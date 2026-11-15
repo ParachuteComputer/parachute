@@ -3,6 +3,7 @@
 // activation (a tap inside the frame gives it to the shell too; a script's click doesn't): that is what lets an applet
 // start (open/mark.ts). Everything is injected, so tests can play a hostile frame against it.
 import type { VaultClient } from "@openparachute/surface-client";
+import { RateLimiter } from "../applet/contract";
 import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameVault, type Method, type Query } from "../bridge/protocol";
 import type { VaultRecord } from "../vault/store";
 
@@ -11,6 +12,7 @@ export type HostDeps = {
   client(rec: VaultRecord): Pick<VaultClient, "queryNotes" | "getNote">;
   roles(rec: VaultRecord): Promise<string[]>;
   applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets>;
+  /** `set` refuses (throws) a choice that names no applet of that vault, or one too many. */
   defaults: { get(vault: string): Record<string, string>; set(vault: string, type: string, choice: string | null): void };
   go(to: string, replace: boolean): void;
   back(): void;
@@ -21,7 +23,13 @@ export type HostDeps = {
   openOut(url: string): void;
   /** For errors from the vault: a message for the person. */
   message(e: unknown): string;
+  now?: () => number;
 };
+
+/** How much a frame may ask: calls waiting at once, and calls in a ten-second window. */
+export const FRAME_LIMITS = { pending: 32, perWindow: 300, windowMs: 10_000 };
+/** The addresses a link out may open: the web, mail and phone. */
+export const LINK_OUT = /^(https?:\/\/|mailto:|tel:)/i;
 
 export const frameVault = (r: VaultRecord): FrameVault => {
   let host = r.issuer;
@@ -32,6 +40,9 @@ export const frameVault = (r: VaultRecord): FrameVault => {
 const pathOf = (to: string) => new URL(to, "http://app.invalid").pathname;
 
 export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
+  const limiter = new RateLimiter(FRAME_LIMITS.perWindow, FRAME_LIMITS.windowMs);
+  const now = deps.now ?? Date.now;
+  let pending = 0;
   const vault = (key: string) => {
     const rec = deps.vaults().find((r) => r.key === key);
     if (!rec) throw new Error("This device doesn't hold that vault.");
@@ -63,7 +74,7 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "clipboard.write": return deps.tapNow() ? deps.copy(p.text as string) : false;
       case "link.out": {
         const url = p.url as string;
-        if (!deps.tapNow() || !/^https?:\/\//i.test(url)) return false;
+        if (!deps.tapNow() || !LINK_OUT.test(url)) return false;
         deps.openOut(url);
         return true;
       }
@@ -73,7 +84,9 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
     handle(data: unknown) {
       const req = parseRequest(data);
       if ("error" in req) { if (req.id) post({ pf: PF, id: req.id, error: req.error }); return; }
-      run(req.method, req.params).then(
+      if (pending >= FRAME_LIMITS.pending || !limiter.take(now())) { post({ pf: PF, id: req.id, error: "rate_limited" }); return; }
+      pending++;
+      run(req.method, req.params).finally(() => { pending--; }).then(
         (result) => post({ pf: PF, id: req.id, result: result ?? null }),
         (e: unknown) => post({ pf: PF, id: req.id, error: e instanceof Error && e.message === "not_allowed" ? "not_allowed" : deps.message(e) }),
       );

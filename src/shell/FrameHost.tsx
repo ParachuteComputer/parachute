@@ -1,7 +1,7 @@
-// The frame, as the shell holds it: one sealed iframe (frameDoc.ts) that stays mounted for the whole session, shown on
-// the frame's addresses and hidden while a shell screen (an applet, Settings, signing in) is up. Only messages from its
-// own window are read. The shell sends it each address it should show, and tells it when vaults, applets or the
-// person's choices change.
+// The frame, as the shell holds it: one sealed iframe (frameDoc.ts), there only while one of the frame's addresses is
+// shown; a shell screen (an applet, Settings, signing in) removes it, and coming back starts it afresh, its reads new.
+// Only messages from its own window are read. The shell sends it each address it should show, and tells it when vaults,
+// applets or the person's choices change.
 import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import frameKit from "virtual:frame-kit";
@@ -15,18 +15,18 @@ import { subscribeGate } from "../applet/selftest/run";
 
 const FRAME_DOC = frameDocument(frameKit.js, frameKit.css);
 
-export default function FrameHost({ visible, doc = FRAME_DOC }: { visible: boolean; doc?: string }) {
+export default function FrameHost({ doc = FRAME_DOC }: { doc?: string }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const navRef = useRef(navigate);
   navRef.current = navigate;
-  const shown = useRef({ visible, location });
-  shown.current = { visible, location };
+  const shown = useRef(location);
+  shown.current = location;
   const host = useMemo(() => createFrameHost((m) => ref.current?.contentWindow?.postMessage(m, "*"), shellDeps((to, replace) => navRef.current(to, { replace }))), []);
   const sendLocation = () => {
-    const { visible: v, location: l } = shown.current;
-    if (v) host.event("location", { pathname: l.pathname, search: l.search, hash: l.hash, key: l.key });
+    const l = shown.current;
+    host.event("location", { pathname: l.pathname, search: l.search, hash: l.hash, key: l.key });
   };
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export default function FrameHost({ visible, doc = FRAME_DOC }: { visible: boole
     return () => { removeEventListener("message", onMessage); offs.forEach((f) => f()); };
   }, [host]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(sendLocation, [location.key, location.pathname, location.search, visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(sendLocation, [location.key, location.pathname, location.search]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <iframe ref={ref} className="app-frame" hidden={!visible} title="Parachute" sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={doc} />;
+  return <iframe ref={ref} className="app-frame" title="Parachute" sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={doc} />;
 }

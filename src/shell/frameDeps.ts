@@ -4,10 +4,11 @@ import { appletsNow, refreshApplets } from "../applet/useApplets";
 import { gateNow, whenGateKnown } from "../applet/selftest/run";
 import { statusOf } from "../open/status";
 import { readRoleTags } from "../open/roles";
-import { clearDefault, defaultsFor, setDefault } from "../open/defaults";
+import { clearDefault, defaultsFor, setDefault, VAULT } from "../open/defaults";
 import { carryMark, clearMark, markTap } from "../open/mark";
 import { clientFor } from "../vault/client";
 import { messageOf } from "../vault/hooks";
+import { inShell } from "../vault/oauth";
 import { listVaults, type VaultRecord } from "../vault/store";
 import type { HostDeps } from "./frameHost";
 
@@ -26,19 +27,38 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   };
 }
 
+/** A choice the frame may store: the vault view or one of the vault's applets as last read, for a tag-like type, and
+ *  no more than a few hundred per vault (they share the device's storage with the sign-ins). */
+export const MAX_DEFAULTS = 200;
+const TYPE = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
+function setChoice(vault: string, type: string, choice: string | null) {
+  if (choice === null) { clearDefault(vault, type); return; }
+  const a = appletsNow(vault);
+  if (!TYPE.test(type) || (choice !== VAULT && !(a?.state === "ok" && a.found.entries.some((e) => e.noteId === choice)))) throw new Error("That isn't a choice this vault has.");
+  const cur = defaultsFor(vault);
+  if (!(type in cur) && Object.keys(cur).length >= MAX_DEFAULTS) throw new Error("Too many choices kept for this vault.");
+  setDefault(vault, type, choice);
+}
+
+/** Open a link outside the app: the system's browser (or mail, or phone) in the shell, a new tab on the web. */
+async function openOut(url: string) {
+  if (inShell()) { const { openUrl } = await import("@tauri-apps/plugin-opener"); await openUrl(url); }
+  else window.open(url, "_blank", "noopener,noreferrer");
+}
+
 export function shellDeps(go: (to: string, replace: boolean) => void): HostDeps {
   return {
     vaults: listVaults,
     client: clientFor,
     roles: (rec) => readRoleTags(clientFor(rec)),
     applets,
-    defaults: { get: defaultsFor, set: (v, t, c) => (c === null ? clearDefault(v, t) : setDefault(v, t, c)) },
+    defaults: { get: defaultsFor, set: setChoice },
     go,
     back: () => history.back(),
     tapNow: () => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true,
     mark: { tap: markTap, carry: carryMark, clear: clearMark },
     copy: (text) => navigator.clipboard?.writeText(text).then(() => true, () => false) ?? Promise.resolve(false),
-    openOut: (url) => { window.open(url, "_blank", "noopener,noreferrer"); },
+    openOut: (url) => { void openOut(url).catch(() => {}); },
     message: messageOf,
   };
 }

@@ -37,7 +37,10 @@ sheet) is its own bundle (the `virtual:frame-kit` Vite plugin) that the shell ru
 `sandbox="allow-scripts"`, an opaque origin, no network and no storage of its own. It reaches the shell only through one
 typed message interface, `src/bridge/protocol.ts`, which reads vaults (never a token), lists applets with their status,
 keeps the person's "Always" choices and moves the person between addresses. Nothing in it grants: Allow is the shell's
-own button. A tap counts only when the shell sees the person's live user activation.
+own button. A tap counts only when the shell sees the person's live user activation. The frame exists only while one of
+its addresses is shown (a shell screen removes it), and it asks at most a few hundred things in ten seconds. Its CSP
+lets a note's pictures load only from inside the note (data:), not from the web; links out (web, mail, phone) open
+through the shell, during a tap.
 
 - `src/vault/`: signing in (OAuth with PKCE and dynamic registration, one sign-in per vault), the vaults this device
   holds, the client.

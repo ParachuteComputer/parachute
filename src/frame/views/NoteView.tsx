@@ -10,7 +10,8 @@ import { folderOf, isAppPath, isCodeNote, noteHref, titleOf } from "../../vault/
 import NoVault from "./NoVault";
 import { linkFor } from "../../links/parse";
 
-// a link out of the app: the frame can't open one itself (it has no popups), so it asks the shell, during the tap
+// a link out of the app (web, mail, phone): the frame can't open one itself (it has no popups), so it asks the shell,
+// during the tap
 const RouterLink = ({ href, className, children }: { href: string; className?: string; children?: ReactNode }) =>
   isAppPath(href) ? <Link to={href} className={className}>{children}</Link>
     : <a href={href} className={className} rel="noreferrer noopener" onClick={(e) => { e.preventDefault(); void call("link.out", { url: href }); }}>{children}</a>;

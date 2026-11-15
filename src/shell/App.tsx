@@ -45,7 +45,9 @@ function ShellRoutes() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/open-link" element={<OpenLink />} />
       </Routes>}
-      <FrameHost visible={!shell} />
+      {/* the frame exists only while it is shown: hidden, it would keep its bridge (and a tap on a shell screen would
+          count for it), and at boot it would learn the shell's address (a sign-in's return carries its code there) */}
+      {!shell && <FrameHost />}
     </>
   );
 }

@@ -1,7 +1,7 @@
 // The shell's side of the bridge, played against as a hostile frame would: every call, every shape, and nothing it
 // answers carries a token, a client id or a grant; a move it asks for starts nothing without a tap.
 import { describe, expect, it, vi } from "vitest";
-import { createFrameHost, type HostDeps } from "./frameHost";
+import { createFrameHost, FRAME_LIMITS, type HostDeps } from "./frameHost";
 import { METHODS, PF } from "../bridge/protocol";
 import type { VaultRecord } from "../vault/store";
 
@@ -23,6 +23,7 @@ function setup(tap = false) {
     mark: { tap: vi.fn(), carry: vi.fn(() => true), clear: vi.fn() },
     copy: vi.fn(async () => true), openOut: vi.fn(),
     message: (e: unknown) => (e instanceof Error ? e.message : "failed"),
+    now: () => 0,
   } satisfies HostDeps;
   const host = createFrameHost((m) => posts.push(m), deps);
   const ask = async (method: string, params?: unknown) => { const id = `t${posts.length}-${Math.random()}`; host.handle({ pf: PF, id, method, params }); await new Promise((r) => setTimeout(r, 0)); return posts.find((p) => (p as { id: string }).id === id) as { result?: unknown; error?: string } | undefined; };
@@ -114,6 +115,22 @@ describe("moving the person", () => {
     expect((await tap.ask("link.out", { url: "javascript:alert(1)" }))?.result).toBe(false);
     expect((await tap.ask("link.out", { url: "file:///etc/passwd" }))?.result).toBe(false);
     expect((await tap.ask("link.out", { url: "https://example.com" }))?.result).toBe(true);
+    expect((await tap.ask("link.out", { url: "mailto:someone@example.com" }))?.result).toBe(true);
     expect(tap.deps.openOut).toHaveBeenCalledWith("https://example.com");
+  });
+});
+
+describe("how much a frame may ask", () => {
+  it("past the window's share, a call is refused and nothing runs", async () => {
+    const { host, posts, deps } = setup(true);
+    // one at a time, so only the window counts
+    for (let i = 0; i < FRAME_LIMITS.perWindow + 5; i++) { host.handle({ pf: PF, id: `n${i}`, method: "nav.back", params: {} }); await new Promise((r) => setTimeout(r, 0)); }
+    expect(deps.back).toHaveBeenCalledTimes(FRAME_LIMITS.perWindow);
+    expect(posts.filter((p) => (p as { error?: string }).error === "rate_limited")).toHaveLength(5);
+  });
+  it("past the calls waiting at once, a call is refused", async () => {
+    const { host, posts } = setup(true);
+    for (let i = 0; i < FRAME_LIMITS.pending + 3; i++) host.handle({ pf: PF, id: `p${i}`, method: "vaults.list", params: {} });
+    expect(posts.filter((p) => (p as { error?: string }).error === "rate_limited")).toHaveLength(3);
   });
 });

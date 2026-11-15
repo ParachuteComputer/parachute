@@ -29,7 +29,8 @@ var calls = [
   ["applets.list", { vault: "VAULT", fresh: true }], ["defaults.get", { vault: "VAULT" }],
   ["clipboard.write", { text: "x" }], ["link.out", { url: "https://evil.example/?x=1" }],
   ["grants.grant", { vault: "VAULT" }], ["applets.allow", {}], ["vault.token", { vault: "VAULT" }], ["storage.get", { key: "parachute.vaults.v1" }],
-  ["nav.go", { to: "/oauth/callback?code=x&state=y" }], ["nav.go", { to: "https://evil.example/" }]
+  ["nav.go", { to: "/oauth/callback?code=x&state=y" }], ["nav.go", { to: "https://evil.example/" }],
+  ["defaults.set", { vault: "VAULT", type: "recipe", choice: "not-an-applet" }]
 ];
 Promise.all(calls.map(function (c) { return ask(c[0], c[1]).then(function (a) { return [c[0], a]; }); })).then(function (answers) {
   r.answers = answers;
@@ -46,6 +47,8 @@ async function hostile(page: Page, go?: string) {
   await page.evaluate((doc) => { (document.querySelector("iframe.app-frame") as HTMLIFrameElement).srcdoc = doc; }, hostileDoc(go));
   // no polling while it acts: Playwright's reads of the frame count as taps too
   await page.waitForTimeout(7_500);
+  // one that moves the person to an applet is gone by now: the frame isn't kept beside a shell screen
+  if (go) return null;
   await expect(ui(page).locator("#done")).toHaveText("done", { timeout: 5_000 });
   return JSON.parse((await ui(page).locator("#report").textContent())!) as Record<string, string> & { answers: [string, { result?: unknown; error?: string; timeout?: boolean }][] };
 }
@@ -57,7 +60,7 @@ test("a hostile frame reads no token and reaches nothing of the shell's", async 
   // the control: from the shell's own realm the same read finds the sign-in
   const rec = JSON.parse(before.vaults)[0];
   expect(rec.accessToken).toBeTruthy();
-  const r = await hostile(page);
+  const r = (await hostile(page))!;
   for (const k of ["own storage", "shell storage", "shell session storage", "shell document", "shell address", "tauri"]) expect(r[k], k).toMatch(/^refused: /);
   expect(r["move the shell"]).not.toBe("read: moved");
   expect(new URL(page.url()).pathname).toBe(`/v/${VAULT}`);
@@ -71,6 +74,9 @@ test("a hostile frame reads no token and reaches nothing of the shell's", async 
   expect(r.answers.filter(([m]) => m === "nav.go").map(([, a]) => a.error)).toEqual(["not_allowed", "not_allowed"]);
   expect(answers["clipboard.write"].result).toBe(false);
   expect(answers["link.out"].result).toBe(false);
+  // a choice that names no applet of the vault isn't kept
+  expect(answers["defaults.set"].error).toBeTruthy();
+  expect(await page.evaluate(() => localStorage.getItem("parachute.openwith.v1"))).toBeNull();
   expect((await stored(page)).grants).toBe(before.grants);
 });
 
@@ -90,4 +96,16 @@ test("a hostile frame can't approve an applet, or start one the person allowed",
   await hostile(page, href);
   await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
   await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+});
+
+test("the frame is there only while it is shown: never beside a shell screen, never at a sign-in's return", async ({ page }) => {
+  await page.goto(`/v/${VAULT}`);
+  await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "Vaults" })).toBeVisible();
+  await expect(page.locator("iframe.app-frame")).toHaveCount(0);
+  // a return from the hub carries its code in the address: no frame is made there to read it
+  await page.goto("/oauth/callback?code=CODE-FROM-HUB&state=nope");
+  await expect(page.getByRole("alert").or(page.getByRole("status")).first()).toBeVisible();
+  await expect(page.locator("iframe.app-frame")).toHaveCount(0);
 });

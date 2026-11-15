@@ -137,11 +137,13 @@ test("signing out of a vault ends its applets' grants on this device", async ({ 
   await allow(page);
   // this test is about grants: the hub's revoke is answered here, so the sign-in the other tests share stays good
   // (the vault tests prove the revoke itself, on a sign-in of their own)
-  await page.route((u) => u.pathname === "/oauth/revoke", (r) => r.fulfill({ status: 200, body: "" }));
+  let revoked = false;
+  await page.route((u) => u.pathname === "/oauth/revoke", (r) => { revoked = true; return r.fulfill({ status: 200, body: "" }); });
   await page.goto("/settings");
   await expect(page.getByRole("list", { name: "Allowed applets" }).getByRole("listitem")).toHaveCount(1);
   await page.getByRole("button", { name: "Sign out" }).click();
   expect(await page.evaluate(() => localStorage.getItem("parachute.applets.grants.v1"))).toBe("{}");
+  await expect.poll(() => revoked).toBe(true);
 });
 
 test("it is handed a note only when it claims that note", async ({ page }) => {

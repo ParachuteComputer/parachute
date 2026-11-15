@@ -30,7 +30,9 @@ export default function NoteRoute() {
     decided.set(location.key, decision.kind);
     if (decision.kind === "applet") {
       // a tap that led to this note leads on to the applet, once (the shell keeps the tap); anything else arrives stopped
-      void carryOn(location.pathname, appletHref(rec.key, decision.candidate, id));
+      const key = location.key;
+      // a move the shell refuses is forgotten, so this entry decides again when it is shown again
+      carryOn(location.pathname, appletHref(rec.key, decision.candidate, id)).catch(() => { decided.delete(key); });
     } else if (decision.kind === "ask" && ow.state === "ok" && ow.note) {
       openSheet(rec.key, id, true, { note: ow.note, cands: decision.candidates });
     }
