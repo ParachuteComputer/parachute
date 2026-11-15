@@ -68,6 +68,22 @@ test("a vault's role tag is no applet's to open: the card leaves it out", async 
   }
 });
 
+test("an applet's call that needs a fresh token still gets its answer", async ({ page }) => {
+  await allow(page);
+  // the access token runs out while the applet runs: its next call is refused, the app refreshes the token, and the
+  // call is answered (the refresh must not take the applet's session down with it)
+  await page.evaluate(() => {
+    const list = JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]");
+    list[0].accessToken = "expired";
+    localStorage.setItem("parachute.vaults.v1", JSON.stringify(list));
+  });
+  await frame(page).getByRole("button", { name: "Add a recipe" }).click();
+  await expect(frame(page).locator("#said")).toContainText("added Recipes/Added", { timeout: 15_000 });
+  const path = (await frame(page).locator("#said").textContent())!.replace("added ", "");
+  const note = await api(hubState(), "GET", `notes?id=${encodeURIComponent(path)}`);
+  await api(hubState(), "DELETE", `notes/${note.id}`);
+});
+
 test("Revoke takes it back: the card shows again", async ({ page }) => {
   await allow(page);
   await page.getByRole("button", { name: "Revoke" }).click();

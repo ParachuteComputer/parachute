@@ -24,11 +24,21 @@ describe("links in", () => {
   it("opens a fresh tap of the same link while the app runs", async () => {
     const went: string[] = [];
     const p = plugin(LINK);
+    const realNow = Date.now;
+    listenForLinks((x) => went.push(x), p);
+    await tick();
+    Date.now = () => realNow() + 5000;
+    try { p.tap(LINK); } finally { Date.now = realNow; }
+    expect(went).toEqual([openLinkPath(LINK), openLinkPath(LINK)]);
+    expect(sessionStorage.getItem(HANDLED_KEY)).toBe(LINK);
+  });
+  it("doesn't open the start link twice when the platform also sends it as an event", async () => {
+    const went: string[] = [];
+    const p = plugin(LINK);
     listenForLinks((x) => went.push(x), p);
     await tick();
     p.tap(LINK);
-    expect(went).toEqual([openLinkPath(LINK), openLinkPath(LINK)]);
-    expect(sessionStorage.getItem(HANDLED_KEY)).toBe(LINK);
+    expect(went).toEqual([openLinkPath(LINK)]);
   });
   it("does nothing with no link", async () => {
     const went: string[] = [];

@@ -17,6 +17,7 @@
 import type { AppletEntry } from "../applet/discovery";
 import { claimOf, withoutRoles, type Opens } from "../applet/opens";
 import { VAULT, type Choice } from "./defaults";
+import { isCodeNote } from "../vault/notes";
 
 export type Status = "ok" | "updated" | "none" | "off";
 export type NoteLike = { id: string; path?: string | null; tags?: readonly string[] | null; extension?: string | null };
@@ -26,10 +27,9 @@ export type Decision =
   | { kind: "ask"; candidates: Candidate[] }
   | { kind: "vault"; line: { candidate: Candidate; status: "none" | "updated"; others: Candidate[] } | null; by?: "default" };
 
-const isCode = (n: NoteLike) => /\.html?$/i.test(n.path ?? "") || String(n.extension ?? "").replace(/^\./, "").toLowerCase() === "html" || (n.tags ?? []).includes("applet");
 
 export function candidates<T extends AppletEntry>(note: NoteLike, applets: readonly T[], statusOf: (e: T) => Status, roleTags: readonly string[] = []): Candidate[] {
-  if (isCode(note)) return [];
+  if (isCodeNote(note)) return [];
   const out: Candidate[] = [];
   for (const entry of applets) {
     if (entry.noteId === note.id) continue;

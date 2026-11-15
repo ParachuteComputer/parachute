@@ -4,8 +4,8 @@
 // sends a link back out. A link opens the note's route with no tap mark: an applet it leads to waits, stopped.
 // The link the app was started with is handled once: a reload or a return to the app doesn't open it again (a return
 // after Android killed the process too: MainActivity drops the old intent), and a fresh tap of the same link does.
-// On desktop a link opens the app from cold; a second link while it runs starts a second window (no single-instance
-// plugin in step 1).
+// On desktop a link opens the app from cold when the app is installed from its .deb (which registers the scheme; an
+// AppImage registers nothing); a second link while it runs starts a second window (no single-instance plugin in step 1).
 import { useEffect, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { inShell } from "../vault/oauth";
@@ -25,8 +25,16 @@ export function listenForLinks(go: (path: string) => void, plugin?: Plugin, stor
   void (async () => {
     const p: Plugin = plugin ?? (await import("@tauri-apps/plugin-deep-link"));
     const start = (await p.getCurrent().catch(() => null))?.[0];
+    const startedAt = Date.now();
     if (start && store.getItem(HANDLED_KEY) !== start) { store.setItem(HANDLED_KEY, start); if (!gone) go(openLinkPath(start)); }
-    const un = await p.onOpenUrl((urls) => { const u = urls[0]; if (!u || gone) return; store.setItem(HANDLED_KEY, u); go(openLinkPath(u)); });
+    const un = await p.onOpenUrl((urls) => {
+      const u = urls[0];
+      if (!u || gone) return;
+      // some platforms also send the start link as an event: the same link within moments of starting is that, not a tap
+      if (u === start && Date.now() - startedAt < 3000) return;
+      store.setItem(HANDLED_KEY, u);
+      go(openLinkPath(u));
+    });
     if (gone) un(); else stop = un;
   })();
   return () => { gone = true; stop?.(); };

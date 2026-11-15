@@ -6,6 +6,7 @@ import { useVault, useVaultQuery } from "../vault/hooks";
 import { folderOf, noteHref, titleOf } from "../vault/notes";
 import NoVault from "./NoVault";
 import { useApplets } from "../applet/useApplets";
+import { appletPath } from "../open/paths";
 
 const LIMIT = 60;
 
@@ -27,7 +28,7 @@ export default function VaultView() {
       {applets.state === "ok" && applets.found.entries.length > 0 && (
         <ul className="applets" aria-label="Applets">
           {applets.found.entries.map((a) => (
-            <li key={a.noteId}><Link className="applet-chip" to={`/v/${encodeURIComponent(rec.key)}/a/${encodeURIComponent(a.noteId)}`}><span aria-hidden="true">{a.manifest.glyph}</span>{a.manifest.name}</Link></li>
+            <li key={a.noteId}><Link className="applet-chip" to={appletPath(rec.key, a.noteId)}><span aria-hidden="true">{a.manifest.glyph}</span>{a.manifest.name}</Link></li>
           ))}
         </ul>
       )}

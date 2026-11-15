@@ -90,10 +90,12 @@ export default function AppletScreen() {
   const decision = runDecision(mode, status, subject ? grants.grantedUnder(subject) : null);
   const granted = decision === "run" || decision === "run-notice";
   const grant = useMemo(() => (entry ? resolvedOf(entry.manifest) : {}), [entry]);
+  // keyed on the vault, not the record object: a token refresh rewrites the record, and rebuilding the router would close
+  // the frame's session with the very call that caused the refresh still waiting
   const router = useMemo(() => (rec && entry ? createRouter([
     createVaultModule(vaultDeps(clientFor(rec)), { opens: entry.opens, name: rec.vault }),
     createThemeModule({ theme: readHostTheme }),
-  ]) : null), [rec, entry]);
+  ]) : null), [rec?.key, rec?.issuer, rec?.vault, entry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
   const note = loaded.state === "ok" ? loaded.note : null;
