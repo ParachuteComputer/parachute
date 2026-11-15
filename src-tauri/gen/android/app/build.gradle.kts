@@ -44,7 +44,9 @@ android {
     }
     buildTypes {
         getByName("debug") {
-            signingConfigs.findByName("playtest")?.let { signingConfig = it }
+            // never Gradle's own debug key: on a machine that builds other apps it may be theirs
+            signingConfig = signingConfigs.findByName("playtest")
+                ?: throw GradleException("No play-test key: set PARACHUTE_KEYSTORE_PROPERTIES or create ~/.config/parachute-playtest/keystore.properties")
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             isDebuggable = true
             isJniDebuggable = true

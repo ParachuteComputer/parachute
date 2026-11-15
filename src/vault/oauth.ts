@@ -1,8 +1,8 @@
 // Sign-in to a vault on a hub: OAuth 2.1 with PKCE and dynamic client registration, the way Parachute's web app signs
 // in (parachute-app src/lib/vault/oauth.ts), on surface-client's discovery, registration and PKCE helpers.
 // The app registers itself on each hub as "Parachute"; the hub keeps a new registration pending until its owner
-// approves it once (the hub's own approve step). The redirect comes back to this app's own origin, /oauth/callback:
-// in the Android shell that is https://tauri.localhost/oauth/callback.
+// approves it once (the hub's own approve step). In a browser the redirect comes back to the page's own origin,
+// /oauth/callback; in the shell, to a loopback address the shell catches (SHELL_RETURN below).
 
 import {
   PendingApprovalError, deriveCodeChallenge, discoverAuthServer, generateCodeVerifier, generateState, registerClient,
@@ -160,7 +160,7 @@ export async function refresh(tokenEndpoint: string, clientId: string, refreshTo
 export async function revoke(rec: { issuer: string; clientId: string; refreshToken?: string; revocationEndpoint?: string }, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<void> {
   if (!rec.refreshToken || !onOrigin(rec.revocationEndpoint, rec.issuer)) return;
   try {
-    await fetchImpl(rec.revocationEndpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    await fetchImpl(rec.revocationEndpoint, { method: "POST", signal: AbortSignal.timeout(5000), headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ token: rec.refreshToken, token_type_hint: "refresh_token", client_id: rec.clientId }).toString() });
   } catch { /* offline or refused: the local record still goes */ }
 }

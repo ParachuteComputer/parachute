@@ -13,10 +13,10 @@ export ANDROID_USER_HOME="${PARACHUTE_ANDROID_USER_HOME:-$(dirname "$props")/and
 mkdir -p "$ANDROID_USER_HOME"
 flags=(--apk --target "$target"); [ "$mode" = debug ] && flags+=(--debug)
 npx tauri android build "${flags[@]}"
-abi=$([ "$target" = aarch64 ] && echo arm64 || echo "$target")
 apk=$(ls -t src-tauri/gen/android/app/build/outputs/apk/*/"$mode"/*.apk | head -1)
 bt=$(command ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)
-want=$(keytool -list -v -keystore "$(sed -n 's/^storeFile=//p' "$props")" -storepass "$(sed -n 's/^storePassword=//p' "$props")" 2>/dev/null | sed -n 's/.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')
+# the password goes to keytool through its environment, never on a command line
+want=$(KEYPASS="$(sed -n 's/^storePassword=//p' "$props")" keytool -list -v -keystore "$(sed -n 's/^storeFile=//p' "$props")" -alias "$(sed -n 's/^keyAlias=//p' "$props")" -storepass:env KEYPASS 2>/dev/null | sed -n 's/.*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')
 got=$("$ANDROID_HOME/build-tools/$bt/apksigner" verify --print-certs "$apk" | sed -n 's/.*SHA-256 digest: //p' | head -1)
 [ -n "$want" ] && [ "$got" = "$want" ] || { echo "$apk is not signed with the play-test key (got ${got:-none})" >&2; exit 1; }
 echo "$apk"
