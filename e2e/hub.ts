@@ -37,22 +37,29 @@ export default async function globalSetup() {
   const origin = `http://127.0.0.1:${port}`;
   const child = spawn(BIN, ["serve", "--embedded", "--home", env.PARACHUTE_HOME, "--listen", `127.0.0.1:${port}`, "--vault-listen", `127.0.0.1:${vaultPort}`],
     { env: { ...env, PARACHUTE_HUB_ORIGIN: origin }, stdio: ["ignore", "pipe", "pipe"], detached: true });
-  let log = "";
-  child.stdout.on("data", (d) => { log += d; }); child.stderr.on("data", (d) => { log += d; });
-  const until = Date.now() + 30_000;
-  while (!/ready: hub/.test(log)) {
-    if (Date.now() > until || child.exitCode !== null) throw new Error(`the e2e hub didn't start:\n${log.slice(-2000)}`);
-    await new Promise((r) => setTimeout(r, 200));
+  // from here on, teardown can find the hub and its home even if the rest of setup fails
+  writeFileSync(STATE, JSON.stringify({ origin, password, home, pid: child.pid!, token: "" }), { mode: 0o600 });
+  try {
+    let log = "";
+    child.stdout.on("data", (d) => { log += d; }); child.stderr.on("data", (d) => { log += d; });
+    const until = Date.now() + 30_000;
+    while (!/ready: hub/.test(log)) {
+      if (Date.now() > until || child.exitCode !== null) throw new Error(`the e2e hub didn't start:\n${log.slice(-2000)}`);
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    child.unref();
+    const minted = JSON.parse(execFileSync(BIN, ["auth", "mint-token", "--scope", `vault:${VAULT}:write`, "--json"], { env: { ...env, PORT: String(port) }, stdio: "pipe" }).toString());
+    const state: HubState = { origin, password, home, pid: child.pid!, token: minted.token };
+    const root = join(import.meta.dirname, "fixtures/vault");
+    for (const f of files(root)) {
+      const path = relative(root, f).replace(/\.md$/, "");
+      await api(state, "POST", "notes", { path, content: readFileSync(f, "utf8"), ...(path.startsWith("Recipes/") ? { tags: ["recipe"] } : {}) });
+    }
+    writeFileSync(STATE, JSON.stringify(state), { mode: 0o600 });
+  } catch (e) {
+    await globalTeardown();
+    throw e;
   }
-  child.unref();
-  const minted = JSON.parse(execFileSync(BIN, ["auth", "mint-token", "--scope", `vault:${VAULT}:write`, "--json"], { env: { ...env, PORT: String(port) }, stdio: "pipe" }).toString());
-  const state: HubState = { origin, password, home, pid: child.pid!, token: minted.token };
-  const root = join(import.meta.dirname, "fixtures/vault");
-  for (const f of files(root)) {
-    const path = relative(root, f).replace(/\.md$/, "");
-    await api(state, "POST", "notes", { path, content: readFileSync(f, "utf8"), ...(path.startsWith("Recipes/") ? { tags: ["recipe"] } : {}) });
-  }
-  writeFileSync(STATE, JSON.stringify(state), { mode: 0o600 });
 }
 
 export function hubState(): HubState { return JSON.parse(readFileSync(STATE, "utf8")) as HubState; }

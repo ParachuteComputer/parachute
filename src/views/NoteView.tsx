@@ -5,11 +5,11 @@ import { NoteRenderer } from "@openparachute/surface-render/note";
 import { unresolvedLink, type WikilinkResolver } from "@openparachute/surface-render/markdown";
 import { Bar } from "../ui/Bar";
 import { useVault, useVaultQuery } from "../vault/hooks";
-import { folderOf, isCodeNote, noteHref, titleOf } from "../vault/notes";
+import { folderOf, isAppPath, isCodeNote, noteHref, titleOf } from "../vault/notes";
 import NoVault from "./NoVault";
 
 const RouterLink = ({ href, className, children }: { href: string; className?: string; children?: ReactNode }) =>
-  href.startsWith("/") ? <Link to={href} className={className}>{children}</Link> : <a href={href} className={className} target="_blank" rel="noreferrer noopener">{children}</a>;
+  isAppPath(href) ? <Link to={href} className={className}>{children}</Link> : <a href={href} className={className} target="_blank" rel="noreferrer noopener">{children}</a>;
 
 /** A note, read: its title, where it sits, its tags, and its content drawn by surface-render. An applet's own note is shown as text. */
 export default function NoteView({ above }: { above?: ReactNode }) {
@@ -32,7 +32,7 @@ export default function NoteView({ above }: { above?: ReactNode }) {
           <p className="note-where">{[folderOf(note), ...(note.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · ") || " "}</p>
           {isCodeNote(note)
             ? <pre className="note-code" aria-label="The note's text">{note.content ?? ""}</pre>
-            : <NoteRenderer className="prose-note" note={{ path: note.path?.match(/\.[a-z0-9]+$/i) ? note.path : `${note.path ?? "note"}.md`, content: note.content ?? "" }} resolve={resolve} linkComponent={RouterLink} />}
+            : <NoteRenderer className="prose-note" note={{ path: `${note.path ?? "note"}.${(note as { extension?: string }).extension?.replace(/^\./, "") || "md"}`, content: note.content ?? "" }} resolve={resolve} linkComponent={RouterLink} />}
         </article>
       )}
     </main>

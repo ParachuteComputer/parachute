@@ -27,7 +27,7 @@ export function useVaultQuery<T>(rec: VaultRecord | null, fn: (c: ReturnType<typ
 
 export function messageOf(e: unknown): string {
   const status = (e as { status?: number } | null)?.status;
-  if (status === 401) return "The vault no longer accepts this app's sign-in. Sign in again from Settings.";
+  if (status === 401) return "The vault no longer accepts this app's sign-in. Sign out in Settings and add it again.";
   if (status === 403) return "This sign-in may not read that.";
   if (status === 404) return "There's no such note.";
   return e instanceof Error && e.message ? e.message : "Something went wrong reaching the vault.";

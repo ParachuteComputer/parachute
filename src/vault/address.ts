@@ -20,6 +20,8 @@ export function parseAddress(input: string): AddressParse {
     return { ok: false, error: "That isn't a web address." };
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return { ok: false, error: "A vault's address starts with https://." };
+  // tokens never travel in the clear: plain http only to this machine itself
+  if (url.protocol === "http:" && !isLoopback(url.hostname)) return { ok: false, error: "A vault's address starts with https://." };
   if (url.username || url.password) return { ok: false, error: "An address with a name and password in it isn't accepted." };
   if (url.search || url.hash) return { ok: false, error: "Leave out anything after ? or #." };
   const segments = url.pathname.split("/").filter(Boolean);
@@ -37,3 +39,6 @@ export function parseAddress(input: string): AddressParse {
 
 /** The vault's API root on its hub. */
 export const vaultUrl = (issuer: string, vault: string) => `${issuer}/vault/${encodeURIComponent(vault)}`;
+
+/** This machine itself: plain http is allowed only here (a hub run for development or tests). */
+export const isLoopback = (host: string) => host === "localhost" || host === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);

@@ -8,7 +8,7 @@ import {
   PendingApprovalError, deriveCodeChallenge, discoverAuthServer, generateCodeVerifier, generateState, registerClient,
   type TokenResponse,
 } from "@openparachute/surface-client";
-import { vaultUrl, type Address } from "./address";
+import { isLoopback, vaultUrl, type Address } from "./address";
 
 export const CLIENT_NAME = "Parachute";
 /** The scope for one named vault: the hub binds the token to it, with no vault picker on its page. */
@@ -37,6 +37,12 @@ const isHttp = (raw: unknown): raw is string => {
   if (typeof raw !== "string") return false;
   try { const p = new URL(raw).protocol; return p === "https:" || p === "http:"; } catch { return false; }
 };
+/** An address on the hub's own origin: https, or http only on this machine. */
+export const onOrigin = (raw: unknown, origin: string): raw is string => {
+  if (!isHttp(raw)) return false;
+  const u = new URL(raw);
+  return u.origin === origin && (u.protocol === "https:" || isLoopback(u.hostname));
+};
 
 function readJson<T>(key: string): T | null {
   try { return JSON.parse(localStorage.getItem(key) ?? "null") as T | null; } catch { return null; }
@@ -62,15 +68,20 @@ export function forgetClient(issuer: string) {
 export async function beginSignIn(address: Address, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<string> {
   const redirect = redirectUri();
   const meta = await discoverAuthServer(vaultUrl(address.issuer, address.vault), fetchImpl);
-  if (!isHttp(meta.authorization_endpoint) || !isHttp(meta.token_endpoint)) throw new Error("The hub's sign-in addresses aren't web addresses.");
-  let clientId = cachedClient(meta.issuer, redirect);
+  // the hub must name itself as the address typed (RFC 8414 3.3), and keep its sign-in on that origin
+  if (meta.issuer?.replace(/\/$/, "") !== address.issuer) throw new Error(`That hub calls itself ${String(meta.issuer).slice(0, 80)}, not ${address.issuer}. Nothing was added.`);
+  if (![meta.authorization_endpoint, meta.token_endpoint, meta.registration_endpoint].every((e) => onOrigin(e, address.issuer))) throw new Error("The hub's sign-in addresses aren't on the hub itself. Nothing was added.");
+  // a sign-in that never came back may have died on a registration the hub no longer knows: register again
+  const stale = readJson<Pending>(PENDING_KEY);
+  if (stale && stale.issuer === address.issuer) forgetClient(address.issuer);
+  let clientId = cachedClient(address.issuer, redirect);
   if (!clientId) {
     clientId = (await registerClient(meta.registration_endpoint, { clientName: CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
-    cacheClient(meta.issuer, redirect, clientId);
+    cacheClient(address.issuer, redirect, clientId);
   }
   const codeVerifier = generateCodeVerifier();
   const state = generateState();
-  const pending: Pending = { issuer: meta.issuer, vault: address.vault, tokenEndpoint: meta.token_endpoint, clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now() };
+  const pending: Pending = { issuer: address.issuer, vault: address.vault, tokenEndpoint: meta.token_endpoint, clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now() };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   const url = new URL(meta.authorization_endpoint);
   url.searchParams.set("response_type", "code");
@@ -84,10 +95,12 @@ export async function beginSignIn(address: Address, fetchImpl: typeof fetch = fe
   return url.toString();
 }
 
-export function takePending(now = Date.now()): Pending | null {
+/** The flow this app started, if `state` is its state; it is then used up. A wrong state leaves it waiting (a stray link can't cancel it). */
+export function takePending(state: string, now = Date.now()): Pending | "mismatch" | null {
   const p = readJson<Pending>(PENDING_KEY);
+  if (!p || typeof p.state !== "string" || typeof p.codeVerifier !== "string" || now - (p.startedAt ?? 0) > PENDING_TTL_MS) { localStorage.removeItem(PENDING_KEY); return null; }
+  if (p.state !== state) return "mismatch";
   localStorage.removeItem(PENDING_KEY);
-  if (!p || typeof p.state !== "string" || typeof p.codeVerifier !== "string" || now - (p.startedAt ?? 0) > PENDING_TTL_MS) return null;
   return p;
 }
 
@@ -95,9 +108,9 @@ export type SignedIn = { pending: Pending; token: TokenResponse; vault: string }
 
 /** Finish signing in: check the state, trade the code for a token. Used once: the flow's secrets are gone after. */
 export async function completeSignIn(code: string, state: string, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<SignedIn> {
-  const pending = takePending();
+  const pending = takePending(state);
   if (!pending) throw new Error("This sign-in has expired or was already used. Start again from Add a vault.");
-  if (pending.state !== state) throw new Error("This sign-in doesn't match the one this app started. Start again.");
+  if (pending === "mismatch") throw new Error("This sign-in doesn't match the one this app started. Start again.");
   const res = await fetchImpl(pending.tokenEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
@@ -107,7 +120,7 @@ export async function completeSignIn(code: string, state: string, fetchImpl: typ
   if (!res.ok) {
     let body: Record<string, unknown> = {};
     try { body = JSON.parse(text) as Record<string, unknown>; } catch { /* not JSON */ }
-    if (body.error === "invalid_client" && isHttp(body.approve_url)) throw new PendingApprovalError(body.approve_url);
+    if (body.error === "invalid_client" && onOrigin(body.approve_url, pending.issuer)) throw new PendingApprovalError(body.approve_url);
     if (body.error === "invalid_client") forgetClient(pending.issuer);
     throw new Error(`The hub refused the sign-in (${res.status}${typeof body.error === "string" ? `, ${body.error}` : ""}).`);
   }
@@ -130,4 +143,15 @@ export async function refresh(tokenEndpoint: string, clientId: string, refreshTo
   const token = (await res.json()) as TokenResponse;
   if (!token.access_token) throw new Error("refresh gave no token");
   return token;
+}
+
+/** Tell the hub to end this app's sign-in (best effort: the record goes from this device either way). */
+export async function revoke(issuer: string, refreshToken: string | undefined, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<void> {
+  if (!refreshToken) return;
+  try {
+    const meta = await discoverAuthServer(issuer, fetchImpl);
+    const endpoint = (meta as { revocation_endpoint?: unknown }).revocation_endpoint;
+    if (!onOrigin(endpoint, issuer)) return;
+    await fetchImpl(endpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ token: refreshToken, token_type_hint: "refresh_token" }).toString() });
+  } catch { /* offline or refused: the local record still goes */ }
 }

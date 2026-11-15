@@ -20,6 +20,7 @@ describe("parseAddress", () => {
     ["https://hub.example/vault/Recipes", "can't be right"],
     ["https://hub.example/vault/a/b", "looks like"],
     ["ftp://hub.example/vault/x", "starts with https"],
+    ["http://hub.example/vault/x", "starts with https"],
     ["javascript:alert(1)", "isn't a web address"],
     ["https://me:pw@hub.example/vault/x", "name and password"],
     ["https://hub.example/vault/x?y=1", "after ?"],

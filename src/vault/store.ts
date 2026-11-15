@@ -27,7 +27,7 @@ const storage = (): StorageLike | null => (typeof localStorage === "undefined" ?
 function valid(r: unknown): r is VaultRecord {
   if (!r || typeof r !== "object") return false;
   const v = r as Record<string, unknown>;
-  return ["key", "issuer", "vault", "tokenEndpoint", "clientId", "accessToken", "scope"].every((k) => typeof v[k] === "string" && v[k]);
+  return ["key", "issuer", "vault", "tokenEndpoint", "clientId", "accessToken"].every((k) => typeof v[k] === "string" && v[k]) && typeof v.scope === "string";
 }
 
 export function listVaults(s: StorageLike | null = storage()): VaultRecord[] {
@@ -51,7 +51,7 @@ export function keyFor(list: readonly VaultRecord[], issuer: string, vault: stri
   const same = list.find((r) => r.issuer === issuer && r.vault === vault);
   if (same) return same.key;
   if (!list.some((r) => r.key === vault)) return vault;
-  return `${vault}@${new URL(issuer).host}`;
+  return `${vault}@${hostOf(issuer)}`;
 }
 
 /** Add a vault, or replace the record for the same hub and vault (signing in again). */
@@ -79,3 +79,6 @@ export function subscribeVaults(cb: () => void): () => void {
   if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
   return () => { listeners.delete(cb); if (typeof window !== "undefined") window.removeEventListener("storage", onStorage); };
 }
+
+/** The host of a hub's address, for showing; the address itself when it can't be read. */
+export function hostOf(issuer: string): string { try { return new URL(issuer).host; } catch { return issuer; } }

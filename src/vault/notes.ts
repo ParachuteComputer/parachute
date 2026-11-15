@@ -19,3 +19,6 @@ export const isCodeNote = (n: Pick<Note, "path" | "tags"> & { extension?: string
 
 /** The app's own address for a note in a vault. */
 export const noteHref = (vaultKey: string, idOrPath: string) => `/v/${encodeURIComponent(vaultKey)}/n/${encodeURIComponent(idOrPath)}`;
+
+/** Only a path on this app (one slash, then not a second slash or backslash) stays in the app; anything else opens outside it. */
+export const isAppPath = (href: string) => /^\/(?![\/\\])/.test(href);
