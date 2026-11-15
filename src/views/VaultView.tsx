@@ -5,6 +5,7 @@ import { Bar } from "../ui/Bar";
 import { useVault, useVaultQuery } from "../vault/hooks";
 import { folderOf, noteHref, titleOf } from "../vault/notes";
 import NoVault from "./NoVault";
+import { useApplets } from "../applet/useApplets";
 
 const LIMIT = 60;
 
@@ -18,10 +19,18 @@ export default function VaultView() {
   const load = useVaultQuery<Note[]>(rec, (c) => (term
     ? c.queryNotes({ search: term, limit: String(LIMIT) })
     : c.queryNotes({ orderBy: "updated_at", sort: "desc", limit: LIMIT })), [term]);
+  const applets = useApplets(rec);
   if (!rec) return <NoVault />;
   return (
     <main className="screen">
       <Bar title={rec.vault} back="/" />
+      {applets.state === "ok" && applets.found.entries.length > 0 && (
+        <ul className="applets" aria-label="Applets">
+          {applets.found.entries.map((a) => (
+            <li key={a.noteId}><Link className="applet-chip" to={`/v/${encodeURIComponent(rec.key)}/a/${encodeURIComponent(a.noteId)}`}><span aria-hidden="true">{a.manifest.glyph}</span>{a.manifest.name}</Link></li>
+          ))}
+        </ul>
+      )}
       <input className="search" type="search" placeholder="Search this vault" aria-label="Search this vault" value={q} onChange={(e) => setQ(e.target.value)} />
       {load.state === "loading" && <p className="quiet" role="status">Loading…</p>}
       {load.state === "error" && <p className="error" role="alert">{load.error}</p>}

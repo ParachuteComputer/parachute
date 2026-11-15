@@ -1,0 +1,20 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{font:16px/1.5 var(--sans,system-ui);color:var(--text);margin:12px}h1{font:600 20px var(--serif,serif)}li{padding:2px 0}#opened{font-weight:600}</style>
+<h1>Recipe box</h1>
+<p id="opened">No recipe opened.</p>
+<ul id="list"></ul>
+<button id="add">Add a recipe</button>
+<p id="said"></p>
+<script>
+function show(n) { document.getElementById("opened").textContent = "Opened: " + n.path; }
+uni.onOpen(function (o) { show(o.note); });
+uni.ready().then(function () { return uni.vault.queryNotes({ pathPrefix: "Recipes/" }); }).then(function (rows) {
+  var ul = document.getElementById("list");
+  rows.forEach(function (r) { var li = document.createElement("li"); li.textContent = r.path; ul.appendChild(li); });
+});
+document.getElementById("add").onclick = function () {
+  uni.vault.createNote({ path: "Recipes/Added " + Date.now(), content: "# Added" })
+    .then(function (n) { document.getElementById("said").textContent = "added " + n.path; }, function (e) { document.getElementById("said").textContent = "refused " + e.message; });
+};
+</script>

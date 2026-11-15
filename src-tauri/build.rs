@@ -2,7 +2,7 @@ fn main() {
     // The wry version the applet self-test pass is keyed on (see `webview_runtime`): read it from the lockfile.
     let lock = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.lock");
     println!("cargo:rerun-if-changed={}", lock.display());
-    let text = std::fs::read_to_string(&lock).unwrap_or_default();
+    let text = std::fs::read_to_string(&lock).unwrap_or_else(|e| { println!("cargo:warning=reading {}: {e}", lock.display()); String::new() });
     let version = text
         .split("[[package]]")
         .find(|p| p.lines().any(|l| l.trim() == "name = \"wry\""))

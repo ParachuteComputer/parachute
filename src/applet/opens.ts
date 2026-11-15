@@ -71,6 +71,10 @@ export function claimOf(opens: readonly Opens[], note: { path?: string | null; t
 /** The tags a note the applet adds at `path` gets: each claimed type whose folder holds it. */
 export const tagsFor = (opens: readonly Opens[], path: string): string[] => [...new Set(opens.filter((o) => inside(o.path, path)).map((o) => o.type))];
 
-/** `opens` without the entries whose type is one of the vault's role tags (or beneath one). */
-export const withoutRoles = (opens: readonly Opens[], roleTags: readonly string[]): Opens[] =>
-  opens.filter((o) => !roleTags.some((r) => o.type === r || o.type.startsWith(`${r}/`)));
+/** Does a claimed type touch a role tag: the same tag, one beneath the role, or one the role sits beneath (any case)? */
+export const touchesRole = (type: string, roleTags: readonly string[]) => {
+  const t = type.toLowerCase();
+  return roleTags.some((role) => { const r = role.toLowerCase(); return t === r || t.startsWith(`${r}/`) || r.startsWith(`${t}/`); });
+};
+/** `opens` without the entries whose type touches one of the vault's role tags. */
+export const withoutRoles = (opens: readonly Opens[], roleTags: readonly string[]): Opens[] => opens.filter((o) => !touchesRole(o.type, roleTags));

@@ -1,0 +1,167 @@
+import { expect, test, type Page } from "@playwright/test";
+import { signIn } from "./helpers";
+import { api, hubState, VAULT } from "./hub";
+
+const idOf = async (path: string) => (await api(hubState(), "GET", `notes?id=${encodeURIComponent(path)}`)).id as string;
+const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
+
+async function selfTestDone(page: Page) {
+  await page.goto("/settings");
+  await expect(page.getByRole("status").filter({ hasText: /approved code only|run sealed/ })).toBeVisible({ timeout: 45_000 });
+}
+async function openFromStrip(page: Page) {
+  await page.goto(`/v/${VAULT}`);
+  await page.getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
+}
+async function allow(page: Page) {
+  await openFromStrip(page);
+  await page.getByRole("button", { name: "Allow" }).click();
+  await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
+}
+
+test("the self-test runs by itself on a new device, and Settings says how applets run here", async ({ page }) => {
+  await signIn(page);
+  await selfTestDone(page);
+  // Chromium has WebRTC and no way to switch it off: approved code only
+  await expect(page.getByRole("status").filter({ hasText: "approved code only" })).toBeVisible();
+});
+
+test.describe("signed in, self-test passed", () => {
+test.use({ storageState: "e2e/.signed-in.json" });
+
+test("an applet shows its card first, and runs after Allow, reading only its own folder", async ({ page }) => {
+  await openFromStrip(page);
+  const card = page.getByRole("region", { name: /asking for access/ });
+  await expect(card).toContainText("Read, add and change notes in Recipes/");
+  await expect(card).toContainText("Open recipe notes in Recipes/ when you tap one");
+  await expect(card).toContainText("Tag the notes it adds in Recipes/ as recipe");
+  await expect(page.locator("iframe")).toHaveCount(0);
+  await page.getByRole("button", { name: "Allow" }).click();
+  const list = frame(page).locator("#list li");
+  await expect(list).toHaveCount(2);
+  await expect(list).toHaveText([/Recipes\/(Rice and beans|Tomato toast)/, /Recipes\/(Rice and beans|Tomato toast)/]);
+});
+
+test("a note it adds gets the tag of the type it opens", async ({ page }) => {
+  await allow(page);
+  await frame(page).getByRole("button", { name: "Add a recipe" }).click();
+  await expect(frame(page).locator("#said")).toContainText("added Recipes/Added");
+  const path = (await frame(page).locator("#said").textContent())!.replace("added ", "");
+  const note = await api(hubState(), "GET", `notes?id=${encodeURIComponent(path)}`);
+  expect(note.tags).toEqual(["recipe"]);
+  await api(hubState(), "DELETE", `notes/${note.id}`);
+});
+
+test("a vault's role tag is no applet's to open: the card leaves it out", async ({ page }) => {
+  const st = hubState();
+  const cur = await api(st, "GET", `notes?id=${encodeURIComponent("Applets/Recipes")}`);
+  const opens = [...cur.metadata.opens, { type: "pinned", path: "Recipes/" }];
+  await api(st, "PATCH", `notes/${cur.id}`, { metadata: { opens }, if_updated_at: cur.updatedAt });
+  try {
+    await openFromStrip(page);
+    const card = page.getByRole("region", { name: /asking for access/ });
+    await expect(card).toContainText("Open recipe notes in Recipes/ when you tap one");
+    await expect(card).not.toContainText("pinned");
+  } finally {
+    const now = await api(st, "GET", `notes?id=${cur.id}`);
+    await api(st, "PATCH", `notes/${cur.id}`, { metadata: { opens: cur.metadata.opens }, if_updated_at: now.updatedAt });
+  }
+});
+
+test("Revoke takes it back: the card shows again", async ({ page }) => {
+  await allow(page);
+  await page.getByRole("button", { name: "Revoke" }).click();
+  await expect(page.getByRole("button", { name: "Allow" })).toBeVisible();
+  await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("changed code asks again (approved code only)", async ({ page }) => {
+  await allow(page);
+  const st = hubState();
+  const id = await idOf("Applets/Recipes");
+  const cur = await api(st, "GET", `notes?id=${id}`);
+  await api(st, "PATCH", `notes/${id}`, { content: `${cur.content}\n<!-- changed -->`, if_updated_at: cur.updatedAt });
+  try {
+    await openFromStrip(page);
+    await expect(page.getByText("code changed since you allowed it")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Allow this version" })).toBeVisible();
+    await expect(page.locator("iframe")).toHaveCount(0);
+  } finally {
+    const now = await api(st, "GET", `notes?id=${id}`);
+    await api(st, "PATCH", `notes/${id}`, { content: cur.content, if_updated_at: now.updatedAt });
+  }
+});
+
+test("with no tap, it doesn't start: an address typed or restored waits with Open", async ({ page }) => {
+  await allow(page);
+  const url = page.url();
+  await page.goto(url);
+  await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
+  await expect(page.locator("iframe")).toHaveCount(0);
+  await page.getByRole("button", { name: /^Open Recipe box$/ }).click();
+  await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
+});
+
+test("a link that isn't a tap doesn't start it, even right after a tap on the same applet", async ({ page }) => {
+  await allow(page);
+  const url = new URL(page.url()).pathname;
+  await page.goto(`/v/${VAULT}`);
+  // tap the applet, then come straight back: the tap's mark is made and then left behind
+  await page.getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
+  await page.goBack();
+  // a navigation that is not a tap, to the same applet
+  await page.evaluate((u) => { history.pushState({}, "", u); dispatchEvent(new PopStateEvent("popstate")); }, url);
+  await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
+  await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("a link that arrives while the applet runs doesn't inherit its start", async ({ page }) => {
+  await allow(page);
+  const tomato = await idOf("Recipes/Tomato toast");
+  await page.evaluate((u) => { history.pushState({}, "", u); dispatchEvent(new PopStateEvent("popstate")); }, `${new URL(page.url()).pathname}?note=${tomato}`);
+  await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
+  await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("Back and Forward never start it, even to a screen a tap once started", async ({ page }) => {
+  await allow(page);
+  await page.goBack();
+  await page.goForward();
+  await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
+  await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("Stop holds: leaving and coming Back doesn't start it again", async ({ page }) => {
+  await openFromStrip(page);
+  await page.getByRole("button", { name: "Allow" }).click();
+  await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
+  await page.getByRole("button", { name: "Stop" }).click();
+  await page.getByRole("link", { name: "Back" }).click();
+  // the vault view drawn first, so the applet's screen is really left
+  await expect(page.getByRole("list", { name: "Applets" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
+  await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("signing out of a vault ends its applets' grants on this device", async ({ page }) => {
+  await allow(page);
+  await page.goto("/settings");
+  await expect(page.getByRole("list", { name: "Allowed applets" }).getByRole("listitem")).toHaveCount(1);
+  await page.getByRole("button", { name: "Sign out" }).click();
+  expect(await page.evaluate(() => localStorage.getItem("parachute.applets.grants.v1"))).toBe("{}");
+});
+
+test("it is handed a note only when it claims that note", async ({ page }) => {
+  await allow(page);
+  const base = new URL(page.url()).pathname;
+  const tomato = await idOf("Recipes/Tomato toast");
+  const welcome = await idOf("Welcome");
+  await page.goto(`${base}?note=${welcome}`);
+  await page.getByRole("button", { name: /^Open Recipe box$/ }).click();
+  await expect(frame(page).locator("#opened")).toHaveText("No recipe opened.");
+  await page.goto(`${base}?note=${tomato}`);
+  await page.getByRole("button", { name: /^Open Recipe box$/ }).click();
+  await expect(frame(page).locator("#opened")).toHaveText("Opened: Recipes/Tomato toast");
+});
+});

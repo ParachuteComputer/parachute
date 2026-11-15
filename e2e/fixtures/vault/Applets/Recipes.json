@@ -1,0 +1,8 @@
+{
+  "applet": {
+    "contract": 2, "id": "recipe-box", "name": "Recipe box", "glyph": "❀", "note": "a test applet: the recipes in Recipes/",
+    "access": [{ "vault": "here", "allow": [{ "path": "Recipes/", "verbs": ["read", "create", "update"] }] }],
+    "screens": [{ "id": "home", "name": "Recipe box" }]
+  },
+  "opens": [{ "type": "recipe", "path": "Recipes/" }]
+}
