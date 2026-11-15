@@ -3,8 +3,10 @@
 One app for your vaults and the applets that grow on them.
 
 - **Vaults.** Add a vault on any Parachute hub by its address and sign in there. Browse, search and read its notes.
-- **Applets.** An applet is a note in your vault: one HTML file and a manifest saying what it may read and write, and
-  which kinds of note it opens. It runs sealed, only after you allow it.
+- **Applets.** An applet is one note in your vault: its metadata is the manifest (what it may read and write, which
+  kinds of note it opens), its content is the code: one TSX or JSX module, or an HTML page. Any chat AI with the
+  Parachute MCP can make one by writing that note: see [docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md). It runs
+  sealed, only after you allow it, and changed code asks again.
 - **Open with.** A note's type is its tag. Tap a note and it opens in the applet that claims its type, or in the plain
   vault view, which opens anything. When two applets claim a type, Parachute asks once. Your choices stay on your device.
 
@@ -31,7 +33,9 @@ the binary if it isn't on your `PATH`.
 - `src/vault/`: signing in (OAuth with PKCE and dynamic registration, one sign-in per vault), the vaults this device
   holds, the client.
 - `src/applet/`: an applet as Parachute reads it. The manifest (`metadata.applet`, contract 2) is read exactly as the Uni
-  app reads it, so one applet note runs in both; what it opens goes beside it in `metadata.opens`. The sealed frame,
+  app reads it, so one applet note runs in both; what it opens goes beside it in `metadata.opens`. Its code (`code.ts`):
+  the note's extension says html, tsx or jsx; TSX/JSX is transpiled in the app with sucrase (small, pure JS, offline),
+  cached against the code's hash, and run with React provided as an import. The sealed frame,
   its kit (`window.uni`, also `window.parachute`), the grant card and the sandbox self-test, which runs by itself and
   decides whether applets run here at all (sealed on desktop, approved code only on Android).
 - `src/open/`: open with. The note's route decides (`resolve.ts`); the sheet and long-press; defaults kept on this

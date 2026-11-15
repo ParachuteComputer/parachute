@@ -47,8 +47,6 @@ export function createGrantStore(storage: StorageLike | null = typeof localStora
       const at = new Date(now());
       read().set(subject, { scope, html, grantedAt: at.toISOString(), grantedUnder: mode, ...(expires ? { expires: expires(at).toISOString() } : {}) }); write();
     },
-    /** The user accepted the changed HTML: remember its hash. Never creates a grant. */
-    acknowledge(subject: string, html: string): void { const r = read().get(subject); if (r) { r.html = html; write(); } },
     revoke(subject: string): void { read().delete(subject); write(); },
     /** Every subject with a grant. */
     subjects(): string[] { return [...read().keys()]; },

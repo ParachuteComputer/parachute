@@ -9,7 +9,7 @@
 //                     beneath one) and whose folder holds the note; never for an HTML note or an applet's own note, and
 //                     never by a type that is one of the vault's role tags; then the vault view, always.
 //   resolve           1. a default for one of the note's claimed types names the vault view → the vault view;
-//                        names an "ok" candidate → open it
+//                        names an "ok" candidate → open it; two of its types' defaults name different places → ask
 //                     2. exactly one "ok" applet claims it → open it
 //                     3. several do → ask
 //                     4. none does → the vault view, with one line when an applet claims it ("updated" first, else "none");
@@ -40,13 +40,17 @@ export function candidates<T extends AppletEntry>(note: NoteLike, applets: reado
 }
 
 export function resolve(cands: readonly Candidate[], defaults: Record<string, Choice>): Decision {
-  // 1. a default for a type this note is claimed by
+  // 1. a default for a type this note is claimed by. Two of its types whose defaults name different places: ask, so
+  //    neither type's choice wins by the order the applets happen to be in
+  const chosen = new Set<string>();
   for (const c of cands) {
     const d = defaults[c.claim.type];
-    if (d === VAULT) return { kind: "vault", line: null, by: "default" };
-    const named = d ? cands.find((x) => x.entry.noteId === d && x.status === "ok") : undefined;
-    if (named) return { kind: "applet", candidate: named, by: "default" };
+    if (d === VAULT || (d && cands.some((x) => x.entry.noteId === d && x.status === "ok"))) chosen.add(d);
   }
+  if (chosen.size > 1) return { kind: "ask", candidates: [...cands] };
+  const [d] = chosen;
+  if (d === VAULT) return { kind: "vault", line: null, by: "default" };
+  if (d) return { kind: "applet", candidate: cands.find((x) => x.entry.noteId === d)!, by: "default" };
   const ok = cands.filter((c) => c.status === "ok");
   if (ok.length === 1) return { kind: "applet", candidate: ok[0], by: "only" };
   if (ok.length > 1) return { kind: "ask", candidates: [...cands] };

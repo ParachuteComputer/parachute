@@ -3,3 +3,8 @@ declare module "virtual:vault-client-kit" {
   const source: string;
   export default source;
 }
+declare module "virtual:react-kit" {
+  /** React, ReactDOM and the JSX runtime bundled to an IIFE that sets `window.__ParachuteModules`. */
+  const source: string;
+  export default source;
+}

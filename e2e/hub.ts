@@ -78,3 +78,15 @@ export async function globalTeardown() {
   rmSync(s.home, { recursive: true, force: true });
   rmSync(STATE, { force: true });
 }
+
+/** One MCP tool call to the e2e vault, as a chat AI with the Parachute MCP makes it: JSON-RPC `tools/call` over HTTP. */
+export async function mcp(state: Pick<HubState, "origin" | "token">, tool: string, args: Record<string, unknown>) {
+  const r = await fetch(`${state.origin}/vault/${VAULT}/mcp`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${state.token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: args } }),
+  });
+  const body = await r.json() as { result?: { isError?: boolean; content: { type: string; text: string }[] }; error?: unknown };
+  if (r.status >= 300 || body.error || body.result?.isError) throw new Error(`${tool}: ${r.status} ${JSON.stringify(body).slice(0, 300)}`);
+  return JSON.parse(body.result!.content[0].text);
+}
