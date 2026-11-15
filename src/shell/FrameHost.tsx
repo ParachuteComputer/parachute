@@ -13,9 +13,14 @@ import { subscribeDefaults } from "../open/defaults";
 import { subscribeApplets } from "../applet/useApplets";
 import { subscribeGate } from "../applet/selftest/run";
 
-const FRAME_DOC = frameDocument(frameKit.js, frameKit.css);
+/** How long a frame from a vault has to say it is listening before the built-in one takes its place. */
+const WATCHDOG_MS = 10_000;
 
-export default function FrameHost({ doc = FRAME_DOC }: { doc?: string }) {
+export default function FrameHost({ js, from, onFailed }: { js: string; from: "built-in" | "vault"; onFailed: (why: string) => void }) {
+  const doc = useMemo(() => frameDocument(frameKit.js, frameKit.css, js), [js]);
+  const failedRef = useRef(onFailed);
+  failedRef.current = onFailed;
+  const heard = useRef(false);
   const ref = useRef<HTMLIFrameElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -34,17 +39,20 @@ export default function FrameHost({ doc = FRAME_DOC }: { doc?: string }) {
     const onMessage = (e: MessageEvent) => {
       // targetOrigin "*" and this check: a sandboxed srcdoc frame's origin is opaque, so its window is what identifies it
       if (e.source === null || e.source !== ref.current?.contentWindow) return;
-      const d = e.data as { pf?: unknown; hello?: unknown } | null;
-      if (d && typeof d === "object" && d.pf === 1 && d.hello === 1) { sendLocation(); return; }
+      const d = e.data as { pf?: unknown; hello?: unknown; failed?: unknown } | null;
+      if (d && typeof d === "object" && d.pf === 1 && d.hello === 1) { heard.current = true; sendLocation(); return; }
+      if (d && typeof d === "object" && d.pf === 1 && typeof d.failed === "string") { failedRef.current(d.failed.slice(0, 300)); return; }
       host.handle(e.data);
     };
     addEventListener("message", onMessage);
     const changed = (what: "vaults" | "applets" | "defaults") => () => host.event("changed", { what });
     const offs = [subscribeVaults(changed("vaults")), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets"))];
-    return () => { removeEventListener("message", onMessage); offs.forEach((f) => f()); };
+    // a frame from a vault that never starts (or never listens) gives way to the built-in one
+    const watchdog = from === "vault" ? window.setTimeout(() => { if (!heard.current) failedRef.current("it didn't start"); }, WATCHDOG_MS) : 0;
+    return () => { removeEventListener("message", onMessage); offs.forEach((f) => f()); window.clearTimeout(watchdog); };
   }, [host]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(sendLocation, [location.key, location.pathname, location.search]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <iframe ref={ref} className="app-frame" title="Parachute" sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={doc} />;
+  return <iframe ref={ref} className="app-frame" data-frame={from} title="Parachute" sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={doc} />;
 }

@@ -42,6 +42,14 @@ its addresses is shown (a shell screen removes it), and it asks at most a few hu
 lets a note's pictures load only from inside the note (data:), not from the web; links out (web, mail, phone) open
 through the shell, during a tap. A tap counts for the frame only while the frame has the focus.
 
+**The frame can come from the home vault.** The built-in frame is itself one TSX module (`src/frame/default-frame.tsx`)
+that the shell transpiles and runs like any other. A note tagged `parachute-frame` in the person's home vault (Settings
+picks it; by default the first vault signed in to) runs in its place once the self-test has passed and the person
+allowed that exact code on the frame's card. Changed code asks again, the last allowed copy runs offline, and a frame
+that stops gives way to the built-in one. "Make this mine" copies the built-in frame into the vault (copy-on-write); a
+newer built-in frame is then offered in Settings, never written over theirs. See
+[docs/CHANGE-YOUR-FRAME.md](docs/CHANGE-YOUR-FRAME.md) and `src/shell/frameSource.ts`.
+
 - `src/vault/`: signing in (OAuth with PKCE and dynamic registration, one sign-in per vault), the vaults this device
   holds, the client.
 - `src/applet/`: an applet as Parachute reads it. The manifest (`metadata.applet`, contract 2) is read exactly as the Uni

@@ -1,11 +1,9 @@
 // The built-in frame: the vault list, a vault, a note (where open-with decides), and the "Open with…" sheet.
+// This file is also the code "Make this mine" copies into the home vault, as one record: it imports only React,
+// react-router and "@parachute/frame", which is all a frame's code may import.
 import { useEffect } from "react";
 import { Route, Routes, useLocation } from "react-router";
-import Home from "./views/Home";
-import VaultView from "./views/VaultView";
-import NoteRoute from "./views/NoteRoute";
-import Sheet from "./open/Sheet";
-import { closeSheet, installLongPress } from "./open/sheet";
+import { closeSheet, Home, installLongPress, NoteRoute, Sheet, VaultView } from "@parachute/frame";
 
 /** The long-press on any link to a note, and the rule that a sheet belongs to the screen it was opened on. */
 function Presses() {

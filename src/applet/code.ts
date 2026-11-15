@@ -75,7 +75,9 @@ export function createCompileCache(storage: StorageLike | null = typeof localSto
   return {
     get(hash: string): string | null {
       const hit = memory.get(hash) ?? read()[hash];
-      return hit && hit.t === TRANSPILER && typeof hit.js === "string" ? hit.js : null;
+      if (!hit || hit.t !== TRANSPILER || typeof hit.js !== "string") return null;
+      memory.set(hash, hit);
+      return hit.js;
     },
     put(hash: string, js: string) {
       const c: Cached = { t: TRANSPILER, js, at: Date.now() };
