@@ -12,10 +12,11 @@ const RouterLink = ({ href, className, children }: { href: string; className?: s
   isAppPath(href) ? <Link to={href} className={className}>{children}</Link> : <a href={href} className={className} target="_blank" rel="noreferrer noopener">{children}</a>;
 
 /** A note, read: its title, where it sits, its tags, and its content drawn by surface-render. An applet's own note is shown as text. */
-export default function NoteView({ above }: { above?: ReactNode }) {
+export default function NoteView({ above, note: given }: { above?: ReactNode; /** the note, when the route already read it */ note?: Note | null }) {
   const { vault: key, id } = useParams();
   const rec = useVault(key);
-  const load = useVaultQuery<Note | null>(rec, (c) => c.getNote(id ?? ""), [id]);
+  const fetched = useVaultQuery<Note | null>(given === undefined ? rec : null, (c) => c.getNote(id ?? ""), [id]);
+  const load: typeof fetched = given === undefined ? fetched : { state: "ok", data: given };
   // a wikilink names a note by its path; the vault answers a path where an id goes
   const resolve: WikilinkResolver = useMemo(() => (target) => (rec ? unresolvedLink(noteHref(rec.key, target.split("|")[0].split("#")[0])) : null), [rec]);
   if (!rec) return <NoVault />;

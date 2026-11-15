@@ -2,11 +2,15 @@
 // long-press on any link to a note (a right-click on desktop). No call site changes.
 import { useSyncExternalStore } from "react";
 
-export type SheetTarget = { vault: string; note: string; asked: boolean };
+import type { Note } from "@openparachute/surface-client";
+import type { Candidate } from "./resolve";
+
+/** `preset`: what the note's route already worked out, so the sheet needn't read it again. */
+export type SheetTarget = { vault: string; note: string; asked: boolean; preset?: { note: Note; cands: Candidate[] } };
 let target: SheetTarget | null = null;
 const listeners = new Set<() => void>();
 const set = (t: SheetTarget | null) => { target = t; listeners.forEach((f) => f()); };
-export const openSheet = (vault: string, note: string, asked = false) => set({ vault, note, asked });
+export const openSheet = (vault: string, note: string, asked = false, preset?: SheetTarget["preset"]) => set({ vault, note, asked, preset });
 export const closeSheet = () => set(null);
 export const useSheet = () => useSyncExternalStore((cb) => { listeners.add(cb); return () => listeners.delete(cb); }, () => target, () => null);
 

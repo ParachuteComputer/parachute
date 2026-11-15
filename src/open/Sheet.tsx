@@ -5,8 +5,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useVault } from "../vault/hooks";
 import { noteHref, titleOf } from "../vault/notes";
-import { closeSheet, useSheet } from "./sheet";
-import { useOpenWith } from "./useOpenWith";
+import { closeSheet, useSheet, type SheetTarget } from "./sheet";
+import { useOpenWith, type OpenWith } from "./useOpenWith";
 import { setDefault, VAULT } from "./defaults";
 import { appletHref, appletPath } from "./paths";
 import { isRealTap, markTap } from "./mark";
@@ -15,13 +15,14 @@ import type { Candidate } from "./resolve";
 export default function Sheet() {
   const target = useSheet();
   if (!target) return null;
-  return <SheetFor key={`${target.vault}/${target.note}`} vault={target.vault} note={target.note} />;
+  return <SheetFor key={`${target.vault}/${target.note}`} vault={target.vault} note={target.note} preset={target.preset} />;
 }
 
-function SheetFor({ vault, note }: { vault: string; note: string }) {
+function SheetFor({ vault, note, preset }: { vault: string; note: string; preset?: SheetTarget["preset"] }) {
   const rec = useVault(vault);
   const nav = useNavigate();
-  const ow = useOpenWith(rec, note, false);
+  const read = useOpenWith(preset ? null : rec, note, false);
+  const ow: OpenWith = preset ? { state: "ok", note: preset.note, cands: preset.cands, decision: { kind: "ask", candidates: preset.cands } } : read;
   const [always, setAlways] = useState(true);
   if (!rec) return null;
   const cands = ow.state === "ok" ? ow.cands : [];

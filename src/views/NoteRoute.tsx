@@ -34,10 +34,10 @@ export default function NoteRoute() {
       // a tap that led to this note leads on to the applet, once; anything else arrives there stopped
       carryMark(location.pathname, appletPath(rec.key, decision.candidate.entry.noteId));
       nav(to, { replace: true });
-    } else if (decision.kind === "ask") {
-      openSheet(rec.key, id, true);
+    } else if (decision.kind === "ask" && ow.state === "ok" && ow.note) {
+      openSheet(rec.key, id, true, { note: ow.note, cands: decision.candidates });
     }
-  }, [decision, rec, id, location.key, location.pathname, nav]);
+  }, [decision, rec, id, location.key, location.pathname, nav]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!rec) return <NoVault />;
   if (plain) return <NoteView />;
@@ -52,7 +52,7 @@ export default function NoteRoute() {
       </Link>
     </p>
   ) : first === "ask" && ow.state === "ok" && ow.note ? (
-    <p className="open-line"><button type="button" className="link-button" onClick={() => openSheet(rec.key, ow.note!.id, true)}>Open {titleOf(ow.note)} with…</button></p>
+    <p className="open-line"><button type="button" className="link-button" onClick={() => openSheet(rec.key, ow.note!.id, true, { note: ow.note!, cands: ow.cands })}>Open {titleOf(ow.note)} with…</button></p>
   ) : null;
-  return <NoteView above={line} />;
+  return <NoteView above={line} note={ow.state === "ok" ? ow.note : undefined} />;
 }
