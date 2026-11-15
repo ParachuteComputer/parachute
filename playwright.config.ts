@@ -11,7 +11,8 @@ export default defineConfig({
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: { baseURL: "http://localhost:4173", trace: "retain-on-failure" },
   projects: [
-    { name: "phone", use: { ...devices["Pixel 7"], browserName: "chromium" } },
+    { name: "setup", testMatch: /auth\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },
+    { name: "phone", dependencies: ["setup"], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
   ],
   webServer: { command: "npm run build && npm run preview", url: "http://localhost:4173", reuseExistingServer: !process.env.CI, timeout: 120_000 },
 });

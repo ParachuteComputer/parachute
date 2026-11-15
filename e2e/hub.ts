@@ -52,6 +52,12 @@ export default async function globalSetup() {
     const state: HubState = { origin, password, home, pid: child.pid!, token: minted.token };
     const root = join(import.meta.dirname, "fixtures/vault");
     for (const f of files(root)) {
+      if (f.endsWith(".json")) continue;
+      if (f.endsWith(".html")) {
+        // an applet: its HTML, tagged applet, with the manifest (and what it opens) from the .json beside it
+        await api(state, "POST", "notes", { path: relative(root, f).replace(/\.html$/, ""), content: readFileSync(f, "utf8"), extension: "html", tags: ["applet"], metadata: JSON.parse(readFileSync(f.replace(/\.html$/, ".json"), "utf8")) });
+        continue;
+      }
       const path = relative(root, f).replace(/\.md$/, "");
       await api(state, "POST", "notes", { path, content: readFileSync(f, "utf8"), ...(path.startsWith("Recipes/") ? { tags: ["recipe"] } : {}) });
     }

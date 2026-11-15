@@ -59,3 +59,27 @@ button, input { font: inherit; color: inherit; }
 .prose-note code { font: .85em var(--mono); }
 .prose-note pre { overflow-x: auto; }
 .prose-note .wikilink-unresolved { border-bottom: 0; }
+
+/* applets */
+.applets { display: flex; gap: 8px; overflow-x: auto; margin: 0 0 10px; padding: 0; list-style: none; }
+.applet-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); text-decoration: none; white-space: nowrap; font-size: 15px; }
+.applet-chip span[aria-hidden] { color: var(--accent); }
+.applet-screen { display: flex; flex-direction: column; min-height: calc(100dvh - 64px); }
+.applet-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; font-size: 14px; }
+.applet-bar .quiet { flex: 1; }
+.applet-frame { flex: 1; width: 100%; min-height: 70dvh; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.selftest-frames { position: fixed; left: -10000px; top: 0; width: 360px; height: 640px; overflow: hidden; }
+.selftest-frames iframe { width: 360px; height: 640px; }
+.grant-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.grant-head h2 { margin: 0; font: 600 18px/1.2 var(--serif); }
+.grant-glyph { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 10px; font-size: 18px; color: var(--accent); }
+.grant-name { font-weight: 600; font-style: normal; }
+.grant-lines { margin: 0 0 8px; padding: 6px 0 6px 1.2em; border-block: 1px solid var(--line); }
+.grant-lines li { padding: 3px 0; }
+.grant-stress { font-weight: 600; }
+.grant-rest, .grant-changed { font-size: 14px; }
+.grant-meta { font-size: 12.5px; margin: 6px 0 0; }
+.grant-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.notice { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: 0 0 8px; font-size: 14px; }
+.check-list { list-style: none; padding: 0; margin: 6px 0 0; font-size: 13px; columns: 2; }
+.check-list .fail { color: var(--danger); }
