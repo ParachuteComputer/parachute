@@ -33,11 +33,12 @@ export const PROVIDED_IMPORTS = ["react", "react-dom", "react-dom/client", "reac
 export const TRANSPILER = "sucrase-3.35.1/2";
 
 /**
- * The hash a grant holds for an applet's code. HTML: of its content alone (as before TSX, so earlier grants hold).
- * TSX/JSX: of its kind and content, so a note whose extension changes is new code, and the transpile cache, keyed on
- * this hash, never serves one kind's output for the other.
+ * The hash a grant holds for an applet's code. HTML: the SHA-256 of its content, bare hex (as before TSX, so earlier
+ * grants hold). TSX/JSX: `tsx:<hex>` / `jsx:<hex>`. The kind is on the output, where no content can reach it, so a note
+ * whose extension changes is new code whatever its content, and the transpile cache, keyed on this, never serves one
+ * kind's output for the other.
  */
-export const codeHash = (kind: CodeKind, source: string): Promise<string> => sha256Hex(kind === "html" ? source : `${kind}\n${source}`);
+export const codeHash = async (kind: CodeKind, source: string): Promise<string> => (kind === "html" ? "" : `${kind}:`) + await sha256Hex(source);
 
 export type Compiled = { ok: true; js: string } | { ok: false; error: string };
 
@@ -61,6 +62,8 @@ export async function transpile(source: string, kind: "tsx" | "jsx"): Promise<Co
 
 export const COMPILED_KEY = "parachute.applets.compiled.v1";
 const KEEP = 24;
+/** At most this much transpiled code is kept on the device (in characters), and none of one module bigger than a quarter of it. */
+const KEEP_CHARS = 1_000_000;
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 type Cached = { t: string; js: string; at: number };
 
@@ -77,10 +80,11 @@ export function createCompileCache(storage: StorageLike | null = typeof localSto
     put(hash: string, js: string) {
       const c: Cached = { t: TRANSPILER, js, at: Date.now() };
       memory.set(hash, c);
-      // the newest few stay on the device; an older one is transpiled again if it is ever opened
-      const all = { ...read(), [hash]: c };
-      const kept = Object.fromEntries(Object.entries(all).sort((a, b) => (b[1]?.at ?? 0) - (a[1]?.at ?? 0)).slice(0, KEEP));
-      try { storage?.setItem(COMPILED_KEY, JSON.stringify(kept)); } catch { /* this session only */ }
+      // the newest few stay on the device, within a size; an older one is transpiled again if it is ever opened
+      const all = Object.entries({ ...read(), [hash]: c }).filter(([, v]) => typeof v?.js === "string" && v.js.length <= KEEP_CHARS / 4).sort((a, b) => (b[1]?.at ?? 0) - (a[1]?.at ?? 0));
+      let size = 0;
+      const kept = Object.fromEntries(all.slice(0, KEEP).filter(([, v]) => (size += v.js.length) <= KEEP_CHARS));
+      try { storage?.setItem(COMPILED_KEY, JSON.stringify(kept)); } catch { try { storage?.setItem(COMPILED_KEY, "{}"); } catch { /* this session only */ } }
     },
   };
 }

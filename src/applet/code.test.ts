@@ -63,6 +63,17 @@ describe("prepare: one transpile per code hash", () => {
     expect(again.compiled?.ok && again.compiled.js).not.toContain("stale");
     expect(TRANSPILER).toMatch(/^sucrase-/);
   });
+  it("keeps no module bigger than its share, and stays within its size", async () => {
+    const mem = new Mem();
+    const cache = createCompileCache(mem);
+    cache.put("big", "x".repeat(300_000));
+    expect(JSON.parse(mem.getItem(COMPILED_KEY)!)).toEqual({});
+    for (let i = 0; i < 6; i++) cache.put(`m${i}`, "y".repeat(200_000));
+    const kept = Object.values(JSON.parse(mem.getItem(COMPILED_KEY)!) as Record<string, { js: string }>);
+    expect(kept.reduce((n, v) => n + v.js.length, 0)).toBeLessThanOrEqual(1_000_000);
+    // what isn't kept on the device still serves this session
+    expect(cache.get("big")).toHaveLength(300_000);
+  });
   it("an HTML applet's hash is of its content, and nothing is transpiled", async () => {
     const p = await prepare("<p>hi</p>", "html", createCompileCache(new Mem()));
     expect(p.compiled).toBeNull();
@@ -83,6 +94,10 @@ describe("the code's hash", () => {
     expect(new Set(hashes).size).toBe(3);
     // an HTML applet's hash is what it was before TSX: grants made then still hold
     expect(hashes[0]).toBe(await sha256Hex(src));
+    // no content of one kind hashes like another kind's
+    expect(await codeHash("html", `tsx\n${src}`)).not.toBe(await codeHash("tsx", src));
+    expect(await codeHash("html", `tsx:${src}`)).not.toBe(await codeHash("tsx", src));
+    expect(await codeHash("tsx", src)).toMatch(/^tsx:[0-9a-f]{64}$/);
   });
   it("keys the transpile cache, so one kind's output is never served for the other", async () => {
     const cache = createCompileCache(new Mem());
@@ -100,11 +115,11 @@ describe("the module page", () => {
     expect(page.match(/<\/script>/g)).toHaveLength(3);
   });
   it("escapes </script> and <!-- without changing what the code means", () => {
-    const code = 'globalThis.__out = ["</script>", "<!--", /<!--/u.test("a<!--b"), `</SCRIPT>`];';
+    const code = 'globalThis.__out = ["</script>", "<!--", /<!--/u.test("a<!--b"), `</SCRIPT>`, "\\</script>", /<\\/script>/u.test("</script>")];';
     const body = inlineScript(code).replace(/^<script>/, "").replace(/<\/script>$/, "");
     expect(body).not.toMatch(/<\/script|<!--/i);
     new Function(body)();
-    expect((globalThis as { __out?: unknown }).__out).toEqual(["</script>", "<!--", true, "</SCRIPT>"]);
+    expect((globalThis as { __out?: unknown }).__out).toEqual(["</script>", "<!--", true, "</SCRIPT>", "</script>", true]);
   });
 });
 

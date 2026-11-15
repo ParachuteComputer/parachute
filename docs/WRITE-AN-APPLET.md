@@ -46,7 +46,8 @@ repaired. A rule can't reach `.parachute/`. No applet can change a code note (HT
   screen: home     # optional: one of its screens
 ```
 
-The folder must be one it may read. `applet`, `view`, `capture` and anything starting with `parachute` can't be claimed.
+The folder must be one it may read, and not `Applets/` or `.parachute/`. `applet`, `view`, `capture` and anything
+starting with `parachute` can't be claimed.
 
 ## The code
 
