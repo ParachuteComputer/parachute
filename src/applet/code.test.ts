@@ -66,6 +66,12 @@ describe("prepare: one transpile per code hash", () => {
     const installed = JSON.parse(readFileSync(`${process.cwd()}/node_modules/sucrase/package.json`, "utf8")).version;
     expect(TRANSPILER.startsWith(`sucrase-${installed}/`)).toBe(true);
   });
+  it("drops another transpiler version's entries when it stores a new one", () => {
+    const mem = new Mem();
+    mem.setItem(COMPILED_KEY, JSON.stringify({ old: { t: "older", js: "/* stale */", at: Date.now() } }));
+    createCompileCache(mem).put("new", "/* fresh */");
+    expect(Object.keys(JSON.parse(mem.getItem(COMPILED_KEY)!))).toEqual(["new"]);
+  });
   it("keeps no module bigger than its share, and stays within its size", async () => {
     const mem = new Mem();
     const cache = createCompileCache(mem);
