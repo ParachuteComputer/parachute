@@ -14,7 +14,7 @@ export function folderOf(n: Pick<Note, "path">): string {
   return i > 0 ? p.slice(0, i) : "";
 }
 /** An applet's own note, or any HTML note: shown as text, never run, in the vault view. */
-export const isCodeNote = (n: Pick<Note, "path" | "tags"> & { extension?: string | null }) =>
+export const isCodeNote = (n: { path?: string | null; tags?: readonly string[] | null; extension?: string | null }) =>
   /\.html?$/i.test(n.path ?? "") || String(n.extension ?? "").replace(/^\./, "").toLowerCase() === "html" || (n.tags ?? []).includes("applet");
 
 /** The app's own address for a note in a vault. */
