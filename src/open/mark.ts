@@ -40,6 +40,9 @@ export function takeMark(path: string): boolean {
   return ok;
 }
 
+/** Drop the mark: a move that wasn't a tap. */
+export function clearMark() { mark = null; }
+
 /** The person is now at `path`: a mark for anywhere else is dropped. */
 export function arrived(path: string) { if (mark && mark.path !== path) mark = null; }
 

@@ -3,14 +3,18 @@ import { Link, useParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import { NoteRenderer } from "@openparachute/surface-render/note";
 import { unresolvedLink, type WikilinkResolver } from "@openparachute/surface-render/markdown";
-import { Bar } from "../ui/Bar";
-import { useVault, useVaultQuery } from "../vault/hooks";
-import { folderOf, isAppPath, isCodeNote, noteHref, titleOf } from "../vault/notes";
+import { Bar } from "../../ui/Bar";
+import { useVault, useVaultQuery } from "../data";
+import { call } from "../bridge";
+import { folderOf, isAppPath, isCodeNote, noteHref, titleOf } from "../../vault/notes";
 import NoVault from "./NoVault";
-import { linkFor } from "../links/parse";
+import { linkFor } from "../../links/parse";
 
+// a link out of the app (web, mail, phone): the frame can't open one itself (it has no popups), so it asks the shell,
+// during the tap
 const RouterLink = ({ href, className, children }: { href: string; className?: string; children?: ReactNode }) =>
-  isAppPath(href) ? <Link to={href} className={className}>{children}</Link> : <a href={href} className={className} target="_blank" rel="noreferrer noopener">{children}</a>;
+  isAppPath(href) ? <Link to={href} className={className}>{children}</Link>
+    : <a href={href} className={className} rel="noreferrer noopener" onClick={(e) => { e.preventDefault(); void call("link.out", { url: href }); }}>{children}</a>;
 
 /** A note, read: its title, where it sits, its tags, and its content drawn by surface-render. An applet's own note is shown as text. */
 export default function NoteView({ above, note: given }: { above?: ReactNode; /** the note, when the route already read it */ note?: Note | null }) {
@@ -45,5 +49,5 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
 /** The note's link for someone else's Parachute (or another app): it opens here only where that vault is held. */
 function CopyLink({ link }: { link: string }) {
   const [done, setDone] = useState(false);
-  return <button type="button" className="link-button note-copy" onClick={() => { void navigator.clipboard?.writeText(link).then(() => setDone(true), () => setDone(false)); }}>{done ? "Link copied" : "Copy link"}</button>;
+  return <button type="button" className="link-button note-copy" onClick={() => { void call("clipboard.write", { text: link }).then(setDone, () => setDone(false)); }}>{done ? "Link copied" : "Copy link"}</button>;
 }

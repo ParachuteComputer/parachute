@@ -7,7 +7,7 @@ export const CSP_META = `<meta http-equiv="Content-Security-Policy" content="${F
 // runs. It is NOT a seal: a srcdoc child frame is a fresh realm. The seal is a
 // webview with WebRTC off, proven by the self-test's child-frame check.
 const RTC_NAMES = ["RTCPeerConnection", "webkitRTCPeerConnection", "mozRTCPeerConnection", "RTCDataChannel", "RTCSessionDescription", "RTCIceCandidate"];
-const NO_RTC = `<script>(function(){var n=${JSON.stringify(RTC_NAMES)};for(var i=0;i<n.length;i++)try{Object.defineProperty(window,n[i],{value:undefined,writable:false,configurable:false})}catch(e){}})()</script>`;
+export const NO_RTC = `<script>(function(){var n=${JSON.stringify(RTC_NAMES)};for(var i=0;i<n.length;i++)try{Object.defineProperty(window,n[i],{value:undefined,writable:false,configurable:false})}catch(e){}})()</script>`;
 
 /**
  * A script inline in the page, kept from closing its own tag or opening an HTML comment: `</script` becomes `<\/script`

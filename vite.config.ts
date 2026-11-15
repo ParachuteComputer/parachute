@@ -30,8 +30,30 @@ function iifeKit(id: string, entry: string, name: string): Plugin {
   };
 }
 
+// The frame (src/frame): its own bundle, one script and its styles, which the shell runs in a sealed frame.
+function frameKit(): Plugin {
+  const id = "virtual:frame-kit";
+  return {
+    name: id,
+    resolveId: (source) => (source === id ? `\0${id}` : null),
+    async load(resolved) {
+      if (resolved !== `\0${id}`) return null;
+      const out = await build({
+        configFile: false, logLevel: "silent", plugins: [react()],
+        define: { "process.env.NODE_ENV": JSON.stringify("production") },
+        build: { write: false, minify: true, cssCodeSplit: false, lib: { entry: new URL("./src/frame/entry.tsx", import.meta.url).pathname, formats: ["iife"], name: "__ParachuteFrame" } },
+      });
+      const result = Array.isArray(out) ? out[0] : out;
+      const files = "output" in result ? result.output : [];
+      const js = files.flatMap((f) => (f.type === "chunk" ? [f.code] : []))[0] ?? "";
+      const css = files.filter((f) => f.type === "asset" && f.fileName.endsWith(".css")).map((f) => (f.type === "asset" ? String(f.source) : "")).join("\n");
+      return `export default ${JSON.stringify({ js, css })};`;
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), iifeKit("virtual:vault-client-kit", "./src/applet/kits/vaultClientEntry.ts", "__UniVC"), iifeKit("virtual:react-kit", "./src/applet/kits/reactEntry.ts", "__ParachuteReact")],
+  plugins: [react(), iifeKit("virtual:vault-client-kit", "./src/applet/kits/vaultClientEntry.ts", "__UniVC"), iifeKit("virtual:react-kit", "./src/applet/kits/reactEntry.ts", "__ParachuteReact"), frameKit()],
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   clearScreen: false,
   server: { port: 1420, strictPort: true, headers },

@@ -3,14 +3,12 @@
 // long-press of any link to a note. A choice is a tap inside the app: it starts the applet for this note.
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useVault } from "../vault/hooks";
-import { noteHref, titleOf } from "../vault/notes";
+import { setDefault, useVault } from "../data";
+import { noteHref, titleOf } from "../../vault/notes";
 import { closeSheet, useSheet, type SheetTarget } from "./sheet";
 import { useOpenWith, type OpenWith } from "./useOpenWith";
-import { setDefault, VAULT } from "./defaults";
-import { appletHref, appletPath } from "./paths";
-import { isRealTap, markTap } from "./mark";
-import type { Candidate } from "./resolve";
+import { appletHref } from "../../open/paths";
+import { VAULT, type Candidate } from "../../open/resolve";
 
 export default function Sheet() {
   const target = useSheet();
@@ -30,18 +28,18 @@ function SheetFor({ vault, note, preset, fromRoute }: { vault: string; note: str
   const types = [...new Set(cands.map((c) => c.claim.type))];
   const title = ow.state === "ok" && ow.note ? titleOf(ow.note) : "this note";
   const pick = (e: React.MouseEvent, c: Candidate | null) => {
-    if (!isRealTap(e) || ow.state !== "ok" || !ow.note) return;
+    if (!e.isTrusted || ow.state !== "ok" || !ow.note) return;
     const id = ow.note.id;
     closeSheet();
     if (!c) {
-      if (always) for (const t of types) setDefault(rec.key, t, VAULT);
+      if (always) for (const t of types) void setDefault(rec.key, t, VAULT);
       // from the note's own route: the choice replaces it, so Back skips it (as when the route opens an applet itself)
       nav(`${noteHref(rec.key, id)}?with=vault`, { replace: fromRoute });
       return;
     }
-    if (always) setDefault(rec.key, c.claim.type, c.entry.noteId);
-    // the choice is the person's tap: it starts this applet for this note (an applet not yet allowed shows its card)
-    markTap(appletPath(rec.key, c.entry.noteId));
+    if (always) void setDefault(rec.key, c.claim.type, c.entry.noteId);
+    // the choice is the person's tap: the shell sees it, and starts this applet for this note (an applet not yet
+    // allowed shows its card)
     nav(appletHref(rec.key, c, id), { replace: fromRoute });
   };
   return (

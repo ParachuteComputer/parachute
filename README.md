@@ -18,7 +18,7 @@ Needs Node 22+.
 
 ```sh
 npm ci
-npm run dev          # the web build at http://localhost:1420
+npm run dev          # the web build at http://localhost:1420 (the frame's bundle is built once at start: restart after changing src/frame)
 npm run typecheck
 npm test             # unit tests (vitest)
 npm run e2e          # Playwright on the web build, against a real hub (see below)
@@ -30,6 +30,18 @@ the binary if it isn't on your `PATH`.
 
 ## How it fits together
 
+Two layers. The **shell** (`src/shell/`, started from `src/main.tsx`) is small and fixed: it holds the sign-ins and their
+tokens, the applets' grants and their card, the self-test, and the screens that use them (adding a vault, an applet's
+screen, Settings, a link from outside). The **frame** (`src/frame/`: the vault list, a vault, a note, open-with and its
+sheet) is its own bundle (the `virtual:frame-kit` Vite plugin) that the shell runs in a sealed frame: a srcdoc iframe with
+`sandbox="allow-scripts"`, an opaque origin, no network and no storage of its own. It reaches the shell only through one
+typed message interface, `src/bridge/protocol.ts`, which reads vaults (never a token), lists applets with their status,
+keeps the person's "Always" choices and moves the person between addresses. Nothing in it grants: Allow is the shell's
+own button. A tap counts only when the shell sees the person's live user activation. The frame exists only while one of
+its addresses is shown (a shell screen removes it), and it asks at most a few hundred things in ten seconds. Its CSP
+lets a note's pictures load only from inside the note (data:), not from the web; links out (web, mail, phone) open
+through the shell, during a tap. A tap counts for the frame only while the frame has the focus.
+
 - `src/vault/`: signing in (OAuth with PKCE and dynamic registration, one sign-in per vault), the vaults this device
   holds, the client.
 - `src/applet/`: an applet as Parachute reads it. The manifest (`metadata.applet`, contract 2) is read exactly as the Uni
@@ -38,8 +50,8 @@ the binary if it isn't on your `PATH`.
   cached against the code's hash, and run with React provided as an import. The sealed frame,
   its kit (`window.uni`, also `window.parachute`), the grant card and the sandbox self-test, which runs by itself and
   decides whether applets run here at all (sealed on desktop, approved code only on Android).
-- `src/open/`: open with. The note's route decides (`resolve.ts`); the sheet and long-press; defaults kept on this
-  device; tap marks, so an applet starts only on a person's tap.
+- `src/open/`: open with. The rule (`resolve.ts`, used by the frame); the defaults kept on this device and the tap marks,
+  so an applet starts only on a person's tap (the shell's). The note's route, the sheet and long-press are the frame's.
 - `src/links/`: links in, `parachute://open?url=<a note's web address>`.
 
 An applet's note, as an example:

@@ -25,6 +25,16 @@ const subscribe = (cb: () => void) => { listeners.add(cb); return () => listener
 export const runSelfTest = () => set({ requested: state.requested + 1 });
 export const useSelfTestRun = () => useSyncExternalStore(subscribe, () => state, () => state);
 
+/** The gate now, outside React: "closed" until the facts are known and a stored pass fits them. */
+export function gateNow(): GateMode | "closed" {
+  if (!state.version || !state.runtime) return "closed";
+  return gateMode(PLATFORM, state.version, parseSelfTest(readSelfTestRaw()), currentUserAgent(), undefined, state.runtime);
+}
+/** Resolves once the facts the gate is judged on are known (the self-test itself may still be running). */
+export const whenGateKnown = (): Promise<void> => (state.known ? Promise.resolve() : new Promise((res) => { const off = subscribe(() => { if (state.known) { off(); res(); } }); }));
+/** Any change to the gate: the run's state or the stored pass. */
+export function subscribeGate(cb: () => void): () => void { const a = subscribe(cb); const b = subscribeSelfTest(cb); return () => { a(); b(); }; }
+
 /** The gate as it stands now, live: "closed" until the facts are known and a stored pass fits them. */
 export function useGate(): GateMode | "closed" {
   const raw = useSyncExternalStore(subscribeSelfTest, readSelfTestRaw, () => null);

@@ -2,8 +2,8 @@
 // the applet, never in the vault. Per vault (this device's key for it) and type: an applet's note id, or "vault" for the
 // plain vault view.
 export const DEFAULTS_KEY = "parachute.openwith.v1";
-export type Choice = string; // an applet's note id, or VAULT
-export const VAULT = "vault";
+import type { Choice } from "./resolve";
+export { VAULT, type Choice } from "./resolve";
 type Store = Record<string, Record<string, Choice>>;
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 

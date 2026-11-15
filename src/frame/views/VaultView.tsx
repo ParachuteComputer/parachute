@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
-import { Bar } from "../ui/Bar";
-import { useVault, useVaultQuery } from "../vault/hooks";
-import { folderOf, noteHref, titleOf } from "../vault/notes";
+import { Bar } from "../../ui/Bar";
+import { useApplets, useVault, useVaultQuery } from "../data";
+import { folderOf, noteHref, titleOf } from "../../vault/notes";
 import NoVault from "./NoVault";
-import { useApplets } from "../applet/useApplets";
-import { appletPath } from "../open/paths";
+import { appletPath } from "../../open/paths";
 
 const LIMIT = 60;
 
@@ -18,16 +17,16 @@ export default function VaultView() {
   const [term, setTerm] = useState("");
   useEffect(() => { const t = window.setTimeout(() => setTerm(q.trim()), 250); return () => window.clearTimeout(t); }, [q]);
   const load = useVaultQuery<Note[]>(rec, (c) => (term
-    ? c.queryNotes({ search: term, limit: String(LIMIT) })
+    ? c.queryNotes({ search: term, limit: LIMIT })
     : c.queryNotes({ orderBy: "updated_at", sort: "desc", limit: LIMIT })), [term]);
-  const applets = useApplets(rec);
+  const applets = useApplets(rec?.key);
   if (!rec) return <NoVault />;
   return (
     <main className="screen">
       <Bar title={rec.vault} back="/" />
-      {applets.state === "ok" && applets.found.entries.length > 0 && (
+      {applets?.ok && applets.entries.length > 0 && (
         <ul className="applets" aria-label="Applets">
-          {applets.found.entries.map((a) => (
+          {applets.entries.map((a) => (
             <li key={a.noteId}><Link className="applet-chip" to={appletPath(rec.key, a.noteId)}><span aria-hidden="true">{a.manifest.glyph}</span>{a.manifest.name}</Link></li>
           ))}
         </ul>

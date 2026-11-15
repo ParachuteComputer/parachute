@@ -1,13 +1,10 @@
 import { Link } from "react-router";
-import { Bar } from "../ui/Bar";
-import { useVaults } from "../vault/hooks";
-import { hostOf } from "../vault/store";
-import AddVault from "./AddVault";
+import { Bar } from "../../ui/Bar";
+import { useVaults } from "../data";
 
-/** The vaults this device holds. With none, the first thing is adding one. */
+/** The vaults this device holds. (With none, the shell shows Add a vault first.) */
 export default function Home() {
   const vaults = useVaults();
-  if (!vaults.length) return <AddVault first />;
   return (
     <main className="screen">
       <Bar title="Parachute" />
@@ -15,7 +12,7 @@ export default function Home() {
         {vaults.map((v) => (
           <li key={v.key}><Link className="row" to={`/v/${encodeURIComponent(v.key)}`}>
             <span className="row-title">{v.vault}</span>
-            <span className="row-sub">{hostOf(v.issuer)}</span>
+            <span className="row-sub">{v.host}</span>
           </Link></li>
         ))}
       </ul>
