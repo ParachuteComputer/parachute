@@ -1,0 +1,6 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{font:20px/1.5 var(--sans,system-ui);color:var(--text);margin:12px}</style>
+<h1>Cook mode</h1>
+<p id="opened">No recipe opened.</p>
+<script>uni.onOpen(function (o) { document.getElementById("opened").textContent = "Cooking: " + o.note.path; });</script>

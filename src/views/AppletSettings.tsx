@@ -1,11 +1,27 @@
 // Settings → Applets: the self-test's result (and Run again), and each applet this device has allowed, with Revoke.
 import { useState } from "react";
-import { PLATFORM, runSelfTest, useGate, useSelfTestRun } from "../applet/selftest/run";
+import { runSelfTest, useGate, useSelfTestRun } from "../applet/selftest/run";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { useApplets } from "../applet/useApplets";
 import type { VaultRecord } from "../vault/store";
+import { useSyncExternalStore } from "react";
+import { allDefaults, clearDefault, subscribeDefaults, VAULT } from "../open/defaults";
 
 const grants = deviceGrants();
+const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+
+function DefaultsIn({ rec }: { rec: VaultRecord }) {
+  const raw = useSyncExternalStore(subscribeDefaults, () => JSON.stringify(allDefaults()[rec.key] ?? {}), () => "{}");
+  const applets = useApplets(rec, false);
+  const defaults = Object.entries(JSON.parse(raw) as Record<string, string>);
+  const nameOf = (id: string) => id === VAULT ? "the vault view" : applets.state === "ok" ? applets.found.entries.find((a) => a.noteId === id)?.manifest.name ?? "an applet that is gone" : "an applet";
+  return <>{defaults.map(([type, id]) => (
+    <li key={type} className="line">
+      <span><strong>{type}</strong> notes in {rec.vault} open in {nameOf(id)}</span>
+      <button type="button" className="quiet-button" onClick={() => clearDefault(rec.key, type)}>Clear</button>
+    </li>
+  ))}</>;
+}
 
 function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }) {
   const applets = useApplets(rec, false);
@@ -17,7 +33,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
     const r = grants.record(subject);
     return (
       <li key={subject} className="line">
-        <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, allowed ${r.grantedAt.slice(0, 10)}` : ""}</span></span>
+        <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
         <button type="button" className="quiet-button" onClick={() => { grants.revoke(subject); onChange(); }}>Revoke</button>
       </li>
     );
@@ -34,13 +50,16 @@ export default function AppletSettings({ vaults }: { vaults: VaultRecord[] }) {
       <h2 id="s-applets">Applets</h2>
       <p className="selftest-status" role="status">
         {run.running ? "Checking that applets are sealed on this device…"
-          : mode === "sealed" ? `Applets run sealed on this device (${PLATFORM}).`
-          : mode === "approved-code" ? `Applets run approved code only on this device (${PLATFORM}): an allowed applet runs only while its code is the code you allowed, because this webview can't switch WebRTC off.`
+          : mode === "sealed" ? "Applets run sealed here."
+          : mode === "approved-code" ? "Applets run approved code only here: one runs only while its code is the code you allowed."
           : run.last ? `Applets are off on this device: the self-test failed${run.timedOut ? " (it didn't finish)" : ""}. Every note opens in the vault view.`
           : "Applets are off until the self-test has run on this device."}
       </p>
       {run.last && failed.length > 0 && mode !== "approved-code" && <ul className="check-list" aria-label="Checks that failed">{failed.map((c) => <li key={c.id} className="fail">✗ {c.label}</li>)}</ul>}
       <button type="button" className="quiet-button" disabled={run.running} onClick={runSelfTest}>Run again</button>
+      <h3 className="settings-sub">Always open with</h3>
+      <ul className="plain" aria-label="Defaults">{vaults.map((v) => <DefaultsIn key={v.key} rec={v} />)}</ul>
+      <h3 className="settings-sub">Allowed</h3>
       <ul className="plain" aria-label="Allowed applets">{vaults.map((v) => <AllowedIn key={v.key} rec={v} onChange={() => setN((n) => n + 1)} />)}</ul>
     </section>
   );

@@ -23,7 +23,9 @@ describe("tap marks", () => {
   });
   it("move with the note route's decision to the applet's screen, and only from the note tapped", () => {
     markTap("/v/recipes/n/abc");
-    expect(carryMark("/v/recipes/n/other", "/v/recipes/a/app?note=other")).toBe(false);
+    expect(carryMark("/v/recipes/n/other", "/v/recipes/a/app")).toBe(false);
+    // a mark for somewhere else is left as it was (the sheet's own tap, made just before)
+    expect(takeMark("/v/recipes/n/abc")).toBe(true);
     markTap("/v/recipes/n/abc");
     expect(carryMark("/v/recipes/n/abc", "/v/recipes/a/app")).toBe(true);
     expect(takeMark("/v/recipes/n/abc")).toBe(false);

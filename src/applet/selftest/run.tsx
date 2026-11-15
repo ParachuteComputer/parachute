@@ -15,8 +15,8 @@ const STUB_ROUTER = createRouter([createThemeModule({ theme: () => ({ text: "", 
 const STAGES = [{ id: "main", html: PROBE_HTML, nav: false }, ...NAV_STAGES.map((s) => ({ id: s.id, html: navProbeHtml(s.vector), nav: true }))];
 export const PLATFORM = platformName(currentUserAgent());
 
-type RunState = { running: boolean; last: ProbeResult | null; timedOut: boolean; requested: number; version: string | null; runtime: string | null };
-let state: RunState = { running: false, last: null, timedOut: false, requested: 0, version: null, runtime: null };
+type RunState = { running: boolean; last: ProbeResult | null; timedOut: boolean; requested: number; version: string | null; runtime: string | null; known: boolean };
+let state: RunState = { running: false, last: null, timedOut: false, requested: 0, version: null, runtime: null, known: false };
 const listeners = new Set<() => void>();
 const set = (patch: Partial<RunState>) => { state = { ...state, ...patch }; listeners.forEach((f) => f()); };
 const subscribe = (cb: () => void) => { listeners.add(cb); return () => listeners.delete(cb); };
@@ -44,7 +44,7 @@ export function SelfTestRunner() {
     let on = true;
     void runtimeFacts().then(({ version, runtime }) => {
       if (!on) return;
-      set({ version, runtime });
+      set({ version, runtime, known: true });
       const stored = parseSelfTest(readSelfTestRaw());
       // nothing stored fits this build and webview: run now, by itself
       if (version && runtime && gateMode(PLATFORM, version, stored, currentUserAgent(), undefined, runtime) === "closed") runSelfTest();

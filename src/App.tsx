@@ -4,7 +4,9 @@ import Home from "./views/Home";
 import AddVault from "./views/AddVault";
 import OAuthCallback from "./views/OAuthCallback";
 import VaultView from "./views/VaultView";
-import NoteView from "./views/NoteView";
+import NoteRoute from "./views/NoteRoute";
+import Sheet from "./open/Sheet";
+import { closeSheet, installLongPress } from "./open/sheet";
 import AppletScreen from "./views/AppletScreen";
 import Settings from "./views/Settings";
 import { SelfTestRunner } from "./applet/selftest/run";
@@ -13,7 +15,10 @@ import { arrived, installTapListener } from "./open/mark";
 /** The one listener for real taps on links inside the app, and the rule that a tap's mark is gone once the person moves on. */
 function Taps() {
   const location = useLocation();
-  useEffect(() => installTapListener(), []);
+  // the long-press listener first: it takes the click that ends a long-press before the tap listener sees it
+  useEffect(() => { const a = installLongPress(); const b = installTapListener(); return () => { b(); a(); }; }, []);
+  // a sheet belongs to the screen it was opened on
+  useEffect(() => { closeSheet(); }, [location.key]);
   useEffect(() => { arrived(location.pathname); }, [location.pathname]);
   return null;
 }
@@ -23,6 +28,12 @@ function Taps() {
 function AppletRoute() {
   const location = useLocation();
   return <AppletScreen key={location.key} />;
+}
+
+/** One note route per history entry, as for applets: nothing decided for one note carries to the next. */
+function NoteRouteKeyed() {
+  const location = useLocation();
+  return <NoteRoute key={location.key} />;
 }
 
 export function AppRoutes() {
@@ -35,11 +46,12 @@ export function AppRoutes() {
         <Route path="/add" element={<AddVault />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
         <Route path="/v/:vault" element={<VaultView />} />
-        <Route path="/v/:vault/n/:id" element={<NoteView />} />
+        <Route path="/v/:vault/n/:id" element={<NoteRouteKeyed />} />
         <Route path="/v/:vault/a/:applet" element={<AppletRoute />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Home />} />
       </Routes>
+      <Sheet />
     </>
   );
 }
