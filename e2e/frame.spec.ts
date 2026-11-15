@@ -222,3 +222,35 @@ test("Use the built-in frame on a changed version holds offline too: the older a
   await expect(frameEl(page)).toHaveAttribute("data-frame", "built-in");
   await expect(ui(page).getByRole("heading", { name: "Version A" })).toHaveCount(0);
 });
+
+test("by keyboard: Enter too early on Open does nothing, a later Enter opens; Enter or Space held from too early doesn't", async ({ page }) => {
+  await write(`import { call } from "@parachute/frame";
+export default function L() { return <button onClick={() => { void call("link.out", { url: "https://kbd.example/" }); }}>Go out</button>; }`);
+  const hits: string[] = [];
+  await page.context().route(/kbd\.example/, (r) => { hits.push(r.request().url()); return r.fulfill({ body: "x" }); });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Use it" }).click();
+  const ask = page.getByRole("dialog", { name: "Open outside Parachute" });
+  for (const key of ["Enter", "Space"]) {
+    await ui(page).getByRole("button", { name: "Go out" }).click();
+    await expect(ask).toBeVisible();
+    await page.keyboard.press("Tab");
+    await page.keyboard.down(key);
+    for (let i = 0; i < 8; i++) { await page.waitForTimeout(150); await page.keyboard.down(key); }
+    await page.keyboard.up(key);
+    await page.waitForTimeout(300);
+    expect(hits).toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(ask).toHaveCount(0);
+    await page.waitForTimeout(6_200);
+  }
+  await ui(page).getByRole("button", { name: "Go out" }).click();
+  await expect(ask).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(ask.getByRole("button", { name: "Open" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(1_000);
+  expect(hits).toEqual([]);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => hits.length).toBe(1);
+});

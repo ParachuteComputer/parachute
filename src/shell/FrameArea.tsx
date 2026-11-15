@@ -81,7 +81,7 @@ function LinkOutQuestion({ url }: { url: string }) {
         <p className="link-raw link-whole"><code>{url}</code></p>
         <div className="grant-actions">
           <button ref={cancel} type="button" className="quiet-button" onClick={() => answerLinkOut(false)}>Cancel</button>
-          <button type="button" className="primary" aria-disabled={!armed} onPointerDown={(e) => { downAt.current = e.timeStamp; }} onKeyDown={(e) => { if (keyAt.current === Infinity) keyAt.current = e.timeStamp; }} onClick={open}>Open</button>
+          <button type="button" className="primary" aria-disabled={!armed} onPointerDown={(e) => { downAt.current = e.timeStamp; }} onKeyDown={(e) => { if (!e.repeat && (e.key === "Enter" || e.key === " ")) keyAt.current = e.timeStamp; }} onClick={open}>Open</button>
         </div>
       </section>
     </div>
