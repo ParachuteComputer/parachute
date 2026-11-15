@@ -7,6 +7,7 @@ import VaultView from "./views/VaultView";
 import NoteRoute from "./views/NoteRoute";
 import Sheet from "./open/Sheet";
 import { closeSheet, installLongPress } from "./open/sheet";
+import OpenLink, { LinksIn } from "./links/LinksIn";
 import AppletScreen from "./views/AppletScreen";
 import Settings from "./views/Settings";
 import { SelfTestRunner } from "./applet/selftest/run";
@@ -41,6 +42,7 @@ export function AppRoutes() {
     <>
       <Taps />
       <SelfTestRunner />
+      <LinksIn />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/add" element={<AddVault />} />
@@ -49,6 +51,7 @@ export function AppRoutes() {
         <Route path="/v/:vault/n/:id" element={<NoteRouteKeyed />} />
         <Route path="/v/:vault/a/:applet" element={<AppletRoute />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/open-link" element={<OpenLink />} />
         <Route path="*" element={<Home />} />
       </Routes>
       <Sheet />
