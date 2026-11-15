@@ -15,7 +15,8 @@ val tauriProperties = Properties().apply {
 
 // The play-test key lives outside the repo (PARACHUTE_KEYSTORE_PROPERTIES, default
 // ~/.config/parachute-playtest/keystore.properties: storeFile, storePassword, keyAlias, keyPassword). With it, debug
-// and release builds are both signed with it; without it a release build is left unsigned.
+// and release builds are both signed with it. Without it a release build is left unsigned, and a debug build fails
+// rather than fall back to Gradle's own debug key (on a machine that builds other apps, that key may be theirs).
 val playtestKey = Properties().apply {
     val f = file(System.getenv("PARACHUTE_KEYSTORE_PROPERTIES") ?: "${System.getProperty("user.home")}/.config/parachute-playtest/keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -44,9 +45,10 @@ android {
     }
     buildTypes {
         getByName("debug") {
-            // never Gradle's own debug key: on a machine that builds other apps it may be theirs
-            signingConfig = signingConfigs.findByName("playtest")
-                ?: throw GradleException("No play-test key: set PARACHUTE_KEYSTORE_PROPERTIES or create ~/.config/parachute-playtest/keystore.properties")
+            val key = signingConfigs.findByName("playtest")
+            if (key != null) signingConfig = key
+            else if (gradle.startParameter.taskNames.any { it.contains("debug", ignoreCase = true) })
+                throw GradleException("No play-test key for a debug build: set PARACHUTE_KEYSTORE_PROPERTIES or create ~/.config/parachute-playtest/keystore.properties")
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             isDebuggable = true
             isJniDebuggable = true
