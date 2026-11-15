@@ -41,7 +41,8 @@ describe("a frame's calls", () => {
   it("every call answers without a token, a client id or a refresh token", async () => {
     for (const tap of [false, true]) {
       const { ask, posts } = setup(tap);
-      for (const m of METHODS) expect((await ask(m, PARAMS[m]))?.error, m).toBeUndefined();
+      // without a tap, keeping a choice is refused (the person makes it in the sheet, by a tap)
+      for (const m of METHODS) expect((await ask(m, PARAMS[m]))?.error, m).toBe(!tap && m === "defaults.set" ? "not_allowed" : undefined);
       expect(posts).toHaveLength(METHODS.length);
       expect(JSON.stringify(posts)).not.toMatch(SECRETS);
     }

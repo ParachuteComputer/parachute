@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { useVaults } from "../vault/hooks";
 import { hostOf } from "../vault/store";
-import { askAgain, forgetFrame, homeVault, keepMine, makeThisMine, readFrameRecord, setHome, takeNewDefault, useFrameSource } from "../shell/frameSource";
+import { askAgain, useBuiltIn, homeVault, keepMine, makeThisMine, readFrameRecord, setHome, takeNewDefault, useFrameSource } from "../shell/frameSource";
 
 const WHY: Record<string, string> = {
   "no-home": "The built-in frame runs.",
@@ -29,7 +29,7 @@ export default function FrameSettings() {
   const act = (f: () => Promise<void> | void) => async () => { setBusy(true); setError(null); try { await f(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const found = fs.read?.state === "found" ? fs.read : null;
   const status = fs.choice.run === "vault" ? `Your frame runs: ${found?.path ?? "the copy this device keeps"}.`
-    : fs.choice.why === "failed" ? `The built-in frame runs: your frame stopped${fs.failedWhy ? ` (${fs.failedWhy})` : ""}.` : WHY[fs.choice.why];
+    : fs.choice.why === "failed" ? "The built-in frame runs: your frame stopped." : WHY[fs.choice.why];
   return (
     <section className="card" aria-labelledby="s-frame">
       <h2 id="s-frame">Frame</h2>
@@ -43,10 +43,11 @@ export default function FrameSettings() {
       )}
       {vaults.length === 1 && home && <p className="quiet">Home vault: <strong>{home.vault}</strong>.</p>}
       <p role="status" className="frame-status">{status}</p>
+      {fs.choice.run === "built-in" && fs.choice.why === "failed" && fs.failedWhy && <p className="quiet">It said: <q data-untrusted="true">{fs.failedWhy}</q></p>}
       {home && fs.read?.state === "none" && (
         <button type="button" className="quiet-button" disabled={busy} onClick={act(makeThisMine)}>Make this mine</button>
       )}
-      {found && fs.choice.run === "vault" && <button type="button" className="quiet-button" disabled={busy} onClick={() => forgetFrame()}>Use the built-in frame</button>}
+      {found && fs.choice.run === "vault" && <button type="button" className="quiet-button" disabled={busy} onClick={() => useBuiltIn()}>Use the built-in frame</button>}
       {found && fs.choice.run === "built-in" && (fs.choice.why === "declined" || fs.choice.why === "failed") && (
         <button type="button" className="quiet-button" disabled={busy} onClick={act(async () => { askAgain(); await readFrameRecord(); })}>Look at my frame again</button>
       )}

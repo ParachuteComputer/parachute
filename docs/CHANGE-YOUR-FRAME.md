@@ -43,7 +43,11 @@ change the vault view, or put something above the notes. For example, a heading 
 ## What the person sees
 
 1. A frame in the home vault runs only once the app's self-test has passed on the device.
-2. The first time, and whenever its code changes, a card says what a frame can do and asks. Until they tap **Use it**,
-   the built-in frame runs.
-3. The last version they allowed is kept on the device, so it also runs when the vault can't be reached.
-4. If the frame stops with an error, the built-in one takes its place, and Settings says why.
+2. The first time, and whenever its code changes, a card says what a frame can do and asks: **Use it**, or **Use the
+   built-in frame** (asked again only when the code changes, or from Settings).
+3. A frame can't open anything outside the app by itself: when it asks to, the app shows the whole address and asks.
+   Over a frame of yours the app keeps a small ◠ button of its own that leads to Settings. Keep a way to Settings in
+   your frame too (the built-in `Bar` has one).
+4. The last version they allowed is kept on the device, so it also runs when the vault can't be reached.
+5. If the frame stops with an error, or hangs the app while it starts, the built-in one takes its place (also at the
+   next start), and Settings says why.

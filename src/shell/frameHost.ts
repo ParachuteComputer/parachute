@@ -62,7 +62,7 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "vault.roles": return deps.roles(vault(p.vault as string)).catch(() => null);
       case "applets.list": return deps.applets(vault(p.vault as string), p.fresh as boolean);
       case "defaults.get": vault(p.vault as string); return deps.defaults.get(p.vault as string);
-      case "defaults.set": vault(p.vault as string); deps.defaults.set(p.vault as string, p.type as string, p.choice as string | null); return null;
+      case "defaults.set": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); deps.defaults.set(p.vault as string, p.type as string, p.choice as string | null); return null;
       case "nav.go": {
         const to = p.to as string;
         if (!allowedDestination(to)) throw new Error("not_allowed");
