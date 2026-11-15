@@ -7,9 +7,9 @@
 export type LinkIn = { ok: true; issuer: string; vault: string; note: string } | { ok: false; reason: string };
 
 export const MAX_LINK = 2000;
-const VAULT = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+import { isLoopback, VAULT_NAME as VAULT } from "../vault/address";
+
 const NOTE = /^[A-Za-z0-9_-]{1,64}$/;
-const isLoopback = (h: string) => h === "localhost" || h === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
 
 export function parseLinkIn(raw: string): LinkIn {
   if (typeof raw !== "string" || !raw) return { ok: false, reason: "The link is empty." };

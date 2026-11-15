@@ -2,9 +2,11 @@
 // whenever one is tapped while the app runs). Every link goes through one screen, /open-link?url=<link>, which opens
 // the note when this device holds that vault on that hub, and otherwise shows why, with a Copy button. The app never
 // sends a link back out. A link opens the note's route with no tap mark: an applet it leads to waits, stopped.
-// The link the app was started with is handled once: a reload or a return to the app doesn't open it again; a fresh tap
-// of the same link does.
-import { useEffect } from "react";
+// The link the app was started with is handled once: a reload or a return to the app doesn't open it again (a return
+// after Android killed the process too: MainActivity drops the old intent), and a fresh tap of the same link does.
+// On desktop a link opens the app from cold; a second link while it runs starts a second window (no single-instance
+// plugin in step 1).
+import { useEffect, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { inShell } from "../vault/oauth";
 import { vaultAt } from "../vault/store";
@@ -33,7 +35,11 @@ export function listenForLinks(go: (path: string) => void, plugin?: Plugin, stor
 /** Mounted once at the root, in the shell only. */
 export function LinksIn() {
   const nav = useNavigate();
-  useEffect(() => (inShell() ? listenForLinks((path) => nav(path)) : undefined), [nav]);
+  // subscribe once: useNavigate's function changes with every navigation, and a link arriving while re-subscribing
+  // would be lost
+  const navRef = useRef(nav);
+  navRef.current = nav;
+  useEffect(() => (inShell() ? listenForLinks((path) => navRef.current(path)) : undefined), []);
   return null;
 }
 
