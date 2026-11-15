@@ -40,7 +40,7 @@ keeps the person's "Always" choices and moves the person between addresses. Noth
 own button. A tap counts only when the shell sees the person's live user activation. The frame exists only while one of
 its addresses is shown (a shell screen removes it), and it asks at most a few hundred things in ten seconds. Its CSP
 lets a note's pictures load only from inside the note (data:), not from the web; links out (web, mail, phone) open
-through the shell, during a tap.
+through the shell, during a tap. A tap counts for the frame only while the frame has the focus.
 
 - `src/vault/`: signing in (OAuth with PKCE and dynamic registration, one sign-in per vault), the vaults this device
   holds, the client.

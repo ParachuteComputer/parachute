@@ -18,7 +18,7 @@ function setup(tap = false) {
     roles: async () => ["pinned"],
     applets: async () => ({ ok: true as const, skipped: 0, entries: [] }),
     defaults: { get: vi.fn(() => ({ recipe: "vault" })), set: vi.fn() },
-    go: vi.fn(), back: vi.fn(),
+    go: vi.fn(), back: vi.fn(), decide: vi.fn(),
     tapNow: () => tap,
     mark: { tap: vi.fn(), carry: vi.fn(() => true), clear: vi.fn() },
     copy: vi.fn(async () => true), openOut: vi.fn(),
@@ -33,7 +33,7 @@ function setup(tap = false) {
 const PARAMS: Record<string, unknown> = {
   "vaults.list": {}, "vault.query": { vault: "kitchen", query: { search: "soup", limit: 5, includeContent: true } }, "vault.note": { vault: "kitchen", id: "n1" },
   "vault.roles": { vault: "kitchen" }, "applets.list": { vault: "kitchen", fresh: true }, "defaults.get": { vault: "kitchen" },
-  "defaults.set": { vault: "kitchen", type: "recipe", choice: null }, "nav.go": { to: "/v/kitchen" }, "nav.back": {},
+  "defaults.set": { vault: "kitchen", type: "recipe", choice: null }, "nav.go": { to: "/v/kitchen" }, "nav.back": {}, "nav.decided": { key: "abc", kind: "vault" },
   "clipboard.write": { text: "x" }, "link.out": { url: "https://example.com" },
 };
 

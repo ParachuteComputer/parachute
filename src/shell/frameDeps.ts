@@ -1,5 +1,5 @@
 // The shell's real answers to the frame (frameHost.ts `HostDeps`), from what the shell holds.
-import type { FrameApplets } from "../bridge/protocol";
+import type { Decided, FrameApplets } from "../bridge/protocol";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
 import { gateNow, whenGateKnown } from "../applet/selftest/run";
 import { statusOf } from "../open/status";
@@ -46,7 +46,21 @@ async function openOut(url: string) {
   else window.open(url, "_blank", "noopener,noreferrer");
 }
 
-export function shellDeps(go: (to: string, replace: boolean) => void): HostDeps {
+/** What each history entry's note route decided, for the session: the frame is made afresh after every shell screen,
+ *  and a return to an entry must not decide again (it would send the person on to the applet a second time). */
+const decisions = new Map<string, Decided>();
+export const decidedFor = (key: string): Decided | undefined => decisions.get(key);
+function decide(key: string, kind: Decided) {
+  decisions.set(key, kind);
+  if (decisions.size > 500) decisions.delete(decisions.keys().next().value!);
+}
+
+/** A tap counts for the frame only while the frame has the focus: a tap inside it gives it that, and a tap on a shell
+ *  screen just before the frame was made (Back from Settings) doesn't. */
+const tapIn = (frame: () => HTMLIFrameElement | null) => () =>
+  (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true && !!frame() && document.activeElement === frame();
+
+export function shellDeps(go: (to: string, replace: boolean) => void, frame: () => HTMLIFrameElement | null): HostDeps {
   return {
     vaults: listVaults,
     client: clientFor,
@@ -55,7 +69,8 @@ export function shellDeps(go: (to: string, replace: boolean) => void): HostDeps 
     defaults: { get: defaultsFor, set: setChoice },
     go,
     back: () => history.back(),
-    tapNow: () => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true,
+    decide,
+    tapNow: tapIn(frame),
     mark: { tap: markTap, carry: carryMark, clear: clearMark },
     copy: (text) => navigator.clipboard?.writeText(text).then(() => true, () => false) ?? Promise.resolve(false),
     openOut: (url) => { void openOut(url).catch(() => {}); },

@@ -186,3 +186,24 @@ test("an applet's own note opens as text and never starts it", async ({ page }) 
   await expect(ui(page).getByLabel("The note's text")).toContainText("<!doctype html>");
   await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });
+
+test("Back from an applet the note's line led to lands on the note, and decides nothing again", async ({ page }) => {
+  const st = hubState();
+  const applet = await api(st, "POST", "notes", { path: "Applets/Solo", extension: "html", tags: ["applet"], content: "<h1 id=solo>Solo</h1>",
+    metadata: { applet: { contract: 2, id: "solo", name: "Solo", access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }] }] }, opens: [{ type: "solo", path: "Recipes/" }] } });
+  const note = await api(st, "POST", "notes", { path: "Recipes/Solo dish", content: "# Solo dish", tags: ["solo"] });
+  try {
+    await tapNote(page, "Solo dish");
+    await ui(page).locator(".open-line").getByRole("link", { name: /Solo can open this/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(frame(page).locator("#solo")).toBeVisible();
+    await page.goBack();
+    await expect(ui(page).locator(".prose-note h1")).toHaveText("Solo dish");
+    await expect(page).toHaveURL(/\/n\//);
+    await page.waitForTimeout(1000);
+    await expect(page).toHaveURL(/\/n\//);
+  } finally {
+    await api(st, "DELETE", `notes/${note.id}`);
+    await api(st, "DELETE", `notes/${applet.id}`);
+  }
+});

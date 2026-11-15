@@ -21,5 +21,6 @@ export default function FrameRouter({ children }: { children: ReactNode }) {
   const [loc, setLoc] = useState<FrameLocation | null>(null);
   useEffect(() => { const off = on("location", setLoc); hello(); return off; }, []);
   if (!loc) return null;
-  return <Router location={{ ...loc, state: null }} navigator={frameNavigator}>{children}</Router>;
+  // what the shell remembers the note's route decided for this entry rides in the location's state
+  return <Router location={{ pathname: loc.pathname, search: loc.search, hash: loc.hash, key: loc.key, state: loc.decided ? { decided: loc.decided } : null }} navigator={frameNavigator}>{children}</Router>;
 }

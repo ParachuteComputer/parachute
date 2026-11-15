@@ -25,7 +25,9 @@ export type FrameApplet = {
 export type FrameApplets = { ok: true; entries: FrameApplet[]; skipped: number } | { ok: false; error: string };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
 export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; includeContent?: boolean; includeMetadata?: boolean };
-export type FrameLocation = { pathname: string; search: string; hash: string; key: string };
+/** `decided`: what the note's route already decided for this history entry (kept by the shell, which outlives the frame). */
+export type Decided = "applet" | "ask" | "vault";
+export type FrameLocation = { pathname: string; search: string; hash: string; key: string; decided?: Decided };
 
 /** Every call, its parameters and its answer. */
 export type Calls = {
@@ -42,6 +44,8 @@ export type Calls = {
   /** Go to an address in the app. `carryFrom`: the address a tap led to, which the app now sends on to `to`. */
   "nav.go": [{ to: string; replace?: boolean; carryFrom?: string }, null];
   "nav.back": [Record<string, never>, null];
+  /** The note's route decided for this history entry: it acts on that once, never again on a return. */
+  "nav.decided": [{ key: string; kind: Decided }, null];
   /** Only during a tap. */
   "clipboard.write": [{ text: string }, boolean];
   /** An http(s) address, opened outside the app; only during a tap. */
@@ -50,7 +54,7 @@ export type Calls = {
 export type Method = keyof Calls;
 export type Params<M extends Method> = Calls[M][0];
 export type Result<M extends Method> = Calls[M][1];
-export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "nav.go", "nav.back", "clipboard.write", "link.out"] as const satisfies readonly Method[];
+export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
 
 export type Events = { location: FrameLocation; changed: { what: "vaults" | "applets" | "defaults" } };
 
@@ -85,6 +89,7 @@ function paramsOk(m: Method, p: Record<string, unknown>): boolean {
     case "applets.list": return only(p, ["vault", "fresh"]) && str(p.vault, 120) && typeof p.fresh === "boolean";
     case "defaults.set": return only(p, ["vault", "type", "choice"]) && str(p.vault, 120) && str(p.type, 120) && (p.choice === null || str(p.choice, 120));
     case "nav.go": return only(p, ["to", "replace", "carryFrom"]) && str(p.to, 2000) && optBool(p.replace) && optStr(p.carryFrom, 2000);
+    case "nav.decided": return only(p, ["key", "kind"]) && str(p.key, 64) && (p.kind === "applet" || p.kind === "ask" || p.kind === "vault");
     case "clipboard.write": return only(p, ["text"]) && str(p.text, 4000);
     case "link.out": return only(p, ["url"]) && str(p.url, 4000);
     case "vault.query": {

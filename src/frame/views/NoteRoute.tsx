@@ -8,12 +8,15 @@ import { openSheet } from "../open/sheet";
 import { useOpenWith } from "../open/useOpenWith";
 import { appletHref } from "../../open/paths";
 import { carryOn } from "../FrameRouter";
+import { call } from "../bridge";
+import type { Decided } from "../../bridge/protocol";
 import NoteView from "./NoteView";
 import NoVault from "./NoVault";
 import { Bar } from "../../ui/Bar";
 
 /** The history entries whose decision has been acted on: the route decides once per visit (a default the sheet
- *  stores a moment later must not send the person on a second time). */
+ *  stores a moment later must not send the person on a second time). The shell keeps them too, across frames (the
+ *  frame is made afresh after a shell screen), and hands them back in the location's state. */
 const decided = new Map<string, string>();
 
 export default function NoteRoute() {
@@ -23,16 +26,19 @@ export default function NoteRoute() {
   const rec = useVault(key);
   const plain = params.get("with") === "vault";
   const ow = useOpenWith(plain ? null : rec, id);
+  const kept = (location.state as { decided?: Decided } | null)?.decided;
+  if (kept && !decided.has(location.key)) decided.set(location.key, kept);
   const decision = ow.state === "ok" ? ow.decision : null;
 
   useEffect(() => {
     if (!rec || !id || !decision || decided.has(location.key)) return;
     decided.set(location.key, decision.kind);
+    void call("nav.decided", { key: location.key, kind: decision.kind });
     if (decision.kind === "applet") {
       // a tap that led to this note leads on to the applet, once (the shell keeps the tap); anything else arrives stopped
       const key = location.key;
       // a move the shell refuses is forgotten, so this entry decides again when it is shown again
-      carryOn(location.pathname, appletHref(rec.key, decision.candidate, id)).catch(() => { decided.delete(key); });
+      carryOn(location.pathname, appletHref(rec.key, decision.candidate, id)).catch(() => { decided.delete(key); void call("nav.decided", { key, kind: "vault" }); });
     } else if (decision.kind === "ask" && ow.state === "ok" && ow.note) {
       openSheet(rec.key, id, true, { note: ow.note, cands: decision.candidates });
     }

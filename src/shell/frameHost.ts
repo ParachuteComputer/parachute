@@ -4,7 +4,7 @@
 // start (open/mark.ts). Everything is injected, so tests can play a hostile frame against it.
 import type { VaultClient } from "@openparachute/surface-client";
 import { RateLimiter } from "../applet/contract";
-import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameVault, type Method, type Query } from "../bridge/protocol";
+import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameVault, type Decided, type Method, type Query } from "../bridge/protocol";
 import type { VaultRecord } from "../vault/store";
 
 export type HostDeps = {
@@ -16,6 +16,8 @@ export type HostDeps = {
   defaults: { get(vault: string): Record<string, string>; set(vault: string, type: string, choice: string | null): void };
   go(to: string, replace: boolean): void;
   back(): void;
+  /** Keep what the note's route decided for a history entry. */
+  decide(key: string, kind: Decided): void;
   /** Is the person tapping right now (live user activation in the shell's own window)? */
   tapNow(): boolean;
   mark: { tap(path: string): void; carry(from: string, to: string): boolean; clear(): void };
@@ -71,6 +73,7 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
         return null;
       }
       case "nav.back": deps.back(); return null;
+      case "nav.decided": deps.decide(p.key as string, p.kind as Decided); return null;
       case "clipboard.write": return deps.tapNow() ? deps.copy(p.text as string) : false;
       case "link.out": {
         const url = p.url as string;

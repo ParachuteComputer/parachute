@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import frameKit from "virtual:frame-kit";
 import { createFrameHost } from "./frameHost";
-import { shellDeps } from "./frameDeps";
+import { decidedFor, shellDeps } from "./frameDeps";
 import { frameDocument } from "./frameDoc";
 import { subscribeVaults } from "../vault/store";
 import { subscribeDefaults } from "../open/defaults";
@@ -23,10 +23,11 @@ export default function FrameHost({ doc = FRAME_DOC }: { doc?: string }) {
   navRef.current = navigate;
   const shown = useRef(location);
   shown.current = location;
-  const host = useMemo(() => createFrameHost((m) => ref.current?.contentWindow?.postMessage(m, "*"), shellDeps((to, replace) => navRef.current(to, { replace }))), []);
+  const host = useMemo(() => createFrameHost((m) => ref.current?.contentWindow?.postMessage(m, "*"), shellDeps((to, replace) => navRef.current(to, { replace }), () => ref.current)), []);
   const sendLocation = () => {
     const l = shown.current;
-    host.event("location", { pathname: l.pathname, search: l.search, hash: l.hash, key: l.key });
+    const decided = decidedFor(l.key);
+    host.event("location", { pathname: l.pathname, search: l.search, hash: l.hash, key: l.key, ...(decided ? { decided } : {}) });
   };
 
   useEffect(() => {
