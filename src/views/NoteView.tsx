@@ -1,0 +1,40 @@
+import { useMemo, type ReactNode } from "react";
+import { Link, useParams } from "react-router";
+import type { Note } from "@openparachute/surface-client";
+import { NoteRenderer } from "@openparachute/surface-render/note";
+import { unresolvedLink, type WikilinkResolver } from "@openparachute/surface-render/markdown";
+import { Bar } from "../ui/Bar";
+import { useVault, useVaultQuery } from "../vault/hooks";
+import { folderOf, isAppPath, isCodeNote, noteHref, titleOf } from "../vault/notes";
+import NoVault from "./NoVault";
+
+const RouterLink = ({ href, className, children }: { href: string; className?: string; children?: ReactNode }) =>
+  isAppPath(href) ? <Link to={href} className={className}>{children}</Link> : <a href={href} className={className} target="_blank" rel="noreferrer noopener">{children}</a>;
+
+/** A note, read: its title, where it sits, its tags, and its content drawn by surface-render. An applet's own note is shown as text. */
+export default function NoteView({ above }: { above?: ReactNode }) {
+  const { vault: key, id } = useParams();
+  const rec = useVault(key);
+  const load = useVaultQuery<Note | null>(rec, (c) => c.getNote(id ?? ""), [id]);
+  // a wikilink names a note by its path; the vault answers a path where an id goes
+  const resolve: WikilinkResolver = useMemo(() => (target) => (rec ? unresolvedLink(noteHref(rec.key, target.split("|")[0].split("#")[0])) : null), [rec]);
+  if (!rec) return <NoVault />;
+  const note = load.state === "ok" ? load.data : null;
+  return (
+    <main className="screen">
+      <Bar title={note ? titleOf(note) : "Note"} back={`/v/${encodeURIComponent(rec.key)}`} />
+      {above}
+      {load.state === "loading" && <p className="quiet" role="status">Loading…</p>}
+      {load.state === "error" && <p className="error" role="alert">{load.error}</p>}
+      {load.state === "ok" && !note && <p className="error" role="alert">There's no such note.</p>}
+      {note && (
+        <article className="note">
+          <p className="note-where">{[folderOf(note), ...(note.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · ") || " "}</p>
+          {isCodeNote(note)
+            ? <pre className="note-code" aria-label="The note's text">{note.content ?? ""}</pre>
+            : <NoteRenderer className="prose-note" note={{ path: `${note.path ?? "note"}.${(note as { extension?: string }).extension?.replace(/^\./, "") || "md"}`, content: note.content ?? "" }} resolve={resolve} linkComponent={RouterLink} />}
+        </article>
+      )}
+    </main>
+  );
+}
