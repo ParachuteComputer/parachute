@@ -43,5 +43,15 @@ describe("resolve", () => {
   it("4. none ok, one changed since allowed: the vault view with that line", () => expect(dec({ A: "updated", B: "off" })).toMatchObject({ kind: "vault", line: { status: "updated" } }));
   it("4. a changed applet's line comes before one never allowed", () => expect(dec({ A: "none", B: "updated" })).toMatchObject({ kind: "vault", line: { status: "updated", candidate: { entry: { noteId: "B" } } } }));
   it("4. applets off on this device: the vault view, no line", () => expect(dec({ A: "off", B: "off" })).toEqual({ kind: "vault", line: null }));
+  it("1. a note of two types whose defaults disagree: ask, whichever applet comes first", () => {
+    const R = applet("R"), M = applet("M", [{ type: "menu", path: "Recipes/" }]);
+    const both = { ...recipe, tags: ["recipe", "menu"] };
+    for (const order of [[R, M], [M, R]]) {
+      expect(resolve(candidates(both, order, st({ R: "ok", M: "ok" })), { recipe: "R", menu: "M" })).toMatchObject({ kind: "ask" });
+      expect(resolve(candidates(both, order, st({ R: "ok", M: "ok" })), { recipe: "R", menu: "vault" })).toMatchObject({ kind: "ask" });
+      // defaults that agree still open straight away
+      expect(resolve(candidates(both, order, st({ R: "ok", M: "ok" })), { recipe: "R", menu: "R" })).toMatchObject({ kind: "applet", by: "default", candidate: { entry: { noteId: "R" } } });
+    }
+  });
   it("no candidates: the vault view, no line", () => expect(resolve([], {})).toEqual({ kind: "vault", line: null }));
 });

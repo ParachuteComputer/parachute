@@ -2,6 +2,8 @@
 // no font files: the theme event names the same stacks.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import vaultClientSource from "virtual:vault-client-kit";
+import reactKitSource from "virtual:react-kit";
+import { modulePage, type CodeKind } from "./code";
 import { buildSrcdoc } from "./srcdoc";
 import { buildKitSource } from "./kits";
 import { createSession, type Session } from "./session";
@@ -12,6 +14,9 @@ import type { Resolved } from "./needs";
 /** Shown in place of a frame whose navigation the host CSP had to block. */
 export const STOPPED_MESSAGE = "This applet tried to leave its sandbox and was stopped.";
 const KIT_SOURCE = buildKitSource({ vaultClientSource });
+
+/** What runs in the frame for an applet's code: an HTML note as written; a TSX/JSX note as its transpiled module, with React. */
+export const appletPage = (kind: CodeKind, content: string, js: string | null): string => (kind === "html" ? content : modulePage(js ?? "", reactKitSource));
 
 /** The sealed srcdoc for an applet: CSP first, WebRTC removed, the kits, then the applet. */
 export const frameSrcDoc = (html: string) => buildSrcdoc(html, { kitSource: KIT_SOURCE, headExtra: "" });

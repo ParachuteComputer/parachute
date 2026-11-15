@@ -1,11 +1,13 @@
 // An applet's screen: /v/<vault>/a/<applet note id>[?note=<id>&screen=<id>]. The applet's note is read as it is now;
 // its manifest, what it opens and its code decide what shows:
 // - applets off on this device (the self-test hasn't passed): a calm line, nothing runs;
-// - never allowed, changed what it reaches, or (approved code) changed code: the grant card; nothing runs until Allow;
+// - its code is HTML, or one TSX/JSX module (code.ts) the app transpiles here, before the card, once per code hash; code
+//   that doesn't compile is refused with the reason, and nothing runs;
+// - never allowed, changed what it reaches, or changed code: the grant card; nothing runs until Allow;
 // - allowed: it runs only after a tap inside the app (a marked tap that led here, Allow, or Open); otherwise it waits,
 //   stopped, with an Open button;
 // - it is handed a note (`ready().open`) only when that note is one it claims (opens.ts), and only when the code that
-//   loaded is the code that was allowed (sealed with changed code runs with a notice and is handed nothing until Accept).
+//   loaded is the code that was allowed.
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
@@ -13,14 +15,14 @@ import { Bar } from "../ui/Bar";
 import { useVault } from "../vault/hooks";
 import { clientFor } from "../vault/client";
 import { noteHref, titleOf } from "../vault/notes";
-import AppletFrame from "../applet/frame";
+import AppletFrame, { appletPage } from "../applet/frame";
 import GrantCard from "../applet/GrantCard";
 import { readApplet, resolvedOf, ownFolder, type AppletEntry } from "../applet/discovery";
 import { claimOf, withoutRoles } from "../applet/opens";
 import { readRoleTags } from "../open/roles";
 import { fingerprint, grantExpiry, grantKey, grantLines, grantOf } from "../applet/grant";
 import { deviceGrants, subjectOf } from "../applet/grants";
-import { htmlHash } from "../applet/needs";
+import { codeKindOf, extensionOf, prepare } from "../applet/code";
 import { screenOf } from "../applet/manifest";
 import { createRouter } from "../applet/router";
 import { createVaultModule } from "../applet/modules/vault";
@@ -36,7 +38,7 @@ const grants = deviceGrants();
 const startedByTap = new Map<string, boolean>();
 
 type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string }
-  | { state: "ok"; entry: AppletEntry; html: string; note: Note | null };
+  | { state: "ok"; entry: AppletEntry; page: string; note: Note | null };
 
 export default function AppletScreen() {
   const { vault: key, applet: appletId } = useParams();
@@ -66,17 +68,19 @@ export default function AppletScreen() {
       try {
         const n = await c.getNote(appletId);
         if (!n) { if (on) setLoaded({ state: "refused", error: "its note is gone" }); return; }
-        if (String((n as { extension?: string }).extension ?? "").replace(/^\./, "").toLowerCase() !== "html") { if (on) setLoaded({ state: "refused", error: "its note is not an HTML note" }); return; }
+        const kind = codeKindOf(n as { extension?: string });
+        if (!kind) { if (on) setLoaded({ state: "refused", error: `its note is ${extensionOf(n as { extension?: string })}, and an applet's note is html, tsx or jsx` }); return; }
         const a = readApplet(n, rec.key);
         if (!a.ok) { if (on) setLoaded({ state: "refused", error: a.error }); return; }
         // the vault's role tags are no applet's to open or to tag with: dropped before the card, the key and the writer
         a.entry.opens = withoutRoles(a.entry.opens, await readRoleTags(c));
         const note = askedNote ? await c.getNote(askedNote).catch(() => null) : null;
-        const html = n.content ?? "";
-        const [scope, hash] = await Promise.all([grantKey(grantOf(a.entry.manifest, rec.key, a.entry.opens), a.entry.path), htmlHash(html)]);
+        const source = n.content ?? "";
+        const [scope, code] = await Promise.all([grantKey(grantOf(a.entry.manifest, rec.key, a.entry.opens), a.entry.path), prepare(source, kind)]);
         if (!on) return;
-        setLoaded({ state: "ok", entry: a.entry, html, note });
-        setKeys({ scope, html: hash });
+        if (code.compiled && !code.compiled.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${code.compiled.error}` }); return; }
+        setLoaded({ state: "ok", entry: a.entry, page: appletPage(kind, source, code.compiled?.js ?? null), note });
+        setKeys({ scope, html: code.hash });
       } catch (e) {
         if (on) setLoaded({ state: "error", error: e instanceof Error ? e.message : "the vault couldn't be read" });
       }
@@ -88,7 +92,7 @@ export default function AppletScreen() {
   const subject = rec && entry ? subjectOf(rec.key, entry.noteId) : null;
   const status = subject && keys ? grants.status(subject, keys.scope, keys.html) : "none";
   const decision = runDecision(mode, status, subject ? grants.grantedUnder(subject) : null);
-  const granted = decision === "run" || decision === "run-notice";
+  const granted = decision === "run";
   const grant = useMemo(() => (entry ? resolvedOf(entry.manifest) : {}), [entry]);
   // keyed on the vault, not the record object: a token refresh rewrites the record, and rebuilding the router would close
   // the frame's session with the very call that caused the refresh still waiting
@@ -132,13 +136,12 @@ export default function AppletScreen() {
     <button type="button" className="primary" onClick={tap(() => setStarted(true))}>Open {name}</button> {plainNote}
   </div>);
   return shell(<>
-    {decision === "run-notice" && <p className="notice" role="status">This applet changed since you allowed it.{note ? " It isn't handed the note until you accept." : ""} <button type="button" className="quiet-button" onClick={tap(() => { grants.acknowledge(subject, keys.html); bump(); })}>Accept</button></p>}
     <div className="applet-bar">
       <span className="quiet">{mode === "approved-code" ? "Approved code only" : "Sealed"}{handed ? ` · ${titleOf(note!)}` : ""}</span>
       {plainNote && <Link className="quiet-button" to={`${noteHref(rec.key, note!.id)}?with=vault`}>Vault</Link>}
       <button type="button" className="quiet-button" onClick={tap(() => setStarted(false))}>Stop</button>
       <button type="button" className="quiet-button" onClick={tap(revoke)}>Revoke</button>
     </div>
-    {router && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={loaded.html} title={name} router={router} grant={grant} ready={ready} />}
+    {router && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={loaded.page} title={name} router={router} grant={grant} ready={ready} />}
   </>);
 }

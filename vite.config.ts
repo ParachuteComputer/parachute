@@ -10,18 +10,18 @@ const csp = JSON.parse(readFileSync(new URL("./src-tauri/tauri.conf.json", impor
 const cspHeader = typeof csp === "string" ? csp : csp ? Object.entries(csp).map(([k, v]) => `${k} ${v}`).join("; ") : null;
 const headers = cspHeader ? { "Content-Security-Policy": cspHeader } : undefined;
 
-// surface-client's VaultClient, bundled once to an IIFE string that the app injects into every sealed frame
-// (src/applet/kits). From the Uni app's vite.config.ts.
-function vaultClientKit(): Plugin {
-  const id = "virtual:vault-client-kit";
+// Code the app puts inside sealed frames, each bundled once to an IIFE string (src/applet/kits): surface-client's
+// VaultClient (from the Uni app's vite.config.ts), and React for applets written as TSX/JSX modules.
+function iifeKit(id: string, entry: string, name: string): Plugin {
   return {
-    name: "vault-client-kit",
+    name: id,
     resolveId: (source) => (source === id ? `\0${id}` : null),
     async load(resolved) {
       if (resolved !== `\0${id}`) return null;
       const out = await build({
         configFile: false, logLevel: "silent",
-        build: { write: false, minify: true, lib: { entry: new URL("./src/applet/kits/vaultClientEntry.ts", import.meta.url).pathname, formats: ["iife"], name: "__UniVC" } },
+        define: { "process.env.NODE_ENV": JSON.stringify("production") },
+        build: { write: false, minify: true, lib: { entry: new URL(entry, import.meta.url).pathname, formats: ["iife"], name } },
       });
       const result = Array.isArray(out) ? out[0] : out;
       const code = "output" in result ? result.output[0].code : "";
@@ -31,7 +31,7 @@ function vaultClientKit(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), vaultClientKit()],
+  plugins: [react(), iifeKit("virtual:vault-client-kit", "./src/applet/kits/vaultClientEntry.ts", "__UniVC"), iifeKit("virtual:react-kit", "./src/applet/kits/reactEntry.ts", "__ParachuteReact")],
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   clearScreen: false,
   server: { port: 1420, strictPort: true, headers },

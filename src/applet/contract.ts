@@ -154,7 +154,7 @@ export function cleanText(s: string): string {
 export const lineCount = (s: string) => s.split("\n").length;
 
 /** Notes at `Areas/Foo.md` and `Areas/Foo` are the same note. */
-export const stripExt = (path: string) => path.replace(/\.(md|html)$/i, "");
+export const stripExt = (path: string) => path.replace(/\.(md|html|tsx|jsx)$/i, "");
 
 /**
  * A folder prefix that ends in `/`, with plain segments only: no `..`, `.`,

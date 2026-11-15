@@ -10,9 +10,10 @@
 //   PATCH /api/notes/:idOrPath  {content, if_updated_at}   new content for a note inside a `vault.update` folder
 // A write sets content only (no tags, metadata, links, move or force: the app's writer takes none; the one tag a new
 // note gets is the app's, from what the applet opens: opens.ts `tagsFor`), never touches an
-// HTML note or a note tagged `applet` (an applet can't rewrite itself or another), and is judged on the note as it is
+// code note (HTML, TSX, JSX) or a note tagged `applet` (an applet can't rewrite itself or another), and is judged on the note as it is
 // read now. A session that has ended writes nothing.
 
+import { CODE_PATH, codeKindOf, isCodeExtension } from "../code.ts";
 import { ContractError, ERROR_CODES, hasHidden, hasOnly, inScope, LIMITS, plain, safePrefix, type ErrorCode } from "../contract.ts";
 import type { CallCtx, UniModule } from "../router.ts";
 import type { Resolved } from "../needs.ts";
@@ -49,11 +50,11 @@ const json = (status: number, statusText: string, data: unknown): FetchResult =>
 const fail = (status: number, code: ErrorCode | "not_found" | "method_not_allowed" | "conflict") => json(status, code, { error: code });
 const notFound = () => fail(404, "not_found");
 const safeRef = (ref: string) => ref.length > 0 && ref.length <= 300 && !/[\u0000-\u001f\\]/.test(ref) && !ref.split("/").some((s) => s === ".." || s === ".");
-/** A path a write may name: plain segments (inScope checks those), no hidden character, no encoded dot or slash, not an HTML file. */
+/** A path a write may name: plain segments (inScope checks those), no hidden character, no encoded dot or slash, not a code file. */
 const writablePath = (p: unknown): p is string => typeof p === "string" && p.length <= 300 && !hasHidden(p) && !/%(?:2e|2f|5c|25)/i.test(p)
-  && !/\.html?$/i.test(p) && p.trim() === p && !p.split("/").some((s) => s.trim() !== s);
-/** A note no applet may change: an HTML note (an applet's code) or one tagged `applet`. */
-const isAppletCode = (n: VaultNote) => /\.html?$/i.test(n.path ?? "") || n.extension?.replace(/^\./, "").toLowerCase() === "html"
+  && !CODE_PATH.test(p) && p.trim() === p && !p.split("/").some((s) => s.trim() !== s);
+/** A note no applet may change: a code note (HTML, TSX, JSX: an applet's code) or one tagged `applet`. */
+const isAppletCode = (n: VaultNote) => isCodeExtension(n)
   || (n.tags ?? []).some((t) => t === "applet" || t.startsWith("applet/"));
 const bodyOf = (raw: string | null, keys: readonly string[], required: readonly string[]): Record<string, string> | null => {
   if (raw === null) return null;
@@ -134,7 +135,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       }
     } else {
       rows = (await deps.listPaths())
-        .filter((r): r is PathRow & { path: string } => !!r.path && inScope(prefixes, r.path) && (r.extension ?? "").toLowerCase().replace(/^\./, "") !== "html")
+        .filter((r): r is PathRow & { path: string } => !!r.path && inScope(prefixes, r.path) && codeKindOf(r) === null)
         .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.path.localeCompare(b.path));
     }
     if (tag || content) {

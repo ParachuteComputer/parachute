@@ -72,14 +72,14 @@ export function liveAreaApps(platform: string, appVersion: string | null, stored
   return gateMode(platform, appVersion, stored, userAgent, proven, runtime) !== "closed";
 }
 
-export type RunDecision = "closed" | "ask" | "ask-updated" | "run" | "run-notice";
+export type RunDecision = "closed" | "ask" | "ask-updated" | "run";
 /**
- * What the applet screen does with an applet, from the gate mode and the grant status. In approved-code mode only an
- * unchanged app that was approved under approved-code mode runs; changed code, or a grant made under a sealed pass, asks again. Sealed keeps "runs, with an Accept notice".
+ * What the applet screen does with an applet, from the gate mode and the grant status. Changed code shows the card
+ * again in both modes. In approved-code mode a grant made under a sealed pass asks again too.
  */
 export function runDecision(mode: GateMode | "closed", status: "none" | "ok" | "updated", grantedUnder?: GateMode | null): RunDecision {
   if (mode !== "sealed" && mode !== "approved-code") return "closed";
   if (status === "none") return "ask";
-  if (mode === "approved-code") return status === "ok" && grantedUnder === "approved-code" ? "run" : "ask-updated";
-  return status === "ok" ? "run" : "run-notice";
+  if (status === "updated") return "ask-updated";
+  return mode === "approved-code" && grantedUnder !== "approved-code" ? "ask-updated" : "run";
 }
