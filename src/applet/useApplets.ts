@@ -49,5 +49,9 @@ export function useApplets(rec: VaultRecord | null, refreshOnMount = true): Entr
   return entry;
 }
 
+/** What was last read for a vault, outside React. */
+export const appletsNow = (key: string): Entry | undefined => cache.get(key);
+export function subscribeApplets(cb: () => void): () => void { listeners.add(cb); return () => { listeners.delete(cb); }; }
+
 /** Forget what was read (sign-out). */
 export const forgetApplets = (key: string) => { cache.delete(key); notify(); };

@@ -8,3 +8,8 @@ declare module "virtual:react-kit" {
   const source: string;
   export default source;
 }
+declare module "virtual:frame-kit" {
+  /** The frame's bundle (src/frame/entry.tsx) as one script, and its styles. */
+  const kit: { js: string; css: string };
+  export default kit;
+}

@@ -21,5 +21,9 @@ export async function signIn(page: Page, vault = VAULT) {
   await Promise.race([approve.waitFor(), page.waitForURL(`**/v/${vault}`)]);
   if (await approve.isVisible().catch(() => false)) await approve.click();
   await page.waitForURL(`**/v/${vault}`);
-  await expect(page.getByRole("list", { name: "Notes" })).toBeVisible();
+  await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
 }
+
+/** The frame: the vault list, a vault, a note and open-with, in their sealed iframe. The shell's own screens (signing in,
+ *  an applet and its card, Settings) are on the page itself. */
+export const ui = (page: Page) => page.frameLocator("iframe.app-frame");

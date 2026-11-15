@@ -31,7 +31,7 @@ import { runDecision } from "../applet/selftest/gate";
 import { useGate } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
 import { takeMark } from "../open/mark";
-import NoVault from "./NoVault";
+import NoVault from "../ui/NoVault";
 
 const grants = deviceGrants();
 /** Whether this history entry was reached by a marked tap: decided once per entry (StrictMode renders twice). */

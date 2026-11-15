@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { Bar } from "../ui/Bar";
+import { Bar } from "./Bar";
 
 export default function NoVault() {
   return (

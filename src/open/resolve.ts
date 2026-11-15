@@ -14,21 +14,24 @@
 //                     3. several do → ask
 //                     4. none does → the vault view, with one line when an applet claims it ("updated" first, else "none");
 //                        "off" gives no line.
-import type { AppletEntry } from "../applet/discovery";
 import { claimOf, withoutRoles, type Opens } from "../applet/opens";
-import { VAULT, type Choice } from "./defaults";
+/** A choice: an applet's note id, or VAULT for the plain vault view. */
+export type Choice = string;
+export const VAULT = "vault";
 import { isCodeNote } from "../vault/notes";
 
 export type Status = "ok" | "updated" | "none" | "off";
 export type NoteLike = { id: string; path?: string | null; tags?: readonly string[] | null; extension?: string | null };
-export type Candidate = { entry: AppletEntry; claim: Opens; status: Status };
+/** What open-with needs of an applet: its note, what it opens, and how it is named. */
+export type AppletLike = { noteId: string; opens: Opens[]; manifest: { id: string; name: string; glyph: string } };
+export type Candidate = { entry: AppletLike; claim: Opens; status: Status };
 export type Decision =
   | { kind: "applet"; candidate: Candidate; by: "default" | "only" }
   | { kind: "ask"; candidates: Candidate[] }
   | { kind: "vault"; line: { candidate: Candidate; status: "none" | "updated"; others: Candidate[] } | null; by?: "default" };
 
 
-export function candidates<T extends AppletEntry>(note: NoteLike, applets: readonly T[], statusOf: (e: T) => Status, roleTags: readonly string[] = []): Candidate[] {
+export function candidates<T extends AppletLike>(note: NoteLike, applets: readonly T[], statusOf: (e: T) => Status, roleTags: readonly string[] = []): Candidate[] {
   if (isCodeNote(note)) return [];
   const out: Candidate[] = [];
   for (const entry of applets) {

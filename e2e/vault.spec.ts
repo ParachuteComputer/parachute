@@ -1,22 +1,22 @@
 import { expect, test } from "@playwright/test";
-import { signIn } from "./helpers";
+import { signIn, ui } from "./helpers";
 
 test("add a vault by its address, sign in on the hub, and read a note", async ({ page }) => {
   await signIn(page);
-  const notes = page.getByRole("list", { name: "Notes" });
+  const notes = ui(page).getByRole("list", { name: "Notes" });
   await expect(notes.getByRole("link", { name: /Tomato toast/ })).toBeVisible();
   await notes.getByRole("link", { name: "Welcome", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Welcome" }).last()).toBeVisible();
+  await expect(ui(page).getByRole("heading", { level: 1, name: "Welcome" }).last()).toBeVisible();
   // a wikilink goes to the note it names
-  await page.getByRole("link", { name: "Recipes/Tomato toast" }).click();
-  await expect(page.locator(".prose-note h1")).toHaveText("Tomato toast");
-  await expect(page.locator(".note-where")).toContainText("#recipe");
+  await ui(page).getByRole("link", { name: "Recipes/Tomato toast" }).click();
+  await expect(ui(page).locator(".prose-note h1")).toHaveText("Tomato toast");
+  await expect(ui(page).locator(".note-where")).toContainText("#recipe");
 });
 
 test("search finds a note by its words", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("searchbox", { name: "Search this vault" }).fill("beans");
-  const hits = page.getByRole("list", { name: "Search results" });
+  await ui(page).getByRole("searchbox", { name: "Search this vault" }).fill("beans");
+  const hits = ui(page).getByRole("list", { name: "Search results" });
   await expect(hits.getByRole("link")).toHaveCount(1);
   await expect(hits.getByRole("link")).toContainText("Rice and beans");
 });
@@ -24,9 +24,9 @@ test("search finds a note by its words", async ({ page }) => {
 test("the vault stays after a reload, and Sign out forgets it here and ends it on the hub", async ({ page }) => {
   await signIn(page);
   await page.reload();
-  await expect(page.getByRole("list", { name: "Notes" })).toBeVisible();
+  await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
   const rec = await page.evaluate(() => JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]")[0]);
-  await page.getByRole("link", { name: "Settings" }).click();
+  await ui(page).getByRole("link", { name: "Settings" }).click();
   const revoked = page.waitForResponse((r) => r.url() === rec.revocationEndpoint);
   await page.getByRole("button", { name: "Sign out" }).click();
   await revoked;

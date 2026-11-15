@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mcp, VAULT } from "./hub";
+import { ui } from "./helpers";
 
 const guide = readFileSync(new URL("../docs/WRITE-AN-APPLET.md", import.meta.url), "utf8");
 const example = guide.slice(guide.indexOf("## A worked example"));
@@ -19,7 +20,7 @@ async function written(args: Record<string, unknown>, run: (id: string) => Promi
 }
 const openChip = async (page: Page, name: RegExp) => {
   await page.goto(`/v/${VAULT}`);
-  await page.getByRole("list", { name: "Applets" }).getByRole("link", { name }).click();
+  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name }).click();
 };
 
 test("the guide's worked example is the code it lays out", () => {
@@ -32,7 +33,7 @@ test("a TSX applet written with one MCP create-note call shows, asks, and runs a
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText("Read and add notes in Recipes/");
     await expect(card).toContainText("Open recipe notes in Recipes/ when you tap one");
-    await expect(page.locator("iframe")).toHaveCount(0);
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(frame(page).getByRole("heading", { name: "Recipe cards" })).toBeVisible();
     // its React state, filled from the vault through the kit
@@ -44,7 +45,7 @@ test("a TSX applet written with one MCP create-note call shows, asks, and runs a
     await mcp(hubState(), "update-note", { id, content: ARGS.content.replace("<h1>Recipe cards</h1>", "<h1>Recipe cards, changed</h1>"), if_updated_at: cur.updatedAt });
     await openChip(page, /Recipe cards/);
     await expect(page.getByText("code changed since you allowed it")).toBeVisible();
-    await expect(page.locator("iframe")).toHaveCount(0);
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await page.getByRole("button", { name: "Allow this version" }).click();
     await expect(frame(page).getByRole("heading", { name: "Recipe cards, changed" })).toBeVisible();
   });
@@ -56,7 +57,7 @@ test("TSX that doesn't compile is refused with the reason, and nothing runs", as
     await openChip(page, /Broken/);
     await expect(page.getByRole("alert")).toContainText("its code doesn't compile");
     await expect(page.getByRole("button", { name: "Allow" })).toHaveCount(0);
-    await expect(page.locator("iframe")).toHaveCount(0);
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
   });
 });
 
@@ -81,7 +82,7 @@ test("the same code run another way is new code: an extension changed alone show
     await mcp(hubState(), "update-note", { id, extension: "html", if_updated_at: cur.updatedAt });
     await openChip(page, /Poly/);
     await expect(page.getByText("code changed since you allowed it")).toBeVisible();
-    await expect(page.locator("iframe")).toHaveCount(0);
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
   });
 });
 

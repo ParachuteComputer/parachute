@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 
 import type { Note } from "@openparachute/surface-client";
-import type { Candidate } from "./resolve";
+import type { Candidate } from "../../open/resolve";
 
 /** `preset`: what the note's route already worked out, so the sheet needn't read it again. */
 export type SheetTarget = { vault: string; note: string; asked: boolean; preset?: { note: Note; cands: Candidate[] } };
@@ -18,9 +18,10 @@ export const useSheet = () => useSyncExternalStore((cb) => { listeners.add(cb); 
 export function noteLink(el: EventTarget | null): { vault: string; note: string } | null {
   const a = (el as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
   if (!a) return null;
-  let url: URL;
-  try { url = new URL(a.href, location.href); } catch { return null; }
-  if (url.origin !== location.origin) return null;
+  // the frame's own origin is opaque: a link inside the app is one on the shell's address (the frame's base)
+  let url: URL, base: URL;
+  try { base = new URL(document.baseURI); url = new URL(a.href, base); } catch { return null; }
+  if (url.origin !== base.origin) return null;
   const m = url.pathname.match(/^\/v\/([^/]+)\/n\/([^/]+)$/);
   if (!m) return null;
   try { return { vault: decodeURIComponent(m[1]), note: decodeURIComponent(m[2]) }; } catch { return null; }

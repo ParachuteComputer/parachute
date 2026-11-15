@@ -1,30 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn } from "./helpers";
+import { ui } from "./helpers";
 import { api, hubState, VAULT } from "./hub";
 
 const idOf = async (path: string) => (await api(hubState(), "GET", `notes?id=${encodeURIComponent(path)}`)).id as string;
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
 
-async function selfTestDone(page: Page) {
-  await page.goto("/settings");
-  await expect(page.getByRole("status").filter({ hasText: /approved code only|run sealed/ })).toBeVisible({ timeout: 45_000 });
-}
 async function openFromStrip(page: Page) {
   await page.goto(`/v/${VAULT}`);
-  await page.getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
+  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
 }
 async function allow(page: Page) {
   await openFromStrip(page);
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
 }
-
-test("the self-test runs by itself on a new device, and Settings says how applets run here", async ({ page }) => {
-  await signIn(page);
-  await selfTestDone(page);
-  // Chromium has WebRTC and no way to switch it off: approved code only
-  await expect(page.getByRole("status").filter({ hasText: "approved code only" })).toBeVisible();
-});
 
 test.describe("signed in, self-test passed", () => {
 test.use({ storageState: "e2e/.signed-in.json" });
@@ -35,7 +24,7 @@ test("an applet shows its card first, and runs after Allow, reading only its own
   await expect(card).toContainText("Read, add and change notes in Recipes/");
   await expect(card).toContainText("Open recipe notes in Recipes/ when you tap one");
   await expect(card).toContainText("Tag the notes it adds in Recipes/ as recipe");
-  await expect(page.locator("iframe")).toHaveCount(0);
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
   await page.getByRole("button", { name: "Allow" }).click();
   const list = frame(page).locator("#list li");
   await expect(list).toHaveCount(2);
@@ -68,27 +57,11 @@ test("a vault's role tag is no applet's to open: the card leaves it out", async 
   }
 });
 
-test("an applet's call that needs a fresh token still gets its answer", async ({ page }) => {
-  await allow(page);
-  // the access token runs out while the applet runs: its next call is refused, the app refreshes the token, and the
-  // call is answered (the refresh must not take the applet's session down with it)
-  await page.evaluate(() => {
-    const list = JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]");
-    list[0].accessToken = "expired";
-    localStorage.setItem("parachute.vaults.v1", JSON.stringify(list));
-  });
-  await frame(page).getByRole("button", { name: "Add a recipe" }).click();
-  await expect(frame(page).locator("#said")).toContainText("added Recipes/Added", { timeout: 15_000 });
-  const path = (await frame(page).locator("#said").textContent())!.replace("added ", "");
-  const note = await api(hubState(), "GET", `notes?id=${encodeURIComponent(path)}`);
-  await api(hubState(), "DELETE", `notes/${note.id}`);
-});
-
 test("Revoke takes it back: the card shows again", async ({ page }) => {
   await allow(page);
   await page.getByRole("button", { name: "Revoke" }).click();
   await expect(page.getByRole("button", { name: "Allow" })).toBeVisible();
-  await expect(page.locator("iframe")).toHaveCount(0);
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });
 
 test("changed code asks again (approved code only)", async ({ page }) => {
@@ -101,7 +74,7 @@ test("changed code asks again (approved code only)", async ({ page }) => {
     await openFromStrip(page);
     await expect(page.getByText("code changed since you allowed it")).toBeVisible();
     await expect(page.getByRole("button", { name: "Allow this version" })).toBeVisible();
-    await expect(page.locator("iframe")).toHaveCount(0);
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
   } finally {
     const now = await api(st, "GET", `notes?id=${id}`);
     await api(st, "PATCH", `notes/${id}`, { content: cur.content, if_updated_at: now.updatedAt });
@@ -113,7 +86,7 @@ test("with no tap, it doesn't start: an address typed or restored waits with Ope
   const url = page.url();
   await page.goto(url);
   await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
-  await expect(page.locator("iframe")).toHaveCount(0);
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
   await page.getByRole("button", { name: /^Open Recipe box$/ }).click();
   await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
 });
@@ -123,12 +96,12 @@ test("a link that isn't a tap doesn't start it, even right after a tap on the sa
   const url = new URL(page.url()).pathname;
   await page.goto(`/v/${VAULT}`);
   // tap the applet, then come straight back: the tap's mark is made and then left behind
-  await page.getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
+  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
   await page.goBack();
   // a navigation that is not a tap, to the same applet
   await page.evaluate((u) => { history.pushState({}, "", u); dispatchEvent(new PopStateEvent("popstate")); }, url);
   await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
-  await expect(page.locator("iframe")).toHaveCount(0);
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });
 
 test("a link that arrives while the applet runs doesn't inherit its start", async ({ page }) => {
@@ -136,7 +109,7 @@ test("a link that arrives while the applet runs doesn't inherit its start", asyn
   const tomato = await idOf("Recipes/Tomato toast");
   await page.evaluate((u) => { history.pushState({}, "", u); dispatchEvent(new PopStateEvent("popstate")); }, `${new URL(page.url()).pathname}?note=${tomato}`);
   await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
-  await expect(page.locator("iframe")).toHaveCount(0);
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });
 
 test("Back and Forward never start it, even to a screen a tap once started", async ({ page }) => {
@@ -144,7 +117,7 @@ test("Back and Forward never start it, even to a screen a tap once started", asy
   await page.goBack();
   await page.goForward();
   await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
-  await expect(page.locator("iframe")).toHaveCount(0);
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });
 
 test("Stop holds: leaving and coming Back doesn't start it again", async ({ page }) => {
@@ -154,14 +127,17 @@ test("Stop holds: leaving and coming Back doesn't start it again", async ({ page
   await page.getByRole("button", { name: "Stop" }).click();
   await page.getByRole("link", { name: "Back" }).click();
   // the vault view drawn first, so the applet's screen is really left
-  await expect(page.getByRole("list", { name: "Applets" })).toBeVisible();
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
   await page.goBack();
   await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
-  await expect(page.locator("iframe")).toHaveCount(0);
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });
 
 test("signing out of a vault ends its applets' grants on this device", async ({ page }) => {
   await allow(page);
+  // this test is about grants: the hub's revoke is answered here, so the sign-in the other tests share stays good
+  // (the vault tests prove the revoke itself, on a sign-in of their own)
+  await page.route((u) => u.pathname === "/oauth/revoke", (r) => r.fulfill({ status: 200, body: "" }));
   await page.goto("/settings");
   await expect(page.getByRole("list", { name: "Allowed applets" }).getByRole("listitem")).toHaveCount(1);
   await page.getByRole("button", { name: "Sign out" }).click();
