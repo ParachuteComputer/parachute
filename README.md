@@ -26,6 +26,28 @@ npm run e2e          # Playwright on the web build, against a real hub (see belo
 a temp folder on a loopback port, seeds a vault from `e2e/fixtures`, and removes it after. Point `PARACHUTE_CORE` at
 the binary if it isn't on your `PATH`.
 
+## The shell (Android and desktop)
+
+Tauri 2, pinned to Tauri 2.11 and wry 0.55.1: the Android webview files in
+`src-tauri/gen/android/app/src/main/java/computer/parachute/app/` (`RustWebView.kt`, `Ipc.kt`, `MainFrameOnly.kt`) are
+copies of wry's templates that keep the bridge to native code out of applet frames and remote pages, and
+`src-tauri/build.rs` refuses an Android build on any other wry.
+
+```sh
+npm run tauri dev                       # desktop, against the dev server
+scripts/android-build.sh                # release APK for arm64, signed with the play-test key
+scripts/android-build.sh --debug --target x86_64   # a debug build for the emulator
+```
+
+The Android build needs `ANDROID_HOME`, `NDK_HOME` and Java 17, and a signing key described in
+`~/.config/parachute-playtest/keystore.properties` (or `PARACHUTE_KEYSTORE_PROPERTIES`): `storeFile`, `storePassword`,
+`keyAlias`, `keyPassword`. The script checks the APK's signature against it. Keys never go in the repo.
+
+**Signing in from the shell.** The app registers on a hub as "Parachute" with the redirect
+`http://127.0.0.1:47219/oauth/callback`. A hub keeps that name for redirects only the person's own device can receive,
+and loopback is one. Nothing listens on that port: the shell catches the navigation in its own webview and hands the
+code to the app (`src-tauri/src/lib.rs`, `signin_return`).
+
 ## Licence
 
 AGPL-3.0-only. See [LICENSE](LICENSE).

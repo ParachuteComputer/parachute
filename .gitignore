@@ -4,3 +4,7 @@ dist
 test-results
 playwright-report
 *.tsbuildinfo
+
+# Tauri
+src-tauri/target
+src-tauri/gen/schemas

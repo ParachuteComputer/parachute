@@ -33,7 +33,11 @@ export type Pending = {
   startedAt: number;
 };
 
-export const redirectUri = (origin: string = window.location.origin) => `${origin}/oauth/callback`;
+/** In the shell, the loopback address the shell catches (src-tauri/src/lib.rs SIGNIN_RETURN): a hub keeps the name
+ *  "Parachute" for redirects only this device can receive. In a browser, this page's own origin. */
+export const SHELL_RETURN = "http://127.0.0.1:47219/oauth/callback";
+export const inShell = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+export const redirectUri = (origin: string = window.location.origin) => (inShell() ? SHELL_RETURN : `${origin}/oauth/callback`);
 
 const isHttp = (raw: unknown): raw is string => {
   if (typeof raw !== "string") return false;

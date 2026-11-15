@@ -43,3 +43,21 @@ jobs:
             playwright-report
             test-results
           retention-days: 7
+
+  shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: System libraries for the Linux webview
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Shell tests
+        run: |
+          mkdir -p dist && echo '<!doctype html>' > dist/index.html
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
