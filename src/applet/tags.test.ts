@@ -1,6 +1,7 @@
 // The app reads some tags itself (an applet's note is tagged `applet`). Every such tag must be one no applet can
 // claim, or an applet could take over how the app's own notes open. This scans the app's source for tag literals
-// it compares against, and fails on one that isn't reserved.
+// it compares against, and fails on one that isn't reserved. It sees only tags written inline: a tag held in a
+// constant first would escape it, so the app keeps tag literals inline.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";

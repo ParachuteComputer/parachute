@@ -17,7 +17,8 @@ let created: { path: string; tags: string[] }[];
 const vault: VaultDeps = {
   async listPaths() { return notes.map((n) => ({ id: n.id, path: n.path ?? null, extension: n.extension ?? "md", updatedAt: n.updatedAt })); },
   async getNote(ref) { const n = notes.find((x) => x.id === ref || x.path === ref); if (!n) throw new Error("missing"); return n; },
-  async search(q, limit, prefix) { return notes.filter((n) => n.content?.includes(q) && (!prefix || n.path?.startsWith(prefix))).slice(0, limit).map((n) => ({ id: n.id, path: n.path ?? null, snippet: "" })); },
+  // a search that ignores the folder asked for: the module must judge every hit itself
+  async search(q, limit) { return notes.filter((n) => n.content?.includes(q)).slice(0, limit).map((n) => ({ id: n.id, path: n.path ?? null, snippet: "" })); },
   async create(path, content, tags) { if (notes.some((n) => n.path === path)) throw new Error("exists"); created.push({ path, tags }); const n = { id: `n${notes.length + 1}`, path, content, tags, updatedAt: "2026-11-15" }; notes.push(n); return n; },
   async save(id, content) { const n = notes.find((x) => x.id === id)!; n.content = content; return n; },
 };
@@ -27,6 +28,8 @@ beforeEach(() => {
     { id: "r1", path: "Recipes/Toast", content: "toast", tags: ["recipe"], updatedAt: "2026-11-02" },
     { id: "j1", path: "Journal/Secret", content: "toast secret", tags: [], updatedAt: "2026-11-03" },
     { id: "a1", path: "Recipes/Widget", extension: "html", content: "<p>code</p>", tags: ["applet"], updatedAt: "2026-11-01" },
+    { id: "a2", path: "Recipes/Tagged", extension: "md", content: "an applet by its tag", tags: ["applet"], updatedAt: "2026-11-01" },
+    { id: "a3", path: "Recipes/Page.html", extension: "html", content: "<p>an html note</p>", tags: [], updatedAt: "2026-11-01" },
   ];
 });
 
@@ -49,7 +52,7 @@ describe("the vault, from inside a frame", () => {
   it("lists only notes in its folders, and never an applet's code", async () => {
     const r = await frame().fetch("GET", "/api/notes");
     expect(r.status).toBe(200);
-    expect(r.body.map((n: { path: string }) => n.path)).toEqual(["Recipes/Toast"]);
+    expect(r.body.map((n: { path: string }) => n.path)).toEqual(["Recipes/Toast", "Recipes/Tagged"]);
   });
   it("can't read a note outside its folders, by id, by path or by query", async () => {
     const f = frame();
@@ -63,6 +66,8 @@ describe("the vault, from inside a frame", () => {
     const f = frame();
     expect((await f.fetch("POST", "/api/notes", { path: "Journal/new", content: "x" })).status).toBe(403);
     expect((await f.fetch("PATCH", "/api/notes/a1", { content: "<p>evil</p>", if_updated_at: "x" })).status).toBe(403);
+    expect((await f.fetch("PATCH", "/api/notes/a2", { content: "x", if_updated_at: "x" })).status).toBe(403);
+    expect((await f.fetch("PATCH", "/api/notes/a3", { content: "x", if_updated_at: "x" })).status).toBe(403);
     expect((await f.fetch("PATCH", "/api/notes/j1", { content: "x", if_updated_at: "x" })).status).toBe(404);
     expect((await f.fetch("DELETE", "/api/notes/r1")).status).toBe(405);
     expect(created).toEqual([]);

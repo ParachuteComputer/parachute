@@ -25,6 +25,13 @@ describe("the grant", () => {
     const lines = grantLines(grantOf(m, "recipes", OPENS), "Applets/").map((l) => l.text);
     expect(lines).toEqual(["Read, add and change notes in Recipes/", "Open recipe notes in Recipes/ when you tap one", "Tag the notes it adds in Recipes/ as recipe"]);
   });
+  it("stresses every folder of an applet whose note sits at the vault's top", () => {
+    const lines = grantLines(grantOf({ ...m, allow: [{ path: "Journal/", verbs: ["read"] }] }, "recipes", []), null);
+    expect(lines).toEqual([{ text: "Read notes outside its own folder, in Journal/", stress: true }]);
+    // and a folder outside its own is stressed even when it only reads and adds there… (all writes are stressed anyway)
+    expect(grantLines(grantOf({ ...m, allow: [{ path: "Journal/", verbs: ["read"] }, { path: "Applets/Mine/", verbs: ["read"] }] }, "recipes", []), "Applets/"))
+      .toEqual([{ text: "Read notes outside its own folder, in Journal/", stress: true }, { text: "Read notes in Applets/Mine/", stress: false }]);
+  });
   it("judges a note on its own path", () => {
     const g = grantOf(m, "recipes", OPENS);
     expect(allowsNote(g, "read", "Recipes/Soup")).toBe(true);

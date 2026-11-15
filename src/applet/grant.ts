@@ -42,11 +42,12 @@ const joinWords = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(
 export function grantLines(g: Grant, ownFolder: string | null): CardLine[] {
   const out: CardLine[] = [];
   for (const r of g.allow) {
+    // as in the Uni app: a folder outside the one its note lives in (every folder, for a note at the top) is stressed
     const outside = !(ownFolder && r.path.startsWith(ownFolder));
     const verbs = joinWords(r.verbs.map((v, i) => (i ? VERB_WORDS[v].toLowerCase() : VERB_WORDS[v])));
-    out.push(r.verbs.length === 1 && r.verbs[0] === "read" && outside && ownFolder
+    out.push(r.verbs.length === 1 && r.verbs[0] === "read" && outside
       ? { text: `Read notes outside its own folder, in ${r.path}`, stress: true }
-      : { text: `${verbs} notes in ${r.path}`, stress: r.verbs.some((v) => v !== "read") });
+      : { text: `${verbs} notes in ${r.path}`, stress: outside || r.verbs.some((v) => v !== "read") });
   }
   for (const o of g.opens) {
     out.push({ text: `Open ${o.type} notes in ${o.path} when you tap one`, stress: false });

@@ -29,7 +29,7 @@ export type Verb = (typeof VERBS)[number];
 
 /** What an applet may do to the notes under one folder of the vault its note lives in. */
 export type Rule = { path: string; verbs: Verb[] };
-export type SearchOffer = { what: string; path?: string };
+export type SearchOffer = { what: string; path?: string; type?: string };
 export type Screen = { id: string; name: string };
 export type Manifest = { contract: 2; id: string; name: string; glyph: string; note?: string; allow: Rule[]; search: SearchOffer[]; screens: Screen[] };
 export type Parse = { ok: true; manifest: Manifest } | { ok: false; error: string };
@@ -39,6 +39,7 @@ export const HERE = "here";
 
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const VAULT = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+const TYPE = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
 const KEYS = ["contract", "id", "name", "glyph", "note", "access", "reach", "search", "screens"];
 const DEFAULT_GLYPH = "◇";
 /** Folders an applet may never be given: the app's own settings and every applet's code. */
@@ -96,7 +97,9 @@ export function parseManifest(raw: unknown): Parse {
     if (!Array.isArray(a.allow) || !a.allow.length || a.allow.length > LIMITS.rules) return fail("the here vault needs a short list of rules");
     for (const r of a.allow) {
       if (!plain(r) || !hasOnly(r, ["type", "path", "verbs", "own"])) return fail("each rule is {path, verbs}");
-      if (r.type !== undefined || r.own !== undefined) return fail("a sealed applet works by folder: each rule is {path, verbs}, with no type and no own");
+      // as the Uni app reads a sealed manifest: no type, and `own` only as false
+      if (r.type !== undefined || (r.own !== undefined && typeof r.own !== "boolean")) return fail("a sealed applet works by folder: each rule is {path, verbs}, with no type and no own");
+      if (r.own === true) return fail("a sealed applet works by folder: each rule is {path, verbs}, with no type and no own");
       const path = pathOf(r.path);
       if (!path) return fail("a path is a plain folder that ends in /");
       if (path.toLowerCase().startsWith(".parachute/")) return fail("a rule can't reach .parachute/, where the app keeps its own settings");
@@ -120,7 +123,8 @@ export function parseManifest(raw: unknown): Parse {
     const offer: SearchOffer = { what };
     if (s.vault !== undefined || s.type !== undefined || s.path !== undefined) {
       if (s.vault !== HERE) return fail("a search over notes names its vault: here");
-      if (s.type !== undefined) return fail("a sealed applet's search names a folder, not a type");
+      // a type beside the folder narrows the search, as the Uni app reads it; the folder is what must be readable
+      if (s.type !== undefined) { if (typeof s.type !== "string" || s.type.length > 64 || !TYPE.test(s.type)) return fail("a search's type is a tag"); offer.type = s.type; }
       const p = pathOf(s.path);
       if (!p) return fail("a search's path is a plain folder that ends in /");
       if (!m.allow.some((r) => r.verbs.includes("read") && p.startsWith(r.path))) return fail(`it offers ${what} to search but can't read them`);

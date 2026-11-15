@@ -97,5 +97,6 @@ export const FRAME_KIT = String.raw`(function () {
   Object.freeze(uni.theme);
   var kit = Object.freeze(uni);
   Object.defineProperty(window, "uni", { value: kit, writable: false, configurable: false });
-  Object.defineProperty(window, "parachute", { value: kit, writable: false, configurable: false });
+  // configurable, so an applet written for the Uni app that declares its own top-level "parachute" still loads
+  Object.defineProperty(window, "parachute", { value: kit, writable: false, configurable: true });
 })();`;

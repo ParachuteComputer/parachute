@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseManifest } from "./manifest";
-import { parseOpens } from "./opens";
+import { claimOf, parseOpens, withoutRoles } from "./opens";
 import { RECIPES } from "./fixtures";
 
 const ok = (raw: unknown) => { const r = parseManifest(raw); if (!r.ok) throw new Error(r.error); return r.manifest; };
@@ -8,6 +8,10 @@ const refused = (raw: unknown, why: RegExp) => { const r = parseManifest(raw); e
 const withRule = (rule: unknown) => ({ ...RECIPES, search: [], access: [{ vault: "here", allow: [rule] }] });
 
 describe("parseManifest", () => {
+  it("reads what the Uni app reads: own: false, and a type beside a search's folder", () => {
+    expect(ok({ ...RECIPES, access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"], own: false }] }] }).allow).toEqual([{ path: "Recipes/", verbs: ["read"] }]);
+    expect(ok({ ...RECIPES, search: [{ what: "soups", vault: "here", type: "recipe", path: "Recipes/" }] }).search).toEqual([{ what: "soups", type: "recipe", path: "Recipes/" }]);
+  });
   it("reads today's Recipes manifest unchanged", () => {
     const m = ok(RECIPES);
     expect(m).toMatchObject({ id: "recipes", name: "Recipes", glyph: "❀", allow: [{ path: "Recipes/", verbs: ["read", "create", "update"] }], screens: [{ id: "home", name: "Recipes" }] });
@@ -47,10 +51,20 @@ describe("parseOpens", () => {
   it("refuses an unknown key in an entry, which refuses the whole list", () => no([{ type: "recipe", path: "Recipes/" }, { type: "dish", path: "Recipes/", icon: "x" }], /\{type, path, screen\?\}/));
   it.each(["applet", "Applet", "APPLET", "applet/x", "view", "View", "capture", "cApTuRe", "parachute", "Parachute-settings", "parachuteX"])("refuses the reserved type %s", (type) =>
     no([{ type, path: "Recipes/" }], /app's own type/));
-  it.each(["Applets/", "applets/x/", ".parachute/"])("refuses the reserved folder %s", (path) => {
+  it.each(["Applets/", "applets/x/", ".parachute/"])("refuses the reserved folder %s, for being the app's own", (path) => {
     const wide = ok({ ...RECIPES, search: [], access: [{ vault: "here", allow: [{ path: "Applets/", verbs: ["read"] }, { path: "applets/", verbs: ["read"] }, { path: "Recipes/", verbs: ["read"] }] }] });
     const r = parseOpens([{ type: "recipe", path }], wide);
     expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/app's own folder/);
+  });
+  it("claims only a note plainly inside the folder, as the vault module judges it", () => {
+    const opens = [{ type: "recipe", path: "Recipes/" }];
+    expect(claimOf(opens, { path: "Recipes/Soup", tags: ["recipe"] })).not.toBeNull();
+    for (const path of ["Recipes//x", "Recipes/../Journal/Secret", "Recipes/./x", "Recipes/a\\b", "Recipes/.md", "Recipes"])
+      expect(claimOf(opens, { path, tags: ["recipe"] }), path).toBeNull();
+  });
+  it("drops the vault's role tags", () => {
+    expect(withoutRoles([{ type: "recipe", path: "Recipes/" }, { type: "pinned", path: "Recipes/" }, { type: "pinned/x", path: "Recipes/" }], ["pinned"])).toEqual([{ type: "recipe", path: "Recipes/" }]);
   });
   it("refuses a list that isn't a list", () => no({ type: "recipe" }, /must be a list/));
 });

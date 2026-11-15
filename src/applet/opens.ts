@@ -10,10 +10,11 @@
 // may read. `screen`, when given, is one of the manifest's screens. `*` is refused: only the app's own vault view
 // opens everything. Reserved types (`applet`, `view`, `capture`, anything beginning `parachute`, in any letter case)
 // and folders (`.parachute/`, `Applets/`) are refused. A vault's own role tags are reserved too, but roles are set
-// per vault, so they are checked when resolving (`claimable`), not here. Anything wrong refuses the whole list (the
+// per vault, so the app drops them with `withoutRoles` when it reads a vault's applets, before the card, the grant's
+// key, the tagging writer or open-with see the list. Anything wrong refuses the whole list (the
 // applet then opens nothing by itself), never the applet. Pure.
 
-import { hasHidden, hasOnly, plain, safePrefix } from "./contract.ts";
+import { hasHidden, hasOnly, inScope, plain, safePrefix } from "./contract.ts";
 import { inReservedFolder, type Manifest } from "./manifest.ts";
 
 export type Opens = { type: string; path: string; screen?: string };
@@ -59,8 +60,8 @@ export function parseOpens(raw: unknown, m: Manifest): OpensParse {
 export const hasType = (tags: readonly unknown[] | null | undefined, type: string) =>
   Array.isArray(tags) && tags.some((t) => typeof t === "string" && (t === type || t.startsWith(`${type}/`)));
 
-/** The folder test the vault module uses: the note's path (extension ignored) strictly inside `folder`. */
-const inside = (folder: string, path: string | null | undefined) => typeof path === "string" && path.replace(/\.(md|html)$/i, "").startsWith(folder) && path.length > folder.length;
+/** The folder test the vault module uses (contract.ts `inScope`): plain segments, strictly inside `folder`. */
+const inside = (folder: string, path: string | null | undefined) => inScope([folder], path);
 
 /** The entry of `opens` that claims this note: its type among the note's tags and its path under the entry's folder. */
 export function claimOf(opens: readonly Opens[], note: { path?: string | null; tags?: readonly unknown[] | null }): Opens | null {
@@ -69,3 +70,7 @@ export function claimOf(opens: readonly Opens[], note: { path?: string | null; t
 
 /** The tags a note the applet adds at `path` gets: each claimed type whose folder holds it. */
 export const tagsFor = (opens: readonly Opens[], path: string): string[] => [...new Set(opens.filter((o) => inside(o.path, path)).map((o) => o.type))];
+
+/** `opens` without the entries whose type is one of the vault's role tags (or beneath one). */
+export const withoutRoles = (opens: readonly Opens[], roleTags: readonly string[]): Opens[] =>
+  opens.filter((o) => !roleTags.some((r) => o.type === r || o.type.startsWith(`${r}/`)));
