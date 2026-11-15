@@ -4,7 +4,7 @@
 // that frame draws), and the question before it opens an address outside the app.
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { answerLinkOut, frameCode, frameFailed, frameStarted, frameStarting, readFrameRecord, STARTED_MS, useFrameSource } from "./frameSource";
+import { answerLinkOut, frameCode, frameFailed, frameHidden, frameShown, readFrameRecord, useFrameSource } from "./frameSource";
 import FrameHost from "./FrameHost";
 import FrameCard from "./FrameCard";
 
@@ -25,15 +25,17 @@ export default function FrameArea() {
     return () => { on = false; };
   }, [want]); // eslint-disable-line react-hooks/exhaustive-deps
   const ready = code && (code.from === "vault" ? `vault:${code.hash}` : "built-in") === want ? code : null;
-  // a frame from a vault is marked as starting until it has run a while, or the page is left normally (a hung page
-  // can't run its pagehide): if it hangs the app, the next start knows
+  // a frame from a vault is marked while it is shown in the foreground, and unmarked when it is left, hidden or closed
+  // (a page it hangs can't do that): if it hangs the app, the next start knows
   useEffect(() => {
     if (ready?.from !== "vault") return;
     const hash = ready.hash;
-    frameStarting(hash);
-    const left = () => frameStarted(hash);
+    const seen = () => (document.visibilityState === "hidden" ? frameHidden(hash) : frameShown(hash));
+    const left = () => frameHidden(hash);
+    seen();
+    document.addEventListener("visibilitychange", seen);
     addEventListener("pagehide", left);
-    return () => removeEventListener("pagehide", left);
+    return () => { document.removeEventListener("visibilitychange", seen); removeEventListener("pagehide", left); frameHidden(hash); answerLinkOut(false); };
   }, [ready?.hash, ready?.from]);
   if ("card" in choice) return <FrameCard {...choice.card} />;
   if (!ready) return null;
@@ -41,8 +43,7 @@ export default function FrameArea() {
   return (
     <>
       <FrameHost key={ready.hash} js={ready.js} from={ready.from}
-        onStarted={() => { if (vault) window.setTimeout(() => frameStarted(ready.hash), STARTED_MS); }}
-        onFailed={(why) => { if (vault) frameFailed(ready.hash, why); }} />
+        onFailed={(why, persist) => { if (vault) frameFailed(ready.hash, why, persist); }} />
       {vault && <Link className="shell-settings" to="/settings" aria-label="Settings (the app's own)">◠</Link>}
       {linkOut !== null && (
         <div className="sheet-scrim">

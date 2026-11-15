@@ -133,7 +133,9 @@ test("a hostile frame from the home vault reaches nothing of the shell's", async
 test("over a frame of the person's, a link out shows the whole address first, and the app keeps its own way to Settings", async ({ page }) => {
   await write(`import { call } from "@parachute/frame";
 export default function Leaky() {
-  return <main><h1>Leaky</h1><button onClick={() => { void call("link.out", { url: "https://leak.example/?notes=all-of-them" }); }}>Go</button></main>;
+  return <main><h1>Leaky</h1>
+    <button onClick={() => { void call("link.out", { url: "https://leak.example/?notes=all-of-them" }); }}>Go</button>
+    <button onClick={() => { void call("link.out", { url: "https://swap.example/" }); }}>Swap</button></main>;
 }`);
   await page.goto("/");
   await page.getByRole("button", { name: "Use it" }).click();
@@ -143,6 +145,9 @@ export default function Leaky() {
   await ui(page).getByRole("button", { name: "Go" }).click();
   const ask = page.getByRole("dialog", { name: "Open outside Parachute" });
   await expect(ask).toContainText("https://leak.example/?notes=all-of-them");
+  // a tap on Open straight after it appeared (a double tap's second tap) doesn't answer it
+  await ask.getByRole("button", { name: "Open" }).click();
+  await expect(ask).toBeVisible();
   await ask.getByRole("button", { name: "Cancel" }).click();
   await expect(ask).toHaveCount(0);
   await page.waitForTimeout(500);
@@ -150,19 +155,23 @@ export default function Leaky() {
   // the frame has no way to Settings; the app's own button does
   await page.getByRole("link", { name: "Settings (the app's own)" }).click();
   await expect(status(page)).toHaveText("Your frame runs: Parachute/Frame.");
+  // leaving the frame for Settings and starting again straight away is no sign it hung the app
+  await page.reload();
+  await page.goto("/");
+  await expect(frameEl(page)).toHaveAttribute("data-frame", "vault");
 });
 
-test("a frame that hung the app while starting gives way to the built-in one at the next start", async ({ page }) => {
+test("a frame that stopped the app gives way to the built-in one at the next start", async ({ page }) => {
   await write('export default function Fine() { return <h1>Fine frame</h1>; }');
   await page.goto("/");
   await page.getByRole("button", { name: "Use it" }).click();
   await expect(ui(page).getByRole("heading", { name: "Fine frame" })).toBeVisible();
-  // what a frame that hangs the app leaves behind: still marked as starting when the app is started again
+  // what a frame that hangs the app leaves behind: still marked as shown when the app is started again
   // (put there before the app starts: leaving the page normally clears it, which a hung page can't do)
   await page.addInitScript(() => { try { const k = JSON.parse(localStorage.getItem("parachute.frames.v1") ?? "{}"); if (k.approved) { k.starting = k.approved.hash; localStorage.setItem("parachute.frames.v1", JSON.stringify(k)); } } catch { /* the sealed frame has no storage */ } });
   await page.reload();
   await expect(frameEl(page)).toHaveAttribute("data-frame", "built-in");
   await page.goto("/settings");
   await expect(status(page)).toHaveText("The built-in frame runs: your frame stopped.");
-  await expect(page.getByText("didn't finish starting last time")).toBeVisible();
+  await expect(page.getByText("stopped the app last time")).toBeVisible();
 });

@@ -16,9 +16,7 @@ import { subscribeGate } from "../applet/selftest/run";
 /** How long a frame from a vault has to say it is listening before the built-in one takes its place. */
 const WATCHDOG_MS = 10_000;
 
-export default function FrameHost({ js, from, onFailed, onStarted }: { js: string; from: "built-in" | "vault"; onFailed: (why: string) => void; onStarted?: () => void }) {
-  const startedRef = useRef(onStarted);
-  startedRef.current = onStarted;
+export default function FrameHost({ js, from, onFailed }: { js: string; from: "built-in" | "vault"; onFailed: (why: string, persist: boolean) => void }) {
   const doc = useMemo(() => frameDocument(frameKit.js, frameKit.css, js), [js]);
   const failedRef = useRef(onFailed);
   failedRef.current = onFailed;
@@ -42,15 +40,15 @@ export default function FrameHost({ js, from, onFailed, onStarted }: { js: strin
       // targetOrigin "*" and this check: a sandboxed srcdoc frame's origin is opaque, so its window is what identifies it
       if (e.source === null || e.source !== ref.current?.contentWindow) return;
       const d = e.data as { pf?: unknown; hello?: unknown; failed?: unknown } | null;
-      if (d && typeof d === "object" && d.pf === 1 && d.hello === 1) { if (!heard.current) startedRef.current?.(); heard.current = true; sendLocation(); return; }
-      if (d && typeof d === "object" && d.pf === 1 && typeof d.failed === "string") { failedRef.current(d.failed.slice(0, 300)); return; }
+      if (d && typeof d === "object" && d.pf === 1 && d.hello === 1) { heard.current = true; sendLocation(); return; }
+      if (d && typeof d === "object" && d.pf === 1 && typeof d.failed === "string") { failedRef.current(d.failed.slice(0, 300), true); return; }
       host.handle(e.data);
     };
     addEventListener("message", onMessage);
     const changed = (what: "vaults" | "applets" | "defaults") => () => host.event("changed", { what });
     const offs = [subscribeVaults(changed("vaults")), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets"))];
     // a frame from a vault that never starts (or never listens) gives way to the built-in one
-    const watchdog = from === "vault" ? window.setTimeout(() => { if (!heard.current) failedRef.current("it didn't start"); }, WATCHDOG_MS) : 0;
+    const watchdog = from === "vault" ? window.setTimeout(() => { if (!heard.current) failedRef.current("it didn't start in time", false); }, WATCHDOG_MS) : 0;
     return () => { removeEventListener("message", onMessage); offs.forEach((f) => f()); window.clearTimeout(watchdog); };
   }, [host]); // eslint-disable-line react-hooks/exhaustive-deps
 

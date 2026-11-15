@@ -25,8 +25,6 @@ export const HOME_KEY = "parachute.home.v1";
 export const FRAMES_KEY = "parachute.frames.v1";
 export const DEFAULT_FRAME_SOURCE = defaultSource;
 export const defaultFrameHash = (): Promise<string> => codeHash("tsx", DEFAULT_FRAME_SOURCE);
-/** How long a frame from a vault must keep running after it says hello before it counts as started. */
-export const STARTED_MS = 5_000;
 
 // ── what this device keeps ──
 
@@ -50,7 +48,7 @@ const set = (p: Partial<State>) => { state = { ...state, ...p, rev: state.rev + 
 const kept = (): Kept => readJson<Kept>(FRAMES_KEY, {});
 const keep = (k: Kept) => { writeJson(FRAMES_KEY, k); set({}); };
 // a frame still marked as starting when the app starts hung it last time: it gives way to the built-in one
-{ const k = kept(); if (k.starting) writeJson(FRAMES_KEY, { ...k, starting: undefined, failed: { hash: k.starting, why: "it didn't finish starting last time" } }); }
+{ const k = kept(); if (k.starting) writeJson(FRAMES_KEY, { ...k, starting: undefined, failed: { hash: k.starting, why: "it stopped the app last time" } }); }
 void defaultFrameHash().then((h) => set({ defaultHash: h }));
 
 /** The gate for a frame from a vault: the self-test's mode, or closed while it runs (a frame mounted during the
@@ -58,7 +56,8 @@ void defaultFrameHash().then((h) => set({ defaultHash: h }));
 const gate = (): Mode | "closed" => (selfTestRunning() ? "closed" : gateNow());
 
 export function currentChoice(): Choice {
-  return choose({ mode: gate(), home: homeVault()?.key ?? null, read: state.read, kept: kept() });
+  const k = kept();
+  return choose({ mode: gate(), home: homeVault()?.key ?? null, read: state.read, kept: failedNow && !k.failed ? { ...k, failed: failedNow } : k });
 }
 
 let generation = 0;
@@ -88,9 +87,10 @@ export async function readFrameRecord(): Promise<void> {
     read = status && status < 500 && status !== 408 && status !== 429 ? { vault: home.key, state: "bad", error: e instanceof Error ? e.message : "it couldn't be read" } : { vault: home.key, state: "unreachable" };
   }
   if (mine !== generation || homeVault()?.key !== home.key) return;
-  // the person's frame is gone from their vault: the copy kept of it goes too (it mustn't run offline later)
+  // the person's frame is gone from their vault (or there are two): the copy kept of it goes too (it mustn't run offline
+  // later). An error reply keeps it: the vault may only be refusing for now.
   const k = kept();
-  if (read.state !== "found" && read.state !== "unreachable" && k.approved?.vault === home.key) keep({ ...k, approved: undefined });
+  if ((read.state === "none" || read.state === "many") && k.approved?.vault === home.key) keep({ ...k, approved: undefined });
   set({ read, reading: false });
 }
 
@@ -138,10 +138,16 @@ export function forgetVaultFrame(vault: string) {
 }
 /** The frame said it stopped (its own words, shown quoted in Settings): the built-in one runs, now and on later starts,
  *  until its code changes or the person asks for it again. */
-export function frameFailed(hash: string, why: string) { keep({ ...kept(), failed: { hash, why: why.slice(0, 200) }, starting: undefined }); }
-/** A frame from a vault is being started: if the app is started again before `frameStarted`, it hung the app. */
-export function frameStarting(hash: string) { keep({ ...kept(), starting: hash }); }
-export function frameStarted(hash: string) { const k = kept(); if (k.starting === hash) keep({ ...k, starting: undefined }); }
+export function frameFailed(hash: string, why: string, persist = true) {
+  if (persist) keep({ ...kept(), failed: { hash, why: why.slice(0, 200) }, starting: undefined });
+  else { failedNow = { hash, why }; set({}); }
+}
+/** A frame that didn't start in time this session (it may only have been slow): the built-in one runs until restart. */
+let failedNow: { hash: string; why: string } | null = null;
+/** A frame from a vault is shown, in the foreground: if the app starts again with this mark still there, that frame hung
+ *  it (a page that hangs can't clear it; one that is left, hidden or closed does). */
+export function frameShown(hash: string) { const k = kept(); if (k.starting !== hash) keep({ ...k, starting: hash }); }
+export function frameHidden(hash: string) { const k = kept(); if (k.starting === hash) keep({ ...k, starting: undefined }); }
 
 export function setHome(key: string) { try { storage()?.setItem(HOME_KEY, key); } catch { /* session only */ } set({ read: null }); void readFrameRecord(); }
 
@@ -187,13 +193,27 @@ export function proposal(s: State = state, k: Kept = kept()): boolean {
 
 // ── a link out from a frame of the person's: the shell shows the whole address first ──
 
+/** After the question is answered, no new one for longer than a tap lasts (5 s): the next asks need a new tap in the frame. */
+export const LINK_OUT_REST_MS = 6_000;
+/** Open counts only once the question has been up this long: the second tap of a double tap can't answer it. */
+export const LINK_OUT_HOLD_MS = 700;
 let pendingOpen: ((open: boolean) => void) | null = null;
-/** Ask the person, on the shell's own screen, before a frame from a vault opens an address outside the app. */
-export function confirmLinkOut(url: string): Promise<boolean> {
-  pendingOpen?.(false);
-  return new Promise((res) => { pendingOpen = (open) => { pendingOpen = null; set({ linkOut: null }); res(open); }; set({ linkOut: url }); });
+let shownAt = 0, restUntil = 0;
+/** Ask the person, on the shell's own screen, before a frame from a vault opens an address outside the app. One
+ *  question at a time (a new ask while one is up is refused, never swapped in), and none for a while after. */
+export function confirmLinkOut(url: string, now: () => number = Date.now): Promise<boolean> {
+  if (pendingOpen || now() < restUntil) return Promise.resolve(false);
+  return new Promise((res) => {
+    shownAt = now();
+    pendingOpen = (open) => { pendingOpen = null; restUntil = now() + LINK_OUT_REST_MS; set({ linkOut: null }); res(open); };
+    set({ linkOut: url });
+  });
 }
-export const answerLinkOut = (open: boolean) => pendingOpen?.(open);
+/** The person's answer. Open too soon after the question appeared is ignored. */
+export function answerLinkOut(open: boolean, now: () => number = Date.now) {
+  if (open && now() - shownAt < LINK_OUT_HOLD_MS) return;
+  pendingOpen?.(open);
+}
 
 const subscribe = (f: () => void) => {
   listeners.add(f);
@@ -203,5 +223,5 @@ const subscribe = (f: () => void) => {
 export function useFrameSource() {
   useSyncExternalStore(subscribe, () => `${state.rev}:${gate()}:${homeVault()?.key ?? ""}`);
   const k = kept();
-  return { choice: currentChoice(), read: state.read, reading: state.reading, failedWhy: k.failed?.why ?? "", proposal: proposal(), defaultHash: state.defaultHash, linkOut: state.linkOut };
+  return { choice: currentChoice(), read: state.read, reading: state.reading, failedWhy: k.failed?.why ?? failedNow?.why ?? "", proposal: proposal(), defaultHash: state.defaultHash, linkOut: state.linkOut };
 }
