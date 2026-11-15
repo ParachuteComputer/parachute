@@ -7,6 +7,7 @@ export type VaultRecord = {
   issuer: string;
   vault: string;
   tokenEndpoint: string;
+  revocationEndpoint?: string;
   clientId: string;
   accessToken: string;
   refreshToken?: string;

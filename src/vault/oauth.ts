@@ -24,6 +24,8 @@ export type Pending = {
   issuer: string;
   vault: string;
   tokenEndpoint: string;
+  /** where Sign out ends the sign-in, when the hub names one on its own origin */
+  revocationEndpoint?: string;
   clientId: string;
   codeVerifier: string;
   state: string;
@@ -69,7 +71,9 @@ export async function beginSignIn(address: Address, fetchImpl: typeof fetch = fe
   const redirect = redirectUri();
   const meta = await discoverAuthServer(vaultUrl(address.issuer, address.vault), fetchImpl);
   // the hub must name itself as the address typed (RFC 8414 3.3), and keep its sign-in on that origin
-  if (meta.issuer?.replace(/\/$/, "") !== address.issuer) throw new Error(`That hub calls itself ${String(meta.issuer).slice(0, 80)}, not ${address.issuer}. Nothing was added.`);
+  let named = "";
+  try { named = new URL(String(meta.issuer)).origin; } catch { /* not an address: refused below */ }
+  if (named !== address.issuer) throw new Error(`That hub calls itself ${String(meta.issuer).slice(0, 80)}, not ${address.issuer}. Nothing was added.`);
   if (![meta.authorization_endpoint, meta.token_endpoint, meta.registration_endpoint].every((e) => onOrigin(e, address.issuer))) throw new Error("The hub's sign-in addresses aren't on the hub itself. Nothing was added.");
   // a sign-in that never came back may have died on a registration the hub no longer knows: register again
   const stale = readJson<Pending>(PENDING_KEY);
@@ -81,7 +85,10 @@ export async function beginSignIn(address: Address, fetchImpl: typeof fetch = fe
   }
   const codeVerifier = generateCodeVerifier();
   const state = generateState();
-  const pending: Pending = { issuer: address.issuer, vault: address.vault, tokenEndpoint: meta.token_endpoint, clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now() };
+  // the vault's own metadata may leave out where to revoke; the hub's names it
+  let revocation = (meta as { revocation_endpoint?: unknown }).revocation_endpoint;
+  if (!onOrigin(revocation, address.issuer)) revocation = await discoverAuthServer(address.issuer, fetchImpl).then((m) => (m as { revocation_endpoint?: unknown }).revocation_endpoint, () => undefined);
+  const pending: Pending = { issuer: address.issuer, vault: address.vault, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, address.issuer) ? { revocationEndpoint: revocation } : {}), clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now() };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   const url = new URL(meta.authorization_endpoint);
   url.searchParams.set("response_type", "code");
@@ -146,12 +153,10 @@ export async function refresh(tokenEndpoint: string, clientId: string, refreshTo
 }
 
 /** Tell the hub to end this app's sign-in (best effort: the record goes from this device either way). */
-export async function revoke(issuer: string, refreshToken: string | undefined, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<void> {
-  if (!refreshToken) return;
+export async function revoke(rec: { issuer: string; clientId: string; refreshToken?: string; revocationEndpoint?: string }, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<void> {
+  if (!rec.refreshToken || !onOrigin(rec.revocationEndpoint, rec.issuer)) return;
   try {
-    const meta = await discoverAuthServer(issuer, fetchImpl);
-    const endpoint = (meta as { revocation_endpoint?: unknown }).revocation_endpoint;
-    if (!onOrigin(endpoint, issuer)) return;
-    await fetchImpl(endpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ token: refreshToken, token_type_hint: "refresh_token" }).toString() });
+    await fetchImpl(rec.revocationEndpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: rec.refreshToken, token_type_hint: "refresh_token", client_id: rec.clientId }).toString() });
   } catch { /* offline or refused: the local record still goes */ }
 }

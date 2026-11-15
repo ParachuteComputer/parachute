@@ -18,7 +18,7 @@ export default function OAuthCallback() {
     if (denied) { setError(denied === "access_denied" ? "You said no on the hub. Nothing was added." : `The hub stopped the sign-in (${denied.slice(0, 60)}).`); return; }
     if (!code || !state) { setError("This page needs a sign-in from a hub."); return; }
     completeSignIn(code, state).then(({ pending, token, vault }) => {
-      const rec = saveVault({ issuer: pending.issuer, vault, tokenEndpoint: pending.tokenEndpoint, clientId: pending.clientId, accessToken: token.access_token,
+      const rec = saveVault({ issuer: pending.issuer, vault, tokenEndpoint: pending.tokenEndpoint, revocationEndpoint: pending.revocationEndpoint, clientId: pending.clientId, accessToken: token.access_token,
         refreshToken: token.refresh_token, expiresAt: token.expires_in ? Date.now() + token.expires_in * 1000 : undefined, scope: token.scope ?? "", addedAt: new Date().toISOString() });
       nav(`/v/${encodeURIComponent(rec.key)}`, { replace: true });
     }, (e: unknown) => {

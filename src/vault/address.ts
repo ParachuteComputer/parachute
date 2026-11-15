@@ -2,7 +2,7 @@
 //   "https://hub.example/vault/recipes"  → { issuer: "https://hub.example", vault: "recipes" }
 //   "hub.example/vault/recipes/"          → the same (https is assumed when no scheme is given)
 // A hub's address alone is refused with a hint: one sign-in is one vault, so the address names it.
-// Anything else (a path that isn't /vault/<name>, a scheme other than http or https, credentials in the address) is refused.
+// Anything else (a path that isn't /vault/<name>, http to anywhere but this machine, credentials in the address) is refused.
 
 export type Address = { issuer: string; vault: string };
 export type AddressParse = { ok: true; address: Address } | { ok: false; error: string };

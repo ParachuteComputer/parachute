@@ -21,14 +21,20 @@ test("search finds a note by its words", async ({ page }) => {
   await expect(hits.getByRole("link")).toContainText("Rice and beans");
 });
 
-test("the vault stays after a reload, and Sign out forgets it", async ({ page }) => {
+test("the vault stays after a reload, and Sign out forgets it here and ends it on the hub", async ({ page }) => {
   await signIn(page);
   await page.reload();
   await expect(page.getByRole("list", { name: "Notes" })).toBeVisible();
+  const rec = await page.evaluate(() => JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]")[0]);
   await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByText("None yet.")).toBeVisible();
   await page.goto("/");
   await expect(page.getByLabel("Vault address")).toBeVisible();
+  // the hub no longer takes the refresh token
+  const res = await fetch(rec.tokenEndpoint, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: rec.refreshToken, client_id: rec.clientId }).toString() });
+  expect(res.status).toBeGreaterThanOrEqual(400);
 });
 
 test("an address that names no vault is refused before going anywhere", async ({ page }) => {

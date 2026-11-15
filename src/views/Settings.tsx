@@ -17,7 +17,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
           {vaults.map((v) => (
             <li key={v.key} className="line">
               <span><strong>{v.vault}</strong> <span className="quiet">on {hostOf(v.issuer)}</span></span>
-              <button type="button" className="quiet-button" onClick={() => { void revoke(v.issuer, v.refreshToken); removeVault(v.key); dropClient(v.key); }}>Sign out</button>
+              <button type="button" className="quiet-button" onClick={async () => { await revoke(v); removeVault(v.key); dropClient(v.key); }}>Sign out</button>
             </li>
           ))}
         </ul> : <p className="quiet">None yet.</p>}
