@@ -135,6 +135,35 @@ test("changed code is seen at the tap: the recipe opens plain with a line, and n
   }
 });
 
+test("if reading the applets fails at the tap, the note opens plain: never on a list read before", async ({ page }) => {
+  await allowApplet(page, "Recipe box");
+  const st = hubState();
+  const cur = await api(st, "GET", `notes?id=${encodeURIComponent("Applets/Recipes")}`);
+  await page.goto(`/v/${VAULT}`);
+  await expect(page.getByRole("list", { name: "Applets" })).toBeVisible();
+  // the app has read the applets; now the applet's code changes, and the vault won't list its applets again
+  await api(st, "PATCH", `notes/${cur.id}`, { content: `${cur.content}\n<!-- changed -->`, if_updated_at: cur.updatedAt });
+  await page.route((u) => u.searchParams.get("tag") === "applet", (r) => r.abort());
+  try {
+    await notes(page).getByRole("link", { name: /^Tomato toast/ }).click();
+    await expect(page.locator(".prose-note h1")).toHaveText("Tomato toast");
+    await expect(page).toHaveURL(/\/n\//);
+    await expect(page.locator("iframe")).toHaveCount(0);
+  } finally {
+    const now = await api(st, "GET", `notes?id=${cur.id}`);
+    await api(st, "PATCH", `notes/${cur.id}`, { content: cur.content, if_updated_at: now.updatedAt });
+  }
+});
+
+test("Back from a note's sheet closes it", async ({ page }) => {
+  await allowApplet(page, "Recipe box");
+  await allowApplet(page, "Cook mode");
+  await tapNote(page, "Tomato toast");
+  await expect(page.getByRole("dialog", { name: "Open with" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
 test("an applet's own note opens as text and never starts it", async ({ page }) => {
   await allowApplet(page, "Recipe box");
   await tapNote(page, "Recipes");

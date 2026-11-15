@@ -15,13 +15,14 @@ import type { Candidate } from "./resolve";
 export default function Sheet() {
   const target = useSheet();
   if (!target) return null;
-  return <SheetFor key={`${target.vault}/${target.note}`} vault={target.vault} note={target.note} preset={target.preset} />;
+  return <SheetFor key={`${target.vault}/${target.note}`} vault={target.vault} note={target.note} preset={target.preset} fromRoute={target.asked} />;
 }
 
-function SheetFor({ vault, note, preset }: { vault: string; note: string; preset?: SheetTarget["preset"] }) {
+function SheetFor({ vault, note, preset, fromRoute }: { vault: string; note: string; preset?: SheetTarget["preset"]; fromRoute: boolean }) {
   const rec = useVault(vault);
   const nav = useNavigate();
-  const read = useOpenWith(preset ? null : rec, note, false);
+  // a long-press reads the applets as they are now, as the note's route does
+  const read = useOpenWith(preset ? null : rec, note, true);
   const ow: OpenWith = preset ? { state: "ok", note: preset.note, cands: preset.cands, decision: { kind: "ask", candidates: preset.cands } } : read;
   const [always, setAlways] = useState(true);
   if (!rec) return null;
@@ -34,13 +35,14 @@ function SheetFor({ vault, note, preset }: { vault: string; note: string; preset
     closeSheet();
     if (!c) {
       if (always) for (const t of types) setDefault(rec.key, t, VAULT);
-      nav(`${noteHref(rec.key, id)}?with=vault`);
+      // from the note's own route: the choice replaces it, so Back skips it (as when the route opens an applet itself)
+      nav(`${noteHref(rec.key, id)}?with=vault`, { replace: fromRoute });
       return;
     }
     if (always) setDefault(rec.key, c.claim.type, c.entry.noteId);
     // the choice is the person's tap: it starts this applet for this note (an applet not yet allowed shows its card)
     markTap(appletPath(rec.key, c.entry.noteId));
-    nav(appletHref(rec.key, c, id));
+    nav(appletHref(rec.key, c, id), { replace: fromRoute });
   };
   return (
     <div className="sheet-scrim" onClick={(e) => { if (e.target === e.currentTarget) closeSheet(); }}>

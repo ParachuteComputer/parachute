@@ -40,7 +40,8 @@ export function installLongPress(doc: Document = document): () => void {
     openSheet(link.vault, link.note);
   };
   const onDown = (e: PointerEvent) => {
-    if (e.pointerType === "mouse") return;
+    cancel();
+    if (e.pointerType === "mouse" || !e.isPrimary) return;
     fired = null;
     held = noteLink(e.target);
     if (!held) return;
@@ -51,7 +52,8 @@ export function installLongPress(doc: Document = document): () => void {
   const onMove = (e: PointerEvent) => { if (timer && Math.hypot(e.clientX - startX, e.clientY - startY) > 10) cancel(); };
   // the click that ends a long-press opens nothing
   const onClick = (e: MouseEvent) => {
-    if (fired && (e.target as Element | null)?.closest?.("a[href]") === fired) { e.preventDefault(); e.stopPropagation(); }
+    // stopImmediatePropagation: the tap listener (installed after this one) must not mark a click the long-press took
+    if (fired && (e.target as Element | null)?.closest?.("a[href]") === fired) { e.preventDefault(); e.stopImmediatePropagation(); }
     fired = null;
   };
   doc.addEventListener("contextmenu", onContext);

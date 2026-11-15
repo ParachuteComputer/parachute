@@ -13,7 +13,7 @@ import type { VaultRecord } from "../vault/store";
 type Entry = { state: "loading" } | { state: "ok"; found: Read; at: number } | { state: "error"; error: string };
 const cache = new Map<string, Entry>();
 const LOADING: Entry = { state: "loading" };
-const inflight = new Map<string, Promise<void>>();
+const inflight = new Map<string, Promise<boolean>>();
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((f) => f());
 
@@ -30,12 +30,13 @@ export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getN
   return { entries, skipped: rows.length - found.entries.length };
 }
 
-export function refreshApplets(rec: VaultRecord): Promise<void> {
+/** Read a vault's applets again. Resolves to whether this read succeeded (a failure keeps the last list for the strip). */
+export function refreshApplets(rec: VaultRecord): Promise<boolean> {
   const running = inflight.get(rec.key);
   if (running) return running;
   if (!cache.has(rec.key)) cache.set(rec.key, { state: "loading" });
   const p = readApplets(clientFor(rec), rec.key)
-    .then((found) => { cache.set(rec.key, { state: "ok", found, at: Date.now() }); }, (e: unknown) => { if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e) }); })
+    .then((found) => { cache.set(rec.key, { state: "ok", found, at: Date.now() }); return true; }, (e: unknown) => { if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e) }); return false; })
     .finally(() => { inflight.delete(rec.key); notify(); });
   inflight.set(rec.key, p);
   return p;

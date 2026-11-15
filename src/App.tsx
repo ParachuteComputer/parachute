@@ -6,7 +6,7 @@ import OAuthCallback from "./views/OAuthCallback";
 import VaultView from "./views/VaultView";
 import NoteRoute from "./views/NoteRoute";
 import Sheet from "./open/Sheet";
-import { installLongPress } from "./open/sheet";
+import { closeSheet, installLongPress } from "./open/sheet";
 import AppletScreen from "./views/AppletScreen";
 import Settings from "./views/Settings";
 import { SelfTestRunner } from "./applet/selftest/run";
@@ -15,8 +15,10 @@ import { arrived, installTapListener } from "./open/mark";
 /** The one listener for real taps on links inside the app, and the rule that a tap's mark is gone once the person moves on. */
 function Taps() {
   const location = useLocation();
-  useEffect(() => installTapListener(), []);
-  useEffect(() => installLongPress(), []);
+  // the long-press listener first: it takes the click that ends a long-press before the tap listener sees it
+  useEffect(() => { const a = installLongPress(); const b = installTapListener(); return () => { b(); a(); }; }, []);
+  // a sheet belongs to the screen it was opened on
+  useEffect(() => { closeSheet(); }, [location.key]);
   useEffect(() => { arrived(location.pathname); }, [location.pathname]);
   return null;
 }

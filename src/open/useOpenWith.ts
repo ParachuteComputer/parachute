@@ -19,7 +19,8 @@ export function useOpenWith(rec: VaultRecord | null, noteId: string | undefined,
   const run = useSelfTestRun();
   const applets = useApplets(rec, false);
   const [note, setNote] = useState<{ id: string; note: Note | null; roles: string[] | null } | { id: string; error: string } | null>(null);
-  const [read, setRead] = useState<string | null>(null);
+  // the note this visit's applet read was for, and whether that read succeeded
+  const [read, setRead] = useState<{ id: string; ok: boolean } | null>(null);
   const defaultsRaw = useSyncExternalStore(subscribeDefaults, () => JSON.stringify(rec ? defaultsFor(rec.key) : {}), () => "{}");
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export function useOpenWith(rec: VaultRecord | null, noteId: string | undefined,
     setNote(null); setRead(null);
     const c = clientFor(rec);
     // the applets as they are now: the status is judged on each applet's note as read now
-    void (fresh ? refreshApplets(rec) : Promise.resolve()).then(() => on && setRead(noteId));
+    void (fresh ? refreshApplets(rec) : Promise.resolve(true)).then((ok) => on && setRead({ id: noteId, ok }));
     // roles unread (the vault answered badly): no applet opens this note this time; the note itself still opens
     Promise.all([c.getNote(noteId), readRoleTags(c).catch(() => null)])
       .then(([n, roles]) => on && setNote({ id: noteId, note: n, roles }), (e: unknown) => on && setNote({ id: noteId, error: e instanceof Error ? e.message : "the vault couldn't be read" }));
@@ -36,10 +37,11 @@ export function useOpenWith(rec: VaultRecord | null, noteId: string | undefined,
   }, [rec?.key, noteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return useMemo((): OpenWith => {
-    if (!rec || !note || note.id !== noteId || read !== noteId || !run.known) return { state: "loading" };
+    if (!rec || !note || note.id !== noteId || read?.id !== noteId || !run.known) return { state: "loading" };
     if ("error" in note) return { state: "error", error: note.error };
     if (!note.note) return { state: "ok", note: null, cands: [], decision: { kind: "vault", line: null } };
-    const entries = applets.state === "ok" ? applets.found.entries : [];
+    // statuses are judged on the applets as read now: if this visit's read failed, no applet opens the note this time
+    const entries = applets.state === "ok" && read.ok ? applets.found.entries : [];
     const cands = note.roles ? candidates(note.note, entries, statusOf(rec.key, mode), note.roles) : [];
     return { state: "ok", note: note.note, cands, decision: resolve(cands, JSON.parse(defaultsRaw)) };
   }, [rec, note, noteId, read, run.known, run.running, applets, mode, defaultsRaw]);

@@ -39,4 +39,6 @@ export const defaultsFor = (vault: string): Record<string, Choice> => read()[vau
 export function setDefault(vault: string, type: string, choice: Choice) { const s = read(); write({ ...s, [vault]: { ...(s[vault] ?? {}), [type]: choice } }); }
 export function clearDefault(vault: string, type: string) { const s = read(); const m = { ...(s[vault] ?? {}) }; delete m[type]; write({ ...s, [vault]: m }); }
 export const allDefaults = (): Store => read();
+/** Signing out of a vault forgets its choices on this device too. */
+export function clearDefaults(vault: string) { const s = { ...read() }; delete s[vault]; write(s); }
 export function subscribeDefaults(cb: () => void) { listeners.add(cb); return () => listeners.delete(cb); }
