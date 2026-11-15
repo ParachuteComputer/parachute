@@ -2,9 +2,9 @@
 // frame is read again each time the frame area is shown, so a change made by them or their agent is seen at the next
 // return, not by polling. Over a frame from a vault the shell keeps two things of its own: a way to Settings (whatever
 // that frame draws), and the question before it opens an address outside the app.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { answerLinkOut, frameCode, frameFailed, frameHidden, frameShown, readFrameRecord, useFrameSource } from "./frameSource";
+import { answerLinkOut, LINK_OUT_HOLD_MS, frameCode, frameFailed, frameHidden, frameShown, readFrameRecord, useFrameSource } from "./frameSource";
 import FrameHost from "./FrameHost";
 import FrameCard from "./FrameCard";
 
@@ -45,19 +45,45 @@ export default function FrameArea() {
       <FrameHost key={ready.hash} js={ready.js} from={ready.from}
         onFailed={(why, persist) => { if (vault) frameFailed(ready.hash, why, persist); }} />
       {vault && <Link className="shell-settings" to="/settings" aria-label="Settings (the app's own)">◠</Link>}
-      {linkOut !== null && (
-        <div className="sheet-scrim">
-          <section className="sheet" role="dialog" aria-modal="true" aria-label="Open outside Parachute">
-            <h2>Open this outside Parachute?</h2>
-            <p>Your frame asks to open:</p>
-            <p className="link-raw"><code>{linkOut.slice(0, 600)}{linkOut.length > 600 ? "…" : ""}</code></p>
-            <div className="grant-actions">
-              <button type="button" className="quiet-button" onClick={() => answerLinkOut(false)}>Cancel</button>
-              <button type="button" className="primary" onClick={(e) => { if (e.isTrusted) answerLinkOut(true); }}>Open</button>
-            </div>
-          </section>
-        </div>
-      )}
+      {linkOut !== null && <LinkOutQuestion key={linkOut} url={linkOut} />}
     </>
+  );
+}
+
+/**
+ * The shell's question before a frame of the person's opens an address outside the app: the whole address, Cancel
+ * focused (so the frame no longer holds the focus a tap needs), Escape cancels. Open counts only for a tap that began
+ * LINK_OUT_HOLD_MS after the question was painted, judged by the tap's own time: a double tap's second tap can't
+ * answer it, even when the frame held the page up between the two taps.
+ */
+function LinkOutQuestion({ url }: { url: string }) {
+  const paintedAt = useRef(Infinity), downAt = useRef(-Infinity);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    cancel.current?.focus();
+    let id = requestAnimationFrame(() => { id = requestAnimationFrame(() => { paintedAt.current = performance.now(); }); });
+    const t = window.setTimeout(() => setArmed(true), LINK_OUT_HOLD_MS + 50);
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") answerLinkOut(false); };
+    addEventListener("keydown", esc);
+    return () => { cancelAnimationFrame(id); window.clearTimeout(t); removeEventListener("keydown", esc); };
+  }, []);
+  const open = (e: React.MouseEvent) => {
+    // a click from the keyboard has no pointer: its own time is when it began
+    const began = e.detail === 0 ? e.timeStamp : downAt.current;
+    if (e.isTrusted && began - paintedAt.current >= LINK_OUT_HOLD_MS) answerLinkOut(true);
+  };
+  return (
+    <div className="sheet-scrim">
+      <section className="sheet" role="dialog" aria-modal="true" aria-label="Open outside Parachute">
+        <h2>Open this outside Parachute?</h2>
+        <p>Your frame asks to open this address:</p>
+        <p className="link-raw link-whole"><code>{url}</code></p>
+        <div className="grant-actions">
+          <button ref={cancel} type="button" className="quiet-button" onClick={() => answerLinkOut(false)}>Cancel</button>
+          <button type="button" className="primary" aria-disabled={!armed} onPointerDown={(e) => { downAt.current = e.timeStamp; }} onClick={open}>Open</button>
+        </div>
+      </section>
+    </div>
   );
 }

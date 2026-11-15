@@ -21,7 +21,7 @@ function setup(tap = false) {
     go: vi.fn(), back: vi.fn(), decide: vi.fn(), here: () => "/v/kitchen/n/n1",
     tapNow: () => tap,
     mark: { tap: vi.fn(), carry: vi.fn(() => true), clear: vi.fn() },
-    copy: vi.fn(async () => true), openOut: vi.fn(),
+    copy: vi.fn(async () => true), openOut: vi.fn(async () => true),
     message: (e: unknown) => (e instanceof Error ? e.message : "failed"),
     now: () => 0,
   } satisfies HostDeps;

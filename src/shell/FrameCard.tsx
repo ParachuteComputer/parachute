@@ -15,7 +15,7 @@ export const FRAME_LINES = [
   "Ask to open an address outside the app when you tap a link (the app shows you the whole address first)",
 ];
 
-export default function FrameCard({ vault, noteId, path, hash, changed }: { vault: string; noteId: string; path: string; hash: string; changed: "code" | "mode" | null }) {
+export default function FrameCard({ vault, noteId, path, hash, changed }: { vault: string; noteId: string; path: string; hash: string; changed: "code" | "mode" | "stopped" | null }) {
   const mode = useGate();
   const [error, setError] = useState<string | null>(null);
   const tap = (f: () => void) => (e: MouseEvent) => { if (e.isTrusted) f(); };
@@ -24,8 +24,9 @@ export default function FrameCard({ vault, noteId, path, hash, changed }: { vaul
     <main className="screen">
       <Bar title="Your frame" />
       <section className="card grant-card" role="region" aria-label="Your home vault's frame asks to run">
-        <header className="grant-head"><span className="grant-glyph" aria-hidden="true">◠</span><h2>{changed ? "Your frame changed" : "Your home vault has its own frame"}</h2></header>
+        <header className="grant-head"><span className="grant-glyph" aria-hidden="true">◠</span><h2>{changed === "stopped" ? "Use your frame again?" : changed ? "Your frame changed" : "Your home vault has its own frame"}</h2></header>
         {changed === "code" && <p className="grant-changed" role="status"><strong>Its code changed since you allowed it. Only the version you allow runs.</strong></p>}
+        {changed === "stopped" && <p className="grant-changed" role="status"><strong>Parachute stopped while your frame was showing. If it stopped the app, use the built-in frame and change yours.</strong></p>}
         {changed === "mode" && <p className="grant-changed" role="status"><strong>You allowed it when frames here were sealed. This device now runs approved code only, so it asks again.</strong></p>}
         <p>The note <q data-untrusted="true">{path}</q> in the <strong>{vault}</strong> vault is a frame: the screens around your notes. In place of the built-in one it would:</p>
         <ul className="grant-lines">{FRAME_LINES.map((l) => <li key={l}>{l}</li>)}</ul>
@@ -36,7 +37,7 @@ export default function FrameCard({ vault, noteId, path, hash, changed }: { vaul
         {error && <p className="error" role="alert">{error}</p>}
         <div className="grant-actions">
           <button type="button" className="quiet-button" onClick={tap(() => declineFrame(vault, noteId, hash))}>Use the built-in frame</button>
-          <button type="button" className="primary" onClick={tap(() => { void allowFrame(vault, noteId, hash).then((r) => { if (!r.ok) setError(r.error); }); })}>{changed ? "Use this version" : "Use it"}</button>
+          <button type="button" className="primary" onClick={tap(() => { void allowFrame(vault, noteId, hash).then((r) => { if (!r.ok) setError(r.error); }); })}>{changed === "code" ? "Use this version" : "Use it"}</button>
         </div>
       </section>
     </main>

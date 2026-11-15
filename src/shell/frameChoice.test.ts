@@ -60,3 +60,17 @@ describe("which frame runs", () => {
     expect(choose({ ...base, read: found("tsx:ddd"), kept: failed })).toMatchObject({ why: "ask" });
   });
 });
+
+describe("when the app stopped while the person's frame showed", () => {
+  const suspect: Kept = { ...approved(), suspect: "tsx:aaa" };
+  it("its card asks before it runs again", () => {
+    expect(choose({ ...base, kept: suspect })).toMatchObject({ run: "built-in", why: "ask", card: { hash: "tsx:aaa", changed: "stopped" } });
+  });
+  it("offline it doesn't run; before the read it waits", () => {
+    expect(choose({ ...base, read: at("unreachable"), kept: suspect })).toEqual({ run: "built-in", why: "failed" });
+    expect(choose({ ...base, read: null, kept: suspect })).toEqual({ run: "built-in", why: "waiting" });
+  });
+  it("changed code since: the usual card", () => {
+    expect(choose({ ...base, read: found("tsx:eee"), kept: suspect })).toMatchObject({ card: { changed: "code" } });
+  });
+});

@@ -76,7 +76,7 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
     tapNow: tapIn(frame),
     mark: { tap: markTap, carry: carryMark, clear: clearMark },
     copy: (text) => navigator.clipboard?.writeText(text).then(() => true, () => false) ?? Promise.resolve(false),
-    openOut: (url) => { void (from === "vault" ? confirmLinkOut(url) : Promise.resolve(true)).then((yes) => (yes ? openOut(url) : undefined)).catch(() => {}); },
+    openOut: (url) => (from === "vault" ? confirmLinkOut(url) : Promise.resolve(true)).then(async (yes) => { if (yes) await openOut(url); return yes; }).catch(() => false),
     message: messageOf,
   };
 }

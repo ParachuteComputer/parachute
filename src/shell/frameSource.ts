@@ -47,8 +47,9 @@ const listeners = new Set<() => void>();
 const set = (p: Partial<State>) => { state = { ...state, ...p, rev: state.rev + 1 }; listeners.forEach((f) => f()); };
 const kept = (): Kept => readJson<Kept>(FRAMES_KEY, {});
 const keep = (k: Kept) => { writeJson(FRAMES_KEY, k); set({}); };
-// a frame still marked as starting when the app starts hung it last time: it gives way to the built-in one
-{ const k = kept(); if (k.starting) writeJson(FRAMES_KEY, { ...k, starting: undefined, failed: { hash: k.starting, why: "it stopped the app last time" } }); }
+// a frame still marked as shown when the app starts: the app stopped while it showed (it may have hung the app, or the
+// app was closed in a way that leaves no time to say so). Its card asks before it runs again.
+{ const k = kept(); if (k.starting) writeJson(FRAMES_KEY, { ...k, starting: undefined, suspect: k.starting }); }
 void defaultFrameHash().then((h) => set({ defaultHash: h }));
 
 /** The gate for a frame from a vault: the self-test's mode, or closed while it runs (a frame mounted during the
@@ -118,17 +119,22 @@ export async function allowFrame(vault: string, noteId: string, hash: string): P
   const p = await prepare(r.source, r.kind);
   if (!p.compiled?.ok) return { ok: false, error: `its code doesn't compile: ${p.compiled && !p.compiled.ok ? p.compiled.error : "?"}` };
   const approved: Approved = { vault, noteId, hash, js: p.compiled.js, t: TRANSPILER, source: r.source, kind: r.kind, mode: g };
-  keep({ ...kept(), approved, declined: undefined, failed: undefined, starting: undefined });
+  keep({ ...kept(), approved, declined: undefined, failed: undefined, starting: undefined, suspect: undefined });
+  failedNow = null;
   return { ok: true };
 }
-export function declineFrame(vault: string, noteId: string, hash: string) { keep({ ...kept(), declined: { vault, noteId, hash } }); }
+export function declineFrame(vault: string, noteId: string, hash: string) {
+  const k = kept();
+  // declining code that was allowed before (the card after the app stopped) takes the allowing back too
+  keep({ ...k, declined: { vault, noteId, hash }, suspect: undefined, ...(k.approved?.hash === hash ? { approved: undefined } : {}) });
+}
 /** Ask again about the person's frame: forget that they chose the built-in one, or that theirs stopped. */
-export function askAgain() { keep({ ...kept(), declined: undefined, failed: undefined, starting: undefined }); }
+export function askAgain() { failedNow = null; keep({ ...kept(), declined: undefined, failed: undefined, starting: undefined }); }
 /** Stop using the person's frame on this device: the built-in one runs until they ask for theirs again. */
 export function useBuiltIn() {
   const r = state.read;
   const k = kept();
-  keep({ ...k, approved: undefined, declined: r?.state === "found" ? { vault: r.vault, noteId: r.noteId, hash: r.hash } : k.declined });
+  keep({ ...k, approved: undefined, suspect: undefined, declined: r?.state === "found" ? { vault: r.vault, noteId: r.noteId, hash: r.hash } : k.declined });
 }
 /** Signing out of a vault forgets the frame this device kept from it. */
 export function forgetVaultFrame(vault: string) {
@@ -140,7 +146,8 @@ export function forgetVaultFrame(vault: string) {
  *  until its code changes or the person asks for it again. */
 export function frameFailed(hash: string, why: string, persist = true) {
   if (persist) keep({ ...kept(), failed: { hash, why: why.slice(0, 200) }, starting: undefined });
-  else { failedNow = { hash, why }; set({}); }
+  // only slow, perhaps: the built-in one for this session, and its card asks before it runs at the next start
+  else { failedNow = { hash, why }; keep({ ...kept(), suspect: hash, starting: undefined }); }
 }
 /** A frame that didn't start in time this session (it may only have been slow): the built-in one runs until restart. */
 let failedNow: { hash: string; why: string } | null = null;
@@ -195,25 +202,22 @@ export function proposal(s: State = state, k: Kept = kept()): boolean {
 
 /** After the question is answered, no new one for longer than a tap lasts (5 s): the next asks need a new tap in the frame. */
 export const LINK_OUT_REST_MS = 6_000;
-/** Open counts only once the question has been up this long: the second tap of a double tap can't answer it. */
+/** Open counts only for a tap that began this long after the question was on screen (FrameArea's LinkOutQuestion):
+ *  the second tap of a double tap can't answer it, even if the frame held the page up between the two. */
 export const LINK_OUT_HOLD_MS = 700;
 let pendingOpen: ((open: boolean) => void) | null = null;
-let shownAt = 0, restUntil = 0;
+let restUntil = 0;
 /** Ask the person, on the shell's own screen, before a frame from a vault opens an address outside the app. One
  *  question at a time (a new ask while one is up is refused, never swapped in), and none for a while after. */
 export function confirmLinkOut(url: string, now: () => number = Date.now): Promise<boolean> {
   if (pendingOpen || now() < restUntil) return Promise.resolve(false);
   return new Promise((res) => {
-    shownAt = now();
     pendingOpen = (open) => { pendingOpen = null; restUntil = now() + LINK_OUT_REST_MS; set({ linkOut: null }); res(open); };
     set({ linkOut: url });
   });
 }
-/** The person's answer. Open too soon after the question appeared is ignored. */
-export function answerLinkOut(open: boolean, now: () => number = Date.now) {
-  if (open && now() - shownAt < LINK_OUT_HOLD_MS) return;
-  pendingOpen?.(open);
-}
+/** The person's answer. */
+export function answerLinkOut(open: boolean) { pendingOpen?.(open); }
 
 const subscribe = (f: () => void) => {
   listeners.add(f);

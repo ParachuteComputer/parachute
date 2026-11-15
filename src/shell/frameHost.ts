@@ -24,7 +24,8 @@ export type HostDeps = {
   tapNow(): boolean;
   mark: { tap(path: string): void; carry(from: string, to: string): boolean; clear(): void };
   copy(text: string): Promise<boolean>;
-  openOut(url: string): void;
+  /** Open it (or, for a frame of the person's, ask first): whether it was opened. */
+  openOut(url: string): Promise<boolean>;
   /** For errors from the vault: a message for the person. */
   message(e: unknown): string;
   now?: () => number;
@@ -82,8 +83,7 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "link.out": {
         const url = p.url as string;
         if (!deps.tapNow() || !LINK_OUT.test(url)) return false;
-        deps.openOut(url);
-        return true;
+        return deps.openOut(url);
       }
     }
   };
