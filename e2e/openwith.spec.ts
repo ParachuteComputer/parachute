@@ -164,6 +164,21 @@ test("Back from a note's sheet closes it", async ({ page }) => {
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
+test("a tag the vault's settings give a role to is no applet's: a note with it opens plain, with no line", async ({ page }) => {
+  await allowApplet(page, "Recipe box");
+  const st = hubState();
+  // as Parachute's web app writes it: the vault's settings note, metadata.notes.tagRoles
+  const settings = await api(st, "POST", "notes", { path: ".parachute/notes/settings", content: "", metadata: { notes: { schemaVersion: 1, tagRoles: { pinned: "recipe" } } } });
+  try {
+    await tapNote(page, "Tomato toast");
+    await expect(page.locator(".prose-note h1")).toHaveText("Tomato toast");
+    await expect(page.locator(".open-line")).toHaveCount(0);
+    await expect(page.locator("iframe")).toHaveCount(0);
+  } finally {
+    await api(st, "DELETE", `notes/${settings.id}`);
+  }
+});
+
 test("an applet's own note opens as text and never starts it", async ({ page }) => {
   await allowApplet(page, "Recipe box");
   await tapNote(page, "Recipes");

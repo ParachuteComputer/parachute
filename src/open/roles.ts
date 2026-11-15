@@ -6,7 +6,9 @@ export const SETTINGS_NOTE_PATH = ".parachute/notes/settings";
 export const DEFAULT_ROLE_TAGS = ["pinned", "archived", "capture", "view"];
 
 export function roleTagsFrom(metadata: unknown): string[] {
-  const roles = (metadata as { notes?: { tagRoles?: Record<string, unknown> } } | null)?.notes?.tagRoles;
+  // as Parachute's web app reads it: `notes`, else the older `lens` key
+  const m = metadata as { notes?: { tagRoles?: Record<string, unknown> }; lens?: { tagRoles?: Record<string, unknown> } } | null;
+  const roles = (m?.notes ?? m?.lens)?.tagRoles;
   const named = roles && typeof roles === "object" ? Object.values(roles).filter((v): v is string => typeof v === "string" && !!v.trim()).map((v) => v.trim().replace(/^#/, "")) : [];
   return [...new Set([...DEFAULT_ROLE_TAGS, ...named])];
 }
