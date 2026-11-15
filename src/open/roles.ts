@@ -5,11 +5,17 @@ import type { VaultClient } from "@openparachute/surface-client";
 export const SETTINGS_NOTE_PATH = ".parachute/notes/settings";
 export const DEFAULT_ROLE_TAGS = ["pinned", "archived", "capture", "view"];
 
+/** The five roles Parachute's web app gives a tag (tag-roles.ts); nothing else in the settings note counts. */
+const ROLE_KEYS = ["pinned", "archived", "captureVoice", "captureText", "view"];
+
 export function roleTagsFrom(metadata: unknown): string[] {
   // as Parachute's web app reads it: `notes`, else the older `lens` key
   const m = metadata as { notes?: { tagRoles?: Record<string, unknown> }; lens?: { tagRoles?: Record<string, unknown> } } | null;
   const roles = (m?.notes ?? m?.lens)?.tagRoles;
-  const named = roles && typeof roles === "object" ? Object.values(roles).filter((v): v is string => typeof v === "string" && !!v.trim()).map((v) => v.trim().replace(/^#/, "")) : [];
+  const named = roles && typeof roles === "object" && !Array.isArray(roles)
+    // trimmed and without a leading #; an empty value means the default, as in the web app
+    ? ROLE_KEYS.map((k) => (typeof roles[k] === "string" ? (roles[k] as string).trim().replace(/^#/, "") : "")).filter(Boolean)
+    : [];
   return [...new Set([...DEFAULT_ROLE_TAGS, ...named])];
 }
 
