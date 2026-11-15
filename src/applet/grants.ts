@@ -1,7 +1,7 @@
 // The grant store (copied from the Uni app's src/interface/grants.ts): which applet the person has allowed, under
-// what (the hash of the grant: what it reaches and what it opens) and for which code (the hash of its HTML, the last
-// one they accepted). The subject is the vault plus the applet's note id. A different grant key is `none` (ask
-// again). Only the HTML changing is `updated`. A grant carries an expiry (grant.ts `grantExpiry`); past it, `none`.
+// what (the hash of the grant: what it reaches and what it opens) and for which code (code.ts `codeHash`, the last one
+// they allowed; the field is still named `html`). The subject is the vault plus the applet's note id. A different grant
+// key is `none` (ask again). Only the code changing is `updated`. A grant carries an expiry (grant.ts `grantExpiry`); past it, `none`.
 // Kept in this app's storage under its own key; storage is injectable.
 
 export const GRANTS_KEY = "parachute.applets.grants.v1";

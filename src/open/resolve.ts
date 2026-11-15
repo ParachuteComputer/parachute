@@ -6,7 +6,7 @@
 //                     "off"      the self-test has not passed on this device
 //                     The vault view is always "ok".
 //   candidates(note)  applets in the note's vault with an `opens` entry whose type is one of the note's tags (or
-//                     beneath one) and whose folder holds the note; never for an HTML note or an applet's own note, and
+//                     beneath one) and whose folder holds the note; never for a code note (HTML, TSX, JSX) or an applet's own note, and
 //                     never by a type that is one of the vault's role tags; then the vault view, always.
 //   resolve           1. a default for one of the note's claimed types names the vault view → the vault view;
 //                        names an "ok" candidate → open it; two of its types' defaults name different places → ask

@@ -10,7 +10,7 @@
 //   PATCH /api/notes/:idOrPath  {content, if_updated_at}   new content for a note inside a `vault.update` folder
 // A write sets content only (no tags, metadata, links, move or force: the app's writer takes none; the one tag a new
 // note gets is the app's, from what the applet opens: opens.ts `tagsFor`), never touches an
-// HTML note or a note tagged `applet` (an applet can't rewrite itself or another), and is judged on the note as it is
+// code note (HTML, TSX, JSX) or a note tagged `applet` (an applet can't rewrite itself or another), and is judged on the note as it is
 // read now. A session that has ended writes nothing.
 
 import { CODE_PATH, codeKindOf, isCodeExtension } from "../code.ts";

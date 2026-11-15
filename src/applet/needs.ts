@@ -16,5 +16,3 @@ export async function sha256Hex(s: string): Promise<string> {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** SHA-256 of an applet's HTML: what "allowed" and "changed since" are judged on. */
-export const htmlHash = (html: string) => sha256Hex(html);

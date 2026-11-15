@@ -68,3 +68,36 @@ test("an import the app doesn't provide stops the applet with one line saying so
     await expect(frame(page).locator(".parachute-error")).toHaveText(/it imports lodash, and an applet can import only react, .*parachute/);
   });
 });
+
+test("the same code run another way is new code: an extension changed alone shows the card again", async ({ page }) => {
+  // as TSX the <script> below is text; as HTML it would run
+  const content = 'export default function App() { return <p id="kind">tsx {"<script>document.body.append(Object.assign(document.createElement(\'b\'),{id:\'ran\'}))</script>"}</p>; }';
+  const args = { ...ARGS, path: "Applets/Poly", metadata: { applet: { ...(ARGS.metadata.applet as object), id: "poly", name: "Poly" } }, content };
+  await written(args, async (id) => {
+    await openChip(page, /Poly/);
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(frame(page).locator("#kind")).toContainText("tsx");
+    const cur = await api(hubState(), "GET", `notes?id=${id}`);
+    await mcp(hubState(), "update-note", { id, extension: "html", if_updated_at: cur.updatedAt });
+    await openChip(page, /Poly/);
+    await expect(page.getByText("code changed since you allowed it")).toBeVisible();
+    await expect(page.locator("iframe")).toHaveCount(0);
+  });
+});
+
+test("a module may await at its top, and one the browser can't parse still says why", async ({ page }) => {
+  const awaits = { ...ARGS, path: "Applets/Awaits", metadata: { applet: { ...(ARGS.metadata.applet as object), id: "awaits", name: "Awaits" } },
+    content: 'import { ready } from "parachute";\nconst ctx = await ready();\nexport default () => <h1>{ctx.applet.name} is ready</h1>;' };
+  await written(awaits, async () => {
+    await openChip(page, /Awaits/);
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(frame(page).getByRole("heading", { name: "Awaits is ready" })).toBeVisible();
+  });
+  // sucrase passes a repeated declaration through; the browser refuses to parse it
+  const twice = { ...ARGS, path: "Applets/Twice", metadata: { applet: { ...(ARGS.metadata.applet as object), id: "twice", name: "Twice" } }, content: "let a = 1; let a = 2;\nexport default () => <p>{a}</p>;" };
+  await written(twice, async () => {
+    await openChip(page, /Twice/);
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(frame(page).locator(".parachute-error")).toContainText("This applet stopped");
+  });
+});

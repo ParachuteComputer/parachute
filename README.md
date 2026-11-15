@@ -33,7 +33,7 @@ the binary if it isn't on your `PATH`.
 - `src/vault/`: signing in (OAuth with PKCE and dynamic registration, one sign-in per vault), the vaults this device
   holds, the client.
 - `src/applet/`: an applet as Parachute reads it. The manifest (`metadata.applet`, contract 2) is read exactly as the Uni
-  app reads it, so one applet note runs in both; what it opens goes beside it in `metadata.opens`. Its code (`code.ts`):
+  app reads it, so one HTML applet note runs in both (the Uni app doesn't run TSX); what it opens goes beside it in `metadata.opens`. Its code (`code.ts`):
   the note's extension says html, tsx or jsx; TSX/JSX is transpiled in the app with sucrase (small, pure JS, offline),
   cached against the code's hash, and run with React provided as an import. The sealed frame,
   its kit (`window.uni`, also `window.parachute`), the grant card and the sandbox self-test, which runs by itself and

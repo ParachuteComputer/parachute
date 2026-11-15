@@ -3,9 +3,11 @@
 //   tsx / jsx   one module whose default export is a React component. The app turns it into plain JavaScript once (with
 //               sucrase, bundled in the app, so it works offline), caches that against the code's hash, and runs it in
 //               the same sealed frame, with React and the kit (`parachute`) provided as imports.
-// The code's hash (of the note's content, as written) is what "allowed" and "changed since" are judged on, for every kind.
+// The code's hash is what "allowed" and "changed since" are judged on: of the content as written, and for TSX/JSX of its
+// kind too, so the same bytes run another way (an extension changed, nothing else) ask again (`codeHash`).
 
 import { sha256Hex } from "./needs.ts";
+import { inlineScript } from "./srcdoc.ts";
 
 export const CODE_KINDS = ["html", "tsx", "jsx"] as const;
 export type CodeKind = (typeof CODE_KINDS)[number];
@@ -16,7 +18,7 @@ export const extensionOf = (n: { extension?: string | null }) => String(n.extens
 /** The kind of code a note holds, from its extension; null for anything an applet can't be. */
 export function codeKindOf(n: { extension?: string | null }): CodeKind | null {
   const e = extensionOf(n);
-  return e === "htm" ? "html" : (CODE_KINDS as readonly string[]).includes(e) ? (e as CodeKind) : null;
+  return (CODE_KINDS as readonly string[]).includes(e) ? (e as CodeKind) : null;
 }
 
 /** A path that names applet code by its suffix (`x.html`, `x.tsx`…): no applet may write one. */
@@ -28,7 +30,14 @@ export const isCodeExtension = (n: { path?: string | null; extension?: string | 
 export const PROVIDED_IMPORTS = ["react", "react-dom", "react-dom/client", "react/jsx-runtime", "parachute"] as const;
 
 /** Bumped when the transpiler or its options change: a cached result from another version is never used. */
-export const TRANSPILER = "sucrase-3.35.1/1";
+export const TRANSPILER = "sucrase-3.35.1/2";
+
+/**
+ * The hash a grant holds for an applet's code. HTML: of its content alone (as before TSX, so earlier grants hold).
+ * TSX/JSX: of its kind and content, so a note whose extension changes is new code, and the transpile cache, keyed on
+ * this hash, never serves one kind's output for the other.
+ */
+export const codeHash = (kind: CodeKind, source: string): Promise<string> => sha256Hex(kind === "html" ? source : `${kind}\n${source}`);
 
 export type Compiled = { ok: true; js: string } | { ok: false; error: string };
 
@@ -81,7 +90,7 @@ export const deviceCompileCache = () => (device ??= createCompileCache());
 
 /** The code hash, and for TSX/JSX the runnable JavaScript (from the cache, or transpiled now and cached). */
 export async function prepare(source: string, kind: CodeKind, cache: CompileCache = deviceCompileCache()): Promise<{ hash: string; compiled: Compiled | null }> {
-  const hash = await sha256Hex(source);
+  const hash = await codeHash(kind, source);
   if (kind === "html") return { hash, compiled: null };
   const hit = cache.get(hash);
   if (hit !== null) return { hash, compiled: { ok: true, js: hit } };
@@ -92,16 +101,18 @@ export async function prepare(source: string, kind: CodeKind, cache: CompileCach
 
 // ── what runs in the frame ──
 
-/** Keep a script body from closing its own tag or opening an HTML comment. */
-const inlineScript = (code: string) => `<script>${code.replace(/<\/(script)/gi, "<\\/$1").replace(/<!--/g, "<\\!--")}</script>`;
-
 /**
- * The loader for a transpiled module: a `require` that serves only the provided imports, then the module, then its
- * default export rendered into #root. An error shows as one line in the frame. Kept free of backticks and `${`.
+ * Two scripts before the module, kept free of backticks and `${`. The first only sets up how a failure shows (one line
+ * in the frame), so even a module the browser can't parse says why. The second is the loader: a `require` that serves
+ * only the provided imports, then the module (an async function, so it may `await` at its top), then its default
+ * export rendered into #root.
  */
+const FAILURE = String.raw`(function () {
+  window.__parachuteFail = function (e) { var root = document.getElementById("root"); if (!root) return; root.textContent = ""; var p = document.createElement("p"); p.className = "parachute-error"; p.textContent = "This applet stopped: " + (e && e.message ? e.message : String(e)); root.appendChild(p); };
+  addEventListener("error", function (e) { var root = document.getElementById("root"); if (root && !root.firstChild) window.__parachuteFail(e.error || e.message); });
+})();`;
 const LOADER_HEAD = String.raw`(function () {
-  var root = document.getElementById("root");
-  function fail(e) { root.textContent = ""; var p = document.createElement("p"); p.className = "parachute-error"; p.textContent = "This applet stopped: " + (e && e.message ? e.message : String(e)); root.appendChild(p); }
+  var root = document.getElementById("root"), fail = window.__parachuteFail;
   var M = window.__ParachuteModules || {};
   var mods = { react: M.react, "react-dom": M["react-dom"], "react-dom/client": M["react-dom/client"], "react/jsx-runtime": M["react/jsx-runtime"], parachute: window.parachute };
   function require(name) {
@@ -109,19 +120,18 @@ const LOADER_HEAD = String.raw`(function () {
     throw new Error("it imports " + name + ", and an applet can import only " + Object.keys(mods).join(", "));
   }
   var module = { exports: {} };
-  try {
-    (function (require, module, exports) {
+  (async function (require, module, exports) {
 `;
 const LOADER_TAIL = String.raw`
-    })(require, module, module.exports);
+  })(require, module, module.exports).then(function () {
     var C = module.exports && module.exports.default;
-    if (typeof C !== "function") throw new Error("its module has no default export to show (export default function App() …)");
+    // a function component, or what memo, forwardRef or lazy return
+    if (typeof C !== "function" && !(C && typeof C === "object" && C.$$typeof)) throw new Error("its module has no default export to show (export default function App() …)");
     M["react-dom/client"].createRoot(root).render(M.react.createElement(C));
-  } catch (e) { fail(e); }
-  addEventListener("error", function (e) { if (!root.firstChild) fail(e.error || e.message); });
+  }).catch(fail);
 })();`;
 
 /** The page a TSX/JSX applet runs as: a root, React, then its module. `reactSource` sets `window.__ParachuteModules`. */
 export function modulePage(js: string, reactSource: string): string {
-  return `<div id="root"></div>${inlineScript(reactSource)}${inlineScript(`${LOADER_HEAD}${js}${LOADER_TAIL}`)}`;
+  return `<div id="root"></div>${inlineScript(FAILURE)}${inlineScript(reactSource)}${inlineScript(`${LOADER_HEAD}${js}${LOADER_TAIL}`)}`;
 }

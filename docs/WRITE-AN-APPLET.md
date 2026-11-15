@@ -35,7 +35,8 @@ screens:                     # optional: its screens; the first is the one that 
 ```
 
 Rules the app holds to. An unknown key, a hidden character or an over-long value refuses the whole applet: it is not
-repaired. A rule can't reach `.parachute/` or `Applets/`.
+repaired. A rule can't reach `.parachute/`. No applet can change a code note (HTML, TSX, JSX) or a note tagged
+`applet`, whatever its rules say.
 
 ### What it opens (`metadata.opens`)
 
@@ -49,8 +50,8 @@ The folder must be one it may read. `applet`, `view`, `capture` and anything sta
 
 ## The code
 
-For `tsx` or `jsx`: one module. Its **default export is a React component**, and the app renders it. It may import only
-these:
+For `tsx` or `jsx`: one module. Its **default export is a React component** (a function, or what `memo` returns), and
+the app renders it. It may `await` at its top level. It may import only these:
 
 | Import | What it is |
 |---|---|

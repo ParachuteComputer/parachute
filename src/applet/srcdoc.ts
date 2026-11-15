@@ -9,8 +9,11 @@ export const CSP_META = `<meta http-equiv="Content-Security-Policy" content="${F
 const RTC_NAMES = ["RTCPeerConnection", "webkitRTCPeerConnection", "mozRTCPeerConnection", "RTCDataChannel", "RTCSessionDescription", "RTCIceCandidate"];
 const NO_RTC = `<script>(function(){var n=${JSON.stringify(RTC_NAMES)};for(var i=0;i<n.length;i++)try{Object.defineProperty(window,n[i],{value:undefined,writable:false,configurable:false})}catch(e){}})()</script>`;
 
-/** Keep a script body from closing its own tag or opening an HTML comment. */
-const inlineScript = (code: string) => `<script>${code.replace(/<\/(script)/gi, "<\\/$1").replace(/<!--/g, "<\\!--")}</script>`;
+/**
+ * A script inline in the page, kept from closing its own tag or opening an HTML comment. `<` becomes `\x3C` there,
+ * which means `<` alike in a string, a template and a regular expression (with or without the u flag).
+ */
+export const inlineScript = (code: string) => `<script>${code.replace(/<(\/script|!--)/gi, "\\x3C$1")}</script>`;
 
 /**
  * The CSP meta is the first thing in the document, so the policy applies

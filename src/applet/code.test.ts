@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { codeKindOf, COMPILED_KEY, createCompileCache, isCodeExtension, modulePage, prepare, transpile, TRANSPILER } from "./code";
+import { codeHash, codeKindOf, COMPILED_KEY, createCompileCache, isCodeExtension, modulePage, prepare, transpile, TRANSPILER } from "./code";
+import { inlineScript } from "./srcdoc";
+import { sha256Hex } from "./needs";
 import { runDecision } from "./selftest/gate";
 
 class Mem { m = new Map<string, string>(); getItem(k: string) { return this.m.get(k) ?? null; } setItem(k: string, v: string) { this.m.set(k, v); } }
 
 describe("an applet's code kind comes from its note's extension", () => {
-  it.each([["html", "html"], [".HTML", "html"], ["htm", "html"], ["tsx", "tsx"], ["jsx", "jsx"], ["md", null], [undefined, null], ["ts", null], ["js", null]])("%s → %s", (ext, kind) => {
+  it.each([["html", "html"], [".HTML", "html"], ["htm", null], ["tsx", "tsx"], ["jsx", "jsx"], ["md", null], [undefined, null], ["ts", null], ["js", null]])("%s → %s", (ext, kind) => {
     expect(codeKindOf({ extension: ext as string | undefined })).toBe(kind);
   });
   it("a path ending like code counts as code, whatever its extension", () => {
@@ -74,10 +76,35 @@ describe("prepare: one transpile per code hash", () => {
   });
 });
 
+describe("the code's hash", () => {
+  it("is of the kind and the content for TSX/JSX, so the same bytes run another way ask again", async () => {
+    const src = "export default () => <i>z</i>;";
+    const hashes = await Promise.all([codeHash("html", src), codeHash("tsx", src), codeHash("jsx", src)]);
+    expect(new Set(hashes).size).toBe(3);
+    // an HTML applet's hash is what it was before TSX: grants made then still hold
+    expect(hashes[0]).toBe(await sha256Hex(src));
+  });
+  it("keys the transpile cache, so one kind's output is never served for the other", async () => {
+    const cache = createCompileCache(new Mem());
+    const src = 'import _ from "lodash";\nexport default () => <i>w</i>;';
+    const tsx = await prepare(src, "tsx", cache), jsx = await prepare(src, "jsx", cache);
+    expect(tsx.hash).not.toBe(jsx.hash);
+    // sucrase drops an import only types use in TSX, and keeps it in JSX
+    expect(jsx.compiled?.ok && jsx.compiled.js).toContain("lodash");
+  });
+});
+
 describe("the module page", () => {
   it("keeps the module's own </script> from closing the loader", () => {
     const page = modulePage('const s = "</script><script>alert(1)</script>";', "/* react */");
-    expect(page.match(/<\/script>/g)).toHaveLength(2);
+    expect(page.match(/<\/script>/g)).toHaveLength(3);
+  });
+  it("escapes </script> and <!-- without changing what the code means", () => {
+    const code = 'globalThis.__out = ["</script>", "<!--", /<!--/u.test("a<!--b"), `</SCRIPT>`];';
+    const body = inlineScript(code).replace(/^<script>/, "").replace(/<\/script>$/, "");
+    expect(body).not.toMatch(/<\/script|<!--/i);
+    new Function(body)();
+    expect((globalThis as { __out?: unknown }).__out).toEqual(["</script>", "<!--", true, "</SCRIPT>"]);
   });
 });
 
