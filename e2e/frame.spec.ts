@@ -158,7 +158,7 @@ export default function Leaky() {
   await expect(frameEl(page)).toHaveAttribute("data-frame", "vault");
 });
 
-test("a frame that stopped the app gives way to the built-in one at the next start", async ({ page }) => {
+test("when the app stopped while the frame showed, its card asks again at the next start", async ({ page }) => {
   await write('export default function Fine() { return <h1>Fine frame</h1>; }');
   await page.goto("/");
   await page.getByRole("button", { name: "Use it" }).click();
@@ -204,4 +204,21 @@ export default function Trap() {
   // the person reads it and taps Open: that opens
   await ask.getByRole("button", { name: "Open" }).click();
   await expect.poll(() => hits.length).toBe(1);
+});
+
+test("Use the built-in frame on a changed version holds offline too: the older allowed copy doesn't run", async ({ page }) => {
+  const a = await write('export default function A() { return <h1>Version A</h1>; }');
+  await page.goto("/");
+  await page.getByRole("button", { name: "Use it" }).click();
+  await expect(ui(page).getByRole("heading", { name: "Version A" })).toBeVisible();
+  const cur = await api(hubState(), "GET", `notes?id=${a.id}`);
+  await mcp(hubState(), "update-note", { id: a.id, content: 'export default function B() { return <h1>Version B</h1>; }', if_updated_at: cur.updatedAt });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Your frame changed" })).toBeVisible();
+  await page.getByRole("button", { name: "Use the built-in frame" }).click();
+  await expect(frameEl(page)).toHaveAttribute("data-frame", "built-in");
+  await page.route((u) => u.origin === hubState().origin, (r) => r.abort());
+  await page.reload();
+  await expect(frameEl(page)).toHaveAttribute("data-frame", "built-in");
+  await expect(ui(page).getByRole("heading", { name: "Version A" })).toHaveCount(0);
 });

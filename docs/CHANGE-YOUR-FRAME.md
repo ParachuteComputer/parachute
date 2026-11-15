@@ -51,5 +51,6 @@ change the vault view, or put something above the notes. For example, a heading 
    your frame too (the built-in `Bar` has one).
 4. The last version they allowed is kept on the device, so it also runs when the vault can't be reached. It is
    dropped when the frame note is gone from the vault, when there are two, and on signing out of that vault.
-5. If the frame stops with an error, or stops the app, the built-in one takes its place (also at the next start) until
-   its code changes, and Settings says why. One that is only slow to start gives way until the app starts again.
+5. If the frame stops with an error, the built-in one takes its place (also at the next start) until its code changes,
+   and Settings says what it said. If the app stopped while it showed (it hung the app, say), its card asks again at the
+   next start. One that is only slow to start gives way until the app starts again.

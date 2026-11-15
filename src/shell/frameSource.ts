@@ -9,7 +9,8 @@
 //   runs when        the self-test has passed on this device (and isn't running), and the person allowed this exact
 //                    code, under this gate mode, on the frame's card (frameChoice.ts). Changed code asks again.
 //   offline          the last allowed copy (kept on this device) runs while the home vault can't be read.
-//   stops            a frame that fails, or hung the app while starting, gives way to the built-in one.
+//   stops            a frame that fails gives way to the built-in one; one still marked as shown when the app starts
+//                    again (it hung the app, or the app closed while it showed) asks again on its card.
 import { useSyncExternalStore } from "react";
 import defaultSource from "../frame/default-frame.tsx?raw";
 import { codeHash, codeKindOf, prepare, TRANSPILER } from "../applet/code";
@@ -125,8 +126,9 @@ export async function allowFrame(vault: string, noteId: string, hash: string): P
 }
 export function declineFrame(vault: string, noteId: string, hash: string) {
   const k = kept();
-  // declining code that was allowed before (the card after the app stopped) takes the allowing back too
-  keep({ ...k, declined: { vault, noteId, hash }, suspect: undefined, ...(k.approved?.hash === hash ? { approved: undefined } : {}) });
+  // "use the built-in frame" is the person's latest word: no copy of this vault's frame runs (offline, or before a read
+  // lands), whichever version was allowed before
+  keep({ ...k, declined: { vault, noteId, hash }, suspect: undefined, ...(k.approved?.vault === vault ? { approved: undefined } : {}) });
 }
 /** Ask again about the person's frame: forget that they chose the built-in one, or that theirs stopped. */
 export function askAgain() { failedNow = null; keep({ ...kept(), declined: undefined, failed: undefined, starting: undefined }); }
@@ -146,13 +148,13 @@ export function forgetVaultFrame(vault: string) {
  *  until its code changes or the person asks for it again. */
 export function frameFailed(hash: string, why: string, persist = true) {
   if (persist) keep({ ...kept(), failed: { hash, why: why.slice(0, 200) }, starting: undefined });
-  // only slow, perhaps: the built-in one for this session, and its card asks before it runs at the next start
-  else { failedNow = { hash, why }; keep({ ...kept(), suspect: hash, starting: undefined }); }
+  // only slow, perhaps: the built-in one for this session
+  else { failedNow = { hash, why }; set({}); }
 }
 /** A frame that didn't start in time this session (it may only have been slow): the built-in one runs until restart. */
 let failedNow: { hash: string; why: string } | null = null;
-/** A frame from a vault is shown, in the foreground: if the app starts again with this mark still there, that frame hung
- *  it (a page that hangs can't clear it; one that is left, hidden or closed does). */
+/** A frame from a vault is shown, in the foreground: if the app starts again with this mark still there, the app stopped
+ *  while it showed (a page that hangs can't clear it; one that is left, hidden or closed does), and its card asks again. */
 export function frameShown(hash: string) { const k = kept(); if (k.starting !== hash) keep({ ...k, starting: hash }); }
 export function frameHidden(hash: string) { const k = kept(); if (k.starting === hash) keep({ ...k, starting: undefined }); }
 

@@ -74,3 +74,13 @@ describe("when the app stopped while the person's frame showed", () => {
     expect(choose({ ...base, read: found("tsx:eee"), kept: suspect })).toMatchObject({ card: { changed: "code" } });
   });
 });
+
+describe("the person's latest word", () => {
+  it("after Use the built-in frame on a changed version, the older allowed copy doesn't run (offline, or before the read)", () => {
+    // what declineFrame keeps: the decline, and no allowed copy for that vault
+    const after: Kept = { declined: { vault: "home", noteId: "f1", hash: "tsx:bbb" } };
+    expect(choose({ ...base, read: at("unreachable"), kept: after })).toEqual({ run: "built-in", why: "unreachable" });
+    expect(choose({ ...base, read: null, kept: after })).toEqual({ run: "built-in", why: "waiting" });
+    expect(choose({ ...base, read: found("tsx:bbb"), kept: after })).toEqual({ run: "built-in", why: "declined" });
+  });
+});

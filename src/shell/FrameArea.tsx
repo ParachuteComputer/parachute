@@ -57,7 +57,7 @@ export default function FrameArea() {
  * answer it, even when the frame held the page up between the two taps.
  */
 function LinkOutQuestion({ url }: { url: string }) {
-  const paintedAt = useRef(Infinity), downAt = useRef(-Infinity);
+  const paintedAt = useRef(Infinity), downAt = useRef(-Infinity), keyAt = useRef(Infinity);
   const cancel = useRef<HTMLButtonElement>(null);
   const [armed, setArmed] = useState(false);
   useEffect(() => {
@@ -69,8 +69,8 @@ function LinkOutQuestion({ url }: { url: string }) {
     return () => { cancelAnimationFrame(id); window.clearTimeout(t); removeEventListener("keydown", esc); };
   }, []);
   const open = (e: React.MouseEvent) => {
-    // a click from the keyboard has no pointer: its own time is when it began
-    const began = e.detail === 0 ? e.timeStamp : downAt.current;
+    // a click from the keyboard has no pointer: it began when its key went down (Space clicks on release)
+    const began = e.detail === 0 ? Math.min(e.timeStamp, keyAt.current) : downAt.current;
     if (e.isTrusted && began - paintedAt.current >= LINK_OUT_HOLD_MS) answerLinkOut(true);
   };
   return (
@@ -81,7 +81,7 @@ function LinkOutQuestion({ url }: { url: string }) {
         <p className="link-raw link-whole"><code>{url}</code></p>
         <div className="grant-actions">
           <button ref={cancel} type="button" className="quiet-button" onClick={() => answerLinkOut(false)}>Cancel</button>
-          <button type="button" className="primary" aria-disabled={!armed} onPointerDown={(e) => { downAt.current = e.timeStamp; }} onClick={open}>Open</button>
+          <button type="button" className="primary" aria-disabled={!armed} onPointerDown={(e) => { downAt.current = e.timeStamp; }} onKeyDown={(e) => { if (keyAt.current === Infinity) keyAt.current = e.timeStamp; }} onClick={open}>Open</button>
         </div>
       </section>
     </div>
