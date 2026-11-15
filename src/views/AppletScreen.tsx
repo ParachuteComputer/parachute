@@ -16,7 +16,8 @@ import { noteHref, titleOf } from "../vault/notes";
 import AppletFrame from "../applet/frame";
 import GrantCard from "../applet/GrantCard";
 import { readApplet, resolvedOf, ownFolder, type AppletEntry } from "../applet/discovery";
-import { claimOf } from "../applet/opens";
+import { claimOf, withoutRoles } from "../applet/opens";
+import { readRoleTags } from "../open/roles";
 import { fingerprint, grantExpiry, grantKey, grantLines, grantOf } from "../applet/grant";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { htmlHash } from "../applet/needs";
@@ -66,6 +67,8 @@ export default function AppletScreen() {
         if (String((n as { extension?: string }).extension ?? "").replace(/^\./, "").toLowerCase() !== "html") { if (on) setLoaded({ state: "refused", error: "its note is not an HTML note" }); return; }
         const a = readApplet(n, rec.key);
         if (!a.ok) { if (on) setLoaded({ state: "refused", error: a.error }); return; }
+        // the vault's role tags are no applet's to open or to tag with: dropped before the card, the key and the writer
+        a.entry.opens = withoutRoles(a.entry.opens, await readRoleTags(c));
         const note = askedNote ? await c.getNote(askedNote).catch(() => null) : null;
         const html = n.content ?? "";
         const [scope, hash] = await Promise.all([grantKey(grantOf(a.entry.manifest, rec.key, a.entry.opens), a.entry.path), htmlHash(html)]);

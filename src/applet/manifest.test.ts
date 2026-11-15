@@ -65,6 +65,8 @@ describe("parseOpens", () => {
   });
   it("drops the vault's role tags", () => {
     expect(withoutRoles([{ type: "recipe", path: "Recipes/" }, { type: "pinned", path: "Recipes/" }, { type: "pinned/x", path: "Recipes/" }], ["pinned"])).toEqual([{ type: "recipe", path: "Recipes/" }]);
+    // any letter case, and a type a role sits beneath (it would claim the role's notes)
+    expect(withoutRoles([{ type: "favourite", path: "Recipes/" }, { type: "task", path: "Recipes/" }], ["Favourite", "task/urgent"])).toEqual([]);
   });
   it("refuses a list that isn't a list", () => no({ type: "recipe" }, /must be a list/));
 });

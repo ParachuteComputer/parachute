@@ -52,6 +52,22 @@ test("a note it adds gets the tag of the type it opens", async ({ page }) => {
   await api(hubState(), "DELETE", `notes/${note.id}`);
 });
 
+test("a vault's role tag is no applet's to open: the card leaves it out", async ({ page }) => {
+  const st = hubState();
+  const cur = await api(st, "GET", `notes?id=${encodeURIComponent("Applets/Recipes")}`);
+  const opens = [...cur.metadata.opens, { type: "pinned", path: "Recipes/" }];
+  await api(st, "PATCH", `notes/${cur.id}`, { metadata: { opens }, if_updated_at: cur.updatedAt });
+  try {
+    await openFromStrip(page);
+    const card = page.getByRole("region", { name: /asking for access/ });
+    await expect(card).toContainText("Open recipe notes in Recipes/ when you tap one");
+    await expect(card).not.toContainText("pinned");
+  } finally {
+    const now = await api(st, "GET", `notes?id=${cur.id}`);
+    await api(st, "PATCH", `notes/${cur.id}`, { metadata: { opens: cur.metadata.opens }, if_updated_at: now.updatedAt });
+  }
+});
+
 test("Revoke takes it back: the card shows again", async ({ page }) => {
   await allow(page);
   await page.getByRole("button", { name: "Revoke" }).click();
