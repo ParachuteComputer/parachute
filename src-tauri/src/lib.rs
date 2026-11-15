@@ -52,6 +52,7 @@ fn signin_return<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(signin_return())
         .invoke_handler(tauri::generate_handler![app_version, webview_runtime])
         .setup(|app| {

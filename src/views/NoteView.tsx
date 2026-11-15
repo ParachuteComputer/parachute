@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import { NoteRenderer } from "@openparachute/surface-render/note";
@@ -7,6 +7,7 @@ import { Bar } from "../ui/Bar";
 import { useVault, useVaultQuery } from "../vault/hooks";
 import { folderOf, isAppPath, isCodeNote, noteHref, titleOf } from "../vault/notes";
 import NoVault from "./NoVault";
+import { linkFor } from "../links/parse";
 
 const RouterLink = ({ href, className, children }: { href: string; className?: string; children?: ReactNode }) =>
   isAppPath(href) ? <Link to={href} className={className}>{children}</Link> : <a href={href} className={className} target="_blank" rel="noreferrer noopener">{children}</a>;
@@ -30,7 +31,8 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
       {load.state === "ok" && !note && <p className="error" role="alert">There's no such note.</p>}
       {note && (
         <article className="note">
-          <p className="note-where">{[folderOf(note), ...(note.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · ") || " "}</p>
+          <p className="note-where">{[folderOf(note), ...(note.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · ") || " "}
+            <CopyLink link={linkFor(rec.issuer, rec.vault, note.id)} /></p>
           {isCodeNote(note)
             ? <pre className="note-code" aria-label="The note's text">{note.content ?? ""}</pre>
             : <NoteRenderer className="prose-note" note={{ path: `${note.path ?? "note"}.${(note as { extension?: string }).extension?.replace(/^\./, "") || "md"}`, content: note.content ?? "" }} resolve={resolve} linkComponent={RouterLink} />}
@@ -38,4 +40,10 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
       )}
     </main>
   );
+}
+
+/** The note's link for someone else's Parachute (or another app): it opens here only where that vault is held. */
+function CopyLink({ link }: { link: string }) {
+  const [done, setDone] = useState(false);
+  return <button type="button" className="link-button note-copy" onClick={() => { void navigator.clipboard?.writeText(link).then(() => setDone(true), () => setDone(false)); }}>{done ? "Link copied" : "Copy link"}</button>;
 }

@@ -7,7 +7,7 @@
 export type Address = { issuer: string; vault: string };
 export type AddressParse = { ok: true; address: Address } | { ok: false; error: string };
 
-const VAULT_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+export const VAULT_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 export function parseAddress(input: string): AddressParse {
   const raw = input.trim();

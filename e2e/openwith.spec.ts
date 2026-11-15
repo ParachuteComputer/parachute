@@ -29,7 +29,7 @@ test("no applet allowed: a recipe opens plain, with a line naming both that coul
   await expect(frame(page).locator("#opened")).toHaveText("Opened: Recipes/Tomato toast");
 });
 
-test("one applet allowed, its code changed, the other never allowed: the line names the changed one and leads to its card", async ({ page }) => {
+test("one applet allowed and since changed, the other never allowed: the sheet says which changed", async ({ page }) => {
   await allowApplet(page, "Recipe box");
   const st = hubState();
   const cur = await api(st, "GET", `notes?id=${encodeURIComponent("Applets/Recipes")}`);
