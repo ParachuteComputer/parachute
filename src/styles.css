@@ -1,0 +1,61 @@
+/* Parachute's one look. The theme variables are also what an applet's frame is handed (text, muted, accent, surface,
+   line, sans, serif, mono). Compact: content starts at the top, no big empty gaps. */
+:root {
+  --bg: #f6f4ef; --surface: #fffdf9; --text: #1d1c1a; --muted: #6b675f; --line: #e2ded5; --accent: #2f5d50; --danger: #9a3324;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --pad: 14px; --radius: 10px;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151514; --surface: #1e1e1c; --text: #ecebe6; --muted: #a29e95; --line: #34332f; --accent: #8cc4b1; --danger: #f08f7f; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 var(--sans); -webkit-tap-highlight-color: transparent; }
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+a { color: var(--accent); }
+button, input { font: inherit; color: inherit; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.screen { max-width: 720px; margin: 0 auto; padding: 0 var(--pad) 24px; }
+.bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; min-height: 52px; background: var(--bg); border-bottom: 1px solid var(--line); margin: 0 calc(-1 * var(--pad)) 10px; padding: 0 var(--pad); }
+.bar-title { flex: 1; margin: 0; font: 600 18px/1.2 var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-back, .bar-menu, .bar-mark { display: inline-grid; place-items: center; min-width: 36px; height: 36px; border: 0; background: none; color: var(--text); font-size: 26px; line-height: 1; text-decoration: none; border-radius: 8px; cursor: pointer; }
+.bar-mark { color: var(--accent); font-size: 22px; }
+.bar-menu { font-size: 22px; }
+.bar-back:active, .bar-menu:active { background: var(--line); }
+
+.rows { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.rows li + li { border-top: 1px solid var(--line); }
+.row { display: flex; flex-direction: column; gap: 1px; padding: 10px 12px; color: var(--text); text-decoration: none; -webkit-touch-callout: none; user-select: none; }
+.row:active { background: var(--line); }
+.row-title { font-weight: 550; overflow-wrap: anywhere; }
+.row-sub { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px var(--pad); margin: 0 0 10px; }
+.card h2 { margin: 0 0 6px; font: 600 15px/1.3 var(--sans); }
+.lead { margin: 0 0 12px; font-family: var(--serif); font-size: 18px; }
+.field { display: grid; gap: 4px; margin-bottom: 10px; font-size: 14px; color: var(--muted); }
+.field input, .search { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 16px; }
+.search { margin: 0 0 10px; }
+.primary { display: inline-block; padding: 10px 16px; border: 0; border-radius: 8px; background: var(--accent); color: var(--surface); font-weight: 600; text-decoration: none; cursor: pointer; }
+.primary:disabled { opacity: .6; }
+.quiet-button { border: 1px solid var(--line); background: none; border-radius: 8px; padding: 4px 10px; font-size: 14px; cursor: pointer; }
+.quiet { color: var(--muted); }
+.error { color: var(--danger); }
+.plain { list-style: none; margin: 0; padding: 0; }
+.line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; }
+.line + .line { border-top: 1px solid var(--line); }
+.screen-foot { margin: 14px 0 0; font-size: 14px; }
+
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 4px var(--pad) 12px; }
+.note-where { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.note-code { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 var(--mono); }
+.prose-note { font-family: var(--serif); font-size: 17px; line-height: 1.55; overflow-wrap: anywhere; }
+.prose-note h1, .prose-note h2, .prose-note h3 { line-height: 1.2; margin: 1em 0 .4em; }
+.prose-note h1 { font-size: 1.5em; } .prose-note h2 { font-size: 1.2em; } .prose-note h3 { font-size: 1.05em; }
+.prose-note ul, .prose-note ol { padding-left: 1.3em; }
+.prose-note code { font: .85em var(--mono); }
+.prose-note pre { overflow-x: auto; }
+.prose-note .wikilink-unresolved { border-bottom: 0; }

@@ -1,0 +1,43 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [next, main]
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      # The end-to-end tests run the web build against a real hub: parachute-core, in a throwaway home, on loopback.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install a Parachute hub for the tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/hub" && cd "$RUNNER_TEMP/hub"
+          echo '{"name":"e2e-hub","private":true}' > package.json
+          bun add @openparachute/core@0.8.0
+          echo "PARACHUTE_CORE=$RUNNER_TEMP/hub/node_modules/.bin/parachute-core" >> "$GITHUB_ENV"
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests (Playwright, web build)
+        run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
