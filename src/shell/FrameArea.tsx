@@ -81,7 +81,12 @@ function LinkOutQuestion({ url }: { url: string }) {
         <p className="link-raw link-whole"><code>{url}</code></p>
         <div className="grant-actions">
           <button ref={cancel} type="button" className="quiet-button" onClick={() => answerLinkOut(false)}>Cancel</button>
-          <button type="button" className="primary" aria-disabled={!armed} onPointerDown={(e) => { downAt.current = e.timeStamp; }} onKeyDown={(e) => { if (!e.repeat && (e.key === "Enter" || e.key === " ")) keyAt.current = e.timeStamp; }} onClick={open}>Open</button>
+          <button type="button" className="primary" aria-disabled={!armed} onPointerDown={(e) => { downAt.current = e.timeStamp; }} onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            // a fresh press on Open is when it began; a key already held when it reached Open (only repeats here) counts
+            // as begun before anything: it can't open until a fresh press
+            if (!e.repeat) keyAt.current = e.timeStamp; else if (keyAt.current === Infinity) keyAt.current = -Infinity;
+          }} onClick={open}>Open</button>
         </div>
       </section>
     </div>

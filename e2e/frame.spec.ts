@@ -231,11 +231,12 @@ export default function L() { return <button onClick={() => { void call("link.ou
   await page.goto("/");
   await page.getByRole("button", { name: "Use it" }).click();
   const ask = page.getByRole("dialog", { name: "Open outside Parachute" });
-  for (const key of ["Enter", "Space"]) {
+  for (const [key, from] of [["Enter", "Open"], ["Space", "Open"], ["Space", "Cancel"]]) {
     await ui(page).getByRole("button", { name: "Go out" }).click();
     await expect(ask).toBeVisible();
-    await page.keyboard.press("Tab");
-    await page.keyboard.down(key);
+    // held on Open; or held on Cancel and carried to Open with Tab
+    if (from === "Open") { await page.keyboard.press("Tab"); await page.keyboard.down(key); }
+    else { await page.keyboard.down(key); await page.keyboard.press("Tab"); }
     for (let i = 0; i < 8; i++) { await page.waitForTimeout(150); await page.keyboard.down(key); }
     await page.keyboard.up(key);
     await page.waitForTimeout(300);

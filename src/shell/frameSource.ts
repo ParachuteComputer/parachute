@@ -105,7 +105,7 @@ export async function frameCode(c: Choice): Promise<{ js: string; hash: string; 
     if (!p.compiled?.ok) return { error: p.compiled && !p.compiled.ok ? p.compiled.error : "it couldn't be read" };
     // only if it is still the one allowed: a decline or sign-out while this compiled must not be undone
     const now = kept();
-    if (now.approved?.vault === a.vault && now.approved.hash === a.hash) keep({ ...now, approved: { ...a, js: p.compiled.js, t: TRANSPILER } });
+    if (now.approved?.vault === a.vault && now.approved.hash === a.hash) keep({ ...now, approved: { ...now.approved, js: p.compiled.js, t: TRANSPILER } });
     return { js: p.compiled.js, hash: c.hash, from: "vault" };
   }
   const p = await prepare(DEFAULT_FRAME_SOURCE, "tsx");
