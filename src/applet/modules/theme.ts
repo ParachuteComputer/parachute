@@ -1,0 +1,18 @@
+// theme module (copied from the Uni app): the host's colours and fonts, pushed as a `theme` event on load
+// and when the colour scheme changes. The app uses system fonts, so the frame gets
+// the same font stacks by name and needs no font files (its CSP allows only `font-src data:`).
+
+import type { UniModule } from "../router.ts";
+
+export type ThemeData = { text: string; muted: string; accent: string; surface: string; line: string; sans: string; serif: string; mono: string };
+export const THEME_VARS: [keyof ThemeData, string][] = [["text", "--text"], ["muted", "--muted"], ["accent", "--accent"], ["surface", "--surface"], ["line", "--line"], ["sans", "--sans"], ["serif", "--serif"], ["mono", "--mono"]];
+
+export function createThemeModule(deps: { theme(): ThemeData }): UniModule {
+  return { namespace: "theme", methods: { get: { cap: null, validate: () => ({ ok: true, value: {} }), run: async () => deps.theme() } } };
+}
+
+/** Read the host's theme variables from the document (browser only). */
+export function readHostTheme(): ThemeData {
+  const css = getComputedStyle(document.documentElement);
+  return Object.fromEntries(THEME_VARS.map(([key, v]) => [key, css.getPropertyValue(v).trim()])) as ThemeData;
+}
