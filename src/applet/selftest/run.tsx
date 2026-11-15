@@ -30,6 +30,8 @@ export function gateNow(): GateMode | "closed" {
   if (!state.version || !state.runtime) return "closed";
   return gateMode(PLATFORM, state.version, parseSelfTest(readSelfTestRaw()), currentUserAgent(), undefined, state.runtime);
 }
+/** Is the self-test running now? */
+export const selfTestRunning = () => state.running;
 /** Resolves once the facts the gate is judged on are known (the self-test itself may still be running). */
 export const whenGateKnown = (): Promise<void> => (state.known ? Promise.resolve() : new Promise((res) => { const off = subscribe(() => { if (state.known) { off(); res(); } }); }));
 /** Any change to the gate: the run's state or the stored pass. */

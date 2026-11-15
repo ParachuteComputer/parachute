@@ -9,6 +9,7 @@ import { carryMark, clearMark, markTap } from "../open/mark";
 import { clientFor } from "../vault/client";
 import { messageOf } from "../vault/hooks";
 import { inShell } from "../vault/oauth";
+import { confirmLinkOut } from "./frameSource";
 import { listVaults, type VaultRecord } from "../vault/store";
 import type { HostDeps } from "./frameHost";
 
@@ -60,7 +61,8 @@ function decide(key: string, kind: Decided) {
 const tapIn = (frame: () => HTMLIFrameElement | null) => () =>
   (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true && !!frame() && document.activeElement === frame();
 
-export function shellDeps(go: (to: string, replace: boolean) => void, frame: () => HTMLIFrameElement | null): HostDeps {
+/** `from`: a frame of the person's (from their vault) asks the shell before it opens an address outside the app. */
+export function shellDeps(go: (to: string, replace: boolean) => void, frame: () => HTMLIFrameElement | null, from: "built-in" | "vault" = "built-in"): HostDeps {
   return {
     vaults: listVaults,
     client: clientFor,
@@ -74,7 +76,7 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
     tapNow: tapIn(frame),
     mark: { tap: markTap, carry: carryMark, clear: clearMark },
     copy: (text) => navigator.clipboard?.writeText(text).then(() => true, () => false) ?? Promise.resolve(false),
-    openOut: (url) => { void openOut(url).catch(() => {}); },
+    openOut: (url) => (from === "vault" ? confirmLinkOut(url) : Promise.resolve(true)).then(async (yes) => { if (yes) await openOut(url); return yes; }).catch(() => false),
     message: messageOf,
   };
 }

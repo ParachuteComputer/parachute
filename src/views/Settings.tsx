@@ -5,6 +5,8 @@ import { hostOf, removeVault } from "../vault/store";
 import { dropClient } from "../vault/client";
 import { revoke } from "../vault/oauth";
 import AppletSettings from "./AppletSettings";
+import FrameSettings from "./FrameSettings";
+import { forgetVaultFrame } from "../shell/frameSource";
 import { clearDefaults } from "../open/defaults";
 import { forgetApplets } from "../applet/useApplets";
 import { deviceGrants, subjectOf } from "../applet/grants";
@@ -24,11 +26,12 @@ export default function Settings({ children }: { children?: ReactNode }) {
           {vaults.map((v) => (
             <li key={v.key} className="line">
               <span><strong>{v.vault}</strong> <span className="quiet">on {hostOf(v.issuer)}</span></span>
-              <button type="button" className="quiet-button" onClick={() => { removeVault(v.key); dropClient(v.key); forgetApplets(v.key); revokeVaultGrants(v.key); clearDefaults(v.key); void revoke(v); }}>Sign out</button>
+              <button type="button" className="quiet-button" onClick={() => { removeVault(v.key); dropClient(v.key); forgetApplets(v.key); revokeVaultGrants(v.key); clearDefaults(v.key); forgetVaultFrame(v.key); void revoke(v); }}>Sign out</button>
             </li>
           ))}
         </ul> : <p className="quiet">None yet.</p>}
       </section>
+      <FrameSettings />
       <AppletSettings vaults={vaults} />
       {children}
       <p className="screen-foot quiet">Parachute {__APP_VERSION__}</p>

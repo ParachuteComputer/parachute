@@ -24,7 +24,8 @@ export type HostDeps = {
   tapNow(): boolean;
   mark: { tap(path: string): void; carry(from: string, to: string): boolean; clear(): void };
   copy(text: string): Promise<boolean>;
-  openOut(url: string): void;
+  /** Open it (or, for a frame of the person's, ask first): whether it was opened. */
+  openOut(url: string): Promise<boolean>;
   /** For errors from the vault: a message for the person. */
   message(e: unknown): string;
   now?: () => number;
@@ -62,7 +63,7 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "vault.roles": return deps.roles(vault(p.vault as string)).catch(() => null);
       case "applets.list": return deps.applets(vault(p.vault as string), p.fresh as boolean);
       case "defaults.get": vault(p.vault as string); return deps.defaults.get(p.vault as string);
-      case "defaults.set": vault(p.vault as string); deps.defaults.set(p.vault as string, p.type as string, p.choice as string | null); return null;
+      case "defaults.set": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); deps.defaults.set(p.vault as string, p.type as string, p.choice as string | null); return null;
       case "nav.go": {
         const to = p.to as string;
         if (!allowedDestination(to)) throw new Error("not_allowed");
@@ -82,8 +83,7 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "link.out": {
         const url = p.url as string;
         if (!deps.tapNow() || !LINK_OUT.test(url)) return false;
-        deps.openOut(url);
-        return true;
+        return deps.openOut(url);
       }
     }
   };

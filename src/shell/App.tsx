@@ -12,7 +12,7 @@ import Settings from "../views/Settings";
 import { SelfTestRunner } from "../applet/selftest/run";
 import { arrived, installTapListener } from "../open/mark";
 import { useVaults } from "../vault/hooks";
-import FrameHost from "./FrameHost";
+import FrameArea from "./FrameArea";
 
 /** The one listener for real taps on the shell's own links, and the rule that a tap's mark is gone once the person moves on. */
 function Taps() {
@@ -47,7 +47,7 @@ function ShellRoutes() {
       </Routes>}
       {/* the frame exists only while it is shown: hidden, it would keep its bridge (and a tap on a shell screen would
           count for it), and at boot it would learn the shell's address (a sign-in's return carries its code there) */}
-      {!shell && <FrameHost />}
+      {!shell && <FrameArea />}
     </>
   );
 }
