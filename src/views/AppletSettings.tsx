@@ -9,14 +9,16 @@ const grants = deviceGrants();
 
 function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }) {
   const applets = useApplets(rec, false);
-  if (applets.state !== "ok") return null;
-  const allowed = applets.found.entries.filter((a) => grants.record(subjectOf(rec.key, a.noteId)));
-  return <>{allowed.map((a) => {
-    const r = grants.record(subjectOf(rec.key, a.noteId));
+  // from the grants themselves, so a grant whose applet is gone from the vault can still be revoked
+  const subjects = grants.subjects().filter((s) => s.startsWith(subjectOf(rec.key, "")));
+  return <>{subjects.map((subject) => {
+    const id = subject.slice(subjectOf(rec.key, "").length);
+    const a = applets.state === "ok" ? applets.found.entries.find((e) => e.noteId === id) : undefined;
+    const r = grants.record(subject);
     return (
-      <li key={a.noteId} className="line">
-        <span><span aria-hidden="true">{a.manifest.glyph}</span> <strong>{a.manifest.name}</strong> <span className="quiet">in {rec.vault}{r?.grantedAt ? `, allowed ${r.grantedAt.slice(0, 10)}` : ""}</span></span>
-        <button type="button" className="quiet-button" onClick={() => { grants.revoke(subjectOf(rec.key, a.noteId)); onChange(); }}>Revoke</button>
+      <li key={subject} className="line">
+        <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, allowed ${r.grantedAt.slice(0, 10)}` : ""}</span></span>
+        <button type="button" className="quiet-button" onClick={() => { grants.revoke(subject); onChange(); }}>Revoke</button>
       </li>
     );
   })}</>;

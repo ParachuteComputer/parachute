@@ -80,7 +80,7 @@ export const PROBE_HTML = `<!doctype html><html><body><script>
     document.addEventListener('securitypolicyviolation', on);
     try { Promise.resolve(attempt()).then(() => { if (!waitAfterSuccess) { clearTimeout(t); off(); res(false); } }, () => {}); } catch (e) {}
   });
-  R.tauriInternals = typeof window.__TAURI_INTERNALS__ === 'undefined' || await blocked(() => window.__TAURI_INTERNALS__.invoke('vault_paths', { vault: 'uni' }));
+  R.tauriInternals = typeof window.__TAURI_INTERNALS__ === 'undefined' || await blocked(() => window.__TAURI_INTERNALS__.invoke('app_version'));
   R.tauriGlobal = typeof window.__TAURI__ === 'undefined';
   // wry/WebKitGTK and Android deliver IPC through these; reachable means a post that does not throw.
   R.webkitIpc = await blocked(() => { const h = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ipc; if (!h) throw new Error('absent'); h.postMessage('selftest'); });

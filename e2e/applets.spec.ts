@@ -123,6 +123,33 @@ test("a link that arrives while the applet runs doesn't inherit its start", asyn
   await expect(page.locator("iframe")).toHaveCount(0);
 });
 
+test("Back and Forward never start it, even to a screen a tap once started", async ({ page }) => {
+  await allow(page);
+  await page.goBack();
+  await page.goForward();
+  await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
+  await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("Stop holds: leaving and coming Back doesn't start it again", async ({ page }) => {
+  await openFromStrip(page);
+  await page.getByRole("button", { name: "Allow" }).click();
+  await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
+  await page.getByRole("button", { name: "Stop" }).click();
+  await page.getByRole("link", { name: "Back" }).click();
+  await page.goBack();
+  await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
+  await expect(page.locator("iframe")).toHaveCount(0);
+});
+
+test("signing out of a vault ends its applets' grants on this device", async ({ page }) => {
+  await allow(page);
+  await page.goto("/settings");
+  await expect(page.getByRole("list", { name: "Allowed applets" }).getByRole("listitem")).toHaveCount(1);
+  await page.getByRole("button", { name: "Sign out" }).click();
+  expect(await page.evaluate(() => localStorage.getItem("parachute.applets.grants.v1"))).toBe("{}");
+});
+
 test("it is handed a note only when it claims that note", async ({ page }) => {
   await allow(page);
   const base = new URL(page.url()).pathname;

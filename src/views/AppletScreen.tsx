@@ -48,6 +48,8 @@ export default function AppletScreen() {
   const askedScreen = params.get("screen");
   if (!startedByTap.has(location.key)) startedByTap.set(location.key, takeMark(location.pathname));
   const [started, setStarted] = useState(() => startedByTap.get(location.key) ?? false);
+  // a tap counts for the first screen drawn for this entry only: Back or Forward to it later starts nothing
+  useEffect(() => () => { startedByTap.set(location.key, false); }, [location.key]);
   const [declined, setDeclined] = useState(false);
   const [, setBump] = useState(0);
   const bump = () => setBump((n) => n + 1);

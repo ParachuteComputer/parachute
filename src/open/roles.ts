@@ -11,6 +11,9 @@ export function roleTagsFrom(metadata: unknown): string[] {
   return [...new Set([...DEFAULT_ROLE_TAGS, ...named])];
 }
 
+/** The defaults only when the vault has no settings note; any other failure is thrown (the caller opens nothing). */
 export async function readRoleTags(c: Pick<VaultClient, "getNote">): Promise<string[]> {
-  try { return roleTagsFrom((await c.getNote(SETTINGS_NOTE_PATH))?.metadata ?? null); } catch { return [...DEFAULT_ROLE_TAGS]; }
+  let note;
+  try { note = await c.getNote(SETTINGS_NOTE_PATH); } catch (e) { if ((e as { status?: number } | null)?.status === 404) return [...DEFAULT_ROLE_TAGS]; throw e; }
+  return roleTagsFrom(note?.metadata ?? null);
 }
