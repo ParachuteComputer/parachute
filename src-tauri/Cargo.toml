@@ -1,0 +1,41 @@
+[package]
+name = "parachute"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77.2"
+license = "AGPL-3.0-only"
+description = "Parachute: the shell around the app (Tauri 2)"
+
+# Mobile needs the app as a library; main.rs stays the desktop entry point.
+[lib]
+name = "parachute_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+# Pinned to the Tauri and wry versions the Android webview overrides (gen/android/.../RustWebView.kt, Ipc.kt) were
+# derived from: wry 0.55.1 under Tauri 2.11. build.rs refuses an Android build on any other wry.
+tauri = { version = "=2.11.6", features = [] }
+tauri-runtime-wry = "=2.11.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+tauri-plugin-opener = "=2.5.5"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Same major as the webkit2gtk wry links; used only to switch WebRTC off and take the bridge away for sealed applets.
+webkit2gtk = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "objc2-app-kit", "WKWebView", "WKWebViewConfiguration", "WKUserContentController", "WKPreferences"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

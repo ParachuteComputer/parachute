@@ -27,7 +27,9 @@ test("the vault stays after a reload, and Sign out forgets it here and ends it o
   await expect(page.getByRole("list", { name: "Notes" })).toBeVisible();
   const rec = await page.evaluate(() => JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]")[0]);
   await page.getByRole("link", { name: "Settings" }).click();
+  const revoked = page.waitForResponse((r) => r.url() === rec.revocationEndpoint);
   await page.getByRole("button", { name: "Sign out" }).click();
+  await revoked;
   await expect(page.getByText("None yet.")).toBeVisible();
   await page.goto("/");
   await expect(page.getByLabel("Vault address")).toBeVisible();

@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The app's own pages only: its two facts, and opening a web link outside the app. No remote page gets anything.",
+  "windows": ["main"],
+  "local": true,
+  "permissions": ["core:default", "opener:allow-open-url"]
+}
