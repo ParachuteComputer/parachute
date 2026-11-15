@@ -21,6 +21,8 @@ describe("parseLinkIn", () => {
     ["https://hub.example/v/recipes/n/abc", /isn't a link Parachute knows/],
     ["parachute://evil?url=x", /isn't a link Parachute knows/],
     ["parachute://open/more?url=x", /isn't a link Parachute knows/],
+    ["parachute://open#x?url=x", /isn't a link Parachute knows/],
+    ["parachute://opener?url=x", /isn't a link Parachute knows/],
     [`${wrap("https://hub.example/v/recipes/n/abc")}&next=https://evil.example`, /doesn't read/],
     [`${wrap("https://hub.example/v/recipes/n/abc")}&url=x`, /doesn't read/],
     [wrap("http://hub.example/v/recipes/n/abc"), /secure/],

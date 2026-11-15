@@ -14,11 +14,12 @@ const isLoopback = (h: string) => h === "localhost" || h === "[::1]" || /^127\.\
 export function parseLinkIn(raw: string): LinkIn {
   if (typeof raw !== "string" || !raw) return { ok: false, reason: "The link is empty." };
   if (raw.length > MAX_LINK) return { ok: false, reason: "The link is too long." };
-  let outer: URL;
-  try { outer = new URL(raw); } catch { return { ok: false, reason: "That isn't a link Parachute knows." }; }
-  if (outer.protocol !== "parachute:" || outer.hostname !== "open" || (outer.pathname && outer.pathname !== "/")) return { ok: false, reason: "That isn't a link Parachute knows." };
-  if ([...outer.searchParams.keys()].some((k) => k !== "url") || outer.searchParams.getAll("url").length !== 1) return { ok: false, reason: "The link carries something Parachute doesn't read." };
-  return parseNoteAddress(outer.searchParams.get("url")!);
+  // read by hand: webviews disagree on how to parse a custom scheme (older ones give `parachute://open` no host)
+  const m = raw.match(/^parachute:\/\/open\/?\?([^#]*)$/i);
+  if (!m) return { ok: false, reason: "That isn't a link Parachute knows." };
+  const q = new URLSearchParams(m[1]);
+  if ([...q.keys()].some((k) => k !== "url") || q.getAll("url").length !== 1) return { ok: false, reason: "The link carries something Parachute doesn't read." };
+  return parseNoteAddress(q.get("url")!);
 }
 
 /** A note's web address on a hub. */
