@@ -26,6 +26,27 @@ npm run e2e          # Playwright on the web build, against a real hub (see belo
 a temp folder on a loopback port, seeds a vault from `e2e/fixtures`, and removes it after. Point `PARACHUTE_CORE` at
 the binary if it isn't on your `PATH`.
 
+## How it fits together
+
+- `src/vault/`: signing in (OAuth with PKCE and dynamic registration, one sign-in per vault), the vaults this device
+  holds, the client.
+- `src/applet/`: an applet as Parachute reads it. The manifest (`metadata.applet`, contract 2) is read exactly as the Uni
+  app reads it, so one applet note runs in both; what it opens goes beside it in `metadata.opens`. The sealed frame,
+  its kit (`window.uni`, also `window.parachute`), the grant card and the sandbox self-test, which runs by itself and
+  decides whether applets run here at all (sealed on desktop, approved code only on Android).
+- `src/open/`: open with. The note's route decides (`resolve.ts`); the sheet and long-press; defaults kept on this
+  device; tap marks, so an applet starts only on a person's tap.
+- `src/links/`: links in, `parachute://open?url=<a note's web address>`.
+
+An applet's note, as an example:
+
+```yaml
+tags: [applet]
+metadata:
+  applet: { contract: 2, id: recipes, name: Recipes, access: [{ vault: here, allow: [{ path: Recipes/, verbs: [read, create, update] }] }] }
+  opens: [{ type: recipe, path: Recipes/ }]   # recipe notes under Recipes/ open in it
+```
+
 ## The shell (Android and desktop)
 
 Tauri 2, pinned to Tauri 2.11 and wry 0.55.1: the Android webview files in
