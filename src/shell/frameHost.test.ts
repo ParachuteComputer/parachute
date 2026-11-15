@@ -18,7 +18,7 @@ function setup(tap = false) {
     roles: async () => ["pinned"],
     applets: async () => ({ ok: true as const, skipped: 0, entries: [] }),
     defaults: { get: vi.fn(() => ({ recipe: "vault" })), set: vi.fn() },
-    go: vi.fn(), back: vi.fn(), decide: vi.fn(),
+    go: vi.fn(), back: vi.fn(), decide: vi.fn(), here: () => "/v/kitchen/n/n1",
     tapNow: () => tap,
     mark: { tap: vi.fn(), carry: vi.fn(() => true), clear: vi.fn() },
     copy: vi.fn(async () => true), openOut: vi.fn(),
@@ -104,6 +104,11 @@ describe("moving the person", () => {
     await ask("nav.go", { to: "/v/kitchen/a/01AB?note=n1", replace: true, carryFrom: "/v/kitchen/n/n1" });
     expect(deps.mark.carry).toHaveBeenCalledWith("/v/kitchen/n/n1", "/v/kitchen/a/01AB");
     expect(deps.go).toHaveBeenCalledWith("/v/kitchen/a/01AB?note=n1", true);
+  });
+  it("a carry from anywhere but where the person is now is refused", async () => {
+    const { ask, deps } = setup(false);
+    expect((await ask("nav.go", { to: "/v/kitchen/a/01AB?note=n2", replace: true, carryFrom: "/v/kitchen/n/n2" }))?.error).toBe("not_allowed");
+    expect(deps.go).not.toHaveBeenCalled();
   });
   it("copying and opening a link out happen only during a tap, and only for a web address", async () => {
     const still = setup(false);

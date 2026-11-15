@@ -109,3 +109,22 @@ test("the frame is there only while it is shown: never beside a shell screen, ne
   await expect(page.getByRole("alert").or(page.getByRole("status")).first()).toBeVisible();
   await expect(page.locator("iframe.app-frame")).toHaveCount(0);
 });
+
+for (const focus of [false, true]) {
+  test(`a tap on the shell doesn't count for the frame${focus ? ", even one that focuses itself" : ""}: its move to an allowed applet leaves it stopped`, async ({ page }) => {
+    await page.goto(`/v/${VAULT}`);
+    const chip = ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ });
+    const href = (await chip.getAttribute("href"))!;
+    await chip.click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Recipe box" })).toBeVisible();
+    await page.goto(`/v/${VAULT}`);
+    await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
+    // the evaluate is the shell's own activation (as a tap on a shell screen is); the frame then moves at once
+    const doc = `<!doctype html><input id=i><script>${focus ? "document.getElementById('i').focus();" : ""}parent.postMessage({pf:1,id:"x",method:"nav.go",params:{to:${JSON.stringify(href)}}},"*");</script>`;
+    await page.evaluate((d) => { (document.querySelector("iframe.app-frame") as HTMLIFrameElement).srcdoc = d; }, doc);
+    await page.waitForURL(/\/a\//);
+    await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+  });
+}

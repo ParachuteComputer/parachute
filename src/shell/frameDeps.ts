@@ -68,6 +68,7 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
     applets,
     defaults: { get: defaultsFor, set: setChoice },
     go,
+    here: () => location.pathname,
     back: () => history.back(),
     decide,
     tapNow: tapIn(frame),

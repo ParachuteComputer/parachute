@@ -15,6 +15,8 @@ export type HostDeps = {
   /** `set` refuses (throws) a choice that names no applet of that vault, or one too many. */
   defaults: { get(vault: string): Record<string, string>; set(vault: string, type: string, choice: string | null): void };
   go(to: string, replace: boolean): void;
+  /** The shell's address now (its path). */
+  here(): string;
   back(): void;
   /** Keep what the note's route decided for a history entry. */
   decide(key: string, kind: Decided): void;
@@ -66,6 +68,8 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
         if (!allowedDestination(to)) throw new Error("not_allowed");
         const from = p.carryFrom as string | undefined;
         // a tap marks where it leads; the note's route may carry that mark on to the applet it opens, once
+        // a carry is the note's route sending the person on: only from where they still are
+        if (from !== undefined && from !== deps.here()) throw new Error("not_allowed");
         if (from !== undefined) deps.mark.carry(from, pathOf(to));
         else if (deps.tapNow()) deps.mark.tap(pathOf(to));
         else deps.mark.clear();
