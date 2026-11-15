@@ -24,7 +24,7 @@ export type Candidate = { entry: AppletEntry; claim: Opens; status: Status };
 export type Decision =
   | { kind: "applet"; candidate: Candidate; by: "default" | "only" }
   | { kind: "ask"; candidates: Candidate[] }
-  | { kind: "vault"; line: { candidate: Candidate; status: "none" | "updated" } | null; by?: "default" };
+  | { kind: "vault"; line: { candidate: Candidate; status: "none" | "updated"; others: Candidate[] } | null; by?: "default" };
 
 const isCode = (n: NoteLike) => /\.html?$/i.test(n.path ?? "") || String(n.extension ?? "").replace(/^\./, "").toLowerCase() === "html" || (n.tags ?? []).includes("applet");
 
@@ -52,5 +52,7 @@ export function resolve(cands: readonly Candidate[], defaults: Record<string, Ch
   if (ok.length > 1) return { kind: "ask", candidates: [...cands] };
   // an applet the person allowed before (now changed) says so first; else one never allowed
   const waiting = cands.find((c) => c.status === "updated") ?? cands.find((c) => c.status === "none");
-  return { kind: "vault", line: waiting ? { candidate: waiting, status: waiting.status as "none" | "updated" } : null };
+  // the others that could open it too: with several, the line leads to the sheet, so the person picks which to allow
+  const others = waiting ? cands.filter((c) => c !== waiting && (c.status === "none" || c.status === "updated")) : [];
+  return { kind: "vault", line: waiting ? { candidate: waiting, status: waiting.status as "none" | "updated", others } : null };
 }

@@ -1,6 +1,6 @@
 // Settings → Applets: the self-test's result (and Run again), and each applet this device has allowed, with Revoke.
 import { useState } from "react";
-import { PLATFORM, runSelfTest, useGate, useSelfTestRun } from "../applet/selftest/run";
+import { runSelfTest, useGate, useSelfTestRun } from "../applet/selftest/run";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { useApplets } from "../applet/useApplets";
 import type { VaultRecord } from "../vault/store";
@@ -8,6 +8,7 @@ import { useSyncExternalStore } from "react";
 import { allDefaults, clearDefault, subscribeDefaults, VAULT } from "../open/defaults";
 
 const grants = deviceGrants();
+const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
 function DefaultsIn({ rec }: { rec: VaultRecord }) {
   const raw = useSyncExternalStore(subscribeDefaults, () => JSON.stringify(allDefaults()[rec.key] ?? {}), () => "{}");
@@ -32,7 +33,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
     const r = grants.record(subject);
     return (
       <li key={subject} className="line">
-        <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, allowed ${r.grantedAt.slice(0, 10)}` : ""}</span></span>
+        <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
         <button type="button" className="quiet-button" onClick={() => { grants.revoke(subject); onChange(); }}>Revoke</button>
       </li>
     );
@@ -49,8 +50,8 @@ export default function AppletSettings({ vaults }: { vaults: VaultRecord[] }) {
       <h2 id="s-applets">Applets</h2>
       <p className="selftest-status" role="status">
         {run.running ? "Checking that applets are sealed on this device…"
-          : mode === "sealed" ? `Applets run sealed on this device (${PLATFORM}).`
-          : mode === "approved-code" ? `Applets run approved code only on this device (${PLATFORM}): an allowed applet runs only while its code is the code you allowed, because this webview can't switch WebRTC off.`
+          : mode === "sealed" ? "Applets run sealed here."
+          : mode === "approved-code" ? "Applets run approved code only here: one runs only while its code is the code you allowed."
           : run.last ? `Applets are off on this device: the self-test failed${run.timedOut ? " (it didn't finish)" : ""}. Every note opens in the vault view.`
           : "Applets are off until the self-test has run on this device."}
       </p>

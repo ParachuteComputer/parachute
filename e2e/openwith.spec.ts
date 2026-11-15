@@ -16,14 +16,32 @@ async function tapNote(page: Page, title: string) {
   await notes(page).getByRole("link", { name: new RegExp(`^${title}(?: (?:Recipes|Applets) ·|$)`) }).click();
 }
 
-test("no applet allowed: a recipe opens plain, with a line; the line leads to the card, and Allow opens it with that recipe", async ({ page }) => {
+test("no applet allowed: a recipe opens plain, with a line naming both that could; the line offers them, Allow first, and Allow opens it with that recipe", async ({ page }) => {
   await tapNote(page, "Tomato toast");
   const line = page.locator(".open-line");
-  await expect(line).toContainText("can open this.");
+  await expect(line).toContainText("Cook mode or Recipe box can open this.");
   await expect(page.locator(".prose-note h1")).toHaveText("Tomato toast");
-  await line.getByRole("link").click();
+  await line.getByRole("button").click();
+  const sheet = page.getByRole("dialog", { name: "Open with" });
+  await expect(sheet.getByRole("button", { name: /Recipe box/ })).toContainText("Allow first");
+  await sheet.getByRole("button", { name: /Recipe box/ }).click();
   await page.getByRole("button", { name: "Allow" }).click();
-  await expect(frame(page).locator("#opened")).toContainText("Recipes/Tomato toast");
+  await expect(frame(page).locator("#opened")).toHaveText("Opened: Recipes/Tomato toast");
+});
+
+test("one applet allowed, its code changed, the other never allowed: the line names the changed one and leads to its card", async ({ page }) => {
+  await allowApplet(page, "Recipe box");
+  const st = hubState();
+  const cur = await api(st, "GET", `notes?id=${encodeURIComponent("Applets/Recipes")}`);
+  await api(st, "PATCH", `notes/${cur.id}`, { content: `${cur.content}\n<!-- changed -->`, if_updated_at: cur.updatedAt });
+  try {
+    await tapNote(page, "Tomato toast");
+    await page.locator(".open-line").getByRole("button").click();
+    await expect(page.getByRole("dialog", { name: "Open with" }).getByRole("button", { name: /Recipe box/ })).toContainText("changed since you allowed it");
+  } finally {
+    const now = await api(st, "GET", `notes?id=${cur.id}`);
+    await api(st, "PATCH", `notes/${cur.id}`, { content: cur.content, if_updated_at: now.updatedAt });
+  }
 });
 
 test("one applet allowed: a tap on a recipe opens it there, with the recipe, and Back skips the note's route", async ({ page }) => {
@@ -109,7 +127,7 @@ test("changed code is seen at the tap: the recipe opens plain with a line, and n
   await api(st, "PATCH", `notes/${cur.id}`, { content: `${cur.content}\n<!-- changed -->`, if_updated_at: cur.updatedAt });
   try {
     await tapNote(page, "Tomato toast");
-    await expect(page.locator(".open-line")).toContainText("Recipe box changed since you allowed it.");
+    await expect(page.locator(".open-line")).toContainText("Recipe box or Cook mode can open this.");
     await expect(page.locator("iframe")).toHaveCount(0);
   } finally {
     const now = await api(st, "GET", `notes?id=${cur.id}`);

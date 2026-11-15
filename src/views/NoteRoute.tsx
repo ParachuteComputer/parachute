@@ -44,12 +44,20 @@ export default function NoteRoute() {
   const first = decided.get(location.key) ?? decision?.kind;
   if (ow.state === "loading" || first === "applet") return <main className="screen"><Bar title="Note" back={`/v/${encodeURIComponent(rec.key)}`} /><p className="quiet" role="status">Opening…</p></main>;
   // what shows is the decision made on arrival (a default stored from the sheet a moment later changes nothing here)
-  const line = first === "vault" && decision?.kind === "vault" && decision.line && ow.state === "ok" && ow.note ? (
+  const l = first === "vault" && decision?.kind === "vault" ? decision.line : null;
+  const line = l && ow.state === "ok" && ow.note ? (
     <p className="open-line" role="status">
-      <Link to={appletHref(rec.key, decision.line.candidate, ow.note.id)}>
-        <span aria-hidden="true">{decision.line.candidate.entry.manifest.glyph}</span>{" "}
-        {decision.line.status === "updated" ? `${decision.line.candidate.entry.manifest.name} changed since you allowed it.` : `${decision.line.candidate.entry.manifest.name} can open this.`}
-      </Link>
+      {l.others.length === 0 ? (
+        <Link to={appletHref(rec.key, l.candidate, ow.note.id)}>
+          <span aria-hidden="true">{l.candidate.entry.manifest.glyph}</span>{" "}
+          {l.status === "updated" ? `${l.candidate.entry.manifest.name} changed since you allowed it.` : `${l.candidate.entry.manifest.name} can open this.`}
+        </Link>
+      ) : (
+        // several could: the sheet lets the person pick which to allow
+        <button type="button" className="link-button" onClick={() => openSheet(rec.key, ow.note!.id, true, { note: ow.note!, cands: ow.cands })}>
+          {[l.candidate, ...l.others].map((c) => c.entry.manifest.name).join(" or ")} can open this.
+        </button>
+      )}
     </p>
   ) : first === "ask" && ow.state === "ok" && ow.note ? (
     <p className="open-line"><button type="button" className="link-button" onClick={() => openSheet(rec.key, ow.note!.id, true, { note: ow.note!, cands: ow.cands })}>Open {titleOf(ow.note)} with…</button></p>
