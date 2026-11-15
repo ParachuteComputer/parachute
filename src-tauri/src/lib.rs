@@ -80,7 +80,11 @@ fn app_version(app: tauri::AppHandle) -> String {
 /// move the bridge) forces the test to run again.
 #[tauri::command]
 fn webview_runtime() -> String {
-    format!("wry {} tauri {}", env!("PARACHUTE_WRY_VERSION"), tauri::VERSION)
+    // a build that can't say which wry it carries keys no pass: "" keeps applets off (src/applet/selftest/runtime.ts)
+    match env!("PARACHUTE_WRY_VERSION") {
+        "unknown" => String::new(),
+        wry => format!("wry {wry} tauri {}", tauri::VERSION),
+    }
 }
 
 /// Close the two holes a sealed applet's frame would otherwise have on desktop: the bridge to native code
