@@ -18,7 +18,7 @@ export function useOpenWith(rec: VaultRecord | null, noteId: string | undefined,
   const mode = useGate();
   const run = useSelfTestRun();
   const applets = useApplets(rec, false);
-  const [note, setNote] = useState<{ id: string; note: Note | null; roles: string[] } | { id: string; error: string } | null>(null);
+  const [note, setNote] = useState<{ id: string; note: Note | null; roles: string[] | null } | { id: string; error: string } | null>(null);
   const [read, setRead] = useState<string | null>(null);
   const defaultsRaw = useSyncExternalStore(subscribeDefaults, () => JSON.stringify(rec ? defaultsFor(rec.key) : {}), () => "{}");
 
@@ -29,7 +29,8 @@ export function useOpenWith(rec: VaultRecord | null, noteId: string | undefined,
     const c = clientFor(rec);
     // the applets as they are now: the status is judged on each applet's note as read now
     void (fresh ? refreshApplets(rec) : Promise.resolve()).then(() => on && setRead(noteId));
-    Promise.all([c.getNote(noteId), readRoleTags(c)])
+    // roles unread (the vault answered badly): no applet opens this note this time; the note itself still opens
+    Promise.all([c.getNote(noteId), readRoleTags(c).catch(() => null)])
       .then(([n, roles]) => on && setNote({ id: noteId, note: n, roles }), (e: unknown) => on && setNote({ id: noteId, error: e instanceof Error ? e.message : "the vault couldn't be read" }));
     return () => { on = false; };
   }, [rec?.key, noteId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -39,7 +40,7 @@ export function useOpenWith(rec: VaultRecord | null, noteId: string | undefined,
     if ("error" in note) return { state: "error", error: note.error };
     if (!note.note) return { state: "ok", note: null, cands: [], decision: { kind: "vault", line: null } };
     const entries = applets.state === "ok" ? applets.found.entries : [];
-    const cands = candidates(note.note, entries, statusOf(rec.key, mode), note.roles);
+    const cands = note.roles ? candidates(note.note, entries, statusOf(rec.key, mode), note.roles) : [];
     return { state: "ok", note: note.note, cands, decision: resolve(cands, JSON.parse(defaultsRaw)) };
   }, [rec, note, noteId, read, run.known, run.running, applets, mode, defaultsRaw]);
 }
