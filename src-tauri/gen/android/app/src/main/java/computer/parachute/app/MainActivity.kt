@@ -15,4 +15,11 @@ class MainActivity : TauriActivity() {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
   }
+
+  // A link tapped while the activity exists becomes its intent: if the deep-link plugin isn't loaded yet (the process was
+  // just recreated), it reads the link from here when it loads; a later recreate still drops it (above).
+  override fun onNewIntent(intent: Intent) {
+    setIntent(intent)
+    super.onNewIntent(intent)
+  }
 }
