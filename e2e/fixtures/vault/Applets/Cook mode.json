@@ -1,0 +1,7 @@
+{
+  "applet": {
+    "contract": 2, "id": "cook-mode", "name": "Cook mode", "glyph": "♨", "note": "a second test applet that also opens recipes",
+    "access": [{ "vault": "here", "allow": [{ "path": "Recipes/", "verbs": ["read"] }] }]
+  },
+  "opens": [{ "type": "recipe", "path": "Recipes/" }]
+}

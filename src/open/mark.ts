@@ -27,7 +27,8 @@ export function markTap(path: string) { mark = isStartable(path) ? { path, at: c
 
 /** Move the mark from where it was to where the app sends the person next (the note's route deciding on an applet). */
 export function carryMark(from: string, to: string): boolean {
-  if (!mark || mark.path !== from || clock() - mark.at > MARK_TTL_MS) { mark = null; return false; }
+  if (!mark || mark.path !== from) return false;
+  if (clock() - mark.at > MARK_TTL_MS) { mark = null; return false; }
   mark = { path: to, at: mark.at };
   return true;
 }

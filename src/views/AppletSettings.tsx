@@ -4,8 +4,23 @@ import { PLATFORM, runSelfTest, useGate, useSelfTestRun } from "../applet/selfte
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { useApplets } from "../applet/useApplets";
 import type { VaultRecord } from "../vault/store";
+import { useSyncExternalStore } from "react";
+import { allDefaults, clearDefault, subscribeDefaults, VAULT } from "../open/defaults";
 
 const grants = deviceGrants();
+
+function DefaultsIn({ rec }: { rec: VaultRecord }) {
+  const raw = useSyncExternalStore(subscribeDefaults, () => JSON.stringify(allDefaults()[rec.key] ?? {}), () => "{}");
+  const applets = useApplets(rec, false);
+  const defaults = Object.entries(JSON.parse(raw) as Record<string, string>);
+  const nameOf = (id: string) => id === VAULT ? "the vault view" : applets.state === "ok" ? applets.found.entries.find((a) => a.noteId === id)?.manifest.name ?? "an applet that is gone" : "an applet";
+  return <>{defaults.map(([type, id]) => (
+    <li key={type} className="line">
+      <span><strong>{type}</strong> notes in {rec.vault} open in {nameOf(id)}</span>
+      <button type="button" className="quiet-button" onClick={() => clearDefault(rec.key, type)}>Clear</button>
+    </li>
+  ))}</>;
+}
 
 function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }) {
   const applets = useApplets(rec, false);
@@ -41,6 +56,9 @@ export default function AppletSettings({ vaults }: { vaults: VaultRecord[] }) {
       </p>
       {run.last && failed.length > 0 && mode !== "approved-code" && <ul className="check-list" aria-label="Checks that failed">{failed.map((c) => <li key={c.id} className="fail">✗ {c.label}</li>)}</ul>}
       <button type="button" className="quiet-button" disabled={run.running} onClick={runSelfTest}>Run again</button>
+      <h3 className="settings-sub">Always open with</h3>
+      <ul className="plain" aria-label="Defaults">{vaults.map((v) => <DefaultsIn key={v.key} rec={v} />)}</ul>
+      <h3 className="settings-sub">Allowed</h3>
       <ul className="plain" aria-label="Allowed applets">{vaults.map((v) => <AllowedIn key={v.key} rec={v} onChange={() => setN((n) => n + 1)} />)}</ul>
     </section>
   );
