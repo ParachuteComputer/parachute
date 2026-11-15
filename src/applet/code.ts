@@ -29,7 +29,7 @@ export const isCodeExtension = (n: { path?: string | null; extension?: string | 
 /** What the imports of a TSX/JSX applet may name. Anything else stops it with a plain message. */
 export const PROVIDED_IMPORTS = ["react", "react-dom", "react-dom/client", "react/jsx-runtime", "parachute"] as const;
 
-/** Bumped when the transpiler or its options change: a cached result from another version is never used. */
+/** Bumped when the transpiler or its options change (a test holds it to the installed sucrase): a cached result from another version is never used. */
 export const TRANSPILER = "sucrase-3.35.1/2";
 
 /**
@@ -81,7 +81,7 @@ export function createCompileCache(storage: StorageLike | null = typeof localSto
       const c: Cached = { t: TRANSPILER, js, at: Date.now() };
       memory.set(hash, c);
       // the newest few stay on the device, within a size; an older one is transpiled again if it is ever opened
-      const all = Object.entries({ ...read(), [hash]: c }).filter(([, v]) => typeof v?.js === "string" && v.js.length <= KEEP_CHARS / 4).sort((a, b) => (b[1]?.at ?? 0) - (a[1]?.at ?? 0));
+      const all = Object.entries({ ...read(), [hash]: c }).filter(([, v]) => v?.t === TRANSPILER && typeof v.js === "string" && v.js.length <= KEEP_CHARS / 4).sort((a, b) => (b[1]?.at ?? 0) - (a[1]?.at ?? 0));
       let size = 0;
       const kept = Object.fromEntries(all.slice(0, KEEP).filter(([, v]) => (size += v.js.length) <= KEEP_CHARS));
       try { storage?.setItem(COMPILED_KEY, JSON.stringify(kept)); } catch { try { storage?.setItem(COMPILED_KEY, "{}"); } catch { /* this session only */ } }

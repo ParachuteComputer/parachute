@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { codeHash, codeKindOf, COMPILED_KEY, createCompileCache, isCodeExtension, modulePage, prepare, transpile, TRANSPILER } from "./code";
 import { inlineScript } from "./srcdoc";
@@ -61,7 +62,9 @@ describe("prepare: one transpile per code hash", () => {
     mem.setItem(COMPILED_KEY, JSON.stringify(stored));
     const again = await prepare(src, "jsx", createCompileCache(mem));
     expect(again.compiled?.ok && again.compiled.js).not.toContain("stale");
-    expect(TRANSPILER).toMatch(/^sucrase-/);
+    // an upgraded sucrase must come with a new TRANSPILER, or its older output would be reused
+    const installed = JSON.parse(readFileSync(`${process.cwd()}/node_modules/sucrase/package.json`, "utf8")).version;
+    expect(TRANSPILER.startsWith(`sucrase-${installed}/`)).toBe(true);
   });
   it("keeps no module bigger than its share, and stays within its size", async () => {
     const mem = new Mem();

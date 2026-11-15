@@ -133,7 +133,7 @@ export default function RecipeCards() {
 1. The applet shows in the vault, beside its name and glyph.
 2. The first time they open it, a card says what it asks for ("Read and add notes in Recipes/", "Open recipe notes in
    Recipes/ when you tap one"). Nothing runs until they tap **Allow**.
-3. The app turns the TSX into JavaScript once, when the card is shown, and keeps it for that version of the code.
+3. The app turns the TSX into JavaScript once, just before it shows the card, and keeps it for that version of the code.
 4. When you change the code or what it asks for, the card shows again before the new version runs.
 
 If the code doesn't compile, the app says so, with the reason, and runs nothing. If it imports something the app doesn't

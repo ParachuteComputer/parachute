@@ -6,6 +6,8 @@ import type { MouseEvent } from "react";
 import type { CardLine } from "./grant";
 
 export const CODE_CHANGED_LINE = "This applet's code changed since you allowed it. On this device an applet could send what it reads to the internet, so only code you've approved runs.";
+/** Sealed: the frame can't reach the internet, so the line says only what changed. */
+export const CODE_CHANGED_SEALED_LINE = "This applet's code changed since you allowed it. Only the version you allow runs.";
 export const APPROVED_CODE_LINE = "On this device an applet could send what it reads to the internet (Android's webview can't switch that off), so it is only as safe as its code. Allow it only if you trust it.";
 export type Runs = "sealed" | "approved-code";
 
@@ -22,7 +24,7 @@ export default function GrantCard({ name, glyph, vault, runs, lines, fingerprint
         <span className="grant-glyph" aria-hidden="true">{glyph}</span>
         <h2>An applet asks for access</h2>
       </header>
-      {codeChanged && <p className="grant-changed" role="status"><strong>{CODE_CHANGED_LINE}</strong></p>}
+      {codeChanged && <p className="grant-changed" role="status"><strong>{runs === "approved-code" ? CODE_CHANGED_LINE : CODE_CHANGED_SEALED_LINE}</strong></p>}
       <p>The applet <q className="grant-name" data-untrusted="true">{name}</q> (a name from its note, not verified) would run in a sealed frame. In the <strong>{vault}</strong> vault it would:</p>
       {lines.length ? <ul className="grant-lines">{lines.map((l, i) => <li key={i} className={l.stress ? "grant-stress" : undefined}>{l.text}</li>)}</ul> : <p className="quiet">Nothing outside itself.</p>}
       <p className="grant-rest">{runs === "approved-code"
