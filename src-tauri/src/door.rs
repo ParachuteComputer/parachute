@@ -193,23 +193,22 @@ pub async fn key_sign_in<R: Runtime>(app: AppHandle<R>, webview: Webview<R>, key
 }
 
 /// One of the hub's cookies as the webview should keep it: for this hub's host only, whatever the header said.
-pub fn host_only(origin: &url::Url, raw: &str) -> Result<tauri::webview::cookie::Cookie<'static>, ()> {
+pub fn host_only(raw: &str) -> Result<tauri::webview::cookie::Cookie<'static>, ()> {
     let mut c = tauri::webview::cookie::Cookie::parse(raw.to_string()).map_err(|_| ())?;
     c.unset_domain();
     if c.path().is_none() {
         c.set_path("/");
     }
-    let _ = origin;
     Ok(c)
 }
 
 /// Keep one of the hub's cookies in the webview, for the hub only.
 async fn plant_cookie<R: Runtime>(webview: &Webview<R>, origin: &url::Url, raw: &str) -> Result<(), ()> {
-    let mut c = host_only(origin, raw)?;
+    #[allow(unused_mut)]
+    let mut c = host_only(raw)?;
     #[cfg(target_os = "android")]
     {
         use tauri::Manager;
-        let _ = &mut c;
         // CookieManager takes a Set-Cookie line for a URL; with no Domain it keeps it for that URL's host only
         let plugin = webview.app_handle().try_state::<crate::android::KeyPluginHandle<R>>().map(|h| h.0.clone()).ok_or(())?;
         plugin
@@ -232,8 +231,7 @@ mod tests {
 
     #[test]
     fn cookies_stay_with_the_hub() {
-        let o = hub_origin("https://hub.example").unwrap();
-        let c = host_only(&o, "parachute_hub_session=abc; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=example; Max-Age=60").unwrap();
+        let c = host_only("parachute_hub_session=abc; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=example; Max-Age=60").unwrap();
         assert_eq!(c.domain(), None);
         let line = c.to_string();
         assert!(line.starts_with("parachute_hub_session=abc") && line.contains("HttpOnly") && line.contains("Secure") && !line.contains("Domain"), "{line}");

@@ -104,9 +104,23 @@ pub fn parse_secret(raw: &str) -> Result<Keys, ()> {
     Keys::parse(raw).map_err(|_| ())
 }
 
+/// Why the key can't be shown: `unavailable` (storage didn't answer this time: try again; the key may be fine) or
+/// `unreadable` (what is stored isn't a key: only removing it helps).
+#[derive(Serialize)]
+pub struct KeyProblem {
+    code: &'static str,
+    message: String,
+}
+
 #[tauri::command]
-pub async fn key_status<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState>) -> Result<Option<KeyInfo>, String> {
-    Ok(state.get(&app).await?.as_ref().map(KeyInfo::of))
+pub async fn key_status<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState>) -> Result<Option<KeyInfo>, KeyProblem> {
+    let mut slot = state.0.lock().await;
+    read(&mut slot, &app).await.map_err(|message| KeyProblem { code: "unavailable", message })?;
+    match &*slot {
+        Slot::Held(k) => Ok(Some(KeyInfo::of(k))),
+        Slot::Unreadable(message) => Err(KeyProblem { code: "unreadable", message: message.clone() }),
+        _ => Ok(None),
+    }
 }
 
 /// Make a new key for someone who has none.

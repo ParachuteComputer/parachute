@@ -18,13 +18,15 @@ export const keysHere = () => inShell();
 
 // What the screens show: `undefined` until read, then the key or null; `problem` when a key is stored but can't be read.
 let known: KeyInfo | null | undefined;
-let problem: string | null = null;
+/** `unavailable`: storage didn't answer (try again, the key may be fine); `unreadable`: what is kept isn't a key. */
+export type KeyProblem = { code: "unavailable" | "unreadable"; message: string };
+let problem: KeyProblem | null = null;
 const listeners = new Set<() => void>();
-const set = (k: KeyInfo | null, why: string | null = null) => { known = k; problem = why; listeners.forEach((f) => f()); };
+const set = (k: KeyInfo | null, why: KeyProblem | null = null) => { known = k; problem = why; listeners.forEach((f) => f()); };
 let reading: Promise<void> | null = null;
 
 function read() {
-  reading ??= invoke<KeyInfo | null>("key_status").then((k) => set(k), (e: unknown) => set(null, String(e))).finally(() => { reading = null; });
+  reading ??= invoke<KeyInfo | null>("key_status").then((k) => set(k), (e: unknown) => set(null, asProblem(e))).finally(() => { reading = null; });
   return reading;
 }
 const subscribe = (cb: () => void) => { listeners.add(cb); if (known === undefined && keysHere()) void read(); return () => { listeners.delete(cb); }; };
@@ -33,8 +35,13 @@ const subscribe = (cb: () => void) => { listeners.add(cb); if (known === undefin
 export function useKey(): KeyInfo | null | undefined {
   return useSyncExternalStore(subscribe, () => (keysHere() ? known : null), () => undefined);
 }
-/** Why a key this device keeps can't be used, if it can't (only removing it helps). */
-export function useKeyProblem(): string | null {
+const asProblem = (e: unknown): KeyProblem => e && typeof e === "object" && ((e as KeyProblem).code === "unreadable" || (e as KeyProblem).code === "unavailable")
+  ? e as KeyProblem : { code: "unavailable", message: typeof e === "string" ? e : "The key store didn't answer." };
+/** Read the key again (after the key store didn't answer). */
+export const readKeyAgain = () => read();
+
+/** Why this device's key can't be shown, if it can't. */
+export function useKeyProblem(): KeyProblem | null {
   return useSyncExternalStore(subscribe, () => problem, () => null);
 }
 
@@ -53,9 +60,9 @@ export const createKey = () => changing<KeyInfo>("key_create");
 export const importKey = (secret: string) => changing<KeyInfo>("key_import", { secret });
 export const forgetKey = () => changing<void>("key_forget");
 
-export const pairStart = (link: string) => invoke<{ sas: string }>("pair_start", { link });
-export const pairConfirm = () => changing<KeyInfo>("pair_confirm");
-export const pairCancel = (codesDiffer: boolean) => invoke<void>("pair_cancel", { codesDiffer }).catch(() => undefined);
+export const pairStart = (link: string) => invoke<{ id: number; sas: string }>("pair_start", { link });
+export const pairConfirm = (id: number) => changing<KeyInfo>("pair_confirm", { id });
+export const pairCancel = (id: number, codesDiffer: boolean) => invoke<void>("pair_cancel", { id, codesDiffer }).catch(() => undefined);
 
 /** Sign in to `hub` with the key; resolves to the hub address to open next (`next`, or the hub's second step). */
 export async function keySignIn(hub: string, next: string): Promise<string> {

@@ -17,16 +17,16 @@ export default function Pair() {
   const [error, setError] = useState<string | null>(null);
   const live = useRef(true);
   const say = (e: unknown) => setError(typeof e === "string" ? e : e instanceof Error ? e.message : "The pairing didn't finish.");
-  // leaving the screen mid-pairing tells the other device
-  const waiting = useRef(false);
-  useEffect(() => () => { live.current = false; if (waiting.current) void pairCancel(false); }, []);
+  // the pairing this screen started; leaving the screen mid-pairing stops it and tells the other device
+  const pairing = useRef<number | null>(null);
+  useEffect(() => () => { live.current = false; if (pairing.current !== null) void pairCancel(pairing.current, false); }, []);
 
   async function start(uri = link) {
     setError(null); setStep("connecting");
     try {
       const r = await pairStart(uri.trim());
-      if (!live.current) { void pairCancel(false); return; }
-      waiting.current = true;
+      if (!live.current) { void pairCancel(r.id, false); return; }
+      pairing.current = r.id;
       setSas(r.sas); setStep("code");
     } catch (e) { if (live.current) { say(e); setStep("link"); } }
   }
@@ -43,15 +43,18 @@ export default function Pair() {
   }
   async function confirm() {
     setError(null); setStep("receiving");
+    const id = pairing.current;
+    if (id === null) return;
     try {
-      await pairConfirm();
-      waiting.current = false;
+      await pairConfirm(id);
+      pairing.current = null;
       if (live.current) nav("/", { replace: true });
-    } catch (e) { waiting.current = false; if (live.current) { say(e); setLink(""); setStep("link"); } }
+    } catch (e) { pairing.current = null; if (live.current) { say(e); setLink(""); setStep("link"); } }
   }
   async function cancel(codesDiffer: boolean) {
-    waiting.current = false;
-    await pairCancel(codesDiffer);
+    const id = pairing.current;
+    pairing.current = null;
+    if (id !== null) await pairCancel(id, codesDiffer);
     setSas(""); setLink(""); setStep("link");
     if (codesDiffer) setError("The codes didn't match, so nothing was sent. Start again on the other device.");
   }

@@ -77,7 +77,7 @@ async fn a_key_comes_over_from_the_uni_apps_side() {
     let theirs = sender.offer().await;
     assert_eq!(pending.sas(), theirs, "both devices show the same code");
     sender.send(identity(&account, &account)).await;
-    let got = pending.confirm(|k| async move { Ok::<_, String>(k) }).await.expect("the key arrives");
+    let got = pending.confirm(|k| async move { Ok::<_, String>(k) }, tokio::sync::oneshot::channel().1).await.expect("the key arrives");
     assert_eq!(got.public_key(), account.public_key());
     // the receiving side says it's done
     loop {
@@ -96,7 +96,7 @@ async fn a_key_that_isnt_what_the_sender_claims_is_refused() {
     let pending = pairing::start(&link).await.unwrap();
     sender.offer().await;
     sender.send(identity(&Keys::generate(), &Keys::generate())).await;
-    assert!(pending.confirm(|k| async move { Ok::<_, String>(k) }).await.is_err());
+    assert!(pending.confirm(|k| async move { Ok::<_, String>(k) }, tokio::sync::oneshot::channel().1).await.is_err());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -131,7 +131,7 @@ async fn a_key_this_device_couldnt_keep_isnt_reported_done() {
     let pending = pairing::start(&link).await.unwrap();
     sender.offer().await;
     sender.send(identity(&account, &account)).await;
-    let kept = pending.confirm(|_| async move { Err::<(), _>("the key store refused".to_string()) }).await;
+    let kept = pending.confirm(|_| async move { Err::<(), _>("the key store refused".to_string()) }, tokio::sync::oneshot::channel().1).await;
     assert!(kept.is_err());
     // the sender hears an abort, never `complete`
     loop {
@@ -141,4 +141,40 @@ async fn a_key_this_device_couldnt_keep_isnt_reported_done() {
             break;
         }
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cancel_while_waiting_for_the_key_tells_the_sender() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let relay = relay().await;
+    let (mut sender, link) = Sender::open(&relay).await;
+    let pending = pairing::start(&link).await.unwrap();
+    sender.offer().await;
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let waiting = tokio::spawn(pending.confirm(|k| async move { Ok::<_, String>(k) }, stopped));
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    stop.send(()).unwrap();
+    assert!(waiting.await.unwrap().is_err());
+    loop {
+        let ev = sender.next().await;
+        if let Ok(reason) = sender.session.handle_abort(&ev) {
+            assert_eq!(reason, AbortReason::UserDenied);
+            break;
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_dropped_stop_is_not_a_stop() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let relay = relay().await;
+    let account = Keys::generate();
+    let (mut sender, link) = Sender::open(&relay).await;
+    let pending = pairing::start(&link).await.unwrap();
+    sender.offer().await;
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    drop(stop);
+    sender.send(identity(&account, &account)).await;
+    let got = pending.confirm(|k| async move { Ok::<_, String>(k) }, stopped).await.expect("still arrives");
+    assert_eq!(got.public_key(), account.public_key());
 }
