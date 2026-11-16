@@ -6,7 +6,7 @@
 //             the note restyles the shell, the frame and every applet at once, without a restart or a poll. While the
 //             socket is down, the note is read again on the usual occasions (at start, when the frame area or Settings
 //             is shown).
-//   copy-on-write  the built-in theme until the first change: "Make this mine" (or a change made in Settings) writes it,
+//   copy-on-write  the built-in theme until the first change: "Make this look mine" (or a change made in Settings) writes it,
 //             in full, into the home vault; from then on that note is the theme.
 //   applied   the shell sets the tokens on its own document; the frame and applets are sent them (theme events).
 import { useSyncExternalStore } from "react";

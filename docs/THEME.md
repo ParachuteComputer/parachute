@@ -33,9 +33,9 @@ Nothing else is read, so a theme can't load anything from the network.
 ## Changing it
 
 - **In the app:** Settings → Look. Choosing a density or light or dark writes the note. The first change copies the
-  built-in theme into your vault in full, and from then on that note is your theme. "Make this mine" copies it without
+  built-in theme into your vault in full, and from then on that note is your theme. "Make this look mine" copies it without
   changing anything.
-- **By your agent:** with the Parachute MCP, `create-note` or `update-note` on that note. For example, "make the
+- **By your agent:** with the Parachute MCP, `create-record` or `update-record` on that record (`create-note`, `update-note` on older hubs). For example, "make the
   accent a deep blue and the app roomier" becomes `"colors": { "accent": "#2f5470" }, "density": "roomy"`.
 
 The app follows the note while it runs. A change restyles every screen and every open applet at once, with no restart.

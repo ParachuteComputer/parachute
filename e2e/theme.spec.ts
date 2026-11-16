@@ -79,5 +79,5 @@ test("the first change in Settings copies the built-in theme into the home vault
   expect(n.metadata.theme.colors.accent).toBe("#4f6b3a");
   expect(Object.keys(n.metadata.theme.dark)).toHaveLength(7);
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--gap").trim())).toBe("18px");
-  await expect(look.getByRole("button", { name: "Make this mine" })).toHaveCount(0);
+  await expect(look.getByRole("button", { name: "Make this look mine" })).toHaveCount(0);
 });

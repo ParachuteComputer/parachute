@@ -33,7 +33,7 @@ export default function ThemeSettings() {
             <legend className="settings-sub">Light or dark</legend>
             {SCHEMES.map((s) => <label key={s}><input type="radio" name="scheme" checked={t.theme.scheme === s} onChange={act(() => setScheme(s))} /> {SCHEME_NAME[s]}</label>)}
           </fieldset>
-          {t.from === "built-in" && <button type="button" className="quiet-button" disabled={busy} onClick={act(makeThemeMine)}>Make this mine</button>}
+          {t.from === "built-in" && <button type="button" className="quiet-button" disabled={busy} onClick={act(makeThemeMine)}>Make this look mine</button>}
         </>
       )}
       {error && <p className="error" role="alert">{error}</p>}
