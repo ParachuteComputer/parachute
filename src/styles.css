@@ -131,6 +131,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .home-bar-place[aria-current="page"] { font-weight: 700; }
 .home-bar-place[aria-current="page"]::after { content: ""; width: 26px; height: 2px; margin-top: 2px; background: var(--text); border-radius: 2px; }
 .home-bar-place:active { background: var(--line); }
+/* the app's own Settings, under a frame of the person's: held at the right edge, on screen however full the bar is */
+.home-bar-own { position: sticky; right: 0; margin-left: auto; background: var(--surface); border-left: 1px solid var(--line); }
 .home-bar-sep { width: 1px; margin: 10px 6px; background: var(--line); flex: none; }
 .with-bar .app-frame { bottom: calc(env(safe-area-inset-bottom) + var(--bar-h)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--bar-h)); }
 .with-bar > .screen, .with-bar > main { padding-bottom: calc(var(--bar-h) + 24px); }

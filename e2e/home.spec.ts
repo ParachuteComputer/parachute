@@ -243,3 +243,28 @@ test("a pin whose vault's applets can't be read stays on the bar, and Unpin stil
   const [n] = await settingsNotes();
   expect(n.metadata.parachute?.bar).toEqual([]);
 });
+
+test("under a frame of the person's own, the app's Settings stays on screen however full the bar is", async ({ page }) => {
+  const made: string[] = [];
+  try {
+    for (let i = 1; i <= 11; i++) {
+      const n = await api(hubState(), "POST", "notes", { path: `Applets/Extra ${i}`, content: "<!doctype html><p>extra</p>", extension: "html", tags: ["applet"],
+        metadata: { applet: { contract: 2, id: `extra-${i}`, name: `Extra ${i}`, glyph: "✦" } } });
+      made.push(n.id);
+    }
+    await writeSettings({ bar: [{ vault: VAULT, applet: "Applets/Recipes" }, ...Array.from({ length: 11 }, (_, i) => ({ vault: VAULT, applet: `Applets/Extra ${i + 1}` }))] });
+    await page.goto("/settings");
+    await page.getByRole("button", { name: "Make this mine" }).click();
+    await expect(page.locator(".frame-status")).toHaveText("Your frame runs: Parachute/Frame.");
+    await page.goto(`/v/${VAULT}`);
+    await expect(page.locator("iframe.app-frame")).toHaveAttribute("data-frame", "vault");
+    const own = bar(page).getByRole("link", { name: "Settings (the app's own)" });
+    const box = (await own.boundingBox())!;
+    const width = page.viewportSize()!.width;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
+  } finally {
+    for (const id of made) await api(hubState(), "DELETE", `notes/${id}`);
+    for (const n of (await api(hubState(), "GET", "notes?tag=parachute-frame")) as { id: string }[]) await api(hubState(), "DELETE", `notes/${n.id}`);
+  }
+});
