@@ -13,33 +13,33 @@ Made-up content. Screens at Daylight 1600x1200 and phone 390x844, each with a gr
 
 ## The pick: A, with B's day line on the home applet
 
-Checked against TASTE.md on the screenshots, grayscale included:
+Checked against the taste notes (paraphrased here) on the screenshots, grayscale included:
 
-- **"not cluttered, not rigid boxy grids"**: B's rings in boxes read as an app grid of icons, and its regions are boxes;
+- **Calm order with room, no rigid boxes**: B's rings in boxes read as an app grid of icons, and its regions are boxes;
   on the phone, B pushes the third vault below the fold. A is rows and rules, no boxes, and shows all three vaults on
   one phone screen. This decided it.
-- **"Feels kind of like I'm reading an old book"**: A is literally a contents page: serif entries, italic chapter
-  names, dotted leaders. B is more "landscape" (also on his list), but the rings make it feel like a launcher grid, which
-  the brief says to avoid ("a calm place, not an app grid").
+- **A paper, book-like feel with a little life**: A is literally a contents page: serif entries, italic chapter
+  names, dotted leaders. B is closer to a landscape (also liked), but the rings make it feel like a launcher grid, which
+  the brief says to avoid: a calm place, not an app grid.
 - **Daylight, grayscale**: both hold up in gray. A's hierarchy is type alone (display serif for the page name, book
   serif for entries, italic for what changed, sans for actions). B's ticks rely on a 4 px mark that may ghost on the
   e-ink screen and are small to read at arm's length.
-- **"Clear content up front … easy to dig into"**: A puts a sentence of what changed next to each applet, so a glance
-  tells you where to go. B's ticks say *that* something changed, not *what*.
-- **"Good data visualizations are my love language"**: B's ticks were the stronger idea here, so the home applet keeps
-  B's one data idea, the day line (a vertical rule with a node per day), drawn in A's type. That is the only thing
-  carried over.
+- **Content up front, simple to explore further**: A puts a sentence of what changed next to each applet, so a glance tells you
+  where to go. B's ticks say *that* something changed, not *what*.
+- **New ways to show information; a love of good data visualisation**: B's ticks were the stronger idea here, so the
+  home applet keeps B's one data idea, the day line (a vertical rule with a node per day), drawn in A's type. That is
+  the only thing carried over.
 
-## How each choice maps to TASTE.md
+## How each choice maps to the taste notes
 
-| Choice (as built) | TASTE.md line |
+| Choice (as built) | Taste note (paraphrased) |
 |---|---|
-| Paper ground `#f2ede2`, ink `#1d1a16`, one moss accent `#4f6b3a` for the pinned mark only | "Light, paper-like grounds"; "One or two earthy, ecological tones" |
-| Book serif for names, italic serif for what changed, a quiet sans for actions and the bar | "small quiet old-book serifs with a quiet grotesk alongside" |
-| Rows and hairline rules, no cards or tiles; two pages on the Daylight | "Calm order with room; not cluttered, not rigid boxy grids" |
-| Dotted leaders, the ensō-like ◠ mark, glyphs as text (never colour emoji) | "Handmade/analog feel appeals" |
-| No motion on the bar or the launcher; a sheet appears without a slide | "one transition per tap, no looping animation (it ghosts)"; "never bouncy" |
-| A line of what changed beside each applet; vault names as chapter heads with "Open the vault" | "Clear content up front, plain navigation, obvious paths to dig deeper" |
-| The home applet's day line | "New ways to present information"; "Good data visualizations are my love language" |
-| Labels: "Launcher", "Pin to the bar", "Open on start"; no captions explaining the screen | "Warm, quiet, minimal words; never corporate SaaS tone; no explanatory chrome" |
-| Current place on the bar: bold plus an underline; pinned: a dot plus the word | "hierarchy by type, weight, space, texture, never colour alone"; "Check every screen under grayscale" |
+| Paper ground `#f2ede2`, ink `#1d1a16`, one moss accent `#4f6b3a` for the pinned mark only | Light paper grounds; one or two earthy tones |
+| Book serif for names, italic serif for what changed, a quiet sans for actions and the bar | Small, quiet old-book serifs beside a quiet grotesk |
+| Rows and hairline rules, no cards or tiles; two pages on the Daylight | Calm order with room; nothing boxy |
+| Dotted leaders, the ensō-like ◠ mark, glyphs as text (never colour emoji) | A handmade, analog feel |
+| No motion on the bar or the launcher; a sheet appears without a slide | One transition per tap, nothing looping (e-ink ghosts); never bouncy |
+| A line of what changed beside each applet; vault names as chapter heads with "Open the vault" | Clear content first, plain navigation, obvious ways to dig deeper |
+| The home applet's day line | New ways to present information; good data visualisation |
+| Labels: "Launcher", "Pin to the bar", "Open on start"; no captions explaining the screen | Warm, quiet, few words; no SaaS tone, no explanatory chrome |
+| Current place on the bar: bold plus an underline; pinned: a dot plus the word | Hierarchy by type, weight and space, never colour alone; every screen checked in gray |
