@@ -10,6 +10,8 @@ import { forgetVaultFrame } from "../shell/frameSource";
 import { clearDefaults } from "../open/defaults";
 import { forgetVaultStart } from "../shell/start";
 import { forgetVaultSettings } from "../shell/homeSettings";
+import { forgetVaultTheme } from "../theme/store";
+import ThemeSettings from "./ThemeSettings";
 import { forgetApplets } from "../applet/useApplets";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import KeySettings from "../key/KeySettings";
@@ -29,13 +31,14 @@ export default function Settings({ children }: { children?: ReactNode }) {
           {vaults.map((v) => (
             <li key={v.key} className="line">
               <span><strong>{v.vault}</strong> <span className="quiet">on {hostOf(v.issuer)}</span></span>
-              <button type="button" className="quiet-button" onClick={() => { removeVault(v.key); dropClient(v.key); forgetApplets(v.key); revokeVaultGrants(v.key); clearDefaults(v.key); forgetVaultFrame(v.key); forgetVaultStart(v.key); forgetVaultSettings(v.key); void revoke(v); }}>Sign out</button>
+              <button type="button" className="quiet-button" onClick={() => { removeVault(v.key); dropClient(v.key); forgetApplets(v.key); revokeVaultGrants(v.key); clearDefaults(v.key); forgetVaultFrame(v.key); forgetVaultStart(v.key); forgetVaultSettings(v.key); forgetVaultTheme(v.key); void revoke(v); }}>Sign out</button>
             </li>
           ))}
         </ul> : <p className="quiet">None yet.</p>}
       </section>
       <KeySettings />
       <FrameSettings />
+      <ThemeSettings />
       <AppletSettings vaults={vaults} />
       {children}
       <p className="screen-foot quiet">Parachute {__APP_VERSION__}</p>

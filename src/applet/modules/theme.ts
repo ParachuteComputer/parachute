@@ -1,18 +1,11 @@
-// theme module (copied from the Uni app): the host's colours and fonts, pushed as a `theme` event on load
-// and when the colour scheme changes. The app uses system fonts, so the frame gets
-// the same font stacks by name and needs no font files (its CSP allows only `font-src data:`).
+// theme module: the app's look (src/theme), as tokens: every colour, font and density value, also set as CSS variables
+// `--<key>` in the frame by the kit. Pushed as a `theme` event on load and each time the look changes (the person's
+// theme record, or the device's light/dark). The fonts are stacks of system fonts by name, so the frame needs no font
+// files (its CSP allows only `font-src data:`).
 
 import type { UniModule } from "../router.ts";
+import type { Tokens } from "../../theme/theme.ts";
 
-export type ThemeData = { text: string; muted: string; accent: string; surface: string; line: string; sans: string; serif: string; mono: string };
-export const THEME_VARS: [keyof ThemeData, string][] = [["text", "--text"], ["muted", "--muted"], ["accent", "--accent"], ["surface", "--surface"], ["line", "--line"], ["sans", "--sans"], ["serif", "--serif"], ["mono", "--mono"]];
-
-export function createThemeModule(deps: { theme(): ThemeData }): UniModule {
+export function createThemeModule(deps: { theme(): Tokens | Record<string, string> }): UniModule {
   return { namespace: "theme", methods: { get: { cap: null, validate: () => ({ ok: true, value: {} }), run: async () => deps.theme() } } };
-}
-
-/** Read the host's theme variables from the document (browser only). */
-export function readHostTheme(): ThemeData {
-  const css = getComputedStyle(document.documentElement);
-  return Object.fromEntries(THEME_VARS.map(([key, v]) => [key, css.getPropertyValue(v).trim()])) as ThemeData;
 }

@@ -8,14 +8,16 @@ import { answerLinkOut, LINK_OUT_HOLD_MS, frameCode, frameFailed, frameHidden, f
 import FrameHost from "./FrameHost";
 import FrameCard from "./FrameCard";
 import { readSettings } from "./homeSettings";
+import { readTheme } from "../theme/store";
 
 type Code = { js: string; hash: string; from: "built-in" | "vault" };
 
 export default function FrameArea() {
   const { choice, linkOut } = useFrameSource();
   const [code, setCode] = useState<Code | null>(null);
-  // the person's frame and their settings note, read again each time the frame area is shown
-  useEffect(() => { void readFrameRecord(); void readSettings(); }, []);
+  // the person's frame, settings and theme notes, read again each time the frame area is shown (the theme is also
+  // followed live; this is for when the live query is down)
+  useEffect(() => { void readFrameRecord(); void readSettings(); void readTheme(); }, []);
   const want = choice.run === "vault" ? `vault:${choice.hash}` : "built-in";
   useEffect(() => {
     let on = true;

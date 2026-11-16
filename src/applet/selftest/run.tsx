@@ -11,7 +11,7 @@ import ProbeFrame, { type ProbeOutcome } from "./ProbeFrame";
 import { runtimeFacts } from "./runtime";
 
 const TIMEOUT_MS = 40000;
-const STUB_ROUTER = createRouter([createThemeModule({ theme: () => ({ text: "", muted: "", accent: "selftest", surface: "", line: "", sans: "", serif: "", mono: "" }) })]);
+const STUB_ROUTER = createRouter([createThemeModule({ theme: () => ({ accent: "selftest" }) })]);
 const STAGES = [{ id: "main", html: PROBE_HTML, nav: false }, ...NAV_STAGES.map((s) => ({ id: s.id, html: navProbeHtml(s.vector), nav: true }))];
 export const PLATFORM = platformName(currentUserAgent());
 

@@ -65,7 +65,7 @@ export type Params<M extends Method> = Calls[M][0];
 export type Result<M extends Method> = Calls[M][1];
 export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "home.get", "home.pin", "home.start", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
 
-export type Events = { location: FrameLocation; changed: { what: "vaults" | "applets" | "defaults" | "home" } };
+export type Events = { location: FrameLocation; changed: { what: "vaults" | "applets" | "defaults" | "home" }; /** the look's tokens (src/theme), each a CSS variable --<key> */ theme: Record<string, string> };
 
 export type Request = { pf: 1; id: string; method: Method; params: unknown };
 export type Reply = { pf: 1; id: string; result: unknown } | { pf: 1; id: string; error: string };
