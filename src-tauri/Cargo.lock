@@ -456,6 +456,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "buzz-pair-relay"
+version = "0.1.0"
+source = "git+https://github.com/unforcedagi/buzz.git?rev=5669fdcbc13aa85b0edede555478ae11b6771e0a#5669fdcbc13aa85b0edede555478ae11b6771e0a"
+dependencies = [
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "parking_lot",
+ "secp256k1 0.31.1",
+ "serde_json",
+ "sha2 0.11.1",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+]
+
+[[package]]
 name = "buzz-ws-client"
 version = "0.1.0"
 source = "git+https://github.com/unforcedagi/buzz.git?rev=5669fdcbc13aa85b0edede555478ae11b6771e0a#5669fdcbc13aa85b0edede555478ae11b6771e0a"
@@ -1913,6 +1931,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
+name = "httpdate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+
+[[package]]
 name = "hybrid-array"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1934,6 +1958,7 @@ dependencies = [
  "http",
  "http-body",
  "httparse",
+ "httpdate",
  "itoa",
  "pin-project-lite",
  "smallvec",
@@ -2650,7 +2675,7 @@ dependencies = [
  "hex",
  "instant",
  "scrypt",
- "secp256k1",
+ "secp256k1 0.29.100",
  "serde",
  "serde_json",
  "unicode-normalization",
@@ -3085,8 +3110,8 @@ name = "parachute"
 version = "0.1.0"
 dependencies = [
  "buzz-core",
+ "buzz-pair-relay",
  "buzz-ws-client",
- "jni 0.21.1",
  "keyring",
  "log",
  "nostr",
@@ -3099,6 +3124,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tauri-plugin-barcode-scanner",
  "tauri-plugin-deep-link",
  "tauri-plugin-opener",
  "tauri-runtime-wry",
@@ -3865,8 +3891,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa163bcf53957be4beb29c82e6ea07c604dc6e27b7bd904ab8163dfb4ee9a3a9"
 dependencies = [
  "rand 0.8.8",
- "secp256k1-sys",
+ "secp256k1-sys 0.10.1",
  "serde",
+]
+
+[[package]]
+name = "secp256k1"
+version = "0.31.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c3c81b43dc2d8877c216a3fccf76677ee1ebccd429566d3e67447290d0c42b2"
+dependencies = [
+ "bitcoin_hashes",
+ "rand 0.9.5",
+ "secp256k1-sys 0.11.0",
 ]
 
 [[package]]
@@ -3874,6 +3911,15 @@ name = "secp256k1-sys"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4387882333d3aa8cb20530a17c69a3752e97837832f34f6dccc760e715001d9"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "secp256k1-sys"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcb913707158fadaf0d8702c2db0e857de66eb003ccfdda5924b5f5ac98efb38"
 dependencies = [
  "cc",
 ]
@@ -4579,6 +4625,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-barcode-scanner"
+version = "2.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81f76741c77b8213350fd37a5608f0c78f4e61fe33f0334f5dfd0e6cc8d00138"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "tauri-plugin-deep-link"
 version = "2.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4900,6 +4960,8 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
+ "libc",
  "pin-project-lite",
  "tokio",
 ]

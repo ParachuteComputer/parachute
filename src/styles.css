@@ -41,6 +41,21 @@ button, input { font: inherit; color: inherit; }
 .search { margin: 0 0 10px; }
 .primary { display: inline-block; padding: 10px 16px; border: 0; border-radius: 8px; background: var(--accent); color: var(--surface); font-weight: 600; text-decoration: none; cursor: pointer; }
 .primary:disabled { opacity: .6; }
+.secondary { display: inline-block; padding: 9px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-weight: 550; text-align: center; text-decoration: none; cursor: pointer; }
+.secondary:disabled { opacity: .6; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.stack > p { margin: 0; }
+.stack .primary { text-align: center; }
+.small { font-size: 14px; }
+.row-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.steps { margin: 0; padding-left: 1.3em; }
+.steps li { padding: 2px 0; }
+.field textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: 14px/1.4 var(--mono); }
+.sas { margin: 4px 0; font: 600 34px/1.2 var(--mono); letter-spacing: .08em; text-align: center; }
+.npub { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.npub code { flex: 1; font: 13px/1.4 var(--mono); overflow-wrap: anywhere; }
+details summary { cursor: pointer; color: var(--muted); }
+details[open] summary { margin-bottom: 6px; }
 .quiet-button { border: 1px solid var(--line); background: none; border-radius: 8px; padding: 4px 10px; font-size: 14px; cursor: pointer; }
 .quiet { color: var(--muted); }
 .error { color: var(--danger); }

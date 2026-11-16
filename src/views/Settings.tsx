@@ -10,6 +10,7 @@ import { forgetVaultFrame } from "../shell/frameSource";
 import { clearDefaults } from "../open/defaults";
 import { forgetApplets } from "../applet/useApplets";
 import { deviceGrants, subjectOf } from "../applet/grants";
+import KeySettings from "../key/KeySettings";
 
 /** Signing out of a vault ends what its applets were allowed on this device too. */
 const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (const s of g.subjects()) if (s.startsWith(subjectOf(key, ""))) g.revoke(s); };
@@ -31,6 +32,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
           ))}
         </ul> : <p className="quiet">None yet.</p>}
       </section>
+      <KeySettings />
       <FrameSettings />
       <AppletSettings vaults={vaults} />
       {children}

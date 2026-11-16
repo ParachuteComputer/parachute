@@ -6,7 +6,7 @@ import { dirname, join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(process.cwd(), "src");
-const FORBIDDEN = ["vault/store.ts", "vault/oauth.ts", "vault/client.ts", "vault/hooks.ts", "applet/grants.ts", "applet/useApplets.ts", "open/defaults.ts", "open/mark.ts", "open/status.ts", "shell/", "applet/selftest/", "views/"];
+const FORBIDDEN = ["vault/store.ts", "vault/oauth.ts", "vault/client.ts", "vault/hooks.ts", "applet/grants.ts", "applet/useApplets.ts", "open/defaults.ts", "open/mark.ts", "open/status.ts", "shell/", "applet/selftest/", "views/", "key/"];
 
 export function reachable(entry: string): string[] {
   const seen = new Set<string>();

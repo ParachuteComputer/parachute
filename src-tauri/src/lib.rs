@@ -77,11 +77,14 @@ fn key_plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
 pub fn run() {
     // the pairing relay's socket and the hub's key door use rustls; its crypto is ring, installed once
     let _ = rustls::crypto::ring::default_provider().install_default();
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(signin_return())
-        .plugin(key_plugin())
+        .plugin(key_plugin());
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+    builder
         .manage(key::KeyState::default())
         .manage(pairing::PairState::default())
         .invoke_handler(tauri::generate_handler![
