@@ -120,8 +120,10 @@ export function settingsNow(): Settings {
   return k && home && k.vault === home.key ? k.settings : { ...EMPTY };
 }
 
-/** Whether the settings note was read from the home vault this session (not only the copy kept from before). */
-export const settingsReadNow = () => state.read === "read";
+/** Whether the settings note was read from the home vault this session (not only the copy kept from before). Stays
+ *  true while a later read runs, so a quick Back to the home doesn't find it "not read". */
+let readThisSession: string | null = null;
+export const settingsReadNow = () => readThisSession !== null && readThisSession === homeVault()?.key;
 
 /** The settings note: the one note tagged so, or the one at the usual path when there are more. */
 const pick = (rows: { path?: string | null }[]) => (rows.length === 1 ? rows[0] : rows.find((r) => stripExt(r.path ?? "") === SETTINGS_PATH) ?? null);
@@ -150,6 +152,7 @@ export async function readSettings(): Promise<void> {
       if (f) found[keyOf(p)] = f;
     }
     keepNow({ vault: home.key, settings, noteId: n?.id ?? null, updatedAt: (n as { updatedAt?: string } | null)?.updatedAt ?? null, found });
+    readThisSession = home.key;
     bump({ read: "read" });
   } catch {
     if (mine !== generation) return;
