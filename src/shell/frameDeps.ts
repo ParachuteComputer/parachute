@@ -12,7 +12,7 @@ import { inShell } from "../vault/oauth";
 import { confirmLinkOut } from "./frameSource";
 import { listVaults, type VaultRecord } from "../vault/store";
 import type { HostDeps } from "./frameHost";
-import { atFirstEntry } from "../ui/hold";
+import { atFirstEntry } from "../ui/history";
 import { barNow, pinApplet, startApplet } from "./homeSettings";
 import { chooseStart, forgetStart } from "./start";
 

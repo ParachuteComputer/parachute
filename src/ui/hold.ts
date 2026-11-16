@@ -23,6 +23,3 @@ export function useHold(f: () => void, ended?: () => void) {
     onClickCapture: (e: React.MouseEvent) => { if (fired.current) { e.preventDefault(); e.stopPropagation(); ended?.(); fired.current = false; } },
   };
 }
-
-/** Is this the first entry of the tab's history (a start, a link from outside)? Back there goes to the launcher. */
-export const atFirstEntry = () => ((history.state as { idx?: number } | null)?.idx ?? 0) === 0;

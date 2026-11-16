@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
-import { atFirstEntry } from "./hold";
+import { atFirstEntry } from "./history";
 
 /** In the shell: one step back in this tab's history, or the launcher when this is its first entry (a start, a link
  *  from outside). In a frame, history is the shell's: the frame's navigator asks the shell, which does the same. */

@@ -18,7 +18,7 @@ import KeyStart from "../key/KeyStart";
 import Pair from "../key/Pair";
 import { keysHere, useKey } from "../key/key";
 import BottomBar from "./BottomBar";
-import { atFirstEntry } from "../ui/hold";
+import { atFirstEntry } from "../ui/history";
 import { startPlace } from "./start";
 import { readSettings } from "./homeSettings";
 

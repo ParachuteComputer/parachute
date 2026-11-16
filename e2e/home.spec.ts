@@ -228,3 +228,18 @@ test("an applet the note names twice: one place on the bar; Move skips the hidde
   const [n] = await settingsNotes();
   expect(n.metadata.parachute?.bar).toEqual([{ vault: VAULT, applet: "Applets/Cook mode" }]);
 });
+
+test("a pin whose vault's applets can't be read stays on the bar, and Unpin still takes it off", async ({ page }) => {
+  await writeSettings({ bar: [{ vault: VAULT, applet: "Applets/Recipes" }] });
+  await start(page);
+  await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
+  // the vault's applets out of reach (the settings note still answers): the bar shows the copy it kept
+  await page.route((u) => u.searchParams.get("tag") === "applet", (r) => r.fulfill({ status: 503, body: "{}" }));
+  await start(page);
+  await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
+  await bar(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
+  await page.getByRole("button", { name: "Unpin" }).click();
+  await expect(bar(page).getByRole("link")).toHaveText([/Launcher/]);
+  const [n] = await settingsNotes();
+  expect(n.metadata.parachute?.bar).toEqual([]);
+});
