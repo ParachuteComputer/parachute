@@ -1,9 +1,9 @@
 // What shows on the frame's addresses: the frame this device runs now (frameSource.ts), or its card. The person's
 // frame is read again each time the frame area is shown, so a change made by them or their agent is seen at the next
 // return, not by polling. Over a frame from a vault the shell keeps two things of its own: a way to Settings (whatever
-// that frame draws), and the question before it opens an address outside the app.
+// that frame draws: a place at the end of the bar, BottomBar.tsx), and the question before it opens an address outside
+// the app.
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
 import { answerLinkOut, LINK_OUT_HOLD_MS, frameCode, frameFailed, frameHidden, frameShown, readFrameRecord, useFrameSource } from "./frameSource";
 import FrameHost from "./FrameHost";
 import FrameCard from "./FrameCard";
@@ -46,7 +46,6 @@ export default function FrameArea() {
     <>
       <FrameHost key={ready.hash} js={ready.js} from={ready.from}
         onFailed={(why, persist) => { if (vault) frameFailed(ready.hash, why, persist); }} />
-      {vault && <Link className="shell-settings" to="/settings" aria-label="Settings (the app's own)">◠</Link>}
       {linkOut !== null && <LinkOutQuestion key={linkOut} url={linkOut} />}
     </>
   );

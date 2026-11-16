@@ -51,7 +51,7 @@ The bar at the foot of the screen is the app's own, under any frame: what is on 
    what a frame can do and asks: **Use it**, or **Use the built-in frame**.
 3. A frame can't open anything outside the app by itself: when it asks to, the app shows the whole address and asks,
    one question at a time.
-   Over a frame of yours the app keeps a small ◠ button of its own, just above the bar, that leads to Settings. Keep a way to Settings in
+   Under a frame of yours the app keeps its own way to Settings: a ◠ Settings place at the end of the bar. Keep a way to Settings in
    your frame too (the built-in `Bar` has one).
 4. The last version they allowed is kept on the device, so it also runs when the vault can't be reached. It is
    dropped when the frame note is gone from the vault, when there are two, and on signing out of that vault.

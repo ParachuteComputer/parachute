@@ -10,11 +10,13 @@ import { Link, useLocation } from "react-router";
 import { move, pinApplet, setStart, useSettings, type Found, type Place } from "./homeSettings";
 import { chooseStart, forgetStart } from "./start";
 import { clearMark } from "../open/mark";
+import { useFrameSource } from "./frameSource";
 
 type Item = Found & { place: Place; home: boolean };
 
 export default function BottomBar() {
   const { bar } = useSettings();
+  const ownFrame = useFrameSource().choice.run === "vault";
   const { pathname } = useLocation();
   const [asked, setAsked] = useState<Item | null>(null);
   const items: Item[] = [...(bar.start ? [{ ...bar.start, home: true }] : []), ...bar.pins.map((p) => ({ ...p, home: false }))];
@@ -26,6 +28,8 @@ export default function BottomBar() {
         <Link className="home-bar-place" to="/" aria-current={pathname === "/" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">⁂</span>Launcher</Link>
         {items.length > 0 && <span className="home-bar-sep" aria-hidden="true" />}
         {items.map((it) => <Place key={it.href} item={it} current={here(it.href)} onHold={() => setAsked(it)} />)}
+        {/* under a frame of the person's own, the app keeps its own way to Settings, whatever that frame draws */}
+        {ownFrame && <Link className="home-bar-place" to="/settings" aria-label="Settings (the app's own)" aria-current={pathname === "/settings" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">◠</span>Settings</Link>}
       </nav>
       {asked && <PlaceSheet item={asked} first={items.filter((x) => !x.home)[0]?.href === asked.href} last={items.filter((x) => !x.home).at(-1)?.href === asked.href} onClose={() => setAsked(null)} />}
     </>
