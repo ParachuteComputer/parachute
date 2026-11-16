@@ -34,11 +34,18 @@ fn refusal(code: &'static str, message: impl Into<String>) -> Refusal {
 }
 
 /// What the hub answered: where to go next on the hub, and the cookies that carry its session there.
-#[derive(Debug)]
 pub struct Session {
     pub set_cookies: Vec<String>,
     /// a path on the hub
     pub redirect: String,
+}
+
+/// Names only: a cookie's value is the hub session.
+impl std::fmt::Debug for Session {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let names: Vec<&str> = self.set_cookies.iter().map(|c| c.split('=').next().unwrap_or("")).collect();
+        f.debug_struct("Session").field("cookies", &names).field("redirect", &self.redirect).finish()
+    }
 }
 
 /// The hub's origin, when it is one the app signs in to: https, or http on this machine.
@@ -150,10 +157,18 @@ pub async fn sign_in(origin: &url::Url, next: &str, keys: &nostr::Keys) -> Resul
         return Err(refusal("refused", format!("The hub refused the key ({}{}).", status.as_u16(), if said.is_empty() { String::new() } else { format!(": {}", said.chars().take(120).collect::<String>()) })));
     }
     let redirect = body.get("redirect").and_then(Value::as_str).unwrap_or("/");
-    if !redirect.starts_with('/') || redirect.starts_with("//") || set_cookies.is_empty() {
+    if on_hub(origin, redirect).is_none() || set_cookies.is_empty() {
         return Err(refusal("refused", "The hub's answer wasn't a sign-in."));
     }
     Ok(Session { set_cookies, redirect: redirect.to_string() })
+}
+
+/// A path the hub names, as an address on the hub itself (`/\\other.example` and the like resolve elsewhere: refused).
+pub fn on_hub(origin: &url::Url, path: &str) -> Option<url::Url> {
+    if !path.starts_with('/') {
+        return None;
+    }
+    origin.join(path).ok().filter(|u| u.origin() == origin.origin())
 }
 
 #[derive(Serialize)]
@@ -173,32 +188,40 @@ pub async fn key_sign_in<R: Runtime>(app: AppHandle<R>, webview: Webview<R>, key
     for raw in &session.set_cookies {
         plant_cookie(&webview, &origin, raw).await.map_err(|_| refusal("refused", "The hub's session couldn't be kept in the app."))?;
     }
-    let go = origin.join(&session.redirect).map_err(|_| refusal("refused", "The hub's answer wasn't a sign-in."))?;
+    let go = on_hub(&origin, &session.redirect).ok_or_else(|| refusal("refused", "The hub's answer wasn't a sign-in."))?;
     Ok(SignedIn { go: go.to_string() })
+}
+
+/// One of the hub's cookies as the webview should keep it: for this hub's host only, whatever the header said.
+pub fn host_only(origin: &url::Url, raw: &str) -> Result<tauri::webview::cookie::Cookie<'static>, ()> {
+    let mut c = tauri::webview::cookie::Cookie::parse(raw.to_string()).map_err(|_| ())?;
+    c.unset_domain();
+    if c.path().is_none() {
+        c.set_path("/");
+    }
+    let _ = origin;
+    Ok(c)
 }
 
 /// Keep one of the hub's cookies in the webview, for the hub only.
 async fn plant_cookie<R: Runtime>(webview: &Webview<R>, origin: &url::Url, raw: &str) -> Result<(), ()> {
+    let mut c = host_only(origin, raw)?;
     #[cfg(target_os = "android")]
     {
-        let _ = webview;
         use tauri::Manager;
+        let _ = &mut c;
+        // CookieManager takes a Set-Cookie line for a URL; with no Domain it keeps it for that URL's host only
         let plugin = webview.app_handle().try_state::<crate::android::KeyPluginHandle<R>>().map(|h| h.0.clone()).ok_or(())?;
         plugin
-            .run_mobile_plugin_async::<Value>("setCookie", json!({ "url": origin.as_str(), "cookie": raw }))
+            .run_mobile_plugin_async::<Value>("setCookie", json!({ "url": origin.as_str(), "cookie": c.to_string() }))
             .await
             .map(|_| ())
             .map_err(|_| ())
     }
     #[cfg(not(target_os = "android"))]
     {
-        use tauri::webview::cookie::Cookie;
-        let mut c = Cookie::parse(raw.to_string()).map_err(|_| ())?;
-        // host-only to this hub, whatever the header said
+        // wry wants a domain to file the cookie under: the hub's host, exactly (libsoup keeps it host-only)
         c.set_domain(origin.host_str().ok_or(())?.to_string());
-        if c.path().is_none() {
-            c.set_path("/");
-        }
         webview.set_cookie(c).map_err(|_| ())
     }
 }
@@ -206,6 +229,17 @@ async fn plant_cookie<R: Runtime>(webview: &Webview<R>, origin: &url::Url, raw: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cookies_stay_with_the_hub() {
+        let o = hub_origin("https://hub.example").unwrap();
+        let c = host_only(&o, "parachute_hub_session=abc; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=example; Max-Age=60").unwrap();
+        assert_eq!(c.domain(), None);
+        let line = c.to_string();
+        assert!(line.starts_with("parachute_hub_session=abc") && line.contains("HttpOnly") && line.contains("Secure") && !line.contains("Domain"), "{line}");
+        let s = Session { set_cookies: vec!["parachute_hub_session=secretvalue; Path=/".into()], redirect: "/".into() };
+        assert!(!format!("{s:?}").contains("secretvalue"));
+    }
 
     #[test]
     fn hubs() {
@@ -223,6 +257,10 @@ mod tests {
         assert_eq!(next_path(&o, "/oauth/authorize").unwrap(), "/oauth/authorize");
         assert!(next_path(&o, "https://other.example/oauth/authorize").is_err());
         assert!(next_path(&o, "//other.example/x").is_err());
+        assert!(on_hub(&o, "/oauth/authorize?x=1").is_some());
+        for away in ["//other.example/x", "/\\other.example/x", "https://other.example/", "other"] {
+            assert!(on_hub(&o, away).is_none(), "{away}");
+        }
     }
 
     fn challenge(u: &str, kind: u64, content: &str) -> Value {

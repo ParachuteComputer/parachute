@@ -106,6 +106,9 @@ export async function beginSignIn(address: Address, fetchImpl: typeof fetch = fe
   return url.toString();
 }
 
+/** Drop the sign-in flow this app started (a key sign-in that the hub refused: the registration is still good). */
+export function dropPending() { localStorage.removeItem(PENDING_KEY); }
+
 /** The flow this app started, if `state` is its state; it is then used up. A wrong state leaves it waiting (a stray link can't cancel it). */
 export function takePending(state: string, now = Date.now()): Pending | "mismatch" | null {
   const p = readJson<Pending>(PENDING_KEY);

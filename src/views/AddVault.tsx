@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { Bar } from "../ui/Bar";
 import { parseAddress } from "../vault/address";
-import { beginSignIn } from "../vault/oauth";
+import { beginSignIn, dropPending } from "../vault/oauth";
 import { keySignIn, keysHere, useKey, type Refusal } from "../key/key";
 import { Npub } from "../key/Npub";
 
@@ -31,6 +31,7 @@ export default function AddVault({ first = false }: { first?: boolean }) {
     try {
       window.location.assign(await keySignIn(parsed.address.issuer, authorize));
     } catch (r) {
+      dropPending();
       setBusy(false); setRefusal(r as Refusal);
     }
   }

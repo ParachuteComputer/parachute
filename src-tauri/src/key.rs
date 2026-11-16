@@ -27,6 +27,8 @@ enum Slot {
     Unread,
     Empty,
     Held(Keys),
+    /// Something is stored but can't be read (storage refused, or not a key): only removing it helps.
+    Unreadable(String),
 }
 
 /// The key this device holds, once read from storage.
@@ -43,18 +45,21 @@ impl KeyState {
     pub async fn get<R: Runtime>(&self, app: &AppHandle<R>) -> Result<Option<Keys>, String> {
         let mut slot = self.0.lock().await;
         read(&mut slot, app).await?;
-        Ok(match &*slot {
-            Slot::Held(k) => Some(k.clone()),
-            _ => None,
-        })
+        match &*slot {
+            Slot::Held(k) => Ok(Some(k.clone())),
+            Slot::Unreadable(why) => Err(why.clone()),
+            _ => Ok(None),
+        }
     }
 
     /// Keep `keys` as this device's key. A device holds one key: another is refused until this one is removed.
     pub async fn install<R: Runtime>(&self, app: &AppHandle<R>, keys: Keys) -> Result<KeyInfo, String> {
         let mut slot = self.0.lock().await;
         read(&mut slot, app).await?;
-        if let Slot::Held(_) = *slot {
-            return Err("This device already has a key. Remove it in Settings first.".into());
+        match &*slot {
+            Slot::Held(_) => return Err("This device already has a key. Remove it in Settings first.".into()),
+            Slot::Unreadable(_) => return Err("The key kept on this device can't be read. Remove it in Settings first.".into()),
+            _ => {}
         }
         let nsec = Zeroizing::new(keys.secret_key().to_bech32().map_err(|_| "Couldn't encode the key.".to_string())?);
         store::save(app, &nsec).await?;
@@ -76,10 +81,14 @@ impl KeyState {
     }
 }
 
+/// Read storage once a run. A storage error is tried again next time; a stored value that isn't a key stays unreadable.
 async fn read<R: Runtime>(slot: &mut Slot, app: &AppHandle<R>) -> Result<(), String> {
     if let Slot::Unread = *slot {
         *slot = match store::load(app).await? {
-            Some(secret) => Slot::Held(parse_secret(&secret).map_err(|_| "The key kept on this device can't be read.".to_string())?),
+            Some(secret) => match parse_secret(&secret) {
+                Ok(keys) => Slot::Held(keys),
+                Err(()) => Slot::Unreadable("The key kept on this device can't be read.".into()),
+            },
             None => Slot::Empty,
         };
     }

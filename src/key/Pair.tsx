@@ -25,7 +25,7 @@ export default function Pair() {
     setError(null); setStep("connecting");
     try {
       const r = await pairStart(uri.trim());
-      if (!live.current) return;
+      if (!live.current) { void pairCancel(false); return; }
       waiting.current = true;
       setSas(r.sas); setStep("code");
     } catch (e) { if (live.current) { say(e); setStep("link"); } }
@@ -44,10 +44,10 @@ export default function Pair() {
   async function confirm() {
     setError(null); setStep("receiving");
     try {
-      waiting.current = false;
       await pairConfirm();
+      waiting.current = false;
       if (live.current) nav("/", { replace: true });
-    } catch (e) { if (live.current) { say(e); setLink(""); setStep("link"); } }
+    } catch (e) { waiting.current = false; if (live.current) { say(e); setLink(""); setStep("link"); } }
   }
   async function cancel(codesDiffer: boolean) {
     waiting.current = false;
@@ -78,10 +78,10 @@ export default function Pair() {
           <p className="sas" aria-label={`Code ${sas.split("").join(" ")}`}>{sas.slice(0, 3)} {sas.slice(3)}</p>
           <p className="quiet small">Go on only if the codes are the same. Then confirm on the other device too.</p>
           <button type="button" className="primary" disabled={step === "receiving"} onClick={() => void confirm()}>{step === "receiving" ? "Waiting for the other device…" : "The codes match"}</button>
-          {step === "code" && <div className="row-buttons">
-            <button type="button" className="secondary" onClick={() => void cancel(true)}>They're different</button>
+          <div className="row-buttons">
+            {step === "code" && <button type="button" className="secondary" onClick={() => void cancel(true)}>They're different</button>}
             <button type="button" className="secondary" onClick={() => void cancel(false)}>Cancel</button>
-          </div>}
+          </div>
         </>}
         {error && <p className="error" role="alert">{error}</p>}
       </section>

@@ -77,7 +77,7 @@ async fn a_key_comes_over_from_the_uni_apps_side() {
     let theirs = sender.offer().await;
     assert_eq!(pending.sas(), theirs, "both devices show the same code");
     sender.send(identity(&account, &account)).await;
-    let got = pending.confirm().await.expect("the key arrives");
+    let got = pending.confirm(|k| async move { Ok::<_, String>(k) }).await.expect("the key arrives");
     assert_eq!(got.public_key(), account.public_key());
     // the receiving side says it's done
     loop {
@@ -96,7 +96,7 @@ async fn a_key_that_isnt_what_the_sender_claims_is_refused() {
     let pending = pairing::start(&link).await.unwrap();
     sender.offer().await;
     sender.send(identity(&Keys::generate(), &Keys::generate())).await;
-    assert!(pending.confirm().await.is_err());
+    assert!(pending.confirm(|k| async move { Ok::<_, String>(k) }).await.is_err());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -120,4 +120,25 @@ async fn codes_that_differ_stop_the_sender() {
 async fn a_link_to_an_insecure_relay_is_refused() {
     let (_session, qr) = PairingSession::new_source("ws://relay.example".into());
     assert!(pairing::start(&encode_qr(&qr)).await.is_err());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_key_this_device_couldnt_keep_isnt_reported_done() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let relay = relay().await;
+    let account = Keys::generate();
+    let (mut sender, link) = Sender::open(&relay).await;
+    let pending = pairing::start(&link).await.unwrap();
+    sender.offer().await;
+    sender.send(identity(&account, &account)).await;
+    let kept = pending.confirm(|_| async move { Err::<(), _>("the key store refused".to_string()) }).await;
+    assert!(kept.is_err());
+    // the sender hears an abort, never `complete`
+    loop {
+        let ev = sender.next().await;
+        assert!(sender.session.handle_complete(&ev).is_err() || sender.session.state() == buzz_core::pairing::SessionState::Aborted, "complete sent for a key that wasn't kept");
+        if sender.session.handle_abort(&ev).is_ok() || sender.session.state() == buzz_core::pairing::SessionState::Aborted {
+            break;
+        }
+    }
 }

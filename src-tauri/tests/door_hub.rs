@@ -62,6 +62,7 @@ fn hub(bin: String) -> Hub {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_linked_key_opens_the_hubs_consent_and_an_unknown_one_is_told() {
     let Ok(bin) = std::env::var("PARACHUTE_CORE") else {
+        assert!(std::env::var("CI").is_err(), "CI must name a hub in PARACHUTE_CORE for the key door test");
         eprintln!("PARACHUTE_CORE not set: skipping the real-hub key door test");
         return;
     };

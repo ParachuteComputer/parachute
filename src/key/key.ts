@@ -16,27 +16,45 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 /** Keys live in the app on a device (the shell), not in a browser tab. */
 export const keysHere = () => inShell();
 
-// What the screens show: `undefined` until read, then the key or null.
+// What the screens show: `undefined` until read, then the key or null; `problem` when a key is stored but can't be read.
 let known: KeyInfo | null | undefined;
+let problem: string | null = null;
 const listeners = new Set<() => void>();
-const set = (k: KeyInfo | null) => { known = k; listeners.forEach((f) => f()); };
+const set = (k: KeyInfo | null, why: string | null = null) => { known = k; problem = why; listeners.forEach((f) => f()); };
 let reading: Promise<void> | null = null;
 
 function read() {
-  reading ??= invoke<KeyInfo | null>("key_status").then((k) => set(k), () => set(null)).finally(() => { reading = null; });
+  reading ??= invoke<KeyInfo | null>("key_status").then((k) => set(k), (e: unknown) => set(null, String(e))).finally(() => { reading = null; });
+  return reading;
 }
+const subscribe = (cb: () => void) => { listeners.add(cb); if (known === undefined && keysHere()) void read(); return () => { listeners.delete(cb); }; };
 
 /** This device's key (its public half): `undefined` while it is read, `null` when there is none. */
 export function useKey(): KeyInfo | null | undefined {
-  return useSyncExternalStore((cb) => { listeners.add(cb); if (known === undefined && keysHere()) read(); return () => { listeners.delete(cb); }; }, () => (keysHere() ? known : null), () => undefined);
+  return useSyncExternalStore(subscribe, () => (keysHere() ? known : null), () => undefined);
+}
+/** Why a key this device keeps can't be used, if it can't (only removing it helps). */
+export function useKeyProblem(): string | null {
+  return useSyncExternalStore(subscribe, () => problem, () => null);
 }
 
-export async function createKey(): Promise<KeyInfo> { const k = await invoke<KeyInfo>("key_create"); set(k); return k; }
-export async function importKey(secret: string): Promise<KeyInfo> { const k = await invoke<KeyInfo>("key_import", { secret }); set(k); return k; }
-export async function forgetKey(): Promise<void> { await invoke("key_forget"); set(null); }
+/** A command that changes the key; when it fails, the screens read the key again (it may be there after all). */
+async function changing<T extends KeyInfo | void>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    const k = await invoke<T>(cmd, args);
+    set(k ? (k as KeyInfo) : null);
+    return k;
+  } catch (e) {
+    await read();
+    throw e;
+  }
+}
+export const createKey = () => changing<KeyInfo>("key_create");
+export const importKey = (secret: string) => changing<KeyInfo>("key_import", { secret });
+export const forgetKey = () => changing<void>("key_forget");
 
 export const pairStart = (link: string) => invoke<{ sas: string }>("pair_start", { link });
-export async function pairConfirm(): Promise<KeyInfo> { const k = await invoke<KeyInfo>("pair_confirm"); set(k); return k; }
+export const pairConfirm = () => changing<KeyInfo>("pair_confirm");
 export const pairCancel = (codesDiffer: boolean) => invoke<void>("pair_cancel", { codesDiffer }).catch(() => undefined);
 
 /** Sign in to `hub` with the key; resolves to the hub address to open next (`next`, or the hub's second step). */

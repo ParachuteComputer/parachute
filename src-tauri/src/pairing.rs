@@ -38,9 +38,12 @@ pub struct Pending {
     deadline: Instant,
 }
 
-/// The pairing this device has started, if any.
+/// The pairing this device has started, if any, and a way to stop one that is waiting for the key.
 #[derive(Default)]
-pub struct PairState(Mutex<Option<Pending>>);
+pub struct PairState {
+    pending: Mutex<Option<Pending>>,
+    receiving: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+}
 
 fn remaining(deadline: Instant) -> Result<Duration, String> {
     deadline
@@ -179,9 +182,14 @@ impl Pending {
         }
     }
 
-    /// Step 2, after the person says the codes match: receive the key.
-    pub async fn confirm(mut self) -> Result<Keys, String> {
-        let result = self.receive().await;
+    /// Step 2, after the person says the codes match: receive the key and hand it to `keep`. The sender hears
+    /// `complete` only once `keep` has kept it; if keeping fails, it hears an abort.
+    pub async fn confirm<T, F, Fut>(mut self, keep: F) -> Result<T, String>
+    where
+        F: FnOnce(Keys) -> Fut,
+        Fut: std::future::Future<Output = Result<T, String>>,
+    {
+        let result = self.receive(keep).await;
         if result.is_err() && !matches!(self.session.state(), SessionState::Aborted) {
             if let Ok(Some(ev)) = self.session.abort(AbortReason::ProtocolError) {
                 let _ = publish(&mut self.conn, &ev).await;
@@ -191,7 +199,11 @@ impl Pending {
         result
     }
 
-    async fn receive(&mut self) -> Result<Keys, String> {
+    async fn receive<T, F, Fut>(&mut self, keep: F) -> Result<T, String>
+    where
+        F: FnOnce(Keys) -> Fut,
+        Fut: std::future::Future<Output = Result<T, String>>,
+    {
         // the sender confirms once its person approves; buzz-core checks the transcript. Junk and repeats are skipped.
         loop {
             let ev = self.next_pairing_event().await?;
@@ -218,10 +230,10 @@ impl Pending {
             }
         };
         let payload = Zeroizing::new(payload.to_string());
-        let keys = parse_payload(kind, &payload)?;
+        let kept = keep(parse_payload(kind, &payload)?).await?;
         let complete = self.session.send_complete().map_err(|_| "The pairing couldn't finish.".to_string())?;
         publish(&mut self.conn, &complete).await?;
-        Ok(keys)
+        Ok(kept)
     }
 
     /// The person declined (codes differ, or cancel): tell the sender.
@@ -246,13 +258,13 @@ pub async fn pair_start<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>
         return Err("This device already has a key. Remove it in Settings first.".into());
     }
     // one pairing at a time: a new start ends the old one (the lock is not held while connecting, so Cancel answers)
-    let old = pairing.0.lock().await.take();
+    let old = pairing.pending.lock().await.take();
     if let Some(old) = old {
         old.cancel(false).await;
     }
     let pending = start(&link).await?;
     let sas = pending.sas().to_string();
-    if let Some(raced) = pairing.0.lock().await.replace(pending) {
+    if let Some(raced) = pairing.pending.lock().await.replace(pending) {
         raced.cancel(false).await;
     }
     Ok(Started { sas })
@@ -260,14 +272,27 @@ pub async fn pair_start<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>
 
 #[tauri::command]
 pub async fn pair_confirm<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, pairing: State<'_, PairState>) -> Result<KeyInfo, String> {
-    let pending = pairing.0.lock().await.take().ok_or_else(|| "No pairing is waiting. Start again.".to_string())?;
-    let received = pending.confirm().await?;
-    keys.install(&app, received).await
+    let pending = pairing.pending.lock().await.take().ok_or_else(|| "No pairing is waiting. Start again.".to_string())?;
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    *pairing.receiving.lock().await = Some(stop);
+    let keys = keys.inner();
+    let app2 = app.clone();
+    let result = tokio::select! {
+        r = pending.confirm(|received| async move { keys.install(&app2, received).await }) => r,
+        // Cancel while waiting: the socket goes with the pairing, so the sender stops hearing from this device
+        _ = stopped => Err("The pairing was stopped. Nothing was kept.".to_string()),
+    };
+    pairing.receiving.lock().await.take();
+    result
 }
 
 #[tauri::command]
 pub async fn pair_cancel(pairing: State<'_, PairState>, codes_differ: bool) -> Result<(), String> {
-    if let Some(pending) = pairing.0.lock().await.take() {
+    if let Some(stop) = pairing.receiving.lock().await.take() {
+        let _ = stop.send(());
+    }
+    let pending = pairing.pending.lock().await.take();
+    if let Some(pending) = pending {
         pending.cancel(codes_differ).await;
     }
     Ok(())
