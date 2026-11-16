@@ -145,3 +145,16 @@ describe("changed code shows the card again, in both modes", () => {
     expect(runDecision(mode, status, under)).toBe(out);
   });
 });
+
+describe("which frame kit an applet gets", () => {
+  it("the note renderer only for code that imports Note (by name, or the whole kit)", async () => {
+    const { usesNote } = await import("./code");
+    expect(usesNote('import { Note, vault } from "parachute";')).toBe(true);
+    expect(usesNote("import {\n  List,\n  Note,\n} from 'parachute'")).toBe(true);
+    expect(usesNote('import * as P from "parachute";')).toBe(true);
+    expect(usesNote('import P from "parachute";')).toBe(true);
+    expect(usesNote('import { List, Days } from "parachute";\nconst Note = 1;')).toBe(false);
+    expect(usesNote('import { NoteLike } from "parachute";')).toBe(false);
+    expect(usesNote('import { useState } from "react";\nimport { vault } from "parachute";')).toBe(false);
+  });
+});

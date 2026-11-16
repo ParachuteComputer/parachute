@@ -1,0 +1,57 @@
+/* The parts (src/kit/parts.tsx), built only on the theme's tokens (src/theme/theme.ts): the look of an old almanac,
+   ink rules and type rather than boxes, one accent (design/kit/WHY.md). Every class starts `pa-`, so an applet's own
+   CSS can sit beside it. Nothing moves, nothing loads. */
+.pa-days { display: block; margin: 0 0 var(--gap); color: var(--text); }
+.pa-days svg { display: block; height: calc(var(--size) * 3.6); width: auto; max-width: 100%; }
+.pa-days .pa-mark { fill: var(--text); }
+.pa-days .pa-base { fill: var(--muted); }
+.pa-days .pa-today { fill: var(--accent); }
+.pa-days figcaption, .pa-days-label { margin-top: 2px; font: italic calc(var(--size) * .82) var(--serif); color: var(--muted); }
+
+.pa-list { margin: 0 0 var(--gap); }
+.pa-list-label { margin: 0 0 4px; font: italic 400 calc(var(--size) * 1.02) var(--serif); color: var(--muted); }
+.pa-list ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--text); }
+.pa-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0 12px; width: 100%; padding: calc(var(--gap) * .6) 0;
+  border: 0; border-bottom: 1px dotted var(--muted); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+button.pa-row:active { background: color-mix(in srgb, var(--line) 40%, transparent); }
+div.pa-row { cursor: default; }
+.pa-row-mark { grid-row: 1 / 3; display: inline-grid; place-items: center; width: 2.3em; height: 2.3em; border: 1px solid var(--text); border-radius: 50%;
+  box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 4px var(--line); background: var(--surface); font: calc(var(--size) * 1.15) var(--serif); font-variant-emoji: text; }
+.pa-row-title { grid-column: 2; font: 500 calc(var(--size) * 1.2)/1.3 var(--serif); overflow-wrap: anywhere; }
+.pa-row-meta { grid-column: 2; font-size: calc(var(--size) * .82); color: var(--muted); overflow-wrap: anywhere; }
+.pa-row-aside { grid-column: 3; grid-row: 1; font: italic calc(var(--size) * .88) var(--serif); color: var(--muted); white-space: nowrap; }
+.pa-row:not(:has(.pa-row-mark)) { grid-template-columns: 1fr auto; }
+.pa-row:not(:has(.pa-row-mark)) .pa-row-title, .pa-row:not(:has(.pa-row-mark)) .pa-row-meta { grid-column: 1; }
+.pa-row:not(:has(.pa-row-mark)) .pa-row-aside { grid-column: 2; }
+
+.pa-card { margin: 0 0 var(--gap); padding: calc(var(--pad) * .8) var(--pad); background: var(--surface); border: 1px solid var(--text); box-shadow: 3px 3px 0 var(--line); }
+.pa-card-title { margin: 0 0 2px; font: 600 calc(var(--size) * 1.06) var(--serif); }
+.pa-card > :last-child { margin-bottom: 0; }
+.pa-card p { margin: 0 0 6px; color: var(--muted); }
+
+.pa-field { display: grid; gap: 2px; margin: 0 0 var(--gap); }
+.pa-field-label { font: italic calc(var(--size) * .94) var(--serif); color: var(--muted); }
+.pa-field-row { display: flex; align-items: end; gap: 12px; }
+.pa-field input { flex: 1; min-width: 0; padding: 6px 0; border: 0; border-bottom: 1px solid var(--text); border-radius: 0; background: none;
+  font: calc(var(--size) * 1.18) var(--serif); color: var(--text); outline: none; }
+.pa-field input:focus { border-bottom-width: 2px; padding-bottom: 5px; }
+.pa-field-action { padding: 6px 16px; border: 1px solid var(--text); border-radius: 999px; background: var(--text); color: var(--bg);
+  font: 600 calc(var(--size) * .88) var(--sans); cursor: pointer; }
+.pa-field-action:disabled { opacity: .5; cursor: default; }
+
+.pa-empty { display: grid; justify-items: center; gap: 4px; padding: var(--gap) 0; color: var(--muted); font: italic calc(var(--size) * 1.06) var(--serif); text-align: center; }
+.pa-empty p { margin: 0; }
+.pa-sprig { width: 110px; height: 36px; color: var(--accent); }
+
+.pa-note { font: calc(var(--size) * 1.1)/1.6 var(--serif); color: var(--text); overflow-wrap: anywhere; }
+.pa-note h1 { margin: 0 0 6px; font: 400 calc(var(--size) * 2.3)/1.1 var(--serif); }
+.pa-note h1::first-letter { color: var(--accent); }
+.pa-note h2 { margin: calc(var(--gap) * 1.3) 0 4px; font: 600 calc(var(--size) * .75) var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.pa-note h3 { margin: var(--gap) 0 2px; font: 600 calc(var(--size) * 1.05) var(--serif); }
+.pa-note ul, .pa-note ol { padding-left: 1.4em; }
+.pa-note a { color: var(--text); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; cursor: pointer; }
+.pa-note blockquote { margin: var(--gap) 0; padding: 0 0 0 14px; border-left: 3px double var(--text); font-style: italic; color: var(--muted); }
+.pa-note code, .pa-note pre { font-family: var(--mono); font-size: .88em; }
+.pa-note pre { overflow-x: auto; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); }
+.pa-note table { border-collapse: collapse; } .pa-note td, .pa-note th { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.pa-note img { max-width: 100%; }

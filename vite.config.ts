@@ -10,6 +10,15 @@ const csp = JSON.parse(readFileSync(new URL("./src-tauri/tauri.conf.json", impor
 const cspHeader = typeof csp === "string" ? csp : csp ? Object.entries(csp).map(([k, v]) => `${k} ${v}`).join("; ") : null;
 const headers = cspHeader ? { "Content-Security-Policy": cspHeader } : undefined;
 
+// The note renderer lives in this repo (packages/surface-render, copied from parachute-surface; AUDIT.md), under its
+// published name, so its imports read the same. Every build below (the app, the frame, the kits) resolves it here.
+const sr = (p: string) => new URL(`./packages/surface-render/${p}`, import.meta.url).pathname;
+const alias = [
+  { find: /^@openparachute\/surface-render\/(styles\.css|rich-notes-kit\.css)$/, replacement: sr("$1") },
+  { find: /^@openparachute\/surface-render\/(\w+)$/, replacement: sr("src/$1/index.ts") },
+  { find: /^@openparachute\/surface-render$/, replacement: sr("src/index.ts") },
+];
+
 // Code the app puts inside sealed frames, each bundled once to an IIFE string (src/applet/kits): surface-client's
 // VaultClient (from the Uni app's vite.config.ts), and React for applets written as TSX/JSX modules.
 function iifeKit(id: string, entry: string, name: string): Plugin {
@@ -19,13 +28,18 @@ function iifeKit(id: string, entry: string, name: string): Plugin {
     async load(resolved) {
       if (resolved !== `\0${id}`) return null;
       const out = await build({
-        configFile: false, logLevel: "silent",
+        configFile: false, logLevel: "silent", resolve: { alias },
         define: { "process.env.NODE_ENV": JSON.stringify("production") },
-        build: { write: false, minify: true, lib: { entry: new URL(entry, import.meta.url).pathname, formats: ["iife"], name } },
+        plugins: [react()],
+        build: { write: false, minify: true, cssCodeSplit: false, lib: { entry: new URL(entry, import.meta.url).pathname, formats: ["iife"], name } },
       });
       const result = Array.isArray(out) ? out[0] : out;
-      const code = "output" in result ? result.output[0].code : "";
-      return `export default ${JSON.stringify(code)};`;
+      const files = "output" in result ? result.output : [];
+      const code = files.flatMap((f) => (f.type === "chunk" ? [f.code] : []))[0] ?? "";
+      // the parts' styles go in with the script (the frame's CSP allows inline styles, and loads nothing)
+      const css = files.filter((f) => f.type === "asset" && f.fileName.endsWith(".css")).map((f) => (f.type === "asset" ? String(f.source) : "")).join("\n");
+      const withCss = css ? `(function(){var s=document.createElement("style");s.setAttribute("data-parachute-parts","");s.textContent=${JSON.stringify(css)};document.head.appendChild(s)})();\n${code}` : code;
+      return `export default ${JSON.stringify(withCss)};`;
     },
   };
 }
@@ -39,7 +53,7 @@ function frameKit(): Plugin {
     async load(resolved) {
       if (resolved !== `\0${id}`) return null;
       const out = await build({
-        configFile: false, logLevel: "silent", plugins: [react()],
+        configFile: false, logLevel: "silent", plugins: [react()], resolve: { alias },
         define: { "process.env.NODE_ENV": JSON.stringify("production") },
         build: { write: false, minify: true, cssCodeSplit: false, lib: { entry: new URL("./src/frame/entry.tsx", import.meta.url).pathname, formats: ["iife"], name: "__ParachuteFrame" } },
       });
@@ -53,7 +67,8 @@ function frameKit(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), iifeKit("virtual:vault-client-kit", "./src/applet/kits/vaultClientEntry.ts", "__UniVC"), iifeKit("virtual:react-kit", "./src/applet/kits/reactEntry.ts", "__ParachuteReact"), frameKit()],
+  plugins: [react(), iifeKit("virtual:vault-client-kit", "./src/applet/kits/vaultClientEntry.ts", "__UniVC"), iifeKit("virtual:react-kit", "./src/applet/kits/reactEntry.ts", "__ParachuteReact"), iifeKit("virtual:react-note-kit", "./src/applet/kits/reactNoteEntry.ts", "__ParachuteReactNote"), frameKit()],
+  resolve: { alias },
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   clearScreen: false,
   server: { port: 1420, strictPort: true, headers },

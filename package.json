@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@openparachute/surface-client": "0.3.7",
-    "@openparachute/surface-render": "0.3.1",
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-barcode-scanner": "2.4.6",
     "@tauri-apps/plugin-deep-link": "2.4.5",
@@ -34,12 +33,14 @@
     "@playwright/test": "1.65.0",
     "@tauri-apps/cli": "2.11.5",
     "@testing-library/react": "^16.1.0",
+    "@types/mdast": "^4.0.4",
     "@types/node": "^22",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.3.0",
     "jsdom": "^25.0.1",
     "typescript": "~5.8.0",
+    "unified": "^11.0.5",
     "vite": "^6.2.0",
     "vitest": "^3.2.0"
   }

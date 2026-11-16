@@ -11,6 +11,9 @@ One app for your vaults and the applets that grow on them.
   kinds of note it opens), its content is the code: one TSX or JSX module, or an HTML page. Any chat AI with the
   Parachute MCP can make one by writing that note: see [docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md). It runs
   sealed, only after you allow it, and changed code asks again.
+- **The kit and the look.** An applet imports `parachute`: the data calls (in record words), and a few parts to build a
+  screen from (a rich note, a tally of days, a list, a card, a field, an empty state). The whole app and every applet
+  follow one theme note in your home vault ([docs/THEME.md](docs/THEME.md)); with none, the built-in one.
 - **Open with.** A note's type is its tag. Tap a note and it opens in the applet that claims its type, or in the plain
   vault view, which opens anything. When two applets claim a type, Parachute asks once. Your choices stay on your device.
 

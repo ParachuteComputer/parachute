@@ -6,7 +6,8 @@ quiet sans.
 
 ## The note
 
-`Parachute/Theme` in your home vault, tagged `parachute-theme`. The theme sits in its `metadata.theme`:
+`Parachute/Theme` in your home vault, tagged `parachute-theme`. The theme sits in its `fields.theme` (on a hub
+before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
 
 ```json
 {
@@ -44,7 +45,8 @@ it uses the built-in theme. Delete the note to go back to it.
 
 ## In an applet
 
-Each value is a CSS variable in the applet's frame: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`,
+The parts (`Note`, `Days`, `List`, `Card`, `Field`, `Empty`) are drawn on these values, so they follow the theme with
+no work. Each value is also a CSS variable in the applet's frame: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`,
 `--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. Write your CSS on
 these, and the applet changes with the theme. `theme.get()` and `theme.on(cb)` give the same values as an object
 ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)).

@@ -37,8 +37,8 @@ test("a TSX applet written with one MCP create-note call shows, asks, and runs a
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(frame(page).getByRole("heading", { name: "Recipe cards" })).toBeVisible();
     // its React state, filled from the vault through the kit
-    await expect(frame(page).getByRole("listitem")).toHaveCount(2);
-    expect((await frame(page).getByRole("listitem").allTextContents()).sort()).toEqual(["Rice and beans", "Tomato toast"]);
+    await expect(frame(page).locator(".pa-row-title")).toHaveCount(2);
+    expect((await frame(page).locator(".pa-row-title").allTextContents()).sort()).toEqual(["Rice and beans", "Tomato toast"]);
 
     // the code changes (one update-note call): the card shows again before the new version runs
     const cur = await api(hubState(), "GET", `notes?id=${id}`);
@@ -48,6 +48,60 @@ test("a TSX applet written with one MCP create-note call shows, asks, and runs a
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await page.getByRole("button", { name: "Allow this version" }).click();
     await expect(frame(page).getByRole("heading", { name: "Recipe cards, changed" })).toBeVisible();
+  });
+});
+
+test("the guide's example on the parts: a recipe drawn richly by Note, its links kept inside the applet, and Field adding one", async ({ page }) => {
+  const linked = await api(hubState(), "POST", "notes", { path: "Recipes/Linked", tags: ["recipe"], content: "# Linked\n\nGood with [[Rice and beans]]. More on [the web](https://example.com/soup).\n" });
+  await written(ARGS, async () => {
+    await openChip(page, /Recipe cards/);
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = frame(page);
+    // the parts, in the app's look: the tally, the field, the list
+    await expect(app.getByRole("img", { name: /changed, the last four weeks/ })).toBeVisible();
+    await expect(app.locator(".pa-row-title")).toHaveCount(3);
+    expect(await app.locator(".pa-row-title").first().evaluate((e) => getComputedStyle(e).fontFamily)).toContain("Iowan Old Style");
+    // Note draws a recipe as the note view does: rich, with its servings
+    await app.getByRole("button", { name: /^Tomato toast/ }).click();
+    await expect(app.getByRole("region", { name: "Recipe" }).getByRole("heading", { name: "Tomato toast" })).toBeVisible();
+    await expect(app.getByRole("button", { name: "Start cooking" })).toBeVisible();
+    // a wikilink goes to onLink (here: that recipe); a web link goes nowhere, and the applet stays
+    const here = page.url();
+    await app.getByRole("button", { name: /^Linked/ }).click();
+    await app.getByRole("link", { name: "Rice and beans" }).click();
+    await expect(app.getByRole("region", { name: "Recipe" }).getByRole("heading", { name: "Rice and beans" })).toBeVisible();
+    await app.getByRole("button", { name: /^Linked/ }).click();
+    await app.getByRole("link", { name: "the web" }).click();
+    await page.waitForTimeout(300);
+    expect(page.url()).toBe(here);
+    await expect(page.getByText("tried to leave its sandbox")).toHaveCount(0);
+    await expect(app.getByRole("heading", { name: "Recipe cards" })).toBeVisible();
+    // Field adds one, through createRecord, and it opens
+    await app.getByLabel("New recipe").fill("Barley stew");
+    await app.getByRole("button", { name: "Add" }).click();
+    await expect(app.getByRole("region", { name: "Recipe" }).getByRole("heading", { name: "Barley stew" })).toBeVisible();
+    const made = await api(hubState(), "GET", `notes?id=${encodeURIComponent("Recipes/Barley stew")}`);
+    expect(made.tags).toContain("recipe");
+    await api(hubState(), "DELETE", `notes/${made.id}`);
+  }).finally(() => api(hubState(), "DELETE", `notes/${linked.id}`));
+});
+
+test("Note keeps a plain note's links inside the applet: a wikilink and a web link go to onLink, and the frame never moves", async ({ page }) => {
+  const body = 'import { Note } from "parachute";\nexport default () => <main><Note path="Notes/Plan v1.2" body={"# Plain\\n\\nSee [[Rice and beans]] and [the web](https://example.com/x)."} onLink={(t) => { document.body.dataset.link = t; }} /></main>;';
+  const args = { ...ARGS, path: "Applets/Plain note", fields: { applet: { ...(ARGS.fields.applet as object), id: "plain-note", name: "Plain note" } }, body };
+  await written(args, async () => {
+    await openChip(page, /Plain note/);
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = frame(page);
+    await expect(app.getByRole("heading", { name: "Plain" })).toBeVisible();
+    const here = page.url();
+    await app.getByRole("link", { name: "Rice and beans" }).click();
+    await expect(app.locator("body")).toHaveAttribute("data-link", "Rice and beans");
+    await app.getByRole("link", { name: "the web" }).click();
+    await expect(app.locator("body")).toHaveAttribute("data-link", "https://example.com/x");
+    expect(page.url()).toBe(here);
+    await expect(page.getByText("tried to leave its sandbox")).toHaveCount(0);
+    await expect(app.getByRole("heading", { name: "Plain" })).toBeVisible();
   });
 });
 

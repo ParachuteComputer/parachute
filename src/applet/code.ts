@@ -120,7 +120,8 @@ const FAILURE = String.raw`(function () {
 const LOADER_HEAD = String.raw`(function () {
   var root = document.getElementById("root"), fail = window.__parachuteFail;
   var M = window.__ParachuteModules || {};
-  var mods = { react: M.react, "react-dom": M["react-dom"], "react-dom/client": M["react-dom/client"], "react/jsx-runtime": M["react/jsx-runtime"], parachute: window.parachute };
+  var kit = M.parts ? Object.freeze(Object.assign({}, window.parachute, M.parts)) : window.parachute;
+  var mods = { react: M.react, "react-dom": M["react-dom"], "react-dom/client": M["react-dom/client"], "react/jsx-runtime": M["react/jsx-runtime"], parachute: kit };
   function require(name) {
     if (Object.prototype.hasOwnProperty.call(mods, name) && mods[name]) return mods[name];
     throw new Error("it imports " + name + ", and an applet can import only " + Object.keys(mods).join(", "));
@@ -136,6 +137,10 @@ const LOADER_TAIL = String.raw`
     M["react-dom/client"].createRoot(root).render(M.react.createElement(C));
   }).catch(fail);
 })();`;
+
+/** Does this module import the `Note` part (by name, or the whole kit as a namespace)? Then its frame gets the note renderer. */
+export const usesNote = (source: string) =>
+  /import\s*(?:\*\s*as\s+\w+|[^;]*\{[^}]*\bNote\b[^}]*\})\s*from\s*["']parachute["']/.test(source) || /import\s+[\w$]+\s*(?:,[^;]*)?from\s*["']parachute["']/.test(source);
 
 /** The page a TSX/JSX applet runs as: a root, React, then its module. `reactSource` sets `window.__ParachuteModules`. */
 export function modulePage(js: string, reactSource: string): string {
