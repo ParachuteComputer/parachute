@@ -186,22 +186,32 @@ impl Pending {
         }
     }
 
-    /// The next pairing event, unless the person stops first (a dropped stop sender is not a stop).
-    async fn next_or_stop(&mut self, stop: &mut oneshot::Receiver<()>) -> Result<Event, String> {
-        tokio::select! {
-            ev = self.next_pairing_event() => ev,
-            Ok(()) = &mut *stop => Err(STOPPED.into()),
+    /// The next pairing event, unless the person stops first. A dropped stop sender is not a stop: the finished
+    /// receiver is put away then, never polled again (a oneshot polled after it completes panics).
+    async fn next_or_stop(&mut self, stop: &mut Option<oneshot::Receiver<()>>) -> Result<Event, String> {
+        let stopped = match stop.as_mut() {
+            None => return self.next_pairing_event().await,
+            Some(rx) => tokio::select! {
+                ev = self.next_pairing_event() => return ev,
+                r = rx => r.is_ok(),
+            },
+        };
+        if stopped {
+            return Err(STOPPED.into());
         }
+        *stop = None;
+        self.next_pairing_event().await
     }
 
     /// Step 2, after the person says the codes match: receive the key and hand it to `keep`. The sender hears
     /// `complete` only once `keep` has kept it; if keeping fails, it hears an abort. `stop` ends the wait for the
     /// sender (the sender hears the person declined); once the key has arrived, keeping it is not interrupted.
-    pub async fn confirm<T, F, Fut>(mut self, keep: F, mut stop: oneshot::Receiver<()>) -> Result<T, String>
+    pub async fn confirm<T, F, Fut>(mut self, keep: F, stop: oneshot::Receiver<()>) -> Result<T, String>
     where
         F: FnOnce(Keys) -> Fut,
         Fut: std::future::Future<Output = Result<T, String>>,
     {
+        let mut stop = Some(stop);
         let result = self.receive(keep, &mut stop).await;
         if let Err(why) = &result {
             let reason = if why == STOPPED { AbortReason::UserDenied } else { AbortReason::ProtocolError };
@@ -215,7 +225,7 @@ impl Pending {
         result
     }
 
-    async fn receive<T, F, Fut>(&mut self, keep: F, stop: &mut oneshot::Receiver<()>) -> Result<T, String>
+    async fn receive<T, F, Fut>(&mut self, keep: F, stop: &mut Option<oneshot::Receiver<()>>) -> Result<T, String>
     where
         F: FnOnce(Keys) -> Fut,
         Fut: std::future::Future<Output = Result<T, String>>,

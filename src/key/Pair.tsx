@@ -42,14 +42,14 @@ export default function Pair() {
     } catch (e) { if (live.current) { say(e); setStep("link"); } }
   }
   async function confirm() {
-    setError(null); setStep("receiving");
     const id = pairing.current;
     if (id === null) return;
+    setError(null); setStep("receiving");
     try {
       await pairConfirm(id);
       pairing.current = null;
       if (live.current) nav("/", { replace: true });
-    } catch (e) { pairing.current = null; if (live.current) { say(e); setLink(""); setStep("link"); } }
+    } catch (e) { if (pairing.current !== id) return; /* the person cancelled: nothing to report */ pairing.current = null; if (live.current) { say(e); setLink(""); setStep("link"); } }
   }
   async function cancel(codesDiffer: boolean) {
     const id = pairing.current;
