@@ -102,7 +102,7 @@ export function urlIn(url: string): string {
   return u.toString();
 }
 
-/** Does this hub have the record door? Asked once per hub; null when the answer said nothing either way. */
+/** Does this vault have the record door? Asked once per vault; null when the answer said nothing either way. */
 function doorOf(vaultApi: string, headers: HeadersInit | undefined, f: typeof fetch): Promise<Door | null> {
   const known = doors.get(vaultApi);
   if (known) return Promise.resolve(known);

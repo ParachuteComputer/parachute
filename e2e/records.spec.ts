@@ -18,7 +18,7 @@ async function readANote(page: Page) {
   await expect(ui(page).locator(".prose-note h1")).toHaveText("Tomato toast");
 }
 
-test("the app goes through the record door where the hub has one, and asks once per hub", async ({ page }) => {
+test("the app goes through the record door where the hub has one, and asks once per vault", async ({ page }) => {
   const door = await hasDoor();
   const calls = watch(page);
   await readANote(page);
