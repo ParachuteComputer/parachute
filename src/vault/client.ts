@@ -1,6 +1,7 @@
 // One VaultClient per vault record, with the token refreshed when the vault says it expired.
 import { VaultClient } from "@openparachute/surface-client";
 import { refresh } from "./oauth";
+import { recordsFetch } from "./records";
 import { findVault, updateVault, type VaultRecord } from "./store";
 import { vaultUrl } from "./address";
 
@@ -32,6 +33,8 @@ export function clientFor(rec: VaultRecord): VaultClient {
     vaultUrl: vaultUrl(rec.issuer, rec.vault),
     tokenProvider: () => findVault(rec.key)?.accessToken ?? rec.accessToken,
     onAuthError: () => refreshOnce(rec.key),
+    // notes calls go through the hub's record door when it has one (records.ts)
+    fetchImpl: recordsFetch(),
   });
   clients.set(rec.key, { at, client });
   return client;

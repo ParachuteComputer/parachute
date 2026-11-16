@@ -2,20 +2,20 @@
 // from docs/WRITE-AN-APPLET.md, and nothing else. The app then shows it, asks, transpiles and runs it.
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { api, hubState, mcp, VAULT } from "./hub";
+import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 
 const guide = readFileSync(new URL("../docs/WRITE-AN-APPLET.md", import.meta.url), "utf8");
 const example = guide.slice(guide.indexOf("## A worked example"));
 /** The create-note arguments exactly as the guide gives them. */
-const ARGS = JSON.parse(example.match(/```json\n([\s\S]*?)\n```/)![1]) as { path: string; content: string; metadata: Record<string, unknown> } & Record<string, unknown>;
+const ARGS = JSON.parse(example.match(/```json\n([\s\S]*?)\n```/)![1]) as { path: string; body: string; fields: Record<string, unknown> } & Record<string, unknown>;
 const LAID_OUT = example.match(/```tsx\n([\s\S]*?)```/)![1];
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
 async function written(args: Record<string, unknown>, run: (id: string) => Promise<void>) {
-  const note = await mcp(hubState(), "create-note", args);
+  const note = await record(hubState(), "create", args);
   try { await run(note.id as string); } finally { await api(hubState(), "DELETE", `notes/${note.id}`); }
 }
 const openChip = async (page: Page, name: RegExp) => {
@@ -24,7 +24,7 @@ const openChip = async (page: Page, name: RegExp) => {
 };
 
 test("the guide's worked example is the code it lays out", () => {
-  expect(ARGS.content).toBe(LAID_OUT);
+  expect(ARGS.body).toBe(LAID_OUT);
 });
 
 test("a TSX applet written with one MCP create-note call shows, asks, and runs after Allow", async ({ page }) => {
@@ -42,7 +42,7 @@ test("a TSX applet written with one MCP create-note call shows, asks, and runs a
 
     // the code changes (one update-note call): the card shows again before the new version runs
     const cur = await api(hubState(), "GET", `notes?id=${id}`);
-    await mcp(hubState(), "update-note", { id, content: ARGS.content.replace("<h1>Recipe cards</h1>", "<h1>Recipe cards, changed</h1>"), if_updated_at: cur.updatedAt });
+    await record(hubState(), "update", { id, body: ARGS.body.replace("<h1>Recipe cards</h1>", "<h1>Recipe cards, changed</h1>"), if_updated_at: cur.updatedAt });
     await openChip(page, /Recipe cards/);
     await expect(page.getByText("code changed since you allowed it")).toBeVisible();
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
@@ -52,7 +52,7 @@ test("a TSX applet written with one MCP create-note call shows, asks, and runs a
 });
 
 test("TSX that doesn't compile is refused with the reason, and nothing runs", async ({ page }) => {
-  const args = { ...ARGS, path: "Applets/Broken", metadata: { applet: { ...(ARGS.metadata.applet as object), id: "broken", name: "Broken" } }, content: "export default function App() { return <p>; }" };
+  const args = { ...ARGS, path: "Applets/Broken", fields: { applet: { ...(ARGS.fields.applet as object), id: "broken", name: "Broken" } }, body: "export default function App() { return <p>; }" };
   await written(args, async () => {
     await openChip(page, /Broken/);
     await expect(page.getByRole("alert")).toContainText("its code doesn't compile");
@@ -62,7 +62,7 @@ test("TSX that doesn't compile is refused with the reason, and nothing runs", as
 });
 
 test("an import the app doesn't provide stops the applet with one line saying so", async ({ page }) => {
-  const args = { ...ARGS, path: "Applets/Imports", metadata: { applet: { ...(ARGS.metadata.applet as object), id: "imports", name: "Imports" } }, content: 'import _ from "lodash";\nexport default () => <p>{_.now()}</p>;' };
+  const args = { ...ARGS, path: "Applets/Imports", fields: { applet: { ...(ARGS.fields.applet as object), id: "imports", name: "Imports" } }, body: 'import _ from "lodash";\nexport default () => <p>{_.now()}</p>;' };
   await written(args, async () => {
     await openChip(page, /Imports/);
     await page.getByRole("button", { name: "Allow" }).click();
@@ -73,13 +73,13 @@ test("an import the app doesn't provide stops the applet with one line saying so
 test("the same code run another way is new code: an extension changed alone shows the card again", async ({ page }) => {
   // as TSX the <script> below is text; as HTML it would run
   const content = 'export default function App() { return <p id="kind">tsx {"<script>document.body.append(Object.assign(document.createElement(\'b\'),{id:\'ran\'}))</script>"}</p>; }';
-  const args = { ...ARGS, path: "Applets/Poly", metadata: { applet: { ...(ARGS.metadata.applet as object), id: "poly", name: "Poly" } }, content };
+  const args = { ...ARGS, path: "Applets/Poly", fields: { applet: { ...(ARGS.fields.applet as object), id: "poly", name: "Poly" } }, body: content };
   await written(args, async (id) => {
     await openChip(page, /Poly/);
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(frame(page).locator("#kind")).toContainText("tsx");
     const cur = await api(hubState(), "GET", `notes?id=${id}`);
-    await mcp(hubState(), "update-note", { id, extension: "html", if_updated_at: cur.updatedAt });
+    await record(hubState(), "update", { id, extension: "html", if_updated_at: cur.updatedAt });
     await openChip(page, /Poly/);
     await expect(page.getByText("code changed since you allowed it")).toBeVisible();
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
@@ -87,15 +87,15 @@ test("the same code run another way is new code: an extension changed alone show
 });
 
 test("a module may await at its top, and one the browser can't parse still says why", async ({ page }) => {
-  const awaits = { ...ARGS, path: "Applets/Awaits", metadata: { applet: { ...(ARGS.metadata.applet as object), id: "awaits", name: "Awaits" } },
-    content: 'import { ready } from "parachute";\nconst ctx = await ready();\nexport default () => <h1>{ctx.applet.name} is ready</h1>;' };
+  const awaits = { ...ARGS, path: "Applets/Awaits", fields: { applet: { ...(ARGS.fields.applet as object), id: "awaits", name: "Awaits" } },
+    body: 'import { ready } from "parachute";\nconst ctx = await ready();\nexport default () => <h1>{ctx.applet.name} is ready</h1>;' };
   await written(awaits, async () => {
     await openChip(page, /Awaits/);
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(frame(page).getByRole("heading", { name: "Awaits is ready" })).toBeVisible();
   });
   // sucrase passes a repeated declaration through; the browser refuses to parse it
-  const twice = { ...ARGS, path: "Applets/Twice", metadata: { applet: { ...(ARGS.metadata.applet as object), id: "twice", name: "Twice" } }, content: "let a = 1; let a = 2;\nexport default () => <p>{a}</p>;" };
+  const twice = { ...ARGS, path: "Applets/Twice", fields: { applet: { ...(ARGS.fields.applet as object), id: "twice", name: "Twice" } }, body: "let a = 1; let a = 2;\nexport default () => <p>{a}</p>;" };
   await written(twice, async () => {
     await openChip(page, /Twice/);
     await page.getByRole("button", { name: "Allow" }).click();

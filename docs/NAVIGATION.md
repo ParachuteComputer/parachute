@@ -52,7 +52,7 @@ reached. Entries it doesn't read are kept as they are when you change the bar.
 {
   "path": "Parachute/Settings",
   "tags": ["parachute-settings"],
-  "metadata": {
+  "fields": {
     "parachute": {
       "bar": [{ "vault": "kitchen", "applet": "Applets/Recipes" }],
       "start": { "vault": "kitchen", "applet": "Applets/Home" }
@@ -61,6 +61,7 @@ reached. Entries it doesn't read are kept as they are when you change the bar.
 }
 ```
 
+That is the record as `create-record` takes it (on a hub before 0.9, `create-note`, with `metadata` for `fields`).
 `vault` is the vault's name (add `"hub": "https://…"` when two hubs hold vaults of the same name). `applet` is the
 applet note's path or id. A place that names an applet this device can't find is left off the bar, not an error.
 

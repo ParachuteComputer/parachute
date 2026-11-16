@@ -2,12 +2,12 @@
 // arguments in docs/WRITE-AN-APPLET.md, and the settings note's `start`. The app opens on it after the person's Allow.
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { api, hubState, mcp, VAULT } from "./hub";
+import { api, hubState, record, VAULT } from "./hub";
 import { ui } from "./helpers";
 
 const guide = readFileSync(new URL("../docs/WRITE-AN-APPLET.md", import.meta.url), "utf8");
 const section = guide.slice(guide.indexOf("## A home applet"), guide.indexOf("## What the person sees"));
-const ARGS = JSON.parse(section.match(/```json\n([\s\S]*?)\n```/)![1]) as { path: string; content: string } & Record<string, unknown>;
+const ARGS = JSON.parse(section.match(/```json\n([\s\S]*?)\n```/)![1]) as { path: string; body: string } & Record<string, unknown>;
 const LAID_OUT = section.match(/```tsx\n([\s\S]*?)```/)![1];
 const applet = (page: Page) => page.frameLocator("iframe.applet-frame");
 
@@ -19,11 +19,11 @@ async function settings(parachute: Record<string, unknown>) {
 async function start(page: Page) { await page.goto("about:blank"); await page.goto("/"); }
 
 test("the guide's home applet is the code it lays out", () => {
-  expect(ARGS.content).toBe(LAID_OUT);
+  expect(ARGS.body).toBe(LAID_OUT);
 });
 
 test("a home applet written only by create-note opens on start after Allow: the newest notes across vaults, and the pins", async ({ page }) => {
-  const home = await mcp(hubState(), "create-note", ARGS);
+  const home = await record(hubState(), "create", ARGS);
   const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" }, bar: [{ vault: VAULT, applet: "Applets/Recipes" }] });
   try {
     await start(page);
@@ -59,7 +59,7 @@ test("a home applet written only by create-note opens on start after Allow: the 
 });
 
 test("hostile: app.open goes nowhere without a tap, and an applet that didn't ask for app gets nothing", async ({ page }) => {
-  const home = await mcp(hubState(), "create-note", ARGS);
+  const home = await record(hubState(), "create", ARGS);
   const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" } });
   try {
     await start(page);
@@ -82,7 +82,7 @@ test("hostile: app.open goes nowhere without a tap, and an applet that didn't as
 });
 
 test("hostile: a tap that has worn off moves nothing, and a home the note no longer names waits for a tap", async ({ page }) => {
-  const home = await mcp(hubState(), "create-note", ARGS);
+  const home = await record(hubState(), "create", ARGS);
   const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" } });
   try {
     await start(page);
@@ -114,7 +114,7 @@ test("hostile: a tap that has worn off moves nothing, and a home the note no lon
 });
 
 test("Back to the home while the settings are read again still finds it running", async ({ page }) => {
-  const home = await mcp(hubState(), "create-note", ARGS);
+  const home = await record(hubState(), "create", ARGS);
   const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" } });
   try {
     await start(page);

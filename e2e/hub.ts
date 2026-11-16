@@ -68,6 +68,13 @@ export default async function globalSetup() {
   }
 }
 
+/** A token with another scope on the e2e hub (e.g. `vault:kitchen:admin`, to change what a tag is). */
+export function mintToken(scope: string): string {
+  const s = hubState();
+  const env = { ...process.env, PARACHUTE_HOME: join(s.home, "home"), PORT: new URL(s.origin).port };
+  return JSON.parse(execFileSync(BIN, ["auth", "mint-token", "--scope", scope, "--json"], { env, stdio: "pipe" }).toString()).token as string;
+}
+
 export function hubState(): HubState { return JSON.parse(readFileSync(STATE, "utf8")) as HubState; }
 
 export async function globalTeardown() {
@@ -80,6 +87,33 @@ export async function globalTeardown() {
 }
 
 /** One MCP tool call to the e2e vault, as a chat AI with the Parachute MCP makes it: JSON-RPC `tools/call` over HTTP. */
+/** Which tools the hub's MCP offers (asked once): core 0.9 has the record tools, 0.8 only the note ones. */
+let toolNames: Promise<Set<string>> | null = null;
+async function tools(state: Pick<HubState, "origin" | "token">): Promise<Set<string>> {
+  toolNames ??= fetch(`${state.origin}/vault/${VAULT}/mcp`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${state.token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+  }).then((r) => r.json()).then((b: { result: { tools: { name: string }[] } }) => new Set(b.result.tools.map((t) => t.name)));
+  return toolNames;
+}
+/** Write a record as a chat AI would: `create-record` / `update-record` in record words where the hub has them, else
+ *  the note tools with the older words (body → content, fields → metadata). The answer comes back in note words. */
+export async function record(state: Pick<HubState, "origin" | "token">, verb: "create" | "update", args: Record<string, unknown>) {
+  if ((await tools(state)).has(`${verb}-record`)) {
+    // a name the vault holds as a type goes in `types` (the record door refuses it in `tags`)
+    const kinds = await fetch(`${state.origin}/vault/${VAULT}/api/types`, { headers: { authorization: `Bearer ${state.token}` } }).then((r) => r.json()) as { name: string; kind: string }[];
+    const types = new Set(kinds.filter((k) => k.kind === "type").map((k) => k.name));
+    const tags = Array.isArray(args.tags) ? (args.tags as string[]) : null;
+    if (tags?.some((t) => types.has(t))) args = { ...args, tags: tags.filter((t) => !types.has(t)), types: tags.filter((t) => types.has(t)) };
+    const r = await mcp(state, `${verb}-record`, args);
+    const { body, fields, ...rest } = r as Record<string, unknown>;
+    return { ...rest, ...(body !== undefined ? { content: body } : {}), ...(fields !== undefined ? { metadata: fields } : {}) };
+  }
+  const { body, fields, ...rest } = args;
+  return mcp(state, `${verb}-note`, { ...rest, ...(body !== undefined ? { content: body } : {}), ...(fields !== undefined ? { metadata: fields } : {}) });
+}
+
 export async function mcp(state: Pick<HubState, "origin" | "token">, tool: string, args: Record<string, unknown>) {
   const r = await fetch(`${state.origin}/vault/${VAULT}/mcp`, {
     method: "POST",
