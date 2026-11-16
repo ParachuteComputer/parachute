@@ -10,6 +10,7 @@ package computer.parachute.app
 
 import android.app.Activity
 import android.content.Context
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -45,6 +46,11 @@ class CookieArgs {
 
 @TauriPlugin
 class KeyPlugin(private val activity: Activity) : Plugin(activity) {
+  companion object {
+    /** This run of the app (a process): a missing Keystore key seen in an earlier run is believed (see loadSecret). */
+    private val RUN: Long = System.nanoTime() xor System.currentTimeMillis() or 1L
+  }
+
   private val keyAlias = "parachute_key"
   private val prefsName = "parachute_key"
 
@@ -76,6 +82,7 @@ class KeyPlugin(private val activity: Activity) : Plugin(activity) {
       val ok = prefs().edit()
         .putString("${args.name}.ct", Base64.encodeToString(ct, Base64.NO_WRAP))
         .putString("${args.name}.iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+        .remove("${args.name}.missing")
         .commit()
       if (!ok) {
         invoke.reject("could not write the encrypted key")
@@ -94,21 +101,39 @@ class KeyPlugin(private val activity: Activity) : Plugin(activity) {
       val p = prefs()
       val ct = p.getString("${args.name}.ct", null)
       val iv = p.getString("${args.name}.iv", null)
-      val k = key(false)
       val out = JSObject()
-      if (ct == null || iv == null || k == null) {
+      if (ct == null || iv == null) {
         out.put("secret", null as String?)
         invoke.resolve(out)
         return
       }
+      val k = key(false)
+      if (k == null) {
+        // A key was kept but the Keystore key that opens it isn't there (a restore onto another phone). Through
+        // Android 11 the Keystore answers "not there" when its service is restarting, too, so there a missing key is
+        // believed only once an earlier run of the app also found it missing; until then it's a failure to retry.
+        val missingIn = p.getLong("${args.name}.missing", 0L)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && (missingIn == 0L || missingIn == RUN)) {
+          p.edit().putLong("${args.name}.missing", RUN).commit()
+          invoke.reject("the key store didn't find its key; try again")
+          return
+        }
+        out.put("secret", null as String?)
+        out.put("unreadable", true)
+        invoke.resolve(out)
+        return
+      }
+      if (p.contains("${args.name}.missing")) p.edit().remove("${args.name}.missing").commit()
       val pt = try {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, k, GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)))
         cipher.doFinal(Base64.decode(ct, Base64.NO_WRAP))
-      } catch (e: javax.crypto.AEADBadTagException) {
-        null
+      } catch (e: javax.crypto.BadPaddingException) {
+        null // includes AEADBadTagException: the tag doesn't verify
+      } catch (e: java.security.InvalidAlgorithmParameterException) {
+        null // a damaged IV (wrong length)
       } catch (e: IllegalArgumentException) {
-        null
+        null // not base64
       }
       if (pt == null) {
         // what is kept will never decrypt (its key was replaced, or it was damaged): only removing it helps
@@ -129,7 +154,7 @@ class KeyPlugin(private val activity: Activity) : Plugin(activity) {
   fun clearSecret(invoke: Invoke) {
     try {
       val args = invoke.parseArgs(NameArgs::class.java)
-      prefs().edit().remove("${args.name}.ct").remove("${args.name}.iv").commit()
+      prefs().edit().remove("${args.name}.ct").remove("${args.name}.iv").remove("${args.name}.missing").commit()
       val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
       if (ks.containsAlias(keyAlias)) ks.deleteEntry(keyAlias)
       invoke.resolve()

@@ -129,7 +129,7 @@ async fn a_hub_without_the_door_and_a_hub_in_trouble_are_told_apart() {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let keys = nostr::Keys::generate();
     // Cloud answers the door's address with its web page; an older hub with 404: no door, sign in another way
-    for (status, body) in [("200 OK", "<!doctype html><title>app</title>"), ("404 Not Found", "not found")] {
+    for (status, body) in [("200 OK", "<!doctype html><title>app</title>"), ("200 OK", "{\"error\":\"not found\"}"), ("404 Not Found", "not found"), ("302 Found", ""), ("403 Forbidden", "behind a login")] {
         let o = door::hub_origin(&answering(status, body).await).unwrap();
         assert_eq!(door::sign_in(&o, "/", &keys).await.unwrap_err().code, "no_door", "{status}");
     }

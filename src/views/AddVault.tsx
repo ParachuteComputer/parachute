@@ -61,7 +61,7 @@ export default function AddVault({ first = false }: { first?: boolean }) {
           <button className="primary" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in with your key"}</button>
           <button className="secondary" type="button" disabled={busy} onClick={() => void go(false)}>Other ways to sign in</button>
         </> : <>
-          <button className="primary" type="submit" disabled={busy || reading}>{busy ? "Opening your hub…" : "Sign in"}</button>
+          <button className="primary" type="submit" disabled={busy || reading}>{busy ? "Opening your hub…" : reading ? "Reading your key…" : "Sign in"}</button>
           {keysHere() && key === null && <p className="small"><Link to="/key">Sign in with your Nostr key instead</Link></p>}
         </>}
       </form>
