@@ -5,8 +5,8 @@
 //
 //   detect    once per vault: `GET <vault>/api/records?limit=1`. 200 is the door; 404 is no door. Anything
 //             else (no network, a refused token) decides nothing: that call goes to /api/notes, and the next one asks
-//             again. A missing record is also a 404 on the door, so a 404 is only read as "no door" on this probe, and a 200
-//             only as the door when it is JSON (a proxy's page for any address is not).
+//             again. A missing record is also a 404 on the door, so a 404 is only read as "no door" on this probe. A 405, or a 200
+//             that isn't JSON (a proxy's page for any address), is no door too; only a JSON 200 is the door.
 //   words     in: content→body, metadata→fields, notes→records, content_edit→body_edit; include_content→include_body,
 //             include_metadata→include_fields, content_offset/length→body_offset/length. Out: the reverse, and a
 //             record's `types` go back into its `tags` (the door lists a type only under `types`; the app's checks read
@@ -113,7 +113,8 @@ function doorOf(vaultApi: string, headers: HeadersInit | undefined, f: typeof fe
       const auth = new Headers(headers).get("authorization");
       const r = await f(`${vaultApi}/records?limit=1`, { headers: auth ? { authorization: auth } : {} });
       const isJson = (r.headers.get("content-type") ?? "").includes("json");
-      const door: Door | null = r.ok && isJson ? "records" : r.status === 404 ? "notes" : null;
+      // no door: a 404 or 405 for the route, or a page that isn't JSON (a proxy's answer for any address)
+      const door: Door | null = r.ok && isJson ? "records" : r.status === 404 || r.status === 405 || (r.ok && !isJson) ? "notes" : null;
       if (door) doors.set(vaultApi, door);
       return door;
     } catch { return null; }

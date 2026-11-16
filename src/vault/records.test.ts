@@ -58,6 +58,13 @@ describe("detection, once per vault", () => {
     expect(seen).toEqual(["/records?limit=1", "/notes?tag=a", "/records?limit=1", "/records?tag=b"]);
   });
 
+  it("a proxy's page for any address (a 200 that isn't JSON) is no door, decided once", async () => {
+    const seen: string[] = [];
+    const f = recordsFetch(hub(true, seen, () => new Response("<html>hi</html>", { status: 200, headers: { "content-type": "text/html" } })));
+    await f(`${V}/notes?tag=a`); await f(`${V}/notes?tag=b`);
+    expect(seen).toEqual(["/records?limit=1", "/notes?tag=a", "/notes?tag=b"]);
+  });
+
   it("anything not under /api/notes is left alone", async () => {
     const seen: string[] = [];
     await recordsFetch(hub(true, seen))(`${V}/tags`);

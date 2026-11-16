@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { build, defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -12,7 +13,7 @@ const headers = cspHeader ? { "Content-Security-Policy": cspHeader } : undefined
 
 // The note renderer lives in this repo (packages/surface-render, copied from parachute-surface; AUDIT.md), under its
 // published name, so its imports read the same. Every build below (the app, the frame, the kits) resolves it here.
-const sr = (p: string) => new URL(`./packages/surface-render/${p}`, import.meta.url).pathname;
+const sr = (p: string) => fileURLToPath(new URL(`./packages/surface-render/${p}`, import.meta.url));
 const alias = [
   { find: /^@openparachute\/surface-render\/(styles\.css|rich-notes-kit\.css)$/, replacement: sr("$1") },
   { find: /^@openparachute\/surface-render\/(\w+)$/, replacement: sr("src/$1/index.ts") },

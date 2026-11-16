@@ -153,6 +153,8 @@ describe("which frame kit an applet gets", () => {
     expect(usesNote("import {\n  List,\n  Note,\n} from 'parachute'")).toBe(true);
     expect(usesNote('import * as P from "parachute";')).toBe(true);
     expect(usesNote('import P from "parachute";')).toBe(true);
+    expect(usesNote('import {\n  List, // rows {a}\n  Note,\n} from "parachute";')).toBe(true);
+    expect(usesNote('// import { Note } from "parachute"\nimport { List } from "parachute";')).toBe(false);
     expect(usesNote('import { List, Days } from "parachute";\nconst Note = 1;')).toBe(false);
     expect(usesNote('import { NoteLike } from "parachute";')).toBe(false);
     expect(usesNote('import { useState } from "react";\nimport { vault } from "parachute";')).toBe(false);

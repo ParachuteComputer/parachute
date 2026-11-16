@@ -8,8 +8,7 @@ import { listVaults } from "../vault/store";
 import { barNow } from "./homeSettings";
 
 /** Notes that are the app's own or an applet's code: never in a list of what the person wrote lately. */
-const own = (n: Note) => isAppOwn(n as Note & { extension?: string })
-  || /^\.parachute\//i.test(n.path ?? "");
+const own = (n: Note) => isAppOwn(n as Note & { extension?: string });
 
 /** A tap in the applet now: live user activation in the shell's window, with the focus in an applet's frame. */
 const tappingInApplet = () => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true
