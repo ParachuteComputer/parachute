@@ -13,7 +13,7 @@
 //   open on start the shell's rule, in start.ts: never on the record alone.
 import { useSyncExternalStore } from "react";
 import { appletsNow, refreshApplets, subscribeApplets } from "../applet/useApplets";
-import { plain } from "../applet/contract";
+import { plain, stripExt } from "../applet/contract";
 import { clientFor } from "../vault/client";
 import { listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
 import { homeVault } from "./frameSource";
@@ -61,7 +61,6 @@ export function placeFor(rec: VaultRecord, appletPath: string, list: readonly Va
   return { vault: rec.vault, ...(twice ? { hub: originOf(rec.issuer) } : {}), applet: appletPath };
 }
 
-const stripExt = (p: string) => p.replace(/\.(html|tsx|jsx)$/i, "");
 /** The applet a place names, as this device last read that vault's applets; null when it isn't there (or not read yet). */
 function findLive(p: Place): Found | null {
   const rec = vaultFor(p);
@@ -83,9 +82,19 @@ export async function readPlaces(s: Settings): Promise<void> {
 type Kept = { vault: string; settings: Settings; noteId: string | null; updatedAt: string | null; found: Record<string, Found> };
 const storage = () => (typeof localStorage === "undefined" ? null : localStorage);
 const keyOf = (p: Place) => `${p.vault}|${p.hub ?? ""}|${p.applet}`;
+let keptRaw: string | null | undefined, keptParsed: Kept | null = null;
+/** The kept copy, parsed once per change of what is stored. */
 function keptNow(): Kept | null {
+  let raw: string | null = null;
+  try { raw = storage()?.getItem(SETTINGS_KEY) ?? null; } catch { raw = null; }
+  if (raw === keptRaw) return keptParsed;
+  keptRaw = raw;
+  keptParsed = parseKept(raw);
+  return keptParsed;
+}
+function parseKept(raw: string | null): Kept | null {
   try {
-    const v = JSON.parse(storage()?.getItem(SETTINGS_KEY) ?? "null") as Kept | null;
+    const v = JSON.parse(raw ?? "null") as Kept | null;
     if (!v || typeof v.vault !== "string") return null;
     const found: Record<string, Found> = {};
     if (plain(v.found)) for (const [k, f] of Object.entries(v.found)) if (plain(f) && line(f.vault, 200) && line(f.noteId, 300) && typeof f.name === "string" && typeof f.glyph === "string" && typeof f.href === "string") found[k] = f as Found;
@@ -120,8 +129,10 @@ export function settingsNow(): Settings {
   return k && home && k.vault === home.key ? k.settings : { ...EMPTY };
 }
 
-/** Whether the settings note was read from the home vault this session (not only the copy kept from before). */
-export const settingsReadNow = () => state.read === "read";
+/** Whether the settings note was read from the home vault this session (not only the copy kept from before). Stays
+ *  true while a later read runs, so a quick Back to the home doesn't find it "not read"; a read that fails clears it. */
+let readThisSession: string | null = null;
+export const settingsReadNow = () => readThisSession !== null && readThisSession === homeVault()?.key;
 
 /** The settings note: the one note tagged so, or the one at the usual path when there are more. */
 const pick = (rows: { path?: string | null }[]) => (rows.length === 1 ? rows[0] : rows.find((r) => stripExt(r.path ?? "") === SETTINGS_PATH) ?? null);
@@ -142,7 +153,8 @@ export async function readSettings(): Promise<void> {
     await readPlaces(settings);
     if (mine !== generation || homeVault()?.key !== home.key) return;
     // what each place names now; a place in a vault whose applets couldn't be read keeps what it named before
-    const before = keptNow()?.vault === home.key ? keptNow()!.found : {};
+    const was = keptNow();
+    const before = was?.vault === home.key ? was.found : {};
     const found: Record<string, Found> = {};
     for (const p of [...settings.bar, ...(settings.start ? [settings.start] : [])]) {
       const rec = vaultFor(p);
@@ -150,9 +162,11 @@ export async function readSettings(): Promise<void> {
       if (f) found[keyOf(p)] = f;
     }
     keepNow({ vault: home.key, settings, noteId: n?.id ?? null, updatedAt: (n as { updatedAt?: string } | null)?.updatedAt ?? null, found });
+    readThisSession = home.key;
     bump({ read: "read" });
   } catch {
     if (mine !== generation) return;
+    readThisSession = null;
     bump({ read: "unreachable" });
   }
 }
@@ -192,14 +206,20 @@ function pinRaw(raw: Raw, match: (p: Place) => boolean, add: Place | null): Raw 
   if (onBar.size >= MAX_PLACES) throw new Error(`The bar holds ${MAX_PLACES} places: unpin one first.`);
   return { ...raw, bar: [...raw.bar, add] };
 }
-export const pin = (p: Place, on: boolean) => changeSettings((r) => pinRaw(r, (x) => same(x, p), on ? p : null));
-/** Swap a place with the next one this device shows, left or right (places it can't find don't count). */
+/** The raw entries the bar shows, as barNow picks them: found here, not the home, the first name of each applet. */
+function shownIndices(r: Raw): number[] {
+  const start = placeOf(r.start), home = start ? find(start) : null;
+  const seen = new Set<string>(home ? [`${home.vault}|${home.noteId}`] : []);
+  const out: number[] = [];
+  r.bar.forEach((x, i) => { const p = placeOf(x), f = p ? find(p) : null; if (f && out.length < MAX_PLACES && !seen.has(`${f.vault}|${f.noteId}`)) { seen.add(`${f.vault}|${f.noteId}`); out.push(i); } });
+  return out;
+}
+/** Swap a place with its neighbour on the bar as shown, left or right (entries the bar doesn't show don't count). */
 export const move = (p: Place, by: -1 | 1) => changeSettings((r) => {
-  const i = r.bar.findIndex((x) => parsedAs(x, (y) => same(y, p)));
-  if (i < 0) return r;
-  let j = i + by;
-  while (j >= 0 && j < r.bar.length && !parsedAs(r.bar[j], (y) => !!find(y))) j += by;
-  if (j < 0 || j >= r.bar.length) return r;
+  const shown = shownIndices(r);
+  const k = shown.findIndex((i) => parsedAs(r.bar[i], (y) => same(y, p)));
+  if (k < 0 || k + by < 0 || k + by >= shown.length) return r;
+  const i = shown[k], j = shown[k + by];
   const bar = [...r.bar];
   [bar[i], bar[j]] = [bar[j], bar[i]];
   return { ...r, bar };
@@ -220,6 +240,8 @@ async function appletPlace(vault: string, noteId: string): Promise<Place> {
 }
 /** Pin one of this device's applets (at the end of the bar), or unpin it however the note names it. */
 export async function pinApplet(vault: string, noteId: string, on: boolean): Promise<void> {
+  // unpinning needs no read of that vault: what each place names comes from the copy kept when it can't be read
+  if (!on) return changeSettings((r) => pinRaw(r, (x) => names(x, vault, noteId), null));
   const p = await appletPlace(vault, noteId);
   return changeSettings((r) => pinRaw(r, (x) => same(x, p) || names(x, vault, noteId), on ? p : null));
 }

@@ -7,7 +7,8 @@
 export const APP_WORDS = ["recent", "pins", "open"] as const;
 export type AppWord = (typeof APP_WORDS)[number];
 
-/** `metadata.app`: absent is none; anything but a short list of known words, each once, refuses the applet. */
+/** `metadata.app`: absent is none; anything but a short list of known words, each once, is refused (the applet then
+ *  asks nothing of the app, as with a bad `opens`). */
 export function parseApp(raw: unknown): { ok: true; app: AppWord[] } | { ok: false; error: string } {
   if (raw === undefined || raw === null) return { ok: true, app: [] };
   if (!Array.isArray(raw) || raw.length > APP_WORDS.length || raw.some((w) => typeof w !== "string" || !(APP_WORDS as readonly string[]).includes(w)) || new Set(raw).size !== raw.length)

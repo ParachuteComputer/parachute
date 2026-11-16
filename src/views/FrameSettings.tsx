@@ -2,6 +2,7 @@
 // (copy the built-in frame into the home vault), looking at their frame again, going back to the built-in one, and a
 // newer built-in frame when one is on offer (never written over theirs without their tap).
 import { useEffect, useState } from "react";
+import { readSettings } from "../shell/homeSettings";
 import { useVaults } from "../vault/hooks";
 import { hostOf } from "../vault/store";
 import { askAgain, useBuiltIn, homeVault, keepMine, makeThisMine, readFrameRecord, setHome, takeNewDefault, useFrameSource } from "../shell/frameSource";
@@ -37,7 +38,7 @@ export default function FrameSettings() {
         <fieldset className="plain">
           <legend className="settings-sub">Home vault</legend>
           {vaults.map((v) => (
-            <label key={v.key} className="line"><span><input type="radio" name="home" checked={home?.key === v.key} onChange={() => setHome(v.key)} /> <strong>{v.vault}</strong> <span className="quiet">on {hostOf(v.issuer)}</span></span></label>
+            <label key={v.key} className="line"><span><input type="radio" name="home" checked={home?.key === v.key} onChange={() => { setHome(v.key); void readSettings(); }} /> <strong>{v.vault}</strong> <span className="quiet">on {hostOf(v.issuer)}</span></span></label>
           ))}
         </fieldset>
       )}

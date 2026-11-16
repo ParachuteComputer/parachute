@@ -1,6 +1,7 @@
 // What an applet asks of the app beyond its vault: read strictly, on the card, and in the grant's key.
 import { describe, expect, it } from "vitest";
 import { parseApp } from "./app";
+import { readApplet } from "./discovery";
 import { parseManifest } from "./manifest";
 import { canonical, grantKey, grantLines, grantOf } from "./grant";
 import { sha256Hex } from "./needs";
@@ -10,10 +11,17 @@ import { appHref } from "./modules/app";
 const m = (() => { const r = parseManifest(RECIPES); if (!r.ok) throw new Error(r.error); return r.manifest; })();
 
 describe("metadata.app", () => {
-  it("is a short list of known words, each once; anything else refuses the applet", () => {
+  it("is a short list of known words, each once; anything else is refused", () => {
     expect(parseApp(undefined)).toEqual({ ok: true, app: [] });
     expect(parseApp(["open", "recent"])).toEqual({ ok: true, app: ["recent", "open"] });
     for (const bad of ["recent", ["recent", "recent"], ["tokens"], [1], {}, ["recent", "pins", "open", "x"]]) expect(parseApp(bad).ok).toBe(false);
+  });
+  it("a bad app costs the applet what it asked of the app, not the applet (as a bad opens does)", () => {
+    const r = readApplet({ id: "n1", path: "Applets/Recipes", tags: ["applet"], metadata: { applet: RECIPES, app: "recipes" } }, "v");
+    expect(r.ok && r.entry.app).toEqual([]);
+    expect(r.ok && r.entry.appError).toMatch(/app must be a list/);
+    const ok = readApplet({ id: "n1", path: "Applets/Recipes", tags: ["applet"], metadata: { applet: RECIPES, app: ["pins"] } }, "v");
+    expect(ok.ok && ok.entry.app).toEqual(["pins"]);
   });
   it("each word is a line on the card; reading every vault is stressed", () => {
     const lines = grantLines(grantOf({ ...m, allow: [] }, "v", [], ["recent", "pins", "open"]), "Applets/");

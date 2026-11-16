@@ -4,13 +4,13 @@
 // too. What is on it is the settings note's (homeSettings.ts). A tap on a place is a real tap on a link inside the app:
 // it marks that address, so an allowed applet starts. A long-press (or a right-click) on a place offers moving it,
 // unpinning it, and open on start.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useHold } from "../ui/hold";
 import { Link, useLocation } from "react-router";
-import { move, pin, setStart, useSettings, type Found, type Place } from "./homeSettings";
+import { move, pinApplet, setStart, useSettings, type Found, type Place } from "./homeSettings";
 import { chooseStart, forgetStart } from "./start";
 import { clearMark } from "../open/mark";
 
-const HOLD_MS = 500;
 type Item = Found & { place: Place; home: boolean };
 
 export default function BottomBar() {
@@ -33,24 +33,10 @@ export default function BottomBar() {
 }
 
 function Place({ item, current, onHold }: { item: Item; current: boolean; onHold: () => void }) {
-  const timer = useRef(0);
-  const fired = useRef(false);
-  const at = useRef({ x: 0, y: 0 });
-  const cancel = () => { window.clearTimeout(timer.current); timer.current = 0; };
-  useEffect(() => cancel, []);
+  // the click that ends a long-press opens nothing, and the mark the tap listener (on the document, first) made for it goes
+  const hold = useHold(onHold, clearMark);
   return (
-    <Link className="home-bar-place" to={item.href} aria-current={current ? "page" : undefined} draggable={false}
-      onContextMenu={(e) => { e.preventDefault(); cancel(); if (e.isTrusted) onHold(); }}
-      onPointerDown={(e) => {
-        cancel(); fired.current = false;
-        if (e.pointerType === "mouse" || !e.isPrimary || !e.isTrusted) return;
-        at.current = { x: e.clientX, y: e.clientY };
-        timer.current = window.setTimeout(() => { fired.current = true; timer.current = 0; onHold(); }, HOLD_MS);
-      }}
-      onPointerMove={(e) => { if (timer.current && Math.hypot(e.clientX - at.current.x, e.clientY - at.current.y) > 10) cancel(); }}
-      onPointerUp={cancel} onPointerCancel={cancel}
-      // the click that ends a long-press opens nothing, and the mark the tap listener (on the document, first) made for it goes
-      onClickCapture={(e) => { if (fired.current) { e.preventDefault(); e.stopPropagation(); clearMark(); fired.current = false; } }}>
+    <Link className="home-bar-place" to={item.href} aria-current={current ? "page" : undefined} {...hold}>
       <span className="home-bar-glyph" aria-hidden="true">{item.glyph}{"\uFE0E"}</span>{item.name}{item.home && <span className="sr-only"> (home)</span>}
     </Link>
   );
@@ -73,7 +59,7 @@ function PlaceSheet({ item, first, last, onClose }: { item: Item; first: boolean
         <ul className="plain sheet-list">
           {!item.home && !first && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => move(item.place, -1))}>Move left</button></li>}
           {!item.home && !last && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => move(item.place, 1))}>Move right</button></li>}
-          {!item.home && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => pin(item.place, false))}>Unpin</button></li>}
+          {!item.home && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => pinApplet(item.vault, item.noteId, false))}>Unpin</button></li>}
           {item.home
             ? <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(async () => { await setStart(null); forgetStart(); })}>Don't open on start</button></li>
             : <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(async () => { await setStart(item.place); chooseStart(item.vault, item.noteId); })}>Open on start</button></li>}

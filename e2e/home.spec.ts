@@ -212,3 +212,34 @@ test("a long-press with a finger on the bar opens its sheet, and the press opens
   await place.tap();
   await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/a/`));
 });
+
+test("an applet the note names twice: one place on the bar; Move skips the hidden name, Unpin takes both", async ({ page }) => {
+  const recipes = await idOf("Applets/Recipes");
+  await writeSettings({ start: { vault: VAULT, applet: "Applets/Cook mode" }, bar: [{ vault: VAULT, applet: recipes }, { vault: VAULT, applet: "Applets/Cook mode" }, { vault: VAULT, applet: "Applets/Recipes" }] });
+  await start(page);
+  await page.goto(`/v/${VAULT}`);
+  // the home first, then Recipe box once (Cook mode on the bar is the home itself)
+  await expect(bar(page).getByRole("link")).toHaveText([/Launcher/, /Cook mode/, /Recipe box/]);
+  await bar(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
+  // the only pin: nothing to move to
+  await expect(page.getByRole("button", { name: "Move right" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Unpin" }).click();
+  await expect(bar(page).getByRole("link")).toHaveText([/Launcher/, /Cook mode/]);
+  const [n] = await settingsNotes();
+  expect(n.metadata.parachute?.bar).toEqual([{ vault: VAULT, applet: "Applets/Cook mode" }]);
+});
+
+test("a pin whose vault's applets can't be read stays on the bar, and Unpin still takes it off", async ({ page }) => {
+  await writeSettings({ bar: [{ vault: VAULT, applet: "Applets/Recipes" }] });
+  await start(page);
+  await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
+  // the vault's applets out of reach (the settings note still answers): the bar shows the copy it kept
+  await page.route((u) => u.searchParams.get("tag") === "applet", (r) => r.fulfill({ status: 503, body: "{}" }));
+  await start(page);
+  await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
+  await bar(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
+  await page.getByRole("button", { name: "Unpin" }).click();
+  await expect(bar(page).getByRole("link")).toHaveText([/Launcher/]);
+  const [n] = await settingsNotes();
+  expect(n.metadata.parachute?.bar).toEqual([]);
+});

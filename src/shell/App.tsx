@@ -18,6 +18,7 @@ import KeyStart from "../key/KeyStart";
 import Pair from "../key/Pair";
 import { keysHere, useKey } from "../key/key";
 import BottomBar from "./BottomBar";
+import { atFirstEntry } from "../ui/history";
 import { startPlace } from "./start";
 import { readSettings } from "./homeSettings";
 
@@ -48,7 +49,7 @@ function FirstRun() {
 function useStart(): boolean {
   const location = useLocation();
   const navigate = useNavigate();
-  const [decided, setDecided] = useState(() => !(location.pathname === "/" && ((history.state as { idx?: number } | null)?.idx ?? 0) === 0 && listVaults().length > 0));
+  const [decided, setDecided] = useState(() => !(location.pathname === "/" && atFirstEntry() && listVaults().length > 0));
   useEffect(() => {
     if (decided) { if (listVaults().length) void readSettings(); return; }
     let on = true;

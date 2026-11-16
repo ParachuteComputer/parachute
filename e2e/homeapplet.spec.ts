@@ -112,3 +112,23 @@ test("hostile: a tap that has worn off moves nothing, and a home the note no lon
     await api(hubState(), "DELETE", `notes/${s.id}`);
   }
 });
+
+test("Back to the home while the settings are read again still finds it running", async ({ page }) => {
+  const home = await mcp(hubState(), "create-note", ARGS);
+  const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" } });
+  try {
+    await start(page);
+    await page.getByRole("button", { name: "Allow" }).click();
+    const lately = applet(page).getByRole("region", { name: "Lately" });
+    // a slow hub: the settings note's read, made again as the note's screen shows, is still on its way at the Back
+    await page.route((u) => u.searchParams.get("tag") === "parachute-settings", async (r) => { await new Promise((res) => setTimeout(res, 4000)); await r.continue().catch(() => {}); });
+    await lately.getByRole("button", { name: /^Welcome kitchen/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/n/`));
+    await ui(page).getByRole("button", { name: "Back" }).click();
+    await expect(applet(page).getByRole("region", { name: "Lately" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Open Home$/ })).toHaveCount(0);
+  } finally {
+    await api(hubState(), "DELETE", `notes/${home.id}`);
+    await api(hubState(), "DELETE", `notes/${s.id}`);
+  }
+});

@@ -21,6 +21,8 @@ export type AppletEntry = {
   opens: Opens[];
   /** What it may ask of the app beyond its vault (app.ts). */
   app: AppWord[];
+  /** why `app` was refused, when it was (the applet then asks nothing of the app) */
+  appError?: string;
   /** why `opens` was refused, when it was */
   opensError?: string;
 };
@@ -35,10 +37,10 @@ export function readApplet(r: Row, vault: string): { ok: true; entry: AppletEntr
   if (!parsed.ok) return { ok: false, error: `its manifest is invalid: ${parsed.error}` };
   if (BUILT_IN_IDS.includes(parsed.manifest.id)) return { ok: false, error: `the id ${parsed.manifest.id} is the app's own` };
   if (meta.interface !== undefined && meta.interface !== null) return { ok: false, error: "a contract 2 applet has one manifest. Its note must not carry interface too" };
+  // as with `opens`: a bad `app` costs the applet what it asked of the app, not the applet
   const app = parseApp(meta.app);
-  if (!app.ok) return { ok: false, error: app.error };
   const opens = parseOpens(meta.opens, parsed.manifest);
-  return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.app, ...(opens.ok ? {} : { opensError: opens.error }) } };
+  return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }) } };
 }
 
 export function discoverApplets(rows: readonly Row[], vault: string): Discovery {

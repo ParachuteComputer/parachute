@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
+import { atFirstEntry } from "./history";
 
 /** In the shell: one step back in this tab's history, or the launcher when this is its first entry (a start, a link
  *  from outside). In a frame, history is the shell's: the frame's navigator asks the shell, which does the same. */
 export function backOrLauncher(nav: (to: string | number, o?: { replace?: boolean }) => void) {
-  if (((history.state as { idx?: number } | null)?.idx ?? 0) > 0) nav(-1); else nav("/", { replace: true });
+  if (!atFirstEntry()) nav(-1); else nav("/", { replace: true });
 }
 
 /** The one top bar: Back (when there is somewhere to go back to), the title, and the way to Settings. */
