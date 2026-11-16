@@ -18,6 +18,7 @@
     "@openparachute/surface-client": "0.3.7",
     "@openparachute/surface-render": "0.3.1",
     "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-barcode-scanner": "2.4.6",
     "@tauri-apps/plugin-deep-link": "2.4.5",
     "@tauri-apps/plugin-opener": "2.5.5",
     "react": "^19.1.0",

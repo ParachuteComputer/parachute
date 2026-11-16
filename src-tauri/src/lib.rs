@@ -1,5 +1,10 @@
 //! Parachute's shell: one window around the app, the seal applets need on desktop, and the two facts the applet
-//! self-test is keyed on (the app's version and the webview runtime). Everything else lives in the web app.
+//! self-test is keyed on (the app's version and the webview runtime), and the person's key (key.rs: kept, paired in by
+//! pairing.rs, used to sign in to a hub by door.rs). Everything else lives in the web app.
+
+pub mod door;
+pub mod key;
+pub mod pairing;
 
 use tauri::{Runtime, Url};
 
@@ -48,13 +53,52 @@ fn signin_return<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
         .build()
 }
 
+/// Android's half of the key store and the sign-in cookie (gen/android/.../KeyPlugin.kt), reachable from Rust only.
+#[cfg(target_os = "android")]
+pub(crate) mod android {
+    pub struct KeyPluginHandle<R: tauri::Runtime>(pub tauri::plugin::PluginHandle<R>);
+}
+
+fn key_plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    tauri::plugin::Builder::<R>::new("parachute-key")
+        .setup(|_app, _api| {
+            #[cfg(target_os = "android")]
+            {
+                use tauri::Manager;
+                let handle = _api.register_android_plugin("computer.parachute.app", "KeyPlugin")?;
+                _app.manage(android::KeyPluginHandle(handle));
+            }
+            Ok(())
+        })
+        .build()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    // the pairing relay's socket and the hub's key door use rustls; its crypto is ring, installed once
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(signin_return())
-        .invoke_handler(tauri::generate_handler![app_version, webview_runtime])
+        .plugin(key_plugin());
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+    builder
+        .manage(key::KeyState::default())
+        .manage(pairing::PairState::default())
+        .invoke_handler(tauri::generate_handler![
+            app_version,
+            webview_runtime,
+            key::key_status,
+            key::key_create,
+            key::key_import,
+            key::key_forget,
+            pairing::pair_start,
+            pairing::pair_confirm,
+            pairing::pair_cancel,
+            door::key_sign_in
+        ])
         .setup(|app| {
             #[cfg(desktop)]
             {

@@ -57,6 +57,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      # The key door test (src-tauri/tests/door_hub.rs) signs in to a real hub, as the web tests do.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install a Parachute hub for the key door test
+        run: |
+          mkdir -p "$RUNNER_TEMP/hub" && cd "$RUNNER_TEMP/hub"
+          echo '{"name":"e2e-hub","private":true}' > package.json
+          bun add @openparachute/core@0.8.0
+          echo "PARACHUTE_CORE=$RUNNER_TEMP/hub/node_modules/.bin/parachute-core" >> "$GITHUB_ENV"
       - name: Shell tests
         run: |
           mkdir -p dist && echo '<!doctype html>' > dist/index.html

@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "mobile-pairing",
+  "description": "The app's own pages on a phone or tablet: scanning the QR code of a pairing link. No remote page gets it.",
+  "platforms": ["android", "iOS"],
+  "windows": ["main"],
+  "local": true,
+  "permissions": [
+    "barcode-scanner:allow-scan",
+    "barcode-scanner:allow-cancel",
+    "barcode-scanner:allow-check-permissions",
+    "barcode-scanner:allow-request-permissions"
+  ]
+}

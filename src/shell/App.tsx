@@ -13,6 +13,9 @@ import { SelfTestRunner } from "../applet/selftest/run";
 import { arrived, installTapListener } from "../open/mark";
 import { useVaults } from "../vault/hooks";
 import FrameArea from "./FrameArea";
+import KeyStart from "../key/KeyStart";
+import Pair from "../key/Pair";
+import { keysHere, useKey } from "../key/key";
 
 /** The one listener for real taps on the shell's own links, and the rule that a tap's mark is gone once the person moves on. */
 function Taps() {
@@ -29,17 +32,26 @@ function AppletRoute() {
   return <AppletScreen key={location.key} />;
 }
 
+/** The first screen, before any vault: getting a key when the device has none (in the app), else adding a vault. */
+function FirstRun() {
+  const key = useKey();
+  if (key === undefined) return null;
+  return keysHere() && key === null ? <KeyStart first /> : <AddVault first />;
+}
+
 /** The shell's own screens; on any other address the frame shows. */
 function ShellRoutes() {
   const location = useLocation();
   const vaults = useVaults();
-  const shell = /^\/(add|oauth\/callback|settings|open-link)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname)
+  const shell = /^\/(add|oauth\/callback|settings|open-link|key|key\/pair)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname)
     || (location.pathname === "/" && !vaults.length);
   return (
     <>
       {shell && <Routes>
-        <Route path="/" element={<AddVault first />} />
+        <Route path="/" element={<FirstRun />} />
         <Route path="/add" element={<AddVault />} />
+        <Route path="/key" element={<KeyStart />} />
+        <Route path="/key/pair" element={<Pair />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
         <Route path="/v/:vault/a/:applet" element={<AppletRoute />} />
         <Route path="/settings" element={<Settings />} />
