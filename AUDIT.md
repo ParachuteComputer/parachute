@@ -39,22 +39,22 @@ The frame transport (`createFrameFetch` / `serveFrameFetch`) is not on `main` or
 An applet imports `react`, `react-dom` and `parachute`, and nothing else. It needs two things from parachute-surface.
 
 1. **Vault data:** `VaultClient`, which the frame already carries as `parachute.vault`. It is published and stable,
-   and the Uni app uses it the same way. **Plan: keep it from npm for now.** The shell is to talk to the hub through
-   it with a translating fetch, so the wire is the record door (`/api/records`; PR #22, see 5). Move it into this
+   and the Uni app uses it the same way. **Done: kept from npm for now.** The shell talks to the hub through it with a
+   translating fetch, so the wire is the record door (`/api/records`; #22, see 5). Move it into this
    repo only when this repo becomes the one place that releases Parachute's browser packages.
 2. **A note renderer with rich notes:** what the `Note` part in `parachute` draws. The rich renderer exists only on
-   surface-render's unreleased `next`. **Plan for this step (it lands in a later PR):** copy surface-render from
-   `next` 4600e80 into `packages/surface-render/`, byte for byte. `VENDORED.md` there says where it came from and
+   surface-render's unreleased `next`. **Done in #23:** surface-render copied from `next` 4600e80 into
+   `packages/surface-render/`, byte for byte but for two type casts. `VENDORED.md` there says where it came from and
    its licences: the renderer is AGPL-3.0, rich-notes-kit and markdown-it are MIT. The app builds it from source under
    the same import name, and the npm dependency on surface-render goes. The frame's note view and the applets' `Note`
    part both use it.
    **Weight:** the rich kit and its markdown-it are about 240 KB of source before minifying, and react-markdown with
-   remark comes on top. So the renderer will go into an applet's frame only when its code imports `Note`. Other
-   applets get React and the light parts alone.
+   remark comes on top. So the renderer goes into an applet's frame only when its code imports `Note` (560 KB of
+   script and 26 KB of styles, minified); other applets get React and the light parts alone (222 KB).
 
 The look (the theme tokens, PR #21) and the other parts (`Days`, list, card, field, empty) are new. They never lived
-in parachute-surface. They will be written here, on the tokens only, so each could later be shared as a record
-(step 6).
+in parachute-surface. They are written here (`src/kit`, #23), on the tokens only, so each could later be shared as a
+record (step 6).
 
 ## 4. Archiving parachute-surface: what it would break
 
@@ -80,8 +80,7 @@ It is not archived. This is what archiving would cost today.
   - Docs that name the repo go stale: core's hub README (its module list), the hub's services-row conventions, and
     parachute.computer's surface pages.
 - **This app is not exposed.** It never calls `fetchAttachmentBlob`: images in its frame are data and blob only,
-  and applet frames reach the vault through the shell with no token. Once the vendoring PR lands, its renderer lives
-  in this repo.
+  and applet frames reach the vault through the shell with no token. Its renderer lives in this repo (#23).
 
 ## 5. Proposals for repos this step doesn't change
 

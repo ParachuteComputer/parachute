@@ -56,7 +56,7 @@ export default function NoteRoute() {
     <p className="open-line" role="status">
       {l.others.length === 0 ? (
         <Link to={appletHref(rec.key, l.candidate, ow.note.id)}>
-          <span aria-hidden="true">{l.candidate.entry.manifest.glyph}</span>{" "}
+          <span aria-hidden="true">{l.candidate.entry.manifest.glyph}{"\uFE0E"}</span>{" "}
           {l.status === "updated" ? `${l.candidate.entry.manifest.name} changed since you allowed it.` : `${l.candidate.entry.manifest.name} can open this.`}
         </Link>
       ) : (

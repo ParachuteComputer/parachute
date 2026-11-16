@@ -33,6 +33,13 @@ I judged both against the taste notes (paraphrased) on the screenshots, grayscal
 
 From B, as well: its wider spacing is the theme's `roomy` density.
 
+## What was built (#23)
+
+The launcher has A's masthead (the week in a line, the four-week tally, the hills in ink over a pale wash), roman
+chapter numbers, ink medallions, each applet's last seven days, and each vault's newest notes. The parts follow A. Not
+built yet: the paper grain, the fleuron between chapters, and the drop cap on the home page (the starter home
+applet has a greeting and the tally, no drop cap).
+
 ## The second theme in the shots
 
 `?theme=alt` changes only the token values: cooler paper, an ink-blue accent and wider spacing in A, and blue-grey
