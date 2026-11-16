@@ -291,7 +291,11 @@ pub async fn pair_start<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>
     if keys.holds(&app).await? {
         return Err("This device already has a key. Remove it in Settings first.".into());
     }
-    // one pairing at a time: a new start ends the old one (the lock is not held while connecting, so Cancel answers)
+    // one pairing at a time: a new start ends the old one, waiting for codes or for its key (the lock is not held while
+    // connecting, so Cancel answers)
+    if let Some((_, older)) = pairing.receiving.lock().await.take() {
+        let _ = older.send(());
+    }
     let old = pairing.pending.lock().await.take();
     if let Some((_, old)) = old {
         old.cancel(false).await;
