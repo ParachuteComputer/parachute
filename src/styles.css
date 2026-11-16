@@ -125,7 +125,7 @@ details[open] summary { margin-bottom: 6px; }
 button.primary[aria-disabled="true"] { opacity: 0.5; }
 
 /* The bar (src/shell/BottomBar.tsx): a ribbon of words across the foot, the current place in bold and underlined. */
-.home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: 1px solid var(--text); overflow-x: auto; }
+.home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: safe center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: 1px solid var(--text); overflow-x: auto; }
 .home-bar-place { flex: 0 1 auto; min-width: 64px; max-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 8px 2px; color: var(--text); text-decoration: none; font-size: 13px; line-height: 1.2; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; -webkit-touch-callout: none; user-select: none; }
 .home-bar-glyph { font: 20px/1 var(--serif); }
 .home-bar-place[aria-current="page"] { font-weight: 700; }

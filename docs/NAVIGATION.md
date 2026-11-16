@@ -15,10 +15,10 @@ One model, everywhere.
 ## The four rules
 
 1. **The bar is for your pinned places.** It sits at the bottom of the launcher, a vault, a note and an applet. On it:
-   the launcher (always), your home applet if you have one, then the applets you pinned, in your order.
+   the launcher (always), your home applet if you have one, then the applets you pinned, in your order (up to 12).
 2. **The launcher is for everything.** Every applet in every vault, and the vaults themselves.
-3. **Back returns where you came from.** The app's Back and the phone's Back are the same: one step back in what you
-   did. On the first screen of a start, Back leaves the app.
+3. **Back returns where you came from.** The app's Back and the phone's Back both go one step back in what you did. On
+   the first screen of a start, the app's Back goes to the launcher, and the phone's Back leaves the app.
 4. **A note opens in its applet.** Tap a note and it opens in the applet that opens its kind; long-press it for "Open
    with…". Nothing about this changed.
 
@@ -32,14 +32,15 @@ Long-press a place on the bar: **Move left**, **Move right**, **Unpin**, **Open 
 Any applet can be your **home**: it opens when the app starts, and it sits first on the bar. With no home, the app opens
 on the launcher. An applet opens on start by itself only when two things hold on this device: you allowed its code
 (its card), and you chose it as home here (the long-press, or the Open button the app shows the first time). If the
-choice came from somewhere else (your agent wrote it), the first start shows the applet's card or its Open button, and
-your tap is the choice.
+choice came from somewhere else (your agent wrote it, or a frame of your own set it), the first start shows the
+applet's card or its Open button, and your tap is the choice.
 
 ## Where the choices live
 
 The bar and the home are one note in your home vault, `Parachute/Settings`, tagged `parachute-settings`. You change it
-by long-pressing; your agent can change it by writing that note. The app reads it each time it shows the launcher or a
-vault, and keeps the last copy for when the vault can't be reached.
+by long-pressing; your agent can change it by writing that note. The app reads it at each start and each time it shows
+the launcher, a vault or a note, and keeps the last copy (with the names on the bar) for when the vault can't be
+reached. Entries it doesn't read are kept as they are when you change the bar.
 
 ```json
 {

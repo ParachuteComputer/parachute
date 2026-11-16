@@ -24,8 +24,9 @@ export function forgetVaultStart(vault: string) { const c = chosen(); if (c?.vau
 export function forgetStart() { try { storage()?.removeItem(START_KEY); } catch { /* nothing kept */ } }
 export const startChosenHere = (vault: string, noteId: string) => { const c = chosen(); return !!c && c.vault === vault && c.noteId === noteId; };
 
+type Arrival = { path: string; chosen: boolean; vault: string; noteId: string };
 /** The address a start led to, this session, and whether it was chosen here. Taken once by the applet's screen. */
-let arrival: { path: string; chosen: boolean; vault: string; noteId: string } | null = null;
+let arrival: Arrival | null = null;
 /** For the applet screen: was this address reached by a start? `chosen`: the person chose it as home on this device. */
 export function takeStart(path: string): { chosen: boolean; vault: string; noteId: string } | null {
   const a = arrival && arrival.path === path ? arrival : null;
@@ -33,12 +34,14 @@ export function takeStart(path: string): { chosen: boolean; vault: string; noteI
   return a;
 }
 
-/** Where the app opens: the home applet's address, or null for the launcher. Waits for the settings note a moment. */
-export async function startPath(): Promise<string | null> {
+/** Where the app opens: the home applet, or null for the launcher. Waits for the settings note a moment. Call
+ *  `go` only if the app is still where it started (a link from outside may have moved it meanwhile). */
+export async function startPlace(): Promise<{ href: string; go(): void } | null> {
+  arrival = null;
   await Promise.race([Promise.all([readSettings(), whenGateKnown()]), new Promise((r) => setTimeout(r, START_WAIT_MS))]);
   if (gateNow() === "closed") return null;
   const s = barNow().start;
   if (!s) return null;
-  arrival = { path: s.href, chosen: startChosenHere(s.vault, s.noteId), vault: s.vault, noteId: s.noteId };
-  return s.href;
+  const a: Arrival = { path: s.href, chosen: startChosenHere(s.vault, s.noteId), vault: s.vault, noteId: s.noteId };
+  return { href: s.href, go: () => { arrival = a; } };
 }

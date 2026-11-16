@@ -51,7 +51,7 @@ function Place({ item, current, onHold }: { item: Item; current: boolean; onHold
       onPointerUp={cancel} onPointerCancel={cancel}
       // the click that ends a long-press opens nothing, and the mark the tap listener (on the document, first) made for it goes
       onClickCapture={(e) => { if (fired.current) { e.preventDefault(); e.stopPropagation(); clearMark(); fired.current = false; } }}>
-      <span className="home-bar-glyph" aria-hidden="true">{item.glyph}{"\uFE0E"}</span>{item.home ? "Home" : item.name}
+      <span className="home-bar-glyph" aria-hidden="true">{item.glyph}{"\uFE0E"}</span>{item.name}{item.home && <span className="sr-only"> (home)</span>}
     </Link>
   );
 }
@@ -69,7 +69,7 @@ function PlaceSheet({ item, first, last, onClose }: { item: Item; first: boolean
   return (
     <div className="sheet-scrim" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <section className="sheet" role="dialog" aria-modal="true" aria-label={item.name}>
-        <h2><span aria-hidden="true">{item.glyph}</span> {item.name}</h2>
+        <h2><span aria-hidden="true">{item.glyph}</span> {item.name}{item.home && <span className="quiet"> · opens on start</span>}</h2>
         <ul className="plain sheet-list">
           {!item.home && !first && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => move(item.place, -1))}>Move left</button></li>}
           {!item.home && !last && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => move(item.place, 1))}>Move right</button></li>}

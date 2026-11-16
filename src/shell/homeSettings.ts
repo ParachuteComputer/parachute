@@ -42,7 +42,7 @@ function placeOf(x: unknown): Place | null {
 export function settingsFrom(metadata: unknown): Settings {
   const p = plain(metadata) && plain(metadata.parachute) ? metadata.parachute : null;
   if (!p) return { ...EMPTY };
-  const bar = Array.isArray(p.bar) ? p.bar.slice(0, MAX_PLACES).map(placeOf).filter((x): x is Place => !!x) : [];
+  const bar = Array.isArray(p.bar) ? p.bar.slice(0, 200).map(placeOf).filter((x): x is Place => !!x) : [];
   return { bar: dedupe(bar), start: placeOf(p.start) };
 }
 const same = (a: Place, b: Place) => a.vault === b.vault && a.applet === b.applet && (a.hub ?? "") === (b.hub ?? "");
@@ -63,7 +63,7 @@ export function placeFor(rec: VaultRecord, appletPath: string, list: readonly Va
 
 const stripExt = (p: string) => p.replace(/\.(html|tsx|jsx)$/i, "");
 /** The applet a place names, as this device last read that vault's applets; null when it isn't there (or not read yet). */
-export function find(p: Place): Found | null {
+function findLive(p: Place): Found | null {
   const rec = vaultFor(p);
   if (!rec) return null;
   const a = appletsNow(rec.key);
@@ -78,17 +78,33 @@ export async function readPlaces(s: Settings): Promise<void> {
   await Promise.all([...recs.values()].map((r) => refreshApplets(r)));
 }
 
-// ── what this device keeps: the last copy read, per home vault ──
+// ── what this device keeps: the last copy read, per home vault, and what its places named then ──
 
-type Kept = { vault: string; settings: Settings; noteId: string | null; updatedAt: string | null };
+type Kept = { vault: string; settings: Settings; noteId: string | null; updatedAt: string | null; found: Record<string, Found> };
 const storage = () => (typeof localStorage === "undefined" ? null : localStorage);
+const keyOf = (p: Place) => `${p.vault}|${p.hub ?? ""}|${p.applet}`;
 function keptNow(): Kept | null {
   try {
     const v = JSON.parse(storage()?.getItem(SETTINGS_KEY) ?? "null") as Kept | null;
-    return v && typeof v.vault === "string" ? { vault: v.vault, settings: settingsFrom({ parachute: v.settings }), noteId: typeof v.noteId === "string" ? v.noteId : null, updatedAt: typeof v.updatedAt === "string" ? v.updatedAt : null } : null;
+    if (!v || typeof v.vault !== "string") return null;
+    const found: Record<string, Found> = {};
+    if (plain(v.found)) for (const [k, f] of Object.entries(v.found)) if (plain(f) && line(f.vault, 200) && line(f.noteId, 300) && typeof f.name === "string" && typeof f.glyph === "string" && typeof f.href === "string") found[k] = f as Found;
+    return { vault: v.vault, settings: settingsFrom({ parachute: v.settings }), noteId: typeof v.noteId === "string" ? v.noteId : null, updatedAt: typeof v.updatedAt === "string" ? v.updatedAt : null, found };
   } catch { return null; }
 }
 const keepNow = (k: Kept) => { try { storage()?.setItem(SETTINGS_KEY, JSON.stringify(k)); } catch { /* this session only */ } };
+/** Signing out of a vault: the copy kept from it goes (another vault could later take its key). */
+export function forgetVaultSettings(vault: string) { if (keptNow()?.vault === vault) { try { storage()?.removeItem(SETTINGS_KEY); } catch { /* nothing kept */ } bump(); } }
+
+/** The applet a place names: as this device last read that vault's applets, else as it found it when it last could
+ *  (so the bar stays while the vault can't be reached). */
+export function find(p: Place): Found | null {
+  const rec = vaultFor(p);
+  if (rec && appletsNow(rec.key)?.state === "ok") return findLive(p);
+  const k = keptNow();
+  const f = k?.found[keyOf(p)];
+  return f && rec && f.vault === rec.key ? f : null;
+}
 
 // ── the store ──
 
@@ -103,8 +119,9 @@ export function settingsNow(): Settings {
   const home = homeVault();
   return k && home && k.vault === home.key ? k.settings : { ...EMPTY };
 }
-/** Whether the home vault has been read this session (or couldn't be). */
-export const settingsRead = () => state.read === "read" || state.read === "unreachable";
+
+/** The settings note: the one note tagged so, or the one at the usual path when there are more. */
+const pick = (rows: { path?: string | null }[]) => (rows.length === 1 ? rows[0] : rows.find((r) => stripExt(r.path ?? "") === SETTINGS_PATH) ?? null);
 
 let generation = 0;
 /** Read the settings note again. A read a newer one (or a change of home) overtook is dropped. */
@@ -116,29 +133,36 @@ export async function readSettings(): Promise<void> {
   try {
     const rows = await clientFor(home).queryNotes({ tag: SETTINGS_TAG, includeMetadata: true, limit: 20 });
     // two notes: the one at the usual path, else none (the person sees the bar empty and can fix it)
-    const n = rows.length === 1 ? rows[0] : rows.find((r) => stripExt(r.path ?? "") === SETTINGS_PATH) ?? null;
+    const n = pick(rows) as (typeof rows)[number] | null;
     if (mine !== generation || homeVault()?.key !== home.key) return;
-    keepNow({ vault: home.key, settings: n ? settingsFrom(n.metadata) : { ...EMPTY }, noteId: n?.id ?? null, updatedAt: (n as { updatedAt?: string } | null)?.updatedAt ?? null });
-    await readPlaces(settingsNow());
-    if (mine !== generation) return;
+    const settings = n ? settingsFrom(n.metadata) : { ...EMPTY };
+    await readPlaces(settings);
+    if (mine !== generation || homeVault()?.key !== home.key) return;
+    const found: Record<string, Found> = {};
+    for (const p of [...settings.bar, ...(settings.start ? [settings.start] : [])]) { const f = findLive(p); if (f) found[keyOf(p)] = f; }
+    keepNow({ vault: home.key, settings, noteId: n?.id ?? null, updatedAt: (n as { updatedAt?: string } | null)?.updatedAt ?? null, found });
     bump({ read: "read" });
   } catch {
     if (mine !== generation) return;
-    await readPlaces(settingsNow()).catch(() => {});
     bump({ read: "unreachable" });
   }
 }
 
+/** The note's choices as written, entries this app doesn't read included: a change keeps them. */
+type Raw = { bar: unknown[]; start: unknown };
+const parsedAs = (x: unknown, f: (p: Place) => boolean) => { const p = placeOf(x); return !!p && f(p); };
+
 /** Change the choices (a tap's): read the note as it is now, change only what was asked, and write it back. */
-export async function changeSettings(change: (s: Settings) => Settings): Promise<void> {
+async function changeSettings(change: (raw: Raw) => Raw): Promise<void> {
   const home = homeVault();
   if (!home) throw new Error("There's no home vault yet.");
   const c = clientFor(home);
   const rows = await c.queryNotes({ tag: SETTINGS_TAG, includeMetadata: true, limit: 20 });
-  const n = rows.length === 1 ? rows[0] : rows.find((r) => stripExt(r.path ?? "") === SETTINGS_PATH) ?? null;
+  const n = pick(rows) as (typeof rows)[number] | null;
   if (!n && rows.length > 1) throw new Error(`Your home vault has ${rows.length} settings notes; keep one, at ${SETTINGS_PATH}.`);
-  const next = change(n ? settingsFrom(n.metadata) : { ...EMPTY });
-  const parachute = { ...(plain(n?.metadata) && plain(n!.metadata!.parachute) ? n!.metadata!.parachute as Record<string, unknown> : {}), bar: next.bar.slice(0, MAX_PLACES), start: next.start };
+  const was = plain(n?.metadata) && plain(n!.metadata!.parachute) ? n!.metadata!.parachute as Record<string, unknown> : {};
+  const next = change({ bar: Array.isArray(was.bar) ? was.bar : [], start: was.start ?? null });
+  const parachute = { ...was, bar: next.bar, start: next.start };
   if (n) {
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), parachute }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
@@ -148,35 +172,48 @@ export async function changeSettings(change: (s: Settings) => Settings): Promise
   await readSettings();
 }
 
-export const pin = (p: Place, on: boolean) => changeSettings((s) => ({ ...s, bar: on ? (s.bar.some((x) => same(x, p)) ? s.bar : [...s.bar, p]) : s.bar.filter((x) => !same(x, p)) }));
-export const move = (p: Place, by: -1 | 1) => changeSettings((s) => {
-  const i = s.bar.findIndex((x) => same(x, p)), j = i + by;
-  if (i < 0 || j < 0 || j >= s.bar.length) return s;
-  const bar = [...s.bar];
+/** Add `add` at the end unless a place already matches; or take out every place that matches. */
+function pinRaw(raw: Raw, match: (p: Place) => boolean, add: Place | null): Raw {
+  if (!add) return { ...raw, bar: raw.bar.filter((x) => !parsedAs(x, match)) };
+  if (raw.bar.some((x) => parsedAs(x, match))) return raw;
+  if (raw.bar.filter((x) => parsedAs(x, (p) => !!find(p))).length >= MAX_PLACES) throw new Error(`The bar holds ${MAX_PLACES} places: unpin one first.`);
+  return { ...raw, bar: [...raw.bar, add] };
+}
+export const pin = (p: Place, on: boolean) => changeSettings((r) => pinRaw(r, (x) => same(x, p), on ? p : null));
+/** Swap a place with the next one this device shows, left or right (places it can't find don't count). */
+export const move = (p: Place, by: -1 | 1) => changeSettings((r) => {
+  const i = r.bar.findIndex((x) => parsedAs(x, (y) => same(y, p)));
+  if (i < 0) return r;
+  let j = i + by;
+  while (j >= 0 && j < r.bar.length && !parsedAs(r.bar[j], (y) => !!find(y))) j += by;
+  if (j < 0 || j >= r.bar.length) return r;
+  const bar = [...r.bar];
   [bar[i], bar[j]] = [bar[j], bar[i]];
-  return { ...s, bar };
+  return { ...r, bar };
 });
-export const setStart = (p: Place | null) => changeSettings((s) => ({ ...s, start: p }));
+export const setStart = (p: Place | null) => changeSettings((r) => ({ ...r, start: p }));
 export const samePlace = same;
 
 /** A place names this applet of this device's (by id or path). */
 const names = (p: Place, vault: string, noteId: string) => { const f = find(p); return !!f && f.vault === vault && f.noteId === noteId; };
-function appletPlace(vault: string, noteId: string): Place {
+/** How the note will name one of this device's applets (its vault's applets read first, if this session hasn't yet). */
+async function appletPlace(vault: string, noteId: string): Promise<Place> {
   const rec = listVaults().find((v) => v.key === vault);
+  if (rec && appletsNow(vault)?.state !== "ok") await refreshApplets(rec);
   const a = appletsNow(vault);
   const e = a?.state === "ok" ? a.found.entries.find((x) => x.noteId === noteId) : undefined;
   if (!rec || !e) throw new Error("That isn't an applet this vault has.");
   return placeFor(rec, stripExt(e.path));
 }
 /** Pin one of this device's applets (at the end of the bar), or unpin it however the note names it. */
-export function pinApplet(vault: string, noteId: string, on: boolean): Promise<void> {
-  const p = appletPlace(vault, noteId);
-  return changeSettings((s) => ({ ...s, bar: on ? (s.bar.some((x) => same(x, p) || names(x, vault, noteId)) ? s.bar : [...s.bar, p]) : s.bar.filter((x) => !same(x, p) && !names(x, vault, noteId)) }));
+export async function pinApplet(vault: string, noteId: string, on: boolean): Promise<void> {
+  const p = await appletPlace(vault, noteId);
+  return changeSettings((r) => pinRaw(r, (x) => same(x, p) || names(x, vault, noteId), on ? p : null));
 }
 /** Make one of this device's applets the home, or none. */
-export function startApplet(vault: string, noteId: string | null): Promise<void> {
-  const p = noteId === null ? null : appletPlace(vault, noteId);
-  return changeSettings((s) => ({ ...s, start: p }));
+export async function startApplet(vault: string, noteId: string | null): Promise<void> {
+  const p = noteId === null ? null : await appletPlace(vault, noteId);
+  return changeSettings((r) => ({ ...r, start: p }));
 }
 
 /** The bar as this device can show it: the home applet first, then the pins it can find, each once. */
@@ -186,6 +223,7 @@ export function barNow(s: Settings = settingsNow()): { start: (Found & { place: 
   for (const p of s.bar) {
     const f = find(p);
     if (f && !(start && f.vault === start.vault && f.noteId === start.noteId) && !pins.some((x) => x.vault === f.vault && x.noteId === f.noteId)) pins.push({ ...f, place: p });
+    if (pins.length === MAX_PLACES) break;
   }
   return { start: start && s.start ? { ...start, place: s.start } : null, pins };
 }

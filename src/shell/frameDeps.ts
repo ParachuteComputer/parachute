@@ -15,12 +15,18 @@ import type { HostDeps } from "./frameHost";
 import { barNow, pinApplet, startApplet } from "./homeSettings";
 import { chooseStart, forgetStart } from "./start";
 
-/** The bar and the home as the frame may see them, and the two changes it may ask for on a tap. */
-const home: HostDeps["home"] = {
+/** The bar and the home as the frame may see them, and the two changes it may ask for on a tap. A frame's tap can't
+ *  tell which of its elements was tapped, so a frame of the person's (from their vault) only writes the settings note:
+ *  its choice of a home is never also the person's choice on this device (start.ts), which their own tap on the screen
+ *  the next start leads to makes. The built-in frame's "Open on start" is the app's own sheet, so it counts. */
+const homeDeps = (from: "built-in" | "vault"): HostDeps["home"] => ({
   get: () => { const b = barNow(); return { start: b.start ? { vault: b.start.vault, noteId: b.start.noteId } : null, bar: b.pins.map((p) => ({ vault: p.vault, noteId: p.noteId })) }; },
   pin: (vault, noteId, on) => pinApplet(vault, noteId, on),
-  start: async (vault, noteId) => { await startApplet(vault, noteId); if (noteId === null) forgetStart(); else chooseStart(vault, noteId); },
-};
+  start: async (vault, noteId) => {
+    await startApplet(vault, noteId);
+    if (noteId === null) forgetStart(); else if (from === "built-in") chooseStart(vault, noteId);
+  },
+});
 
 async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> {
   // statuses are judged once the self-test's facts are known, so a note never opens plain only because the app had
@@ -78,7 +84,7 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
     roles: (rec) => readRoleTags(clientFor(rec)),
     applets,
     defaults: { get: defaultsFor, set: setChoice },
-    home,
+    home: homeDeps(from),
     go,
     here: () => location.pathname,
     // one step back, or the launcher on the first entry (a start, a link from outside): never out of the app from a screen's Back

@@ -19,9 +19,10 @@ describe("the settings note", () => {
   it("no note, other metadata, or a bad start: an empty bar and no home", () => {
     for (const m of [null, {}, { parachute: "x" }, { parachute: { bar: "x", start: "Applets/Home" } }, { parachute: { start: { vault: "k" } } }]) expect(settingsFrom(m)).toEqual({ bar: [], start: null });
   });
-  it("reads no more than a bar's worth of places", () => {
-    const bar = Array.from({ length: 40 }, (_, i) => ({ vault: "k", applet: `A/${i}` }));
-    expect(settingsFrom({ parachute: { bar } }).bar).toHaveLength(MAX_PLACES);
+  it("reads every place it can (the bar shows the first ones it finds), up to a bound", () => {
+    const bar = Array.from({ length: 400 }, (_, i) => ({ vault: "k", applet: `A/${i}` }));
+    expect(settingsFrom({ parachute: { bar } }).bar).toHaveLength(200);
+    expect(MAX_PLACES).toBe(12);
   });
 });
 

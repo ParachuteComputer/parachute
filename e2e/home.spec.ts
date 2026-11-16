@@ -3,7 +3,7 @@
 // applet set only by a write opens on start after the person's own tap, never by itself.
 import { expect, test, type Page } from "@playwright/test";
 import { ui } from "./helpers";
-import { api, hubState, VAULT } from "./hub";
+import { api, hubState, mcp, VAULT } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
@@ -62,7 +62,8 @@ test("a long-press pins an applet to the bar; the pin is the settings note's, su
 });
 
 test("the agent changes the bar by writing the settings note; the bar's long-press moves and unpins", async ({ page }) => {
-  await writeSettings({ bar: [{ vault: VAULT, applet: "Applets/Cook mode" }, { vault: VAULT, applet: await idOf("Applets/Recipes") }, { vault: VAULT, applet: "Applets/Gone" }] });
+  const theirs = { vault: VAULT, applet: "Applets/Recipes", label: "a key this app doesn't read" };
+  await writeSettings({ bar: [{ vault: VAULT, applet: "Applets/Cook mode" }, { vault: VAULT, applet: await idOf("Applets/Recipes") }, { vault: VAULT, applet: "Applets/Gone" }, theirs] });
   await start(page);
   // in the note's order; a place this device can't find is left out
   await expect(bar(page).getByRole("link")).toHaveText([/Launcher/, /Cook mode/, /Recipe box/]);
@@ -73,7 +74,8 @@ test("the agent changes the bar by writing the settings note; the bar's long-pre
   await page.getByRole("button", { name: "Unpin" }).click();
   await expect(bar(page).getByRole("link")).toHaveText([/Launcher/, /Recipe box/]);
   const [n] = await settingsNotes();
-  expect((n.metadata.parachute?.bar as { applet: string }[]).map((p) => p.applet)).toEqual([await idOf("Applets/Recipes"), "Applets/Gone"]);
+  // what the app doesn't read is kept as written
+  expect(n.metadata.parachute?.bar).toEqual([{ vault: VAULT, applet: await idOf("Applets/Recipes") }, { vault: VAULT, applet: "Applets/Gone" }, theirs]);
 });
 
 test("a home written only into the note opens on start after the person's tap, and by itself from then on", async ({ page }) => {
@@ -84,7 +86,7 @@ test("a home written only into the note opens on start after the person's tap, a
   await expect(page.getByText("Your settings open Recipe box when the app starts.")).toBeVisible();
   await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible();
   await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
-  await expect(bar(page).getByRole("link", { name: /Home/ })).toHaveAttribute("aria-current", "page");
+  await expect(bar(page).getByRole("link", { name: /Recipe box \(home\)/ })).toHaveAttribute("aria-current", "page");
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(appletFrame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
   // the next start opens it, running, with no card and no tap
@@ -142,4 +144,71 @@ test("hostile: a frame can't pin or set a home without a tap", async ({ page }) 
   }, id);
   expect(said).toEqual(["not_allowed", "not_allowed"]);
   expect(await settingsNotes()).toEqual([]);
+});
+
+test("hostile: a frame of the person's can set a home only in the note; this device still waits for their own tap", async ({ page }) => {
+  // Cook mode allowed with an ordinary tap
+  await page.goto(`/v/${VAULT}`);
+  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Cook mode/ }).click();
+  await page.getByRole("button", { name: "Allow" }).click();
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(1);
+  const cook = await idOf("Applets/Cook mode");
+  // a frame from the home vault that turns any tap on it into "open Cook mode on start"
+  const frame = await mcp(hubState(), "create-note", { path: "Parachute/Frame", extension: "tsx", tags: ["parachute-frame"],
+    content: `import { call } from "@parachute/frame";\nexport default function F() { return <button onClick={() => { void call("home.start", { vault: "${VAULT}", noteId: "${cook}" }); }}>Read the news</button>; }` });
+  try {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Use it" }).click();
+    await ui(page).getByRole("button", { name: "Read the news" }).click();
+    await expect.poll(async () => (await settingsNotes())[0]?.metadata.parachute?.start).toEqual({ vault: VAULT, applet: "Applets/Cook mode" });
+    await start(page);
+    await expect(page.getByText("Your settings open Cook mode when the app starts.")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Open Cook mode$/ })).toBeVisible();
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+  } finally {
+    await api(hubState(), "DELETE", `notes/${frame.id}`);
+  }
+});
+
+test("a full bar: the launcher stays in reach on a phone, and a thirteenth pin is refused with a reason", async ({ page }) => {
+  const made: string[] = [];
+  const html = "<!doctype html><p>extra</p>";
+  try {
+    for (let i = 1; i <= 11; i++) {
+      const n = await api(hubState(), "POST", "notes", { path: `Applets/Extra ${i}`, content: html, extension: "html", tags: ["applet"],
+        metadata: { applet: { contract: 2, id: `extra-${i}`, name: `Extra ${i}`, glyph: "✦" } } });
+      made.push(n.id);
+    }
+    await writeSettings({ bar: [{ vault: VAULT, applet: "Applets/Recipes" }, ...Array.from({ length: 11 }, (_, i) => ({ vault: VAULT, applet: `Applets/Extra ${i + 1}` }))] });
+    await start(page);
+    const launcher = bar(page).getByRole("link", { name: /Launcher/ });
+    await expect(bar(page).getByRole("link")).toHaveCount(13);
+    // the first place can be reached: it starts at the bar's left edge, not off screen
+    expect((await launcher.boundingBox())!.x).toBeGreaterThanOrEqual(0);
+    await ui(page).getByRole("link", { name: /Cook mode/ }).click({ button: "right" });
+    await ui(page).getByRole("button", { name: "Pin to the bar" }).click();
+    await expect(ui(page).getByRole("alert")).toHaveText("The bar holds 12 places: unpin one first.");
+  } finally {
+    for (const id of made) await api(hubState(), "DELETE", `notes/${id}`);
+  }
+});
+
+test("a long-press with a finger on the bar opens its sheet, and the press opens nothing", async ({ page }) => {
+  await writeSettings({ bar: [{ vault: VAULT, applet: "Applets/Recipes" }] });
+  await start(page);
+  const place = bar(page).getByRole("link", { name: /Recipe box/ });
+  await expect(place).toBeVisible();
+  const box = (await place.boundingBox())!;
+  const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [at] });
+  await page.waitForTimeout(800);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect(page.getByRole("dialog", { name: "Recipe box" })).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  // a short tap still goes there
+  await place.tap();
+  await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/a/`));
 });

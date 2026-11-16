@@ -18,7 +18,7 @@ import KeyStart from "../key/KeyStart";
 import Pair from "../key/Pair";
 import { keysHere, useKey } from "../key/key";
 import BottomBar from "./BottomBar";
-import { startPath } from "./start";
+import { startPlace } from "./start";
 import { readSettings } from "./homeSettings";
 
 /** The one listener for real taps on the shell's own links, and the rule that a tap's mark is gone once the person moves on. */
@@ -52,7 +52,12 @@ function useStart(): boolean {
   useEffect(() => {
     if (decided) { if (listVaults().length) void readSettings(); return; }
     let on = true;
-    void startPath().then((to) => { if (!on) return; if (to) navigate(to, { replace: true }); setDecided(true); }, () => { if (on) setDecided(true); });
+    void startPlace().then((to) => {
+      if (!on) return;
+      // only from where the app started: a link from outside that arrived meanwhile wins
+      if (to && window.location.pathname === "/") { to.go(); navigate(to.href, { replace: true }); }
+      setDecided(true);
+    }, () => { if (on) setDecided(true); });
     return () => { on = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return decided;
