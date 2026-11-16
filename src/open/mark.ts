@@ -2,7 +2,8 @@
 // live user activation where the webview reports it) on a link to a note or an applet, and marks that address. The
 // screen the address leads to may start an applet for it once. The mark is in memory only, lives 10 seconds, and is
 // gone when the person goes anywhere else first. A link from outside, a typed address or a screen restored at launch
-// has no mark: the applet waits, stopped, for a tap on its Open button.
+// has no mark: the applet waits, stopped, for a tap on its Open button. (One exception, the shell's: the home the person
+// chose on this device runs on any arrival while their settings still name it. See shell/start.ts.)
 
 export const MARK_TTL_MS = 10_000;
 type Mark = { path: string; at: number };

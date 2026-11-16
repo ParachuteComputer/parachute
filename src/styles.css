@@ -128,13 +128,16 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: safe center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: 1px solid var(--text); overflow-x: auto; }
 .home-bar-place { flex: 0 1 auto; min-width: 64px; max-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 8px 2px; color: var(--text); text-decoration: none; font-size: 13px; line-height: 1.2; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; -webkit-touch-callout: none; user-select: none; }
 .home-bar-glyph { font: 20px/1 var(--serif); }
+/* a glyph is ink: one with no text form (only a colour emoji) is drawn grey, never in colour */
+.home-bar-glyph, .entry-glyph, .grant-glyph { filter: grayscale(1); }
 .home-bar-place[aria-current="page"] { font-weight: 700; }
 .home-bar-place[aria-current="page"]::after { content: ""; width: 26px; height: 2px; margin-top: 2px; background: var(--text); border-radius: 2px; }
 .home-bar-place:active { background: var(--line); }
 .home-bar-sep { width: 1px; margin: 10px 6px; background: var(--line); flex: none; }
 .with-bar .app-frame { bottom: calc(env(safe-area-inset-bottom) + var(--bar-h)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--bar-h)); }
 .with-bar > .screen, .with-bar > main { padding-bottom: calc(var(--bar-h) + 24px); }
-.with-bar .applet-screen { min-height: calc(100dvh - var(--bar-h) - 24px); }
+.applet-screen { max-width: 1280px; }
+.with-bar .applet-screen { min-height: 100dvh; padding-bottom: calc(var(--bar-h) + 10px); }
 .with-bar .sheet-scrim { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
 .sheet-list li + li { border-top: 1px solid var(--line); }
 .sheet-list .sheet-choice { padding: 12px 2px; font-size: 16px; }

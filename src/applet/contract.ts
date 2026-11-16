@@ -8,7 +8,7 @@
 // and the host pushes events: {uni:1, event, data}.
 
 export const CONTRACT_VERSION = 1;
-export const NAMESPACES = ["vault", "theme"] as const;
+export const NAMESPACES = ["vault", "theme", "app"] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
 /** What an applet can be granted, each scoped to folders of the vault its note lives in: read, add notes, change notes. */

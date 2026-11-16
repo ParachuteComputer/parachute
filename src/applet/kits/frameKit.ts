@@ -9,6 +9,7 @@
 //   uni.frameFetch(url, init)        → fetch over the frame (pfr envelope), what VaultClient uses
 //   uni.VaultClient / uni.vault      → surface-client's VaultClient on frameFetch
 //   uni.theme.get() / .on(cb)        → host colours; CSS vars --text, --accent… are also set on <html>
+//   uni.app.recent/pins/open         → what it may ask of the app (modules/app.ts), new here: the Uni app has none
 // In-page #anchor links scroll in place.
 
 export const FRAME_KIT = String.raw`(function () {
@@ -84,6 +85,11 @@ export const FRAME_KIT = String.raw`(function () {
     },
     frameFetch: frameFetch,
     call: call,
+    app: Object.freeze({
+      recent: function (o) { return call("app", "recent", o || {}); },
+      pins: function () { return call("app", "pins", {}); },
+      open: function (href) { return call("app", "open", { href: href }); }
+    }),
     theme: {
       get: function () { return call("theme", "get", {}); },
       on: function (cb) { themeCbs.push(cb); if (theme) cb(theme); }

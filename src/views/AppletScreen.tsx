@@ -4,12 +4,13 @@
 // - its code is HTML, or one TSX/JSX module (code.ts) the app transpiles here, before the card, once per code hash; code
 //   that doesn't compile is refused with the reason, and nothing runs;
 // - never allowed, changed what it reaches, or changed code: the grant card; nothing runs until Allow;
-// - allowed: it runs only after a tap inside the app (a marked tap that led here, Allow, or Open); otherwise it waits,
+// - allowed: it runs only after a tap inside the app (a marked tap that led here, Allow, or Open), or when it is the
+//   person's home, chosen on this device and still named in their settings (shell/start.ts); otherwise it waits,
 //   stopped, with an Open button;
 // - it is handed a note (`ready().open`) only when that note is one it claims (opens.ts), and only when the code that
 //   loaded is the code that was allowed.
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useParams, useSearchParams } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../ui/Bar";
 import { useVault } from "../vault/hooks";
@@ -27,11 +28,14 @@ import { screenOf } from "../applet/manifest";
 import { createRouter } from "../applet/router";
 import { createVaultModule } from "../applet/modules/vault";
 import { createThemeModule, readHostTheme } from "../applet/modules/theme";
+import { createAppModule } from "../applet/modules/app";
+import { appDeps } from "../shell/appDeps";
 import { runDecision } from "../applet/selftest/gate";
 import { useGate } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
 import { takeMark } from "../open/mark";
-import { chooseStart, takeStart } from "../shell/start";
+import { chooseStart, startChosenHere, takeStart } from "../shell/start";
+import { barNow, settingsReadNow } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 
@@ -48,6 +52,9 @@ export default function AppletScreen() {
   const { vault: key, applet: appletId } = useParams();
   const [params] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
+  const navRef = useRef(navigate);
+  navRef.current = navigate;
   const rec = useVault(key);
   const mode = useGate();
   const askedNote = params.get("note");
@@ -58,11 +65,16 @@ export default function AppletScreen() {
     // a start runs it by itself only when the person chose it as home here (and, as always, allowed its code)
     startedByTap.set(location.key, tapped || !!start?.chosen);
   }
+  // so does any other way to that home (Back to it, the bar), when it isn't asked to open a note: while the settings, as
+  // read from the vault this session (not the copy kept from before), still name it, and the person chose it here
+  const home = settingsReadNow() ? barNow().start : null;
+  const chosenHome = !askedNote && !!rec && !!appletId && home?.vault === rec.key && home.noteId === appletId && startChosenHere(rec.key, appletId);
   const atStart = startedAtStart.get(location.key) ?? null;
   // the person's tap on Allow or Open, on the screen a start led to, is their choice of it as home on this device
   const chooseHere = () => { if (atStart && !atStart.chosen) { chooseStart(atStart.vault, atStart.noteId); startedAtStart.set(location.key, { ...atStart, chosen: true }); } };
-  const [started, setStarted] = useState(() => startedByTap.get(location.key) ?? false);
-  // a tap counts for the first screen drawn for this entry only: Back or Forward to it later starts nothing
+  const [started, setStarted] = useState(() => (startedByTap.get(location.key) ?? false) || chosenHome);
+  // a tap counts for the first screen drawn for this entry only: Back or Forward to it later starts nothing (but the home
+  // the person chose here, above)
   useEffect(() => () => { startedByTap.set(location.key, false); }, [location.key]);
   const [declined, setDeclined] = useState(false);
   const [, setBump] = useState(0);
@@ -88,7 +100,7 @@ export default function AppletScreen() {
         a.entry.opens = withoutRoles(a.entry.opens, await readRoleTags(c));
         const note = askedNote ? await c.getNote(askedNote).catch(() => null) : null;
         const source = n.content ?? "";
-        const [scope, code] = await Promise.all([grantKey(grantOf(a.entry.manifest, rec.key, a.entry.opens), a.entry.path), prepare(source, kind)]);
+        const [scope, code] = await Promise.all([grantKey(grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app), a.entry.path), prepare(source, kind)]);
         if (!on) return;
         if (code.compiled && !code.compiled.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${code.compiled.error}` }); return; }
         setLoaded({ state: "ok", entry: a.entry, page: appletPage(kind, source, code.compiled?.js ?? null), note });
@@ -111,6 +123,7 @@ export default function AppletScreen() {
   const router = useMemo(() => (rec && entry ? createRouter([
     createVaultModule(vaultDeps(clientFor(rec)), { opens: entry.opens, name: rec.vault }),
     createThemeModule({ theme: readHostTheme }),
+    createAppModule(entry.app, appDeps((href) => navRef.current(href))),
   ]) : null), [rec?.key, rec?.issuer, rec?.vault, entry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
@@ -138,7 +151,7 @@ export default function AppletScreen() {
     return shell(<>
       {note && <p className="quiet">{name} asks before it opens {titleOf(note)}.</p>}
       <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} runs={mode === "approved-code" ? "approved-code" : "sealed"} codeChanged={decision === "ask-updated" && status === "updated"}
-        lines={grantLines(grantOf(entry.manifest, rec.key, entry.opens), ownFolder(entry.path))} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
+        lines={grantLines(grantOf(entry.manifest, rec.key, entry.opens, entry.app), ownFolder(entry.path))} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         onAllow={() => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry); chooseHere(); setStarted(true); bump(); }}
         onNotNow={() => setDeclined(true)} />
     </>);
