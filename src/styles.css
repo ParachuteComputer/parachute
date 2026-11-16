@@ -1,18 +1,21 @@
-/* Parachute's one look. The theme variables are also what an applet's frame is handed (text, muted, accent, surface,
-   line, sans, serif, mono). Compact: content starts at the top, no big empty gaps. */
+/* Parachute's one look: paper, ink and one moss accent, a book serif for names and reading, a quiet sans for the rest
+   (design/WHY.md). The theme variables are also what an applet's frame is handed (text, muted, accent, surface, line,
+   sans, serif, mono). Compact: content starts at the top, no big empty gaps. Hierarchy by type, weight and space, never
+   colour alone: the Daylight shows grey. */
 :root {
-  --bg: #f6f4ef; --surface: #fffdf9; --text: #1d1c1a; --muted: #6b675f; --line: #e2ded5; --accent: #2f5d50; --danger: #9a3324;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --bg: #f2ede2; --surface: #fbf8f1; --text: #1d1a16; --muted: #6d665a; --line: #d9d1c1; --accent: #4f6b3a; --danger: #9a3324;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif;
+  --bar-h: 58px;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --pad: 14px; --radius: 10px;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #151514; --surface: #1e1e1c; --text: #ecebe6; --muted: #a29e95; --line: #34332f; --accent: #8cc4b1; --danger: #f08f7f; }
+  :root { --bg: #171613; --surface: #201e1a; --text: #ece7dc; --muted: #a59d8e; --line: #3a362f; --accent: #a3bf8a; --danger: #f08f7f; }
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 var(--sans); -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 var(--sans); -webkit-tap-highlight-color: transparent; font-variant-emoji: text; }
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: var(--accent); }
 button, input { font: inherit; color: inherit; }
@@ -117,6 +120,59 @@ details[open] summary { margin-bottom: 6px; }
 /* The frame: the sealed iframe the shell shows the vault list, a vault and a note in, filling the screen inside the safe area. */
 .app-frame { position: fixed; top: env(safe-area-inset-top); right: env(safe-area-inset-right); bottom: env(safe-area-inset-bottom); left: env(safe-area-inset-left); width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom)); border: 0; background: var(--bg); }
 /* The app's own way to Settings over a frame from the person's vault: whatever that frame draws, this stays. */
-.shell-settings { position: fixed; right: calc(env(safe-area-inset-right) + 10px); bottom: calc(env(safe-area-inset-bottom) + 10px); width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--surface); color: var(--muted); border: 1px solid var(--line); text-decoration: none; font-size: 16px; opacity: 0.85; }
+.shell-settings { position: fixed; right: calc(env(safe-area-inset-right) + 10px); bottom: calc(env(safe-area-inset-bottom) + var(--bar-h) + 10px); width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--surface); color: var(--muted); border: 1px solid var(--line); text-decoration: none; font-size: 16px; opacity: 0.85; }
 .link-whole { max-height: 30vh; overflow: auto; overflow-wrap: anywhere; }
 button.primary[aria-disabled="true"] { opacity: 0.5; }
+
+/* The bar (src/shell/BottomBar.tsx): a ribbon of words across the foot, the current place in bold and underlined. */
+.home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: safe center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: 1px solid var(--text); overflow-x: auto; }
+.home-bar-place { flex: 0 1 auto; min-width: 64px; max-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 8px 2px; color: var(--text); text-decoration: none; font-size: 13px; line-height: 1.2; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; -webkit-touch-callout: none; user-select: none; }
+.home-bar-glyph { font: 20px/1 var(--serif); }
+.home-bar-place[aria-current="page"] { font-weight: 700; }
+.home-bar-place[aria-current="page"]::after { content: ""; width: 26px; height: 2px; margin-top: 2px; background: var(--text); border-radius: 2px; }
+.home-bar-place:active { background: var(--line); }
+.home-bar-sep { width: 1px; margin: 10px 6px; background: var(--line); flex: none; }
+.with-bar .app-frame { bottom: calc(env(safe-area-inset-bottom) + var(--bar-h)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--bar-h)); }
+.with-bar > .screen, .with-bar > main { padding-bottom: calc(var(--bar-h) + 24px); }
+.with-bar .applet-screen { min-height: calc(100dvh - var(--bar-h) - 24px); }
+.with-bar .sheet-scrim { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
+.sheet-list li + li { border-top: 1px solid var(--line); }
+.sheet-list .sheet-choice { padding: 12px 2px; font-size: 16px; }
+.start-line { margin: 0 0 8px; font: italic 15px var(--serif); }
+
+/* The launcher (src/frame/views/Launcher.tsx): the contents page of a book. Vaults are chapters; each applet is an entry
+   with a dotted leader to a line of what changed lately. Two pages on a wide screen. */
+.launcher { max-width: 860px; padding-top: 22px; }
+.launcher-wide { max-width: 1280px; }
+.launcher-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 16px; }
+.launcher-head h1 { margin: 0; font: 400 30px/1.1 var(--serif); letter-spacing: -.01em; }
+.launcher-when { font: italic 15px var(--serif); color: var(--muted); }
+.launcher-spread { display: grid; gap: 24px; }
+.chapter h2 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; font: italic 400 17px var(--serif); color: var(--muted); }
+.chapter h2 a { margin-left: auto; font: normal 14px var(--sans); color: var(--text); text-decoration: none; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.entries { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--text); }
+.entries > li { border-bottom: 1px solid var(--line); }
+.entry { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: baseline; column-gap: 8px; padding: 10px 0; color: var(--text); text-decoration: none; -webkit-touch-callout: none; user-select: none; }
+.entry:active { background: var(--line); }
+.entry-glyph { font: 19px var(--serif); text-align: center; }
+.entry-name { font: 500 21px/1.25 var(--serif); overflow-wrap: anywhere; }
+.entry-dots { display: none; }
+.entry-life { grid-column: 2; font: italic 15px/1.35 var(--serif); color: var(--muted); overflow-wrap: anywhere; }
+.entry-home { margin-left: 8px; padding: 1px 5px; border-radius: 3px; background: var(--text); color: var(--surface); font: 600 12px/1.3 var(--sans); vertical-align: 3px; }
+.entry-pinned { margin-left: 8px; font: 12px var(--sans); color: var(--accent); vertical-align: 2px; }
+.entry-quiet { padding: 10px 0 10px 34px; font: italic 15px var(--serif); color: var(--muted); }
+.launcher-foot { display: flex; gap: 18px; margin: 22px 0 0; font-size: 14px; }
+.launcher-foot a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--line); }
+@media (min-width: 640px) {
+  .entry { grid-template-columns: 26px auto minmax(20px, 1fr) auto; }
+  .entry-dots { display: block; border-bottom: 1.5px dotted var(--muted); transform: translateY(-5px); }
+  .entry-life { grid-column: auto; text-align: right; max-width: 22em; }
+}
+@media (min-width: 1000px) {
+  .launcher { padding: 40px 64px 32px; }
+  .launcher-head h1 { font-size: 38px; }
+  .launcher-pages { display: block; columns: 2; column-gap: 96px; column-rule: 1px solid var(--line); }
+  .chapter { break-inside: avoid; margin-bottom: 26px; }
+  .entry-name { font-size: 23px; }
+  .home-bar-place { min-width: 96px; font-size: 15px; }
+}

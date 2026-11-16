@@ -28,7 +28,7 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
   const note = load.state === "ok" ? load.data : null;
   return (
     <main className="screen">
-      <Bar title={note ? titleOf(note) : "Note"} back={`/v/${encodeURIComponent(rec.key)}`} />
+      <Bar title={note ? titleOf(note) : "Note"} back={true} />
       {above}
       {load.state === "loading" && <p className="quiet" role="status">Loading…</p>}
       {load.state === "error" && <p className="error" role="alert">{load.error}</p>}

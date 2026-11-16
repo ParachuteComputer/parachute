@@ -49,7 +49,7 @@ export default function NoteRoute() {
   if (!rec) return <NoVault />;
   if (plain) return <NoteView />;
   const first = decided.get(location.key) ?? decision?.kind;
-  if (ow.state === "loading" || first === "applet") return <main className="screen"><Bar title="Note" back={`/v/${encodeURIComponent(rec.key)}`} /><p className="quiet" role="status">Opening…</p></main>;
+  if (ow.state === "loading" || first === "applet") return <main className="screen"><Bar title="Note" back={true} /><p className="quiet" role="status">Opening…</p></main>;
   // what shows is the decision made on arrival (a default stored from the sheet a moment later changes nothing here)
   const l = first === "vault" && decision?.kind === "vault" ? decision.line : null;
   const line = l && ow.state === "ok" && ow.note ? (

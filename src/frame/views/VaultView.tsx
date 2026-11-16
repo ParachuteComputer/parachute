@@ -23,7 +23,7 @@ export default function VaultView() {
   if (!rec) return <NoVault />;
   return (
     <main className="screen">
-      <Bar title={rec.vault} back="/" />
+      <Bar title={rec.vault} back={true} />
       {applets?.ok && applets.entries.length > 0 && (
         <ul className="applets" aria-label="Applets">
           {applets.entries.map((a) => (

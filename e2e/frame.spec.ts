@@ -40,7 +40,7 @@ test("a change to the frame (one MCP update) shows the card again; the version a
   await page.getByRole("button", { name: "Make this mine" }).click();
   await expect(status(page)).toHaveText("Your frame runs: Parachute/Frame.");
   const [rec] = await frameNotes();
-  const changed = rec.content.replace('<Route path="/" element={<Home />} />', '<Route path="/" element={<><h2>My own frame</h2><Home /></>} />');
+  const changed = rec.content.replace('<Route path="/" element={<Launcher />} />', '<Route path="/" element={<><h2>My own frame</h2><Launcher /></>} />');
   expect(changed).not.toBe(rec.content);
   await mcp(hubState(), "update-note", { id: rec.id, content: changed, if_updated_at: rec.updatedAt });
   await page.goto("/");
@@ -108,7 +108,7 @@ test("a frame that stops gives way to the built-in one, and Settings says why", 
   await page.goto("/");
   await page.getByRole("button", { name: "Use it" }).click();
   await expect(frameEl(page)).toHaveAttribute("data-frame", "built-in");
-  await expect(ui(page).getByRole("list", { name: "Vaults" })).toBeVisible();
+  await expect(ui(page).getByRole("list", { name: `Applets in ${VAULT}` })).toBeVisible();
   await page.goto("/settings");
   await expect(status(page)).toHaveText("The built-in frame runs: your frame stopped.");
   await expect(page.locator("q[data-untrusted]")).toContainText("boom");

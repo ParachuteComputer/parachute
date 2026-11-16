@@ -36,7 +36,7 @@ the binary if it isn't on your `PATH`.
 
 Two layers. The **shell** (`src/shell/`, started from `src/main.tsx`) is small and fixed: it holds the key, the sign-ins
 and their tokens, the applets' grants and their card, the self-test, and the screens that use them (adding a vault, an applet's
-screen, Settings, a link from outside). The **frame** (`src/frame/`: the vault list, a vault, a note, open-with and its
+screen, Settings, a link from outside). The **frame** (`src/frame/`: the launcher, a vault, a note, open-with and its
 sheet) is its own bundle (the `virtual:frame-kit` Vite plugin) that the shell runs in a sealed frame: a srcdoc iframe with
 `sandbox="allow-scripts"`, an opaque origin, no network and no storage of its own. It reaches the shell only through one
 typed message interface, `src/bridge/protocol.ts`, which reads vaults (never a token), lists applets with their status,
@@ -53,6 +53,12 @@ allowed that exact code on the frame's card. Changed code asks again, the last a
 that stops gives way to the built-in one. "Make this mine" copies the built-in frame into the vault (copy-on-write); a
 newer built-in frame is then offered in Settings, never written over theirs. See
 [docs/CHANGE-YOUR-FRAME.md](docs/CHANGE-YOUR-FRAME.md) and `src/shell/frameSource.ts`.
+
+**Moving around** is one model ([docs/NAVIGATION.md](docs/NAVIGATION.md)): the launcher for everything, a bar at the
+foot for the pinned places and the home applet, Back to where you came from, a note in its applet. The bar is the
+shell's (`src/shell/BottomBar.tsx`), drawn under the frame and under applets; what is on it is one settings note in the
+home vault (`src/shell/homeSettings.ts`), which the person's agent can write. Open on start (`src/shell/start.ts`) runs
+an applet by itself only when this device holds both its Allow and the person's choice of it as home.
 
 - `src/vault/`: signing in (OAuth with PKCE and dynamic registration, one sign-in per vault), the vaults this device
   holds, the client.

@@ -19,10 +19,14 @@ export type FrameVault = { key: string; vault: string; host: string; issuer: str
 /** An applet as open-with needs it, with its status on this device, judged by the shell. */
 export type FrameApplet = {
   noteId: string; path: string; vault: string; opens: Opens[];
-  manifest: { id: string; name: string; glyph: string; screens: { id: string; name: string }[] };
+  manifest: { id: string; name: string; glyph: string; note?: string; screens: { id: string; name: string }[] };
   status: "ok" | "updated" | "none" | "off";
 };
 export type FrameApplets = { ok: true; entries: FrameApplet[]; skipped: number } | { ok: false; error: string };
+/** An applet as the bar names it: its vault (this device's key) and its note. */
+export type FramePlace = { vault: string; noteId: string };
+/** The bar and the home (docs/NAVIGATION.md): what this device can find of the person's settings note. */
+export type FrameHome = { start: FramePlace | null; bar: FramePlace[] };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
 export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; includeContent?: boolean; includeMetadata?: boolean };
 /** `decided`: what the note's route already decided for this history entry (kept by the shell, which outlives the frame). */
@@ -41,6 +45,11 @@ export type Calls = {
   "defaults.get": [{ vault: string }, Record<string, string>];
   /** `choice` null clears it. */
   "defaults.set": [{ vault: string; type: string; choice: string | null }, null];
+  "home.get": [Record<string, never>, FrameHome];
+  /** Pin an applet to the bar, or unpin it; only during a tap. */
+  "home.pin": [{ vault: string; noteId: string; on: boolean }, null];
+  /** Make an applet the home (it opens on start), or none (`noteId` null); only during a tap. */
+  "home.start": [{ vault: string; noteId: string | null }, null];
   /** Go to an address in the app. `carryFrom`: the address a tap led to, which the app now sends on to `to`. */
   "nav.go": [{ to: string; replace?: boolean; carryFrom?: string }, null];
   "nav.back": [Record<string, never>, null];
@@ -54,9 +63,9 @@ export type Calls = {
 export type Method = keyof Calls;
 export type Params<M extends Method> = Calls[M][0];
 export type Result<M extends Method> = Calls[M][1];
-export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
+export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "home.get", "home.pin", "home.start", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
 
-export type Events = { location: FrameLocation; changed: { what: "vaults" | "applets" | "defaults" } };
+export type Events = { location: FrameLocation; changed: { what: "vaults" | "applets" | "defaults" | "home" } };
 
 export type Request = { pf: 1; id: string; method: Method; params: unknown };
 export type Reply = { pf: 1; id: string; result: unknown } | { pf: 1; id: string; error: string };
@@ -83,7 +92,9 @@ export function parseRequest(data: unknown): { id: string; method: Method; param
 
 function paramsOk(m: Method, p: Record<string, unknown>): boolean {
   switch (m) {
-    case "vaults.list": case "nav.back": return only(p, []);
+    case "vaults.list": case "nav.back": case "home.get": return only(p, []);
+    case "home.pin": return only(p, ["vault", "noteId", "on"]) && str(p.vault, 120) && str(p.noteId) && typeof p.on === "boolean";
+    case "home.start": return only(p, ["vault", "noteId"]) && str(p.vault, 120) && (p.noteId === null || str(p.noteId));
     case "vault.note": return only(p, ["vault", "id"]) && str(p.vault, 120) && str(p.id);
     case "vault.roles": case "defaults.get": return only(p, ["vault"]) && str(p.vault, 120);
     case "applets.list": return only(p, ["vault", "fresh"]) && str(p.vault, 120) && typeof p.fresh === "boolean";

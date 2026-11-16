@@ -125,10 +125,11 @@ test("Stop holds: leaving and coming Back doesn't start it again", async ({ page
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
   await page.getByRole("button", { name: "Stop" }).click();
-  await page.getByRole("link", { name: "Back" }).click();
+  // Back returns where the person came from: the vault
+  await page.getByRole("button", { name: "Back" }).click();
   // the vault view drawn first, so the applet's screen is really left
   await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
-  await page.goBack();
+  await page.goForward();
   await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
   await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });

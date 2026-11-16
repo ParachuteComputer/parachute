@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup A: Contents</title>
+<!-- Mockup A, "Contents": the launcher reads like the contents page of an old book. Static; made-up content.
+     ?screen=launcher | home -->
+<style>
+  :root {
+    --ground: #f2ede2; --paper: #fbf8f1; --ink: #1d1a16; --muted: #6d665a; --rule: #d9d1c1; --moss: #4f6b3a;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif;
+    --display: Fraunces, "Iowan Old Style", "Noto Serif", serif;
+    --sans: "Instrument Sans", system-ui, "Noto Sans", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { font-variant-emoji: text; margin: 0; height: 100%; background: var(--ground); color: var(--ink); font: 16px/1.5 var(--sans); }
+  body { display: flex; flex-direction: column; }
+  main { flex: 1; overflow: auto; }
+  .page { max-width: 1280px; margin: 0 auto; padding: 28px 22px 24px; }
+  .head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 18px; }
+  .head h1 { margin: 0; font: 400 30px/1.1 var(--display); letter-spacing: -.01em; }
+  .head .when { font: italic 15px var(--serif); color: var(--muted); }
+  .spread { display: grid; gap: 26px; }
+  .chapter h2 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; font: italic 400 17px var(--serif); color: var(--muted); }
+  .chapter h2 a { margin-left: auto; font: 14px var(--sans); color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule); }
+  ol { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--ink); }
+  li a { display: grid; grid-template-columns: 26px auto 1fr auto; align-items: baseline; gap: 8px; padding: 11px 0; color: inherit; text-decoration: none; border-bottom: 1px solid var(--rule); }
+  .g { font: 19px var(--serif); text-align: center; }
+  .n { font: 500 21px/1.25 var(--serif); }
+  .dots { border-bottom: 1.5px dotted var(--muted); transform: translateY(-5px); min-width: 20px; }
+  .life { font: italic 15px var(--serif); color: var(--muted); text-align: right; }
+  .pin { font: 12px var(--sans); color: var(--moss); margin-left: 6px; }
+  .home-mark { font: 600 12px var(--sans); color: var(--paper); background: var(--ink); border-radius: 3px; padding: 1px 5px; margin-left: 6px; vertical-align: 3px; }
+  .foot { margin-top: 24px; display: flex; gap: 18px; font-size: 14px; }
+  .foot a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule); }
+
+  /* the bar: a ribbon of words, like a bookmark across the foot of the page */
+  nav.bar { flex: none; display: flex; justify-content: center; gap: 4px; background: var(--paper); border-top: 1px solid var(--ink); padding: 6px 10px calc(6px + env(safe-area-inset-bottom)); }
+  nav.bar a { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 64px; padding: 6px 10px 4px; color: var(--ink); text-decoration: none; font: 13px var(--sans); }
+  nav.bar a .bg { font: 20px/1 var(--serif); }
+  nav.bar a[aria-current] { font-weight: 650; }
+  nav.bar a[aria-current]::after { content: ""; width: 26px; height: 2px; background: var(--ink); border-radius: 2px; margin-top: 2px; }
+  nav.bar .sep { width: 1px; background: var(--rule); margin: 6px 6px; }
+
+  /* home */
+  .lede { font: 400 34px/1.15 var(--display); margin: 0 0 6px; }
+  .sub { font: italic 16px var(--serif); color: var(--muted); margin: 0 0 22px; }
+  .lately li a { grid-template-columns: 1fr auto; }
+  .lately .t { font: 500 19px/1.3 var(--serif); }
+  .lately .v { font: 13px var(--sans); color: var(--muted); display: block; }
+  .lately .d { font: italic 14px var(--serif); color: var(--muted); }
+  .day { font: italic 15px var(--serif); color: var(--muted); margin: 16px 0 4px; }
+  .pins { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 0; padding: 12px 0 0; list-style: none; border-top: 1px solid var(--ink); }
+  .pins a { font: 500 19px var(--serif); color: var(--ink); text-decoration: none; }
+  .pins a span { margin-right: 6px; }
+
+  @media (max-width: 600px) {
+    li a { grid-template-columns: 26px 1fr; row-gap: 0; padding: 10px 0; }
+    .dots { display: none; }
+    .life { grid-column: 2; text-align: left; font-size: 14px; }
+    .lately li a { grid-template-columns: 1fr auto; }
+    .lately .d { grid-column: auto; }
+  }
+  @media (min-width: 900px) {
+    .page { padding: 40px 64px 32px; }
+    .head h1 { font-size: 38px; }
+    .spread { grid-template-columns: 1fr 1fr; column-gap: 96px; position: relative; }
+    .spread::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: linear-gradient(var(--rule), transparent); }
+    .n { font-size: 23px; }
+    .lede { font-size: 46px; }
+    nav.bar a { min-width: 96px; font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<main id="launcher">
+  <div class="page">
+    <div class="head"><h1>Parachute</h1><span class="when">Sunday, 16 November</span></div>
+    <div class="spread">
+      <div>
+        <section class="chapter">
+          <h2>Notebook <a href="#">Open the vault</a></h2>
+          <ol>
+            <li><a href="#"><span class="g">◠</span><span class="n">Home<span class="home-mark">home</span></span><span class="dots"></span><span class="life">opens on start</span></a></li>
+            <li><a href="#"><span class="g">☾</span><span class="n">Reading list<span class="pin">● pinned</span></span><span class="dots"></span><span class="life">The Overstory, 5 days ago</span></a></li>
+            <li><a href="#"><span class="g">✎</span><span class="n">Field notes</span><span class="dots"></span><span class="life">3 new this week</span></a></li>
+          </ol>
+        </section>
+        <section class="chapter" style="margin-top:26px">
+          <h2>Garden <a href="#">Open the vault</a></h2>
+          <ol>
+            <li><a href="#"><span class="g">✿</span><span class="n">Seed log<span class="pin">● pinned</span></span><span class="dots"></span><span class="life">tomatoes sown, yesterday</span></a></li>
+            <li><a href="#"><span class="g">☂&#xFE0E;</span><span class="n">Rain gauge</span><span class="dots"></span><span class="life">4 readings this week</span></a></li>
+          </ol>
+        </section>
+      </div>
+      <div>
+        <section class="chapter">
+          <h2>Kitchen <a href="#">Open the vault</a></h2>
+          <ol>
+            <li><a href="#"><span class="g">❀</span><span class="n">Recipes<span class="pin">● pinned</span></span><span class="dots"></span><span class="life">lentil soup, 2 days ago</span></a></li>
+            <li><a href="#"><span class="g">◇</span><span class="n">Week plan</span><span class="dots"></span><span class="life">Thursday filled in, today</span></a></li>
+            <li><a href="#"><span class="g">✣</span><span class="n">Pantry</span><span class="dots"></span><span class="life">quiet for a month</span></a></li>
+          </ol>
+        </section>
+        <div class="foot"><a href="#">Add a vault</a><a href="#">Settings</a></div>
+      </div>
+    </div>
+  </div>
+</main>
+<main id="home" hidden>
+  <div class="page">
+    <p class="lede">Sunday</p>
+    <p class="sub">Five notes changed since Friday, in three vaults.</p>
+    <div class="spread">
+      <section class="lately">
+        <p class="day">Today</p>
+        <ol>
+          <li><a href="#"><span><span class="t">Week of 17 November</span><span class="v">Kitchen · Week plan</span></span><span class="d">9:40</span></a></li>
+          <li><a href="#"><span><span class="t">Walk along the creek</span><span class="v">Notebook · Field notes</span></span><span class="d">8:15</span></a></li>
+        </ol>
+        <p class="day">Yesterday</p>
+        <ol>
+          <li><a href="#"><span><span class="t">Tomatoes, second sowing</span><span class="v">Garden · Seed log</span></span><span class="d">17:02</span></a></li>
+          <li><a href="#"><span><span class="t">Rain, 12 mm</span><span class="v">Garden</span></span><span class="d">7:30</span></a></li>
+        </ol>
+        <p class="day">Friday</p>
+        <ol>
+          <li><a href="#"><span><span class="t">Lentil soup</span><span class="v">Kitchen · Recipes</span></span><span class="d">18:45</span></a></li>
+        </ol>
+      </section>
+      <section>
+        <p class="day">Pinned</p>
+        <ul class="pins">
+          <li><a href="#"><span>❀</span>Recipes</a></li>
+          <li><a href="#"><span>✿</span>Seed log</a></li>
+          <li><a href="#"><span>☾</span>Reading list</a></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</main>
+<nav class="bar" aria-label="Bar">
+  <a href="#" id="b-launcher" aria-current="page"><span class="bg">⁂</span>Launcher</a>
+  <span class="sep"></span>
+  <a href="#" id="b-home"><span class="bg">◠</span>Home</a>
+  <a href="#"><span class="bg">❀</span>Recipes</a>
+  <a href="#"><span class="bg">✿</span>Seed log</a>
+  <a href="#"><span class="bg">☾</span>Reading</a>
+</nav>
+<script>
+  if (new URLSearchParams(location.search).get("screen") === "home") {
+    document.getElementById("launcher").hidden = true; document.getElementById("home").hidden = false;
+    document.getElementById("b-launcher").removeAttribute("aria-current"); document.getElementById("b-home").setAttribute("aria-current", "page");
+  }
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Change your frame
 
-For a chat AI with the Parachute MCP, and for people. The **frame** is the screens around your notes: the vault list,
+For a chat AI with the Parachute MCP, and for people. The **frame** is the screens around your notes: the launcher,
 a vault, a note, and "Open with…". The Parachute app has a built-in frame. You can have your own instead: **one note**
 in your home vault. The app never takes sign-ins, grants or the permission card from a vault: those stay in the app.
 
@@ -27,18 +27,22 @@ Its code may import only `react`, `react-dom`, `react-dom/client`, `react/jsx-ru
 
 | From `@parachute/frame` | What it is |
 |---|---|
-| `Home`, `VaultView`, `NoteRoute`, `NoteView`, `NoVault`, `Sheet`, `Bar` | The built-in screens and parts |
+| `Launcher`, `VaultView`, `NoteRoute`, `NoteView`, `NoVault`, `Sheet`, `Bar` | The built-in screens and parts (`Home` is the launcher's older name) |
 | `installLongPress`, `openSheet`, `closeSheet`, `useOpenWith` | Open with, and the long-press that offers it |
 | `useVaults`, `useVault`, `useVaultQuery`, `readerFor`, `useApplets`, `useDefaults` | The vaults this device holds and reads of them (no sign-ins) |
+| `useHome`, `pinApplet`, `startApplet` | What is on the bar and which applet is home; pin, unpin or choose home (on a tap only) |
 | `call` | The app's bridge, for anything else it offers |
 | `noteHref`, `titleOf`, `folderOf` | Small helpers |
 
 Start from the built-in frame's code (the note "Make this mine" writes) and change what you need: add a screen,
-change the vault view, or put something above the notes. For example, a heading on the vault list:
+change the vault view, or put something above the notes. For example, a heading on the launcher:
 
 ```tsx
-<Route path="/" element={<><h2>Good morning</h2><Home /></>} />
+<Route path="/" element={<><h2>Good morning</h2><Launcher /></>} />
 ```
+
+The bar at the foot of the screen is the app's own, under any frame: what is on it is your settings note
+([NAVIGATION.md](NAVIGATION.md)), not frame code.
 
 ## What the person sees
 
@@ -47,7 +51,7 @@ change the vault view, or put something above the notes. For example, a heading 
    what a frame can do and asks: **Use it**, or **Use the built-in frame**.
 3. A frame can't open anything outside the app by itself: when it asks to, the app shows the whole address and asks,
    one question at a time.
-   Over a frame of yours the app keeps a small ◠ button of its own that leads to Settings. Keep a way to Settings in
+   Over a frame of yours the app keeps a small ◠ button of its own, just above the bar, that leads to Settings. Keep a way to Settings in
    your frame too (the built-in `Bar` has one).
 4. The last version they allowed is kept on the device, so it also runs when the vault can't be reached. It is
    dropped when the frame note is gone from the vault, when there are two, and on signing out of that vault.

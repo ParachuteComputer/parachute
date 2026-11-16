@@ -4,7 +4,7 @@
 // start (open/mark.ts). Everything is injected, so tests can play a hostile frame against it.
 import type { VaultClient } from "@openparachute/surface-client";
 import { RateLimiter } from "../applet/contract";
-import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameVault, type Decided, type Method, type Query } from "../bridge/protocol";
+import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameHome, type FrameVault, type Decided, type Method, type Query } from "../bridge/protocol";
 import type { VaultRecord } from "../vault/store";
 
 export type HostDeps = {
@@ -14,6 +14,8 @@ export type HostDeps = {
   applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets>;
   /** `set` refuses (throws) a choice that names no applet of that vault, or one too many. */
   defaults: { get(vault: string): Record<string, string>; set(vault: string, type: string, choice: string | null): void };
+  /** The bar and the home; `pin` and `start` write the person's settings note (only ever called during a tap). */
+  home: { get(): FrameHome; pin(vault: string, noteId: string, on: boolean): Promise<void>; start(vault: string, noteId: string | null): Promise<void> };
   go(to: string, replace: boolean): void;
   /** The shell's address now (its path). */
   here(): string;
@@ -64,6 +66,9 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "applets.list": return deps.applets(vault(p.vault as string), p.fresh as boolean);
       case "defaults.get": vault(p.vault as string); return deps.defaults.get(p.vault as string);
       case "defaults.set": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); deps.defaults.set(p.vault as string, p.type as string, p.choice as string | null); return null;
+      case "home.get": return deps.home.get();
+      case "home.pin": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); await deps.home.pin(p.vault as string, p.noteId as string, p.on as boolean); return null;
+      case "home.start": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); await deps.home.start(p.vault as string, p.noteId as string | null); return null;
       case "nav.go": {
         const to = p.to as string;
         if (!allowedDestination(to)) throw new Error("not_allowed");
