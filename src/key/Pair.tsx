@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Bar } from "../ui/Bar";
-import { pairCancel, pairConfirm, pairStart } from "./key";
+import { errorText, pairCancel, pairConfirm, pairStart } from "./key";
 
 type Step = "link" | "scanning" | "connecting" | "code" | "receiving";
 const isLink = (s: string) => s.trim().startsWith("nostrpair://");
@@ -16,10 +16,13 @@ export default function Pair() {
   const [sas, setSas] = useState("");
   const [error, setError] = useState<string | null>(null);
   const live = useRef(true);
-  const say = (e: unknown) => setError(typeof e === "string" ? e : e instanceof Error ? e.message : "The pairing didn't finish.");
+  const say = (e: unknown) => setError(errorText(e, "The pairing didn't finish."));
   // the pairing this screen started; leaving the screen mid-pairing stops it and tells the other device
   const pairing = useRef<number | null>(null);
-  useEffect(() => () => { live.current = false; if (pairing.current !== null) void pairCancel(pairing.current, false); }, []);
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; if (pairing.current !== null) void pairCancel(pairing.current, false); };
+  }, []);
 
   async function start(uri = link) {
     setError(null); setStep("connecting");

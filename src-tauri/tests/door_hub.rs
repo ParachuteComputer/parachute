@@ -107,3 +107,33 @@ async fn a_linked_key_opens_the_hubs_consent_and_an_unknown_one_is_told() {
     let stranger = door::sign_in(&origin, "/", &nostr::Keys::generate()).await.unwrap_err();
     assert_eq!(stranger.code, "unknown_key");
 }
+
+/// A hub that answers its door with `status` and `body`, once per connection.
+async fn answering(status: &'static str, body: &'static str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        while let Ok((mut sock, _)) = listener.accept().await {
+            let mut buf = [0u8; 4096];
+            let _ = sock.read(&mut buf).await;
+            let reply = format!("HTTP/1.1 {status}\r\ncontent-type: text/html\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}", body.len());
+            let _ = sock.write_all(reply.as_bytes()).await;
+        }
+    });
+    format!("http://127.0.0.1:{port}")
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_hub_without_the_door_and_a_hub_in_trouble_are_told_apart() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let keys = nostr::Keys::generate();
+    // Cloud answers the door's address with its web page; an older hub with 404: no door, sign in another way
+    for (status, body) in [("200 OK", "<!doctype html><title>app</title>"), ("404 Not Found", "not found")] {
+        let o = door::hub_origin(&answering(status, body).await).unwrap();
+        assert_eq!(door::sign_in(&o, "/", &keys).await.unwrap_err().code, "no_door", "{status}");
+    }
+    // a hub that is restarting is not a hub without the door
+    let o = door::hub_origin(&answering("503 Service Unavailable", "busy").await).unwrap();
+    assert_eq!(door::sign_in(&o, "/", &keys).await.unwrap_err().code, "unreachable");
+}

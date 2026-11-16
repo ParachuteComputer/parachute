@@ -35,7 +35,9 @@ export default function AddVault({ first = false }: { first?: boolean }) {
       setBusy(false); setRefusal(r as Refusal);
     }
   }
-  const submit = (e: FormEvent) => { e.preventDefault(); void go(!!key); };
+  // in the app, wait to know whether there is a key: Enter before then mustn't take the password path
+  const reading = keysHere() && key === undefined;
+  const submit = (e: FormEvent) => { e.preventDefault(); if (!reading) void go(!!key); };
 
   return (
     <main className="screen">
@@ -59,7 +61,7 @@ export default function AddVault({ first = false }: { first?: boolean }) {
           <button className="primary" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in with your key"}</button>
           <button className="secondary" type="button" disabled={busy} onClick={() => void go(false)}>Other ways to sign in</button>
         </> : <>
-          <button className="primary" type="submit" disabled={busy}>{busy ? "Opening your hub…" : "Sign in"}</button>
+          <button className="primary" type="submit" disabled={busy || reading}>{busy ? "Opening your hub…" : "Sign in"}</button>
           {keysHere() && key === null && <p className="small"><Link to="/key">Sign in with your Nostr key instead</Link></p>}
         </>}
       </form>

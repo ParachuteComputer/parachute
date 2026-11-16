@@ -101,9 +101,22 @@ class KeyPlugin(private val activity: Activity) : Plugin(activity) {
         invoke.resolve(out)
         return
       }
-      val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-      cipher.init(Cipher.DECRYPT_MODE, k, GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)))
-      val pt = cipher.doFinal(Base64.decode(ct, Base64.NO_WRAP))
+      val pt = try {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, k, GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)))
+        cipher.doFinal(Base64.decode(ct, Base64.NO_WRAP))
+      } catch (e: javax.crypto.AEADBadTagException) {
+        null
+      } catch (e: IllegalArgumentException) {
+        null
+      }
+      if (pt == null) {
+        // what is kept will never decrypt (its key was replaced, or it was damaged): only removing it helps
+        out.put("secret", null as String?)
+        out.put("unreadable", true)
+        invoke.resolve(out)
+        return
+      }
       out.put("secret", String(pt, Charsets.UTF_8))
       pt.fill(0)
       invoke.resolve(out)

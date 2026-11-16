@@ -134,8 +134,9 @@ pub async fn sign_in(origin: &url::Url, next: &str, keys: &nostr::Keys) -> Resul
     let challenge = match (status.as_u16(), challenge) {
         (200, Some(c)) => c,
         (429, _) => return Err(refusal("refused", "The hub asks to wait a moment before trying again.")),
-        // no such route, or an answer that isn't the door's: this hub has no key door (an older hub, Cloud)
-        _ => return Err(refusal("no_door", "This hub doesn't take a key to sign in.")),
+        // no such route, or a page that isn't the door's answer: this hub has no key door (an older hub, Cloud)
+        (200 | 404 | 405, _) => return Err(refusal("no_door", "This hub doesn't take a key to sign in.")),
+        (s, _) => return Err(refusal("unreachable", format!("The hub didn't answer the key sign-in ({s}). Try again in a moment."))),
     };
     let event = sign_in_event(origin, &challenge)?.sign_with_keys(keys).map_err(|_| refusal("refused", "The key couldn't sign."))?;
     let res = http
