@@ -139,8 +139,12 @@ const LOADER_TAIL = String.raw`
 })();`;
 
 /** Does this module import the `Note` part (by name, or the whole kit as a namespace)? Then its frame gets the note renderer. */
-export const usesNote = (source: string) =>
-  /import\s*(?:\*\s*as\s+\w+|[^;]*\{[^}]*\bNote\b[^}]*\})\s*from\s*["']parachute["']/.test(source) || /import\s+[\w$]+\s*(?:,[^;]*)?from\s*["']parachute["']/.test(source);
+export const usesNote = (code: string) => {
+  // comments out first (a brace or a word in one doesn't count), in one pass that keeps strings: a "/*" or "//" inside
+  // a string or a line comment is not a comment's start
+  const source = code.replace(/("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (_m: string, s: string | undefined) => s ?? " ");
+  return /import\s*(?:\*\s*as\s+\w+|[^;]*\{[^}]*\bNote\b[^}]*\})\s*from\s*["']parachute["']/.test(source) || /import\s+[\w$]+\s*(?:,[^;]*)?from\s*["']parachute["']/.test(source);
+};
 
 /** The page a TSX/JSX applet runs as: a root, React, then its module. `reactSource` sets `window.__ParachuteModules`. */
 export function modulePage(js: string, reactSource: string): string {
