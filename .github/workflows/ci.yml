@@ -8,6 +8,12 @@ on:
 
 jobs:
   web:
+    # the hub before the record door (0.8) and with it (0.9): the app must work on both (src/vault/records.ts)
+    strategy:
+      fail-fast: false
+      matrix:
+        core: ["0.8.0", "0.9.0-pre.1"]
+    name: web (core ${{ matrix.core }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -29,7 +35,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/hub" && cd "$RUNNER_TEMP/hub"
           echo '{"name":"e2e-hub","private":true}' > package.json
-          bun add @openparachute/core@0.8.0
+          bun add @openparachute/core@${{ matrix.core }}
           echo "PARACHUTE_CORE=$RUNNER_TEMP/hub/node_modules/.bin/parachute-core" >> "$GITHUB_ENV"
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
@@ -38,7 +44,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.core }}
           path: |
             playwright-report
             test-results

@@ -7,7 +7,8 @@
 //                                      The Uni app never sends it: an applet must work without it.
 //   uni.onOpen(cb)                   → cb({note, screen}) now (if the app opened a note) and whenever it opens another.
 //   uni.frameFetch(url, init)        → fetch over the frame (pfr envelope), what VaultClient uses
-//   uni.VaultClient / uni.vault      → surface-client's VaultClient on frameFetch
+//   uni.VaultClient / uni.vault      → surface-client's VaultClient on frameFetch, with the record-worded calls
+//                                      queryRecords/getRecord/createRecord/updateRecord (body, fields) beside its own
 //   uni.theme.get() / .on(cb)        → the app's look (src/theme): every token is also a CSS var --<key> on <html>
 //   uni.app.recent/pins/open         → what it may ask of the app (modules/app.ts), new here: the Uni app has none
 // In-page #anchor links scroll in place.
@@ -100,7 +101,18 @@ export const FRAME_KIT = String.raw`(function () {
   var VC = window.__UniVC && window.__UniVC.VaultClient;
   if (VC) {
     uni.VaultClient = VC;
-    uni.vault = new VC({ vaultUrl: "https://vault.invalid", accessToken: "frame", fetchImpl: frameFetch });
+    var vc = new VC({ vaultUrl: "https://vault.invalid", accessToken: "frame", fetchImpl: frameFetch });
+    // The record words (core 0.9's record door): a record's text is its body and its data its fields. The note-named
+    // calls stay, for applets written before (and for the Uni app, which has only those).
+    var renamed = function (o, map) { if (!o || typeof o !== "object") return o; var r = {}; Object.keys(o).forEach(function (k) { r[map[k] || k] = o[k]; }); return r; };
+    var IN = { body: "content", fields: "metadata", includeBody: "includeContent" };
+    var OUT = { content: "body", metadata: "fields" };
+    var rec = function (n) { return renamed(n, OUT); };
+    vc.queryRecords = function (o) { return vc.queryNotes(renamed(o || {}, IN)).then(function (rows) { return Array.isArray(rows) ? rows.map(rec) : rows; }); };
+    vc.getRecord = function (id) { return vc.getNote(id).then(rec); };
+    vc.createRecord = function (o) { return vc.createNote(renamed(o || {}, IN)).then(rec); };
+    vc.updateRecord = function (id, o) { return vc.updateNote(id, renamed(o || {}, IN)).then(rec); };
+    uni.vault = vc;
   }
   Object.freeze(uni.theme);
   var kit = Object.freeze(uni);
