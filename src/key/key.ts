@@ -36,7 +36,7 @@ export function useKey(): KeyInfo | null | undefined {
   return useSyncExternalStore(subscribe, () => (keysHere() ? known : null), () => undefined);
 }
 const asProblem = (e: unknown): KeyProblem => e && typeof e === "object" && ((e as KeyProblem).code === "unreadable" || (e as KeyProblem).code === "unavailable")
-  ? e as KeyProblem : { code: "unavailable", message: typeof e === "string" ? e : "The key store didn't answer." };
+  ? e as KeyProblem : { code: "unavailable", message: errorText(e, "The key store didn't answer.") };
 /** Read the key again (after the key store didn't answer). */
 export const readKeyAgain = () => read();
 
@@ -73,9 +73,12 @@ export async function keySignIn(hub: string, next: string): Promise<string> {
   }
 }
 
+/** The words of a failed command (the shell's commands fail with a sentence), or `fallback`. */
+export const errorText = (e: unknown, fallback: string) => (typeof e === "string" ? e : e instanceof Error ? e.message : fallback);
+
 export function asRefusal(e: unknown): Refusal {
   if (e && typeof e === "object" && typeof (e as Refusal).code === "string" && typeof (e as Refusal).message === "string") return e as Refusal;
-  return { code: "refused", message: typeof e === "string" ? e : e instanceof Error ? e.message : "The sign-in didn't finish." };
+  return { code: "refused", message: errorText(e, "The sign-in didn't finish.") };
 }
 
 /** An npub shortened for a line of text; the whole one is a tap away. */

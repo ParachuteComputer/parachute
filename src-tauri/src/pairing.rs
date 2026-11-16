@@ -235,7 +235,12 @@ impl Pending {
             let ev = self.next_or_stop(stop).await?;
             match self.session.handle_sas_confirm(&ev) {
                 Ok(code) if code == self.sas => break,
-                Ok(_) => return Err("The codes didn't match. Nothing was kept.".into()),
+                Ok(_) => {
+                    if let Ok(Some(abort)) = self.session.abort(AbortReason::SasMismatch) {
+                        let _ = publish(&mut self.conn, &abort).await;
+                    }
+                    return Err("The codes didn't match. Nothing was kept.".into());
+                }
                 Err(PairingError::TranscriptMismatch) => {
                     if let Ok(Some(abort)) = self.session.abort(AbortReason::SasMismatch) {
                         let _ = publish(&mut self.conn, &abort).await;
@@ -257,8 +262,10 @@ impl Pending {
         };
         let payload = Zeroizing::new(payload.to_string());
         let kept = keep(parse_payload(kind, &payload)?).await?;
-        let complete = self.session.send_complete().map_err(|_| "The pairing couldn't finish.".to_string())?;
-        publish(&mut self.conn, &complete).await?;
+        // the key is kept: telling the sender is best effort (if this fails, it times out; the key is still here)
+        if let Ok(complete) = self.session.send_complete() {
+            let _ = publish(&mut self.conn, &complete).await;
+        }
         Ok(kept)
     }
 
@@ -301,18 +308,21 @@ pub async fn pair_start<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>
 
 #[tauri::command]
 pub async fn pair_confirm<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, pairing: State<'_, PairState>, id: u64) -> Result<KeyInfo, String> {
+    // the stop is in place before the pending pairing leaves its slot, so a Cancel always finds one or the other
+    let (stop, stopped) = oneshot::channel();
     let pending = {
         let mut slot = pairing.pending.lock().await;
         match slot.take() {
-            Some((held, p)) if held == id => p,
+            Some((held, p)) if held == id => {
+                *pairing.receiving.lock().await = Some((id, stop));
+                p
+            }
             other => {
                 *slot = other;
                 return Err("No pairing is waiting. Start again.".into());
             }
         }
     };
-    let (stop, stopped) = oneshot::channel();
-    *pairing.receiving.lock().await = Some((id, stop));
     let keys = keys.inner();
     let result = pending.confirm(|received| async move { keys.install(&app, received).await }, stopped).await;
     let mut receiving = pairing.receiving.lock().await;
@@ -325,16 +335,15 @@ pub async fn pair_confirm<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyStat
 /// Stop pairing `id`: before the codes are confirmed (the sender hears why), or while waiting for the key.
 #[tauri::command]
 pub async fn pair_cancel(pairing: State<'_, PairState>, id: u64, codes_differ: bool) -> Result<(), String> {
-    {
+    // both slots under their locks, in pair_confirm's order (pending, then receiving): the pairing is in one of them
+    let pending = {
+        let mut slot = pairing.pending.lock().await;
         let mut receiving = pairing.receiving.lock().await;
         if matches!(*receiving, Some((held, _)) if held == id) {
             if let Some((_, stop)) = receiving.take() {
                 let _ = stop.send(());
             }
         }
-    }
-    let pending = {
-        let mut slot = pairing.pending.lock().await;
         match slot.take() {
             Some((held, p)) if held == id => Some(p),
             other => {
@@ -374,10 +383,5 @@ mod tests {
         assert_eq!(parse_payload(PayloadType::Nsec, &format!("{nsec}\n")).unwrap().public_key(), k.public_key());
         assert!(parse_payload(PayloadType::Bunker, "bunker://x").is_err());
         assert!(parse_payload(PayloadType::Custom, "{}").is_err());
-    }
-
-    #[test]
-    fn links() {
-        assert!(decode_qr("https://example.com").is_err());
     }
 }

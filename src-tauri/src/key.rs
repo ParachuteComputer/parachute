@@ -84,12 +84,11 @@ impl KeyState {
 /// Read storage once a run. A storage error is tried again next time; a stored value that isn't a key stays unreadable.
 async fn read<R: Runtime>(slot: &mut Slot, app: &AppHandle<R>) -> Result<(), String> {
     if let Slot::Unread = *slot {
+        let unreadable = || Slot::Unreadable("The key kept on this device can't be read.".into());
         *slot = match store::load(app).await? {
-            Some(secret) => match parse_secret(&secret) {
-                Ok(keys) => Slot::Held(keys),
-                Err(()) => Slot::Unreadable("The key kept on this device can't be read.".into()),
-            },
-            None => Slot::Empty,
+            store::Stored::Secret(secret) => parse_secret(&secret).map(Slot::Held).unwrap_or_else(|()| unreadable()),
+            store::Stored::Unreadable => unreadable(),
+            store::Stored::Nothing => Slot::Empty,
         };
     }
     Ok(())
@@ -160,29 +159,44 @@ mod store {
         app.try_state::<crate::android::KeyPluginHandle<R>>().map(|h| h.0.clone()).ok_or_else(|| "The key store isn't ready.".to_string())
     }
 
+    /// What storage holds: a secret, nothing, or something that will never read as one.
+    pub enum Stored {
+        Secret(Zeroizing<String>),
+        Nothing,
+        Unreadable,
+    }
+
     #[cfg(not(target_os = "android"))]
     fn entry() -> Result<keyring::Entry, String> {
         keyring::Entry::new("computer.parachute.app", "nostr-key").map_err(|e| format!("This computer's keyring can't be used ({e})."))
     }
 
-    pub async fn load<R: Runtime>(_app: &AppHandle<R>) -> Result<Option<Zeroizing<String>>, String> {
+    /// An `Err` is storage not answering this time (try again); `Unreadable` is for good.
+    pub async fn load<R: Runtime>(_app: &AppHandle<R>) -> Result<Stored, String> {
         #[cfg(target_os = "android")]
         {
             #[derive(serde::Deserialize)]
             struct Loaded {
                 secret: Option<String>,
+                #[serde(default)]
+                unreadable: bool,
             }
             let loaded: Loaded = plugin(_app)?
                 .run_mobile_plugin_async("loadSecret", serde_json::json!({ "name": SLOT }))
                 .await
                 .map_err(|_| "The key store couldn't be read.".to_string())?;
-            Ok(loaded.secret.map(Zeroizing::new))
+            Ok(match (loaded.secret, loaded.unreadable) {
+                (_, true) => Stored::Unreadable,
+                (Some(s), _) => Stored::Secret(Zeroizing::new(s)),
+                (None, _) => Stored::Nothing,
+            })
         }
         #[cfg(not(target_os = "android"))]
         {
             tauri::async_runtime::spawn_blocking(|| match entry()?.get_password() {
-                Ok(s) => Ok(Some(Zeroizing::new(s))),
-                Err(keyring::Error::NoEntry) => Ok(None),
+                Ok(s) => Ok(Stored::Secret(Zeroizing::new(s))),
+                Err(keyring::Error::NoEntry) => Ok(Stored::Nothing),
+                Err(keyring::Error::BadEncoding(_)) => Ok(Stored::Unreadable),
                 Err(e) => Err(format!("This computer's keyring couldn't be read ({e}).")),
             })
             .await

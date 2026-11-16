@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { Bar } from "../ui/Bar";
-import { createKey, importKey, type KeyInfo } from "./key";
+import { createKey, errorText, importKey, type KeyInfo } from "./key";
 import { Npub } from "./Npub";
 
 /** Getting a key into the app, in the order most people need: pair it from a device that has it, make a new one, or
@@ -12,7 +12,7 @@ export default function KeyStart({ first = false }: { first?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [secret, setSecret] = useState("");
-  const say = (e: unknown) => setError(typeof e === "string" ? e : e instanceof Error ? e.message : "That didn't work.");
+  const say = (e: unknown) => setError(errorText(e, "That didn't work."));
 
   async function make() {
     setBusy(true); setError(null);
