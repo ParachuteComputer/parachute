@@ -23,10 +23,14 @@ export function Note({ body, path, tags, fields, onLink }: { body: string; path?
     const a = (e.target as Element | null)?.closest?.("a[href]");
     if (!a) return;
     const href = a.getAttribute("href") ?? "";
-    // a link within the note (a footnote) scrolls in place: the kit does that, without moving the frame
-    if (href.startsWith("#") && !href.startsWith(WIKI)) return;
     e.preventDefault();
     e.stopPropagation();
+    // a link within the note (a footnote) scrolls in place, here, not by moving the frame
+    if (href.startsWith("#") && !href.startsWith(WIKI)) {
+      let id = href.slice(1); try { id = decodeURIComponent(id); } catch { /* as written */ }
+      document.getElementById(id)?.scrollIntoView();
+      return;
+    }
     tap(href);
   };
   return (
