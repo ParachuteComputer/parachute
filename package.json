@@ -30,6 +30,7 @@
     "sucrase": "3.35.1"
   },
   "devDependencies": {
+    "@noble/curves": "2.0.1",
     "@playwright/test": "1.65.0",
     "@tauri-apps/cli": "2.11.5",
     "@testing-library/react": "^16.1.0",

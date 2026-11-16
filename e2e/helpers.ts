@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { hubState, VAULT } from "./hub";
+import { keyDoor } from "./keys";
 
 /** Add the e2e vault and sign in through the hub's own pages: its sign-in, then its one Approve. */
 export async function signIn(page: Page, vault = VAULT) {
@@ -27,3 +28,19 @@ export async function signIn(page: Page, vault = VAULT) {
 /** The frame: the vault list, a vault, a note and open-with, in their sealed iframe. The shell's own screens (signing in,
  *  an applet and its card, Settings) are on the page itself. */
 export const ui = (page: Page) => page.frameLocator("iframe.app-frame");
+
+/** Add another Parachute's vault (the org's) and sign in there with the person's key: the hub's key door (signed by the
+ *  test, as the app's native side signs it), then the hub's own Approve. */
+export async function signInWithKey(page: Page, hub: { origin: string }, vault: string) {
+  const cookies = await keyDoor(hub.origin, hubState().key);
+  await page.context().addCookies(cookies.map((c) => ({ ...c, url: hub.origin })));
+  await page.goto("/add");
+  await page.getByLabel("Vault address").fill(`${hub.origin}/vault/${vault}`);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL((u) => u.origin === hub.origin);
+  const approve = page.getByRole("button", { name: "Approve" });
+  await Promise.race([approve.waitFor(), page.waitForURL(`**/v/${vault}`)]);
+  if (await approve.isVisible().catch(() => false)) await approve.click();
+  await page.waitForURL(`**/v/${vault}`);
+  await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
+}
