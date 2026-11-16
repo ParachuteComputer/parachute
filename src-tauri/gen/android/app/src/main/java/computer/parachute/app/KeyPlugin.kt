@@ -96,8 +96,15 @@ class KeyPlugin(private val activity: Activity) : Plugin(activity) {
       val iv = p.getString("${args.name}.iv", null)
       val k = key(false)
       val out = JSObject()
-      if (ct == null || iv == null || k == null) {
+      if (ct == null || iv == null) {
         out.put("secret", null as String?)
+        invoke.resolve(out)
+        return
+      }
+      if (k == null) {
+        // a key was kept, but the Keystore key that opens it is gone (a restore onto another phone): it can't be read
+        out.put("secret", null as String?)
+        out.put("unreadable", true)
         invoke.resolve(out)
         return
       }
@@ -105,10 +112,12 @@ class KeyPlugin(private val activity: Activity) : Plugin(activity) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, k, GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)))
         cipher.doFinal(Base64.decode(ct, Base64.NO_WRAP))
-      } catch (e: javax.crypto.AEADBadTagException) {
-        null
+      } catch (e: javax.crypto.BadPaddingException) {
+        null // includes AEADBadTagException: the tag doesn't verify
+      } catch (e: java.security.InvalidAlgorithmParameterException) {
+        null // a damaged IV (wrong length)
       } catch (e: IllegalArgumentException) {
-        null
+        null // not base64
       }
       if (pt == null) {
         // what is kept will never decrypt (its key was replaced, or it was damaged): only removing it helps

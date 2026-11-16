@@ -178,3 +178,11 @@ async fn a_dropped_stop_is_not_a_stop() {
     let got = pending.confirm(|k| async move { Ok::<_, String>(k) }, stopped).await.expect("still arrives");
     assert_eq!(got.public_key(), account.public_key());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn only_a_pairing_link_starts_a_pairing() {
+    for not_a_link in ["https://example.com", "nostrpair://nothex?secret=00&relay=wss%3A%2F%2Fr.example&v=1", "", "  "] {
+        let e = pairing::start(not_a_link).await.err().expect(not_a_link);
+        assert!(e.contains("pairing link"), "{not_a_link}: {e}");
+    }
+}

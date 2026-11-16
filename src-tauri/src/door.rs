@@ -130,12 +130,13 @@ pub async fn sign_in(origin: &url::Url, next: &str, keys: &nostr::Keys) -> Resul
     let unreachable = |_| refusal("unreachable", "The hub didn't answer.");
     let res = http.get(origin.join(CHALLENGE_PATH).expect("fixed path")).header("Accept", "application/json").send().await.map_err(unreachable)?;
     let status = res.status();
-    let challenge: Option<Value> = res.json().await.ok();
+    let challenge: Option<Value> = res.json().await.ok().filter(|v: &Value| v.get("challenge").is_some() && v.get("event_template").is_some());
     let challenge = match (status.as_u16(), challenge) {
         (200, Some(c)) => c,
         (429, _) => return Err(refusal("refused", "The hub asks to wait a moment before trying again.")),
-        // no such route, or a page that isn't the door's answer: this hub has no key door (an older hub, Cloud)
-        (200 | 404 | 405, _) => return Err(refusal("no_door", "This hub doesn't take a key to sign in.")),
+        // no such route, a page that isn't the door's answer, a redirect to a login, or something in front of the hub
+        // that wants its own sign-in: no key door here (an older hub, Cloud)
+        (200 | 300..=399 | 401 | 403 | 404 | 405 | 410, _) => return Err(refusal("no_door", "This hub doesn't take a key to sign in.")),
         (s, _) => return Err(refusal("unreachable", format!("The hub didn't answer the key sign-in ({s}). Try again in a moment."))),
     };
     let event = sign_in_event(origin, &challenge)?.sign_with_keys(keys).map_err(|_| refusal("refused", "The key couldn't sign."))?;

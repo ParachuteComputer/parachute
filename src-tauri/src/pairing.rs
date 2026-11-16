@@ -6,7 +6,7 @@
 //! 1. `pair_start(link)`: read the `nostrpair://` link, connect to the relay it names (answering a NIP-42 challenge
 //!    with the session's throwaway key), subscribe, wait for EOSE, publish the offer. Returns the 6-digit code.
 //! 2. The person compares codes. `pair_confirm`: wait for the sender's confirmation (buzz-core checks the transcript),
-//!    take the key, check it, say `complete`, keep the key (key.rs). `pair_cancel` sends an abort instead.
+//!    take the key, check it, keep it (key.rs), then say `complete`. `pair_cancel` sends an abort instead.
 //!
 //! The received secret lives in `Zeroizing` buffers and goes nowhere but the key store.
 
@@ -314,7 +314,10 @@ pub async fn pair_confirm<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyStat
         let mut slot = pairing.pending.lock().await;
         match slot.take() {
             Some((held, p)) if held == id => {
-                *pairing.receiving.lock().await = Some((id, stop));
+                // an older pairing still waiting for its key is stopped, not left uncancellable
+                if let Some((_, older)) = pairing.receiving.lock().await.replace((id, stop)) {
+                    let _ = older.send(());
+                }
                 p
             }
             other => {
