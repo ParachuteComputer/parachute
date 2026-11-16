@@ -6,6 +6,7 @@ import { inScope, stripExt } from "./contract.ts";
 import type { Manifest, Rule, Verb } from "./manifest.ts";
 import type { Opens } from "./opens.ts";
 import { sha256Hex } from "./needs.ts";
+import { appLines, type AppWord } from "./app.ts";
 
 export type Grant = {
   applet: { id: string; name: string };
@@ -13,14 +14,16 @@ export type Grant = {
   vault: string;
   allow: Rule[];
   opens: Opens[];
+  /** What it may ask of the app beyond its vault (app.ts). */
+  app: AppWord[];
 };
 
 /** How long a grant lasts before the card comes back. */
 export const GRANT_DAYS = 365;
 export const grantExpiry = (from: Date): Date => new Date(from.getTime() + GRANT_DAYS * 86_400_000);
 
-export const grantOf = (m: Manifest, vault: string, opens: readonly Opens[]): Grant =>
-  ({ applet: { id: m.id, name: m.name }, vault, allow: m.allow.map((r) => ({ path: r.path, verbs: [...r.verbs] })), opens: opens.map((o) => ({ ...o })) });
+export const grantOf = (m: Manifest, vault: string, opens: readonly Opens[], app: readonly AppWord[] = []): Grant =>
+  ({ applet: { id: m.id, name: m.name }, vault, allow: m.allow.map((r) => ({ path: r.path, verbs: [...r.verbs] })), opens: opens.map((o) => ({ ...o })), app: [...app] });
 
 /** A note's path as a rule may judge it: plain segments only, no percent-encoded dot, slash, backslash or percent. */
 const plainPath = (path: unknown): path is string => typeof path === "string" && !/%(?:2e|2f|5c|25)/i.test(path) && inScope([""], path);
@@ -53,6 +56,7 @@ export function grantLines(g: Grant, ownFolder: string | null): CardLine[] {
     out.push({ text: `Open ${o.type} notes in ${o.path} when you tap one`, stress: false });
     if (g.allow.some((r) => r.verbs.includes("create") && (r.path.startsWith(o.path) || o.path.startsWith(r.path)))) out.push({ text: `Tag the notes it adds in ${o.path} as ${o.type}`, stress: false });
   }
+  out.push(...appLines(g.app));
   return out;
 }
 
@@ -69,7 +73,9 @@ export function canonical(x: unknown): string {
 export function grantKey(g: Grant, notePath: string): Promise<string> {
   const allow = [...new Set(g.allow.map((r) => canonical({ path: r.path, verbs: [...r.verbs].sort() })))].sort();
   const opens = [...new Set(g.opens.map((o) => canonical({ type: o.type, path: o.path, screen: o.screen })))].sort();
-  return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens }));
+  // `app` only when it asks something: the keys of applets that ask nothing of the app stay as they were
+  const app = g.app?.length ? [...new Set(g.app)].sort() : undefined;
+  return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens, app }));
 }
 
 /** "9b13 b2ae": the first eight digits of the key, to tell two cards apart. */

@@ -27,7 +27,7 @@ export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getN
   const html = new Map(rows.map((r) => [r.id, r.content ?? ""]));
   const kinds = new Map(rows.map((r) => [r.id, codeKindOf(r as { extension?: string })]));
   // as the applet screen reads them: the vault's role tags dropped first, so the keys match its keys
-  const entries = await Promise.all(found.entries.map((e) => ({ ...e, opens: withoutRoles(e.opens, roles) })).map(async (e) => ({ ...e, keys: { scope: await grantKey(grantOf(e.manifest, vault, e.opens), e.path), html: await codeHash(kinds.get(e.noteId)!, html.get(e.noteId) ?? "") } })));
+  const entries = await Promise.all(found.entries.map((e) => ({ ...e, opens: withoutRoles(e.opens, roles) })).map(async (e) => ({ ...e, keys: { scope: await grantKey(grantOf(e.manifest, vault, e.opens, e.app), e.path), html: await codeHash(kinds.get(e.noteId)!, html.get(e.noteId) ?? "") } })));
   return { entries, skipped: rows.length - found.entries.length };
 }
 

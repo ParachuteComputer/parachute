@@ -1,0 +1,82 @@
+// The starter home applet, written the way a chat AI with the Parachute MCP writes it: one `create-note` call with the
+// arguments in docs/WRITE-AN-APPLET.md, and the settings note's `start`. The app opens on it after the person's Allow.
+import { readFileSync } from "node:fs";
+import { expect, test, type Page } from "@playwright/test";
+import { api, hubState, mcp, VAULT } from "./hub";
+import { ui } from "./helpers";
+
+const guide = readFileSync(new URL("../docs/WRITE-AN-APPLET.md", import.meta.url), "utf8");
+const section = guide.slice(guide.indexOf("## A home applet"), guide.indexOf("## What the person sees"));
+const ARGS = JSON.parse(section.match(/```json\n([\s\S]*?)\n```/)![1]) as { path: string; content: string } & Record<string, unknown>;
+const LAID_OUT = section.match(/```tsx\n([\s\S]*?)```/)![1];
+const applet = (page: Page) => page.frameLocator("iframe.applet-frame");
+
+test.use({ storageState: "e2e/.signed-in.json" });
+
+async function settings(parachute: Record<string, unknown>) {
+  return api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute } });
+}
+async function start(page: Page) { await page.goto("about:blank"); await page.goto("/"); }
+
+test("the guide's home applet is the code it lays out", () => {
+  expect(ARGS.content).toBe(LAID_OUT);
+});
+
+test("a home applet written only by create-note opens on start after Allow: the newest notes across vaults, and the pins", async ({ page }) => {
+  const home = await mcp(hubState(), "create-note", ARGS);
+  const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" }, bar: [{ vault: VAULT, applet: "Applets/Recipes" }] });
+  try {
+    await start(page);
+    const card = page.getByRole("region", { name: /asking for access/ });
+    await expect(card).toContainText("See the titles of the newest notes in every vault on this device");
+    await expect(card).toContainText("See what is on your bar");
+    await expect(card).toContainText("Take you to a note or an applet when you tap");
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+    await page.getByRole("button", { name: "Allow" }).click();
+    const lately = applet(page).getByRole("region", { name: "Lately" });
+    await expect(lately.getByRole("button", { name: /^Welcome kitchen/ })).toBeVisible();
+    // the app's own notes and applets' code are not "what changed lately"
+    await expect(lately.getByRole("button", { name: /Settings|Recipes\b|Cook mode/ })).toHaveCount(0);
+    await expect(applet(page).getByRole("region", { name: "Pinned" }).getByRole("button", { name: /Recipe box/ })).toBeVisible();
+    // a tap on a note takes the person there
+    await lately.getByRole("button", { name: /^Welcome kitchen/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/n/`));
+    await expect(ui(page).locator("header").getByRole("heading", { name: "Welcome" })).toBeVisible();
+    // Back returns to Home, running: it is the home chosen on this device (Allow at its start)
+    await ui(page).getByRole("button", { name: "Back" }).click();
+    await expect(applet(page).getByRole("region", { name: "Lately" }).getByRole("button", { name: /^Welcome kitchen/ })).toBeVisible();
+    // and a restart opens it by itself
+    await start(page);
+    await expect(applet(page).getByRole("region", { name: "Lately" }).getByRole("button", { name: /^Welcome kitchen/ })).toBeVisible();
+    // a pin takes the person to that applet
+    await applet(page).getByRole("region", { name: "Pinned" }).getByRole("button", { name: /Recipe box/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/a/`));
+    await expect(page.getByRole("heading", { name: /Recipe box/ })).toBeVisible();
+  } finally {
+    await api(hubState(), "DELETE", `notes/${home.id}`);
+    await api(hubState(), "DELETE", `notes/${s.id}`);
+  }
+});
+
+test("hostile: app.open goes nowhere without a tap, and an applet that didn't ask for app gets nothing", async ({ page }) => {
+  const home = await mcp(hubState(), "create-note", ARGS);
+  const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" } });
+  try {
+    await start(page);
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(applet(page).getByRole("region", { name: "Lately" })).toBeVisible();
+    const here = page.url();
+    const went = await applet(page).locator("body").evaluate(() => (window as unknown as { parachute: { app: { open(h: string): Promise<boolean> } } }).parachute.app.open("/v/kitchen"));
+    expect(went).toBe(false);
+    expect(page.url()).toBe(here);
+    // Recipe box asks nothing of the app
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const said = await applet(page).locator("body").evaluate(() => (window as unknown as { parachute: { app: { recent(): Promise<unknown> } } }).parachute.app.recent().then(() => "answered", (e: { code?: string }) => e.code));
+    expect(said).toBe("not_granted");
+  } finally {
+    await api(hubState(), "DELETE", `notes/${home.id}`);
+    await api(hubState(), "DELETE", `notes/${s.id}`);
+  }
+});

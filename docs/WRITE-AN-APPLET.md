@@ -13,6 +13,7 @@ the Parachute app reads the note, shows the person what it asks for, and runs it
 | `tags` | `["applet"]`. That tag is what makes it an applet. |
 | `metadata.applet` | The manifest: what it is and what it may do (below). |
 | `metadata.opens` | Optional: which kind of note opens in it when the person taps one. |
+| `metadata.app` | Optional: what it asks of the app beyond its vault: any of `recent`, `pins`, `open` (below). |
 | `content` | The code: one self-contained file. |
 
 ### The manifest (`metadata.applet`)
@@ -75,6 +76,9 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 | `vault.getNote(idOrPath)` | One note it may read, with its content. |
 | `vault.createNote({ path, content })` | A new note, in a folder it may `create` in. |
 | `vault.updateNote(id, { content, if_updated_at })` | New content for a note it may `update`. |
+| `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only, never content. `limit` up to 40. |
+| `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
+| `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above), while they tap inside the applet. Resolves to whether it went. |
 | `theme.get()`, `theme.on(cb)` | The app's colours and fonts. They are also CSS variables: `--text`, `--muted`, `--accent`, `--surface`, `--line`, `--sans`, `--serif`, `--mono`. |
 
 A call outside what it was allowed fails with `out_of_scope` or `not_granted`. It never reaches anything else.
@@ -123,6 +127,134 @@ export default function RecipeCards() {
       <h1>Recipe cards</h1>
       {opened && <p>Opened: {opened}</p>}
       {cards === null ? <p>Reading…</p> : <ul>{cards.map((c) => <li key={c.id}>{c.path.replace("Recipes/", "")}</li>)}</ul>}
+    </main>
+  );
+}
+```
+
+## A home applet
+
+The applet the app opens on start, which the person or their agent chooses ([NAVIGATION.md](NAVIGATION.md)). Any
+applet can be one; this one shows what changed lately across all the person's vaults, a day at a time, and their
+pinned applets. It reads no folder of its own vault, so it has no `access`; it asks the app for the three things in
+`metadata.app`, and its card says so. Create it with `create-note`:
+
+```json
+{
+  "path": "Applets/Home",
+  "extension": "tsx",
+  "tags": [
+    "applet"
+  ],
+  "metadata": {
+    "applet": {
+      "contract": 2,
+      "id": "home",
+      "name": "Home",
+      "glyph": "◠",
+      "note": "what changed lately, and your pins"
+    },
+    "app": [
+      "recent",
+      "pins",
+      "open"
+    ]
+  },
+  "content": "import { useEffect, useState } from \"react\";\nimport { app, ready } from \"parachute\";\n\ntype Note = { vaultName: string; id: string; title: string; updatedAt: string | null; href: string };\ntype Place = { name: string; glyph: string; href: string; home: boolean };\n\nconst midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();\nfunction dayOf(iso: string | null): string {\n  if (!iso) return \"Earlier\";\n  const d = new Date(iso), ago = Math.round((midnight(new Date()) - midnight(d)) / 86400000);\n  if (ago <= 0) return \"Today\";\n  if (ago === 1) return \"Yesterday\";\n  if (ago < 7) return d.toLocaleDateString(undefined, { weekday: \"long\" });\n  return d.toLocaleDateString(undefined, { day: \"numeric\", month: \"long\" });\n}\nconst timeOf = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: \"numeric\", minute: \"2-digit\" }) : \"\");\n\nconst CSS = `\nmain { max-width: 1100px; margin: 0 auto; padding: 28px 22px; font: 16px/1.5 var(--sans); color: var(--text); }\nh1 { margin: 0; font: 400 36px/1.1 var(--serif); }\n.sub { margin: 4px 0 18px; font: italic 16px var(--serif); color: var(--muted); }\n.cols { display: grid; gap: 28px; }\n@media (min-width: 900px) { .cols { grid-template-columns: 3fr 2fr; gap: 72px; } h1 { font-size: 48px; } }\n.river { position: relative; padding-left: 26px; }\n.river::before { content: \"\"; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: var(--text); }\nh2 { position: relative; margin: 14px 0 4px; font: italic 400 16px var(--serif); color: var(--muted); }\n.river h2::before { content: \"\"; position: absolute; left: -24px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--text); }\nbutton { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; width: 100%; padding: 7px 0; border: 0; border-bottom: 1px solid var(--line); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }\n.t { font: 500 19px/1.3 var(--serif); }\n.v { grid-column: 1; font-size: 13px; color: var(--muted); }\n.d { grid-row: 1; grid-column: 2; font: italic 14px var(--serif); color: var(--muted); }\n.pins ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--text); }\n.pins button { display: block; font: 500 19px var(--serif); }\n.quiet { font: italic 16px var(--serif); color: var(--muted); }\n`;\n\nexport default function Home() {\n  const [notes, setNotes] = useState<Note[] | null>(null);\n  const [pins, setPins] = useState<Place[]>([]);\n  useEffect(() => {\n    ready()\n      .then(() => Promise.all([app.recent({ limit: 12 }), app.pins()]))\n      .then(([n, p]: [Note[], Place[]]) => { setNotes(n); setPins(p.filter((x) => !x.home)); }, () => setNotes([]));\n  }, []);\n  const days: { label: string; notes: Note[] }[] = [];\n  for (const n of notes ?? []) {\n    const label = dayOf(n.updatedAt);\n    if (days.at(-1)?.label !== label) days.push({ label, notes: [] });\n    days.at(-1)!.notes.push(n);\n  }\n  const vaults = new Set((notes ?? []).map((n) => n.vaultName)).size;\n  return (\n    <main>\n      <style>{CSS}</style>\n      <h1>{new Date().toLocaleDateString(undefined, { weekday: \"long\" })}</h1>\n      <p className=\"sub\">{notes === null ? \"Reading…\" : `${notes.length} notes lately, in ${vaults} ${vaults === 1 ? \"vault\" : \"vaults\"}.`}</p>\n      <div className=\"cols\">\n        <section className=\"river\" aria-label=\"Lately\">\n          {days.map((d) => (\n            <div key={d.label}>\n              <h2>{d.label}</h2>\n              {d.notes.map((n) => (\n                <button key={n.href} type=\"button\" onClick={() => app.open(n.href)}>\n                  <span className=\"t\">{n.title}</span>\n                  <span className=\"v\">{n.vaultName}</span>\n                  <span className=\"d\">{timeOf(n.updatedAt)}</span>\n                </button>\n              ))}\n            </div>\n          ))}\n          {notes !== null && !notes.length && <p className=\"quiet\">Nothing written yet.</p>}\n        </section>\n        {pins.length > 0 && (\n          <section className=\"pins\" aria-label=\"Pinned\">\n            <h2>Pinned</h2>\n            <ul>{pins.map((p) => <li key={p.href}><button type=\"button\" onClick={() => app.open(p.href)}>{p.glyph} {p.name}</button></li>)}</ul>\n          </section>\n        )}\n      </div>\n    </main>\n  );\n}\n"
+}
+```
+
+Then make it the home: write the settings note in the home vault (`Parachute/Settings`, tagged `parachute-settings`):
+
+```json
+{ "metadata": { "parachute": { "start": { "vault": "<the vault's name>", "applet": "Applets/Home" } } } }
+```
+
+The next time the app starts, it opens on Home and shows its card; once the person taps Allow, it opens there by itself.
+They can also long-press it in the launcher and tap **Open on start**.
+
+The code in `content`, laid out:
+
+```tsx
+import { useEffect, useState } from "react";
+import { app, ready } from "parachute";
+
+type Note = { vaultName: string; id: string; title: string; updatedAt: string | null; href: string };
+type Place = { name: string; glyph: string; href: string; home: boolean };
+
+const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+function dayOf(iso: string | null): string {
+  if (!iso) return "Earlier";
+  const d = new Date(iso), ago = Math.round((midnight(new Date()) - midnight(d)) / 86400000);
+  if (ago <= 0) return "Today";
+  if (ago === 1) return "Yesterday";
+  if (ago < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "long" });
+}
+const timeOf = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "");
+
+const CSS = `
+main { max-width: 1100px; margin: 0 auto; padding: 28px 22px; font: 16px/1.5 var(--sans); color: var(--text); }
+h1 { margin: 0; font: 400 36px/1.1 var(--serif); }
+.sub { margin: 4px 0 18px; font: italic 16px var(--serif); color: var(--muted); }
+.cols { display: grid; gap: 28px; }
+@media (min-width: 900px) { .cols { grid-template-columns: 3fr 2fr; gap: 72px; } h1 { font-size: 48px; } }
+.river { position: relative; padding-left: 26px; }
+.river::before { content: ""; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: var(--text); }
+h2 { position: relative; margin: 14px 0 4px; font: italic 400 16px var(--serif); color: var(--muted); }
+.river h2::before { content: ""; position: absolute; left: -24px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--text); }
+button { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; width: 100%; padding: 7px 0; border: 0; border-bottom: 1px solid var(--line); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.t { font: 500 19px/1.3 var(--serif); }
+.v { grid-column: 1; font-size: 13px; color: var(--muted); }
+.d { grid-row: 1; grid-column: 2; font: italic 14px var(--serif); color: var(--muted); }
+.pins ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--text); }
+.pins button { display: block; font: 500 19px var(--serif); }
+.quiet { font: italic 16px var(--serif); color: var(--muted); }
+`;
+
+export default function Home() {
+  const [notes, setNotes] = useState<Note[] | null>(null);
+  const [pins, setPins] = useState<Place[]>([]);
+  useEffect(() => {
+    ready()
+      .then(() => Promise.all([app.recent({ limit: 12 }), app.pins()]))
+      .then(([n, p]: [Note[], Place[]]) => { setNotes(n); setPins(p.filter((x) => !x.home)); }, () => setNotes([]));
+  }, []);
+  const days: { label: string; notes: Note[] }[] = [];
+  for (const n of notes ?? []) {
+    const label = dayOf(n.updatedAt);
+    if (days.at(-1)?.label !== label) days.push({ label, notes: [] });
+    days.at(-1)!.notes.push(n);
+  }
+  const vaults = new Set((notes ?? []).map((n) => n.vaultName)).size;
+  return (
+    <main>
+      <style>{CSS}</style>
+      <h1>{new Date().toLocaleDateString(undefined, { weekday: "long" })}</h1>
+      <p className="sub">{notes === null ? "Reading…" : `${notes.length} notes lately, in ${vaults} ${vaults === 1 ? "vault" : "vaults"}.`}</p>
+      <div className="cols">
+        <section className="river" aria-label="Lately">
+          {days.map((d) => (
+            <div key={d.label}>
+              <h2>{d.label}</h2>
+              {d.notes.map((n) => (
+                <button key={n.href} type="button" onClick={() => app.open(n.href)}>
+                  <span className="t">{n.title}</span>
+                  <span className="v">{n.vaultName}</span>
+                  <span className="d">{timeOf(n.updatedAt)}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+          {notes !== null && !notes.length && <p className="quiet">Nothing written yet.</p>}
+        </section>
+        {pins.length > 0 && (
+          <section className="pins" aria-label="Pinned">
+            <h2>Pinned</h2>
+            <ul>{pins.map((p) => <li key={p.href}><button type="button" onClick={() => app.open(p.href)}>{p.glyph} {p.name}</button></li>)}</ul>
+          </section>
+        )}
+      </div>
     </main>
   );
 }
