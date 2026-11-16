@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en" data-feel="garden"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parts, mockup B: Garden</title>
+<style>
+/* B, "Garden": a painted landscape across the top (three hills in moss and sage), applets as specimen tags on soft paper
+   panels, the weeks as a bloom (one petal a day, longer where more changed), and clay beside the moss. Roomier. */
+:root {
+  --bg: #ece5d4; --surface: #faf6ec; --text: #29231b; --muted: #776b58; --line: #e0d5bf; --accent: #9a5b34; --danger: #9a3324; --moss: #5f7a47; --sage: #a9b892;
+  --serif: "Iowan Old Style", Palatino, "Noto Serif", Georgia, serif; --sans: system-ui, "Noto Sans", sans-serif; --mono: ui-monospace, monospace;
+  --pad: 20px; --gap: 18px; --radius: 14px; --size: 16px; --leading: 1.55;
+}
+:root.alt { --bg: #e2e6dc; --surface: #f6f8f1; --text: #1f2a22; --muted: #5e6e5f; --line: #d1dacb; --accent: #4f6b3a; --moss: #3f5a6a; --sage: #9db0bb; --radius: 6px; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: var(--size)/var(--leading) var(--sans); }
+body { display: flex; flex-direction: column; }
+a { color: inherit; }
+.page { flex: 1; overflow: hidden; width: 100%; max-width: 1500px; margin: 0 auto; padding: 0 var(--pad) var(--gap); }
+@media (max-width: 899px) { .page { overflow: auto; } .wide-only { display: none; } }
+.shell-top { display: flex; align-items: center; gap: 10px; padding: 12px var(--pad); font: 600 20px var(--serif); }
+.shell-top .more { margin-left: auto; color: var(--muted); } .shell-top .back { font-size: 26px; } .glyph { color: var(--accent); font-weight: 400; }
+.shell-bar { display: flex; justify-content: center; gap: 8px; padding: 8px; background: var(--bg); font-size: 13px; }
+.shell-bar a { display: grid; justify-items: center; padding: 4px 16px; border-radius: 999px; color: var(--muted); } .shell-bar .g { font: 18px/1.2 var(--serif); }
+.shell-bar a.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 0 var(--line); }
+
+/* ornament */
+.orn-sprig { width: 110px; height: 36px; color: var(--moss); }
+.orn-rule { display: none; }
+.orn-hills { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+.orn-hills .h1 { fill: var(--sage); } .orn-hills .h2 { fill: var(--moss); opacity: .85; } .orn-hills .h3 { fill: var(--bg); }
+.medal { display: inline-grid; place-items: center; width: 42px; height: 42px; border-radius: 12px 12px 12px 3px; background: var(--bg); color: var(--moss); font: 22px var(--serif); font-variant-emoji: text; }
+
+/* launcher */
+.mast { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px 32px; margin: 0 calc(-1 * var(--pad)); padding: 24px calc(var(--pad) + 8px) 96px;
+  background: linear-gradient(#f3ead6, var(--bg)); overflow: hidden; }
+.mast-words, .mast .pa-days { position: relative; z-index: 1; }
+.mast h1 { margin: 0; font: 600 clamp(40px, 6vw, 64px)/1 var(--serif); }
+.mast-when { margin: 6px 0 0; color: var(--muted); } .mast-sum { margin: 10px 0 0; max-width: 32em; font: 18px/1.45 var(--serif); }
+.mast .pa-days { padding: 10px; border-radius: 50%; background: color-mix(in srgb, var(--surface) 80%, transparent); }
+@media (max-width: 899px) { .mast { grid-template-columns: 1fr; justify-items: start; padding-bottom: 70px; } }
+.chapters { display: grid; gap: 18px 32px; margin-top: -40px; position: relative; z-index: 1; }
+@media (min-width: 900px) { .chapters { grid-template-columns: 1fr 1fr; } }
+.chapter { padding: 16px 20px 8px; border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 0 var(--line), 0 10px 24px -18px rgba(60,40,10,.5); }
+.chapter h2 { display: grid; grid-template-columns: 1fr auto; align-items: baseline; margin: 0 0 6px; font-weight: 400; }
+.chap-num { display: none; } .chap-name { font: 600 24px var(--serif); text-transform: capitalize; } .chapter h2 a { font-size: 14px; color: var(--accent); }
+.chap-note { grid-column: 1 / 3; font-size: 14px; color: var(--muted); }
+.entries { list-style: none; margin: 0; padding: 0; }
+.entry { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0 14px; padding: 10px 0; }
+.entry + .entry { border-top: 1px solid var(--line); }
+.entry .medal { grid-row: 1 / 3; } .entry-name { font: 600 19px/1.2 var(--serif); } .entry-life { grid-column: 2; font-size: 14px; color: var(--muted); }
+.entry .spark { grid-row: 1 / 3; grid-column: 3; width: 60px; height: 16px; color: var(--accent); }
+.tag { padding: 1px 8px; border-radius: 999px; background: var(--bg); font: 600 11px var(--sans); font-style: normal; color: var(--accent); }
+.foot { display: flex; gap: 10px; margin: 18px 0 0; } .foot a { padding: 6px 14px; border-radius: 999px; background: var(--surface); font-size: 14px; text-decoration: none; }
+
+/* the days part: a bloom */
+.pa-days { margin: 0; display: grid; justify-items: center; } .pa-days svg { display: block; width: 150px; height: 150px; }
+.pa-days line { stroke: var(--moss); stroke-width: 1.6; stroke-linecap: round; } .pa-days circle { fill: var(--accent); } .pa-days .core { fill: var(--moss); }
+.pa-days figcaption { font-size: 12px; color: var(--muted); }
+
+/* home */
+.home-head { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; margin: 0 0 var(--gap); padding: 20px 24px; border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 0 var(--line); }
+@media (max-width: 899px) { .home-head { grid-template-columns: 1fr; } }
+.kick { margin: 0; font: 600 13px var(--sans); color: var(--accent); }
+.home-head h1 { margin: 2px 0 6px; font: 600 clamp(34px, 5vw, 52px)/1.05 var(--serif); }
+.home-sum { margin: 0; max-width: 34em; font: 18px/1.5 var(--serif); }
+.drop { float: left; margin: 2px 8px 0 0; padding: 4px 10px; border-radius: 10px; background: var(--moss); color: var(--surface); font: 600 40px/1 var(--serif); }
+.home-cols { display: grid; gap: 18px 32px; }
+@media (min-width: 900px) { .home-cols { grid-template-columns: 3fr 2fr; } }
+.river h2, .pins h2 { margin: 12px 0 6px 4px; font: 600 15px var(--serif); color: var(--muted); }
+.river .pa-row { margin-bottom: 8px; }
+.pin { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0 12px; width: 100%; margin-bottom: 8px; padding: 10px 14px; border: 0; border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 0 var(--line); color: inherit; font: 600 18px var(--serif); text-align: left; }
+.pin .medal { grid-row: 1 / 3; } .pin-life { font: 13px var(--sans); color: var(--muted); }
+
+/* the parts sheet and Recipes */
+.sheet { display: grid; gap: var(--gap); padding-top: 8px; }
+@media (min-width: 900px) { .sheet { grid-template-columns: 1fr 1fr; padding: 12px 48px; gap: 32px; } .sheet.two { grid-template-columns: 2fr 3fr; } }
+.kicker { margin: var(--gap) 0 6px 4px; font: 600 12px var(--sans); color: var(--accent); }
+.rec-head h1 { margin: 6px 0 0; font: 600 36px/1.1 var(--serif); } .rec-head p { margin: 2px 0 8px; color: var(--muted); }
+.pa-note { padding: 26px 30px; background: var(--surface); border-radius: var(--radius); box-shadow: 0 1px 0 var(--line), 0 10px 24px -18px rgba(60,40,10,.5); font: 17px/1.65 var(--serif); }
+.pa-note h1 { margin: 0 0 4px; font: 600 34px/1.15 var(--serif); }
+.pa-note .pa-lede { margin: 0 0 var(--gap); color: var(--muted); }
+.pa-facts { display: flex; gap: 8px; margin: 0 0 var(--gap); }
+.pa-facts div { padding: 6px 14px; border-radius: 999px; background: var(--bg); } .pa-facts dt { display: inline; font-size: 12px; color: var(--muted); } .pa-facts dd { display: inline; margin: 0 0 0 6px; font-weight: 600; }
+.pa-note h2 { margin: calc(var(--gap) * 1.2) 0 4px; font: 600 19px var(--serif); color: var(--moss); }
+.pa-note ul, .pa-note ol { margin: 0; padding-left: 1.3em; } .pa-note li::marker { color: var(--accent); }
+.pa-note a { color: var(--accent); }
+.pa-note blockquote { margin: var(--gap) 0 0; padding: 12px 16px; border-radius: calc(var(--radius) / 2); background: var(--bg); color: var(--muted); }
+.pa-list { margin: 0 0 var(--gap); } .pa-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pa-list-label { margin: 0 0 6px 4px; font: 600 15px var(--serif); color: var(--muted); }
+.pa-row { display: grid; grid-template-columns: 1fr auto; width: 100%; padding: 12px 16px; border: 0; border-left: 4px solid var(--sage); border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 0 var(--line); color: inherit; font: inherit; text-align: left; }
+.pa-row-title { font: 600 18px/1.3 var(--serif); } .pa-row-meta { grid-column: 1; font-size: 13px; color: var(--muted); }
+.pa-row-aside { grid-row: 1; grid-column: 2; font-size: 13px; color: var(--accent); }
+.pa-card { margin: 0 0 var(--gap); padding: 16px 18px; border-radius: var(--radius); background: var(--moss); color: var(--surface); }
+.pa-card-title { margin: 0 0 4px; font: 600 18px var(--serif); } .pa-card p { margin: 0; opacity: .9; }
+.pa-field { display: grid; gap: 4px; margin: 0 0 var(--gap); } .pa-field-label { margin-left: 4px; font: 600 13px var(--sans); color: var(--muted); }
+.pa-field-row { display: flex; gap: 8px; }
+.pa-field input { flex: 1; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font: 17px var(--serif); color: var(--text); outline: none; }
+.pa-field-action { padding: 0 20px; border: 0; border-radius: var(--radius); background: var(--accent); font: 600 15px var(--sans); color: var(--surface); }
+.pa-empty { display: grid; justify-items: center; gap: 6px; padding: 24px 16px; border-radius: var(--radius); background: var(--surface); color: var(--muted); text-align: center; }
+.pa-empty p { margin: 0; font: 16px var(--serif); }
+.lately-label { margin: 14px 0 4px; font: 600 13px var(--serif); color: var(--muted); }
+.lately { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; } .lately li { padding: 4px 12px; border-radius: 999px; background: var(--bg); font: 15px var(--serif); }
+.lately i { margin-left: 8px; font: 12px var(--sans); color: var(--muted); }
+@media (min-width: 900px) { .entry-name { font-size: 22px; } .entry-life { font-size: 15px; } .medal { width: 50px; height: 50px; font-size: 24px; } .entry { padding: 14px 0; } }
+.col { min-width: 0; } .pa-days svg { max-width: 100%; }
+</style></head>
+<body><script src="mock.js"></script></body></html>
