@@ -28,6 +28,7 @@ Its code may import only `react`, `react-dom`, `react-dom/client`, `react/jsx-ru
 | From `@parachute/frame` | What it is |
 |---|---|
 | `Launcher`, `VaultView`, `NoteRoute`, `NoteView`, `NoVault`, `Sheet`, `Bar` | The built-in screens and parts (`Home` is the launcher's older name) |
+| `Note`, `Days`, `List`, `Card`, `Field`, `Empty` | The parts applets have ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)), in the theme's look |
 | `installLongPress`, `openSheet`, `closeSheet`, `useOpenWith` | Open with, and the long-press that offers it |
 | `useVaults`, `useVault`, `useVaultQuery`, `readerFor`, `useApplets`, `useDefaults` | The vaults this device holds and reads of them (no sign-ins) |
 | `useHome`, `pinApplet`, `startApplet` | What is on the bar and which applet is home; pin, unpin or choose home (on a tap only) |

@@ -135,40 +135,67 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .sheet-list .sheet-choice { padding: 12px 2px; font-size: 16px; }
 .start-line { margin: 0 0 8px; font: italic 15px var(--serif); }
 
-/* The launcher (src/frame/views/Launcher.tsx): the contents page of a book. Vaults are chapters; each applet is an entry
-   with a dotted leader to a line of what changed lately. Two pages on a wide screen. */
-.launcher { max-width: 860px; padding-top: 22px; }
-.launcher-wide { max-width: 1280px; }
-.launcher-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 16px; }
-.launcher-head h1 { margin: 0; font: 400 30px/1.1 var(--serif); letter-spacing: -.01em; }
-.launcher-when { font: italic 15px var(--serif); color: var(--muted); }
-.launcher-spread { display: grid; gap: 24px; }
-.chapter h2 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; font: italic 400 17px var(--serif); color: var(--muted); }
-.chapter h2 a { margin-left: auto; font: normal 14px var(--sans); color: var(--text); text-decoration: none; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.entries { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--text); }
-.entries > li { border-bottom: 1px solid var(--line); }
-.entry { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: baseline; column-gap: 8px; padding: 10px 0; color: var(--text); text-decoration: none; -webkit-touch-callout: none; user-select: none; }
-.entry:active { background: var(--line); }
-.entry-glyph { font: 19px var(--serif); text-align: center; }
-.entry-name { font: 500 21px/1.25 var(--serif); overflow-wrap: anywhere; }
-.entry-dots { display: none; }
+/* The launcher (src/frame/views/Launcher.tsx): a page of an almanac (design/kit/WHY.md). A masthead with hills drawn in
+   ink over a pale wash, the week in a line and its days as a tally; a chapter per vault, its applets in ink medallions
+   with their last seven days, and its newest notes. Hierarchy by type, rules and ink, so it holds in grey. */
+.launcher { max-width: 880px; padding-top: 14px; }
+.launcher-wide { max-width: 1320px; }
+.launcher-head { position: relative; display: grid; grid-template-columns: 1fr; gap: 8px 32px; align-items: end; margin: 0 0 6px; padding-bottom: 74px; border-bottom: 1px solid var(--text); }
+.launcher-words, .launcher-head .pa-days { position: relative; z-index: 1; }
+.launcher-head h1 { margin: 0; font: 400 46px/1 var(--serif); letter-spacing: -.01em; }
+.launcher-when { margin: 4px 0 0; font: italic 16px var(--serif); color: var(--muted); }
+.launcher-week { margin: 8px 0 0; font: 18px/1.4 var(--serif); }
+.launcher-hills { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 66px; }
+.launcher-hills path { stroke: var(--text); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-opacity: .5; }
+.launcher-hills .h1 { fill: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
+.launcher-hills .h2 { fill: color-mix(in srgb, var(--accent) 22%, var(--bg)); stroke-opacity: .35; }
+.launcher-hills .h3 { fill: var(--bg); stroke: var(--accent); stroke-opacity: .7; }
+.launcher-spread { display: grid; gap: 8px; }
+.launcher-head .pa-days { margin: 0; }
+.launcher-head .pa-days svg { height: 64px; }
+.entry-glyph { font-variant-emoji: text; }
+.chapter { padding-top: 10px; }
+.chapter h2 { display: grid; grid-template-columns: 2em 1fr auto; align-items: baseline; margin: 0 0 2px; font-weight: 400; }
+.chapter-n { font: 600 13px var(--serif); letter-spacing: .2em; color: var(--accent); }
+.chapter-name { font: 500 25px/1.2 var(--serif); overflow-wrap: anywhere; }
+.chapter h2 a { font: 14px var(--sans); color: var(--muted); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.entries { list-style: none; margin: 4px 0 0; padding: 0; }
+.entries > li { border-bottom: 1px dotted var(--muted); }
+.entry { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 14px; padding: 10px 0; color: var(--text); text-decoration: none; -webkit-touch-callout: none; user-select: none; }
+.entry:active { background: color-mix(in srgb, var(--line) 40%, transparent); }
+.entry-glyph { grid-row: 1 / 3; display: inline-grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--text); border-radius: 50%;
+  box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 4px var(--line); background: var(--surface); font: 21px var(--serif); }
+.entry-name { grid-column: 2; font: 500 22px/1.25 var(--serif); overflow-wrap: anywhere; }
 .entry-life { grid-column: 2; font: italic 15px/1.35 var(--serif); color: var(--muted); overflow-wrap: anywhere; }
-.entry-home { margin-left: 8px; padding: 1px 5px; border-radius: 3px; background: var(--text); color: var(--surface); font: 600 12px/1.3 var(--sans); vertical-align: 3px; }
+.entry-days { grid-row: 1 / 3; grid-column: 3; width: 64px; }
+.entry-days .pa-days { margin: 0; } .entry-days .pa-days svg { height: 24px; max-width: 64px; }
+.entry-home { margin-left: 8px; font: 600 11px var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); vertical-align: 3px; }
 .entry-pinned { margin-left: 8px; font: 12px var(--sans); color: var(--accent); vertical-align: 2px; }
-.entry-quiet { padding: 10px 0 10px 34px; font: italic 15px var(--serif); color: var(--muted); }
+.entry-quiet { padding: 10px 0; font: italic 15px var(--serif); color: var(--muted); }
+.lately-label { margin: 14px 0 2px; font: 600 11px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.lately { list-style: none; margin: 0; padding: 0; }
+.lately a { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; color: var(--text); text-decoration: none; font: 17px var(--serif); }
+.lately a::before { content: "·"; color: var(--accent); }
+.lately span { overflow-wrap: anywhere; } .lately i { margin-left: auto; font-size: 14px; color: var(--muted); white-space: nowrap; }
 .launcher-foot { display: flex; gap: 18px; margin: 22px 0 0; font-size: 14px; }
-.launcher-foot a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--line); }
-@media (min-width: 640px) {
-  .entry { grid-template-columns: 26px auto minmax(20px, 1fr) auto; }
-  .entry-dots { display: block; border-bottom: 1.5px dotted var(--muted); transform: translateY(-5px); }
-  .entry-life { grid-column: auto; text-align: right; max-width: 22em; }
+.launcher-foot a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+@media (min-width: 700px) {
+  .launcher-head { grid-template-columns: 1fr minmax(240px, 420px); padding-bottom: 92px; }
+  .launcher-hills { height: 84px; }
 }
 @media (min-width: 1000px) {
-  .launcher { padding: 40px 64px 32px; }
-  .launcher-head h1 { font-size: 38px; }
-  .launcher-pages { display: block; columns: 2; column-gap: 96px; column-rule: 1px solid var(--line); }
-  .chapter { break-inside: avoid; margin-bottom: 26px; }
-  .entry-name { font-size: 23px; }
+  .launcher { padding: 28px 64px 32px; }
+  .launcher-head h1 { font-size: 64px; }
+  .launcher-pages { display: grid; grid-template-columns: 1fr 1fr; column-gap: 96px; }
+  .entry-name { font-size: 25px; }
+  .entry-glyph { width: 50px; height: 50px; font-size: 24px; }
+  /* one vault on a wide screen: its applets and its newest notes side by side */
+  .launcher:not(.launcher-wide) { max-width: 1320px; }
+  .launcher:not(.launcher-wide) .chapter { display: grid; grid-template-columns: 3fr 2fr; column-gap: 72px; align-content: start; }
+  .launcher:not(.launcher-wide) .chapter > h2 { grid-column: 1 / -1; }
+  .launcher:not(.launcher-wide) .chapter > .entries { grid-column: 1; grid-row: 2 / span 3; }
+  .launcher:not(.launcher-wide) .chapter > :not(h2):not(.entries) { grid-column: 2; }
+  .launcher:not(.launcher-wide) .lately-label { margin-top: 8px; }
   .home-bar-place { min-width: 96px; font-size: 15px; }
 }
 

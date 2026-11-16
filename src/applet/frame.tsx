@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import vaultClientSource from "virtual:vault-client-kit";
 import reactKitSource from "virtual:react-kit";
-import { modulePage, type CodeKind } from "./code";
+import reactNoteKitSource from "virtual:react-note-kit";
+import { modulePage, usesNote, type CodeKind } from "./code";
 import { buildSrcdoc } from "./srcdoc";
 import { buildKitSource } from "./kits";
 import { createSession, type Session } from "./session";
@@ -16,7 +17,7 @@ export const STOPPED_MESSAGE = "This applet tried to leave its sandbox and was s
 const KIT_SOURCE = buildKitSource({ vaultClientSource });
 
 /** What runs in the frame for an applet's code: an HTML note as written; a TSX/JSX note as its transpiled module, with React. */
-export const appletPage = (kind: CodeKind, content: string, js: string | null): string => (kind === "html" ? content : modulePage(js ?? "", reactKitSource));
+export const appletPage = (kind: CodeKind, content: string, js: string | null): string => (kind === "html" ? content : modulePage(js ?? "", usesNote(content) ? reactNoteKitSource : reactKitSource));
 
 /** The sealed srcdoc for an applet: CSP first, WebRTC removed, the kits, then the applet. */
 export const frameSrcDoc = (html: string) => buildSrcdoc(html, { kitSource: KIT_SOURCE, headExtra: "" });

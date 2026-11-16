@@ -9,6 +9,7 @@ import * as ReactDOMClient from "react-dom/client";
 import * as JSXRuntime from "react/jsx-runtime";
 import * as ReactRouter from "react-router";
 import "@openparachute/surface-render/styles.css";
+import "@openparachute/surface-render/rich-notes-kit.css";
 import "../styles.css";
 import FrameRouter from "./FrameRouter";
 import * as lib from "./lib";

@@ -1,0 +1,192 @@
+import { useEffect, useMemo, useRef } from "react";
+import { type FetchBlob, isVaultStorageUrl } from "../embed/fetch-blob.js";
+import type { WikilinkResolver } from "../markdown/remark-wikilinks.js";
+import { mountRichNote, parseRichNote } from "./kit-api.js";
+import type { RichDoc, RichHandle, RichHost, RichNote } from "./kit-api.js";
+
+export interface RichNoteViewProps {
+  /** The note: content plus whatever of metadata / tags / path / id /
+   *  updatedAt the surface has (surface-client's `Note` has all of them). */
+  note: { content?: string } & Partial<Omit<RichNote, "content">>;
+  /** An already parsed doc for this note (NoteRenderer passes the one it
+   *  parsed to decide), so the note is parsed once. */
+  doc?: RichDoc;
+  /** Wikilink resolver: `[[target]]` → its href, as in `MarkdownView`.
+   *  Without it a wikilink is plain text. */
+  resolve?: WikilinkResolver;
+  /** The surface's router navigate, for wikilinks and internal links. */
+  onNavigate?: (href: string) => void;
+  /** Opens an external link (`https:`, `mailto:`, `geo:`, the only schemes
+   *  the kit keeps). An app webview should pass its platform opener; without
+   *  it the kit uses an ordinary `target=_blank` link. */
+  openLink?: (href: string) => void;
+  /** Auth'd blob fetcher for the note's own attachments (`/api/storage/…`).
+   *  It is only ever asked for a URL that passes
+   *  `isVaultStorageUrl(src, vaultUrl)`; nothing else is fetched. */
+  fetchBlob?: FetchBlob;
+  /** The vault's base URL (e.g. `https://hub.example/vault/default`), as on
+   *  `MarkdownView`: the vault an image must sit in to be fetched. A full
+   *  URL inside this vault loads too; any other absolute URL stays a link. */
+  vaultUrl?: string;
+  /** Saves a one-line content edit (a ticked task, a "made today" line).
+   *  Resolve with the saved note, or `{ updatedAt }` (it becomes the next
+   *  revision); reject with `{ status: 409 }` when stale. Hand the view the
+   *  saved note after this resolves, not inside it. Without it the note is
+   *  read-only. */
+  onSave?: NonNullable<RichHost["save"]>;
+  /** Ink / reduced-motion screens: nothing moves. */
+  calm?: boolean;
+  /** The reader's lasting choice of units for recipes. */
+  units?: "us" | "metric";
+  /** Wrapper class (default `rich-note`). */
+  className?: string;
+}
+
+/**
+ * Draws one note with rich-notes-kit (PATTERNS v0.3): recipes with servings,
+ * units and timers; minutes with quorum and tallies; session notes; chant
+ * charts; and for every note, tasks, dated logs, callouts, `<details>` and
+ * charts from number tables.
+ *
+ * **No network.** The kit loads nothing itself: a remote image is a link,
+ * links open only on a tap, and the one thing it asks the host for — an
+ * attachment image — goes through `fetchBlob` only for a vault storage path.
+ * Note text only ever enters the page as text.
+ */
+export function RichNoteView(props: RichNoteViewProps) {
+  // One mount per note, and per set of hooks the kit was given: a different
+  // note starts with a fresh sitting (servings, ticks, timers belong to the
+  // note they were set on), and a hook that appears or goes (a note you may
+  // edit, a resolver or fetcher that loaded) redraws with it. A note with
+  // neither id nor path can't be told apart, so it updates in place. The same
+  // note with new content updates in place and keeps the sitting, and so does
+  // a vaultUrl change: its images are asked afresh (RichNoteMount).
+  const { note, resolve, openLink, onSave, fetchBlob, units } = props;
+  const key = [
+    note.id ?? note.path ?? "",
+    resolve ? "r" : "",
+    openLink ? "l" : "",
+    onSave ? "s" : "",
+    fetchBlob ? "b" : "",
+    units ?? "",
+  ].join("|");
+  return <RichNoteMount key={key} {...props} />;
+}
+
+function RichNoteMount({ note, doc, className = "rich-note", ...hooks }: RichNoteViewProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const handle = useRef<RichHandle | null>(null);
+  const drawn = useRef<RichDoc | null>(null);
+  // The host is built once per mount; it reads the latest props through this
+  // ref, so a new callback identity never remounts the note (and never loses
+  // the reader's sitting: ticks, scale, step, timers).
+  const latest = useRef(hooks);
+  latest.current = hooks;
+  // The object URLs this mount made, and which vault they belong to: a vault
+  // change bumps `gen`, so an image asked before it never becomes a URL.
+  const images = useRef({ gen: 0, urls: [] as string[] });
+
+  const parsed = useMemo(
+    () => doc ?? parseRichNote({ ...note, content: note.content ?? "" }),
+    [doc, note],
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount once; updates go through handle.update below.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let disposed = false;
+    const h = latest.current;
+    const host: RichHost = {
+      // `src` is raw, as markdown-it normalised it (the string MarkdownView
+      // gets, minus any `#fragment`). This check decides every load; a refusal
+      // reads "(not loaded)".
+      async image(src) {
+        const fetchBlob = latest.current.fetchBlob;
+        if (!fetchBlob || !isVaultStorageUrl(src, latest.current.vaultUrl))
+          throw new Error("not a vault attachment");
+        const gen = images.current.gen;
+        const blob = await fetchBlob(src);
+        if (disposed) throw new Error("view closed");
+        // Asked under a vault that has since changed: the kit no longer shows it.
+        if (gen !== images.current.gen) throw new Error("vault changed");
+        const url = URL.createObjectURL(blob);
+        images.current.urls.push(url);
+        return url;
+      },
+      // An absolute src is an attachment only when it sits in this vault:
+      // isVaultStorageUrl compares scheme, host and port, and reads the query
+      // (the kit checks only the path's shape). Anything else stays a link and
+      // is never asked for.
+      // Without fetchBlob nothing can load, so it stays a link the reader can open.
+      isAttachment: (src) =>
+        Boolean(latest.current.fetchBlob) && isVaultStorageUrl(src, latest.current.vaultUrl),
+      calm: () => Boolean(latest.current.calm),
+    };
+    if (h.resolve) {
+      host.openNote = (target) => {
+        const resolved = latest.current.resolve?.(target);
+        if (resolved?.href) navigate(resolved.href, latest.current.onNavigate);
+      };
+    }
+    if (h.openLink) host.openLink = (href) => latest.current.openLink?.(href);
+    if (h.onSave) {
+      host.save = (content, patch) => {
+        const save = latest.current.onSave;
+        return save ? save(content, patch) : Promise.reject(new Error("read-only"));
+      };
+    }
+    if (h.units) host.units = h.units;
+    handle.current = mountRichNote(el, parsed, host);
+    drawn.current = parsed;
+    return () => {
+      disposed = true;
+      handle.current?.destroy();
+      handle.current = null;
+      for (const u of images.current.urls.splice(0)) URL.revokeObjectURL(u);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!handle.current || drawn.current === parsed) return;
+    drawn.current = parsed;
+    handle.current.update(parsed);
+  }, [parsed]);
+
+  // A vaultUrl that changes (arrives late, names another vault, goes away)
+  // changes what each image is: kit 0.4's refreshImages forgets every answer
+  // and redraws the kit's own current doc (a saved tick included), so each
+  // image is asked again under the new vault, and the sitting stays. The doc
+  // stays the one on screen until the host hands the new vault's note in
+  // (as with a remount, which also drew the props' note); its revision makes
+  // a save in that window stale rather than silent.
+  const vaultUrl = hooks.vaultUrl;
+  const drawnVault = useRef(vaultUrl);
+  useEffect(() => {
+    if (!handle.current || drawnVault.current === vaultUrl) return;
+    drawnVault.current = vaultUrl;
+    images.current.gen++;
+    const stale = images.current.urls.splice(0);
+    handle.current.refreshImages();
+    // The redraw dropped every image drawn from them.
+    for (const u of stale) URL.revokeObjectURL(u);
+  }, [vaultUrl]);
+
+  return <div ref={ref} className={className} />;
+}
+
+/** Routes go to the surface's navigate; without one, only an href on this
+ *  page's own origin is followed (the resolver owns the href; parsing it
+ *  first means `/\\host` or `/<TAB>/host` can't leave the site). */
+function navigate(href: string, onNavigate?: (href: string) => void): void {
+  if (onNavigate) {
+    onNavigate(href);
+    return;
+  }
+  try {
+    const u = new URL(href, window.location.href);
+    if (u.origin === window.location.origin) window.location.assign(u.href);
+  } catch {
+    // not a URL: nothing to follow
+  }
+}

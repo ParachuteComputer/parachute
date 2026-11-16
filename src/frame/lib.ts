@@ -12,6 +12,9 @@ export { default as Sheet } from "./open/Sheet";
 export { closeSheet, installLongPress, openSheet } from "./open/sheet";
 export { useOpenWith } from "./open/useOpenWith";
 export { Bar } from "../ui/Bar";
+/** The parts applets have (docs/WRITE-AN-APPLET.md), for a frame of the person's too. */
+export { Card, Days, Empty, Field, List } from "../kit/parts";
+export { Note } from "../kit/parts-note";
 export { pinApplet, readerFor, startApplet, useApplets, useDefaults, useHome, useVault, useVaultQuery, useVaults } from "./data";
 export { call } from "./bridge";
 export { folderOf, noteHref, titleOf } from "../vault/notes";

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import { NoteRenderer } from "@openparachute/surface-render/note";
 import { unresolvedLink, type WikilinkResolver } from "@openparachute/surface-render/markdown";
@@ -20,6 +20,7 @@ const RouterLink = ({ href, className, children }: { href: string; className?: s
 export default function NoteView({ above, note: given }: { above?: ReactNode; /** the note, when the route already read it */ note?: Note | null }) {
   const { vault: key, id } = useParams();
   const rec = useVault(key);
+  const navigate = useNavigate();
   const fetched = useVaultQuery<Note | null>(given === undefined ? rec : null, (c) => c.getNote(id ?? ""), [id]);
   const load: typeof fetched = given === undefined ? fetched : { state: "ok", data: given };
   // a wikilink names a note by its path; the vault answers a path where an id goes
@@ -39,7 +40,8 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
             <CopyLink link={linkFor(rec.issuer, rec.vault, note.id)} /></p>
           {isCodeNote(note)
             ? <pre className="note-code" aria-label="The note's text">{note.content ?? ""}</pre>
-            : <NoteRenderer className="prose-note" note={{ path: `${note.path ?? "note"}.${(note as { extension?: string }).extension?.replace(/^\./, "") || "md"}`, content: note.content ?? "" }} resolve={resolve} linkComponent={RouterLink} />}
+            : <div className="rn-theme-uni"><NoteRenderer className="prose-note" rich calm note={{ ...note, path: `${note.path ?? "note"}.${(note as { extension?: string }).extension?.replace(/^\./, "") || "md"}`, content: note.content ?? "" }} resolve={resolve} linkComponent={RouterLink}
+                onNavigate={(href) => { if (isAppPath(href)) navigate(href); }} openLink={(url) => { void call("link.out", { url }); }} /></div>}
         </article>
       )}
     </main>
