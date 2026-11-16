@@ -15,16 +15,16 @@ Made-up content. Screens at Daylight 1600x1200 and phone 390x844, each with a gr
 
 Checked against the taste notes (paraphrased here) on the screenshots, grayscale included:
 
-- **Calm order with room, no boxy grids**: B's rings in boxes read as an app grid of icons, and its regions are boxes;
+- **Calm order with room, no rigid boxes**: B's rings in boxes read as an app grid of icons, and its regions are boxes;
   on the phone, B pushes the third vault below the fold. A is rows and rules, no boxes, and shows all three vaults on
   one phone screen. This decided it.
-- **Like reading an old book, with just enough life**: A is literally a contents page: serif entries, italic chapter
+- **A paper, book-like feel with a little life**: A is literally a contents page: serif entries, italic chapter
   names, dotted leaders. B is closer to a landscape (also liked), but the rings make it feel like a launcher grid, which
   the brief says to avoid: a calm place, not an app grid.
 - **Daylight, grayscale**: both hold up in gray. A's hierarchy is type alone (display serif for the page name, book
   serif for entries, italic for what changed, sans for actions). B's ticks rely on a 4 px mark that may ghost on the
   e-ink screen and are small to read at arm's length.
-- **Content up front, easy to dig into**: A puts a sentence of what changed next to each applet, so a glance tells you
+- **Content up front, simple to explore further**: A puts a sentence of what changed next to each applet, so a glance tells you
   where to go. B's ticks say *that* something changed, not *what*.
 - **New ways to show information; a love of good data visualisation**: B's ticks were the stronger idea here, so the
   home applet keeps B's one data idea, the day line (a vertical rule with a node per day), drawn in A's type. That is
