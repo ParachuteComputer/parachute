@@ -16,6 +16,7 @@ One model, everywhere.
 
 1. **The bar is for your pinned places.** It sits at the bottom of the launcher, a vault, a note and an applet. On it:
    the launcher (always), your home applet if you have one, then the applets you pinned, in your order (up to 12).
+   Under a frame of your own it also ends with the app's own way to Settings (not one of the twelve; always on screen).
 2. **The launcher is for everything.** Every applet in every vault, and the vaults themselves.
 3. **Back returns where you came from.** The app's Back and the phone's Back both go one step back in what you did. On
    the first screen of a start, the app's Back goes to the launcher, and the phone's Back leaves the app.
