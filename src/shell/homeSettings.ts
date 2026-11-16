@@ -138,8 +138,14 @@ export async function readSettings(): Promise<void> {
     const settings = n ? settingsFrom(n.metadata) : { ...EMPTY };
     await readPlaces(settings);
     if (mine !== generation || homeVault()?.key !== home.key) return;
+    // what each place names now; a place in a vault whose applets couldn't be read keeps what it named before
+    const before = keptNow()?.vault === home.key ? keptNow()!.found : {};
     const found: Record<string, Found> = {};
-    for (const p of [...settings.bar, ...(settings.start ? [settings.start] : [])]) { const f = findLive(p); if (f) found[keyOf(p)] = f; }
+    for (const p of [...settings.bar, ...(settings.start ? [settings.start] : [])]) {
+      const rec = vaultFor(p);
+      const f = rec && appletsNow(rec.key)?.state === "ok" ? findLive(p) : before[keyOf(p)];
+      if (f) found[keyOf(p)] = f;
+    }
     keepNow({ vault: home.key, settings, noteId: n?.id ?? null, updatedAt: (n as { updatedAt?: string } | null)?.updatedAt ?? null, found });
     bump({ read: "read" });
   } catch {
@@ -176,7 +182,10 @@ async function changeSettings(change: (raw: Raw) => Raw): Promise<void> {
 function pinRaw(raw: Raw, match: (p: Place) => boolean, add: Place | null): Raw {
   if (!add) return { ...raw, bar: raw.bar.filter((x) => !parsedAs(x, match)) };
   if (raw.bar.some((x) => parsedAs(x, match))) return raw;
-  if (raw.bar.filter((x) => parsedAs(x, (p) => !!find(p))).length >= MAX_PLACES) throw new Error(`The bar holds ${MAX_PLACES} places: unpin one first.`);
+  // the places the bar shows: found here, and not the home (which sits first on its own)
+  const home = (() => { const s = placeOf(raw.start); return s ? find(s) : null; })();
+  const shown = (p: Place) => { const f = find(p); return !!f && !(home && f.vault === home.vault && f.noteId === home.noteId); };
+  if (raw.bar.filter((x) => parsedAs(x, shown)).length >= MAX_PLACES) throw new Error(`The bar holds ${MAX_PLACES} places: unpin one first.`);
   return { ...raw, bar: [...raw.bar, add] };
 }
 export const pin = (p: Place, on: boolean) => changeSettings((r) => pinRaw(r, (x) => same(x, p), on ? p : null));

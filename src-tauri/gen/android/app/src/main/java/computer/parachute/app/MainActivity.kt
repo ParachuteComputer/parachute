@@ -1,8 +1,12 @@
 package computer.parachute.app
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
+import android.view.View
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -14,6 +18,18 @@ class MainActivity : TauriActivity() {
     }
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+    // Edge to edge, the page would draw under the status bar and the navigation bar, and the webviews in use (124 on the
+    // emulator) report neither as a safe area: the app's bar at the foot of the screen would sit under the phone's own
+    // buttons or gesture line. So the page sits inside the system bars (and a camera cutout), with the app's paper
+    // colour in the strips around it.
+    val content = findViewById<View>(android.R.id.content)
+    val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    content.setBackgroundColor(if (night) 0xFF201E1A.toInt() else 0xFFFBF8F1.toInt())
+    ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+      val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+      v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+      insets
+    }
   }
 
   // A link tapped while the activity exists becomes its intent: if the deep-link plugin isn't loaded yet (the process was

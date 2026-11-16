@@ -136,7 +136,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .home-bar-sep { width: 1px; margin: 10px 6px; background: var(--line); flex: none; }
 .with-bar .app-frame { bottom: calc(env(safe-area-inset-bottom) + var(--bar-h)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--bar-h)); }
 .with-bar > .screen, .with-bar > main { padding-bottom: calc(var(--bar-h) + 24px); }
-.with-bar .applet-screen { min-height: calc(100dvh - var(--bar-h) - 24px); }
+.applet-screen { max-width: 1280px; }
+.with-bar .applet-screen { min-height: 100dvh; padding-bottom: calc(var(--bar-h) + 10px); }
 .with-bar .sheet-scrim { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
 .sheet-list li + li { border-top: 1px solid var(--line); }
 .sheet-list .sheet-choice { padding: 12px 2px; font-size: 16px; }
