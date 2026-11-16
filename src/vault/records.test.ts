@@ -24,7 +24,7 @@ describe("words", () => {
   });
 });
 
-describe("detection, once per hub", () => {
+describe("detection, once per vault", () => {
   beforeEach(forgetDoors);
   const hub = (door: boolean, seen: string[], probe?: () => Response) => (async (input: RequestInfo | URL) => {
     const url = String(input); seen.push(url.replace("https://hub.example/vault/v/api", ""));
@@ -40,7 +40,7 @@ describe("detection, once per hub", () => {
     expect((await f(`${V}/notes/missing`)).status).toBe(404);
     await f(`${V}/notes?tag=x`);
     expect(seen).toEqual(["/records?limit=1", "/records?tag=applet", "/records/missing", "/records?tag=x"]);
-    expect(doorsKnown().get("https://hub.example")).toBe("records");
+    expect(doorsKnown().get(V)).toBe("records");
   });
 
   it("a hub without it (404 on the probe) keeps /api/notes, and is asked once", async () => {
@@ -81,7 +81,7 @@ describe("types on a write", () => {
       if (url === "/records?limit=1") return json(200, []);
       if (url === "/types") return json(200, types.map((name) => ({ name, kind: "type" })));
       const b = JSON.parse(String(init?.body));
-      if ((b.tags ?? []).some((t: string) => types.includes(t))) return json(400, { error_type: "tag_kind" });
+      if ((b.tags ?? []).some((t: string) => types.includes(t))) return json(422, { error_type: "tag_kind" }); // as core 0.9 answers it
       return json(201, { id: "1", body: b.body, fields: {}, tags: b.tags, types: b.types ?? [] });
     }) as typeof fetch);
     const one = await (await f(`${V}/notes`, { method: "POST", body: JSON.stringify({ path: "A", content: "x", tags: ["applet", "y"] }) })).json();

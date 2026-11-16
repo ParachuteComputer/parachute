@@ -33,6 +33,8 @@ test("the app goes through the record door where the hub has one, and asks once 
   }
 });
 
+// It leaves `applet` and `recipe` as types for the specs after it (one worker, in order): they run on a vault whose
+// owner made them types, which is the case this guards.
 test("a tag that becomes a type (the door lists it under types, not tags) still finds applets and opens notes in them", async ({ page }) => {
   test.skip(!(await hasDoor()), "only a hub with the record door has types");
   const admin = mintToken(`vault:${VAULT}:admin`);

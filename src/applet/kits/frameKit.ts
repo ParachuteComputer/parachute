@@ -105,7 +105,7 @@ export const FRAME_KIT = String.raw`(function () {
     // The record words (core 0.9's record door): a record's text is its body and its data its fields. The note-named
     // calls stay, for applets written before (and for the Uni app, which has only those).
     var renamed = function (o, map) { if (!o || typeof o !== "object") return o; var r = {}; Object.keys(o).forEach(function (k) { r[map[k] || k] = o[k]; }); return r; };
-    var IN = { body: "content", fields: "metadata", includeBody: "includeContent", includeFields: "includeMetadata" };
+    var IN = { body: "content", fields: "metadata", includeBody: "includeContent" };
     var OUT = { content: "body", metadata: "fields" };
     var rec = function (n) { return renamed(n, OUT); };
     vc.queryRecords = function (o) { return vc.queryNotes(renamed(o || {}, IN)).then(function (rows) { return Array.isArray(rows) ? rows.map(rec) : rows; }); };

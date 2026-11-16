@@ -86,7 +86,6 @@ export async function globalTeardown() {
   rmSync(STATE, { force: true });
 }
 
-/** One MCP tool call to the e2e vault, as a chat AI with the Parachute MCP makes it: JSON-RPC `tools/call` over HTTP. */
 /** Which tools the hub's MCP offers (asked once): core 0.9 has the record tools, 0.8 only the note ones. */
 let toolNames: Promise<Set<string>> | null = null;
 async function tools(state: Pick<HubState, "origin" | "token">): Promise<Set<string>> {
@@ -114,6 +113,7 @@ export async function record(state: Pick<HubState, "origin" | "token">, verb: "c
   return mcp(state, `${verb}-note`, { ...rest, ...(body !== undefined ? { content: body } : {}), ...(fields !== undefined ? { metadata: fields } : {}) });
 }
 
+/** One MCP tool call to the e2e vault, as a chat AI with the Parachute MCP makes it: JSON-RPC `tools/call` over HTTP. */
 export async function mcp(state: Pick<HubState, "origin" | "token">, tool: string, args: Record<string, unknown>) {
   const r = await fetch(`${state.origin}/vault/${VAULT}/mcp`, {
     method: "POST",

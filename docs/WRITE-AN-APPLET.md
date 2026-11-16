@@ -72,7 +72,7 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 |---|---|
 | `ready()` | Resolves when the app has started it: `{ applet: { id, name }, theme, open? }`. |
 | `onOpen(cb)` | `cb({ note: { id, path }, screen })` when the person opened a note in it (now, and each time after). |
-| `vault.queryRecords({ pathPrefix, tag, search, limit, includeBody })` | Records in folders it may read: `{ id, path, tags, body?, fields, updatedAt }`. |
+| `vault.queryRecords({ pathPrefix, tag, search, limit, includeBody })` | Records in folders it may read: `{ id, path, updatedAt }`, and with `tag` or `includeBody` also `tags`, `fields` and the `body`. |
 | `vault.getRecord(idOrPath)` | One record it may read, with its body. |
 | `vault.createRecord({ path, body })` | A new record, in a folder it may `create` in. |
 | `vault.updateRecord(id, { body, if_updated_at })` | A new body for a record it may `update`. |
@@ -87,7 +87,8 @@ A call outside what it was allowed fails with `out_of_scope` or `not_granted`. I
 
 These are the exact arguments for the MCP tool `create-record` (the same body works for `POST /api/records`). A hub
 before 0.9 has only `create-note` and `/api/notes`, with the older words: `content` for `body`, `metadata` for
-`fields`. The note-named calls in the kit (`queryNotes`, `getNote`, `createNote`, `updateNote`) work too.
+`fields`. If the vault holds `applet` as a type (it has fields of its own), the hub asks for it in `types`
+rather than `tags`: `"types": ["applet"]`. The note-named calls in the kit (`queryNotes`, `getNote`, `createNote`, `updateNote`) work too.
 
 ```json
 {

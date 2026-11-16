@@ -3,9 +3,10 @@
 // this app hands it a fetch that sends every notes call to the record door instead, in record words, and turns the
 // answer back into the note shape the app reads. A hub without the door (0.8, Cloud today) gets the call as it was.
 //
-//   detect    once per hub (its origin): `GET <vault>/api/records?limit=1`. 200 is the door; 404 is no door. Anything
+//   detect    once per vault: `GET <vault>/api/records?limit=1`. 200 is the door; 404 is no door. Anything
 //             else (no network, a refused token) decides nothing: that call goes to /api/notes, and the next one asks
-//             again. A missing record is also a 404 on the door, so a 404 is only read as "no door" on this probe.
+//             again. A missing record is also a 404 on the door, so a 404 is only read as "no door" on this probe, and a 200
+//             only as the door when it is JSON (a proxy's page for any address is not).
 //   words     in: content→body, metadata→fields, notes→records, content_edit→body_edit; include_content→include_body,
 //             include_metadata→include_fields, content_offset/length→body_offset/length. Out: the reverse, and a
 //             record's `types` go back into its `tags` (the door lists a type only under `types`; the app's checks read
@@ -20,7 +21,7 @@ type Door = "records" | "notes";
 const doors = new Map<string, Door>();
 const asking = new Map<string, Promise<Door | null>>();
 
-/** What this session found out about each hub (for tests). */
+/** What this session found out about each vault (for tests). */
 export const doorsKnown = () => new Map(doors);
 export const forgetDoors = () => { doors.clear(); asking.clear(); typeNames.clear(); };
 
@@ -102,21 +103,22 @@ export function urlIn(url: string): string {
 }
 
 /** Does this hub have the record door? Asked once per hub; null when the answer said nothing either way. */
-function doorOf(vaultApi: string, origin: string, headers: HeadersInit | undefined, f: typeof fetch): Promise<Door | null> {
-  const known = doors.get(origin);
+function doorOf(vaultApi: string, headers: HeadersInit | undefined, f: typeof fetch): Promise<Door | null> {
+  const known = doors.get(vaultApi);
   if (known) return Promise.resolve(known);
-  const running = asking.get(origin);
+  const running = asking.get(vaultApi);
   if (running) return running;
   const p = (async () => {
     try {
       const auth = new Headers(headers).get("authorization");
       const r = await f(`${vaultApi}/records?limit=1`, { headers: auth ? { authorization: auth } : {} });
-      const door: Door | null = r.ok ? "records" : r.status === 404 ? "notes" : null;
-      if (door) doors.set(origin, door);
+      const isJson = (r.headers.get("content-type") ?? "").includes("json");
+      const door: Door | null = r.ok && isJson ? "records" : r.status === 404 ? "notes" : null;
+      if (door) doors.set(vaultApi, door);
       return door;
     } catch { return null; }
-  })().finally(() => asking.delete(origin));
-  asking.set(origin, p);
+  })().finally(() => asking.delete(vaultApi));
+  asking.set(vaultApi, p);
   return p;
 }
 
@@ -128,7 +130,7 @@ export function recordsFetch(base: typeof fetch = (...a) => fetch(...a)): typeof
     try { u = new URL(url); } catch { return base(input, init); }
     const m = NOTES.exec(u.pathname);
     if (!m) return base(input, init);
-    const door = await doorOf(`${u.origin}${m[1]}`, u.origin, init?.headers, base);
+    const door = await doorOf(`${u.origin}${m[1]}`, init?.headers, base);
     if (door !== "records") return base(input, init);
     const vaultApi = `${u.origin}${m[1]}`;
     const auth = new Headers(init?.headers).get("authorization");
@@ -141,7 +143,7 @@ export function recordsFetch(base: typeof fetch = (...a) => fetch(...a)): typeof
     };
     let res = await send(false);
     // a name became a type since the vault's types were read: read them again, once
-    if (res.status === 400 && namesTags(json)) {
+    if (res.status >= 400 && res.status < 500 && namesTags(json)) {
       const why = (await res.clone().json().catch(() => null)) as { error_type?: string } | null;
       if (why?.error_type === "tag_kind") res = await send(true);
     }
