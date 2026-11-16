@@ -2,7 +2,11 @@
 
 One app for your vaults and the applets that grow on them.
 
-- **Vaults.** Add a vault on any Parachute hub by its address and sign in there. Browse, search and read its notes.
+- **Your key.** You sign in with your Nostr key. Pair it from a device that has it (the Uni app or Buzz desktop sends it
+  over the Buzz pairing relay, encrypted end to end), make a new one, or paste one. It stays in the app's native side, in
+  the platform's secure storage.
+- **Vaults.** Add a vault on any Parachute hub by its address and sign in there with your key, or another way the hub
+  offers (a password, or Cloud's own sign-in). Browse, search and read its notes.
 - **Applets.** An applet is one note in your vault: its metadata is the manifest (what it may read and write, which
   kinds of note it opens), its content is the code: one TSX or JSX module, or an HTML page. Any chat AI with the
   Parachute MCP can make one by writing that note: see [docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md). It runs
@@ -30,8 +34,8 @@ the binary if it isn't on your `PATH`.
 
 ## How it fits together
 
-Two layers. The **shell** (`src/shell/`, started from `src/main.tsx`) is small and fixed: it holds the sign-ins and their
-tokens, the applets' grants and their card, the self-test, and the screens that use them (adding a vault, an applet's
+Two layers. The **shell** (`src/shell/`, started from `src/main.tsx`) is small and fixed: it holds the key, the sign-ins
+and their tokens, the applets' grants and their card, the self-test, and the screens that use them (adding a vault, an applet's
 screen, Settings, a link from outside). The **frame** (`src/frame/`: the vault list, a vault, a note, open-with and its
 sheet) is its own bundle (the `virtual:frame-kit` Vite plugin) that the shell runs in a sealed frame: a srcdoc iframe with
 `sandbox="allow-scripts"`, an opaque origin, no network and no storage of its own. It reaches the shell only through one
@@ -52,6 +56,12 @@ newer built-in frame is then offered in Settings, never written over theirs. See
 
 - `src/vault/`: signing in (OAuth with PKCE and dynamic registration, one sign-in per vault), the vaults this device
   holds, the client.
+- `src/key/` and `src-tauri/src/{key,pairing,door}.rs`: the person's Nostr key. The secret never reaches the web side:
+  Rust keeps it (Android Keystore through `KeyPlugin.kt`, the desktop keyring), receives it by pairing (NIP-AB, the
+  receiving side of what the Uni app and Buzz desktop send, on buzz-core), and signs the hub's key door
+  (`/api/auth/nostr/challenge` and `/verify`, the same on hub 0.8 and 0.9). The door starts a hub session, which the
+  shell puts in the webview; the hub's usual authorize page then gives the vault token, so a key sign-in and a password
+  sign-in hold a vault the same way. A hub without the door (Cloud today) is signed in to on its own page.
 - `src/applet/`: an applet as Parachute reads it. The manifest (`metadata.applet`, contract 2) is read exactly as the Uni
   app reads it, so one HTML applet note runs in both (the Uni app doesn't run TSX); what it opens goes beside it in `metadata.opens`. Its code (`code.ts`):
   the note's extension says html, tsx or jsx; TSX/JSX is transpiled in the app with sucrase (small, pure JS, offline),
