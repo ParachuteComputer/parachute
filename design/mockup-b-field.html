@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup B: Field</title>
+<!-- Mockup B, "Field": the launcher as a field notebook page. Each applet is a hand-drawn ring with its glyph, and a
+     strip of fourteen ticks under it: one per day, filled where something it opens changed. Static; made-up content.
+     ?screen=launcher | home -->
+<style>
+  :root {
+    --ground: #f2ede2; --paper: #fbf8f1; --ink: #1d1a16; --muted: #6d665a; --rule: #d9d1c1; --moss: #4f6b3a;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif;
+    --display: Fraunces, "Iowan Old Style", "Noto Serif", serif;
+    --sans: "Instrument Sans", system-ui, "Noto Sans", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { font-variant-emoji: text; margin: 0; height: 100%; color: var(--ink); font: 16px/1.5 var(--sans); }
+  body { display: flex; flex-direction: column; background: var(--ground)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400'%3E%3Cg fill='none' stroke='%23d9d1c1' stroke-width='1'%3E%3Cpath d='M-20 80 C120 40 220 130 360 90 S560 40 640 90'/%3E%3Cpath d='M-20 160 C140 120 240 210 380 170 S560 120 640 170'/%3E%3Cpath d='M-20 250 C110 220 260 300 400 260 S560 210 640 260'/%3E%3Cpath d='M-20 340 C130 310 250 380 390 345 S560 300 640 345'/%3E%3C/g%3E%3C/svg%3E"); }
+  main { flex: 1; overflow: auto; }
+  .page { max-width: 1400px; margin: 0 auto; padding: 24px 20px; }
+  .head { margin: 0 0 14px; }
+  .head h1 { margin: 0; font: 400 30px/1.1 var(--display); }
+  .head p { margin: 2px 0 0; font: italic 15px var(--serif); color: var(--muted); }
+  .regions { display: grid; gap: 14px; }
+  .region { background: var(--paper); border-radius: 18px 22px 16px 24px / 22px 16px 24px 18px; padding: 14px 16px 16px; border: 1px solid var(--rule); }
+  .region h2 { display: flex; align-items: baseline; margin: 0 0 10px; font: 600 18px var(--serif); }
+  .region h2 small { margin-left: 8px; font: italic 400 14px var(--serif); color: var(--muted); }
+  .region h2 a { margin-left: auto; font: 14px var(--sans); color: var(--ink); }
+  .stones { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px 10px; list-style: none; margin: 0; padding: 0; }
+  .stone a { display: flex; flex-direction: column; align-items: center; gap: 4px; color: inherit; text-decoration: none; text-align: center; }
+  .ring { position: relative; width: 64px; height: 64px; display: grid; place-items: center; font: 26px var(--serif); }
+  .ring svg { position: absolute; inset: 0; }
+  .ring.pinned svg path { stroke-width: 3.2; }
+  .name { font: 500 17px/1.2 var(--serif); }
+  .ticks { display: flex; gap: 3px; height: 10px; align-items: end; }
+  .ticks i { width: 4px; height: 4px; background: var(--rule); border-radius: 1px; }
+  .ticks i.on { height: 10px; background: var(--ink); }
+  .life { font: italic 13px var(--serif); color: var(--muted); }
+  .tag { font: 600 11px var(--sans); color: var(--moss); }
+  .foot { margin: 14px 4px 0; display: flex; gap: 18px; font-size: 14px; }
+  .foot a { color: var(--ink); }
+
+  nav.bar { flex: none; display: flex; justify-content: center; gap: 6px; padding: 8px 10px; background: var(--paper); border-top: 1px solid var(--rule); box-shadow: 0 -1px 0 var(--paper); }
+  nav.bar a { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; color: var(--ink); text-decoration: none; font: 14px var(--sans); border: 1px solid transparent; }
+  nav.bar a .bg { font: 18px/1 var(--serif); }
+  nav.bar a[aria-current] { border-color: var(--ink); font-weight: 650; }
+  @media (max-width: 600px) { nav.bar a { flex-direction: column; gap: 0; padding: 6px 8px; font-size: 12px; } nav.bar { gap: 0; } }
+
+  /* home: a river of the last days */
+  .lede { font: 400 34px/1.1 var(--display); margin: 0; }
+  .river { position: relative; margin: 18px 0 0; padding-left: 26px; }
+  .river::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--ink); border-radius: 2px; }
+  .river h3 { position: relative; margin: 14px 0 6px; font: italic 400 16px var(--serif); color: var(--muted); }
+  .river h3::before { content: ""; position: absolute; left: -24px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--paper); border: 2px solid var(--ink); }
+  .river a { display: block; padding: 6px 0; color: inherit; text-decoration: none; }
+  .river .t { font: 500 19px/1.3 var(--serif); }
+  .river .v { font: 13px var(--sans); color: var(--muted); }
+  .home-grid { display: grid; gap: 20px; }
+
+  @media (min-width: 900px) {
+    .page { padding: 36px 56px; }
+    .head h1, .lede { font-size: 44px; }
+    .regions { grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .home-grid { grid-template-columns: 1.4fr 1fr; gap: 56px; }
+    .ring { width: 76px; height: 76px; font-size: 30px; }
+    nav.bar a { font-size: 16px; padding: 10px 20px; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <path id="enso" d="M38 6 C58 7 70 22 69 39 C68 57 53 70 36 69 C18 68 6 54 7 37 C8 22 18 11 31 7" fill="none" stroke="#1d1a16" stroke-width="2" stroke-linecap="round"/>
+</defs></svg>
+<main id="launcher">
+  <div class="page">
+    <div class="head"><h1>Parachute</h1><p>Sunday, 16 November. Ticks are the last fourteen days.</p></div>
+    <div class="regions">
+      <section class="region"><h2>Notebook <small>home.example</small><a href="#">Open the vault</a></h2>
+        <ul class="stones">
+          <li class="stone"><a href="#"><span class="ring pinned"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>◠</span><span class="name">Home</span><span class="tag">opens on start</span></a></li>
+          <li class="stone"><a href="#"><span class="ring pinned"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>☾</span><span class="name">Reading list</span><span class="ticks"><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span></a></li>
+          <li class="stone"><a href="#"><span class="ring"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>✎</span><span class="name">Field notes</span><span class="ticks"><i></i><i class="on"></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i></span></a></li>
+        </ul></section>
+      <section class="region"><h2>Garden <small>home.example</small><a href="#">Open the vault</a></h2>
+        <ul class="stones">
+          <li class="stone"><a href="#"><span class="ring pinned"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>✿</span><span class="name">Seed log</span><span class="ticks"><i></i><i></i><i></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i></span></a></li>
+          <li class="stone"><a href="#"><span class="ring"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>☂&#xFE0E;</span><span class="name">Rain gauge</span><span class="ticks"><i class="on"></i><i></i><i class="on"></i><i></i><i></i><i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i><i class="on"></i><i></i><i class="on"></i><i class="on"></i></span></a></li>
+        </ul></section>
+      <section class="region"><h2>Kitchen <small>home.example</small><a href="#">Open the vault</a></h2>
+        <ul class="stones">
+          <li class="stone"><a href="#"><span class="ring pinned"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>❀</span><span class="name">Recipes</span><span class="ticks"><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i></span></a></li>
+          <li class="stone"><a href="#"><span class="ring"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>◇</span><span class="name">Week plan</span><span class="ticks"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></span></a></li>
+          <li class="stone"><a href="#"><span class="ring"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>✣</span><span class="name">Pantry</span><span class="life">quiet</span></a></li>
+        </ul></section>
+    </div>
+    <div class="foot"><a href="#">Add a vault</a><a href="#">Settings</a></div>
+  </div>
+</main>
+<main id="home" hidden>
+  <div class="page home-grid">
+    <section>
+      <p class="lede">Sunday</p>
+      <div class="river">
+        <h3>Today</h3>
+        <a href="#"><div class="t">Week of 17 November</div><div class="v">Kitchen · Week plan</div></a>
+        <a href="#"><div class="t">Walk along the creek</div><div class="v">Notebook · Field notes</div></a>
+        <h3>Yesterday</h3>
+        <a href="#"><div class="t">Tomatoes, second sowing</div><div class="v">Garden · Seed log</div></a>
+        <a href="#"><div class="t">Rain, 12 mm</div><div class="v">Garden</div></a>
+        <h3>Friday</h3>
+        <a href="#"><div class="t">Lentil soup</div><div class="v">Kitchen · Recipes</div></a>
+      </div>
+    </section>
+    <section class="region" style="align-self:start">
+      <h2>Pinned</h2>
+      <ul class="stones">
+        <li class="stone"><a href="#"><span class="ring"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>❀</span><span class="name">Recipes</span></a></li>
+        <li class="stone"><a href="#"><span class="ring"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>✿</span><span class="name">Seed log</span></a></li>
+        <li class="stone"><a href="#"><span class="ring"><svg viewBox="0 0 76 76"><use href="#enso"/></svg>☾</span><span class="name">Reading list</span></a></li>
+      </ul>
+    </section>
+  </div>
+</main>
+<nav class="bar" aria-label="Bar">
+  <a href="#" id="b-launcher" aria-current="page"><span class="bg">⁂</span>Launcher</a>
+  <a href="#" id="b-home"><span class="bg">◠</span>Home</a>
+  <a href="#"><span class="bg">❀</span>Recipes</a>
+  <a href="#"><span class="bg">✿</span>Seed log</a>
+  <a href="#"><span class="bg">☾</span>Reading</a>
+</nav>
+<script>
+  if (new URLSearchParams(location.search).get("screen") === "home") {
+    document.getElementById("launcher").hidden = true; document.getElementById("home").hidden = false;
+    document.getElementById("b-launcher").removeAttribute("aria-current"); document.getElementById("b-home").setAttribute("aria-current", "page");
+  }
+</script>
+</body>
+</html>
