@@ -6,7 +6,7 @@ One model, everywhere.
 
 | Address | What it is |
 |---|---|
-| `/` | **The launcher**: every applet and every vault this device holds. Always there. |
+| `/` | **The launcher**: every applet and every vault this device holds, with what changed lately in each. Always there. |
 | `/v/<vault>` | A vault: its newest notes, and search. |
 | `/v/<vault>/n/<note>` | A note. It opens in the applet that opens its kind (open-with), else as plain text. |
 | `/v/<vault>/a/<applet>` | An applet. |

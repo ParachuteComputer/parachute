@@ -27,7 +27,7 @@ export default function VaultView() {
       {applets?.ok && applets.entries.length > 0 && (
         <ul className="applets" aria-label="Applets">
           {applets.entries.map((a) => (
-            <li key={a.noteId}><Link className="applet-chip" to={appletPath(rec.key, a.noteId)}><span aria-hidden="true">{a.manifest.glyph}</span>{a.manifest.name}</Link></li>
+            <li key={a.noteId}><Link className="applet-chip" to={appletPath(rec.key, a.noteId)}><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span>{a.manifest.name}</Link></li>
           ))}
         </ul>
       )}
