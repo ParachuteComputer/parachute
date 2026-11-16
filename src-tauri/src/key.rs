@@ -184,7 +184,7 @@ mod store {
             let loaded: Loaded = plugin(_app)?
                 .run_mobile_plugin_async("loadSecret", serde_json::json!({ "name": SLOT }))
                 .await
-                .map_err(|_| "The key store couldn't be read.".to_string())?;
+                .map_err(|_| "The key store couldn't be read. Try again, or close and reopen the app.".to_string())?;
             Ok(match (loaded.secret, loaded.unreadable) {
                 (_, true) => Stored::Unreadable,
                 (Some(s), _) => Stored::Secret(Zeroizing::new(s)),
