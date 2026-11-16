@@ -13,7 +13,7 @@ the Parachute app reads the note, shows the person what it asks for, and runs it
 | `tags` | `["applet"]`. That tag is what makes it an applet. |
 | `metadata.applet` | The manifest: what it is and what it may do (below). |
 | `metadata.opens` | Optional: which kind of note opens in it when the person taps one. |
-| `metadata.app` | Optional: what it asks of the app beyond its vault: any of `recent`, `pins`, `open` (below). |
+| `metadata.app` | Optional: what it asks of the app beyond its vault: any of `recent`, `pins`, `open` (below). Anything else is ignored, and the applet then asks nothing of the app. |
 | `content` | The code: one self-contained file. |
 
 ### The manifest (`metadata.applet`)

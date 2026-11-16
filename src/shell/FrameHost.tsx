@@ -13,6 +13,7 @@ import { subscribeDefaults } from "../open/defaults";
 import { subscribeApplets } from "../applet/useApplets";
 import { subscribeGate } from "../applet/selftest/run";
 import { subscribeSettings } from "./homeSettings";
+import { homeNow } from "./frameDeps";
 
 /** How long a frame from a vault has to say it is listening before the built-in one takes its place. */
 const WATCHDOG_MS = 10_000;
@@ -47,7 +48,10 @@ export default function FrameHost({ js, from, onFailed }: { js: string; from: "b
     };
     addEventListener("message", onMessage);
     const changed = (what: "vaults" | "applets" | "defaults" | "home") => () => host.event("changed", { what });
-    const offs = [subscribeVaults(changed("vaults")), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets")), subscribeSettings(changed("home"))];
+    // the bar and the home: told only when what the frame would read of them changed (the settings store moves often)
+    let homeWas = JSON.stringify(homeNow());
+    const homeChanged = () => { const now = JSON.stringify(homeNow()); if (now !== homeWas) { homeWas = now; host.event("changed", { what: "home" }); } };
+    const offs = [subscribeVaults(changed("vaults")), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets")), subscribeSettings(homeChanged)];
     // a frame from a vault that never starts (or never listens) gives way to the built-in one
     const watchdog = from === "vault" ? window.setTimeout(() => { if (!heard.current) failedRef.current("it didn't start in time", false); }, WATCHDOG_MS) : 0;
     return () => { removeEventListener("message", onMessage); offs.forEach((f) => f()); window.clearTimeout(watchdog); };

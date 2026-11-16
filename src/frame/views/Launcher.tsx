@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useHold } from "../../ui/hold";
 import { Link } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameVault } from "../../bridge/protocol";
@@ -82,26 +83,6 @@ function Life({ v, a, home }: { v: FrameVault; a: FrameApplet; home: boolean }) 
     text = n ? `${titleOf(n)}, ${ago((n as { updatedAt?: string }).updatedAt)}` : "nothing in it yet";
   }
   return <span className="entry-life">{text}</span>;
-}
-
-/** A long-press (touch) or a right-click calls `f`; the click that ends a long-press opens nothing. */
-export function useHold(f: () => void) {
-  const timer = useRef(0), fired = useRef(false), at = useRef({ x: 0, y: 0 });
-  const cancel = () => { window.clearTimeout(timer.current); timer.current = 0; };
-  useEffect(() => cancel, []);
-  return {
-    draggable: false,
-    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); cancel(); f(); },
-    onPointerDown: (e: React.PointerEvent) => {
-      cancel(); fired.current = false;
-      if (e.pointerType === "mouse" || !e.isPrimary) return;
-      at.current = { x: e.clientX, y: e.clientY };
-      timer.current = window.setTimeout(() => { fired.current = true; timer.current = 0; f(); }, 500);
-    },
-    onPointerMove: (e: React.PointerEvent) => { if (timer.current && Math.hypot(e.clientX - at.current.x, e.clientY - at.current.y) > 10) cancel(); },
-    onPointerUp: cancel, onPointerCancel: cancel,
-    onClickCapture: (e: React.MouseEvent) => { if (fired.current) { e.preventDefault(); e.stopPropagation(); fired.current = false; } },
-  };
 }
 
 /** Pin to the bar, and open on start: each a tap here, which the shell writes into the person's settings note. */
