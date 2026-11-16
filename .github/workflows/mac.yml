@@ -1,0 +1,76 @@
+name: Mac
+# The Mac app for Apple Silicon: the shell's tests on macOS (the key in the real Keychain, pairing, the hub's key door),
+# then the app built, ad-hoc signed (no Apple account yet), installed from its dmg the way docs/INSTALL-MAC.md says and
+# started. The dmg and the .app.tar.gz are this run's artifact. The release workflow builds through this one too.
+permissions:
+  contents: read
+on:
+  push:
+    branches: [next]
+  # a change to the shell or its packaging is built on the Mac before it merges
+  pull_request:
+    paths:
+      - "src-tauri/**"
+      - "scripts/mac-smoke.sh"
+      - ".github/workflows/mac.yml"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  mac:
+    name: mac (Apple Silicon)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install a Parachute hub for the key door test
+        run: |
+          mkdir -p "$RUNNER_TEMP/hub" && cd "$RUNNER_TEMP/hub"
+          echo '{"name":"e2e-hub","private":true}' > package.json
+          bun add @openparachute/core@0.8.0
+          echo "PARACHUTE_CORE=$RUNNER_TEMP/hub/node_modules/.bin/parachute-core" >> "$GITHUB_ENV"
+      - name: Shell tests on macOS (Keychain, pairing, key door)
+        run: |
+          mkdir -p dist && echo '<!doctype html>' > dist/index.html
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Build the app (ad-hoc signed)
+        run: npx tauri build --ci
+      - name: Name the files
+        id: files
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          bundle=src-tauri/target/release/bundle
+          mkdir -p out
+          cp "$bundle"/dmg/*.dmg "out/Parachute_${version}_aarch64.dmg"
+          tar -czf "out/Parachute_${version}_aarch64.app.tar.gz" -C "$bundle/macos" Parachute.app
+          (cd out && shasum -a 256 *) | tee out/SHA256SUMS.mac
+          echo "dmg=out/Parachute_${version}_aarch64.dmg" >> "$GITHUB_OUTPUT"
+      - name: Install from the dmg and start it (docs/INSTALL-MAC.md, as far as a runner can)
+        run: scripts/mac-smoke.sh "${{ steps.files.outputs.dmg }}" mac-smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: parachute-macos
+          path: |
+            out/*.dmg
+            out/*.app.tar.gz
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-smoke
+          path: mac-smoke
+          retention-days: 14

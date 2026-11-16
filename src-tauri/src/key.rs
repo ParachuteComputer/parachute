@@ -166,9 +166,39 @@ mod store {
         Unreadable,
     }
 
+    /// Desktop: one item in the OS keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service), filed
+    /// under the app's identifier. The account is a parameter only so a test can use its own item.
     #[cfg(not(target_os = "android"))]
-    fn entry() -> Result<keyring::Entry, String> {
-        keyring::Entry::new("computer.parachute.app", "nostr-key").map_err(|e| format!("This computer's keyring can't be used ({e})."))
+    pub(super) mod desktop {
+        use super::Stored;
+        use zeroize::Zeroizing;
+
+        pub const SERVICE: &str = "computer.parachute.app";
+        pub const ACCOUNT: &str = "nostr-key";
+
+        fn entry(account: &str) -> Result<keyring::Entry, String> {
+            keyring::Entry::new(SERVICE, account).map_err(|e| format!("This computer's keyring can't be used ({e})."))
+        }
+
+        pub fn load(account: &str) -> Result<Stored, String> {
+            match entry(account)?.get_password() {
+                Ok(s) => Ok(Stored::Secret(Zeroizing::new(s))),
+                Err(keyring::Error::NoEntry) => Ok(Stored::Nothing),
+                Err(keyring::Error::BadEncoding(_)) => Ok(Stored::Unreadable),
+                Err(e) => Err(format!("This computer's keyring couldn't be read ({e}).")),
+            }
+        }
+
+        pub fn save(account: &str, nsec: &str) -> Result<(), String> {
+            entry(account)?.set_password(nsec).map_err(|e| format!("The key couldn't be kept in this computer's keyring ({e})."))
+        }
+
+        pub fn clear(account: &str) -> Result<(), String> {
+            match entry(account)?.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+                Err(e) => Err(format!("The key couldn't be removed from this computer's keyring ({e}).")),
+            }
+        }
     }
 
     /// An `Err` is storage not answering this time (try again); `Unreadable` is for good.
@@ -193,14 +223,7 @@ mod store {
         }
         #[cfg(not(target_os = "android"))]
         {
-            tauri::async_runtime::spawn_blocking(|| match entry()?.get_password() {
-                Ok(s) => Ok(Stored::Secret(Zeroizing::new(s))),
-                Err(keyring::Error::NoEntry) => Ok(Stored::Nothing),
-                Err(keyring::Error::BadEncoding(_)) => Ok(Stored::Unreadable),
-                Err(e) => Err(format!("This computer's keyring couldn't be read ({e}).")),
-            })
-            .await
-            .map_err(|e| e.to_string())?
+            tauri::async_runtime::spawn_blocking(|| desktop::load(desktop::ACCOUNT)).await.map_err(|e| e.to_string())?
         }
     }
 
@@ -221,9 +244,7 @@ mod store {
         #[cfg(not(target_os = "android"))]
         {
             let nsec = nsec.clone();
-            tauri::async_runtime::spawn_blocking(move || entry()?.set_password(&nsec).map_err(|e| format!("The key couldn't be kept in this computer's keyring ({e}).")))
-                .await
-                .map_err(|e| e.to_string())?
+            tauri::async_runtime::spawn_blocking(move || desktop::save(desktop::ACCOUNT, &nsec)).await.map_err(|e| e.to_string())?
         }
     }
 
@@ -238,12 +259,7 @@ mod store {
         }
         #[cfg(not(target_os = "android"))]
         {
-            tauri::async_runtime::spawn_blocking(|| match entry()?.delete_credential() {
-                Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-                Err(e) => Err(format!("The key couldn't be removed from this computer's keyring ({e}).")),
-            })
-            .await
-            .map_err(|e| e.to_string())?
+            tauri::async_runtime::spawn_blocking(|| desktop::clear(desktop::ACCOUNT)).await.map_err(|e| e.to_string())?
         }
     }
 }
@@ -261,6 +277,37 @@ mod tests {
         assert!(parse_secret(&k.public_key().to_bech32().unwrap()).is_err(), "a public key is not a secret");
         assert!(parse_secret("nsec1notakey").is_err());
         assert!(parse_secret("").is_err());
+    }
+
+    /// The Mac keeps the key in the login Keychain, not in a stub: what is saved is there for `security` to find, reads
+    /// back as the same key, and is gone after clearing. (Runs on macOS: the Mac workflow, .github/workflows/mac.yml.)
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_mac_keeps_the_key_in_its_keychain() {
+        use super::store::{desktop, Stored};
+        let account = format!("nostr-key-test-{}", std::process::id());
+        let in_keychain = || {
+            std::process::Command::new("security")
+                .args(["find-generic-password", "-s", desktop::SERVICE, "-a", &account])
+                .output()
+                .unwrap()
+                .status
+                .success()
+        };
+        let k = Keys::generate();
+        let nsec = k.secret_key().to_bech32().unwrap();
+        assert!(matches!(desktop::load(&account).unwrap(), Stored::Nothing));
+        desktop::save(&account, &nsec).unwrap();
+        let kept = in_keychain();
+        let back = desktop::load(&account);
+        desktop::clear(&account).unwrap();
+        assert!(kept, "the key is an item in the macOS Keychain");
+        match back.unwrap() {
+            Stored::Secret(s) => assert_eq!(parse_secret(&s).unwrap().public_key(), k.public_key()),
+            _ => panic!("the key reads back"),
+        }
+        assert!(!in_keychain(), "clearing removes the Keychain item");
+        assert!(matches!(desktop::load(&account).unwrap(), Stored::Nothing));
     }
 
     #[test]
