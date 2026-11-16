@@ -12,6 +12,14 @@ import "@openparachute/surface-render/styles.css";
 import "../styles.css";
 import FrameRouter from "./FrameRouter";
 import * as lib from "./lib";
+import { on } from "./bridge";
+
+// the look changed (the person's theme record, or light/dark): every token is a CSS variable on <html>
+on("theme", (t) => {
+  const s = document.documentElement.style;
+  for (const [k, v] of Object.entries(t ?? {})) if (/^[a-z]+$/.test(k) && typeof v === "string") s.setProperty(`--${k}`, v);
+  if (t?.scheme === "light" || t?.scheme === "dark") s.setProperty("color-scheme", t.scheme);
+});
 
 function mount(Frame: ComponentType) {
   ReactDOMClient.createRoot(document.getElementById("root")!).render(<StrictMode><FrameRouter><Frame /></FrameRouter></StrictMode>);

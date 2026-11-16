@@ -7,7 +7,7 @@ import { modulePage, type CodeKind } from "./code";
 import { buildSrcdoc } from "./srcdoc";
 import { buildKitSource } from "./kits";
 import { createSession, type Session } from "./session";
-import { readHostTheme } from "./modules/theme";
+import { subscribeTheme, tokensNow } from "../theme/store";
 import type { Router } from "./router";
 import type { Resolved } from "./needs";
 
@@ -53,7 +53,7 @@ export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Re
     session.current = s;
     onSessionRef.current?.(s);
     // The frame can finish loading before this effect runs (WebKit does): tell a late session it is ready.
-    if (loaded.current === srcDoc) s.sendEvent("ready", { contract: 1, ...(readyRef.current as object), theme: readHostTheme() });
+    if (loaded.current === srcDoc) s.sendEvent("ready", { contract: 1, ...(readyRef.current as object), theme: tokensNow() });
     const onMessage = (e: MessageEvent) => { if (e.source === null || e.source !== frame.current?.contentWindow) return; s.handle(e.data); };
     const onViolation = (e: SecurityPolicyViolationEvent) => {
       if (!(e.effectiveDirective || e.violatedDirective || "").startsWith("frame-src")) return;
@@ -63,15 +63,15 @@ export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Re
     window.addEventListener("message", onMessage);
     document.addEventListener("securitypolicyviolation", onViolation);
     setArmed(srcDoc);
-    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
-    const retheme = () => s.sendEvent("theme", readHostTheme());
-    mq?.addEventListener?.("change", retheme);
-    return () => { s.close(); window.removeEventListener("message", onMessage); document.removeEventListener("securitypolicyviolation", onViolation); mq?.removeEventListener?.("change", retheme); session.current = null; onSessionRef.current?.(null); };
+    // the look changed (the person's theme record, or the device's light/dark): sent only when the tokens did
+    let sent = JSON.stringify(tokensNow());
+    const offTheme = subscribeTheme(() => { const t = tokensNow(), now = JSON.stringify(t); if (now !== sent) { sent = now; s.sendEvent("theme", t); } });
+    return () => { s.close(); window.removeEventListener("message", onMessage); document.removeEventListener("securitypolicyviolation", onViolation); offTheme(); session.current = null; onSessionRef.current?.(null); };
   }, [srcDoc, router, grant, stopOnViolation]);
 
   const armedRef = useRef(armed);
   armedRef.current = armed;
-  const onLoad = useCallback(() => { if (armedRef.current !== srcDocRef.current) return; loaded.current = srcDocRef.current; session.current?.sendEvent("ready", { contract: 1, ...(readyRef.current as object), theme: readHostTheme() }); }, []);
+  const onLoad = useCallback(() => { if (armedRef.current !== srcDocRef.current) return; loaded.current = srcDocRef.current; session.current?.sendEvent("ready", { contract: 1, ...(readyRef.current as object), theme: tokensNow() }); }, []);
   return { frame, stopped, onLoad, srcDoc: armed === srcDoc ? srcDoc : undefined };
 }
 

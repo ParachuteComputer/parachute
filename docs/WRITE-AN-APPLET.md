@@ -79,7 +79,7 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
 | `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above), while they tap inside the applet. Resolves to whether it went. |
-| `theme.get()`, `theme.on(cb)` | The app's colours and fonts. They are also CSS variables: `--text`, `--muted`, `--accent`, `--surface`, `--line`, `--sans`, `--serif`, `--mono`. |
+| `theme.get()`, `theme.on(cb)` | The app's look, which the person can change ([THEME.md](THEME.md)): `on` calls back now and at each change, and returns a function that stops it. Every value is also a CSS variable: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. |
 
 A call outside what it was allowed fails with `out_of_scope` or `not_granted`. It never reaches anything else.
 

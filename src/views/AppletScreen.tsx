@@ -27,7 +27,8 @@ import { codeKindOf, extensionOf, prepare } from "../applet/code";
 import { screenOf } from "../applet/manifest";
 import { createRouter } from "../applet/router";
 import { createVaultModule } from "../applet/modules/vault";
-import { createThemeModule, readHostTheme } from "../applet/modules/theme";
+import { createThemeModule } from "../applet/modules/theme";
+import { tokensNow } from "../theme/store";
 import { createAppModule } from "../applet/modules/app";
 import { appDeps } from "../shell/appDeps";
 import { runDecision } from "../applet/selftest/gate";
@@ -122,7 +123,7 @@ export default function AppletScreen() {
   // the frame's session with the very call that caused the refresh still waiting
   const router = useMemo(() => (rec && entry ? createRouter([
     createVaultModule(vaultDeps(clientFor(rec)), { opens: entry.opens, name: rec.vault }),
-    createThemeModule({ theme: readHostTheme }),
+    createThemeModule({ theme: tokensNow }),
     createAppModule(entry.app, appDeps((href) => navRef.current(href))),
   ]) : null), [rec?.key, rec?.issuer, rec?.vault, entry]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -14,12 +14,15 @@ import { subscribeApplets } from "../applet/useApplets";
 import { subscribeGate } from "../applet/selftest/run";
 import { subscribeSettings } from "./homeSettings";
 import { homeNow } from "./frameDeps";
+import { subscribeTheme, tokensNow } from "../theme/store";
+import { cssOf } from "../theme/theme";
 
 /** How long a frame from a vault has to say it is listening before the built-in one takes its place. */
 const WATCHDOG_MS = 10_000;
 
 export default function FrameHost({ js, from, onFailed }: { js: string; from: "built-in" | "vault"; onFailed: (why: string, persist: boolean) => void }) {
-  const doc = useMemo(() => frameDocument(frameKit.js, frameKit.css, js), [js]);
+  // the look as it is when the frame starts; each later change is a `theme` event
+  const doc = useMemo(() => frameDocument(frameKit.js, frameKit.css, js, cssOf(tokensNow())), [js]);
   const failedRef = useRef(onFailed);
   failedRef.current = onFailed;
   const heard = useRef(false);
@@ -51,7 +54,9 @@ export default function FrameHost({ js, from, onFailed }: { js: string; from: "b
     // the bar and the home: told only when what the frame would read of them changed (the settings store moves often)
     let homeWas = JSON.stringify(homeNow());
     const homeChanged = () => { const now = JSON.stringify(homeNow()); if (now !== homeWas) { homeWas = now; host.event("changed", { what: "home" }); } };
-    const offs = [subscribeVaults(changed("vaults")), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets")), subscribeSettings(homeChanged)];
+    let themeWas = JSON.stringify(tokensNow());
+    const themeChanged = () => { const t = tokensNow(), now = JSON.stringify(t); if (now !== themeWas) { themeWas = now; host.event("theme", t); } };
+    const offs = [subscribeTheme(themeChanged), subscribeVaults(changed("vaults")), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets")), subscribeSettings(homeChanged)];
     // a frame from a vault that never starts (or never listens) gives way to the built-in one
     const watchdog = from === "vault" ? window.setTimeout(() => { if (!heard.current) failedRef.current("it didn't start in time", false); }, WATCHDOG_MS) : 0;
     return () => { removeEventListener("message", onMessage); offs.forEach((f) => f()); window.clearTimeout(watchdog); };

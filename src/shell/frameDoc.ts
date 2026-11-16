@@ -36,5 +36,6 @@ const LOADER_TAIL = String.raw`
   }).catch(fail);
 })();`;
 
-export const frameDocument = (runtime: string, css: string, frameJs: string): string =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${FRAME_DOC_CSP}">${NO_RTC}<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><style>${css.replace(/<\/(style)/gi, "<\\/$1")}</style></head><body><div id="root"></div>${inlineScript(FAILURE)}${inlineScript(runtime)}${inlineScript(`${LOADER_HEAD}${frameJs}${LOADER_TAIL}`)}</body></html>`;
+/** `theme`: the look's tokens as CSS for :root (theme.ts cssOf), after the frame's own styles; later changes come as `theme` events. */
+export const frameDocument = (runtime: string, css: string, frameJs: string, theme = ""): string =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${FRAME_DOC_CSP}">${NO_RTC}<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><style>${css.replace(/<\/(style)/gi, "<\\/$1")}</style><style>${theme.replace(/</g, "")}</style></head><body><div id="root"></div>${inlineScript(FAILURE)}${inlineScript(runtime)}${inlineScript(`${LOADER_HEAD}${frameJs}${LOADER_TAIL}`)}</body></html>`;

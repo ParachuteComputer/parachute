@@ -8,7 +8,7 @@
 //   uni.onOpen(cb)                   → cb({note, screen}) now (if the app opened a note) and whenever it opens another.
 //   uni.frameFetch(url, init)        → fetch over the frame (pfr envelope), what VaultClient uses
 //   uni.VaultClient / uni.vault      → surface-client's VaultClient on frameFetch
-//   uni.theme.get() / .on(cb)        → host colours; CSS vars --text, --accent… are also set on <html>
+//   uni.theme.get() / .on(cb)        → the app's look (src/theme): every token is also a CSS var --<key> on <html>
 //   uni.app.recent/pins/open         → what it may ask of the app (modules/app.ts), new here: the Uni app has none
 // In-page #anchor links scroll in place.
 
@@ -26,7 +26,8 @@ export const FRAME_KIT = String.raw`(function () {
   }
   function applyTheme(t) {
     theme = t; var r = document.documentElement.style;
-    ["text", "muted", "accent", "surface", "line", "sans", "serif", "mono"].forEach(function (k) { if (t && t[k]) r.setProperty("--" + k, t[k]); });
+    if (t && typeof t === "object") Object.keys(t).forEach(function (k) { if (/^[a-z]+$/.test(k) && typeof t[k] === "string") r.setProperty("--" + k, t[k]); });
+    if (t && (t.scheme === "light" || t.scheme === "dark")) r.setProperty("color-scheme", t.scheme);
     themeCbs.forEach(function (f) { try { f(t); } catch (e) {} });
   }
   function applyOpen(o) {
@@ -92,7 +93,8 @@ export const FRAME_KIT = String.raw`(function () {
     }),
     theme: {
       get: function () { return call("theme", "get", {}); },
-      on: function (cb) { themeCbs.push(cb); if (theme) cb(theme); }
+      now: function () { return theme; },
+      on: function (cb) { themeCbs.push(cb); if (theme) cb(theme); return function () { var i = themeCbs.indexOf(cb); if (i >= 0) themeCbs.splice(i, 1); }; }
     }
   };
   var VC = window.__UniVC && window.__UniVC.VaultClient;

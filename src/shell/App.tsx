@@ -21,12 +21,22 @@ import BottomBar from "./BottomBar";
 import { atFirstEntry } from "../ui/history";
 import { startPlace } from "./start";
 import { readSettings } from "./homeSettings";
+import { homeVault, useFrameSource } from "./frameSource";
+import { readTheme, watchTheme } from "../theme/store";
 
 /** The one listener for real taps on the shell's own links, and the rule that a tap's mark is gone once the person moves on. */
 function Taps() {
   const location = useLocation();
   useEffect(() => installTapListener(), []);
   useEffect(() => { arrived(location.pathname); }, [location.pathname]);
+  return null;
+}
+
+/** The person's look: their theme record, read once and then followed live while the app runs (src/theme/store.ts). */
+function ThemeWatch() {
+  useFrameSource(); // a change of home vault (Settings) is told there
+  const home = homeVault(useVaults())?.key ?? null;
+  useEffect(() => { if (!home) return; void readTheme(); return watchTheme(); }, [home]);
   return null;
 }
 
@@ -100,6 +110,7 @@ export function AppRoutes() {
   return (
     <>
       <Taps />
+      <ThemeWatch />
       <SelfTestRunner />
       <LinksIn />
       <ShellRoutes />

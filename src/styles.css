@@ -1,21 +1,12 @@
 /* Parachute's one look: paper, ink and one moss accent, a book serif for names and reading, a quiet sans for the rest
-   (design/WHY.md). The theme variables are also what an applet's frame is handed (text, muted, accent, surface, line,
-   sans, serif, mono). Compact: content starts at the top, no big empty gaps. Hierarchy by type, weight and space, never
-   colour alone: the Daylight shows grey. */
-:root {
-  --bg: #f2ede2; --surface: #fbf8f1; --text: #1d1a16; --muted: #6d665a; --line: #d9d1c1; --accent: #4f6b3a; --danger: #9a3324;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif;
-  --bar-h: 58px;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --pad: 14px; --radius: 10px;
-  color-scheme: light dark;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #171613; --surface: #201e1a; --text: #ece7dc; --muted: #a59d8e; --line: #3a362f; --accent: #a3bf8a; --danger: #f08f7f; }
-}
+   (design/WHY.md, design/kit/WHY.md). Compact: content starts at the top, no big empty gaps. Hierarchy by type, weight
+   and space, never colour alone: the Daylight shows grey.
+   The tokens (--bg, --surface, --text, --muted, --line, --accent, --danger, --serif, --sans, --mono, --pad, --gap,
+   --radius, --size, --leading) are not set here: they come from the theme (src/theme/theme.ts), the built-in one or the
+   person's theme record, and are set on <html> by the shell, and handed to the frame and every applet. */
+:root { --bar-h: 58px; }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 var(--sans); -webkit-tap-highlight-color: transparent; font-variant-emoji: text; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--size)/var(--leading) var(--sans); -webkit-tap-highlight-color: transparent; font-variant-emoji: text; }
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: var(--accent); }
 button, input { font: inherit; color: inherit; }
@@ -31,7 +22,7 @@ button, input { font: inherit; color: inherit; }
 
 .rows { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .rows li + li { border-top: 1px solid var(--line); }
-.row { display: flex; flex-direction: column; gap: 1px; padding: 10px 12px; color: var(--text); text-decoration: none; -webkit-touch-callout: none; user-select: none; }
+.row { display: flex; flex-direction: column; gap: 1px; padding: calc(var(--gap) * .7) 12px; color: var(--text); text-decoration: none; -webkit-touch-callout: none; user-select: none; }
 .row:active { background: var(--line); }
 .row-title { font-weight: 550; overflow-wrap: anywhere; }
 .row-sub { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
@@ -179,3 +170,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
   .entry-name { font-size: 23px; }
   .home-bar-place { min-width: 96px; font-size: 15px; }
 }
+
+.swatches { display: flex; gap: 6px; margin: 6px 0; }
+.swatch { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--text); }
+.choice { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.choice legend { width: 100%; }
