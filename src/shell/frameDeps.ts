@@ -12,6 +12,15 @@ import { inShell } from "../vault/oauth";
 import { confirmLinkOut } from "./frameSource";
 import { listVaults, type VaultRecord } from "../vault/store";
 import type { HostDeps } from "./frameHost";
+import { barNow, pinApplet, startApplet } from "./homeSettings";
+import { chooseStart, forgetStart } from "./start";
+
+/** The bar and the home as the frame may see them, and the two changes it may ask for on a tap. */
+const home: HostDeps["home"] = {
+  get: () => { const b = barNow(); return { start: b.start ? { vault: b.start.vault, noteId: b.start.noteId } : null, bar: b.pins.map((p) => ({ vault: p.vault, noteId: p.noteId })) }; },
+  pin: (vault, noteId, on) => pinApplet(vault, noteId, on),
+  start: async (vault, noteId) => { await startApplet(vault, noteId); if (noteId === null) forgetStart(); else chooseStart(vault, noteId); },
+};
 
 async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> {
   // statuses are judged once the self-test's facts are known, so a note never opens plain only because the app had
@@ -24,7 +33,7 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   return {
     ok: true, skipped: e.found.skipped,
     entries: e.found.entries.map((a) => ({ noteId: a.noteId, path: a.path, vault: a.vault, opens: a.opens, status: status(a),
-      manifest: { id: a.manifest.id, name: a.manifest.name, glyph: a.manifest.glyph, screens: a.manifest.screens } })),
+      manifest: { id: a.manifest.id, name: a.manifest.name, glyph: a.manifest.glyph, ...(a.manifest.note ? { note: a.manifest.note } : {}), screens: a.manifest.screens } })),
   };
 }
 
@@ -69,9 +78,11 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
     roles: (rec) => readRoleTags(clientFor(rec)),
     applets,
     defaults: { get: defaultsFor, set: setChoice },
+    home,
     go,
     here: () => location.pathname,
-    back: () => history.back(),
+    // one step back, or the launcher on the first entry (a start, a link from outside): never out of the app from a screen's Back
+    back: () => { if (((history.state as { idx?: number } | null)?.idx ?? 0) > 0) history.back(); else go("/", true); },
     decide,
     tapNow: tapIn(frame),
     mark: { tap: markTap, carry: carryMark, clear: clearMark },

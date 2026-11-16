@@ -31,11 +31,15 @@ import { runDecision } from "../applet/selftest/gate";
 import { useGate } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
 import { takeMark } from "../open/mark";
+import { chooseStart, takeStart } from "../shell/start";
+import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 
 const grants = deviceGrants();
 /** Whether this history entry was reached by a marked tap: decided once per entry (StrictMode renders twice). */
 const startedByTap = new Map<string, boolean>();
+/** The entries a start led to (start.ts), and whether the person chose that applet as home on this device. */
+const startedAtStart = new Map<string, { chosen: boolean; vault: string; noteId: string }>();
 
 type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string }
   | { state: "ok"; entry: AppletEntry; page: string; note: Note | null };
@@ -48,7 +52,15 @@ export default function AppletScreen() {
   const mode = useGate();
   const askedNote = params.get("note");
   const askedScreen = params.get("screen");
-  if (!startedByTap.has(location.key)) startedByTap.set(location.key, takeMark(location.pathname));
+  if (!startedByTap.has(location.key)) {
+    const tapped = takeMark(location.pathname), start = takeStart(location.pathname);
+    if (start) startedAtStart.set(location.key, start);
+    // a start runs it by itself only when the person chose it as home here (and, as always, allowed its code)
+    startedByTap.set(location.key, tapped || !!start?.chosen);
+  }
+  const atStart = startedAtStart.get(location.key) ?? null;
+  // the person's tap on Allow or Open, on the screen a start led to, is their choice of it as home on this device
+  const chooseHere = () => { if (atStart && !atStart.chosen) { chooseStart(atStart.vault, atStart.noteId); startedAtStart.set(location.key, { ...atStart, chosen: true }); } };
   const [started, setStarted] = useState(() => startedByTap.get(location.key) ?? false);
   // a tap counts for the first screen drawn for this entry only: Back or Forward to it later starts nothing
   useEffect(() => () => { startedByTap.set(location.key, false); }, [location.key]);
@@ -110,9 +122,10 @@ export default function AppletScreen() {
   const tap = (f: () => void) => (e: React.MouseEvent) => { if (e.isTrusted) f(); };
 
   if (!rec) return <NoVault />;
-  const back = `/v/${encodeURIComponent(rec.key)}`;
+  // Back returns where the person came from; on the first screen of a start, to the launcher
+  const back = backOrLauncher;
   const plainNote = note ? <Link to={`${noteHref(rec.key, note.id)}?with=vault`}>Open {titleOf(note)} in the vault view</Link> : null;
-  const shell = (body: React.ReactNode) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}` : "Applet"} back={back} />{body}</main>;
+  const shell = (body: React.ReactNode) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}` : "Applet"} back={true} onBack={back} />{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;
 
   if (mode === "closed") return shell(<div className="card" role="status"><p>Applets are off on this device until its self-test passes. See Settings.</p>{plainNote}</div>);
   if (loaded.state === "loading" || (loaded.state === "ok" && !keys)) return shell(<p className="quiet" role="status">Opening…</p>);
@@ -126,14 +139,14 @@ export default function AppletScreen() {
       {note && <p className="quiet">{name} asks before it opens {titleOf(note)}.</p>}
       <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} runs={mode === "approved-code" ? "approved-code" : "sealed"} codeChanged={decision === "ask-updated" && status === "updated"}
         lines={grantLines(grantOf(entry.manifest, rec.key, entry.opens), ownFolder(entry.path))} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
-        onAllow={() => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry); setStarted(true); bump(); }}
+        onAllow={() => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry); chooseHere(); setStarted(true); bump(); }}
         onNotNow={() => setDeclined(true)} />
     </>);
   }
   const revoke = () => { grants.revoke(subject); setStarted(false); bump(); };
   if (!started) return shell(<div className="card" role="status">
     <p>{name} is stopped.{note && claim ? ` It will open ${titleOf(note)}.` : ""}</p>
-    <button type="button" className="primary" onClick={tap(() => setStarted(true))}>Open {name}</button> {plainNote}
+    <button type="button" className="primary" onClick={tap(() => { chooseHere(); setStarted(true); })}>Open {name}</button> {plainNote}
   </div>);
   return shell(<>
     <div className="applet-bar">

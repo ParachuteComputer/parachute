@@ -139,5 +139,5 @@ export default function RecipeCards() {
 If the code doesn't compile, the app says so, with the reason, and runs nothing. If it imports something the app doesn't
 provide, or throws while starting, the applet shows one line saying why.
 
-To change the screens around the notes instead (the vault list, a vault, a note), see
+To change the screens around the notes instead (the launcher, a vault, a note), see
 [CHANGE-YOUR-FRAME.md](CHANGE-YOUR-FRAME.md).

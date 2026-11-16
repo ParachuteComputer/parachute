@@ -3,7 +3,7 @@
 // shell says it changed.
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Note } from "@openparachute/surface-client";
-import type { FrameApplets, FrameVault, Query } from "../bridge/protocol";
+import type { FrameApplets, FrameHome, FrameVault, Query } from "../bridge/protocol";
 import { call, on } from "./bridge";
 
 function store<T>(read: () => Promise<T>, initial: T) {
@@ -89,3 +89,14 @@ export async function setDefault(vault: string, type: string, choice: string | n
   await call("defaults.set", { vault, type, choice });
   await readDefaults(vault);
 }
+
+// ── the bar and the home ──
+
+const home = store<FrameHome>(() => call("home.get", {}), { start: null, bar: [] });
+on("changed", ({ what }) => { if (what === "home" || what === "applets" || what === "vaults") void home.load(); });
+/** What is on the bar (the home applet, the pins) as the shell finds them on this device. */
+export const useHome = (): FrameHome => useSyncExternalStore(home.subscribe, home.get);
+/** Pin or unpin an applet (during a tap only: the shell refuses otherwise). */
+export const pinApplet = (vault: string, noteId: string, on: boolean) => call("home.pin", { vault, noteId, on }).then(() => home.load());
+/** Make an applet the home, or none (during a tap only). */
+export const startApplet = (vault: string, noteId: string | null) => call("home.start", { vault, noteId }).then(() => home.load());

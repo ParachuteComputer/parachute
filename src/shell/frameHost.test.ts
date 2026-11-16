@@ -18,6 +18,7 @@ function setup(tap = false) {
     roles: async () => ["pinned"],
     applets: async () => ({ ok: true as const, skipped: 0, entries: [] }),
     defaults: { get: vi.fn(() => ({ recipe: "vault" })), set: vi.fn() },
+    home: { get: vi.fn(() => ({ start: null, bar: [{ vault: "kitchen", noteId: "a1" }] })), pin: vi.fn(async () => {}), start: vi.fn(async () => {}) },
     go: vi.fn(), back: vi.fn(), decide: vi.fn(), here: () => "/v/kitchen/n/n1",
     tapNow: () => tap,
     mark: { tap: vi.fn(), carry: vi.fn(() => true), clear: vi.fn() },
@@ -35,14 +36,16 @@ const PARAMS: Record<string, unknown> = {
   "vault.roles": { vault: "kitchen" }, "applets.list": { vault: "kitchen", fresh: true }, "defaults.get": { vault: "kitchen" },
   "defaults.set": { vault: "kitchen", type: "recipe", choice: null }, "nav.go": { to: "/v/kitchen" }, "nav.back": {}, "nav.decided": { key: "abc", kind: "vault" },
   "clipboard.write": { text: "x" }, "link.out": { url: "https://example.com" },
+  "home.get": {}, "home.pin": { vault: "kitchen", noteId: "a1", on: true }, "home.start": { vault: "kitchen", noteId: null },
 };
+const TAP_ONLY = ["defaults.set", "home.pin", "home.start"];
 
 describe("a frame's calls", () => {
   it("every call answers without a token, a client id or a refresh token", async () => {
     for (const tap of [false, true]) {
       const { ask, posts } = setup(tap);
       // without a tap, keeping a choice is refused (the person makes it in the sheet, by a tap)
-      for (const m of METHODS) expect((await ask(m, PARAMS[m]))?.error, m).toBe(!tap && m === "defaults.set" ? "not_allowed" : undefined);
+      for (const m of METHODS) expect((await ask(m, PARAMS[m]))?.error, m).toBe(!tap && TAP_ONLY.includes(m) ? "not_allowed" : undefined);
       expect(posts).toHaveLength(METHODS.length);
       expect(JSON.stringify(posts)).not.toMatch(SECRETS);
     }
@@ -138,5 +141,23 @@ describe("how much a frame may ask", () => {
     const { host, posts } = setup(true);
     for (let i = 0; i < FRAME_LIMITS.pending + 3; i++) host.handle({ pf: PF, id: `p${i}`, method: "vaults.list", params: {} });
     expect(posts.filter((p) => (p as { error?: string }).error === "rate_limited")).toHaveLength(3);
+  });
+});
+
+describe("the bar and the home", () => {
+  it("pinning and choosing a home write the person's settings only during a tap, and only for a vault this device holds", async () => {
+    const off = setup(false);
+    expect((await off.ask("home.pin", { vault: "kitchen", noteId: "a1", on: true }))?.error).toBe("not_allowed");
+    expect((await off.ask("home.start", { vault: "kitchen", noteId: "a1" }))?.error).toBe("not_allowed");
+    expect(off.deps.home.pin).not.toHaveBeenCalled();
+    expect(off.deps.home.start).not.toHaveBeenCalled();
+    const on = setup(true);
+    expect((await on.ask("home.pin", { vault: "elsewhere", noteId: "a1", on: true }))?.error).toBe("This device doesn't hold that vault.");
+    expect((await on.ask("home.start", { vault: "kitchen", noteId: "a1", extra: 1 }))?.error).toBe("bad_params");
+    expect((await on.ask("home.pin", { vault: "kitchen", noteId: "a1", on: "yes" }))?.error).toBe("bad_params");
+    expect((await on.ask("home.pin", { vault: "kitchen", noteId: "a1", on: false }))?.error).toBeUndefined();
+    expect(on.deps.home.pin).toHaveBeenCalledWith("kitchen", "a1", false);
+    expect((await on.ask("home.start", { vault: "kitchen", noteId: null }))?.error).toBeUndefined();
+    expect(on.deps.home.start).toHaveBeenCalledWith("kitchen", null);
   });
 });

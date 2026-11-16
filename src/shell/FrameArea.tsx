@@ -7,13 +7,15 @@ import { Link } from "react-router";
 import { answerLinkOut, LINK_OUT_HOLD_MS, frameCode, frameFailed, frameHidden, frameShown, readFrameRecord, useFrameSource } from "./frameSource";
 import FrameHost from "./FrameHost";
 import FrameCard from "./FrameCard";
+import { readSettings } from "./homeSettings";
 
 type Code = { js: string; hash: string; from: "built-in" | "vault" };
 
 export default function FrameArea() {
   const { choice, linkOut } = useFrameSource();
   const [code, setCode] = useState<Code | null>(null);
-  useEffect(() => { void readFrameRecord(); }, []);
+  // the person's frame and their settings note, read again each time the frame area is shown
+  useEffect(() => { void readFrameRecord(); void readSettings(); }, []);
   const want = choice.run === "vault" ? `vault:${choice.hash}` : "built-in";
   useEffect(() => {
     let on = true;

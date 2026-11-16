@@ -1,0 +1,43 @@
+// The settings note is the person's and their agent's to write: read strictly, and a bad place never costs the rest.
+import { describe, expect, it } from "vitest";
+import { MAX_PLACES, placeFor, settingsFrom, vaultFor } from "./homeSettings";
+import type { VaultRecord } from "../vault/store";
+
+const rec = (key: string, vault: string, issuer: string, addedAt = "2026-11-01"): VaultRecord =>
+  ({ key, vault, issuer, tokenEndpoint: `${issuer}/oauth/token`, clientId: "c", accessToken: "t", scope: "s", addedAt });
+
+describe("the settings note", () => {
+  it("keeps the places that parse, in order, once each; drops the rest", () => {
+    const s = settingsFrom({ parachute: {
+      bar: [{ vault: "kitchen", applet: "Applets/Recipes" }, { vault: "kitchen", applet: "Applets/Recipes" }, { vault: "kitchen" }, { vault: "kitchen", applet: "x", extra: 1 },
+        "Applets/Recipes", { vault: "garden", hub: "https://hub.example", applet: "01ABC" }, { vault: "k", applet: "a\u0000b" }],
+      start: { vault: "kitchen", applet: "Applets/Home" },
+    } });
+    expect(s.bar).toEqual([{ vault: "kitchen", applet: "Applets/Recipes" }, { vault: "garden", hub: "https://hub.example", applet: "01ABC" }]);
+    expect(s.start).toEqual({ vault: "kitchen", applet: "Applets/Home" });
+  });
+  it("no note, other metadata, or a bad start: an empty bar and no home", () => {
+    for (const m of [null, {}, { parachute: "x" }, { parachute: { bar: "x", start: "Applets/Home" } }, { parachute: { start: { vault: "k" } } }]) expect(settingsFrom(m)).toEqual({ bar: [], start: null });
+  });
+  it("reads no more than a bar's worth of places", () => {
+    const bar = Array.from({ length: 40 }, (_, i) => ({ vault: "k", applet: `A/${i}` }));
+    expect(settingsFrom({ parachute: { bar } }).bar).toHaveLength(MAX_PLACES);
+  });
+});
+
+describe("which vault a place names", () => {
+  const home = rec("kitchen", "kitchen", "https://home.example");
+  const other = rec("kitchen@other.example", "kitchen", "https://other.example");
+  const list = [home, other];
+  it("by its hub when it names one, and none when this device has no vault of that name there", () => {
+    expect(vaultFor({ vault: "kitchen", hub: "https://other.example/" }, list, home)?.key).toBe("kitchen@other.example");
+    expect(vaultFor({ vault: "kitchen", hub: "https://third.example" }, list, home)).toBeNull();
+  });
+  it("else the one on the home vault's hub", () => {
+    expect(vaultFor({ vault: "kitchen" }, [other, home], home)?.key).toBe("kitchen");
+  });
+  it("names a vault by its hub only when another hub holds that name too", () => {
+    expect(placeFor(home, "Applets/Recipes", [home])).toEqual({ vault: "kitchen", applet: "Applets/Recipes" });
+    expect(placeFor(other, "Applets/Recipes", list)).toEqual({ vault: "kitchen", hub: "https://other.example", applet: "Applets/Recipes" });
+  });
+});
