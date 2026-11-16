@@ -6,7 +6,8 @@ if (q.get("theme") === "alt") document.documentElement.classList.add("alt");
 const feel = document.documentElement.dataset.feel; // "almanac" or "garden": which drawing the activity part uses
 
 // ── made-up content ──
-const DAYS = [0, 1, 0, 2, 3, 1, 0, 0, 4, 2, 1, 0, 3, 5, 2, 0, 1, 1, 0, 2, 6, 3, 1, 0, 2, 4, 3, 5]; // 4 weeks, oldest first
+const DAYS = [0, 1, 0, 2, 3, 1, 0, 0, 4, 2, 1, 0, 3, 5, 2, 0, 1, 1, 0, 2, 6, 3, 1, 0, 2, 4, 1, 3]; // 4 weeks, oldest first; 14 this week
+const COOKED = [0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
 const vaults = [
   { name: "kitchen", note: "recipes and what we cooked", recent: [["Lemon lentil soup", "yesterday"], ["Shopping list", "Friday"], ["Skillet cornbread", "Thursday"]], applets: [
     { g: "❀", n: "Recipes", life: "Lemon lentil soup, yesterday", d: [0, 1, 0, 2, 3, 1, 2] },
@@ -102,10 +103,10 @@ if (screen === "launcher") {
       <p class="kicker">Card</p>${card("Made twice", `<p>Last on 2 November. Halve the cumin for small people.</p>`)}
       <p class="kicker">Field</p>${field("New recipe", "Barley stew", "Add")}
       <p class="kicker">Empty</p>${empty("No recipes yet. Add one above, or ask your AI to.")}</div>
-  </main>${shellBar("Launcher")}`;
+  </main>${shellBar("")}`;
 } else {
   body = `${shellTop("❀", "Recipes")}<main class="page sheet two">
-    <div class="col"><header class="rec-head"><h1>Recipes</h1><p>Five recipes, two made this month.</p></header>${activity(DAYS, "cooked, the last four weeks")}
+    <div class="col"><header class="rec-head"><h1>Recipes</h1><p>Five recipes, seven meals this month.</p></header>${activity(COOKED, "cooked, the last four weeks")}
       ${field("New recipe", "", "Add")}${list("Lately", recipes.slice(0, 2))}${list("Earlier", recipes.slice(2))}</div>
     <div class="col wide-only"><article class="pa-note">${note}</article></div>
   </main>${shellBar("Recipes")}`;

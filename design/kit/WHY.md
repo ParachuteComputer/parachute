@@ -19,17 +19,17 @@ with a grayscale copy, in `shots/`. `shots/compare-launcher-phone.png` puts step
 I judged both against the taste notes (paraphrased) on the screenshots, grayscale included.
 
 - **On the Daylight, which shows only grey.** A keeps its order in grey: large serif names, italics, small capitals,
-  ink rules and the tally are all dark marks on light paper. B's hills and panels fall to three close greys. Its
-  bloom's dots and stems blur together. Its clay labels drop to the same grey as body text.
+  ink rules and the tally are all dark marks on light paper. B loses more: its bloom becomes a dark knot, and its
+  clay times and labels drop to the same grey as body text.
 - **Rich, not busy.** A adds a lot but keeps one accent. The new marks are line work that recedes. B adds as much,
   but in filled colour, and its panels on panels make the page boxier.
 - **Printed, with a pulse.** A's masthead, fleuron and drop cap belong to printed pages. The tally and the
   seven-day lines are the live part.
 - **Information shown, not only listed.** Both give every applet a trace of its last week and the person a picture of
-  the month. A's tally can be read for actual counts (a mark per note); B's bloom gives a shape but not numbers.
-- **The landscape.** A drawn landscape suits the hand-made feel the taste notes ask for, so B's hills carry over into A,
-  drawn lighter: a pale wash behind the masthead, under A's ink lines, so it adds warmth without a block of grey on
-  the Daylight.
+  the month. A's tally can be read for counts (a mark per note); B's bloom gives a shape but not numbers.
+- **The landscape.** A landscape drawn by hand suits the taste notes, so B's hills carry over into A, lighter: a
+  pale wash under A's ink lines on the masthead (as in the A shots), warm in colour and a light grey on the
+  Daylight, not a dark block.
 
 From B, as well: its wider spacing is the theme's `roomy` density.
 
