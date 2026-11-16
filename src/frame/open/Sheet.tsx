@@ -53,7 +53,7 @@ function SheetFor({ vault, note, preset, fromRoute }: { vault: string; note: str
             {cands.map((c) => (
               <li key={c.entry.noteId}>
                 <button type="button" className="row sheet-choice" disabled={c.status === "off"} onClick={(e) => pick(e, c)}>
-                  <span className="row-title"><span aria-hidden="true">{c.entry.manifest.glyph}</span> {c.entry.manifest.name}</span>
+                  <span className="row-title"><span aria-hidden="true">{c.entry.manifest.glyph}{"\uFE0E"}</span> {c.entry.manifest.name}</span>
                   <span className="row-sub">{c.status === "ok" ? `opens ${c.claim.type} notes` : c.status === "updated" ? "changed since you allowed it" : c.status === "off" ? "applets are off on this device" : "Allow first"}</span>
                 </button>
               </li>

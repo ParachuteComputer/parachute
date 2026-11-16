@@ -160,7 +160,7 @@ function AppletSheet({ v, a, onClose }: { v: FrameVault; a: FrameApplet; onClose
   return (
     <div className="sheet-scrim" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <section className="sheet" role="dialog" aria-modal="true" aria-label={a.manifest.name}>
-        <h2><span aria-hidden="true">{a.manifest.glyph}</span> {a.manifest.name} <span className="quiet">in {v.vault}</span></h2>
+        <h2><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> {a.manifest.name} <span className="quiet">in {v.vault}</span></h2>
         <ul className="plain sheet-list">
           {!isHome && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => pinApplet(v.key, a.noteId, !pinned))}>{pinned ? "Unpin from the bar" : "Pin to the bar"}</button></li>}
           <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => startApplet(v.key, isHome ? null : a.noteId))}>{isHome ? "Don't open on start" : "Open on start"}</button></li>

@@ -33,7 +33,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
     const r = grants.record(subject);
     return (
       <li key={subject} className="line">
-        <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
+        <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
         <button type="button" className="quiet-button" onClick={() => { grants.revoke(subject); onChange(); }}>Revoke</button>
       </li>
     );
