@@ -81,3 +81,11 @@ test("the first change in Settings copies the built-in theme into the home vault
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--gap").trim())).toBe("18px");
   await expect(look.getByRole("button", { name: "Make this look mine" })).toHaveCount(0);
 });
+
+test("a theme written while the app was closed is the look of the shell and the frame at the next start", async ({ page }) => {
+  await api(hubState(), "POST", "notes", { path: "Parachute/Theme", tags: ["parachute-theme"], metadata: { theme: THEME } });
+  await page.goto(`/v/${VAULT}`);
+  await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
+  await expect.poll(() => shellBg(page)).toBe(SAGE);
+  await expect.poll(() => frameBg(page), { timeout: 3000 }).toBe(SAGE);
+});

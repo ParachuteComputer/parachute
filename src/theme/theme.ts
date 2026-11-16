@@ -53,11 +53,13 @@ export type TokenKey = (typeof TOKEN_KEYS)[number];
 /** The look as applied: every token's value, which palette shows, and the density by name. */
 export type Tokens = Record<TokenKey, string> & { scheme: "light" | "dark"; density: Density };
 
-const NUM = String.raw`[+-]?(?:\d+\.?\d*|\.\d+)(?:%|deg|turn|rad)?`;
-const FN = new RegExp(String.raw`^(?:rgba?|hsla?|oklch|oklab)\(\s*${NUM}(?:\s*[,/]?\s*${NUM}){1,3}\s*\)$`, "i");
+// One way to read each number, and a separator required between two (a comma, a slash or a space): a pattern that could
+// split a run of digits many ways would take seconds on a hostile value, and this one runs at every start.
+const NUM = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:%|deg|turn|rad)?`;
+const FN = new RegExp(String.raw`^(?:rgba?|hsla?|oklch|oklab)\(\s*${NUM}(?:(?:\s*[,/]\s*|\s+)${NUM}){1,3}\s*\)$`, "i");
 /** A colour this reads: hex (3, 4, 6 or 8 digits), or rgb/hsl/oklch/oklab with numbers only. */
 export const isColor = (v: unknown): v is string => typeof v === "string" && v.length <= 64 && (/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) || FN.test(v));
-const FAMILY = /^\s*(?:"[A-Za-z0-9 -]{1,60}"|'[A-Za-z0-9 -]{1,60}'|[A-Za-z][A-Za-z0-9 -]{0,60})\s*$/;
+const FAMILY = /^\s*(?:"[A-Za-z0-9 -]{1,60}"|'[A-Za-z0-9 -]{1,60}'|-?[A-Za-z][A-Za-z0-9 -]{0,60})\s*$/;
 /** A font stack this reads: family names (quoted or bare), separated by commas. */
 export const isFontStack = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 300 && v.split(",").length <= 12 && v.split(",").every((f) => FAMILY.test(f));
 

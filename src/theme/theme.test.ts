@@ -37,8 +37,20 @@ describe("the grammar (values end up in CSS the shell, the frame and applets app
     for (const c of ["red", "url(x)", "var(--x)", "rgb(var(--a),1,2)", "#abcde", "#12345g", "rgb(1,2,3);}x{", "image-set(\"a.png\" 1x)", "attr(x)", "expression(alert(1))", "#fff;", "", 7, null, "rgb(1)", "rgb(1,2,3,4,5)"]) expect(isColor(c), String(c)).toBe(false);
   });
 
+  it("answers at once on a value built to be slow (it is read at every start)", () => {
+    for (const v of ["rgb(" + "1".repeat(59) + "x", "hsl(" + "1.".repeat(29) + "x", "oklch(" + "1 ".repeat(28) + "/", "rgb(" + "1,".repeat(29) + ")"]) {
+      const t = performance.now();
+      expect(isColor(v)).toBe(false);
+      expect(performance.now() - t, v).toBeLessThan(50);
+    }
+    const t = performance.now();
+    isFontStack(Array.from({ length: 12 }, () => " a".repeat(24)).join(","));
+    expect(performance.now() - t).toBeLessThan(50);
+  });
+
   it("reads font stacks as family names only", () => {
-    expect(isFontStack(DEFAULT_THEME.fonts.serif)).toBe(true);
+    for (const k of ["serif", "sans", "mono"] as const) expect(isFontStack(DEFAULT_THEME.fonts[k]), k).toBe(true);
+    expect(themeFrom({ theme: { fonts: { sans: `Inter, ${DEFAULT_THEME.fonts.sans}` } } }).fonts.sans).toBe(`Inter, ${DEFAULT_THEME.fonts.sans}`);
     expect(isFontStack(`"EB Garamond", Georgia, serif`)).toBe(true);
     for (const f of [`x;}body{color:red`, `url(a.woff)`, `"unclosed, serif`, `a</style>`, `var(--x)`, "", `"a\\" b"`]) expect(isFontStack(f), f).toBe(false);
   });

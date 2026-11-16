@@ -26,7 +26,7 @@ export const FRAME_KIT = String.raw`(function () {
   }
   function applyTheme(t) {
     theme = t; var r = document.documentElement.style;
-    if (t && typeof t === "object") Object.keys(t).forEach(function (k) { if (/^[a-z]+$/.test(k) && typeof t[k] === "string") r.setProperty("--" + k, t[k]); });
+    if (t && typeof t === "object") Object.keys(t).forEach(function (k) { if (/^[a-z]+$/.test(k) && k !== "scheme" && k !== "density" && typeof t[k] === "string") r.setProperty("--" + k, t[k]); });
     if (t && (t.scheme === "light" || t.scheme === "dark")) r.setProperty("color-scheme", t.scheme);
     themeCbs.forEach(function (f) { try { f(t); } catch (e) {} });
   }

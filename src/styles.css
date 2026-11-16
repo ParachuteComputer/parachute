@@ -6,7 +6,8 @@
    person's theme record, and are set on <html> by the shell, and handed to the frame and every applet. */
 :root { --bar-h: 58px; }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--size)/var(--leading) var(--sans); -webkit-tap-highlight-color: transparent; font-variant-emoji: text; }
+/* the fallbacks are the built-in theme's, for a paint before the shell sets the tokens */
+html, body { margin: 0; background: var(--bg, #f2ede2); color: var(--text, #1d1a16); font: var(--size, 16px)/var(--leading, 1.45) var(--sans, system-ui, sans-serif); -webkit-tap-highlight-color: transparent; font-variant-emoji: text; }
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: var(--accent); }
 button, input { font: inherit; color: inherit; }

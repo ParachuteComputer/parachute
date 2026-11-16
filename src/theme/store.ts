@@ -20,22 +20,30 @@ export const THEME_TAG = "parachute-theme";
 export const THEME_PATH = "Parachute/Theme";
 export const THEME_KEY = "parachute.theme.v1";
 
-type Kept = { vault: string; theme: unknown; noteId: string | null };
+type Kept = { vault: string; theme: Theme; noteId: string | null };
 const storage = () => (typeof localStorage === "undefined" ? null : localStorage);
+// The copy in memory is the one used; storage is where it outlasts the app. Read once, parsed (and held to the grammar)
+// once per change, never per call.
+let memory: Kept | null | undefined;
 function kept(): Kept | null {
+  if (memory !== undefined) return memory;
   try {
-    const v = JSON.parse(storage()?.getItem(THEME_KEY) ?? "null") as Kept | null;
-    return v && typeof v.vault === "string" ? { vault: v.vault, theme: v.theme ?? null, noteId: typeof v.noteId === "string" ? v.noteId : null } : null;
-  } catch { return null; }
+    const v = JSON.parse(storage()?.getItem(THEME_KEY) ?? "null") as { vault?: unknown; theme?: unknown; noteId?: unknown } | null;
+    memory = v && typeof v.vault === "string" ? { vault: v.vault, theme: themeFrom({ theme: v.theme }), noteId: typeof v.noteId === "string" ? v.noteId : null } : null;
+  } catch { memory = null; }
+  return memory;
 }
-const keep = (k: Kept) => { try { storage()?.setItem(THEME_KEY, JSON.stringify(k)); } catch { /* this session only */ } };
+function keep(vault: string, raw: unknown, noteId: string | null) {
+  memory = { vault, theme: themeFrom({ theme: raw }), noteId };
+  try { storage()?.setItem(THEME_KEY, JSON.stringify({ vault, theme: raw, noteId })); } catch { /* kept in memory, for this session */ }
+}
 
 /** The theme now: the home vault's record as last read, else the built-in one. */
 export function themeNow(): { theme: Theme; from: "built-in" | "vault"; noteId: string | null } {
   const k = kept();
   const home = homeVault();
-  if (!k || !home || k.vault !== home.key || !k.noteId) return { theme: structuredClone(DEFAULT_THEME), from: "built-in", noteId: null };
-  return { theme: themeFrom({ theme: k.theme }), from: "vault", noteId: k.noteId };
+  if (!k || !home || k.vault !== home.key || !k.noteId) return { theme: DEFAULT_THEME, from: "built-in", noteId: null };
+  return { theme: k.theme, from: "vault", noteId: k.noteId };
 }
 
 const darkQuery = () => (typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null);
@@ -82,7 +90,7 @@ const themeOf = (n: Note | null) => (n && plain(n.metadata) ? (n.metadata as Rec
 /** Take what the vault holds now as the theme (or none). */
 function take(vault: string, rows: Note[]) {
   const n = pick(rows);
-  keep({ vault, theme: themeOf(n), noteId: n?.id ?? null });
+  keep(vault, themeOf(n), n?.id ?? null);
   read = "read";
   bump();
 }
@@ -109,7 +117,8 @@ export function watchTheme(): () => void {
   const home = homeVault();
   if (!home) return () => {};
   const rows = new Map<string, Note>();
-  const now = () => { if (homeVault()?.key === home.key) take(home.key, [...rows.values()]); };
+  // a live change is newer than any read still on its way: that read is dropped (readTheme's generation)
+  const now = () => { if (homeVault()?.key === home.key) { generation++; take(home.key, [...rows.values()]); } };
   let stop: () => void = () => {};
   try {
     stop = clientFor(home).subscribe({ tag: THEME_TAG, includeMetadata: true, limit: 20 }, {
@@ -151,5 +160,5 @@ export const setScheme = (scheme: Theme["scheme"]) => changeTheme((r) => ({ ...r
 
 /** Signing out of a vault: the copy kept from it goes. */
 export function forgetVaultTheme(vault: string) {
-  if (kept()?.vault === vault) { try { storage()?.removeItem(THEME_KEY); } catch { /* nothing kept */ } bump(); }
+  if (kept()?.vault === vault) { memory = null; try { storage()?.removeItem(THEME_KEY); } catch { /* nothing kept */ } bump(); }
 }

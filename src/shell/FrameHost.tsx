@@ -26,6 +26,7 @@ export default function FrameHost({ js, from, onFailed }: { js: string; from: "b
   const failedRef = useRef(onFailed);
   failedRef.current = onFailed;
   const heard = useRef(false);
+  const themeWasRef = useRef("");
   const ref = useRef<HTMLIFrameElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -45,7 +46,8 @@ export default function FrameHost({ js, from, onFailed }: { js: string; from: "b
       // targetOrigin "*" and this check: a sandboxed srcdoc frame's origin is opaque, so its window is what identifies it
       if (e.source === null || e.source !== ref.current?.contentWindow) return;
       const d = e.data as { pf?: unknown; hello?: unknown; failed?: unknown } | null;
-      if (d && typeof d === "object" && d.pf === 1 && d.hello === 1) { heard.current = true; sendLocation(); return; }
+      // listening now: its address, and the look as it is now (a change while it loaded was sent before it listened)
+      if (d && typeof d === "object" && d.pf === 1 && d.hello === 1) { heard.current = true; sendLocation(); const t = tokensNow(); themeWasRef.current = JSON.stringify(t); host.event("theme", t); return; }
       if (d && typeof d === "object" && d.pf === 1 && typeof d.failed === "string") { failedRef.current(d.failed.slice(0, 300), true); return; }
       host.handle(e.data);
     };
@@ -54,8 +56,8 @@ export default function FrameHost({ js, from, onFailed }: { js: string; from: "b
     // the bar and the home: told only when what the frame would read of them changed (the settings store moves often)
     let homeWas = JSON.stringify(homeNow());
     const homeChanged = () => { const now = JSON.stringify(homeNow()); if (now !== homeWas) { homeWas = now; host.event("changed", { what: "home" }); } };
-    let themeWas = JSON.stringify(tokensNow());
-    const themeChanged = () => { const t = tokensNow(), now = JSON.stringify(t); if (now !== themeWas) { themeWas = now; host.event("theme", t); } };
+    themeWasRef.current = JSON.stringify(tokensNow());
+    const themeChanged = () => { const t = tokensNow(), now = JSON.stringify(t); if (now !== themeWasRef.current) { themeWasRef.current = now; host.event("theme", t); } };
     const offs = [subscribeTheme(themeChanged), subscribeVaults(changed("vaults")), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets")), subscribeSettings(homeChanged)];
     // a frame from a vault that never starts (or never listens) gives way to the built-in one
     const watchdog = from === "vault" ? window.setTimeout(() => { if (!heard.current) failedRef.current("it didn't start in time", false); }, WATCHDOG_MS) : 0;
