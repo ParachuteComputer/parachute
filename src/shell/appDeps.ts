@@ -24,8 +24,7 @@ export function appDeps(go: (href: string) => void): AppDeps {
       const lists = await Promise.all(vaults.map(async (rec) => {
         const rows = await clientFor(rec).queryNotes({ orderBy: "updated_at", sort: "desc", limit: limit + 10 }).catch(() => [] as Note[]);
         return rows.filter((n) => !own(n)).map((n): RecentNote => ({
-          vault: rec.key, vaultName: rec.vault, id: n.id, title: titleOf(n), path: n.path ?? "",
-          updatedAt: (n as { updatedAt?: string }).updatedAt ?? null, href: noteHref(rec.key, n.id),
+          vaultName: rec.vault, title: titleOf(n), updatedAt: (n as { updatedAt?: string }).updatedAt ?? null, href: noteHref(rec.key, n.id),
         }));
       }));
       return lists.flat().sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")).slice(0, limit);

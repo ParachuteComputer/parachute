@@ -4,7 +4,8 @@
 // - its code is HTML, or one TSX/JSX module (code.ts) the app transpiles here, before the card, once per code hash; code
 //   that doesn't compile is refused with the reason, and nothing runs;
 // - never allowed, changed what it reaches, or changed code: the grant card; nothing runs until Allow;
-// - allowed: it runs only after a tap inside the app (a marked tap that led here, Allow, or Open); otherwise it waits,
+// - allowed: it runs only after a tap inside the app (a marked tap that led here, Allow, or Open), or when it is the
+//   person's home, chosen on this device and still named in their settings (shell/start.ts); otherwise it waits,
 //   stopped, with an Open button;
 // - it is handed a note (`ready().open`) only when that note is one it claims (opens.ts), and only when the code that
 //   loaded is the code that was allowed.
@@ -34,6 +35,7 @@ import { useGate } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
 import { takeMark } from "../open/mark";
 import { chooseStart, startChosenHere, takeStart } from "../shell/start";
+import { barNow, settingsReadNow } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 
@@ -63,13 +65,16 @@ export default function AppletScreen() {
     // a start runs it by itself only when the person chose it as home here (and, as always, allowed its code)
     startedByTap.set(location.key, tapped || !!start?.chosen);
   }
-  // so does any other way to that home (Back to it, the bar), when it isn't asked to open a note
-  const chosenHome = !askedNote && !!rec && !!appletId && startChosenHere(rec.key, appletId);
+  // so does any other way to that home (Back to it, the bar), when it isn't asked to open a note: while the settings, as
+  // read from the vault this session (not the copy kept from before), still name it, and the person chose it here
+  const home = settingsReadNow() ? barNow().start : null;
+  const chosenHome = !askedNote && !!rec && !!appletId && home?.vault === rec.key && home.noteId === appletId && startChosenHere(rec.key, appletId);
   const atStart = startedAtStart.get(location.key) ?? null;
   // the person's tap on Allow or Open, on the screen a start led to, is their choice of it as home on this device
   const chooseHere = () => { if (atStart && !atStart.chosen) { chooseStart(atStart.vault, atStart.noteId); startedAtStart.set(location.key, { ...atStart, chosen: true }); } };
   const [started, setStarted] = useState(() => (startedByTap.get(location.key) ?? false) || chosenHome);
-  // a tap counts for the first screen drawn for this entry only: Back or Forward to it later starts nothing
+  // a tap counts for the first screen drawn for this entry only: Back or Forward to it later starts nothing (but the home
+  // the person chose here, above)
   useEffect(() => () => { startedByTap.set(location.key, false); }, [location.key]);
   const [declined, setDeclined] = useState(false);
   const [, setBump] = useState(0);

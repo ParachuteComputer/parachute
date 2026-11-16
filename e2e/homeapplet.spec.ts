@@ -80,3 +80,35 @@ test("hostile: app.open goes nowhere without a tap, and an applet that didn't as
     await api(hubState(), "DELETE", `notes/${s.id}`);
   }
 });
+
+test("hostile: a tap that has worn off moves nothing, and a home the note no longer names waits for a tap", async ({ page }) => {
+  const home = await mcp(hubState(), "create-note", ARGS);
+  const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" } });
+  try {
+    await start(page);
+    await page.getByRole("button", { name: "Allow" }).click();
+    const lately = applet(page).getByRole("region", { name: "Lately" });
+    await expect(lately).toBeVisible();
+    // a real tap inside the applet (focus stays in its frame), then the applet's own timer calls open once the tap's
+    // activation has worn off (Playwright's evaluate carries a gesture of its own, so the call can't come from it)
+    await applet(page).getByRole("heading").first().click();
+    const here = page.url();
+    await applet(page).locator("body").evaluate(() => {
+      const kit = (window as unknown as { parachute: { app: { open(h: string): Promise<boolean> } } }).parachute;
+      setTimeout(() => { kit.app.open("/v/kitchen").then((r) => { document.body.dataset.went = String(r); }, (e: { code?: string }) => { document.body.dataset.went = `error ${e.code}`; }); }, 6500);
+    });
+    // waited out, not polled: Playwright's reads carry a gesture of their own too
+    await page.waitForTimeout(8_000);
+    expect(await applet(page).locator("body").getAttribute("data-went")).toBe("false");
+    expect(page.url()).toBe(here);
+    // the agent clears the home in the note; the home's address, reached again, waits for a tap
+    const now = await api(hubState(), "GET", `notes/${s.id}`);
+    await api(hubState(), "PATCH", `notes/${s.id}`, { metadata: { parachute: { start: null } }, if_updated_at: now.updatedAt });
+    await page.goto(here);
+    await expect(page.getByRole("button", { name: /^Open Home$/ })).toBeVisible();
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+  } finally {
+    await api(hubState(), "DELETE", `notes/${home.id}`);
+    await api(hubState(), "DELETE", `notes/${s.id}`);
+  }
+});

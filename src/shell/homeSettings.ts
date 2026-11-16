@@ -120,6 +120,9 @@ export function settingsNow(): Settings {
   return k && home && k.vault === home.key ? k.settings : { ...EMPTY };
 }
 
+/** Whether the settings note was read from the home vault this session (not only the copy kept from before). */
+export const settingsReadNow = () => state.read === "read";
+
 /** The settings note: the one note tagged so, or the one at the usual path when there are more. */
 const pick = (rows: { path?: string | null }[]) => (rows.length === 1 ? rows[0] : rows.find((r) => stripExt(r.path ?? "") === SETTINGS_PATH) ?? null);
 
@@ -185,7 +188,8 @@ function pinRaw(raw: Raw, match: (p: Place) => boolean, add: Place | null): Raw 
   // the places the bar shows: found here, and not the home (which sits first on its own)
   const home = (() => { const s = placeOf(raw.start); return s ? find(s) : null; })();
   const shown = (p: Place) => { const f = find(p); return !!f && !(home && f.vault === home.vault && f.noteId === home.noteId); };
-  if (raw.bar.filter((x) => parsedAs(x, shown)).length >= MAX_PLACES) throw new Error(`The bar holds ${MAX_PLACES} places: unpin one first.`);
+  const onBar = new Set(raw.bar.map((x) => { const p = placeOf(x); const f = p && shown(p) ? find(p) : null; return f ? `${f.vault}|${f.noteId}` : null; }).filter(Boolean));
+  if (onBar.size >= MAX_PLACES) throw new Error(`The bar holds ${MAX_PLACES} places: unpin one first.`);
   return { ...raw, bar: [...raw.bar, add] };
 }
 export const pin = (p: Place, on: boolean) => changeSettings((r) => pinRaw(r, (x) => same(x, p), on ? p : null));

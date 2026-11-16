@@ -5,7 +5,7 @@ import { parseManifest } from "./manifest";
 import { canonical, grantKey, grantLines, grantOf } from "./grant";
 import { sha256Hex } from "./needs";
 import { RECIPES } from "./fixtures";
-import { APP_HREF } from "./modules/app";
+import { appHref } from "./modules/app";
 
 const m = (() => { const r = parseManifest(RECIPES); if (!r.ok) throw new Error(r.error); return r.manifest; })();
 
@@ -27,12 +27,17 @@ describe("metadata.app", () => {
     const none = await grantKey(grantOf(m, "v", []), "Applets/Recipes");
     expect(await grantKey(grantOf(m, "v", [], ["pins"]), "Applets/Recipes")).not.toBe(none);
     expect(await grantKey(grantOf(m, "v", [], ["pins", "open"]), "Applets/Recipes")).not.toBe(await grantKey(grantOf(m, "v", [], ["pins"]), "Applets/Recipes"));
+    // taking a word away asks again too
+    expect(await grantKey(grantOf(m, "v", [], ["pins"]), "Applets/Recipes")).not.toBe(await grantKey(grantOf(m, "v", [], ["pins", "open"]), "Applets/Recipes"));
+    expect(await grantKey(grantOf(m, "v", [], ["open", "pins"]), "Applets/Recipes")).toBe(await grantKey(grantOf(m, "v", [], ["pins", "open"]), "Applets/Recipes"));
     // the key as it was computed before `app` existed
     const allow = [...new Set(m.allow.map((r) => canonical({ path: r.path, verbs: [...r.verbs].sort() })))].sort();
     expect(none).toBe(await sha256Hex(canonical({ v: 3, note: "Applets/Recipes", applet: m.id, vault: "v", allow, opens: [] })));
   });
   it("open goes only to the app's own places", () => {
-    for (const ok of ["/", "/v/kitchen", "/v/kitchen/n/01ABC", "/v/kitchen/a/01ABC", "/v/k%40h/n/Recipes%2FSoup"]) expect(APP_HREF.test(ok), ok).toBe(true);
-    for (const bad of ["//evil.example", "https://evil.example", "/settings", "/add", "/v/k/n/x?y=1", "/v/k/x/y", "/oauth/callback", "javascript:alert(1)"]) expect(APP_HREF.test(bad), bad).toBe(false);
+    for (const ok of ["/", "/v/kitchen", "/v/kitchen/n/01ABC", "/v/kitchen/a/01ABC", "/v/k%40h/n/Recipes%2FSoup"]) expect(appHref(ok), ok).toBe(true);
+    for (const bad of ["//evil.example", "https://evil.example", "/settings", "/add", "/v/k/n/x?y=1", "/v/k/x/y", "/oauth/callback", "javascript:alert(1)",
+      // what the browser would read as another address: a backslash, encoded or plain dot segments, a stripped tab
+      "/v/kitchen/n/a\\..\\..\\..\\..\\settings", "/v/%2e%2e/n/x", "/v/%2E%2E", "/v/k/n/..", "/v/../a/x", "/v/k/n/a\t", "/v/k/n/a\n"]) expect(appHref(bad), bad).toBe(false);
   });
 });
