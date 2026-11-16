@@ -1,12 +1,12 @@
 /* The parts (src/kit/parts.tsx), built only on the theme's tokens (src/theme/theme.ts): the look of an old almanac,
    ink rules and type rather than boxes, one accent (design/kit/WHY.md). Every class starts `pa-`, so an applet's own
    CSS can sit beside it. Nothing moves, nothing loads. */
-.pa-days { margin: 0 0 var(--gap); color: var(--text); }
+.pa-days { display: block; margin: 0 0 var(--gap); color: var(--text); }
 .pa-days svg { display: block; height: calc(var(--size) * 3.6); width: auto; max-width: 100%; }
 .pa-days .pa-mark { fill: var(--text); }
 .pa-days .pa-base { fill: var(--muted); }
 .pa-days .pa-today { fill: var(--accent); }
-.pa-days figcaption { margin-top: 2px; font: italic calc(var(--size) * .82) var(--serif); color: var(--muted); }
+.pa-days figcaption, .pa-days-label { margin-top: 2px; font: italic calc(var(--size) * .82) var(--serif); color: var(--muted); }
 
 .pa-list { margin: 0 0 var(--gap); }
 .pa-list-label { margin: 0 0 4px; font: italic 400 calc(var(--size) * 1.02) var(--serif); color: var(--muted); }

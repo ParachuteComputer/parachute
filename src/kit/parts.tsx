@@ -28,14 +28,16 @@ export function daysFrom(times: readonly (string | number | null | undefined)[],
 }
 
 /** What changed, a day at a time. `counts` (oldest first, the last is today), or `times` to count by day. */
-export function Days({ counts, times, days = 28, label }: { counts?: readonly number[]; times?: readonly (string | number | null | undefined)[]; days?: number; label?: string }) {
-  const values = useMemo(() => (counts ? counts.slice(-days) : daysFrom(times ?? [], days)), [counts, times, days]);
-  const tall = 8; // marks shown at most; a taller day is drawn full, with its number in the label
+export function Days({ counts, times, days = 28, label, inline }: { counts?: readonly number[]; times?: readonly (string | number | null | undefined)[]; days?: number; label?: string; /** inside a line of text (a link, a row): drawn in a span, not a figure */ inline?: boolean }) {
+  const n = Math.max(1, Math.min(366, Math.floor(days) || 28));
+  const values = useMemo(() => { const v = counts ? counts.slice(-n) : daysFrom(times ?? [], n); return v.length ? v : [0]; }, [counts, times, n]);
+  const tall = 8; // marks drawn at most: a busier day is drawn full (the label's total still counts every change)
   const total = values.reduce((a, b) => a + b, 0);
   const width = values.length * 9 + Math.floor((values.length - 1) / 7) * 6;
   const said = `${label ? `${label}: ` : ""}${total} in ${values.length} days`;
+  const Box = inline ? "span" : "figure";
   return (
-    <figure className="pa-days" role="img" aria-label={said}>
+    <Box className="pa-days" role="img" aria-label={said}>
       <svg viewBox={`0 0 ${width} ${tall * 5 + 12}`} preserveAspectRatio="xMinYMax meet" aria-hidden="true">
         {values.map((v, i) => {
           const x = i * 9 + Math.floor(i / 7) * 6;
@@ -49,8 +51,8 @@ export function Days({ counts, times, days = 28, label }: { counts?: readonly nu
           );
         })}
       </svg>
-      {label && <figcaption>{label}</figcaption>}
-    </figure>
+      {label && (inline ? <span className="pa-days-label">{label}</span> : <figcaption>{label}</figcaption>)}
+    </Box>
   );
 }
 
@@ -66,8 +68,8 @@ export function List({ label, rows }: { label?: ReactNode; rows: readonly Row[] 
             <>
               {r.glyph && <span className="pa-row-mark" aria-hidden="true">{r.glyph}{"︎"}</span>}
               <span className="pa-row-title">{r.title}</span>
-              {r.meta && <span className="pa-row-meta">{r.meta}</span>}
-              {r.aside && <span className="pa-row-aside">{r.aside}</span>}
+              {r.meta != null && r.meta !== "" && <span className="pa-row-meta">{r.meta}</span>}
+              {r.aside != null && r.aside !== "" && <span className="pa-row-aside">{r.aside}</span>}
             </>
           );
           return <li key={r.key ?? i}>{r.onPress ? <button type="button" className="pa-row" onClick={r.onPress}>{inner}</button> : <div className="pa-row">{inner}</div>}</li>;
@@ -82,7 +84,9 @@ export function Card({ title, children }: { title?: ReactNode; children?: ReactN
   return <section className="pa-card">{title && <h3 className="pa-card-title">{title}</h3>}{children}</section>;
 }
 
-/** A line to write on, and its one action (a tap, or Enter). Keeps its own text unless `value` is given. */
+/** A line to write on, and its one action (a tap, or Enter). Keeps its own text unless `value` is given, and clears it
+ *  after the action unless `clearOnAction` is false. `onAction` should catch its own errors and say so: a rejection
+ *  leaves the text as it was. */
 export function Field({ label, value, onChange, placeholder, action, onAction, clearOnAction = true }: {
   label: ReactNode; value?: string; onChange?: (v: string) => void; placeholder?: string;
   action?: string; onAction?: (v: string) => void | Promise<unknown>; clearOnAction?: boolean;
@@ -96,13 +100,13 @@ export function Field({ label, value, onChange, placeholder, action, onAction, c
   const submit = async () => {
     if (!onAction || busy || !text.trim()) return;
     setBusy(true);
-    try { await onAction(text.trim()); if (clearOnAction) set(""); } finally { setBusy(false); }
+    try { await onAction(text.trim()); if (clearOnAction) set(""); } catch { /* the text stays, to try again */ } finally { setBusy(false); }
   };
   return (
     <div className="pa-field">
       <label className="pa-field-label" htmlFor={id}>{label}</label>
       <span className="pa-field-row">
-        <input id={id} value={text} placeholder={placeholder} onChange={(e) => set(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} enterKeyHint={action ? "done" : undefined} />
+        <input id={id} value={text} placeholder={placeholder} onChange={(e) => set(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); void submit(); } }} enterKeyHint={action ? "done" : undefined} />
         {action && <button type="button" className="pa-field-action" disabled={busy || !text.trim()} onClick={() => void submit()}>{action}</button>}
       </span>
     </div>

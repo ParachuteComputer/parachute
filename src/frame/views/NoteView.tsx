@@ -25,8 +25,10 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
   const load: typeof fetched = given === undefined ? fetched : { state: "ok", data: given };
   // a wikilink names a note by its path; the vault answers a path where an id goes
   const resolve: WikilinkResolver = useMemo(() => (target) => (rec ? unresolvedLink(noteHref(rec.key, target.split("|")[0].split("#")[0])) : null), [rec]);
-  if (!rec) return <NoVault />;
   const note = load.state === "ok" ? load.data : null;
+  // the note as the renderer takes it, made once per note: a new object each render would redraw a rich note
+  const drawn = useMemo(() => (note ? { ...note, path: `${note.path ?? "note"}.${(note as { extension?: string }).extension?.replace(/^\./, "") || "md"}`, content: note.content ?? "" } : null), [note]);
+  if (!rec) return <NoVault />;
   return (
     <main className="screen">
       <Bar title={note ? titleOf(note) : "Note"} back={true} />
@@ -40,7 +42,7 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
             <CopyLink link={linkFor(rec.issuer, rec.vault, note.id)} /></p>
           {isCodeNote(note)
             ? <pre className="note-code" aria-label="The note's text">{note.content ?? ""}</pre>
-            : <div className="rn-theme-uni"><NoteRenderer className="prose-note" rich calm note={{ ...note, path: `${note.path ?? "note"}.${(note as { extension?: string }).extension?.replace(/^\./, "") || "md"}`, content: note.content ?? "" }} resolve={resolve} linkComponent={RouterLink}
+            : <div className="rn-theme-uni"><NoteRenderer className="prose-note" rich calm note={drawn!} resolve={resolve} linkComponent={RouterLink}
                 onNavigate={(href) => { if (isAppPath(href)) navigate(href); }} openLink={(url) => { void call("link.out", { url }); }} /></div>}
         </article>
       )}

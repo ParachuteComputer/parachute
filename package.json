@@ -27,21 +27,21 @@
     "rehype-highlight": "^7.0.2",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
-    "sucrase": "3.35.1",
-    "unified": "^11.0.5"
+    "sucrase": "3.35.1"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",
     "@tauri-apps/cli": "2.11.5",
     "@testing-library/react": "^16.1.0",
+    "@types/mdast": "^4.0.4",
     "@types/node": "^22",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.3.0",
     "jsdom": "^25.0.1",
     "typescript": "~5.8.0",
+    "unified": "^11.0.5",
     "vite": "^6.2.0",
-    "vitest": "^3.2.0",
-    "@types/mdast": "^4.0.4"
+    "vitest": "^3.2.0"
   }
 }

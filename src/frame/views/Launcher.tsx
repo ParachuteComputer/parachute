@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameVault } from "../../bridge/protocol";
 import { pinApplet, readerFor, startApplet, useApplets, useHome, useVaultQuery, useVaults } from "../data";
-import { isCodeNote, noteHref, titleOf } from "../../vault/notes";
+import { isAppOwn, noteHref, titleOf } from "../../vault/notes";
 import { Days, Empty } from "../../kit/parts";
 import { appletPath } from "../../open/paths";
 
@@ -19,8 +19,7 @@ export function ago(iso: string | null | undefined, now = Date.now()): string {
   return new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "long" });
 }
 
-/** The notes worth showing as "what changed": not the app's own (Parachute/…, .parachute/…) and not applets' code. */
-const worthShowing = (n: Note) => !isCodeNote(n) && !/^(Parachute\/|\.parachute\/)/.test(n.path ?? "");
+const worthShowing = (n: Note) => !isAppOwn(n);
 const updated = (n: Note) => (n as { updatedAt?: string }).updatedAt ?? null;
 
 /** The newest notes of every vault, read once per showing of the launcher. */
@@ -73,7 +72,8 @@ export default function Launcher() {
   const recent = useRecent(vaults);
   const [asked, setAsked] = useState<{ v: FrameVault; a: FrameApplet } | null>(null);
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
-  const all = Object.values(recent).flat();
+  // a vault signed out of while the launcher shows leaves the tally with it
+  const all = vaults.flatMap((v) => recent[v.key] ?? []);
   return (
     <main className={vaults.length > 1 ? "screen launcher launcher-wide" : "screen launcher"}>
       <header className="launcher-head">
@@ -138,7 +138,7 @@ function Entry({ v, a, home, pinned, onHold }: { v: FrameVault; a: FrameApplet; 
         <span className="entry-glyph" aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span>
         <span className="entry-name">{a.manifest.name}{home && <span className="entry-home">home</span>}{pinned && !home && <span className="entry-pinned"><span aria-hidden="true">●</span> pinned</span>}</span>
         <span className="entry-life">{life}</span>
-        {o && load.state === "ok" && <span className="entry-days" aria-hidden="true"><Days times={load.data.map(updated)} days={7} /></span>}
+        {o && load.state === "ok" && <span className="entry-days" aria-hidden="true"><Days times={load.data.map(updated)} days={7} inline /></span>}
       </Link>
     </li>
   );

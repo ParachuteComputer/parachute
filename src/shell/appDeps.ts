@@ -1,15 +1,14 @@
 // The shell's answers to an applet's `app` calls (applet/modules/app.ts), from what the shell holds.
 import type { Note } from "@openparachute/surface-client";
 import type { AppDeps, RecentNote } from "../applet/modules/app";
-import { isCodeExtension } from "../applet/code";
 import { markTap } from "../open/mark";
 import { clientFor } from "../vault/client";
-import { noteHref, titleOf } from "../vault/notes";
+import { isAppOwn, noteHref, titleOf } from "../vault/notes";
 import { listVaults } from "../vault/store";
 import { barNow } from "./homeSettings";
 
 /** Notes that are the app's own or an applet's code: never in a list of what the person wrote lately. */
-const own = (n: Note) => isCodeExtension(n as { extension?: string }) || (n.tags ?? []).some((t) => t === "applet" || t.startsWith("applet/") || t.startsWith("parachute"))
+const own = (n: Note) => isAppOwn(n as Note & { extension?: string })
   || /^\.parachute\//i.test(n.path ?? "");
 
 /** A tap in the applet now: live user activation in the shell's window, with the focus in an applet's frame. */

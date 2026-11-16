@@ -90,11 +90,11 @@ does. Use them, or your own markup on the CSS variables, or both.
 
 | Part | What it draws |
 |---|---|
-| `<Note body path? tags? fields? onLink? />` | A note's text as the app's note view draws it: markdown, and rich notes (a recipe with servings and timers, tasks, logs, callouts, charts from tables); give the record's `tags` and `fields` so a typed note (tagged `recipe`) draws as its type. A tapped link never leaves the applet: `onLink(target)` gets a wikilink's target as written (`[[Green herb rice]]` gives `Green herb rice`) or a web address. The renderer is large, so the app loads it only for an applet that imports `Note`. |
-| `<Days times? counts? days? label? />` | What changed, a day at a time: a column of ink marks per day, weeks set apart, today marked. Give `times` (ISO times, counted by day) or `counts` (oldest first). `days` defaults to 28. |
+| `<Note body path? tags? fields? onLink? />` | A note's text as the app's note view draws it: markdown, and rich notes (a recipe with servings and timers, tasks, logs, callouts, charts from tables); give the record's `tags` and `fields` so a typed note (tagged `recipe`) draws as its type, and its `path`, which tells one note from the next. A tapped link never leaves the applet: `onLink(target)` gets a wikilink's target as written (`[[Green herb rice]]` gives `Green herb rice`) or a web address. The renderer is large, so the app loads it only for an applet that imports `Note`. |
+| `<Days times? counts? days? label? inline? />` | What changed, a day at a time: a column of ink marks per day, weeks set apart, today marked. Give `times` (ISO times, counted by day) or `counts` (oldest first). `days` defaults to 28; `inline` draws it inside a line (a row, a link). |
 | `<List label? rows />` | Rows under a label. A row is `{ key?, title, meta?, aside?, glyph?, onPress? }`; one with `onPress` is a button. |
 | `<Card title?>…</Card>` | A raised block with a title. |
-| `<Field label placeholder? action? onAction? value? onChange? />` | A line to write on, and one action (its button, or Enter). It keeps its own text unless `value` is given, and clears after the action. |
+| `<Field label placeholder? action? onAction? value? onChange? clearOnAction? />` | A line to write on, and one action (its button, or Enter). It keeps its own text unless `value` is given, and clears after the action unless `clearOnAction` is false. `onAction` should catch its own errors and show them: a failed action leaves the text as it was. |
 | `<Empty>…</Empty>` | What shows when there is nothing yet: a sprig and a line. |
 | `useTheme()` | The look as values (`accent`, `bg`, …, `scheme`, `density`), or null until the app has sent it. Most applets need only the CSS variables. |
 
@@ -143,14 +143,14 @@ rather than `tags`: `"types": ["applet"]`. The note-named calls in the kit (`que
       }
     ]
   },
-  "body": "import { useEffect, useState } from \"react\";\nimport { Days, Empty, Field, List, Note, onOpen, ready, vault } from \"parachute\";\n\ntype Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };\nconst nameOf = (r: Recipe) => r.path.replace(\"Recipes/\", \"\");\nconst when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: \"numeric\", month: \"short\" }) : \"\");\n\nconst CSS = `\nmain { max-width: 1100px; margin: 0 auto; padding: 22px var(--pad); }\nh1 { margin: 0 0 4px; font: 400 calc(var(--size) * 2.4)/1.1 var(--serif); }\n.cols { display: grid; gap: calc(var(--gap) * 2); }\n@media (min-width: 900px) { .cols { grid-template-columns: 2fr 3fr; gap: 64px; } }\n.back { margin: 0 0 10px; padding: 0; border: 0; background: none; color: var(--muted); font: italic var(--size) var(--serif); cursor: pointer; }\n`;\n\nexport default function RecipeCards() {\n  const [recipes, setRecipes] = useState<Recipe[] | null>(null);\n  const [open, setOpen] = useState<Recipe | null>(null);\n  const load = () => vault.queryRecords({ pathPrefix: \"Recipes/\", tag: \"recipe\", includeBody: true }).then((rows: Recipe[]) => setRecipes(rows));\n  useEffect(() => {\n    ready().then(load);\n    return onOpen((o: { note: { id: string } }) => vault.getRecord(o.note.id).then(setOpen));\n  }, []);\n  const add = async (name: string) => {\n    const made: Recipe = await vault.createRecord({ path: `Recipes/${name}`, body: `# ${name}\\n\\n## Ingredients\\n\\n## Steps\\n` });\n    await load();\n    setOpen(await vault.getRecord(made.id));\n  };\n  const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };\n  return (\n    <main>\n      <style>{CSS}</style>\n      <div className=\"cols\">\n        <section>\n          <h1>Recipe cards</h1>\n          <Days times={(recipes ?? []).map((r) => r.updatedAt)} label=\"changed, the last four weeks\" />\n          <Field label=\"New recipe\" placeholder=\"A name\" action=\"Add\" onAction={add} />\n          {recipes === null ? <p>Reading…</p> : recipes.length\n            ? <List label=\"Recipes\" rows={recipes.map((r) => ({ key: r.id, title: nameOf(r), aside: when(r.updatedAt), onPress: () => setOpen(r) }))} />\n            : <Empty>No recipes yet. Add one above, or ask your AI to.</Empty>}\n        </section>\n        {open && (\n          <section aria-label=\"Recipe\">\n            <button type=\"button\" className=\"back\" onClick={() => setOpen(null)}>Close</button>\n            <Note body={open.body ?? \"\"} path={open.path} tags={open.tags} onLink={follow} />\n          </section>\n        )}\n      </div>\n    </main>\n  );\n}\n"
+  "body": "import { useEffect, useRef, useState } from \"react\";\nimport { Days, Empty, Field, List, Note, onOpen, ready, vault } from \"parachute\";\n\ntype Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };\nconst nameOf = (r: Recipe) => r.path.replace(\"Recipes/\", \"\");\nconst when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: \"numeric\", month: \"short\" }) : \"\");\n\nconst CSS = `\nmain { max-width: 1100px; margin: 0 auto; padding: 22px var(--pad); }\nh1 { margin: 0 0 4px; font: 400 calc(var(--size) * 2.4)/1.1 var(--serif); }\n.cols { display: grid; gap: calc(var(--gap) * 2); }\n@media (min-width: 900px) { .cols { grid-template-columns: 2fr 3fr; gap: 64px; } }\n.back { margin: 0 0 10px; padding: 0; border: 0; background: none; color: var(--muted); font: italic var(--size) var(--serif); cursor: pointer; }\n`;\n\nexport default function RecipeCards() {\n  const [recipes, setRecipes] = useState<Recipe[] | null>(null);\n  const [open, setOpen] = useState<Recipe | null>(null);\n  const shown = useRef<HTMLElement>(null);\n  const load = () => vault.queryRecords({ pathPrefix: \"Recipes/\", tag: \"recipe\", includeBody: true }).then((rows: Recipe[]) => setRecipes(rows));\n  useEffect(() => {\n    ready().then(load);\n    return onOpen((o: { note: { id: string } }) => vault.getRecord(o.note.id).then(setOpen));\n  }, []);\n  // a recipe opened (or followed from a link) comes into view: below the list on a phone\n  useEffect(() => { if (open) shown.current?.scrollIntoView({ block: \"start\" }); }, [open]);\n  const add = async (name: string) => {\n    const made: Recipe = await vault.createRecord({ path: `Recipes/${name}`, body: `# ${name}\\n\\n## Ingredients\\n\\n## Steps\\n` });\n    await load();\n    setOpen(await vault.getRecord(made.id));\n  };\n  const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };\n  return (\n    <main>\n      <style>{CSS}</style>\n      <div className=\"cols\">\n        <section>\n          <h1>Recipe cards</h1>\n          <Days times={(recipes ?? []).map((r) => r.updatedAt)} label=\"changed, the last four weeks\" />\n          <Field label=\"New recipe\" placeholder=\"A name\" action=\"Add\" onAction={add} />\n          {recipes === null ? <p>Reading…</p> : recipes.length\n            ? <List label=\"Recipes\" rows={recipes.map((r) => ({ key: r.id, title: nameOf(r), aside: when(r.updatedAt), onPress: () => setOpen(r) }))} />\n            : <Empty>No recipes yet. Add one above, or ask your AI to.</Empty>}\n        </section>\n        {open && (\n          <section aria-label=\"Recipe\" ref={shown}>\n            <button type=\"button\" className=\"back\" onClick={() => setOpen(null)}>Close</button>\n            <Note body={open.body ?? \"\"} path={open.path} tags={open.tags} onLink={follow} />\n          </section>\n        )}\n      </div>\n    </main>\n  );\n}\n"
 }
 ```
 
 The code in `body`, laid out:
 
 ```tsx
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Days, Empty, Field, List, Note, onOpen, ready, vault } from "parachute";
 
 type Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };
@@ -168,11 +168,14 @@ h1 { margin: 0 0 4px; font: 400 calc(var(--size) * 2.4)/1.1 var(--serif); }
 export default function RecipeCards() {
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [open, setOpen] = useState<Recipe | null>(null);
+  const shown = useRef<HTMLElement>(null);
   const load = () => vault.queryRecords({ pathPrefix: "Recipes/", tag: "recipe", includeBody: true }).then((rows: Recipe[]) => setRecipes(rows));
   useEffect(() => {
     ready().then(load);
     return onOpen((o: { note: { id: string } }) => vault.getRecord(o.note.id).then(setOpen));
   }, []);
+  // a recipe opened (or followed from a link) comes into view: below the list on a phone
+  useEffect(() => { if (open) shown.current?.scrollIntoView({ block: "start" }); }, [open]);
   const add = async (name: string) => {
     const made: Recipe = await vault.createRecord({ path: `Recipes/${name}`, body: `# ${name}\n\n## Ingredients\n\n## Steps\n` });
     await load();
@@ -192,7 +195,7 @@ export default function RecipeCards() {
             : <Empty>No recipes yet. Add one above, or ask your AI to.</Empty>}
         </section>
         {open && (
-          <section aria-label="Recipe">
+          <section aria-label="Recipe" ref={shown}>
             <button type="button" className="back" onClick={() => setOpen(null)}>Close</button>
             <Note body={open.body ?? ""} path={open.path} tags={open.tags} onLink={follow} />
           </section>

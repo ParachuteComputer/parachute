@@ -87,7 +87,7 @@ test("the guide's example on the parts: a recipe drawn richly by Note, its links
 });
 
 test("Note keeps a plain note's links inside the applet: a wikilink and a web link go to onLink, and the frame never moves", async ({ page }) => {
-  const body = 'import { Note } from "parachute";\nexport default () => <main><Note body={"# Plain\\n\\nSee [[Rice and beans]] and [the web](https://example.com/x)."} onLink={(t) => { document.body.dataset.link = t; }} /></main>;';
+  const body = 'import { Note } from "parachute";\nexport default () => <main><Note path="Notes/Plan v1.2" body={"# Plain\\n\\nSee [[Rice and beans]] and [the web](https://example.com/x)."} onLink={(t) => { document.body.dataset.link = t; }} /></main>;';
   const args = { ...ARGS, path: "Applets/Plain note", fields: { applet: { ...(ARGS.fields.applet as object), id: "plain-note", name: "Plain note" } }, body };
   await written(args, async () => {
     await openChip(page, /Plain note/);

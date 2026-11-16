@@ -4,7 +4,7 @@
 //
 // A link in it never moves the sealed frame (that would stop the applet): a tap on one goes to `onLink`, with a
 // wikilink's target as written (`[[Green herb rice]]` gives "Green herb rice") or a web link's address.
-import type { MouseEvent } from "react";
+import { useMemo, type MouseEvent } from "react";
 import { NoteRenderer } from "@openparachute/surface-render/note";
 import type { WikilinkResolver } from "@openparachute/surface-render/markdown";
 import "@openparachute/surface-render/styles.css";
@@ -17,16 +17,22 @@ const resolve: WikilinkResolver = (target) => ({ href: WIKI + encodeURIComponent
 /** `tags` and `fields` (the record's) let it draw a typed note richly: a note tagged `recipe` as a recipe. */
 export function Note({ body, path, tags, fields, onLink }: { body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void }) {
   const tap = (href: string) => onLink?.(href.startsWith(WIKI) ? decodeURIComponent(href.slice(WIKI.length)) : href);
+  // the note, made once per change of what it is: a new object each render would redraw a rich note (and end cook mode)
+  const note = useMemo(() => ({ path: path ?? "note.md", content: body, tags: tags ? [...tags] : undefined, metadata: fields }), [body, path, tags, fields]);
   const onClickCapture = (e: MouseEvent) => {
     const a = (e.target as Element | null)?.closest?.("a[href]");
     if (!a) return;
+    const href = a.getAttribute("href") ?? "";
+    // a link within the note (a footnote) scrolls in place: the kit does that, without moving the frame
+    if (href.startsWith("#") && !href.startsWith(WIKI)) return;
     e.preventDefault();
     e.stopPropagation();
-    tap(a.getAttribute("href") ?? "");
+    tap(href);
   };
   return (
-    <div className="pa-note rn-theme-uni" onClickCapture={onClickCapture}>
-      <NoteRenderer note={{ path: path ?? "note.md", content: body, tags: tags ? [...tags] : undefined, metadata: fields }} rich calm resolve={resolve} onNavigate={tap} openLink={tap} />
+    <div className="pa-note rn-theme-uni" onClickCapture={onClickCapture} onAuxClickCapture={(e) => { if ((e.target as Element | null)?.closest?.("a[href]")) e.preventDefault(); }}>
+      {/* markdown whatever the path says (a dot in a title is not an extension); a note with no path is new with each body */}
+      <NoteRenderer key={path ?? body} note={note} format="markdown" rich calm resolve={resolve} onNavigate={tap} openLink={tap} />
     </div>
   );
 }
