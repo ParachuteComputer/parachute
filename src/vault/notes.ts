@@ -18,11 +18,13 @@ export function folderOf(n: Pick<Note, "path">): string {
 export const isCodeNote = (n: { path?: string | null; tags?: readonly string[] | null; extension?: string | null }) =>
   isCodeExtension(n) || (n.tags ?? []).includes("applet");
 
-/** Notes that are the app's own (its settings, frame and theme records, tagged parachute…; the vault's system space,
+/** The tags of the app's own records (homeSettings.ts, frameSource.ts, theme/store.ts). */
+const APP_TAGS = ["parachute-settings", "parachute-frame", "parachute-theme"];
+/** Notes that are the app's own (its settings, frame and theme records, by their tags; the vault's system space,
  *  .parachute/) or an applet's code: never among what the person wrote lately (the launcher, `app.recent`). A person's
  *  own folder named Parachute/ is theirs, and shows. */
 export const isAppOwn = (n: { path?: string | null; tags?: readonly string[] | null; extension?: string | null }) =>
-  isCodeExtension(n) || (n.tags ?? []).some((t) => t === "applet" || t.startsWith("applet/") || t.startsWith("parachute"))
+  isCodeExtension(n) || (n.tags ?? []).some((t) => t === "applet" || t.startsWith("applet/") || APP_TAGS.includes(t))
   || /^\.parachute\//i.test(n.path ?? "");
 
 /** The app's own address for a note in a vault. */

@@ -115,7 +115,8 @@ function doorOf(vaultApi: string, headers: HeadersInit | undefined, f: typeof fe
       const isJson = (r.headers.get("content-type") ?? "").includes("json");
       // no door: a 404 or 405 for the route, or a page that isn't JSON (a proxy's answer for any address)
       const door: Door | null = r.ok && isJson ? "records" : r.status === 404 || r.status === 405 || (r.ok && !isJson) ? "notes" : null;
-      if (door) doors.set(vaultApi, door);
+      // a page reached through a redirect (a sign-in portal) says nothing about this hub for good
+      if (door && !(door === "notes" && r.redirected)) doors.set(vaultApi, door);
       return door;
     } catch { return null; }
   })().finally(() => asking.delete(vaultApi));
