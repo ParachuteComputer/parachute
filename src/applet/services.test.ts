@@ -68,19 +68,19 @@ describe("the card and the key", () => {
   it("says each service, as whom, and where what it reads could go", () => {
     const lines = serviceLines([one<RelayService>(relay({ publish: [9, 7, 5, 20002], private: [{ kind: 30078, d: "read-state:", t: "read-state" }] })), one<HttpService>(http())]).map((l) => l.text);
     expect(lines).toEqual([
-      "Sign in to relay.example as you",
-      "Post as you in your rooms there: messages, reactions and typing",
-      "Delete your messages and reactions there",
-      "Send and open files there as you",
+      "With your everyday key: sign in to relay.example as you",
+      "With your everyday key: post as you in your rooms there: messages, reactions and typing",
+      "With your everyday key: delete your messages and reactions there",
+      "With your everyday key: send and open files there as you",
       "Keep private notes there (read-state:…), sealed to your key: other apps of yours may share them",
       "What it reads here could reach relay.example",
-      "Send requests to mail.example signed as you",
+      "With your everyday key: send requests to mail.example signed as you",
       "What it reads here could reach mail.example",
     ]);
   });
   it("shows a look-alike host as written and as punycode, and a loopback one as on this device", () => {
     expect(serviceLines([one<HttpService>(http({ url: "https://аpple.example/x/", auth: "none" }))])[0].text).toBe("Send requests to аpple.example (xn--pple-43d.example)");
-    expect(serviceLines([one<HttpService>(http({ url: "http://localhost:8452/mail/" }))])[0].text).toBe("Send requests to localhost:8452 on this device signed as you");
+    expect(serviceLines([one<HttpService>(http({ url: "http://localhost:8452/mail/" }))])[0].text).toBe("With your everyday key: send requests to localhost:8452 on this device signed as you");
   });
   it("leaves the keys of applets without services as they were, and asks again for a changed address or kind", async () => {
     const plainKey = await grantKey(grantOf(m, "v", []), "Applets/Rooms");
@@ -91,7 +91,7 @@ describe("the card and the key", () => {
     expect(await grantKey(grantOf(m, "v", [], [], [one(relay({ url: "wss://other.example" }))]), "Applets/Rooms")).not.toBe(a);
     expect(await grantKey(grantOf(m, "v", [], [], [one(relay({ publish: [9, 7, 5] }))]), "Applets/Rooms")).not.toBe(a);
     expect(await grantKey(grantOf(m, "v", [], [], [one(relay({ media: false }))]), "Applets/Rooms")).not.toBe(a);
-    expect(grantLines(grantOf(m, "v", [], [], [one(relay())]), "Applets/").some((l) => l.text === "Sign in to relay.example as you")).toBe(true);
+    expect(grantLines(grantOf(m, "v", [], [], [one(relay())]), "Applets/").some((l) => l.text === "With your everyday key: sign in to relay.example as you")).toBe(true);
   });
 });
 
@@ -139,5 +139,58 @@ describe("the frame's envelope for services", () => {
     expect(parseEnvelope({ uni: 1, id: "k2", ns: "services", method: "upload", params: { service: "rooms", bytes: new ArrayBuffer(1024 * 1024), type: "image/png" } }).kind).toBe("uni");
     expect(parseEnvelope({ uni: 1, id: "k3", ns: "services", method: "upload", params: { service: "rooms", bytes: new ArrayBuffer(26 * 1024 * 1024), type: "image/png" } })).toMatchObject({ kind: "bad", error: "too_large" });
     expect(parseEnvelope({ uni: 1, id: "k4", ns: "vault", method: "x", params: { bytes: new ArrayBuffer(10) } })).toMatchObject({ kind: "bad" });
+  });
+});
+
+describe("the keyring's additions (docs/design/KEYRING.md)", () => {
+  const uni = "b".repeat(64), other = "c".repeat(64);
+  const garden = { id: "3f2a1b2c-0000-4000-8000-000000000001", name: "Garden" };
+  const scoped = () => one<RelayService>(relay({ publish: [9, 7, 40003, 5], rooms: [garden], approvals: { from: [uni] }, notify: { mentions: true, from: [uni] } }));
+  it("reads rooms, approvals, notify and approve, and refuses them malformed", () => {
+    const s = scoped();
+    expect(s.rooms).toEqual([garden]);
+    expect(s.approvals).toEqual({ from: [uni] });
+    expect(s.notify).toEqual({ mentions: true, from: [uni] });
+    expect(one<HttpService>(http({ approve: { field: "op", ops: ["send.approve"] } })).approve).toEqual({ field: "op", ops: ["send.approve"] });
+    for (const bad of [
+      relay({ rooms: [] }), relay({ rooms: [{ id: "a b", name: "x" }] }), relay({ rooms: [garden, garden] }), relay({ rooms: [{ id: "x", name: "a«b" }] }),
+      relay({ approvals: { from: [] } }), relay({ approvals: { from: ["npub1x"] } }), relay({ approvals: { from: [uni], extra: 1 } }), relay({ approvals: { from: [uni, uni] } }),
+      relay({ notify: {} }), relay({ notify: { mentions: "yes" } }), relay({ notify: { from: Array(5).fill(0).map((_, i) => String(i).repeat(64)) } }),
+      http({ approve: { path: "op", ops: ["send.approve"] } }), http({ auth: "none", approve: { field: "op", ops: ["x"] } }), http({ approve: { field: "op", ops: [] } }),
+    ]) expect(parse([bad]).ok, JSON.stringify(bad)).toBe(false);
+  });
+  it("names each key on the card, the approvals line apart and in words, approvers by the device's list", () => {
+    const lines = serviceLines([scoped()], { approvalSame: true, approverName: (h) => (h === uni ? "Uni" : null) }).map((l) => l.text);
+    expect(lines).toContain("With your everyday key: post as you only in «Garden» (3f2a1b2c…), named by the applet there: messages, reactions and edits of your messages");
+    expect(lines).toContain("High risk. With your approval key: answer approval cards and secret requests there from Uni (your approval key is your everyday key for now). Powerful ones ask for your device unlock");
+    expect(lines).toContain("Tell you about messages only in «Garden» (3f2a1b2c…), named by the applet there that name you, and every message from Uni, even when Parachute is closed");
+    const unknown = serviceLines([one<RelayService>(relay({ approvals: { from: [other] } }))]).map((l) => l.text).join("\n");
+    expect(unknown).toMatch(/from a key you haven't trusted on this device \(npub1/);
+    expect(serviceLines([one<HttpService>(http({ approve: { field: "op", ops: ["send.approve"] } }))]).map((l) => l.text)).toContain("High risk. With your approval key: send send.approve requests to mail.example");
+  });
+  it("keeps the keys of grants made before, and asks again for any change to rooms, approvers, notify or approve", async () => {
+    const m = (() => { const r = parseManifest({ contract: 2, id: "rooms", name: "Rooms", access: [{ vault: "here", allow: [{ path: "Rooms/", verbs: ["read"] }] }] }); if (!r.ok) throw new Error(r.error); return r.manifest; })();
+    const k = (x: Record<string, unknown>) => grantKey(grantOf(m, "v", [], [], [one(relay(x))]), "Applets/Rooms");
+    const base = await k({});
+    const variants = [{ rooms: [garden] }, { rooms: [{ ...garden, name: "Finance" }] }, { approvals: { from: [uni] } }, { approvals: { from: [other] } }, { notify: { mentions: true } }, { notify: { mentions: true, from: [uni] } }];
+    const keys = await Promise.all(variants.map(k));
+    expect(new Set([base, ...keys]).size).toBe(variants.length + 1);
+    const hk = (x: Record<string, unknown>) => grantKey(grantOf(m, "v", [], [], [one(http(x))]), "Applets/Rooms");
+    expect(await hk({})).not.toBe(await hk({ approve: { field: "op", ops: ["send.approve"] } }));
+  });
+  it("keeps a scoped applet's filters and posts inside its rooms", () => {
+    const s = scoped();
+    const id = "a".repeat(64);
+    expect(checkFilters([{ kinds: [9], "#h": [garden.id] }], s.rooms).ok).toBe(true);
+    expect(checkFilters([{ kinds: [39000], "#d": [garden.id] }], s.rooms).ok).toBe(true);
+    expect(checkFilters([{ kinds: [0], authors: [id] }], s.rooms).ok).toBe(true);
+    for (const f of [{ kinds: [9] }, { kinds: [9], "#h": ["other"] }, { kinds: [9], "#h": [garden.id, "other"] }, { kinds: [9], "#h": [garden.id], search: "x" }, { ids: [id] }, { authors: [id] },
+      { kinds: [9, 0], authors: [id] }, { kinds: [39002], "#p": [id] }, { kinds: [9], "#d": [garden.id] }, { kinds: [39000], "#d": ["other"] }])
+      expect(checkFilters([f], s.rooms).ok, JSON.stringify(f)).toBe(false);
+    expect(checkPublish(s, { kind: 9, content: "hi", tags: [["h", garden.id]] }).ok).toBe(true);
+    expect(checkPublish(s, { kind: 9, content: "hi", tags: [["h", "other"]] }).ok).toBe(false);
+    expect(checkPublish(s, { kind: 9, content: "hi", tags: [] }).ok).toBe(false);
+    expect(checkPublish(s, { kind: 9, content: "hi", tags: [["h", garden.id], ["h", "other"]] }).ok).toBe(false);
+    expect(checkPublish(s, { kind: 7, content: "+", tags: [["e", id], ["h", garden.id]] }).ok).toBe(true);
   });
 });

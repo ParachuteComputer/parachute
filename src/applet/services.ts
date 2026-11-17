@@ -7,21 +7,32 @@
 //     - { id: rooms, kind: nostr-relay, url: wss://relay.example, publish: [9, 7], media: true,
 //         private: [{ kind: 30078, d: "read-state:", t: read-state }] }
 //     - { id: mail, kind: http, url: https://mail.example/mail/, auth: nip98 }
+import { npubEncode } from "nostr-tools/nip19";
 import { hasHidden, hasOnly, plain } from "./contract.ts";
 
 export const SERVICE_KINDS = ["nostr-relay", "http"] as const;
 export const HTTP_AUTHS = ["none", "nip98", "token"] as const;
 export type HttpAuth = (typeof HTTP_AUTHS)[number];
 export type PrivateEntry = { kind: 30078; d: string; t: string };
-export type RelayService = { id: string; kind: "nostr-relay"; url: string; publish: number[]; media: boolean; private: PrivateEntry[] };
-export type HttpService = { id: string; kind: "http"; url: string; auth: HttpAuth };
+/** A room a relay service is limited to (docs/design/KEYRING.md): its NIP-29 id, which is enforced, and the applet's
+ *  name for it, which the card shows quoted as the applet's own word. */
+export type Room = { id: string; name: string };
+/** Answer cards and secret requests from these keys (hex), with the approval key. */
+export type Approvals = { from: string[] };
+/** Notifications while Parachute is closed: messages that name you, and every message from these keys (hex). */
+export type Notify = { mentions: boolean; from: string[] };
+export type RelayService = { id: string; kind: "nostr-relay"; url: string; publish: number[]; media: boolean; private: PrivateEntry[]; rooms?: Room[]; approvals?: Approvals; notify?: Notify };
+/** A request whose JSON body's `field` is one of `ops` is signed with the approval key, and only with it; the everyday
+ *  key signs only a JSON body whose `field` is a string not in `ops` (docs/design/KEYRING.md). */
+export type Approve = { field: string; ops: string[] };
+export type HttpService = { id: string; kind: "http"; url: string; auth: HttpAuth; approve?: Approve };
 export type Service = RelayService | HttpService;
 
 /** The kinds an applet may ask the shell to sign, each with the words its card uses. Any other is refused. */
 export const NAMED_KINDS: Record<number, string> = { 9: "messages", 7: "reactions", 40003: "edits of your messages", 5: "deletions", 20002: "typing" };
 /** Tags an applet's event may not carry: they are what sign-ins and signed requests are made of. */
 export const AUTH_TAGS = ["u", "method", "payload", "challenge", "relay", "server", "expiration"];
-export const LIMITS = { services: 6, id: 40, url: 300, publish: 16, private: 2, prefix: 40, word: 40, filters: 10, subs: 100, filterValues: 100, history: 500, tags: 100, content: 64 * 1024, bytes: 25 * 1024 * 1024 };
+export const LIMITS = { rooms: 12, roomName: 40, trusted: 4, ops: 4, services: 6, id: 40, url: 300, publish: 16, private: 2, prefix: 40, word: 40, filters: 10, subs: 100, filterValues: 100, history: 500, tags: 100, content: 64 * 1024, bytes: 25 * 1024 * 1024 };
 
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const LOOPBACK = ["localhost", "127.0.0.1", "[::1]"];
@@ -56,12 +67,33 @@ export function originOf(s: Pick<Service, "kind" | "url">): string {
 }
 export const hostLine = (s: Pick<Service, "kind" | "url">) => new URL(originOf(s)).host;
 
+const HEX_KEY = /^[0-9a-f]{64}$/;
+/** A short list of public keys (64 lowercase hex), each once. */
+function hexKeys(x: unknown, min: number): string[] | null {
+  if (!Array.isArray(x) || x.length < min || x.length > LIMITS.trusted || new Set(x).size !== x.length || !x.every((k) => typeof k === "string" && HEX_KEY.test(k))) return null;
+  return [...x].sort();
+}
+/** A room id as Buzz names one (NIP-29 group id: a UUID, or letters, digits, - and _). */
+export const ROOM_ID = /^[A-Za-z0-9_-]{1,64}$/;
+function parseRooms(x: unknown): Parsed<Room[]> {
+  if (x === undefined) return { ok: true, value: [] };
+  if (!Array.isArray(x) || !x.length || x.length > LIMITS.rooms) return fail(`rooms is a list of 1 to ${LIMITS.rooms}`);
+  const out: Room[] = [];
+  for (const r of x) {
+    if (!plain(r) || !hasOnly(r, ["id", "name"]) || typeof r.id !== "string" || !ROOM_ID.test(r.id)) return fail("a room is {id, name}: its id as the relay names it");
+    if (typeof r.name !== "string" || !r.name.trim() || [...r.name].length > LIMITS.roomName || hasHidden(r.name) || /[\n\t«»]/.test(r.name)) return fail("a room's name is one short line");
+    if (out.some((o) => o.id === r.id)) return fail("rooms names a room twice");
+    out.push({ id: r.id, name: r.name.trim() });
+  }
+  return { ok: true, value: out.sort((a, b) => a.id.localeCompare(b.id)) };
+}
+
 function parseOne(x: unknown, isHub: (origin: string) => boolean): Parsed<Service> {
   if (!plain(x)) return fail("each service is an object");
   const id = typeof x.id === "string" && x.id.length <= LIMITS.id && ID.test(x.id) ? x.id : null;
   if (!id) return fail("a service's id is short kebab-case");
   if (x.kind === "nostr-relay") {
-    if (!hasOnly(x, ["id", "kind", "url", "publish", "media", "private"])) return fail(`${id}: a relay is {id, kind, url, publish?, media?, private?}`);
+    if (!hasOnly(x, ["id", "kind", "url", "publish", "media", "private", "rooms", "approvals", "notify"])) return fail(`${id}: a relay is {id, kind, url, publish?, media?, private?, rooms?, approvals?, notify?}`);
     const u = normalUrl(x.url, ["wss", "ws"], false);
     if (!u.ok) return fail(`${id}: ${u.error}`);
     const publish = x.publish === undefined ? [] : x.publish;
@@ -79,17 +111,44 @@ function parseOne(x: unknown, isHub: (origin: string) => boolean): Parsed<Servic
       if (entries.some((e) => d.startsWith(e.d) || e.d.startsWith(d))) return fail(`${id}: two private entries overlap`);
       entries.push({ kind: 30078, d, t: p.t as string });
     }
-    const s: RelayService = { id, kind: "nostr-relay", url: u.value.href.replace(/\/$/, ""), publish: [...publish].sort((a, b) => a - b), media: x.media === true, private: entries };
+    const rooms = parseRooms(x.rooms);
+    if (!rooms.ok) return fail(`${id}: ${rooms.error}`);
+    let approvals: Approvals | undefined;
+    if (x.approvals !== undefined) {
+      if (!plain(x.approvals) || !hasOnly(x.approvals, ["from"])) return fail(`${id}: approvals is {from: [keys]}`);
+      const from = hexKeys(x.approvals.from, 1);
+      if (!from) return fail(`${id}: approvals.from is a list of 1 to ${LIMITS.trusted} public keys (hex)`);
+      approvals = { from };
+    }
+    let notify: Notify | undefined;
+    if (x.notify !== undefined) {
+      if (!plain(x.notify) || !hasOnly(x.notify, ["mentions", "from"])) return fail(`${id}: notify is {mentions?, from?}`);
+      if (x.notify.mentions !== undefined && typeof x.notify.mentions !== "boolean") return fail(`${id}: notify.mentions is true or false`);
+      const from = x.notify.from === undefined ? [] : hexKeys(x.notify.from, 0);
+      if (!from) return fail(`${id}: notify.from is a list of at most ${LIMITS.trusted} public keys (hex)`);
+      if (x.notify.mentions !== true && !from.length) return fail(`${id}: notify says what to tell you about: mentions, or from`);
+      notify = { mentions: x.notify.mentions === true, from };
+    }
+    const s: RelayService = { id, kind: "nostr-relay", url: u.value.href.replace(/\/$/, ""), publish: [...publish].sort((a, b) => a - b), media: x.media === true, private: entries,
+      ...(rooms.value.length ? { rooms: rooms.value } : {}), ...(approvals ? { approvals } : {}), ...(notify ? { notify } : {}) };
     if (isHub(originOf(s))) return fail(`${id}: that address is a Parachute hub, which no applet reaches as a service`);
     return { ok: true, value: s };
   }
   if (x.kind === "http") {
-    if (!hasOnly(x, ["id", "kind", "url", "auth"])) return fail(`${id}: an http service is {id, kind, url, auth?}`);
+    if (!hasOnly(x, ["id", "kind", "url", "auth", "approve"])) return fail(`${id}: an http service is {id, kind, url, auth?, approve?}`);
     const u = normalUrl(x.url, ["https", "http"], true);
     if (!u.ok) return fail(`${id}: ${u.error}`);
     const auth = x.auth === undefined ? "none" : x.auth;
     if (typeof auth !== "string" || !(HTTP_AUTHS as readonly string[]).includes(auth)) return fail(`${id}: auth is ${HTTP_AUTHS.join(", ")}`);
-    const s: HttpService = { id, kind: "http", url: u.value.href, auth: auth as HttpAuth };
+    let approve: Approve | undefined;
+    if (x.approve !== undefined) {
+      if (auth !== "nip98") return fail(`${id}: approve needs auth nip98 (the approval key signs those requests)`);
+      const a = x.approve;
+      if (!plain(a) || !hasOnly(a, ["field", "ops"]) || typeof a.field !== "string" || !/^[a-z][a-zA-Z0-9_]{0,39}$/.test(a.field)) return fail(`${id}: approve is {field, ops}: the JSON body's field that names the op`);
+      if (!Array.isArray(a.ops) || !a.ops.length || a.ops.length > LIMITS.ops || new Set(a.ops).size !== a.ops.length || !a.ops.every((o) => typeof o === "string" && /^[a-z][a-z0-9._-]{0,39}$/.test(o))) return fail(`${id}: approve.ops is a short list of op names`);
+      approve = { field: a.field, ops: [...a.ops].sort() };
+    }
+    const s: HttpService = { id, kind: "http", url: u.value.href, auth: auth as HttpAuth, ...(approve ? { approve } : {}) };
     if (isHub(originOf(s))) return fail(`${id}: that address is a Parachute hub, which no applet reaches as a service`);
     return { ok: true, value: s };
   }
@@ -123,40 +182,88 @@ export function hostWords(s: Pick<Service, "kind" | "url">): string {
   return (shown === host ? host : `${shown} (${host})`) + here;
 }
 
-export function serviceLines(services: readonly Service[]): { text: string; stress: boolean }[] {
+/** "npub1…" for a hex key, in full: the card shows exactly whom it trusts. */
+export const npubOf = (hex: string): string => { try { return npubEncode(hex); } catch { return hex; } };
+const shortId = (id: string) => (id.length > 12 ? `${id.slice(0, 8)}…` : id);
+/** Where in a relay it may act: its rooms, or only the ones it names (each quoted as the applet's word, with its id). */
+export const roomsWords = (s: RelayService) => (s.rooms?.length
+  ? `only in ${joinWords(s.rooms.map((r) => `«${r.name}» (${shortId(r.id)})`))}, named by the applet`
+  : "in your rooms");
+
+export type LineOptions = {
+  /** The approval key is the everyday key for now (no separate one on this device). */
+  approvalSame?: boolean;
+  /** The trusted list's name for a key ("Uni"), or null when it isn't on the list (docs/design/KEYRING.md). */
+  approverName?: (hex: string) => string | null;
+};
+export const EVERYDAY = "With your everyday key: ";
+export const APPROVAL = "High risk. With your approval key: ";
+
+export function serviceLines(services: readonly Service[], opts: LineOptions = {}): { text: string; stress: boolean }[] {
   const out: { text: string; stress: boolean }[] = [];
+  const same = opts.approvalSame ? " (your approval key is your everyday key for now)" : "";
+  const who = (hex: string) => opts.approverName?.(hex) ?? `a key you haven't trusted on this device (${npubOf(hex)})`;
   for (const s of services) {
     const at = hostWords(s);
     if (s.kind === "nostr-relay") {
-      out.push({ text: `Sign in to ${at} as you`, stress: true });
+      out.push({ text: `${EVERYDAY}sign in to ${at} as you`, stress: true });
       const posts = [9, 7, 40003, 20002].filter((k) => s.publish.includes(k)).map((k) => NAMED_KINDS[k]);
-      if (posts.length) out.push({ text: `Post as you in your rooms there: ${joinWords(posts)}`, stress: true });
-      if (s.publish.includes(5)) out.push({ text: "Delete your messages and reactions there", stress: true });
-      if (s.media) out.push({ text: "Send and open files there as you", stress: true });
+      if (posts.length) out.push({ text: `${EVERYDAY}post as you ${roomsWords(s)} there: ${joinWords(posts)}`, stress: true });
+      if (s.publish.includes(5)) out.push({ text: `${EVERYDAY}delete your messages and reactions there${s.rooms?.length ? `, ${roomsWords(s)}` : ""}`, stress: true });
+      if (s.rooms?.length) out.push({ text: `It reads only those rooms there${s.media || s.private.length ? "; files and private notes there aren't limited to them" : ""}`, stress: false });
+      if (s.media) out.push({ text: `${EVERYDAY}send and open files there as you`, stress: true });
       for (const p of s.private) out.push({ text: `Keep private notes there (${p.d}…), sealed to your key: other apps of yours may share them`, stress: false });
+      if (s.approvals) {
+        out.push({ text: `${APPROVAL}answer approval cards and secret requests there from ${joinWords(s.approvals.from.map(who))}${same}. Powerful ones ask for your device unlock`, stress: true });
+        out.push({ text: "It sees what each card asks (the job, never a key), and that could reach the servers it uses", stress: false });
+      }
+      if (s.notify) {
+        const what = [s.notify.mentions ? "that name you" : "", s.notify.from.length ? `from ${joinWords(s.notify.from.map(who))}` : ""].filter(Boolean).join(", and every message ");
+        out.push({ text: `Tell you about messages ${roomsWords(s)} there ${what}, even when Parachute is closed`, stress: false });
+      }
     } else {
-      out.push(s.auth === "nip98" ? { text: `Send requests to ${at} signed as you`, stress: true }
+      out.push(s.auth === "nip98" ? { text: `${EVERYDAY}send requests to ${at} signed as you`, stress: true }
         : s.auth === "token" ? { text: `Use a token you give it for ${at}`, stress: true }
         : { text: `Send requests to ${at}`, stress: false });
+      if (s.approve) out.push({ text: `${APPROVAL}send ${joinWords(s.approve.ops)} requests to ${at}${same}`, stress: true });
     }
     out.push({ text: `What it reads here could reach ${at}`, stress: true });
   }
   return out;
 }
 
-/** The services as the grant's key holds them: everything that changes what it reaches, in a fixed order. */
+/** The services as the grant's key holds them: everything that changes what it reaches, in a fixed order. The fields
+ *  added for the keyring are there only when declared, so the key of a grant made before them holds. */
 export const servicesKeyPart = (services: readonly Service[]) =>
   services.map((s) => (s.kind === "nostr-relay"
-    ? { id: s.id, kind: s.kind, url: s.url, publish: [...s.publish].sort((a, b) => a - b), media: s.media, private: s.private.map((p) => `${p.kind}/${p.d}/${p.t}`).sort() }
-    : { id: s.id, kind: s.kind, url: s.url, auth: s.auth })).sort((a, b) => a.id.localeCompare(b.id));
+    ? { id: s.id, kind: s.kind, url: s.url, publish: [...s.publish].sort((a, b) => a - b), media: s.media, private: s.private.map((p) => `${p.kind}/${p.d}/${p.t}`).sort(),
+        ...(s.rooms?.length ? { rooms: s.rooms.map((r) => `${r.id}/${r.name}`).sort() } : {}),
+        ...(s.approvals ? { approvals: [...s.approvals.from].sort() } : {}),
+        ...(s.notify ? { notify: { mentions: s.notify.mentions, from: [...s.notify.from].sort() } } : {}) }
+    : { id: s.id, kind: s.kind, url: s.url, auth: s.auth, ...(s.approve ? { approve: { field: s.approve.field, ops: [...s.approve.ops].sort() } } : {}) })).sort((a, b) => a.id.localeCompare(b.id));
 
 // ── the checks on each call ──
 
 const FILTER_KEYS = ["ids", "authors", "kinds", "since", "until", "limit", "search"];
 const strList = (x: unknown, max: number) => Array.isArray(x) && x.length <= LIMITS.filterValues && x.every((v) => typeof v === "string" && v.length > 0 && v.length <= max);
 
-/** A relay subscription's filters: NIP-01 keys only (and one-letter tag keys), short lists, history capped. */
-export function checkFilters(raw: unknown): Parsed<Record<string, unknown>[]> {
+/** Room metadata (NIP-29: group, admins, members, roles), read by `#d`. */
+const ROOM_META = [39000, 39001, 39002, 39003];
+/** Is this filter inside a relay service's rooms? Every one must name rooms by `#h` within the list; or read their
+ *  metadata (only room-metadata kinds, `#d` within the list); or read profiles (kind 0 only, by `authors`). */
+export function inRooms(f: Record<string, unknown>, rooms: readonly Room[]): boolean {
+  const ids = new Set(rooms.map((r) => r.id));
+  const within = (v: unknown) => Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && ids.has(x));
+  const kinds = f.kinds as number[] | undefined;
+  if (f["#h"] !== undefined) return within(f["#h"]) && f.search === undefined;
+  if (f["#d"] !== undefined) return within(f["#d"]) && !!kinds?.length && kinds.every((k) => ROOM_META.includes(k)) && f.search === undefined && f.ids === undefined;
+  return !!kinds?.length && kinds.every((k) => k === 0) && Array.isArray(f.authors) && f.authors.length > 0 && f.search === undefined && f.ids === undefined
+    && Object.keys(f).every((k) => ["kinds", "authors", "limit", "since", "until"].includes(k));
+}
+
+/** A relay subscription's filters: NIP-01 keys only (and one-letter tag keys), short lists, history capped; with
+ *  `rooms`, each inside them. */
+export function checkFilters(raw: unknown, rooms?: readonly Room[]): Parsed<Record<string, unknown>[]> {
   if (!Array.isArray(raw) || !raw.length || raw.length > LIMITS.filters) return fail(`filters are a list of 1 to ${LIMITS.filters}`);
   const out: Record<string, unknown>[] = [];
   for (const f of raw) {
@@ -170,6 +277,7 @@ export function checkFilters(raw: unknown): Parsed<Record<string, unknown>[]> {
       if (k === "limit" && !(Number.isInteger(v) && (v as number) >= 0 && (v as number) <= LIMITS.history)) return fail(`limit is at most ${LIMITS.history}`);
       if (k === "search" && !(typeof v === "string" && v.length <= 200)) return fail("search is a short line");
     }
+    if (rooms?.length && !inRooms(f, rooms)) return fail("it may read only its rooms there");
     out.push({ ...f });
   }
   return { ok: true, value: out };
@@ -193,6 +301,11 @@ export function checkPublish(s: RelayService, raw: unknown): Parsed<Template> {
     if (t[0] === "e" && !/^[0-9a-f]{64}$/.test(t[1] ?? "")) return fail("an e tag names an event id");
   }
   if (kind === 5 && !tags.some((t) => t[0] === "e")) return fail("a deletion names the events it deletes");
+  if (s.rooms?.length) {
+    // exactly one room, one of its own: Buzz files an event by its h tag
+    const hs = tags.filter((t) => t[0] === "h");
+    if (hs.length !== 1 || !s.rooms.some((r) => r.id === hs[0][1])) return fail("it may post only in its rooms there");
+  }
   return { ok: true, value: { kind: kind as number, content, tags: tags.map((t) => [...t]) } };
 }
 

@@ -115,7 +115,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
     subscribe(p: { service: string; sub?: string; filters?: unknown; subs?: { sub: string; filters: unknown }[] }) {
       const s = relayOf(p.service);
       const list = p.subs ?? [{ sub: p.sub!, filters: p.filters }];
-      const checked = list.map((x) => { const f = checkFilters(x.filters); if (!f.ok) throw new BrokerError("bad_params", f.error); return { sub: x.sub, filters: f.value }; });
+      const checked = list.map((x) => { const f = checkFilters(x.filters, s.rooms); if (!f.ok) throw new BrokerError("bad_params", f.error); return { sub: x.sub, filters: f.value }; });
       const c = conn(s);
       // one sent again (the kit retries a request that timed out) replaces itself: only new ones count
       if (c.subscriptions + checked.filter((x) => !c.has(`a:${x.sub}`)).length > LIMITS.subs) throw new BrokerError("failed", `at most ${LIMITS.subs} subscriptions`);
@@ -148,8 +148,8 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
 
     async query(p: { service: string; filters: unknown }) {
       const s = relayOf(p.service);
-      const f = checkFilters(p.filters);
-      if (!f.ok) throw new BrokerError("bad_params", f.error);
+      const f = checkFilters(p.filters, s.rooms);
+      if (!f.ok) throw new BrokerError(s.rooms?.length ? "out_of_scope" : "bad_params", f.error);
       return queryOnce(s, f.value);
     },
 
@@ -158,6 +158,16 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       const t = checkPublish(s, p.event);
       if (!t.ok) throw new BrokerError("out_of_scope", t.error);
       const me = (await opened).pubkey;
+      if (s.rooms?.length && [7, 40003, 5].includes(t.value.kind)) {
+        // a reaction, edit or deletion acts on an event: it must be in one of its rooms (read from the relay, as signed)
+        const ids = t.value.tags.filter((x) => x[0] === "e").map((x) => x[1]);
+        const found = ids.length ? await queryOnce(s, [{ ids }], ids.length) : [];
+        for (const id of ids) {
+          const e = found.find((x) => x.id === id);
+          const room = e?.tags.find((x) => x[0] === "h")?.[1];
+          if (!e || !verifyEvent(e as Parameters<typeof verifyEvent>[0]) || !room || !s.rooms.some((r) => r.id === room)) throw new BrokerError("out_of_scope", "it may act only on events in its rooms");
+        }
+      }
       if (t.value.kind === 5) {
         // a deletion only of the person's own events, of a kind this applet may publish, read from the relay first
         const ids = t.value.tags.filter((x) => x[0] === "e").map((x) => x[1]);
