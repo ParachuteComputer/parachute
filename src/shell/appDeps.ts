@@ -10,11 +10,13 @@ import { barNow } from "./homeSettings";
 /** Notes that are the app's own or an applet's code: never in a list of what the person wrote lately. */
 const own = (n: Note) => isAppOwn(n as Note & { extension?: string });
 
-/** A tap in the applet now: live user activation in the shell's window, with the focus in an applet's frame. */
-const tappingInApplet = () => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true
-  && document.activeElement instanceof HTMLIFrameElement && document.activeElement.classList.contains("applet-frame");
+/** A tap in this applet now: live user activation in the shell's window, with the focus in this applet's own frame (not
+ *  any frame: an embed's, or another applet's, docs/design/EMBED.md). */
+const tappingIn = (frame: () => HTMLIFrameElement | null) => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true
+  && !!frame() && document.activeElement === frame();
 
-export function appDeps(go: (href: string) => void): AppDeps {
+export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameElement | null): AppDeps {
+  const tappingInApplet = () => tappingIn(frame);
   return {
     async recent(limit, charge) {
       const vaults = listVaults();

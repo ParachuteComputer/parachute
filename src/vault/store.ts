@@ -74,6 +74,9 @@ export const findVault = (key: string | undefined) => listVaults().find((r) => r
 /** The vault a web address names: its hub and its name, among the vaults this device holds. */
 export const vaultAt = (issuer: string, vault: string) => listVaults().find((r) => r.issuer === issuer && r.vault === vault) ?? null;
 
+/** Tell everyone who follows the vaults that something about them changed (whose one is, vault/whose.ts). */
+export function touchVaults() { cache = null; listeners.forEach((f) => f()); }
+
 export function subscribeVaults(cb: () => void): () => void {
   listeners.add(cb);
   const onStorage = (e: StorageEvent) => { if (!e.key || e.key === VAULTS_KEY) { cache = null; cb(); } };

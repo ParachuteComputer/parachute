@@ -84,9 +84,13 @@ export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Re
  * network, inside a host whose own CSP allows only `frame-src about:`. Its
  * only door is the contract session.
  */
-export default function AppletFrame({ html, title, router, grant, ready, onSession }: { html: string; title: string; router: Router; grant: Resolved; ready: unknown; /** The live session (null when it ends): the host's way to push events such as `open`. */ onSession?: (s: Session | null) => void }) {
+export default function AppletFrame({ html, title, router, grant, ready, onSession, onElement }: { html: string; title: string; router: Router; grant: Resolved; ready: unknown; /** The live session (null when it ends): the host's way to push events such as `open`. */ onSession?: (s: Session | null) => void;
+  /** This frame's element, for the shell to tell a tap in it from a tap anywhere else. */ onElement?: (el: HTMLIFrameElement | null) => void }) {
   const srcDoc = useMemo(() => frameSrcDoc(html), [html]);
   const { frame, stopped, onLoad, srcDoc: liveDoc } = useSealedFrame({ srcDoc, router, grant, ready, stopOnViolation: true, onSession });
+  const onElementRef = useRef(onElement);
+  onElementRef.current = onElement;
+  const ref = useCallback((el: HTMLIFrameElement | null) => { frame.current = el; onElementRef.current?.(el); }, [frame]);
   if (stopped) return <p className="applet-stopped error" role="alert">{STOPPED_MESSAGE}</p>;
-  return <iframe ref={frame} className="applet-frame" title={title} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={liveDoc} onLoad={onLoad} />;
+  return <iframe ref={ref} className="applet-frame" title={title} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={liveDoc} onLoad={onLoad} />;
 }

@@ -16,13 +16,14 @@ import defaultSource from "../frame/default-frame.tsx?raw";
 import { codeHash, codeKindOf, prepare, TRANSPILER } from "../applet/code";
 import { gateNow, selfTestRunning, subscribeGate } from "../applet/selftest/run";
 import { clientFor } from "../vault/client";
+import { isMine, HOME_KEY } from "../vault/whose";
 import { listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
 import { choose, type Approved, type Choice, type Kept, type Mode, type Read } from "./frameChoice";
 export type { Choice, Kept, Read };
 
 export const FRAME_TAG = "parachute-frame";
 export const FRAME_PATH = "Parachute/Frame";
-export const HOME_KEY = "parachute.home.v1";
+export { HOME_KEY } from "../vault/whose";
 export const FRAMES_KEY = "parachute.frames.v1";
 export const DEFAULT_FRAME_SOURCE = defaultSource;
 export const defaultFrameHash = (): Promise<string> => codeHash("tsx", DEFAULT_FRAME_SOURCE);
@@ -33,11 +34,13 @@ const storage = () => (typeof localStorage === "undefined" ? null : localStorage
 function readJson<T>(key: string, fallback: T): T { try { const v: unknown = JSON.parse(storage()?.getItem(key) ?? "null"); return v && typeof v === "object" ? (v as T) : fallback; } catch { return fallback; } }
 const writeJson = (key: string, v: unknown) => { try { storage()?.setItem(key, JSON.stringify(v)); } catch { /* this session only */ } };
 
-/** The home vault: the person's choice if this device still holds it, else the first vault it signed in to. */
+/** The home vault, always one that is the person's own (vault/whose.ts): their choice if this device still holds it and
+ *  it is theirs, else the first vault they signed in to that is theirs. Someone else's vault is never the home. */
 export function homeVault(list: readonly VaultRecord[] = listVaults()): VaultRecord | null {
   let chosen: string | null = null;
   try { chosen = storage()?.getItem(HOME_KEY) ?? null; } catch { chosen = null; }
-  return list.find((v) => v.key === chosen) ?? [...list].sort((a, b) => a.addedAt.localeCompare(b.addedAt))[0] ?? null;
+  const mine = list.filter(isMine);
+  return mine.find((v) => v.key === chosen) ?? [...mine].sort((a, b) => a.addedAt.localeCompare(b.addedAt))[0] ?? null;
 }
 
 // ── the store ──

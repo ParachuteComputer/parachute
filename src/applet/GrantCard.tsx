@@ -13,8 +13,16 @@ export type Runs = "sealed" | "approved-code";
 
 const day = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
 
-export default function GrantCard({ name, glyph, vault, runs, lines, fingerprint, expires, codeChanged, onAllow, onNotNow }: {
+/** The heading when the code changed since it was brought into the person's Parachute (a pointer's pin). */
+export const broughtChangedLine = (vault: string, name: string) => `${vault} changed «${name}» since you brought it in. Only the version you allow runs.`;
+export const ASKS_OTHER_LINE = "It now asks for something else than what you allowed.";
+
+export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, lines, fingerprint, expires, codeChanged, broughtChanged = false, asksOther = false, onAllow, onNotNow }: {
   name: string; glyph: string; vault: string; runs: Runs; lines: CardLine[]; fingerprint: string; expires: Date; codeChanged: boolean;
+  /** whose the vault is (vault/whose.ts), and its hub's host: someone else's is said so */
+  whose?: "mine" | "theirs" | "trusted"; host?: string;
+  /** the code differs from what a pointer brought in; or a grant was here and what it asks changed */
+  broughtChanged?: boolean; asksOther?: boolean;
   onAllow: () => void; onNotNow: () => void;
 }) {
   const tap = (f: () => void) => (e: MouseEvent) => { if (e.isTrusted) f(); };
@@ -24,12 +32,15 @@ export default function GrantCard({ name, glyph, vault, runs, lines, fingerprint
         <span className="grant-glyph" aria-hidden="true">{glyph}</span>
         <h2>An applet asks for access</h2>
       </header>
-      {codeChanged && <p className="grant-changed" role="status"><strong>{runs === "approved-code" ? CODE_CHANGED_LINE : CODE_CHANGED_SEALED_LINE}</strong></p>}
-      <p>The applet <q className="grant-name" data-untrusted="true">{name}</q> (a name from its note, not verified) would run in a sealed frame. In the <strong>{vault}</strong> vault it would:</p>
+      {broughtChanged ? <p className="grant-changed" role="status"><strong>{broughtChangedLine(vault, name)}</strong></p>
+        : codeChanged ? <p className="grant-changed" role="status"><strong>{runs === "approved-code" ? CODE_CHANGED_LINE : CODE_CHANGED_SEALED_LINE}</strong></p>
+        : asksOther ? <p className="grant-changed" role="status"><strong>{ASKS_OTHER_LINE}</strong></p> : null}
+      <p>The applet <q className="grant-name" data-untrusted="true">{name}</q> (a name from its note, not verified) would run in a sealed frame. In the <strong>{vault}</strong> vault{whose !== "mine" ? <> (someone else's{host ? `, at ${host}` : ""})</> : null} it would:</p>
       {lines.length ? <ul className="grant-lines">{lines.map((l, i) => <li key={i} className={l.stress ? "grant-stress" : undefined}>{l.text}</li>)}</ul> : <p className="quiet">Nothing outside itself.</p>}
       <p className="grant-rest">{runs === "approved-code"
         ? <><strong>{APPROVED_CODE_LINE}</strong> It can't delete notes or change notes anywhere else.</>
-        : <><strong>Nothing else.</strong> It can't delete notes, change notes anywhere else, or reach the internet.</>}</p>
+        : <><strong>Nothing else.</strong> It can't delete notes, change notes anywhere else, or reach the internet.</>}
+        {whose !== "mine" && <> It acts as you in {vault}, with your sign-in there. It sees nothing in your own vaults.</>}</p>
       <p className="grant-meta quiet">Lasts until {day.format(expires)}, or until you revoke it · Grant <code>{fingerprint}</code></p>
       <div className="grant-actions">
         <button type="button" className="quiet-button" onClick={tap(onNotNow)}>Not now</button>

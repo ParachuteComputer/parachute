@@ -15,6 +15,7 @@ import ThemeSettings from "./ThemeSettings";
 import { forgetApplets } from "../applet/useApplets";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import KeySettings from "../key/KeySettings";
+import { AskWhose, WhoseLine } from "./Whose";
 
 /** Signing out of a vault ends what its applets were allowed on this device too. */
 const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (const s of g.subjects()) if (s.startsWith(subjectOf(key, ""))) g.revoke(s); };
@@ -27,10 +28,11 @@ export default function Settings({ children }: { children?: ReactNode }) {
       <Bar title="Settings" back={true} onBack={backOrLauncher} />
       <section className="card" aria-labelledby="s-vaults">
         <h2 id="s-vaults">Vaults</h2>
+        <AskWhose vaults={vaults} />
         {vaults.length ? <ul className="plain">
           {vaults.map((v) => (
             <li key={v.key} className="line">
-              <span><strong>{v.vault}</strong> <span className="quiet">on {hostOf(v.issuer)}</span></span>
+              <span><strong>{v.vault}</strong> <span className="quiet">on {hostOf(v.issuer)}</span> <WhoseLine v={v} /></span>
               <button type="button" className="quiet-button" onClick={() => { removeVault(v.key); dropClient(v.key); forgetApplets(v.key); revokeVaultGrants(v.key); clearDefaults(v.key); forgetVaultFrame(v.key); forgetVaultStart(v.key); forgetVaultSettings(v.key); forgetVaultTheme(v.key); void revoke(v); }}>Sign out</button>
             </li>
           ))}

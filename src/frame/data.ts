@@ -3,7 +3,7 @@
 // shell says it changed.
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Note } from "@openparachute/surface-client";
-import type { FrameApplets, FrameHome, FrameVault, Query } from "../bridge/protocol";
+import type { FrameApplets, FrameHome, FramePointer, FrameVault, Query } from "../bridge/protocol";
 import { call, on } from "./bridge";
 
 function store<T>(read: () => Promise<T>, initial: T) {
@@ -100,3 +100,12 @@ export const useHome = (): FrameHome => useSyncExternalStore(home.subscribe, hom
 export const pinApplet = (vault: string, noteId: string, on: boolean) => call("home.pin", { vault, noteId, on }).then(() => home.load());
 /** Make an applet the home, or none (during a tap only). */
 export const startApplet = (vault: string, noteId: string | null) => call("home.start", { vault, noteId }).then(() => home.load());
+
+// ── what the home vault brings in from other Parachutes (docs/design/EMBED.md) ──
+
+const pointers = store<FramePointer[]>(() => call("pointers.list", {}), []);
+on("changed", ({ what }) => { if (what === "pointers" || what === "vaults" || what === "applets") void pointers.load(); });
+/** The home vault's pointers, as the shell finds them on this device. */
+export const usePointers = (): FramePointer[] => useSyncExternalStore(pointers.subscribe, pointers.get);
+/** Bring an applet of someone else's vault into the home vault (during a tap only). */
+export const bringIn = (vault: string, noteId: string) => call("home.bringIn", { vault, noteId }).then(() => pointers.load());

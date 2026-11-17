@@ -36,7 +36,7 @@ describe("a pointer", () => {
     [{ ...P, hub: "javascript:alert(1)" }], [{ ...P, hub: "https://u:p@techne.example" }], [{ ...P, hub: "https://techne.example/vault/techne" }],
     [{ ...P, kind: "frame" }], [{ ...P, code: "tsx:abc" }], [{ ...P, extra: 1 }], [{ ...P, name: "Ev​ents" }],
   ])("refuses %#", (raw) => expect(parsePointer(raw).ok).toBe(false));
-  it("is written under Parachute/From/<vault>/", () => expect(pointerPath("techne", "Events / soon")).toBe("Parachute/From/techne/Events - soon"));
+  it("is written under Parachute/From/<host>/<vault>/<kind>-<id>", () => expect(pointerPath("localhost:8080", "techne", "component", "events")).toBe("Parachute/From/localhost-8080/techne/component-events"));
 });
 
 describe("imports", () => {

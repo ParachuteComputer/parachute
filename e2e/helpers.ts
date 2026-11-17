@@ -7,6 +7,7 @@ export async function signIn(page: Page, vault = VAULT) {
   const hub = hubState();
   await page.goto("/");
   await page.getByLabel("Vault address").fill(`${hub.origin}/vault/${vault}`);
+  await page.getByRole("radio", { name: "Mine" }).check();
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((u) => u.origin === hub.origin);
   // a new registration is pending until the hub's owner approves it: the hub asks them to sign in first
@@ -36,6 +37,7 @@ export async function signInWithKey(page: Page, hub: { origin: string }, vault: 
   await page.context().addCookies(cookies.map((c) => ({ ...c, url: hub.origin })));
   await page.goto("/add");
   await page.getByLabel("Vault address").fill(`${hub.origin}/vault/${vault}`);
+  await page.getByRole("radio", { name: /Someone else's/ }).check();
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((u) => u.origin === hub.origin);
   const approve = page.getByRole("button", { name: "Approve" });

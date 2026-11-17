@@ -47,5 +47,6 @@ export function parsePointer(raw: unknown): PointerParse {
   return { ok: true, pointer: { hub, vault: raw.vault, record: raw.record, kind: raw.kind as PointerKind, id: raw.id, name, code: raw.code } };
 }
 
-/** Where the app writes a pointer: under Parachute/From/<vault>/, by its name (a few characters kept out of paths). */
-export const pointerPath = (vault: string, name: string) => `${POINTER_FOLDER}${vault}/${name.replace(/[/\\#?%]/g, "-").trim() || "untitled"}`;
+/** Where the app writes a pointer: Parachute/From/<host>/<vault>/<kind>-<id>. Ids are kebab-case and unique per kind in a
+ *  vault, and the host keeps two hubs' vaults of one name apart. */
+export const pointerPath = (host: string, vault: string, kind: PointerKind, id: string) => `${POINTER_FOLDER}${host.replace(/[^A-Za-z0-9.-]/g, "-")}/${vault}/${kind}-${id}`;

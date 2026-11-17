@@ -16,6 +16,7 @@ import { appletsNow, refreshApplets, subscribeApplets } from "../applet/useApple
 import { plain, stripExt } from "../applet/contract";
 import { clientFor } from "../vault/client";
 import { listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
+import { isMine } from "../vault/whose";
 import { homeVault } from "./frameSource";
 
 export const SETTINGS_TAG = "parachute-settings";
@@ -247,6 +248,9 @@ export async function pinApplet(vault: string, noteId: string, on: boolean): Pro
 }
 /** Make one of this device's applets the home, or none. */
 export async function startApplet(vault: string, noteId: string | null): Promise<void> {
+  // the home applet is in a vault of the person's own: someone else's code never opens by itself (docs/design/EMBED.md)
+  const rec = listVaults().find((v) => v.key === vault);
+  if (noteId !== null && (!rec || !isMine(rec))) throw new Error("Only an applet in a vault of yours can open on start.");
   const p = noteId === null ? null : await appletPlace(vault, noteId);
   return changeSettings((r) => ({ ...r, start: p }));
 }

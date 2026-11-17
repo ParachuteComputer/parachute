@@ -9,7 +9,10 @@ import { carryMark, clearMark, markTap } from "../open/mark";
 import { clientFor } from "../vault/client";
 import { messageOf } from "../vault/hooks";
 import { inShell } from "../vault/oauth";
-import { confirmLinkOut } from "./frameSource";
+import { confirmLinkOut, homeVault } from "./frameSource";
+import { bringIn, readPointers } from "../applet/pointers";
+import { isMine, whoseOf } from "../vault/whose";
+import type { FramePointer } from "../bridge/protocol";
 import { listVaults, type VaultRecord } from "../vault/store";
 import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
@@ -23,6 +26,7 @@ import { chooseStart, forgetStart } from "./start";
 export const homeNow = () => { const b = barNow(); return { start: b.start ? { vault: b.start.vault, noteId: b.start.noteId } : null, bar: b.pins.map((p) => ({ vault: p.vault, noteId: p.noteId })) }; };
 const homeDeps = (from: "built-in" | "vault"): HostDeps["home"] => ({
   get: homeNow,
+  bringIn: (vault, noteId) => bringAppletIn(vault, noteId),
   pin: (vault, noteId, on) => pinApplet(vault, noteId, on),
   start: async (vault, noteId) => {
     await startApplet(vault, noteId);
@@ -43,6 +47,43 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
     entries: e.found.entries.map((a) => ({ noteId: a.noteId, path: a.path, vault: a.vault, opens: a.opens, status: status(a),
       manifest: { id: a.manifest.id, name: a.manifest.name, glyph: a.manifest.glyph, ...(a.manifest.note ? { note: a.manifest.note } : {}), screens: a.manifest.screens } })),
   };
+}
+
+// ── other Parachutes in the person's own (docs/design/EMBED.md) ──
+
+const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
+/** This device's vault for a pointer's hub and vault, if it holds it. */
+const heldFor = (hub: string, vault: string) => listVaults().find((v) => originOf(v.issuer) === hub && v.vault === vault) ?? null;
+
+/** Bring an applet of someone else's vault in: a pointer in the home vault, pinned to its code as read now. */
+async function bringAppletIn(vault: string, noteId: string): Promise<void> {
+  const rec = listVaults().find((v) => v.key === vault);
+  if (!rec) throw new Error("This device doesn't hold that vault.");
+  if (isMine(rec)) throw new Error("It's in a vault of yours already.");
+  await refreshApplets(rec);
+  const a = appletsNow(rec.key);
+  const e = a?.state === "ok" ? a.found.entries.find((x) => x.noteId === noteId) : undefined;
+  if (!e) throw new Error("That isn't an applet this vault has.");
+  await bringIn(rec, noteId, { kind: "applet", id: e.manifest.id, name: e.manifest.name, code: e.keys.html });
+}
+
+/** The home vault's pointers, each found on this device. */
+async function pointers(): Promise<FramePointer[]> {
+  await whenGateKnown();
+  const list = await readPointers().catch(() => []);
+  const mode = gateNow();
+  return Promise.all(list.map(async ({ noteId, pointer: p }) => {
+    let host = p.hub;
+    try { host = new URL(p.hub).host; } catch { /* as written */ }
+    const base: FramePointer = { noteId, kind: p.kind, id: p.id, name: p.name, from: { vault: p.vault, host }, record: p.record, at: null };
+    const rec = heldFor(p.hub, p.vault);
+    if (!rec) return base;
+    if (p.kind !== "applet") return { ...base, at: rec.key };
+    if (appletsNow(rec.key)?.state !== "ok") await refreshApplets(rec);
+    const a = appletsNow(rec.key);
+    const e = a?.state === "ok" ? a.found.entries.find((x) => x.noteId === p.record) : undefined;
+    return e ? { ...base, at: rec.key, glyph: e.manifest.glyph, status: statusOf(rec.key, mode)(e), changed: e.keys.html !== p.code } : { ...base, at: rec.key };
+  }));
 }
 
 /** A choice the frame may store: the vault view or one of the vault's applets as last read, for a tag-like type, and
@@ -87,6 +128,9 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
     applets,
     defaults: { get: defaultsFor, set: setChoice },
     home: homeDeps(from),
+    pointers,
+    whose: whoseOf,
+    homeKey: () => homeVault()?.key ?? null,
     go,
     here: () => location.pathname,
     // one step back, or the launcher on the first entry (a start, a link from outside): never out of the app from a screen's Back

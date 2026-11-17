@@ -7,6 +7,8 @@
 // Otherwise the applet's screen shows its card, or waits, stopped, with Open; that tap is the choice.
 import { gateNow, whenGateKnown } from "../applet/selftest/run";
 import { barNow, readSettings } from "./homeSettings";
+import { listVaults } from "../vault/store";
+import { isMine } from "../vault/whose";
 
 export const START_KEY = "parachute.start.v1";
 /** How long the app waits for the settings note before it decides from the copy it kept. */
@@ -41,7 +43,9 @@ export async function startPlace(): Promise<{ href: string; go(): void } | null>
   await Promise.race([Promise.all([readSettings(), whenGateKnown()]), new Promise((r) => setTimeout(r, START_WAIT_MS))]);
   if (gateNow() === "closed") return null;
   const s = barNow().start;
-  if (!s) return null;
+  // a home in someone else's vault (an agent can write the settings note) never opens by itself
+  const rec = s ? listVaults().find((v) => v.key === s.vault) : null;
+  if (!s || !rec || !isMine(rec)) return null;
   const a: Arrival = { path: s.href, chosen: startChosenHere(s.vault, s.noteId), vault: s.vault, noteId: s.noteId };
   return { href: s.href, go: () => { arrival = a; } };
 }

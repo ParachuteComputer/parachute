@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useHold } from "../../ui/hold";
 import { Link } from "react-router";
 import type { Note } from "@openparachute/surface-client";
-import type { FrameApplet, FrameVault } from "../../bridge/protocol";
-import { pinApplet, readerFor, startApplet, useApplets, useHome, useVaultQuery, useVaults } from "../data";
+import type { FrameApplet, FramePointer, FrameVault } from "../../bridge/protocol";
+import { bringIn, pinApplet, readerFor, startApplet, useApplets, useHome, usePointers, useVaultQuery, useVaults } from "../data";
 import { isAppOwn, noteHref, titleOf } from "../../vault/notes";
 import { Days, Empty } from "../../kit/parts";
 import { appletPath } from "../../open/paths";
@@ -86,7 +86,7 @@ export default function Launcher() {
         <Days times={all.map(updated)} label="the last four weeks" />
       </header>
       <div className={vaults.length > 1 ? "launcher-spread launcher-pages" : "launcher-spread"}>
-        {vaults.map((v, i) => <Chapter key={v.key} n={i} v={v} recent={recent[v.key]} onHold={(a) => setAsked({ v, a })} />)}
+        {vaults.map((v, i) => <Chapter key={v.key} n={i} v={v} many={vaults.length > 1} recent={recent[v.key]} onHold={(a) => setAsked({ v, a })} />)}
       </div>
       <p className="launcher-foot"><Link to="/add">Add a vault</Link><Link to="/settings">Settings</Link></p>
       {asked && <AppletSheet v={asked.v} a={asked.a} onClose={() => setAsked(null)} />}
@@ -94,21 +94,35 @@ export default function Launcher() {
   );
 }
 
-function Chapter({ n, v, recent, onHold }: { n: number; v: FrameVault; recent: Note[] | undefined; onHold: (a: FrameApplet) => void }) {
+/** Whose a chapter is, under its name: the home, or someone else's (and where). The person's other vaults need no word. */
+export function whoseLine(v: FrameVault, many: boolean): string | null {
+  if (v.home) return many ? "your home" : null;
+  if (v.whose === "trusted") return `someone else's, trusted · at ${v.host}`;
+  if (v.whose === "theirs") return `someone else's · at ${v.host}`;
+  return null;
+}
+
+function Chapter({ n, v, many, recent, onHold }: { n: number; v: FrameVault; many: boolean; recent: Note[] | undefined; onHold: (a: FrameApplet) => void }) {
   const applets = useApplets(v.key);
   const home = useHome();
+  const pointers = usePointers();
   const shown = applets?.ok ? applets.entries : [];
+  const whose = whoseLine(v, many);
+  // what the home brings in from other Parachutes sits among its own applets
+  const brought = v.home ? pointers.filter((p) => p.kind === "applet") : [];
   return (
-    <section className="chapter" aria-label={v.vault}>
+    <section className={v.whose && v.whose !== "mine" ? "chapter chapter-theirs" : "chapter"} aria-label={v.vault}>
       <h2><span className="chapter-n" aria-hidden="true">{ROMAN[n] ?? n + 1}</span><span className="chapter-name">{v.vault}</span><Link to={`/v/${encodeURIComponent(v.key)}`}>Open the vault</Link></h2>
+      {whose && <p className="chapter-whose">{whose}</p>}
       <ol className="entries" aria-label={`Applets in ${v.vault}`}>
         {shown.map((a) => {
           const isHome = home.start?.vault === v.key && home.start.noteId === a.noteId;
           const pinned = home.bar.some((p) => p.vault === v.key && p.noteId === a.noteId);
           return <Entry key={a.noteId} v={v} a={a} home={isHome} pinned={pinned} onHold={() => onHold(a)} />;
         })}
+        {brought.map((p) => <Brought key={p.noteId} p={p} />)}
         {applets && !applets.ok && <li className="entry-quiet">Its applets couldn't be read.</li>}
-        {applets?.ok && !shown.length && <li className="entry-quiet">No applets here yet.</li>}
+        {applets?.ok && !shown.length && !brought.length && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
       {!!recent?.length && (
         <>
@@ -144,6 +158,21 @@ function Entry({ v, a, home, pinned, onHold }: { v: FrameVault; a: FrameApplet; 
   );
 }
 
+/** An applet brought in from someone else's Parachute (a pointer in the home vault): it opens where it lives, and says
+ *  where that is. Its own screen checks the pin and asks before anything runs. */
+function Brought({ p }: { p: FramePointer }) {
+  const line = !p.at ? `from ${p.from.vault} · this device isn't signed in there` : p.changed ? `from ${p.from.vault} · changed since you brought it in` : `from ${p.from.vault} · at ${p.from.host}`;
+  return (
+    <li>
+      <Link className="entry entry-brought" to={p.at ? appletPath(p.at, p.record) : "/add"}>
+        <span className="entry-glyph" aria-hidden="true">{p.glyph ?? "◇"}{"\uFE0E"}</span>
+        <span className="entry-name">{p.name}</span>
+        <span className="entry-life">{line}</span>
+      </Link>
+    </li>
+  );
+}
+
 /** Pin to the bar, and open on start: each a tap here, which the shell writes into the person's settings note. */
 function AppletSheet({ v, a, onClose }: { v: FrameVault; a: FrameApplet; onClose: () => void }) {
   const home = useHome();
@@ -151,6 +180,9 @@ function AppletSheet({ v, a, onClose }: { v: FrameVault; a: FrameApplet; onClose
   const [error, setError] = useState("");
   const isHome = home.start?.vault === v.key && home.start.noteId === a.noteId;
   const pinned = home.bar.some((p) => p.vault === v.key && p.noteId === a.noteId);
+  const pointers = usePointers();
+  const theirs = !!v.whose && v.whose !== "mine";
+  const isBrought = pointers.some((p) => p.kind === "applet" && p.at === v.key && p.record === a.noteId);
   const act = (f: () => Promise<unknown>) => () => {
     if (busy) return;
     setBusy(true); setError("");
@@ -163,7 +195,9 @@ function AppletSheet({ v, a, onClose }: { v: FrameVault; a: FrameApplet; onClose
         <h2><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> {a.manifest.name} <span className="quiet">in {v.vault}</span></h2>
         <ul className="plain sheet-list">
           {!isHome && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => pinApplet(v.key, a.noteId, !pinned))}>{pinned ? "Unpin from the bar" : "Pin to the bar"}</button></li>}
-          <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => startApplet(v.key, isHome ? null : a.noteId))}>{isHome ? "Don't open on start" : "Open on start"}</button></li>
+          {!theirs && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => startApplet(v.key, isHome ? null : a.noteId))}>{isHome ? "Don't open on start" : "Open on start"}</button></li>}
+          {theirs && !isBrought && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => bringIn(v.key, a.noteId))}>Bring into my Parachute</button></li>}
+          {theirs && isBrought && <li className="quiet sheet-note">Brought into your Parachute.</li>}
         </ul>
         {error && <p className="error" role="alert">{error}</p>}
         <div className="grant-actions"><button type="button" className="quiet-button" onClick={onClose}>Cancel</button></div>

@@ -14,8 +14,16 @@ import type { Opens } from "../applet/opens.ts";
 
 export const PF = 1;
 
-/** A vault as the frame sees it: no token, no client id, nothing to sign in with. */
-export type FrameVault = { key: string; vault: string; host: string; issuer: string };
+/** A vault as the frame sees it: no token, no client id, nothing to sign in with. `whose` (vault/whose.ts): mine,
+ *  someone else's, or someone else's that the person trusts; `home`: the person's home vault. */
+export type FrameVault = { key: string; vault: string; host: string; issuer: string; whose?: "mine" | "theirs" | "trusted"; home?: boolean };
+/** A pointer in the home vault (docs/design/EMBED.md): what it brings in, from where, and whether this device holds that
+ *  vault (`at`: this device's key for it) and the record's status there. `changed`: its code differs from the pin. */
+export type FramePointer = {
+  noteId: string; kind: "applet" | "component"; id: string; name: string;
+  from: { vault: string; host: string }; record: string;
+  at: string | null; glyph?: string; status?: "ok" | "updated" | "none" | "off"; changed?: boolean;
+};
 /** An applet as open-with needs it, with its status on this device, judged by the shell. */
 export type FrameApplet = {
   noteId: string; path: string; vault: string; opens: Opens[];
@@ -50,6 +58,10 @@ export type Calls = {
   "home.pin": [{ vault: string; noteId: string; on: boolean }, null];
   /** Make an applet the home (it opens on start), or none (`noteId` null); only during a tap. */
   "home.start": [{ vault: string; noteId: string | null }, null];
+  /** The home vault's pointers, each resolved on this device. */
+  "pointers.list": [Record<string, never>, FramePointer[]];
+  /** Bring an applet of someone else's vault into the person's own: a pointer in the home vault; only during a tap. */
+  "home.bringIn": [{ vault: string; noteId: string }, null];
   /** Go to an address in the app. `carryFrom`: the address a tap led to, which the app now sends on to `to`. */
   "nav.go": [{ to: string; replace?: boolean; carryFrom?: string }, null];
   "nav.back": [Record<string, never>, null];
@@ -63,9 +75,9 @@ export type Calls = {
 export type Method = keyof Calls;
 export type Params<M extends Method> = Calls[M][0];
 export type Result<M extends Method> = Calls[M][1];
-export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "home.get", "home.pin", "home.start", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
+export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "home.get", "home.pin", "home.start", "pointers.list", "home.bringIn", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
 
-export type Events = { location: FrameLocation; changed: { what: "vaults" | "applets" | "defaults" | "home" }; /** the look's tokens (src/theme), each a CSS variable --<key> */ theme: Record<string, string> };
+export type Events = { location: FrameLocation; changed: { what: "vaults" | "applets" | "defaults" | "home" | "pointers" }; /** the look's tokens (src/theme), each a CSS variable --<key> */ theme: Record<string, string> };
 
 export type Request = { pf: 1; id: string; method: Method; params: unknown };
 export type Reply = { pf: 1; id: string; result: unknown } | { pf: 1; id: string; error: string };
@@ -92,7 +104,8 @@ export function parseRequest(data: unknown): { id: string; method: Method; param
 
 function paramsOk(m: Method, p: Record<string, unknown>): boolean {
   switch (m) {
-    case "vaults.list": case "nav.back": case "home.get": return only(p, []);
+    case "vaults.list": case "nav.back": case "home.get": case "pointers.list": return only(p, []);
+    case "home.bringIn": return only(p, ["vault", "noteId"]) && str(p.vault, 120) && str(p.noteId);
     case "home.pin": return only(p, ["vault", "noteId", "on"]) && str(p.vault, 120) && str(p.noteId) && typeof p.on === "boolean";
     case "home.start": return only(p, ["vault", "noteId"]) && str(p.vault, 120) && (p.noteId === null || str(p.noteId));
     case "vault.note": return only(p, ["vault", "id"]) && str(p.vault, 120) && str(p.id);
