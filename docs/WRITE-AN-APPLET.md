@@ -14,6 +14,7 @@ the Parachute app reads the record, shows the person what it asks for, and runs 
 | `fields.applet` | The manifest: what it is and what it may do (below). |
 | `fields.opens` | Optional: which kind of note opens in it when the person taps one. |
 | `fields.app` | Optional: what it asks of the app beyond its vault: any of `recent`, `pins`, `open` (below). Anything else is ignored, and the applet then asks nothing of the app. |
+| `fields.services` | Optional: the servers it talks to, through the app (below). |
 | `body` | The code: one self-contained file. |
 
 ### The manifest (`fields.applet`)
@@ -50,6 +51,31 @@ repaired. A rule can't reach `.parachute/`. No applet can change a code note (HT
 The folder must be one it may read, and not `Applets/` or `.parachute/`. `applet`, `view`, `capture`, `component` and
 anything starting with `parachute` can't be claimed.
 
+### Its servers (`fields.services`)
+
+An applet has no network of its own. It can still talk to a server (rooms on a Nostr relay, mail behind a gateway) by
+naming it here: the app talks to it for the applet, and signs as the person where the server asks for it. The applet
+never holds the person's key or a password. The card says each server, what the app will sign there, and that what the
+applet reads could reach it; a new server, a changed address or a new kind asks again.
+
+```yaml
+services:
+  - id: rooms                       # what the code calls it
+    kind: nostr-relay
+    url: wss://relay.example
+    publish: [9, 7, 40003, 5, 20002]   # messages, reactions, edits, deletions of your own, typing: nothing else
+    media: true                     # files on the relay's media server
+    private: [{ kind: 30078, d: "read-state:", t: read-state }]   # notes sealed to your key, under that prefix
+  - id: mail
+    kind: http
+    url: https://mail.example/mail/ # an https origin and a path prefix; requests stay under it
+    auth: nip98                     # none | nip98 (each request signed as you) | token (one you give the app)
+```
+
+A Parachute hub is never a server here (the app refuses it), and an applet in someone else's vault reaches none. The
+rules, and why, are in [design/SERVICES.md](design/SERVICES.md). Two applets that do it: `applets/rooms.tsx` and
+`applets/mail.tsx` in this repository.
+
 ## The code
 
 For `tsx` or `jsx`: one module. Its **default export is a React component** (a function, or what `memo` returns), and
@@ -80,6 +106,10 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
 | `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above), while they tap inside the applet. Resolves to whether it went. |
 | `props()`, `onProps(cb)` | In a component a page embeds: the plain data the page hands it (also its React props), and each change after. Empty in an applet. |
+| `services.fetch(id, path, { method, headers, body, as })` | With `services`: a request to that server, under its url. `as`: `text`, `json` or `bytes`. Resolves `{ status, headers, body }`. |
+| `services.relay(id)` | With `services`: the relay. `.subscribe(filters, onEvents, onEose?)` (returns a function that stops it; one room per subscription on a Buzz relay), `.query(filters)`, `.publish({ kind, content, tags })` (resolves `{ ok, id, message, event }`), `.loadPrivate(prefix)`, `.savePrivate(d, text)`, `.onStatus(cb)`. |
+| `services.upload(id, bytes, type)`, `services.media(id, sha256, ext)` | With `media`: a file up (the server's descriptor) or down (`{ bytes, type }`, for a `blob:` address an `<img>`, `<audio>` or `<video>` plays). |
+| `services.me()` | Who the app signs as: `{ pubkey }`. |
 | `theme.get()`, `theme.now()`, `theme.on(cb)` | The app's look, which the person can change ([THEME.md](THEME.md)): `get` asks for it, `now` gives the last one sent (or null), `on` calls back now and at each change and returns a function that stops it. Beside the values below, it says `scheme` (`light` or `dark`) and `density`. Every value is also a CSS variable: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. |
 
 A call outside what it was allowed fails with `out_of_scope` or `not_granted`. It never reaches anything else.
@@ -98,6 +128,7 @@ Its own frame, its own card, its own vault; or, from a vault you trust, imported
 - **Check who a message is from.** The kit only reads messages from the app. An HTML applet that listens for
   `message` events itself must check `event.source === parent`: on a page with embeds, other frames can post to it.
 - **Never ask for a key or a password.** Parachute never does inside a page, and the person is told so.
+- **No `<form>` submits.** The sealed frame has no `allow-forms`, so a submit does nothing: use a button's `onClick`.
 
 ### The parts (`import { … } from "parachute"`, TSX and JSX only)
 

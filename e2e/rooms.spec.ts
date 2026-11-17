@@ -108,6 +108,19 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     await app.getByRole("button", { name: "Send message" }).click(); // on a phone Enter is a new line
     await expect(log.locator("article.mine", { hasText: `the beds ${stamp}` }).getByRole("img", { name: "beds.png" })).toBeVisible({ timeout: 20_000 });
 
+    const bedsEv = (await bob.query({ kinds: [9], "#h": [g], authors: [alice], limit: 50 })).find((e) => e.content.includes(`the beds ${stamp}`));
+    expect(bedsEv?.tags.some((t) => t[0] === "imeta")).toBe(true);
+    // she edits her picture's line, then deletes it: bob sees both
+    const beds = log.locator("article.mine", { hasText: `the beds ${stamp}` });
+    await beds.getByRole("button", { name: "Edit" }).click();
+    await app.getByLabel("Edit your message").fill(`the raised beds ${stamp}`);
+    await app.getByRole("button", { name: "Save" }).click();
+    const raised = log.locator("article.mine", { hasText: `the raised beds ${stamp}` });
+    await expect(raised).toContainText("(edited)");
+    await raised.getByRole("button", { name: "Delete" }).click();
+    await raised.getByRole("button", { name: "Tap again to delete" }).click();
+    await expect(log.locator("article", { hasText: `the raised beds ${stamp}` })).toHaveCount(0);
+
     // what bob sees, on the relay: each signed by alice, shaped as the Uni app shapes it
     const seen = [...await bob.query({ kinds: [9], "#h": [g], authors: [alice], limit: 50 }), ...await bob.query({ kinds: [7], authors: [alice], limit: 20 })];
     const answer = seen.find((e) => e.tags.some((t) => t[0] === "q" && t[1] === ask.ev.id));
@@ -118,7 +131,9 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     expect(thanks?.tags).toContainEqual(["p", bob.pubkey]);
     expect(seen.find((e) => e.content.includes(`In the thread ${stamp}`))?.tags.some((t) => t[0] === "e" && t[3] === "root")).toBe(true);
     expect(seen.some((e) => e.kind === 7 && e.content === "👍")).toBe(true);
-    expect(seen.find((e) => e.content.includes(`the beds ${stamp}`))?.tags.some((t) => t[0] === "imeta")).toBe(true);
+    const later = await bob.query({ kinds: [40003, 5], authors: [alice], "#e": [bedsEv!.id] });
+    expect(later.find((e) => e.kind === 40003)?.content).toBe(`the raised beds ${stamp}`);
+    expect(later.some((e) => e.kind === 5)).toBe(true);
 
     // unread: back on the list, bob writes naming her; the row says so
     await app.getByRole("button", { name: "← Rooms" }).click();

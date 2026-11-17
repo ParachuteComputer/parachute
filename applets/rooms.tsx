@@ -497,6 +497,12 @@ function RoomView({ st, relay, view, setView, markRead, names }: { st: Store; re
     if (r.ok) { st.add(r.event); st.bump(); } else setErr(`Not sent: ${r.message}`);
   };
 
+  /** Your own message: a new text (an edit, kind 40003) or gone (a deletion, kind 5). */
+  const change = async (e: Ev, text: string | null) => {
+    const r = text === null ? await relay.publish({ kind: 5, content: "", tags: [["e", e.id], ["h", view.id]] }) : await relay.publish({ kind: 40003, content: text, tags: [["h", view.id], ["e", e.id]] });
+    if (r.ok) { st.add(r.event); st.bump(); } else setErr(`Not changed: ${r.message}`);
+    return r.ok;
+  };
   let lastDay = "", prev: Ev | null = null, newShown = false;
   return <>
     <div className="top">
@@ -512,7 +518,7 @@ function RoomView({ st, relay, view, setView, markRead, names }: { st: Store; re
         lastDay = day; prev = e;
         const mark = !thread && !newShown && firstUnread.current && e.created_at > firstUnread.current && e.pubkey !== s.me ? (newShown = true, <p className="new" key={`n${e.id}`}>New</p>) : null;
         return [sep, mark, <Message key={e.id} st={st} e={e} grouped={!!grouped} root={thread === e.id} replies={thread ? 0 : replies.get(e.id)?.length ?? 0}
-          openThread={() => setView({ at: "thread", id: view.id, root: e.id })} answer={answer} answeredBy={answered.get(e.id)} settled={settled.has(e.id)} react={react} send={send} />];
+          openThread={() => setView({ at: "thread", id: view.id, root: e.id })} answer={answer} answeredBy={answered.get(e.id)} settled={settled.has(e.id)} react={react} send={send} change={change} />];
       })}
       {thread && shown.length <= 1 && <p className="day">No replies yet</p>}
     </div>
@@ -521,8 +527,10 @@ function RoomView({ st, relay, view, setView, markRead, names }: { st: Store; re
   </>;
 }
 
-function Message({ st, e, grouped, root, replies, openThread, answer, answeredBy, settled, react, send }: { st: Store; e: Ev; grouped: boolean; root: boolean; replies: number; openThread: () => void;
-  answer: (ask: Ev, a: "pick" | "did" | "seen" | "later", pick?: { id: string; label: string }) => void; answeredBy?: Ev; settled: boolean; react: (e: Ev, emoji: string) => void; send: (c: string) => Promise<boolean> }) {
+function Message({ st, e, grouped, root, replies, openThread, answer, answeredBy, settled, react, send, change }: { st: Store; e: Ev; grouped: boolean; root: boolean; replies: number; openThread: () => void;
+  answer: (ask: Ev, a: "pick" | "did" | "seen" | "later", pick?: { id: string; label: string }) => void; answeredBy?: Ev; settled: boolean; react: (e: Ev, emoji: string) => void; send: (c: string) => Promise<boolean>; change: (e: Ev, text: string | null) => Promise<boolean> }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [sure, setSure] = useState(false);
   const s = st.s;
   const mine = e.pubkey === s.me;
   const text = textOf(s, e);
@@ -539,7 +547,11 @@ function Message({ st, e, grouped, root, replies, openThread, answer, answeredBy
   const names = [...s.names.values()];
   return <article className={`msg${grouped ? " grouped" : ""}${mine ? " mine" : ""}${named ? " me-named" : ""}${root ? " root" : ""}`} data-id={e.id} aria-label={`${mine ? "You" : nameOf(s, e.pubkey)}, ${TIME.format(new Date(e.created_at * 1000))}`}>
     {!grouped && <div><span className="who">{mine ? "You" : nameOf(s, e.pubkey)}</span><span className="when">{TIME.format(new Date(e.created_at * 1000))}</span></div>}
-    {body && !ask && !prompt && <div className="body"><Markdown text={body} names={names} />{s.edits.get(e.id)?.pubkey === e.pubkey && <span className="edited" title="Edited by the author">(edited)</span>}</div>}
+    {editing !== null ? <div className="body editing">
+      <textarea aria-label="Edit your message" value={editing} onChange={(x) => setEditing(x.target.value)} rows={3} style={{ width: "100%", font: "inherit" }} />
+      <div className="acts"><button className="chip" onClick={async () => { if (editing.trim() && await change(e, editing)) setEditing(null); }}>Save</button><button className="chip quiet" onClick={() => setEditing(null)}>Cancel</button></div>
+    </div>
+      : body && !ask && !prompt && <div className="body"><Markdown text={body} names={names} />{s.edits.get(e.id)?.pubkey === e.pubkey && <span className="edited" title="Edited by the author">(edited)</span>}</div>}
     {ask && <AskCard e={e} ask={ask} answeredBy={answeredBy} mine={mine} answer={answer} />}
     {prompt && <PromptCard p={prompt} settled={settled} send={send} />}
     {sealed && <div className="card ended"><p>Uni asks for your OK on a card. Answer it in the Uni app: cards that approve are kept to an app screen, never an applet.</p></div>}
@@ -548,6 +560,8 @@ function Message({ st, e, grouped, root, replies, openThread, answer, answeredBy
       {[...reacts].map(([k, v]) => <button key={k} className={`chip${v.mine ? " mine" : ""}`} aria-label={`${k} ${v.n}${v.mine ? ", including yours" : ""}`} onClick={() => react(e, k)}>{k} {v.n}</button>)}
       {!mine && ["👍", "❤️", "✓"].filter((k) => !reacts.get(k)?.mine).map((k) => <button key={`r${k}`} className="chip quiet" aria-label={`React ${k}`} onClick={() => react(e, k)}>{k}</button>)}
       {!root && <button className="thread-link" onClick={openThread}>{replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : "Reply"}</button>}
+      {mine && !ask && editing === null && <button className="thread-link" onClick={() => setEditing(body)}>Edit</button>}
+      {mine && <button className="thread-link" onClick={async () => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } await change(e, null); }}>{sure ? "Tap again to delete" : "Delete"}</button>}
     </div>
   </article>;
 }
