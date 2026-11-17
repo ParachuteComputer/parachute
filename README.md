@@ -1,6 +1,30 @@
 # Parachute
 
-One app for your vaults and the applets that grow on them.
+One app for your vaults and the applets that grow on them. Early: version 0.1.0, a pre-release
+([what works and what doesn't](RELEASE-NOTES.md)).
+
+## Install and sign in
+
+You need a vault on a Parachute hub (its address looks like `https://your-hub/vault/name`) and a Nostr key, or a new
+one.
+
+1. **Get the app** from the [releases page](https://github.com/ParachuteComputer/parachute/releases):
+   - **Android** (8 or newer, 64-bit ARM): download the `.apk` on the phone and open it.
+   - **Mac** (Apple Silicon): the `.dmg`. It isn't notarised, so macOS asks once:
+     [docs/INSTALL-MAC.md](docs/INSTALL-MAC.md). The newest build of `next` is in the
+     [Mac workflow's](https://github.com/ParachuteComputer/parachute/actions/workflows/mac.yml) artifacts.
+2. **Your key.** On the first screen, **Pair from a device that has your key**: in the Uni app, Settings →
+   **Pair a device**, then scan its QR code (Android) or paste its `nostrpair://` link (Mac), and check the 6-digit
+   codes match. Or **Make a new key**.
+3. **Your hub knows your key.** The hub's owner links it once: `parachute auth link-pubkey --user <name> <npub>`. The
+   app shows your `npub1…`.
+4. **Add a vault.** Enter the vault's address, press **Sign in with your key**, and allow it on the hub's page.
+   **Other ways to sign in** uses the hub's own sign-in instead (a password, or Parachute Cloud's).
+
+**For agents:** an applet is one note your agent writes with the Parachute MCP; see
+[docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md). Building from source is under [Build](#build).
+
+## What it does
 
 - **Your key.** You sign in with your Nostr key. Pair it from a device that has it (the Uni app or Buzz desktop sends it
   over the Buzz pairing relay, encrypted end to end), make a new one, or paste one. It stays in the app's native side, in
@@ -17,7 +41,9 @@ One app for your vaults and the applets that grow on them.
 - **Open with.** A note's type is its tag. Tap a note and it opens in the applet that claims its type, or in the plain
   vault view, which opens anything. When two applets claim a type, Parachute asks once. Your choices stay on your device.
 
-It runs on Android and desktop (Tauri 2). The web build is what the tests drive.
+It runs on Android and desktop (Tauri 2); releases are built for Android and Apple Silicon Macs
+([.github/workflows/release.yml](.github/workflows/release.yml), [docs/LAUNCH.md](docs/LAUNCH.md) for what a public
+launch still needs). The web build is what the tests drive.
 
 ## Build
 
