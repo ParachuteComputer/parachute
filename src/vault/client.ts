@@ -23,17 +23,9 @@ export const refusedRefresh = (e: unknown) => e instanceof Error && /^refresh fa
 /** How the last refresh of each vault's sign-in ended, when it failed: the hub said no, or it didn't answer. */
 const refreshFailed = new Map<string, "refused" | "unreachable">();
 
-/** The token each vault's last refresh brought, and when. A request that set off with the token before it and is refused
- *  just after comes back with that token, not with a refresh of its own: on core 0.9 each refresh retires the token
- *  before it, so refreshing for such a straggler would retire the token the vault's other requests were just given. */
-const lastRefresh = new Map<string, { token: string; at: number }>();
-export const FRESH_MS = 5000;
-
 export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<string | null> {
   const running = refreshing.get(key);
   if (running) return running;
-  const last = lastRefresh.get(key);
-  if (last && Date.now() - last.at < FRESH_MS && findVault(key)?.accessToken === last.token) return Promise.resolve(last.token);
   const p = (async () => {
     const cur = findVault(key);
     // no refresh token: the app can't ask, so it can't say the hub refused
@@ -41,7 +33,6 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
     try {
       const t = await refresh(cur.tokenEndpoint, cur.clientId, cur.refreshToken, fetchImpl ?? fetchFor(cur));
       updateVault(cur.key, { accessToken: t.access_token, refreshToken: t.refresh_token ?? cur.refreshToken, expiresAt: t.expires_in ? Date.now() + t.expires_in * 1000 : undefined });
-      lastRefresh.set(key, { token: t.access_token, at: Date.now() });
       refreshFailed.delete(key);
       return t.access_token;
     } catch (e) {
@@ -54,6 +45,28 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
   return p;
 }
 
+/** A request refused because it set off with a token that has since been replaced (a refresh for the vault's other
+ *  requests finished while it was on its way) is sent once more with the current token, before anyone sees the
+ *  refusal. Only a refusal of the current token sets off a refresh: on core 0.9 each refresh retires the token before
+ *  it, so refreshing for such a straggler would take the fresh token away from every other request. A refusal the
+ *  browser can't read (0.9 sends a refused token no CORS headers) counts the same. */
+export function withCurrentToken(key: string, f: typeof fetch): typeof fetch {
+  return async (input, init) => {
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    new Headers(init?.headers).forEach((v, k) => headers.set(k, v));
+    const sent = /^Bearer (.+)$/i.exec(headers.get("Authorization") ?? "")?.[1];
+    const again = () => {
+      const now = findVault(key)?.accessToken;
+      if (!sent || !now || now === sent) return null;
+      headers.set("Authorization", `Bearer ${now}`);
+      return f(input instanceof Request ? new Request(input, { headers }) : input, { ...init, headers });
+    };
+    let res: Response;
+    try { res = await f(input, init); } catch (e) { const r = again(); if (r) return r; throw e; }
+    return res.status === 401 ? again() ?? res : res;
+  };
+}
+
 export function clientFor(rec: VaultRecord): VaultClient {
   const hit = clients.get(rec.key);
   const at = `${rec.issuer} ${rec.vault} ${rec.url ?? ""}`;
@@ -63,7 +76,7 @@ export function clientFor(rec: VaultRecord): VaultClient {
     tokenProvider: () => findVault(rec.key)?.accessToken ?? rec.accessToken,
     onAuthError: () => refreshOnce(rec.key),
     // notes calls go through the hub's record door when it has one (records.ts)
-    fetchImpl: recordsFetch(fetchFor(rec)),
+    fetchImpl: recordsFetch(withCurrentToken(rec.key, fetchFor(rec))),
   });
   clients.set(rec.key, { at, client });
   return client;

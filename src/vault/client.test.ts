@@ -1,9 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { refreshOnce } from "./client";
+import { beforeEach, describe, expect, it } from "vitest";
+import { refreshOnce, withCurrentToken } from "./client";
 import { findVault, saveVault } from "./store";
 
 beforeEach(() => localStorage.clear());
-afterEach(() => vi.useRealTimers());
 
 describe("refreshOnce", () => {
   it("sends one refresh for two overlapping expiries, and stores the rotated token", async () => {
@@ -16,21 +15,25 @@ describe("refreshOnce", () => {
     expect(a).toBe("new1"); expect(b).toBe("new1");
     expect(findVault("recipes")?.refreshToken).toBe("r2");
   });
-  it("a request that set off with the old token and fails just after a refresh takes the fresh token: no second refresh", async () => {
-    // on core 0.9 each refresh retires the token before it: refreshing again for a straggler would retire the token
-    // every other request has just been given (seen in CI: a vault's page lost its fresh token to its own stragglers)
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-11-17T08:00:00Z"));
-    saveVault({ issuer: "https://hub.example", vault: "pantry", tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", accessToken: "spoiled", refreshToken: "r1", scope: "", addedAt: "" });
-    let calls = 0;
-    const hub = (async () => { calls++; return new Response(JSON.stringify({ access_token: `new${calls}`, refresh_token: `r${calls + 1}` })); }) as unknown as typeof fetch;
-    expect(await refreshOnce("pantry", hub)).toBe("new1");
-    vi.setSystemTime(new Date("2026-11-17T08:00:02Z"));
-    expect(await refreshOnce("pantry", hub)).toBe("new1");
-    expect(calls).toBe(1);
-    // later, a refusal is a real one: refreshed again
-    vi.setSystemTime(new Date("2026-11-17T08:00:30Z"));
-    expect(await refreshOnce("pantry", hub)).toBe("new2");
-    expect(calls).toBe(2);
+  it("a request refused with a token since replaced goes again with the current one; a refusal of the current one stands", async () => {
+    // on core 0.9 each refresh retires the token before it: a straggler that refreshed again would take the fresh token
+    // away from every other request (seen in CI: a vault's page lost its token to its own parallel reads)
+    saveVault({ issuer: "https://hub.example", vault: "pantry", tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", accessToken: "fresh", refreshToken: "r1", scope: "", addedAt: "" });
+    const seen: string[] = [];
+    // the hub's vault: takes only the fresh token; one that is replaced it refuses, unreadably (no CORS headers)
+    const hub = (async (_u: unknown, init?: RequestInit) => {
+      const t = new Headers(init?.headers).get("Authorization") ?? "";
+      seen.push(t);
+      if (t === "Bearer old") throw new TypeError("Failed to fetch");
+      return new Response("{}", { status: t === "Bearer fresh" ? 200 : 401 });
+    }) as unknown as typeof fetch;
+    const f = withCurrentToken("pantry", hub);
+    expect((await f("https://hub.example/vault/pantry/api/records", { headers: { Authorization: "Bearer old" } })).status).toBe(200);
+    expect(seen).toEqual(["Bearer old", "Bearer fresh"]);
+    // the current token refused: nothing to retry with, the refusal goes to the caller (and its refresh)
+    saveVault({ issuer: "https://hub.example", vault: "pantry", tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", accessToken: "revoked", refreshToken: "r1", scope: "", addedAt: "" });
+    seen.length = 0;
+    expect((await f("https://hub.example/vault/pantry/api/records", { headers: { Authorization: "Bearer revoked" } })).status).toBe(401);
+    expect(seen).toEqual(["Bearer revoked"]);
   });
 });
