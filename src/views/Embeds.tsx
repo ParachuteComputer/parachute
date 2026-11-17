@@ -222,8 +222,11 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
   );
 }
 
-/** A sheet over the whole screen, above every frame; the page under it is held still while it is open. */
+/** A sheet over the whole screen, above every frame; the page under it is held still while it is open. It takes the focus
+ *  when it opens, so a screen reader (and Android's accessibility) moves into it, and a frame no longer holds the focus. */
 function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
+  const box = useRef<HTMLElement>(null);
+  useEffect(() => { box.current?.focus(); }, []);
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     addEventListener("keydown", esc);
@@ -233,7 +236,7 @@ function Sheet({ label, onClose, children }: { label: string; onClose: () => voi
   }, [onClose]);
   return (
     <div className="sheet-scrim sheet-over-frames" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <section className="sheet" role="dialog" aria-modal="true" aria-label={label}>{children}</section>
+      <section ref={box} tabIndex={-1} className="sheet" role="dialog" aria-modal="true" aria-label={label}>{children}</section>
     </div>
   );
 }
