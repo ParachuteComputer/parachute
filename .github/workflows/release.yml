@@ -1,0 +1,132 @@
+name: Release
+# A `v*` tag builds the Android APK (arm64) and the Mac dmg, writes SHA256SUMS, and makes a GitHub pre-release with
+# RELEASE-NOTES.md as its notes. Run by hand (workflow_dispatch) it is a dry run: the same build, a *draft* release
+# that nobody sees until it is published or deleted. docs/LAUNCH.md says what a public launch still needs.
+#
+# The APK is signed with the play-test key, from four repository secrets (names in docs/LAUNCH.md):
+# PLAYTEST_KEYSTORE_BASE64, PLAYTEST_KEYSTORE_PASSWORD, PLAYTEST_KEY_ALIAS, PLAYTEST_KEY_PASSWORD. A tag without them
+# fails. A dry run without them signs with a key made for that run alone, and the file name says so.
+permissions:
+  contents: read
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash  # -eo pipefail: a failed build piped into tee still fails the step
+
+jobs:
+  mac:
+    uses: ./.github/workflows/mac.yml
+
+  android:
+    name: android (arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NDK_VERSION: 29.0.14206865
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The tag is the app's version, on next or main
+        if: github.event_name == 'push'
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          [ "${GITHUB_REF_NAME#v}" = "$version" ] || { echo "tag $GITHUB_REF_NAME, but tauri.conf.json says $version" >&2; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/next || git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "tag $GITHUB_REF_NAME is on a commit that isn't on next or main" >&2; exit 1; }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-36 build-tools;36.1.0 ndk;29.0.14206865"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android
+      - name: The play-test key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PLAYTEST_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.PLAYTEST_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PLAYTEST_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PLAYTEST_KEY_PASSWORD }}
+        run: |
+          dir="$RUNNER_TEMP/playtest" && mkdir -p "$dir" && chmod 700 "$dir"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$dir/keystore.jks"
+            printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$dir/keystore.jks" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > "$dir/keystore.properties"
+            echo "APK_SUFFIX=" >> "$GITHUB_ENV"
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            echo "::warning::No play-test key in this repository's secrets: this dry run signs with a key made for it alone."
+            pw=$(openssl rand -hex 24)
+            KEYPASS=$pw keytool -genkeypair -keystore "$dir/keystore.jks" -alias throwaway -keyalg RSA -keysize 2048 -validity 2 \
+              -dname "CN=Parachute dry run" -storepass:env KEYPASS -keypass:env KEYPASS >/dev/null
+            printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=throwaway\nkeyPassword=%s\n' "$dir/keystore.jks" "$pw" "$pw" > "$dir/keystore.properties"
+            echo "APK_SUFFIX=-dry-run-key" >> "$GITHUB_ENV"
+          else
+            echo "::error::No play-test key: set PLAYTEST_KEYSTORE_BASE64, PLAYTEST_KEYSTORE_PASSWORD, PLAYTEST_KEY_ALIAS and PLAYTEST_KEY_PASSWORD (docs/LAUNCH.md)."
+            exit 1
+          fi
+          chmod 600 "$dir"/*
+          echo "PARACHUTE_KEYSTORE_PROPERTIES=$dir/keystore.properties" >> "$GITHUB_ENV"
+      - name: Build the APK (scripts/android-build.sh checks its signature)
+        run: |
+          export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          scripts/android-build.sh --target aarch64 | tee "$RUNNER_TEMP/android-build.log"
+          apk=$(grep '\.apk$' "$RUNNER_TEMP/android-build.log" | tail -1)
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          mkdir -p out && cp "$apk" "out/Parachute_${version}_arm64${APK_SUFFIX}.apk"
+          ls -l out
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/playtest"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: parachute-android
+          path: out/*.apk
+          retention-days: 30
+
+  release:
+    needs: [mac, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: parachute-*
+          path: files
+          merge-multiple: true
+      - name: SHA256SUMS
+        run: cd files && sha256sum * | tee SHA256SUMS
+      - name: Make the release (a pre-release on a tag; a draft on a dry run)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            gh release create "$GITHUB_REF_NAME" files/* --prerelease --verify-tag --title "Parachute $version" --notes-file RELEASE-NOTES.md
+          else
+            tag="v$version-dry-run.$GITHUB_RUN_ID"
+            gh release create "$tag" files/* --draft --prerelease --target "$GITHUB_SHA" --title "Parachute $version (dry run, draft)" --notes-file RELEASE-NOTES.md
+            echo "Draft $tag made. Delete it with: gh release delete $tag --yes" >> "$GITHUB_STEP_SUMMARY"
+          fi
