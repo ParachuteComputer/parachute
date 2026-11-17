@@ -123,7 +123,8 @@ from turning into a signature the card didn't show.
 **Relay.** The shell opens the WebSocket in its own window (never the frame), one per applet session and relay, closed
 with the session. On `["AUTH", challenge]` it asks Rust for kind 22242 (`svc_relay_auth`): Rust uses the declared relay
 URL itself. `subscribe` and `query` send `REQ` with the applet's filters, checked: NIP-01 filter keys only, at most 10
-filters and 10 open subscriptions, `limit` at most 500. Events go to the frame in batches (one message per 50 ms or 200
+filters and 100 open subscriptions (a Buzz relay sends live events only to a subscription for one room, so a rooms
+applet holds one per room), `limit` at most 500. Events go to the frame in batches (one message per 50 ms or 200
 events) through a queue of its own, not the rate-limited push; when more than 5000 wait, the subscription is closed
 with a status and the applet subscribes again. `publish` checks the kind and tags, and for kind 5 reads each target
 from the relay (`ids` filter) and checks it is the person's and of a kind this applet may publish; Rust signs

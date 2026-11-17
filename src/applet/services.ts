@@ -21,7 +21,7 @@ export type Service = RelayService | HttpService;
 export const NAMED_KINDS: Record<number, string> = { 9: "messages", 7: "reactions", 40003: "edits of your messages", 5: "deletions", 20002: "typing" };
 /** Tags an applet's event may not carry: they are what sign-ins and signed requests are made of. */
 export const AUTH_TAGS = ["u", "method", "payload", "challenge", "relay", "server", "expiration"];
-export const LIMITS = { services: 6, id: 40, url: 300, publish: 16, private: 2, prefix: 40, word: 40, filters: 10, subs: 10, filterValues: 100, history: 500, tags: 100, content: 64 * 1024, bytes: 25 * 1024 * 1024 };
+export const LIMITS = { services: 6, id: 40, url: 300, publish: 16, private: 2, prefix: 40, word: 40, filters: 10, subs: 100, filterValues: 100, history: 500, tags: 100, content: 64 * 1024, bytes: 25 * 1024 * 1024 };
 
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const LOOPBACK = ["localhost", "127.0.0.1", "[::1]"];

@@ -37,6 +37,7 @@
     "src",
     "packages/surface-render/src",
     "e2e",
+    "applets/record.ts",
     "vite.config.ts",
     "playwright.config.ts"
   ],
