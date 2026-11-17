@@ -94,13 +94,15 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "open") { applyOpen(m.data); return; }
     if (m.event === "services.events") {
       var d = m.data || {}, h = svcSubs[d.service + "|" + d.sub];
-      if (h) { if (d.events && d.events.length) { try { h.onEvents(d.events); } catch (e) {} } if (d.eose && h.onEose) { try { h.onEose(); } catch (e) {} } }
+      if (h) { if (d.events && d.events.length) { h.tries = 0; try { h.onEvents(d.events); } catch (e) {} } if (d.eose && h.onEose) { try { h.onEose(); } catch (e) {} } }
       return;
     }
     if (m.event === "services.status") {
       // a subscription the relay or the shell closed is made again (the kit holds its filters); the applet hears it too
       var st = m.data || {};
-      if (st.sub && st.status === "closed" && svcSubs[st.service + "|" + st.sub]) again(st.service, st.sub);
+      // made again only when it is worth it: the shell let it go (too many at once), or the relay asks a sign-in or had
+      // an error; a relay's other refusal (not a member, say) stands
+      if (st.sub && st.status === "closed" && svcSubs[st.service + "|" + st.sub] && /^(too many|the relay closed it: (auth-required|error))/.test(st.why || "")) again(st.service, st.sub);
       svcStatus.slice().forEach(function (f) { try { f(st); } catch (e) {} });
       return;
     }
@@ -140,7 +142,7 @@ export const FRAME_KIT = String.raw`(function () {
       call("services", "subscribe", { service: service, subs: part.map(function (x) { return { sub: x, filters: svcSubs[service + "|" + x].filters }; }) })
         .catch(function (e) {
           // a wait (a rate limit, a busy frame, a timeout) is tried again; a refusal is the applet's to hear
-          var transient = e && (e.code === "rate_limited" || e.code === "too_many_pending" || e.code === "failed" || e.message === "timeout");
+          var transient = e && (e.code === "rate_limited" || e.code === "too_many_pending" || e.message === "timeout");
           part.forEach(function (x) {
             if (transient) { again(service, x); return; }
             delete svcSubs[service + "|" + x];

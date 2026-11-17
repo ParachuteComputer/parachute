@@ -155,7 +155,9 @@ list, is refused at parse. And Rust checks at every NIP-98 call, so a hub added 
 an origin it has signed in to with the key (`door.rs` keeps that set on the device), one the web side lists as the
 person's, and any origin whose `/.well-known/parachute-account` or `/.well-known/parachute.json` answers as a hub (both
 asked once per origin per run, before its first signed request). The probe fails closed: when it can't finish (a
-network error, a timeout, a 5xx) nothing is signed for that origin this time. And on any origin, nothing is signed for
+network error, a timeout, a 5xx but 501, a 429, a redirect) nothing is signed for that origin this time; a server whose
+well-known files always redirect gets nothing signed until the redirect goes. A 501 is an answer (that server takes no
+GET at all, as the Uni app's mail gateway). And on any origin, nothing is signed for
 a path under `/account/`, `/api/auth/` or `/vault/`. Hosts compare with the trailing dot dropped. A hub's own check of the `u` tag against its
 public address is the last line. Tested: a throwaway hub refuses what the broker would sign.
 

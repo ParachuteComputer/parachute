@@ -211,11 +211,17 @@ function mediaOf(e: Ev): Media[] {
   }).filter((x): x is Media => !!x);
 }
 const kindOf = (m: Media) => (m.type.startsWith("image/") && m.type !== "image/svg+xml" ? "image" : m.type.startsWith("video/") ? "video" : m.type.startsWith("audio/") ? "audio" : "file");
-/** The files drawn lately, as blob: addresses; the oldest let go past a few dozen (a video can be 25 MB). */
+/** The files drawn lately, as blob: addresses; past a few dozen (a video can be 25 MB) the oldest that nothing on
+ *  screen shows is let go. */
 const blobs = new Map<string, Promise<string>>();
+const shown = new Map<string, number>();
 function keepBlob(sha: string, p: Promise<string>) {
   blobs.delete(sha); blobs.set(sha, p);
-  while (blobs.size > 40) { const [old, gone] = blobs.entries().next().value as [string, Promise<string>]; blobs.delete(old); gone.then((u) => URL.revokeObjectURL(u), () => {}); }
+  for (const [old, gone] of blobs) {
+    if (blobs.size <= 40) break;
+    if (shown.get(old)) continue;
+    blobs.delete(old); gone.then((u) => URL.revokeObjectURL(u), () => {});
+  }
 }
 function useBlob(m: Media | null) {
   const [url, setUrl] = useState<string | null>(null);
@@ -225,8 +231,9 @@ function useBlob(m: Media | null) {
     let on = true;
     const p = blobs.get(m.sha) ?? services.media("rooms", m.sha, m.ext).then((r: any) => URL.createObjectURL(new Blob([r.bytes], { type: r.type || m.type })));
     keepBlob(m.sha, p);
+    shown.set(m.sha, (shown.get(m.sha) ?? 0) + 1);
     p.then((u) => { if (on) setUrl(u); }, () => { blobs.delete(m.sha); if (on) setErr(true); });
-    return () => { on = false; };
+    return () => { on = false; shown.set(m.sha, (shown.get(m.sha) ?? 1) - 1); };
   }, [m?.sha]);
   return { url, err };
 }

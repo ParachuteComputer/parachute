@@ -42,30 +42,47 @@ pub fn hub_in(bin: String, name: &str) -> Hub {
         .status()
         .unwrap();
     assert!(ok.success(), "bootstrap");
-    let (port, vport) = (free_port(), free_port());
-    let origin = format!("http://127.0.0.1:{port}");
-    let log = std::fs::File::create(home.join("serve.log")).unwrap();
-    // embedded serve stops when its parent goes; a shell that waits on it is the parent, in its own group
-    // (its own process group, not setsid: macOS has no setsid command)
-    let mut sh = Command::new("sh");
-    #[cfg(unix)]
-    sh.process_group(0);
-    let child = sh
-        .args(["-c", "\"$@\"; :", "_", &bin, "serve", "--embedded", "--home", ph.to_str().unwrap(), "--listen", &format!("127.0.0.1:{port}"), "--vault-listen", &format!("127.0.0.1:{vport}")])
-        .env("PARACHUTE_HOME", &ph)
-        .env("PARACHUTE_HUB_ORIGIN", &origin)
-        .stdout(log.try_clone().unwrap())
-        .stderr(log)
-        .spawn()
-        .unwrap();
-    let h = Hub { child, home, origin, bin };
-    for _ in 0..120 {
-        if std::fs::read_to_string(h.home.join("serve.log")).unwrap_or_default().contains("ready: hub") {
-            return h;
+    // a free port can be taken by another test between asking and listening: then try again on another
+    for _ in 0..4 {
+        let (port, vport) = (free_port(), free_port());
+        let origin = format!("http://127.0.0.1:{port}");
+        let log = std::fs::File::create(home.join("serve.log")).unwrap();
+        // embedded serve stops when its parent goes; a shell that waits on it is the parent, in its own group
+        // (its own process group, not setsid: macOS has no setsid command)
+        let mut sh = Command::new("sh");
+        #[cfg(unix)]
+        sh.process_group(0);
+        let child = sh
+            .args(["-c", "\"$@\"; :", "_", &bin, "serve", "--embedded", "--home", ph.to_str().unwrap(), "--listen", &format!("127.0.0.1:{port}"), "--vault-listen", &format!("127.0.0.1:{vport}")])
+            .env("PARACHUTE_HOME", &ph)
+            .env("PARACHUTE_HUB_ORIGIN", &origin)
+            .stdout(log.try_clone().unwrap())
+            .stderr(log)
+            .spawn()
+            .unwrap();
+        let h = Hub { child, home: home.clone(), origin, bin: bin.clone() };
+        for _ in 0..120 {
+            let log = std::fs::read_to_string(h.home.join("serve.log")).unwrap_or_default();
+            if log.contains("ready: hub") {
+                return h;
+            }
+            if log.contains("is in use") {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(250));
         }
-        std::thread::sleep(Duration::from_millis(250));
+        let log = std::fs::read_to_string(h.home.join("serve.log")).unwrap_or_default();
+        if !log.contains("is in use") {
+            panic!("hub didn't start: {log}");
+        }
+        // stop what it started, keeping its home for the next try (Drop would remove it)
+        let mut h = h;
+        let _ = Command::new("kill").args(["--", &format!("-{}", h.child.id())]).status();
+        let _ = h.child.kill();
+        let _ = h.child.wait();
+        std::mem::forget(h);
     }
-    panic!("hub didn't start: {}", std::fs::read_to_string(h.home.join("serve.log")).unwrap_or_default());
+    panic!("hub didn't start: its ports kept being taken");
 }
 
 /// One `parachute-core` command against the test hub, as its operator.
