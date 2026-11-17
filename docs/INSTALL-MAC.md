@@ -47,7 +47,8 @@ signature until the app is signed with an Apple Developer ID). Enter your Mac pa
 
 ## 5. Add a vault
 
-Enter the vault's address, like `https://your-hub/vault/name`, and press **Sign in with your key**. The hub's own page
+Enter the vault's address, like `https://your-hub/vault/name`, say whose it is (**Mine**, or **Someone else's** for
+an org's or a friend's: [OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)), and press **Sign in with your key**. The hub's own page
 asks "Approve Parachute?" (it may call Parachute a third-party app). Press **Approve**, and you're back in Parachute
 with the vault's notes.
 
