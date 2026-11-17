@@ -55,17 +55,30 @@ export function withCurrentToken(key: string, f: typeof fetch): typeof fetch {
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     new Headers(init?.headers).forEach((v, k) => headers.set(k, v));
     const sent = /^Bearer (.+)$/i.exec(headers.get("Authorization") ?? "")?.[1];
-    const again = () => {
+    // a body that can be sent only once (a stream) isn't sent again
+    const resendable = !(init?.body instanceof ReadableStream) && !(input instanceof Request && input.bodyUsed);
+    /** The same request with the current token, if a newer one is stored (waiting for a refresh already on its way). */
+    const again = async (): Promise<Response | null> => {
+      await refreshing.get(key)?.catch(() => null);
       const now = findVault(key)?.accessToken;
-      if (!sent || !now || now === sent) return null;
+      if (!sent || !now || now === sent || !resendable) return null;
       headers.set("Authorization", `Bearer ${now}`);
-      return f(input instanceof Request ? new Request(input, { headers }) : input, { ...init, headers });
+      try { return await f(input instanceof Request ? new Request(input, { headers }) : input, { ...init, headers }); } catch { return null; }
     };
-    let res: Response;
-    // a fetch that threw may have reached the hub (a write saved, then the line dropped): only a read goes again then
+    // a fetch that threw may have reached the hub (a write saved, then the line dropped): only a read goes again then;
+    // and a request the caller stopped stays stopped
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-    try { res = await f(input, init); } catch (e) { const r = method === "GET" || method === "HEAD" ? again() : null; if (r) return r; throw e; }
-    return res.status === 401 ? again() ?? res : res;
+    let res: Response;
+    try { res = await f(input, init); } catch (e) {
+      const r = (method === "GET" || method === "HEAD") && (e as { name?: string } | null)?.name !== "AbortError" ? await again() : null;
+      if (r) return r;
+      throw e;
+    }
+    if (res.status !== 401 && res.status !== 403) return res;
+    const r = await again();
+    if (!r) return res;
+    void res.body?.cancel().catch(() => {});
+    return r;
   };
 }
 

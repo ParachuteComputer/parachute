@@ -34,10 +34,32 @@ describe("refreshOnce", () => {
     seen.length = 0;
     await expect(f("https://hub.example/vault/pantry/api/records", { method: "POST", body: "{}", headers: { Authorization: "Bearer old" } })).rejects.toThrow("Failed to fetch");
     expect(seen).toEqual(["Bearer old"]);
+    // a 403 for a replaced token goes again too; a stopped request stays stopped
+    seen.length = 0;
+    const forbids = (async (_u: unknown, init?: RequestInit) => { const t = new Headers(init?.headers).get("Authorization") ?? ""; seen.push(t); return new Response("{}", { status: t === "Bearer fresh" ? 200 : 403 }); }) as unknown as typeof fetch;
+    expect((await withCurrentToken("pantry", forbids)("https://hub.example/x", { headers: { Authorization: "Bearer old" } })).status).toBe(200);
+    seen.length = 0;
+    const aborts = (async (_u: unknown, init?: RequestInit) => { seen.push(new Headers(init?.headers).get("Authorization") ?? ""); throw new DOMException("stopped", "AbortError"); }) as unknown as typeof fetch;
+    await expect(withCurrentToken("pantry", aborts)("https://hub.example/x", { headers: { Authorization: "Bearer old" } })).rejects.toThrow("stopped");
+    expect(seen).toEqual(["Bearer old"]);
     // the current token refused: nothing to retry with, the refusal goes to the caller (and its refresh)
     saveVault({ issuer: "https://hub.example", vault: "pantry", tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", accessToken: "revoked", refreshToken: "r1", scope: "", addedAt: "" });
     seen.length = 0;
     expect((await f("https://hub.example/vault/pantry/api/records", { headers: { Authorization: "Bearer revoked" } })).status).toBe(401);
     expect(seen).toEqual(["Bearer revoked"]);
+  });
+  it("a refusal that arrives while the vault's refresh is on its way waits for it, then goes with the new token", async () => {
+    saveVault({ issuer: "https://hub.example", vault: "attic", tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", accessToken: "old", refreshToken: "r1", scope: "", addedAt: "" });
+    let release!: () => void;
+    const slowHub = (async () => { await new Promise<void>((r) => { release = r; }); return new Response(JSON.stringify({ access_token: "fresh", refresh_token: "r2" })); }) as unknown as typeof fetch;
+    const refreshed = refreshOnce("attic", slowHub);
+    const seen: string[] = [];
+    const vault = (async (_u: unknown, init?: RequestInit) => { const t = new Headers(init?.headers).get("Authorization") ?? ""; seen.push(t); return new Response("{}", { status: t === "Bearer fresh" ? 200 : 401 }); }) as unknown as typeof fetch;
+    const read = withCurrentToken("attic", vault)("https://hub.example/x", { headers: { Authorization: "Bearer old" } });
+    await new Promise((r) => setTimeout(r, 5));
+    release();
+    expect((await read).status).toBe(200);
+    expect(await refreshed).toBe("fresh");
+    expect(seen).toEqual(["Bearer old", "Bearer fresh"]);
   });
 });
