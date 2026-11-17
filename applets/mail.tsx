@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ready, services } from "parachute";
 
 type Addr = { name?: string | null; email: string };
-type Email = { id: string; threadId: string; mailboxIds: Record<string, boolean>; keywords: Record<string, boolean>; from?: Addr[]; to?: Addr[]; cc?: Addr[]; subject?: string; receivedAt: string; preview?: string; hasAttachment?: boolean;
+type Email = { id: string; threadId: string; mailboxIds: Record<string, boolean>; keywords: Record<string, boolean>; from?: Addr[]; to?: Addr[]; replyTo?: Addr[]; cc?: Addr[]; subject?: string; receivedAt: string; preview?: string; hasAttachment?: boolean;
   textBody?: { partId: string }[]; htmlBody?: { partId: string }[]; bodyValues?: Record<string, { value: string }>; attachments?: { name?: string; type?: string; size?: number }[] };
 type Box = { id: string; name: string; role: string | null; unreadEmails?: number; totalEmails?: number };
 type Session = { account: string; primaryAccounts: Record<string, string>; accounts: Record<string, { name: string }>; roles: Record<string, string>; operations: Record<string, string[]> };
@@ -26,7 +26,7 @@ const op = (name: string, accountId: string, args: Record<string, unknown>) => p
 const opId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
 
 const PLACES: { role: string; name: string }[] = [{ role: "inbox", name: "Inbox" }, { role: "drafts", name: "Drafts" }, { role: "sent", name: "Sent" }, { role: "archive", name: "Archive" }, { role: "junk", name: "Junk" }];
-const LIST_PROPS = ["threadId", "mailboxIds", "keywords", "from", "to", "subject", "receivedAt", "preview", "hasAttachment"];
+const LIST_PROPS = ["threadId", "mailboxIds", "keywords", "from", "to", "replyTo", "subject", "receivedAt", "preview", "hasAttachment"];
 const who = (a?: Addr[]) => (a ?? []).map((x) => x.name || x.email).join(", ") || "(nobody)";
 const addrs = (s: string): Addr[] => s.split(/[,;]/).map((x) => x.trim()).filter(Boolean).map((x) => { const m = /^(.*)<([^>]+)>$/.exec(x); return m ? { name: m[1].trim().replace(/^"|"$/g, "") || undefined, email: m[2].trim() } : { email: x }; });
 const addrLine = (a: Addr[]) => a.map((x) => (x.name ? `${x.name} <${x.email}>` : x.email)).join(", ");
@@ -189,7 +189,7 @@ function Thread({ id, account, can, back, reply, edit, inDrafts }: { id: string;
 }
 
 function Compose({ account, can, draft, reply, done }: { account: string; can: (o: string) => boolean; draft?: Draft; reply?: Email; done: (sent: boolean) => void }) {
-  const init: Fields = draft?.fields ?? (reply ? { to: reply.from ?? [], cc: [], bcc: [], subject: /^re:/i.test(reply.subject ?? "") ? reply.subject! : `Re: ${reply.subject ?? ""}`, text: "", inReplyTo: reply.id } : { to: [], cc: [], bcc: [], subject: "", text: "" });
+  const init: Fields = draft?.fields ?? (reply ? { to: (reply.replyTo?.length ? reply.replyTo : reply.from) ?? [], cc: [], bcc: [], subject: /^re:/i.test(reply.subject ?? "") ? reply.subject! : `Re: ${reply.subject ?? ""}`, text: "", inReplyTo: reply.id } : { to: [], cc: [], bcc: [], subject: "", text: "" });
   const [to, setTo] = useState(addrLine(init.to));
   const [cc, setCc] = useState(addrLine(init.cc));
   const [subject, setSubject] = useState(init.subject);
@@ -200,10 +200,10 @@ function Compose({ account, can, draft, reply, done }: { account: string; can: (
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const send = useRef<string>(opId());
-  const fields = (): Fields => ({ to: addrs(to), cc: addrs(cc), bcc: [], subject: subject.trim(), text, ...(init.inReplyTo ? { inReplyTo: init.inReplyTo } : {}) });
+  const fields = (): Fields => ({ to: addrs(to), cc: addrs(cc), bcc: init.bcc, subject: subject.trim(), text, ...(init.inReplyTo ? { inReplyTo: init.inReplyTo } : {}) });
   /** Save it as a draft (a new revision of the one open), then read back exactly what would go. */
   const saveAndReview = async () => {
-    setBusy(true); setErr("");
+    setBusy(true); setErr(""); setState("");
     try {
       const s = await op("draft.save", account, { fields: fields(), ...(saved ? { replaces: saved.draftId, base: saved.fingerprint } : {}) });
       setSaved({ draftId: s.draftId, fingerprint: s.fingerprint });

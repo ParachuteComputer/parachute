@@ -96,10 +96,11 @@ export class RelayConn {
 
   subscribe(id: string, filters: Record<string, unknown>[], onEvent: Sub["onEvent"], onEose: Sub["onEose"], onClosed: Sub["onClosed"]) {
     this.subs.set(id, { filters, onEvent, onEose, onClosed });
-    this.send(["REQ", id, ...filters]);
+    // before the sign-in, `ready` sends every subscription: never queued as well (it would go twice)
+    if (this.authed) this.raw(["REQ", id, ...filters]);
   }
   unsubscribe(id: string) {
-    if (this.subs.delete(id)) this.send(["CLOSE", id]);
+    if (this.subs.delete(id) && this.authed) this.raw(["CLOSE", id]);
   }
   get subscriptions() { return this.subs.size; }
 

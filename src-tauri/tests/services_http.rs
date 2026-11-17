@@ -207,6 +207,16 @@ async fn a_probe_that_fails_signs_nothing_and_is_asked_again() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_well_known_file_behind_a_redirect_is_no_answer() {
+    start();
+    let (origin, seen) = serve(|s: &Seen| if s.path.starts_with("/.well-known/") { reply(302, &[("location", "https://hub.example/.well-known/parachute.json")], b"") } else { reply(200, &[], b"ok") }).await;
+    let k = Keys::generate();
+    let b = broker("redirect", &k, &[json!({ "id": "x", "kind": "http", "url": format!("{origin}/api/"), "auth": "nip98" })]);
+    assert_eq!(b.http(&k, "s", "x", &req("GET", "a")).await.unwrap_err().code, "hub_unsure");
+    assert!(seen.lock().unwrap().iter().all(|s| s.path.starts_with("/.well-known/")), "nothing signed or sent");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_gateway_that_takes_no_get_is_not_a_hub() {
     // the Uni app's mail gateway answers every GET with 501: an answer (no GET here, so no hub's files), not trouble
     start();

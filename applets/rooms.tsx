@@ -23,7 +23,7 @@ function rootOf(e: Ev): string | null {
 // ── the store: everything read from the relay, kept in one place ──
 function createStore() {
   const s = {
-    me: "", rooms: new Map<string, Room>(), msgs: new Map<string, Map<string, Ev>>(), edits: new Map<string, Ev>(), gone: new Set<string>(),
+    me: "", rooms: new Map<string, Room>(), msgs: new Map<string, Map<string, Ev>>(), edits: new Map<string, Ev>(), gone: new Map<string, Set<string>>(), removed: new Set<string>(),
     reacts: new Map<string, Map<string, Ev>>(), typing: new Map<string, Map<string, number>>(), names: new Map<string, string>(),
     read: {} as Record<string, number>, rev: 0, listeners: new Set<() => void>(), asked: new Set<string>(),
   };
@@ -37,8 +37,11 @@ function createStore() {
       const target = tag(e, "e"); if (!target) return;
       const was = s.edits.get(target);
       if (!was || was.created_at <= e.created_at) s.edits.set(target, e);
-    } else if (e.kind === 5 || e.kind === 9005) {
-      for (const t of tags(e, "e")) s.gone.add(t);
+    } else if (e.kind === 5) {
+      // a deletion counts only from whoever wrote the message (checked when it is drawn: the message may come later)
+      for (const t of tags(e, "e")) { const by = s.gone.get(t) ?? new Set<string>(); by.add(e.pubkey); s.gone.set(t, by); }
+    } else if (e.kind === 9005) {
+      for (const t of tags(e, "e")) s.removed.add(t);
     } else if (e.kind === 7) {
       const target = [...e.tags].reverse().find((t) => t[0] === "e")?.[1]; if (!target) return;
       const m = s.reacts.get(target) ?? new Map(); m.set(e.id, e); s.reacts.set(target, m);
@@ -55,7 +58,7 @@ type Store = ReturnType<typeof createStore>;
 const nameOf = (st: Store["s"], pk: string) => st.names.get(pk) ?? `${pk.slice(0, 8)}…`;
 /** A message's text as it is now: its author's latest edit. */
 const textOf = (st: Store["s"], e: Ev) => { const ed = st.edits.get(e.id); return ed && ed.pubkey === e.pubkey ? ed.content : e.content; };
-const visible = (st: Store["s"], e: Ev) => !st.gone.has(e.id);
+const visible = (st: Store["s"], e: Ev) => !st.removed.has(e.id) && !st.gone.get(e.id)?.has(e.pubkey);
 
 // ── read state, as the Uni app keeps it (max per room across every slot) ──
 async function loadRead(relay: any): Promise<Record<string, number>> {
@@ -208,7 +211,12 @@ function mediaOf(e: Ev): Media[] {
   }).filter((x): x is Media => !!x);
 }
 const kindOf = (m: Media) => (m.type.startsWith("image/") && m.type !== "image/svg+xml" ? "image" : m.type.startsWith("video/") ? "video" : m.type.startsWith("audio/") ? "audio" : "file");
+/** The files drawn lately, as blob: addresses; the oldest let go past a few dozen (a video can be 25 MB). */
 const blobs = new Map<string, Promise<string>>();
+function keepBlob(sha: string, p: Promise<string>) {
+  blobs.delete(sha); blobs.set(sha, p);
+  while (blobs.size > 40) { const [old, gone] = blobs.entries().next().value as [string, Promise<string>]; blobs.delete(old); gone.then((u) => URL.revokeObjectURL(u), () => {}); }
+}
 function useBlob(m: Media | null) {
   const [url, setUrl] = useState<string | null>(null);
   const [err, setErr] = useState(false);
@@ -216,7 +224,7 @@ function useBlob(m: Media | null) {
     if (!m) return;
     let on = true;
     const p = blobs.get(m.sha) ?? services.media("rooms", m.sha, m.ext).then((r: any) => URL.createObjectURL(new Blob([r.bytes], { type: r.type || m.type })));
-    blobs.set(m.sha, p);
+    keepBlob(m.sha, p);
     p.then((u) => { if (on) setUrl(u); }, () => { blobs.delete(m.sha); if (on) setErr(true); });
     return () => { on = false; };
   }, [m?.sha]);
@@ -355,6 +363,8 @@ export default function Rooms() {
         }
         s.read = await loadRead(relay);
         const rooms = [...s.rooms.keys()];
+        // what comes after starts now: anything posted while the history below is read still arrives
+        const since = now() - 5;
         for (const c of chunk(rooms, 10)) (await relay.query(c.map((id) => ({ kinds: [9], "#h": [id], limit: 40 })))).forEach(st.add);
         st.bump();
         if (!on) return;
@@ -362,10 +372,8 @@ export default function Rooms() {
         await names([...new Set([...s.msgs.values()].flatMap((m) => [...m.values()].map((e) => e.pubkey)))]);
         // what comes after: new posts, edits, deletions, reactions and typing, one subscription a room (a Buzz relay
         // sends live events only to a subscription for one room)
-        const since = now() - 5;
         const onEvents = (evs: Ev[]) => { evs.forEach(st.add); st.bump(); void names(evs.map((e) => e.pubkey)); };
-        const stops = rooms.slice(0, 90).map((id) => relay.subscribe([{ kinds: [9, 5, 7, 40003, 9005], "#h": [id], since }, { kinds: [20002], "#h": [id], since }], onEvents));
-        stop = () => stops.forEach((f: () => void) => f());
+        stop = relay.subscribeMany(rooms.slice(0, 90).map((id) => [{ kinds: [9, 5, 7, 40003, 9005], "#h": [id], since }, { kinds: [20002], "#h": [id], since }]), onEvents);
       } catch (e: any) { setStatus(`Couldn't read your rooms: ${e?.message ?? e}`); }
     })();
     const sweep = setInterval(() => { let changed = false; for (const m of s.typing.values()) for (const [k, t] of m) if (Date.now() - t > 8000) { m.delete(k); changed = true; } if (changed) st.bump(); }, 1000);
@@ -613,6 +621,9 @@ async function plainImage(f: File): Promise<{ bytes: ArrayBuffer; type: string }
   return { bytes: await blob.arrayBuffer(), type };
 }
 
+/** What one message may hold here: the app takes a call of at most 8 KB from an applet. */
+const MAX_TEXT = 7000;
+
 function Composer({ st, relay, room, thread, members, send, typing, err, setErr, name }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; send: (c: string, extra?: string[][], mentions?: string[]) => Promise<boolean>; typing: string[]; err: string; setErr: (e: string) => void; name: string }) {
   const s = st.s;
   const [text, setText] = useState("");
@@ -664,12 +675,13 @@ function Composer({ st, relay, room, thread, members, send, typing, err, setErr,
       <div className="note" aria-live="polite">
         <span className="typing">{typing.length === 1 ? `${typing[0]} is typing…` : typing.length === 2 ? `${typing[0]} and ${typing[1]} are typing…` : typing.length > 2 ? "Several people are typing…" : ""}</span>
         {err && <span className="err" role="alert">{err}</span>}
+        {text.length > MAX_TEXT - 500 && <span className="quiet">{MAX_TEXT - text.length} characters left in this message</span>}
         {files.map((f, i) => <span key={i} className="chip">{f.name} <button className="thread-link" aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((_, j) => j !== i))}>×</button></span>)}
       </div>
       {pick && options.length > 0 && <ul className="pick" role="listbox" aria-label="People in this room">{options.map((o, i) => <li key={o.p} role="option" aria-selected={i === pick.sel}><button onMouseDown={(e) => { e.preventDefault(); choose(o); }}>{o.n}</button></li>)}</ul>}
       <button className="attach" aria-label="Choose files to attach" onClick={() => fileIn.current?.click()}>＋</button>
       <input ref={fileIn} type="file" multiple hidden onChange={(e) => { setFiles([...files, ...Array.from(e.target.files ?? [])]); e.target.value = ""; }} />
-      <textarea ref={field} rows={1} aria-label={`Message ${name}`} placeholder={thread ? "Reply in thread…" : `Message ${name}…`} value={text} maxLength={65536}
+      <textarea ref={field} rows={1} aria-label={`Message ${name}`} placeholder={thread ? "Reply in thread…" : `Message ${name}…`} value={text} maxLength={MAX_TEXT}
         onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
         onKeyDown={(e) => {
           if (pick && options.length) {

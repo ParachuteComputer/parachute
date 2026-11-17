@@ -4,6 +4,7 @@
 import { checkFilters, checkPublish, METHODS, REQUEST_HEADERS, requestUrl, LIMITS, originOf, type HttpService, type RelayService, type Service } from "../applet/services";
 import type { Native, SignedEvent } from "./native";
 import { RelayConn, type Status } from "./relay";
+import { verifyEvent } from "nostr-tools/pure";
 
 export class BrokerError extends Error {
   constructor(public code: "not_granted" | "out_of_scope" | "bad_params" | "failed", message?: string) { super(message ?? code); }
@@ -55,6 +56,8 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
   const later = () => { if (!flushTimer && !closed) flushTimer = setTimeout(flush, BATCH_MS); };
 
   function conn(s: RelayService): RelayConn {
+    // a call that was on its way when the frame closed makes no new connection (it would sign in and reconnect for ever)
+    if (closed) throw new BrokerError("failed", "the applet closed");
     let c = conns.get(s.id);
     if (!c) {
       const status = (st: Status) => { if (!closed) emit("services.status", { service: s.id, ...st }); };
@@ -106,23 +109,26 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       } finally { release(); }
     },
 
-    subscribe(p: { service: string; sub: string; filters: unknown }) {
+    /** One subscription, or several in one request (`subs`): a rooms applet holds one a room. */
+    subscribe(p: { service: string; sub?: string; filters?: unknown; subs?: { sub: string; filters: unknown }[] }) {
       const s = relayOf(p.service);
-      const f = checkFilters(p.filters);
-      if (!f.ok) throw new BrokerError("bad_params", f.error);
+      const list = p.subs ?? [{ sub: p.sub!, filters: p.filters }];
+      const checked = list.map((x) => { const f = checkFilters(x.filters); if (!f.ok) throw new BrokerError("bad_params", f.error); return { sub: x.sub, filters: f.value }; });
       const c = conn(s);
-      if (c.subscriptions >= LIMITS.subs) throw new BrokerError("failed", `at most ${LIMITS.subs} subscriptions`);
-      const key = `${s.id}\u0000${p.sub}`;
-      let queued = 0;
-      c.subscribe(`a:${p.sub}`, f.value, (e) => {
-        if (closed) return;
-        const q = pending.get(key) ?? { events: [], eose: false };
-        q.events.push(e); pending.set(key, q);
-        // more waiting than the frame should ever hold: the subscription stops, and the applet hears why
-        if (++queued > QUEUE_MAX) { c.unsubscribe(`a:${p.sub}`); emit("services.status", { service: s.id, status: "ready", sub: p.sub, why: "too many events: subscribe again with a narrower filter" }); }
-        if (q.events.length >= BATCH_MAX) flush(); else later();
-      }, () => { queued = 0; const q = pending.get(key) ?? { events: [], eose: false }; q.eose = true; pending.set(key, q); later(); },
-      (why) => emit("services.status", { service: s.id, status: "ready", sub: p.sub, why: `the relay closed it: ${why}` }));
+      if (c.subscriptions + checked.length > LIMITS.subs) throw new BrokerError("failed", `at most ${LIMITS.subs} subscriptions`);
+      for (const { sub, filters } of checked) {
+        const key = `${s.id}\u0000${sub}`;
+        c.subscribe(`a:${sub}`, filters, (e) => {
+          if (closed) return;
+          const q = pending.get(key) ?? { events: [], eose: false };
+          q.events.push(e); pending.set(key, q);
+          // more waiting than the frame should ever hold (the flush below keeps it far under): the subscription stops,
+          // and the applet hears it closed (the kit subscribes it again)
+          if (q.events.length > QUEUE_MAX) { c.unsubscribe(`a:${sub}`); pending.delete(key); emit("services.status", { service: s.id, status: "closed", sub, why: "too many events at once" }); return; }
+          if (q.events.length >= BATCH_MAX) flush(); else later();
+        }, () => { const q = pending.get(key) ?? { events: [], eose: false }; q.eose = true; pending.set(key, q); later(); },
+        (why) => { if (!closed) emit("services.status", { service: s.id, status: "closed", sub, why: `the relay closed it: ${why}` }); });
+      }
       return true;
     },
 
@@ -146,11 +152,12 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
         const found = await queryOnce(s, [{ ids }], ids.length);
         for (const id of ids) {
           const e = found.find((x) => x.id === id);
-          if (!e || e.pubkey !== me || !s.publish.includes(e.kind) || e.kind === 5) throw new BrokerError("out_of_scope", "it may delete only your own posts of its kinds");
+          // checked as signed (a relay could hand back anything), the person's, of a kind this applet may publish
+          if (!e || !verifyEvent(e as Parameters<typeof verifyEvent>[0]) || e.pubkey !== me || !s.publish.includes(e.kind) || e.kind === 5) throw new BrokerError("out_of_scope", "it may delete only your own posts of its kinds");
         }
       }
       const ev = await native.signEvent(session, s.id, t.value);
-      const r = await conn(s).publish(ev);
+      const r = await conn(s).publish(ev); // conn() refuses once closed
       return { ...r, id: ev.id, event: ev };
     },
 

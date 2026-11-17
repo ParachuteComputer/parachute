@@ -97,7 +97,13 @@ export const FRAME_KIT = String.raw`(function () {
       if (h) { if (d.events && d.events.length) { try { h.onEvents(d.events); } catch (e) {} } if (d.eose && h.onEose) { try { h.onEose(); } catch (e) {} } }
       return;
     }
-    if (m.event === "services.status") { svcStatus.slice().forEach(function (f) { try { f(m.data); } catch (e) {} }); return; }
+    if (m.event === "services.status") {
+      // a subscription the relay or the shell closed is made again (the kit holds its filters); the applet hears it too
+      var st = m.data || {};
+      if (st.sub && st.status === "closed" && svcSubs[st.service + "|" + st.sub]) again(st.service, st.sub);
+      svcStatus.slice().forEach(function (f) { try { f(st); } catch (e) {} });
+      return;
+    }
     var p = pending[m.id]; if (!p) return; delete pending[m.id];
     if (m.error) { var er = new Error(m.error.message || m.error.code); er.code = m.error.code; p.rej(er); } else p.res(m.result);
   });
@@ -127,6 +133,27 @@ export const FRAME_KIT = String.raw`(function () {
     var t = id ? document.getElementById(id) || document.getElementsByName(id)[0] : null;
     if (t) t.scrollIntoView(); else if (!id) window.scrollTo(0, 0);
   }, true);
+  // subscriptions, sent a few dozen to a request (a rooms applet holds one a room), each made again after a refusal
+  // (a rate limit, a relay's CLOSED) with a growing wait while its handler is still there
+  function sendSubs(service, list) {
+    for (var i = 0; i < list.length; i += 25) (function (part) {
+      call("services", "subscribe", { service: service, subs: part.map(function (x) { return { sub: x, filters: svcSubs[service + "|" + x].filters }; }) })
+        .catch(function (e) {
+          // a wait (a rate limit, a busy frame, a timeout) is tried again; a refusal is the applet's to hear
+          var transient = e && (e.code === "rate_limited" || e.code === "too_many_pending" || e.code === "failed" || e.message === "timeout");
+          part.forEach(function (x) {
+            if (transient) { again(service, x); return; }
+            delete svcSubs[service + "|" + x];
+            svcStatus.slice().forEach(function (f) { try { f({ service: service, sub: x, status: "closed", why: (e && (e.code || e.message)) || "refused" }); } catch (y) {} });
+          });
+        });
+    })(list.slice(i, i + 25));
+  }
+  function again(service, sub) {
+    var h = svcSubs[service + "|" + sub]; if (!h || h.waiting) return;
+    h.waiting = true; h.tries = (h.tries || 0) + 1;
+    setTimeout(function () { if (svcSubs[service + "|" + sub] !== h) return; h.waiting = false; sendSubs(service, [sub]); }, Math.min(30000, 2000 * h.tries));
+  }
   var uni = {
     contract: 1,
     ready: function () { return readyP; },
@@ -160,19 +187,22 @@ export const FRAME_KIT = String.raw`(function () {
         var b = init.body;
         if (b instanceof ArrayBuffer) p.bytes = b;
         else if (b && ArrayBuffer.isView(b)) p.bytes = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
-        else if (typeof b === "string") p.body = b;
-        else if (b !== undefined && b !== null) p.body = JSON.stringify(b);
+        // text goes as bytes too: a long mail or a big JSON body rides outside the request's 8 KB
+        else if (typeof b === "string") p.bytes = new TextEncoder().encode(b).buffer;
+        else if (b !== undefined && b !== null) p.bytes = new TextEncoder().encode(JSON.stringify(b)).buffer;
         return call("services", "fetch", p);
       },
       relay: function (service) {
-        return Object.freeze({
-          subscribe: function (filters, onEvents, onEose) {
+        // several subscriptions (one a room, say), the same handlers; returns a function that stops them all
+        function many(filterSets, onEvents, onEose) {
             if (typeof onEvents !== "function") throw new TypeError("subscribe needs a function for the events");
-            var sub = "s" + (++n), key = service + "|" + sub, on = true;
-            svcSubs[key] = { onEvents: onEvents, onEose: onEose };
-            call("services", "subscribe", { service: service, sub: sub, filters: filters }).catch(function (e) { delete svcSubs[key]; svcStatus.slice().forEach(function (f) { try { f({ service: service, sub: sub, status: "closed", why: e.message }); } catch (x) {} }); });
-            return function () { if (!on) return; on = false; delete svcSubs[key]; call("services", "unsubscribe", { service: service, sub: sub }).catch(function () {}); };
-          },
+            var subs = filterSets.map(function (filters) { var sub = "s" + (++n); svcSubs[service + "|" + sub] = { onEvents: onEvents, onEose: onEose, filters: filters }; return sub; }), on = true;
+            sendSubs(service, subs);
+            return function () { if (!on) return; on = false; subs.forEach(function (sub) { delete svcSubs[service + "|" + sub]; call("services", "unsubscribe", { service: service, sub: sub }).catch(function () {}); }); };
+        }
+        return Object.freeze({
+          subscribe: function (filters, onEvents, onEose) { return many([filters], onEvents, onEose); },
+          subscribeMany: many,
           query: function (filters) { return call("services", "query", { service: service, filters: filters }); },
           publish: function (ev) { return call("services", "publish", { service: service, event: ev }); },
           loadPrivate: function (d) { return call("services", "loadPrivate", { service: service, d: d }); },

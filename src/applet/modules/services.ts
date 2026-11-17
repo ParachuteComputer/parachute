@@ -37,7 +37,10 @@ export function createServicesModule(broker: () => Promise<Broker | null>, why: 
           && (p.as === undefined || p.as === "text" || p.as === "json" || p.as === "bytes")),
         run: wrap((x, p: Record<string, unknown>) => x.fetch({ service: p.service as string, path: p.path as string, method: p.method as string | undefined, headers: p.headers as Record<string, string> | undefined, body: (p.bytes ?? p.body) as string | ArrayBuffer | undefined, as: p.as as "text" | "json" | "bytes" | undefined })),
       },
-      subscribe: { cap: null, validate: shape(["service", "sub", "filters"], (p) => str(p.service, 40) && str(p.sub, 40)), run: wrap((x, p: Record<string, unknown>) => x.subscribe(p as { service: string; sub: string; filters: unknown })) },
+      subscribe: { cap: null, validate: shape(["service", "sub", "filters", "subs"], (p) => str(p.service, 40) && (p.subs === undefined
+          ? str(p.sub, 40) && p.filters !== undefined
+          : p.sub === undefined && p.filters === undefined && Array.isArray(p.subs) && p.subs.length > 0 && p.subs.length <= 40 && p.subs.every((x) => plain(x) && hasOnly(x, ["sub", "filters"]) && str(x.sub, 40)))),
+        run: wrap((x, p: Record<string, unknown>) => x.subscribe(p as { service: string; sub?: string; filters?: unknown; subs?: { sub: string; filters: unknown }[] })) },
       unsubscribe: { cap: null, validate: shape(["service", "sub"], (p) => str(p.service, 40) && str(p.sub, 40)), run: wrap((x, p: Record<string, unknown>) => x.unsubscribe(p as { service: string; sub: string })) },
       query: { cap: null, validate: shape(["service", "filters"], (p) => str(p.service, 40)), run: wrap((x, p: Record<string, unknown>) => x.query(p as { service: string; filters: unknown })) },
       publish: { cap: null, validate: shape(["service", "event"], (p) => str(p.service, 40)), run: wrap((x, p: Record<string, unknown>) => x.publish(p as { service: string; event: unknown })) },

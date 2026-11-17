@@ -202,7 +202,11 @@ record), a server an applet talks to, a page an applet shows, other applets.
 
 Left, said plainly: an allowed applet can post its granted kinds to any room the person is in on that relay, not only
 the one on screen; it can read whatever the relay lets the person read and send it to its declared servers. Each is a
-line on the card.
+line on the card. One more, from how a room works rather than from the broker: a message is also how a person answers
+some bots in a room (Hermes takes a plain "/approve" message as the owner's OK for a command it flagged), so an applet
+allowed to post messages can say that too. The rooms applet draws Hermes's prompt with Approve and Deny buttons, as
+any message the person sends; approving that is stronger than a message belongs on a shell-owned screen, as sealed
+cards do.
 
 ## Testing
 

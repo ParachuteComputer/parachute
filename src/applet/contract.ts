@@ -70,7 +70,8 @@ export const hasOnly = (o: Record<string, unknown>, keys: readonly string[]) => 
  * a request ever does is refused too.
  */
 export function withinBudget(x: unknown, budget: { left: number }, depth = 0): boolean {
-  if (depth > 6) return false;
+  // deep enough for a services call with several subscriptions (params.subs[i].filters[j]["#h"][k]: 7 levels)
+  if (depth > 8) return false;
   switch (typeof x) {
     case "string": budget.left -= x.length + 2; return budget.left >= 0;
     case "number": case "boolean": budget.left -= 8; return budget.left >= 0;

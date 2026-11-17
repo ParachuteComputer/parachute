@@ -3,6 +3,7 @@ import { checkFilters, checkPublish, parseServices, requestUrl, serviceLines, ty
 import { grantKey, grantLines, grantOf } from "./grant";
 import { parseManifest } from "./manifest";
 import { readApplet } from "./discovery";
+import { parseEnvelope } from "./contract";
 
 const relay = (x: Record<string, unknown> = {}) => ({ id: "rooms", kind: "nostr-relay", url: "wss://relay.example", publish: [9, 7], media: true, ...x });
 const http = (x: Record<string, unknown> = {}) => ({ id: "mail", kind: "http", url: "https://mail.example/mail/", auth: "nip98", ...x });
@@ -126,5 +127,17 @@ describe("the checks on each call", () => {
     expect(requestUrl(h, "/jmap?x=1")).toEqual({ ok: true, value: "https://mail.example/mail/jmap?x=1" });
     expect(requestUrl(h, "//evil.example/x")).toEqual({ ok: true, value: "https://mail.example/mail//evil.example/x" });
     for (const bad of ["../account/mcp", "a/../../x", "%2e%2e/x", "a%2fb", "a\\b", "a#b", "a b", "./x", "a/%25"]) expect(requestUrl(h, bad).ok, bad).toBe(false);
+  });
+});
+
+describe("the frame's envelope for services", () => {
+  it("takes a request that subscribes to a few dozen rooms at once (its filters nest seven deep)", () => {
+    const subs = Array.from({ length: 25 }, (_, i) => ({ sub: `s${i}`, filters: [{ kinds: [9, 5, 7, 40003, 9005], "#h": [crypto.randomUUID()], since: 1794937000 }, { kinds: [20002], "#h": [crypto.randomUUID()], since: 1794937000 }] }));
+    expect(parseEnvelope({ uni: 1, id: "k1", ns: "services", method: "subscribe", params: { service: "rooms", subs } }).kind).toBe("uni");
+  });
+  it("lets bytes past the request's budget, within their own", () => {
+    expect(parseEnvelope({ uni: 1, id: "k2", ns: "services", method: "upload", params: { service: "rooms", bytes: new ArrayBuffer(1024 * 1024), type: "image/png" } }).kind).toBe("uni");
+    expect(parseEnvelope({ uni: 1, id: "k3", ns: "services", method: "upload", params: { service: "rooms", bytes: new ArrayBuffer(26 * 1024 * 1024), type: "image/png" } })).toMatchObject({ kind: "bad", error: "too_large" });
+    expect(parseEnvelope({ uni: 1, id: "k4", ns: "vault", method: "x", params: { bytes: new ArrayBuffer(10) } })).toMatchObject({ kind: "bad" });
   });
 });

@@ -10,7 +10,7 @@ the Uni app's mail gateway (e2e/services/README.md); "CI" means it runs on every
 | Feature | State | Tested |
 |---|---|---|
 | Room list: your rooms (NIP-29 membership), newest first, glyph, time, last line "who: text" | built | e2e/rooms.spec.ts, real relay |
-| Unread count and "@" when you are named, from the Uni app's own read markers (kind 30078, sealed to you) | built | rooms.spec: a mention after you read shows "1 new, mentions you"; the marker on the relay is sealed |
+| Unread count and "@" when you are named, from the Uni app's own read markers (kind 30078, sealed to you); a room with no marker yet shows no count, as in the Uni app | built | rooms.spec: a mention after you read shows "1 new, mentions you"; the marker on the relay is sealed |
 | "Wants you" on a row for an open ask | built | rooms.spec |
 | Search across rooms | built (the relay's NIP-50 search) | by hand on the real relay; not in a spec |
 | Messages: markdown (bold, italics, strike, code, fences, quotes, lists, tables, headings, rules), day lines, grouping, "New" line | built | rooms.spec (bold in a message) |

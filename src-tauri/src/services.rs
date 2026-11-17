@@ -716,10 +716,11 @@ impl Broker {
                     let status = res.status().as_u16();
                     // a server in trouble or asking to wait hasn't answered: nothing is signed this time. 501 is an
                     // answer: it does no GET at all (the Uni app's mail gateway), and a hub serves these files on GET
-                    if (status >= 500 && status != 501) || status == 429 {
+                    // a redirect isn't followed, and isn't an answer either: a hub behind one would pass for none
+                    if (status >= 500 && status != 501) || status == 429 || (300..400).contains(&status) {
                         return Err(unsure());
                     }
-                    // 2xx with a JSON body: a hub. 3xx (not followed), other 4xx, 2xx with anything else: not on this path.
+                    // 2xx with a JSON body: a hub. Other 4xx, 2xx with anything else: not on this path.
                     if (200..300).contains(&status) {
                         let body = read_capped(res, 256 * 1024).await.map_err(|_| unsure())?;
                         if serde_json::from_slice::<Value>(&body).is_ok() {
