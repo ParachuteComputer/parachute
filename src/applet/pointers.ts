@@ -58,16 +58,19 @@ export async function bringIn(rec: Pick<VaultRecord, "issuer" | "vault">, record
   return { noteId: n.id, path: n.path ?? "", updatedAt: (n as { updatedAt?: string }).updatedAt ?? null, pointer };
 }
 
-/** Pin a pointer to new code (the person allowed it): only its `code`, only if the note is as it was read. */
-export async function repin(p: PointerNote, code: string, c: Pick<VaultClient, "getNote" | "updateNote"> | null = homeClient()): Promise<void> {
-  if (!c || p.pointer.code === code) return;
+/** Pin a pointer to new code (the person allowed it): only its `code`, only if the note is as it was read. Whether the
+ *  pointer now pins that code (it was written, or already did). */
+export async function repin(p: PointerNote, code: string, c: Pick<VaultClient, "getNote" | "updateNote"> | null = homeClient()): Promise<boolean> {
+  if (!c) return false;
+  if (p.pointer.code === code) return true;
   const n = await c.getNote(p.noteId);
-  if (!n) return;
+  if (!n) return false;
   const meta = (n.metadata ?? {}) as Record<string, unknown>;
   const now = parsePointer(meta.pointer);
-  if (!now.ok || now.pointer.record !== p.pointer.record) return;
+  if (!now.ok || now.pointer.record !== p.pointer.record) return false;
   const updatedAt = (n as { updatedAt?: string }).updatedAt;
   await c.updateNote(n.id, { metadata: { ...meta, pointer: { ...(meta.pointer as object), code } }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
+  return true;
 }
 
 /** The other vaults a page's embeds come from, as "<vault> at <host>", for its host's card and grant (EMBED.md): pointers
