@@ -38,8 +38,8 @@ hub=$(mktemp -d)
 printf 'correct horse battery staple 1' > "$hub/pw"
 export PARACHUTE_HOME="$hub/home"
 "$PARACHUTE_CORE" bootstrap --embedded --home "$PARACHUTE_HOME" --username owner --password-file "$hub/pw" --vault recipes --json > /dev/null
-port=$(node -e 'const s=require("net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')
-vport=$(node -e 'const s=require("net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')
+# two free ports at once (both held until both are known, so they differ)
+read -r port vport < <(node -e 'const n=require("net");const a=n.createServer().listen(0,"127.0.0.1",()=>{const b=n.createServer().listen(0,"127.0.0.1",()=>{console.log(a.address().port,b.address().port);a.close();b.close()})})')
 PARACHUTE_HUB_ORIGIN="http://127.0.0.1:$port" "$PARACHUTE_CORE" serve --embedded --home "$PARACHUTE_HOME" \
   --listen "127.0.0.1:$port" --vault-listen "127.0.0.1:$vport" > "$hub/serve.log" 2>&1 &
 hubpid=$!

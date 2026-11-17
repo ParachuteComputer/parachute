@@ -61,9 +61,8 @@ jobs:
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
           bundle=src-tauri/target/release/bundle
           mkdir -p out
-          cp "$bundle"/dmg/*.dmg "out/Parachute_${version}_aarch64.dmg"
+          cp "$bundle/dmg/Parachute_${version}_aarch64.dmg" out/
           tar -czf "out/Parachute_${version}_aarch64.app.tar.gz" -C "$bundle/macos" Parachute.app
-          (cd out && shasum -a 256 *) | tee out/SHA256SUMS.mac
           echo "dmg=out/Parachute_${version}_aarch64.dmg" >> "$GITHUB_OUTPUT"
       - name: Install from the dmg and start it (docs/INSTALL-MAC.md, as far as a runner can)
         run: scripts/mac-smoke.sh "${{ steps.files.outputs.dmg }}" mac-smoke
