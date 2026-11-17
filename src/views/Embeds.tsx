@@ -214,8 +214,9 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
             grants.grant(subject, keys.scope, keys.hash, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry);
             releaseFromPage(pageId, embed.name);
             // the pointer now pins this code: so does what this place remembers of it (a later Revoke asks plainly again)
-            if (found.pointer && pinMoved) void repin(found.pointer, keys.hash).then(() => setPlace((p) => (p.state === "found" && p.found.pointer
-              ? { ...p, found: { ...p.found, pointer: { ...p.found.pointer, pointer: { ...p.found.pointer.pointer, code: keys.hash } } } } : p)), () => {});
+            const was = found.pointer;
+            if (was && pinMoved) void repin(was, keys.hash).then((pinned) => { if (pinned) setPlace((p) => (p.state === "found" && p.found.pointer?.noteId === was.noteId
+              ? { ...p, found: { ...p.found, pointer: { ...p.found.pointer, pointer: { ...p.found.pointer.pointer, code: keys.hash } } } } : p)); }, () => {});
             setAsking(false); bump((n) => n + 1);
           }}
           onNotNow={() => setAsking(false)} />

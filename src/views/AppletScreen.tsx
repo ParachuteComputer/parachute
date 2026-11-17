@@ -240,7 +240,7 @@ export default function AppletScreen() {
         broughtChanged={pinMoved} asksOther={status === "none" && !!grants.record(subject)}
         lines={[...grantLines({ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app), embedsFrom: loaded.state === "ok" ? loaded.from : [] }, ownFolder(entry.path)), ...importLines(loaded.state === "ok" ? loaded.imports : [])]}
         withImports={loaded.state === "ok" && loaded.imports.length > 0} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
-        onAllow={() => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry); if (brought && pinMoved) void repin(brought, keys.html).then(() => setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }), () => {}); chooseHere(); setStarted(true); bump(); }}
+        onAllow={() => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry); if (brought && pinMoved) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); }}
         onNotNow={() => setDeclined(true)} />
     </>);
   }
