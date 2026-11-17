@@ -226,7 +226,12 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
  *  when it opens, so a screen reader (and Android's accessibility) moves into it, and a frame no longer holds the focus. */
 function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
   const box = useRef<HTMLElement>(null);
-  useEffect(() => { box.current?.focus(); }, []);
+  useEffect(() => {
+    // into the sheet, unless something in it took the focus already (Run them's Not now); back where it was after
+    const was = document.activeElement as HTMLElement | null;
+    if (!box.current?.contains(document.activeElement)) box.current?.focus();
+    return () => { if (was && document.contains(was)) was.focus(); };
+  }, []);
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     addEventListener("keydown", esc);
