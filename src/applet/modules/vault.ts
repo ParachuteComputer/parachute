@@ -38,7 +38,7 @@ const MAX_BODY = 512 * 1024;
 const NOTE_TTL_MS = 10_000;
 const CACHE_MAX = 40;
 const CACHE_MAX_CONTENT = 200_000;
-// include_metadata is taken and changes nothing: a note's metadata (its fields) always comes back
+// include_metadata brings each note's tags and metadata (its fields), read note by note as a tag filter is
 const NOTES_PARAMS = ["path_prefix", "tag", "search", "limit", "id", "path", "include_content", "include_metadata"];
 const NOTE_PARAMS = ["include_content"];
 const VAULT_PARAMS = ["include_stats"];
@@ -116,6 +116,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       limit = Math.min(LIMITS.maxNotes, Number(rawLimit));
     }
     const content = q.get("include_content") === "true";
+    const fields = q.get("include_metadata") === "true";
 
     const key = q.get("id") ?? q.get("path");
     if (key !== null) {
@@ -141,7 +142,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         .filter((r): r is PathRow & { path: string } => !!r.path && inScope(prefixes, r.path) && codeKindOf(r) === null)
         .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.path.localeCompare(b.path));
     }
-    if (tag || content) {
+    if (tag || content || fields) {
       // Tags and bodies need the notes themselves (the deps expose no tag filter, so
       // this is a bounded scan): read at most maxScan, charge each read, judge scope again on what comes back.
       const out: Record<string, unknown>[] = [];

@@ -208,7 +208,7 @@ it. Names from records are quoted and the hub's address is the app's:
 |---|---|
 | Never allowed here, or allowed and then revoked | Review (the card on the sheet) |
 | The code (or the pin) differs from what was allowed / brought in | the card, headed "techne changed «Events» since you allowed it" (or "brought it in") |
-| What it asks for changed (a grant was here, its key differs) | the card, headed "«Events» now asks for something else" |
+| What it asks for changed (a grant was here, its key differs) | the card, headed "It now asks for something other than what you allowed." |
 | This device isn't signed in to that vault | "This comes from «techne» at «techne.example» (as its record says), and this device isn't signed in there." + a link to Add a vault, with nothing filled in |
 | The hub refuses the sign-in (401 after a refresh) | "techne no longer lets this device in. Sign in to techne again." |
 | The hub forbids a read (403) | nothing new: the component gets the vault module's plain answer (404 or 502), as an applet would |

@@ -71,6 +71,9 @@ test("Techne's Events on the home: the host's card says what its page shows, the
     await sheet.getByRole("button", { name: "Allow" }).click();
     await expect(embed(page, "Events").getByText("Seed swap")).toBeVisible();
     await expect(embed(page, "Events").getByText("Barn raising")).toBeVisible();
+    // its fields came with the list (includeFields): each event's date, and the soonest first
+    await expect(embed(page, "Events").getByText("2026-11-20")).toBeVisible();
+    expect((await embed(page, "Events").locator(".pa-row-title").allTextContents())[0]).toBe("Seed swap");
     await expect(place.locator(".embed-line")).toContainText("Events · techne's");
     // size follows content: the frame is as tall as its list, not a screen
     const h = await page.locator('iframe.embed-frame[title="Events"]').evaluate((f) => f.getBoundingClientRect().height);
