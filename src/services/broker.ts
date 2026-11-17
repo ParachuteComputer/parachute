@@ -67,14 +67,14 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
     return c;
   }
 
-  async function queryOnce(s: RelayService, filters: Record<string, unknown>[], max = LIMITS.history * LIMITS.filters): Promise<SignedEvent[]> {
+  async function queryOnce(s: RelayService, filters: Record<string, unknown>[], max = LIMITS.history * LIMITS.filters, urgent = false): Promise<SignedEvent[]> {
     const c = conn(s);
     const id = `q${Math.random().toString(36).slice(2, 10)}`;
     return new Promise((resolve) => {
       const got: SignedEvent[] = [];
       const done = () => { clearTimeout(t); c.unsubscribe(id); resolve(got); };
       const t = setTimeout(done, 15_000);
-      c.subscribe(id, filters, (e) => { if (got.length < max) got.push(e); }, done, () => { clearTimeout(t); resolve(got); });
+      c.subscribe(id, filters, (e) => { if (got.length < max) got.push(e); }, done, () => { clearTimeout(t); resolve(got); }, urgent);
     });
   }
 
@@ -126,8 +126,13 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
           // to the frame in batches: a full one at once, else within BATCH_MS
           if (q.events.length >= BATCH_MAX) flush(); else later();
         }, () => { const q = pending.get(key) ?? { events: [], eose: false }; q.eose = true; pending.set(key, q); later(); },
-        // a relay that wants a sign-in first, or had an error, is worth asking again (`retry`); another refusal stands
-        (why) => { if (!closed) emit("services.status", { service: s.id, status: "closed", sub, why: `the relay closed it: ${why}`, retry: /^(auth-required|error)/.test(why) }); });
+        // a relay that wants a sign-in first, had an error, or asks to slow down, is worth asking again (`retry`, after
+        // the wait it names); another refusal stands
+        (why) => {
+          if (closed) return;
+          const after = /retry in (\d+)/i.exec(why);
+          emit("services.status", { service: s.id, status: "closed", sub, why: `the relay closed it: ${why}`, retry: /^(auth-required|error|rate-limited)/.test(why), ...(after ? { after: Math.min(300, Number(after[1])) } : {}) });
+        });
       }
       return true;
     },
@@ -154,7 +159,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       if (t.value.kind === 5) {
         // a deletion only of the person's own events, of a kind this applet may publish, read from the relay first
         const ids = t.value.tags.filter((x) => x[0] === "e").map((x) => x[1]);
-        const found = await queryOnce(s, [{ ids }], ids.length);
+        const found = await queryOnce(s, [{ ids }], ids.length, true); // a post waits on it: ahead of subscriptions
         for (const id of ids) {
           const e = found.find((x) => x.id === id);
           // checked as signed (a relay could hand back anything), the person's, of a kind this applet may publish

@@ -102,7 +102,7 @@ export const FRAME_KIT = String.raw`(function () {
       var st = m.data || {};
       // made again only when it is worth it: the shell let it go (too many at once), or the relay asks a sign-in or had
       // an error; a relay's other refusal (not a member, say) stands
-      if (st.sub && st.status === "closed" && st.retry === true && svcSubs[st.service + "|" + st.sub]) again(st.service, st.sub);
+      if (st.sub && st.status === "closed" && st.retry === true && svcSubs[st.service + "|" + st.sub]) again(st.service, st.sub, st.after);
       svcStatus.slice().forEach(function (f) { try { f(st); } catch (e) {} });
       return;
     }
@@ -151,10 +151,12 @@ export const FRAME_KIT = String.raw`(function () {
         });
     })(list.slice(i, i + 25));
   }
-  function again(service, sub) {
+  function again(service, sub, after) {
     var h = svcSubs[service + "|" + sub]; if (!h || h.waiting) return;
     h.waiting = true; h.tries = (h.tries || 0) + 1;
-    setTimeout(function () { if (svcSubs[service + "|" + sub] !== h) return; h.waiting = false; sendSubs(service, [sub]); }, Math.min(30000, 2000 * h.tries));
+    // the longer of a growing wait and the one the relay named
+    var wait = Math.max(Math.min(30000, 2000 * h.tries), typeof after === "number" ? after * 1000 + 250 : 0);
+    setTimeout(function () { if (svcSubs[service + "|" + sub] !== h) return; h.waiting = false; sendSubs(service, [sub]); }, wait);
   }
   var uni = {
     contract: 1,

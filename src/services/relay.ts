@@ -9,10 +9,11 @@ type Sub = { filters: Record<string, unknown>[]; onEvent: (e: SignedEvent) => vo
 type Waiter = { resolve: (r: { ok: boolean; message: string }) => void; timer: ReturnType<typeof setTimeout> };
 
 const AUTH_WAIT_MS = 2500;
-/** A relay counts the posts and subscriptions a connection sends (Buzz by default: 10 a second, over 5 s; past it, it
- *  drops them with a NOTICE). The shell keeps under that: a burst of 30, then 8 a second; posts go before
- *  subscriptions, and sign-ins and CLOSEs (not counted) go at once. */
-const PACE_BURST = 30, PACE_PER_SEC = 8;
+/** A relay counts the posts and subscriptions a person sends (Buzz: 50 in a fixed 5 s window by default, across all of
+ *  their connections; past it, they are refused). The shell keeps well under that, leaving room for the person's other
+ *  apps: a burst of 10, then 7 a second (at most 45 in any 5 s); posts go before subscriptions, and sign-ins and
+ *  CLOSEs (not counted) go at once. */
+const PACE_BURST = 10, PACE_PER_SEC = 7;
 const OK_WAIT_MS = 10_000;
 
 export class RelayConn {
@@ -31,6 +32,9 @@ export class RelayConn {
   private posts: unknown[] = [];
   private reqs: unknown[] = [];
   private drainTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The subscriptions whose REQ has gone out on this connection (only those get a CLOSE). */
+  private sent = new Set<string>();
+  private urgent = new Set<string>();
 
   constructor(private url: string, private auth: (challenge: string) => Promise<SignedEvent>, private onStatus: (s: Status) => void, private socket: (url: string) => WebSocket = (u) => new WebSocket(u)) {
     this.connect();
@@ -89,7 +93,7 @@ export class RelayConn {
     if (!this.ws || !this.open) return;
     const kind = Array.isArray(m) ? m[0] : "";
     if (kind !== "EVENT" && kind !== "REQ") { this.ws.send(JSON.stringify(m)); return; }
-    (kind === "EVENT" ? this.posts : this.reqs).push(m);
+    (kind === "EVENT" || this.urgent.has((m as unknown[])[1] as string) ? this.posts : this.reqs).push(m);
     this.drain();
   }
   private drain() {
@@ -98,7 +102,9 @@ export class RelayConn {
     this.tokens = Math.min(PACE_BURST, this.tokens + ((now - this.refilled) * PACE_PER_SEC) / 1000);
     this.refilled = now;
     while (this.tokens >= 1 && this.ws && this.open && (this.posts.length || this.reqs.length)) {
-      this.ws.send(JSON.stringify(this.posts.length ? this.posts.shift() : this.reqs.shift()));
+      const m = this.posts.length ? this.posts.shift() : this.reqs.shift();
+      if (Array.isArray(m) && m[0] === "REQ") this.sent.add(m[1] as string);
+      this.ws.send(JSON.stringify(m));
       this.tokens -= 1;
     }
     if (this.posts.length || this.reqs.length) this.drainTimer = setTimeout(() => this.drain(), Math.ceil(((1 - this.tokens) * 1000) / PACE_PER_SEC) + 5);
@@ -106,7 +112,7 @@ export class RelayConn {
   /** Nothing waits to go out (the connection dropped or closed: subscriptions are sent again after the next sign-in). */
   private dropOutbox() {
     if (this.drainTimer) { clearTimeout(this.drainTimer); this.drainTimer = null; }
-    this.posts = []; this.reqs = [];
+    this.posts = []; this.reqs = []; this.sent.clear();
   }
   private send(m: unknown) { if (this.authed) this.raw(m); else this.queue.push(m); }
 
@@ -148,13 +154,21 @@ export class RelayConn {
     }
   }
 
-  subscribe(id: string, filters: Record<string, unknown>[], onEvent: Sub["onEvent"], onEose: Sub["onEose"], onClosed: Sub["onClosed"]) {
+  /** `urgent`: a read a post waits on (a deletion's targets): it goes in the posts' lane, ahead of subscriptions. */
+  subscribe(id: string, filters: Record<string, unknown>[], onEvent: Sub["onEvent"], onEose: Sub["onEose"], onClosed: Sub["onClosed"], urgent = false) {
     this.subs.set(id, { filters, onEvent, onEose, onClosed });
+    if (urgent) this.urgent.add(id);
     // before the sign-in, `ready` sends every subscription: never queued as well (it would go twice)
     if (this.authed) this.raw(["REQ", id, ...filters]);
   }
   unsubscribe(id: string) {
-    if (this.subs.delete(id) && this.authed) this.raw(["CLOSE", id]);
+    if (!this.subs.delete(id)) return;
+    this.urgent.delete(id);
+    // a REQ still waiting to go out is simply not sent; only one the relay has gets a CLOSE (else the CLOSE would
+    // overtake it, and the relay keep a subscription nobody listens to)
+    const notThis = (m: unknown) => !(Array.isArray(m) && m[0] === "REQ" && m[1] === id);
+    this.reqs = this.reqs.filter(notThis); this.posts = this.posts.filter(notThis); this.queue = this.queue.filter(notThis);
+    if (this.sent.delete(id) && this.authed) this.raw(["CLOSE", id]);
   }
   get subscriptions() { return this.subs.size; }
   has(id: string) { return this.subs.has(id); }
