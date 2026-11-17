@@ -30,6 +30,10 @@ describe("refreshOnce", () => {
     const f = withCurrentToken("pantry", hub);
     expect((await f("https://hub.example/vault/pantry/api/records", { headers: { Authorization: "Bearer old" } })).status).toBe(200);
     expect(seen).toEqual(["Bearer old", "Bearer fresh"]);
+    // a write whose fetch threw may have been saved: not sent twice
+    seen.length = 0;
+    await expect(f("https://hub.example/vault/pantry/api/records", { method: "POST", body: "{}", headers: { Authorization: "Bearer old" } })).rejects.toThrow("Failed to fetch");
+    expect(seen).toEqual(["Bearer old"]);
     // the current token refused: nothing to retry with, the refusal goes to the caller (and its refresh)
     saveVault({ issuer: "https://hub.example", vault: "pantry", tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", accessToken: "revoked", refreshToken: "r1", scope: "", addedAt: "" });
     seen.length = 0;

@@ -62,7 +62,9 @@ export function withCurrentToken(key: string, f: typeof fetch): typeof fetch {
       return f(input instanceof Request ? new Request(input, { headers }) : input, { ...init, headers });
     };
     let res: Response;
-    try { res = await f(input, init); } catch (e) { const r = again(); if (r) return r; throw e; }
+    // a fetch that threw may have reached the hub (a write saved, then the line dropped): only a read goes again then
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    try { res = await f(input, init); } catch (e) { const r = method === "GET" || method === "HEAD" ? again() : null; if (r) return r; throw e; }
     return res.status === 401 ? again() ?? res : res;
   };
 }
