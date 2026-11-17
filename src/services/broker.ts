@@ -67,14 +67,16 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
     return c;
   }
 
-  async function queryOnce(s: RelayService, filters: Record<string, unknown>[], max = LIMITS.history * LIMITS.filters, urgent = false): Promise<SignedEvent[]> {
+  /** One read until EOSE. A person (or a post) waits on it, so it goes ahead of live subscriptions still waiting to
+   *  go out: a room opened while a rooms applet is subscribing to all of them shows at once. */
+  async function queryOnce(s: RelayService, filters: Record<string, unknown>[], max = LIMITS.history * LIMITS.filters): Promise<SignedEvent[]> {
     const c = conn(s);
     const id = `q${Math.random().toString(36).slice(2, 10)}`;
     return new Promise((resolve) => {
       const got: SignedEvent[] = [];
       const done = () => { clearTimeout(t); c.unsubscribe(id); resolve(got); };
       const t = setTimeout(done, 15_000);
-      c.subscribe(id, filters, (e) => { if (got.length < max) got.push(e); }, done, () => { clearTimeout(t); resolve(got); }, urgent);
+      c.subscribe(id, filters, (e) => { if (got.length < max) got.push(e); }, done, () => { clearTimeout(t); resolve(got); }, true);
     });
   }
 
@@ -159,7 +161,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       if (t.value.kind === 5) {
         // a deletion only of the person's own events, of a kind this applet may publish, read from the relay first
         const ids = t.value.tags.filter((x) => x[0] === "e").map((x) => x[1]);
-        const found = await queryOnce(s, [{ ids }], ids.length, true); // a post waits on it: ahead of subscriptions
+        const found = await queryOnce(s, [{ ids }], ids.length);
         for (const id of ids) {
           const e = found.find((x) => x.id === id);
           // checked as signed (a relay could hand back anything), the person's, of a kind this applet may publish
