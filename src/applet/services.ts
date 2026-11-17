@@ -133,7 +133,7 @@ export function serviceLines(services: readonly Service[]): { text: string; stre
       if (posts.length) out.push({ text: `Post as you in your rooms there: ${joinWords(posts)}`, stress: true });
       if (s.publish.includes(5)) out.push({ text: "Delete your messages and reactions there", stress: true });
       if (s.media) out.push({ text: "Send and open files there as you", stress: true });
-      for (const p of s.private) out.push({ text: `Keep its own private notes there (${p.d}…), sealed to your key`, stress: false });
+      for (const p of s.private) out.push({ text: `Keep private notes there (${p.d}…), sealed to your key: other apps of yours may share them`, stress: false });
     } else {
       out.push(s.auth === "nip98" ? { text: `Send requests to ${at} signed as you`, stress: true }
         : s.auth === "token" ? { text: `Use a token you give it for ${at}`, stress: true }

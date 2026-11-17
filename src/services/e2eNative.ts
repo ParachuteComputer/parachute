@@ -25,7 +25,7 @@ export function e2eNative(secretHex: string): Native {
   const svc = (id: string, service: string) => { const s = sess(id).services.get(service); if (!s) throw new Error("no service"); return s; };
   const log = (session: string, service: string, what: string, id?: string) => {
     const s = sess(session); const l = logs.get(s.applet.subject) ?? [];
-    l.push({ at: Date.now(), applet: s.applet.name, service, what, id }); logs.set(s.applet.subject, l.slice(-500));
+    l.push({ at: Math.floor(Date.now() / 1000), applet: s.applet.name, service, what, id }); logs.set(s.applet.subject, l.slice(-500));
   };
   const relayOrigin = (s: Service) => { const u = new URL(s.url); u.protocol = u.protocol === "wss:" ? "https:" : "http:"; return u.origin; };
   const sha256 = async (b: Uint8Array) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", b))].map((x) => x.toString(16).padStart(2, "0")).join("");
@@ -88,6 +88,6 @@ export function e2eNative(secretHex: string): Native {
     },
     async tokenSet(subject, s, token) { if (token === null) tokens.delete(tokenKey(subject, s)); else tokens.set(tokenKey(subject, s), nip44.encrypt(token, selfKey())); },
     async tokenHas(subject, s) { return tokens.has(tokenKey(subject, s)); },
-    async log(subject) { return [...(logs.get(subject) ?? [])].reverse(); },
+    async log(subject) { return [...(logs.get(subject) ?? [])]; },
   };
 }

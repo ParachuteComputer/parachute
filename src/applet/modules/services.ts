@@ -15,6 +15,11 @@ export function createServicesModule(broker: () => Promise<Broker | null>, why: 
   const wrap = <T>(f: (x: Broker, p: T) => Promise<unknown> | unknown) => async (p: T) => {
     try { return await f(await b(), p); } catch (e) {
       if (e instanceof ContractError) throw e;
+      // the native side fails with {code, message} (native.ts NativeError): its refusals are the applet's to hear
+      if (e && typeof e === "object" && !(e instanceof Error) && typeof (e as { code?: unknown }).code === "string") {
+        const { code, message } = e as { code: string; message?: string };
+        throw new ContractError(code === "not_granted" ? ERROR_CODES.notGranted : code === "out_of_scope" || code.startsWith("hub_") ? ERROR_CODES.outOfScope : ERROR_CODES.failed, String(message ?? code).slice(0, 300));
+      }
       if (e instanceof BrokerError) throw new ContractError(e.code === "not_granted" ? ERROR_CODES.notGranted : e.code === "out_of_scope" ? ERROR_CODES.outOfScope : e.code === "bad_params" ? ERROR_CODES.badParams : ERROR_CODES.failed, e.message);
       throw new ContractError(ERROR_CODES.failed, e instanceof Error ? e.message.slice(0, 300) : "it failed");
     }

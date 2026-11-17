@@ -71,7 +71,7 @@ describe("the card and the key", () => {
       "Post as you in your rooms there: reactions, messages and typing",
       "Delete your messages and reactions there",
       "Send and open files there as you",
-      "Keep its own private notes there (read-state:…), sealed to your key",
+      "Keep private notes there (read-state:…), sealed to your key: other apps of yours may share them",
       "What it reads here could reach relay.example",
       "Send requests to mail.example signed as you",
       "What it reads here could reach mail.example",

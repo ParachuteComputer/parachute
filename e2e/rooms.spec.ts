@@ -55,7 +55,7 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText(`Sign in to ${new URL(RELAY!.replace(/^ws/, "http")).host} on this device as you`);
-    await expect(card).toContainText("Keep its own private notes there (read-state:…), sealed to your key");
+    await expect(card).toContainText("Keep private notes there (read-state:…), sealed to your key: other apps of yours may share them");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
     await expect(app.getByRole("heading", { name: "Rooms" })).toBeVisible();

@@ -86,8 +86,9 @@ and the home read their own vault.
 One line per service, in the app's words; stressed when it acts as the person or opens a way out:
 
 - relay: **"Sign in to relay.example as you"**; **"Post as you in your rooms there: messages, reactions, edits,
-  typing"**; **"Delete your messages and reactions there"**; **"Send and open files there as you"** (media); **"Keep its own private
-  notes there (read-state:…), sealed to your key"** (private).
+  typing"**; **"Delete your messages and reactions there"**; **"Send and open files there as you"** (media); **"Keep private notes
+  there (read-state:…), sealed to your key: other apps of yours may share them"** (private: the Uni app keeps its read
+  markers under the same prefix, which is the point; two applets declaring one prefix read each other's).
 - http: **"Send requests to mail.example signed as you"** (nip98), **"Use a token you give it for matrix.example"**
   (token: the person gives it to the shell on the shell's own sheet, never to the applet), **"Send requests to
   example.org"** (none).
