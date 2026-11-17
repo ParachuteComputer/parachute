@@ -15,7 +15,7 @@ one.
      [Mac workflow's](https://github.com/ParachuteComputer/parachute/actions/workflows/mac.yml) artifacts.
 2. **Your key.** On the first screen, **Make a new key**. If your key is already in the Uni app or
    [Buzz](https://github.com/unforcedagi/buzz) desktop, choose **Pair from a device that has your key** instead: on
-   that device, Settings → **Pair a device**; here, scan its QR code (Android) or paste its `nostrpair://` link (Mac);
+   that device, Settings → **Pair a device** (in Buzz, **Pair mobile device**); here, scan its QR code (Android) or paste its `nostrpair://` link (Mac);
    check the 6-digit codes match.
 3. **Your hub knows your key.** The hub's owner links it once: `parachute auth link-pubkey --user <name> <npub>`. The
    app shows your `npub1…`.
