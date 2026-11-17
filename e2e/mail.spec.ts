@@ -55,6 +55,13 @@ test("mail: alice reads what bob sent, replies after reviewing exactly what will
     // it is in Sent, and in bob's inbox
     await expect(app.getByRole("list", { name: "Sent" }).getByRole("button", { name: new RegExp(`Re: Tomato seedlings ${stamp}`) })).toBeVisible({ timeout: 20_000 });
     await expect.poll(async () => (await bob.inbox()).some((m) => m.subject === `Re: Tomato seedlings ${stamp}`), { timeout: 30_000 }).toBe(true);
+    // the thread now ends with her own reply: Reply still answers bob, not herself
+    await app.getByRole("navigation", { name: "Places" }).getByRole("button", { name: /Inbox/ }).click();
+    await inbox.getByRole("button", { name: new RegExp(`Tomato seedlings ${stamp}`) }).click();
+    await expect(app.getByRole("article")).toHaveCount(2);
+    await app.getByRole("button", { name: "Reply" }).click();
+    await expect(app.getByLabel("To")).toHaveValue(/bob@/);
+    await app.getByRole("button", { name: "← Mail" }).click();
     // back in the inbox, bob's message reads as seen; search finds it
     await app.getByRole("navigation", { name: "Places" }).getByRole("button", { name: /Inbox/ }).click();
     await expect(inbox.getByRole("button", { name: new RegExp(`Tomato seedlings ${stamp}`) })).not.toHaveClass(/unseen/);

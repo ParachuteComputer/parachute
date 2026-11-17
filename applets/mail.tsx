@@ -117,7 +117,7 @@ export default function Mail() {
   const accountNames = session ? Object.keys(session.roles).map((id) => ({ id, name: session.accounts[id]?.name ?? id, role: session.roles[id] })) : [];
   const css = <style>{CSS}</style>;
   if (!session) return <main>{css}<h1>Mail</h1>{err ? <p className="err" role="alert">{err}</p> : <p className="quiet">Opening your mail…</p>}</main>;
-  if (view.at === "read") return <main>{css}<Thread id={view.id} account={account!} can={can} back={() => { setView({ at: "list" }); void load(); void loadBoxes(); }} reply={(e) => setView({ at: "compose", reply: e })} edit={(d) => setView({ at: "compose", draft: d })} inDrafts={place === "drafts"} /></main>;
+  if (view.at === "read") return <main>{css}<Thread id={view.id} account={account!} me={session.accounts[account!]?.name ?? session.account} can={can} back={() => { setView({ at: "list" }); void load(); void loadBoxes(); }} reply={(e) => setView({ at: "compose", reply: e })} edit={(d) => setView({ at: "compose", draft: d })} inDrafts={place === "drafts"} /></main>;
   if (view.at === "compose") return <main>{css}<Compose account={account!} can={can} draft={view.draft} reply={view.reply} done={(sent) => { setView({ at: "list" }); if (sent) setPlace("sent"); void loadBoxes(); void load(); }} /></main>;
   return <main>
     {css}
@@ -142,7 +142,7 @@ export default function Mail() {
   </main>;
 }
 
-function Thread({ id, account, can, back, reply, edit, inDrafts }: { id: string; account: string; can: (o: string) => boolean; back: () => void; reply: (e: Email) => void; edit: (d: Draft) => void; inDrafts: boolean }) {
+function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: string; account: string; me: string; can: (o: string) => boolean; back: () => void; reply: (e: Email) => void; edit: (d: Draft) => void; inDrafts: boolean }) {
   const [emails, setEmails] = useState<Email[] | null>(null);
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
@@ -163,6 +163,9 @@ function Thread({ id, account, can, back, reply, edit, inDrafts }: { id: string;
     })();
   }, [id]);
   const last = emails?.[emails.length - 1];
+  // a reply answers the newest message someone else sent; in a thread of only mine, it goes to whom mine went
+  const mine = (e: Email) => (e.from ?? []).some((a) => a.email.toLowerCase() === me.toLowerCase());
+  const answering = emails ? [...emails].reverse().find((e) => !e.keywords?.$draft && !mine(e)) ?? (last ? { ...last, replyTo: last.to } : undefined) : undefined;
   const bodyOf = (e: Email) => {
     const t = (e.textBody ?? []).map((p) => e.bodyValues?.[p.partId]?.value ?? "").join("\n").trim();
     if (t) return t;
@@ -180,7 +183,7 @@ function Thread({ id, account, can, back, reply, edit, inDrafts }: { id: string;
     </article>)}
     {last && <div className="bar" style={{ marginTop: 16 }}>
       {inDrafts && last.keywords?.$draft && can("draft.save") ? <button className="primary" onClick={async () => { const r = await op("draft.review", account, { draftId: last.id }); edit({ draftId: last.id, fingerprint: r.fingerprint, fields: { to: r.fields.to ?? [], cc: r.fields.cc ?? [], bcc: r.fields.bcc ?? [], subject: r.fields.subject ?? "", text: r.fields.text ?? "" } }); }}>Open the draft</button>
-        : can("draft.save") && <button className="primary" onClick={() => reply(last)}>Reply</button>}
+        : can("draft.save") && answering && <button className="primary" onClick={() => reply(answering)}>Reply</button>}
       {can("flag") && <button className="plainbtn" onClick={() => act("flag", { emailIds: [last.id], flagged: !last.keywords?.$flagged }, last.keywords?.$flagged ? "Unflagged." : "Flagged.")}>{last.keywords?.$flagged ? "Unflag" : "Flag"}</button>}
       {can("archive") && !last.keywords?.$draft && <button className="plainbtn" onClick={() => act("archive", { emailIds: emails.map((e) => e.id) }, "Archived.")}>Archive</button>}
       {note && <span className="quiet" role="status">{note}</span>}
