@@ -93,14 +93,14 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     await app.getByRole("listbox", { name: "People in this room" }).getByRole("button", { name: bobName }).click();
     await field.pressSequentially(`see you at noon ${stamp}`);
     await app.getByRole("button", { name: "Send message" }).click(); // on a phone Enter is a new line
-    await expect(log.locator("article.mine", { hasText: `see you at noon ${stamp}` })).toBeVisible();
+    await expect(log.locator("article.mine", { hasText: `see you at noon ${stamp}` })).toBeVisible({ timeout: 15_000 });
 
     // a reply in a thread
     await beans.getByRole("button", { name: "Reply" }).click();
     await expect(app.getByRole("heading", { name: "Thread" })).toBeVisible();
     await app.getByLabel(`Message Garden ${stamp}`).fill(`In the thread ${stamp}`);
     await app.getByRole("button", { name: "Send message" }).click();
-    await expect(app.getByRole("log").locator("article.mine", { hasText: `In the thread ${stamp}` })).toBeVisible();
+    await expect(app.getByRole("log").locator("article.mine", { hasText: `In the thread ${stamp}` })).toBeVisible({ timeout: 15_000 });
     await app.getByRole("button", { name: `← Garden ${stamp}` }).click();
     await expect(log.locator("article", { hasText: `are up ${stamp}` }).getByRole("button", { name: "1 reply" })).toBeVisible();
 

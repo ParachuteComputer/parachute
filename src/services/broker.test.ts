@@ -140,4 +140,30 @@ describe("the broker's relay connection", () => {
       expect(sock.sent.some((m) => Array.isArray(m) && m[0] === "EVENT")).toBe(false);
     } finally { vi.useRealTimers(); }
   });
+
+  it("keeps under a relay's rate: a burst, then paced; a post goes before waiting subscriptions", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", subs: Array.from({ length: 40 }, (_, i) => ({ sub: `r${i}`, filters: [{ kinds: [9], "#h": [`room-${i}`] }] })) });
+      b.subscribe({ service: "rooms", subs: Array.from({ length: 30 }, (_, i) => ({ sub: `q${i}`, filters: [{ kinds: [9], "#h": [`more-${i}`] }] })) });
+      await vi.advanceTimersByTimeAsync(1);
+      const sock = FakeSocket.all[0];
+      await signIn(sock, () => vi.advanceTimersByTimeAsync(1));
+      expect(sock.reqs()).toHaveLength(30);
+      const posted = b.publish({ service: "rooms", event: { kind: 9, content: "now", tags: [["h", "room-0"]] } });
+      await vi.advanceTimersByTimeAsync(200);
+      // the next message out is the post, ahead of the 40 subscriptions still waiting
+      const after = sock.sent.slice(sock.sent.findIndex((m) => Array.isArray(m) && m[0] === "REQ") + 30);
+      expect(after[0]).toMatchObject(["EVENT", { content: "now" }]);
+      sock.from(["OK", (after[0] as unknown[] as [string, { id: string }])[1].id, true, ""]);
+      await expect(posted).resolves.toMatchObject({ ok: true });
+      // no more than the burst plus 8 a second, over any 5 s
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(sock.reqs().length).toBeLessThanOrEqual(30 + 40 + 1);
+      expect(sock.reqs().length).toBeLessThanOrEqual(30 + Math.ceil(5.2 * 8));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(sock.reqs()).toHaveLength(70);
+    } finally { vi.useRealTimers(); }
+  });
 });

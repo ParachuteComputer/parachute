@@ -9,6 +9,10 @@ type Sub = { filters: Record<string, unknown>[]; onEvent: (e: SignedEvent) => vo
 type Waiter = { resolve: (r: { ok: boolean; message: string }) => void; timer: ReturnType<typeof setTimeout> };
 
 const AUTH_WAIT_MS = 2500;
+/** A relay counts the posts and subscriptions a connection sends (Buzz by default: 10 a second, over 5 s; past it, it
+ *  drops them with a NOTICE). The shell keeps under that: a burst of 30, then 8 a second; posts go before
+ *  subscriptions, and sign-ins and CLOSEs (not counted) go at once. */
+const PACE_BURST = 30, PACE_PER_SEC = 8;
 const OK_WAIT_MS = 10_000;
 
 export class RelayConn {
@@ -22,6 +26,11 @@ export class RelayConn {
   private closedForGood = false;
   private tries = 0;
   private authTimer: ReturnType<typeof setTimeout> | null = null;
+  private tokens = PACE_BURST;
+  private refilled = Date.now();
+  private posts: unknown[] = [];
+  private reqs: unknown[] = [];
+  private drainTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private url: string, private auth: (challenge: string) => Promise<SignedEvent>, private onStatus: (s: Status) => void, private socket: (url: string) => WebSocket = (u) => new WebSocket(u)) {
     this.connect();
@@ -48,6 +57,7 @@ export class RelayConn {
       this.onStatus({ status: "closed", why: "the relay closed the connection" });
       // a publish in flight gets its answer now, never a hang; and having been told it failed, it isn't sent later
       this.failWaiting("connection closed");
+      this.dropOutbox();
       this.again();
     };
   }
@@ -56,6 +66,7 @@ export class RelayConn {
   private failWaiting(why: string) {
     for (const [id, w] of this.waiting) { clearTimeout(w.timer); w.resolve({ ok: false, message: why }); this.waiting.delete(id); }
     this.queue = this.queue.filter((m) => !(Array.isArray(m) && m[0] === "EVENT"));
+    this.posts = [];
   }
 
   /** Connect again after a growing wait (a dropped socket, or one that couldn't be made). */
@@ -74,7 +85,29 @@ export class RelayConn {
     for (const m of q) this.raw(m);
   }
 
-  private raw(m: unknown) { if (this.ws && this.open) this.ws.send(JSON.stringify(m)); }
+  private raw(m: unknown) {
+    if (!this.ws || !this.open) return;
+    const kind = Array.isArray(m) ? m[0] : "";
+    if (kind !== "EVENT" && kind !== "REQ") { this.ws.send(JSON.stringify(m)); return; }
+    (kind === "EVENT" ? this.posts : this.reqs).push(m);
+    this.drain();
+  }
+  private drain() {
+    if (this.drainTimer) { clearTimeout(this.drainTimer); this.drainTimer = null; }
+    const now = Date.now();
+    this.tokens = Math.min(PACE_BURST, this.tokens + ((now - this.refilled) * PACE_PER_SEC) / 1000);
+    this.refilled = now;
+    while (this.tokens >= 1 && this.ws && this.open && (this.posts.length || this.reqs.length)) {
+      this.ws.send(JSON.stringify(this.posts.length ? this.posts.shift() : this.reqs.shift()));
+      this.tokens -= 1;
+    }
+    if (this.posts.length || this.reqs.length) this.drainTimer = setTimeout(() => this.drain(), Math.ceil(((1 - this.tokens) * 1000) / PACE_PER_SEC) + 5);
+  }
+  /** Nothing waits to go out (the connection dropped or closed: subscriptions are sent again after the next sign-in). */
+  private dropOutbox() {
+    if (this.drainTimer) { clearTimeout(this.drainTimer); this.drainTimer = null; }
+    this.posts = []; this.reqs = [];
+  }
   private send(m: unknown) { if (this.authed) this.raw(m); else this.queue.push(m); }
 
   private message(data: unknown) {
@@ -131,7 +164,8 @@ export class RelayConn {
       const timer = setTimeout(() => {
         this.waiting.delete(ev.id);
         // told it failed: if it was still waiting for a sign-in, it doesn't go out later
-        this.queue = this.queue.filter((m) => !(Array.isArray(m) && m[0] === "EVENT" && (m[1] as SignedEvent)?.id === ev.id));
+        const other = (m: unknown) => !(Array.isArray(m) && m[0] === "EVENT" && (m[1] as SignedEvent)?.id === ev.id);
+        this.queue = this.queue.filter(other); this.posts = this.posts.filter(other);
         resolve({ ok: false, message: "no answer from the relay" });
       }, OK_WAIT_MS);
       this.waiting.set(ev.id, { resolve, timer });
@@ -143,7 +177,7 @@ export class RelayConn {
     this.closedForGood = true;
     if (this.authTimer) clearTimeout(this.authTimer);
     for (const [, w] of this.waiting) { clearTimeout(w.timer); w.resolve({ ok: false, message: "closed" }); }
-    this.waiting.clear(); this.subs.clear(); this.queue = [];
+    this.waiting.clear(); this.subs.clear(); this.queue = []; this.dropOutbox();
     try { this.ws?.close(); } catch { /* gone */ }
     this.ws = null;
   }
