@@ -17,6 +17,10 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash  # -eo pipefail: a failed build piped into tee still fails the step
+
 jobs:
   mac:
     uses: ./.github/workflows/mac.yml
@@ -29,11 +33,15 @@ jobs:
       NDK_VERSION: 29.0.14206865
     steps:
       - uses: actions/checkout@v4
-      - name: The tag is the app's version
+        with:
+          fetch-depth: 0
+      - name: The tag is the app's version, on next or main
         if: github.event_name == 'push'
         run: |
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
           [ "${GITHUB_REF_NAME#v}" = "$version" ] || { echo "tag $GITHUB_REF_NAME, but tauri.conf.json says $version" >&2; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/next || git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "tag $GITHUB_REF_NAME is on a commit that isn't on next or main" >&2; exit 1; }
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -86,6 +94,9 @@ jobs:
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
           mkdir -p out && cp "$apk" "out/Parachute_${version}_arm64${APK_SUFFIX}.apk"
           ls -l out
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/playtest"
       - uses: actions/upload-artifact@v4
         with:
           name: parachute-android
