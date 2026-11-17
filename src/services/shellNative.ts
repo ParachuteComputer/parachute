@@ -6,8 +6,11 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   return invoke<T>(cmd, args);
 }
 
+/** A grant's subject joins vault and note with a NUL (applet/grants.ts subjectOf); the native side takes plain text. */
+export const plainSubject = (subject: string) => subject.replace(/\u0000/g, " | ");
+
 export const shellNative: Native = {
-  open: (session, applet, services, hubs) => invoke("svc_open", { session, applet, services, hubs }),
+  open: (session, applet, services, hubs) => invoke("svc_open", { session, applet: { ...applet, subject: plainSubject(applet.subject) }, services, hubs }),
   close: (session) => invoke("svc_close", { session }),
   relayAuth: (session, service, challenge) => invoke("svc_relay_auth", { session, service, challenge }),
   signEvent: (session, service, template) => invoke("svc_sign_event", { session, service, template }),
@@ -16,7 +19,7 @@ export const shellNative: Native = {
   media: (session, service, sha256, ext) => invoke("svc_media", { session, service, sha256, ext }),
   privateOpen: (session, service, event) => invoke("svc_private_open", { session, service, event }),
   privateSave: (session, service, d, text) => invoke("svc_private_save", { session, service, d, text }),
-  tokenSet: (subject, service, token) => invoke("svc_token_set", { subject, service, token }),
-  tokenHas: (subject, service) => invoke("svc_token_has", { subject, service }),
-  log: (subject) => invoke("svc_log", { subject }),
+  tokenSet: (subject, service, token) => invoke("svc_token_set", { subject: plainSubject(subject), service, token }),
+  tokenHas: (subject, service) => invoke("svc_token_has", { subject: plainSubject(subject), service }),
+  log: (subject) => invoke("svc_log", { subject: plainSubject(subject) }),
 };

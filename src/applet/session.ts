@@ -10,6 +10,8 @@ import type { Router } from "./router.ts";
 export type SessionOptions = { post: (m: HostMessage) => void; router: Router; grant: Resolved; now?: () => number };
 
 const codeOf = (e: unknown): ErrorCode => (e instanceof ContractError ? e.code : ERROR_CODES.failed);
+/** What the frame is told: the code, and the app's own words when a module gave some (never anything else's). */
+const wordsOf = (e: unknown): string | undefined => (e instanceof ContractError && e.message !== e.code ? e.message.slice(0, 300) : undefined);
 
 export function createSession(opts: SessionOptions) {
   const now = opts.now ?? Date.now;
@@ -40,9 +42,9 @@ export function createSession(opts: SessionOptions) {
       const limited = !requests.take(now());
       const env = parseEnvelope(data);
       const isPfr = !!data && typeof data === "object" && "pfr" in (data as object);
-      const errorReply = (id: string, code: ErrorCode) => post(isPfr || env.kind === "pfr"
+      const errorReply = (id: string, code: ErrorCode, words?: string) => post(isPfr || env.kind === "pfr"
         ? errorToFrameFetchReply({ id, channel: "vault" }, code)
-        : { uni: 1, id, error: { code, message: code } });
+        : { uni: 1, id, error: { code, message: words ?? code } });
       if (limited) { if (env.id) errorReply(env.id, ERROR_CODES.rateLimited); return; }
       if (env.kind === "bad") { if (env.id) errorReply(env.id, env.error); return; }
       if (pending >= LIMITS.maxPending) { errorReply(env.id, ERROR_CODES.tooManyPending); return; }
@@ -51,7 +53,7 @@ export function createSession(opts: SessionOptions) {
         ? opts.router.call("vault", "fetch", { method: env.method, path: env.path, headers: env.headers, body: env.body }, opts.grant, ctx)
           .then((r: FetchResult) => post(toFrameFetchReply(env, r)))
         : opts.router.call(env.ns, env.method, env.params, opts.grant, ctx).then((result) => post({ uni: 1, id: env.id, result: result ?? null }));
-      call.catch((e) => errorReply(env.id, codeOf(e))).finally(() => { pending--; });
+      call.catch((e) => errorReply(env.id, codeOf(e), wordsOf(e))).finally(() => { pending--; });
     },
   };
 }
