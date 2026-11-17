@@ -116,4 +116,73 @@ describe("the broker's relay connection", () => {
       expect(second.sent.some((m) => Array.isArray(m) && m[0] === "EVENT")).toBe(false);
     } finally { vi.useRealTimers(); }
   });
+
+  it("doesn't send a post queued behind a sign-in the relay refused, nor one it said had timed out", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const slow = native();
+      slow.relayAuth = () => new Promise((r) => setTimeout(() => r({ ...ev("auth"), kind: 22242 }), 12_000));
+      const { b } = setup(slow);
+      const late = b.publish({ service: "rooms", event: { kind: 9, content: "late", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(1);
+      const sock = FakeSocket.all[0];
+      sock.from(["AUTH", "challenge"]);
+      // the sign-in takes longer than a post waits: it is told it failed
+      await vi.advanceTimersByTimeAsync(10_500);
+      await expect(late).resolves.toMatchObject({ ok: false });
+      await vi.advanceTimersByTimeAsync(2000);
+      const refused = b.publish({ service: "rooms", event: { kind: 9, content: "refused", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(1);
+      sock.from(["OK", "auth", false, "restricted: not a member"]);
+      await expect(refused).resolves.toMatchObject({ ok: false });
+      // a later sign-in on this connection sends neither
+      sock.from(["OK", "auth", true, ""]);
+      expect(sock.sent.some((m) => Array.isArray(m) && m[0] === "EVENT")).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("keeps under a relay's rate: a burst, then paced; a post goes before waiting subscriptions", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", subs: Array.from({ length: 40 }, (_, i) => ({ sub: `r${i}`, filters: [{ kinds: [9], "#h": [`room-${i}`] }] })) });
+      b.subscribe({ service: "rooms", subs: Array.from({ length: 30 }, (_, i) => ({ sub: `q${i}`, filters: [{ kinds: [9], "#h": [`more-${i}`] }] })) });
+      await vi.advanceTimersByTimeAsync(1);
+      const sock = FakeSocket.all[0];
+      await signIn(sock, () => vi.advanceTimersByTimeAsync(1));
+      expect(sock.reqs()).toHaveLength(10);
+      const posted = b.publish({ service: "rooms", event: { kind: 9, content: "now", tags: [["h", "room-0"]] } });
+      await vi.advanceTimersByTimeAsync(200);
+      // the next message out is the post, ahead of the 40 subscriptions still waiting
+      const after = sock.sent.slice(sock.sent.findIndex((m) => Array.isArray(m) && m[0] === "REQ") + 10);
+      expect(after[0]).toMatchObject(["EVENT", { content: "now" }]);
+      sock.from(["OK", (after[0] as unknown[] as [string, { id: string }])[1].id, true, ""]);
+      await expect(posted).resolves.toMatchObject({ ok: true });
+      // at most 45 counted messages in any 5 s (Buzz allows 50 a person, in a fixed window): checked over the whole run
+      const at: number[] = [];
+      const send = sock.send.bind(sock);
+      sock.send = (x: string) => { if (/^\["(REQ|EVENT)"/.test(x)) at.push(Date.now()); send(x); };
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(sock.reqs()).toHaveLength(70);
+      const all = [...Array(10 + 1).fill(0), ...at]; // the burst and the post went out at the start
+      for (const t0 of at) expect(all.filter((t) => t >= t0 - 5000 && t <= t0).length).toBeLessThanOrEqual(45);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("never closes a subscription the relay hasn't been sent yet (its CLOSE would overtake its REQ)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", subs: Array.from({ length: 20 }, (_, i) => ({ sub: `r${i}`, filters: [{ kinds: [9], "#h": [`room-${i}`] }] })) });
+      await vi.advanceTimersByTimeAsync(1);
+      const sock = FakeSocket.all[0];
+      await signIn(sock, () => vi.advanceTimersByTimeAsync(1));
+      b.unsubscribe({ service: "rooms", subs: ["r0", "r19"] });
+      await vi.advanceTimersByTimeAsync(5000);
+      const ids = (t: string) => sock.sent.filter((m) => Array.isArray(m) && m[0] === t).map((m) => (m as string[])[1]);
+      expect(ids("CLOSE")).toEqual(["a:r0"]);
+      expect(ids("REQ")).not.toContain("a:r19");
+      expect(ids("REQ")).toHaveLength(19);
+    } finally { vi.useRealTimers(); }
+  });
 });

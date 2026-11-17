@@ -26,6 +26,10 @@ BUZZ_ENV_FILE=$PWD/relay.env docker compose -f e2e/services/relay-compose.yml up
 Use `ws://localhost:3871` (not 127.0.0.1): the relay binds its community to the host in `RELAY_URL`. The rooms spec makes
 its own rooms each run: the owner lets alice and bob in (kind 9030), makes two rooms (9007) and adds both (9000).
 
+The compose file keeps Buzz's default rate per connection (10 messages a second over 5 s; a production relay may allow
+more): stricter than production, so the shell's pacing is tested. A rooms applet's person in many rooms is the case it
+holds: a burst of subscriptions is paced, and a post goes ahead of them.
+
 What the relay taught the applet (and the tests hold it to): it sends live events only to a subscription for one room;
 typing (kind 20002) goes in a filter of its own; a file with metadata in it (camera data, encoder tags) is refused, so
 the applet draws a picture again before it sends it; read markers are whole seconds.
