@@ -18,6 +18,10 @@ on:
   workflow_dispatch:
   workflow_call:
 
+defaults:
+  run:
+    shell: bash  # -eo pipefail: a failing step in a pipe fails the step
+
 jobs:
   mac:
     name: mac (Apple Silicon)
