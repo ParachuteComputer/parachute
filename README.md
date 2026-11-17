@@ -39,6 +39,11 @@ one.
 - **The kit and the look.** An applet imports `parachute`: the data calls (in record words), and a few parts to build a
   screen from (a rich note, a tally of days, a list, a card, a field, an empty state). The whole app and every applet
   follow one theme note in your home vault ([docs/THEME.md](docs/THEME.md)); with none, the built-in one.
+- **Other Parachutes.** Add an org's vault (or a friend's) with the same key, as someone else's: the launcher marks it.
+  Bring its applets into your own launcher, and put its components on your home, each in its own sealed frame with
+  its own card, seeing only what that card allows of their vault and nothing of yours. From a vault you trust, import
+  a component into your own code instead. See [docs/OTHER-PARACHUTES.md](docs/OTHER-PARACHUTES.md) and the trust
+  model, [docs/design/EMBED.md](docs/design/EMBED.md).
 - **Open with.** A note's type is its tag. Tap a note and it opens in the applet that claims its type, or in the plain
   vault view, which opens anything. When two applets claim a type, Parachute asks once. Your choices stay on your device.
 
