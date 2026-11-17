@@ -16,7 +16,7 @@ const day = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short",
 
 /** The heading when the code changed since it was brought into the person's Parachute (a pointer's pin). */
 export const broughtChangedLine = (vault: string, name: string) => `${vault} changed «${name}» since you brought it in. Only the version you allow runs.`;
-export const ASKS_OTHER_LINE = "It now asks for something else than what you allowed.";
+export const ASKS_OTHER_LINE = "It now asks for something other than what you allowed.";
 
 /** The props a page hands a component, as the card shows them: every one, in full. */
 export const handedLine = (props: Record<string, unknown>) => `Your page hands it: ${Object.entries(props).map(([k, v]) => `${k} ${JSON.stringify(v)}`).join(", ")}.`;

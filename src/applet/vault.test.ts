@@ -103,3 +103,18 @@ describe("the vault, from inside a frame", () => {
     ]));
   });
 });
+
+describe("fields on a list", () => {
+  it("include_metadata brings each note's tags and fields, and still only from its folders", async () => {
+    notes[0].metadata = { when: "2026-11-20" };
+    const r = await frame().fetch("GET", "/api/notes?path_prefix=Recipes/&include_metadata=true");
+    expect(r.status).toBe(200);
+    const rows = r.body as { path: string; metadata?: Record<string, unknown>; tags?: string[] }[];
+    expect(rows.find((x) => x.path === "Recipes/Toast")).toMatchObject({ metadata: { when: "2026-11-20" }, tags: ["recipe"] });
+    expect(rows.some((x) => x.path.startsWith("Journal/"))).toBe(false);
+    // without it, a list is what it was: ids, paths and times
+    const plain = (await frame().fetch("GET", "/api/notes?path_prefix=Recipes/")).body as Record<string, unknown>[];
+    expect(plain[0]).not.toHaveProperty("metadata");
+  });
+});
+
