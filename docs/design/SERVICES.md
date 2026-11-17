@@ -78,7 +78,7 @@ runs in the applet's frame, with its services; its code is in the code hash, so 
 **Not here: another vault by URL.** An applet reaches the vault its record lives in (`access`, `vault: here`). A
 second vault needs its own sign-in (per-vault tokens, ONE-SIGN-IN.md), which the shell holds for the vaults this device
 has; that is a vault rule, not a service, and vault routes are on hub origins, which services refuse. It is left for a
-later step with its own mechanism. Aaron's daily applets don't need it: rooms and mail talk to their servers, journal
+later step with its own mechanism. The first applets don't need it: rooms and mail talk to their servers, journal
 and the home read their own vault.
 
 ## The card
@@ -226,5 +226,5 @@ line on the card.
 ## Subtract
 
 This replaces nothing in Parachute (applets had no network before). It is the second home of the Uni app's rooms, mail
-and journal; the Uni app is retired when Aaron has switched (his call, after daily use). Cut from this version:
+and journal; the Uni app is retired once its person has switched (their call, after daily use). Cut from this version:
 `basic` auth, kinds beyond the five named, vault by URL, services for embedded components.

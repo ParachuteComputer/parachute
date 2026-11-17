@@ -64,7 +64,7 @@ the Uni app's mail gateway (e2e/services/README.md); "CI" means it runs on every
 
 | Feature | State | Why |
 |---|---|---|
-| Home (the rooms list) | built: the Rooms applet is the home in Aaron's layout | — |
+| Home (the rooms list) | built: the Rooms applet is the home in the Uni layout (scripts/install-applets.ts) | — |
 | Settings, the key, pairing a device | built in Parachute already (steps 3 and 7) | — |
 | Vault browser and notes | built in Parachute already (the launcher, the vault view) | — |
 | Search across the journal and vaults | part: each vault's search in the app; no one search across rooms and vaults | — |
