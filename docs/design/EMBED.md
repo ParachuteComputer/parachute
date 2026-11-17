@@ -1,12 +1,12 @@
 # Other Parachutes in yours: pointers, embeds and imports (design)
 
-Status: design for step 6, revised twice after review. The first review (NO-SHIP) found that "another Parachute" was
+Status: design for step 6, revised four times after review; the fifth review said SHIP. The first review (NO-SHIP) found that "another Parachute" was
 judged by hub, any applet could host embeds, props reached foreign code without the card saying so, and one embed's
 sandbox violation stopped every frame. The second (NO-SHIP) found that a card drawn on the page could be slid under a
 tap by frames changing size, and that a component that hangs late beat the hang guard. The third (NO-SHIP) found that
 a huge record could freeze the app while it was read and transpiled, before any guard. The fourth (NO-SHIP) found that
 guard covered embeds but not brought-in applets or the launcher, and that a host can message its embeds directly.
-Plain words first, then the rules, then the threats. The worked example all the way through is **Techne's
+The fifth's notes are folded in. Plain words first, then the rules, then the threats. The worked example all the way through is **Techne's
 Events component on Aaron's home**.
 
 ## What a person gets
@@ -41,7 +41,9 @@ sign-in (`parachute.whose.v1`), so signing in again keeps it. No record or agent
   first added, as today) is mine, so nothing it does now changes; every other counts as someone else's. Settings asks,
   until the person answers, "Are these yours?" beside each, and always shows every vault's value and lets the person
   change it. (A device that added an org's vault first and used it as home keeps today's behaviour for it until the
-  person says otherwise: no less safe than now.)
+  person says otherwise: no less safe than now.) The other vaults do change: a home applet or bar place in one of them
+  stops opening on start, asking the app for things, and reading embeds and pointers until the person says it is
+  theirs, so Settings lists those vaults first.
 - **The home vault is always mine.** The default home is the first vault that is mine; Settings offers only mine. A
   device whose vaults are all someone else's has no home until the person marks one as theirs.
 - **Trusted** is someone else's vault the person has marked so on its card (below). The only thing it adds is that code
@@ -50,7 +52,7 @@ sign-in (`parachute.whose.v1`), so signing in again keeps it. No record or agent
 | | Mine | Someone else's, trusted | Someone else's |
 |---|---|---|---|
 | Its applets may ask the app for `recent`, `pins`, `open` | yes | no | no |
-| Its applets may host embeds (`fields.embeds`); its pointers are read | yes | no | no |
+| Its applets may host embeds (`fields.embeds`) | yes | no | no |
 | Its components may be imported into an applet in another vault | yes | yes | no (embed instead) |
 | Can be the home, or hold the home applet | yes | no | no |
 | The launcher marks its chapter | *your home* on the home; nothing on the rest | *someone else's, trusted · at host* | *someone else's · at host* |
@@ -107,12 +109,13 @@ fields:
     code: tsx:9b13…                    # the code hash brought in
 ```
 
-The pin (`code`) is the version brought in. It is a claim, kept so every device and the agent can see it; it never
+**Pointers live in the home vault**, one place: the app writes them there, reads them only there, and an embed or an
+import names a pointer there. The pin (`code`) is the version brought in. It is a claim, kept so every device and the agent can see it; it never
 runs anything. Running needs this device's Allow for that exact code (as for any applet). When the code upstream no
 longer matches the pin, the card is headed "Techne changed Events since you brought it in", even on a device that never
 allowed it; Allow then rewrites the pin (one shell write, `if_updated_at`) and records this device's Allow. A pointer
-an agent rewrote to a new hash changes nothing until a tap on a device allows that code. Pointers are read only in
-vaults that are mine (the app writes them beside the home applet, at `Parachute/From/<host>/<vault>/<kind>-<id>`).
+an agent rewrote to a new hash changes nothing until a tap on a device allows that code. The path is
+`Parachute/From/<host>/<vault>/<kind>-<id>`.
 
 ### An embed (in the host applet's record, in a vault that is mine)
 
@@ -120,7 +123,7 @@ vaults that are mine (the app writes them beside the home applet, at `Parachute/
 fields:
   embeds:
     - name: events                                     # a word for it on this page
-      record: Parachute/From/techne.example/techne/component-events   # a component, or a pointer to one, in the host's own vault
+      record: Parachute/From/techne.example/techne/component-events   # a component in the host's vault, or a pointer in the home vault
       props: { days: 7 }                               # plain data
 ```
 
@@ -135,7 +138,8 @@ so a host showing someone else's embed can hand it what the host reads, and the 
 the host's grant key includes the sorted list of the other vaults its embeds come from (only when there is one, so
 no grant made before changes), and its card says, stressed: *"Shows things from techne (someone else's) on its page.
 What it reads here could reach techne."* Adding the first embed from techne asks the host again; more from techne
-don't.
+don't. Embeds from two other vaults can also talk to each other, so with more than one the line names them all:
+*"Shows things from techne and acme on its page. What it reads here, and what they read, could pass between them."*
 
 ## How an embed runs
 
@@ -163,7 +167,7 @@ The host is an applet in a vault that is mine (usually the home applet), in its 
   nothing on a card shows it, so only these few values cross; the bits left in fourteen colours are named and
   accepted.
 - **Its grant, per place.** The grant's subject is the place on the page: the host's vault and note and the embed's
-  name. Its key covers what the component is (its hub, vault and record), its rules, and its props, so a change to any
+  name, in a form no applet's subject can take (`subjectOf` with a separator a note id can't hold). Its key covers what the component is (its hub, vault and record), its rules, and its props, so a change to any
   asks again.
 - **Every decision is on a sheet above the page, never in it.** Where an embed would run but needs a yes, its place
   shows the shell's sentence and **Review** ("«Events», from techne, asks to read its events. Review"). Review opens
@@ -190,7 +194,8 @@ The shell's CSP (`frame-src about:`) is what stops a frame navigating, and the v
 tried. Today any violation stops the applet on screen. With embeds: each frame's element reports a `load` after its
 first; the frame whose element loaded again is the one that navigated, and only it is stopped ("«Events» tried to
 leave its sandbox and was stopped"). When no single frame can be named (a webview that fires no second `load`), every
-frame on the page stops, with that sentence: safe, at the cost of the page.
+frame on the page stops, with that sentence: safe, at the cost of the page; the page then starts again with its
+embeds from someone else's vaults held at Review, each named, so the person can see which ones and Revoke.
 (Checked in Chromium, the engine of Android's WebView: a blocked self-navigation fires the violation and a second
 `load` on that frame's element only; a sandboxed frame that sets a sibling's `location` gets a `SecurityError`.)
 
@@ -212,8 +217,8 @@ it. Names from records are quoted and the hub's address is the app's:
 | It doesn't compile, its record is invalid, or its body is over 200 KB | "«Events» can't run: <reason>." |
 
 The vault module turns hub errors into plain answers for the frame, so the shell wraps the vault deps it hands an
-embed's module: the wrapper sees surface-client's `VaultAuthError` (after the refresh the client already tries) and
-`VaultUnreachableError`, and replaces the frame with the sentence; the record itself being gone (`VaultNotFoundError`
+embed's module: the wrapper sees surface-client's `VaultAuthError` with status 401 (after the refresh the client
+already tries; a `VaultPermissionError`, 403, is left to the plain answer) and `VaultUnreachableError`, and replaces the frame with the sentence; the record itself being gone (`VaultNotFoundError`
 when it is read to start) is the shell's own read. Sentences that need a tap ("Sign in to techne again", "Add it") are
 links to the app's own screens, not buttons that grant.
 
@@ -225,18 +230,22 @@ transpiles code, which a hub serving huge or pathological records could make tak
 read from **someone else's** vault, applets and components alike, wherever it is read (the launcher's lists, the
 bar's places, an applet's screen, an embed):
 
-- **Every reply from someone else's hub is read up to a limit** (4 MB), in the fetch the vault client uses; a bigger
-  one is refused as that hub's error, before it is parsed. A record's body is at most 200 KB; a bigger one is refused
-  with the shell's sentence before it is hashed.
+- **Every reply from someone else's hub is read up to a limit** (4 MB): the vault client's fetch, the token refresh
+  and sign-in discovery alike, since a refresh can happen at start without a tap. A bigger one is refused as that hub's
+  error, before it is parsed. A code record's body (an applet's, a component's) is at most 200 KB; a bigger one is
+  refused with the shell's sentence before it is hashed. (Notes read in the vault view keep today's limits.) The
+  applets and components of someone else's vault are listed in pages of 20, so a vault with many isn't one big reply.
 - **Its code is transpiled only after its hash matches an Allow on this device.** The card needs the hash and the
   record's fields, not the transpiled code. (Code from the person's own vaults keeps today's order, so a mistake in
   it is still shown before its card.)
 - **The home applet is in a vault that is mine** (`startApplet` and the start refuse any other), so no start runs
-  someone else's code by itself.
-- **Embeds keep a mark** (the frame record's, `frameSource.ts`: set while it shows, *suspect* on the next start): the
-  shell sets "embeds on <page>" before it reads the page's first embed record, keeps it while any embed is being read
-  or runs, and clears it when they stop, when the person leaves the page, on `pagehide`, and when the app is hidden
-  (`visibilitychange`, as `FrameArea` does, since swiping the app away on Android fires no `pagehide`). A start that
+  someone else's code by itself, with one exception the person chose: a home applet that imports from a trusted vault.
+  The page mark below covers a host with imports too.
+- **Pages keep a mark** (the same idea as the frame record's in `frameSource.ts`, under its own key): the shell sets
+  "page <host> running" before it reads the first embed record of a host with embeds or imports, keeps it while any of
+  that is read or runs, sets it again when the app is shown, and clears it when they stop, when the person leaves the
+  page, on `pagehide`, and when the app is hidden (`visibilitychange`, as `FrameArea` does, since swiping the app away
+  on Android fires no `pagehide`). A start that
   finds it still there leaves that page's embeds unread and stopped, with *"The app stopped while these were
   running."* and Review (the sheet: Run them).
 
@@ -255,7 +264,7 @@ import Events from "component:events";
   `access` is not used. One level only: a component that itself imports is refused.
 - **The applet's code hash covers what it imports.** With imports, the hash is `tsx:` + SHA-256 of the source and the
   sorted `id=hash` of each import; without, it is what it is today (no grant made before changes). A change upstream
-  changes the applet's hash, so its card comes back, saying which import changed.
+  changes the applet's hash, so its card comes back ("its code, or what it imports, changed since you allowed it").
 - The applet's card lists each import: "Includes «Events» from techne (trusted): its code runs inside this applet and
   sees what it sees." (stressed when it comes from someone else's vault).
 - An applet that imports from another Parachute can't open while that Parachute can't be reached (its hash can't be
@@ -279,8 +288,8 @@ data, and only the person's own tap should do that. Settings shows it beside eac
 - **Bring in** (an applet or a component in someone else's chapter, from its long-press sheet): on a tap the shell
   writes the pointer to the home vault, pinned to the code read now (its hash only: nothing is transpiled). The thing itself still asks on its card the first
   time it runs.
-- **Add to home** (a component, from its long-press sheet): on a tap the shell writes the pointer, in the home applet's
-  own vault (which is mine), if the component is in another vault, then appends `{name, record}` to the home applet's
+- **Add to home** (a component, from its long-press sheet): on a tap the shell writes the pointer, in the home vault,
+  if the component is in another vault than the home applet's, then appends `{name, record}` to the home applet's
   `fields.embeds` with `if_updated_at` (a conflict reads again and tries once more). No home applet: the sheet says so
   and writes nothing.
 - From a frame of the person's own (a `parachute-frame` record), these bridge calls are tap-gated and the shell asks
@@ -329,7 +338,7 @@ A custom frame that ignores them keeps working.
 | 4 | **A hostile host** uses an embed's grant or reads its data | The host can't make or write the embed frame (it isn't its parent) and can't see into it (cross-origin); its router has only its own vault; it chooses nothing about the embed (place, size, props). It *can* post to it, and a component's own listener would read that: see 7. | e2e: the host reaches for `frames` and posts to them; nothing |
 | 5 | **Someone else's applet hosts an embed** to use another component as a lookup | `fields.embeds` and pointers are read only in vaults that are mine. | unit |
 | 6 | **The person's words go to someone else's code in props** | Props come only from the record, are checked against the declaration, and are on the card and in the grant key: new props ask again. | e2e: an agent changes the props; the card comes back showing them |
-| 7 | **A host and its embed talk** | Sibling frames can `postMessage` each other directly; nothing in a browser stops it. So a host showing someone else's embed is treated as able to send what it reads to that vault's hub: its own card says so, stressed, and its grant key covers the vaults its embeds come from (the first embed from a new vault asks the host again). The embed's card says it too. | e2e: adding an embed from techne brings the host's card back with that line |
+| 7 | **A host and its embeds talk, and embeds talk to each other** | Sibling frames can `postMessage` each other directly; nothing in a browser stops it. So a host showing someone else's embed is treated as able to send what it reads to that vault's hub: its own card says so, stressed, and its grant key covers the vaults its embeds come from (the first embed from a new vault asks the host again; with embeds from two other vaults, the line names both). The embed's card says it too. | e2e: adding an embed from techne brings the host's card back with that line |
 | 8 | **A changed upstream** | Runs only the code this device allowed; a different hash (or pin) shows the card headed with what changed. For an import, the host's hash changes and its card comes back. | e2e: change the component on the techne hub; the card comes back; Allow runs the new code and rewrites the pin |
 | 9 | **A revoked grant: the person's** | The session closes at once and the frame goes; the place says so. | e2e: Revoke under the embed |
 | 10 | **A revoked grant: the org's** | A 401 after one refresh replaces the frame with the sentence. **Core gap, found by a spike on two loopback hubs (0.8.0 and 0.9.0-pre.1):** `revoke-access` leaves the member's live token and refresh token working, and the consent page issues a new one; only `/oauth/revoke` (or `auth revoke-token`) stops a token, and only 0.9 checks it at once (0.8 reads on until expiry, ≤ 15 min). Proposal below. | e2e (0.9): the hub revokes the person's tokens; the place says "techne no longer lets this device in." Skipped on 0.8 with that reason. |
