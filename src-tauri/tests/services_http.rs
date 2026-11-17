@@ -12,7 +12,7 @@ use http_server::{reply, serve, Seen};
 use nostr::base64::engine::general_purpose::STANDARD as B64;
 use nostr::base64::Engine;
 use nostr::{Event, Keys};
-use parachute_lib::services::{sha256_hex, Applet, Broker, HttpReq};
+use parachute_lib::services::{sha256_hex, Applet, Broker, HttpReq, Role};
 use serde_json::{json, Value};
 
 fn dir(name: &str) -> std::path::PathBuf {
@@ -76,13 +76,13 @@ async fn nip98_signs_the_exact_request_with_a_fresh_nonce() {
         r.headers.insert(h.into(), v.into());
     }
     r.body = Some(B64.encode(b"{\"to\":\"x\"}"));
-    let res = b.http(&k, "s", "mail", &r).await.unwrap();
+    let res = b.http(&k, &Role::Everyday, "s", "mail", &r).await.unwrap();
     assert_eq!(res.status, 200);
     assert_eq!(B64.decode(&res.body).unwrap(), b"ok");
     let names: Vec<&str> = res.headers.keys().map(String::as_str).collect();
     assert_eq!(names, vec!["content-length", "content-type", "etag", "last-modified"], "only plain headers come back: no cookie");
 
-    let again = b.http(&k, "s", "mail", &r).await.unwrap();
+    let again = b.http(&k, &Role::Everyday, "s", "mail", &r).await.unwrap();
     assert_eq!(again.status, 200);
 
     let seen = seen.lock().unwrap().clone();
@@ -129,11 +129,11 @@ async fn a_redirect_comes_back_as_it_is_and_big_answers_are_refused() {
     .await;
     let k = Keys::generate();
     let b = broker("redirect", &k, &[json!({ "id": "web", "kind": "http", "url": format!("{origin}/api/") })]);
-    let res = b.http(&k, "s", "web", &req("GET", "moved")).await.unwrap();
+    let res = b.http(&k, &Role::Everyday, "s", "web", &req("GET", "moved")).await.unwrap();
     assert_eq!(res.status, 302);
     assert_eq!(res.headers.get("location").map(String::as_str), Some("http://127.0.0.1:9/elsewhere"));
     assert!(!res.headers.contains_key("set-cookie"));
-    assert_eq!(b.http(&k, "s", "web", &req("GET", "huge")).await.unwrap_err().code, "too_large");
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "web", &req("GET", "huge")).await.unwrap_err().code, "too_large");
     let seen = seen.lock().unwrap().clone();
     assert_eq!(seen.iter().filter(not_probe).map(|s| s.path.as_str()).collect::<Vec<_>>(), vec!["/api/moved", "/api/huge"], "nothing followed");
     assert!(seen.iter().all(|s| s.header("authorization").is_none()), "auth none: nothing signed");
@@ -150,7 +150,7 @@ async fn a_kept_token_is_sent_as_bearer() {
     b.token_set(&k, "vault:home/mail@1", &svc, Some("syt_abc")).unwrap();
     let mut r = req("GET", "client/v3/sync");
     r.headers.insert("authorization".into(), "Bearer other".into());
-    assert_eq!(b.http(&k, "s", "matrix", &r).await.unwrap().status, 200);
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "matrix", &r).await.unwrap().status, 200);
     let seen = seen.lock().unwrap().clone();
     let sent: Vec<&Seen> = seen.iter().filter(not_probe).collect();
     assert_eq!(sent[0].header("authorization"), Some("Bearer syt_abc"));
@@ -167,8 +167,8 @@ async fn a_server_that_answers_as_a_hub_gets_nothing_signed() {
     .await;
     let k = Keys::generate();
     let b = broker("hub", &k, &[json!({ "id": "x", "kind": "http", "url": format!("{origin}/"), "auth": "nip98" })]);
-    assert_eq!(b.http(&k, "s", "x", &req("POST", "mcp")).await.unwrap_err().code, "hub_probe");
-    assert_eq!(b.http(&k, "s", "x", &req("GET", "anything")).await.unwrap_err().code, "hub_probe", "remembered");
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "x", &req("POST", "mcp")).await.unwrap_err().code, "hub_probe");
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "x", &req("GET", "anything")).await.unwrap_err().code, "hub_probe", "remembered");
     let seen = seen.lock().unwrap().clone();
     assert!(seen.iter().all(|s| s.path.starts_with("/.well-known/") && s.header("authorization").is_none()), "{seen:?}");
     assert_eq!(seen.len(), 2, "asked once");
@@ -195,15 +195,15 @@ async fn a_probe_that_fails_signs_nothing_and_is_asked_again() {
     .await;
     let k = Keys::generate();
     let b = broker("unsure", &k, &[json!({ "id": "x", "kind": "http", "url": format!("{origin}/api/"), "auth": "nip98" })]);
-    assert_eq!(b.http(&k, "s", "x", &req("GET", "a")).await.unwrap_err().code, "hub_unsure");
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "x", &req("GET", "a")).await.unwrap_err().code, "hub_unsure");
     phase.store(1, Ordering::SeqCst);
-    assert_eq!(b.http(&k, "s", "x", &req("GET", "a")).await.unwrap_err().code, "hub_unsure", "asked again, and 429 is no answer");
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "x", &req("GET", "a")).await.unwrap_err().code, "hub_unsure", "asked again, and 429 is no answer");
     assert!(seen.lock().unwrap().iter().all(|s| s.path.starts_with("/.well-known/")), "fail closed: nothing sent");
     phase.store(2, Ordering::SeqCst);
-    assert_eq!(b.http(&k, "s", "x", &req("GET", "a")).await.unwrap().status, 200, "not remembered: asked again");
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "x", &req("GET", "a")).await.unwrap().status, 200, "not remembered: asked again");
     // a server that isn't there at all: the same
     let gone = broker("gone", &k, &[json!({ "id": "x", "kind": "http", "url": "http://127.0.0.1:9/api/", "auth": "nip98" })]);
-    assert_eq!(gone.http(&k, "s", "x", &req("GET", "a")).await.unwrap_err().code, "hub_unsure");
+    assert_eq!(gone.http(&k, &Role::Everyday, "s", "x", &req("GET", "a")).await.unwrap_err().code, "hub_unsure");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -212,7 +212,7 @@ async fn a_well_known_file_behind_a_redirect_is_no_answer() {
     let (origin, seen) = serve(|s: &Seen| if s.path.starts_with("/.well-known/") { reply(302, &[("location", "https://hub.example/.well-known/parachute.json")], b"") } else { reply(200, &[], b"ok") }).await;
     let k = Keys::generate();
     let b = broker("redirect", &k, &[json!({ "id": "x", "kind": "http", "url": format!("{origin}/api/"), "auth": "nip98" })]);
-    assert_eq!(b.http(&k, "s", "x", &req("GET", "a")).await.unwrap_err().code, "hub_unsure");
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "x", &req("GET", "a")).await.unwrap_err().code, "hub_unsure");
     assert!(seen.lock().unwrap().iter().all(|s| s.path.starts_with("/.well-known/")), "nothing signed or sent");
 }
 
@@ -223,7 +223,7 @@ async fn a_gateway_that_takes_no_get_is_not_a_hub() {
     let (origin, seen) = serve(|s: &Seen| if s.method == "GET" { reply(501, &[], b"Unsupported method") } else { reply(200, &[("content-type", "application/json")], b"{}") }).await;
     let k = Keys::generate();
     let b = broker("gateway", &k, &[json!({ "id": "mail", "kind": "http", "url": format!("{origin}/mail/"), "auth": "nip98" })]);
-    assert_eq!(b.http(&k, "s", "mail", &req("POST", "session")).await.unwrap().status, 200);
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "mail", &req("POST", "session")).await.unwrap().status, 200);
     assert!(seen.lock().unwrap().iter().any(|s| s.path == "/mail/session" && s.header("authorization").is_some()), "signed and sent");
 }
 
@@ -236,13 +236,13 @@ async fn hub_paths_and_hubs_signed_in_to_later_are_refused() {
     let b = Broker::new(d.clone()).unwrap();
     b.open(&k, "s", &applet(), &[json!({ "id": "x", "kind": "http", "url": format!("{origin}/"), "auth": "nip98" })], &[]).unwrap();
     for p in ["account/mcp", "/account/", "api/auth/nostr/verify", "vault/notes/mcp", "Account/mcp", "//account/mcp", "%61ccount/mcp"] {
-        assert_eq!(b.http(&k, "s", "x", &req("POST", p)).await.unwrap_err().code, "hub_path", "{p}");
+        assert_eq!(b.http(&k, &Role::Everyday, "s", "x", &req("POST", p)).await.unwrap_err().code, "hub_path", "{p}");
     }
     assert!(seen.lock().unwrap().is_empty(), "refused before anything was asked");
-    assert_eq!(b.http(&k, "s", "x", &req("GET", "fine")).await.unwrap().status, 200);
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "x", &req("GET", "fine")).await.unwrap().status, 200);
     // the person signs in to that origin as a hub after the applet was allowed: it counts at once
     parachute_lib::door::remember_hub(&d, &url::Url::parse(&origin).unwrap()).unwrap();
-    assert_eq!(b.http(&k, "s", "x", &req("GET", "fine")).await.unwrap_err().code, "hub_known");
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "x", &req("GET", "fine")).await.unwrap_err().code, "hub_known");
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -8,7 +8,7 @@ mod hub;
 
 use nostr::Keys;
 use parachute_lib::door;
-use parachute_lib::services::{authorization, nip98_event, Applet, Broker, HttpReq};
+use parachute_lib::services::{authorization, nip98_event, Applet, Broker, HttpReq, Role};
 use serde_json::json;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -48,8 +48,8 @@ async fn the_broker_signs_nothing_for_a_real_hub() {
     let relay = json!({ "id": "relay", "kind": "nostr-relay", "url": h.origin.replace("http://", "ws://"), "media": true });
     b.open(&keys, "s", &applet, &[svc, relay], &[]).expect("the device hasn't signed in to it, and the web side lists none: only the probe can tell");
     let req = |path: &str| HttpReq { method: "POST".into(), path: path.into(), body: Some(nostr::base64::Engine::encode(&nostr::base64::engine::general_purpose::STANDARD, door::LIST_VAULTS_BODY)), ..Default::default() };
-    assert_eq!(b.http(&keys, "s", "hub", &req("account/mcp")).await.unwrap_err().code, "hub_path");
-    assert_eq!(b.http(&keys, "s", "hub", &req("mcp")).await.unwrap_err().code, "hub_probe", "the hub answers its well-known as a hub");
+    assert_eq!(b.http(&keys, &Role::Everyday, "s", "hub", &req("account/mcp")).await.unwrap_err().code, "hub_path");
+    assert_eq!(b.http(&keys, &Role::Everyday, "s", "hub", &req("mcp")).await.unwrap_err().code, "hub_probe", "the hub answers its well-known as a hub");
     assert_eq!(b.media(&keys, "s", "relay", &"ab".repeat(32), "png").await.unwrap_err().code, "hub_probe");
     assert!(b.log_lines("vault:x/probe@1").is_empty(), "nothing was signed");
     // and once the device signs in to it, it is refused at open as well

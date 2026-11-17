@@ -90,10 +90,20 @@ pub enum Auth {
     Token,
 }
 
+/// `approve` on an http service (docs/design/KEYRING.md): a JSON body whose `field` is one of `ops` is signed with the
+/// approval key; the everyday key signs only a JSON body whose `field` is a string not in `ops`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Approve {
+    pub field: String,
+    pub ops: Vec<String>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ServiceKind {
-    Relay { publish: Vec<u16>, media: bool, private: Vec<PrivateEntry> },
-    Http { auth: Auth },
+    /// `rooms`: the NIP-29 ids it is limited to (empty: every room); `approvals`: the keys (hex) whose cards and secret
+    /// requests it may answer with the approval key (empty: none).
+    Relay { publish: Vec<u16>, media: bool, private: Vec<PrivateEntry>, rooms: Vec<String>, approvals: Vec<String> },
+    Http { auth: Auth, approve: Option<Approve> },
 }
 
 /// One declared service, normalised: `url` as the web side shows and keys it (a relay's without its trailing `/`, an
@@ -191,13 +201,71 @@ fn only_keys(o: &serde_json::Map<String, Value>, allowed: &[&str]) -> bool {
 }
 
 /// One service as the web side parsed it (`src/applet/services.ts`), checked again here. Anything wrong refuses it.
+fn is_hex_key(k: &str) -> bool {
+    k.len() == 64 && k.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// A short list (`min` to 4) of public keys, 64 lowercase hex each, each once; sorted.
+fn hex_keys(x: Option<&Value>, min: usize) -> Option<Vec<String>> {
+    let xs = x?.as_array()?;
+    if xs.len() < min || xs.len() > 4 {
+        return None;
+    }
+    let mut out: Vec<String> = Vec::new();
+    for k in xs {
+        let k = k.as_str().filter(|k| is_hex_key(k))?;
+        if out.iter().any(|o| o == k) {
+            return None;
+        }
+        out.push(k.to_string());
+    }
+    out.sort();
+    Some(out)
+}
+
+/// A room id as Buzz names one (a NIP-29 group id): letters, digits, `-` and `_`, 1 to 64.
+pub fn room_id_ok(id: &str) -> bool {
+    (1..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// `rooms`: 1 to 12 `{id, name}`, each id once. Only the ids are kept: they are what is enforced.
+fn parse_rooms(x: Option<&Value>) -> Result<Vec<String>, String> {
+    let Some(x) = x else { return Ok(Vec::new()) };
+    let xs = x.as_array().filter(|xs| (1..=12).contains(&xs.len())).ok_or("rooms is a list of 1 to 12")?;
+    let mut out: Vec<String> = Vec::new();
+    for r in xs {
+        let r = r.as_object().filter(|r| only_keys(r, &["id", "name"])).ok_or("a room is {id, name}")?;
+        let id = r.get("id").and_then(Value::as_str).filter(|id| room_id_ok(id)).ok_or("a room's id is as the relay names it")?;
+        let name = r.get("name").and_then(Value::as_str).ok_or("a room has a name")?;
+        if name.trim().is_empty() || name.chars().count() > 40 || name.chars().any(|c| hidden(c) || c == '\n' || c == '\t' || c == '«' || c == '»') {
+            return Err("a room's name is one short line".into());
+        }
+        if out.iter().any(|o| o == id) {
+            return Err("rooms names a room twice".into());
+        }
+        out.push(id.to_string());
+    }
+    out.sort();
+    Ok(out)
+}
+
+fn field_ok(f: &str) -> bool {
+    let b = f.as_bytes();
+    (1..=40).contains(&b.len()) && b[0].is_ascii_lowercase() && b.iter().all(|c| c.is_ascii_alphanumeric() || *c == b'_')
+}
+
+fn op_ok(o: &str) -> bool {
+    let b = o.as_bytes();
+    (1..=40).contains(&b.len()) && b[0].is_ascii_lowercase() && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"._-".contains(c))
+}
+
 pub fn parse_service(x: &Value) -> Result<Service, Refusal> {
     let o = x.as_object().ok_or_else(|| bad("each service is an object"))?;
     let id = o.get("id").and_then(Value::as_str).filter(|id| kebab(id)).ok_or_else(|| bad("a service's id is short kebab-case"))?.to_string();
     match o.get("kind").and_then(Value::as_str) {
         Some("nostr-relay") => {
-            if !only_keys(o, &["id", "kind", "url", "publish", "media", "private"]) {
-                return Err(bad(format!("{id}: a relay is {{id, kind, url, publish?, media?, private?}}")));
+            if !only_keys(o, &["id", "kind", "url", "publish", "media", "private", "rooms", "approvals", "notify"]) {
+                return Err(bad(format!("{id}: a relay is {{id, kind, url, publish?, media?, private?, rooms?, approvals?, notify?}}")));
             }
             let u = normal_url(o.get("url").unwrap_or(&Value::Null), "wss", "ws", false).map_err(|e| bad(format!("{id}: {e}")))?;
             let mut publish: Vec<u16> = Vec::new();
@@ -237,14 +305,38 @@ pub fn parse_service(x: &Value) -> Result<Service, Refusal> {
                 }
                 _ => return Err(bad(format!("{id}: private is a short list"))),
             }
+            let rooms = parse_rooms(o.get("rooms")).map_err(|e| bad(format!("{id}: {e}")))?;
+            let approvals = match o.get("approvals") {
+                None => Vec::new(),
+                Some(Value::Object(a)) if only_keys(a, &["from"]) => hex_keys(a.get("from"), 1).ok_or_else(|| bad(format!("{id}: approvals.from is a list of 1 to 4 public keys (hex)")))?,
+                _ => return Err(bad(format!("{id}: approvals is {{from: [keys]}}"))),
+            };
+            match o.get("notify") {
+                None => {}
+                Some(Value::Object(n)) if only_keys(n, &["mentions", "from"]) => {
+                    let mentions = match n.get("mentions") {
+                        None => false,
+                        Some(Value::Bool(b)) => *b,
+                        _ => return Err(bad(format!("{id}: notify.mentions is true or false"))),
+                    };
+                    let from = match n.get("from") {
+                        None => Vec::new(),
+                        f => hex_keys(f, 0).ok_or_else(|| bad(format!("{id}: notify.from is a list of at most 4 public keys (hex)")))?,
+                    };
+                    if !mentions && from.is_empty() {
+                        return Err(bad(format!("{id}: notify says what to tell you about")));
+                    }
+                }
+                _ => return Err(bad(format!("{id}: notify is {{mentions?, from?}}"))),
+            }
             let url = u.as_str().strip_suffix('/').unwrap_or(u.as_str()).to_string();
             let twin = format!("{}://{}", if u.scheme() == "wss" { "https" } else { "http" }, origin_key(&u).split_once("://").map(|x| x.1).unwrap_or(""));
             let origin = Url::parse(&twin).map_err(|_| bad(format!("{id}: url must be an address")))?;
-            Ok(Service { id, url, origin, kind: ServiceKind::Relay { publish, media, private } })
+            Ok(Service { id, url, origin, kind: ServiceKind::Relay { publish, media, private, rooms, approvals } })
         }
         Some("http") => {
-            if !only_keys(o, &["id", "kind", "url", "auth"]) {
-                return Err(bad(format!("{id}: an http service is {{id, kind, url, auth?}}")));
+            if !only_keys(o, &["id", "kind", "url", "auth", "approve"]) {
+                return Err(bad(format!("{id}: an http service is {{id, kind, url, auth?, approve?}}")));
             }
             let u = normal_url(o.get("url").unwrap_or(&Value::Null), "https", "http", true).map_err(|e| bad(format!("{id}: {e}")))?;
             let auth = match o.get("auth").map(|a| a.as_str()) {
@@ -253,8 +345,25 @@ pub fn parse_service(x: &Value) -> Result<Service, Refusal> {
                 Some(Some("token")) => Auth::Token,
                 _ => return Err(bad(format!("{id}: auth is none, nip98 or token"))),
             };
+            let approve = match o.get("approve") {
+                None => None,
+                Some(Value::Object(a)) if only_keys(a, &["field", "ops"]) && auth == Auth::Nip98 => {
+                    let field = a.get("field").and_then(Value::as_str).filter(|f| field_ok(f)).ok_or_else(|| bad(format!("{id}: approve.field is the JSON body's field that names the op")))?;
+                    let ops = a.get("ops").and_then(Value::as_array).filter(|xs| (1..=4).contains(&xs.len())).ok_or_else(|| bad(format!("{id}: approve.ops is a short list")))?;
+                    let mut out: Vec<String> = Vec::new();
+                    for x in ops {
+                        match x.as_str().filter(|x| op_ok(x)) {
+                            Some(x) if !out.iter().any(|o| o == x) => out.push(x.to_string()),
+                            _ => return Err(bad(format!("{id}: approve.ops are op names, each once"))),
+                        }
+                    }
+                    out.sort();
+                    Some(Approve { field: field.to_string(), ops: out })
+                }
+                _ => return Err(bad(format!("{id}: approve is {{field, ops}}, on an http service signed with nip98"))),
+            };
             let origin = Url::parse(&origin_key(&u)).map_err(|_| bad(format!("{id}: url must be an address")))?;
-            Ok(Service { id, url: u.as_str().to_string(), origin, kind: ServiceKind::Http { auth } })
+            Ok(Service { id, url: u.as_str().to_string(), origin, kind: ServiceKind::Http { auth, approve } })
         }
         _ => Err(bad(format!("{id}: kind is nostr-relay or http"))),
     }
@@ -264,7 +373,9 @@ pub fn parse_service(x: &Value) -> Result<Service, Refusal> {
 
 /// An event the applet asks to publish: a kind it may publish there (and one the shell can name), plain tags none of
 /// which is shaped like auth, and for a deletion only `e` (and `h`) tags. Returns (kind, content, tags).
-pub fn check_template(publish: &[u16], raw: &Value) -> Result<(u16, String, Vec<Vec<String>>), Refusal> {
+/// With `rooms`, the event carries exactly one `h` tag, one of them. A kind 9 that reads as a command approval for a bot
+/// (Hermes's `/approve`, `/deny`) is signed only when `may_approve` (the applet holds the approvals grant there).
+pub fn check_template(publish: &[u16], rooms: &[String], may_approve: bool, raw: &Value) -> Result<(u16, String, Vec<Vec<String>>), Refusal> {
     let o = raw.as_object().filter(|o| only_keys(o, &["kind", "content", "tags"])).ok_or_else(|| scope("an event is {kind, content, tags}"))?;
     let kind = o.get("kind").and_then(Value::as_u64).filter(|k| *k <= u16::MAX as u64).map(|k| k as u16);
     let kind = kind.filter(|k| NAMED_KINDS.contains(k) && publish.contains(k)).ok_or_else(|| scope(format!("it may not publish kind {} there", o.get("kind").unwrap_or(&Value::Null))))?;
@@ -299,7 +410,73 @@ pub fn check_template(publish: &[u16], raw: &Value) -> Result<(u16, String, Vec<
     if kind == 5 && !tags.iter().any(|t| t[0] == "e") {
         return Err(scope("a deletion names the events it deletes"));
     }
+    if !rooms.is_empty() {
+        let hs: Vec<&Vec<String>> = tags.iter().filter(|t| t[0] == "h").collect();
+        if hs.len() != 1 || !hs[0].get(1).is_some_and(|h| rooms.contains(h)) {
+            return Err(scope("it may post only in its rooms there"));
+        }
+    }
+    if kind == 9 && !may_approve && is_command_approval(&content) {
+        return Err(no("not_granted", "Answering a bot's approval needs the approvals grant."));
+    }
     Ok((kind, content, tags))
+}
+
+/// Which key signs a request to an http service (docs/design/KEYRING.md).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Role {
+    Everyday,
+    /// The approval key, for this op.
+    Approval(String),
+}
+
+/// A JSON object whose top-level keys are each named once (serde_json would keep the last of two silently).
+struct UniqueObject(serde_json::Map<String, Value>);
+
+impl<'de> Deserialize<'de> for UniqueObject {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = UniqueObject;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a JSON object")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut a: A) -> Result<UniqueObject, A::Error> {
+                let mut m = serde_json::Map::new();
+                while let Some((k, v)) = a.next_entry::<String, Value>()? {
+                    if m.insert(k, v).is_some() {
+                        return Err(serde::de::Error::custom("a key is named twice"));
+                    }
+                }
+                Ok(UniqueObject(m))
+            }
+        }
+        d.deserialize_map(V)
+    }
+}
+
+/// For a service with `approve`: the approval key for a JSON body (`content-type: application/json`, unique keys) whose
+/// `field` is one of `ops`; the everyday key for one whose `field` is a string not in `ops`; anything else is refused,
+/// so the split fails closed. Without `approve`, the everyday key.
+pub fn http_role(approve: Option<&Approve>, headers: &HashMap<String, String>, body: Option<&[u8]>) -> Result<Role, Refusal> {
+    let Some(a) = approve else { return Ok(Role::Everyday) };
+    let refused = || scope(format!("a request to this service is a JSON body naming its {}", a.field));
+    let json = headers.iter().any(|(k, v)| {
+        let v = v.trim().to_ascii_lowercase();
+        k.eq_ignore_ascii_case("content-type") && (v == "application/json" || v.starts_with("application/json;"))
+    });
+    if !json {
+        return Err(refused());
+    }
+    let obj: UniqueObject = serde_json::from_slice(body.ok_or_else(refused)?).map_err(|_| refused())?;
+    let op = obj.0.get(&a.field).and_then(Value::as_str).ok_or_else(refused)?;
+    Ok(if a.ops.iter().any(|o| o == op) { Role::Approval(op.to_string()) } else { Role::Everyday })
+}
+
+/// Text a bot may take as the owner's approval: `/approve` or `/deny`, leading whitespace trimmed, case ignored.
+pub fn is_command_approval(content: &str) -> bool {
+    let t = content.trim_start().to_lowercase();
+    t.starts_with("/approve") || t.starts_with("/deny")
 }
 
 fn is_hex64(s: &str) -> bool {
@@ -649,7 +826,7 @@ impl Broker {
 
     fn relay(call: &Call) -> Result<(&Vec<u16>, bool, &Vec<PrivateEntry>), Refusal> {
         match &call.service.kind {
-            ServiceKind::Relay { publish, media, private } => Ok((publish, *media, private)),
+            ServiceKind::Relay { publish, media, private, .. } => Ok((publish, *media, private)),
             ServiceKind::Http { .. } => Err(scope(format!("{} isn't a relay", call.service.id))),
         }
     }
@@ -751,16 +928,35 @@ impl Broker {
     pub fn sign_event(&self, keys: &Keys, session: &str, service: &str, template: &Value) -> Result<Event, Refusal> {
         let call = self.call(session, service)?;
         let (publish, _, _) = Self::relay(&call)?;
-        let (kind, content, tags) = check_template(publish, template)?;
+        let (rooms, approvals) = match &call.service.kind {
+            ServiceKind::Relay { rooms, approvals, .. } => (rooms, approvals),
+            ServiceKind::Http { .. } => return Err(scope("not a relay")),
+        };
+        let (kind, content, tags) = check_template(publish, rooms, !approvals.is_empty(), template)?;
         let ev = sign_template(keys, kind, &content, &tags)?;
         self.log(&call, format!("kind {kind}"), Some(ev.id.to_hex()), kind == TYPING_KIND)?;
         Ok(ev)
     }
 
-    pub async fn http(&self, keys: &Keys, session: &str, service: &str, req: &HttpReq) -> Result<HttpRes, Refusal> {
+    /// Which key a request would be signed with (the command takes the device unlock before an approval).
+    pub fn http_role(&self, session: &str, service: &str, req: &HttpReq) -> Result<Role, Refusal> {
         let call = self.call(session, service)?;
-        let auth = match call.service.kind {
-            ServiceKind::Http { auth } => auth,
+        match &call.service.kind {
+            ServiceKind::Http { auth: Auth::Nip98, approve } => {
+                let body = req.body.as_deref().map(decode_body).transpose()?;
+                http_role(approve.as_ref(), &req.headers, body.as_deref())
+            }
+            ServiceKind::Http { .. } => Ok(Role::Everyday),
+            ServiceKind::Relay { .. } => Err(scope(format!("{service} isn't an http service"))),
+        }
+    }
+
+    /// Send a request, signed (for nip98) with `keys` in `role`: the role is worked out again here from what is sent,
+    /// and must be the one the caller took the keys for.
+    pub async fn http(&self, keys: &Keys, role: &Role, session: &str, service: &str, req: &HttpReq) -> Result<HttpRes, Refusal> {
+        let call = self.call(session, service)?;
+        let (auth, approve) = match &call.service.kind {
+            ServiceKind::Http { auth, approve } => (*auth, approve.clone()),
             ServiceKind::Relay { .. } => return Err(scope(format!("{service} isn't an http service"))),
         };
         let method = req.method.to_ascii_uppercase();
@@ -781,9 +977,17 @@ impl Broker {
         let body = req.body.as_deref().map(decode_body).transpose()?;
         match auth {
             Auth::Nip98 => {
+                let worked_out = http_role(approve.as_ref(), &req.headers, body.as_deref())?;
+                if &worked_out != role {
+                    return Err(no("refused", "That request is signed with another key."));
+                }
                 self.guard(&call.hubs, &url).await?;
                 let ev = nip98_event(keys, &url, &method, body.as_deref())?;
-                self.log(&call, format!("{method} {}", url.path()), Some(ev.id.to_hex()), false)?;
+                let with = match role {
+                    Role::Everyday => String::new(),
+                    Role::Approval(op) => format!(" ({op}, approval key)"),
+                };
+                self.log(&call, format!("{method} {}{with}", url.path()), Some(ev.id.to_hex()), false)?;
                 headers.insert(reqwest::header::AUTHORIZATION, reqwest::header::HeaderValue::from_str(&authorization(&ev)).map_err(|_| scope("auth"))?);
             }
             Auth::Token => {
@@ -931,7 +1135,7 @@ impl Broker {
         }
         let s = parse_service(service)?;
         match s.kind {
-            ServiceKind::Http { auth: Auth::Token } => Ok(s),
+            ServiceKind::Http { auth: Auth::Token, .. } => Ok(s),
             _ => Err(scope(format!("{} doesn't use a token", s.id))),
         }
     }
@@ -1039,7 +1243,13 @@ pub async fn svc_sign_event<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeySt
 #[tauri::command]
 pub async fn svc_http<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, state: State<'_, ServicesState>, session: String, service: String, req: HttpReq) -> Result<HttpRes, Refusal> {
     let k = held(&app, &keys).await?;
-    state.broker(&app)?.http(&k, &session, &service, &req).await
+    let broker = state.broker(&app)?;
+    let role = broker.http_role(&session, &service, &req)?;
+    match role {
+        Role::Everyday => broker.http(&k, &role, &session, &service, &req).await,
+        // the approval key, behind the device unlock: wired with the keyring (keyring.rs)
+        Role::Approval(_) => Err(no("refused", "Approvals need the keyring.")),
+    }
 }
 
 #[tauri::command]
@@ -1127,7 +1337,7 @@ mod tests {
         let s = parse_service(&relay()).unwrap();
         assert_eq!(s.url, "wss://relay.example");
         assert_eq!(s.origin.as_str(), "https://relay.example/", "a relay's media server is its https twin");
-        assert_eq!(s.kind, ServiceKind::Relay { publish: vec![5, 7, 9, 20002], media: true, private: vec![PrivateEntry { d: "read-state:".into(), t: "read-state".into() }] });
+        assert_eq!(s.kind, ServiceKind::Relay { publish: vec![5, 7, 9, 20002], media: true, private: vec![PrivateEntry { d: "read-state:".into(), t: "read-state".into() }], rooms: vec![], approvals: vec![] });
         let m = parse_service(&mail()).unwrap();
         assert_eq!((m.url.as_str(), m.origin.as_str()), ("https://mail.example/mail/", "https://mail.example/"));
         // normalised: case, trailing dot, default port
@@ -1200,14 +1410,14 @@ mod tests {
     #[test]
     fn only_the_named_kinds_and_plain_tags_are_signed() {
         let publish = [5u16, 7, 9, 20002];
-        let ok = |t: Value| check_template(&publish, &t);
+        let ok = |t: Value| check_template(&publish, &[], false, &t);
         let e = "ab".repeat(32);
         assert!(ok(json!({ "kind": 9, "content": "hi", "tags": [["h", "room"], ["e", e]] })).is_ok());
         assert!(ok(json!({ "kind": 7, "content": "+" })).is_ok());
         for kind in [1, 0, 3, 22242, 27235, 24242, 30078, 40003, 1059, 13, 9000] {
             assert_eq!(code(ok(json!({ "kind": kind, "content": "", "tags": [] }))), "out_of_scope", "kind {kind}");
         }
-        assert_eq!(code(check_template(&[9], &json!({ "kind": 7 }))), "out_of_scope", "not in this declaration");
+        assert_eq!(code(check_template(&[9], &[], false, &json!({ "kind": 7 }))), "out_of_scope", "not in this declaration");
         for t in AUTH_TAGS {
             assert_eq!(code(ok(json!({ "kind": 9, "tags": [[t, "x"]] }))), "out_of_scope", "{t}");
         }
@@ -1288,22 +1498,22 @@ mod tests {
         let b = broker("http", &k);
         let req = |m: &str, p: &str| HttpReq { method: m.into(), path: p.into(), ..Default::default() };
         for m in ["TRACE", "CONNECT", "OPTIONS", "get x"] {
-            assert_eq!(code(b.http(&k, "s1", "mail", &req(m, "x")).await), "out_of_scope", "{m}");
+            assert_eq!(code(b.http(&k, &Role::Everyday, "s1", "mail", &req(m, "x")).await), "out_of_scope", "{m}");
         }
-        assert_eq!(code(b.http(&k, "s1", "mail", &req("GET", "../x")).await), "out_of_scope");
-        assert_eq!(code(b.http(&k, "s1", "rooms", &req("GET", "x")).await), "out_of_scope");
+        assert_eq!(code(b.http(&k, &Role::Everyday, "s1", "mail", &req("GET", "../x")).await), "out_of_scope");
+        assert_eq!(code(b.http(&k, &Role::Everyday, "s1", "rooms", &req("GET", "x")).await), "out_of_scope");
         let mut bad_header = req("GET", "x");
         bad_header.headers.insert("accept".into(), "a\r\nx-evil: 1".into());
-        assert_eq!(code(b.http(&k, "s1", "mail", &bad_header).await), "out_of_scope");
+        assert_eq!(code(b.http(&k, &Role::Everyday, "s1", "mail", &bad_header).await), "out_of_scope");
         let mut twice = req("GET", "x");
         twice.headers.insert("Accept".into(), "a/b".into());
         twice.headers.insert("accept".into(), "c/d".into());
-        assert_eq!(code(b.http(&k, "s1", "mail", &twice).await), "out_of_scope", "a header named twice");
+        assert_eq!(code(b.http(&k, &Role::Everyday, "s1", "mail", &twice).await), "out_of_scope", "a header named twice");
         let mut big = req("POST", "x");
         big.body = Some("A".repeat(MAX_BYTES / 3 * 4 + 100));
-        assert_eq!(code(b.http(&k, "s1", "mail", &big).await), "too_large");
+        assert_eq!(code(b.http(&k, &Role::Everyday, "s1", "mail", &big).await), "too_large");
         // a token service with no token sends nothing
-        assert_eq!(code(b.http(&k, "s1", "matrix", &req("GET", "x")).await), "no_token");
+        assert_eq!(code(b.http(&k, &Role::Everyday, "s1", "matrix", &req("GET", "x")).await), "no_token");
         assert_eq!(code(b.media(&k, "s1", "rooms", "AB", "png").await), "out_of_scope");
         assert_eq!(code(b.media(&k, "s1", "rooms", &"ab".repeat(32), "p/ng").await), "out_of_scope");
         assert_eq!(code(b.upload(&k, "s1", "rooms", "", "text/plain\r\nx: y").await), "out_of_scope");
@@ -1445,4 +1655,66 @@ mod tests {
         assert_eq!(lines.len(), LOG_LINES);
         assert!(lines.iter().all(|l| l.what == "kind 7"), "the newest 500 kept");
     }
+
+    // ── the keyring's additions (docs/design/KEYRING.md) ──
+
+    #[test]
+    fn reads_rooms_approvals_notify_and_approve_and_refuses_them_malformed() {
+        let uni = "b".repeat(64);
+        let r = parse_service(&json!({ "id": "rooms", "kind": "nostr-relay", "url": "wss://relay.example", "publish": [9],
+            "rooms": [{ "id": "garden-1", "name": "Garden" }], "approvals": { "from": [uni] }, "notify": { "mentions": true } })).unwrap();
+        assert_eq!(r.kind, ServiceKind::Relay { publish: vec![9], media: false, private: vec![], rooms: vec!["garden-1".into()], approvals: vec![uni.clone()] });
+        let h = parse_service(&json!({ "id": "mail", "kind": "http", "url": "https://mail.example/mail/", "auth": "nip98", "approve": { "field": "op", "ops": ["send.approve"] } })).unwrap();
+        assert_eq!(h.kind, ServiceKind::Http { auth: Auth::Nip98, approve: Some(Approve { field: "op".into(), ops: vec!["send.approve".into()] }) });
+        for bad in [
+            json!({ "rooms": [] }), json!({ "rooms": [{ "id": "a b", "name": "x" }] }), json!({ "rooms": [{ "id": "a", "name": "x" }, { "id": "a", "name": "y" }] }),
+            json!({ "approvals": { "from": [] } }), json!({ "approvals": { "from": ["npub1x"] } }), json!({ "approvals": { "from": [uni, uni] } }),
+            json!({ "notify": {} }), json!({ "notify": { "mentions": 1 } }),
+        ] {
+            let mut x = json!({ "id": "rooms", "kind": "nostr-relay", "url": "wss://relay.example" });
+            for (k, v) in bad.as_object().unwrap() { x[k] = v.clone(); }
+            assert!(parse_service(&x).is_err(), "{x}");
+        }
+        for approve in [json!({ "path": "op", "ops": ["x"] }), json!({ "field": "op", "ops": [] }), json!({ "field": "Op", "ops": ["x"] })] {
+            assert!(parse_service(&json!({ "id": "mail", "kind": "http", "url": "https://mail.example/mail/", "auth": "nip98", "approve": approve })).is_err());
+        }
+        assert!(parse_service(&json!({ "id": "mail", "kind": "http", "url": "https://mail.example/mail/", "auth": "none", "approve": { "field": "op", "ops": ["x"] } })).is_err(), "approve needs nip98");
+    }
+
+    #[test]
+    fn a_scoped_applet_posts_only_in_its_rooms_and_only_the_approvals_grant_answers_a_bot() {
+        let rooms = vec!["garden".to_string()];
+        let ev = |content: &str, tags: Value| json!({ "kind": 9, "content": content, "tags": tags });
+        assert!(check_template(&[9], &rooms, false, &ev("hi", json!([["h", "garden"]]))).is_ok());
+        for tags in [json!([]), json!([["h", "finance"]]), json!([["h", "garden"], ["h", "finance"]])] {
+            assert_eq!(code(check_template(&[9], &rooms, false, &ev("hi", tags.clone()))), "out_of_scope", "{tags}");
+        }
+        for text in ["/approve", "  /Approve once", "\n/DENY", "/deny"] {
+            assert_eq!(code(check_template(&[9], &[], false, &ev(text, json!([["h", "x"]])))), "not_granted", "{text}");
+            assert!(check_template(&[9], &[], true, &ev(text, json!([["h", "x"]]))).is_ok(), "{text}");
+        }
+        assert!(check_template(&[9], &[], false, &ev("I approve of this", json!([["h", "x"]]))).is_ok());
+    }
+
+    #[test]
+    fn the_approve_split_fails_closed() {
+        let a = Approve { field: "op".into(), ops: vec!["send.approve".into()] };
+        let json_ct: HashMap<String, String> = [("content-type".to_string(), "application/json".to_string())].into();
+        let role = |h: &HashMap<String, String>, b: Option<&str>| http_role(Some(&a), h, b.map(str::as_bytes));
+        assert_eq!(role(&json_ct, Some(r#"{"op":"send.approve","opId":"x"}"#)).unwrap(), Role::Approval("send.approve".into()));
+        assert_eq!(role(&json_ct, Some(r#"{"op":"draft.save"}"#)).unwrap(), Role::Everyday);
+        let charset: HashMap<String, String> = [("Content-Type".to_string(), "Application/JSON; charset=utf-8".to_string())].into();
+        assert_eq!(role(&charset, Some(r#"{"op":"send.approve"}"#)).unwrap(), Role::Approval("send.approve".into()));
+        // refused: no body, not JSON, another type, a key twice, the field missing or not a string, not an object
+        for (h, b) in [
+            (&json_ct, None), (&json_ct, Some("op=send.approve")), (&HashMap::new(), Some(r#"{"op":"draft.save"}"#)),
+            (&[("content-type".to_string(), "text/plain".to_string())].into(), Some(r#"{"op":"draft.save"}"#)),
+            (&json_ct, Some(r#"{"op":"draft.save","op":"send.approve"}"#)), (&json_ct, Some(r#"{"opId":"x"}"#)),
+            (&json_ct, Some(r#"{"op":["send.approve"]}"#)), (&json_ct, Some(r#"["send.approve"]"#)),
+        ] {
+            assert!(role(h, b).is_err(), "{b:?}");
+        }
+        assert_eq!(http_role(None, &HashMap::new(), None).unwrap(), Role::Everyday);
+    }
+
 }
