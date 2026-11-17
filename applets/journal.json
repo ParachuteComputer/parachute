@@ -1,0 +1,16 @@
+{
+  "path": "Applets/Journal",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "journal",
+      "name": "Journal",
+      "glyph": "✎",
+      "note": "write a line, see your days",
+      "access": [{ "vault": "here", "allow": [{ "path": "Journal/", "verbs": ["read", "create"] }] }]
+    },
+    "opens": [{ "type": "journal", "path": "Journal/" }]
+  }
+}
