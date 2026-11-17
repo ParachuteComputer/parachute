@@ -4,7 +4,7 @@
 //   swift scripts/mac-ax.swift <process> wait <text> [secs]    wait until something shows <text>
 //   swift scripts/mac-ax.swift <process> press <text>          press the button, link or disclosure that says <text>
 //   swift scripts/mac-ax.swift <process> type <field> <text>   type into the field labelled or placeholdered <field>
-// Exits 1 when what it looks for isn't there.
+// press and type wait up to 10 s for what they look for (a page may still be loading); exit 1 when it never shows.
 import AppKit
 import ApplicationServices
 
@@ -49,6 +49,16 @@ func find(_ text: String, roles: Set<String>? = nil) -> AXUIElement? {
   all().first { e in (roles == nil || roles!.contains(str(e, kAXRoleAttribute))) && says(e).contains(text) }
 }
 
+/// Look again until `secs` have passed.
+func soon<T>(within secs: Double = 10, _ look: () -> T?) -> T? {
+  let until = Date().addingTimeInterval(secs)
+  repeat {
+    if let found = look() { return found }
+    usleep(250_000)
+  } while Date() < until
+  return nil
+}
+
 func typeText(_ text: String) {
   let src = CGEventSource(stateID: .hidSystemState)
   for ch in text.utf16 {
@@ -71,21 +81,22 @@ case "dump":
   }
 case "wait":
   let secs = args.count > 4 ? Double(args[4])! : 20
-  let until = Date().addingTimeInterval(secs)
-  while Date() < until {
-    if find(args[3]) != nil { exit(0) }
-    usleep(250_000)
-  }
+  if soon(within: secs, { find(args[3]) }) != nil { exit(0) }
   fputs("nothing shows \"\(args[3])\" after \(Int(secs)) s\n", stderr); exit(1)
 case "press":
-  guard let e = find(args[3], roles: ["AXButton", "AXLink", "AXDisclosureTriangle", "AXGroup", "AXCheckBox"]) else {
+  guard let e = soon({ find(args[3], roles: ["AXButton", "AXLink", "AXDisclosureTriangle", "AXGroup", "AXCheckBox"]) }) else {
     fputs("no button or link says \"\(args[3])\"\n", stderr); exit(1)
   }
   let r = AXUIElementPerformAction(e, kAXPressAction as CFString)
   if r != .success { fputs("pressing \"\(args[3])\" failed (\(r.rawValue))\n", stderr); exit(1) }
 case "type":
-  let fields = all().filter { ["AXTextField", "AXTextArea", "AXSecureTextField"].contains(str($0, kAXRoleAttribute)) || str($0, kAXSubroleAttribute) == "AXSecureTextField" }
-  guard let f = fields.first(where: { says($0).contains(args[3]) || str($0, kAXPlaceholderValueAttribute) == args[3] }) else {
+  let field = soon {
+    all().first { f in
+      (["AXTextField", "AXTextArea"].contains(str(f, kAXRoleAttribute)) || str(f, kAXSubroleAttribute) == "AXSecureTextField")
+        && (says(f).contains(args[3]) || str(f, kAXPlaceholderValueAttribute) == args[3])
+    }
+  }
+  guard let f = field else {
     fputs("no field \"\(args[3])\"\n", stderr); exit(1)
   }
   AXUIElementSetAttributeValue(f, kAXFocusedAttribute as CFString, kCFBooleanTrue)

@@ -4,6 +4,8 @@
 # it stays up, open a parachute:// link, and take screenshots.
 #   scripts/mac-smoke.sh <Parachute.dmg> [<folder for screenshots and notes>]
 set -euo pipefail
+# it replaces /Applications/Parachute.app: CI only, or say so
+[ "${CI:-}" = true ] || [ "${PARACHUTE_MAC_DRIVE:-}" = yes ] || { echo "This replaces /Applications/Parachute.app. On a machine of your own, set PARACHUTE_MAC_DRIVE=yes." >&2; exit 2; }
 dmg=$1 out=${2:-mac-smoke}
 mkdir -p "$out"
 say() { echo "== $*"; }

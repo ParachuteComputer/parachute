@@ -6,6 +6,8 @@
 # installed the app. Needs PARACHUTE_CORE (a parachute-core binary), PAIR_SEND (the built pair_send example) and node.
 #   scripts/mac-signin.sh [<folder for screenshots>]
 set -euo pipefail
+# it replaces /Applications/Parachute.app's key in the login Keychain with throwaway ones: CI only, or say so
+[ "${CI:-}" = true ] || [ "${PARACHUTE_MAC_DRIVE:-}" = yes ] || { echo "This removes the Parachute key in your Keychain. On a machine of your own, set PARACHUTE_MAC_DRIVE=yes." >&2; exit 2; }
 out=${1:-mac-smoke}
 mkdir -p "$out"
 here=$(cd "$(dirname "$0")" && pwd)
@@ -28,8 +30,7 @@ remove_key() {
 }
 
 say "build the accessibility driver"
-axbin="$RUNNER_TEMP/mac-ax"
-[ -n "${RUNNER_TEMP:-}" ] || axbin=$(mktemp -d)/mac-ax
+axbin="${RUNNER_TEMP:-$(mktemp -d)}/mac-ax"
 swiftc -O -o "$axbin" "$here/mac-ax.swift"
 
 say "a throwaway hub on loopback"
@@ -71,16 +72,11 @@ say "add the vault and sign in with the key"
 ax type "Vault address" "http://127.0.0.1:$port/vault/recipes" || fail "no vault address field"
 shot 12-add-vault
 ax press "Sign in with your key" || fail "no Sign in with your key"
-sleep 4
+ax wait "Approve Parachute?" 30 || fail "the hub's Approve page didn't open"
 shot 13-hub-consent
-ax dump > "$out/13-hub-consent-ui.txt" 2>&1 || true
-pressed=
-for b in Allow Approve Authorize Continue "Allow access"; do
-  if ax press "$b" 2>/dev/null; then pressed=$b; break; fi
-done
-[ -n "$pressed" ] || fail "no way to allow on the hub's page"
-echo "pressed \"$pressed\" on the hub's page"
-ax wait "recipes" 30 || fail "the vault didn't open"
+ax press "Approve" || fail "no Approve on the hub's page"
+# only the vault's own screen has this
+ax wait "Search this vault" 30 || fail "the vault didn't open"
 sleep 2
 shot 14-vault
 ax dump > "$out/14-vault-ui.txt" 2>&1 || true
@@ -93,7 +89,7 @@ ax wait "Continue" 20 || fail "no new key"
 keychain || fail "the new key isn't in the login Keychain"
 echo "the new key is in the login Keychain"
 shot 15-new-key
-ax press "Continue"
+ax press "Continue" || fail "no Continue"
 
 say "remove it, pair a key from another device by pasting its link"
 remove_key

@@ -8,14 +8,13 @@ permissions:
 on:
   push:
     branches: [next]
-  # a change to the shell or its packaging is built on the Mac before it merges
+  # a change is built and driven on the Mac before it merges (a Mac-only break can sit anywhere: a module name that
+  # differs only by case, a button's words the drive presses); only docs skip it
   pull_request:
-    paths:
-      - "src-tauri/**"
-      - "scripts/mac-smoke.sh"
-      - ".github/workflows/mac.yml"
-      - "package.json"
-      - "package-lock.json"
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "design/**"
   workflow_dispatch:
   workflow_call:
 
