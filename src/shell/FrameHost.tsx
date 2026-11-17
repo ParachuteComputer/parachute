@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import frameKit from "virtual:frame-kit";
-import { createFrameHost } from "./frameHost";
+import { createFrameHost } from "./frameBridge";
 import { decidedFor, shellDeps } from "./frameDeps";
 import { frameDocument } from "./frameDoc";
 import { subscribeVaults } from "../vault/store";

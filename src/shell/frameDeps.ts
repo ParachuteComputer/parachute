@@ -1,4 +1,4 @@
-// The shell's real answers to the frame (frameHost.ts `HostDeps`), from what the shell holds.
+// The shell's real answers to the frame (frameBridge.ts `HostDeps`), from what the shell holds.
 import type { Decided, FrameApplets } from "../bridge/protocol";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
 import { gateNow, whenGateKnown } from "../applet/selftest/run";
@@ -11,7 +11,7 @@ import { messageOf } from "../vault/hooks";
 import { inShell } from "../vault/oauth";
 import { confirmLinkOut } from "./frameSource";
 import { listVaults, type VaultRecord } from "../vault/store";
-import type { HostDeps } from "./frameHost";
+import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
 import { barNow, pinApplet, startApplet } from "./homeSettings";
 import { chooseStart, forgetStart } from "./start";
