@@ -1,6 +1,7 @@
 //! The key door against a real hub: parachute-core in a throwaway home on loopback, when `PARACHUTE_CORE` names it (CI
 //! sets it; without it this test says so and passes). A key linked to the hub's owner gets a session that opens the
 //! hub's authorize page (its consent, not its login); a key the hub doesn't know is told so.
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -43,8 +44,10 @@ fn hub(bin: String) -> Hub {
     let log = std::fs::File::create(home.join("serve.log")).unwrap();
     // embedded serve stops when its parent goes; a shell that waits on it is the parent, in its own group
     // (its own process group, not setsid: macOS has no setsid command)
-    let child = Command::new("sh")
-        .process_group(0)
+    let mut sh = Command::new("sh");
+    #[cfg(unix)]
+    sh.process_group(0);
+    let child = sh
         .args(["-c", "\"$@\"; :", "_", &bin, "serve", "--embedded", "--home", ph.to_str().unwrap(), "--listen", &format!("127.0.0.1:{port}"), "--vault-listen", &format!("127.0.0.1:{vport}")])
         .env("PARACHUTE_HOME", &ph)
         .env("PARACHUTE_HUB_ORIGIN", &origin)

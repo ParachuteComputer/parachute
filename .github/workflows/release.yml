@@ -22,15 +22,10 @@ defaults:
     shell: bash  # -eo pipefail: a failed build piped into tee still fails the step
 
 jobs:
-  mac:
-    uses: ./.github/workflows/mac.yml
-
-  android:
-    name: android (arm64)
+  # before any build: a tag must be the app's version and sit on next or main
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      NDK_VERSION: 29.0.14206865
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,6 +37,20 @@ jobs:
           [ "${GITHUB_REF_NAME#v}" = "$version" ] || { echo "tag $GITHUB_REF_NAME, but tauri.conf.json says $version" >&2; exit 1; }
           git merge-base --is-ancestor "$GITHUB_SHA" origin/next || git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
             || { echo "tag $GITHUB_REF_NAME is on a commit that isn't on next or main" >&2; exit 1; }
+
+  mac:
+    needs: check
+    uses: ./.github/workflows/mac.yml
+
+  android:
+    needs: check
+    name: android (arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NDK_VERSION: 29.0.14206865
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -126,7 +135,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             gh release create "$GITHUB_REF_NAME" files/* --prerelease --verify-tag --title "Parachute $version" --notes-file RELEASE-NOTES.md
           else
-            tag="v$version-dry-run.$GITHUB_RUN_ID"
+            tag="dry-run-$version.$GITHUB_RUN_ID"  # outside v*: publishing it by mistake starts no release
             gh release create "$tag" files/* --draft --prerelease --target "$GITHUB_SHA" --title "Parachute $version (dry run, draft)" --notes-file RELEASE-NOTES.md
             echo "Draft $tag made. Delete it with: gh release delete $tag --yes" >> "$GITHUB_STEP_SUMMARY"
           fi

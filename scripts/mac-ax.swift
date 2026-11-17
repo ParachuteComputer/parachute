@@ -80,7 +80,7 @@ case "dump":
     if !s.isEmpty || role == "AXTextField" || role == "AXButton" { print("\(role): \(s)") }
   }
 case "wait":
-  let secs = args.count > 4 ? Double(args[4])! : 20
+  let secs = args.count > 4 ? (Double(args[4]) ?? 20) : 20
   if soon(within: secs, { find(args[3]) }) != nil { exit(0) }
   fputs("nothing shows \"\(args[3])\" after \(Int(secs)) s\n", stderr); exit(1)
 case "press":

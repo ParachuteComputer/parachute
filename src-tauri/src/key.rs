@@ -294,6 +294,14 @@ mod tests {
                 .status
                 .success()
         };
+        // the test's item goes even when an assertion fails
+        struct Cleanup<'a>(&'a str);
+        impl Drop for Cleanup<'_> {
+            fn drop(&mut self) {
+                let _ = desktop::clear(self.0);
+            }
+        }
+        let _cleanup = Cleanup(&account);
         let k = Keys::generate();
         let nsec = k.secret_key().to_bech32().unwrap();
         assert!(matches!(desktop::load(&account).unwrap(), Stored::Nothing));
