@@ -9,18 +9,24 @@ async function backOnTheLauncher(page: Page, vault: string) {
 
 /** The hub's Approve, as many times as it asks (the app without a key asks twice: to see which vaults are the person's,
  *  then for all of them at once), until the app is back on its launcher. Returns how many times it asked. */
-export async function approveUntilBack(page: Page, hubOrigin: string, appOrigin: string): Promise<number> {
+export async function approveUntilBack(page: Page, hubOrigin: string, appOrigin: string, onPick?: (page: Page) => Promise<void>): Promise<number> {
   const approve = page.getByRole("button", { name: "Approve" });
+  // on a hub the person runs, the app asks which of its vaults are theirs before the consent: all ticked, Continue
+  const pick = page.getByRole("button", { name: "Continue" });
   const where = async () => {
     const u = new URL(page.url());
     if (u.origin === appOrigin && u.pathname === "/") return "back";
+    if (u.origin === appOrigin && await pick.isVisible().catch(() => false)) return "pick";
     return u.origin === hubOrigin && await approve.isVisible().catch(() => false) ? "asked" : "wait";
   };
-  for (let asked = 0; ; asked++) {
+  for (let asked = 0; ; ) {
     await expect.poll(where, { timeout: 30_000 }).not.toBe("wait");
-    if (await where() === "back") return asked;
+    const at = await where();
+    if (at === "back") return asked;
     const before = page.url();
-    await approve.click();
+    if (at === "pick") await (onPick ? onPick(page) : Promise.resolve());
+    await (at === "pick" ? pick : approve).click();
+    if (at === "asked") asked++;
     await page.waitForURL((u) => u.href !== before);
   }
 }
@@ -53,7 +59,7 @@ export const ui = (page: Page) => page.frameLocator("iframe.app-frame");
 
 /** Add another Parachute (the org's) and sign in there with the person's key: the hub's key door (signed by the test, as
  *  the app's native side signs it), then the hub's own Approves. Returns how many times the hub asked. */
-export async function signInWithKey(page: Page, hub: { origin: string }, vault: string, whose: "Mine" | RegExp = /Someone else's/): Promise<number> {
+export async function signInWithKey(page: Page, hub: { origin: string }, vault: string, whose: "Mine" | RegExp = /Someone else's/, onPick?: (page: Page) => Promise<void>): Promise<number> {
   const cookies = await keyDoor(hub.origin, hubState().key);
   await page.context().addCookies(cookies.map((c) => ({ ...c, url: hub.origin })));
   await page.goto("/add");
@@ -62,7 +68,7 @@ export async function signInWithKey(page: Page, hub: { origin: string }, vault: 
   await page.getByRole("radio", { name: whose }).check();
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((u) => u.origin === hub.origin);
-  const asked = await approveUntilBack(page, hub.origin, app);
+  const asked = await approveUntilBack(page, hub.origin, app, onPick);
   await backOnTheLauncher(page, vault);
   return asked;
 }

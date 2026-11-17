@@ -3,8 +3,8 @@
 // is signed in to once, and every vault the person may reach there comes with it. A second device that signs in to the
 // home Parachute finds Techne on the person's list.
 import { expect, test, type Page } from "@playwright/test";
-import { api, hubState, MORE_VAULTS, NOT_GIVEN, ORG_VAULT, techneState, VAULT } from "./hub";
-import { signInWithKey, ui } from "./helpers";
+import { api, hubState, mintToken, MORE_VAULTS, NOT_GIVEN, ORG_VAULT, techneState, VAULT } from "./hub";
+import { approveUntilBack, signInWithKey, ui } from "./helpers";
 import { keyDoor } from "./keys";
 
 const hostOf = (origin: string) => new URL(origin).host;
@@ -103,16 +103,61 @@ test("a sign-in stopped partway keeps the vaults it had, and says which", async 
   await page.getByLabel("Your Parachute's address").fill(hubState().origin);
   await page.getByRole("radio", { name: "Mine" }).check();
   await page.getByRole("button", { name: "Sign in" }).click();
-  // the two pages without a key: see which vaults are yours, then all of them; the hops after stop at pantry
-  for (let i = 0; i < 2; i++) {
+  // the pages without a key: see which vaults are yours, which of them are (the person runs this hub), then all of
+  // them; the hops after stop at pantry
+  for (const name of ["Approve", "Continue", "Approve"]) {
     const before = page.url();
-    await page.getByRole("button", { name: "Approve" }).click();
+    await page.getByRole("button", { name }).click();
     await page.waitForURL((u) => u.href !== before);
   }
   await expect(page.getByRole("alert")).toContainText("You said no on the hub. The 2 vaults signed in to before that stay: kitchen, letters.");
   await page.getByRole("link", { name: "Open your launcher" }).click();
   for (const v of [VAULT, "letters"]) await expect(ui(page).getByRole("region", { name: v, exact: true })).toBeVisible();
   await expect(ui(page).getByRole("region", { name: "pantry", exact: true })).toHaveCount(0);
+});
+
+test("on a hub the person runs, they say which of its vaults are theirs; the others come in as someone else's", async ({ page }) => {
+  await signInWithKey(page, hubState(), VAULT, "Mine", async (p) => {
+    await expect(p.getByRole("group", { name: /You run .*Which are yours\?/ })).toBeVisible();
+    // all ticked to begin with: a good default for a hub of one's own
+    for (const v of [VAULT, "letters", "pantry"]) await expect(p.getByRole("checkbox", { name: v })).toBeChecked();
+    await p.getByRole("checkbox", { name: "pantry" }).uncheck();
+  });
+  await expect(ui(page).getByRole("region", { name: "pantry", exact: true })).toContainText("someone else's");
+  await page.goto("/settings");
+  await expect(page.getByRole("combobox", { name: "Whose pantry is" })).toHaveValue("theirs");
+  await expect(page.getByRole("combobox", { name: `Whose ${VAULT} is` })).toHaveValue("mine");
+});
+
+test("signing in again never changes what the person said of a vault", async ({ page }) => {
+  await signInWithKey(page, hubState(), VAULT, "Mine");
+  await signInWithKey(page, techneState(), ORG_VAULT);
+  // the person says Techne's vault is theirs after all (a card, and its own button)
+  await page.goto("/settings");
+  await page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` }).selectOption("mine");
+  await page.getByRole("button", { name: `${ORG_VAULT} is mine` }).click();
+  // then signs in to Techne again, answering as before
+  await page.getByRole("region", { name: `Parachute: ${hostOf(techneState().origin)}` }).getByRole("link", { name: "Sign in again" }).click();
+  await expect(page.getByLabel("Your Parachute's address")).toHaveValue(techneState().origin);
+  await page.getByRole("radio", { name: /Someone else's/ }).check();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await approveUntilBack(page, techneState().origin, new URL(page.url()).origin);
+  await page.goto("/settings");
+  await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("mine");
+});
+
+test("a new device takes as home the vault of the person's that holds their settings, wherever it is", async ({ page }) => {
+  // another device made pantry the home: its settings note is there (and lists Techne); none in the kitchen
+  for (const n of await home("GET", "notes?tag=parachute-settings")) await home("DELETE", `notes/${n.id}`);
+  const pantry = { ...hubState(), token: mintToken("vault:pantry:write") };
+  const note = await api(pantry, "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar: [], start: null, hubs: [{ hub: techneState().origin }] } } }, "pantry");
+  try {
+    await signInWithKey(page, hubState(), VAULT, "Mine");
+    await expect(parachute(page, hubState().origin).getByRole("region", { name: "pantry", exact: true })).toContainText("your home");
+    await expect(parachute(page, techneState().origin)).toContainText("not signed in on this device");
+  } finally {
+    await api(pantry, "DELETE", `notes/${note.id}`, undefined, "pantry");
+  }
 });
 
 test("a second device that signs in to the home Parachute finds Techne on the list, a tap from signed in", async ({ browser }, info) => {

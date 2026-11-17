@@ -71,6 +71,8 @@ function write(stored: Stored, s: StorageLike | null = storage()) {
 /** Whose this vault is. A vault no one said anything about is someone else's. */
 export const whoseOf = (r: Pick<VaultRecord, "issuer" | "vault">): Whose => read().whose[whoseKey(r)] ?? "theirs";
 export const isMine = (r: Pick<VaultRecord, "issuer" | "vault">) => whoseOf(r) === "mine";
+/** What the person said about this vault, if anything (a vault never answered for counts as someone else's). */
+export const whoseSaid = (r: Pick<VaultRecord, "issuer" | "vault">): Whose | null => read().whose[whoseKey(r)] ?? null;
 /** May an applet import a component from this vault (its own vault always may)? */
 export const importable = (r: Pick<VaultRecord, "issuer" | "vault">) => whoseOf(r) !== "theirs";
 /** The person said whose it is (a tap on Add a Parachute or in Settings). */

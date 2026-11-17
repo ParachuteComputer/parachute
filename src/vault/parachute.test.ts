@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from "vitest";
-import { CLOUD, describe, grantedVaults, parseHub, rpcAnswer, scopeForVaults, vaultUrlFrom, vaultNamesFrom } from "./parachute";
+import { CLOUD, describe, grantedVaults, listFrom, MAX_VAULTS, parseHub, reachesEvery, rpcAnswer, scopeForVaults, vaultUrlFrom } from "./parachute";
 import { hubOf, settingsFrom } from "../shell/homeSettings";
 
 group("parseHub", () => {
@@ -47,13 +47,26 @@ group("describe", () => {
   });
 });
 
+group("whether the person runs the hub", () => {
+  const pub = (names: string[]) => answering(200, { vaults: names.map((name) => ({ name, url: "x" })) });
+  it("they reach every vault its public list names", async () => {
+    expect(await reachesEvery("https://hub.example", ["a", "b", "c"], pub(["a", "b", "c"]))).toBe(true);
+    expect(await reachesEvery("https://hub.example", ["a", "b"], pub(["a", "b", "c"]))).toBe(false);
+    // one vault on the hub: nothing to pick between; no public list (Cloud): no
+    expect(await reachesEvery("https://hub.example", ["a"], pub(["a"]))).toBe(false);
+    expect(await reachesEvery("https://hub.example", ["a", "b"], answering(404, "no"))).toBe(false);
+  });
+});
+
 group("the vaults a hub lists and grants", () => {
-  const listed = (vaults: unknown) => ({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify({ covered: "listed", vaults }) }] } });
-  it("reads only names a vault can have, once each, sorted", () => {
-    expect(vaultNamesFrom(listed([{ name: "work" }, { name: "kim" }, { name: "Bad Name" }, { name: "../x" }, { name: "kim" }, {}]))).toEqual(["kim", "work"]);
-    expect(() => vaultNamesFrom({ error: { code: 1 } })).toThrow();
+  const listed = (vaults: unknown, covered = "listed") => ({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify({ covered, vaults }) }] } });
+  it("reads only names a vault can have, once each, sorted, and whether they are every vault on the hub", () => {
+    expect(listFrom(listed([{ name: "work" }, { name: "kim" }, { name: "Bad Name" }, { name: "../x" }, { name: "kim" }, {}]))).toEqual({ vaults: ["kim", "work"], all: false });
+    expect(listFrom(listed([{ name: "a" }], "all")).all).toBe(true);
+    expect(listFrom(listed(Array.from({ length: 500 }, (_, i) => ({ name: `v${i}` })))).vaults).toHaveLength(MAX_VAULTS);
+    expect(() => listFrom({ error: { code: 1 } })).toThrow();
     // an MCP door may answer as one server-sent event
-    expect(vaultNamesFrom(rpcAnswer(`event: message\ndata: ${JSON.stringify(listed([{ name: "kim" }]))}\n\n`))).toEqual(["kim"]);
+    expect(listFrom(rpcAnswer(`event: message\ndata: ${JSON.stringify(listed([{ name: "kim" }]))}\n\n`)).vaults).toEqual(["kim"]);
   });
   it("asks read and write of each, and keeps what the hub's scope names among those asked", () => {
     expect(scopeForVaults(["a", "b"])).toBe("vault:a:read vault:a:write vault:b:read vault:b:write");

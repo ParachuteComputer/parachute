@@ -37,7 +37,8 @@ sign-in (`parachute.whose.v1`), so signing in again keeps it. No record or agent
 
 - **Add a Parachute asks every time** (step 7, [ONE-SIGN-IN.md](ONE-SIGN-IN.md); it was Add a vault): *"Whose Parachute
   is this? Mine / Someone else's (an org's, a friend's)"*, with neither chosen beforehand: Sign in waits for the
-  answer, and it holds for each vault that sign-in brings. Settings changes it per vault.
+  answer, and it holds for each vault that sign-in brings that this device hasn't been told about (on a hub the person
+  runs, they tick which of its vaults are theirs). Settings changes it per vault.
 - **Vaults this device already held** (before this step): the one that was its home (the person's choice, else the
   first added, as today) is mine, so nothing it does now changes; every other counts as someone else's. Settings asks,
   until the person answers, "Are these yours?" beside each, and always shows every vault's value and lets the person

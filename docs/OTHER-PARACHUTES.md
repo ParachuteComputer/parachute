@@ -22,7 +22,8 @@ and **Sign in with your key**. The hub shows its usual Approve once, for every v
 other devices find it ([design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md)).
 
 Whose a vault is, is Aaron's say, kept on his device, and nothing else can set it: not a record, not an agent. His
-answer on Add a Parachute holds for each of its vaults; Settings changes it per vault. It decides what code from that
+answer on Add a Parachute holds for each of its vaults (signing in again never changes what he said of one); Settings
+changes it per vault. It decides what code from that
 vault may do:
 
 | | Mine | Someone else's, trusted | Someone else's |

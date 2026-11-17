@@ -77,6 +77,10 @@ ax type "Your Parachute's address" "http://127.0.0.1:$port" || fail "no Parachut
 ax press "Mine" || fail "no Mine on Add a Parachute"
 shot 12-add-parachute
 ax press "Sign in with your key" || fail "no Sign in with your key"
+# the key is the hub owner's: it reaches every vault, so the app asks which are theirs (all ticked) before the consent
+ax wait "Which are yours?" 30 || fail "no pick of the person's own vaults"
+shot 12b-pick
+ax press "Continue" || fail "no Continue on the pick"
 ax wait "Approve Parachute?" 30 || fail "the hub's Approve page didn't open"
 shot 13-hub-consent
 ax press "Approve" || fail "no Approve on the hub's page"

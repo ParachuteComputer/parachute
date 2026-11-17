@@ -26,15 +26,17 @@ export type ParachuteLine = {
  *  the ones the list names that this device isn't signed in to (as listed). */
 export function parachutesNow(list: readonly VaultRecord[] = listVaults(), home: VaultRecord | null = homeVault(list)): ParachuteLine[] {
   const listed = settingsNow().hubs;
-  const nameOf = (hub: string) => listed.find((h) => h.hub === hub)?.name ?? (hub === CLOUD ? CLOUD_NAME : hostOf(hub));
+  // a name from the list (an agent can write it) only for a Parachute this device isn't signed in to; one it is
+  // signed in to is called by its address, so a record can't relabel it
+  const nameOf = (hub: string, signedIn: boolean) => (hub === CLOUD ? CLOUD_NAME : !signedIn && listed.find((h) => h.hub === hub)?.name) || hostOf(hub);
   const byHub = new Map<string, VaultRecord[]>();
   for (const v of [...list].sort((a, b) => a.addedAt.localeCompare(b.addedAt) || a.vault.localeCompare(b.vault))) {
     const h = originOf(v.issuer);
     byHub.set(h, [...(byHub.get(h) ?? []), v]);
   }
-  const lines: ParachuteLine[] = [...byHub].map(([hub, vaults]) => ({ hub, host: hostOf(hub), name: nameOf(hub), vaults, home: !!home && vaults.some((v) => v.key === home.key) }));
+  const lines: ParachuteLine[] = [...byHub].map(([hub, vaults]) => ({ hub, host: hostOf(hub), name: nameOf(hub, true), vaults, home: !!home && vaults.some((v) => v.key === home.key) }));
   lines.sort((a, b) => Number(b.home) - Number(a.home));
-  for (const h of listed) if (!byHub.has(h.hub)) lines.push({ hub: h.hub, host: hostOf(h.hub), name: nameOf(h.hub), vaults: [], home: false });
+  for (const h of listed) if (!byHub.has(h.hub)) lines.push({ hub: h.hub, host: hostOf(h.hub), name: nameOf(h.hub, false), vaults: [], home: false });
   return lines;
 }
 

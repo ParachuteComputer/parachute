@@ -172,7 +172,9 @@ async fn a_key_is_told_its_own_vaults_and_no_others() {
     // the hub's owner (its admin): every vault
     let owner = nostr::Keys::generate();
     cli(&h, &["auth", "link-pubkey", "--user", "owner", &owner.public_key().to_hex()]);
-    assert_eq!(door::list_vaults(&origin, &owner).await.unwrap(), vec!["family", "recipes", "work"]);
+    let theirs = door::list_vaults(&origin, &owner).await.unwrap();
+    assert_eq!(theirs.vaults, vec!["family", "recipes", "work"]);
+    assert!(theirs.all, "the owner runs the hub: every vault, said so");
     // a member given one vault by their key: that one only
     let member = nostr::Keys::generate();
     let token: serde_json::Value = serde_json::from_slice(&cli(&h, &["auth", "mint-token", "--scope", "account:vaults", "--json"]).stdout).unwrap();
@@ -185,9 +187,11 @@ async fn a_key_is_told_its_own_vaults_and_no_others() {
         .await
         .unwrap();
     assert_eq!(granted.status(), 200);
-    assert_eq!(door::list_vaults(&origin, &member).await.unwrap(), vec!["work"]);
+    let given = door::list_vaults(&origin, &member).await.unwrap();
+    assert_eq!(given.vaults, vec!["work"]);
+    assert!(!given.all, "a member: the vaults given to them");
     // asking twice in the same second is two requests, not a replay
-    assert_eq!(door::list_vaults(&origin, &member).await.unwrap(), vec!["work"]);
+    assert_eq!(door::list_vaults(&origin, &member).await.unwrap().vaults, vec!["work"]);
     // a key the hub doesn't know is told so
     assert_eq!(door::list_vaults(&origin, &nostr::Keys::generate()).await.unwrap_err().code, "unknown_key");
 }

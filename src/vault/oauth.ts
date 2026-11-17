@@ -36,6 +36,8 @@ export type Pending = {
   granted: string;
   /** the vaults this sign-in has kept so far */
   kept: string[];
+  /** on a hub the person runs (every vault listed): the ones they said are theirs; the rest are someone else's */
+  mine?: string[];
   issuer: string;
   tokenEndpoint: string;
   /** where Sign out ends the sign-in, when the hub names one on its own origin */
@@ -88,7 +90,7 @@ export function forgetClient(issuer: string) {
   try { localStorage.setItem(CLIENTS_KEY, JSON.stringify(all)); } catch { /* nothing to do */ }
 }
 
-export type Begin = { parachute: Parachute; step: "list" | "vaults" | "vault"; vaults?: string[]; queue?: string[]; granted?: string; kept?: string[]; whose?: "mine" | "theirs"; how: "key" | "page";
+export type Begin = { parachute: Parachute; step: "list" | "vaults" | "vault"; vaults?: string[]; queue?: string[]; granted?: string; kept?: string[]; mine?: string[]; whose?: "mine" | "theirs"; how: "key" | "page";
   /** a new sign-in (not the next step of one): a registration a sign-in that never came back used is dropped */
   fresh?: boolean };
 
@@ -113,7 +115,9 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   // a sign-in that never came back may have died on a registration the hub no longer knows: register again (only at
   // a new sign-in: its next steps follow at once, with the registration the hub just took)
   const stale = readJson<Pending>(PENDING_KEY);
-  if (b.fresh && stale && stale.issuer === parachute.issuer) forgetClient(parachute.issuer);
+  // (a sign-in that stopped after its first step had a registration the hub took: kept, so a hub whose owner approves
+  // new registrations doesn't have to again)
+  if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "vaults" && !stale.kept?.length))) forgetClient(parachute.issuer);
   let clientId = cachedClient(parachute.issuer, redirect);
   if (!clientId) {
     clientId = (await registerClient(meta.registration_endpoint, { clientName: CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
@@ -122,7 +126,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   const codeVerifier = generateCodeVerifier();
   const state = generateState();
   const revocation = (meta as { revocation_endpoint?: unknown }).revocation_endpoint;
-  const pending: Pending = { parachute, step: b.step, vaults, queue: [...(b.queue ?? [])], granted: b.granted ?? "", kept: [...(b.kept ?? [])], issuer: parachute.issuer, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, parachute.issuer) ? { revocationEndpoint: revocation } : {}),
+  const pending: Pending = { parachute, step: b.step, vaults, queue: [...(b.queue ?? [])], granted: b.granted ?? "", kept: [...(b.kept ?? [])], ...(b.mine ? { mine: [...b.mine] } : {}), issuer: parachute.issuer, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, parachute.issuer) ? { revocationEndpoint: revocation } : {}),
     clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now(), how: b.how, ...(b.whose ? { whose: b.whose } : {}) };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   const url = new URL(meta.authorization_endpoint);

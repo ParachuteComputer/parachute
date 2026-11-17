@@ -63,17 +63,25 @@ different applets; without having to enter a bunch of different URLs."*
 
 So a person with a key approves once per Parachute; without a key, twice (*see your vaults*, then *read and write
 them*). The web build, which the Playwright e2e drives, has no key: e2e covers the two-Approve path end to end on both
-hub versions, with a member who can reach only some of a hub's vaults. The key path is covered by the shell's own
-tests (the signed request's shape), the Mac workflow (`scripts/mac-signin.sh`, the real app against a real hub) and the
-emulator device steps.
+hub versions, with a member who can reach only some of a hub's vaults, and the owner's pick. The key path is covered by
+the shell's tests (the signed request's shape; `list-vaults` against real 0.8 and 0.9 hubs as owner and as member), the
+Mac workflow (`scripts/mac-signin.sh`, the real app against a real hub, as its owner) and the emulator device steps
+(the real Android app: the owner's hub, then Techne's as a member by key alone, then a second device).
 
 ## Whose, now per Parachute
 
 EMBED.md asked *whose vault is this* on every Add. Adding a Parachute now asks once: **Whose Parachute is this? Mine /
-Someone else's (an org's, a friend's)**, neither chosen beforehand. The answer is kept for each of its vaults, as
-before (`parachute.whose.v1`, device-held, never from a record), and for vaults that appear when the person signs in to
-that Parachute again. Settings still changes it per vault (an org's vault on the person's own hub), and trust is still
+Someone else's (an org's, a friend's)**, neither chosen beforehand. The answer is kept, device-held as before
+(`parachute.whose.v1`, never from a record), for each vault of that Parachute this device hasn't been told about.
+Signing in again never changes what the person already said of a vault; Settings does, per vault, and trust is still
 per vault, on its card. The home is always one of the person's own vaults.
+
+**A hub the person runs.** Its owner reaches every vault on it, some of which may be other people's (a family
+member's, a client's). When the person answers Mine and the hub gives them every vault (the shell's list says
+`covered: "all"`; without a key, their list holds every vault the hub's public `/.well-known/parachute.json` names), the
+app asks before the consent: *You run uni.example, so every vault on it comes in. Which are yours?*, each vault a
+checkbox, all ticked to begin with (vaults this device already knows keep what was said). The ones left unticked come in
+as someone else's. Only the person's own vaults are looked through for the home.
 
 ## Your Parachutes: the list in the home vault
 
@@ -112,7 +120,9 @@ note there (the list of Parachutes), a second device finds the same home.
 | 2 | A hub's descriptor sends tokens elsewhere | The issuer must be the address typed; the token and authorize endpoints must be on the issuer; the vault and account addresses must be on the hub's own origin (only Parachute Cloud may use another host of its own domain, `*.parachute.computer`), else the hub's own are used. |
 | 3 | The key signs something it shouldn't | `hub_vaults` signs one fixed body for one URL on the hub's origin; NIP-98 binds the URL, method, body hash and a 60 s window; the hub refuses a replay. |
 | 4 | A stray or replayed code lands on the app's return page | Each step's `state` and PKCE verifier are kept for that one step and used once (`oauth.ts`), as before; a token for a vault not asked for at that step is refused, not kept. |
-| 5 | Someone else's vault becomes home | The home is only ever one of the person's own vaults (whose stays device-held). |
+| 5 | Someone else's vault becomes home | The home is only ever one of the person's own vaults (whose stays device-held). On a hub the person runs, they tick which vaults are theirs before anything is kept, so a member's vault (and its settings note) isn't taken for theirs. |
+| 7 | An agent relabels a Parachute (the list's `name`) | A name from the list is shown only for a Parachute this device isn't signed in to; one it is signed in to is called by its address. |
+| 8 | A hub lists a great many vaults | At most 60 come with one sign-in (each is a page load of its own sign-in). |
 | 6 | Many vaults at once | The scope grows by ~40 characters a vault; Aaron's hub (10 vaults) is well inside any URL limit. |
 
 ## Proposals for core (for Uni)

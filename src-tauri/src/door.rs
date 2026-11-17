@@ -75,9 +75,16 @@ pub fn list_vaults_event(origin: &url::Url, nonce: &str) -> Result<EventBuilder,
     Ok(EventBuilder::new(Kind::from(SIGN_IN_KIND), "").tags([tag("u", &u)?, tag("method", "POST")?, tag("nonce", nonce)?, tag("payload", &payload)?]))
 }
 
-/// The vault names in the hub's answer to `list-vaults` (JSON, or one server-sent event carrying it): names a vault can
-/// have, each once, sorted.
-pub fn vault_names(body: &str) -> Option<Vec<String>> {
+/// What the hub answered to `list-vaults`: the vault names (each once, sorted, only names a vault can have), and whether
+/// they are every vault on the hub (`covered: "all"`: the person runs the hub) rather than the ones given to them.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct HubVaults {
+    pub vaults: Vec<String>,
+    pub all: bool,
+}
+
+/// Read the hub's answer to `list-vaults` (JSON, or one server-sent event carrying it).
+pub fn vault_names(body: &str) -> Option<HubVaults> {
     let json = if body.trim_start().starts_with('{') { body.to_string() } else { body.lines().find_map(|l| l.strip_prefix("data:")).map(|d| d.trim().to_string())? };
     let v: Value = serde_json::from_str(&json).ok()?;
     if v.get("error").is_some() || v.pointer("/result/isError").and_then(Value::as_bool) == Some(true) {
@@ -85,6 +92,7 @@ pub fn vault_names(body: &str) -> Option<Vec<String>> {
     }
     let text = v.pointer("/result/content")?.as_array()?.iter().find(|c| c.get("type").and_then(Value::as_str) == Some("text"))?.get("text")?.as_str()?;
     let inner: Value = serde_json::from_str(text).ok()?;
+    let all = inner.get("covered").and_then(Value::as_str) == Some("all");
     let mut names: Vec<String> = inner
         .get("vaults")?
         .as_array()?
@@ -95,9 +103,12 @@ pub fn vault_names(body: &str) -> Option<Vec<String>> {
         .collect();
     names.sort();
     names.dedup();
-    names.truncate(200);
-    Some(names)
+    names.truncate(MAX_VAULTS);
+    Some(HubVaults { vaults: names, all })
 }
+
+/// The most vaults one sign-in brings (each is a page load of its own sign-in).
+pub const MAX_VAULTS: usize = 60;
 
 /// A vault's name, as the app takes one: lower-case letters, digits, `-` and `_`, starting with a letter or digit.
 fn vault_name_ok(n: &str) -> bool {
@@ -111,7 +122,7 @@ fn nonce() -> String {
 }
 
 /// Ask the hub which vaults this key's person may reach.
-pub async fn list_vaults(origin: &url::Url, keys: &nostr::Keys) -> Result<Vec<String>, Refusal> {
+pub async fn list_vaults(origin: &url::Url, keys: &nostr::Keys) -> Result<HubVaults, Refusal> {
     let http = client()?;
     let event = list_vaults_event(origin, &nonce())?.sign_with_keys(keys).map_err(|_| refusal("refused", "The key couldn't sign."))?;
     let auth = format!("Nostr {}", nostr::base64::engine::general_purpose::STANDARD.encode(nostr::JsonUtil::as_json(&event)));
@@ -136,17 +147,12 @@ pub async fn list_vaults(origin: &url::Url, keys: &nostr::Keys) -> Result<Vec<St
     }
 }
 
-#[derive(Serialize)]
-pub struct HubVaults {
-    vaults: Vec<String>,
-}
-
 /// The vaults this device's key may reach on `hub`: one request the shell signs itself (the key never leaves it).
 #[tauri::command]
 pub async fn hub_vaults<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, hub: String) -> Result<HubVaults, Refusal> {
     let origin = hub_origin(&hub)?;
     let held = keys.get(&app).await.map_err(|m| refusal("no_key", m))?.ok_or_else(|| refusal("no_key", "This device has no key."))?;
-    Ok(HubVaults { vaults: list_vaults(&origin, &held).await? })
+    list_vaults(&origin, &held).await
 }
 
 /// A same-hub path to go to after signing in (the authorize address), as the hub's `next` takes it.
@@ -358,8 +364,12 @@ mod tests {
     fn reads_the_list_of_vaults() {
         let inner = r#"{"covered":"listed","vaults":[{"name":"work","url":"x"},{"name":"kim"},{"name":"Bad Name"},{"name":"kim"},{"nope":1}]}"#;
         let body = json!({ "jsonrpc": "2.0", "id": 1, "result": { "content": [{ "type": "text", "text": inner }] } }).to_string();
-        assert_eq!(vault_names(&body).unwrap(), vec!["kim".to_string(), "work".to_string()]);
-        assert_eq!(vault_names(&format!("event: message\ndata: {body}\n\n")).unwrap(), vec!["kim".to_string(), "work".to_string()]);
+        let want = HubVaults { vaults: vec!["kim".to_string(), "work".to_string()], all: false };
+        assert_eq!(vault_names(&body).unwrap(), want);
+        assert_eq!(vault_names(&format!("event: message\ndata: {body}\n\n")).unwrap(), want);
+        // the hub's admin is given every vault on it
+        let every = json!({ "jsonrpc": "2.0", "id": 1, "result": { "content": [{ "type": "text", "text": r#"{"covered":"all","vaults":[{"name":"a"}]}"# }] } }).to_string();
+        assert!(vault_names(&every).unwrap().all);
         assert!(vault_names(r#"{"jsonrpc":"2.0","id":1,"error":{"code":-1}}"#).is_none());
         assert!(vault_names(r#"{"jsonrpc":"2.0","id":1,"result":{"isError":true,"content":[]}}"#).is_none());
         assert!(vault_names("not json").is_none());

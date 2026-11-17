@@ -49,7 +49,8 @@ signature until the app is signed with an Apple Developer ID). Enter your Mac pa
 
 Type your Parachute's address (your hub's, like `your-hub.example`; a vault's address works too), say whose it is
 (**Mine**, or **Someone else's** for an org's or a friend's: [OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)), and press
-**Sign in with your key**. The hub's own page asks "Approve Parachute?" once, listing every vault you can reach there (it
+**Sign in with your key**. If you run the hub, Parachute first asks which of its vaults are yours (all ticked; untick
+another person's). The hub's own page asks "Approve Parachute?" once, listing every vault you can reach there (it
 may call Parachute a third-party app). Press **Approve**, and you're back in Parachute with all of them in the launcher.
 Add another Parachute later from **Add a Parachute** at the foot of the launcher.
 

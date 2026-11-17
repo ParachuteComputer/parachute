@@ -75,10 +75,10 @@ export async function keySignIn(hub: string, next: string): Promise<string> {
 
 /** The vaults this device's key may reach on `hub` (the hub's own `list-vaults`, a request the shell signs with the key:
  *  src-tauri/src/door.rs). `no_list`: the hub doesn't answer that (sign in to list them instead). */
-export async function hubVaults(hub: string): Promise<string[]> {
+export async function hubVaults(hub: string): Promise<{ vaults: string[]; all: boolean }> {
   try {
-    const names = (await invoke<{ vaults: string[] }>("hub_vaults", { hub })).vaults;
-    return [...new Set(names.filter((n) => typeof n === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(n)))].sort().slice(0, 200);
+    const r = await invoke<{ vaults: string[]; all: boolean }>("hub_vaults", { hub });
+    return { vaults: [...new Set(r.vaults.filter((n) => typeof n === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(n)))].sort().slice(0, 60), all: r.all === true };
   } catch (e) {
     throw asRefusal(e);
   }

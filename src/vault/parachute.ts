@@ -2,7 +2,6 @@
 // hub says about itself, and the vaults the person may reach there.
 //
 //   "uni.example", "https://uni.example", "https://uni.example/vault/notes"  → the hub at https://uni.example
-//   "Parachute Cloud"                                                        → CLOUD
 // The hub describes itself at /.well-known/parachute-account (core 0.8, 0.9 and Cloud): its OAuth issuer, its account
 // MCP (where `list-vaults` answers which vaults the person may reach) and where its vaults live.
 import { isLoopback, VAULT_NAME } from "./address";
@@ -79,26 +78,44 @@ export function rpcAnswer(text: string): unknown {
   try { return JSON.parse(json); } catch { throw new Error("The hub's list of your vaults couldn't be read."); }
 }
 
-/** The vault names in what the hub answered to `list-vaults` (a JSON-RPC result whose text is JSON). Only names a vault
- *  can have; at most 200. */
-export function vaultNamesFrom(body: unknown): string[] {
+/** The most vaults one sign-in brings (each is a page load of its own sign-in). */
+export const MAX_VAULTS = 60;
+/** The vaults the hub lists for the person, and whether they are every vault on it (`covered: "all"`: the person runs
+ *  the hub) rather than the ones given to them. */
+export type Listed = { vaults: string[]; all: boolean };
+
+/** What the hub answered to `list-vaults` (a JSON-RPC result whose text is JSON). Only names a vault can have, each once,
+ *  sorted; at most MAX_VAULTS. */
+export function listFrom(body: unknown): Listed {
   const r = body as { result?: { isError?: boolean; content?: { type?: string; text?: string }[] }; error?: unknown } | null;
   if (!r || r.error || r.result?.isError) throw new Error("The hub didn't list your vaults.");
   const text = r.result?.content?.find((c) => c.type === "text")?.text;
-  let parsed: { vaults?: { name?: unknown }[] };
+  let parsed: { vaults?: { name?: unknown }[]; covered?: unknown };
   try { parsed = JSON.parse(text ?? "") as typeof parsed; } catch { throw new Error("The hub's list of your vaults couldn't be read."); }
   const names = (Array.isArray(parsed.vaults) ? parsed.vaults : []).map((v) => v?.name).filter((n): n is string => typeof n === "string" && VAULT_NAME.test(n));
-  return [...new Set(names)].sort().slice(0, 200);
+  return { vaults: [...new Set(names)].sort().slice(0, MAX_VAULTS), all: parsed.covered === "all" };
 }
 
 /** The one call that lists the person's vaults: `list-vaults` on the hub's account MCP. */
 export const LIST_VAULTS_BODY = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list-vaults", arguments: {} } });
 
 /** List the person's vaults with an account token (the sign-in without a key). */
-export async function listWithToken(accountMcp: string, token: string, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<string[]> {
+export async function listWithToken(accountMcp: string, token: string, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<Listed> {
   const res = await fetchImpl(accountMcp, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: LIST_VAULTS_BODY });
   if (!res.ok) throw new Error(`The hub didn't list your vaults (${res.status}).`);
-  return vaultNamesFrom(rpcAnswer(await res.text()));
+  return listFrom(rpcAnswer(await res.text()));
+}
+
+/** Does the person reach every vault on the hub (they run it)? The hub's public list of its vaults
+ *  (`/.well-known/parachute.json`, core 0.8 and 0.9; Cloud has none) against theirs. Without that list: no. */
+export async function reachesEvery(hub: string, theirs: readonly string[], fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<boolean> {
+  try {
+    const res = await fetchImpl(`${hub}/.well-known/parachute.json`, { headers: { Accept: "application/json" } });
+    if (!res.ok) return false;
+    const d = (await res.json()) as { vaults?: { name?: unknown }[] };
+    const every = (Array.isArray(d.vaults) ? d.vaults : []).map((v) => v?.name).filter((n): n is string => typeof n === "string");
+    return every.length > 1 && every.every((n) => theirs.includes(n));
+  } catch { return false; }
 }
 
 /** The scope that asks for every vault named: read and write each (the hub gives read only where that is all the
