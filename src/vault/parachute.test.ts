@@ -1,5 +1,6 @@
 import { describe as group, expect, it } from "vitest";
-import { CLOUD, describe, grantedVaults, listFrom, MAX_VAULTS, parseHub, reachesEvery, rpcAnswer, scopeForVaults, vaultUrlFrom } from "./parachute";
+import { canList, CLOUD, describe, grantedVaults, listFrom, parseHub, reachesEvery, rpcAnswer, scopeForVaults, vaultUrlFrom } from "./parachute";
+import { MAX_VAULTS } from "./address";
 import { hubOf, settingsFrom } from "../shell/homeSettings";
 
 group("parseHub", () => {
@@ -44,6 +45,13 @@ group("describe", () => {
   });
   it("reads a hub with no description (older) as keeping everything on its origin", async () => {
     expect((await describe("https://old.example", answering(404, "no"))).vaultTemplate).toBe("https://old.example/vault/{name}");
+  });
+});
+
+group("the listing token", () => {
+  it("lists the person's vaults with the account-vaults scope however the hub granted it", () => {
+    for (const s of ["account:vaults", "account:self:vaults", "account:u-123:vaults", "account:self:vaults:garden:read account:self:vaults:kitchen:read"]) expect(canList(s), s).toBe(true);
+    for (const s of ["vault:garden:read", "account:self:read", "", undefined]) expect(canList(s), String(s)).toBe(false);
   });
 });
 

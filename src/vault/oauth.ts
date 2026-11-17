@@ -1,6 +1,6 @@
 // Sign-in to a Parachute (a hub): OAuth 2.1 with PKCE and dynamic client registration, on surface-client's discovery,
 // registration and PKCE helpers (docs/design/ONE-SIGN-IN.md). One sign-in covers every vault the person may reach there:
-//   list    (only without a key) a sign-in for `account:self:vaults`, whose token asks the hub which vaults are theirs
+//   list    (only without a key) a sign-in for `account:vaults`, whose token asks the hub which vaults are theirs
 //   vaults  one consent naming all those vaults: its token is for the first of them
 //   vault   for each of the others, the same sign-in once more for that vault alone: the hub's grant already covers it,
 //           so it sends the person straight back with a code (no page), and the vault gets a token of its own
@@ -13,16 +13,13 @@ import {
   type TokenResponse,
 } from "@openparachute/surface-client";
 import { isLoopback } from "./address";
-import { grantedVaults, LIST_SCOPE, scopeForVaults, type Parachute } from "./parachute";
+import { canList, grantedVaults, LIST_SCOPE, scopeForVaults, type Parachute } from "./parachute";
 
 export const CLIENT_NAME = "Parachute";
 const PENDING_KEY = "parachute.oauth.pending.v1";
 const CLIENTS_KEY = "parachute.oauth.clients.v1";
 /** A flow older than this is stale: its code verifier is dropped. */
 const PENDING_TTL_MS = 30 * 60_000;
-/** A consent left this long ago (the person never came back from it) may have died on a registration the hub has since
- *  forgotten: the next sign-in registers again. A fresher one keeps it. */
-const STALE_CONSENT_MS = 5 * 60_000;
 
 export { PendingApprovalError };
 import { limitedFetch } from "./limited";
@@ -120,7 +117,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   const stale = readJson<Pending>(PENDING_KEY);
   // (only one that stopped at its first step: the listing, or the consent when the key listed the vaults; past that,
   // the hub took the registration, kept so a hub whose owner approves new registrations doesn't have to again)
-  if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "vaults" && (stale.how === "key" || Date.now() - stale.startedAt > STALE_CONSENT_MS)))) forgetClient(parachute.issuer);
+  if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "vaults" && stale.how === "key"))) forgetClient(parachute.issuer);
   let clientId = cachedClient(parachute.issuer, redirect);
   if (!clientId) {
     clientId = (await registerClient(meta.registration_endpoint, { clientName: CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
@@ -200,8 +197,7 @@ export async function completeSignIn(code: string, state: string, fetchImpl?: ty
   try { token = JSON.parse(text) as TokenResponse; } catch { throw new Error("The hub's answer couldn't be read."); }
   if (!token.access_token) throw new Error("The hub's answer had no token.");
   if (pending.step === "list") {
-    // 0.8 grants `account:self:vaults` as asked; 0.9 grants it per vault (`account:self:vaults:<vault>:read`)
-    if (!(token.scope ?? "").split(/\s+/).some((w) => w === LIST_SCOPE || w.startsWith(`${LIST_SCOPE}:`))) throw new Error("The hub didn't let Parachute see which vaults are yours. Nothing was added.");
+    if (!canList(token.scope)) throw new Error("The hub didn't let Parachute see which vaults are yours. Nothing was added.");
     return { pending, token, vaults: [], vault: null };
   }
   // the vaults this sign-in holds: the hub's word (the token's scope), among those asked for; a token for something

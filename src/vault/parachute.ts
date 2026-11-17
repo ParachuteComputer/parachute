@@ -4,7 +4,7 @@
 //   "uni.example", "https://uni.example", "https://uni.example/vault/notes"  → the hub at https://uni.example
 // The hub describes itself at /.well-known/parachute-account (core 0.8, 0.9 and Cloud): its OAuth issuer, its account
 // MCP (where `list-vaults` answers which vaults the person may reach) and where its vaults live.
-import { cleanVaultNames, isLoopback, MAX_VAULTS, VAULT_NAME } from "./address";
+import { cleanVaultNames, isLoopback, isVaultName, MAX_VAULTS } from "./address";
 
 export const CLOUD = "https://cloud.parachute.computer";
 export const CLOUD_NAME = "Parachute Cloud";
@@ -78,7 +78,6 @@ export function rpcAnswer(text: string): unknown {
   try { return JSON.parse(json); } catch { throw new Error("The hub's list of your vaults couldn't be read."); }
 }
 
-export { MAX_VAULTS };
 /** The vaults the hub lists for the person, and whether they are every vault on it (`covered: "all"`: the person runs
  *  the hub) rather than the ones given to them. */
 export type Listed = { vaults: string[]; all: boolean };
@@ -111,7 +110,7 @@ export async function reachesEvery(hub: string, theirs: readonly string[], fetch
     const res = await fetchImpl(`${hub}/.well-known/parachute.json`, { headers: { Accept: "application/json" } });
     if (!res.ok) return false;
     const d = (await res.json()) as { vaults?: { name?: unknown }[] };
-    const every = (Array.isArray(d.vaults) ? d.vaults : []).map((v) => v?.name).filter((n): n is string => typeof n === "string" && VAULT_NAME.test(n));
+    const every = (Array.isArray(d.vaults) ? d.vaults : []).map((v) => v?.name).filter(isVaultName);
     // a list cut at MAX_VAULTS can't show it covers every vault: asked, rather than taken as the person's
     return every.length > 1 && (theirs.length >= MAX_VAULTS || every.every((n) => theirs.includes(n)));
   } catch { return false; }
@@ -120,8 +119,12 @@ export async function reachesEvery(hub: string, theirs: readonly string[], fetch
 /** The scope that asks for every vault named: read and write each (the hub gives read only where that is all the
  *  person holds). */
 export const scopeForVaults = (names: readonly string[]) => names.flatMap((n) => [`vault:${n}:read`, `vault:${n}:write`]).join(" ");
-/** The scope that asks only to see which vaults are the person's. */
-export const LIST_SCOPE = "account:self:vaults";
+/** The scope that asks only to see which vaults are the person's: the un-narrowed account-vaults scope, which core 0.8
+ *  and 0.9 and Parachute Cloud all take (Cloud refuses `account:self:vaults`: `self` isn't an account id there). */
+export const LIST_SCOPE = "account:vaults";
+/** Does a token's scope let it list the person's vaults? As granted: `account:vaults`, `account:<id>:vaults` (0.8,
+ *  Cloud), or per vault, `account:<id>:vaults:<vault>:<verb>` (0.9). */
+export const canList = (scope: string | undefined) => (scope ?? "").split(/\s+/).some((w) => w === LIST_SCOPE || /^account:[^:\s]+:vaults(:|$)/.test(w));
 
 /** The vaults a token's scope grants: the hub's word on what this sign-in holds, among the ones asked for. */
 export function grantedVaults(scope: string | undefined, asked: readonly string[]): string[] {

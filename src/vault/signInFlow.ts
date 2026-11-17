@@ -131,7 +131,7 @@ function keep(pending: Pending, token: TokenResponse, vault: string): VaultRecor
 }
 
 /** An error of a sign-in step, in words for the person. */
-export const signInWords = (err: unknown) => err instanceof Error && /fetch|network|load/i.test(err.message) ? "The hub didn't answer at that address." : err instanceof Error ? err.message : "The hub didn't answer.";
+export const signInWords = (err: unknown) => err instanceof TypeError ? "The hub didn't answer." : err instanceof Error ? err.message : "The hub didn't answer.";
 
 /** A sign-in that stopped partway (the person said no to a later vault, or the hub refused one): what it kept stays,
  *  and is said. Null when it had kept nothing. */
