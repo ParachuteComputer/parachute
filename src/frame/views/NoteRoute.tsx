@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { useVault } from "../data";
 import { titleOf } from "../../vault/notes";
-import { openSheet } from "../open/sheet";
+import { openSheet } from "../open/sheetState";
 import { useOpenWith } from "../open/useOpenWith";
 import { appletHref } from "../../open/paths";
 import { carryOn } from "../FrameRouter";

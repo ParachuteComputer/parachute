@@ -9,7 +9,7 @@ export { default as NoteRoute } from "./views/NoteRoute";
 export { default as NoteView } from "./views/NoteView";
 export { default as NoVault } from "./views/NoVault";
 export { default as Sheet } from "./open/Sheet";
-export { closeSheet, installLongPress, openSheet } from "./open/sheet";
+export { closeSheet, installLongPress, openSheet } from "./open/sheetState";
 export { useOpenWith } from "./open/useOpenWith";
 export { Bar } from "../ui/Bar";
 /** The parts applets have (docs/WRITE-AN-APPLET.md), for a frame of the person's too. */

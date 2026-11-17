@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { setDefault, useVault } from "../data";
 import { noteHref, titleOf } from "../../vault/notes";
-import { closeSheet, useSheet, type SheetTarget } from "./sheet";
+import { closeSheet, useSheet, type SheetTarget } from "./sheetState";
 import { useOpenWith, type OpenWith } from "./useOpenWith";
 import { appletHref } from "../../open/paths";
 import { VAULT, type Candidate } from "../../open/resolve";

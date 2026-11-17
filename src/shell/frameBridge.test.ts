@@ -1,7 +1,7 @@
 // The shell's side of the bridge, played against as a hostile frame would: every call, every shape, and nothing it
 // answers carries a token, a client id or a grant; a move it asks for starts nothing without a tap.
 import { describe, expect, it, vi } from "vitest";
-import { createFrameHost, FRAME_LIMITS, type HostDeps } from "./frameHost";
+import { createFrameHost, FRAME_LIMITS, type HostDeps } from "./frameBridge";
 import { METHODS, PF } from "../bridge/protocol";
 import type { VaultRecord } from "../vault/store";
 
