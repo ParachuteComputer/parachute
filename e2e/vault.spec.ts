@@ -1,9 +1,13 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { signIn, ui } from "./helpers";
 import { hubState, MORE_VAULTS, VAULT } from "./hub";
 
-test("add a vault by its address, sign in on the hub, and read a note", async ({ page }) => {
+/** From the launcher into a vault, as a person does: its chapter's Open the vault. */
+const openVault = (page: Page, vault = VAULT) => ui(page).getByRole("region", { name: vault, exact: true }).getByRole("link", { name: "Open the vault" }).click();
+
+test("sign in to the Parachute on the hub, open a vault, and read a note", async ({ page }) => {
   await signIn(page);
+  await openVault(page);
   const notes = ui(page).getByRole("list", { name: "Notes" });
   await expect(notes.getByRole("link", { name: /Tomato toast/ })).toBeVisible();
   await notes.getByRole("link", { name: "Welcome", exact: true }).click();
@@ -16,6 +20,7 @@ test("add a vault by its address, sign in on the hub, and read a note", async ({
 
 test("search finds a note by its words", async ({ page }) => {
   await signIn(page);
+  await openVault(page);
   await ui(page).getByRole("searchbox", { name: "Search this vault" }).fill("beans");
   const hits = ui(page).getByRole("list", { name: "Search results" });
   await expect(hits.getByRole("link")).toHaveCount(1);
