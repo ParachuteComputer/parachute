@@ -124,7 +124,7 @@ note there (the list of Parachutes), a second device finds the same home.
 | 4 | A stray or replayed code lands on the app's return page | Each step's `state` and PKCE verifier are kept for that one step and used once (`oauth.ts`), as before; a token for a vault not asked for at that step is refused, not kept. |
 | 5 | Someone else's vault becomes home | The home is only ever one of the person's own vaults (whose stays device-held). On a hub the person runs, they tick which vaults are theirs before anything is kept, so a member's vault (and its settings note) isn't taken for theirs. |
 | 7 | An agent relabels a Parachute (the list's `name`) | A name from the list is shown only for a Parachute this device isn't signed in to; one it is signed in to is called by its address. |
-| 8 | A hub lists a great many vaults | At most 60 come with one sign-in (each is a page load of its own sign-in). |
+| 8 | A hub lists a great many vaults | At most 60 come with one sign-in (each is a page load of its own sign-in): the first 60 by name; the rest are left out (proposal 3 would lift this). A list cut there is never taken as "every vault": the person is asked which are theirs. |
 | 6 | Many vaults at once | The scope grows by ~40 characters a vault; Aaron's hub (10 vaults) is well inside any URL limit. |
 
 ## Proposals for core (for Uni)

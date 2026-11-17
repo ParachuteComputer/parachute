@@ -14,24 +14,24 @@ import type { TokenResponse } from "@openparachute/surface-client";
 /** On a hub the person runs (it lists every vault on it), before the consent: which of them are theirs. `vaults` are all
  *  of them; `mine`, the ones ticked to begin with (each one this device already said is theirs, and every new one). The
  *  screen calls `go` with the person's choice, and opens the address it gives. */
-export type Pick = { hub: string; vaults: string[]; mine: string[]; go: (mine: string[]) => Promise<string> };
+export type VaultPick = { hub: string; vaults: string[]; mine: string[]; go: (mine: string[]) => Promise<string> };
 /** Where to go next: the hub (its sign-in or consent page, or the next vault's sign-in), a pick of the person's own
  *  vaults first, or done, with the vaults now held. `progress`: how far through the vaults, for the screen between steps. */
-export type Next = { go: string; progress?: { done: number; of: number } } | { pick: Pick } | { done: VaultRecord[]; parachute: Parachute };
+export type Next = { go: string; progress?: { done: number; of: number } } | { pick: VaultPick } | { done: VaultRecord[]; parachute: Parachute };
 
 /** The pick of their own vaults, when the person said Mine of a hub that gave them every vault on it (they run it: some
  *  vaults may be other people's). Null when there is nothing to pick. */
-function pickFor(parachute: Parachute, listed: Listed, whose: "mine" | "theirs", go: (mine: string[] | undefined) => Promise<string>): Pick | null {
+function pickFor(parachute: Parachute, listed: Listed, whose: "mine" | "theirs", go: (mine: string[]) => Promise<string>): VaultPick | null {
   if (whose !== "mine" || !listed.all || listed.vaults.length < 2) return null;
-  const said = (v: string) => whoseSaid({ issuer: parachute.issuer, vault: v });
-  return { hub: parachute.hub, vaults: listed.vaults, mine: listed.vaults.filter((v) => said(v) === null || said(v) === "mine"), go: (mine) => go(mine) };
+  const mine = listed.vaults.filter((v) => [null, "mine"].includes(whoseSaid({ issuer: parachute.issuer, vault: v })));
+  return { hub: parachute.hub, vaults: listed.vaults, mine, go };
 }
 
 const fetchFor = (whose: "mine" | "theirs") => (whose === "mine" ? fetch.bind(globalThis) : limitedFetch());
 
 /** Start: read the hub, and with the key learn the person's vaults at once and open the hub's key door. Throws a
  *  Refusal (key) or an Error (words for the person). */
-export async function startSignIn(hub: string, whose: "mine" | "theirs", withKey: boolean): Promise<{ go: string } | { pick: Pick }> {
+export async function startSignIn(hub: string, whose: "mine" | "theirs", withKey: boolean): Promise<{ go: string } | { pick: VaultPick }> {
   const f = fetchFor(whose);
   const parachute = await describe(hub, f);
   if (!withKey) return { go: await beginSignIn({ parachute, step: "list", whose, how: "page", fresh: true }, f) };
@@ -75,7 +75,9 @@ export async function finishStep(code: string, state: string): Promise<Next> {
       // an account token's `covered` says what the token covers, not whether the person runs the hub (0.9 grants it
       // per vault): that is read from the hub's public list instead
       const theirs = await listWithToken(p.accountMcp, token.access_token, f);
-      listed = { vaults: theirs.vaults, all: await reachesEvery(p.hub, theirs.vaults, f) };
+      // asked only when there could be a pick (Mine, and more than one vault)
+      const ask = pending.whose === "mine" && theirs.vaults.length > 1;
+      listed = { vaults: theirs.vaults, all: ask && await reachesEvery(p.hub, theirs.vaults, f) };
     } finally {
       // the listing token has done its one job: ended before the page moves on
       await revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint });

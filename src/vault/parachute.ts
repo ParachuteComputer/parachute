@@ -113,8 +113,9 @@ export async function reachesEvery(hub: string, theirs: readonly string[], fetch
     const res = await fetchImpl(`${hub}/.well-known/parachute.json`, { headers: { Accept: "application/json" } });
     if (!res.ok) return false;
     const d = (await res.json()) as { vaults?: { name?: unknown }[] };
-    const every = (Array.isArray(d.vaults) ? d.vaults : []).map((v) => v?.name).filter((n): n is string => typeof n === "string");
-    return every.length > 1 && every.every((n) => theirs.includes(n));
+    const every = (Array.isArray(d.vaults) ? d.vaults : []).map((v) => v?.name).filter((n): n is string => typeof n === "string" && VAULT_NAME.test(n));
+    // a list cut at MAX_VAULTS can't show it covers every vault: asked, rather than taken as the person's
+    return every.length > 1 && (theirs.length >= MAX_VAULTS || every.every((n) => theirs.includes(n)));
   } catch { return false; }
 }
 

@@ -55,6 +55,9 @@ group("whether the person runs the hub", () => {
     // one vault on the hub: nothing to pick between; no public list (Cloud): no
     expect(await reachesEvery("https://hub.example", ["a"], pub(["a"]))).toBe(false);
     expect(await reachesEvery("https://hub.example", ["a", "b"], answering(404, "no"))).toBe(false);
+    // a list cut at the cap is asked about, never taken as the person's own; names a vault can't have don't count
+    expect(await reachesEvery("https://hub.example", Array.from({ length: MAX_VAULTS }, (_, i) => `v${i}`), pub(Array.from({ length: 70 }, (_, i) => `v${i}`)))).toBe(true);
+    expect(await reachesEvery("https://hub.example", ["a", "b"], pub(["a", "b", "Bad Name"]))).toBe(true);
   });
 });
 

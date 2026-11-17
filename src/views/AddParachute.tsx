@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Bar } from "../ui/Bar";
 import { CLOUD, CLOUD_NAME, parseHub } from "../vault/parachute";
-import { startSignIn, type Pick } from "../vault/signInFlow";
+import { startSignIn, type VaultPick } from "../vault/signInFlow";
 import PickVaults from "./PickVaults";
 import { keysHere, useKey, type Refusal } from "../key/key";
 import { Npub } from "../key/Npub";
@@ -24,7 +24,7 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
   // whose it is (vault/whose.ts): asked every time, nothing chosen beforehand
   const [whose, setWhoseHere] = useState<"mine" | "theirs" | null>(null);
   // a hub the person runs: which of its vaults are theirs, before the hub's consent
-  const [pick, setPick] = useState<Pick | null>(null);
+  const [pick, setPick] = useState<VaultPick | null>(null);
 
   async function go(hubInput: string, withKey: boolean) {
     const parsed = parseHub(hubInput);
@@ -48,7 +48,7 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
     <main className="screen">
       <Bar title={first ? "Parachute" : "Add a Parachute"} back={first ? undefined : "/"} />
       <section className="card stack">
-        <PickVaults pick={pick} onError={(m) => { setPick(null); setError(m); }} />
+        <PickVaults pick={pick} onCancel={() => setPick(null)} onError={(e) => { setPick(null); if (isRefusal(e)) setRefusal(e); else setError(words(e)); }} />
       </section>
     </main>
   );

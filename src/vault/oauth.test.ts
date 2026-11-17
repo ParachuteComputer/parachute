@@ -108,9 +108,17 @@ describe("beginSignIn", () => {
   });
   it("registers again when the last sign-in to that hub never came back", async () => {
     const reg: string[] = [];
-    await beginSignIn(begin({ step: "vaults", vaults: ["recipes"], fresh: true }), discovery(META, reg));
-    const again = new URL(await beginSignIn(begin({ step: "vaults", vaults: ["recipes"], fresh: true }), discovery(META, reg)));
+    // with the key, the consent is the first step
+    await beginSignIn(begin({ step: "vaults", vaults: ["recipes"], fresh: true, how: "key" }), discovery(META, reg));
+    const again = new URL(await beginSignIn(begin({ step: "vaults", vaults: ["recipes"], fresh: true, how: "key" }), discovery(META, reg)));
     expect(again.searchParams.get("client_id")).toBe("client-2");
+  });
+  it("keeps the registration when the last sign-in stopped past its first step (the hub had taken it)", async () => {
+    const reg: string[] = [];
+    // without a key, the listing came back (the registration worked); the person left at the consent
+    await beginSignIn(begin({ step: "vaults", vaults: ["recipes"], how: "page" }), discovery(META, reg));
+    const again = new URL(await beginSignIn(begin({ step: "list", fresh: true, how: "page" }), discovery(META, reg)));
+    expect(again.searchParams.get("client_id")).toBe("client-1");
   });
   it("keeps the registration from the listing step for the consent that follows it", async () => {
     const reg: string[] = [];

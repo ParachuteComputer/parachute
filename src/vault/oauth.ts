@@ -115,9 +115,9 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   // a sign-in that never came back may have died on a registration the hub no longer knows: register again (only at
   // a new sign-in: its next steps follow at once, with the registration the hub just took)
   const stale = readJson<Pending>(PENDING_KEY);
-  // (a sign-in that stopped after its first step had a registration the hub took: kept, so a hub whose owner approves
-  // new registrations doesn't have to again)
-  if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "vaults" && !stale.kept?.length))) forgetClient(parachute.issuer);
+  // (only one that stopped at its first step: the listing, or the consent when the key listed the vaults; past that,
+  // the hub took the registration, kept so a hub whose owner approves new registrations doesn't have to again)
+  if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "vaults" && stale.how === "key"))) forgetClient(parachute.issuer);
   let clientId = cachedClient(parachute.issuer, redirect);
   if (!clientId) {
     clientId = (await registerClient(meta.registration_endpoint, { clientName: CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;

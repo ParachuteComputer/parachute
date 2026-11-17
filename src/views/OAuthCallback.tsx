@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Bar } from "../ui/Bar";
 import { dropPending, peekPending, PendingApprovalError } from "../vault/oauth";
-import { finishStep, keptSoFar, type Pick } from "../vault/signInFlow";
+import { finishStep, keptSoFar, type VaultPick } from "../vault/signInFlow";
 import PickVaults from "./PickVaults";
 import { afterSignIn } from "../shell/parachutes";
 
@@ -15,7 +15,7 @@ export default function OAuthCallback() {
   const [approve, setApprove] = useState<string | null>(null);
   const [saying, setSaying] = useState("Finishing the sign-in…");
   const [kept, setKept] = useState(false);
-  const [pick, setPick] = useState<Pick | null>(null);
+  const [pick, setPick] = useState<VaultPick | null>(null);
   const once = useRef(false);
   useEffect(() => {
     if (once.current) return;
@@ -49,7 +49,7 @@ export default function OAuthCallback() {
   return (
     <main className="screen">
       <Bar title="Signing in" back="/" />
-      {pick ? <section className="card stack"><PickVaults pick={pick} onError={(m) => { setPick(null); setError(m); }} /></section> : <div className="card" role="status">
+      {pick ? <section className="card stack"><PickVaults pick={pick} onCancel={() => nav("/add", { replace: true })} onError={(e) => { setPick(null); setError(e instanceof Error ? e.message : "The hub didn't answer."); }} /></section> : <div className="card" role="status">
         {approve ? <>
           <p>Your hub hasn't approved Parachute yet. Approve it there, then sign in again.</p>
           <a className="primary" href={approve}>Approve on your hub</a>
