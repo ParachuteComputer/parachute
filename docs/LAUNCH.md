@@ -15,8 +15,8 @@ in CI it comes from four repository secrets, which are **not set yet**:
 | `PLAYTEST_KEY_ALIAS` | the key's alias |
 | `PLAYTEST_KEY_PASSWORD` | the key's password |
 
-The passwords must not contain a backslash (`\`): the properties file reads it as an escape. Without them a tag's
-release fails, and a dry run signs with a key made for that run (the file is named `-dry-run-key`).
+Without these secrets a tag's release fails, and a dry run signs with a key made for that run (the file is named
+`-dry-run-key`). The passwords must not contain a backslash (`\`): the properties file reads it as an escape.
 
 **Recommendation:** register as an *organisation* on Google Play (a new personal account must first run a closed test
 with 12 testers for 14 days; an organisation needs a D-U-N-S number instead). Use Play App Signing: Google keeps the
