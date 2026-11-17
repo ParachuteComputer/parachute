@@ -196,19 +196,17 @@ record), a server an applet talks to, a page an applet shows, other applets.
 | An applet opens something sealed to the person (a private list, a wallet secret) | It can't hand the shell ciphertext: private notes are read by the shell from the relay, and opened only if the person wrote them, of the declared kind, `t` and `d` prefix. Tokens use their own derived key. |
 | Code changes after the person allowed it | The code's hash is in the grant: changed code shows the card again before it runs. A changed declaration changes the grant's key. |
 | An applet posts in the person's name things they didn't write | Bounded by the card: only the kinds listed, only to that relay. The log shows each one. |
-| An applet approves a credential request or answers a sealed card | Gift wraps and seals are never applet kinds. Approving them stays with a screen the shell owns (a later step; PARITY.md). |
+| An applet approves a credential request or answers a sealed card | Gift wraps and seals are never applet kinds to publish. Answering Uni's cards is its own grant line, with the approval key, keys the device trusts and the device unlock: [KEYRING.md](KEYRING.md). |
 | A server redirects, sets a cookie, or floods | No redirects followed; no cookies; plain headers only; bodies capped at 25 MB; relay batches capped, a subscription that overflows is closed. |
 | An applet floods the shell | The frame's request and pending limits; bytes capped per call and in flight. |
 | Replay of a signed request | NIP-98 carries URL, method, body hash, nonce and time; the server checks the window (the mail gateway keeps a replay cache). |
 | The shell's own web side has a bug | Rust's checks per session still hold: named kinds, tags, prefix, declared relay, hubs. A compromised web side is out of scope: it already holds vault tokens. |
 
-Left, said plainly: an allowed applet can post its granted kinds to any room the person is in on that relay, not only
-the one on screen; it can read whatever the relay lets the person read and send it to its declared servers. Each is a
-line on the card. One more, from how a room works rather than from the broker: a message is also how a person answers
-some bots in a room (Hermes takes a plain "/approve" message as the owner's OK for a command it flagged), so an applet
-allowed to post messages can say that too. The rooms applet draws Hermes's prompt with Approve and Deny buttons, as
-any message the person sends; approving that is stronger than a message belongs on a shell-owned screen, as sealed
-cards do.
+Left, said plainly: an allowed applet can post its granted kinds to any room the person is in on that relay, unless its
+service names `rooms` (KEYRING.md); it can read whatever the relay lets the person read there and send it to its
+declared servers. Each is a line on the card. Hermes still takes a plain "/approve" message as the owner's OK for a
+command it flagged; until it takes sealed answers, the shell signs such a message only for an applet with the approvals
+grant, during a tap (KEYRING.md).
 
 ## Testing
 

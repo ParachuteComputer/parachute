@@ -283,6 +283,10 @@ export function checkFilters(raw: unknown, rooms?: readonly Room[]): Parsed<Reco
   return { ok: true, value: out };
 }
 
+/** Text a bot may take as the owner's approval (Hermes's `/approve`, `/deny`), as Rust reads it: leading whitespace
+ *  trimmed, case ignored. Only an applet holding the approvals grant posts it, during a tap (docs/design/KEYRING.md). */
+export const isCommandApproval = (content: string) => /^\s*\/(approve|deny)/i.test(content);
+
 export type Template = { kind: number; content: string; tags: string[][] };
 /** An event the applet asks the shell to sign: a kind it may publish there, plain tags (none shaped like auth), and
  *  for a deletion only `e` (and `h`) tags. The shell sets who and when. */

@@ -149,12 +149,12 @@ asks every time instead, said in PARITY.md). Each approval that a grace let thro
 the applet ("Approved: cloudflare-dns · 1 h") and is written to the signing log. `always_unlock` (the Uni app's rule: a powerful key unless a small
 one; any `mint.` or long-lived child) always asks. Deny never asks.
 
-**Held sends** (mail): `approve: {field, ops}` on an http service. A request whose body is a JSON object (unique keys,
-`content-type: application/json`) with `field` one of `ops` is signed with the approval key, behind the same tap,
-unlock and grace. For a service that declares `approve`, **the everyday key signs only a body it can read the same
-way and whose `field` is a string not in `ops`**; anything else (no body, another type, duplicate keys, the field
-missing or not a string) is refused: it fails closed. The mail gateway still decides by the key it maps; the
-separation is complete once it is told the approval key (with Uni and Hermes, outside this repo).
+**Held sends** (mail): `approve: {field, ops}` on an http service. A request whose body is a JSON object with `field`
+one of `ops` is signed with the approval key, behind the same unlock and grace (and a tap). Everything else that service
+is sent (no body; JSON without that field, or with another op) is the everyday key's. What a gateway might read
+differently is refused, so the split fails closed: a body that isn't plain JSON (a byte-order mark, NaN, another
+encoding), a key named twice, or the field holding anything but a string. The mail gateway still decides by the key it
+maps; the separation is complete once it is told the approval key (with Uni and Hermes, outside this repo).
 
 **Hermes's command prompts** (a plain kind 9 `/approve` or `/deny` today) stay as they are until Hermes moves to sealed
 answers (separately). Meanwhile the everyday key signs a kind 9 whose text, leading whitespace trimmed and case ignored, starts with
@@ -222,7 +222,7 @@ is allowed. Desktop: not in this step (the Uni app notifies only while running t
 | A forged card (another key, a replayed real box) | Author must be in the grant's `from` and on the device's trusted list; the request digest binds every field; the ledger refuses a replayed `rid` or `rpk`. |
 | The data key or a secret reaches the applet | The view never carries `dek`; secrets are typed on the shell's sheet and sealed in Rust. |
 | An applet scoped to one room posts or reads elsewhere | `rooms`: one `h` in the list on every event (web side and Rust), targets checked, filters refused without an in-scope `#h`. |
-| Posting rights approve a held send | The everyday key signs nothing for that service but a JSON body whose `field` is a string not in `ops` (fails closed); full separation needs the gateway to know the approval key (said). |
+| Posting rights approve a held send | The everyday key never signs a body whose `field` is an approve op, and a body read two ways is refused (fails closed); full separation needs the gateway to know the approval key (said). |
 | A notification leaks a message | It shows only what a mention would: who and the first words, on the lock screen as Android's settings allow. |
 | An applet exfiltrates through a link or a saved file | `links` is stressed on the card; a saved file goes where the person's own files are. |
 

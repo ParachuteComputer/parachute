@@ -455,22 +455,34 @@ impl<'de> Deserialize<'de> for UniqueObject {
     }
 }
 
-/// For a service with `approve`: the approval key for a JSON body (`content-type: application/json`, unique keys) whose
-/// `field` is one of `ops`; the everyday key for one whose `field` is a string not in `ops`; anything else is refused,
-/// so the split fails closed. Without `approve`, the everyday key.
-pub fn http_role(approve: Option<&Approve>, headers: &HashMap<String, String>, body: Option<&[u8]>) -> Result<Role, Refusal> {
+/// For a service with `approve` (docs/design/KEYRING.md): the approval key for a body that is a JSON object whose
+/// `field` is one of `ops`; the everyday key for no body, a JSON body that isn't an object, or an object without that
+/// field or with another string there. Anything a server might read differently from this is refused, so the split
+/// fails closed: a body that isn't JSON as serde reads it (a gateway's parser may take a byte-order mark, NaN or another
+/// encoding), a key named twice (most parsers keep the last), or the field holding anything but a string. Without
+/// `approve`, the everyday key.
+pub fn http_role(approve: Option<&Approve>, body: Option<&[u8]>) -> Result<Role, Refusal> {
     let Some(a) = approve else { return Ok(Role::Everyday) };
-    let refused = || scope(format!("a request to this service is a JSON body naming its {}", a.field));
-    let json = headers.iter().any(|(k, v)| {
-        let v = v.trim().to_ascii_lowercase();
-        k.eq_ignore_ascii_case("content-type") && (v == "application/json" || v.starts_with("application/json;"))
-    });
-    if !json {
+    let body = match body {
+        None => return Ok(Role::Everyday),
+        Some(b) if b.is_empty() => return Ok(Role::Everyday),
+        Some(b) => b,
+    };
+    let refused = || scope(format!("a request to this service with a body is plain JSON, its {} named once, as text", a.field));
+    if !body.first().is_some_and(|c| matches!(c, b'{' | b'[' | b'"' | b't' | b'f' | b'n' | b'-' | b'0'..=b'9' | b' ' | b'\n' | b'\r' | b'\t')) {
         return Err(refused());
     }
-    let obj: UniqueObject = serde_json::from_slice(body.ok_or_else(refused)?).map_err(|_| refused())?;
-    let op = obj.0.get(&a.field).and_then(Value::as_str).ok_or_else(refused)?;
-    Ok(if a.ops.iter().any(|o| o == op) { Role::Approval(op.to_string()) } else { Role::Everyday })
+    let obj: UniqueObject = match serde_json::from_slice::<UniqueObject>(body) {
+        Ok(o) => o,
+        // not an object: valid JSON of another shape is everyday; anything else is refused
+        Err(_) => return serde_json::from_slice::<Value>(body).ok().filter(|v| !v.is_object()).map(|_| Role::Everyday).ok_or_else(refused),
+    };
+    match obj.0.get(&a.field) {
+        None => Ok(Role::Everyday),
+        Some(Value::String(op)) if a.ops.iter().any(|o| o == op) => Ok(Role::Approval(op.clone())),
+        Some(Value::String(_)) => Ok(Role::Everyday),
+        Some(_) => Err(refused()),
+    }
 }
 
 /// Text a bot may take as the owner's approval: `/approve` or `/deny`, leading whitespace trimmed, case ignored.
@@ -698,6 +710,13 @@ struct Session {
     opened: u64,
 }
 
+/// An approvals call's applet: its grant subject, and its relay service's rooms (empty: all) and approvers (hex).
+pub(crate) struct Grantee {
+    pub subject: String,
+    pub rooms: Vec<String>,
+    pub from: Vec<String>,
+}
+
 /// What a call needs from its session, copied out so no lock is held across a request.
 struct Call {
     applet: String,
@@ -831,6 +850,35 @@ impl Broker {
         }
     }
 
+    /// What an approvals call needs from its session (docs/design/KEYRING.md): the applet's grant subject, and the
+    /// relay service's rooms and approvers. Refused when that service has no approvals line.
+    pub(crate) fn approvals_of(&self, session: &str, service: &str) -> Result<Grantee, Refusal> {
+        let call = self.call(session, service)?;
+        match &call.service.kind {
+            ServiceKind::Relay { rooms, approvals, .. } if !approvals.is_empty() => Ok(Grantee { subject: call.subject.clone(), rooms: rooms.clone(), from: approvals.clone() }),
+            ServiceKind::Relay { .. } => Err(no("not_granted", "It may not answer approvals there.")),
+            ServiceKind::Http { .. } => Err(scope(format!("{service} isn't a relay"))),
+        }
+    }
+
+    /// The host a service talks to, as the unlock prompt names it.
+    pub(crate) fn host_of(&self, session: &str, service: &str) -> Result<String, Refusal> {
+        let call = self.call(session, service)?;
+        Ok(call.service.origin.host_str().unwrap_or("").to_string())
+    }
+
+    /// The applet's grant subject for a session (an unlock's grace belongs to it).
+    pub(crate) fn subject_of(&self, session: &str) -> Result<String, Refusal> {
+        let sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        sessions.get(session).map(|s| s.subject.clone()).ok_or_else(|| no("no_session", "This applet's session isn't open."))
+    }
+
+    /// The signing log, for a signature made outside this file (an approval's seal, cards.rs).
+    pub(crate) fn log_for(&self, session: &str, service: &str, what: String, id: Option<String>) -> Result<(), Refusal> {
+        let call = self.call(session, service)?;
+        self.log(&call, what, id, false)
+    }
+
     /// Write a line for a signature just made. Typing within a minute of the same line folds into it with a count.
     fn log(&self, call: &Call, what: String, id: Option<String>, fold: bool) -> Result<(), Refusal> {
         let _g = self.files.lock().unwrap_or_else(|e| e.into_inner());
@@ -944,7 +992,7 @@ impl Broker {
         match &call.service.kind {
             ServiceKind::Http { auth: Auth::Nip98, approve } => {
                 let body = req.body.as_deref().map(decode_body).transpose()?;
-                http_role(approve.as_ref(), &req.headers, body.as_deref())
+                http_role(approve.as_ref(), body.as_deref())
             }
             ServiceKind::Http { .. } => Ok(Role::Everyday),
             ServiceKind::Relay { .. } => Err(scope(format!("{service} isn't an http service"))),
@@ -977,7 +1025,7 @@ impl Broker {
         let body = req.body.as_deref().map(decode_body).transpose()?;
         match auth {
             Auth::Nip98 => {
-                let worked_out = http_role(approve.as_ref(), &req.headers, body.as_deref())?;
+                let worked_out = http_role(approve.as_ref(), body.as_deref())?;
                 if &worked_out != role {
                     return Err(no("refused", "That request is signed with another key."));
                 }
@@ -1198,7 +1246,7 @@ async fn read_capped(mut res: reqwest::Response, cap: usize) -> Result<Vec<u8>, 
 pub struct ServicesState(OnceLock<Broker>);
 
 impl ServicesState {
-    fn broker<R: Runtime>(&self, app: &AppHandle<R>) -> Result<&Broker, Refusal> {
+    pub(crate) fn broker<R: Runtime>(&self, app: &AppHandle<R>) -> Result<&Broker, Refusal> {
         if let Some(b) = self.0.get() {
             return Ok(b);
         }
@@ -1208,7 +1256,7 @@ impl ServicesState {
     }
 }
 
-async fn held<R: Runtime>(app: &AppHandle<R>, keys: &KeyState) -> Result<Keys, Refusal> {
+pub(crate) async fn held<R: Runtime>(app: &AppHandle<R>, keys: &KeyState) -> Result<Keys, Refusal> {
     keys.get(app).await.map_err(|m| no("no_key", m))?.ok_or_else(|| no("no_key", "This device has no key."))
 }
 
@@ -1241,14 +1289,21 @@ pub async fn svc_sign_event<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeySt
 }
 
 #[tauri::command]
-pub async fn svc_http<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, state: State<'_, ServicesState>, session: String, service: String, req: HttpReq) -> Result<HttpRes, Refusal> {
+pub async fn svc_http<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, ring: State<'_, crate::keyring::KeyringState>, state: State<'_, ServicesState>, session: String, service: String, req: HttpReq) -> Result<HttpRes, Refusal> {
     let k = held(&app, &keys).await?;
     let broker = state.broker(&app)?;
     let role = broker.http_role(&session, &service, &req)?;
     match role {
         Role::Everyday => broker.http(&k, &role, &session, &service, &req).await,
-        // the approval key, behind the device unlock: wired with the keyring (keyring.rs)
-        Role::Approval(_) => Err(no("refused", "Approvals need the keyring.")),
+        // the approval key, behind the device unlock (a grace this applet earned may cover it: these are routine)
+        Role::Approval(ref op) => {
+            let approval = ring.approval(&app, &k).await?;
+            let subject = broker.subject_of(&session)?;
+            let host = broker.host_of(&session, &service)?;
+            let graced = ring.confirm(&app, &subject, &format!("{service}:{op}"), true, "Approve with your approval key", &format!("Send {op} to {host}, signed with your approval key.")).await?;
+            let _ = graced;
+            broker.http(crate::approvals::for_approve_op(&approval), &role, &session, &service, &req).await
+        }
     }
 }
 
@@ -1699,22 +1754,23 @@ mod tests {
     #[test]
     fn the_approve_split_fails_closed() {
         let a = Approve { field: "op".into(), ops: vec!["send.approve".into()] };
-        let json_ct: HashMap<String, String> = [("content-type".to_string(), "application/json".to_string())].into();
-        let role = |h: &HashMap<String, String>, b: Option<&str>| http_role(Some(&a), h, b.map(str::as_bytes));
-        assert_eq!(role(&json_ct, Some(r#"{"op":"send.approve","opId":"x"}"#)).unwrap(), Role::Approval("send.approve".into()));
-        assert_eq!(role(&json_ct, Some(r#"{"op":"draft.save"}"#)).unwrap(), Role::Everyday);
-        let charset: HashMap<String, String> = [("Content-Type".to_string(), "Application/JSON; charset=utf-8".to_string())].into();
-        assert_eq!(role(&charset, Some(r#"{"op":"send.approve"}"#)).unwrap(), Role::Approval("send.approve".into()));
-        // refused: no body, not JSON, another type, a key twice, the field missing or not a string, not an object
-        for (h, b) in [
-            (&json_ct, None), (&json_ct, Some("op=send.approve")), (&HashMap::new(), Some(r#"{"op":"draft.save"}"#)),
-            (&[("content-type".to_string(), "text/plain".to_string())].into(), Some(r#"{"op":"draft.save"}"#)),
-            (&json_ct, Some(r#"{"op":"draft.save","op":"send.approve"}"#)), (&json_ct, Some(r#"{"opId":"x"}"#)),
-            (&json_ct, Some(r#"{"op":["send.approve"]}"#)), (&json_ct, Some(r#"["send.approve"]"#)),
+        let role = |b: Option<&str>| http_role(Some(&a), b.map(str::as_bytes));
+        assert_eq!(role(Some(r#"{"op":"send.approve","opId":"x"}"#)).unwrap(), Role::Approval("send.approve".into()));
+        assert_eq!(role(Some(r#" {"opId":"x", "op": "send.approve"}"#)).unwrap(), Role::Approval("send.approve".into()));
+        assert_eq!(role(Some(r#"{"op":"draft.save"}"#)).unwrap(), Role::Everyday);
+        // the gateway's other calls: no op, no body, or JSON of another shape
+        assert_eq!(role(Some(r#"{"calls":[["Mailbox/get",{},"b"]]}"#)).unwrap(), Role::Everyday);
+        assert_eq!(role(None).unwrap(), Role::Everyday);
+        assert_eq!(role(Some("")).unwrap(), Role::Everyday);
+        assert_eq!(role(Some(r#"["send.approve"]"#)).unwrap(), Role::Everyday);
+        // refused: what another parser could read as an approval
+        for b in [
+            r#"{"op":"draft.save","op":"send.approve"}"#, r#"{"op":["send.approve"]}"#, r#"{"op":null}"#,
+            "\u{feff}{\"op\":\"send.approve\"}", r#"{"op":"send.approve","x":NaN}"#, "op=send.approve", r#"{"op":"send.approve""#,
         ] {
-            assert!(role(h, b).is_err(), "{b:?}");
+            assert!(role(Some(b)).is_err(), "{b:?}");
         }
-        assert_eq!(http_role(None, &HashMap::new(), None).unwrap(), Role::Everyday);
+        assert_eq!(http_role(None, Some(b"op=send.approve")).unwrap(), Role::Everyday, "no approve: as before");
     }
 
 }

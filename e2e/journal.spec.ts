@@ -19,7 +19,7 @@ test("journal: a line becomes a dated journal note; the days show, voice entries
     await page.goto(`/v/${VAULT}`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
-    await expect(card).toContainText("Read and add notes in Journal/");
+    await expect(card).toContainText("Read, add and change notes in Journal/"); // change: a voice entry's recording is attached to it
     await page.getByRole("button", { name: "Allow" }).click();
     const app = page.frameLocator("iframe.applet-frame");
     await expect(app.getByRole("heading", { name: "Journal" })).toBeVisible();

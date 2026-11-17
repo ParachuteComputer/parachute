@@ -27,6 +27,8 @@ export async function person(relay: string, secretHex: string) {
       const ev = finalizeEvent({ created_at: Math.floor(Date.now() / 1000), content: "", tags: [], ...t }, sk);
       waiting.set(ev.id, (ok, msg) => res({ ok, msg, ev })); ws.send(JSON.stringify(["EVENT", ev]));
     }),
+    /** An event signed elsewhere (a card a synthetic Uni made), as it is. */
+    send: (ev: Event) => new Promise<{ ok: boolean; msg: string }>((res) => { waiting.set(ev.id, (ok, msg) => res({ ok, msg })); ws.send(JSON.stringify(["EVENT", ev])); }),
     query: (...filters: Record<string, unknown>[]) => new Promise<Event[]>((res) => { const id = `q${Math.random().toString(36).slice(2)}`; subs.set(id, { events: [], done: res }); ws.send(JSON.stringify(["REQ", id, ...filters])); }),
     upload: async (bytes: Buffer, type: string) => {
       const x = createHash("sha256").update(bytes).digest("hex");

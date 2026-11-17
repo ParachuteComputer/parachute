@@ -24,6 +24,9 @@ const native = (): Native => ({
   relayAuth: async () => ({ ...ev("auth"), kind: 22242 }), signEvent: async (_s, _v, t) => ({ ...ev("e"), ...t, pubkey: "a".repeat(64) }),
   http: async () => ({ status: 200, headers: {}, body: "" }), upload: async () => ({}), media: async () => ({ type: "", body: "" }),
   privateOpen: async () => "", privateSave: async () => ev("p"), tokenSet: async () => {}, tokenHas: async () => false, log: async () => [],
+  cardView: async (_s, _v, e) => ({ kind: null, event_id: e.id, refused: "no", rows: [] }), cardAnswer: async () => ({ wraps: [], graced: false, summary: "" }), cardSent: async () => {},
+  secretView: async () => { throw new Error("no"); }, secretSend: async () => ev("w"), secretForget: async () => ev("w"),
+  keyring: async () => ({ everyday: "", approval: "", same: true, seal_pub: "", approvers: [] }),
 });
 const relay: Service = { id: "rooms", kind: "nostr-relay", url: "wss://relay.example", publish: [9], media: false, private: [] };
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));

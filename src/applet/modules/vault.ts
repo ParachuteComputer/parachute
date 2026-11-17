@@ -12,8 +12,12 @@
 // note gets is the app's, from what the applet opens: opens.ts `tagsFor`), never touches a
 // code note (HTML, TSX, JSX) or a note tagged `applet`, `component` or `parachute-pointer` (an applet can't rewrite itself, another, a component or a pointer), and is judged on the note as it is
 // read now. A session that has ended writes nothing.
+// One call beside the REST subset (docs/design/KEYRING.md): `vault.attach {noteId, bytes, type, transcribe?}` adds a
+// file to a note the grant lets it change (the same judgment as a PATCH), through the hub's own upload and attach
+// routes; `transcribe` asks the hub to transcribe audio. The kit names it `uni.vault.attach(noteId, bytes, type, {transcribe})`.
 
 import { CODE_PATH, codeKindOf, isCodeExtension } from "../code.ts";
+import { FILE_MAX, mediaType } from "../files.ts";
 import { ContractError, ERROR_CODES, hasHidden, hasOnly, inScope, LIMITS, plain, safePrefix, type ErrorCode } from "../contract.ts";
 import type { CallCtx, UniModule } from "../router.ts";
 import type { Resolved } from "../needs.ts";
@@ -33,7 +37,10 @@ export type VaultDeps = {
   create?(path: string, content: string, tags: string[]): Promise<VaultNote>;
   /** New content for the note `id`, only if it is still at `ifUpdatedAt`; a rejection whose message starts "conflict:" is a conflict. */
   save?(id: string, content: string, ifUpdatedAt: string): Promise<VaultNote>;
+  /** Upload the bytes to the vault's storage and attach them to the note `id`. Absent: the host can't, and attach is not_granted. */
+  attach?(id: string, bytes: ArrayBuffer, type: string, transcribe: boolean): Promise<{ id?: string; path: string; mimeType?: string }>;
 };
+type AttachParams = { noteId: string; bytes: ArrayBuffer; type: string; transcribe: boolean };
 type FetchParams = { method: string; path: string; headers: Record<string, string>; body: string | null };
 
 const MAX_BODY = 512 * 1024;
@@ -221,6 +228,28 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
   return {
     namespace: "vault",
     methods: {
+      attach: {
+        cap: "vault.update",
+        validate: (p: unknown) => {
+          if (!plain(p) || !hasOnly(p, ["noteId", "bytes", "type", "transcribe"]) || typeof p.noteId !== "string" || !safeRef(p.noteId)) return { ok: false };
+          const type = mediaType(p.type);
+          if (!type || !(p.bytes instanceof ArrayBuffer) || !p.bytes.byteLength || p.bytes.byteLength > FILE_MAX || (p.transcribe !== undefined && typeof p.transcribe !== "boolean")) return { ok: false };
+          return { ok: true, value: { noteId: p.noteId, bytes: p.bytes, type, transcribe: p.transcribe === true } };
+        },
+        async run(v: AttachParams, scopes, ctx) {
+          if (!deps.attach) throw new ContractError(ERROR_CODES.notGranted, "this vault takes no files from applets here");
+          const folders = scopes["vault.update"] ?? [];
+          ctx.charge(1);
+          let note: VaultNote;
+          try { note = await deps.getNote(v.noteId); } catch (e) { if (e instanceof ContractError) throw e; throw new ContractError(ERROR_CODES.outOfScope, "it may attach files only to notes it may change"); }
+          // judged as a PATCH is: on the note as read now, never a code note or one the app guards
+          if (!inScope(folders, note.path) || isAppletCode(note)) throw new ContractError(ERROR_CODES.outOfScope, "it may attach files only to notes it may change");
+          if (ctx.closed()) throw new ContractError(ERROR_CODES.failed);
+          const a = await deps.attach(note.id, v.bytes, v.type, v.transcribe).catch((e: unknown) => { throw new ContractError(ERROR_CODES.failed, `the vault didn't take it: ${e instanceof Error ? e.message.slice(0, 200) : "it failed"}`); });
+          forget(v.noteId, note.id, note.path);
+          return { id: a.id ?? null, path: a.path, type: a.mimeType ?? v.type, transcribe: v.transcribe };
+        },
+      },
       fetch: {
         cap: "vault.read",
         validate: (p: unknown) => {

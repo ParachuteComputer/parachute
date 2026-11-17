@@ -1,6 +1,7 @@
 // The shell's answers to an applet's `app` calls (applet/modules/app.ts), from what the shell holds.
 import type { Note } from "@openparachute/surface-client";
-import type { AppDeps, RecentNote } from "../applet/modules/app";
+import { notTapped, type AppDeps, type PickedFile, type RecentNote } from "../applet/modules/app";
+import { openLinkOut, saveFileOut } from "./device";
 import { markTap } from "../open/mark";
 import { clientFor } from "../vault/client";
 import { isAppOwn, noteHref, titleOf } from "../vault/notes";
@@ -12,10 +13,13 @@ const own = (n: Note) => isAppOwn(n as Note & { extension?: string });
 
 /** A tap in this applet now: live user activation in the shell's window, with the focus in this applet's own frame (not
  *  any frame: an embed's, or another applet's, docs/design/EMBED.md). */
-const tappingIn = (frame: () => HTMLIFrameElement | null) => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true
+export const tappingIn = (frame: () => HTMLIFrameElement | null) => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true
   && !!frame() && document.activeElement === frame();
 
-export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameElement | null): AppDeps {
+/** The shell's own picker sheet (views/DeviceSheets.tsx). */
+export type Picker = { pick(accept: string[], multiple: boolean): Promise<PickedFile[]> };
+
+export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameElement | null, picker: Picker): AppDeps {
   const tappingInApplet = () => tappingIn(frame);
   return {
     async recent(limit, charge) {
@@ -38,6 +42,19 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       markTap(new URL(href, "http://app.invalid").pathname);
       go(href);
       return true;
+    },
+    async openLink(url) {
+      if (!tappingInApplet()) return false;
+      await openLinkOut(url);
+      return true;
+    },
+    async save(name, bytes, type) {
+      if (!tappingInApplet()) throw notTapped();
+      return saveFileOut(name, bytes, type);
+    },
+    pick(accept, multiple) {
+      if (!tappingInApplet()) return Promise.reject(notTapped());
+      return picker.pick(accept, multiple);
     },
   };
 }

@@ -16,6 +16,9 @@ import { judge, loadedAgain } from "./violations";
 
 /** Shown in place of a frame whose navigation the host CSP had to block. */
 export const STOPPED_MESSAGE = "This applet tried to leave its sandbox and was stopped.";
+/** A sealed frame gets no microphone, camera or screen of its own, whatever the webview would grant: an applet that
+ *  records asks the shell, which records on its own sheet (docs/design/KEYRING.md "Voice, files, links, storage"). */
+export const NO_DEVICES = "microphone 'none'; camera 'none'; display-capture 'none'; geolocation 'none'";
 /** When the app couldn't tell which frame on a page tried (docs/design/EMBED.md). */
 export const PAGE_STOPPED_MESSAGE = "Something on this page tried to leave its sandbox, so the page was stopped.";
 const KIT_SOURCE = buildKitSource({ vaultClientSource });
@@ -110,5 +113,5 @@ export default function AppletFrame({ html, title, router, grant, ready, onSessi
   onElementRef.current = onElement;
   const ref = useCallback((el: HTMLIFrameElement | null) => { frame.current = el; onElementRef.current?.(el); }, [frame]);
   if (stopped) return <p className="applet-stopped error" role="alert">{stopped === "unnamed" ? PAGE_STOPPED_MESSAGE : STOPPED_MESSAGE}</p>;
-  return <iframe ref={ref} className={height === undefined ? "applet-frame" : "applet-frame applet-frame-sized"} style={height === undefined ? undefined : { height }} title={title} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={liveDoc} onLoad={onLoad} />;
+  return <iframe ref={ref} className={height === undefined ? "applet-frame" : "applet-frame applet-frame-sized"} style={height === undefined ? undefined : { height }} title={title} sandbox="allow-scripts" allow={NO_DEVICES} referrerPolicy="no-referrer" srcDoc={liveDoc} onLoad={onLoad} />;
 }

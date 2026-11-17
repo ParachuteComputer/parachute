@@ -1,8 +1,8 @@
 // The broker for one applet's session (docs/design/SERVICES.md): what the frame's `services` calls do. It holds the
 // policy (which service, which call; the checks in applet/services.ts), the relay connections and the queue of events
 // back to the frame; every signature and every signed request is the native side's (native.ts), which checks again.
-import { checkFilters, checkPublish, METHODS, REQUEST_HEADERS, requestUrl, LIMITS, originOf, type HttpService, type RelayService, type Service } from "../applet/services";
-import type { Native, SignedEvent } from "./native";
+import { checkFilters, checkPublish, isCommandApproval, METHODS, REQUEST_HEADERS, requestUrl, LIMITS, originOf, type HttpService, type RelayService, type Service } from "../applet/services";
+import type { Native, SecretView, SignedEvent } from "./native";
 import { RelayConn, type Status } from "./relay";
 import { verifyEvent } from "nostr-tools/pure";
 
@@ -19,7 +19,14 @@ type Pending = { events: SignedEvent[]; eose: boolean };
 
 const BATCH_MS = 50, BATCH_MAX = 200, IN_FLIGHT_MAX = 50 * 1024 * 1024;
 
-export function createBroker(opts: { native: Native; session: string; applet: { name: string; subject: string }; services: Service[]; hubs: string[]; emit: Emit; socket?: (url: string) => WebSocket }) {
+/** What the shell around the frame gives the broker for approvals (docs/design/KEYRING.md): a tap in this applet's
+ *  frame, used up by the call that takes it; its own sheet for a secret (null: the person cancelled); its own line
+ *  over the applet. */
+export type Shell = { tap: () => boolean; secret: (v: SecretView) => Promise<string | null>; say: (text: string) => void };
+const NO_SHELL: Shell = { tap: () => false, secret: async () => null, say: () => {} };
+
+export function createBroker(opts: { native: Native; session: string; applet: { name: string; subject: string }; services: Service[]; hubs: string[]; emit: Emit; socket?: (url: string) => WebSocket; shell?: Shell }) {
+  const shell = opts.shell ?? NO_SHELL;
   const { native, session, emit } = opts;
   const byId = new Map(opts.services.map((s) => [s.id, s]));
   const conns = new Map<string, RelayConn>();
@@ -38,6 +45,15 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
   };
   const relayOf = (id: unknown): RelayService => { const s = service(id); if (s.kind !== "nostr-relay") throw new BrokerError("bad_params", "that service isn't a relay"); return s; };
   const httpOf = (id: unknown): HttpService => { const s = service(id); if (s.kind !== "http") throw new BrokerError("bad_params", "that service isn't http"); return s; };
+  const approverOf = (id: unknown): RelayService => { const s = relayOf(id); if (!s.approvals) throw new BrokerError("not_granted", "it may not answer approvals there"); return s; };
+  /** A card is a signed kind 9 in one of its rooms (when it has rooms): Rust checks the rest. */
+  const cardEvent = (s: RelayService, raw: unknown): SignedEvent => {
+    const e = raw as SignedEvent;
+    if (!e || typeof e !== "object" || e.kind !== 9 || !verifyEvent(e as Parameters<typeof verifyEvent>[0])) throw new BrokerError("bad_params", "a card is a signed message");
+    const room = e.tags.find((t) => t[0] === "h")?.[1];
+    if (s.rooms?.length && !(room && s.rooms.some((r) => r.id === room))) throw new BrokerError("out_of_scope", "that card isn't in its rooms");
+    return { id: e.id, pubkey: e.pubkey, created_at: e.created_at, kind: e.kind, tags: e.tags, content: e.content, sig: e.sig };
+  };
 
   function flush() {
     flushTimer = null;
@@ -99,6 +115,12 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       const headers: Record<string, string> = {};
       for (const [k, v] of Object.entries(p.headers ?? {})) if (REQUEST_HEADERS.includes(k.toLowerCase()) && typeof v === "string" && v.length <= 1000) headers[k.toLowerCase()] = v;
       const bytes = p.body === undefined ? null : typeof p.body === "string" ? new TextEncoder().encode(p.body) : new Uint8Array(p.body);
+      // an approve op (KEYRING.md) is an approval: a tap pays for it; which key signs it is Rust's to work out again
+      if (s.approve && bytes) {
+        let op: unknown;
+        try { const j = JSON.parse(new TextDecoder().decode(bytes)); op = j && typeof j === "object" && !Array.isArray(j) ? (j as Record<string, unknown>)[s.approve.field] : undefined; } catch { op = undefined; }
+        if (typeof op === "string" && s.approve.ops.includes(op) && !shell.tap()) throw new BrokerError("not_granted", "an approval needs your tap in the applet");
+      }
       const release = bytesIn(bytes?.length ?? 0);
       try {
         await opened;
@@ -157,6 +179,11 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       const s = relayOf(p.service);
       const t = checkPublish(s, p.event);
       if (!t.ok) throw new BrokerError("out_of_scope", t.error);
+      if (t.value.kind === 9 && isCommandApproval(t.value.content)) {
+        // a bot's approval (Hermes's /approve) is an approval: the grant, and a tap
+        if (!s.approvals) throw new BrokerError("not_granted", "answering a bot's approval needs the approvals grant");
+        if (!shell.tap()) throw new BrokerError("not_granted", "an approval needs your tap in the applet");
+      }
       const me = (await opened).pubkey;
       if (s.rooms?.length && [7, 40003, 5].includes(t.value.kind)) {
         // a reaction, edit or deletion acts on an event: it must be in one of its rooms (read from the relay, as signed)
@@ -223,6 +250,62 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       const r = await native.media(session, s.id, p.sha256, p.ext);
       const b = fromB64(r.body);
       return { type: r.type, bytes: b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) };
+    },
+
+    // ── approvals (docs/design/KEYRING.md) ──
+
+    /** Uni's card in a room message, as Rust checked it. */
+    async card(p: { service: string; event: unknown }) {
+      const s = approverOf(p.service);
+      const ev = cardEvent(s, p.event);
+      await opened;
+      return native.cardView(session, s.id, ev);
+    },
+
+    /** Answer rows of a card. Needs a tap in this applet; the unlock is Rust's. The wraps go to the relay from here and
+     *  never reach the frame. */
+    async answer(p: { service: string; event: unknown; decision: unknown; rids: unknown }) {
+      const s = approverOf(p.service);
+      const ev = cardEvent(s, p.event);
+      if (p.decision !== "approve" && p.decision !== "deny") throw new BrokerError("bad_params", "a decision is approve or deny");
+      if (!Array.isArray(p.rids) || !p.rids.length || p.rids.length > 20 || !p.rids.every((r) => typeof r === "string" && /^[0-9a-f]{32}$/.test(r))) throw new BrokerError("bad_params", "rids are the card's request ids");
+      if (!shell.tap()) throw new BrokerError("not_granted", "an answer needs your tap in the applet");
+      await opened;
+      const r = await native.cardAnswer(session, s.id, ev, p.decision, p.rids as string[]);
+      const sent: string[] = [];
+      let failed: string | null = null;
+      for (const w of r.wraps) {
+        const res = await conn(s).publish(w.wrap);
+        if (res.ok) { sent.push(w.rid); await native.cardSent(session, s.id, ev.id, w.rid).catch(() => {}); } else { failed = res.message || "the relay refused it"; break; }
+      }
+      if (r.graced) shell.say(r.summary);
+      const view = await native.cardView(session, s.id, ev);
+      return { view, sent, ...(failed ? { failed } : {}) };
+    },
+
+    /** A secret request: the shell's own sheet takes the value; the applet hears only whether it went. */
+    async secret(p: { service: string; event: unknown }) {
+      const s = approverOf(p.service);
+      const ev = cardEvent(s, p.event);
+      if (!shell.tap()) throw new BrokerError("not_granted", "a secret needs your tap in the applet");
+      await opened;
+      const v = await native.secretView(session, s.id, ev);
+      const value = await shell.secret(v);
+      if (value === null) return { sent: false };
+      const wrap = await native.secretSend(session, s.id, ev, value);
+      const res = await conn(s).publish(wrap);
+      return { sent: res.ok, ...(res.ok ? {} : { failed: res.message || "the relay refused it" }) };
+    },
+
+    /** Ask the requester to forget what it kept for this request. */
+    async forgetSecret(p: { service: string; event: unknown }) {
+      const s = approverOf(p.service);
+      const ev = cardEvent(s, p.event);
+      if (!shell.tap()) throw new BrokerError("not_granted", "this needs your tap in the applet");
+      await opened;
+      const wrap = await native.secretForget(session, s.id, ev);
+      const res = await conn(s).publish(wrap);
+      return { sent: res.ok };
     },
 
     /** The origins it may reach, for the applet's settings page. */

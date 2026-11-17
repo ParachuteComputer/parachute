@@ -19,5 +19,13 @@ export function vaultDeps(c: VaultClient): VaultDeps {
         throw e;
       }
     },
+    // the hub's own two steps: the file into the vault's storage (multipart), then onto the note; `transcribe` asks the
+    // hub to transcribe audio (core 0.8 and 0.9 alike; on 0.9 the attach goes to the record door, vault/records.ts)
+    attach: async (id, bytes, type, transcribe) => {
+      const ext = (type.split("/")[1] ?? "").replace(/[^a-z0-9]/g, "").slice(0, 8) || "bin";
+      const up = await c.uploadStorageFile(new File([bytes], `${type.startsWith("audio/") ? "voice" : "file"}.${ext}`, { type }));
+      const a = await c.addAttachment(id, { path: up.path, mimeType: type, ...(transcribe ? { transcribe: true } : {}) });
+      return { id: a.id, path: a.path ?? up.path, mimeType: a.mimeType ?? type };
+    },
   };
 }

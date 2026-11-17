@@ -1,0 +1,78 @@
+// What the shell draws over a running applet, outside its frame (docs/design/KEYRING.md): the sheet a secret is typed
+// on (the value never enters the frame), and the shell's own line when an approval went through on an earlier unlock.
+// Every word is the app's; what comes from Uni's request is shown as Uni's.
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { SecretView } from "../services/native";
+import type { Shell } from "../services/broker";
+
+type Asking = { view: SecretView; done: (value: string | null) => void };
+
+/** A tap in this applet now, each tap good for one call: live user activation with the focus in its own frame, and none
+ *  spent in the last few seconds (an activation lasts that long, and one tap must not pay for several approvals). */
+export function useTapOnce(frame: () => HTMLIFrameElement | null) {
+  const spent = useRef(-Infinity);
+  return useCallback(() => {
+    const active = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true;
+    if (!active || !frame() || document.activeElement !== frame()) return false;
+    const t = performance.now();
+    if (t - spent.current < 5000) return false;
+    spent.current = t;
+    return true;
+  }, [frame]);
+}
+
+const until = (s: number) => new Date(s * 1000).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+
+function SecretSheet({ asking, onDone }: { asking: Asking; onDone: (v: string | null) => void }) {
+  const [value, setValue] = useState("");
+  const [shown, setShown] = useState(false);
+  const v = asking.view;
+  const send = () => { const x = value; setValue(""); onDone(x); };
+  return (
+    <div className="sheet-scrim sheet-over-frames" role="presentation">
+      <section className="sheet secret-sheet" role="dialog" aria-modal="true" aria-label={`${v.requester} asks for a secret`}>
+        <h2>{v.requester} asks for a secret</h2>
+        <p><strong>{v.label}</strong></p>
+        {v.purpose && <p className="quiet">{v.purpose}</p>}
+        <p className="quiet">{v.requester} says it keeps it in {v.store} for {v.keep_days} {v.keep_days === 1 ? "day" : "days"}. Sealed with your approval key, only {v.requester} can open it. The applet never sees it. Asked until {until(v.expires)}.</p>
+        <form onSubmit={(e) => { e.preventDefault(); if (value) send(); }}>
+          <label className="secret-field">
+            <span className="quiet">The secret</span>
+            <input type={shown ? "text" : "password"} value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => setShown(false)} autoComplete="off" autoCapitalize="off" spellCheck={false} maxLength={16384} placeholder="Paste or type it here" />
+          </label>
+          <div className="grant-actions">
+            <button type="button" className="quiet-button" onClick={() => setShown((s) => !s)}>{shown ? "Hide" : "Show"}</button>
+            <button type="button" className="quiet-button" onClick={() => { setValue(""); onDone(null); }}>Cancel</button>
+            <button type="submit" className="primary" disabled={!value}>Send sealed</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+/** The shell's half of an applet's approvals: its tap, its secret sheet, its line. `ui` goes over the frame. */
+export function useShellSheets(frame: () => HTMLIFrameElement | null) {
+  const tap = useTapOnce(frame);
+  const [asking, setAsking] = useState<Asking | null>(null);
+  const [line, setLine] = useState<string | null>(null);
+  useEffect(() => { if (!line) return; const t = setTimeout(() => setLine(null), 6000); return () => clearTimeout(t); }, [line]);
+  // an open sheet answers "cancelled" when the screen goes
+  const open = useRef<Asking | null>(null);
+  useEffect(() => () => { open.current?.done(null); }, []);
+  const shell: Shell = {
+    tap,
+    secret: (view) => new Promise((done) => {
+      if (open.current) { done(null); return; }
+      const a = { view, done: (x: string | null) => { open.current = null; setAsking(null); done(x); } };
+      open.current = a;
+      setAsking(a);
+    }),
+    say: (text) => setLine(text),
+  };
+  const ui = <>
+    {asking && <SecretSheet asking={asking} onDone={asking.done} />}
+    {line && <p className="shell-line" role="status">{line}</p>}
+  </>;
+  return { shell, ui };
+}

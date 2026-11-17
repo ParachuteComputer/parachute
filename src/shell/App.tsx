@@ -28,6 +28,18 @@ import { readTheme, watchTheme } from "../theme/store";
 function Taps() {
   const location = useLocation();
   useEffect(() => installTapListener(), []);
+  // notifications while the app is closed follow the grants (services/notify.ts): sent at start and on every change
+  useEffect(() => {
+    let off = () => {};
+    let gone = false;
+    void import("../services/notify").then(async ({ syncNotify }) => {
+      const { deviceGrants } = await import("../applet/grants");
+      if (gone) return;
+      void syncNotify();
+      off = deviceGrants().onChange(() => { void syncNotify(); });
+    });
+    return () => { gone = true; off(); };
+  }, []);
   useEffect(() => { arrived(location.pathname); }, [location.pathname]);
   return null;
 }

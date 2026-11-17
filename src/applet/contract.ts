@@ -43,7 +43,8 @@ export const LIMITS = {
   maxHeaders: 20,
   /** A frame-fetch body: a written note's content rides in it, so it is most of the request (7 KB of the 8). */
   maxFetchBody: 7 * 1024,
-  /** Bytes a `services` call may carry beside its 8 KB (an upload, a request's body): docs/design/SERVICES.md. */
+  /** Bytes a `services`, `app.save` or `vault.attach` call may carry beside its 8 KB (an upload, a request's body, a
+   *  file): docs/design/SERVICES.md, KEYRING.md. */
   maxBytes: 25 * 1024 * 1024,
 };
 
@@ -99,8 +100,9 @@ export function parseEnvelope(raw: unknown): Envelope {
   if (!plain(raw)) return { kind: "bad", id: null, error: ERROR_CODES.badRequest };
   const id = idOf(raw.id);
   const bad = (error: ErrorCode): Envelope => ({ kind: "bad", id, error });
-  // a services call may carry bytes (an ArrayBuffer at params.bytes), outside the request's budget and capped on their own
-  const params = "uni" in raw && raw.ns === "services" && plain(raw.params) ? raw.params : null;
+  // a services call, a file it saves (app.save) or attaches to a note (vault.attach) may carry bytes (an ArrayBuffer at
+  // params.bytes), outside the request's budget and capped on their own
+  const params = "uni" in raw && (raw.ns === "services" || raw.ns === "app" || raw.ns === "vault") && plain(raw.params) ? raw.params : null;
   const bytes = params && params.bytes instanceof ArrayBuffer ? params.bytes : null;
   if (bytes && bytes.byteLength > LIMITS.maxBytes) return bad(ERROR_CODES.tooLarge);
   const measured = bytes ? { ...raw, params: { ...params, bytes: null } } : raw;

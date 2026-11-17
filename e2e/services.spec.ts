@@ -91,11 +91,11 @@ test("an applet reaches only the servers it declared, the shell signing for it; 
     await open(page);
     const card = page.getByRole("region", { name: /asking for access/ });
     const host = new URL(relay.origin).host;
-    await expect(card).toContainText(`Sign in to ${host} on this device as you`);
-    await expect(card).toContainText("Post as you in your rooms there: messages");
-    await expect(card).toContainText("Delete your messages and reactions there");
-    await expect(card).toContainText("Send and open files there as you");
-    await expect(card).toContainText(`Send requests to ${new URL(http.origin).host} on this device signed as you`);
+    await expect(card).toContainText(`With your everyday key: sign in to ${host} on this device as you`);
+    await expect(card).toContainText("With your everyday key: post as you in your rooms there: messages");
+    await expect(card).toContainText("With your everyday key: delete your messages and reactions there");
+    await expect(card).toContainText("With your everyday key: send and open files there as you");
+    await expect(card).toContainText(`With your everyday key: send requests to ${new URL(http.origin).host} on this device signed as you`);
     await expect(card).toContainText(`What it reads here could reach ${new URL(http.origin).host}`);
     // nothing reached any server before Allow
     expect(relay.signIns.length + http.seen.length).toBe(0);

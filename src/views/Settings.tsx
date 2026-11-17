@@ -18,6 +18,7 @@ import { forgetApplets } from "../applet/useApplets";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { grantInVault } from "../applet/embeds";
 import KeySettings from "../key/KeySettings";
+import KeyringSettings from "../key/KeyringSettings";
 import { AskWhose, WhoseLine } from "./Whose";
 import { useParachutes } from "../shell/parachutes";
 import { listHub } from "../shell/homeSettings";
@@ -68,6 +69,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
       </section>
       <ServicesSettings />
       <KeySettings />
+      <KeyringSettings />
       <FrameSettings />
       <ThemeSettings />
       <AppletSettings vaults={vaults} />

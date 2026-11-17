@@ -138,7 +138,8 @@ describe("the frame's envelope for services", () => {
   it("lets bytes past the request's budget, within their own", () => {
     expect(parseEnvelope({ uni: 1, id: "k2", ns: "services", method: "upload", params: { service: "rooms", bytes: new ArrayBuffer(1024 * 1024), type: "image/png" } }).kind).toBe("uni");
     expect(parseEnvelope({ uni: 1, id: "k3", ns: "services", method: "upload", params: { service: "rooms", bytes: new ArrayBuffer(26 * 1024 * 1024), type: "image/png" } })).toMatchObject({ kind: "bad", error: "too_large" });
-    expect(parseEnvelope({ uni: 1, id: "k4", ns: "vault", method: "x", params: { bytes: new ArrayBuffer(10) } })).toMatchObject({ kind: "bad" });
+    // bytes ride only where a call takes them: services, app (save) and vault (attach)
+    expect(parseEnvelope({ uni: 1, id: "k4", ns: "theme", method: "x", params: { bytes: new ArrayBuffer(10) } })).toMatchObject({ kind: "bad" });
   });
 });
 
