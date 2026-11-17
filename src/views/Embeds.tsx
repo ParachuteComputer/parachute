@@ -5,7 +5,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { VaultAuthError, VaultPermissionError, VaultUnreachableError, type Note } from "@openparachute/surface-client";
-import { useSealedFrame } from "../applet/frame";
+import { PAGE_STOPPED_MESSAGE, useSealedFrame } from "../applet/frame";
+import { holdPage, pageHeld, releaseFromPage } from "../applet/violations";
 import { buildSrcdoc } from "../applet/srcdoc";
 import { buildKitSource } from "../applet/kits";
 import vaultClientSource from "virtual:vault-client-kit";
@@ -72,6 +73,8 @@ async function settled(rec: VaultRecord, f: ReturnType<typeof failureOf>): Promi
   return s === "refused" ? "refused" : s === "alive" ? "alive" : "offline";
 }
 
+const theirsOf = (p: Place) => p.state === "found" && p.found.whose !== "mine";
+
 /** Find what an embed names: a pointer in the home vault (by id or path), else a component in the host's vault. */
 async function find(host: VaultRecord, embed: Embed): Promise<Place> {
   const pointers = await readPointers().catch(() => [] as PointerNote[]);
@@ -115,7 +118,7 @@ async function find(host: VaultRecord, embed: Embed): Promise<Place> {
 }
 
 /** The embeds of one page, under its content. `page`: the host's vault and note, for the mark and the grants. */
-export function PageEmbeds({ host, hostNote, embeds }: { host: VaultRecord; hostNote: string; embeds: Embed[] }) {
+export function PageEmbeds({ host, hostNote, embeds, from }: { host: VaultRecord; hostNote: string; embeds: Embed[]; /** the other vaults the host's card named */ from: string[] }) {
   const page = `${host.key}|${hostNote}`;
   const marks = pageMarks();
   const [held, setHeld] = useState(() => marks.suspect(page));
@@ -133,10 +136,10 @@ export function PageEmbeds({ host, hostNote, embeds }: { host: VaultRecord; host
       </Sheet>}
     </section>
   );
-  return <section className="embeds" aria-label="Embedded">{embeds.map((e) => <EmbedPlace key={e.name} host={host} hostNote={hostNote} embed={e} />)}</section>;
+  return <section className="embeds" aria-label="Embedded">{embeds.map((e) => <EmbedPlace key={e.name} host={host} hostNote={hostNote} embed={e} from={from} />)}</section>;
 }
 
-function EmbedPlace({ host, hostNote, embed }: { host: VaultRecord; hostNote: string; embed: Embed }) {
+function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNote: string; embed: Embed; from: string[] }) {
   const mode = useGate();
   const [place, setPlace] = useState<Place>({ state: "reading" });
   const [keys, setKeys] = useState<{ scope: string; hash: string; props: Record<string, unknown> } | null>(null);
@@ -149,6 +152,11 @@ function EmbedPlace({ host, hostNote, embed }: { host: VaultRecord; hostNote: st
     setPlace({ state: "reading" }); setKeys(null); setBroke(null);
     void find(host, embed).then(async (p) => {
       if (!on) return;
+      // something from someone else's vault that the host's card didn't name (its pointer changed since): not run
+      if (p.state === "found" && p.found.whose !== "mine" && !(p.found.rec.key === host.key) && !from.includes(`${p.found.rec.vault} at ${hostOf(p.found.rec.issuer)}`)) {
+        if (on) setPlace({ state: "invalid", name: p.found.component.name, why: "it comes from a vault this page's card didn't name. Open the page again" });
+        return;
+      }
       if (p.state === "found") {
         const f = p.found, props = propsFor(f.component, embed.props);
         const [scope, hash] = await Promise.all([embedKey({ hub: originOf(f.rec.issuer), vault: f.rec.vault, record: f.noteId, allow: f.component.allow, props }), codeHash(f.kind, f.source)]);
@@ -163,7 +171,10 @@ function EmbedPlace({ host, hostNote, embed }: { host: VaultRecord; hostNote: st
   const status = found && keys ? grants.status(subject, keys.scope, keys.hash) : "none";
   const decision = found && keys ? runDecision(mode, status, grants.grantedUnder(subject)) : "ask";
   const pinMoved = !!found?.pointer && !!keys && found.pointer.pointer.code !== keys.hash;
-  const run = decision === "run" && !broke;
+  const pageId = `${host.key}|${hostNote}`;
+  // the page was stopped and no one frame could be named: what comes from someone else's vaults waits at Review
+  const held = theirsOf(place) && pageHeld(pageId, embed.name);
+  const run = decision === "run" && !broke && !held;
   const name = found?.component.name ?? embed.name;
   const glyph = found?.component.glyph ?? "◇";
   const theirs = found ? found.whose !== "mine" : false;
@@ -190,9 +201,9 @@ function EmbedPlace({ host, hostNote, embed }: { host: VaultRecord; hostNote: st
   return (
     <div className="embed-place" data-embed={embed.name}>
       {line}
-      {run ? <EmbedFrame found={found} name={name} props={keys.props} onBroke={setBroke} />
+      {run ? <EmbedFrame found={found} name={name} props={keys.props} onBroke={setBroke} onPageStopped={() => holdPage(pageId)} />
         : <div className="embed-said" role="status">
-          <p>{pinMoved ? `${found.rec.vault} changed «${name}» since you brought it in.` : status === "updated" ? `«${name}» changed since you allowed it.` : `«${name}»${theirs ? `, from ${found.rec.vault},` : ""} asks to run here.`}</p>
+          <p>{held && decision === "run" ? `The page was stopped while «${name}», from ${found.rec.vault}, was on it.` : pinMoved ? `${found.rec.vault} changed «${name}» since you brought it in.` : status === "updated" ? `«${name}» changed since you allowed it.` : `«${name}»${theirs ? `, from ${found.rec.vault},` : ""} asks to run here.`}</p>
           <button type="button" className="quiet-button" onClick={(e) => { if (e.isTrusted) setAsking(true); }}>Review</button>
         </div>}
       {asking && <Sheet label={`${name} is asking for access`} onClose={() => setAsking(false)}>
@@ -201,6 +212,7 @@ function EmbedPlace({ host, hostNote, embed }: { host: VaultRecord; hostNote: st
           lines={grantLines(grant, ownFolder(found.path))} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())} settle={LINK_OUT_HOLD_MS}
           onAllow={() => {
             grants.grant(subject, keys.scope, keys.hash, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry);
+            releaseFromPage(pageId, embed.name);
             if (found.pointer && pinMoved) void repin(found.pointer, keys.hash).catch(() => {});
             setAsking(false); bump((n) => n + 1);
           }}
@@ -244,7 +256,7 @@ function SettledButton({ label, onPress }: { label: string; onPress: () => void 
 
 /** One embed's sealed frame: the component's code, its own session, its own vault (the shell watches those calls and
  *  says so when that hub refuses this device or can't be reached), the look as embeds get it, and its height. */
-function EmbedFrame({ found, name, props, onBroke }: { found: Found; name: string; props: Record<string, unknown>; onBroke: (why: "refused" | "offline") => void }) {
+function EmbedFrame({ found, name, props, onBroke, onPageStopped }: { found: Found; name: string; props: Record<string, unknown>; onBroke: (why: "refused" | "offline") => void; onPageStopped: () => void }) {
   const [page, setPage] = useState<{ ok: true; html: string } | { ok: false; error: string } | null>(null);
   const [height, setHeight] = useState(EMBED_MIN);
   const brokeRef = useRef(onBroke);
@@ -281,16 +293,18 @@ function EmbedFrame({ found, name, props, onBroke }: { found: Found; name: strin
   const grant = useMemo(() => resolvedOf({ allow: found.component.allow } as Manifest), [found.component]);
   if (!page) return <p className="quiet embed-said">Opening…</p>;
   if (!page.ok) return <p className="embed-said error" role="alert">«{name}» can't run: its code doesn't compile: {page.error}.</p>;
-  return <EmbedIframe html={page.html} name={name} router={router} grant={grant} ready={ready} height={height} props={props} />;
+  return <EmbedIframe html={page.html} name={name} router={router} grant={grant} ready={ready} height={height} props={props} onPageStopped={onPageStopped} />;
 }
 
-function EmbedIframe({ html, name, router, grant, ready, height, props }: { html: string; name: string; router: ReturnType<typeof createRouter>; grant: ReturnType<typeof resolvedOf>; ready: unknown; height: number; props: Record<string, unknown> }) {
+function EmbedIframe({ html, name, router, grant, ready, height, props, onPageStopped }: { html: string; name: string; router: ReturnType<typeof createRouter>; grant: ReturnType<typeof resolvedOf>; ready: unknown; height: number; props: Record<string, unknown>; onPageStopped: () => void }) {
   const tokens = () => embedTokens(tokensNow() as unknown as Record<string, string>);
   const srcDoc = useMemo(() => buildSrcdoc(html, { kitSource: KIT, headExtra: `<style>${cssOf(tokens() as never).replace(/</g, "")}</style>` }), [html]); // eslint-disable-line react-hooks/exhaustive-deps
   const { frame, stopped, onLoad, srcDoc: live } = useSealedFrame({ srcDoc, router, grant, ready, stopOnViolation: true, tokens, onSession: (s) => { session.current = s; } });
   const session = useRef<{ sendEvent(e: string, d: unknown): void } | null>(null);
   const first = useRef(true);
   useEffect(() => { if (first.current) { first.current = false; return; } session.current?.sendEvent("props", props); }, [JSON.stringify(props)]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (stopped === "unnamed") onPageStopped(); }, [stopped]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (stopped === "unnamed") return <p className="embed-said error" role="alert">{PAGE_STOPPED_MESSAGE}</p>;
   if (stopped) return <p className="embed-said error" role="alert">«{name}» tried to leave its sandbox and was stopped.</p>;
   return <iframe ref={frame} className="embed-frame" title={name} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={live} onLoad={onLoad} style={{ height }} />;
 }

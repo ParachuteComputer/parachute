@@ -10,7 +10,7 @@ import { clientFor } from "../vault/client";
 import { messageOf } from "../vault/hooks";
 import { inShell } from "../vault/oauth";
 import { confirmLinkOut, confirmWrite, homeVault, type WriteAsk } from "./frameSource";
-import { refreshComponents } from "../applet/useComponents";
+import { fullComponent, refreshComponents } from "../applet/useComponents";
 import { addToHome } from "../applet/addToHome";
 import { bringIn, readPointers } from "../applet/pointers";
 import { isMine, whoseOf } from "../vault/whose";
@@ -69,8 +69,7 @@ async function bringThingIn(vault: string, noteId: string): Promise<void> {
   const a = appletsNow(rec.key);
   const e = a?.state === "ok" ? a.found.entries.find((x) => x.noteId === noteId) : undefined;
   if (e) { await bringIn(rec, noteId, { kind: "applet", id: e.manifest.id, name: e.manifest.name, code: e.keys.html }); return; }
-  const cs = await refreshComponents(rec, true);
-  const c = cs.state === "ok" ? cs.entries.find((x) => x.noteId === noteId) : undefined;
+  const c = await fullComponent(rec, noteId).catch(() => null);
   if (!c) throw new Error("That isn't an applet or a component this vault has.");
   await bringIn(rec, noteId, { kind: "component", id: c.component.id, name: c.component.name, code: c.hash });
 }

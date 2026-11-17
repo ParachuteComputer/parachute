@@ -235,7 +235,8 @@ bar's places, an applet's screen, an embed):
   and sign-in discovery alike, since a refresh can happen at start without a tap. A bigger one is refused as that hub's
   error, before it is parsed. A code record's body (an applet's, a component's) is at most 200 KB; a bigger one is
   refused with the shell's sentence before it is hashed. (Notes read in the vault view keep today's limits.) The
-  applets and components of someone else's vault are listed in pages of 20, so a vault with many isn't one big reply.
+  components of someone else's vault are listed from their fields alone, and a component's code is read on its own only
+  when it is brought in, added or imported; its applets are read one at a time (four at once), so no one reply is big.
 - **Its code is transpiled only after its hash matches an Allow on this device.** The card needs the hash and the
   record's fields, not the transpiled code. (Code from the person's own vaults keeps today's order, so a mistake in
   it is still shown before its card.)

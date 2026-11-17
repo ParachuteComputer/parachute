@@ -1,6 +1,7 @@
-// The components in one vault (component.ts), read from its records tagged `component` and kept for the session, with
-// each one's code hash. From someone else's vault they are listed without their code and read one at a time, and any
-// whose code is over the limit is left out (vault/limited.ts).
+// The components in one vault (component.ts), read from its records tagged `component` and kept for the session. From
+// the person's own vaults, with their code and its hash. From someone else's, listed from their fields alone (no code,
+// so a listing is one small reply); a component's code is read on its own, and checked against the limit, only when it
+// is brought in, added to a page or imported (`fullComponent`).
 import type { Note, VaultClient } from "@openparachute/surface-client";
 import { codeHash } from "./code";
 import { COMPONENT_TAG, discoverComponents, type ComponentEntry } from "./component";
@@ -17,21 +18,25 @@ const cache = new Map<string, Entry>();
 const inflight = new Map<string, Promise<Entry>>();
 
 async function rows(client: Pick<VaultClient, "queryNotes" | "getNote">, notMine: boolean): Promise<Note[]> {
-  if (!notMine) return client.queryNotes({ tag: COMPONENT_TAG, limit: 200, includeMetadata: true, includeContent: true });
-  const listed = await client.queryNotes({ tag: COMPONENT_TAG, limit: 200, includeMetadata: true });
-  const out: Note[] = [];
-  for (let i = 0; i < listed.length; i += 4) {
-    const got = await Promise.all(listed.slice(i, i + 4).map((r) => client.getNote(r.id).catch(() => null)));
-    for (const n of got) if (n && (n.content ?? "").length <= MAX_CODE_CHARS) out.push(n);
-  }
-  return out;
+  return client.queryNotes({ tag: COMPONENT_TAG, limit: 200, includeMetadata: true, ...(notMine ? {} : { includeContent: true }) });
+}
+
+/** One component with its code and hash, read now (for someone else's vault, within the limit). */
+export async function fullComponent(rec: VaultRecord, noteId: string): Promise<KeyedComponent> {
+  const n = await clientFor(rec).getNote(noteId);
+  if (!n) throw new Error("That component is gone.");
+  if (whoseOf(rec) !== "mine" && (n.content ?? "").length > MAX_CODE_CHARS) throw new Error("That component is bigger than one from someone else's vault may be.");
+  const found = discoverComponents([n], rec.key).entries[0];
+  if (!found) throw new Error("That isn't a component this vault has.");
+  return { ...found, source: n.content ?? "", hash: await codeHash(found.kind, n.content ?? "") };
 }
 
 export async function readComponents(client: Pick<VaultClient, "queryNotes" | "getNote">, vault: string, notMine = false): Promise<{ entries: KeyedComponent[]; skipped: number }> {
   const all = await rows(client, notMine);
   const found = discoverComponents(all, vault);
   const body = new Map(all.map((r) => [r.id, r.content ?? ""]));
-  const entries = await Promise.all(found.entries.map(async (e) => ({ ...e, source: body.get(e.noteId) ?? "", hash: await codeHash(e.kind, body.get(e.noteId) ?? "") })));
+  // listed without code (someone else's vault): no source, no hash
+  const entries = await Promise.all(found.entries.map(async (e) => ({ ...e, source: body.get(e.noteId) ?? "", hash: notMine ? "" : await codeHash(e.kind, body.get(e.noteId) ?? "") })));
   return { entries, skipped: found.skipped };
 }
 

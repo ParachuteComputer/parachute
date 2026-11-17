@@ -137,7 +137,8 @@ The **pointer**: a record in his home vault that names Techne's record and the c
 }
 ```
 
-And the **embed**, added to his home applet's `fields.embeds`:
+And the **embed**, added to his home applet's `fields.embeds`. The app writes `name` and `record`; `props` is the plain
+data the page hands the component, which Aaron (or his agent) adds to the record when it takes some. Here, `days: 30`:
 
 ```json
 {
@@ -154,10 +155,10 @@ And the **embed**, added to his home applet's `fields.embeds`:
 ```
 
 `name` is a word for it on this page. `record` is the pointer (or, for a component in the home applet's own vault,
-the component itself), by path or id. `props` is the plain data the page hands it: written in the record, never by the
-page's running code, and shown on its card.
+the component itself), by path or id. `props` is written in the record, never by the page's running code, and shown on
+its card; changing it asks again.
 
-**By an agent** it is the same two writes. Create the pointer with `create-record` in the home vault, with `code` set to
+**By an agent** it is the same two writes (with `props` if it hands any). Create the pointer with `create-record` in the home vault, with `code` set to
 `tsx:` and the SHA-256 of the component's body exactly as read, in hex. Then read the home applet, add the embed to
 its `fields.embeds` (keep everything else in `fields` as it was), and write `fields` back with `update-record` and its
 `if_updated_at`. The home applet is the `start` in `Parachute/Settings` ([NAVIGATION.md](NAVIGATION.md)). Nothing an

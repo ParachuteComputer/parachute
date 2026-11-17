@@ -46,7 +46,7 @@ export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getN
   const kinds = new Map(rows.map((r) => [r.id, codeKindOf(r as { extension?: string })]));
   // as the applet screen reads them: the vault's role tags dropped first, so the keys match its keys
   // as the applet screen keys them: a page that shows things from someone else's vaults says so in its key
-  const pointers = found.entries.some((e) => e.embeds.length) && host ? await readPointers().catch(() => []) : [];
+  const pointers = found.entries.some((e) => e.embeds.length) && host ? await readPointers() : [];
   const entries = await Promise.all(found.entries.map((e) => ({ ...e, opens: withoutRoles(e.opens, roles) })).map(async (e) => {
     const from = e.embeds.length && host ? await embedsFrom(host, e.embeds, pointers) : [];
     // as the applet screen hashes it: with what it imports, when it imports (an import it can't find leaves the plain

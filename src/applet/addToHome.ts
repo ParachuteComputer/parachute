@@ -4,8 +4,8 @@
 // the person allows it on its own sheet.
 import { VaultConflictError } from "@openparachute/surface-client";
 import { stripExt } from "./contract";
-import { bringIn } from "./pointers";
-import { refreshComponents } from "./useComponents";
+import { bringIn, names, readPointers } from "./pointers";
+import { fullComponent } from "./useComponents";
 import { barNow } from "../shell/homeSettings";
 import { clientFor } from "../vault/client";
 import { listVaults } from "../vault/store";
@@ -19,12 +19,17 @@ export async function addToHome(vault: string, noteId: string): Promise<"added" 
   if (!host || !isMine(host)) throw new Error("Your home applet isn't in a vault of yours.");
   const from = listVaults().find((v) => v.key === vault);
   if (!from) throw new Error("This device doesn't hold that vault.");
-  const read = await refreshComponents(from, true);
-  const c = read.state === "ok" ? read.entries.find((e) => e.noteId === noteId) : undefined;
-  if (!c) throw new Error("That isn't a component this vault has.");
-  const record = from.key === host.key ? stripExt(c.path)
-    : stripExt((await bringIn(from, noteId, { kind: "component", id: c.component.id, name: c.component.name, code: c.hash })).path);
+  const c = await fullComponent(from, noteId);
   const client = clientFor(host);
+  // nothing is written when the page is full
+  const before = await client.getNote(start.noteId);
+  if (!before) throw new Error("Your home applet is gone.");
+  const had = ((before.metadata ?? {}) as Record<string, unknown>).embeds;
+  if (Array.isArray(had) && had.length >= MAX_EMBEDS) throw new Error(`Your home shows ${MAX_EMBEDS} things already: take one off first.`);
+  // a pointer already there is used as it is: its pin moves only when the person allows new code on its card
+  const there = from.key === host.key ? null : (await readPointers()).find((p) => names(p.pointer, from, noteId)) ?? null;
+  const record = from.key === host.key ? stripExt(c.path)
+    : stripExt(there?.path ?? (await bringIn(from, noteId, { kind: "component", id: c.component.id, name: c.component.name, code: c.hash })).path);
   for (let attempt = 0; ; attempt++) {
     const n = await client.getNote(start.noteId);
     if (!n) throw new Error("Your home applet is gone.");

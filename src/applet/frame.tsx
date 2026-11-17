@@ -16,6 +16,8 @@ import { judge, loadedAgain } from "./violations";
 
 /** Shown in place of a frame whose navigation the host CSP had to block. */
 export const STOPPED_MESSAGE = "This applet tried to leave its sandbox and was stopped.";
+/** When the app couldn't tell which frame on a page tried (docs/design/EMBED.md). */
+export const PAGE_STOPPED_MESSAGE = "Something on this page tried to leave its sandbox, so the page was stopped.";
 const KIT_SOURCE = buildKitSource({ vaultClientSource });
 
 /** What runs in the frame for an applet's code: an HTML note as written; a TSX/JSX note as its transpiled module, with React. */
@@ -45,7 +47,9 @@ export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Re
   onViolationRef.current = opts.onViolation;
   const onSessionRef = useRef(opts.onSession);
   onSessionRef.current = opts.onSession;
-  const [stopped, setStopped] = useState(false);
+  // stopped because this frame tried to leave ("named"), or because something on the page did and no one frame could be
+  // named ("unnamed")
+  const [stopped, setStopped] = useState<false | "named" | "unnamed">(false);
   // which frame this is, for telling whose navigation a violation was (violations.ts)
   const id = useRef(`f${Math.random().toString(36).slice(2)}`);
   const tokensRef = useRef(opts.tokens ?? tokensNow);
@@ -68,7 +72,7 @@ export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Re
       if (!(e.effectiveDirective || e.violatedDirective || "").startsWith("frame-src")) return;
       onViolationRef.current?.();
       // stop this frame if it is the one that navigated, or if no one frame can be named
-      if (stopOnViolation) void judge(id.current).then((mine) => { if (mine) { s.close(); setStopped(true); } });
+      if (stopOnViolation) void judge(id.current).then((w) => { if (w !== "other") { s.close(); setStopped(w === "mine" ? "named" : "unnamed"); } });
     };
     window.addEventListener("message", onMessage);
     document.addEventListener("securitypolicyviolation", onViolation);
@@ -105,6 +109,6 @@ export default function AppletFrame({ html, title, router, grant, ready, onSessi
   const onElementRef = useRef(onElement);
   onElementRef.current = onElement;
   const ref = useCallback((el: HTMLIFrameElement | null) => { frame.current = el; onElementRef.current?.(el); }, [frame]);
-  if (stopped) return <p className="applet-stopped error" role="alert">{STOPPED_MESSAGE}</p>;
+  if (stopped) return <p className="applet-stopped error" role="alert">{stopped === "unnamed" ? PAGE_STOPPED_MESSAGE : STOPPED_MESSAGE}</p>;
   return <iframe ref={ref} className={height === undefined ? "applet-frame" : "applet-frame applet-frame-sized"} style={height === undefined ? undefined : { height }} title={title} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={liveDoc} onLoad={onLoad} />;
 }

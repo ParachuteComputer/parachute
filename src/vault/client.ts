@@ -26,7 +26,8 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
   if (running) return running;
   const p = (async () => {
     const cur = findVault(key);
-    if (!cur?.refreshToken) { refreshFailed.set(key, "refused"); return null; }
+    // no refresh token: the app can't ask, so it can't say the hub refused
+    if (!cur?.refreshToken) { refreshFailed.set(key, "unreachable"); return null; }
     try {
       const t = await refresh(cur.tokenEndpoint, cur.clientId, cur.refreshToken, fetchImpl ?? fetchFor(cur));
       updateVault(cur.key, { accessToken: t.access_token, refreshToken: t.refresh_token ?? cur.refreshToken, expiresAt: t.expires_in ? Date.now() + t.expires_in * 1000 : undefined });
@@ -34,7 +35,7 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
       return t.access_token;
     } catch (e) {
       // the hub answering no (a 4xx to the refresh) is a refusal; anything else (no answer, its own trouble) is not
-      refreshFailed.set(key, e instanceof Error && /^refresh failed \(4\d\d\)$/.test(e.message) ? "refused" : "unreachable");
+      refreshFailed.set(key, e instanceof Error && /^refresh failed \(4(?!29)\d\d\)$/.test(e.message) ? "refused" : "unreachable");
       return null;
     }
   })().finally(() => refreshing.delete(key));

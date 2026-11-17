@@ -92,7 +92,9 @@ Its own frame, its own card, its own vault; or, from a vault you trust, imported
 [OTHER-PARACHUTES.md](OTHER-PARACHUTES.md). Three things for an applet's author:
 
 - **A page with embeds scrolls as a whole.** An applet whose record has `fields.embeds` is drawn as tall as its content,
-  with its embeds under it; `position: fixed` and its own inner scrolling scroll with the page.
+  with its embeds under it; `position: fixed` and its own inner scrolling scroll with the page. A page that grows by the
+  same amount three times running is held at its height (that is how a layout sized to the screen stops growing for
+  ever), so one that adds rows on a tap should page them rather than grow without end.
 - **Check who a message is from.** The kit only reads messages from the app. An HTML applet that listens for
   `message` events itself must check `event.source === parent`: on a page with embeds, other frames can post to it.
 - **Never ask for a key or a password.** Parachute never does inside a page, and the person is told so.

@@ -7,7 +7,7 @@ import { codeHash } from "./code";
 import { COMPONENT_TAG, parseComponent } from "./component";
 import { importsOf, MAX_IMPORTS, plainImportId } from "./imports";
 import { readPointers } from "./pointers";
-import { refreshComponents } from "./useComponents";
+import { fullComponent, refreshComponents } from "./useComponents";
 import { clientFor } from "../vault/client";
 import { MAX_CODE_CHARS } from "../vault/limited";
 import { listVaults, type VaultRecord } from "../vault/store";
@@ -29,7 +29,10 @@ export async function readImports(rec: VaultRecord, source: string): Promise<Imp
   let pointers: Awaited<ReturnType<typeof readPointers>> | null = null;
   const out: Imported[] = [];
   for (const id of ids) {
-    const here = own?.entries.find((c) => c.component.id === id);
+    const listed = own?.entries.find((c) => c.component.id === id);
+    // from a listing without code (the applet's vault is someone else's): read that one in full
+    const here = listed && !listed.hash ? await fullComponent(rec, listed.noteId).catch(() => null) : listed;
+    if (listed && !here) return { ok: false, error: `«${id}» couldn't be read` };
     if (here) {
       if (importsOf(here.source).length) return { ok: false, error: `«${id}» imports components itself, and an import is one level only` };
       out.push({ id, name: here.component.name, vault: rec.vault, host: hostOf(rec.issuer), own: true, whose: whoseOf(rec), kind: here.kind, source: here.source, hash: here.hash });

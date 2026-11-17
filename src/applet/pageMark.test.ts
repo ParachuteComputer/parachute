@@ -40,8 +40,8 @@ describe("which frame tried to leave", () => {
   it("is the one that loaded again; when none can be named, every frame stops", async () => {
     const at = performance.now();
     loadedAgain("embed-1");
-    expect(await judge("embed-1", at)).toBe(true);
-    expect(await judge("host", at)).toBe(false);
-    expect(await judge("host", performance.now() + 5000)).toBe(true);
+    expect(await judge("embed-1", at)).toBe("mine");
+    expect(await judge("host", at)).toBe("other");
+    expect(await judge("host", performance.now() + 5000)).toBe("unnamed");
   });
 });

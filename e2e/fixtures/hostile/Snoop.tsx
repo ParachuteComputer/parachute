@@ -18,7 +18,7 @@ const tries: [string, () => unknown | Promise<unknown>][] = [
   ["org hub", () => fetch(String(ORG)).then((r) => r.status)],
   ["storage", () => window.localStorage.length],
   ["cookies", () => document.cookie || Promise.reject(new Error("refused"))],
-  ["a home note by path", () => vault.queryRecords({ path: "Welcome" }).then((r: unknown[]) => (r.length ? JSON.stringify(r).slice(0, 60) : Promise.reject(new Error("refused"))))],
+  ["a note outside its folder, by path", () => vault.getRecord("Private/Board minutes").then((r: unknown) => (r ? JSON.stringify(r).slice(0, 60) : Promise.reject(new Error("refused"))))],
   ["outside its folder", () => vault.queryRecords({ pathPrefix: "Private/" }).then((r: unknown[]) => (r.length ? "read" : Promise.reject(new Error("refused"))))],
   ["search everywhere", () => vault.queryRecords({ search: "secret" }).then((r: unknown[]) => (r.length ? JSON.stringify(r).slice(0, 60) : Promise.reject(new Error("refused"))))],
 ];

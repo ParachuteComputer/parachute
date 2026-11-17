@@ -74,7 +74,8 @@ export async function repin(p: PointerNote, code: string, c: Pick<VaultClient, "
  *  to a vault that isn't the person's own and isn't the host's. */
 export async function embedsFrom(host: Pick<VaultRecord, "issuer" | "vault">, embeds: readonly { record: string }[], all?: PointerNote[]): Promise<string[]> {
   if (!embeds.length) return [];
-  const pointers = all ?? await readPointers().catch(() => [] as PointerNote[]);
+  // no pointers read is no answer: the host's card must not leave out where its embeds come from (it fails closed)
+  const pointers = all ?? await readPointers();
   const from = new Set<string>();
   for (const e of embeds) {
     const p = pointers.find((x) => x.noteId === e.record || stripExt(x.path) === stripExt(e.record));

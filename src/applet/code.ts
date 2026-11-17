@@ -123,13 +123,15 @@ const LOADER_HEAD = String.raw`(function () {
   var kit = M.parts ? Object.freeze(Object.assign({}, window.parachute, M.parts)) : window.parachute;
   var mods = { react: M.react, "react-dom": M["react-dom"], "react-dom/client": M["react-dom/client"], "react/jsx-runtime": M["react/jsx-runtime"], parachute: kit };
   // the components it imports (imports.ts), each its own module, run once when first required
-  var imports = window.__ParachuteImports || {}, done = {};
+  var imports = Object.freeze(window.__ParachuteImports || {}), done = {};
   function require(name) {
     if (Object.prototype.hasOwnProperty.call(mods, name) && mods[name]) return mods[name];
     if (Object.prototype.hasOwnProperty.call(imports, name)) {
       if (!done[name]) { var m = { exports: {} }; done[name] = m; imports[name](require, m, m.exports); }
       return done[name].exports;
     }
+    // a component it imports whose own code didn't load (each is its own script, so one error stays its own)
+    if (name.indexOf("component:") === 0) throw new Error(name.slice(10) + ", which it imports, couldn't load: its code has an error");
     throw new Error("it imports " + name + ", and an applet can import only " + Object.keys(mods).concat(Object.keys(imports)).join(", "));
   }
   var module = { exports: {} };
@@ -162,8 +164,7 @@ export const usesNote = (code: string) => {
 /** The page a TSX/JSX applet runs as: a root, React, the components it imports, then its module. `reactSource` sets
  *  `window.__ParachuteModules`. */
 export function modulePage(js: string, reactSource: string, imports: readonly { id: string; js: string }[] = []): string {
-  const table = imports.length
-    ? inlineScript(`window.__ParachuteImports = Object.freeze({${imports.map((i) => `${JSON.stringify(`component:${i.id}`)}: function (require, module, exports) {\n${i.js}\n}`).join(",")}});`)
-    : "";
+  // each import in its own script, so a mistake in one fails that one, by name
+  const table = imports.map((i) => inlineScript(`(window.__ParachuteImports = window.__ParachuteImports || {})[${JSON.stringify(`component:${i.id}`)}] = function (require, module, exports) {\n${i.js}\n};`)).join("");
   return `<div id="root"></div>${inlineScript(FAILURE)}${inlineScript(reactSource)}${table}${inlineScript(`${LOADER_HEAD}${js}${LOADER_TAIL}`)}`;
 }
