@@ -78,7 +78,7 @@ ax press "Mine" || fail "no Mine on Add a Parachute"
 shot 12-add-parachute
 ax press "Sign in with your key" || fail "no Sign in with your key"
 # the key is the hub owner's: it reaches every vault, so the app asks which are theirs (all ticked) before the consent
-ax wait "Which are yours?" 30 || fail "no pick of the person's own vaults"
+ax wait "Every vault on 127.0.0.1:$port comes in. Which are yours?" 30 || fail "no pick of the person's own vaults"
 shot 12b-pick
 ax press "Continue" || fail "no Continue on the pick"
 ax wait "Approve Parachute?" 30 || fail "the hub's Approve page didn't open"
