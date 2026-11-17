@@ -47,10 +47,15 @@ export class RelayConn {
       if (this.closedForGood) return;
       this.onStatus({ status: "closed", why: "the relay closed the connection" });
       // a publish in flight gets its answer now, never a hang; and having been told it failed, it isn't sent later
-      for (const [id, w] of this.waiting) { clearTimeout(w.timer); w.resolve({ ok: false, message: "connection closed" }); this.waiting.delete(id); }
-      this.queue = [];
+      this.failWaiting("connection closed");
       this.again();
     };
+  }
+
+  /** Every publish waiting is answered "failed", and none of them is sent afterwards. */
+  private failWaiting(why: string) {
+    for (const [id, w] of this.waiting) { clearTimeout(w.timer); w.resolve({ ok: false, message: why }); this.waiting.delete(id); }
+    this.queue = this.queue.filter((m) => !(Array.isArray(m) && m[0] === "EVENT"));
   }
 
   /** Connect again after a growing wait (a dropped socket, or one that couldn't be made). */
@@ -86,7 +91,13 @@ export class RelayConn {
       }
       case "OK": {
         const [, id, ok, message] = m as [string, string, boolean, string];
-        if (id === this.authEvent) { if (ok) this.ready(); else this.onStatus({ status: "closed", why: `the relay refused the sign-in: ${message ?? ""}` }); return; }
+        if (id === this.authEvent) {
+          if (ok) { this.ready(); return; }
+          this.onStatus({ status: "closed", why: `the relay refused the sign-in: ${message ?? ""}` });
+          // what waited for the sign-in is told it failed, and never goes out later
+          this.failWaiting("the relay refused the sign-in");
+          return;
+        }
         const w = this.waiting.get(id);
         if (w) { clearTimeout(w.timer); this.waiting.delete(id); w.resolve({ ok: ok === true, message: typeof message === "string" ? message : "" }); }
         return;
@@ -117,7 +128,12 @@ export class RelayConn {
 
   publish(ev: SignedEvent): Promise<{ ok: boolean; message: string }> {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => { this.waiting.delete(ev.id); resolve({ ok: false, message: "no answer from the relay" }); }, OK_WAIT_MS);
+      const timer = setTimeout(() => {
+        this.waiting.delete(ev.id);
+        // told it failed: if it was still waiting for a sign-in, it doesn't go out later
+        this.queue = this.queue.filter((m) => !(Array.isArray(m) && m[0] === "EVENT" && (m[1] as SignedEvent)?.id === ev.id));
+        resolve({ ok: false, message: "no answer from the relay" });
+      }, OK_WAIT_MS);
       this.waiting.set(ev.id, { resolve, timer });
       this.send(["EVENT", ev]);
     });

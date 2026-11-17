@@ -116,4 +116,28 @@ describe("the broker's relay connection", () => {
       expect(second.sent.some((m) => Array.isArray(m) && m[0] === "EVENT")).toBe(false);
     } finally { vi.useRealTimers(); }
   });
+
+  it("doesn't send a post queued behind a sign-in the relay refused, nor one it said had timed out", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const slow = native();
+      slow.relayAuth = () => new Promise((r) => setTimeout(() => r({ ...ev("auth"), kind: 22242 }), 12_000));
+      const { b } = setup(slow);
+      const late = b.publish({ service: "rooms", event: { kind: 9, content: "late", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(1);
+      const sock = FakeSocket.all[0];
+      sock.from(["AUTH", "challenge"]);
+      // the sign-in takes longer than a post waits: it is told it failed
+      await vi.advanceTimersByTimeAsync(10_500);
+      await expect(late).resolves.toMatchObject({ ok: false });
+      await vi.advanceTimersByTimeAsync(2000);
+      const refused = b.publish({ service: "rooms", event: { kind: 9, content: "refused", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(1);
+      sock.from(["OK", "auth", false, "restricted: not a member"]);
+      await expect(refused).resolves.toMatchObject({ ok: false });
+      // a later sign-in on this connection sends neither
+      sock.from(["OK", "auth", true, ""]);
+      expect(sock.sent.some((m) => Array.isArray(m) && m[0] === "EVENT")).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
 });
