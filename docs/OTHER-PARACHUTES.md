@@ -16,11 +16,14 @@ owner gives it a role on the vault with the `grant-access` tool of the hub's acc
 { "pubkey": "npub1…aaron", "vault": "techne", "role": "read" }
 ```
 
-Then, in the app: **Add a vault**, the address (`https://techne.example/vault/techne`), **Whose vault is this?
-Someone else's**, and **Sign in with your key**. The hub shows its usual Approve. That is all there is to it.
+Then, in the app: **Add a Parachute**, the address (`techne.example`), **Whose Parachute is this? Someone else's**,
+and **Sign in with your key**. The hub shows its usual Approve once, for every vault of Techne's his key may reach
+(here, `techne`). That is all there is to it. Techne goes on the list of his Parachutes in his home vault, so his
+other devices find it ([design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md)).
 
-Whose a vault is, is Aaron's say, kept on his device, and nothing else can set it: not a record, not an agent. It
-decides what code from that vault may do:
+Whose a vault is, is Aaron's say, kept on his device, and nothing else can set it: not a record, not an agent. His
+answer on Add a Parachute holds for each of its vaults; Settings changes it per vault. It decides what code from that
+vault may do:
 
 | | Mine | Someone else's, trusted | Someone else's |
 |---|---|---|---|

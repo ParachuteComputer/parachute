@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Sign in on the Mac app as a person would, driven through accessibility (scripts/mac-ax.swift): paste a secret key,
-# check it went into the login Keychain, add a vault on a throwaway hub on loopback and sign in to it with the key (the
-# hub's key door, its consent page, back into the app); then remove it and make a new key; then remove that and pair a
+# check it went into the login Keychain, add a throwaway hub on loopback (two vaults) as the person's Parachute and sign
+# in to it with the key (the shell lists the key's vaults, the hub's key door, one consent page, back into the app with
+# both vaults: docs/design/ONE-SIGN-IN.md); then remove it and make a new key; then remove that and pair a
 # key in from a stand-in for the Uni app (examples/pair_send.rs), pasting its link. Run after scripts/mac-smoke.sh
 # installed the app. Needs PARACHUTE_CORE (a parachute-core binary), PAIR_SEND (the built pair_send example) and node.
 #   scripts/mac-signin.sh [<folder for screenshots>]
@@ -46,6 +47,8 @@ hubpid=$!
 trap 'kill $hubpid 2>/dev/null || true; rm -rf "$hub"' EXIT
 for _ in $(seq 120); do grep -q "ready: hub" "$hub/serve.log" && break; sleep 0.25; done
 grep -q "ready: hub" "$hub/serve.log" || { cat "$hub/serve.log"; fail "the hub didn't start"; }
+# a second vault: one sign-in brings both
+PORT=$port "$PARACHUTE_CORE" vault create letters --json --no-mirror > /dev/null
 
 say "a throwaway key, linked to the hub's owner"
 # a Nostr key is a secp256k1 secret; its public key is the point's x coordinate (the secret never leaves this shell)
@@ -63,25 +66,27 @@ say "paste a secret key"
 ax press "Advanced: paste a secret key" || fail "no paste-a-key section"
 ax type "nsec1…" "$sk" || fail "no secret key field"
 ax press "Keep this key" || fail "no Keep this key"
-# a kept key goes straight on to adding a vault
+# a kept key goes straight on to signing in to a Parachute
 ax wait "Sign in with your key" 20 || fail "the key wasn't kept"
 keychain || fail "the key isn't in the login Keychain"
 echo "the key is in the login Keychain (computer.parachute.app / nostr-key)"
 
-say "add the vault and sign in with the key"
-ax type "Vault address" "http://127.0.0.1:$port/vault/recipes" || fail "no vault address field"
-# Add a vault asks whose it is, every time (docs/OTHER-PARACHUTES.md)
-ax press "Mine" || fail "no Mine on Add a vault"
-shot 12-add-vault
+say "sign in to the Parachute with the key: every vault, one Approve"
+ax type "Your Parachute's address" "http://127.0.0.1:$port" || fail "no Parachute address field"
+# Add a Parachute asks whose it is, every time (docs/OTHER-PARACHUTES.md)
+ax press "Mine" || fail "no Mine on Add a Parachute"
+shot 12-add-parachute
 ax press "Sign in with your key" || fail "no Sign in with your key"
 ax wait "Approve Parachute?" 30 || fail "the hub's Approve page didn't open"
 shot 13-hub-consent
 ax press "Approve" || fail "no Approve on the hub's page"
-# only the vault's own screen has this
-ax wait "Search this vault" 30 || fail "the vault didn't open"
+# the launcher, with a chapter for each vault: the second came without a page of its own
+ax wait "Open the vault" 40 || fail "the launcher didn't open"
+ax wait "letters" 20 || fail "the second vault didn't come with the sign-in"
+ax wait "recipes" 10 || fail "the first vault isn't in the launcher"
 sleep 2
-shot 14-vault
-ax dump > "$out/14-vault-ui.txt" 2>&1 || true
+shot 14-launcher
+ax dump > "$out/14-launcher-ui.txt" 2>&1 || true
 
 say "remove the key, make a new one"
 remove_key
@@ -123,4 +128,4 @@ echo "paired: the sender's key is the app's key, in the Keychain"
 shot 17-paired-key
 
 pkill -x "$exe" || true
-say "ok: pasted, new and paired keys each kept in the Keychain and removed; signed in to a hub with a key; vault open"
+say "ok: pasted, new and paired keys each kept in the Keychain and removed; signed in to a Parachute with a key; both vaults in the launcher"

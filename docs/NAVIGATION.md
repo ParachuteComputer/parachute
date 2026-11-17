@@ -51,7 +51,8 @@ into my Parachute**), and its components put on your home ([OTHER-PARACHUTES.md]
 
 ## Where the choices live
 
-The bar and the home are one note in your home vault, `Parachute/Settings`, tagged `parachute-settings`. You change it
+The bar, the home and the list of your Parachutes are one note in your home vault, `Parachute/Settings`, tagged
+`parachute-settings`. You change it
 by long-pressing; your agent can change it by writing that note. The app reads it at each start and each time it shows
 the launcher, a vault or a note, and keeps the last copy (with the names on the bar) for when the vault can't be
 reached. Entries it doesn't read are kept as they are when you change the bar.
@@ -63,7 +64,8 @@ reached. Entries it doesn't read are kept as they are when you change the bar.
   "fields": {
     "parachute": {
       "bar": [{ "vault": "kitchen", "applet": "Applets/Recipes" }],
-      "start": { "vault": "kitchen", "applet": "Applets/Home" }
+      "start": { "vault": "kitchen", "applet": "Applets/Home" },
+      "hubs": [{ "hub": "https://uni.example" }, { "hub": "https://techne.example", "name": "Techne" }]
     }
   }
 }
@@ -72,6 +74,11 @@ reached. Entries it doesn't read are kept as they are when you change the bar.
 That is the record as `create-record` takes it (on a hub before 0.9, `create-note`, with `metadata` for `fields`).
 `vault` is the vault's name (add `"hub": "https://…"` when two hubs hold vaults of the same name). `applet` is the
 applet note's path or id. A place that names an applet this device can't find is left off the bar, not an error.
+
+`hubs` lists your Parachutes ([design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md)): each an address (`https://…`, the
+hub's origin) and, if you like, a `name` the launcher shows. The app adds one each time you sign in to a Parachute; an
+agent can add one by writing an entry. A Parachute on the list that a device isn't signed in to shows in its launcher
+as one line with **Sign in**; nothing is signed in to, or fetched from it, until you tap that and say whose it is.
 
 ## What is whose
 

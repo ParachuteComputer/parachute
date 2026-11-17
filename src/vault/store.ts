@@ -57,7 +57,7 @@ export function keyFor(list: readonly VaultRecord[], issuer: string, vault: stri
   return `${vault}@${hostOf(issuer)}`;
 }
 
-/** Add a vault, or replace the record for the same hub and vault (signing in again). */
+/** Keep a vault, or replace the record for the same hub and vault (signing in again). */
 export function saveVault(rec: Omit<VaultRecord, "key">): VaultRecord {
   const list = listVaults();
   const key = keyFor(list, rec.issuer, rec.vault);

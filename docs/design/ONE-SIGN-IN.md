@@ -30,9 +30,9 @@ different applets; without having to enter a bunch of different URLs."*
 | `/.well-known/parachute.json`? | Public, CORS `*`: every vault on the hub (not per person). Not on Cloud (404). | spike |
 | `/.well-known/parachute-account`? | Public: issuer, `account_mcp_endpoint`, `vault_url_template`, sign-in methods. Same shape on hub 0.8, 0.9 and Cloud. | spike; Cloud read-only |
 | One consent for several vaults? | Yes: an authorize naming `vault:a:… vault:b:…` shows one consent listing them. The token is for the first named vault only (aud `vault.a`). Asking a vault outside the person's assignment ends on a hub page, 400 "Vault assignment mismatch", with no way back to the app. Asking write where the person holds read is capped to read, silently. | spike + source |
-| Tokens for the other vaults? | A refresh with `resource=<vault>/mcp` re-aims the new token at any vault the grant names (aud `vault.b`, same scope set). | spike + source (`resolveRefreshAudience`) |
-| Refresh tokens? | Rotated on every use; the spent one keeps working for about a minute, then using it revokes the whole chain. So two chains can't be forked from one token: **one chain per sign-in, re-aimed on each refresh**, holds every vault (checked over 3+ minutes, alternating vaults). | spike |
-| Does a later sign-in skip consent? | When the app's registration already holds a grant covering every scope asked: the hub sends the person straight back. A new vault means one more consent (the grant then covers it too). | spike + source (`isCoveredByGrant`) |
+| Does a later sign-in skip consent? | When the app's registration already holds a grant covering every scope asked: the hub sends the person straight back with a code, no page. So after the one consent, a sign-in for any one of those vaults (asking exactly what it was granted: read only where the person holds read) is answered at once. A new vault means one more consent (the grant then covers it too). | spike + source (`isCoveredByGrant`) |
+| Do those per-vault sign-ins last? | Yes: each is its own token pair, read and refreshed on its own for 3+ minutes across several refreshes, on both versions. | spike |
+| One refresh chain for every vault? | A refresh with `resource=<vault>/mcp` re-aims the new token at any vault the grant names. But refresh tokens rotate on every use (a spent one used again after about a minute revokes the whole chain), and **on 0.9 each refresh also retires the access token issued before it**, so one chain can't hold live tokens for two vaults at once (0.8 can). Not used. | spike + source (`resolveRefreshAudience`) |
 | The "All assigned vaults" pick on the consent page? | Mints an account token (aud `account`): opens `list-vaults`, reads no vault, and doesn't cover a later vault consent. | spike |
 
 ## How the app signs in to a Parachute
@@ -50,18 +50,16 @@ different applets; without having to enter a bunch of different URLs."*
 3. **One consent for all of them.** An authorize naming `vault:<name>:read vault:<name>:write` for each listed vault.
    The hub's page lists them; one Approve. Only names from the hub's own list are asked for (an unlisted one strands the
    person on the mismatch page).
-4. **Keep one sign-in, many vaults.** The code buys a token for the first vault and a refresh token. The app keeps one
-   **sign-in** per Parachute (`parachute.signins.v1`: the hub, its token and revocation addresses, the app's
-   registration, the refresh token) and one vault record per vault the hub granted (read from the token's `scope`,
-   the hub's word, not the app's list), each naming its sign-in. Each other vault's first token is minted at once by
-   refreshing the chain with `resource=<vault>/mcp`.
-5. **Refresh**: a vault whose token expired refreshes through its sign-in's chain, re-aimed at itself. One refresh at a
-   time per sign-in (a queue, and the browser's lock across tabs), and the new refresh token is stored before the next
-   starts.
-6. **Sign out of a Parachute** revokes the chain and drops all its vaults on this device. Signing out of one vault of a
-   Parachute only takes it off this device; the last one out revokes the chain.
-7. **Signing in again** to a Parachute replaces its sign-in, and takes over vaults this device held by an older
-   one-vault sign-in (their old sign-ins are revoked).
+4. **Each vault its own token.** The code buys a token for the first vault the hub granted (its audience). The vaults
+   the sign-in holds are read from the token's `scope` (the hub's word, not the app's list). For each of the others,
+   the app goes through the same authorize once more, for that vault alone and exactly the scope it was granted; the
+   hub's grant already covers it, so it answers at once with a code (no page; the app's screen says *Signing in to your
+   vaults: 2 of 10…*). Each vault keeps its own token pair, refreshed on its own, as before this step. These are
+   top-level redirects because the hub's session cookie is `SameSite=Lax`: a fetch or a hidden frame wouldn't carry it.
+   If the person stops partway, the vaults already kept stay.
+5. **Sign out of a Parachute** signs out of each of its vaults (each revoked at the hub). Sign out of one vault, as before.
+6. **Signing in again** to a Parachute brings any vault given since, and replaces this device's older sign-in of each
+   vault it brings (the old one is revoked at the hub).
 
 So a person with a key approves once per Parachute; without a key, twice (*see your vaults*, then *read and write
 them*). The web build, which the Playwright e2e drives, has no key: e2e covers the two-Approve path end to end on both
@@ -113,7 +111,7 @@ note there (the list of Parachutes), a second device finds the same home.
 | 1 | An agent (or anyone who can write the home vault) lists a hostile hub | It is a line with **Sign in**; nothing is fetched or opened until the person taps it, and Add a Parachute asks whose it is. |
 | 2 | A hub's descriptor sends tokens elsewhere | The issuer must be the address typed; the token and authorize endpoints must be on the issuer; vault and account addresses https. |
 | 3 | The key signs something it shouldn't | `hub_vaults` signs one fixed body for one URL on the hub's origin; NIP-98 binds the URL, method, body hash and a 60 s window; the hub refuses a replay. |
-| 4 | A spent refresh token revokes everything | One chain per sign-in, refreshed one at a time, newest token stored before the next; a refusal marks that Parachute's vaults signed out with a plain line, and Sign in again restores them. |
+| 4 | A stray or replayed code lands on the app's return page | Each step's `state` and PKCE verifier are kept for that one step and used once (`oauth.ts`), as before; a token for a vault not asked for at that step is refused, not kept. |
 | 5 | Someone else's vault becomes home | The home is only ever one of the person's own vaults (whose stays device-held). |
 | 6 | Many vaults at once | The scope grows by ~40 characters a vault; Aaron's hub (10 vaults) is well inside any URL limit. |
 
@@ -127,9 +125,10 @@ note there (the list of Parachutes), a second device finds the same home.
 2. **One consent that covers my vaults, now and later.** Let a grant for `account:self:vaults` count as covering
    `vault:<assigned>:<verb>` up to the person's role for that client, and let a refresh re-aim within it. Then a person
    without a key approves once, and a vault created later needs no new consent.
-3. **Write down the chain rules clients rely on**: rotation with a grace of about a minute, revocation of the whole
-   chain on a late reuse, and `resource=` re-aiming on refresh (`resolveRefreshAudience`). Or, simpler for clients:
-   issue one refresh token per vault from one code (`resource` repeated on the code exchange).
+3. **One code, a token per vault.** Let the code exchange (or a refresh) take `resource` repeated, and answer one token
+   pair per vault, each its own key row. Today the app must go back through `/oauth/authorize` once per vault, each a
+   page load, because a re-aimed refresh retires the token before it on 0.9. Document the rotation rules too: the
+   grace minute, and the whole chain revoked on a late reuse.
 4. **A key door and NIP-98 on Cloud.** Cloud signs in by emailed link only, so its people approve twice.
 5. **A Parachute's name** in `/.well-known/parachute-account` (`name`), so the launcher can say *Techne*, not
    `techne.example` (EMBED.md proposal 4).

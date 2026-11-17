@@ -68,7 +68,7 @@ export default function OpenLink() {
         <p>{why}</p>
         <p className="link-raw"><code>{raw.slice(0, 300)}{raw.length > 300 ? "…" : ""}</code></p>
         <div className="grant-actions">
-          {parsed.ok && <Link className="quiet-button" to="/add">Add a vault</Link>}
+          {parsed.ok && <Link className="quiet-button" to="/add">Add a Parachute</Link>}
           <button type="button" className="quiet-button" onClick={() => void navigator.clipboard?.writeText(raw)}>Copy</button>
         </div>
       </section>

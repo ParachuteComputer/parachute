@@ -183,7 +183,7 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
   const say = (text: string, extra?: React.ReactNode) => <div className="embed-place embed-said" data-embed={embed.name} role="status"><p>{text}</p>{extra}</div>;
   if (mode === "closed") return say("Embeds are off on this device until its self-test passes.");
   if (place.state === "reading") return <div className="embed-place embed-said" data-embed={embed.name} aria-busy="true"><p className="quiet">Opening «{embed.name}»…</p></div>;
-  if (place.state === "no-sign-in") return say(`This comes from «${place.vault}» at «${place.host}» (as its record says), and this device isn't signed in there.`, <Link to="/add">Add a vault</Link>);
+  if (place.state === "no-sign-in") return say(`This comes from «${place.vault}» at «${place.host}» (as its record says), and this device isn't signed in there.`, <Link to="/add">Add a Parachute</Link>);
   if (place.state === "offline") return say(`${place.vault} can't be reached right now.`);
   if (place.state === "refused") return say(`${place.vault} no longer lets this device in. Sign in to ${place.vault} again.`, <Link to="/settings">Settings</Link>);
   if (place.state === "gone") return say(`«${place.name}» is gone from ${place.vault}.`);

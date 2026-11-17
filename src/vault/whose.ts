@@ -1,5 +1,5 @@
 // Whose a vault is (docs/design/EMBED.md): mine, someone else's, or someone else's that the person trusts. One value per
-// vault (its hub's origin and its name), chosen by the person on the app's own screens (Add a vault asks; Settings
+// vault (its hub's origin and its name), chosen by the person on the app's own screens (Add a Parachute asks; Settings
 // changes it) and kept on this device apart from the sign-in, so signing in again keeps it. No record or agent sets it.
 //
 //   mine      its applets may ask the app for things (recent, pins, open) and host embeds; it can be the home
@@ -74,7 +74,7 @@ export const whoseOf = (r: Pick<VaultRecord, "issuer" | "vault">): Whose => read
 export const isMine = (r: Pick<VaultRecord, "issuer" | "vault">) => whoseOf(r) === "mine";
 /** May an applet import a component from this vault (its own vault always may)? */
 export const importable = (r: Pick<VaultRecord, "issuer" | "vault">) => whoseOf(r) !== "theirs";
-/** The person said whose it is (a tap on Add a vault or in Settings). */
+/** The person said whose it is (a tap on Add a Parachute or in Settings). */
 export function setWhose(r: Pick<VaultRecord, "issuer" | "vault">, w: Whose) {
   const s = read(), k = whoseKey(r);
   write({ whose: { ...s.whose, [k]: w }, ask: s.ask.filter((x) => x !== k) });
