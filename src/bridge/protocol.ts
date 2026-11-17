@@ -19,6 +19,9 @@ export const PF = 1;
 export type FrameVault = { key: string; vault: string; host: string; issuer: string; whose?: "mine" | "theirs" | "trusted"; home?: boolean };
 /** A pointer in the home vault (docs/design/EMBED.md): what it brings in, from where, and whether this device holds that
  *  vault (`at`: this device's key for it) and the record's status there. `changed`: its code differs from the pin. */
+/** A component as the launcher lists it (component.ts): what it is and what it takes. */
+export type FrameComponent = { noteId: string; path: string; id: string; name: string; glyph: string; note?: string; props: Record<string, string> };
+export type FrameComponents = { ok: true; entries: FrameComponent[] } | { ok: false; error: string };
 export type FramePointer = {
   noteId: string; kind: "applet" | "component"; id: string; name: string;
   from: { vault: string; host: string }; record: string;
@@ -60,8 +63,14 @@ export type Calls = {
   "home.start": [{ vault: string; noteId: string | null }, null];
   /** The home vault's pointers, each resolved on this device. */
   "pointers.list": [Record<string, never>, FramePointer[]];
-  /** Bring an applet of someone else's vault into the person's own: a pointer in the home vault; only during a tap. */
+  /** Bring an applet or a component of someone else's vault into the person's own: a pointer in the home vault; only
+   *  during a tap. */
   "home.bringIn": [{ vault: string; noteId: string }, null];
+  /** A vault's components. */
+  "components.list": [{ vault: string }, FrameComponents];
+  /** Put a component on the home applet's page (a pointer when it is from another vault, and the embed); only during a
+   *  tap. "already" when it is there. */
+  "home.addEmbed": [{ vault: string; noteId: string }, "added" | "already"];
   /** Go to an address in the app. `carryFrom`: the address a tap led to, which the app now sends on to `to`. */
   "nav.go": [{ to: string; replace?: boolean; carryFrom?: string }, null];
   "nav.back": [Record<string, never>, null];
@@ -75,7 +84,7 @@ export type Calls = {
 export type Method = keyof Calls;
 export type Params<M extends Method> = Calls[M][0];
 export type Result<M extends Method> = Calls[M][1];
-export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "home.get", "home.pin", "home.start", "pointers.list", "home.bringIn", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
+export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "home.get", "home.pin", "home.start", "pointers.list", "home.bringIn", "components.list", "home.addEmbed", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
 
 export type Events = { location: FrameLocation; changed: { what: "vaults" | "applets" | "defaults" | "home" | "pointers" }; /** the look's tokens (src/theme), each a CSS variable --<key> */ theme: Record<string, string> };
 
@@ -105,7 +114,8 @@ export function parseRequest(data: unknown): { id: string; method: Method; param
 function paramsOk(m: Method, p: Record<string, unknown>): boolean {
   switch (m) {
     case "vaults.list": case "nav.back": case "home.get": case "pointers.list": return only(p, []);
-    case "home.bringIn": return only(p, ["vault", "noteId"]) && str(p.vault, 120) && str(p.noteId);
+    case "home.bringIn": case "home.addEmbed": return only(p, ["vault", "noteId"]) && str(p.vault, 120) && str(p.noteId);
+    case "components.list": return only(p, ["vault"]) && str(p.vault, 120);
     case "home.pin": return only(p, ["vault", "noteId", "on"]) && str(p.vault, 120) && str(p.noteId) && typeof p.on === "boolean";
     case "home.start": return only(p, ["vault", "noteId"]) && str(p.vault, 120) && (p.noteId === null || str(p.noteId));
     case "vault.note": return only(p, ["vault", "id"]) && str(p.vault, 120) && str(p.id);

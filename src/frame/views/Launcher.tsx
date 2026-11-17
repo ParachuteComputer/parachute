@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useHold } from "../../ui/hold";
 import { Link } from "react-router";
 import type { Note } from "@openparachute/surface-client";
-import type { FrameApplet, FramePointer, FrameVault } from "../../bridge/protocol";
-import { bringIn, pinApplet, readerFor, startApplet, useApplets, useHome, usePointers, useVaultQuery, useVaults } from "../data";
+import type { FrameApplet, FrameComponent, FramePointer, FrameVault } from "../../bridge/protocol";
+import { addEmbed, bringIn, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
 import { isAppOwn, noteHref, titleOf } from "../../vault/notes";
 import { Days, Empty } from "../../kit/parts";
 import { appletPath } from "../../open/paths";
@@ -71,6 +71,7 @@ export default function Launcher() {
   const vaults = useVaults();
   const recent = useRecent(vaults);
   const [asked, setAsked] = useState<{ v: FrameVault; a: FrameApplet } | null>(null);
+  const [part, setPart] = useState<{ v: FrameVault; c: FrameComponent } | null>(null);
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
   // a vault signed out of while the launcher shows leaves the tally with it
   const all = vaults.flatMap((v) => recent[v.key] ?? []);
@@ -86,10 +87,11 @@ export default function Launcher() {
         <Days times={all.map(updated)} label="the last four weeks" />
       </header>
       <div className={vaults.length > 1 ? "launcher-spread launcher-pages" : "launcher-spread"}>
-        {vaults.map((v, i) => <Chapter key={v.key} n={i} v={v} many={vaults.length > 1} recent={recent[v.key]} onHold={(a) => setAsked({ v, a })} />)}
+        {vaults.map((v, i) => <Chapter key={v.key} n={i} v={v} many={vaults.length > 1} recent={recent[v.key]} onHold={(a) => setAsked({ v, a })} onPart={(c) => setPart({ v, c })} />)}
       </div>
       <p className="launcher-foot"><Link to="/add">Add a vault</Link><Link to="/settings">Settings</Link></p>
       {asked && <AppletSheet v={asked.v} a={asked.a} onClose={() => setAsked(null)} />}
+      {part && <ComponentSheet v={part.v} c={part.c} onClose={() => setPart(null)} />}
     </main>
   );
 }
@@ -102,7 +104,8 @@ export function whoseLine(v: FrameVault, many: boolean): string | null {
   return null;
 }
 
-function Chapter({ n, v, many, recent, onHold }: { n: number; v: FrameVault; many: boolean; recent: Note[] | undefined; onHold: (a: FrameApplet) => void }) {
+function Chapter({ n, v, many, recent, onHold, onPart }: { n: number; v: FrameVault; many: boolean; recent: Note[] | undefined; onHold: (a: FrameApplet) => void; onPart: (c: FrameComponent) => void }) {
+  const parts = useComponents(v.key);
   const applets = useApplets(v.key);
   const home = useHome();
   const pointers = usePointers();
@@ -124,6 +127,14 @@ function Chapter({ n, v, many, recent, onHold }: { n: number; v: FrameVault; man
         {applets && !applets.ok && <li className="entry-quiet">Its applets couldn't be read.</li>}
         {applets?.ok && !shown.length && !brought.length && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
+      {parts?.ok && parts.entries.length > 0 && (
+        <>
+          <h3 className="lately-label">Components in {v.vault}</h3>
+          <ul className="parts-list" aria-label={`Components in ${v.vault}`}>
+            {parts.entries.map((c) => <li key={c.noteId}><button type="button" className="part-chip" onClick={() => onPart(c)}><span aria-hidden="true">{c.glyph}{"\uFE0E"}</span> {c.name}</button></li>)}
+          </ul>
+        </>
+      )}
       {!!recent?.length && (
         <>
           <h3 className="lately-label">Lately in {v.vault}</h3>
@@ -170,6 +181,36 @@ function Brought({ p }: { p: FramePointer }) {
         <span className="entry-life">{line}</span>
       </Link>
     </li>
+  );
+}
+
+/** A component: put it on the home's page, or (from someone else's vault) bring it in. Each a tap here, which the shell
+ *  writes; it asks on its own sheet before it runs. */
+function ComponentSheet({ v, c, onClose }: { v: FrameVault; c: FrameComponent; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState("");
+  const theirs = !!v.whose && v.whose !== "mine";
+  const pointers = usePointers();
+  const isBrought = pointers.some((p) => p.kind === "component" && p.at === v.key && p.record === c.noteId);
+  const act = (f: () => Promise<string | null>) => () => {
+    if (busy) return;
+    setBusy(true); setSaid("");
+    f().then((done) => { if (done) { setSaid(done); setBusy(false); } else onClose(); }, (e: unknown) => { setSaid(e instanceof Error && e.message !== "not_allowed" ? e.message : "That needs a tap."); setBusy(false); });
+  };
+  useEffect(() => { const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; addEventListener("keydown", esc); return () => removeEventListener("keydown", esc); }, [onClose]);
+  return (
+    <div className="sheet-scrim" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <section className="sheet" role="dialog" aria-modal="true" aria-label={c.name}>
+        <h2><span aria-hidden="true">{c.glyph}{"\uFE0E"}</span> {c.name} <span className="quiet">in {v.vault}</span></h2>
+        {c.note && <p className="quiet">{c.note}</p>}
+        <ul className="plain sheet-list">
+          <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(async () => (await addEmbed(v.key, c.noteId)) === "already" ? "It's on your home already." : "Added to your home. It shows under your home applet, and asks before it runs.")}>Add to home</button></li>
+          {theirs && !isBrought && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(async () => { await bringIn(v.key, c.noteId); return null; })}>Bring into my Parachute</button></li>}
+        </ul>
+        {said && <p role="status">{said}</p>}
+        <div className="grant-actions"><button type="button" className="quiet-button" onClick={onClose}>{said ? "Done" : "Cancel"}</button></div>
+      </section>
+    </div>
   );
 }
 

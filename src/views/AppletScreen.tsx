@@ -23,7 +23,11 @@ import { claimOf, withoutRoles } from "../applet/opens";
 import { readRoleTags } from "../open/roles";
 import { fingerprint, grantExpiry, grantKey, grantLines, grantOf } from "../applet/grant";
 import { deviceGrants, subjectOf } from "../applet/grants";
-import { codeHash, codeKindOf, extensionOf, prepare, type CodeKind } from "../applet/code";
+import { codeHash, codeKindOf, extensionOf, modulePage, prepare, usesNote, type CodeKind } from "../applet/code";
+import { importLines, readImports, type Imported } from "../applet/resolveImports";
+import { compositeHash } from "../applet/imports";
+import reactKitSource from "virtual:react-kit";
+import reactNoteKitSource from "virtual:react-note-kit";
 import { embedsFrom, pointerFor, repin, type PointerNote } from "../applet/pointers";
 import { createPageModule } from "../applet/modules/page";
 import { PageEmbeds, PAGE_MAX } from "./Embeds";
@@ -48,6 +52,18 @@ import NoVault from "../ui/NoVault";
 
 const grants = deviceGrants();
 
+/** An applet's page from its code and what it imports, each transpiled (and cached) on its own. */
+async function buildPage(kind: CodeKind, source: string, imports: readonly Imported[]): Promise<{ ok: true; page: string } | { ok: false; error: string }> {
+  if (kind === "html") return { ok: true, page: source };
+  const [host, ...parts] = await Promise.all([prepare(source, kind), ...imports.map((i) => prepare(i.source, i.kind))]);
+  if (host.compiled && !host.compiled.ok) return { ok: false, error: host.compiled.error };
+  const bad = parts.findIndex((p) => p.compiled && !p.compiled.ok);
+  if (bad >= 0) return { ok: false, error: `«${imports[bad].id}»: ${(parts[bad].compiled as { error: string }).error}` };
+  const js = (c: Awaited<ReturnType<typeof prepare>>) => (c.compiled && c.compiled.ok ? c.compiled.js : "");
+  const note = usesNote(source) || imports.some((i) => usesNote(i.source));
+  return { ok: true, page: modulePage(js(host), note ? reactNoteKitSource : reactKitSource, imports.map((i, k) => ({ id: i.id, js: js(parts[k]) }))) };
+}
+
 /** A page with embeds grows to its content, up to PAGE_MAX; one that grows by the same amount three times running (a
  *  layout measured from the screen, plus a margin) is held where it is. */
 export function grow(was: { h: number; steps: number[] }, reported: number): { h: number; steps: number[] } {
@@ -64,7 +80,7 @@ const startedAtStart = new Map<string, { chosen: boolean; vault: string; noteId:
 
 /** `page` is null for code from someone else's vault until it is allowed: it is transpiled only then (`source` waits). */
 type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string }
-  | { state: "ok"; entry: AppletEntry; page: string | null; source: { kind: CodeKind; text: string }; note: Note | null; from: string[] };
+  | { state: "ok"; entry: AppletEntry; page: string | null; source: { kind: CodeKind; text: string }; imports: Imported[]; note: Note | null; from: string[] };
 
 export default function AppletScreen() {
   const { vault: key, applet: appletId } = useParams();
@@ -130,12 +146,23 @@ export default function AppletScreen() {
         // someone else's code is only hashed here; it is transpiled once it is allowed (below)
         // a page that shows things from someone else's vaults says so on its card, and in its key (docs/design/EMBED.md)
         const from = a.entry.embeds.length ? await embedsFrom(rec, a.entry.embeds) : [];
+        // what it imports (component:<id>), from the person's own vaults or ones they trust: its hash covers each
+        const imp = kind === "html" ? { ok: true as const, imports: [] } : await readImports(rec, source);
+        if (!imp.ok) { if (on) setLoaded({ state: "refused", error: imp.error }); return; }
+        const imports = imp.imports;
+        // code from someone else's vault, its own or imported, is transpiled only once it is allowed
+        const late = notMine || imports.some((i) => i.whose !== "mine");
         const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app), embedsFrom: from }, a.entry.path),
-          notMine ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), pointerFor(rec, n.id).catch(() => null)]);
+          late || imports.length ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), pointerFor(rec, n.id).catch(() => null)]);
+        const hash = imports.length && kind !== "html" ? await compositeHash(kind, source, imports) : code.hash;
         if (!on) return;
         if (code.compiled && !code.compiled.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${code.compiled.error}` }); return; }
-        setLoaded({ state: "ok", entry: a.entry, page: notMine && kind !== "html" ? null : appletPage(kind, source, code.compiled?.js ?? null), source: { kind, text: source }, note, from });
-        setKeys({ scope, html: code.hash });
+        let page: string | null = null;
+        if (kind === "html") page = source;
+        else if (!late && !imports.length) page = appletPage(kind, source, code.compiled?.js ?? null);
+        else if (!late) { const built = await buildPage(kind, source, imports); if (!on) return; if (!built.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${built.error}` }); return; } page = built.page; }
+        setLoaded({ state: "ok", entry: a.entry, page, source: { kind, text: source }, imports, note, from });
+        setKeys({ scope, html: hash });
         setBrought(pointer);
       } catch (e) {
         if (on) setLoaded({ state: "error", error: e instanceof Error ? e.message : "the vault couldn't be read" });
@@ -157,7 +184,7 @@ export default function AppletScreen() {
     if (!granted || loaded.state !== "ok" || loaded.page !== null || !keys || late?.hash === keys.html) return;
     let on = true;
     const { kind, text } = loaded.source;
-    void prepare(text, kind).then((c) => { if (!on) return; setLate(c.compiled && !c.compiled.ok ? { hash: keys.html, error: c.compiled.error } : { hash: keys.html, page: appletPage(kind, text, c.compiled?.js ?? null) }); });
+    void buildPage(kind, text, loaded.imports).then((b) => { if (on) setLate(b.ok ? { hash: keys.html, page: b.page } : { hash: keys.html, error: b.error }); });
     return () => { on = false; };
   }, [granted, loaded, keys?.html]); // eslint-disable-line react-hooks/exhaustive-deps
   const page = loaded.state === "ok" ? loaded.page ?? (late && keys && late.hash === keys.html && "page" in late ? late.page : null) : null;
@@ -200,7 +227,8 @@ export default function AppletScreen() {
       {note && <p className="quiet">{name} asks before it opens {titleOf(note)}.</p>}
       <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"} codeChanged={decision === "ask-updated" && status === "updated"}
         broughtChanged={pinMoved} asksOther={status === "none" && !!grants.record(subject)}
-        lines={grantLines({ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app), embedsFrom: loaded.state === "ok" ? loaded.from : [] }, ownFolder(entry.path))} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
+        lines={[...grantLines({ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app), embedsFrom: loaded.state === "ok" ? loaded.from : [] }, ownFolder(entry.path)), ...importLines(loaded.state === "ok" ? loaded.imports : [])]}
+        withImports={loaded.state === "ok" && loaded.imports.length > 0} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         onAllow={() => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry); if (brought && pinMoved) void repin(brought, keys.html).then(() => setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }), () => {}); chooseHere(); setStarted(true); bump(); }}
         onNotNow={() => setDeclined(true)} />
     </>);

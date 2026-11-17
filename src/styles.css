@@ -191,6 +191,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .entry-quiet { padding: 10px 0; font: italic 15px var(--serif); color: var(--muted); }
 .lately-label { margin: 14px 0 2px; font: 600 11px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .lately { list-style: none; margin: 0; padding: 0; }
+.parts-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.part-chip { border: 1px solid var(--line); border-radius: 999px; background: var(--surface); padding: 4px 12px; font: 16px var(--serif); color: var(--text); cursor: pointer; }
 .lately a { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; color: var(--text); text-decoration: none; font: 17px var(--serif); }
 .lately a::before { content: "·"; color: var(--accent); }
 .lately span { overflow-wrap: anywhere; } .lately i { margin-left: auto; font-size: 14px; color: var(--muted); white-space: nowrap; }

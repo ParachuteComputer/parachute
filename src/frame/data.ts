@@ -3,7 +3,7 @@
 // shell says it changed.
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Note } from "@openparachute/surface-client";
-import type { FrameApplets, FrameHome, FramePointer, FrameVault, Query } from "../bridge/protocol";
+import type { FrameApplets, FrameComponents, FrameHome, FramePointer, FrameVault, Query } from "../bridge/protocol";
 import { call, on } from "./bridge";
 
 function store<T>(read: () => Promise<T>, initial: T) {
@@ -109,3 +109,21 @@ on("changed", ({ what }) => { if (what === "pointers" || what === "vaults" || wh
 export const usePointers = (): FramePointer[] => useSyncExternalStore(pointers.subscribe, pointers.get);
 /** Bring an applet of someone else's vault into the home vault (during a tap only). */
 export const bringIn = (vault: string, noteId: string) => call("home.bringIn", { vault, noteId }).then(() => pointers.load());
+
+// ── components, per vault ──
+
+const components = new Map<string, FrameComponents>();
+const componentSubs = new Set<() => void>();
+async function readComponents(vault: string) {
+  components.set(vault, await call("components.list", { vault }).catch((e: unknown): FrameComponents => ({ ok: false, error: String(e) })));
+  componentSubs.forEach((f) => f());
+}
+on("changed", ({ what }) => { if (what === "applets") for (const k of components.keys()) void readComponents(k); });
+/** A vault's components, as the shell reads them. */
+export function useComponents(vault: string | undefined): FrameComponents | null {
+  const got = useSyncExternalStore((f) => { componentSubs.add(f); return () => { componentSubs.delete(f); }; }, () => (vault ? components.get(vault) ?? null : null));
+  useEffect(() => { if (vault) void readComponents(vault); }, [vault]);
+  return got;
+}
+/** Put a component on the home applet's page (during a tap only). */
+export const addEmbed = (vault: string, noteId: string) => call("home.addEmbed", { vault, noteId }).then((r) => { void pointers.load(); return r; });

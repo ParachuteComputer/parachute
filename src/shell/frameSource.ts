@@ -45,8 +45,10 @@ export function homeVault(list: readonly VaultRecord[] = listVaults()): VaultRec
 
 // ── the store ──
 
-type State = { read: Read | null; reading: boolean; defaultHash: string | null; rev: number; linkOut: string | null };
-let state: State = { read: null, reading: false, defaultHash: null, rev: 0, linkOut: null };
+/** A write a frame of the person's asked for, which the shell asks about once more on its own sheet. */
+export type WriteAsk = { title: string; body: string; act: string };
+type State = { read: Read | null; reading: boolean; defaultHash: string | null; rev: number; linkOut: string | null; writeAsk: WriteAsk | null };
+let state: State = { read: null, reading: false, defaultHash: null, rev: 0, linkOut: null, writeAsk: null };
 const listeners = new Set<() => void>();
 const set = (p: Partial<State>) => { state = { ...state, ...p, rev: state.rev + 1 }; listeners.forEach((f) => f()); };
 const kept = (): Kept => readJson<Kept>(FRAMES_KEY, {});
@@ -225,6 +227,15 @@ export function confirmLinkOut(url: string, now: () => number = Date.now): Promi
 }
 /** The person's answer. */
 export function answerLinkOut(open: boolean) { pendingOpen?.(open); }
+/** Ask the person, on the shell's own sheet, before a frame from a vault writes into their vault (bringing something
+ *  in, adding to home: docs/design/EMBED.md). The same one-at-a-time rule and timing as a link out. */
+export function confirmWrite(q: WriteAsk, now: () => number = Date.now): Promise<boolean> {
+  if (pendingOpen || now() < restUntil) return Promise.resolve(false);
+  return new Promise((res) => {
+    pendingOpen = (yes) => { pendingOpen = null; restUntil = now() + LINK_OUT_REST_MS; set({ writeAsk: null }); res(yes); };
+    set({ writeAsk: q });
+  });
+}
 
 const subscribe = (f: () => void) => {
   listeners.add(f);
@@ -234,5 +245,5 @@ const subscribe = (f: () => void) => {
 export function useFrameSource() {
   useSyncExternalStore(subscribe, () => `${state.rev}:${gate()}:${homeVault()?.key ?? ""}`);
   const k = kept();
-  return { choice: currentChoice(), read: state.read, reading: state.reading, failedWhy: k.failed?.why ?? failedNow?.why ?? "", proposal: proposal(), defaultHash: state.defaultHash, linkOut: state.linkOut };
+  return { choice: currentChoice(), read: state.read, reading: state.reading, failedWhy: k.failed?.why ?? failedNow?.why ?? "", proposal: proposal(), defaultHash: state.defaultHash, linkOut: state.linkOut, writeAsk: state.writeAsk };
 }

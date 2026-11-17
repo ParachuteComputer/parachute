@@ -21,7 +21,9 @@ export const ASKS_OTHER_LINE = "It now asks for something else than what you all
 /** The props a page hands a component, as the card shows them: every one, in full. */
 export const handedLine = (props: Record<string, unknown>) => `Your page hands it: ${Object.entries(props).map(([k, v]) => `${k} ${JSON.stringify(v)}`).join(", ")}.`;
 
-export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, lines, fingerprint, expires, codeChanged, broughtChanged = false, asksOther = false, onAllow, onNotNow, what = "applet", handed, settle }: {
+export const IMPORTS_CHANGED_LINE = "This applet's code, or what it imports, changed since you allowed it. Only the version you allow runs.";
+
+export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, lines, fingerprint, expires, codeChanged, broughtChanged = false, asksOther = false, onAllow, onNotNow, what = "applet", handed, settle, withImports = false }: {
   name: string; glyph: string; vault: string; runs: Runs; lines: CardLine[]; fingerprint: string; expires: Date; codeChanged: boolean;
   /** whose the vault is (vault/whose.ts), and its hub's host: someone else's is said so */
   whose?: "mine" | "theirs" | "trusted"; host?: string;
@@ -32,6 +34,8 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
   what?: "applet" | "component"; handed?: Record<string, unknown>;
   /** On a sheet over a page where frames run: Allow counts only for a press that began this long after it showed. */
   settle?: number;
+  /** It imports components: a code change may be in them. */
+  withImports?: boolean;
 }) {
   const tap = (f: () => void) => (e: MouseEvent) => { if (e.isTrusted) f(); };
   const press = useSettledPress(settle ?? 0);
@@ -44,7 +48,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
         <h2>{what === "component" ? "A component asks for access" : "An applet asks for access"}</h2>
       </header>
       {broughtChanged ? <p className="grant-changed" role="status"><strong>{broughtChangedLine(vault, name)}</strong></p>
-        : codeChanged ? <p className="grant-changed" role="status"><strong>{runs === "approved-code" ? CODE_CHANGED_LINE : CODE_CHANGED_SEALED_LINE}</strong></p>
+        : codeChanged ? <p className="grant-changed" role="status"><strong>{withImports ? IMPORTS_CHANGED_LINE : runs === "approved-code" ? CODE_CHANGED_LINE : CODE_CHANGED_SEALED_LINE}</strong></p>
         : asksOther ? <p className="grant-changed" role="status"><strong>{ASKS_OTHER_LINE}</strong></p> : null}
       {what === "component"
         ? <p>The component <q className="grant-name" data-untrusted="true">{name}</q> (a name from its record, not verified), from <strong>{vault}</strong>{where}, would run in its own sealed frame on your page. In the {vault} vault it would:</p>

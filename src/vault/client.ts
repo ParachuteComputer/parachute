@@ -18,17 +18,25 @@ const clients = new Map<string, { at: string; client: VaultClient }>();
 /** One refresh at a time per vault: the hub rotates refresh tokens, so two at once could store a spent one. */
 const refreshing = new Map<string, Promise<string | null>>();
 
+/** How the last refresh of each vault's sign-in ended, when it failed: the hub said no, or it didn't answer. */
+const refreshFailed = new Map<string, "refused" | "unreachable">();
+
 export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<string | null> {
   const running = refreshing.get(key);
   if (running) return running;
   const p = (async () => {
     const cur = findVault(key);
-    if (!cur?.refreshToken) return null;
+    if (!cur?.refreshToken) { refreshFailed.set(key, "refused"); return null; }
     try {
       const t = await refresh(cur.tokenEndpoint, cur.clientId, cur.refreshToken, fetchImpl ?? fetchFor(cur));
       updateVault(cur.key, { accessToken: t.access_token, refreshToken: t.refresh_token ?? cur.refreshToken, expiresAt: t.expires_in ? Date.now() + t.expires_in * 1000 : undefined });
+      refreshFailed.delete(key);
       return t.access_token;
-    } catch { return null; }
+    } catch (e) {
+      // the hub answering no (a 4xx to the refresh) is a refusal; anything else (no answer, its own trouble) is not
+      refreshFailed.set(key, e instanceof Error && /^refresh failed \(4\d\d\)$/.test(e.message) ? "refused" : "unreachable");
+      return null;
+    }
   })().finally(() => refreshing.delete(key));
   refreshing.set(key, p);
   return p;
@@ -50,3 +58,14 @@ export function clientFor(rec: VaultRecord): VaultClient {
 }
 
 export const dropClient = (key: string) => { clients.delete(key); };
+
+/**
+ * Is this vault's sign-in still good, when a call to its hub failed with no answer the app could read? A hub may refuse a
+ * token without the headers a browser needs to see the refusal (core 0.9 does, for a revoked token), so a failure that
+ * looks like the network is checked by refreshing the sign-in: the hub answering no is a refused sign-in; no answer at
+ * all is a hub out of reach; a fresh token means it was neither (try again).
+ */
+export async function signInState(key: string): Promise<"alive" | "refused" | "unreachable"> {
+  const t = await refreshOnce(key);
+  return t ? "alive" : refreshFailed.get(key) ?? "unreachable";
+}

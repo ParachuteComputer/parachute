@@ -18,8 +18,9 @@ function setup(tap = false) {
     roles: async () => ["pinned"],
     applets: async () => ({ ok: true as const, skipped: 0, entries: [] }),
     defaults: { get: vi.fn(() => ({ recipe: "vault" })), set: vi.fn() },
-    home: { get: vi.fn(() => ({ start: null, bar: [{ vault: "kitchen", noteId: "a1" }] })), pin: vi.fn(async () => {}), start: vi.fn(async () => {}), bringIn: vi.fn(async () => {}) },
+    home: { get: vi.fn(() => ({ start: null, bar: [{ vault: "kitchen", noteId: "a1" }] })), pin: vi.fn(async () => {}), start: vi.fn(async () => {}), bringIn: vi.fn(async () => {}), addEmbed: vi.fn(async () => "added" as const) },
     pointers: async () => [],
+    components: async () => ({ ok: true as const, entries: [] }),
     go: vi.fn(), back: vi.fn(), decide: vi.fn(), here: () => "/v/kitchen/n/n1",
     tapNow: () => tap,
     mark: { tap: vi.fn(), carry: vi.fn(() => true), clear: vi.fn() },
@@ -38,9 +39,9 @@ const PARAMS: Record<string, unknown> = {
   "defaults.set": { vault: "kitchen", type: "recipe", choice: null }, "nav.go": { to: "/v/kitchen" }, "nav.back": {}, "nav.decided": { key: "abc", kind: "vault" },
   "clipboard.write": { text: "x" }, "link.out": { url: "https://example.com" },
   "home.get": {}, "home.pin": { vault: "kitchen", noteId: "a1", on: true }, "home.start": { vault: "kitchen", noteId: null },
-  "pointers.list": {}, "home.bringIn": { vault: "kitchen", noteId: "a1" },
+  "pointers.list": {}, "home.bringIn": { vault: "kitchen", noteId: "a1" }, "components.list": { vault: "kitchen" }, "home.addEmbed": { vault: "kitchen", noteId: "c1" },
 };
-const TAP_ONLY = ["defaults.set", "home.pin", "home.start", "home.bringIn"];
+const TAP_ONLY = ["defaults.set", "home.pin", "home.start", "home.bringIn", "home.addEmbed"];
 
 describe("a frame's calls", () => {
   it("every call answers without a token, a client id or a refresh token", async () => {

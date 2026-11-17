@@ -30,7 +30,7 @@ import { stripExt } from "../applet/contract";
 import { pageMarks } from "../applet/pageMark";
 import { tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
-import { clientFor } from "../vault/client";
+import { clientFor, signInState } from "../vault/client";
 import { MAX_CODE_CHARS, TooLargeError } from "../vault/limited";
 import { listVaults, hostOf, type VaultRecord } from "../vault/store";
 import { whoseOf, type Whose } from "../vault/whose";
@@ -64,6 +64,13 @@ export function failureOf(e: unknown): "refused" | "offline" | "large" | "other"
   return "other";
 }
 
+/** A failure that looks like the network may be a refusal the browser couldn't read: the sign-in says which. */
+async function settled(rec: VaultRecord, f: ReturnType<typeof failureOf>): Promise<ReturnType<typeof failureOf>> {
+  if (f !== "offline") return f;
+  const s = await signInState(rec.key);
+  return s === "refused" ? "refused" : "offline";
+}
+
 /** Find what an embed names: a pointer in the home vault (by id or path), else a component in the host's vault. */
 async function find(host: VaultRecord, embed: Embed): Promise<Place> {
   const pointers = await readPointers().catch(() => [] as PointerNote[]);
@@ -78,7 +85,7 @@ async function find(host: VaultRecord, embed: Embed): Promise<Place> {
   const whose = whoseOf(rec);
   let n: Note | null;
   try { n = await clientFor(rec).getNote(ref); } catch (e) {
-    const f = failureOf(e);
+    const f = await settled(rec, failureOf(e));
     if (f === "refused") return { state: "refused", vault: rec.vault };
     if (f === "large") return { state: "invalid", name: named?.pointer.name ?? embed.name, why: "its record is bigger than a component from someone else's vault may be" };
     return { state: "offline", vault: rec.vault };
@@ -150,9 +157,9 @@ function EmbedPlace({ host, hostNote, embed }: { host: VaultRecord; hostNote: st
   const glyph = found?.component.glyph ?? "◇";
   const theirs = found ? found.whose !== "mine" : false;
 
-  const say = (text: string, extra?: React.ReactNode) => <div className="embed-place embed-said" role="status"><p>{text}</p>{extra}</div>;
+  const say = (text: string, extra?: React.ReactNode) => <div className="embed-place embed-said" data-embed={embed.name} role="status"><p>{text}</p>{extra}</div>;
   if (mode === "closed") return say("Embeds are off on this device until its self-test passes.");
-  if (place.state === "reading") return <div className="embed-place embed-said" aria-busy="true"><p className="quiet">Opening «{embed.name}»…</p></div>;
+  if (place.state === "reading") return <div className="embed-place embed-said" data-embed={embed.name} aria-busy="true"><p className="quiet">Opening «{embed.name}»…</p></div>;
   if (place.state === "no-sign-in") return say(`This comes from «${place.vault}» at «${place.host}» (as its record says), and this device isn't signed in there.`, <Link to="/add">Add a vault</Link>);
   if (place.state === "offline") return say(`${place.vault} can't be reached right now.`);
   if (place.state === "refused") return say(`${place.vault} no longer lets this device in. Sign in to ${place.vault} again.`, <Link to="/settings">Settings</Link>);
@@ -245,7 +252,12 @@ function EmbedFrame({ found, name, props, onBroke }: { found: Found; name: strin
     const deps = vaultDeps(clientFor(found.rec));
     // the shell watches its own calls to that vault: a refusal of this device, or a hub that can't be reached
     const watch = <A extends unknown[], R>(f: (...a: A) => Promise<R>) => async (...a: A): Promise<R> => {
-      try { return await f(...a); } catch (e) { const w = failureOf(e); if (w === "refused" || w === "offline") brokeRef.current(w); throw e; }
+      try { return await f(...a); } catch (e) {
+        const w = failureOf(e);
+        if (w === "refused") brokeRef.current(w);
+        else if (w === "offline") void settled(found.rec, w).then((x) => { if (x === "refused" || x === "offline") brokeRef.current(x); });
+        throw e;
+      }
     };
     return createRouter([
       createVaultModule({ listPaths: watch(deps.listPaths), getNote: watch(deps.getNote), search: watch(deps.search), create: deps.create && watch(deps.create), save: deps.save && watch(deps.save) }, { name: found.rec.vault }),

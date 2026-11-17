@@ -4,7 +4,7 @@
 // start (open/mark.ts). Everything is injected, so tests can play a hostile frame against it.
 import type { VaultClient } from "@openparachute/surface-client";
 import { RateLimiter } from "../applet/contract";
-import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameHome, type FramePointer, type FrameVault, type Decided, type Method, type Query } from "../bridge/protocol";
+import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameHome, type FrameComponents, type FramePointer, type FrameVault, type Decided, type Method, type Query } from "../bridge/protocol";
 import type { VaultRecord } from "../vault/store";
 
 export type HostDeps = {
@@ -16,8 +16,11 @@ export type HostDeps = {
   defaults: { get(vault: string): Record<string, string>; set(vault: string, type: string, choice: string | null): void };
   /** The bar and the home; `pin` and `start` write the person's settings note (only ever called during a tap). */
   home: { get(): FrameHome; pin(vault: string, noteId: string, on: boolean): Promise<void>; start(vault: string, noteId: string | null): Promise<void>;
-    /** Write a pointer to that applet in the home vault (only ever called during a tap). */
-    bringIn(vault: string, noteId: string): Promise<void> };
+    /** Write a pointer to that applet or component in the home vault (only ever called during a tap). */
+    bringIn(vault: string, noteId: string): Promise<void>;
+    /** Put that component on the home applet's page (only ever called during a tap). */
+    addEmbed(vault: string, noteId: string): Promise<"added" | "already"> };
+  components(rec: VaultRecord): Promise<FrameComponents>;
   pointers(): Promise<FramePointer[]>;
   go(to: string, replace: boolean): void;
   /** The shell's address now (its path). */
@@ -77,6 +80,8 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "home.start": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); await deps.home.start(p.vault as string, p.noteId as string | null); return null;
       case "pointers.list": return deps.pointers();
       case "home.bringIn": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); await deps.home.bringIn(p.vault as string, p.noteId as string); return null;
+      case "home.addEmbed": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); return deps.home.addEmbed(p.vault as string, p.noteId as string);
+      case "components.list": return deps.components(vault(p.vault as string));
       case "nav.go": {
         const to = p.to as string;
         if (!allowedDestination(to)) throw new Error("not_allowed");
