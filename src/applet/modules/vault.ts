@@ -140,24 +140,23 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
           if (h.path && inScope(prefixes, h.path) && !seen.has(h.id)) { seen.add(h.id); rows.push({ id: h.id, path: h.path }); }
         }
       }
-    } else {
-      rows = (await deps.listPaths())
-        .filter((r): r is PathRow & { path: string } => !!r.path && inScope(prefixes, r.path) && codeKindOf(r) === null)
-        .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.path.localeCompare(b.path));
-    }
-    if (fields && !tag && !content && !search && deps.listFields) {
+    } else if (fields && !tag && !content && deps.listFields) {
       // one ask per granted folder, each note judged on its own path, as any list is
       const seen = new Set<string>();
       const out: (VaultNote & { path: string })[] = [];
       for (const p of prefixes) {
         ctx.charge(1);
-        for (const n of await deps.listFields(p, limit)) {
+        for (const n of await deps.listFields(p, LIMITS.maxNotes)) {
           if (!n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null) continue;
           seen.add(n.id); out.push(n as VaultNote & { path: string });
         }
       }
       out.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.path.localeCompare(b.path));
       return json(200, "OK", out.slice(0, limit).map((n) => publicNote(n, false)));
+    } else {
+      rows = (await deps.listPaths())
+        .filter((r): r is PathRow & { path: string } => !!r.path && inScope(prefixes, r.path) && codeKindOf(r) === null)
+        .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.path.localeCompare(b.path));
     }
     if (tag || content || fields) {
       // Tags and bodies need the notes themselves (the deps expose no tag filter, so
