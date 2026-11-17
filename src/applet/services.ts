@@ -129,7 +129,7 @@ export function serviceLines(services: readonly Service[]): { text: string; stre
     const at = hostWords(s);
     if (s.kind === "nostr-relay") {
       out.push({ text: `Sign in to ${at} as you`, stress: true });
-      const posts = s.publish.filter((k) => k !== 5).map((k) => NAMED_KINDS[k]);
+      const posts = [9, 7, 40003, 20002].filter((k) => s.publish.includes(k)).map((k) => NAMED_KINDS[k]);
       if (posts.length) out.push({ text: `Post as you in your rooms there: ${joinWords(posts)}`, stress: true });
       if (s.publish.includes(5)) out.push({ text: "Delete your messages and reactions there", stress: true });
       if (s.media) out.push({ text: "Send and open files there as you", stress: true });

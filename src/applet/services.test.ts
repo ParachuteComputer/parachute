@@ -69,7 +69,7 @@ describe("the card and the key", () => {
     const lines = serviceLines([one<RelayService>(relay({ publish: [9, 7, 5, 20002], private: [{ kind: 30078, d: "read-state:", t: "read-state" }] })), one<HttpService>(http())]).map((l) => l.text);
     expect(lines).toEqual([
       "Sign in to relay.example as you",
-      "Post as you in your rooms there: reactions, messages and typing",
+      "Post as you in your rooms there: messages, reactions and typing",
       "Delete your messages and reactions there",
       "Send and open files there as you",
       "Keep private notes there (read-state:…), sealed to your key: other apps of yours may share them",
