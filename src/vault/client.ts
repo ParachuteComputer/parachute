@@ -45,6 +45,43 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
   return p;
 }
 
+/** A request refused because it set off with a token that has since been replaced (a refresh for the vault's other
+ *  requests finished while it was on its way) is sent once more with the current token, before anyone sees the
+ *  refusal. Only a refusal of the current token sets off a refresh: on core 0.9 each refresh retires the token before
+ *  it, so refreshing for such a straggler would take the fresh token away from every other request. A refusal the
+ *  browser can't read (0.9 sends a refused token no CORS headers) counts the same. */
+export function withCurrentToken(key: string, f: typeof fetch): typeof fetch {
+  return async (input, init) => {
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    new Headers(init?.headers).forEach((v, k) => headers.set(k, v));
+    const sent = /^Bearer (.+)$/i.exec(headers.get("Authorization") ?? "")?.[1];
+    // a body that can be sent only once (a stream) isn't sent again
+    const resendable = !(init?.body instanceof ReadableStream) && !(input instanceof Request && input.bodyUsed);
+    /** The same request with the current token, if a newer one is stored (waiting for a refresh already on its way). */
+    const again = async (): Promise<Response | null> => {
+      await refreshing.get(key)?.catch(() => null);
+      const now = findVault(key)?.accessToken;
+      if (!sent || !now || now === sent || !resendable) return null;
+      headers.set("Authorization", `Bearer ${now}`);
+      try { return await f(input instanceof Request ? new Request(input, { headers }) : input, { ...init, headers }); } catch { return null; }
+    };
+    // a fetch that threw may have reached the hub (a write saved, then the line dropped): only a read goes again then;
+    // and a request the caller stopped stays stopped
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    let res: Response;
+    try { res = await f(input, init); } catch (e) {
+      const r = (method === "GET" || method === "HEAD") && (e as { name?: string } | null)?.name !== "AbortError" ? await again() : null;
+      if (r) return r;
+      throw e;
+    }
+    if (res.status !== 401 && res.status !== 403) return res;
+    const r = await again();
+    if (!r) return res;
+    void res.body?.cancel().catch(() => {});
+    return r;
+  };
+}
+
 export function clientFor(rec: VaultRecord): VaultClient {
   const hit = clients.get(rec.key);
   const at = `${rec.issuer} ${rec.vault} ${rec.url ?? ""}`;
@@ -54,7 +91,7 @@ export function clientFor(rec: VaultRecord): VaultClient {
     tokenProvider: () => findVault(rec.key)?.accessToken ?? rec.accessToken,
     onAuthError: () => refreshOnce(rec.key),
     // notes calls go through the hub's record door when it has one (records.ts)
-    fetchImpl: recordsFetch(fetchFor(rec)),
+    fetchImpl: recordsFetch(withCurrentToken(rec.key, fetchFor(rec))),
   });
   clients.set(rec.key, { at, client });
   return client;
