@@ -76,7 +76,8 @@ export default function Matrix() {
           } catch { await new Promise((r) => setTimeout(r, 3000)); }
         }
       } catch (e: any) {
-        setErr(e?.message === "NO_TOKEN" ? "The homeserver needs a token. Give this applet one in Settings → Applets → Matrix: the app keeps it, never the applet." : `Couldn't read your rooms: ${e?.message ?? e}`);
+        // the homeserver refuses without one (401), or the app says it holds none for this applet yet
+        setErr(e?.message === "NO_TOKEN" || /token/i.test(e?.message ?? "") ? "The homeserver needs a token. Give this applet one in Settings → Applets → Matrix: the app keeps it, never the applet." : `Couldn't read your rooms: ${e?.message ?? e}`);
       }
     })();
     return () => { on = false; };
