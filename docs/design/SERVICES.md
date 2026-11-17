@@ -44,7 +44,7 @@ applet still opens, and reaches no service; its settings page says why):
 
 - At most 6 services. `id`: kebab-case, 40 characters, unique.
 - `url`: `https:` / `wss:`; `http:` / `ws:` only to `localhost`, `127.0.0.1` or `[::1]` (a server on this device, for
-  building and tests: the card says "on this device", and a release build of the shell never signs to one). No user,
+  building and tests: the card says "on this device"; a hub on this device is caught by the probe below like any other). No user,
   password, query or fragment; no raw `.`/`..` or encoded `.`, `/`, `\`, `%` in the path. Normalised (lower-case host,
   trailing dot dropped, default port dropped, IDN as punycode) before it is shown, keyed or used.
 - **Never a Parachute hub** (see "Hubs are not services" below).
