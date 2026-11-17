@@ -4,7 +4,8 @@ import type { VaultClient } from "@openparachute/surface-client";
 import { homeVault } from "../shell/frameSource";
 import { clientFor } from "../vault/client";
 import { isMine } from "../vault/whose";
-import type { VaultRecord } from "../vault/store";
+import { listVaults, type VaultRecord } from "../vault/store";
+import { stripExt } from "./contract";
 import { parsePointer, pointerPath, POINTER_TAG, type Pointer } from "./pointer";
 
 export type PointerNote = { noteId: string; path: string; updatedAt: string | null; pointer: Pointer };
@@ -57,4 +58,22 @@ export async function repin(p: PointerNote, code: string, c: Pick<VaultClient, "
   if (!now.ok || now.pointer.record !== p.pointer.record) return;
   const updatedAt = (n as { updatedAt?: string }).updatedAt;
   await c.updateNote(n.id, { metadata: { ...meta, pointer: { ...(meta.pointer as object), code } }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
+}
+
+/** The other vaults a page's embeds come from, as "<vault> at <host>", for its host's card and grant (EMBED.md): pointers
+ *  to a vault that isn't the person's own and isn't the host's. */
+export async function embedsFrom(host: Pick<VaultRecord, "issuer" | "vault">, embeds: readonly { record: string }[], all?: PointerNote[]): Promise<string[]> {
+  if (!embeds.length) return [];
+  const pointers = all ?? await readPointers().catch(() => [] as PointerNote[]);
+  const from = new Set<string>();
+  for (const e of embeds) {
+    const p = pointers.find((x) => x.noteId === e.record || stripExt(x.path) === stripExt(e.record));
+    if (!p || p.pointer.kind !== "component") continue;
+    if (p.pointer.hub === originOf(host.issuer) && p.pointer.vault === host.vault) continue;
+    const held = listVaults().find((v) => originOf(v.issuer) === p.pointer.hub && v.vault === p.pointer.vault);
+    if (held && isMine(held)) continue;
+    let h = p.pointer.hub; try { h = new URL(h).host; } catch { /* as written */ }
+    from.add(`${p.pointer.vault} at ${h}`);
+  }
+  return [...from].sort();
 }

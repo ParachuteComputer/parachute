@@ -5,7 +5,7 @@ import { parseManifest } from "../applet/manifest";
 import { RECIPES } from "../applet/fixtures";
 
 const m = (() => { const r = parseManifest(RECIPES); if (!r.ok) throw new Error(r.error); return r.manifest; })();
-const applet = (noteId: string, opens = [{ type: "recipe", path: "Recipes/" }]): AppletEntry => ({ manifest: { ...m, id: noteId, name: noteId }, vault: "v", noteId, path: `Applets/${noteId}`, opens, app: [] });
+const applet = (noteId: string, opens = [{ type: "recipe", path: "Recipes/" }]): AppletEntry => ({ manifest: { ...m, id: noteId, name: noteId }, vault: "v", noteId, path: `Applets/${noteId}`, opens, app: [], embeds: [] });
 const recipe = { id: "n1", path: "Recipes/Soup", tags: ["recipe"] };
 const st = (map: Record<string, Status>) => (e: AppletEntry) => map[e.noteId] ?? "none";
 

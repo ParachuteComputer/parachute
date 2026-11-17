@@ -38,7 +38,8 @@ const MAX_BODY = 512 * 1024;
 const NOTE_TTL_MS = 10_000;
 const CACHE_MAX = 40;
 const CACHE_MAX_CONTENT = 200_000;
-const NOTES_PARAMS = ["path_prefix", "tag", "search", "limit", "id", "path", "include_content"];
+// include_metadata is taken and changes nothing: a note's metadata (its fields) always comes back
+const NOTES_PARAMS = ["path_prefix", "tag", "search", "limit", "id", "path", "include_content", "include_metadata"];
 const NOTE_PARAMS = ["include_content"];
 const VAULT_PARAMS = ["include_stats"];
 const json = (status: number, statusText: string, data: unknown): FetchResult => {

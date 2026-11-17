@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { Note, VaultClient } from "@openparachute/surface-client";
 import { MAX_CODE_CHARS } from "../vault/limited";
 import { whoseOf } from "../vault/whose";
+import { embedsFrom, readPointers } from "./pointers";
 import { discoverApplets, type AppletEntry, type Discovery } from "./discovery";
 import { grantKey, grantOf } from "./grant";
 import { codeHash, codeKindOf } from "./code";
@@ -36,13 +37,18 @@ async function appletRows(client: Pick<VaultClient, "queryNotes" | "getNote">, n
   return out;
 }
 
-export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getNote">, vault: string, notMine = false): Promise<Read> {
+export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getNote">, vault: string, notMine = false, host?: Pick<VaultRecord, "issuer" | "vault">): Promise<Read> {
   const [rows, roles] = await Promise.all([appletRows(client, notMine), readRoleTags(client)]);
   const found: Discovery = discoverApplets(rows.filter((r) => codeKindOf(r as { extension?: string }) !== null), vault, notMine);
   const html = new Map(rows.map((r) => [r.id, r.content ?? ""]));
   const kinds = new Map(rows.map((r) => [r.id, codeKindOf(r as { extension?: string })]));
   // as the applet screen reads them: the vault's role tags dropped first, so the keys match its keys
-  const entries = await Promise.all(found.entries.map((e) => ({ ...e, opens: withoutRoles(e.opens, roles) })).map(async (e) => ({ ...e, keys: { scope: await grantKey(grantOf(e.manifest, vault, e.opens, e.app), e.path), html: await codeHash(kinds.get(e.noteId)!, html.get(e.noteId) ?? "") } })));
+  // as the applet screen keys them: a page that shows things from someone else's vaults says so in its key
+  const pointers = found.entries.some((e) => e.embeds.length) && host ? await readPointers().catch(() => []) : [];
+  const entries = await Promise.all(found.entries.map((e) => ({ ...e, opens: withoutRoles(e.opens, roles) })).map(async (e) => {
+    const from = e.embeds.length && host ? await embedsFrom(host, e.embeds, pointers) : [];
+    return { ...e, keys: { scope: await grantKey({ ...grantOf(e.manifest, vault, e.opens, e.app), embedsFrom: from }, e.path), html: await codeHash(kinds.get(e.noteId)!, html.get(e.noteId) ?? "") } };
+  }));
   return { entries, skipped: rows.length - found.entries.length };
 }
 
@@ -51,7 +57,7 @@ export function refreshApplets(rec: VaultRecord): Promise<boolean> {
   const running = inflight.get(rec.key);
   if (running) return running;
   if (!cache.has(rec.key)) cache.set(rec.key, { state: "loading" });
-  const p = readApplets(clientFor(rec), rec.key, whoseOf(rec) !== "mine")
+  const p = readApplets(clientFor(rec), rec.key, whoseOf(rec) !== "mine", rec)
     .then((found) => { cache.set(rec.key, { state: "ok", found, at: Date.now() }); return true; }, (e: unknown) => { if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e) }); return false; })
     .finally(() => { inflight.delete(rec.key); notify(); });
   inflight.set(rec.key, p);

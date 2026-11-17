@@ -9,6 +9,7 @@ import { parseOpens, type Opens } from "./opens.ts";
 import { parseApp, type AppWord } from "./app.ts";
 import type { Need, Resolved } from "./needs.ts";
 import { resolveNeeds } from "./needs.ts";
+import { parseEmbeds, type Embed } from "./embeds.ts";
 
 /** The app's own applet ids: a note may not take one. */
 export const BUILT_IN_IDS = ["vault"];
@@ -25,6 +26,8 @@ export type AppletEntry = {
   appError?: string;
   /** why `opens` was refused, when it was */
   opensError?: string;
+  /** What its page embeds (embeds.ts): only for an applet in a vault of the person's own. */
+  embeds: Embed[];
 };
 export type Discovery = { entries: AppletEntry[]; skipped: number };
 type Row = { id?: unknown; path?: unknown; tags?: unknown; metadata?: unknown };
@@ -41,7 +44,7 @@ export function readApplet(r: Row, vault: string, theirs = false): { ok: true; e
   // as with `opens`: a bad `app` costs the applet what it asked of the app, not the applet
   const app = theirs ? { ok: false as const, error: "an applet in someone else's vault can't ask the app for anything" } : parseApp(meta.app);
   const opens = parseOpens(meta.opens, parsed.manifest);
-  return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }) } };
+  return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], embeds: theirs ? [] : parseEmbeds(meta.embeds), ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }) } };
 }
 
 export function discoverApplets(rows: readonly Row[], vault: string, theirs = false): Discovery {

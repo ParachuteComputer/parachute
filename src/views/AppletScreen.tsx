@@ -24,7 +24,9 @@ import { readRoleTags } from "../open/roles";
 import { fingerprint, grantExpiry, grantKey, grantLines, grantOf } from "../applet/grant";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { codeHash, codeKindOf, extensionOf, prepare, type CodeKind } from "../applet/code";
-import { pointerFor, repin, type PointerNote } from "../applet/pointers";
+import { embedsFrom, pointerFor, repin, type PointerNote } from "../applet/pointers";
+import { createPageModule } from "../applet/modules/page";
+import { PageEmbeds, PAGE_MAX } from "./Embeds";
 import { isMine, whoseOf } from "../vault/whose";
 import { MAX_CODE_CHARS } from "../vault/limited";
 import { hostOf } from "../vault/store";
@@ -45,6 +47,16 @@ import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 
 const grants = deviceGrants();
+
+/** A page with embeds grows to its content, up to PAGE_MAX; one that grows by the same amount three times running (a
+ *  layout measured from the screen, plus a margin) is held where it is. */
+export function grow(was: { h: number; steps: number[] }, reported: number): { h: number; steps: number[] } {
+  const h = Math.max(0, Math.min(PAGE_MAX, Math.round(reported)));
+  if (h <= was.h) return { h, steps: [] };
+  const steps = [...was.steps, h - was.h].slice(-3);
+  if (steps.length === 3 && steps.every((d) => d === steps[0])) return { h: was.h, steps };
+  return { h, steps };
+}
 /** Whether this history entry was reached by a marked tap: decided once per entry (StrictMode renders twice). */
 const startedByTap = new Map<string, boolean>();
 /** The entries a start led to (start.ts), and whether the person chose that applet as home on this device. */
@@ -52,7 +64,7 @@ const startedAtStart = new Map<string, { chosen: boolean; vault: string; noteId:
 
 /** `page` is null for code from someone else's vault until it is allowed: it is transpiled only then (`source` waits). */
 type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string }
-  | { state: "ok"; entry: AppletEntry; page: string | null; source: { kind: CodeKind; text: string }; note: Note | null };
+  | { state: "ok"; entry: AppletEntry; page: string | null; source: { kind: CodeKind; text: string }; note: Note | null; from: string[] };
 
 export default function AppletScreen() {
   const { vault: key, applet: appletId } = useParams();
@@ -89,6 +101,9 @@ export default function AppletScreen() {
   const bump = () => setBump((n) => n + 1);
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
   const [keys, setKeys] = useState<{ scope: string; html: string } | null>(null);
+  // a page with embeds: how tall its own content is (and the last few steps it grew by, to stop a page that measures
+  // the screen growing for ever)
+  const [hostHeight, setHostHeight] = useState<{ h: number; steps: number[] }>({ h: 0, steps: [] });
   // a pointer in the home vault that brought this record in, and the code it was brought in with
   const [brought, setBrought] = useState<PointerNote | null>(null);
   const notMine = !!rec && whoseOf(rec) !== "mine";
@@ -113,11 +128,13 @@ export default function AppletScreen() {
         const note = askedNote ? await c.getNote(askedNote).catch(() => null) : null;
         const source = n.content ?? "";
         // someone else's code is only hashed here; it is transpiled once it is allowed (below)
-        const [scope, code, pointer] = await Promise.all([grantKey(grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app), a.entry.path),
+        // a page that shows things from someone else's vaults says so on its card, and in its key (docs/design/EMBED.md)
+        const from = a.entry.embeds.length ? await embedsFrom(rec, a.entry.embeds) : [];
+        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app), embedsFrom: from }, a.entry.path),
           notMine ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), pointerFor(rec, n.id).catch(() => null)]);
         if (!on) return;
         if (code.compiled && !code.compiled.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${code.compiled.error}` }); return; }
-        setLoaded({ state: "ok", entry: a.entry, page: notMine && kind !== "html" ? null : appletPage(kind, source, code.compiled?.js ?? null), source: { kind, text: source }, note });
+        setLoaded({ state: "ok", entry: a.entry, page: notMine && kind !== "html" ? null : appletPage(kind, source, code.compiled?.js ?? null), source: { kind, text: source }, note, from });
         setKeys({ scope, html: code.hash });
         setBrought(pointer);
       } catch (e) {
@@ -151,6 +168,8 @@ export default function AppletScreen() {
     createVaultModule(vaultDeps(clientFor(rec)), { opens: entry.opens, name: rec.vault }),
     createThemeModule({ theme: tokensNow }),
     createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current)),
+    // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
+    ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
   ]) : null), [rec?.key, rec?.issuer, rec?.vault, entry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
@@ -158,7 +177,8 @@ export default function AppletScreen() {
   const claim = entry && note && note.id !== entry.noteId ? claimOf(entry.opens, note) : null;
   const handed = decision === "run" && claim && note ? { note: { id: note.id, path: note.path ?? "" }, screen: screenOf(entry!.manifest, claim.screen ?? askedScreen).id } : null;
   const name = entry?.manifest.name ?? "Applet";
-  const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, ...(handed ? { open: handed } : {}) }), [entry?.manifest.id, name, handed?.note.id, handed?.screen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sized = !!entry?.embeds.length;
+  const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, ...(handed ? { open: handed } : {}), ...(sized ? { page: { embeds: entry!.embeds.map((e) => e.name) } } : {}) }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized]); // eslint-disable-line react-hooks/exhaustive-deps
   const tap = (f: () => void) => (e: React.MouseEvent) => { if (e.isTrusted) f(); };
 
   if (!rec) return <NoVault />;
@@ -180,7 +200,7 @@ export default function AppletScreen() {
       {note && <p className="quiet">{name} asks before it opens {titleOf(note)}.</p>}
       <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"} codeChanged={decision === "ask-updated" && status === "updated"}
         broughtChanged={pinMoved} asksOther={status === "none" && !!grants.record(subject)}
-        lines={grantLines(grantOf(entry.manifest, rec.key, entry.opens, entry.app), ownFolder(entry.path))} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
+        lines={grantLines({ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app), embedsFrom: loaded.state === "ok" ? loaded.from : [] }, ownFolder(entry.path))} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         onAllow={() => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry); if (brought && pinMoved) void repin(brought, keys.html).then(() => setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }), () => {}); chooseHere(); setStarted(true); bump(); }}
         onNotNow={() => setDeclined(true)} />
     </>);
@@ -198,6 +218,7 @@ export default function AppletScreen() {
       <button type="button" className="quiet-button" onClick={tap(revoke)}>Revoke</button>
     </div>
     {late && "error" in late && late.hash === keys.html && <p className="error" role="alert">This applet can't run: its code doesn't compile: {late.error}.</p>}
-    {router && page && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={page} title={name} router={router} grant={grant} ready={ready} onElement={(el) => { frameEl.current = el; }} />}
+    {router && page && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={page} title={name} router={router} grant={grant} ready={ready} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
+    {router && page && sized && rec && isMine(rec) && <PageEmbeds host={rec} hostNote={entry.noteId} embeds={entry.embeds} />}
   </>);
 }

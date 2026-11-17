@@ -12,6 +12,7 @@ import { subscribeTheme, tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
 import type { Router } from "./router";
 import type { Resolved } from "./needs";
+import { judge, loadedAgain } from "./violations";
 
 /** Shown in place of a frame whose navigation the host CSP had to block. */
 export const STOPPED_MESSAGE = "This applet tried to leave its sandbox and was stopped.";
@@ -31,7 +32,8 @@ export const frameSrcDoc = (html: string) => buildSrcdoc(html, { kitSource: KIT_
  * violations: the host CSP is what stops a navigation, and a violation is the
  * evidence that something tried one. The real frame stops on a violation.
  */
-export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Resolved; ready?: unknown; stopOnViolation?: boolean; onViolation?: () => void; onSession?: (s: Session | null) => void }) {
+export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Resolved; ready?: unknown; stopOnViolation?: boolean; onViolation?: () => void; onSession?: (s: Session | null) => void;
+  /** The look the frame gets (an embed's is narrower, embeds.ts `embedTokens`); the app's own by default. */ tokens?: () => Record<string, string> }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const session = useRef<Session | null>(null);
   const loaded = useRef<string | null>(null);
@@ -44,6 +46,10 @@ export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Re
   const onSessionRef = useRef(opts.onSession);
   onSessionRef.current = opts.onSession;
   const [stopped, setStopped] = useState(false);
+  // which frame this is, for telling whose navigation a violation was (violations.ts)
+  const id = useRef(`f${Math.random().toString(36).slice(2)}`);
+  const tokensRef = useRef(opts.tokens ?? tokensNow);
+  tokensRef.current = opts.tokens ?? tokensNow;
   // The frame gets its document only once the session is listening: a document that posts while parsing
   // (WebKit loads srcdoc synchronously on mount) would otherwise talk to nobody.
   const [armed, setArmed] = useState<string | null>(null);
@@ -56,25 +62,32 @@ export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Re
     session.current = s;
     onSessionRef.current?.(s);
     // The frame can finish loading before this effect runs (WebKit does): tell a late session it is ready.
-    if (loaded.current === srcDoc) s.sendEvent("ready", { contract: 1, ...(readyRef.current as object), theme: tokensNow() });
+    if (loaded.current === srcDoc) s.sendEvent("ready", { contract: 1, ...(readyRef.current as object), theme: tokensRef.current() });
     const onMessage = (e: MessageEvent) => { if (e.source === null || e.source !== frame.current?.contentWindow) return; s.handle(e.data); };
     const onViolation = (e: SecurityPolicyViolationEvent) => {
       if (!(e.effectiveDirective || e.violatedDirective || "").startsWith("frame-src")) return;
       onViolationRef.current?.();
-      if (stopOnViolation) { s.close(); setStopped(true); }
+      // stop this frame if it is the one that navigated, or if no one frame can be named
+      if (stopOnViolation) void judge(id.current).then((mine) => { if (mine) { s.close(); setStopped(true); } });
     };
     window.addEventListener("message", onMessage);
     document.addEventListener("securitypolicyviolation", onViolation);
     setArmed(srcDoc);
     // the look changed (the person's theme record, or the device's light/dark): sent only when the tokens did
-    let sent = JSON.stringify(tokensNow());
-    const offTheme = subscribeTheme(() => { const t = tokensNow(), now = JSON.stringify(t); if (now !== sent) { sent = now; s.sendEvent("theme", t); } });
+    let sent = JSON.stringify(tokensRef.current());
+    const offTheme = subscribeTheme(() => { const t = tokensRef.current(), now = JSON.stringify(t); if (now !== sent) { sent = now; s.sendEvent("theme", t); } });
     return () => { s.close(); window.removeEventListener("message", onMessage); document.removeEventListener("securitypolicyviolation", onViolation); offTheme(); session.current = null; onSessionRef.current?.(null); };
   }, [srcDoc, router, grant, stopOnViolation]);
 
   const armedRef = useRef(armed);
   armedRef.current = armed;
-  const onLoad = useCallback(() => { if (armedRef.current !== srcDocRef.current) return; loaded.current = srcDocRef.current; session.current?.sendEvent("ready", { contract: 1, ...(readyRef.current as object), theme: tokensNow() }); }, []);
+  const onLoad = useCallback(() => {
+    if (armedRef.current !== srcDocRef.current) return;
+    // a second load of the same document is a navigation (stopped by the host CSP): say which frame it was
+    if (loaded.current === srcDocRef.current) { loadedAgain(id.current); return; }
+    loaded.current = srcDocRef.current;
+    session.current?.sendEvent("ready", { contract: 1, ...(readyRef.current as object), theme: tokensRef.current() });
+  }, []);
   return { frame, stopped, onLoad, srcDoc: armed === srcDoc ? srcDoc : undefined };
 }
 
@@ -84,13 +97,14 @@ export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Re
  * network, inside a host whose own CSP allows only `frame-src about:`. Its
  * only door is the contract session.
  */
-export default function AppletFrame({ html, title, router, grant, ready, onSession, onElement }: { html: string; title: string; router: Router; grant: Resolved; ready: unknown; /** The live session (null when it ends): the host's way to push events such as `open`. */ onSession?: (s: Session | null) => void;
-  /** This frame's element, for the shell to tell a tap in it from a tap anywhere else. */ onElement?: (el: HTMLIFrameElement | null) => void }) {
+export default function AppletFrame({ html, title, router, grant, ready, onSession, onElement, height }: { html: string; title: string; router: Router; grant: Resolved; ready: unknown; /** The live session (null when it ends): the host's way to push events such as `open`. */ onSession?: (s: Session | null) => void;
+  /** This frame's element, for the shell to tell a tap in it from a tap anywhere else. */ onElement?: (el: HTMLIFrameElement | null) => void;
+  /** A page with embeds: the frame is as tall as its content, and the page scrolls as a whole. */ height?: number }) {
   const srcDoc = useMemo(() => frameSrcDoc(html), [html]);
   const { frame, stopped, onLoad, srcDoc: liveDoc } = useSealedFrame({ srcDoc, router, grant, ready, stopOnViolation: true, onSession });
   const onElementRef = useRef(onElement);
   onElementRef.current = onElement;
   const ref = useCallback((el: HTMLIFrameElement | null) => { frame.current = el; onElementRef.current?.(el); }, [frame]);
   if (stopped) return <p className="applet-stopped error" role="alert">{STOPPED_MESSAGE}</p>;
-  return <iframe ref={ref} className="applet-frame" title={title} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={liveDoc} onLoad={onLoad} />;
+  return <iframe ref={ref} className={height === undefined ? "applet-frame" : "applet-frame applet-frame-sized"} style={height === undefined ? undefined : { height }} title={title} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={liveDoc} onLoad={onLoad} />;
 }

@@ -1,29 +1,18 @@
-// page module: how a page with embeds is laid out (docs/design/EMBED.md). The frame reports its content height and,
-// for a host, where each embed's slot starts; nothing else. The shell clamps both and decides the rest (a slot's width,
-// an embed's height). Asked by the kit itself, not by applet code, but an applet could call it too: it is only ever
-// a size, and the shell takes a few a second at most.
-//   page.layout({height, slots: [{name, top}]})
+// page module: how a page with embeds is laid out (docs/design/EMBED.md). A host page and each embed report their
+// content height, and nothing else; the shell clamps it and decides the rest. Asked by the kit itself, not by applet
+// code, but an applet could call it too: it is only ever a height, and the shell takes a few a second at most.
+//   page.layout({height})
 import { hasOnly, plain } from "../contract.ts";
 import type { UniModule } from "../router.ts";
 
-export type Layout = { height: number; slots: { name: string; top: number }[] };
+export type Layout = { height: number };
 export const MAX_PAGE_HEIGHT = 20_000;
-export const MAX_SLOTS = 8;
-const NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 /** Layouts taken per second; more are dropped (the last one waits for the next). */
 export const LAYOUTS_PER_SECOND = 8;
 
 export function parseLayout(p: unknown): Layout | null {
-  if (!plain(p) || !hasOnly(p, ["height", "slots"]) || typeof p.height !== "number" || !Number.isFinite(p.height)) return null;
-  const slots: Layout["slots"] = [];
-  if (p.slots !== undefined) {
-    if (!Array.isArray(p.slots) || p.slots.length > MAX_SLOTS) return null;
-    for (const s of p.slots) {
-      if (!plain(s) || !hasOnly(s, ["name", "top"]) || typeof s.name !== "string" || s.name.length > 40 || !NAME.test(s.name) || typeof s.top !== "number" || !Number.isFinite(s.top)) return null;
-      if (!slots.some((x) => x.name === s.name)) slots.push({ name: s.name, top: Math.max(0, Math.min(MAX_PAGE_HEIGHT, Math.round(s.top))) });
-    }
-  }
-  return { height: Math.max(0, Math.min(MAX_PAGE_HEIGHT, Math.round(p.height))), slots };
+  if (!plain(p) || !hasOnly(p, ["height"]) || typeof p.height !== "number" || !Number.isFinite(p.height)) return null;
+  return { height: Math.max(0, Math.min(MAX_PAGE_HEIGHT, Math.round(p.height))) };
 }
 
 export function createPageModule(onLayout: (l: Layout) => void, now: () => number = Date.now): UniModule {

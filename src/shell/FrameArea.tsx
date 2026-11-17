@@ -3,6 +3,7 @@
 // return, not by polling. Over a frame from a vault the shell keeps two things of its own: a way to Settings (whatever
 // that frame draws: a place at the end of the bar, BottomBar.tsx), and the question before it opens an address outside
 // the app.
+import { useSettledPress } from "../ui/press";
 import { useEffect, useRef, useState } from "react";
 import { answerLinkOut, LINK_OUT_HOLD_MS, frameCode, frameFailed, frameHidden, frameShown, readFrameRecord, useFrameSource } from "./frameSource";
 import FrameHost from "./FrameHost";
@@ -60,22 +61,14 @@ export default function FrameArea() {
  * answer it, even when the frame held the page up between the two taps.
  */
 function LinkOutQuestion({ url }: { url: string }) {
-  const paintedAt = useRef(Infinity), downAt = useRef(-Infinity), keyAt = useRef(Infinity);
   const cancel = useRef<HTMLButtonElement>(null);
-  const [armed, setArmed] = useState(false);
+  const press = useSettledPress(LINK_OUT_HOLD_MS);
   useEffect(() => {
     cancel.current?.focus();
-    let id = requestAnimationFrame(() => { id = requestAnimationFrame(() => { paintedAt.current = performance.now(); }); });
-    const t = window.setTimeout(() => setArmed(true), LINK_OUT_HOLD_MS + 50);
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") answerLinkOut(false); };
     addEventListener("keydown", esc);
-    return () => { cancelAnimationFrame(id); window.clearTimeout(t); removeEventListener("keydown", esc); };
+    return () => removeEventListener("keydown", esc);
   }, []);
-  const open = (e: React.MouseEvent) => {
-    // a click from the keyboard has no pointer: it began when its key went down (Space clicks on release)
-    const began = e.detail === 0 ? Math.min(e.timeStamp, keyAt.current) : downAt.current;
-    if (e.isTrusted && began - paintedAt.current >= LINK_OUT_HOLD_MS) answerLinkOut(true);
-  };
   return (
     <div className="sheet-scrim">
       <section className="sheet" role="dialog" aria-modal="true" aria-label="Open outside Parachute">
@@ -84,12 +77,7 @@ function LinkOutQuestion({ url }: { url: string }) {
         <p className="link-raw link-whole"><code>{url}</code></p>
         <div className="grant-actions">
           <button ref={cancel} type="button" className="quiet-button" onClick={() => answerLinkOut(false)}>Cancel</button>
-          <button type="button" className="primary" aria-disabled={!armed} onPointerDown={(e) => { downAt.current = e.timeStamp; }} onKeyDown={(e) => {
-            if (e.key !== "Enter" && e.key !== " ") return;
-            // a fresh press on Open is when it began; a key already held when it reached Open (only repeats here) counts
-            // as begun before anything: it can't open until a fresh press
-            if (!e.repeat) keyAt.current = e.timeStamp; else if (keyAt.current === Infinity) keyAt.current = -Infinity;
-          }} onClick={open}>Open</button>
+          <button type="button" className="primary" {...press.bind} onClick={(e) => { if (press.counts(e)) answerLinkOut(true); }}>Open</button>
         </div>
       </section>
     </div>
