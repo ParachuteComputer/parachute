@@ -38,6 +38,7 @@ describe("whose a vault is", () => {
   it("is kept by hub and name, so signing in again keeps it", () => {
     localStorage.setItem(WHOSE_KEY, JSON.stringify({ whose: {}, ask: [] }));
     setWhose(techne, "trusted");
-    expect(whoseOf({ ...techne, key: "techne@techne.example", accessToken: "new" })).toBe("trusted");
+    const again: VaultRecord = { ...techne, key: "techne@techne.example", accessToken: "new" };
+    expect(whoseOf(again)).toBe("trusted");
   });
 });
