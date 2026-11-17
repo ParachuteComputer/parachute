@@ -8,7 +8,7 @@
 //
 // Rules: at most 8 entries. `path` must sit inside one of the manifest's read rules, so an applet only opens what it
 // may read. `screen`, when given, is one of the manifest's screens. `*` is refused: only the app's own vault view
-// opens everything. Reserved types (`applet`, `view`, `capture`, anything beginning `parachute`, in any letter case)
+// opens everything. Reserved types (`applet`, `view`, `capture`, `component`, anything beginning `parachute`, in any letter case)
 // and folders (`.parachute/`, `Applets/`) are refused. A vault's own role tags are reserved too, but roles are set
 // per vault, so the app drops them with `withoutRoles` when it reads a vault's applets, before the card, the grant's
 // key, the tagging writer or open-with see the list. Anything wrong refuses the whole list (the
@@ -23,7 +23,7 @@ export type OpensParse = { ok: true; opens: Opens[] } | { ok: false; error: stri
 export const MAX_OPENS = 8;
 const TYPE = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
 /** Types no applet may claim, whatever the letter case: the app's own, and any it may come to own. */
-export const RESERVED_TYPES = ["applet", "view", "capture"];
+export const RESERVED_TYPES = ["applet", "view", "capture", "component"];
 export const isReservedType = (type: string) => {
   const t = type.toLowerCase();
   return RESERVED_TYPES.some((r) => t === r || t.startsWith(`${r}/`)) || t.startsWith("parachute");

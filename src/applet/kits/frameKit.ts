@@ -11,10 +11,16 @@
 //                                      queryRecords/getRecord/createRecord/updateRecord (body, fields) beside its own
 //   uni.theme.get() / .on(cb)        → the app's look (src/theme): every token is also a CSS var --<key> on <html>
 //   uni.app.recent/pins/open         → what it may ask of the app (modules/app.ts), new here: the Uni app has none
+//   uni.props() / uni.onProps(cb)    → a component's props (plain data from the page's record), and later changes
+// On a page with embeds (docs/design/EMBED.md), `ready` says `page: {embeds: [names]}` and the kit reports the page's
+// content height and where each `[data-parachute-embed=<name>]` slot starts (`page.layout`); the shell answers with
+// each slot's height (`embed` events), which the kit sets on the slot. An embedded component's frame (`page: {sized:
+// true}`) reports only its content height. Nothing else crosses: a slot's width is the shell's.
 // In-page #anchor links scroll in place.
 
 export const FRAME_KIT = String.raw`(function () {
-  var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], theme = null, opened = null, readyRes;
+  var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
+  var slotHeights = {}, measuring = false, lastLayout = "", queued = false;
   var readyP = new Promise(function (r) { readyRes = r; });
   function post(m) { parent.postMessage(m, "*"); }
   function timeout(table, id, rej) { setTimeout(function () { if (table[id]) { delete table[id]; rej(new Error("timeout")); } }, 20000); }
@@ -36,6 +42,48 @@ export const FRAME_KIT = String.raw`(function () {
     opened = o;
     openCbs.slice().forEach(function (f) { try { f(o); } catch (e) {} });
   }
+  function applyProps(p) {
+    props = p && typeof p === "object" ? p : {};
+    propsCbs.slice().forEach(function (f) { try { f(props); } catch (e) {} });
+  }
+  // the page's content height and its slots' offsets, sent when they change (at most once a frame)
+  function measure() {
+    queued = false;
+    var b = document.body; if (!b) return;
+    Object.keys(slotHeights).forEach(function (k) {
+      var els = document.querySelectorAll("[data-parachute-embed]");
+      for (var i = 0; i < els.length; i++) if (els[i].getAttribute("data-parachute-embed") === k) { var h = slotHeights[k] + "px"; if (els[i].style.height !== h) els[i].style.height = h; }
+    });
+    var cs = getComputedStyle(b);
+    var height = Math.ceil(Math.max(b.scrollHeight, b.getBoundingClientRect().height) + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0));
+    var slots = [], seen = {};
+    var els2 = document.querySelectorAll("[data-parachute-embed]");
+    for (var j = 0; j < els2.length && slots.length < 8; j++) {
+      var name = els2[j].getAttribute("data-parachute-embed");
+      if (typeof name !== "string" || seen[name]) continue;
+      seen[name] = 1;
+      slots.push({ name: name.slice(0, 40), top: Math.max(0, Math.round(els2[j].getBoundingClientRect().top + window.scrollY)) });
+    }
+    var layout = JSON.stringify({ height: height, slots: slots });
+    if (layout === lastLayout) return;
+    lastLayout = layout;
+    call("page", "layout", { height: height, slots: slots }).catch(function () {});
+  }
+  function queue() { if (!queued) { queued = true; requestAnimationFrame(measure); } }
+  function startMeasuring() {
+    if (measuring) return; measuring = true;
+    var st = document.createElement("style");
+    st.textContent = "html,body{height:auto!important;min-height:0!important;overflow:hidden!important}";
+    document.head.appendChild(st);
+    var go = function () {
+      if (!document.body) { setTimeout(go, 20); return; }
+      try { new ResizeObserver(queue).observe(document.body); } catch (e) {}
+      try { new MutationObserver(queue).observe(document.body, { childList: true, subtree: true, attributes: true }); } catch (e) {}
+      addEventListener("load", queue, true);
+      queue();
+    };
+    go();
+  }
   addEventListener("message", function (e) {
     if (e.source !== parent) return;
     var m = e.data; if (!m || typeof m !== "object") return;
@@ -45,7 +93,16 @@ export const FRAME_KIT = String.raw`(function () {
       return;
     }
     if (m.uni !== 1) return;
-    if (m.event === "ready") { if (m.data && m.data.theme) applyTheme(m.data.theme); readyRes(m.data); if (m.data && m.data.open) applyOpen(m.data.open); return; }
+    if (m.event === "ready") {
+      if (m.data && m.data.theme) applyTheme(m.data.theme);
+      if (m.data && m.data.props) applyProps(m.data.props);
+      readyRes(m.data);
+      if (m.data && m.data.open) applyOpen(m.data.open);
+      if (m.data && m.data.page && (m.data.page.sized || m.data.page.embeds)) startMeasuring();
+      return;
+    }
+    if (m.event === "props") { applyProps(m.data); return; }
+    if (m.event === "embed") { if (m.data && typeof m.data.name === "string" && typeof m.data.height === "number") { slotHeights[m.data.name] = m.data.height; queue(); } return; }
     if (m.event === "theme") { applyTheme(m.data); return; }
     if (m.event === "open") { applyOpen(m.data); return; }
     var p = pending[m.id]; if (!p) return; delete pending[m.id];
@@ -87,6 +144,12 @@ export const FRAME_KIT = String.raw`(function () {
     },
     frameFetch: frameFetch,
     call: call,
+    props: function () { return props; },
+    onProps: function (cb) {
+      if (typeof cb !== "function") throw new TypeError("onProps needs a function");
+      propsCbs.push(cb);
+      return function () { var i = propsCbs.indexOf(cb); if (i >= 0) propsCbs.splice(i, 1); };
+    },
     app: Object.freeze({
       recent: function (o) { return call("app", "recent", o || {}); },
       pins: function () { return call("app", "pins", {}); },

@@ -122,9 +122,15 @@ const LOADER_HEAD = String.raw`(function () {
   var M = window.__ParachuteModules || {};
   var kit = M.parts ? Object.freeze(Object.assign({}, window.parachute, M.parts)) : window.parachute;
   var mods = { react: M.react, "react-dom": M["react-dom"], "react-dom/client": M["react-dom/client"], "react/jsx-runtime": M["react/jsx-runtime"], parachute: kit };
+  // the components it imports (imports.ts), each its own module, run once when first required
+  var imports = window.__ParachuteImports || {}, done = {};
   function require(name) {
     if (Object.prototype.hasOwnProperty.call(mods, name) && mods[name]) return mods[name];
-    throw new Error("it imports " + name + ", and an applet can import only " + Object.keys(mods).join(", "));
+    if (Object.prototype.hasOwnProperty.call(imports, name)) {
+      if (!done[name]) { var m = { exports: {} }; done[name] = m; imports[name](require, m, m.exports); }
+      return done[name].exports;
+    }
+    throw new Error("it imports " + name + ", and an applet can import only " + Object.keys(mods).concat(Object.keys(imports)).join(", "));
   }
   var module = { exports: {} };
   (async function (require, module, exports) {
@@ -134,7 +140,14 @@ const LOADER_TAIL = String.raw`
     var C = module.exports && module.exports.default;
     // a function component, or what memo, forwardRef or lazy return
     if (typeof C !== "function" && !(C && typeof C === "object" && C.$$typeof)) throw new Error("its module has no default export to show (export default function App() …)");
-    M["react-dom/client"].createRoot(root).render(M.react.createElement(C));
+    // a component gets its props (plain data from the page's record), and again when they change
+    var R = M.react;
+    function WithProps() {
+      var s = R.useState(kit.props ? kit.props() : {});
+      R.useEffect(function () { return kit.onProps ? kit.onProps(function (p) { s[1](p); }) : undefined; }, []);
+      return R.createElement(C, s[0]);
+    }
+    M["react-dom/client"].createRoot(root).render(R.createElement(WithProps));
   }).catch(fail);
 })();`;
 
@@ -146,7 +159,11 @@ export const usesNote = (code: string) => {
   return /import\s*(?:\*\s*as\s+\w+|[^;]*\{[^}]*\bNote\b[^}]*\})\s*from\s*["']parachute["']/.test(source) || /import\s+[\w$]+\s*(?:,[^;]*)?from\s*["']parachute["']/.test(source);
 };
 
-/** The page a TSX/JSX applet runs as: a root, React, then its module. `reactSource` sets `window.__ParachuteModules`. */
-export function modulePage(js: string, reactSource: string): string {
-  return `<div id="root"></div>${inlineScript(FAILURE)}${inlineScript(reactSource)}${inlineScript(`${LOADER_HEAD}${js}${LOADER_TAIL}`)}`;
+/** The page a TSX/JSX applet runs as: a root, React, the components it imports, then its module. `reactSource` sets
+ *  `window.__ParachuteModules`. */
+export function modulePage(js: string, reactSource: string, imports: readonly { id: string; js: string }[] = []): string {
+  const table = imports.length
+    ? inlineScript(`window.__ParachuteImports = Object.freeze({${imports.map((i) => `${JSON.stringify(`component:${i.id}`)}: function (require, module, exports) {\n${i.js}\n}`).join(",")}});`)
+    : "";
+  return `<div id="root"></div>${inlineScript(FAILURE)}${inlineScript(reactSource)}${table}${inlineScript(`${LOADER_HEAD}${js}${LOADER_TAIL}`)}`;
 }

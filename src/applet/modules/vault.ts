@@ -9,8 +9,8 @@
 //   POST  /api/notes            {path, content}            a new note, its path inside a `vault.create` folder
 //   PATCH /api/notes/:idOrPath  {content, if_updated_at}   new content for a note inside a `vault.update` folder
 // A write sets content only (no tags, metadata, links, move or force: the app's writer takes none; the one tag a new
-// note gets is the app's, from what the applet opens: opens.ts `tagsFor`), never touches an
-// code note (HTML, TSX, JSX) or a note tagged `applet` (an applet can't rewrite itself or another), and is judged on the note as it is
+// note gets is the app's, from what the applet opens: opens.ts `tagsFor`), never touches a
+// code note (HTML, TSX, JSX) or a note tagged `applet`, `component` or `parachute-pointer` (an applet can't rewrite itself, another, a component or a pointer), and is judged on the note as it is
 // read now. A session that has ended writes nothing.
 
 import { CODE_PATH, codeKindOf, isCodeExtension } from "../code.ts";
@@ -53,9 +53,11 @@ const safeRef = (ref: string) => ref.length > 0 && ref.length <= 300 && !/[\u000
 /** A path a write may name: plain segments (inScope checks those), no hidden character, no encoded dot or slash, not a code file. */
 const writablePath = (p: unknown): p is string => typeof p === "string" && p.length <= 300 && !hasHidden(p) && !/%(?:2e|2f|5c|25)/i.test(p)
   && !CODE_PATH.test(p) && p.trim() === p && !p.split("/").some((s) => s.trim() !== s);
-/** A note no applet may change: a code note (HTML, TSX, JSX: an applet's code) or one tagged `applet`. */
+/** A note no applet may change: a code note (HTML, TSX, JSX: an applet's or a component's code), or one tagged `applet`,
+ *  `component` or `parachute-pointer` (docs/design/EMBED.md). */
+const GUARDED_TAGS = ["applet", "component", "parachute-pointer"];
 const isAppletCode = (n: VaultNote) => isCodeExtension(n)
-  || (n.tags ?? []).some((t) => t === "applet" || t.startsWith("applet/"));
+  || (n.tags ?? []).some((t) => GUARDED_TAGS.some((g) => t === g || t.startsWith(`${g}/`)));
 const bodyOf = (raw: string | null, keys: readonly string[], required: readonly string[]): Record<string, string> | null => {
   if (raw === null) return null;
   let b: unknown;
