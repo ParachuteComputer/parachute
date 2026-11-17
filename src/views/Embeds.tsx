@@ -64,11 +64,12 @@ export function failureOf(e: unknown): "refused" | "offline" | "large" | "other"
   return "other";
 }
 
-/** A failure that looks like the network may be a refusal the browser couldn't read: the sign-in says which. */
-async function settled(rec: VaultRecord, f: ReturnType<typeof failureOf>): Promise<ReturnType<typeof failureOf>> {
+/** A failure that looks like the network may be a refusal the browser couldn't read: the sign-in says which. "alive":
+ *  the hub answered and gave a fresh token, so it was neither; the call may be tried again. */
+async function settled(rec: VaultRecord, f: ReturnType<typeof failureOf>): Promise<ReturnType<typeof failureOf> | "alive"> {
   if (f !== "offline") return f;
   const s = await signInState(rec.key);
-  return s === "refused" ? "refused" : "offline";
+  return s === "refused" ? "refused" : s === "alive" ? "alive" : "offline";
 }
 
 /** Find what an embed names: a pointer in the home vault (by id or path), else a component in the host's vault. */
@@ -84,12 +85,22 @@ async function find(host: VaultRecord, embed: Embed): Promise<Place> {
   }
   const whose = whoseOf(rec);
   let n: Note | null;
-  try { n = await clientFor(rec).getNote(ref); } catch (e) {
-    const f = await settled(rec, failureOf(e));
+  const read = async (again: boolean): Promise<Note | null | { failed: ReturnType<typeof failureOf> }> => {
+    try { return await clientFor(rec!).getNote(ref); } catch (e) {
+      const f = await settled(rec!, failureOf(e));
+      // the sign-in was renewed: one more try
+      if (f === "alive") return again ? read(false) : { failed: "offline" };
+      return { failed: f };
+    }
+  };
+  const got = await read(true);
+  if (got && "failed" in got) {
+    const f = got.failed;
     if (f === "refused") return { state: "refused", vault: rec.vault };
     if (f === "large") return { state: "invalid", name: named?.pointer.name ?? embed.name, why: "its record is bigger than a component from someone else's vault may be" };
     return { state: "offline", vault: rec.vault };
   }
+  n = got;
   const name = named?.pointer.name ?? embed.name;
   if (!n) return { state: "gone", name, vault: rec.vault };
   const ext = String((n as { extension?: string }).extension ?? "md").replace(/^\./, "").toLowerCase();
@@ -132,7 +143,7 @@ function EmbedPlace({ host, hostNote, embed }: { host: VaultRecord; hostNote: st
   const [asking, setAsking] = useState(false);
   const [broke, setBroke] = useState<"refused" | "offline" | null>(null);
   const [, bump] = useState(0);
-  const subject = embedSubject(host.key, hostNote, embed.name);
+  const subject = embedSubject(host.key, hostNote, embed.name, place.state === "found" ? place.found.rec.key : "");
   useEffect(() => {
     let on = true;
     setPlace({ state: "reading" }); setKeys(null); setBroke(null);

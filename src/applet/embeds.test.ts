@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { embedKey, embedSubject, embedSubjectParts, embedTokens, isEmbedSubject, parseEmbeds } from "./embeds";
+import { embedKey, embedSubject, embedSubjectParts, embedTokens, grantInVault, isEmbedSubject, parseEmbeds } from "./embeds";
 import { subjectOf } from "./grants";
 import { grantKey, type Grant } from "./grant";
 import { grow } from "../views/AppletScreen";
@@ -16,10 +16,14 @@ describe("a page's embeds", () => {
     expect(parseEmbeds(undefined)).toEqual([]);
   });
   it("each has a grant subject no applet's can be, whatever the vault is called", () => {
-    const s = embedSubject("embed", "01HOME", "events");
+    const s = embedSubject("embed", "01HOME", "events", "techne");
     expect(isEmbedSubject(s)).toBe(true);
     expect(s.startsWith(subjectOf("embed", ""))).toBe(false);
-    expect(embedSubjectParts(s)).toEqual({ hostVault: "embed", hostNote: "01HOME", name: "events" });
+    expect(embedSubjectParts(s)).toEqual({ hostVault: "embed", hostNote: "01HOME", name: "events", from: "techne" });
+    // signing out of the page's vault, or of the component's, ends it; another vault's sign-out doesn't
+    expect(grantInVault(s, subjectOf("embed", ""), "embed")).toBe(true);
+    expect(grantInVault(s, subjectOf("techne", ""), "techne")).toBe(true);
+    expect(grantInVault(s, subjectOf("kitchen", ""), "kitchen")).toBe(false);
   });
   it("a grant's key changes with what the component is, its rules and its props", async () => {
     const base = { hub: "https://t.example", vault: "techne", record: "01A", allow: [{ path: "Events/", verbs: ["read" as const] }], props: { days: 7 } };

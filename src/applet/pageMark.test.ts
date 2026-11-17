@@ -14,8 +14,12 @@ describe("the page mark", () => {
     const b = createPageMarks(s);
     expect(b.suspect("kitchen|home")).toBe(true);
     expect(s.m.has(PAGE_MARK_KEY)).toBe(false);
-    b.clear("kitchen|home");
-    expect(b.suspect("kitchen|home")).toBe(false);
+    // the person didn't open that page: the start after still holds it
+    const c = createPageMarks(s);
+    expect(c.suspect("kitchen|home")).toBe(true);
+    c.clear("kitchen|home");
+    expect(c.suspect("kitchen|home")).toBe(false);
+    expect(createPageMarks(s).suspect("kitchen|home")).toBe(false);
     void done;
   });
   it("is cleared when the page is left, and when the app goes out of sight; set again when it comes back", () => {

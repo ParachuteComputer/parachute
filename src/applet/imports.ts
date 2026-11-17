@@ -1,5 +1,5 @@
 // Imports: a TSX/JSX applet may import a component inline, `import Events from "component:events"`, when it comes from
-// the applet's own vault or from a Parachute this device trusts (trust.ts, docs/design/EMBED.md). The imported code
+// the applet's own vault, a vault of the person's, or one this device trusts (vault/whose.ts, docs/design/EMBED.md). The imported code
 // runs inside the applet and sees what it sees, so the applet's code hash covers it: with imports, the hash is of the
 // source and each import's id and hash; without, it is what it always was (no grant made before changes). Pure.
 

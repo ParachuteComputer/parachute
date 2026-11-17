@@ -5,6 +5,8 @@ import type { Note, VaultClient } from "@openparachute/surface-client";
 import { MAX_CODE_CHARS } from "../vault/limited";
 import { whoseOf } from "../vault/whose";
 import { embedsFrom, readPointers } from "./pointers";
+import { compositeHash, importsOf } from "./imports";
+import { readImports } from "./resolveImports";
 import { discoverApplets, type AppletEntry, type Discovery } from "./discovery";
 import { grantKey, grantOf } from "./grant";
 import { codeHash, codeKindOf } from "./code";
@@ -37,7 +39,7 @@ async function appletRows(client: Pick<VaultClient, "queryNotes" | "getNote">, n
   return out;
 }
 
-export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getNote">, vault: string, notMine = false, host?: Pick<VaultRecord, "issuer" | "vault">): Promise<Read> {
+export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getNote">, vault: string, notMine = false, host?: VaultRecord): Promise<Read> {
   const [rows, roles] = await Promise.all([appletRows(client, notMine), readRoleTags(client)]);
   const found: Discovery = discoverApplets(rows.filter((r) => codeKindOf(r as { extension?: string }) !== null), vault, notMine);
   const html = new Map(rows.map((r) => [r.id, r.content ?? ""]));
@@ -47,7 +49,12 @@ export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getN
   const pointers = found.entries.some((e) => e.embeds.length) && host ? await readPointers().catch(() => []) : [];
   const entries = await Promise.all(found.entries.map((e) => ({ ...e, opens: withoutRoles(e.opens, roles) })).map(async (e) => {
     const from = e.embeds.length && host ? await embedsFrom(host, e.embeds, pointers) : [];
-    return { ...e, keys: { scope: await grantKey({ ...grantOf(e.manifest, vault, e.opens, e.app), embedsFrom: from }, e.path), html: await codeHash(kinds.get(e.noteId)!, html.get(e.noteId) ?? "") } };
+    // as the applet screen hashes it: with what it imports, when it imports (an import it can't find leaves the plain
+    // hash, and its screen refuses it)
+    const kind = kinds.get(e.noteId)!, source = html.get(e.noteId) ?? "";
+    const imp = kind !== "html" && host && importsOf(source).length ? await readImports(host, source).catch(() => null) : null;
+    const code = imp?.ok && imp.imports.length && kind !== "html" ? await compositeHash(kind, source, imp.imports) : await codeHash(kind, source);
+    return { ...e, keys: { scope: await grantKey({ ...grantOf(e.manifest, vault, e.opens, e.app), embedsFrom: from }, e.path), html: code } };
   }));
   return { entries, skipped: rows.length - found.entries.length };
 }

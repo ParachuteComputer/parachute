@@ -10,7 +10,9 @@ import { whoseOf } from "../vault/whose";
 import type { VaultRecord } from "../vault/store";
 
 export type KeyedComponent = ComponentEntry & { hash: string; source: string };
-type Entry = { state: "ok"; entries: KeyedComponent[]; skipped: number } | { state: "error"; error: string };
+type Entry = { state: "ok"; entries: KeyedComponent[]; skipped: number; at: number } | { state: "error"; error: string };
+/** A read this recent is used again, unless a fresh one is asked for (a write that pins a hash asks). */
+const FRESH_MS = 10_000;
 const cache = new Map<string, Entry>();
 const inflight = new Map<string, Promise<Entry>>();
 
@@ -33,12 +35,14 @@ export async function readComponents(client: Pick<VaultClient, "queryNotes" | "g
   return { entries, skipped: found.skipped };
 }
 
-/** Read a vault's components (again). */
-export function refreshComponents(rec: VaultRecord): Promise<Entry> {
+/** A vault's components: as read in the last few seconds, or read again (`fresh`: always). */
+export function refreshComponents(rec: VaultRecord, fresh = false): Promise<Entry> {
+  const hit = cache.get(rec.key);
+  if (!fresh && hit?.state === "ok" && Date.now() - hit.at < FRESH_MS) return Promise.resolve(hit);
   const running = inflight.get(rec.key);
   if (running) return running;
   const p = readComponents(clientFor(rec), rec.key, whoseOf(rec) !== "mine")
-    .then((r): Entry => ({ state: "ok", ...r }), (e: unknown): Entry => ({ state: "error", error: e instanceof Error ? e.message : String(e) }))
+    .then((r): Entry => ({ state: "ok", ...r, at: Date.now() }), (e: unknown): Entry => ({ state: "error", error: e instanceof Error ? e.message : String(e) }))
     .then((e) => { cache.set(rec.key, e); return e; })
     .finally(() => inflight.delete(rec.key));
   inflight.set(rec.key, p);

@@ -6,20 +6,29 @@
 // its own key.
 
 export const PAGE_MARK_KEY = "parachute.pagemark.v1";
+/** The pages a start found marked: held until the person runs them again, however many starts that takes. */
+export const PAGE_SUSPECT_KEY = "parachute.pagemark.suspect.v1";
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const storage = (): StorageLike | null => (typeof localStorage === "undefined" ? null : localStorage);
 
 export function createPageMarks(s: StorageLike | null = storage()) {
-  // what a mark left from before this start named: held until the person runs it again
-  let suspect: string | null = null;
-  try { suspect = s?.getItem(PAGE_MARK_KEY) ?? null; s?.removeItem(PAGE_MARK_KEY); } catch { suspect = null; }
+  // what a mark left from before this start named joins the held pages, kept until the person runs each again
+  let suspects: string[] = [];
+  try {
+    const v: unknown = JSON.parse(s?.getItem(PAGE_SUSPECT_KEY) ?? "[]");
+    suspects = Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, 50) : [];
+    const left = s?.getItem(PAGE_MARK_KEY) ?? null;
+    if (left && !suspects.includes(left)) suspects.push(left);
+    s?.setItem(PAGE_SUSPECT_KEY, JSON.stringify(suspects));
+    s?.removeItem(PAGE_MARK_KEY);
+  } catch { /* nothing kept */ }
   const running = new Map<string, number>();
   const write = () => { try { const first = running.keys().next(); if (first.done) s?.removeItem(PAGE_MARK_KEY); else s?.setItem(PAGE_MARK_KEY, first.value); } catch { /* nothing kept */ } };
   return {
     /** The app stopped while this page ran its embeds. */
-    suspect: (page: string) => suspect === page,
+    suspect: (page: string) => suspects.includes(page),
     /** The person chose to run it again. */
-    clear: (page: string) => { if (suspect === page) suspect = null; },
+    clear: (page: string) => { suspects = suspects.filter((p) => p !== page); try { s?.setItem(PAGE_SUSPECT_KEY, JSON.stringify(suspects)); } catch { /* this session only */ } },
     /** A page starts reading or running what it embeds: until the returned function is called. */
     hold(page: string): () => void {
       running.set(page, (running.get(page) ?? 0) + 1);

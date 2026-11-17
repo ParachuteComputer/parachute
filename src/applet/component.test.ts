@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { parseComponent, propsFor } from "./component";
 import { parsePointer, pointerPath } from "./pointer";
 import { compositeHash, importsOf } from "./imports";
-import { createTrustStore } from "./trust";
 
 const EVENTS = { contract: 1, id: "events", name: "Events", glyph: "◷", props: { days: "number", title: "string" }, access: [{ vault: "here", allow: [{ path: "Events/", verbs: ["read"] }] }] };
 
@@ -48,18 +47,5 @@ describe("imports", () => {
     expect(await compositeHash("tsx", "src", [{ id: "b", hash: "2" }, { id: "a", hash: "1" }])).toBe(a);
     expect(await compositeHash("tsx", "src", [{ id: "a", hash: "1" }, { id: "b", hash: "3" }])).not.toBe(a);
     expect(a).toMatch(/^tsx:[0-9a-f]{64}$/);
-  });
-});
-
-describe("trust", () => {
-  it("is per hub and vault, kept on the device", () => {
-    const mem = new Map<string, string>();
-    const s = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) };
-    const t = createTrustStore(s);
-    t.trust("https://techne.example/x", "techne");
-    expect(createTrustStore(s).has("https://techne.example", "techne")).toBe(true);
-    expect(t.has("https://techne.example", "other")).toBe(false);
-    t.untrust("https://techne.example", "techne");
-    expect(createTrustStore(s).has("https://techne.example", "techne")).toBe(false);
   });
 });

@@ -19,7 +19,7 @@ export async function addToHome(vault: string, noteId: string): Promise<"added" 
   if (!host || !isMine(host)) throw new Error("Your home applet isn't in a vault of yours.");
   const from = listVaults().find((v) => v.key === vault);
   if (!from) throw new Error("This device doesn't hold that vault.");
-  const read = await refreshComponents(from);
+  const read = await refreshComponents(from, true);
   const c = read.state === "ok" ? read.entries.find((e) => e.noteId === noteId) : undefined;
   if (!c) throw new Error("That isn't a component this vault has.");
   const record = from.key === host.key ? stripExt(c.path)

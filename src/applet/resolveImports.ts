@@ -7,7 +7,7 @@ import { codeHash } from "./code";
 import { COMPONENT_TAG, parseComponent } from "./component";
 import { importsOf, MAX_IMPORTS, plainImportId } from "./imports";
 import { readPointers } from "./pointers";
-import { readComponents } from "./useComponents";
+import { refreshComponents } from "./useComponents";
 import { clientFor } from "../vault/client";
 import { MAX_CODE_CHARS } from "../vault/limited";
 import { listVaults, type VaultRecord } from "../vault/store";
@@ -24,7 +24,8 @@ export async function readImports(rec: VaultRecord, source: string): Promise<Imp
   if (ids.length > MAX_IMPORTS) return { ok: false, error: `it imports more than ${MAX_IMPORTS} components` };
   const bad = ids.find((id) => !plainImportId(id));
   if (bad !== undefined) return { ok: false, error: `it imports «${bad.slice(0, 40)}», which isn't a component's id` };
-  const own = await readComponents(clientFor(rec), rec.key, whoseOf(rec) !== "mine").catch(() => null);
+  const read = await refreshComponents(rec).catch(() => null);
+  const own = read?.state === "ok" ? read : null;
   let pointers: Awaited<ReturnType<typeof readPointers>> | null = null;
   const out: Imported[] = [];
   for (const id of ids) {

@@ -3,7 +3,8 @@ import { useState } from "react";
 import { runSelfTest, useGate, useSelfTestRun } from "../applet/selftest/run";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { useApplets } from "../applet/useApplets";
-import type { VaultRecord } from "../vault/store";
+import { listVaults, type VaultRecord } from "../vault/store";
+import { embedSubjectParts } from "../applet/embeds";
 import { useSyncExternalStore } from "react";
 import { allDefaults, clearDefault, subscribeDefaults, VAULT } from "../open/defaults";
 
@@ -40,6 +41,21 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
   })}</>;
 }
 
+/** The embeds allowed on this device, on the pages of one vault (docs/design/EMBED.md), each with Revoke. */
+function EmbedsIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }) {
+  const subjects = grants.subjects().map((s) => ({ s, p: embedSubjectParts(s) })).filter((x) => x.p?.hostVault === rec.key);
+  return <>{subjects.map(({ s, p }) => {
+    const r = grants.record(s);
+    const from = listVaults().find((v) => v.key === p!.from);
+    return (
+      <li key={s} className="line">
+        <span><strong>«{p!.name}»</strong> <span className="quiet">on a page in {rec.vault}{from && from.key !== rec.key ? `, from ${from.vault}` : ""}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
+        <button type="button" className="quiet-button" onClick={() => { grants.revoke(s); onChange(); }}>Revoke</button>
+      </li>
+    );
+  })}</>;
+}
+
 export default function AppletSettings({ vaults }: { vaults: VaultRecord[] }) {
   const mode = useGate();
   const run = useSelfTestRun();
@@ -61,6 +77,8 @@ export default function AppletSettings({ vaults }: { vaults: VaultRecord[] }) {
       <ul className="plain" aria-label="Defaults">{vaults.map((v) => <DefaultsIn key={v.key} rec={v} />)}</ul>
       <h3 className="settings-sub">Allowed</h3>
       <ul className="plain" aria-label="Allowed applets">{vaults.map((v) => <AllowedIn key={v.key} rec={v} onChange={() => setN((n) => n + 1)} />)}</ul>
+      <h3 className="settings-sub">On your pages</h3>
+      <ul className="plain" aria-label="Allowed on your pages">{vaults.map((v) => <EmbedsIn key={v.key} rec={v} onChange={() => setN((n) => n + 1)} />)}</ul>
     </section>
   );
 }

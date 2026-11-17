@@ -14,11 +14,12 @@ import { forgetVaultTheme } from "../theme/store";
 import ThemeSettings from "./ThemeSettings";
 import { forgetApplets } from "../applet/useApplets";
 import { deviceGrants, subjectOf } from "../applet/grants";
+import { grantInVault } from "../applet/embeds";
 import KeySettings from "../key/KeySettings";
 import { AskWhose, WhoseLine } from "./Whose";
 
-/** Signing out of a vault ends what its applets were allowed on this device too. */
-const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (const s of g.subjects()) if (s.startsWith(subjectOf(key, ""))) g.revoke(s); };
+/** Signing out of a vault ends what its applets were allowed on this device too, and the embeds on its pages or from it. */
+const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (const s of g.subjects()) if (grantInVault(s, subjectOf(key, ""), key)) g.revoke(s); };
 
 /** The one place for what this device holds. Later sections (applets, the self-test) join here. */
 export default function Settings({ children }: { children?: ReactNode }) {

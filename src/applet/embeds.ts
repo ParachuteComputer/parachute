@@ -33,16 +33,22 @@ export function parseEmbeds(raw: unknown): Embed[] {
   return out;
 }
 
-/** What an embed's grant is stored under: the place on the page. It starts with a character no vault's key can, so no
- *  applet's grant (grants.ts `subjectOf`) can share it. */
-export const embedSubject = (hostVault: string, hostNote: string, name: string) => `\u0001embed\u0000${hostVault}\u0000${hostNote}\u0000${name}`;
+/** What an embed's grant is stored under: the place on the page (the host's vault and note, the embed's name) and the
+ *  vault its component comes from (this device's key for it), so signing out of either ends it. It starts with a
+ *  character no vault's key can, so no applet's grant (grants.ts `subjectOf`) can share it. */
+export const embedSubject = (hostVault: string, hostNote: string, name: string, from: string) => `\u0001embed\u0000${hostVault}\u0000${hostNote}\u0000${name}\u0000${from}`;
 export const isEmbedSubject = (s: string) => s.startsWith("\u0001embed\u0000");
-/** The parts of an embed's subject: its host's vault and note, and its name. */
-export function embedSubjectParts(s: string): { hostVault: string; hostNote: string; name: string } | null {
+/** The parts of an embed's subject. */
+export function embedSubjectParts(s: string): { hostVault: string; hostNote: string; name: string; from: string } | null {
   if (!isEmbedSubject(s)) return null;
-  const [, , hostVault, hostNote, name] = s.split(/\u0000|\u0001embed/);
-  return hostVault && hostNote && name ? { hostVault, hostNote, name } : null;
+  const [hostVault, hostNote, name, from] = s.slice("\u0001embed\u0000".length).split("\u0000");
+  return hostVault && hostNote && name && from ? { hostVault, hostNote, name, from } : null;
 }
+/** Does this grant belong to that vault (an applet's in it, or an embed's on a page in it or of a component from it)? */
+export const grantInVault = (subject: string, vaultSubjectPrefix: string, key: string) => {
+  const e = embedSubjectParts(subject);
+  return e ? e.hostVault === key || e.from === key : subject.startsWith(vaultSubjectPrefix);
+};
 
 /** The grant's key for an embed: what the component is (hub, vault, record), its rules, and the props the page hands
  *  it. A change to any asks again. */

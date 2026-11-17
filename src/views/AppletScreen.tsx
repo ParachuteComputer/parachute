@@ -31,7 +31,8 @@ import reactNoteKitSource from "virtual:react-note-kit";
 import { embedsFrom, pointerFor, repin, type PointerNote } from "../applet/pointers";
 import { createPageModule } from "../applet/modules/page";
 import { PageEmbeds, PAGE_MAX } from "./Embeds";
-import { isMine, whoseOf } from "../vault/whose";
+import { isMine, useWhose, whoseOf } from "../vault/whose";
+import { pageMarks } from "../applet/pageMark";
 import { MAX_CODE_CHARS } from "../vault/limited";
 import { hostOf } from "../vault/store";
 import { screenOf } from "../applet/manifest";
@@ -122,7 +123,9 @@ export default function AppletScreen() {
   const [hostHeight, setHostHeight] = useState<{ h: number; steps: number[] }>({ h: 0, steps: [] });
   // a pointer in the home vault that brought this record in, and the code it was brought in with
   const [brought, setBrought] = useState<PointerNote | null>(null);
-  const notMine = !!rec && whoseOf(rec) !== "mine";
+  // whose its vault is, read again when the person changes it
+  const whoseNow = useWhose();
+  const notMine = !!rec && whoseNow(rec) !== "mine";
 
   // the applet's note as it is now, and the note it is asked to open
   useEffect(() => {
@@ -169,7 +172,7 @@ export default function AppletScreen() {
       }
     })();
     return () => { on = false; };
-  }, [rec?.key, appletId, askedNote]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rec?.key, appletId, askedNote, notMine]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const entry = loaded.state === "ok" ? loaded.entry : null;
   const subject = rec && entry ? subjectOf(rec.key, entry.noteId) : null;
@@ -188,6 +191,14 @@ export default function AppletScreen() {
     return () => { on = false; };
   }, [granted, loaded, keys?.html]); // eslint-disable-line react-hooks/exhaustive-deps
   const page = loaded.state === "ok" ? loaded.page ?? (late && keys && late.hash === keys.html && "page" in late ? late.page : null) : null;
+  // the page mark (applet/pageMark.ts) covers code it imports from another vault, as it covers embeds
+  const marks = pageMarks();
+  const pageId = rec && appletId ? `${rec.key}|${appletId}` : "";
+  const importsElsewhere = loaded.state === "ok" && loaded.imports.some((i) => !i.own);
+  const [hangCleared, setHangCleared] = useState(false);
+  const heldForHang = importsElsewhere && !hangCleared && marks.suspect(pageId);
+  const runningImports = importsElsewhere && granted && started && !!page && !heldForHang;
+  useEffect(() => (runningImports ? marks.hold(pageId) : undefined), [runningImports, pageId]); // eslint-disable-line react-hooks/exhaustive-deps
   const grant = useMemo(() => (entry ? resolvedOf(entry.manifest) : {}), [entry]);
   // keyed on the vault, not the record object: a token refresh rewrites the record, and rebuilding the router would close
   // the frame's session with the very call that caused the refresh still waiting
@@ -234,6 +245,11 @@ export default function AppletScreen() {
     </>);
   }
   const revoke = () => { grants.revoke(subject); setStarted(false); bump(); };
+  // code imported from another vault runs inside it: a start after it hung the app holds it, until a tap
+  if (heldForHang) return shell(<div className="card" role="status">
+    <p>The app stopped while {name} was running. It imports code from another vault, which may have held it up.</p>
+    <button type="button" className="primary" onClick={tap(() => { marks.clear(pageId); setHangCleared(true); setStarted(true); })}>Open {name}</button> {plainNote}
+  </div>);
   if (!started) return shell(<div className="card" role="status">
     <p>{name} is stopped.{note && claim ? ` It will open ${titleOf(note)}.` : ""}</p>
     <button type="button" className="primary" onClick={tap(() => { chooseHere(); setStarted(true); })}>Open {name}</button> {plainNote}

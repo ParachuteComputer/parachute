@@ -41,10 +41,20 @@ export async function bringIn(rec: Pick<VaultRecord, "issuer" | "vault">, record
   if (!home || !isMine(home)) throw new Error("You have no home vault of your own to bring it into.");
   const c = clientFor(home);
   const pointer: Pointer = { hub: originOf(rec.issuer), vault: rec.vault, record: recordId, kind: what.kind, id: what.id, name: what.name, code: what.code };
-  const there = (await readPointers(c)).find((p) => names(p.pointer, rec, recordId));
+  const all = await readPointers(c);
+  const there = all.find((p) => names(p.pointer, rec, recordId));
   if (there) { await repin(there, what.code, c); return { ...there, pointer: { ...there.pointer, code: what.code } }; }
   const host = new URL(pointer.hub).host;
-  const n = await c.createNote({ path: pointerPath(host, rec.vault, what.kind, what.id), content: `${what.name}, from ${rec.vault} at ${host}. Brought in by the Parachute app; see docs/OTHER-PARACHUTES.md.`, tags: [POINTER_TAG], metadata: { pointer } } as Parameters<typeof c.createNote>[0]);
+  const path = pointerPath(host, rec.vault, what.kind, what.id);
+  // a pointer already at that path names an older record of the same id (deleted and made again there): point it here
+  const stale = all.find((p) => stripExt(p.path) === path);
+  if (stale) {
+    const n = await c.getNote(stale.noteId);
+    const updatedAt = (n as { updatedAt?: string } | null)?.updatedAt;
+    await c.updateNote(stale.noteId, { metadata: { ...((n?.metadata ?? {}) as object), pointer }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
+    return { ...stale, pointer };
+  }
+  const n = await c.createNote({ path, content: `${what.name}, from ${rec.vault} at ${host}. Brought in by the Parachute app; see docs/OTHER-PARACHUTES.md.`, tags: [POINTER_TAG], metadata: { pointer } } as Parameters<typeof c.createNote>[0]);
   return { noteId: n.id, path: n.path ?? "", updatedAt: (n as { updatedAt?: string }).updatedAt ?? null, pointer };
 }
 
