@@ -146,6 +146,7 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
   const [asking, setAsking] = useState(false);
   const [broke, setBroke] = useState<"refused" | "offline" | null>(null);
   const [, bump] = useState(0);
+  const placeEl = useRef<HTMLDivElement>(null);
   const subject = embedSubject(host.key, hostNote, embed.name, place.state === "found" ? place.found.rec.key : "");
   useEffect(() => {
     let on = true;
@@ -199,14 +200,14 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
     </p>
   );
   return (
-    <div className="embed-place" data-embed={embed.name}>
+    <div className="embed-place" data-embed={embed.name} ref={placeEl} tabIndex={-1}>
       {line}
       {run ? <EmbedFrame found={found} name={name} props={keys.props} onBroke={setBroke} onPageStopped={() => holdPage(pageId)} />
         : <div className="embed-said" role="status">
           <p>{held && decision === "run" ? `The page was stopped while «${name}», from ${found.rec.vault}, was on it.` : pinMoved ? `${found.rec.vault} changed «${name}» since you brought it in.` : status === "updated" ? `«${name}» changed since you allowed it.` : `«${name}»${theirs ? `, from ${found.rec.vault},` : ""} asks to run here.`}</p>
           <button type="button" className="quiet-button" onClick={(e) => { if (e.isTrusted) setAsking(true); }}>Review</button>
         </div>}
-      {asking && <Sheet label={`${name} is asking for access`} onClose={() => setAsking(false)}>
+      {asking && <Sheet label={`${name} is asking for access`} onClose={() => setAsking(false)} back={placeEl}>
         <GrantCard what="component" name={name} glyph={glyph} vault={found.rec.vault} whose={found.whose} host={hostOf(found.rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"}
           codeChanged={status === "updated"} broughtChanged={pinMoved} asksOther={status === "none" && !!grants.record(subject)} handed={keys.props}
           lines={grantLines(grant, ownFolder(found.path))} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())} settle={LINK_OUT_HOLD_MS}
@@ -215,7 +216,7 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
             releaseFromPage(pageId, embed.name);
             // the pointer now pins this code: so does what this place remembers of it (a later Revoke asks plainly again)
             const was = found.pointer;
-            if (was && pinMoved) void repin(was, keys.hash).then((pinned) => { if (pinned) setPlace((p) => (p.state === "found" && p.found.pointer?.noteId === was.noteId
+            if (was && pinMoved) void repin(was, keys.hash).then((pinned) => { if (pinned) setPlace((p) => (p.state === "found" && p.found.pointer?.noteId === was.noteId && p.found.pointer.pointer.code === was.pointer.code
               ? { ...p, found: { ...p.found, pointer: { ...p.found.pointer, pointer: { ...p.found.pointer.pointer, code: keys.hash } } } } : p)); }, () => {});
             setAsking(false); bump((n) => n + 1);
           }}
@@ -227,13 +228,13 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
 
 /** A sheet over the whole screen, above every frame; the page under it is held still while it is open. It takes the focus
  *  when it opens, so a screen reader (and Android's accessibility) moves into it, and a frame no longer holds the focus. */
-function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
+function Sheet({ label, onClose, children, back }: { label: string; onClose: () => void; children: React.ReactNode; /** where the focus goes after, when what opened it is gone */ back?: React.RefObject<HTMLElement | null> }) {
   const box = useRef<HTMLElement>(null);
   useEffect(() => {
     // into the sheet, unless something in it took the focus already (Run them's Not now); back where it was after
     const was = document.activeElement as HTMLElement | null;
     if (!box.current?.contains(document.activeElement)) box.current?.focus();
-    return () => { if (was && document.contains(was)) was.focus(); };
+    return () => { if (was && document.contains(was) && was !== document.body) was.focus(); else back?.current?.focus(); };
   }, []);
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };

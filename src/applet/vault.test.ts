@@ -120,3 +120,23 @@ describe("fields on a list", () => {
   });
 });
 
+describe("fields on a list, in one ask", () => {
+  it("asks once per folder, keeps only its folders' notes (whatever the host sends back), and takes a list of fields too", async () => {
+    notes[0].metadata = { when: "2026-11-20" };
+    let reads = 0, asks = 0;
+    const one: VaultDeps = { ...vault, async getNote(ref) { reads++; return vault.getNote(ref); },
+      // a host that ignores the folder asked for: the module must judge every note itself
+      async listFields() { asks++; return notes.map((n) => ({ ...n, content: undefined })); } };
+    const out: HostMessage[] = [];
+    const router = createRouter([createVaultModule(one, {})]);
+    const s = createSession({ post: (m) => out.push(m), router, grant: resolvedOf(manifest) });
+    s.handle({ pfr: 1, channel: "vault", id: "f1", method: "GET", path: "/api/notes?path_prefix=Recipes/&include_metadata=when", headers: {}, body: null });
+    await new Promise((r) => setTimeout(r, 0));
+    const rows = JSON.parse((out[0] as { body: string }).body) as { path: string; metadata?: Record<string, unknown>; content?: string }[];
+    expect(rows.map((r) => r.path).sort()).toEqual(["Recipes/Tagged", "Recipes/Toast"]);
+    expect(rows.find((r) => r.path === "Recipes/Toast")?.metadata).toEqual({ when: "2026-11-20" });
+    expect(rows.every((r) => !("content" in r))).toBe(true);
+    expect([asks, reads]).toEqual([1, 0]);
+  });
+});
+
