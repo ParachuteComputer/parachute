@@ -714,8 +714,9 @@ impl Broker {
                 for p in ["/.well-known/parachute-account", "/.well-known/parachute.json"] {
                     let res = self.probe_http.get(format!("{origin}{p}")).header("accept", "application/json").send().await.map_err(|_| unsure())?;
                     let status = res.status().as_u16();
-                    // a server in trouble or asking to wait hasn't answered: nothing is signed this time
-                    if status >= 500 || status == 429 {
+                    // a server in trouble or asking to wait hasn't answered: nothing is signed this time. 501 is an
+                    // answer: it does no GET at all (the Uni app's mail gateway), and a hub serves these files on GET
+                    if (status >= 500 && status != 501) || status == 429 {
                         return Err(unsure());
                     }
                     // 2xx with a JSON body: a hub. 3xx (not followed), other 4xx, 2xx with anything else: not on this path.

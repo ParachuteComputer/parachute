@@ -1,0 +1,16 @@
+{
+  "path": "Applets/Mail",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "mail",
+      "name": "Mail",
+      "glyph": "✉",
+      "note": "your mail, through your mail gateway",
+      "access": []
+    },
+    "services": [{ "id": "mail", "kind": "http", "url": "{{mail}}", "auth": "nip98" }]
+  }
+}

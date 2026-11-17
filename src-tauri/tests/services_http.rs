@@ -207,6 +207,17 @@ async fn a_probe_that_fails_signs_nothing_and_is_asked_again() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_gateway_that_takes_no_get_is_not_a_hub() {
+    // the Uni app's mail gateway answers every GET with 501: an answer (no GET here, so no hub's files), not trouble
+    start();
+    let (origin, seen) = serve(|s: &Seen| if s.method == "GET" { reply(501, &[], b"Unsupported method") } else { reply(200, &[("content-type", "application/json")], b"{}") }).await;
+    let k = Keys::generate();
+    let b = broker("gateway", &k, &[json!({ "id": "mail", "kind": "http", "url": format!("{origin}/mail/"), "auth": "nip98" })]);
+    assert_eq!(b.http(&k, "s", "mail", &req("POST", "session")).await.unwrap().status, 200);
+    assert!(seen.lock().unwrap().iter().any(|s| s.path == "/mail/session" && s.header("authorization").is_some()), "signed and sent");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn hub_paths_and_hubs_signed_in_to_later_are_refused() {
     start();
     let (origin, seen) = serve(plain_server(|_| reply(200, &[], b"ok"))).await;
