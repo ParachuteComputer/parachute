@@ -17,7 +17,10 @@ export function e2eNative(secretHex: string): Native {
   const sk = Uint8Array.from(secretHex.match(/../g)!.map((h) => parseInt(h, 16)));
   const pubkey = getPublicKey(sk);
   const sessions = new Map<string, Sess>();
-  const tokens = new Map<string, string>();
+  // kept for the tab (a test goes to Settings and back, which reloads the page)
+  const KEPT = "parachute.e2e.tokens";
+  const tokens = new Map<string, string>(Object.entries((() => { try { return JSON.parse(sessionStorage.getItem(KEPT) ?? "{}") as Record<string, string>; } catch { return {}; } })()));
+  const keepTokens = () => { try { sessionStorage.setItem(KEPT, JSON.stringify(Object.fromEntries(tokens))); } catch { /* this page only */ } };
   const logs = new Map<string, LogLine[]>();
   const now = () => Math.floor(Date.now() / 1000);
   const sign = (kind: number, content: string, tags: string[][]): SignedEvent => finalizeEvent({ kind, content, tags, created_at: now() }, sk) as SignedEvent;
@@ -86,7 +89,7 @@ export function e2eNative(secretHex: string): Native {
       if (!entry) throw new Error("not declared");
       const ev = sign(30078, nip44.encrypt(text, selfKey()), [["d", d], ["t", entry.t]]); log(session, service, "private note", ev.id); return ev;
     },
-    async tokenSet(subject, s, token) { if (token === null) tokens.delete(tokenKey(subject, s)); else tokens.set(tokenKey(subject, s), nip44.encrypt(token, selfKey())); },
+    async tokenSet(subject, s, token) { if (token === null) tokens.delete(tokenKey(subject, s)); else tokens.set(tokenKey(subject, s), nip44.encrypt(token, selfKey())); keepTokens(); },
     async tokenHas(subject, s) { return tokens.has(tokenKey(subject, s)); },
     async log(subject) { return [...(logs.get(subject) ?? [])]; },
   };

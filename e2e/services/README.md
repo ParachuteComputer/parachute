@@ -7,6 +7,7 @@ servers the first applets use; each skips itself when its server isn't named.
 |---|---|
 | `e2e/rooms.spec.ts` | `BUZZ_RELAY` (a Buzz relay), `BUZZ_KEYS` (a folder with `owner.hex`, `alice.hex`, `bob.hex`) |
 | `e2e/mail.spec.ts` | `MAIL_BRIDGE` (the Uni app's mail gateway in front of a Stalwart), `BUZZ_KEYS` |
+| `e2e/matrix.spec.ts` | `MATRIX_HS` (a Matrix homeserver), `MATRIX_TOKENS` (a folder with `alice.token`, `bob.token`), `BUZZ_KEYS` |
 | `src-tauri/tests/services_real.rs` | `BUZZ_RELAY`, `MAIL_BRIDGE`, `BUZZ_KEYS` (the native side, not the browser) |
 
 The keys are throwaway Nostr secret keys, 64 hex characters each, one per file. Never use a real person's key.
@@ -37,8 +38,15 @@ Uni app's mail gateway (not in this repo) in front of it, with alice's and bob's
 need them), so the spec starts a pass-through on `127.0.0.1:19952`: add `http://127.0.0.1:19952` to the gateway's
 `public_aliases`, so a request signed for that address is accepted.
 
+## A Matrix homeserver
+
+Any homeserver on loopback with two users, alice and bob, in a room named Garden (tuwunel runs in one container), and
+each one's access token in a file. Matrix servers send CORS headers, so the browser reaches it directly.
+
+## Running them
+
 ```sh
 PARACHUTE_CORE=… BUZZ_RELAY=ws://localhost:3871 MAIL_BRIDGE=http://127.0.0.1:<port> BUZZ_KEYS=<folder> \
-  npx playwright test e2e/rooms.spec.ts e2e/mail.spec.ts --project=phone
+  MATRIX_HS=http://127.0.0.1:<port> MATRIX_TOKENS=<folder> npx playwright test e2e/rooms.spec.ts e2e/mail.spec.ts e2e/matrix.spec.ts --project=phone
 BUZZ_RELAY=… MAIL_BRIDGE=… BUZZ_KEYS=… cargo test --manifest-path src-tauri/Cargo.toml --test services_real
 ```

@@ -71,6 +71,6 @@ the Uni app's mail gateway (e2e/services/README.md); "CI" means it runs on every
 | Calendar | left: the calendar door speaks NIP-98, so a calendar applet can declare it as a service; not written yet | next |
 | Decisions | left | niche |
 | Areas, To Post, Studio, Arcade, Usage, Route suggestions | left | niche or experimental in the Uni app |
-| Messages over Matrix (bridged chats) | left in this step; the broker's `token` services are built for it | stretch |
+| Messages over Matrix | part: applets/matrix.tsx reads and writes a homeserver's rooms with a token the person gives the app (e2e/matrix.spec.ts, a real homeserver). The Uni app's bridged networks (Signal, WhatsApp…) behind its Matrix door are not linked from here | — |
 | Updates over the air | left: Parachute updates as an app | — |
 | Unlock before powerful approvals | left with the approvals themselves | — |
