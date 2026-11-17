@@ -1,5 +1,5 @@
 // Drive the Mac app the way a person would, through macOS accessibility (the same tree VoiceOver reads), for the Mac
-// workflow's sign-in smoke test (scripts/mac-smoke.sh). Only what that test needs:
+// workflow's sign-in drive (scripts/mac-signin.sh). Only what that test needs:
 //   swift scripts/mac-ax.swift <process> dump                  print the window's tree (role, title, value)
 //   swift scripts/mac-ax.swift <process> wait <text> [secs]    wait until something shows <text>
 //   swift scripts/mac-ax.swift <process> press <text>          press the button, link or disclosure that says <text>

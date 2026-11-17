@@ -96,7 +96,7 @@ remove_key
 "$PAIR_SEND" > "$hub/pair.log" 2>&1 &
 sendpid=$!
 trap 'kill $hubpid $sendpid 2>/dev/null || true; rm -rf "$hub"' EXIT
-line() { sed -n "s/^$1 //p" "$hub/pair.log" | head -1; }
+line() { awk -v k="$1" '$1 == k { sub(/^[^ ]+ /, ""); print; exit }' "$hub/pair.log"; }
 for _ in $(seq 40); do [ -n "$(line link)" ] && break; sleep 0.25; done
 link=$(line link)
 [ -n "$link" ] || { cat "$hub/pair.log"; fail "the sender gave no link"; }
