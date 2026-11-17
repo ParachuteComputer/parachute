@@ -29,11 +29,14 @@ tauri-plugin-deep-link = "=2.4.5"
 # Uni app and Buzz desktop send a key with: buzz-core holds its crypto, buzz-ws-client its relay I/O (public, Apache-2.0).
 buzz-core = { git = "https://github.com/unforcedagi/buzz.git", rev = "5669fdcbc13aa85b0edede555478ae11b6771e0a" }
 buzz-ws-client = { git = "https://github.com/unforcedagi/buzz.git", rev = "5669fdcbc13aa85b0edede555478ae11b6771e0a" }
-# The same nostr major buzz pins, so its types are ours.
-nostr = { version = "0.44", default-features = false, features = ["std", "nip98"] }
+# The same nostr major buzz pins, so its types are ours. nip44 seals an applet's private notes and its service tokens
+# (services.rs).
+nostr = { version = "0.44", default-features = false, features = ["std", "nip44", "nip98"] }
 zeroize = "1.8"
 tokio = { version = "1", features = ["time", "sync"] }
 url = "2"
+# An upload's body, shared (not copied) between the broker's two tries (services.rs).
+bytes = "1"
 # The hub's key door (two requests). rustls with ring, installed at start (the release build aborts on a panic).
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }

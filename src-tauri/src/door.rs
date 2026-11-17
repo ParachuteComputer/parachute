@@ -10,7 +10,6 @@
 
 use std::time::Duration;
 
-use nostr::base64::Engine;
 use nostr::hashes::Hash;
 use nostr::{EventBuilder, Kind, Tag};
 use serde::Serialize;
@@ -125,7 +124,7 @@ fn nonce() -> String {
 pub async fn list_vaults(origin: &url::Url, keys: &nostr::Keys) -> Result<HubVaults, Refusal> {
     let http = client()?;
     let event = list_vaults_event(origin, &nonce())?.sign_with_keys(keys).map_err(|_| refusal("refused", "The key couldn't sign."))?;
-    let auth = format!("Nostr {}", nostr::base64::engine::general_purpose::STANDARD.encode(nostr::JsonUtil::as_json(&event)));
+    let auth = crate::services::authorization(&event);
     let res = http
         .post(origin.join(ACCOUNT_MCP_PATH).expect("fixed path"))
         .header("Authorization", auth)
@@ -152,7 +151,16 @@ pub async fn list_vaults(origin: &url::Url, keys: &nostr::Keys) -> Result<HubVau
 pub async fn hub_vaults<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, hub: String) -> Result<HubVaults, Refusal> {
     let origin = hub_origin(&hub)?;
     let held = keys.get(&app).await.map_err(|m| refusal("no_key", m))?.ok_or_else(|| refusal("no_key", "This device has no key."))?;
-    list_vaults(&origin, &held).await
+    let listed = list_vaults(&origin, &held).await;
+    if answered_as_hub(&listed) {
+        note_hub(&app, &origin);
+    }
+    listed
+}
+
+/// The hub's key door took the key, or knew it was a hub's door and didn't know the key: either way it is a hub.
+fn answered_as_hub<T>(r: &Result<T, Refusal>) -> bool {
+    r.is_ok() || matches!(r, Err(e) if e.code == "unknown_key")
 }
 
 /// A same-hub path to go to after signing in (the authorize address), as the hub's `next` takes it.
@@ -205,20 +213,54 @@ pub fn sign_in_event(origin: &url::Url, challenge: &Value) -> Result<EventBuilde
 }
 
 fn client() -> Result<reqwest::Client, Refusal> {
+    http_client(Duration::from_secs(20)).map_err(|_| refusal("unreachable", "Secure connections aren't available."))
+}
+
+/// The shell's HTTP client: rustls with the web's roots, no redirects followed, no cookie store, a whole-request timeout.
+pub(crate) fn http_client(timeout: Duration) -> Result<reqwest::Client, ()> {
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let provider = rustls::crypto::CryptoProvider::get_default().cloned().unwrap_or_else(|| std::sync::Arc::new(rustls::crypto::ring::default_provider()));
-    let tls = rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(|_| refusal("unreachable", "Secure connections aren't available."))?
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-    reqwest::Client::builder()
-        .tls_backend_preconfigured(tls)
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(20))
-        .build()
-        .map_err(|_| refusal("unreachable", "Secure connections aren't available."))
+    let tls = rustls::ClientConfig::builder_with_provider(provider).with_safe_default_protocol_versions().map_err(|_| ())?.with_root_certificates(roots).with_no_client_auth();
+    reqwest::Client::builder().tls_backend_preconfigured(tls).redirect(reqwest::redirect::Policy::none()).timeout(timeout).build().map_err(|_| ())
+}
+
+/// The hubs this device has signed in to with the key, kept in the app's data folder: the service broker never signs
+/// for them (services.rs). Origins as `services::origin_key` writes them.
+pub const HUBS_FILE: &str = "signed-in-hubs.json";
+static HUBS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn read_hubs(dir: &std::path::Path) -> Vec<String> {
+    std::fs::read(dir.join(HUBS_FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+pub fn signed_in_hubs(dir: &std::path::Path) -> Vec<String> {
+    let _g = HUBS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    read_hubs(dir)
+}
+
+pub fn remember_hub(dir: &std::path::Path, origin: &url::Url) -> std::io::Result<()> {
+    let _g = HUBS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let key = crate::services::origin_key(origin);
+    let mut hubs = read_hubs(dir);
+    if hubs.contains(&key) {
+        return Ok(());
+    }
+    hubs.push(key);
+    crate::services::write_json(&dir.join(HUBS_FILE), &hubs)
+}
+
+/// Note a hub the key signed in to (a failure is logged: the broker's probe still finds a hub).
+fn note_hub<R: Runtime>(app: &AppHandle<R>, origin: &url::Url) {
+    use tauri::Manager;
+    match app.path().app_data_dir() {
+        Ok(dir) => {
+            if let Err(err) = remember_hub(&dir, origin) {
+                log::warn!("couldn't note the hub signed in to: {err}");
+            }
+        }
+        Err(err) => log::warn!("no app data folder to note the hub in: {err}"),
+    }
 }
 
 /// Ask the hub for a challenge, sign it with `keys`, and hand it back: the hub's session, or why not.
@@ -283,7 +325,11 @@ pub async fn key_sign_in<R: Runtime>(app: AppHandle<R>, webview: Webview<R>, key
     let origin = hub_origin(&hub)?;
     let next = next_path(&origin, &next)?;
     let held = keys.get(&app).await.map_err(|m| refusal("no_key", m))?.ok_or_else(|| refusal("no_key", "This device has no key."))?;
-    let session = sign_in(&origin, &next, &held).await?;
+    let signed = sign_in(&origin, &next, &held).await;
+    if answered_as_hub(&signed) {
+        note_hub(&app, &origin);
+    }
+    let session = signed?;
     for raw in &session.set_cookies {
         plant_cookie(&webview, &origin, raw).await.map_err(|_| refusal("refused", "The hub's session couldn't be kept in the app."))?;
     }

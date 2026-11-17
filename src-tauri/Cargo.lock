@@ -3112,6 +3112,7 @@ dependencies = [
  "buzz-core",
  "buzz-pair-relay",
  "buzz-ws-client",
+ "bytes",
  "keyring",
  "log",
  "nostr",

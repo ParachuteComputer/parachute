@@ -1,10 +1,12 @@
 //! Parachute's shell: one window around the app, the seal applets need on desktop, and the two facts the applet
 //! self-test is keyed on (the app's version and the webview runtime), and the person's key (key.rs: kept, paired in by
-//! pairing.rs, used to sign in to a hub by door.rs). Everything else lives in the web app.
+//! pairing.rs, used to sign in to a hub by door.rs and for an allowed applet's services by services.rs). Everything else
+//! lives in the web app.
 
 pub mod door;
 pub mod key;
 pub mod pairing;
+pub mod services;
 
 use tauri::{Runtime, Url};
 
@@ -87,6 +89,7 @@ pub fn run() {
     builder
         .manage(key::KeyState::default())
         .manage(pairing::PairState::default())
+        .manage(services::ServicesState::default())
         .invoke_handler(tauri::generate_handler![
             app_version,
             webview_runtime,
@@ -98,7 +101,19 @@ pub fn run() {
             pairing::pair_confirm,
             pairing::pair_cancel,
             door::key_sign_in,
-            door::hub_vaults
+            door::hub_vaults,
+            services::svc_open,
+            services::svc_close,
+            services::svc_relay_auth,
+            services::svc_sign_event,
+            services::svc_http,
+            services::svc_upload,
+            services::svc_media,
+            services::svc_private_open,
+            services::svc_private_save,
+            services::svc_token_set,
+            services::svc_token_has,
+            services::svc_log
         ])
         .setup(|app| {
             #[cfg(desktop)]
