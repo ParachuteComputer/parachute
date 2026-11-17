@@ -162,3 +162,16 @@ describe("which frame kit an applet gets", () => {
     expect(usesNote('import { useState } from "react";\nimport { vault } from "parachute";')).toBe(false);
   });
 });
+
+describe("what an applet imports", () => {
+  it("each import is its own script: one with a mistake fails alone, by name, and the rest load", async () => {
+    const { modulePage } = await import("./code");
+    const page = modulePage("module.exports.default = function () { return null; };", "window.__ParachuteModules = {};", [{ id: "good", js: "module.exports.ok = 1;" }, { id: "bad", js: "this is not javascript (" }]);
+    const scripts = page.match(/<script>[\s\S]*?<\/script>/g)!;
+    const imports = scripts.filter((s) => s.includes("__ParachuteImports = window.__ParachuteImports"));
+    expect(imports).toHaveLength(2);
+    expect(imports[0]).toContain('"component:good"');
+    expect(imports[1]).toContain('"component:bad"');
+    expect(page).toContain("which it imports, couldn't load: its code has an error");
+  });
+});

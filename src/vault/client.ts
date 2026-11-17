@@ -18,6 +18,9 @@ const clients = new Map<string, { at: string; client: VaultClient }>();
 /** One refresh at a time per vault: the hub rotates refresh tokens, so two at once could store a spent one. */
 const refreshing = new Map<string, Promise<string | null>>();
 
+/** A refresh the hub answered no to: a 4xx, but not 429 (too many asks is not a no). */
+export const refusedRefresh = (e: unknown) => e instanceof Error && /^refresh failed \(4(?!29)\d\d\)$/.test(e.message);
+
 /** How the last refresh of each vault's sign-in ended, when it failed: the hub said no, or it didn't answer. */
 const refreshFailed = new Map<string, "refused" | "unreachable">();
 
@@ -35,7 +38,7 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
       return t.access_token;
     } catch (e) {
       // the hub answering no (a 4xx to the refresh) is a refusal; anything else (no answer, its own trouble) is not
-      refreshFailed.set(key, e instanceof Error && /^refresh failed \(4(?!29)\d\d\)$/.test(e.message) ? "refused" : "unreachable");
+      refreshFailed.set(key, refusedRefresh(e) ? "refused" : "unreachable");
       return null;
     }
   })().finally(() => refreshing.delete(key));

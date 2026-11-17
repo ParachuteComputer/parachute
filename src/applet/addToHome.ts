@@ -25,9 +25,11 @@ export async function addToHome(vault: string, noteId: string): Promise<"added" 
   const before = await client.getNote(start.noteId);
   if (!before) throw new Error("Your home applet is gone.");
   const had = ((before.metadata ?? {}) as Record<string, unknown>).embeds;
-  if (Array.isArray(had) && had.length >= MAX_EMBEDS) throw new Error(`Your home shows ${MAX_EMBEDS} things already: take one off first.`);
   // a pointer already there is used as it is: its pin moves only when the person allows new code on its card
   const there = from.key === host.key ? null : (await readPointers()).find((p) => names(p.pointer, from, noteId)) ?? null;
+  const already = from.key === host.key ? stripExt(c.path) : there ? stripExt(there.path) : null;
+  if (Array.isArray(had) && already && had.some((e) => typeof e?.record === "string" && stripExt(e.record) === already)) return "already";
+  if (Array.isArray(had) && had.length >= MAX_EMBEDS) throw new Error(`Your home shows ${MAX_EMBEDS} things already: take one off first.`);
   const record = from.key === host.key ? stripExt(c.path)
     : stripExt(there?.path ?? (await bringIn(from, noteId, { kind: "component", id: c.component.id, name: c.component.name, code: c.hash })).path);
   for (let attempt = 0; ; attempt++) {

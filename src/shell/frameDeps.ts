@@ -69,8 +69,7 @@ async function bringThingIn(vault: string, noteId: string): Promise<void> {
   const a = appletsNow(rec.key);
   const e = a?.state === "ok" ? a.found.entries.find((x) => x.noteId === noteId) : undefined;
   if (e) { await bringIn(rec, noteId, { kind: "applet", id: e.manifest.id, name: e.manifest.name, code: e.keys.html }); return; }
-  const c = await fullComponent(rec, noteId).catch(() => null);
-  if (!c) throw new Error("That isn't an applet or a component this vault has.");
+  const c = await fullComponent(rec, noteId);
   await bringIn(rec, noteId, { kind: "component", id: c.component.id, name: c.component.name, code: c.hash });
 }
 

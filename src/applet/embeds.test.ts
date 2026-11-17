@@ -69,3 +69,14 @@ describe("a page with embeds", () => {
     expect(failureOf(new TypeError("Failed to fetch"))).toBe("offline");
   });
 });
+
+describe("telling a refused sign-in from a hub in trouble", () => {
+  it("a 4xx to the refresh is a no; a 429, a 5xx or no answer is not", async () => {
+    const { refusedRefresh } = await import("../vault/client");
+    expect(refusedRefresh(new Error("refresh failed (400)"))).toBe(true);
+    expect(refusedRefresh(new Error("refresh failed (401)"))).toBe(true);
+    expect(refusedRefresh(new Error("refresh failed (429)"))).toBe(false);
+    expect(refusedRefresh(new Error("refresh failed (503)"))).toBe(false);
+    expect(refusedRefresh(new TypeError("Failed to fetch"))).toBe(false);
+  });
+});
