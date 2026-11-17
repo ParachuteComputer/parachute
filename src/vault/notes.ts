@@ -19,7 +19,7 @@ export const isCodeNote = (n: { path?: string | null; tags?: readonly string[] |
   isCodeExtension(n) || (n.tags ?? []).includes("applet");
 
 /** The tags of the app's own records (homeSettings.ts, frameSource.ts, theme/store.ts). */
-const APP_TAGS = ["parachute-settings", "parachute-frame", "parachute-theme"];
+const APP_TAGS = ["parachute-settings", "parachute-frame", "parachute-theme", "parachute-pointer"];
 /** Notes that are the app's own (its settings, frame and theme records, by their tags; the vault's system space,
  *  .parachute/) or an applet's code: never among what the person wrote lately (the launcher, `app.recent`). A person's
  *  own folder named Parachute/ is theirs, and shows. */

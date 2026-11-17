@@ -60,6 +60,8 @@ test("Techne's Events on the home: the host's card says what its page shows, the
     await expect(place.getByRole("button", { name: /Allow/ })).toHaveCount(0);
     await place.getByRole("button", { name: "Review" }).click();
     const sheet = page.getByRole("dialog", { name: /Events is asking/ });
+    // it takes the focus: a screen reader moves into it, and no frame holds the focus while it is open
+    await expect(sheet).toBeFocused();
     await expect(sheet).toContainText("A component asks for access");
     await expect(sheet).toContainText(`from techne (someone else's, at ${hostOf(techneState().origin)})`);
     await expect(sheet).toContainText("Read notes outside its own folder, in Events/");
