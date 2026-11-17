@@ -19,15 +19,17 @@
 
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
+  var svcSubs = {}, svcStatus = [];
   var measuring = false, lastHeight = -1, queued = false;
   var readyP = new Promise(function (r) { readyRes = r; });
   function post(m) { parent.postMessage(m, "*"); }
-  function timeout(table, id, rej) { setTimeout(function () { if (table[id]) { delete table[id]; rej(new Error("timeout")); } }, 20000); }
+  function timeout(table, id, rej, ms) { setTimeout(function () { if (table[id]) { delete table[id]; rej(new Error("timeout")); } }, ms || 20000); }
   function call(ns, method, params) {
     return new Promise(function (res, rej) {
       var id = "k" + (++n); pending[id] = { res: res, rej: rej };
       post({ uni: 1, id: id, ns: ns, method: method, params: params || {} });
-      timeout(pending, id, rej);
+      // a server can take a while (an upload, a relay's history): services calls wait longer
+      timeout(pending, id, rej, ns === "services" ? 120000 : 20000);
     });
   }
   function applyTheme(t) {
@@ -90,6 +92,12 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "props") { applyProps(m.data); return; }
     if (m.event === "theme") { applyTheme(m.data); return; }
     if (m.event === "open") { applyOpen(m.data); return; }
+    if (m.event === "services.events") {
+      var d = m.data || {}, h = svcSubs[d.service + "|" + d.sub];
+      if (h) { if (d.events && d.events.length) { try { h.onEvents(d.events); } catch (e) {} } if (d.eose && h.onEose) { try { h.onEose(); } catch (e) {} } }
+      return;
+    }
+    if (m.event === "services.status") { svcStatus.slice().forEach(function (f) { try { f(m.data); } catch (e) {} }); return; }
     var p = pending[m.id]; if (!p) return; delete pending[m.id];
     if (m.error) { var er = new Error(m.error.message || m.error.code); er.code = m.error.code; p.rej(er); } else p.res(m.result);
   });
@@ -139,6 +147,45 @@ export const FRAME_KIT = String.raw`(function () {
       recent: function (o) { return call("app", "recent", o || {}); },
       pins: function () { return call("app", "pins", {}); },
       open: function (href) { return call("app", "open", { href: href }); }
+    }),
+    // the servers it declared (docs/design/SERVICES.md): the shell talks to them for it, and signs as the person
+    services: Object.freeze({
+      me: function () { return call("services", "me", {}); },
+      fetch: function (service, path, init) {
+        init = init || {};
+        var p = { service: service, path: path };
+        if (init.method) p.method = String(init.method);
+        if (init.headers) p.headers = init.headers;
+        if (init.as) p.as = init.as;
+        var b = init.body;
+        if (b instanceof ArrayBuffer) p.bytes = b;
+        else if (b && ArrayBuffer.isView(b)) p.bytes = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+        else if (typeof b === "string") p.body = b;
+        else if (b !== undefined && b !== null) p.body = JSON.stringify(b);
+        return call("services", "fetch", p);
+      },
+      relay: function (service) {
+        return Object.freeze({
+          subscribe: function (filters, onEvents, onEose) {
+            if (typeof onEvents !== "function") throw new TypeError("subscribe needs a function for the events");
+            var sub = "s" + (++n), key = service + "|" + sub, on = true;
+            svcSubs[key] = { onEvents: onEvents, onEose: onEose };
+            call("services", "subscribe", { service: service, sub: sub, filters: filters }).catch(function (e) { delete svcSubs[key]; svcStatus.slice().forEach(function (f) { try { f({ service: service, sub: sub, status: "closed", why: e.message }); } catch (x) {} }); });
+            return function () { if (!on) return; on = false; delete svcSubs[key]; call("services", "unsubscribe", { service: service, sub: sub }).catch(function () {}); };
+          },
+          query: function (filters) { return call("services", "query", { service: service, filters: filters }); },
+          publish: function (ev) { return call("services", "publish", { service: service, event: ev }); },
+          loadPrivate: function (d) { return call("services", "loadPrivate", { service: service, d: d }); },
+          savePrivate: function (d, text) { return call("services", "savePrivate", { service: service, d: d, text: text }); },
+          onStatus: function (cb) { var f = function (s) { if (s && s.service === service) cb(s); }; svcStatus.push(f); return function () { var i = svcStatus.indexOf(f); if (i >= 0) svcStatus.splice(i, 1); }; }
+        });
+      },
+      upload: function (service, bytes, type) {
+        var b = bytes instanceof ArrayBuffer ? bytes : bytes && ArrayBuffer.isView(bytes) ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : null;
+        if (!b) return Promise.reject(new TypeError("upload takes bytes (an ArrayBuffer)"));
+        return call("services", "upload", { service: service, bytes: b, type: type });
+      },
+      media: function (service, sha256, ext) { return call("services", "media", { service: service, sha256: sha256, ext: ext }); }
     }),
     theme: {
       get: function () { return call("theme", "get", {}); },

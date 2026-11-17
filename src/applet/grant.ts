@@ -7,6 +7,7 @@ import type { Manifest, Rule, Verb } from "./manifest.ts";
 import type { Opens } from "./opens.ts";
 import { sha256Hex } from "./needs.ts";
 import { appLines, type AppWord } from "./app.ts";
+import { serviceLines, servicesKeyPart, type Service } from "./services.ts";
 
 /** The card's line for a page whose embeds come from someone else's vaults ("techne at techne.example"). */
 export function embedsLine(from: readonly string[]): string | null {
@@ -28,14 +29,16 @@ export type Grant = {
   app: AppWord[];
   /** The other vaults its page's embeds come from, by name and host (docs/design/EMBED.md): on its card, and in its key. */
   embedsFrom?: string[];
+  /** The servers it reaches through the shell (docs/design/SERVICES.md): on its card, and in its key. */
+  services?: Service[];
 };
 
 /** How long a grant lasts before the card comes back. */
 export const GRANT_DAYS = 365;
 export const grantExpiry = (from: Date): Date => new Date(from.getTime() + GRANT_DAYS * 86_400_000);
 
-export const grantOf = (m: Manifest, vault: string, opens: readonly Opens[], app: readonly AppWord[] = []): Grant =>
-  ({ applet: { id: m.id, name: m.name }, vault, allow: m.allow.map((r) => ({ path: r.path, verbs: [...r.verbs] })), opens: opens.map((o) => ({ ...o })), app: [...app] });
+export const grantOf = (m: Manifest, vault: string, opens: readonly Opens[], app: readonly AppWord[] = [], services: readonly Service[] = []): Grant =>
+  ({ applet: { id: m.id, name: m.name }, vault, allow: m.allow.map((r) => ({ path: r.path, verbs: [...r.verbs] })), opens: opens.map((o) => ({ ...o })), app: [...app], ...(services.length ? { services: services.map((s) => ({ ...s })) } : {}) });
 
 /** A note's path as a rule may judge it: plain segments only, no percent-encoded dot, slash, backslash or percent. */
 const plainPath = (path: unknown): path is string => typeof path === "string" && !/%(?:2e|2f|5c|25)/i.test(path) && inScope([""], path);
@@ -69,6 +72,7 @@ export function grantLines(g: Grant, ownFolder: string | null): CardLine[] {
     if (g.allow.some((r) => r.verbs.includes("create") && (r.path.startsWith(o.path) || o.path.startsWith(r.path)))) out.push({ text: `Tag the notes it adds in ${o.path} as ${o.type}`, stress: false });
   }
   out.push(...appLines(g.app));
+  out.push(...serviceLines(g.services ?? []));
   const page = embedsLine(g.embedsFrom ?? []);
   if (page) out.push({ text: page, stress: true });
   return out;
@@ -91,7 +95,9 @@ export function grantKey(g: Grant, notePath: string): Promise<string> {
   const app = g.app?.length ? [...new Set(g.app)].sort() : undefined;
   // only when its page shows things from someone else's vaults: every other key stays as it was
   const embeds = g.embedsFrom?.length ? [...new Set(g.embedsFrom)].sort() : undefined;
-  return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens, app, embeds }));
+  // only when it reaches servers: every other key stays as it was
+  const services = g.services?.length ? servicesKeyPart(g.services) : undefined;
+  return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens, app, embeds, services }));
 }
 
 /** "9b13 b2ae": the first eight digits of the key, to tell two cards apart. */

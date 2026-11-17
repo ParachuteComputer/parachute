@@ -1,5 +1,6 @@
 // The applets in one vault, as the app lists them (discovery.ts), read from the vault's notes tagged `applet` and kept
 // for this session. Read again when a screen asks (`refresh`), so a newly published applet shows up.
+import { isKnownHub } from "../services/hubs";
 import { useEffect, useSyncExternalStore } from "react";
 import type { Note, VaultClient } from "@openparachute/surface-client";
 import { MAX_CODE_CHARS } from "../vault/limited";
@@ -41,7 +42,7 @@ async function appletRows(client: Pick<VaultClient, "queryNotes" | "getNote">, n
 
 export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getNote">, vault: string, notMine = false, host?: VaultRecord): Promise<Read> {
   const [rows, roles] = await Promise.all([appletRows(client, notMine), readRoleTags(client)]);
-  const found: Discovery = discoverApplets(rows.filter((r) => codeKindOf(r as { extension?: string }) !== null), vault, notMine);
+  const found: Discovery = discoverApplets(rows.filter((r) => codeKindOf(r as { extension?: string }) !== null), vault, notMine, isKnownHub);
   const html = new Map(rows.map((r) => [r.id, r.content ?? ""]));
   const kinds = new Map(rows.map((r) => [r.id, codeKindOf(r as { extension?: string })]));
   // as the applet screen reads them: the vault's role tags dropped first, so the keys match its keys
@@ -54,7 +55,7 @@ export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getN
     const kind = kinds.get(e.noteId)!, source = html.get(e.noteId) ?? "";
     const imp = kind !== "html" && host && importsOf(source).length ? await readImports(host, source).catch(() => null) : null;
     const code = imp?.ok && imp.imports.length && kind !== "html" ? await compositeHash(kind, source, imp.imports) : await codeHash(kind, source);
-    return { ...e, keys: { scope: await grantKey({ ...grantOf(e.manifest, vault, e.opens, e.app), embedsFrom: from }, e.path), html: code } };
+    return { ...e, keys: { scope: await grantKey({ ...grantOf(e.manifest, vault, e.opens, e.app, e.services), embedsFrom: from }, e.path), html: code } };
   }));
   return { entries, skipped: rows.length - found.entries.length };
 }

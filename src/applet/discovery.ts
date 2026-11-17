@@ -10,6 +10,7 @@ import { parseApp, type AppWord } from "./app.ts";
 import type { Need, Resolved } from "./needs.ts";
 import { resolveNeeds } from "./needs.ts";
 import { parseEmbeds, type Embed } from "./embeds.ts";
+import { parseServices, type Service } from "./services.ts";
 
 /** The app's own applet ids: a note may not take one. */
 export const BUILT_IN_IDS = ["vault"];
@@ -28,12 +29,17 @@ export type AppletEntry = {
   opensError?: string;
   /** What its page embeds (embeds.ts): only for an applet in a vault of the person's own. */
   embeds: Embed[];
+  /** The servers it may reach through the shell (services.ts, docs/design/SERVICES.md): only in a vault of the person's own. */
+  services: Service[];
+  /** why `services` was refused, when it was (the applet then reaches no service) */
+  servicesError?: string;
 };
 export type Discovery = { entries: AppletEntry[]; skipped: number };
 type Row = { id?: unknown; path?: unknown; tags?: unknown; metadata?: unknown };
 
-/** `theirs`: the vault isn't the person's own (vault/whose.ts): its applets ask nothing of the app, whatever `app` says. */
-export function readApplet(r: Row, vault: string, theirs = false): { ok: true; entry: AppletEntry } | { ok: false; error: string } {
+/** `theirs`: the vault isn't the person's own (vault/whose.ts): its applets ask nothing of the app, whatever `app` says,
+ *  and reach no service. `isHub`: is an origin one of the person's Parachute hubs (never a service). */
+export function readApplet(r: Row, vault: string, theirs = false, isHub: (origin: string) => boolean = () => false): { ok: true; entry: AppletEntry } | { ok: false; error: string } {
   if (typeof r.id !== "string" || !r.id || typeof r.path !== "string" || !r.path) return { ok: false, error: "it isn't a note" };
   if (!Array.isArray(r.tags) || !r.tags.includes("applet")) return { ok: false, error: "it isn't tagged applet" };
   const meta = plain(r.metadata) ? r.metadata : {};
@@ -44,16 +50,18 @@ export function readApplet(r: Row, vault: string, theirs = false): { ok: true; e
   // as with `opens`: a bad `app` costs the applet what it asked of the app, not the applet
   const app = theirs ? { ok: false as const, error: "an applet in someone else's vault can't ask the app for anything" } : parseApp(meta.app);
   const opens = parseOpens(meta.opens, parsed.manifest);
-  return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], embeds: theirs ? [] : parseEmbeds(meta.embeds), ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }) } };
+  const services = theirs ? (meta.services === undefined ? { ok: true as const, services: [] } : { ok: false as const, error: "an applet in someone else's vault reaches no service" }) : parseServices(meta.services, isHub);
+  return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], embeds: theirs ? [] : parseEmbeds(meta.embeds), services: services.ok ? services.services : [],
+    ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }), ...(services.ok ? {} : { servicesError: services.error }) } };
 }
 
-export function discoverApplets(rows: readonly Row[], vault: string, theirs = false): Discovery {
+export function discoverApplets(rows: readonly Row[], vault: string, theirs = false, isHub: (origin: string) => boolean = () => false): Discovery {
   const entries: AppletEntry[] = [];
   const ids = new Set<string>();
   let skipped = 0;
   const sorted = [...rows].sort((a, b) => String(a.path ?? "").localeCompare(String(b.path ?? "")));
   for (const r of sorted) {
-    const a = readApplet(r, vault, theirs);
+    const a = readApplet(r, vault, theirs, isHub);
     if (!a.ok || ids.has(a.entry.manifest.id)) { skipped++; continue; }
     ids.add(a.entry.manifest.id);
     entries.push(a.entry);
