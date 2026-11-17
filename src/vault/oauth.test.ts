@@ -113,6 +113,14 @@ describe("beginSignIn", () => {
     const again = new URL(await beginSignIn(begin({ step: "vaults", vaults: ["recipes"], fresh: true, how: "key" }), discovery(META, reg)));
     expect(again.searchParams.get("client_id")).toBe("client-2");
   });
+  it("a consent left long ago (the hub may have forgotten the registration) registers again", async () => {
+    const reg: string[] = [];
+    await beginSignIn(begin({ step: "vaults", vaults: ["recipes"], how: "page" }), discovery(META, reg));
+    const p = JSON.parse(localStorage.getItem(PENDING)!) as Pending;
+    localStorage.setItem(PENDING, JSON.stringify({ ...p, startedAt: Date.now() - 6 * 60_000 }));
+    const again = new URL(await beginSignIn(begin({ step: "list", fresh: true, how: "page" }), discovery(META, reg)));
+    expect(again.searchParams.get("client_id")).toBe("client-2");
+  });
   it("keeps the registration when the last sign-in stopped past its first step (the hub had taken it)", async () => {
     const reg: string[] = [];
     // without a key, the listing came back (the registration worked); the person left at the consent

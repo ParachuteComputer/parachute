@@ -3,8 +3,7 @@
 // screens use this module; the frame and applets can't reach it (src/frame/boundary.test.ts, and they have no bridge).
 import { useSyncExternalStore } from "react";
 import { inShell } from "../vault/oauth";
-import { VAULT_NAME } from "../vault/address";
-import { MAX_VAULTS } from "../vault/parachute";
+import { cleanVaultNames } from "../vault/address";
 
 export type KeyInfo = { npub: string };
 /** Why a key sign-in didn't happen (src-tauri/src/door.rs `Refusal`). */
@@ -80,7 +79,7 @@ export async function keySignIn(hub: string, next: string): Promise<string> {
 export async function hubVaults(hub: string): Promise<{ vaults: string[]; all: boolean }> {
   try {
     const r = await invoke<{ vaults: string[]; all: boolean }>("hub_vaults", { hub });
-    return { vaults: [...new Set(r.vaults.filter((n) => typeof n === "string" && VAULT_NAME.test(n)))].sort().slice(0, MAX_VAULTS), all: r.all === true };
+    return { vaults: cleanVaultNames(Array.isArray(r.vaults) ? r.vaults : []), all: r.all === true };
   } catch (e) {
     throw asRefusal(e);
   }

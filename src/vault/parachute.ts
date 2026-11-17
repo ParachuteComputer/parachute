@@ -4,7 +4,7 @@
 //   "uni.example", "https://uni.example", "https://uni.example/vault/notes"  → the hub at https://uni.example
 // The hub describes itself at /.well-known/parachute-account (core 0.8, 0.9 and Cloud): its OAuth issuer, its account
 // MCP (where `list-vaults` answers which vaults the person may reach) and where its vaults live.
-import { isLoopback, VAULT_NAME } from "./address";
+import { cleanVaultNames, isLoopback, MAX_VAULTS, VAULT_NAME } from "./address";
 
 export const CLOUD = "https://cloud.parachute.computer";
 export const CLOUD_NAME = "Parachute Cloud";
@@ -78,8 +78,7 @@ export function rpcAnswer(text: string): unknown {
   try { return JSON.parse(json); } catch { throw new Error("The hub's list of your vaults couldn't be read."); }
 }
 
-/** The most vaults one sign-in brings (each is a page load of its own sign-in). */
-export const MAX_VAULTS = 60;
+export { MAX_VAULTS };
 /** The vaults the hub lists for the person, and whether they are every vault on it (`covered: "all"`: the person runs
  *  the hub) rather than the ones given to them. */
 export type Listed = { vaults: string[]; all: boolean };
@@ -92,8 +91,7 @@ export function listFrom(body: unknown): Listed {
   const text = r.result?.content?.find((c) => c.type === "text")?.text;
   let parsed: { vaults?: { name?: unknown }[]; covered?: unknown };
   try { parsed = JSON.parse(text ?? "") as typeof parsed; } catch { throw new Error("The hub's list of your vaults couldn't be read."); }
-  const names = (Array.isArray(parsed.vaults) ? parsed.vaults : []).map((v) => v?.name).filter((n): n is string => typeof n === "string" && VAULT_NAME.test(n));
-  return { vaults: [...new Set(names)].sort().slice(0, MAX_VAULTS), all: parsed.covered === "all" };
+  return { vaults: cleanVaultNames((Array.isArray(parsed.vaults) ? parsed.vaults : []).map((v) => v?.name)), all: parsed.covered === "all" };
 }
 
 /** The one call that lists the person's vaults: `list-vaults` on the hub's account MCP. */

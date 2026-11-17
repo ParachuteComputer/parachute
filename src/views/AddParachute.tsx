@@ -2,12 +2,11 @@ import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Bar } from "../ui/Bar";
 import { CLOUD, CLOUD_NAME, parseHub } from "../vault/parachute";
-import { startSignIn, type VaultPick } from "../vault/signInFlow";
+import { signInWords as words, startSignIn, type VaultPick } from "../vault/signInFlow";
 import PickVaults from "./PickVaults";
 import { keysHere, useKey, type Refusal } from "../key/key";
 import { Npub } from "../key/Npub";
 
-const words = (err: unknown) => err instanceof Error && /fetch|network|load/i.test(err.message) ? "The hub didn't answer at that address." : err instanceof Error ? err.message : "The hub didn't answer.";
 const isRefusal = (e: unknown): e is Refusal => !!e && typeof e === "object" && typeof (e as Refusal).code === "string" && typeof (e as Refusal).message === "string" && !(e instanceof Error);
 
 /** Add a Parachute (docs/design/ONE-SIGN-IN.md): its address, or Parachute Cloud; whose it is; then one sign-in on its

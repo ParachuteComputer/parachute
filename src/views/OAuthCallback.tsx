@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Bar } from "../ui/Bar";
 import { dropPending, peekPending, PendingApprovalError } from "../vault/oauth";
-import { finishStep, keptSoFar, type VaultPick } from "../vault/signInFlow";
+import { finishStep, keptSoFar, signInWords, type VaultPick } from "../vault/signInFlow";
 import PickVaults from "./PickVaults";
 import { afterSignIn } from "../shell/parachutes";
 
@@ -49,7 +49,7 @@ export default function OAuthCallback() {
   return (
     <main className="screen">
       <Bar title="Signing in" back="/" />
-      {pick ? <section className="card stack"><PickVaults pick={pick} onCancel={() => nav("/add", { replace: true })} onError={(e) => { setPick(null); setError(e instanceof Error ? e.message : "The hub didn't answer."); }} /></section> : <div className="card" role="status">
+      {pick ? <section className="card stack"><PickVaults pick={pick} onCancel={() => { dropPending(); nav("/", { replace: true }); }} onError={(e) => { setPick(null); if (e instanceof PendingApprovalError) setApprove(e.approveUrl); else setError(signInWords(e)); }} /></section> : <div className="card" role="status">
         {approve ? <>
           <p>Your hub hasn't approved Parachute yet. Approve it there, then sign in again.</p>
           <a className="primary" href={approve}>Approve on your hub</a>

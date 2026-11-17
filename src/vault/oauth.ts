@@ -20,6 +20,9 @@ const PENDING_KEY = "parachute.oauth.pending.v1";
 const CLIENTS_KEY = "parachute.oauth.clients.v1";
 /** A flow older than this is stale: its code verifier is dropped. */
 const PENDING_TTL_MS = 30 * 60_000;
+/** A consent left this long ago (the person never came back from it) may have died on a registration the hub has since
+ *  forgotten: the next sign-in registers again. A fresher one keeps it. */
+const STALE_CONSENT_MS = 5 * 60_000;
 
 export { PendingApprovalError };
 import { limitedFetch } from "./limited";
@@ -117,7 +120,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   const stale = readJson<Pending>(PENDING_KEY);
   // (only one that stopped at its first step: the listing, or the consent when the key listed the vaults; past that,
   // the hub took the registration, kept so a hub whose owner approves new registrations doesn't have to again)
-  if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "vaults" && stale.how === "key"))) forgetClient(parachute.issuer);
+  if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "vaults" && (stale.how === "key" || Date.now() - stale.startedAt > STALE_CONSENT_MS)))) forgetClient(parachute.issuer);
   let clientId = cachedClient(parachute.issuer, redirect);
   if (!clientId) {
     clientId = (await registerClient(meta.registration_endpoint, { clientName: CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
