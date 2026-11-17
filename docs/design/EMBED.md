@@ -217,7 +217,8 @@ it. Names from records are quoted and the hub's address is the app's:
 | It doesn't compile, its record is invalid, or its body is over 200 KB | "«Events» can't run: <reason>." |
 
 The vault module turns hub errors into plain answers for the frame, so the shell wraps the vault deps it hands an
-embed's module: the wrapper sees surface-client's `VaultAuthError` with status 401 (after the refresh the client
+embed's module (and a failure that looks like the network is checked by trying the sign-in's refresh, since a hub
+may refuse a token in a way a browser can't read: core proposal 3): the wrapper sees surface-client's `VaultAuthError` with status 401 (after the refresh the client
 already tries; a `VaultPermissionError`, 403, is left to the plain answer) and `VaultUnreachableError`, and replaces the frame with the sentence; the record itself being gone (`VaultNotFoundError`
 when it is read to start) is the shell's own read. Sentences that need a tap ("Sign in to techne again", "Add it") are
 links to the app's own screens, not buttons that grant.
@@ -367,7 +368,11 @@ A custom frame that ignores them keeps working.
    and the consent page should refuse a vault the person has no role on any more. Today (0.8.0 and 0.9.0-pre.1) all
    three keep working.
 2. 0.8's vault should check the token registry, as 0.9's does.
-3. A hub-wide display name in a public endpoint, so "whose it is" can name *Techne*, not the host. The app would still
+3. Core 0.9's 401 for a revoked token ("this key has been revoked") has no CORS headers, unlike its other 401s, so a
+   browser can't see it: to the app it looks like the hub is out of reach. The app tells the two apart by trying the
+   sign-in's refresh (the hub answering no is a refused sign-in), but the 401 should carry the same headers as the
+   rest. Found while building this step (a loopback hub, `auth revoke-token`, then a request with an `Origin`).
+4. A hub-wide display name in a public endpoint, so "whose it is" can name *Techne*, not the host. The app would still
    quote it as unverified.
 
 ## Not in this step
