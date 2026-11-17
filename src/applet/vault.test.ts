@@ -112,6 +112,8 @@ describe("fields on a list", () => {
     const rows = r.body as { path: string; metadata?: Record<string, unknown>; tags?: string[] }[];
     expect(rows.find((x) => x.path === "Recipes/Toast")).toMatchObject({ metadata: { when: "2026-11-20" }, tags: ["recipe"] });
     expect(rows.some((x) => x.path.startsWith("Journal/"))).toBe(false);
+    // fields, not bodies: a body comes only with include_content
+    expect(rows.find((x) => x.path === "Recipes/Toast")).not.toHaveProperty("content");
     // without it, a list is what it was: ids, paths and times
     const plain = (await frame().fetch("GET", "/api/notes?path_prefix=Recipes/")).body as Record<string, unknown>[];
     expect(plain[0]).not.toHaveProperty("metadata");
