@@ -1,5 +1,5 @@
 // Whose a vault is (docs/design/EMBED.md): mine, someone else's, or someone else's that the person trusts. One value per
-// vault (its hub's origin and its name), chosen by the person on the app's own screens (Add a vault asks; Settings
+// vault (its hub's origin and its name), chosen by the person on the app's own screens (Add a Parachute asks; Settings
 // changes it) and kept on this device apart from the sign-in, so signing in again keeps it. No record or agent sets it.
 //
 //   mine      its applets may ask the app for things (recent, pins, open) and host embeds; it can be the home
@@ -9,7 +9,7 @@
 // Vaults this device held before this existed: the one that was its home (the person's choice, else the first added)
 // is mine; the others are someone else's until the person answers Settings' "Are these yours?".
 import { useSyncExternalStore } from "react";
-import { listVaults, subscribeVaults, touchVaults, type VaultRecord } from "./store";
+import { originOf, listVaults, subscribeVaults, touchVaults, type VaultRecord } from "./store";
 
 export type Whose = "mine" | "theirs" | "trusted";
 export const WHOSE_KEY = "parachute.whose.v1";
@@ -18,7 +18,6 @@ export const HOME_KEY = "parachute.home.v1";
 type Stored = { whose: Record<string, Whose>; ask: string[] };
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
-const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
 /** What a vault's value is kept under: its hub's origin and its name. */
 export const whoseKey = (r: Pick<VaultRecord, "issuer" | "vault">) => `${originOf(r.issuer)} ${r.vault}`;
 const WORDS: readonly Whose[] = ["mine", "theirs", "trusted"];
@@ -32,7 +31,7 @@ function migrate(list: readonly VaultRecord[], s: StorageLike | null): Stored {
   if (!list.length) return { whose: {}, ask: [] };
   let chosen: string | null = null;
   try { chosen = s?.getItem(HOME_KEY) ?? null; } catch { chosen = null; }
-  const home = list.find((v) => v.key === chosen) ?? [...list].sort((a, b) => a.addedAt.localeCompare(b.addedAt))[0];
+  const home = list.find((v) => v.key === chosen) ?? [...list].sort((a, b) => a.addedAt.localeCompare(b.addedAt) || a.vault.localeCompare(b.vault))[0];
   const whose: Record<string, Whose> = {};
   const ask: string[] = [];
   for (const v of list) { const k = whoseKey(v); if (v.key === home.key) whose[k] = "mine"; else { whose[k] = "theirs"; ask.push(k); } }
@@ -72,9 +71,15 @@ function write(stored: Stored, s: StorageLike | null = storage()) {
 /** Whose this vault is. A vault no one said anything about is someone else's. */
 export const whoseOf = (r: Pick<VaultRecord, "issuer" | "vault">): Whose => read().whose[whoseKey(r)] ?? "theirs";
 export const isMine = (r: Pick<VaultRecord, "issuer" | "vault">) => whoseOf(r) === "mine";
+/** What the person said about this vault, if anything (a vault never answered for counts as someone else's). */
+export const whoseSaid = (r: Pick<VaultRecord, "issuer" | "vault">): Whose | null => {
+  const s = read(), k = whoseKey(r);
+  // a vault held from before this existed, still asked about, has had no answer yet
+  return s.ask.includes(k) ? null : s.whose[k] ?? null;
+};
 /** May an applet import a component from this vault (its own vault always may)? */
 export const importable = (r: Pick<VaultRecord, "issuer" | "vault">) => whoseOf(r) !== "theirs";
-/** The person said whose it is (a tap on Add a vault or in Settings). */
+/** The person said whose it is (a tap on Add a Parachute or in Settings). */
 export function setWhose(r: Pick<VaultRecord, "issuer" | "vault">, w: Whose) {
   const s = read(), k = whoseKey(r);
   write({ whose: { ...s.whose, [k]: w }, ask: s.ask.filter((x) => x !== k) });

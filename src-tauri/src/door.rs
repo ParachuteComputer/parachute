@@ -10,6 +10,8 @@
 
 use std::time::Duration;
 
+use nostr::base64::Engine;
+use nostr::hashes::Hash;
 use nostr::{EventBuilder, Kind, Tag};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -56,6 +58,101 @@ pub fn hub_origin(raw: &str) -> Result<url::Url, Refusal> {
         return Err(refusal("bad_hub", "A hub is signed in to over https."));
     }
     url::Url::parse(&u.origin().ascii_serialization()).map_err(|_| refusal("bad_hub", "That isn't a hub address."))
+}
+
+/// The hub's account MCP, where `list-vaults` answers which vaults a key's person may reach (docs/design/ONE-SIGN-IN.md).
+pub const ACCOUNT_MCP_PATH: &str = "/account/mcp";
+/// The one call the key signs there: list the person's vaults. Nothing else is ever signed for the web side.
+pub const LIST_VAULTS_BODY: &str = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list-vaults","arguments":{}}}"#;
+
+/// The NIP-98 event for the one `list-vaults` request to this hub: kind 27235, `u` its account MCP on the hub's own
+/// origin, `method` POST, a fresh `nonce` (two asks in the same second are two events), and `payload` the body's hash.
+pub fn list_vaults_event(origin: &url::Url, nonce: &str) -> Result<EventBuilder, Refusal> {
+    let bad = || refusal("refused", "The request to list your vaults couldn't be made.");
+    let u = format!("{}{ACCOUNT_MCP_PATH}", origin.origin().ascii_serialization());
+    let payload = nostr::hashes::sha256::Hash::hash(LIST_VAULTS_BODY.as_bytes()).to_string();
+    let tag = |k: &str, v: &str| Tag::parse([k, v]).map_err(|_| bad());
+    Ok(EventBuilder::new(Kind::from(SIGN_IN_KIND), "").tags([tag("u", &u)?, tag("method", "POST")?, tag("nonce", nonce)?, tag("payload", &payload)?]))
+}
+
+/// What the hub answered to `list-vaults`: the vault names (each once, sorted, only names a vault can have), and whether
+/// they are every vault on the hub (`covered: "all"`: the person runs the hub) rather than the ones given to them.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct HubVaults {
+    pub vaults: Vec<String>,
+    pub all: bool,
+}
+
+/// Read the hub's answer to `list-vaults` (JSON, or one server-sent event carrying it).
+pub fn vault_names(body: &str) -> Option<HubVaults> {
+    let json = if body.trim_start().starts_with('{') { body.to_string() } else { body.lines().find_map(|l| l.strip_prefix("data:")).map(|d| d.trim().to_string())? };
+    let v: Value = serde_json::from_str(&json).ok()?;
+    if v.get("error").is_some() || v.pointer("/result/isError").and_then(Value::as_bool) == Some(true) {
+        return None;
+    }
+    let text = v.pointer("/result/content")?.as_array()?.iter().find(|c| c.get("type").and_then(Value::as_str) == Some("text"))?.get("text")?.as_str()?;
+    let inner: Value = serde_json::from_str(text).ok()?;
+    let all = inner.get("covered").and_then(Value::as_str) == Some("all");
+    let mut names: Vec<String> = inner
+        .get("vaults")?
+        .as_array()?
+        .iter()
+        .filter_map(|x| x.get("name").and_then(Value::as_str))
+        .filter(|n| vault_name_ok(n))
+        .map(str::to_string)
+        .collect();
+    names.sort();
+    names.dedup();
+    names.truncate(MAX_VAULTS);
+    Some(HubVaults { vaults: names, all })
+}
+
+/// The most vaults one sign-in brings (each is a page load of its own sign-in).
+pub const MAX_VAULTS: usize = 60;
+
+/// A vault's name, as the app takes one: lower-case letters, digits, `-` and `_`, starting with a letter or digit.
+fn vault_name_ok(n: &str) -> bool {
+    !n.is_empty() && n.len() <= 64 && n.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_') && n.as_bytes()[0] != b'-' && n.as_bytes()[0] != b'_'
+}
+
+static NONCES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+fn nonce() -> String {
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    format!("{t:x}{:x}", NONCES.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+}
+
+/// Ask the hub which vaults this key's person may reach.
+pub async fn list_vaults(origin: &url::Url, keys: &nostr::Keys) -> Result<HubVaults, Refusal> {
+    let http = client()?;
+    let event = list_vaults_event(origin, &nonce())?.sign_with_keys(keys).map_err(|_| refusal("refused", "The key couldn't sign."))?;
+    let auth = format!("Nostr {}", nostr::base64::engine::general_purpose::STANDARD.encode(nostr::JsonUtil::as_json(&event)));
+    let res = http
+        .post(origin.join(ACCOUNT_MCP_PATH).expect("fixed path"))
+        .header("Authorization", auth)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .body(LIST_VAULTS_BODY)
+        .send()
+        .await
+        .map_err(|_| refusal("unreachable", "The hub didn't answer."))?;
+    let status = res.status().as_u16();
+    let body = res.text().await.unwrap_or_default();
+    match status {
+        200 => vault_names(&body).ok_or_else(|| refusal("no_list", "The hub didn't list your vaults.")),
+        401 if body.contains("not linked") || body.contains("unknown_pubkey") => Err(refusal("unknown_key", "This hub doesn't know your key yet.")),
+        429 => Err(refusal("refused", "The hub asks to wait a moment before trying again.")),
+        500..=599 => Err(refusal("unreachable", format!("The hub didn't answer ({status}). Try again in a moment."))),
+        // no account MCP, or one that doesn't take a key: the app signs in to list them instead
+        _ => Err(refusal("no_list", "This hub doesn't list vaults for a key.")),
+    }
+}
+
+/// The vaults this device's key may reach on `hub`: one request the shell signs itself (the key never leaves it).
+#[tauri::command]
+pub async fn hub_vaults<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, hub: String) -> Result<HubVaults, Refusal> {
+    let origin = hub_origin(&hub)?;
+    let held = keys.get(&app).await.map_err(|m| refusal("no_key", m))?.ok_or_else(|| refusal("no_key", "This device has no key."))?;
+    list_vaults(&origin, &held).await
 }
 
 /// A same-hub path to go to after signing in (the authorize address), as the hub's `next` takes it.
@@ -239,6 +336,43 @@ mod tests {
         assert!(line.starts_with("parachute_hub_session=abc") && line.contains("HttpOnly") && line.contains("Secure") && !line.contains("Domain"), "{line}");
         let s = Session { set_cookies: vec!["parachute_hub_session=secretvalue; Path=/".into()], redirect: "/".into() };
         assert!(!format!("{s:?}").contains("secretvalue"));
+    }
+
+    #[test]
+    fn signs_only_the_list_of_vaults() {
+        let o = hub_origin("https://hub.example/vault/notes").unwrap();
+        let k = nostr::Keys::generate();
+        let ev = list_vaults_event(&o, "n1").unwrap().sign_with_keys(&k).unwrap();
+        assert_eq!(ev.kind, Kind::from(27235));
+        assert_eq!(ev.content, "");
+        let tags: Vec<Vec<String>> = ev.tags.iter().map(|t| t.as_slice().to_vec()).collect();
+        // the hub's own account MCP, on its origin, whatever address was typed
+        assert!(tags.contains(&vec!["u".into(), "https://hub.example/account/mcp".into()]), "{tags:?}");
+        assert!(tags.contains(&vec!["method".into(), "POST".into()]));
+        assert!(tags.contains(&vec!["nonce".into(), "n1".into()]));
+        // the hash of the one fixed body (sha256 hex), so the signature covers what is asked and nothing else
+        let payload = tags.iter().find(|t| t[0] == "payload").unwrap()[1].clone();
+        assert_eq!(payload, nostr::hashes::sha256::Hash::hash(LIST_VAULTS_BODY.as_bytes()).to_string());
+        assert_eq!(payload.len(), 64);
+        assert_eq!(tags.len(), 4);
+        assert!(ev.verify().is_ok());
+        let other = list_vaults_event(&o, "n2").unwrap().sign_with_keys(&k).unwrap();
+        assert_ne!(ev.id, other.id, "two asks are two events");
+    }
+
+    #[test]
+    fn reads_the_list_of_vaults() {
+        let inner = r#"{"covered":"listed","vaults":[{"name":"work","url":"x"},{"name":"kim"},{"name":"Bad Name"},{"name":"kim"},{"nope":1}]}"#;
+        let body = json!({ "jsonrpc": "2.0", "id": 1, "result": { "content": [{ "type": "text", "text": inner }] } }).to_string();
+        let want = HubVaults { vaults: vec!["kim".to_string(), "work".to_string()], all: false };
+        assert_eq!(vault_names(&body).unwrap(), want);
+        assert_eq!(vault_names(&format!("event: message\ndata: {body}\n\n")).unwrap(), want);
+        // the hub's admin is given every vault on it
+        let every = json!({ "jsonrpc": "2.0", "id": 1, "result": { "content": [{ "type": "text", "text": r#"{"covered":"all","vaults":[{"name":"a"}]}"# }] } }).to_string();
+        assert!(vault_names(&every).unwrap().all);
+        assert!(vault_names(r#"{"jsonrpc":"2.0","id":1,"error":{"code":-1}}"#).is_none());
+        assert!(vault_names(r#"{"jsonrpc":"2.0","id":1,"result":{"isError":true,"content":[]}}"#).is_none());
+        assert!(vault_names("not json").is_none());
     }
 
     #[test]

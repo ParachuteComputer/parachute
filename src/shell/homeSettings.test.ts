@@ -17,7 +17,7 @@ describe("the settings note", () => {
     expect(s.start).toEqual({ vault: "kitchen", applet: "Applets/Home" });
   });
   it("no note, other metadata, or a bad start: an empty bar and no home", () => {
-    for (const m of [null, {}, { parachute: "x" }, { parachute: { bar: "x", start: "Applets/Home" } }, { parachute: { start: { vault: "k" } } }]) expect(settingsFrom(m)).toEqual({ bar: [], start: null });
+    for (const m of [null, {}, { parachute: "x" }, { parachute: { bar: "x", start: "Applets/Home" } }, { parachute: { start: { vault: "k" } } }]) expect(settingsFrom(m)).toEqual({ bar: [], start: null, hubs: [] });
   });
   it("reads every place it can (the bar shows the first ones it finds), up to a bound", () => {
     const bar = Array.from({ length: 400 }, (_, i) => ({ vault: "k", applet: `A/${i}` }));

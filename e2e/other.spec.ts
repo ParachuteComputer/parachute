@@ -36,7 +36,8 @@ test("the org's vault, added with the person's key as someone else's, is its own
   await page.goto("/settings");
   await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
   await expect(page.getByRole("combobox", { name: `Whose ${VAULT} is` })).toHaveValue("mine");
-  await expect(page.getByText(`Home vault: ${VAULT}.`)).toBeVisible();
+  await expect(page.getByRole("radio", { name: new RegExp(`^${VAULT} on`) })).toBeChecked();
+  await expect(page.getByRole("radio", { name: new RegExp(`^${ORG_VAULT} on`) })).toHaveCount(0);
 });
 
 test("an applet brought in from Techne: a pointer in the home vault, its card says whose, it reads only Techne, and a change upstream asks again", async ({ page }) => {

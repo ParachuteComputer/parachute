@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { forgetWhoseCache, HOME_KEY, importable, isMine, setWhose, WHOSE_KEY, whoseOf, askedAbout } from "./whose";
+import { forgetWhoseCache, HOME_KEY, importable, isMine, setWhose, WHOSE_KEY, whoseOf, whoseSaid, askedAbout } from "./whose";
 import { VAULTS_KEY, type VaultRecord } from "./store";
 import { homeVault } from "../shell/frameSource";
 
@@ -16,8 +16,12 @@ describe("whose a vault is", () => {
     expect(whoseOf(techne)).toBe("theirs");
     expect(whoseOf(journal)).toBe("theirs");
     expect(askedAbout([techne, kitchen, journal]).map((v) => v.key).sort()).toEqual(["journal", "techne"]);
+    // one still asked about has had no answer: a sign-in's answer may still be taken for it
+    expect(whoseSaid(journal)).toBeNull();
+    expect(whoseSaid(kitchen)).toBe("mine");
     setWhose(journal, "mine");
     expect(askedAbout([techne, kitchen, journal]).map((v) => v.key)).toEqual(["techne"]);
+    expect(whoseSaid(journal)).toBe("mine");
   });
   it("a vault no one said anything about is someone else's; only mine and trusted may be imported from", () => {
     localStorage.setItem(WHOSE_KEY, JSON.stringify({ whose: {}, ask: [] }));

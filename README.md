@@ -5,8 +5,7 @@ One app for your vaults and the applets that grow on them. Early: version 0.1.0,
 
 ## Install and sign in
 
-You need a vault on a Parachute hub (its address looks like `https://your-hub/vault/name`) and a Nostr key, or a new
-one.
+You need a Parachute (a hub of your own, an org's, or Parachute Cloud) and a Nostr key, or a new one.
 
 1. **Get the app** from the [releases page](https://github.com/ParachuteComputer/parachute/releases):
    - **Android** (8 or newer, 64-bit ARM): download the `.apk` on the phone and open it.
@@ -19,9 +18,13 @@ one.
    paste its `nostrpair://` link (Mac); check the 6-digit codes match.
 3. **Your hub knows your key.** The hub's owner links it once: `parachute auth link-pubkey --user <name> <npub>`. The
    app shows your `npub1…`.
-4. **Add a vault.** Enter the vault's address, say whose it is (**Mine**, or **Someone else's** for an org's), press
-   **Sign in with your key**, and press **Approve** on the hub's page.
-   **Other ways to sign in** uses the hub's own sign-in instead (a password, or Parachute Cloud's).
+4. **Your Parachute.** Type its address (`your-hub.example`), say whose it is (**Mine**), press **Sign in with your key**,
+   and press **Approve** once on the hub's page. Every vault you can reach there comes with it, applets and all; you
+   never type a vault's address. If you run the hub, Parachute first asks which of its vaults are yours (all ticked). **Use Parachute Cloud instead** and **Other ways to sign in** use the hub's own sign-in
+   (an emailed link, a password); the hub then asks twice: to show Parachute your vaults, then for all of them.
+5. **More Parachutes** (an org's, a friend's): **Add a Parachute** at the foot of the launcher, the same way, as
+   **Someone else's**. Each one you add is listed in your home vault, so another device you sign in on finds them all,
+   each a tap from signed in.
 
 **For agents:** an applet is one note your agent writes with the Parachute MCP; see
 [docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md). Building from source is under [Build](#build).
@@ -31,8 +34,9 @@ one.
 - **Your key.** You sign in with your Nostr key. Pair it from a device that has it (the Uni app or Buzz desktop sends it
   over the Buzz pairing relay, encrypted end to end), make a new one, or paste one. It stays in the app's native side, in
   the platform's secure storage.
-- **Vaults.** Add a vault on any Parachute hub by its address and sign in there with your key, or another way the hub
-  offers (a password, or Cloud's own sign-in). Browse, search and read its notes.
+- **Your Parachutes.** Sign in once per hub, with your key or another way the hub offers (a password, or Cloud's own
+  sign-in), and every vault you can reach there is in the launcher, grouped by Parachute. The list of your Parachutes
+  lives in your home vault ([docs/design/ONE-SIGN-IN.md](docs/design/ONE-SIGN-IN.md)). Browse, search and read notes.
 - **Applets.** An applet is one note in your vault: its metadata is the manifest (what it may read and write, which
   kinds of note it opens), its content is the code: one TSX or JSX module, or an HTML page. Any chat AI with the
   Parachute MCP can make one by writing that note: see [docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md). It runs
@@ -40,7 +44,8 @@ one.
 - **The kit and the look.** An applet imports `parachute`: the data calls (in record words), and a few parts to build a
   screen from (a rich note, a tally of days, a list, a card, a field, an empty state). The whole app and every applet
   follow one theme note in your home vault ([docs/THEME.md](docs/THEME.md)); with none, the built-in one.
-- **Other Parachutes.** Add an org's vault (or a friend's) with the same key, as someone else's: the launcher marks it.
+- **Other Parachutes.** Add an org's Parachute (or a friend's) with the same key, as someone else's: the launcher marks
+  its vaults.
   Bring its applets into your own launcher, and put its components on your home, each in its own sealed frame with
   its own card, seeing only what that card allows of their vault and nothing of yours. From a vault you trust, import
   a component into your own code instead. See [docs/OTHER-PARACHUTES.md](docs/OTHER-PARACHUTES.md) and the trust

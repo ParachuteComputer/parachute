@@ -2,6 +2,7 @@
 // never with a token, a client id or a grant. A tap counts only when the shell itself sees the person's live user
 // activation (a tap inside the frame gives it to the shell too; a script's click doesn't): that is what lets an applet
 // start (open/mark.ts). Everything is injected, so tests can play a hostile frame against it.
+import { originOf } from "../vault/store";
 import type { VaultClient } from "@openparachute/surface-client";
 import { RateLimiter } from "../applet/contract";
 import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameHome, type FrameComponents, type FramePointer, type FrameVault, type Decided, type Method, type Query } from "../bridge/protocol";
@@ -50,7 +51,7 @@ export const LINK_OUT = /^(https?:\/\/|mailto:|tel:)/i;
 export const frameVault = (r: VaultRecord, whose?: FrameVault["whose"], home?: boolean): FrameVault => {
   let host = r.issuer;
   try { host = new URL(r.issuer).host; } catch { /* as given */ }
-  return { key: r.key, vault: r.vault, host, issuer: r.issuer, ...(whose ? { whose } : {}), ...(home ? { home: true } : {}) };
+  return { key: r.key, vault: r.vault, host, issuer: r.issuer, hub: originOf(r.issuer), ...(whose ? { whose } : {}), ...(home ? { home: true } : {}) };
 };
 
 const pathOf = (to: string) => new URL(to, "http://app.invalid").pathname;

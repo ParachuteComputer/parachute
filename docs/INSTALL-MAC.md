@@ -45,16 +45,19 @@ On the first screen:
 When you install a newer build, macOS may ask whether Parachute may use the key in your Keychain (each build has a new
 signature until the app is signed with an Apple Developer ID). Enter your Mac password and choose **Always Allow**.
 
-## 5. Add a vault
+## 5. Sign in to your Parachute
 
-Enter the vault's address, like `https://your-hub/vault/name`, say whose it is (**Mine**, or **Someone else's** for
-an org's or a friend's: [OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)), and press **Sign in with your key**. The hub's own page
-asks "Approve Parachute?" (it may call Parachute a third-party app). Press **Approve**, and you're back in Parachute
-with the vault's notes.
+Type your Parachute's address (your hub's, like `your-hub.example`; a vault's address works too), say whose it is
+(**Mine**, or **Someone else's** for an org's or a friend's: [OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)), and press
+**Sign in with your key**. If you run the hub, Parachute first asks which of its vaults are yours (all ticked; untick
+another person's). The hub's own page asks "Approve Parachute?" once, listing every vault you can reach there (it
+may call Parachute a third-party app). Press **Approve**, and you're back in Parachute with all of them in the launcher.
+Add another Parachute later from **Add a Parachute** at the foot of the launcher.
 
 - A hub on your tailnet needs Tailscale running on the Mac.
 - If the hub says it doesn't know your key, send its owner the `npub1…` it shows.
-- **Other ways to sign in** opens the hub's own sign-in (a password, or Parachute Cloud's).
+- **Other ways to sign in** (and **Use Parachute Cloud instead**) open the hub's own sign-in: a password, or Cloud's
+  emailed link. Without your key the hub asks twice: to show Parachute which vaults are yours, then for all of them.
 
 ## If something goes wrong
 

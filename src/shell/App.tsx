@@ -4,7 +4,7 @@
 // FrameHost and reaches the shell only through the bridge (src/bridge/protocol.ts).
 import { useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router";
-import AddVault from "../views/AddVault";
+import AddParachute from "../views/AddParachute";
 import OAuthCallback from "../views/OAuthCallback";
 import OpenLink, { LinksIn } from "../links/LinksIn";
 import AppletScreen from "../views/AppletScreen";
@@ -51,7 +51,7 @@ function AppletRoute() {
 function FirstRun() {
   const key = useKey();
   if (key === undefined) return null;
-  return keysHere() && key === null ? <KeyStart first /> : <AddVault first />;
+  return keysHere() && key === null ? <KeyStart first /> : <AddParachute first />;
 }
 
 /** Where the app opens (start.ts): at a start on the launcher (the first entry of this tab's history), the home applet
@@ -90,7 +90,7 @@ function ShellRoutes() {
     <div className={bar ? "with-bar" : undefined}>
       {shell && <Routes>
         <Route path="/" element={<FirstRun />} />
-        <Route path="/add" element={<AddVault />} />
+        <Route path="/add" element={<AddParachute />} />
         <Route path="/key" element={<KeyStart />} />
         <Route path="/key/pair" element={<Pair />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />

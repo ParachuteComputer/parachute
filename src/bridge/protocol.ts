@@ -16,7 +16,8 @@ export const PF = 1;
 
 /** A vault as the frame sees it: no token, no client id, nothing to sign in with. `whose` (vault/whose.ts): mine,
  *  someone else's, or someone else's that the person trusts; `home`: the person's home vault. */
-export type FrameVault = { key: string; vault: string; host: string; issuer: string; whose?: "mine" | "theirs" | "trusted"; home?: boolean };
+/** `hub`: the origin of the Parachute it is on (FrameParachute.hub). */
+export type FrameVault = { key: string; vault: string; host: string; issuer: string; hub?: string; whose?: "mine" | "theirs" | "trusted"; home?: boolean };
 /** A pointer in the home vault (docs/design/EMBED.md): what it brings in, from where, and whether this device holds that
  *  vault (`at`: this device's key for it) and the record's status there. `changed`: its code differs from the pin. */
 /** A component as the launcher lists it (component.ts): what it is and what it takes. */
@@ -37,7 +38,10 @@ export type FrameApplets = { ok: true; entries: FrameApplet[]; skipped: number }
 /** An applet as the bar names it: its vault (this device's key) and its note. */
 export type FramePlace = { vault: string; noteId: string };
 /** The bar and the home (docs/NAVIGATION.md): what this device can find of the person's settings note. */
-export type FrameHome = { start: FramePlace | null; bar: FramePlace[] };
+/** One of the person's Parachutes (docs/design/ONE-SIGN-IN.md): a hub this device is signed in to (its vaults are the
+ *  ones whose `issuer` is `hub`), or one their list names that this device isn't (`signedIn` false). The home's first. */
+export type FrameParachute = { hub: string; host: string; name: string; home: boolean; signedIn: boolean };
+export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[] };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
 export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; includeContent?: boolean; includeMetadata?: boolean };
 /** `decided`: what the note's route already decided for this history entry (kept by the shell, which outlives the frame). */

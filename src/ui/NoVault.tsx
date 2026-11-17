@@ -5,7 +5,7 @@ export default function NoVault() {
   return (
     <main className="screen">
       <Bar title="Not here" back="/" />
-      <div className="card"><p>This device doesn't hold that vault.</p><Link to="/add">Add a vault</Link></div>
+      <div className="card"><p>This device doesn't hold that vault.</p><Link to="/add">Add a Parachute</Link></div>
     </main>
   );
 }

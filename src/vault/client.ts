@@ -2,8 +2,7 @@
 import { VaultClient } from "@openparachute/surface-client";
 import { refresh } from "./oauth";
 import { recordsFetch } from "./records";
-import { findVault, updateVault, type VaultRecord } from "./store";
-import { vaultUrl } from "./address";
+import { findVault, updateVault, vaultUrlOf, type VaultRecord } from "./store";
 import { limitedFetch } from "./limited";
 import { whoseOf } from "./whose";
 
@@ -48,10 +47,10 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
 
 export function clientFor(rec: VaultRecord): VaultClient {
   const hit = clients.get(rec.key);
-  const at = `${rec.issuer} ${rec.vault}`;
+  const at = `${rec.issuer} ${rec.vault} ${rec.url ?? ""}`;
   if (hit && hit.at === at) return hit.client;
   const client = new VaultClient({
-    vaultUrl: vaultUrl(rec.issuer, rec.vault),
+    vaultUrl: vaultUrlOf(rec),
     tokenProvider: () => findVault(rec.key)?.accessToken ?? rec.accessToken,
     onAuthError: () => refreshOnce(rec.key),
     // notes calls go through the hub's record door when it has one (records.ts)

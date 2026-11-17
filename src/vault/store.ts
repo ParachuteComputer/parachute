@@ -15,6 +15,8 @@ export type VaultRecord = {
   expiresAt?: number;
   scope: string;
   addedAt: string;
+  /** the vault's API root, when it isn't `<issuer>/vault/<name>` (Parachute Cloud's vaults live on another host) */
+  url?: string;
 };
 
 export const VAULTS_KEY = "parachute.vaults.v1";
@@ -55,7 +57,7 @@ export function keyFor(list: readonly VaultRecord[], issuer: string, vault: stri
   return `${vault}@${hostOf(issuer)}`;
 }
 
-/** Add a vault, or replace the record for the same hub and vault (signing in again). */
+/** Keep a vault, or replace the record for the same hub and vault (signing in again). */
 export function saveVault(rec: Omit<VaultRecord, "key">): VaultRecord {
   const list = listVaults();
   const key = keyFor(list, rec.issuer, rec.vault);
@@ -70,6 +72,9 @@ export function updateVault(key: string, patch: Partial<VaultRecord>) {
 
 export function removeVault(key: string) { write(listVaults().filter((r) => r.key !== key)); }
 
+/** A vault's API root. */
+export const vaultUrlOf = (r: Pick<VaultRecord, "issuer" | "vault" | "url">) => r.url ?? `${r.issuer}/vault/${encodeURIComponent(r.vault)}`;
+
 export const findVault = (key: string | undefined) => listVaults().find((r) => r.key === key) ?? null;
 /** The vault a web address names: its hub and its name, among the vaults this device holds. */
 export const vaultAt = (issuer: string, vault: string) => listVaults().find((r) => r.issuer === issuer && r.vault === vault) ?? null;
@@ -83,6 +88,9 @@ export function subscribeVaults(cb: () => void): () => void {
   if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
   return () => { listeners.delete(cb); if (typeof window !== "undefined") window.removeEventListener("storage", onStorage); };
 }
+
+/** A hub's origin, from its issuer (or any address on it); the text itself when it can't be read. */
+export const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
 
 /** The host of a hub's address, for showing; the address itself when it can't be read. */
 export function hostOf(issuer: string): string { try { return new URL(issuer).host; } catch { return issuer; } }

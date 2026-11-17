@@ -97,7 +97,8 @@ pub fn run() {
             pairing::pair_start,
             pairing::pair_confirm,
             pairing::pair_cancel,
-            door::key_sign_in
+            door::key_sign_in,
+            door::hub_vaults
         ])
         .setup(|app| {
             #[cfg(desktop)]

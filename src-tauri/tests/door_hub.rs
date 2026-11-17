@@ -28,7 +28,12 @@ fn free_port() -> u16 {
 }
 
 fn hub(bin: String) -> Hub {
-    let home = std::env::temp_dir().join(format!("parachute-door-{}", std::process::id()));
+    hub_in(bin, "door")
+}
+
+/// A hub in its own throwaway home (`name` keeps two tests of this process apart).
+fn hub_in(bin: String, name: &str) -> Hub {
+    let home = std::env::temp_dir().join(format!("parachute-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&home).unwrap();
     std::fs::write(home.join("pw"), "correct horse battery staple 1").unwrap();
     let ph = home.join("home");
@@ -142,4 +147,63 @@ async fn a_hub_without_the_door_and_a_hub_in_trouble_are_told_apart() {
     // a hub that is restarting is not a hub without the door
     let o = door::hub_origin(&answering("503 Service Unavailable", "busy").await).unwrap();
     assert_eq!(door::sign_in(&o, "/", &keys).await.unwrap_err().code, "unreachable");
+}
+
+/// One `parachute-core` command against the test hub, as its operator.
+fn cli(h: &Hub, args: &[&str]) -> std::process::Output {
+    let out = Command::new(&h.bin).args(args).env("PARACHUTE_HOME", h.home.join("home")).env("PORT", h.origin.rsplit(':').next().unwrap()).output().unwrap();
+    assert!(out.status.success(), "{args:?}: {}", String::from_utf8_lossy(&out.stderr));
+    out
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_key_is_told_its_own_vaults_and_no_others() {
+    let Ok(bin) = std::env::var("PARACHUTE_CORE") else {
+        assert!(std::env::var("CI").is_err(), "CI must name a hub in PARACHUTE_CORE for the list test");
+        eprintln!("PARACHUTE_CORE not set: skipping the real-hub list test");
+        return;
+    };
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let h = hub_in(bin, "list");
+    for v in ["work", "family"] {
+        cli(&h, &["vault", "create", v, "--json", "--no-mirror"]);
+    }
+    let origin = door::hub_origin(&h.origin).unwrap();
+    // the hub's owner (its admin): every vault
+    let owner = nostr::Keys::generate();
+    cli(&h, &["auth", "link-pubkey", "--user", "owner", &owner.public_key().to_hex()]);
+    let theirs = door::list_vaults(&origin, &owner).await.unwrap();
+    assert_eq!(theirs.vaults, vec!["family", "recipes", "work"]);
+    assert!(theirs.all, "the owner runs the hub: every vault, said so");
+    // a member given one vault by their key: that one only
+    let member = nostr::Keys::generate();
+    let token: serde_json::Value = serde_json::from_slice(&cli(&h, &["auth", "mint-token", "--scope", "account:vaults", "--json"]).stdout).unwrap();
+    let granted = reqwest::Client::new()
+        .post(format!("{}/account/mcp", h.origin))
+        .bearer_auth(token["token"].as_str().unwrap())
+        .header("accept", "application/json, text/event-stream")
+        .json(&serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "grant-access", "arguments": { "pubkey": member.public_key().to_hex(), "vault": "work", "role": "write" } } }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(granted.status(), 200);
+    let given = door::list_vaults(&origin, &member).await.unwrap();
+    assert_eq!(given.vaults, vec!["work"]);
+    assert!(!given.all, "a member: the vaults given to them");
+    // asking twice in the same second is two requests, not a replay
+    assert_eq!(door::list_vaults(&origin, &member).await.unwrap().vaults, vec!["work"]);
+    // a key the hub doesn't know is told so
+    assert_eq!(door::list_vaults(&origin, &nostr::Keys::generate()).await.unwrap_err().code, "unknown_key");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_hub_that_lists_no_vaults_for_a_key_says_so() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let keys = nostr::Keys::generate();
+    for status in ["404 Not Found", "405 Method Not Allowed", "406 Not Acceptable"] {
+        let o = door::hub_origin(&answering(status, "no").await).unwrap();
+        assert_eq!(door::list_vaults(&o, &keys).await.unwrap_err().code, "no_list", "{status}");
+    }
+    let o = door::hub_origin(&answering("503 Service Unavailable", "busy").await).unwrap();
+    assert_eq!(door::list_vaults(&o, &keys).await.unwrap_err().code, "unreachable");
 }

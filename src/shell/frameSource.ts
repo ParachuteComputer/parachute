@@ -40,7 +40,19 @@ export function homeVault(list: readonly VaultRecord[] = listVaults()): VaultRec
   let chosen: string | null = null;
   try { chosen = storage()?.getItem(HOME_KEY) ?? null; } catch { chosen = null; }
   const mine = list.filter(isMine);
-  return mine.find((v) => v.key === chosen) ?? [...mine].sort((a, b) => a.addedAt.localeCompare(b.addedAt))[0] ?? null;
+  // at the same time: the first by name
+  return mine.find((v) => v.key === chosen) ?? [...mine].sort((a, b) => a.addedAt.localeCompare(b.addedAt) || a.vault.localeCompare(b.vault))[0] ?? null;
+}
+
+/** Keep the home this device has now as its home, when it was only the default (the first of the person's own): a
+ *  sign-in that keeps new records of earlier vaults must not move it. */
+export function holdHome() {
+  let chosen: string | null = null;
+  try { chosen = storage()?.getItem(HOME_KEY) ?? null; } catch { chosen = null; }
+  const list = listVaults();
+  if (list.some((v) => v.key === chosen && isMine(v))) return;
+  const home = homeVault(list);
+  if (home) { try { storage()?.setItem(HOME_KEY, home.key); } catch { /* this session only */ } }
 }
 
 // ── the store ──

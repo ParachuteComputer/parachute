@@ -35,8 +35,10 @@ Every vault this device holds is **mine**, **someone else's**, or **someone else
 hub's origin and its name), chosen by the person on the app's own screen and kept on this device apart from the
 sign-in (`parachute.whose.v1`), so signing in again keeps it. No record or agent can set it.
 
-- **Add a vault asks every time**: *"Whose vault is this? Mine / Someone else's (an org's, a friend's)"*, with neither
-  chosen beforehand: Sign in waits for the answer.
+- **Add a Parachute asks every time** (step 7, [ONE-SIGN-IN.md](ONE-SIGN-IN.md); it was Add a vault): *"Whose Parachute
+  is this? Mine / Someone else's (an org's, a friend's)"*, with neither chosen beforehand: Sign in waits for the
+  answer, and it holds for each vault that sign-in brings that this device hasn't been told about (on a hub the person
+  runs, they tick which of its vaults are theirs). Settings changes it per vault.
 - **Vaults this device already held** (before this step): the one that was its home (the person's choice, else the
   first added, as today) is mine, so nothing it does now changes; every other counts as someone else's. Settings asks,
   until the person answers, "Are these yours?" beside each, and always shows every vault's value and lets the person
@@ -209,7 +211,7 @@ it. Names from records are quoted and the hub's address is the app's:
 | Never allowed here, or allowed and then revoked | Review (the card on the sheet) |
 | The code (or the pin) differs from what was allowed / brought in | the card, headed "techne changed «Events» since you allowed it" (or "brought it in") |
 | What it asks for changed (a grant was here, its key differs) | the card, headed "It now asks for something other than what you allowed." |
-| This device isn't signed in to that vault | "This comes from «techne» at «techne.example» (as its record says), and this device isn't signed in there." + a link to Add a vault, with nothing filled in |
+| This device isn't signed in to that vault | "This comes from «techne» at «techne.example» (as its record says), and this device isn't signed in there." + a link to Add a Parachute, with nothing filled in |
 | The hub refuses the sign-in (401 after a refresh) | "techne no longer lets this device in. Sign in to techne again." |
 | The hub forbids a read (403) | nothing new: the component gets the vault module's plain answer (404 or 502), as an applet would |
 | The hub can't be reached | "techne can't be reached right now." |
@@ -351,7 +353,7 @@ A custom frame that ignores them keeps working.
 | 15 | **A misleading name** ("Your bank") | The card and every sentence quote the record's name as unverified and give the hub's address. | unit on the words |
 | 16 | **Android (approved-code mode)** | Only allowed code runs; the card says it is only as safe as its code and whose code it is. A hostile org component could send what it reads (its own vault's data, the props on its card, and what a colluding host signals it) to the internet; it still can't read the host or the person's vaults. | device steps |
 | 17 | **Code that hangs**, or a hub built to hang the shell | For anything from someone else's vault: replies read up to 4 MB, bodies over 200 KB refused before hashing, transpiled only after an Allow, never the home applet; embeds' mark set before the first read, so a start after a freeze leaves that page's embeds unread, with Review. | unit on the read limit, the cap and the mark |
-| 18 | **Someone else's vault becomes home** on a new device | Add a vault asks whose it is every time; the default home is the first vault that is mine; someone else's are never offered. | unit |
+| 18 | **Someone else's vault becomes home** on a new device | Add a Parachute asks whose it is every time; the default home is the first vault that is mine; someone else's are never offered. | unit |
 | 19 | **The theme record as a channel** (an agent writes words into it) | Embeds get colours rewritten as `#rrggbb`, density and scheme; their fonts are the app's own. | unit |
 
 ## Subtract

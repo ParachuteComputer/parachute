@@ -67,7 +67,7 @@ test("a hostile frame reads no token and reaches nothing of the shell's", async 
   // it may read the vault (that is what a frame is for), and it is told of the vault, but never how to sign in to it
   const answers = Object.fromEntries(r.answers);
   expect(answers["vault.query"].result).toBeTruthy();
-  expect(answers["vaults.list"].result).toEqual([expect.objectContaining({ key: VAULT })]);
+  expect(answers["vaults.list"].result).toEqual(expect.arrayContaining([expect.objectContaining({ key: VAULT })]));
   const all = JSON.stringify(r);
   for (const secret of [rec.accessToken, rec.refreshToken, rec.clientId].filter(Boolean)) expect(all).not.toContain(secret);
   for (const m of ["grants.grant", "applets.allow", "vault.token", "storage.get"]) expect(answers[m].error, m).toBe("unknown_method");
@@ -102,7 +102,7 @@ test("the frame is there only while it is shown: never beside a shell screen, ne
   await page.goto(`/v/${VAULT}`);
   await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
   await page.goto("/settings");
-  await expect(page.getByRole("heading", { name: "Vaults" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your Parachutes" })).toBeVisible();
   await expect(page.locator("iframe.app-frame")).toHaveCount(0);
   // a return from the hub carries its code in the address: no frame is made there to read it
   await page.goto("/oauth/callback?code=CODE-FROM-HUB&state=nope");

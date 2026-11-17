@@ -32,6 +32,8 @@ async function world(made: Made) {
   const h = await home("POST", "notes", { path: "Applets/Home", extension: "tsx", content: fixture("techne/Home.tsx"), tags: ["applet"],
     metadata: { applet: { contract: 2, id: "home", name: "Home", glyph: "⌂", access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }] }] } } });
   made.home.push(h.id);
+  // one settings note: a sign-in in an earlier test may have left one (it lists the person's Parachutes)
+  for (const n of await home("GET", "notes?tag=parachute-settings")) await home("DELETE", `notes/${n.id}`);
   made.home.push((await home("POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { start: { vault: VAULT, applet: "Applets/Home" }, bar: [] } } })).id);
   return { events: events.id as string, home: h.id as string };
 }

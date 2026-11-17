@@ -3,10 +3,11 @@
 // screens use this module; the frame and applets can't reach it (src/frame/boundary.test.ts, and they have no bridge).
 import { useSyncExternalStore } from "react";
 import { inShell } from "../vault/oauth";
+import { cleanVaultNames } from "../vault/address";
 
 export type KeyInfo = { npub: string };
 /** Why a key sign-in didn't happen (src-tauri/src/door.rs `Refusal`). */
-export type Refusal = { code: "no_key" | "no_door" | "unknown_key" | "refused" | "unreachable" | "bad_hub"; message: string };
+export type Refusal = { code: "no_key" | "no_door" | "unknown_key" | "refused" | "unreachable" | "bad_hub" | "no_list" | "no_vaults"; message: string };
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
@@ -68,6 +69,17 @@ export const pairCancel = (id: number, codesDiffer: boolean) => invoke<void>("pa
 export async function keySignIn(hub: string, next: string): Promise<string> {
   try {
     return (await invoke<{ go: string }>("key_sign_in", { hub, next })).go;
+  } catch (e) {
+    throw asRefusal(e);
+  }
+}
+
+/** The vaults this device's key may reach on `hub` (the hub's own `list-vaults`, a request the shell signs with the key:
+ *  src-tauri/src/door.rs). `no_list`: the hub doesn't answer that (sign in to list them instead). */
+export async function hubVaults(hub: string): Promise<{ vaults: string[]; all: boolean }> {
+  try {
+    const r = await invoke<{ vaults: string[]; all: boolean }>("hub_vaults", { hub });
+    return { vaults: cleanVaultNames(Array.isArray(r.vaults) ? r.vaults : []), all: r.all === true };
   } catch (e) {
     throw asRefusal(e);
   }

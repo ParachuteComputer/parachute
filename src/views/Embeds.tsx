@@ -33,7 +33,7 @@ import { tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
 import { clientFor, signInState } from "../vault/client";
 import { MAX_CODE_CHARS, TooLargeError } from "../vault/limited";
-import { listVaults, hostOf, type VaultRecord } from "../vault/store";
+import { originOf, listVaults, hostOf, type VaultRecord } from "../vault/store";
 import { whoseOf, type Whose } from "../vault/whose";
 import { LINK_OUT_HOLD_MS } from "../shell/frameSource";
 import { useSettledPress } from "../ui/press";
@@ -42,7 +42,6 @@ import type { Manifest } from "../applet/manifest";
 
 const grants = deviceGrants();
 const KIT = buildKitSource({ vaultClientSource });
-const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
 /** The smallest and largest an embed is drawn, and how much a host page may grow to. */
 export const EMBED_MIN = 40, EMBED_MAX = 2000, PAGE_MAX = 20_000;
 
@@ -183,7 +182,7 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
   const say = (text: string, extra?: React.ReactNode) => <div className="embed-place embed-said" data-embed={embed.name} role="status"><p>{text}</p>{extra}</div>;
   if (mode === "closed") return say("Embeds are off on this device until its self-test passes.");
   if (place.state === "reading") return <div className="embed-place embed-said" data-embed={embed.name} aria-busy="true"><p className="quiet">Opening «{embed.name}»…</p></div>;
-  if (place.state === "no-sign-in") return say(`This comes from «${place.vault}» at «${place.host}» (as its record says), and this device isn't signed in there.`, <Link to="/add">Add a vault</Link>);
+  if (place.state === "no-sign-in") return say(`This comes from «${place.vault}» at «${place.host}» (as its record says), and this device isn't signed in there.`, <Link to="/add">Add a Parachute</Link>);
   if (place.state === "offline") return say(`${place.vault} can't be reached right now.`);
   if (place.state === "refused") return say(`${place.vault} no longer lets this device in. Sign in to ${place.vault} again.`, <Link to="/settings">Settings</Link>);
   if (place.state === "gone") return say(`«${place.name}» is gone from ${place.vault}.`);
