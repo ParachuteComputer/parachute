@@ -27,6 +27,8 @@ export type VaultDeps = {
   /** By id or path; rejects when missing. */
   getNote(ref: string): Promise<VaultNote>;
   search(query: string, limit: number, pathPrefix: string | null): Promise<{ id: string; path: string | null; snippet: string }[]>;
+  /** The newest notes under a folder with their tags and metadata, no content, in one ask. Absent: fields are read note by note. */
+  listFields?(pathPrefix: string, limit: number): Promise<VaultNote[]>;
   /** A new note at `path` with these tags (refused when one is there). Absent: the host can't write, and every write is 405. */
   create?(path: string, content: string, tags: string[]): Promise<VaultNote>;
   /** New content for the note `id`, only if it is still at `ifUpdatedAt`; a rejection whose message starts "conflict:" is a conflict. */
@@ -38,7 +40,8 @@ const MAX_BODY = 512 * 1024;
 const NOTE_TTL_MS = 10_000;
 const CACHE_MAX = 40;
 const CACHE_MAX_CONTENT = 200_000;
-// include_metadata brings each note's tags and metadata (its fields), read note by note as a tag filter is
+// include_metadata (true, or a list of fields: either way, all of them) brings each note's tags and metadata (its fields):
+// one ask per folder where the host can, else note by note as a tag filter is
 const NOTES_PARAMS = ["path_prefix", "tag", "search", "limit", "id", "path", "include_content", "include_metadata"];
 const NOTE_PARAMS = ["include_content"];
 const VAULT_PARAMS = ["include_stats"];
@@ -116,7 +119,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       limit = Math.min(LIMITS.maxNotes, Number(rawLimit));
     }
     const content = q.get("include_content") === "true";
-    const fields = q.get("include_metadata") === "true";
+    const fields = q.has("include_metadata") && q.get("include_metadata") !== "false";
 
     const key = q.get("id") ?? q.get("path");
     if (key !== null) {
@@ -141,6 +144,20 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       rows = (await deps.listPaths())
         .filter((r): r is PathRow & { path: string } => !!r.path && inScope(prefixes, r.path) && codeKindOf(r) === null)
         .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.path.localeCompare(b.path));
+    }
+    if (fields && !tag && !content && !search && deps.listFields) {
+      // one ask per granted folder, each note judged on its own path, as any list is
+      const seen = new Set<string>();
+      const out: (VaultNote & { path: string })[] = [];
+      for (const p of prefixes) {
+        ctx.charge(1);
+        for (const n of await deps.listFields(p, limit)) {
+          if (!n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null) continue;
+          seen.add(n.id); out.push(n as VaultNote & { path: string });
+        }
+      }
+      out.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.path.localeCompare(b.path));
+      return json(200, "OK", out.slice(0, limit).map((n) => publicNote(n, false)));
     }
     if (tag || content || fields) {
       // Tags and bodies need the notes themselves (the deps expose no tag filter, so
