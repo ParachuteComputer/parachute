@@ -16,7 +16,8 @@ export const PF = 1;
 
 /** A vault as the frame sees it: no token, no client id, nothing to sign in with. `whose` (vault/whose.ts): mine,
  *  someone else's, or someone else's that the person trusts; `home`: the person's home vault. */
-export type FrameVault = { key: string; vault: string; host: string; issuer: string; whose?: "mine" | "theirs" | "trusted"; home?: boolean };
+/** `hub`: the origin of the Parachute it is on (FrameParachute.hub). */
+export type FrameVault = { key: string; vault: string; host: string; issuer: string; hub?: string; whose?: "mine" | "theirs" | "trusted"; home?: boolean };
 /** A pointer in the home vault (docs/design/EMBED.md): what it brings in, from where, and whether this device holds that
  *  vault (`at`: this device's key for it) and the record's status there. `changed`: its code differs from the pin. */
 /** A component as the launcher lists it (component.ts): what it is and what it takes. */

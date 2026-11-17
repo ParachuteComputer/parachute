@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from "vitest";
-import { describe, grantedVaults, parseHub, scopeForVaults, vaultAt, vaultNamesFrom } from "./parachute";
+import { CLOUD, describe, grantedVaults, parseHub, rpcAnswer, scopeForVaults, vaultUrlFrom, vaultNamesFrom } from "./parachute";
 import { hubOf, settingsFrom } from "../shell/homeSettings";
 
 group("parseHub", () => {
@@ -23,10 +23,18 @@ group("the list of Parachutes in the settings note is read as untrusted", () => 
 
 const answering = (status: number, body: unknown) => (async () => new Response(typeof body === "string" ? body : JSON.stringify(body), { status })) as unknown as typeof fetch;
 group("describe", () => {
-  it("reads where the hub keeps its account and its vaults (Cloud's live on another host)", async () => {
-    const p = await describe("https://cloud.example", answering(200, { issuer: "https://cloud.example", account_mcp_endpoint: "https://my.example/account/mcp", vault_url_template: "https://my.example/vault/{name}" }));
-    expect(p).toEqual({ hub: "https://cloud.example", issuer: "https://cloud.example", accountMcp: "https://my.example/account/mcp", vaultTemplate: "https://my.example/vault/{name}" });
-    expect(vaultAt(p.vaultTemplate, "notes")).toBe("https://my.example/vault/notes");
+  it("reads where Cloud keeps its account and its vaults (another host of its own domain)", async () => {
+    const p = await describe(CLOUD, answering(200, { issuer: CLOUD, account_mcp_endpoint: "https://my.parachute.computer/account/mcp", vault_url_template: "https://my.parachute.computer/vault/{name}" }));
+    expect(p).toEqual({ hub: CLOUD, issuer: CLOUD, accountMcp: "https://my.parachute.computer/account/mcp", vaultTemplate: "https://my.parachute.computer/vault/{name}" });
+    expect(vaultUrlFrom(p.vaultTemplate, "notes")).toBe("https://my.parachute.computer/vault/notes");
+  });
+  it("never sends a hub's tokens to another host: an address off the hub is read as the hub's own", async () => {
+    const p = await describe("https://hub.example", answering(200, { issuer: "https://hub.example", account_mcp_endpoint: "https://evil.example/account/mcp", vault_url_template: "https://evil.example/{name}" }));
+    expect(p.accountMcp).toBe("https://hub.example/account/mcp");
+    expect(p.vaultTemplate).toBe("https://hub.example/vault/{name}");
+    // only Cloud may use its own domain
+    const q = await describe("https://hub.example", answering(200, { issuer: "https://hub.example", vault_url_template: "https://my.parachute.computer/vault/{name}" }));
+    expect(q.vaultTemplate).toBe("https://hub.example/vault/{name}");
   });
   it("refuses a hub that names another issuer, and keeps an address that isn't https on the hub itself", async () => {
     await expect(describe("https://a.example", answering(200, { issuer: "https://b.example" }))).rejects.toThrow(/calls itself/);
@@ -44,6 +52,8 @@ group("the vaults a hub lists and grants", () => {
   it("reads only names a vault can have, once each, sorted", () => {
     expect(vaultNamesFrom(listed([{ name: "work" }, { name: "kim" }, { name: "Bad Name" }, { name: "../x" }, { name: "kim" }, {}]))).toEqual(["kim", "work"]);
     expect(() => vaultNamesFrom({ error: { code: 1 } })).toThrow();
+    // an MCP door may answer as one server-sent event
+    expect(vaultNamesFrom(rpcAnswer(`event: message\ndata: ${JSON.stringify(listed([{ name: "kim" }]))}\n\n`))).toEqual(["kim"]);
   });
   it("asks read and write of each, and keeps what the hub's scope names among those asked", () => {
     expect(scopeForVaults(["a", "b"])).toBe("vault:a:read vault:a:write vault:b:read vault:b:write");

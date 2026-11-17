@@ -89,5 +89,8 @@ export function subscribeVaults(cb: () => void): () => void {
   return () => { listeners.delete(cb); if (typeof window !== "undefined") window.removeEventListener("storage", onStorage); };
 }
 
+/** A hub's origin, from its issuer (or any address on it); the text itself when it can't be read. */
+export const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
+
 /** The host of a hub's address, for showing; the address itself when it can't be read. */
 export function hostOf(issuer: string): string { try { return new URL(issuer).host; } catch { return issuer; } }

@@ -9,7 +9,7 @@
 // Vaults this device held before this existed: the one that was its home (the person's choice, else the first added)
 // is mine; the others are someone else's until the person answers Settings' "Are these yours?".
 import { useSyncExternalStore } from "react";
-import { listVaults, subscribeVaults, touchVaults, type VaultRecord } from "./store";
+import { originOf, listVaults, subscribeVaults, touchVaults, type VaultRecord } from "./store";
 
 export type Whose = "mine" | "theirs" | "trusted";
 export const WHOSE_KEY = "parachute.whose.v1";
@@ -18,7 +18,6 @@ export const HOME_KEY = "parachute.home.v1";
 type Stored = { whose: Record<string, Whose>; ask: string[] };
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
-const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
 /** What a vault's value is kept under: its hub's origin and its name. */
 export const whoseKey = (r: Pick<VaultRecord, "issuer" | "vault">) => `${originOf(r.issuer)} ${r.vault}`;
 const WORDS: readonly Whose[] = ["mine", "theirs", "trusted"];

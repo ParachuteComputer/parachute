@@ -109,7 +109,7 @@ note there (the list of Parachutes), a second device finds the same home.
 | | Threat | Answer |
 |---|---|---|
 | 1 | An agent (or anyone who can write the home vault) lists a hostile hub | It is a line with **Sign in**; nothing is fetched or opened until the person taps it, and Add a Parachute asks whose it is. |
-| 2 | A hub's descriptor sends tokens elsewhere | The issuer must be the address typed; the token and authorize endpoints must be on the issuer; vault and account addresses https. |
+| 2 | A hub's descriptor sends tokens elsewhere | The issuer must be the address typed; the token and authorize endpoints must be on the issuer; the vault and account addresses must be on the hub's own origin (only Parachute Cloud may use another host of its own domain, `*.parachute.computer`), else the hub's own are used. |
 | 3 | The key signs something it shouldn't | `hub_vaults` signs one fixed body for one URL on the hub's origin; NIP-98 binds the URL, method, body hash and a 60 s window; the hub refuses a replay. |
 | 4 | A stray or replayed code lands on the app's return page | Each step's `state` and PKCE verifier are kept for that one step and used once (`oauth.ts`), as before; a token for a vault not asked for at that step is refused, not kept. |
 | 5 | Someone else's vault becomes home | The home is only ever one of the person's own vaults (whose stays device-held). |
@@ -133,9 +133,11 @@ note there (the list of Parachutes), a second device finds the same home.
 5. **A Parachute's name** in `/.well-known/parachute-account` (`name`), so the launcher can say *Techne*, not
    `techne.example` (EMBED.md proposal 4).
 
-## What this replaces
+## What this replaces (subtract)
 
-- **Add a vault by its address** (the typed `https://hub/vault/name` screen, one OAuth sign-in per vault) goes now:
-  `/add` is Add a Parachute. A pasted vault address still works there (its hub is used).
-- One-vault sign-ins already on a device keep working, each refreshing on its own, until the person signs in to that
-  Parachute again, which takes them over (and revokes them), or signs out.
+- **Add a vault by its address** (the typed `https://hub/vault/name` screen, `parseAddress`, one OAuth sign-in per vault
+  started by hand) is gone as of this change (2026-11-16): `/add` is Add a Parachute. A pasted vault address still
+  works there (its hub is used).
+- Nothing old keeps running beside the new way: a vault a Parachute sign-in brings is the same record, with its own
+  token pair, as a vault added the old way, refreshed by the same code. Records from before stay valid until the person
+  signs out, and the next sign-in to that Parachute replaces them (revoking the old token at the hub).

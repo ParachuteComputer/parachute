@@ -17,7 +17,7 @@ import { useSyncExternalStore } from "react";
 import { appletsNow, refreshApplets, subscribeApplets } from "../applet/useApplets";
 import { plain, stripExt } from "../applet/contract";
 import { clientFor } from "../vault/client";
-import { listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
+import { originOf, listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
 import { homeVault } from "./frameSource";
 import { parseHub } from "../vault/parachute";
@@ -64,7 +64,6 @@ export function settingsFrom(metadata: unknown): Settings {
 const same = (a: Place, b: Place) => a.vault === b.vault && a.applet === b.applet && (a.hub ?? "") === (b.hub ?? "");
 const dedupe = (xs: Place[]) => xs.filter((x, i) => xs.findIndex((y) => same(x, y)) === i);
 
-const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
 /** The vault a place names: by its hub when it names one, else the one on the home vault's hub, else the first. */
 export function vaultFor(p: Pick<Place, "vault" | "hub">, list: readonly VaultRecord[] = listVaults(), home: VaultRecord | null = homeVault(list)): VaultRecord | null {
   const named = list.filter((v) => v.vault === p.vault);

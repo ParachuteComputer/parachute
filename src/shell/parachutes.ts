@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from "react";
 import { clientFor } from "../vault/client";
 import { CLOUD, CLOUD_NAME } from "../vault/parachute";
-import { listVaults, subscribeVaults, hostOf, type VaultRecord } from "../vault/store";
+import { originOf, listVaults, subscribeVaults, hostOf, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
 import { homeVault, setHome, HOME_KEY } from "./frameSource";
 import { listHub, readSettings, settingsNow, subscribeSettings, SETTINGS_TAG } from "./homeSettings";
@@ -21,7 +21,6 @@ export type ParachuteLine = {
   home: boolean;
 };
 
-const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
 
 /** The Parachutes in order: the home's first, then the others this device is signed in to (as first signed in), then
  *  the ones the list names that this device isn't signed in to (as listed). */
@@ -57,9 +56,11 @@ export async function afterSignIn(hub: string, kept: readonly VaultRecord[]): Pr
   // only a device with no home of its own before this sign-in looks for the one another device chose
   const hadHome = mineNow.some((v) => v.key === chosen || !kept.some((k) => k.key === v.key));
   if (!hadHome) {
-    const candidates = kept.filter(isMine);
-    const holding = await withSettings(candidates);
-    if (holding) setHome(holding.key);
+    // the vault of theirs another device made the home (it holds the settings), else the first by name; kept as
+    // this device's home, so a later sign-in doesn't move it
+    const holding = await withSettings(kept.filter(isMine));
+    const first = [...kept].filter(isMine).sort((a, b) => a.vault.localeCompare(b.vault))[0];
+    if (holding ?? first) setHome((holding ?? first).key);
   }
   await readSettings();
   if (!homeVault()) return;

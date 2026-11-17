@@ -5,6 +5,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, MORE_VAULTS, NOT_GIVEN, ORG_VAULT, techneState, VAULT } from "./hub";
 import { signInWithKey, ui } from "./helpers";
+import { keyDoor } from "./keys";
 
 const hostOf = (origin: string) => new URL(origin).host;
 const parachute = (page: Page, origin: string) => ui(page).getByRole("region", { name: `Parachute: ${hostOf(origin)}` });
@@ -88,6 +89,30 @@ test("each vault keeps a sign-in of its own: one refreshed, the others untouched
   // and the others still read with theirs
   await page.goto("/v/letters");
   await expect(ui(page).getByRole("list", { name: "Notes" })).toContainText("Post");
+});
+
+test("a sign-in stopped partway keeps the vaults it had, and says which", async ({ page }) => {
+  // the hub says no to the last vault's own sign-in (as if the person pressed Deny on a page it showed)
+  await page.route((u) => u.pathname === "/oauth/authorize" && u.searchParams.get("vault") === "pantry" && u.searchParams.get("scope") !== null && !u.searchParams.get("scope")!.includes("kitchen"), async (r) => {
+    const u = new URL(r.request().url());
+    await r.fulfill({ status: 302, headers: { location: `${u.searchParams.get("redirect_uri")}?error=access_denied&state=${u.searchParams.get("state")}` } });
+  });
+  const cookies = await keyDoor(hubState().origin, hubState().key);
+  await page.context().addCookies(cookies.map((c) => ({ ...c, url: hubState().origin })));
+  await page.goto("/");
+  await page.getByLabel("Your Parachute's address").fill(hubState().origin);
+  await page.getByRole("radio", { name: "Mine" }).check();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  // the two pages without a key: see which vaults are yours, then all of them; the hops after stop at pantry
+  for (let i = 0; i < 2; i++) {
+    const before = page.url();
+    await page.getByRole("button", { name: "Approve" }).click();
+    await page.waitForURL((u) => u.href !== before);
+  }
+  await expect(page.getByRole("alert")).toContainText("You said no on the hub. The 2 vaults signed in to before that stay: kitchen, letters.");
+  await page.getByRole("link", { name: "Open your launcher" }).click();
+  for (const v of [VAULT, "letters"]) await expect(ui(page).getByRole("region", { name: v, exact: true })).toBeVisible();
+  await expect(ui(page).getByRole("region", { name: "pantry", exact: true })).toHaveCount(0);
 });
 
 test("a second device that signs in to the home Parachute finds Techne on the list, a tap from signed in", async ({ browser }, info) => {

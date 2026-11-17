@@ -31,13 +31,21 @@ export function parseHub(input: string): HubParse {
   return { ok: true, hub: url.origin };
 }
 
-/** What a hub says about itself: where to sign in, where to ask which vaults are the person's, where vaults live. */
+/** What a hub says about itself: where to sign in, where to ask which vaults are the person's, where vaults live.
+ *  Tokens go to those addresses, so they must be on the hub's own origin; only Parachute Cloud keeps its vaults and
+ *  account on another host of its own domain (cloud.parachute.computer → my.parachute.computer). */
 export type Parachute = { hub: string; issuer: string; accountMcp: string; vaultTemplate: string };
 
 /** https, or http on this machine. */
 const safe = (raw: unknown): raw is string => {
   if (typeof raw !== "string" || raw.length > 500) return false;
   try { const u = new URL(raw); return !u.username && !u.password && (u.protocol === "https:" || (u.protocol === "http:" && isLoopback(u.hostname))); } catch { return false; }
+};
+
+const onHubOrDomain = (raw: string, hub: string) => {
+  const u = new URL(raw);
+  if (u.origin === hub) return true;
+  return hub === CLOUD && u.protocol === "https:" && u.hostname.endsWith(".parachute.computer");
 };
 
 /** Read the hub's own description; a hub with none (older than 0.8) is read as one that keeps everything on its origin. */
@@ -57,13 +65,19 @@ export async function describe(hub: string, fetchImpl: typeof fetch = fetch.bind
   let issuer = "";
   try { issuer = new URL(String(d.issuer)).origin; } catch { /* refused below */ }
   if (issuer !== hub) throw new Error(`That hub calls itself ${String(d.issuer).slice(0, 80)}, not ${hub}. Nothing was added.`);
-  const accountMcp = safe(d.account_mcp_endpoint) ? d.account_mcp_endpoint : plainHub.accountMcp;
-  const vaultTemplate = safe(d.vault_url_template) && (d.vault_url_template as string).includes("{name}") ? d.vault_url_template as string : plainHub.vaultTemplate;
+  const accountMcp = safe(d.account_mcp_endpoint) && onHubOrDomain(d.account_mcp_endpoint, hub) ? d.account_mcp_endpoint : plainHub.accountMcp;
+  const vaultTemplate = safe(d.vault_url_template) && (d.vault_url_template as string).includes("{name}") && onHubOrDomain(d.vault_url_template.replace("{name}", "x"), hub) ? d.vault_url_template as string : plainHub.vaultTemplate;
   return { hub, issuer, accountMcp, vaultTemplate };
 }
 
 /** A vault's API root, from where the Parachute says its vaults live. */
-export const vaultAt = (template: string, name: string) => template.replace("{name}", encodeURIComponent(name)).replace(/\/$/, "");
+export const vaultUrlFrom = (template: string, name: string) => template.replace("{name}", encodeURIComponent(name)).replace(/\/$/, "");
+
+/** A JSON-RPC answer from an MCP door: JSON, or one server-sent event carrying it (`data: {…}`). */
+export function rpcAnswer(text: string): unknown {
+  const json = text.trimStart().startsWith("{") ? text : text.split("\n").find((l) => l.startsWith("data:"))?.slice(5).trim() ?? "";
+  try { return JSON.parse(json); } catch { throw new Error("The hub's list of your vaults couldn't be read."); }
+}
 
 /** The vault names in what the hub answered to `list-vaults` (a JSON-RPC result whose text is JSON). Only names a vault
  *  can have; at most 200. */
@@ -84,7 +98,7 @@ export const LIST_VAULTS_BODY = JSON.stringify({ jsonrpc: "2.0", id: 1, method: 
 export async function listWithToken(accountMcp: string, token: string, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<string[]> {
   const res = await fetchImpl(accountMcp, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: LIST_VAULTS_BODY });
   if (!res.ok) throw new Error(`The hub didn't list your vaults (${res.status}).`);
-  return vaultNamesFrom(await res.json());
+  return vaultNamesFrom(rpcAnswer(await res.text()));
 }
 
 /** The scope that asks for every vault named: read and write each (the hub gives read only where that is all the

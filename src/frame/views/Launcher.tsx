@@ -109,18 +109,17 @@ export default function Launcher() {
   );
 }
 
-const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
 /** The vaults by Parachute, in the order the shell gives the Parachutes (the home's first); a vault no Parachute
  *  names (a frame on an older shell) goes in a group of its own at the end. `from`: the first chapter's number. */
 export function byParachute(vaults: FrameVault[], parachutes: FrameParachute[]): { p: FrameParachute | null; vaults: FrameVault[]; from: number }[] {
   const out: { p: FrameParachute | null; vaults: FrameVault[]; from: number }[] = [];
   let n = 0;
   for (const p of parachutes) {
-    const here = vaults.filter((v) => originOf(v.issuer) === p.hub);
+    const here = vaults.filter((v) => v.hub === p.hub);
     out.push({ p, vaults: here, from: n });
     n += here.length;
   }
-  const rest = vaults.filter((v) => !parachutes.some((p) => originOf(v.issuer) === p.hub));
+  const rest = vaults.filter((v) => !parachutes.some((p) => v.hub === p.hub));
   if (rest.length || !out.length) out.push({ p: null, vaults: rest, from: n });
   return out;
 }

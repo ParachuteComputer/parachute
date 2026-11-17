@@ -4,12 +4,11 @@ import type { VaultClient } from "@openparachute/surface-client";
 import { homeVault } from "../shell/frameSource";
 import { clientFor } from "../vault/client";
 import { isMine } from "../vault/whose";
-import { listVaults, type VaultRecord } from "../vault/store";
+import { originOf, listVaults, type VaultRecord } from "../vault/store";
 import { stripExt } from "./contract";
 import { parsePointer, pointerPath, POINTER_TAG, type Pointer } from "./pointer";
 
 export type PointerNote = { noteId: string; path: string; updatedAt: string | null; pointer: Pointer };
-const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
 
 /** The home vault's pointers that parse. */
 export async function readPointers(c: Pick<VaultClient, "queryNotes"> | null = homeClient()): Promise<PointerNote[]> {

@@ -10,12 +10,11 @@ import { readPointers } from "./pointers";
 import { fullComponent, refreshComponents } from "./useComponents";
 import { clientFor } from "../vault/client";
 import { MAX_CODE_CHARS } from "../vault/limited";
-import { listVaults, type VaultRecord } from "../vault/store";
+import { originOf, listVaults, type VaultRecord } from "../vault/store";
 import { whoseOf } from "../vault/whose";
 
 export type Imported = { id: string; name: string; vault: string; host: string; own: boolean; whose: "mine" | "theirs" | "trusted"; kind: "tsx" | "jsx"; source: string; hash: string };
 export type ImportsRead = { ok: true; imports: Imported[] } | { ok: false; error: string };
-const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
 const hostOf = (issuer: string) => { try { return new URL(issuer).host; } catch { return issuer; } };
 
 export async function readImports(rec: VaultRecord, source: string): Promise<ImportsRead> {

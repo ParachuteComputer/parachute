@@ -15,7 +15,7 @@ import { addToHome } from "../applet/addToHome";
 import { bringIn, readPointers } from "../applet/pointers";
 import { isMine, whoseOf } from "../vault/whose";
 import type { FrameComponents, FramePointer } from "../bridge/protocol";
-import { listVaults, type VaultRecord } from "../vault/store";
+import { originOf, listVaults, type VaultRecord } from "../vault/store";
 import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
 import { barNow, pinApplet, startApplet } from "./homeSettings";
@@ -61,7 +61,6 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
 
 // ── other Parachutes in the person's own (docs/design/EMBED.md) ──
 
-const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
 /** This device's vault for a pointer's hub and vault, if it holds it. */
 const heldFor = (hub: string, vault: string) => listVaults().find((v) => originOf(v.issuer) === hub && v.vault === vault) ?? null;
 

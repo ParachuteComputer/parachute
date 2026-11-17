@@ -137,6 +137,13 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   return url.toString();
 }
 
+/** The flow this app started, if `state` is its state, without using it up (what a sign-in kept so far, before a step
+ *  that may fail). */
+export function peekPending(state: string | null): Pending | null {
+  const p = readJson<Pending>(PENDING_KEY);
+  return p && state && p.state === state ? p : null;
+}
+
 /** Drop the sign-in flow this app started (a key sign-in that the hub refused: the registration is still good). */
 export function dropPending() { localStorage.removeItem(PENDING_KEY); }
 
@@ -217,7 +224,8 @@ export async function refresh(tokenEndpoint: string, clientId: string, refreshTo
 export async function revoke(rec: { issuer: string; clientId: string; refreshToken?: string; revocationEndpoint?: string }, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<void> {
   if (!rec.refreshToken || !onOrigin(rec.revocationEndpoint, rec.issuer)) return;
   try {
-    await fetchImpl(rec.revocationEndpoint, { method: "POST", signal: AbortSignal.timeout(5000), headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    // keepalive: a revoke made as the page moves on (the sign-in's next step) still reaches the hub
+    await fetchImpl(rec.revocationEndpoint, { method: "POST", keepalive: true, signal: AbortSignal.timeout(5000), headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ token: rec.refreshToken, token_type_hint: "refresh_token", client_id: rec.clientId }).toString() });
   } catch { /* offline or refused: the local record still goes */ }
 }
