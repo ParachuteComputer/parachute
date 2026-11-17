@@ -21,7 +21,8 @@ export default function OAuthCallback() {
     if (denied) { setError(denied === "access_denied" ? "You said no on the hub. Nothing was added." : `The hub stopped the sign-in (${denied.slice(0, 60)}).`); return; }
     if (!code || !state) { setError("This page needs a sign-in from a hub."); return; }
     finishStep(code, state).then(async (next) => {
-      if ("go" in next) { setSaying("Asking your hub for your vaults…"); window.location.assign(next.go); return; }
+      // the next step: the consent for all the vaults, or the next vault's own sign-in, which the hub answers at once
+      if ("go" in next) { setSaying(next.progress ? `Signing in to your vaults: ${next.progress.done} of ${next.progress.of}…` : "Asking your hub for your vaults…"); window.location.assign(next.go); return; }
       setSaying(`Signed in to ${next.done.length === 1 ? "one vault" : `${next.done.length} vaults`}.`);
       await afterSignIn(next.parachute.hub, next.done).catch(() => undefined);
       nav("/", { replace: true });

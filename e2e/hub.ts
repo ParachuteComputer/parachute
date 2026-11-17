@@ -1,9 +1,10 @@
 // Two real Parachute hubs for the end-to-end tests: `parachute-core` (from @openparachute/core), each in a throwaway home
 // on a loopback port. Nothing here touches any other hub.
-//   home     at 127.0.0.1, one vault, `kitchen`, seeded from e2e/fixtures: the person's own Parachute.
-//   techne   at localhost (another host, so the browser keeps its sign-in apart), one vault, `techne`: an org's
-//            Parachute. The person is a member there by their Nostr key alone: the hub's owner granted the key `read`
-//            on the vault (grant-access), and the person signs in through the hub's key door (keys.ts).
+//   home     at 127.0.0.1, the person's own Parachute: three vaults, `kitchen` seeded from e2e/fixtures, `letters` and
+//            `pantry` with an applet each (named after kitchen, so kitchen is the default home: the first by name). The person is its owner (a password) and their key is linked to them.
+//   techne   at localhost (another host, so the browser keeps its sign-in apart): an org's Parachute with two vaults,
+//            `techne` and `board`. The person is a member there by their Nostr key alone: the hub's owner granted the
+//            key `read` on `techne` only (grant-access), and the person signs in through the hub's key door (keys.ts).
 //   PARACHUTE_CORE   the parachute-core binary (default: `parachute-core` on PATH)
 // Addresses, the owner's password and a throwaway key go to e2e/.hub.json for the tests; teardown stops both hubs and
 // removes their homes.
@@ -18,6 +19,9 @@ import { newKey, pubOf } from "./keys";
 export const STATE = join(import.meta.dirname, ".hub.json");
 export const VAULT = "kitchen";
 export const ORG_VAULT = "techne";
+/** The person's other vaults at home, each with one applet; and Techne's vault the person isn't given. */
+export const MORE_VAULTS = [{ vault: "letters", applet: "Post", glyph: "✉" }, { vault: "pantry", applet: "Shelves", glyph: "❦" }] as const;
+export const NOT_GIVEN = "board";
 export type HubState = { origin: string; password: string; home: string; pid: number; token: string };
 /** The person's key (a throwaway, made per run), and the org's hub. */
 export type State = HubState & { key: string; techne?: HubState };
@@ -95,11 +99,18 @@ export default async function globalSetup() {
       const path = relative(root, f).replace(/\.md$/, "");
       await api(state as State, "POST", "notes", { path, content: readFileSync(f, "utf8"), ...(path.startsWith("Recipes/") ? { tags: ["recipe"] } : {}) });
     }
-    // the same key is the owner's at home, and a member's (read) at techne
+    // the person's other vaults at home, each with an applet that says which vault it is in
+    for (const m of MORE_VAULTS) {
+      cli(state as State, ["vault", "create", m.vault, "--json", "--no-mirror"]);
+      await api({ origin: state.origin!, token: mintToken(`vault:${m.vault}:write`, state as State) }, "POST", "notes", { path: `Applets/${m.applet}`, extension: "html", tags: ["applet"],
+        content: `<!doctype html><h1>${m.applet}</h1><p>In ${m.vault}.</p>`, metadata: { applet: { contract: 2, id: m.applet.toLowerCase(), name: m.applet, glyph: m.glyph, access: [] } } }, m.vault);
+    }
+    // the same key is the owner's at home, and a member's (read) at techne, where another vault isn't theirs
     const pub = pubOf(state.key!);
     cli(state as State, ["auth", "link-pubkey", "--user", "owner", pub]);
     state.techne = await startHub(ORG_VAULT, "localhost", (h) => { state.techne = h; keep(); });
     keep();
+    cli(state.techne, ["vault", "create", NOT_GIVEN, "--json", "--no-mirror"]);
     await account(state.techne, "grant-access", { pubkey: pub, vault: ORG_VAULT, role: "read" });
     keep();
   } catch (e) {

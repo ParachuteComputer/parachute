@@ -15,8 +15,6 @@ export type VaultRecord = {
   expiresAt?: number;
   scope: string;
   addedAt: string;
-  /** the Parachute sign-in this vault came with (vault/signins.ts): its token is refreshed through that sign-in's chain */
-  signIn?: string;
   /** the vault's API root, when it isn't `<issuer>/vault/<name>` (Parachute Cloud's vaults live on another host) */
   url?: string;
 };
@@ -76,20 +74,6 @@ export function removeVault(key: string) { write(listVaults().filter((r) => r.ke
 
 /** A vault's API root. */
 export const vaultUrlOf = (r: Pick<VaultRecord, "issuer" | "vault" | "url">) => r.url ?? `${r.issuer}/vault/${encodeURIComponent(r.vault)}`;
-
-/** Add several vaults at once (one sign-in to a Parachute), each replacing this device's record of the same vault. */
-export function saveVaults(recs: Omit<VaultRecord, "key">[]): VaultRecord[] {
-  let list = listVaults();
-  const out: VaultRecord[] = [];
-  for (const rec of recs) {
-    const key = keyFor(list, rec.issuer, rec.vault);
-    const next = { ...rec, key };
-    list = [...list.filter((r) => r.key !== key), next];
-    out.push(next);
-  }
-  write(list);
-  return out;
-}
 
 export const findVault = (key: string | undefined) => listVaults().find((r) => r.key === key) ?? null;
 /** The vault a web address names: its hub and its name, among the vaults this device holds. */
