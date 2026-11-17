@@ -200,6 +200,9 @@ function Compose({ account, can, draft, reply, done }: { account: string; can: (
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const send = useRef<string>(opId());
+  // what will go comes into view as soon as it is read back (below the message on a phone)
+  const shownReview = useRef<HTMLElement>(null);
+  useEffect(() => { if (review) shownReview.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [review]);
   const fields = (): Fields => ({ to: addrs(to), cc: addrs(cc), bcc: init.bcc, subject: subject.trim(), text, ...(init.inReplyTo ? { inReplyTo: init.inReplyTo } : {}) });
   /** Save it as a draft (a new revision of the one open), then read back exactly what would go. */
   const saveAndReview = async () => {
@@ -240,7 +243,7 @@ function Compose({ account, can, draft, reply, done }: { account: string; can: (
       </div>
     </div>
     {err && <p className="err" role="alert">{err}</p>}
-    {review && <section className="review" aria-label="What will be sent">
+    {review && <section className="review" aria-label="What will be sent" ref={shownReview}>
       <strong>This is what will go</strong>
       <div className="quiet">To {addrLine(review.fields.to ?? [])}{review.fields.cc?.length ? ` · cc ${addrLine(review.fields.cc)}` : ""}</div>
       <div><b>{review.fields.subject || "(no subject)"}</b></div>
