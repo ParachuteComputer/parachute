@@ -1,0 +1,16 @@
+{
+  "path": "Applets/Matrix",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "matrix",
+      "name": "Matrix",
+      "glyph": "◫",
+      "note": "your rooms on a Matrix homeserver",
+      "access": []
+    },
+    "services": [{ "id": "matrix", "kind": "http", "url": "{{homeserver}}/_matrix/client/", "auth": "token" }]
+  }
+}

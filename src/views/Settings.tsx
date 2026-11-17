@@ -13,6 +13,7 @@ import { forgetVaultStart } from "../shell/start";
 import { forgetVaultSettings } from "../shell/homeSettings";
 import { forgetVaultTheme } from "../theme/store";
 import ThemeSettings from "./ThemeSettings";
+import ServicesSettings from "./ServicesSettings";
 import { forgetApplets } from "../applet/useApplets";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { grantInVault } from "../applet/embeds";
@@ -65,6 +66,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
         )) : <p className="quiet">None yet.</p>}
         <p className="small"><Link to="/add">Add a Parachute</Link></p>
       </section>
+      <ServicesSettings />
       <KeySettings />
       <FrameSettings />
       <ThemeSettings />

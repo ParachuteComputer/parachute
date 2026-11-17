@@ -100,6 +100,7 @@ jobs:
           export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
           scripts/android-build.sh --target aarch64 | tee "$RUNNER_TEMP/android-build.log"
           apk=$(grep '\.apk$' "$RUNNER_TEMP/android-build.log" | tail -1)
+          scripts/no-test-signer.sh dist
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
           mkdir -p out && cp "$apk" "out/Parachute_${version}_arm64${APK_SUFFIX}.apk"
           ls -l out

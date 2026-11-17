@@ -1,7 +1,7 @@
 //! The person's Nostr key. It is made here, pasted in, or paired in from a device that has it (pairing.rs), and it
 //! stays in the shell: kept in the platform's secure storage (Android Keystore through `KeyPlugin.kt`, the desktop's
-//! keyring), held in memory here, and used only to sign the hub's sign-in (door.rs). No command hands it to the web
-//! side; the web side learns only the public key.
+//! keyring), held in memory here, and used only here: to sign the hub's sign-in (door.rs), and to sign and seal for an
+//! allowed applet's services (services.rs). No command hands it to the web side; the web side learns only the public key.
 
 use nostr::nips::nip19::ToBech32;
 use nostr::Keys;

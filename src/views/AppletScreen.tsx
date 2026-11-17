@@ -41,6 +41,11 @@ import { createVaultModule } from "../applet/modules/vault";
 import { createThemeModule } from "../applet/modules/theme";
 import { tokensNow } from "../theme/store";
 import { createAppModule } from "../applet/modules/app";
+import { createServicesModule } from "../applet/modules/services";
+import { createBroker, type Broker } from "../services/broker";
+import { nativeNow } from "../services/native";
+import { hubCheck, knownHubs } from "../services/hubs";
+import type { Session } from "../applet/session";
 import { appDeps } from "../shell/appDeps";
 import { runDecision } from "../applet/selftest/gate";
 import { useGate } from "../applet/selftest/run";
@@ -140,7 +145,7 @@ export default function AppletScreen() {
         const kind = codeKindOf(n as { extension?: string });
         if (!kind) { if (on) setLoaded({ state: "refused", error: `its note is ${extensionOf(n as { extension?: string })}, and an applet's note is html, tsx or jsx` }); return; }
         if (notMine && (n.content ?? "").length > MAX_CODE_CHARS) { if (on) setLoaded({ state: "refused", error: "its code is bigger than an applet from someone else's vault may be" }); return; }
-        const a = readApplet(n, rec.key, notMine);
+        const a = readApplet(n, rec.key, notMine, hubCheck());
         if (!a.ok) { if (on) setLoaded({ state: "refused", error: a.error }); return; }
         // the vault's role tags are no applet's to open or to tag with: dropped before the card, the key and the writer
         a.entry.opens = withoutRoles(a.entry.opens, await readRoleTags(c));
@@ -155,7 +160,7 @@ export default function AppletScreen() {
         const imports = imp.imports;
         // code from someone else's vault, its own or imported, is transpiled only once it is allowed
         const late = notMine || imports.some((i) => i.whose !== "mine");
-        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app), embedsFrom: from }, a.entry.path),
+        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app, a.entry.services), embedsFrom: from }, a.entry.path),
           late || imports.length ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), pointerFor(rec, n.id).catch(() => null)]);
         const hash = imports.length && kind !== "html" ? await compositeHash(kind, source, imports) : code.hash;
         if (!on) return;
@@ -202,10 +207,26 @@ export default function AppletScreen() {
   const grant = useMemo(() => (entry ? resolvedOf(entry.manifest) : {}), [entry]);
   // keyed on the vault, not the record object: a token refresh rewrites the record, and rebuilding the router would close
   // the frame's session with the very call that caused the refresh still waiting
+  // the servers it declared (docs/design/SERVICES.md): a broker for each of its frame's sessions, opened with the session
+  // and closed with it; its calls wait for it
+  const brokerRef = useRef<{ session: Session; broker: Promise<Broker | null> } | null>(null);
+  const servicesWhy = useRef<string | null>(null);
+  const onSession = (s: Session | null) => {
+    const was = brokerRef.current;
+    if (was && was.session !== s) { void was.broker.then((b) => b?.close()); brokerRef.current = null; }
+    if (!s || !entry?.services.length || !rec || !subject) return;
+    const services = entry.services;
+    brokerRef.current = { session: s, broker: nativeNow().then((native) => {
+      if (!native) { servicesWhy.current = "its servers need the Parachute app on a device, which holds your key"; return null; }
+      return createBroker({ native, session: `s${Math.random().toString(36).slice(2)}`, applet: { name: entry.manifest.name, subject }, services, hubs: knownHubs(), emit: (event, data) => s.sendEvent(event, data) });
+    }) };
+  };
+  useEffect(() => () => { void brokerRef.current?.broker.then((b) => b?.close()); brokerRef.current = null; }, []);
   const router = useMemo(() => (rec && entry ? createRouter([
     createVaultModule(vaultDeps(clientFor(rec)), { opens: entry.opens, name: rec.vault }),
     createThemeModule({ theme: tokensNow }),
     createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current)),
+    ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
   ]) : null), [rec?.key, rec?.issuer, rec?.vault, entry]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -238,7 +259,7 @@ export default function AppletScreen() {
       {note && <p className="quiet">{name} asks before it opens {titleOf(note)}.</p>}
       <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"} codeChanged={decision === "ask-updated" && status === "updated"}
         broughtChanged={pinMoved} asksOther={status === "none" && !!grants.record(subject)}
-        lines={[...grantLines({ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app), embedsFrom: loaded.state === "ok" ? loaded.from : [] }, ownFolder(entry.path)), ...importLines(loaded.state === "ok" ? loaded.imports : [])]}
+        lines={[...grantLines({ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services), embedsFrom: loaded.state === "ok" ? loaded.from : [] }, ownFolder(entry.path)), ...importLines(loaded.state === "ok" ? loaded.imports : [])]}
         withImports={loaded.state === "ok" && loaded.imports.length > 0} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         onAllow={() => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry); if (brought && pinMoved) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); }}
         onNotNow={() => setDeclined(true)} />
@@ -262,7 +283,7 @@ export default function AppletScreen() {
       <button type="button" className="quiet-button" onClick={tap(revoke)}>Revoke</button>
     </div>
     {late && "error" in late && late.hash === keys.html && <p className="error" role="alert">This applet can't run: its code doesn't compile: {late.error}.</p>}
-    {router && page && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={page} title={name} router={router} grant={grant} ready={ready} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
+    {router && page && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
     {router && page && sized && rec && isMine(rec) && <PageEmbeds host={rec} hostNote={entry.noteId} embeds={entry.embeds} from={loaded.state === "ok" ? loaded.from : []} />}
   </>);
 }

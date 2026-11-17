@@ -27,6 +27,9 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
+      # the app's bundle has no test signer (src/services/e2eNative.ts); the e2e build below has one
+      - name: No test signer in the app's bundle
+        run: npm run build && scripts/no-test-signer.sh dist
       # The end-to-end tests run the web build against a real hub: parachute-core, in a throwaway home, on loopback.
       - uses: oven-sh/setup-bun@v2
         with:

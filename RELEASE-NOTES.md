@@ -29,6 +29,9 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   code changes. A small kit (`parachute`) gives it record calls and parts to build a screen from.
 - **One look.** The app and every applet follow one theme note in your home vault ([docs/THEME.md](docs/THEME.md)).
   Make the launcher your own with a frame note ([docs/CHANGE-YOUR-FRAME.md](docs/CHANGE-YOUR-FRAME.md)).
+- **Applets that talk to servers.** An applet can name its servers; the card says each and what the app signs there as
+  you, and the app talks to them for it with your key, which the applet never holds. The first: Rooms (your rooms on a
+  Buzz relay, with Uni's cards), Mail (through a mail gateway), Journal and Matrix ([docs/PARITY.md](docs/PARITY.md)).
 - **Links in.** `parachute://open?url=<a note's address>` opens a note.
 
 ## What doesn't yet

@@ -7,6 +7,7 @@ import { listVaults, type VaultRecord } from "../vault/store";
 import { embedSubjectParts } from "../applet/embeds";
 import { useSyncExternalStore } from "react";
 import { allDefaults, clearDefault, subscribeDefaults, VAULT } from "../open/defaults";
+import AppletServices from "./AppletServices";
 
 const grants = deviceGrants();
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
@@ -36,6 +37,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
       <li key={subject} className="line">
         <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
         <button type="button" className="quiet-button" onClick={() => { grants.revoke(subject); onChange(); }}>Revoke</button>
+        {a && (a.services.length > 0 || a.servicesError) && <AppletServices subject={subject} entry={a} />}
       </li>
     );
   })}</>;

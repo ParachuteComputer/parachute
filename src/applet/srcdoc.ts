@@ -1,6 +1,6 @@
 // The srcdoc for a sealed applet (copied from the Uni app). Pure: data in, string out.
 
-export const FRAME_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
+export const FRAME_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
 export const CSP_META = `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}">`;
 
 // WebRTC ignores CSP. This removes it from the app's own realm before app code

@@ -1,74 +1,13 @@
 //! The key door against a real hub: parachute-core in a throwaway home on loopback, when `PARACHUTE_CORE` names it (CI
 //! sets it; without it this test says so and passes). A key linked to the hub's owner gets a session that opens the
 //! hub's authorize page (its consent, not its login); a key the hub doesn't know is told so.
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
-use std::process::{Command, Stdio};
-use std::time::Duration;
+#[path = "support/hub.rs"]
+mod hub;
 
+use std::process::Command;
+
+use hub::{cli, hub, hub_in};
 use parachute_lib::door;
-
-struct Hub {
-    child: std::process::Child,
-    home: std::path::PathBuf,
-    origin: String,
-    bin: String,
-}
-
-impl Drop for Hub {
-    fn drop(&mut self) {
-        let _ = Command::new("kill").args(["--", &format!("-{}", self.child.id())]).status();
-        let _ = self.child.kill();
-        let _ = std::fs::remove_dir_all(&self.home);
-    }
-}
-
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
-}
-
-fn hub(bin: String) -> Hub {
-    hub_in(bin, "door")
-}
-
-/// A hub in its own throwaway home (`name` keeps two tests of this process apart).
-fn hub_in(bin: String, name: &str) -> Hub {
-    let home = std::env::temp_dir().join(format!("parachute-{name}-{}", std::process::id()));
-    std::fs::create_dir_all(&home).unwrap();
-    std::fs::write(home.join("pw"), "correct horse battery staple 1").unwrap();
-    let ph = home.join("home");
-    let ok = Command::new(&bin)
-        .args(["bootstrap", "--embedded", "--home", ph.to_str().unwrap(), "--username", "owner", "--password-file", home.join("pw").to_str().unwrap(), "--vault", "recipes", "--json"])
-        .env("PARACHUTE_HOME", &ph)
-        .stdout(Stdio::null())
-        .status()
-        .unwrap();
-    assert!(ok.success(), "bootstrap");
-    let (port, vport) = (free_port(), free_port());
-    let origin = format!("http://127.0.0.1:{port}");
-    let log = std::fs::File::create(home.join("serve.log")).unwrap();
-    // embedded serve stops when its parent goes; a shell that waits on it is the parent, in its own group
-    // (its own process group, not setsid: macOS has no setsid command)
-    let mut sh = Command::new("sh");
-    #[cfg(unix)]
-    sh.process_group(0);
-    let child = sh
-        .args(["-c", "\"$@\"; :", "_", &bin, "serve", "--embedded", "--home", ph.to_str().unwrap(), "--listen", &format!("127.0.0.1:{port}"), "--vault-listen", &format!("127.0.0.1:{vport}")])
-        .env("PARACHUTE_HOME", &ph)
-        .env("PARACHUTE_HUB_ORIGIN", &origin)
-        .stdout(log.try_clone().unwrap())
-        .stderr(log)
-        .spawn()
-        .unwrap();
-    let h = Hub { child, home, origin, bin };
-    for _ in 0..120 {
-        if std::fs::read_to_string(h.home.join("serve.log")).unwrap_or_default().contains("ready: hub") {
-            return h;
-        }
-        std::thread::sleep(Duration::from_millis(250));
-    }
-    panic!("hub didn't start: {}", std::fs::read_to_string(h.home.join("serve.log")).unwrap_or_default());
-}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_linked_key_opens_the_hubs_consent_and_an_unknown_one_is_told() {
@@ -147,13 +86,6 @@ async fn a_hub_without_the_door_and_a_hub_in_trouble_are_told_apart() {
     // a hub that is restarting is not a hub without the door
     let o = door::hub_origin(&answering("503 Service Unavailable", "busy").await).unwrap();
     assert_eq!(door::sign_in(&o, "/", &keys).await.unwrap_err().code, "unreachable");
-}
-
-/// One `parachute-core` command against the test hub, as its operator.
-fn cli(h: &Hub, args: &[&str]) -> std::process::Output {
-    let out = Command::new(&h.bin).args(args).env("PARACHUTE_HOME", h.home.join("home")).env("PORT", h.origin.rsplit(':').next().unwrap()).output().unwrap();
-    assert!(out.status.success(), "{args:?}: {}", String::from_utf8_lossy(&out.stderr));
-    out
 }
 
 #[tokio::test(flavor = "multi_thread")]

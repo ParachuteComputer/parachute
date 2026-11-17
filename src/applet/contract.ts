@@ -8,7 +8,7 @@
 // and the host pushes events: {uni:1, event, data}.
 
 export const CONTRACT_VERSION = 1;
-export const NAMESPACES = ["vault", "theme", "app", "page"] as const;
+export const NAMESPACES = ["vault", "theme", "app", "page", "services"] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
 /** What an applet can be granted, each scoped to folders of the vault its note lives in: read, add notes, change notes. */
@@ -43,6 +43,8 @@ export const LIMITS = {
   maxHeaders: 20,
   /** A frame-fetch body: a written note's content rides in it, so it is most of the request (7 KB of the 8). */
   maxFetchBody: 7 * 1024,
+  /** Bytes a `services` call may carry beside its 8 KB (an upload, a request's body): docs/design/SERVICES.md. */
+  maxBytes: 25 * 1024 * 1024,
 };
 
 export type UniRequest = { uni: 1; id: string; ns: string; method: string; params: Record<string, unknown> };
@@ -68,7 +70,8 @@ export const hasOnly = (o: Record<string, unknown>, keys: readonly string[]) => 
  * a request ever does is refused too.
  */
 export function withinBudget(x: unknown, budget: { left: number }, depth = 0): boolean {
-  if (depth > 6) return false;
+  // deep enough for a services call with several subscriptions (params.subs[i].filters[j]["#h"][k]: 7 levels)
+  if (depth > 8) return false;
   switch (typeof x) {
     case "string": budget.left -= x.length + 2; return budget.left >= 0;
     case "number": case "boolean": budget.left -= 8; return budget.left >= 0;
@@ -96,7 +99,12 @@ export function parseEnvelope(raw: unknown): Envelope {
   if (!plain(raw)) return { kind: "bad", id: null, error: ERROR_CODES.badRequest };
   const id = idOf(raw.id);
   const bad = (error: ErrorCode): Envelope => ({ kind: "bad", id, error });
-  if (!withinBudget(raw, { left: LIMITS.maxRequestBytes })) return bad(ERROR_CODES.tooLarge);
+  // a services call may carry bytes (an ArrayBuffer at params.bytes), outside the request's budget and capped on their own
+  const params = "uni" in raw && raw.ns === "services" && plain(raw.params) ? raw.params : null;
+  const bytes = params && params.bytes instanceof ArrayBuffer ? params.bytes : null;
+  if (bytes && bytes.byteLength > LIMITS.maxBytes) return bad(ERROR_CODES.tooLarge);
+  const measured = bytes ? { ...raw, params: { ...params, bytes: null } } : raw;
+  if (!withinBudget(measured, { left: LIMITS.maxRequestBytes })) return bad(ERROR_CODES.tooLarge);
   if ("uni" in raw) {
     if (raw.uni !== CONTRACT_VERSION) return bad(ERROR_CODES.badVersion);
     if (id === null || !hasOnly(raw, UNI_KEYS) || typeof raw.ns !== "string" || typeof raw.method !== "string") return bad(ERROR_CODES.badRequest);

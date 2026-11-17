@@ -17,7 +17,7 @@ describe("the settings note", () => {
     expect(s.start).toEqual({ vault: "kitchen", applet: "Applets/Home" });
   });
   it("no note, other metadata, or a bad start: an empty bar and no home", () => {
-    for (const m of [null, {}, { parachute: "x" }, { parachute: { bar: "x", start: "Applets/Home" } }, { parachute: { start: { vault: "k" } } }]) expect(settingsFrom(m)).toEqual({ bar: [], start: null, hubs: [] });
+    for (const m of [null, {}, { parachute: "x" }, { parachute: { bar: "x", start: "Applets/Home" } }, { parachute: { start: { vault: "k" } } }]) expect(settingsFrom(m)).toEqual({ bar: [], start: null, hubs: [], services: [] });
   });
   it("reads every place it can (the bar shows the first ones it finds), up to a bound", () => {
     const bar = Array.from({ length: 400 }, (_, i) => ({ vault: "k", applet: `A/${i}` }));
@@ -40,5 +40,18 @@ describe("which vault a place names", () => {
   it("names a vault by its hub only when another hub holds that name too", () => {
     expect(placeFor(home, "Applets/Recipes", [home])).toEqual({ vault: "kitchen", applet: "Applets/Recipes" });
     expect(placeFor(other, "Applets/Recipes", list)).toEqual({ vault: "kitchen", hub: "https://other.example", applet: "Applets/Recipes" });
+  });
+});
+
+describe("the servers the note lists", () => {
+  it("keeps the ones that parse, made plain, and drops the rest", () => {
+    const s = settingsFrom({ parachute: { services: [
+      { name: "Rooms", kind: "nostr-relay", url: "wss://Relay.Example/" },
+      { name: "Mail", kind: "http", url: "https://mail.example:8452/mail/" },
+      { name: "Bad", kind: "http", url: "http://mail.example/mail/" },
+      { name: "Odd", kind: "smtp", url: "https://x.example/" },
+      { kind: "http", url: "https://x.example/" },
+    ] } });
+    expect(s.services).toEqual([{ name: "Rooms", kind: "nostr-relay", url: "wss://relay.example" }, { name: "Mail", kind: "http", url: "https://mail.example:8452/mail/" }]);
   });
 });

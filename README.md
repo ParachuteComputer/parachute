@@ -52,6 +52,11 @@ You need a Parachute (a hub of your own, an org's, or Parachute Cloud) and a Nos
   model, [docs/design/EMBED.md](docs/design/EMBED.md).
 - **Open with.** A note's type is its tag. Tap a note and it opens in the applet that claims its type, or in the plain
   vault view, which opens anything. When two applets claim a type, Parachute asks once. Your choices stay on your device.
+- **Servers, through the app.** An applet can name the servers it talks to (a Nostr relay, a mail gateway, a Matrix
+  homeserver); its card says each one and what the app will sign there as you. The app talks to them for it and signs
+  with your key, which the applet never holds ([docs/design/SERVICES.md](docs/design/SERVICES.md)). `applets/` has
+  the first ones: Rooms (a Buzz relay), Mail (a mail gateway), Journal and Matrix; `scripts/install-applets.ts` puts
+  them into a vault and lays out the bar around them. What they cover of the Uni app: [docs/PARITY.md](docs/PARITY.md).
 
 It runs on Android and desktop (Tauri 2); releases are built for Android and Apple Silicon Macs
 ([.github/workflows/release.yml](.github/workflows/release.yml), [docs/LAUNCH.md](docs/LAUNCH.md) for what a public
@@ -117,6 +122,9 @@ an applet by itself only when this device holds both its Allow and the person's 
   decides whether applets run here at all (sealed on desktop, approved code only on Android).
 - `src/open/`: open with. The rule (`resolve.ts`, used by the frame); the defaults kept on this device and the tap marks,
   so an applet starts only on a person's tap (the shell's). The note's route, the sheet and long-press are the frame's.
+- `src/services/` and `src-tauri/src/services.rs`: the broker for an applet's servers. The web side holds the policy and
+  the relay connections; the native side signs, seals and sends, checking each call again (named kinds only, never a
+  Parachute hub) and writing down what it signed.
 - `src/links/`: links in, `parachute://open?url=<a note's web address>`.
 
 An applet's note, as an example:

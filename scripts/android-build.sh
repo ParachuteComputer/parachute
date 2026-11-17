@@ -13,6 +13,8 @@ export ANDROID_USER_HOME="${PARACHUTE_ANDROID_USER_HOME:-$(dirname "$props")/and
 mkdir -p "$ANDROID_USER_HOME"
 flags=(--apk --target "$target"); [ "$mode" = debug ] && flags+=(--debug)
 npx tauri android build "${flags[@]}"
+# the bundle the app was built from has no test signer (src/services/e2eNative.ts)
+scripts/no-test-signer.sh dist >&2
 apk=$(ls -t src-tauri/gen/android/app/build/outputs/apk/*/"$mode"/*.apk | head -1)
 bt=$(command ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)
 # the password goes to keytool through its environment, never on a command line
