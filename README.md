@@ -18,7 +18,7 @@ one.
    codes match. Or **Make a new key**.
 3. **Your hub knows your key.** The hub's owner links it once: `parachute auth link-pubkey --user <name> <npub>`. The
    app shows your `npub1…`.
-4. **Add a vault.** Enter the vault's address, press **Sign in with your key**, and allow it on the hub's page.
+4. **Add a vault.** Enter the vault's address, press **Sign in with your key**, and press **Approve** on the hub's page.
    **Other ways to sign in** uses the hub's own sign-in instead (a password, or Parachute Cloud's).
 
 **For agents:** an applet is one note your agent writes with the Parachute MCP; see
