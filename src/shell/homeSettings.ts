@@ -7,6 +7,9 @@
 //                   start: {vault, hub?, applet} | null   the home applet: it opens on start, first on the bar
 //                   hubs:  [{hub, name?}]   the person's Parachutes (docs/design/ONE-SIGN-IN.md): shown, never signed
 //                          in to by themselves
+//                   services: [{name, kind, url}]   the servers the person's applets reach (docs/design/SERVICES.md):
+//                          their relay, their mail gateway. Shown in Settings with the applets that reach each; an
+//                          applet's own record still names what it reaches, and its card is what allows it
 //                 `vault` is a vault's name (with `hub`, an issuer origin, when two hubs hold vaults of that name);
 //                 `applet` is the applet note's id or path. A place this device can't find is left out.
 //   read          at boot, and each time the frame area is shown; after each write.
@@ -21,6 +24,7 @@ import { originOf, listVaults, subscribeVaults, type VaultRecord } from "../vaul
 import { isMine } from "../vault/whose";
 import { homeVault } from "./frameSource";
 import { parseHub } from "../vault/parachute";
+import { normalUrl } from "../applet/services";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -31,11 +35,13 @@ export const MAX_PLACES = 12;
 export type Place = { vault: string; hub?: string; applet: string };
 /** One of the person's Parachutes, as the note lists it: its address (an origin) and, maybe, what to call it. */
 export type HubEntry = { hub: string; name?: string };
-export type Settings = { bar: Place[]; start: Place | null; hubs: HubEntry[] };
+/** A server the person's applets reach, as the note lists it. */
+export type ServiceEntry = { name: string; kind: "nostr-relay" | "http"; url: string };
+export type Settings = { bar: Place[]; start: Place | null; hubs: HubEntry[]; services: ServiceEntry[] };
 /** A place this device can open: its vault (this device's key) and the applet's note. */
 export type Found = { vault: string; noteId: string; name: string; glyph: string; href: string };
 
-const EMPTY: Settings = { bar: [], start: null, hubs: [] };
+const EMPTY: Settings = { bar: [], start: null, hubs: [], services: [] };
 const line = (x: unknown, max: number): x is string => typeof x === "string" && x.length > 0 && x.length <= max && !/[\u0000-\u001f]/.test(x);
 
 function placeOf(x: unknown): Place | null {
@@ -53,13 +59,21 @@ export function hubOf(x: unknown): HubEntry | null {
   return { hub: parsed.hub, ...(name ? { name } : {}) };
 }
 
+/** A server the note lists: a name, a kind and an address that parses as one (applet/services.ts), else nothing. */
+export function serviceOf(x: unknown): ServiceEntry | null {
+  if (!plain(x) || !line(x.name, 60) || (x.kind !== "nostr-relay" && x.kind !== "http")) return null;
+  const u = normalUrl(x.url, x.kind === "http" ? ["https", "http"] : ["wss", "ws"], x.kind === "http");
+  return u.ok ? { name: x.name as string, kind: x.kind, url: x.kind === "http" ? u.value.href : u.value.href.replace(/\/$/, "") } : null;
+}
+
 /** The choices in a settings note's metadata. A place (or a Parachute) that doesn't parse is dropped, never the rest. */
 export function settingsFrom(metadata: unknown): Settings {
   const p = plain(metadata) && plain(metadata.parachute) ? metadata.parachute : null;
-  if (!p) return { ...EMPTY, hubs: [] };
+  if (!p) return { ...EMPTY, hubs: [], services: [] };
   const bar = Array.isArray(p.bar) ? p.bar.slice(0, 200).map(placeOf).filter((x): x is Place => !!x) : [];
   const hubs = (Array.isArray(p.hubs) ? p.hubs.slice(0, 50).map(hubOf).filter((x): x is HubEntry => !!x) : []).filter((h, i, all) => all.findIndex((y) => y.hub === h.hub) === i);
-  return { bar: dedupe(bar), start: placeOf(p.start), hubs };
+  const services = Array.isArray(p.services) ? p.services.slice(0, 20).map(serviceOf).filter((x): x is ServiceEntry => !!x) : [];
+  return { bar: dedupe(bar), start: placeOf(p.start), hubs, services };
 }
 const same = (a: Place, b: Place) => a.vault === b.vault && a.applet === b.applet && (a.hub ?? "") === (b.hub ?? "");
 const dedupe = (xs: Place[]) => xs.filter((x, i) => xs.findIndex((y) => same(x, y)) === i);
