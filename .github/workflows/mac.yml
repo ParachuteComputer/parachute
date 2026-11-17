@@ -54,7 +54,7 @@ jobs:
           cargo build --locked --manifest-path src-tauri/Cargo.toml --example pair_send
           echo "PAIR_SEND=$PWD/src-tauri/target/debug/examples/pair_send" >> "$GITHUB_ENV"
       - name: Build the app (ad-hoc signed)
-        run: npx tauri build --ci
+        run: npx tauri build --ci && scripts/no-test-signer.sh dist
       - name: Name the files
         id: files
         run: |
