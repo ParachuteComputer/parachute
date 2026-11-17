@@ -35,6 +35,20 @@ different applets; without having to enter a bunch of different URLs."*
 | One refresh chain for every vault? | A refresh with `resource=<vault>/mcp` re-aims the new token at any vault the grant names. But refresh tokens rotate on every use (a spent one used again after about a minute revokes the whole chain), and **on 0.9 each refresh also retires the access token issued before it**, so one chain can't hold live tokens for two vaults at once (0.8 can). Not used. | spike + source (`resolveRefreshAudience`) |
 | The "All assigned vaults" pick on the consent page? | Mints an account token (aud `account`): opens `list-vaults`, reads no vault, and doesn't cover a later vault consent. | spike |
 
+**Parachute Cloud** (read in its source, the identity worker at parachute-cloud `ccf80de`; not exercised, for want of
+an account): no key door (an emailed link or a password), so the listing sign-in comes first. It takes `account:vaults`
+(not `account:self:vaults`) and always shows that consent; `/account/mcp` answers `list-vaults` to that Bearer token
+only (no NIP-98), CORS open. A consent naming several vaults gives one token for the first; a later authorize for one of
+them alone skips consent (exact scope match). Refresh rotates and retires the previous access token, as core 0.9 does.
+Its vaults live at `my.parachute.computer`. One difference to watch on a first real Cloud sign-in: its source replaces
+the stored grant with whatever was last approved, so if a per-vault step ever shows a consent page, earlier vaults may
+ask again next time.
+
+**Aaron's hub** runs hub 0.7.19 with vault 0.7.9 (older than either version tested). Its source has `list-vaults` over
+NIP-98 with `covered`, the same consent skip and audience rule; a live probe confirmed only that a signed list request
+passes its address check behind `tailscale serve`, and that it serves the descriptor. A first sign-in there is the
+real test.
+
 ## How the app signs in to a Parachute
 
 1. **Read the Parachute.** `GET <address origin>/.well-known/parachute-account`. Its issuer must be the address's own
@@ -45,7 +59,7 @@ different applets; without having to enter a bunch of different URLs."*
    - **With the device's key** (the app on a phone or a Mac): the shell signs one `list-vaults` request itself
      (`hub_vaults`, src-tauri/src/door.rs) and hands the web side the names. The key never leaves the shell, and the
      command signs nothing else: the URL is the hub's own `/account/mcp`, the body is the one fixed call.
-   - **Without a key** (a browser, a password, Cloud's emailed link): an OAuth sign-in for `account:self:vaults` (one
+   - **Without a key** (a browser, a password, Cloud's emailed link): an OAuth sign-in for `account:vaults` (one
      Approve on the hub's page), `list-vaults` with that token, then the token is revoked.
 3. **One consent for all of them.** An authorize naming `vault:<name>:read vault:<name>:write` for each listed vault.
    The hub's page lists them; one Approve. Only names from the hub's own list are asked for (an unlisted one strands the
@@ -134,7 +148,7 @@ note there (the list of Parachutes), a second device finds the same home.
    token or a NIP-98 request. Today the app needs a key (NIP-98) or a separate Approve for an account token, and never
    learns roles or which vault is the person's home (the "vault named like you" rule can't be applied: the app doesn't
    know the username).
-2. **One consent that covers my vaults, now and later.** Let a grant for `account:self:vaults` count as covering
+2. **One consent that covers my vaults, now and later.** Let a grant for `account:vaults` count as covering
    `vault:<assigned>:<verb>` up to the person's role for that client, and let a refresh re-aim within it. Then a person
    without a key approves once, and a vault created later needs no new consent.
 3. **One code, a token per vault.** Let the code exchange (or a refresh) take `resource` repeated, and answer one token

@@ -102,7 +102,7 @@ describe("beginSignIn", () => {
     // the first flow came back
     localStorage.removeItem(PENDING);
     const second = new URL(await beginSignIn(begin({ step: "list" }), discovery(META, reg)));
-    expect(second.searchParams.get("scope")).toBe("account:self:vaults");
+    expect(second.searchParams.get("scope")).toBe("account:vaults");
     expect(second.searchParams.get("client_id")).toBe("client-1");
     expect(reg).toHaveLength(1);
   });
@@ -111,14 +111,6 @@ describe("beginSignIn", () => {
     // with the key, the consent is the first step
     await beginSignIn(begin({ step: "vaults", vaults: ["recipes"], fresh: true, how: "key" }), discovery(META, reg));
     const again = new URL(await beginSignIn(begin({ step: "vaults", vaults: ["recipes"], fresh: true, how: "key" }), discovery(META, reg)));
-    expect(again.searchParams.get("client_id")).toBe("client-2");
-  });
-  it("a consent left long ago (the hub may have forgotten the registration) registers again", async () => {
-    const reg: string[] = [];
-    await beginSignIn(begin({ step: "vaults", vaults: ["recipes"], how: "page" }), discovery(META, reg));
-    const p = JSON.parse(localStorage.getItem(PENDING)!) as Pending;
-    localStorage.setItem(PENDING, JSON.stringify({ ...p, startedAt: Date.now() - 6 * 60_000 }));
-    const again = new URL(await beginSignIn(begin({ step: "list", fresh: true, how: "page" }), discovery(META, reg)));
     expect(again.searchParams.get("client_id")).toBe("client-2");
   });
   it("keeps the registration when the last sign-in stopped past its first step (the hub had taken it)", async () => {

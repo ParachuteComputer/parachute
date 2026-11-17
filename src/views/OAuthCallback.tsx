@@ -49,7 +49,7 @@ export default function OAuthCallback() {
   return (
     <main className="screen">
       <Bar title="Signing in" back="/" />
-      {pick ? <section className="card stack"><PickVaults pick={pick} onCancel={() => { dropPending(); nav("/", { replace: true }); }} onError={(e) => { setPick(null); if (e instanceof PendingApprovalError) setApprove(e.approveUrl); else setError(signInWords(e)); }} /></section> : <div className="card" role="status">
+      {pick ? <section className="card stack"><PickVaults pick={pick} onCancel={() => nav(`/add?hub=${encodeURIComponent(pick.hub)}`, { replace: true })} onError={(e) => { setPick(null); setError(signInWords(e)); }} /></section> : <div className="card" role="status">
         {approve ? <>
           <p>Your hub hasn't approved Parachute yet. Approve it there, then sign in again.</p>
           <a className="primary" href={approve}>Approve on your hub</a>
