@@ -102,7 +102,7 @@ export const FRAME_KIT = String.raw`(function () {
       var st = m.data || {};
       // made again only when it is worth it: the shell let it go (too many at once), or the relay asks a sign-in or had
       // an error; a relay's other refusal (not a member, say) stands
-      if (st.sub && st.status === "closed" && svcSubs[st.service + "|" + st.sub] && /^(too many|the relay closed it: (auth-required|error))/.test(st.why || "")) again(st.service, st.sub);
+      if (st.sub && st.status === "closed" && st.retry === true && svcSubs[st.service + "|" + st.sub]) again(st.service, st.sub);
       svcStatus.slice().forEach(function (f) { try { f(st); } catch (e) {} });
       return;
     }
@@ -200,7 +200,12 @@ export const FRAME_KIT = String.raw`(function () {
             if (typeof onEvents !== "function") throw new TypeError("subscribe needs a function for the events");
             var subs = filterSets.map(function (filters) { var sub = "s" + (++n); svcSubs[service + "|" + sub] = { onEvents: onEvents, onEose: onEose, filters: filters }; return sub; }), on = true;
             sendSubs(service, subs);
-            return function () { if (!on) return; on = false; subs.forEach(function (sub) { delete svcSubs[service + "|" + sub]; call("services", "unsubscribe", { service: service, sub: sub }).catch(function () {}); }); };
+            return function () {
+              if (!on) return; on = false;
+              subs.forEach(function (sub) { delete svcSubs[service + "|" + sub]; });
+              // stopped in a few requests, not one each (the frame's rate limit would drop most of them)
+              for (var i = 0; i < subs.length; i += 100) call("services", "unsubscribe", { service: service, subs: subs.slice(i, i + 100) }).catch(function () {});
+            };
         }
         return Object.freeze({
           subscribe: function (filters, onEvents, onEose) { return many([filters], onEvents, onEose); },

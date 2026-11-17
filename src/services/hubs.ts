@@ -14,4 +14,8 @@ export function knownHubs(): string[] {
   return [...new Set(hubs.filter(Boolean).map(plainOrigin))];
 }
 
-export const isKnownHub = (origin: string): boolean => knownHubs().includes(plainOrigin(origin));
+/** A check against the hubs known now, made once for a whole read of a vault's applets. */
+export function hubCheck(): (origin: string) => boolean {
+  const hubs = new Set(knownHubs());
+  return (origin) => hubs.has(plainOrigin(origin));
+}

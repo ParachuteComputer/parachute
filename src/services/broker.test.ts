@@ -28,10 +28,10 @@ const native = (): Native => ({
 const relay: Service = { id: "rooms", kind: "nostr-relay", url: "wss://relay.example", publish: [9], media: false, private: [] };
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
-function setup() {
+function setup(n: Native = native()) {
   FakeSocket.all = [];
   const emitted: { event: string; data: any }[] = [];
-  const b = createBroker({ native: native(), session: "s", applet: { name: "Rooms", subject: "v\u0000n" }, services: [relay], hubs: [], emit: (event, data) => emitted.push({ event, data }), socket: (u) => new FakeSocket(u) as unknown as WebSocket });
+  const b = createBroker({ native: n, session: "s", applet: { name: "Rooms", subject: "v\u0000n" }, services: [relay], hubs: [], emit: (event, data) => emitted.push({ event, data }), socket: (u) => new FakeSocket(u) as unknown as WebSocket });
   return { b, emitted };
 }
 async function signIn(sock: FakeSocket, wait: () => Promise<unknown> = () => tick()) {
@@ -52,7 +52,7 @@ describe("the broker's relay connection", () => {
   });
 
   it("keeps a live subscription open however many events pass, the frame getting them in batches", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const { b, emitted } = setup();
       b.subscribe({ service: "rooms", sub: "live", filters: [{ kinds: [9], "#h": ["r"] }] });
@@ -81,5 +81,39 @@ describe("the broker's relay connection", () => {
     await tick(5);
     expect(FakeSocket.all.length).toBe(before);
     void query;
+  });
+
+  it("sends nothing before a slow sign-in finishes (the relay asked for one)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const slow = native();
+      slow.relayAuth = () => new Promise((r) => setTimeout(() => r({ ...ev("auth"), kind: 22242 }), 6000));
+      const { b } = setup(slow);
+      b.subscribe({ service: "rooms", sub: "a", filters: [{ kinds: [9] }] });
+      await vi.advanceTimersByTimeAsync(1);
+      const sock = FakeSocket.all[0];
+      sock.from(["AUTH", "challenge"]);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(sock.reqs()).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1500);
+      sock.from(["OK", "auth", true, ""]);
+      expect(sock.reqs()).toHaveLength(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("doesn't send later a post it said had failed when the connection dropped", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const { b } = setup();
+      const posted = b.publish({ service: "rooms", event: { kind: 9, content: "hello", tags: [["h", "r"]] } });
+      await vi.advanceTimersByTimeAsync(1);
+      const first = FakeSocket.all[0];
+      first.onclose?.();
+      await expect(posted).resolves.toMatchObject({ ok: false });
+      await vi.advanceTimersByTimeAsync(1100);
+      const second = FakeSocket.all[1];
+      await signIn(second, () => vi.advanceTimersByTimeAsync(1));
+      expect(second.sent.some((m) => Array.isArray(m) && m[0] === "EVENT")).toBe(false);
+    } finally { vi.useRealTimers(); }
   });
 });

@@ -6,7 +6,7 @@
 import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools/pure";
 import * as nip44 from "nostr-tools/nip44";
 import type { Native, LogLine, SignedEvent } from "./native";
-import type { Service } from "../applet/services";
+import { originOf, RESPONSE_HEADERS, type Service } from "../applet/services";
 import { fromB64, toB64 } from "./broker";
 
 export const E2E_SIGNER_MARK = "parachute-e2e-test-signer";
@@ -30,7 +30,7 @@ export function e2eNative(secretHex: string): Native {
     const s = sess(session); const l = logs.get(s.applet.subject) ?? [];
     l.push({ at: Math.floor(Date.now() / 1000), applet: s.applet.name, service, what, id }); logs.set(s.applet.subject, l.slice(-500));
   };
-  const relayOrigin = (s: Service) => { const u = new URL(s.url); u.protocol = u.protocol === "wss:" ? "https:" : "http:"; return u.origin; };
+  const relayOrigin = (s: Service) => originOf(s);
   const sha256 = async (b: Uint8Array) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", b))].map((x) => x.toString(16).padStart(2, "0")).join("");
   const authHeader = (ev: SignedEvent) => `Nostr ${btoa(JSON.stringify(ev))}`;
   const selfKey = () => nip44.getConversationKey(sk, pubkey);
@@ -55,7 +55,7 @@ export function e2eNative(secretHex: string): Native {
       }
       const res = await fetch(url, { method: req.method, headers, body: body as BodyInit | undefined, redirect: "manual", credentials: "omit" });
       const keep: Record<string, string> = {};
-      for (const k of ["content-type", "content-length", "etag", "last-modified", "location"]) { const v = res.headers.get(k); if (v) keep[k] = v; }
+      for (const k of RESPONSE_HEADERS) { const v = res.headers.get(k); if (v) keep[k] = v; }
       return { status: res.status, headers: keep, body: toB64(new Uint8Array(await res.arrayBuffer())) };
     },
     async upload(session, service, b64, type) {

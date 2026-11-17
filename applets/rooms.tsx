@@ -219,7 +219,7 @@ function keepBlob(sha: string, p: Promise<string>) {
   blobs.delete(sha); blobs.set(sha, p);
   for (const [old, gone] of blobs) {
     if (blobs.size <= 40) break;
-    if (shown.get(old)) continue;
+    if (old === sha || shown.get(old)) continue;
     blobs.delete(old); gone.then((u) => URL.revokeObjectURL(u), () => {});
   }
 }
@@ -230,8 +230,8 @@ function useBlob(m: Media | null) {
     if (!m) return;
     let on = true;
     const p = blobs.get(m.sha) ?? services.media("rooms", m.sha, m.ext).then((r: any) => URL.createObjectURL(new Blob([r.bytes], { type: r.type || m.type })));
+    shown.set(m.sha, (shown.get(m.sha) ?? 0) + 1); // shown before it is kept, so the cache never lets go of it
     keepBlob(m.sha, p);
-    shown.set(m.sha, (shown.get(m.sha) ?? 0) + 1);
     p.then((u) => { if (on) setUrl(u); }, () => { blobs.delete(m.sha); if (on) setErr(true); });
     return () => { on = false; shown.set(m.sha, (shown.get(m.sha) ?? 1) - 1); };
   }, [m?.sha]);

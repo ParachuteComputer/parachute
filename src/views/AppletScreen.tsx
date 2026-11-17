@@ -44,7 +44,7 @@ import { createAppModule } from "../applet/modules/app";
 import { createServicesModule } from "../applet/modules/services";
 import { createBroker, type Broker } from "../services/broker";
 import { nativeNow } from "../services/native";
-import { isKnownHub, knownHubs } from "../services/hubs";
+import { hubCheck, knownHubs } from "../services/hubs";
 import type { Session } from "../applet/session";
 import { appDeps } from "../shell/appDeps";
 import { runDecision } from "../applet/selftest/gate";
@@ -145,7 +145,7 @@ export default function AppletScreen() {
         const kind = codeKindOf(n as { extension?: string });
         if (!kind) { if (on) setLoaded({ state: "refused", error: `its note is ${extensionOf(n as { extension?: string })}, and an applet's note is html, tsx or jsx` }); return; }
         if (notMine && (n.content ?? "").length > MAX_CODE_CHARS) { if (on) setLoaded({ state: "refused", error: "its code is bigger than an applet from someone else's vault may be" }); return; }
-        const a = readApplet(n, rec.key, notMine, isKnownHub);
+        const a = readApplet(n, rec.key, notMine, hubCheck());
         if (!a.ok) { if (on) setLoaded({ state: "refused", error: a.error }); return; }
         // the vault's role tags are no applet's to open or to tag with: dropped before the card, the key and the writer
         a.entry.opens = withoutRoles(a.entry.opens, await readRoleTags(c));

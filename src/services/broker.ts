@@ -17,7 +17,7 @@ export const fromB64 = (s: string): Uint8Array => Uint8Array.from(atob(s), (c) =
 export type Emit = (event: "services.events" | "services.status", data: unknown) => void;
 type Pending = { events: SignedEvent[]; eose: boolean };
 
-const BATCH_MS = 50, BATCH_MAX = 200, QUEUE_MAX = 5000, IN_FLIGHT_MAX = 50 * 1024 * 1024;
+const BATCH_MS = 50, BATCH_MAX = 200, IN_FLIGHT_MAX = 50 * 1024 * 1024;
 
 export function createBroker(opts: { native: Native; session: string; applet: { name: string; subject: string }; services: Service[]; hubs: string[]; emit: Emit; socket?: (url: string) => WebSocket }) {
   const { native, session, emit } = opts;
@@ -115,24 +115,29 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       const list = p.subs ?? [{ sub: p.sub!, filters: p.filters }];
       const checked = list.map((x) => { const f = checkFilters(x.filters); if (!f.ok) throw new BrokerError("bad_params", f.error); return { sub: x.sub, filters: f.value }; });
       const c = conn(s);
-      if (c.subscriptions + checked.length > LIMITS.subs) throw new BrokerError("failed", `at most ${LIMITS.subs} subscriptions`);
+      // one sent again (the kit retries a request that timed out) replaces itself: only new ones count
+      if (c.subscriptions + checked.filter((x) => !c.has(`a:${x.sub}`)).length > LIMITS.subs) throw new BrokerError("failed", `at most ${LIMITS.subs} subscriptions`);
       for (const { sub, filters } of checked) {
         const key = `${s.id}\u0000${sub}`;
         c.subscribe(`a:${sub}`, filters, (e) => {
           if (closed) return;
           const q = pending.get(key) ?? { events: [], eose: false };
           q.events.push(e); pending.set(key, q);
-          // more waiting than the frame should ever hold (the flush below keeps it far under): the subscription stops,
-          // and the applet hears it closed (the kit subscribes it again)
-          if (q.events.length > QUEUE_MAX) { c.unsubscribe(`a:${sub}`); pending.delete(key); emit("services.status", { service: s.id, status: "closed", sub, why: "too many events at once" }); return; }
+          // to the frame in batches: a full one at once, else within BATCH_MS
           if (q.events.length >= BATCH_MAX) flush(); else later();
         }, () => { const q = pending.get(key) ?? { events: [], eose: false }; q.eose = true; pending.set(key, q); later(); },
-        (why) => { if (!closed) emit("services.status", { service: s.id, status: "closed", sub, why: `the relay closed it: ${why}` }); });
+        // a relay that wants a sign-in first, or had an error, is worth asking again (`retry`); another refusal stands
+        (why) => { if (!closed) emit("services.status", { service: s.id, status: "closed", sub, why: `the relay closed it: ${why}`, retry: /^(auth-required|error)/.test(why) }); });
       }
       return true;
     },
 
-    unsubscribe(p: { service: string; sub: string }) { const s = relayOf(p.service); conns.get(s.id)?.unsubscribe(`a:${p.sub}`); return true; },
+    /** One subscription, or several in one request (`subs`): stopping a rooms applet's 90 takes a few. */
+    unsubscribe(p: { service: string; sub?: string; subs?: string[] }) {
+      const s = relayOf(p.service);
+      for (const sub of p.subs ?? [p.sub!]) conns.get(s.id)?.unsubscribe(`a:${sub}`);
+      return true;
+    },
 
     async query(p: { service: string; filters: unknown }) {
       const s = relayOf(p.service);

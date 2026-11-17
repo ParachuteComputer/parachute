@@ -32,6 +32,8 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     for (const p of [alice, bob.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", id], ["p", p]] })).ok).toBe(true);
   }
   owner.close();
+  // bob has a name (his profile): the @ list and the room show it
+  await bob.publish({ kind: 0, content: JSON.stringify({ name: "Bob", display_name: "Bob" }) });
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
   const note = await record(hubState(), "create", appletRecord("rooms", { relay: RELAY! }));
   try {
@@ -87,7 +89,7 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     await expect(beans.getByRole("button", { name: "👍 1, including yours" })).toBeVisible();
     const field = app.getByLabel(`Message Garden ${stamp}`);
     await field.fill("Thanks @");
-    const bobName = `${bob.pubkey.slice(0, 8)}…`;
+    const bobName = "Bob";
     await app.getByRole("listbox", { name: "People in this room" }).getByRole("button", { name: bobName }).click();
     await field.pressSequentially(`see you at noon ${stamp}`);
     await app.getByRole("button", { name: "Send message" }).click(); // on a phone Enter is a new line

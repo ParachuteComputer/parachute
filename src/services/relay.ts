@@ -32,7 +32,7 @@ export class RelayConn {
     this.onStatus({ status: "connecting" });
     this.authed = false; this.open = false; this.authEvent = null;
     let ws: WebSocket;
-    try { ws = this.socket(this.url); } catch (e) { this.onStatus({ status: "closed", why: e instanceof Error ? e.message : "couldn't connect" }); return; }
+    try { ws = this.socket(this.url); } catch (e) { this.onStatus({ status: "closed", why: e instanceof Error ? e.message : "couldn't connect" }); this.again(); return; }
     this.ws = ws;
     ws.onopen = () => {
       this.open = true; this.tries = 0;
@@ -41,15 +41,23 @@ export class RelayConn {
     };
     ws.onmessage = (m) => this.message(m.data);
     ws.onclose = () => {
-      this.ws = null; this.open = false;
+      // not signed in any more: what is sent from now waits for the next sign-in
+      this.ws = null; this.open = false; this.authed = false;
       if (this.authTimer) clearTimeout(this.authTimer);
       if (this.closedForGood) return;
       this.onStatus({ status: "closed", why: "the relay closed the connection" });
-      // a publish in flight gets its answer now, never a hang
+      // a publish in flight gets its answer now, never a hang; and having been told it failed, it isn't sent later
       for (const [id, w] of this.waiting) { clearTimeout(w.timer); w.resolve({ ok: false, message: "connection closed" }); this.waiting.delete(id); }
-      const wait = Math.min(30_000, 1000 * 2 ** this.tries++);
-      setTimeout(() => this.connect(), wait);
+      this.queue = [];
+      this.again();
     };
+  }
+
+  /** Connect again after a growing wait (a dropped socket, or one that couldn't be made). */
+  private again() {
+    if (this.closedForGood) return;
+    const wait = Math.min(30_000, 1000 * 2 ** this.tries++);
+    setTimeout(() => this.connect(), wait);
   }
 
   private ready() {
@@ -71,6 +79,8 @@ export class RelayConn {
     switch (m[0]) {
       case "AUTH": {
         if (typeof m[1] !== "string") return;
+        // the relay asks a sign-in: nothing goes before it, however long the signing takes
+        if (this.authTimer) { clearTimeout(this.authTimer); this.authTimer = null; }
         void this.auth(m[1]).then((ev) => { this.authEvent = ev.id; this.raw(["AUTH", ev]); }, (e) => this.onStatus({ status: "closed", why: `sign-in refused: ${e instanceof Error ? e.message : String(e)}` }));
         return;
       }
@@ -103,6 +113,7 @@ export class RelayConn {
     if (this.subs.delete(id) && this.authed) this.raw(["CLOSE", id]);
   }
   get subscriptions() { return this.subs.size; }
+  has(id: string) { return this.subs.has(id); }
 
   publish(ev: SignedEvent): Promise<{ ok: boolean; message: string }> {
     return new Promise((resolve) => {

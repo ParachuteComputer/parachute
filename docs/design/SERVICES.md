@@ -126,8 +126,8 @@ with the session. On `["AUTH", challenge]` it asks Rust for kind 22242 (`svc_rel
 URL itself. `subscribe` and `query` send `REQ` with the applet's filters, checked: NIP-01 filter keys only, at most 10
 filters and 100 open subscriptions (a Buzz relay sends live events only to a subscription for one room, so a rooms
 applet holds one per room), `limit` at most 500. Events go to the frame in batches (one message per 50 ms or 200
-events) through a queue of its own, not the rate-limited push; when more than 5000 wait, the subscription is closed
-with a status and the applet subscribes again. `publish` checks the kind and tags, and for kind 5 reads each target
+events) through a queue of its own, not the rate-limited push. A subscription the relay closes comes back to the applet
+as a status, marked `retry` when the relay wanted a sign-in first or had an error; the kit then makes it again. `publish` checks the kind and tags, and for kind 5 reads each target
 from the relay (`ids` filter) and checks it is the person's and of a kind this applet may publish; Rust signs
 (`svc_sign_event`), the shell sends it and resolves on the relay's `OK`. `loadPrivate` asks the relay for the person's
 own events of the entry's kind and `t`, keeps those whose `d` starts with the prefix, and has Rust open each
