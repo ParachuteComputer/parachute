@@ -185,4 +185,19 @@ describe("the broker's relay connection", () => {
       expect(ids("REQ")).toHaveLength(19);
     } finally { vi.useRealTimers(); }
   });
+
+  it("sends a one-time read ahead of live subscriptions still waiting to go out", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const { b } = setup();
+      b.subscribe({ service: "rooms", subs: Array.from({ length: 40 }, (_, i) => ({ sub: `r${i}`, filters: [{ kinds: [9], "#h": [`room-${i}`] }] })) });
+      await vi.advanceTimersByTimeAsync(1);
+      const sock = FakeSocket.all[0];
+      await signIn(sock, () => vi.advanceTimersByTimeAsync(1));
+      void b.query({ service: "rooms", filters: [{ kinds: [9], "#h": ["opened-room"], limit: 150 }] });
+      await vi.advanceTimersByTimeAsync(200);
+      const reqs = sock.reqs();
+      expect(reqs.findIndex((r) => JSON.stringify(r).includes("opened-room"))).toBe(10);
+    } finally { vi.useRealTimers(); }
+  });
 });

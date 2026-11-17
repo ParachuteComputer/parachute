@@ -148,13 +148,13 @@ export class RelayConn {
         const why = typeof m[2] === "string" ? m[2] : "";
         // refused before the sign-in finished: it goes again once signed in
         if (s && why.startsWith("auth-required") && !this.authed) return;
-        if (s) { this.subs.delete(m[1]); s.onClosed(why); }
+        if (s) { this.subs.delete(m[1]); this.urgent.delete(m[1]); this.sent.delete(m[1]); s.onClosed(why); }
         return;
       }
     }
   }
 
-  /** `urgent`: a read a post waits on (a deletion's targets): it goes in the posts' lane, ahead of subscriptions. */
+  /** `urgent`: a one-time read someone waits on: it goes in the posts' lane, ahead of live subscriptions. */
   subscribe(id: string, filters: Record<string, unknown>[], onEvent: Sub["onEvent"], onEose: Sub["onEose"], onClosed: Sub["onClosed"], urgent = false) {
     this.subs.set(id, { filters, onEvent, onEose, onClosed });
     if (urgent) this.urgent.add(id);
