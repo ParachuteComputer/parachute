@@ -5,6 +5,8 @@
 //   the note      `Parachute/Settings` in the home vault, tagged `parachute-settings`. Its metadata `parachute`:
 //                   bar:   [{vault, hub?, applet}]   the pinned places, in order
 //                   start: {vault, hub?, applet} | null   the home applet: it opens on start, first on the bar
+//                   hubs:  [{hub, name?}]   the person's Parachutes (docs/design/ONE-SIGN-IN.md): shown, never signed
+//                          in to by themselves
 //                 `vault` is a vault's name (with `hub`, an issuer origin, when two hubs hold vaults of that name);
 //                 `applet` is the applet note's id or path. A place this device can't find is left out.
 //   read          at boot, and each time the frame area is shown; after each write.
@@ -18,6 +20,7 @@ import { clientFor } from "../vault/client";
 import { listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
 import { homeVault } from "./frameSource";
+import { parseHub } from "../vault/parachute";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -26,11 +29,13 @@ export const MAX_PLACES = 12;
 
 /** A place as the note names it. */
 export type Place = { vault: string; hub?: string; applet: string };
-export type Settings = { bar: Place[]; start: Place | null };
+/** One of the person's Parachutes, as the note lists it: its address (an origin) and, maybe, what to call it. */
+export type HubEntry = { hub: string; name?: string };
+export type Settings = { bar: Place[]; start: Place | null; hubs: HubEntry[] };
 /** A place this device can open: its vault (this device's key) and the applet's note. */
 export type Found = { vault: string; noteId: string; name: string; glyph: string; href: string };
 
-const EMPTY: Settings = { bar: [], start: null };
+const EMPTY: Settings = { bar: [], start: null, hubs: [] };
 const line = (x: unknown, max: number): x is string => typeof x === "string" && x.length > 0 && x.length <= max && !/[\u0000-\u001f]/.test(x);
 
 function placeOf(x: unknown): Place | null {
@@ -39,12 +44,22 @@ function placeOf(x: unknown): Place | null {
   return { vault: x.vault, applet: x.applet, ...(x.hub !== undefined ? { hub: x.hub as string } : {}) };
 }
 
-/** The choices in a settings note's metadata. A place that doesn't parse is dropped, never the rest. */
+/** A Parachute the note lists: an address that parses as one (vault/parachute.ts), and a short name if it has one. */
+export function hubOf(x: unknown): HubEntry | null {
+  if (!plain(x) || !line(x.hub, 300)) return null;
+  const parsed = parseHub(x.hub);
+  if (!parsed.ok) return null;
+  const name = line(x.name, 60) ? (x.name as string) : undefined;
+  return { hub: parsed.hub, ...(name ? { name } : {}) };
+}
+
+/** The choices in a settings note's metadata. A place (or a Parachute) that doesn't parse is dropped, never the rest. */
 export function settingsFrom(metadata: unknown): Settings {
   const p = plain(metadata) && plain(metadata.parachute) ? metadata.parachute : null;
-  if (!p) return { ...EMPTY };
+  if (!p) return { ...EMPTY, hubs: [] };
   const bar = Array.isArray(p.bar) ? p.bar.slice(0, 200).map(placeOf).filter((x): x is Place => !!x) : [];
-  return { bar: dedupe(bar), start: placeOf(p.start) };
+  const hubs = (Array.isArray(p.hubs) ? p.hubs.slice(0, 50).map(hubOf).filter((x): x is HubEntry => !!x) : []).filter((h, i, all) => all.findIndex((y) => y.hub === h.hub) === i);
+  return { bar: dedupe(bar), start: placeOf(p.start), hubs };
 }
 const same = (a: Place, b: Place) => a.vault === b.vault && a.applet === b.applet && (a.hub ?? "") === (b.hub ?? "");
 const dedupe = (xs: Place[]) => xs.filter((x, i) => xs.findIndex((y) => same(x, y)) === i);
@@ -173,7 +188,7 @@ export async function readSettings(): Promise<void> {
 }
 
 /** The note's choices as written, entries this app doesn't read included: a change keeps them. */
-type Raw = { bar: unknown[]; start: unknown };
+type Raw = { bar: unknown[]; start: unknown; hubs: unknown[] };
 const parsedAs = (x: unknown, f: (p: Place) => boolean) => { const p = placeOf(x); return !!p && f(p); };
 
 /** Change the choices (a tap's): read the note as it is now, change only what was asked, and write it back. */
@@ -185,13 +200,13 @@ async function changeSettings(change: (raw: Raw) => Raw): Promise<void> {
   const n = pick(rows) as (typeof rows)[number] | null;
   if (!n && rows.length > 1) throw new Error(`Your home vault has ${rows.length} settings notes; keep one, at ${SETTINGS_PATH}.`);
   const was = plain(n?.metadata) && plain(n!.metadata!.parachute) ? n!.metadata!.parachute as Record<string, unknown> : {};
-  const next = change({ bar: Array.isArray(was.bar) ? was.bar : [], start: was.start ?? null });
-  const parachute = { ...was, bar: next.bar, start: next.start };
+  const next = change({ bar: Array.isArray(was.bar) ? was.bar : [], start: was.start ?? null, hubs: Array.isArray(was.hubs) ? was.hubs : [] });
+  const parachute = { ...was, bar: next.bar, start: next.start, ...(next.hubs.length || Array.isArray(was.hubs) ? { hubs: next.hubs } : {}) };
   if (n) {
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), parachute }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
   } else {
-    await c.createNote({ path: SETTINGS_PATH, content: "The bar and the home applet of the Parachute app. See docs/NAVIGATION.md.", tags: [SETTINGS_TAG], metadata: { parachute } } as Parameters<typeof c.createNote>[0]);
+    await c.createNote({ path: SETTINGS_PATH, content: "The bar, the home applet and the Parachutes of the Parachute app. See docs/NAVIGATION.md.", tags: [SETTINGS_TAG], metadata: { parachute } } as Parameters<typeof c.createNote>[0]);
   }
   await readSettings();
 }
@@ -224,6 +239,12 @@ export const move = (p: Place, by: -1 | 1) => changeSettings((r) => {
   const bar = [...r.bar];
   [bar[i], bar[j]] = [bar[j], bar[i]];
   return { ...r, bar };
+});
+/** Put a Parachute on the person's list (after a sign-in to it), unless it is there; or take it off. */
+export const listHub = (hub: string, on: boolean, name?: string) => changeSettings((r) => {
+  const has = r.hubs.some((x) => hubOf(x)?.hub === hub);
+  if (on) return has ? r : { ...r, hubs: [...r.hubs, { hub, ...(name ? { name } : {}) }] };
+  return has ? { ...r, hubs: r.hubs.filter((x) => hubOf(x)?.hub !== hub) } : r;
 });
 export const setStart = (p: Place | null) => changeSettings((r) => ({ ...r, start: p }));
 export const samePlace = same;

@@ -2,8 +2,8 @@
 import { VaultClient } from "@openparachute/surface-client";
 import { refresh } from "./oauth";
 import { recordsFetch } from "./records";
-import { findVault, updateVault, type VaultRecord } from "./store";
-import { vaultUrl } from "./address";
+import { findVault, updateVault, vaultUrlOf, type VaultRecord } from "./store";
+import { refreshFor } from "./signins";
 import { limitedFetch } from "./limited";
 import { whoseOf } from "./whose";
 
@@ -29,11 +29,13 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
   if (running) return running;
   const p = (async () => {
     const cur = findVault(key);
-    // no refresh token: the app can't ask, so it can't say the hub refused
-    if (!cur?.refreshToken) { refreshFailed.set(key, "unreachable"); return null; }
+    // no refresh token (nor a Parachute sign-in to refresh through): the app can't ask, so it can't say the hub refused
+    if (!cur || (!cur.signIn && !cur.refreshToken)) { refreshFailed.set(key, "unreachable"); return null; }
     try {
-      const t = await refresh(cur.tokenEndpoint, cur.clientId, cur.refreshToken, fetchImpl ?? fetchFor(cur));
-      updateVault(cur.key, { accessToken: t.access_token, refreshToken: t.refresh_token ?? cur.refreshToken, expiresAt: t.expires_in ? Date.now() + t.expires_in * 1000 : undefined });
+      // a vault of a Parachute sign-in: its chain, aimed at this vault (vault/signins.ts); else its own one-vault sign-in
+      const t = cur.signIn ? await refreshFor(cur.signIn, vaultUrlOf(cur), fetchImpl ?? fetchFor(cur))
+        : await refresh(cur.tokenEndpoint, cur.clientId, cur.refreshToken!, fetchImpl ?? fetchFor(cur));
+      updateVault(cur.key, { accessToken: t.access_token, ...(cur.signIn ? {} : { refreshToken: t.refresh_token ?? cur.refreshToken }), expiresAt: t.expires_in ? Date.now() + t.expires_in * 1000 : undefined });
       refreshFailed.delete(key);
       return t.access_token;
     } catch (e) {
@@ -48,10 +50,10 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
 
 export function clientFor(rec: VaultRecord): VaultClient {
   const hit = clients.get(rec.key);
-  const at = `${rec.issuer} ${rec.vault}`;
+  const at = `${rec.issuer} ${rec.vault} ${rec.url ?? ""}`;
   if (hit && hit.at === at) return hit.client;
   const client = new VaultClient({
-    vaultUrl: vaultUrl(rec.issuer, rec.vault),
+    vaultUrl: vaultUrlOf(rec),
     tokenProvider: () => findVault(rec.key)?.accessToken ?? rec.accessToken,
     onAuthError: () => refreshOnce(rec.key),
     // notes calls go through the hub's record door when it has one (records.ts)

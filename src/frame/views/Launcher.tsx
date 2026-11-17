@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useHold } from "../../ui/hold";
 import { Link } from "react-router";
 import type { Note } from "@openparachute/surface-client";
-import type { FrameApplet, FrameComponent, FramePointer, FrameVault } from "../../bridge/protocol";
+import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVault } from "../../bridge/protocol";
 import { addEmbed, bringIn, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
 import { isAppOwn, noteHref, titleOf } from "../../vault/notes";
 import { Days, Empty } from "../../kit/parts";
@@ -75,6 +75,9 @@ export default function Launcher() {
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
   // a vault signed out of while the launcher shows leaves the tally with it
   const all = vaults.flatMap((v) => recent[v.key] ?? []);
+  const groups = byParachute(vaults, useHome().parachutes ?? []);
+  // one Parachute, all of it here: no heading over its chapters
+  const grouped = groups.length > 1 || groups.some((g) => g.p && !g.p.signedIn);
   return (
     <main className={vaults.length > 1 ? "screen launcher launcher-wide" : "screen launcher"}>
       <header className="launcher-head">
@@ -86,14 +89,40 @@ export default function Launcher() {
         </div>
         <Days times={all.map(updated)} label="the last four weeks" />
       </header>
-      <div className={vaults.length > 1 ? "launcher-spread launcher-pages" : "launcher-spread"}>
-        {vaults.map((v, i) => <Chapter key={v.key} n={i} v={v} many={vaults.length > 1} recent={recent[v.key]} onHold={(a) => setAsked({ v, a })} onPart={(c) => setPart({ v, c })} />)}
-      </div>
-      <p className="launcher-foot"><Link to="/add">Add a vault</Link><Link to="/settings">Settings</Link></p>
+      {groups.map(({ p, vaults: here, from }) => {
+        const chapters = <div className={vaults.length > 1 ? "launcher-spread launcher-pages" : "launcher-spread"}>
+          {here.map((v, i) => <Chapter key={v.key} n={from + i} v={v} many={vaults.length > 1} level={p && grouped ? 3 : 2} recent={recent[v.key]} onHold={(a) => setAsked({ v, a })} onPart={(c) => setPart({ v, c })} />)}
+        </div>;
+        if (!p || !grouped) return <div key={p?.hub ?? "all"}>{chapters}</div>;
+        return (
+          <section key={p.hub} className="parachute" aria-label={`Parachute: ${p.name}`}>
+            <h2 className="parachute-name">{p.name}{p.name !== p.host && <span className="parachute-host"> · {p.host}</span>}</h2>
+            {p.signedIn ? chapters
+              : <p className="parachute-out">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`} aria-label={`Sign in to ${p.name}`}>Sign in</Link></p>}
+          </section>
+        );
+      })}
+      <p className="launcher-foot"><Link to="/add">Add a Parachute</Link><Link to="/settings">Settings</Link></p>
       {asked && <AppletSheet v={asked.v} a={asked.a} onClose={() => setAsked(null)} />}
       {part && <ComponentSheet v={part.v} c={part.c} onClose={() => setPart(null)} />}
     </main>
   );
+}
+
+const originOf = (issuer: string) => { try { return new URL(issuer).origin; } catch { return issuer; } };
+/** The vaults by Parachute, in the order the shell gives the Parachutes (the home's first); a vault no Parachute
+ *  names (a frame on an older shell) goes in a group of its own at the end. `from`: the first chapter's number. */
+export function byParachute(vaults: FrameVault[], parachutes: FrameParachute[]): { p: FrameParachute | null; vaults: FrameVault[]; from: number }[] {
+  const out: { p: FrameParachute | null; vaults: FrameVault[]; from: number }[] = [];
+  let n = 0;
+  for (const p of parachutes) {
+    const here = vaults.filter((v) => originOf(v.issuer) === p.hub);
+    out.push({ p, vaults: here, from: n });
+    n += here.length;
+  }
+  const rest = vaults.filter((v) => !parachutes.some((p) => originOf(v.issuer) === p.hub));
+  if (rest.length || !out.length) out.push({ p: null, vaults: rest, from: n });
+  return out;
 }
 
 /** Whose a chapter is, under its name: the home, or someone else's (and where). The person's other vaults need no word. */
@@ -104,7 +133,8 @@ export function whoseLine(v: FrameVault, many: boolean): string | null {
   return null;
 }
 
-function Chapter({ n, v, many, recent, onHold, onPart }: { n: number; v: FrameVault; many: boolean; recent: Note[] | undefined; onHold: (a: FrameApplet) => void; onPart: (c: FrameComponent) => void }) {
+function Chapter({ n, v, many, level, recent, onHold, onPart }: { n: number; v: FrameVault; many: boolean; level: 2 | 3; recent: Note[] | undefined; onHold: (a: FrameApplet) => void; onPart: (c: FrameComponent) => void }) {
+  const H = level === 3 ? "h3" : "h2";
   const parts = useComponents(v.key);
   const applets = useApplets(v.key);
   const home = useHome();
@@ -115,7 +145,7 @@ function Chapter({ n, v, many, recent, onHold, onPart }: { n: number; v: FrameVa
   const brought = v.home ? pointers.filter((p) => p.kind === "applet") : [];
   return (
     <section className={v.whose && v.whose !== "mine" ? "chapter chapter-theirs" : "chapter"} aria-label={v.vault}>
-      <h2><span className="chapter-n" aria-hidden="true">{ROMAN[n] ?? n + 1}</span><span className="chapter-name">{v.vault}</span><Link to={`/v/${encodeURIComponent(v.key)}`}>Open the vault</Link></h2>
+      <H className="chapter-head"><span className="chapter-n" aria-hidden="true">{ROMAN[n] ?? n + 1}</span><span className="chapter-name">{v.vault}</span><Link to={`/v/${encodeURIComponent(v.key)}`}>Open the vault</Link></H>
       {whose && <p className="chapter-whose">{whose}</p>}
       <ol className="entries" aria-label={`Applets in ${v.vault}`}>
         {shown.map((a) => {

@@ -32,7 +32,7 @@ function migrate(list: readonly VaultRecord[], s: StorageLike | null): Stored {
   if (!list.length) return { whose: {}, ask: [] };
   let chosen: string | null = null;
   try { chosen = s?.getItem(HOME_KEY) ?? null; } catch { chosen = null; }
-  const home = list.find((v) => v.key === chosen) ?? [...list].sort((a, b) => a.addedAt.localeCompare(b.addedAt))[0];
+  const home = list.find((v) => v.key === chosen) ?? [...list].sort((a, b) => a.addedAt.localeCompare(b.addedAt) || a.vault.localeCompare(b.vault))[0];
   const whose: Record<string, Whose> = {};
   const ask: string[] = [];
   for (const v of list) { const k = whoseKey(v); if (v.key === home.key) whose[k] = "mine"; else { whose[k] = "theirs"; ask.push(k); } }

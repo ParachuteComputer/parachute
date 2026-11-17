@@ -6,7 +6,7 @@ import { inShell } from "../vault/oauth";
 
 export type KeyInfo = { npub: string };
 /** Why a key sign-in didn't happen (src-tauri/src/door.rs `Refusal`). */
-export type Refusal = { code: "no_key" | "no_door" | "unknown_key" | "refused" | "unreachable" | "bad_hub"; message: string };
+export type Refusal = { code: "no_key" | "no_door" | "unknown_key" | "refused" | "unreachable" | "bad_hub" | "no_list" | "no_vaults"; message: string };
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
@@ -68,6 +68,17 @@ export const pairCancel = (id: number, codesDiffer: boolean) => invoke<void>("pa
 export async function keySignIn(hub: string, next: string): Promise<string> {
   try {
     return (await invoke<{ go: string }>("key_sign_in", { hub, next })).go;
+  } catch (e) {
+    throw asRefusal(e);
+  }
+}
+
+/** The vaults this device's key may reach on `hub` (the hub's own `list-vaults`, a request the shell signs with the key:
+ *  src-tauri/src/door.rs). `no_list`: the hub doesn't answer that (sign in to list them instead). */
+export async function hubVaults(hub: string): Promise<string[]> {
+  try {
+    const names = (await invoke<{ vaults: string[] }>("hub_vaults", { hub })).vaults;
+    return [...new Set(names.filter((n) => typeof n === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(n)))].sort().slice(0, 200);
   } catch (e) {
     throw asRefusal(e);
   }

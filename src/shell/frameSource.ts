@@ -40,7 +40,8 @@ export function homeVault(list: readonly VaultRecord[] = listVaults()): VaultRec
   let chosen: string | null = null;
   try { chosen = storage()?.getItem(HOME_KEY) ?? null; } catch { chosen = null; }
   const mine = list.filter(isMine);
-  return mine.find((v) => v.key === chosen) ?? [...mine].sort((a, b) => a.addedAt.localeCompare(b.addedAt))[0] ?? null;
+  // vaults that came with one sign-in share their time: the first of them by name, so every device picks the same one
+  return mine.find((v) => v.key === chosen) ?? [...mine].sort((a, b) => a.addedAt.localeCompare(b.addedAt) || a.vault.localeCompare(b.vault))[0] ?? null;
 }
 
 // ── the store ──

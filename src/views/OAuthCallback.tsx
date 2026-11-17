@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Bar } from "../ui/Bar";
-import { completeSignIn, PendingApprovalError } from "../vault/oauth";
-import { saveVault } from "../vault/store";
-import { setWhose, whoseOf } from "../vault/whose";
+import { PendingApprovalError } from "../vault/oauth";
+import { finishStep } from "../vault/signInFlow";
+import { afterSignIn } from "../shell/parachutes";
 
-/** Where the hub sends the person back after signing in. */
+/** Where the hub sends the person back after signing in: on to the next step (the consent for all their vaults), or,
+ *  with every vault kept, to the launcher. */
 export default function OAuthCallback() {
   const [params] = useSearchParams();
   const nav = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [approve, setApprove] = useState<string | null>(null);
+  const [saying, setSaying] = useState("Finishing the sign-in…");
   const once = useRef(false);
   useEffect(() => {
     if (once.current) return;
@@ -18,12 +20,11 @@ export default function OAuthCallback() {
     const code = params.get("code"), state = params.get("state"), denied = params.get("error");
     if (denied) { setError(denied === "access_denied" ? "You said no on the hub. Nothing was added." : `The hub stopped the sign-in (${denied.slice(0, 60)}).`); return; }
     if (!code || !state) { setError("This page needs a sign-in from a hub."); return; }
-    completeSignIn(code, state).then(({ pending, token, vault }) => {
-      const rec = saveVault({ issuer: pending.issuer, vault, tokenEndpoint: pending.tokenEndpoint, revocationEndpoint: pending.revocationEndpoint, clientId: pending.clientId, accessToken: token.access_token,
-        refreshToken: token.refresh_token, expiresAt: token.expires_in ? Date.now() + token.expires_in * 1000 : undefined, scope: token.scope ?? "", addedAt: new Date().toISOString() });
-      // what the person said on Add a vault; signing in again to a trusted vault doesn't drop its trust
-      if (pending.whose && !(pending.whose === "theirs" && whoseOf(rec) === "trusted")) setWhose(rec, pending.whose);
-      nav(`/v/${encodeURIComponent(rec.key)}`, { replace: true });
+    finishStep(code, state).then(async (next) => {
+      if ("go" in next) { setSaying("Asking your hub for your vaults…"); window.location.assign(next.go); return; }
+      setSaying(`Signed in to ${next.done.length === 1 ? "one vault" : `${next.done.length} vaults`}.`);
+      await afterSignIn(next.parachute.hub, next.done).catch(() => undefined);
+      nav("/", { replace: true });
     }, (e: unknown) => {
       if (e instanceof PendingApprovalError) setApprove(e.approveUrl);
       else setError(e instanceof Error ? e.message : "The sign-in didn't finish.");
@@ -39,7 +40,7 @@ export default function OAuthCallback() {
         </> : error ? <>
           <p className="error" role="alert">{error}</p>
           <Link to="/add">Try again</Link>
-        </> : <p>Finishing the sign-in…</p>}
+        </> : <p>{saying}</p>}
       </div>
     </main>
   );

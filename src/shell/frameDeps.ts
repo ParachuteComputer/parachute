@@ -20,12 +20,17 @@ import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
 import { barNow, pinApplet, startApplet } from "./homeSettings";
 import { chooseStart, forgetStart } from "./start";
+import { parachutesNow } from "./parachutes";
 
 /** The bar and the home as the frame may see them, and the two changes it may ask for on a tap. A frame's tap can't
  *  tell which of its elements was tapped, so a frame of the person's (from their vault) only writes the settings note:
  *  its choice of a home is never also the person's choice on this device (start.ts), which their own tap on the screen
  *  the next start leads to makes. The built-in frame's "Open on start" is the app's own sheet, so it counts. */
-export const homeNow = () => { const b = barNow(); return { start: b.start ? { vault: b.start.vault, noteId: b.start.noteId } : null, bar: b.pins.map((p) => ({ vault: p.vault, noteId: p.noteId })) }; };
+export const homeNow = () => {
+  const b = barNow();
+  return { start: b.start ? { vault: b.start.vault, noteId: b.start.noteId } : null, bar: b.pins.map((p) => ({ vault: p.vault, noteId: p.noteId })),
+    parachutes: parachutesNow().map((p) => ({ hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0 })) };
+};
 /** For a frame of the person's own, a write into their vault is asked about once more on the shell's own sheet. */
 const confirmed = (from: "built-in" | "vault", q: WriteAsk) => (from === "vault" ? confirmWrite(q) : Promise.resolve(true)).then((yes) => { if (!yes) throw new Error("not_allowed"); });
 const homeDeps = (from: "built-in" | "vault"): HostDeps["home"] => ({
