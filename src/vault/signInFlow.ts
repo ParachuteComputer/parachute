@@ -112,6 +112,9 @@ function keep(pending: Pending, token: TokenResponse, vault: string): VaultRecor
   const p = pending.parachute;
   const url = vaultUrlFrom(p.vaultTemplate, vault);
   const before = listVaults().find((v) => v.issuer === p.issuer && v.vault === vault);
+  // what the person already said of this vault: read before the record is kept (on a device that has never been told
+  // whose anything is, the first read sorts out the vaults held then, and this one mustn't be among them)
+  const said = whoseSaid({ issuer: p.issuer, vault });
   const rec = saveVault({ issuer: p.issuer, vault, tokenEndpoint: pending.tokenEndpoint, ...(pending.revocationEndpoint ? { revocationEndpoint: pending.revocationEndpoint } : {}), clientId: pending.clientId,
     accessToken: token.access_token, refreshToken: token.refresh_token, expiresAt: token.expires_in ? Date.now() + token.expires_in * 1000 : undefined, scope: token.scope ?? "",
     addedAt: new Date().toISOString(), ...(url !== vaultUrlOf({ issuer: p.issuer, vault }) ? { url } : {}) });
@@ -120,7 +123,6 @@ function keep(pending: Pending, token: TokenResponse, vault: string): VaultRecor
   // for a vault this device hasn't been told about. Signing in again never changes what they already said of a vault
   // (Settings does), and a trusted vault stays trusted.
   const picked = pending.mine ? (pending.mine.includes(vault) ? "mine" : "theirs") : null;
-  const said = whoseSaid(rec);
   const to = picked ?? (said === null ? pending.whose : null);
   if (to && !(to === "theirs" && whoseOf(rec) === "trusted")) setWhose(rec, to);
   return rec;

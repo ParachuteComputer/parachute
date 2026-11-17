@@ -79,9 +79,11 @@ per vault, on its card. The home is always one of the person's own vaults.
 **A hub the person runs.** Its owner reaches every vault on it, some of which may be other people's (a family
 member's, a client's). When the person answers Mine and the hub gives them every vault (the shell's list says
 `covered: "all"`; without a key, their list holds every vault the hub's public `/.well-known/parachute.json` names), the
-app asks before the consent: *You run uni.example, so every vault on it comes in. Which are yours?*, each vault a
-checkbox, all ticked to begin with (vaults this device already knows keep what was said). The ones left unticked come in
-as someone else's. Only the person's own vaults are looked through for the home.
+app asks before the consent: *Every vault on uni.example comes in. Which are yours?*, each vault a checkbox, all
+ticked to begin with (vaults this device already knows keep what was said). The ones left unticked come in as someone
+else's. Only the person's own vaults are looked through for the home. (A member given every vault on a hub sees the
+same question; nothing follows from it but their answer. Without a key on 0.9, an owner can also untick vaults on the
+hub's own page for the listing; the app then lists only those, asks nothing, and takes them as the person's.)
 
 ## Your Parachutes: the list in the home vault
 

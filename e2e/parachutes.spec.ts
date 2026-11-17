@@ -118,7 +118,7 @@ test("a sign-in stopped partway keeps the vaults it had, and says which", async 
 
 test("on a hub the person runs, they say which of its vaults are theirs; the others come in as someone else's", async ({ page }) => {
   await signInWithKey(page, hubState(), VAULT, "Mine", async (p) => {
-    await expect(p.getByRole("group", { name: /You run .*Which are yours\?/ })).toBeVisible();
+    await expect(p.getByRole("group", { name: /Every vault on .* comes in\. Which are yours\?/ })).toBeVisible();
     // all ticked to begin with: a good default for a hub of one's own
     for (const v of [VAULT, "letters", "pantry"]) await expect(p.getByRole("checkbox", { name: v })).toBeChecked();
     await p.getByRole("checkbox", { name: "pantry" }).uncheck();
@@ -127,6 +127,14 @@ test("on a hub the person runs, they say which of its vaults are theirs; the oth
   await page.goto("/settings");
   await expect(page.getByRole("combobox", { name: "Whose pantry is" })).toHaveValue("theirs");
   await expect(page.getByRole("combobox", { name: `Whose ${VAULT} is` })).toHaveValue("mine");
+});
+
+test("a new device that signs in to someone else's Parachute first takes none of it for its own", async ({ page }) => {
+  await signInWithKey(page, techneState(), ORG_VAULT);
+  await expect(ui(page).getByRole("region", { name: ORG_VAULT, exact: true })).toContainText("someone else's");
+  await page.goto("/settings");
+  await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
+  await expect(page.getByText("No home vault: none of your vaults is marked as yours.")).toBeVisible();
 });
 
 test("signing in again never changes what the person said of a vault", async ({ page }) => {

@@ -15,7 +15,7 @@ export default function PickVaults({ pick, onError }: { pick: Pick; onError: (me
   return (
     <div className="stack">
       <fieldset className="plain pick-vaults">
-        <legend>You run {hostOf(pick.hub)}, so every vault on it comes in. Which are yours?</legend>
+        <legend>Every vault on {hostOf(pick.hub)} comes in. Which are yours?</legend>
         {pick.vaults.map((v) => (
           <label key={v} className="line"><span><input type="checkbox" checked={mine.includes(v)} onChange={() => flip(v)} /> {v}</span></label>
         ))}
