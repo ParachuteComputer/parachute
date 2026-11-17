@@ -81,9 +81,8 @@ jobs:
       - name: Build the APK (scripts/android-build.sh checks its signature)
         run: |
           export NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
-          built=$(scripts/android-build.sh --target aarch64)
-          echo "$built"
-          apk=$(echo "$built" | head -1)
+          scripts/android-build.sh --target aarch64 | tee "$RUNNER_TEMP/android-build.log"
+          apk=$(grep '\.apk$' "$RUNNER_TEMP/android-build.log" | tail -1)
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
           mkdir -p out && cp "$apk" "out/Parachute_${version}_arm64${APK_SUFFIX}.apk"
           ls -l out
