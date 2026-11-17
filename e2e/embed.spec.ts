@@ -153,6 +153,9 @@ test("a change upstream shows the card again, Allow re-pins; new props ask again
     await sheet.getByRole("button", { name: "Allow this version" }).click();
     await expect(embed(page, "Events").getByText("Coming up at Techne")).toBeVisible();
     await expect.poll(async () => one(await home("GET", `notes?path=${encodeURIComponent(ids.pointerPath)}&include_metadata=true`)).metadata.pointer.code).toBe(`tsx:${await sha(fixture("techne/Events.tsx").replace("On at Techne", "Coming up at Techne"))}`);
+    // found on the emulator: after that Allow, a Revoke asks plainly again, not "changed since you brought it in"
+    await place.getByRole("button", { name: "Revoke" }).click();
+    await expect(place).toContainText("«Events», from techne, asks to run here.");
     // the page hands it new props: it asks again, and the card shows them
     const h = one(await home("GET", `notes?id=${ids.home}&include_metadata=true`));
     await home("PATCH", `notes/${ids.home}`, { metadata: { ...h.metadata, embeds: [{ name: "events", record: ids.pointerPath, props: { days: 7 } }] }, if_updated_at: h.updatedAt });
