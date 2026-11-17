@@ -11,10 +11,15 @@
 //                                      queryRecords/getRecord/createRecord/updateRecord (body, fields) beside its own
 //   uni.theme.get() / .on(cb)        → the app's look (src/theme): every token is also a CSS var --<key> on <html>
 //   uni.app.recent/pins/open         → what it may ask of the app (modules/app.ts), new here: the Uni app has none
+//   uni.props() / uni.onProps(cb)    → a component's props (plain data from the page's record), and later changes
+// On a page with embeds (docs/design/EMBED.md), `ready` says `page: {embeds: [names]}`, and in an embedded component's
+// frame `page: {sized: true}`: the kit then reports the frame's content height (`page.layout`), and nothing else. The
+// shell sets the frame's height from it; the embeds sit under the host's content.
 // In-page #anchor links scroll in place.
 
 export const FRAME_KIT = String.raw`(function () {
-  var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], theme = null, opened = null, readyRes;
+  var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
+  var measuring = false, lastHeight = -1, queued = false;
   var readyP = new Promise(function (r) { readyRes = r; });
   function post(m) { parent.postMessage(m, "*"); }
   function timeout(table, id, rej) { setTimeout(function () { if (table[id]) { delete table[id]; rej(new Error("timeout")); } }, 20000); }
@@ -36,6 +41,35 @@ export const FRAME_KIT = String.raw`(function () {
     opened = o;
     openCbs.slice().forEach(function (f) { try { f(o); } catch (e) {} });
   }
+  function applyProps(p) {
+    props = p && typeof p === "object" ? p : {};
+    propsCbs.slice().forEach(function (f) { try { f(props); } catch (e) {} });
+  }
+  // the frame's content height, sent when it changes (at most once a frame)
+  function measure() {
+    queued = false;
+    var b = document.body; if (!b) return;
+    var cs = getComputedStyle(b);
+    var height = Math.ceil(Math.max(b.scrollHeight, b.getBoundingClientRect().height) + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0));
+    if (height === lastHeight) return;
+    lastHeight = height;
+    call("page", "layout", { height: height }).catch(function () {});
+  }
+  function queue() { if (!queued) { queued = true; requestAnimationFrame(measure); } }
+  function startMeasuring() {
+    if (measuring) return; measuring = true;
+    var st = document.createElement("style");
+    st.textContent = "html,body{height:auto!important;min-height:0!important;overflow:hidden!important}";
+    document.head.appendChild(st);
+    var go = function () {
+      if (!document.body) { setTimeout(go, 20); return; }
+      try { new ResizeObserver(queue).observe(document.body); } catch (e) {}
+      try { new MutationObserver(queue).observe(document.body, { childList: true, subtree: true, attributes: true }); } catch (e) {}
+      addEventListener("load", queue, true);
+      queue();
+    };
+    go();
+  }
   addEventListener("message", function (e) {
     if (e.source !== parent) return;
     var m = e.data; if (!m || typeof m !== "object") return;
@@ -45,7 +79,15 @@ export const FRAME_KIT = String.raw`(function () {
       return;
     }
     if (m.uni !== 1) return;
-    if (m.event === "ready") { if (m.data && m.data.theme) applyTheme(m.data.theme); readyRes(m.data); if (m.data && m.data.open) applyOpen(m.data.open); return; }
+    if (m.event === "ready") {
+      if (m.data && m.data.theme) applyTheme(m.data.theme);
+      if (m.data && m.data.props) applyProps(m.data.props);
+      readyRes(m.data);
+      if (m.data && m.data.open) applyOpen(m.data.open);
+      if (m.data && m.data.page && (m.data.page.sized || m.data.page.embeds)) startMeasuring();
+      return;
+    }
+    if (m.event === "props") { applyProps(m.data); return; }
     if (m.event === "theme") { applyTheme(m.data); return; }
     if (m.event === "open") { applyOpen(m.data); return; }
     var p = pending[m.id]; if (!p) return; delete pending[m.id];
@@ -87,6 +129,12 @@ export const FRAME_KIT = String.raw`(function () {
     },
     frameFetch: frameFetch,
     call: call,
+    props: function () { return props; },
+    onProps: function (cb) {
+      if (typeof cb !== "function") throw new TypeError("onProps needs a function");
+      propsCbs.push(cb);
+      return function () { var i = propsCbs.indexOf(cb); if (i >= 0) propsCbs.splice(i, 1); };
+    },
     app: Object.freeze({
       recent: function (o) { return call("app", "recent", o || {}); },
       pins: function () { return call("app", "pins", {}); },
@@ -105,7 +153,7 @@ export const FRAME_KIT = String.raw`(function () {
     // The record words (core 0.9's record door): a record's text is its body and its data its fields. The note-named
     // calls stay, for applets written before (and for the Uni app, which has only those).
     var renamed = function (o, map) { if (!o || typeof o !== "object") return o; var r = {}; Object.keys(o).forEach(function (k) { r[map[k] || k] = o[k]; }); return r; };
-    var IN = { body: "content", fields: "metadata", includeBody: "includeContent" };
+    var IN = { body: "content", fields: "metadata", includeBody: "includeContent", includeFields: "includeMetadata" };
     var OUT = { content: "body", metadata: "fields" };
     var rec = function (n) { return renamed(n, OUT); };
     vc.queryRecords = function (o) { return vc.queryNotes(renamed(o || {}, IN)).then(function (rows) { return Array.isArray(rows) ? rows.map(rec) : rows; }); };

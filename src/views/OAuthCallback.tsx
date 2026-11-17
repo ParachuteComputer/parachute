@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { Bar } from "../ui/Bar";
 import { completeSignIn, PendingApprovalError } from "../vault/oauth";
 import { saveVault } from "../vault/store";
+import { setWhose, whoseOf } from "../vault/whose";
 
 /** Where the hub sends the person back after signing in. */
 export default function OAuthCallback() {
@@ -20,6 +21,8 @@ export default function OAuthCallback() {
     completeSignIn(code, state).then(({ pending, token, vault }) => {
       const rec = saveVault({ issuer: pending.issuer, vault, tokenEndpoint: pending.tokenEndpoint, revocationEndpoint: pending.revocationEndpoint, clientId: pending.clientId, accessToken: token.access_token,
         refreshToken: token.refresh_token, expiresAt: token.expires_in ? Date.now() + token.expires_in * 1000 : undefined, scope: token.scope ?? "", addedAt: new Date().toISOString() });
+      // what the person said on Add a vault; signing in again to a trusted vault doesn't drop its trust
+      if (pending.whose && !(pending.whose === "theirs" && whoseOf(rec) === "trusted")) setWhose(rec, pending.whose);
       nav(`/v/${encodeURIComponent(rec.key)}`, { replace: true });
     }, (e: unknown) => {
       if (e instanceof PendingApprovalError) setApprove(e.approveUrl);

@@ -50,3 +50,8 @@ no work. Each value is also a CSS variable in the applet's frame: `--bg`, `--sur
 `--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. Write your CSS on
 these, and the applet changes with the theme. `theme.get()` and `theme.on(cb)` give the same values as an object
 ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)).
+
+A component embedded in a page ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)) gets the same look, with two differences:
+each colour comes as `#rrggbb` (one written another way comes as the built-in colour), and its fonts are always the
+built-in ones. The theme note is text anyone you let write your vault can change, so only these few values reach code
+from someone else's Parachute.

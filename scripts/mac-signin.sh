@@ -70,6 +70,8 @@ echo "the key is in the login Keychain (computer.parachute.app / nostr-key)"
 
 say "add the vault and sign in with the key"
 ax type "Vault address" "http://127.0.0.1:$port/vault/recipes" || fail "no vault address field"
+# Add a vault asks whose it is, every time (docs/OTHER-PARACHUTES.md)
+ax press "Mine" || fail "no Mine on Add a vault"
 shot 12-add-vault
 ax press "Sign in with your key" || fail "no Sign in with your key"
 ax wait "Approve Parachute?" 30 || fail "the hub's Approve page didn't open"

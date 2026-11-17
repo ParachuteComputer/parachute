@@ -8,6 +8,16 @@ import type { Opens } from "./opens.ts";
 import { sha256Hex } from "./needs.ts";
 import { appLines, type AppWord } from "./app.ts";
 
+/** The card's line for a page whose embeds come from someone else's vaults ("techne at techne.example"). */
+export function embedsLine(from: readonly string[]): string | null {
+  if (!from.length) return null;
+  const names = [...new Set(from.map((f) => f.split(" at ")[0]))];
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return from.length === 1
+    ? `Shows things from ${list} (someone else's) on its page. What it reads here could reach ${list}.`
+    : `Shows things from ${list} on its page. What it reads here, and what they read, could pass between them.`;
+}
+
 export type Grant = {
   applet: { id: string; name: string };
   /** The vault the applet's note lives in: the only one it reaches. */
@@ -16,6 +26,8 @@ export type Grant = {
   opens: Opens[];
   /** What it may ask of the app beyond its vault (app.ts). */
   app: AppWord[];
+  /** The other vaults its page's embeds come from, by name and host (docs/design/EMBED.md): on its card, and in its key. */
+  embedsFrom?: string[];
 };
 
 /** How long a grant lasts before the card comes back. */
@@ -57,6 +69,8 @@ export function grantLines(g: Grant, ownFolder: string | null): CardLine[] {
     if (g.allow.some((r) => r.verbs.includes("create") && (r.path.startsWith(o.path) || o.path.startsWith(r.path)))) out.push({ text: `Tag the notes it adds in ${o.path} as ${o.type}`, stress: false });
   }
   out.push(...appLines(g.app));
+  const page = embedsLine(g.embedsFrom ?? []);
+  if (page) out.push({ text: page, stress: true });
   return out;
 }
 
@@ -75,7 +89,9 @@ export function grantKey(g: Grant, notePath: string): Promise<string> {
   const opens = [...new Set(g.opens.map((o) => canonical({ type: o.type, path: o.path, screen: o.screen })))].sort();
   // `app` only when it asks something: the keys of applets that ask nothing of the app stay as they were
   const app = g.app?.length ? [...new Set(g.app)].sort() : undefined;
-  return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens, app }));
+  // only when its page shows things from someone else's vaults: every other key stays as it was
+  const embeds = g.embedsFrom?.length ? [...new Set(g.embedsFrom)].sort() : undefined;
+  return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens, app, embeds }));
 }
 
 /** "9b13 b2ae": the first eight digits of the key, to tell two cards apart. */

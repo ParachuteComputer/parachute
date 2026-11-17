@@ -217,7 +217,8 @@ it. Names from records are quoted and the hub's address is the app's:
 | It doesn't compile, its record is invalid, or its body is over 200 KB | "«Events» can't run: <reason>." |
 
 The vault module turns hub errors into plain answers for the frame, so the shell wraps the vault deps it hands an
-embed's module: the wrapper sees surface-client's `VaultAuthError` with status 401 (after the refresh the client
+embed's module (and a failure that looks like the network is checked by trying the sign-in's refresh, since a hub
+may refuse a token in a way a browser can't read: core proposal 3): the wrapper sees surface-client's `VaultAuthError` with status 401 (after the refresh the client
 already tries; a `VaultPermissionError`, 403, is left to the plain answer) and `VaultUnreachableError`, and replaces the frame with the sentence; the record itself being gone (`VaultNotFoundError`
 when it is read to start) is the shell's own read. Sentences that need a tap ("Sign in to techne again", "Add it") are
 links to the app's own screens, not buttons that grant.
@@ -234,7 +235,8 @@ bar's places, an applet's screen, an embed):
   and sign-in discovery alike, since a refresh can happen at start without a tap. A bigger one is refused as that hub's
   error, before it is parsed. A code record's body (an applet's, a component's) is at most 200 KB; a bigger one is
   refused with the shell's sentence before it is hashed. (Notes read in the vault view keep today's limits.) The
-  applets and components of someone else's vault are listed in pages of 20, so a vault with many isn't one big reply.
+  components of someone else's vault are listed from their fields alone, and a component's code is read on its own only
+  when it is brought in, added or imported; its applets are read one at a time (four at once), so no one reply is big.
 - **Its code is transpiled only after its hash matches an Allow on this device.** The card needs the hash and the
   record's fields, not the transpiled code. (Code from the person's own vaults keeps today's order, so a mistake in
   it is still shown before its card.)
@@ -330,7 +332,7 @@ A custom frame that ignores them keeps working.
 
 | # | Threat | What stops it | Shown by |
 |---|---|---|---|
-| 1 | **A hostile component** reads the host page, the home vault or the person's other data | Its frame is the shell's child: sandbox `allow-scripts` without same-origin (opaque origin, no storage, no cookies), CSP `connect-src 'none'`. `parent.document` and every sibling's document throw. Its only door is its own session, whose vault module is bound to its own vault and its card's rules. No message names another vault. | e2e: a hostile component tries the parent's and every sibling's document, `fetch` to both hubs, storage, cookies, a home note by path, a folder outside its rule, a search; it writes what it got in its own page; the test reads only refusals |
+| 1 | **A hostile component** reads the host page, the home vault or the person's other data | Its frame is the shell's child: sandbox `allow-scripts` without same-origin (opaque origin, no storage, no cookies), CSP `connect-src 'none'`. `parent.document` and every sibling's document throw. Its only door is its own session, whose vault module is bound to its own vault and its card's rules. No message names another vault. | e2e: a hostile component tries the parent's and every sibling's document, `fetch` to both hubs, storage, cookies, a note outside its folder by path, a folder outside its rule, a search; it writes what it got in its own page; the test reads only refusals |
 | 2 | **It talks to another frame** (`parent.frames[i].postMessage`: a fake `ready`, theme or `open`; a call to the shell as the host) | Every kit reads only messages from its parent; the shell routes a message only to the session of the frame whose window sent it. A sandboxed frame can't navigate a sibling or the top, or open a window. HTML applets with their own listeners must check the source (the guide says so). | e2e: the hostile component posts fakes to every sibling and calls `app.recent` as if it were the host; the host page is unchanged and nothing answers it |
 | 3 | **It navigates itself** to get the page stopped | The frame that loaded again is stopped alone; if none can be named, the page stops with the shell's sentence (safe). | e2e (Chromium): the hostile component navigates; it alone is replaced by the sentence; the host runs on |
 | 3b | **A frame slides a decision under a tap** (an embed or the host changes size as the person taps) | No Allow or Run them is ever drawn in the page: the place offers Review, and the card is on a sheet above every frame, still while open, its Allow taken only after it has been shown a moment. | e2e: an embed above changes size during the tap on Review; the sheet opens and nothing is allowed until its own Allow |
@@ -367,7 +369,11 @@ A custom frame that ignores them keeps working.
    and the consent page should refuse a vault the person has no role on any more. Today (0.8.0 and 0.9.0-pre.1) all
    three keep working.
 2. 0.8's vault should check the token registry, as 0.9's does.
-3. A hub-wide display name in a public endpoint, so "whose it is" can name *Techne*, not the host. The app would still
+3. Core 0.9's 401 for a revoked token ("this key has been revoked") has no CORS headers, unlike its other 401s, so a
+   browser can't see it: to the app it looks like the hub is out of reach. The app tells the two apart by trying the
+   sign-in's refresh (the hub answering no is a refused sign-in), but the 401 should carry the same headers as the
+   rest. Found while building this step (a loopback hub, `auth revoke-token`, then a request with an `Origin`).
+4. A hub-wide display name in a public endpoint, so "whose it is" can name *Techne*, not the host. The app would still
    quote it as unverified.
 
 ## Not in this step

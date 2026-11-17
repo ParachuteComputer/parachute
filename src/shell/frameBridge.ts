@@ -4,7 +4,7 @@
 // start (open/mark.ts). Everything is injected, so tests can play a hostile frame against it.
 import type { VaultClient } from "@openparachute/surface-client";
 import { RateLimiter } from "../applet/contract";
-import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameHome, type FrameVault, type Decided, type Method, type Query } from "../bridge/protocol";
+import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameHome, type FrameComponents, type FramePointer, type FrameVault, type Decided, type Method, type Query } from "../bridge/protocol";
 import type { VaultRecord } from "../vault/store";
 
 export type HostDeps = {
@@ -15,7 +15,13 @@ export type HostDeps = {
   /** `set` refuses (throws) a choice that names no applet of that vault, or one too many. */
   defaults: { get(vault: string): Record<string, string>; set(vault: string, type: string, choice: string | null): void };
   /** The bar and the home; `pin` and `start` write the person's settings note (only ever called during a tap). */
-  home: { get(): FrameHome; pin(vault: string, noteId: string, on: boolean): Promise<void>; start(vault: string, noteId: string | null): Promise<void> };
+  home: { get(): FrameHome; pin(vault: string, noteId: string, on: boolean): Promise<void>; start(vault: string, noteId: string | null): Promise<void>;
+    /** Write a pointer to that applet or component in the home vault (only ever called during a tap). */
+    bringIn(vault: string, noteId: string): Promise<void>;
+    /** Put that component on the home applet's page (only ever called during a tap). */
+    addEmbed(vault: string, noteId: string): Promise<"added" | "already"> };
+  components(rec: VaultRecord): Promise<FrameComponents>;
+  pointers(): Promise<FramePointer[]>;
   go(to: string, replace: boolean): void;
   /** The shell's address now (its path). */
   here(): string;
@@ -28,6 +34,9 @@ export type HostDeps = {
   copy(text: string): Promise<boolean>;
   /** Open it (or, for a frame of the person's, ask first): whether it was opened. */
   openOut(url: string): Promise<boolean>;
+  /** Whose each vault is (vault/whose.ts), and the home vault's key. */
+  whose?(r: VaultRecord): FrameVault["whose"];
+  homeKey?(): string | null;
   /** For errors from the vault: a message for the person. */
   message(e: unknown): string;
   now?: () => number;
@@ -38,10 +47,10 @@ export const FRAME_LIMITS = { pending: 32, perWindow: 300, windowMs: 10_000 };
 /** The addresses a link out may open: the web, mail and phone. */
 export const LINK_OUT = /^(https?:\/\/|mailto:|tel:)/i;
 
-export const frameVault = (r: VaultRecord): FrameVault => {
+export const frameVault = (r: VaultRecord, whose?: FrameVault["whose"], home?: boolean): FrameVault => {
   let host = r.issuer;
   try { host = new URL(r.issuer).host; } catch { /* as given */ }
-  return { key: r.key, vault: r.vault, host, issuer: r.issuer };
+  return { key: r.key, vault: r.vault, host, issuer: r.issuer, ...(whose ? { whose } : {}), ...(home ? { home: true } : {}) };
 };
 
 const pathOf = (to: string) => new URL(to, "http://app.invalid").pathname;
@@ -57,7 +66,7 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
   };
   const run = async (method: Method, p: Record<string, unknown>): Promise<unknown> => {
     switch (method) {
-      case "vaults.list": return deps.vaults().map(frameVault);
+      case "vaults.list": return deps.vaults().map((r) => frameVault(r, deps.whose?.(r), deps.homeKey?.() === r.key));
       case "vault.query": return deps.client(vault(p.vault as string)).queryNotes(p.query as Query);
       case "vault.note": {
         try { return await deps.client(vault(p.vault as string)).getNote(p.id as string); } catch (e) { if ((e as { status?: number } | null)?.status === 404) return null; throw e; }
@@ -69,6 +78,10 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "home.get": return deps.home.get();
       case "home.pin": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); await deps.home.pin(p.vault as string, p.noteId as string, p.on as boolean); return null;
       case "home.start": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); await deps.home.start(p.vault as string, p.noteId as string | null); return null;
+      case "pointers.list": return deps.pointers();
+      case "home.bringIn": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); await deps.home.bringIn(p.vault as string, p.noteId as string); return null;
+      case "home.addEmbed": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); return deps.home.addEmbed(p.vault as string, p.noteId as string);
+      case "components.list": return deps.components(vault(p.vault as string));
       case "nav.go": {
         const to = p.to as string;
         if (!allowedDestination(to)) throw new Error("not_allowed");

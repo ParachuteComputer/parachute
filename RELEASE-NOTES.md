@@ -18,6 +18,9 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   check), make a new one, or paste one. It stays in the Android Keystore or the Mac's Keychain, never in the web side.
 - **Vaults.** Add a vault by its address on any Parachute hub (0.8 or 0.9) and sign in with your key, a password, or
   Parachute Cloud's own page. Several vaults at once.
+- **Other Parachutes.** Add an org's vault as someone else's; bring its applets into your launcher and put its
+  components on your home, each in its own sealed frame with its own card, seeing only what that card allows of their
+  vault ([docs/OTHER-PARACHUTES.md](docs/OTHER-PARACHUTES.md)).
 - **Read your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, or in
   the plain view.
 - **Applets.** An applet is one note in your vault (TSX, JSX or HTML) that a chat AI with the Parachute MCP can write

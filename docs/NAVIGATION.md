@@ -30,7 +30,8 @@ Long-press a place on the bar: **Move left**, **Move right**, **Unpin**, **Open 
 
 ## Home
 
-Any applet can be your **home**: it opens when the app starts, and it sits first on the bar. With no home, the app opens
+Any applet in a vault of yours can be your **home** (an applet in someone else's vault never opens by itself:
+[OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)): it opens when the app starts, and it sits first on the bar. With no home, the app opens
 on the launcher. An applet opens on start by itself only when two things hold on this device: you allowed its code
 (its card), and you chose it as home here (the long-press, or the Open button the app shows the first time). If the
 choice came from somewhere else (your agent wrote it, or a frame of your own set it), the first start shows the
@@ -39,7 +40,14 @@ to it (Back, or its place on the bar).
 
 A home applet is an ordinary applet that asks the app for a little more: the newest notes across your vaults, what is
 on your bar, and a way to take you somewhere on a tap. The starter one is in
-[WRITE-AN-APPLET.md](WRITE-AN-APPLET.md#a-home-applet).
+[WRITE-AN-APPLET.md](WRITE-AN-APPLET.md#a-home-applet). Components can sit under its own content, each in its own
+frame: **Add to home** on a component in the launcher ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)).
+
+## Other Parachutes
+
+The launcher shows each vault as a chapter. One that is someone else's (you say so when you add it) is marked under
+its name: *someone else's · at techne.example*. Its applets can be brought into your own chapter (long-press, **Bring
+into my Parachute**), and its components put on your home ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)).
 
 ## Where the choices live
 

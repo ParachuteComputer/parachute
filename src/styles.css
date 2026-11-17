@@ -81,6 +81,17 @@ fieldset.plain legend { padding: 0; }
 .applet-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; font-size: 14px; }
 .applet-bar .quiet { flex: 1; }
 .applet-frame { flex: 1; width: 100%; min-height: 70dvh; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+/* a page with embeds (docs/design/EMBED.md): the host as tall as its content, then each embed, the page scrolling whole */
+.applet-frame.applet-frame-sized { flex: none; min-height: 0; }
+.embeds { display: grid; gap: 14px; margin-top: 14px; }
+.embed-place { display: grid; gap: 4px; }
+.embed-line { display: flex; align-items: baseline; gap: 8px; margin: 0; padding-top: 6px; border-top: 1px dotted var(--muted); font: italic 14px/1.3 var(--serif); color: var(--muted); }
+.embed-line .quiet-button { margin-left: auto; font-style: normal; }
+.embed-frame { display: block; width: 100%; border: 0; background: transparent; }
+.embed-said { padding: 12px var(--pad); border: 1px dashed var(--line); border-radius: var(--radius); }
+.embed-said p { margin: 0 0 6px; }
+.sheet-over-frames { z-index: 30; }
+.grant-handed { font-style: italic; }
 .selftest-frames { position: fixed; left: -10000px; top: 0; width: 360px; height: 640px; overflow: hidden; }
 .selftest-frames iframe { width: 360px; height: 640px; }
 .grant-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
@@ -162,6 +173,9 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .chapter-n { font: 600 13px var(--serif); letter-spacing: .2em; color: var(--accent); }
 .chapter-name { font: 500 25px/1.2 var(--serif); overflow-wrap: anywhere; }
 .chapter h2 a { font: 14px var(--sans); color: var(--muted); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+/* whose a chapter is (vault/whose.ts): someone else's says so under its name, set in from the margin like a running head */
+.chapter-whose { margin: 0 0 2px 2em; font: italic 15px/1.3 var(--serif); color: var(--muted); }
+.chapter-theirs .chapter-whose::before { content: "❧ "; font-style: normal; color: var(--accent); }
 .entries { list-style: none; margin: 4px 0 0; padding: 0; }
 .entries > li { border-bottom: 1px dotted var(--muted); }
 .entry { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 14px; padding: 10px 0; color: var(--text); text-decoration: none; -webkit-touch-callout: none; user-select: none; }
@@ -177,6 +191,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .entry-quiet { padding: 10px 0; font: italic 15px var(--serif); color: var(--muted); }
 .lately-label { margin: 14px 0 2px; font: 600 11px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .lately { list-style: none; margin: 0; padding: 0; }
+.parts-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.part-chip { border: 1px solid var(--line); border-radius: 999px; background: var(--surface); padding: 4px 12px; font: 16px var(--serif); color: var(--text); cursor: pointer; }
 .lately a { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; color: var(--text); text-decoration: none; font: 17px var(--serif); }
 .lately a::before { content: "·"; color: var(--accent); }
 .lately span { overflow-wrap: anywhere; } .lately i { margin-left: auto; font-size: 14px; color: var(--muted); white-space: nowrap; }
@@ -195,9 +211,10 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
   /* one vault on a wide screen: its applets and its newest notes side by side */
   .launcher:not(.launcher-wide) { max-width: 1320px; }
   .launcher:not(.launcher-wide) .chapter { display: grid; grid-template-columns: 3fr 2fr; column-gap: 72px; align-content: start; }
-  .launcher:not(.launcher-wide) .chapter > h2 { grid-column: 1 / -1; }
+  .launcher:not(.launcher-wide) .chapter > h2, .launcher:not(.launcher-wide) .chapter > .chapter-whose { grid-column: 1 / -1; }
   .launcher:not(.launcher-wide) .chapter > .entries { grid-column: 1; grid-row: 2 / span 3; }
-  .launcher:not(.launcher-wide) .chapter > :not(h2):not(.entries) { grid-column: 2; }
+  .launcher:not(.launcher-wide) .chapter > .chapter-whose + .entries { grid-row: 3 / span 3; }
+  .launcher:not(.launcher-wide) .chapter > :not(h2):not(.entries):not(.chapter-whose) { grid-column: 2; }
   .launcher:not(.launcher-wide) .lately-label { margin-top: 8px; }
   .home-bar-place { min-width: 96px; font-size: 15px; }
 }

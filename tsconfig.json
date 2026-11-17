@@ -39,5 +39,7 @@
     "e2e",
     "vite.config.ts",
     "playwright.config.ts"
-  ]
+  ],
+  // records' code (components, applets) the tests write into a vault: the app runs it, not this build
+  "exclude": ["e2e/fixtures"]
 }

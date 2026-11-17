@@ -37,7 +37,7 @@ screens:                     # optional: its screens; the first is the one that 
 
 Rules the app holds to. An unknown key, a hidden character or an over-long value refuses the whole applet: it is not
 repaired. A rule can't reach `.parachute/`. No applet can change a code note (HTML, TSX, JSX) or a note tagged
-`applet`, whatever its rules say.
+`applet`, `component` or `parachute-pointer`, whatever its rules say.
 
 ### What it opens (`fields.opens`)
 
@@ -47,8 +47,8 @@ repaired. A rule can't reach `.parachute/`. No applet can change a code note (HT
   screen: home     # optional: one of its screens
 ```
 
-The folder must be one it may read, and not `Applets/` or `.parachute/`. `applet`, `view`, `capture` and anything
-starting with `parachute` can't be claimed.
+The folder must be one it may read, and not `Applets/` or `.parachute/`. `applet`, `view`, `capture`, `component` and
+anything starting with `parachute` can't be claimed.
 
 ## The code
 
@@ -72,16 +72,32 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 |---|---|
 | `ready()` | Resolves when the app has started it: `{ applet: { id, name }, theme, open? }`. |
 | `onOpen(cb)` | `cb({ note: { id, path }, screen })` when the person opened a note in it (now, and each time after). |
-| `vault.queryRecords({ pathPrefix, tag, search, limit, includeBody })` | Records in folders it may read: `{ id, path, updatedAt }`, and with `tag` or `includeBody` also `tags`, `fields` and the `body`. |
+| `vault.queryRecords({ pathPrefix, tag, search, limit, includeBody, includeFields })` | Records in folders it may read: `{ id, path, updatedAt }`, and with `tag`, `includeBody` or `includeFields` also `tags` and `fields` (and with `includeBody` the `body`). |
 | `vault.getRecord(idOrPath)` | One record it may read, with its body. |
 | `vault.createRecord({ path, body })` | A new record, in a folder it may `create` in: `{ id, path, tags, fields, updatedAt }` (`getRecord` for its body). |
 | `vault.updateRecord(id, { body, if_updated_at })` | A new body for a record it may `update`. |
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
 | `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above), while they tap inside the applet. Resolves to whether it went. |
+| `props()`, `onProps(cb)` | In a component a page embeds: the plain data the page hands it (also its React props), and each change after. Empty in an applet. |
 | `theme.get()`, `theme.now()`, `theme.on(cb)` | The app's look, which the person can change ([THEME.md](THEME.md)): `get` asks for it, `now` gives the last one sent (or null), `on` calls back now and at each change and returns a function that stops it. Beside the values below, it says `scheme` (`light` or `dark`) and `density`. Every value is also a CSS variable: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. |
 
 A call outside what it was allowed fails with `out_of_scope` or `not_granted`. It never reaches anything else.
+
+### Components, embeds and imports
+
+A **component** is a record like an applet, tagged `component`, that a page shows rather than one that has a screen.
+Its own frame, its own card, its own vault; or, from a vault you trust, imported into your code with
+`import Events from "component:events"`. All of it, with a worked example, is in
+[OTHER-PARACHUTES.md](OTHER-PARACHUTES.md). Three things for an applet's author:
+
+- **A page with embeds scrolls as a whole.** An applet whose record has `fields.embeds` is drawn as tall as its content,
+  with its embeds under it; `position: fixed` and its own inner scrolling scroll with the page. A page that grows by the
+  same amount three times running is held at its height (that is how a layout sized to the screen stops growing for
+  ever), so one that adds rows on a tap should page them rather than grow without end.
+- **Check who a message is from.** The kit only reads messages from the app. An HTML applet that listens for
+  `message` events itself must check `event.source === parent`: on a page with embeds, other frames can post to it.
+- **Never ask for a key or a password.** Parachute never does inside a page, and the person is told so.
 
 ### The parts (`import { … } from "parachute"`, TSX and JSX only)
 

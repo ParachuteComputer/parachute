@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { Bar } from "../ui/Bar";
 import { parseAddress } from "../vault/address";
 import { beginSignIn, dropPending } from "../vault/oauth";
+import { limitedFetch } from "../vault/limited";
 import { keySignIn, keysHere, useKey, type Refusal } from "../key/key";
 import { Npub } from "../key/Npub";
 
@@ -16,14 +17,18 @@ export default function AddVault({ first = false }: { first?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [busy, setBusy] = useState(false);
+  // whose it is (vault/whose.ts): asked every time, nothing chosen beforehand
+  const [whose, setWhoseHere] = useState<"mine" | "theirs" | null>(null);
 
   async function go(withKey: boolean) {
     const parsed = parseAddress(input);
     if (!parsed.ok) { setError(parsed.error); return; }
+    if (!whose) { setError("Say whose vault it is first."); return; }
     setBusy(true); setError(null); setRefusal(null);
     let authorize: string;
     try {
-      authorize = await beginSignIn(parsed.address);
+      // someone else's hub is read up to a limit from its first answer (vault/limited.ts)
+      authorize = await beginSignIn(parsed.address, whose === "mine" ? undefined : limitedFetch(), whose);
     } catch (err) {
       setBusy(false); setError(unreachable(err)); return;
     }
@@ -49,6 +54,11 @@ export default function AddVault({ first = false }: { first?: boolean }) {
           <input type="url" inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} placeholder="https://your-hub/vault/name"
             value={input} onChange={(e) => setInput(e.target.value)} aria-invalid={!!error} aria-describedby={error ? "add-error" : undefined} />
         </label>
+        <fieldset className="plain whose">
+          <legend>Whose vault is this?</legend>
+          <label className="line"><span><input type="radio" name="whose" checked={whose === "mine"} onChange={() => setWhoseHere("mine")} /> Mine</span></label>
+          <label className="line"><span><input type="radio" name="whose" checked={whose === "theirs"} onChange={() => setWhoseHere("theirs")} /> Someone else's <span className="quiet">(an org's, a friend's)</span></span></label>
+        </fieldset>
         {error && <p className="error" id="add-error" role="alert">{error}</p>}
         {refusal && <div className="error" role="alert">
           {refusal.code === "unknown_key" ? <>

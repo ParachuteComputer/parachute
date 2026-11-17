@@ -9,6 +9,7 @@ import { parseOpens, type Opens } from "./opens.ts";
 import { parseApp, type AppWord } from "./app.ts";
 import type { Need, Resolved } from "./needs.ts";
 import { resolveNeeds } from "./needs.ts";
+import { parseEmbeds, type Embed } from "./embeds.ts";
 
 /** The app's own applet ids: a note may not take one. */
 export const BUILT_IN_IDS = ["vault"];
@@ -25,11 +26,14 @@ export type AppletEntry = {
   appError?: string;
   /** why `opens` was refused, when it was */
   opensError?: string;
+  /** What its page embeds (embeds.ts): only for an applet in a vault of the person's own. */
+  embeds: Embed[];
 };
 export type Discovery = { entries: AppletEntry[]; skipped: number };
 type Row = { id?: unknown; path?: unknown; tags?: unknown; metadata?: unknown };
 
-export function readApplet(r: Row, vault: string): { ok: true; entry: AppletEntry } | { ok: false; error: string } {
+/** `theirs`: the vault isn't the person's own (vault/whose.ts): its applets ask nothing of the app, whatever `app` says. */
+export function readApplet(r: Row, vault: string, theirs = false): { ok: true; entry: AppletEntry } | { ok: false; error: string } {
   if (typeof r.id !== "string" || !r.id || typeof r.path !== "string" || !r.path) return { ok: false, error: "it isn't a note" };
   if (!Array.isArray(r.tags) || !r.tags.includes("applet")) return { ok: false, error: "it isn't tagged applet" };
   const meta = plain(r.metadata) ? r.metadata : {};
@@ -38,18 +42,18 @@ export function readApplet(r: Row, vault: string): { ok: true; entry: AppletEntr
   if (BUILT_IN_IDS.includes(parsed.manifest.id)) return { ok: false, error: `the id ${parsed.manifest.id} is the app's own` };
   if (meta.interface !== undefined && meta.interface !== null) return { ok: false, error: "a contract 2 applet has one manifest. Its note must not carry interface too" };
   // as with `opens`: a bad `app` costs the applet what it asked of the app, not the applet
-  const app = parseApp(meta.app);
+  const app = theirs ? { ok: false as const, error: "an applet in someone else's vault can't ask the app for anything" } : parseApp(meta.app);
   const opens = parseOpens(meta.opens, parsed.manifest);
-  return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }) } };
+  return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], embeds: theirs ? [] : parseEmbeds(meta.embeds), ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }) } };
 }
 
-export function discoverApplets(rows: readonly Row[], vault: string): Discovery {
+export function discoverApplets(rows: readonly Row[], vault: string, theirs = false): Discovery {
   const entries: AppletEntry[] = [];
   const ids = new Set<string>();
   let skipped = 0;
   const sorted = [...rows].sort((a, b) => String(a.path ?? "").localeCompare(String(b.path ?? "")));
   for (const r of sorted) {
-    const a = readApplet(r, vault);
+    const a = readApplet(r, vault, theirs);
     if (!a.ok || ids.has(a.entry.manifest.id)) { skipped++; continue; }
     ids.add(a.entry.manifest.id);
     entries.push(a.entry);

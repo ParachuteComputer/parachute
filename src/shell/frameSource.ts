@@ -16,13 +16,14 @@ import defaultSource from "../frame/default-frame.tsx?raw";
 import { codeHash, codeKindOf, prepare, TRANSPILER } from "../applet/code";
 import { gateNow, selfTestRunning, subscribeGate } from "../applet/selftest/run";
 import { clientFor } from "../vault/client";
+import { isMine, HOME_KEY } from "../vault/whose";
 import { listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
 import { choose, type Approved, type Choice, type Kept, type Mode, type Read } from "./frameChoice";
 export type { Choice, Kept, Read };
 
 export const FRAME_TAG = "parachute-frame";
 export const FRAME_PATH = "Parachute/Frame";
-export const HOME_KEY = "parachute.home.v1";
+export { HOME_KEY } from "../vault/whose";
 export const FRAMES_KEY = "parachute.frames.v1";
 export const DEFAULT_FRAME_SOURCE = defaultSource;
 export const defaultFrameHash = (): Promise<string> => codeHash("tsx", DEFAULT_FRAME_SOURCE);
@@ -33,17 +34,21 @@ const storage = () => (typeof localStorage === "undefined" ? null : localStorage
 function readJson<T>(key: string, fallback: T): T { try { const v: unknown = JSON.parse(storage()?.getItem(key) ?? "null"); return v && typeof v === "object" ? (v as T) : fallback; } catch { return fallback; } }
 const writeJson = (key: string, v: unknown) => { try { storage()?.setItem(key, JSON.stringify(v)); } catch { /* this session only */ } };
 
-/** The home vault: the person's choice if this device still holds it, else the first vault it signed in to. */
+/** The home vault, always one that is the person's own (vault/whose.ts): their choice if this device still holds it and
+ *  it is theirs, else the first vault they signed in to that is theirs. Someone else's vault is never the home. */
 export function homeVault(list: readonly VaultRecord[] = listVaults()): VaultRecord | null {
   let chosen: string | null = null;
   try { chosen = storage()?.getItem(HOME_KEY) ?? null; } catch { chosen = null; }
-  return list.find((v) => v.key === chosen) ?? [...list].sort((a, b) => a.addedAt.localeCompare(b.addedAt))[0] ?? null;
+  const mine = list.filter(isMine);
+  return mine.find((v) => v.key === chosen) ?? [...mine].sort((a, b) => a.addedAt.localeCompare(b.addedAt))[0] ?? null;
 }
 
 // ── the store ──
 
-type State = { read: Read | null; reading: boolean; defaultHash: string | null; rev: number; linkOut: string | null };
-let state: State = { read: null, reading: false, defaultHash: null, rev: 0, linkOut: null };
+/** A write a frame of the person's asked for, which the shell asks about once more on its own sheet. */
+export type WriteAsk = { title: string; body: string; act: string };
+type State = { read: Read | null; reading: boolean; defaultHash: string | null; rev: number; linkOut: string | null; writeAsk: WriteAsk | null };
+let state: State = { read: null, reading: false, defaultHash: null, rev: 0, linkOut: null, writeAsk: null };
 const listeners = new Set<() => void>();
 const set = (p: Partial<State>) => { state = { ...state, ...p, rev: state.rev + 1 }; listeners.forEach((f) => f()); };
 const kept = (): Kept => readJson<Kept>(FRAMES_KEY, {});
@@ -222,6 +227,15 @@ export function confirmLinkOut(url: string, now: () => number = Date.now): Promi
 }
 /** The person's answer. */
 export function answerLinkOut(open: boolean) { pendingOpen?.(open); }
+/** Ask the person, on the shell's own sheet, before a frame from a vault writes into their vault (bringing something
+ *  in, adding to home: docs/design/EMBED.md). The same one-at-a-time rule and timing as a link out. */
+export function confirmWrite(q: WriteAsk, now: () => number = Date.now): Promise<boolean> {
+  if (pendingOpen || now() < restUntil) return Promise.resolve(false);
+  return new Promise((res) => {
+    pendingOpen = (yes) => { pendingOpen = null; restUntil = now() + LINK_OUT_REST_MS; set({ writeAsk: null }); res(yes); };
+    set({ writeAsk: q });
+  });
+}
 
 const subscribe = (f: () => void) => {
   listeners.add(f);
@@ -231,5 +245,5 @@ const subscribe = (f: () => void) => {
 export function useFrameSource() {
   useSyncExternalStore(subscribe, () => `${state.rev}:${gate()}:${homeVault()?.key ?? ""}`);
   const k = kept();
-  return { choice: currentChoice(), read: state.read, reading: state.reading, failedWhy: k.failed?.why ?? failedNow?.why ?? "", proposal: proposal(), defaultHash: state.defaultHash, linkOut: state.linkOut };
+  return { choice: currentChoice(), read: state.read, reading: state.reading, failedWhy: k.failed?.why ?? failedNow?.why ?? "", proposal: proposal(), defaultHash: state.defaultHash, linkOut: state.linkOut, writeAsk: state.writeAsk };
 }

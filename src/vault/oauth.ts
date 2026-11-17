@@ -19,6 +19,7 @@ const CLIENTS_KEY = "parachute.oauth.clients.v1";
 const PENDING_TTL_MS = 30 * 60_000;
 
 export { PendingApprovalError };
+import { limitedFetch } from "./limited";
 
 export type Pending = {
   issuer: string;
@@ -31,6 +32,8 @@ export type Pending = {
   state: string;
   redirectUri: string;
   startedAt: number;
+  /** whose the person said it is, on Add a vault (vault/whose.ts): kept when the sign-in comes back */
+  whose?: "mine" | "theirs";
 };
 
 /** In the shell, the loopback address the shell catches (src-tauri/src/lib.rs SIGNIN_RETURN): a hub keeps the name
@@ -71,7 +74,7 @@ export function forgetClient(issuer: string) {
 }
 
 /** Start signing in: returns the hub's authorize address to go to. The flow's secrets wait in this app's storage. */
-export async function beginSignIn(address: Address, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<string> {
+export async function beginSignIn(address: Address, fetchImpl: typeof fetch = fetch.bind(globalThis), whose?: "mine" | "theirs"): Promise<string> {
   const redirect = redirectUri();
   const meta = await discoverAuthServer(vaultUrl(address.issuer, address.vault), fetchImpl);
   // the hub must name itself as the address typed (RFC 8414 3.3), and keep its sign-in on that origin
@@ -92,7 +95,7 @@ export async function beginSignIn(address: Address, fetchImpl: typeof fetch = fe
   // the vault's own metadata may leave out where to revoke; the hub's names it
   let revocation = (meta as { revocation_endpoint?: unknown }).revocation_endpoint;
   if (!onOrigin(revocation, address.issuer)) revocation = await discoverAuthServer(address.issuer, fetchImpl).then((m) => (m as { revocation_endpoint?: unknown }).revocation_endpoint, () => undefined);
-  const pending: Pending = { issuer: address.issuer, vault: address.vault, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, address.issuer) ? { revocationEndpoint: revocation } : {}), clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now() };
+  const pending: Pending = { issuer: address.issuer, vault: address.vault, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, address.issuer) ? { revocationEndpoint: revocation } : {}), clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now(), ...(whose ? { whose } : {}) };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   const url = new URL(meta.authorization_endpoint);
   url.searchParams.set("response_type", "code");
@@ -121,11 +124,13 @@ export function takePending(state: string, now = Date.now()): Pending | "mismatc
 export type SignedIn = { pending: Pending; token: TokenResponse; vault: string };
 
 /** Finish signing in: check the state, trade the code for a token. Used once: the flow's secrets are gone after. */
-export async function completeSignIn(code: string, state: string, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<SignedIn> {
+export async function completeSignIn(code: string, state: string, fetchImpl?: typeof fetch): Promise<SignedIn> {
   const pending = takePending(state);
   if (!pending) throw new Error("This sign-in has expired or was already used. Start again from Add a vault.");
   if (pending === "mismatch") throw new Error("This sign-in doesn't match the one this app started. Start again.");
-  const res = await fetchImpl(pending.tokenEndpoint, {
+  // someone else's hub is read up to a limit (limited.ts); the person's own (or one they didn't say) as before
+  const f = fetchImpl ?? (pending.whose === "theirs" ? limitedFetch() : fetch.bind(globalThis));
+  const res = await f(pending.tokenEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams({ grant_type: "authorization_code", code, code_verifier: pending.codeVerifier, client_id: pending.clientId, redirect_uri: pending.redirectUri }).toString(),
