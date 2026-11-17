@@ -47,8 +47,9 @@ signature until the app is signed with an Apple Developer ID). Enter your Mac pa
 
 ## 5. Add a vault
 
-Enter the vault's address, like `https://your-hub/vault/name`, and press **Sign in with your key**. The hub opens its
-own page to confirm; allow it, and you're back in Parachute with the vault's notes.
+Enter the vault's address, like `https://your-hub/vault/name`, and press **Sign in with your key**. The hub's own page
+asks "Approve Parachute?" (it may call Parachute a third-party app). Press **Approve**, and you're back in Parachute
+with the vault's notes.
 
 - A hub on your tailnet needs Tailscale running on the Mac.
 - If the hub says it doesn't know your key, send its owner the `npub1…` it shows.

@@ -1,7 +1,8 @@
 name: Mac
 # The Mac app for Apple Silicon: the shell's tests on macOS (the key in the real Keychain, pairing, the hub's key door),
-# then the app built, ad-hoc signed (no Apple account yet), installed from its dmg the way docs/INSTALL-MAC.md says and
-# started. The dmg and the .app.tar.gz are this run's artifact. The release workflow builds through this one too.
+# then the app built, ad-hoc signed (no Apple account yet), installed from its dmg the way docs/INSTALL-MAC.md says,
+# started, and signed in to a throwaway hub with a key, driven as a person would. The dmg and the .app.tar.gz are this
+# run's artifact; the screenshots are `mac-smoke`. The release workflow builds through this one too.
 permissions:
   contents: read
 on:
@@ -47,6 +48,8 @@ jobs:
         run: |
           mkdir -p dist && echo '<!doctype html>' > dist/index.html
           cargo test --locked --manifest-path src-tauri/Cargo.toml
+          cargo build --locked --manifest-path src-tauri/Cargo.toml --example pair_send
+          echo "PAIR_SEND=$PWD/src-tauri/target/debug/examples/pair_send" >> "$GITHUB_ENV"
       - name: Build the app (ad-hoc signed)
         run: npx tauri build --ci
       - name: Name the files
@@ -61,6 +64,10 @@ jobs:
           echo "dmg=out/Parachute_${version}_aarch64.dmg" >> "$GITHUB_OUTPUT"
       - name: Install from the dmg and start it (docs/INSTALL-MAC.md, as far as a runner can)
         run: scripts/mac-smoke.sh "${{ steps.files.outputs.dmg }}" mac-smoke
+      # driven through accessibility, as a person would: a pasted, a new and a paired key, each into the Keychain; a key
+      # sign-in on a hub on loopback through its consent page into the vault
+      - name: Sign in on the installed app (paste a key, sign in to a hub, new key, pair a key)
+        run: scripts/mac-signin.sh mac-smoke
       - uses: actions/upload-artifact@v4
         with:
           name: parachute-macos

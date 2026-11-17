@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# Sign in on the Mac app as a person would, driven through accessibility (scripts/mac-ax.swift): paste a secret key,
+# check it went into the login Keychain, add a vault on a throwaway hub on loopback and sign in to it with the key (the
+# hub's key door, its consent page, back into the app); then remove it and make a new key; then remove that and pair a
+# key in from a stand-in for the Uni app (examples/pair_send.rs), pasting its link. Run after scripts/mac-smoke.sh
+# installed the app. Needs PARACHUTE_CORE (a parachute-core binary), PAIR_SEND (the built pair_send example) and node.
+#   scripts/mac-signin.sh [<folder for screenshots>]
+set -euo pipefail
+out=${1:-mac-smoke}
+mkdir -p "$out"
+here=$(cd "$(dirname "$0")" && pwd)
+app=/Applications/Parachute.app
+exe=$(defaults read "$app/Contents/Info" CFBundleExecutable)
+say() { echo "== $*"; }
+fail() { echo "FAIL: $*" >&2; ax dump > "$out/failed-ui.txt" 2>&1 || true; screencapture -x "$out/failed.png" || true; exit 1; }
+ax() { "$axbin" "$exe" "$@"; }
+shot() { sleep 1; screencapture -x "$out/$1.png" || true; }
+: "${PARACHUTE_CORE:?set PARACHUTE_CORE to a parachute-core binary}"
+: "${PAIR_SEND:?set PAIR_SEND to the built pair_send example (cargo build --example pair_send)}"
+keychain() { security find-generic-password -s computer.parachute.app -a nostr-key > /dev/null 2>&1; }
+remove_key() {
+  ax press "Settings" || fail "no Settings"
+  ax press "Remove from this device" || fail "no Remove from this device"
+  ax press "Remove" || fail "no Remove"
+  ax wait "Add your key" 10 || fail "the key wasn't removed"
+  if keychain; then fail "the key is still in the Keychain after Remove"; fi
+  echo "removed: no longer in the Keychain"
+}
+
+say "build the accessibility driver"
+axbin="$RUNNER_TEMP/mac-ax"
+[ -n "${RUNNER_TEMP:-}" ] || axbin=$(mktemp -d)/mac-ax
+swiftc -O -o "$axbin" "$here/mac-ax.swift"
+
+say "a throwaway hub on loopback"
+hub=$(mktemp -d)
+printf 'correct horse battery staple 1' > "$hub/pw"
+export PARACHUTE_HOME="$hub/home"
+"$PARACHUTE_CORE" bootstrap --embedded --home "$PARACHUTE_HOME" --username owner --password-file "$hub/pw" --vault recipes --json > /dev/null
+port=$(node -e 'const s=require("net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')
+vport=$(node -e 'const s=require("net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')
+PARACHUTE_HUB_ORIGIN="http://127.0.0.1:$port" "$PARACHUTE_CORE" serve --embedded --home "$PARACHUTE_HOME" \
+  --listen "127.0.0.1:$port" --vault-listen "127.0.0.1:$vport" > "$hub/serve.log" 2>&1 &
+hubpid=$!
+trap 'kill $hubpid 2>/dev/null || true; rm -rf "$hub"' EXIT
+for _ in $(seq 120); do grep -q "ready: hub" "$hub/serve.log" && break; sleep 0.25; done
+grep -q "ready: hub" "$hub/serve.log" || { cat "$hub/serve.log"; fail "the hub didn't start"; }
+
+say "a throwaway key, linked to the hub's owner"
+# a Nostr key is a secp256k1 secret; its public key is the point's x coordinate (the secret never leaves this shell)
+read -r sk pk < <(node -e 'const e=require("crypto").createECDH("secp256k1");e.generateKeys();console.log(e.getPrivateKey("hex").padStart(64,"0"),e.getPublicKey("hex","compressed").slice(2))')
+PORT=$port "$PARACHUTE_CORE" auth link-pubkey --user owner "$pk" > /dev/null
+
+say "the app, fresh"
+pkill -x "$exe" 2>/dev/null || true
+security delete-generic-password -s computer.parachute.app -a nostr-key >/dev/null 2>&1 || true
+open "$app"
+ax wait "Make a new key" 30 || fail "the first screen didn't show"
+shot 10-key-start
+
+say "paste a secret key"
+ax press "Advanced: paste a secret key" || fail "no paste-a-key section"
+ax type "nsec1…" "$sk" || fail "no secret key field"
+ax press "Keep this key" || fail "no Keep this key"
+# a kept key goes straight on to adding a vault
+ax wait "Sign in with your key" 20 || fail "the key wasn't kept"
+keychain || fail "the key isn't in the login Keychain"
+echo "the key is in the login Keychain (computer.parachute.app / nostr-key)"
+
+say "add the vault and sign in with the key"
+ax type "Vault address" "http://127.0.0.1:$port/vault/recipes" || fail "no vault address field"
+shot 12-add-vault
+ax press "Sign in with your key" || fail "no Sign in with your key"
+sleep 4
+shot 13-hub-consent
+ax dump > "$out/13-hub-consent-ui.txt" 2>&1 || true
+pressed=
+for b in Allow Approve Authorize Continue "Allow access"; do
+  if ax press "$b" 2>/dev/null; then pressed=$b; break; fi
+done
+[ -n "$pressed" ] || fail "no way to allow on the hub's page"
+echo "pressed \"$pressed\" on the hub's page"
+ax wait "recipes" 30 || fail "the vault didn't open"
+sleep 2
+shot 14-vault
+ax dump > "$out/14-vault-ui.txt" 2>&1 || true
+
+say "remove the key, make a new one"
+remove_key
+ax press "Add your key" || fail "no Add your key"
+ax press "Make a new key" || fail "no Make a new key"
+ax wait "Continue" 20 || fail "no new key"
+keychain || fail "the new key isn't in the login Keychain"
+echo "the new key is in the login Keychain"
+shot 15-new-key
+ax press "Continue"
+
+say "remove it, pair a key from another device by pasting its link"
+remove_key
+"$PAIR_SEND" > "$hub/pair.log" 2>&1 &
+sendpid=$!
+trap 'kill $hubpid $sendpid 2>/dev/null || true; rm -rf "$hub"' EXIT
+line() { sed -n "s/^$1 //p" "$hub/pair.log" | head -1; }
+for _ in $(seq 40); do [ -n "$(line link)" ] && break; sleep 0.25; done
+link=$(line link)
+[ -n "$link" ] || { cat "$hub/pair.log"; fail "the sender gave no link"; }
+ax press "Add your key" || fail "no Add your key"
+ax press "Pair from a device that has your key" || fail "no Pair from a device"
+ax type "Pairing link" "$link" || fail "no Pairing link field"
+ax press "Start" || fail "no Start"
+for _ in $(seq 80); do [ -n "$(line sas)" ] && break; sleep 0.25; done
+sas=$(line sas)
+[ -n "$sas" ] || { cat "$hub/pair.log"; fail "the app never answered the sender"; }
+# the code as the screen reads it out ("Code 1 2 3 4 5 6")
+ax wait "Code $(echo "$sas" | sed 's/./& /g; s/ $//')" 20 || fail "the app doesn't show the sender's code $sas"
+echo "both show $sas"
+shot 16-pair-code
+ax press "The codes match" || fail "no The codes match"
+for _ in $(seq 120); do grep -qx done "$hub/pair.log" && break; sleep 0.25; done
+grep -qx done "$hub/pair.log" || { cat "$hub/pair.log"; fail "the app didn't say it kept the key"; }
+keychain || fail "the paired key isn't in the login Keychain"
+ax press "Settings" || fail "no Settings"
+ax wait "$(line npub)" 10 || fail "Settings doesn't show the paired key"
+echo "paired: the sender's key is the app's key, in the Keychain"
+shot 17-paired-key
+
+pkill -x "$exe" || true
+say "ok: pasted, new and paired keys each kept in the Keychain and removed; signed in to a hub with a key; vault open"
