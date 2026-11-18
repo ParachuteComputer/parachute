@@ -28,6 +28,12 @@ One model, everywhere.
 Long-press (or right-click) an applet in the launcher: **Pin to the bar** or **Unpin**, and **Open on start**.
 Long-press a place on the bar: **Move left**, **Move right**, **Unpin**, **Open on start**.
 
+## A running applet's menu
+
+The top bar's **⋯** on a running applet opens its menu: how it runs (sealed, or approved code only), the note in the
+vault view when it was handed one, **Stop**, **Revoke** and **Settings**. Nothing sits between the bar and the applet.
+Stopped or still asking, ⋯ goes to Settings as on every other screen.
+
 ## Home
 
 Any applet in a vault of yours can be your **home** (an applet in someone else's vault never opens by itself:

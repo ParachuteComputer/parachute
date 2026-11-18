@@ -92,3 +92,9 @@ export async function installApplet(name: string, vars: Record<string, string> =
   } catch (e) { await remove(); throw e; }
   return { id: made[made.length - 1], remove };
 }
+
+/** A running applet's Stop or Revoke: in the bar's menu (⋯), as the person reaches them. */
+export async function fromAppletMenu(page: Page, choice: "Stop" | "Revoke") {
+  await page.locator("header.bar").getByRole("button", { name: "Menu" }).click();
+  await page.getByRole("dialog", { name: /menu$/ }).getByRole("button", { name: choice, exact: true }).click();
+}

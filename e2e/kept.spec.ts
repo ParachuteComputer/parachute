@@ -2,7 +2,7 @@
 // once; hidden, it is told so and gets no tap; shown again, its note is read again, so changed code asks on the card.
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, record, VAULT } from "./hub";
-import { ui } from "./helpers";
+import { fromAppletMenu, ui } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame:visible");
@@ -78,7 +78,7 @@ test("an applet that is stopped or asking is not kept: back to it is as before",
     await page.goBack();
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(frame(page).locator("#booted")).toBeVisible();
-    await page.getByRole("button", { name: "Stop" }).click();
+    await fromAppletMenu(page, "Stop");
     await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Launcher" }).click();
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await page.goBack();
