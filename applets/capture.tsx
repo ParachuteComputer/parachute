@@ -4,7 +4,11 @@
 // attached with transcribe asked (vault.attach): the hub puts the words in place of the marker. Below the box, the
 // latest captures; a tap opens one in the app, where it can be edited.
 import { useEffect, useRef, useState } from "react";
-import { Empty, Link, link, ready, vault, voice } from "parachute";
+import { Empty, Link as KitLink, link as kitLink, ready, vault, voice } from "parachute";
+
+// an app from before note links has no Link or link (src/kit/olderApp.test.ts): there a capture's name is plain text
+const Link: (p: { to: string; children?: unknown }) => unknown = KitLink ?? ((p: { children?: unknown }) => p.children);
+const link: { to: (r: Rec) => Promise<string> } = kitLink ?? { to: async () => "" };
 
 type Rec = { id: string; path: string; updatedAt: string | null; createdAt?: string | null; body?: string };
 const PENDING = "_Transcript pending._";
