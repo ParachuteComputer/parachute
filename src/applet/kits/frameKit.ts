@@ -6,6 +6,9 @@
 //                                      `open`: {note: {id, path}, screen} when the app opened a note in this applet.
 //                                      The Uni app never sends it: an applet must work without it.
 //   uni.onOpen(cb)                   → cb({note, screen}) now (if the app opened a note) and whenever it opens another.
+//   uni.shown() / uni.onShown(cb)    → whether it is on screen; cb(true|false) when that changes. The app keeps an applet
+//                                      running while the person is elsewhere (shell/kept.tsx); hidden, it gets no tap,
+//                                      and what only a person looking should do (mark a message read) waits.
 //   uni.frameFetch(url, init)        → fetch over the frame (pfr envelope), what VaultClient uses
 //   uni.VaultClient / uni.vault      → surface-client's VaultClient on frameFetch, with the record-worded calls
 //                                      queryRecords/getRecord/createRecord/updateRecord (body, fields) beside its own
@@ -29,7 +32,7 @@
 
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
-  var svcSubs = {}, svcStatus = [], launchCbs = [];
+  var svcSubs = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [];
   var measuring = false, lastHeight = -1, queued = false;
   var readyP = new Promise(function (r) { readyRes = r; });
   // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen
@@ -99,6 +102,8 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "ready") {
       if (m.data && m.data.theme) applyTheme(m.data.theme);
       if (m.data && m.data.props) applyProps(m.data.props);
+      // booted while hidden: what read shown() before ready (a component's first render) hears the change
+      if (m.data && typeof m.data.shown === "boolean" && m.data.shown !== shownNow) { shownNow = m.data.shown; shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); }
       readyRes(m.data);
       if (m.data && m.data.open) applyOpen(m.data.open);
       if (m.data && m.data.page && (m.data.page.sized || m.data.page.embeds)) startMeasuring();
@@ -108,6 +113,7 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "theme") { applyTheme(m.data); return; }
     if (m.event === "open") { applyOpen(m.data); return; }
     if (m.event === "launch") { launchCbs.slice().forEach(function (f) { try { f(m.data); } catch (e) {} }); return; }
+    if (m.event === "shown") { shownNow = !!(m.data && m.data.shown); shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); return; }
     if (m.event === "services.events") {
       var d = m.data || {}, h = svcSubs[d.service + "|" + d.sub];
       if (h) { if (d.events && d.events.length) { h.tries = 0; try { h.onEvents(d.events); } catch (e) {} } if (d.eose && h.onEose) { try { h.onEose(); } catch (e) {} } }
@@ -183,6 +189,12 @@ export const FRAME_KIT = String.raw`(function () {
       launchCbs.push(cb);
       readyP.then(function (d) { if (d && d.launch) { try { cb(d.launch); } catch (e) {} } });
       return function () { var i = launchCbs.indexOf(cb); if (i >= 0) launchCbs.splice(i, 1); };
+    },
+    shown: function () { return shownNow; },
+    onShown: function (cb) {
+      if (typeof cb !== "function") throw new TypeError("onShown needs a function");
+      shownCbs.push(cb);
+      return function () { var i = shownCbs.indexOf(cb); if (i >= 0) shownCbs.splice(i, 1); };
     },
     onOpen: function (cb) {
       if (typeof cb !== "function") throw new TypeError("onOpen needs a function");

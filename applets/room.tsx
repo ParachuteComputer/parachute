@@ -8,13 +8,30 @@
 //   room     the room's id (its NIP-29 h)
 //   at       optional: a message's id to open at, scrolled to and marked (a notification's tap, a search hit)
 //   readAt   optional: when you last read the room (unix seconds), for the "New" line
-//   onRead   optional: called with the newest message's time while the room is open (the importer keeps read state)
+//   onRead   optional: called with the newest message's time while the room is open and looked at (the importer keeps
+//            read state): not while the app is in the background or the applet is kept hidden (useLooking)
 //   onBack   optional: a "← Rooms" link back to the importer's list
 // Which key is Uni's is the service's own declaration (ready().services: approvals.from, else notify.from): without
 // one there is no turn line, no Stop and no listening switch. Its named exports (the store, the cards' readers, the
 // time words) are for the importer's own list.
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { app, ready, services, storage, voice } from "parachute";
+import { app, onShown, ready, services, shown as onScreen, storage, voice } from "parachute";
+
+/** Whether a person can be looking: the applet on screen (the app keeps it running while hidden, kit `shown`/`onShown`,
+ *  imported as onScreen: `shown` below is the media cache's) and the app in front. What is new is read only then. An
+ *  older app without them counts as on screen. */
+export function useLooking() {
+  const now = () => (typeof onScreen === "function" ? onScreen() : true) && document.visibilityState === "visible";
+  const [looking, setLooking] = useState(now);
+  useEffect(() => {
+    const f = () => setLooking(now());
+    const off = typeof onShown === "function" ? onShown(f) : () => {};
+    document.addEventListener("visibilitychange", f);
+    f(); // what changed between the first render and here (a ready that said hidden)
+    return () => { off(); document.removeEventListener("visibilitychange", f); };
+  }, []);
+  return looking;
+}
 
 /** The relay service this room is on, for everything drawn inside it (files, cards, uploads). */
 const Svc = createContext("rooms");
@@ -526,8 +543,10 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     placed.current = true;
     if (el && scroller.current) { scroller.current.scrollTop = Math.max(0, el.offsetTop - scroller.current.clientHeight / 3); atBottom.current = false; } else toBottom();
   }, [loaded, thread]);
-  // new posts while it is open are read, and followed when you are at the foot
-  useEffect(() => { if (!newest || !loaded) return; onReadNow.current?.(newest.created_at); if (atBottom.current) toBottom(); }, [newest?.id, loaded]);
+  // new posts while it is open are read while you can see them (not while the app or the applet is hidden), and followed
+  // when you are at the foot
+  const looking = useLooking();
+  useEffect(() => { if (!newest || !loaded || !looking) return; onReadNow.current?.(newest.created_at); if (atBottom.current) toBottom(); }, [newest?.id, loaded, looking]);
 
   const loadOlder = async () => {
     setOlder("loading");

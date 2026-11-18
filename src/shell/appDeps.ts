@@ -11,10 +11,17 @@ import { barNow } from "./homeSettings";
 /** Notes that are the app's own or an applet's code: never in a list of what the person wrote lately. */
 const own = (n: Note) => isAppOwn(n as Note & { extension?: string });
 
+/** Its frame is on screen: in the page and drawn (a kept applet's, hidden, is not: shell/kept.tsx). */
+export const onScreen = (f: HTMLIFrameElement) => f.isConnected && f.getClientRects().length > 0;
+
 /** A tap in this applet now: live user activation in the shell's window, with the focus in this applet's own frame (not
- *  any frame: an embed's, or another applet's, docs/design/EMBED.md). */
-export const tappingIn = (frame: () => HTMLIFrameElement | null) => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true
-  && !!frame() && document.activeElement === frame();
+ *  any frame: an embed's, or another applet's, docs/design/EMBED.md), and that frame on screen. */
+export const tappingIn = (frame: () => HTMLIFrameElement | null) => {
+  const f = frame();
+  // on screen too: a kept applet, hidden (shell/kept.tsx), gets no tap however its frame came to hold the focus
+  return (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true
+    && !!f && onScreen(f) && document.activeElement === f;
+};
 
 /** The shell's own picker sheet (views/DeviceSheets.tsx). */
 export type Picker = { pick(accept: string[], multiple: boolean): Promise<PickedFile[]> };

@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SecretView } from "../services/native";
 import type { Shell } from "../services/broker";
+import { onScreen } from "../shell/appDeps";
 
 type Asking = { view: SecretView; done: (value: string | null) => void };
 
@@ -13,7 +14,8 @@ export function useTapOnce(frame: () => HTMLIFrameElement | null) {
   const spent = useRef(-Infinity);
   return useCallback(() => {
     const active = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true;
-    if (!active || !frame() || document.activeElement !== frame()) return false;
+    const f = frame();
+    if (!active || !f || !onScreen(f) || document.activeElement !== f) return false;
     const t = performance.now();
     if (t - spent.current < 5000) return false;
     spent.current = t;
@@ -63,7 +65,9 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
   const shell: Shell = {
     tap,
     secret: (view) => new Promise((done) => {
-      if (open.current) { done(null); return; }
+      // one at a time, and never for a screen that is hidden (kept running, shell/kept.tsx): it would wait there unseen
+      const f = frame();
+      if (open.current || !f || !onScreen(f)) { done(null); return; }
       const a = { view, done: (x: string | null) => { open.current = null; setAsking(null); done(x); } };
       open.current = a;
       setAsking(a);
@@ -74,5 +78,7 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
     {asking && <SecretSheet asking={asking} onDone={asking.done} />}
     {line && <p className="shell-line" role="status">{line}</p>}
   </>;
-  return { shell, ui };
+  // the screen hid (kept running, shell/kept.tsx): an open sheet answers "cancelled", as when the screen goes
+  const cancel = () => { open.current?.done(null); };
+  return { shell, ui, cancel };
 }

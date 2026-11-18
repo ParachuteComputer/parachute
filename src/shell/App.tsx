@@ -18,6 +18,7 @@ import KeyStart from "../key/KeyStart";
 import Pair from "../key/Pair";
 import { keysHere, useKey } from "../key/key";
 import BottomBar from "./BottomBar";
+import { keptId, KeptApplets } from "./kept";
 import { atFirstEntry } from "../ui/history";
 import { startPlace } from "./start";
 import { readSettings } from "./homeSettings";
@@ -57,8 +58,8 @@ function ThemeWatch() {
   return null;
 }
 
-/** One applet screen per history entry: a move from one applet address to another (a link from outside while an
- *  applet runs) is a new screen with nothing carried over, so it starts only if a tap led to it. */
+/** An applet address that hands it a note (?note=, ?screen=): one screen per history entry, a new screen with nothing
+ *  carried over, so it starts only if a tap led to it. An applet's own address is a kept screen (kept.tsx). */
 function AppletRoute() {
   const location = useLocation();
   return <AppletScreen key={location.key} />;
@@ -103,6 +104,7 @@ function ShellRoutes() {
     || (location.pathname === "/" && !vaults.length);
   if (!decided) return null;
   const bar = withBar(location.pathname, shell) && vaults.length > 0;
+  const own = keptId(location) !== null;
   return (
     <div className={bar ? "with-bar" : undefined}>
       {shell && <Routes>
@@ -111,13 +113,15 @@ function ShellRoutes() {
         <Route path="/key" element={<KeyStart />} />
         <Route path="/key/pair" element={<Pair />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
-        <Route path="/v/:vault/a/:applet" element={<AppletRoute />} />
+        <Route path="/v/:vault/a/:applet" element={own ? null : <AppletRoute />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/open-link" element={<OpenLink />} />
       </Routes>}
       {/* the frame exists only while it is shown: hidden, it would keep its bridge (and a tap on a shell screen would
           count for it), and at boot it would learn the shell's address (a sign-in's return carries its code there) */}
       {!shell && <FrameArea />}
+      {/* applets at their own address, and the ones kept running while hidden (kept.tsx), whatever is shown */}
+      {vaults.length > 0 && <KeptApplets active={own} />}
       {bar && <BottomBar />}
     </div>
   );
