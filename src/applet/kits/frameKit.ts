@@ -29,6 +29,7 @@
 // frame `page: {sized: true}`: the kit then reports the frame's content height (`page.layout`), and nothing else. The
 // shell sets the frame's height from it; the embeds sit under the host's content.
 // In-page #anchor links scroll in place.
+// Calls and frame-fetches wait in one line, 8 out at once (the shell's limit); a busy refusal is tried again, unseen.
 
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
@@ -40,14 +41,51 @@ export const FRAME_KIT = String.raw`(function () {
   // bytes as an ArrayBuffer (what the shell takes), from an ArrayBuffer or a view of one
   function buf(b) { return b instanceof ArrayBuffer ? b : b && ArrayBuffer.isView(b) ? b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) : null; }
   function post(m) { parent.postMessage(m, "*"); }
-  function timeout(table, id, rej, ms) { setTimeout(function () { if (table[id]) { delete table[id]; rej(new Error("timeout")); } }, ms || 20000); }
+  // The shell holds 8 of a frame's calls waiting at once (src/applet/contract.ts LIMITS.maxPending) and refuses the
+  // rest. So the kit sends at most 8 and keeps the others in line; a refusal for being busy (too many waiting, too many
+  // in ten seconds) goes back in line after a short wait, within the call's own time. An applet never sees one.
+  var MAX_OUT = 8, line = [], out = 0;
+  // what the person is waiting on goes ahead of the line: a tap's call (it needs the tap still fresh), a post, the
+  // frame's height
+  var FIRST = { "app.openLink": 1, "app.save": 1, "app.pick": 1, "app.open": 1, "voice.record": 1, "services.publish": 1, "page.layout": 1 };
+  function pump() {
+    while (out < MAX_OUT && line.length) {
+      var j = line.shift(); if (j.table[j.id] !== j) continue;
+      j.out = true; out++;
+      if (!j.timed) { j.timed = true; timeout(j.table, j.id, j.rej, j.ms); }
+      post(j.msg);
+    }
+  }
+  function send(table, id, msg, ms, res, rej, first) {
+    var j = { table: table, id: id, msg: msg, ms: ms, res: res, rej: rej, tries: 0, out: false, timed: false };
+    table[id] = j;
+    if (first) line.unshift(j); else line.push(j);
+    pump();
+  }
+  // its answer came: the slot is free; a busy refusal waits a little and goes again (true), else it is settled
+  function answered(j, busy) {
+    if (j.out) { j.out = false; out--; }
+    if (busy) {
+      j.tries++;
+      setTimeout(function () { if (j.table[j.id] === j) { line.unshift(j); pump(); } }, Math.min(2000, 100 * Math.pow(2, j.tries)));
+    } else delete j.table[j.id];
+    pump();
+    return busy;
+  }
+  function timeout(table, id, rej, ms) {
+    setTimeout(function () {
+      var j = table[id]; if (!j) return;
+      delete table[id];
+      if (j.out) { j.out = false; out--; pump(); }
+      rej(new Error("timeout"));
+    }, ms || 20000);
+  }
   function call(ns, method, params) {
     return new Promise(function (res, rej) {
-      var id = "k" + (++n); pending[id] = { res: res, rej: rej };
-      post({ uni: 1, id: id, ns: ns, method: method, params: params || {} });
+      var id = "k" + (++n);
       // a server can take a while (an upload, a relay's history): services calls wait longer; so do the person (a
       // recording of up to 10 minutes, a file being chosen) and a file going out
-      timeout(pending, id, rej, ns === "services" ? 120000 : WAITS[ns + "." + method] || 20000);
+      send(pending, id, { uni: 1, id: id, ns: ns, method: method, params: params || {} }, ns === "services" ? 120000 : WAITS[ns + "." + method] || 20000, res, rej, FIRST[ns + "." + method] === 1);
     });
   }
   function applyTheme(t) {
@@ -94,7 +132,8 @@ export const FRAME_KIT = String.raw`(function () {
     if (e.source !== parent) return;
     var m = e.data; if (!m || typeof m !== "object") return;
     if (m.pfr === 1) {
-      var f = fetches[m.id]; if (!f) return; delete fetches[m.id];
+      var f = fetches[m.id]; if (!f) return;
+      if (answered(f, m.status === 429 && (m.statusText === "too_many_pending" || m.statusText === "rate_limited"))) return;
       try { f.res(new Response(m.body, { status: m.status, statusText: m.statusText, headers: m.headers })); } catch (err) { f.rej(err); }
       return;
     }
@@ -128,7 +167,9 @@ export const FRAME_KIT = String.raw`(function () {
       svcStatus.slice().forEach(function (f) { try { f(st); } catch (e) {} });
       return;
     }
-    var p = pending[m.id]; if (!p) return; delete pending[m.id];
+    var p = pending[m.id]; if (!p) return;
+    // the shell's own refusals carry only their code; a module's (one file a second) carries its words and stands
+    if (answered(p, !!m.error && (m.error.code === "too_many_pending" || (m.error.code === "rate_limited" && (m.error.message || "rate_limited") === "rate_limited")))) return;
     if (m.error) { var er = new Error(m.error.message || m.error.code); er.code = m.error.code; p.rej(er); } else p.res(m.result);
   });
   function frameFetch(input, init) {
@@ -141,9 +182,8 @@ export const FRAME_KIT = String.raw`(function () {
       if (h && typeof h.forEach === "function") h.forEach(function (v, k) { headers[k] = String(v); });
       else if (h) Object.keys(h).forEach(function (k) { headers[k] = String(h[k]); });
       delete headers.Authorization; delete headers.authorization;
-      var id = "f" + (++n); fetches[id] = { res: res, rej: rej };
-      post({ pfr: 1, channel: "vault", id: id, method: String(init.method || "GET"), path: u.pathname + u.search, headers: headers, body: typeof init.body === "string" ? init.body : null });
-      timeout(fetches, id, rej);
+      var id = "f" + (++n);
+      send(fetches, id, { pfr: 1, channel: "vault", id: id, method: String(init.method || "GET"), path: u.pathname + u.search, headers: headers, body: typeof init.body === "string" ? init.body : null }, 20000, res, rej, false);
     });
   }
   // In a srcdoc frame a bare "#section" link resolves against the *host's* URL, so the browser would navigate the
@@ -157,14 +197,14 @@ export const FRAME_KIT = String.raw`(function () {
     var t = id ? document.getElementById(id) || document.getElementsByName(id)[0] : null;
     if (t) t.scrollIntoView(); else if (!id) window.scrollTo(0, 0);
   }, true);
-  // subscriptions, sent a few dozen to a request (a rooms applet holds one a room), each made again after a refusal
-  // (a rate limit, a relay's CLOSED) with a growing wait while its handler is still there
+  // subscriptions, sent a few dozen to a request (a rooms applet holds one a room), each made again after a timeout or
+  // a relay's CLOSED with a growing wait while its handler is still there
   function sendSubs(service, list) {
     for (var i = 0; i < list.length; i += 25) (function (part) {
       call("services", "subscribe", { service: service, subs: part.map(function (x) { return { sub: x, filters: svcSubs[service + "|" + x].filters }; }) })
         .catch(function (e) {
-          // a wait (a rate limit, a busy frame, a timeout) is tried again; a refusal is the applet's to hear
-          var transient = e && (e.code === "rate_limited" || e.code === "too_many_pending" || e.message === "timeout");
+          // a timeout is tried again (the kit already waits out a busy shell); a refusal is the applet's to hear
+          var transient = e && e.message === "timeout";
           part.forEach(function (x) {
             if (transient) { again(service, x); return; }
             delete svcSubs[service + "|" + x];

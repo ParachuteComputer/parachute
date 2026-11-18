@@ -5,8 +5,9 @@
 import { originOf } from "../vault/store";
 import type { VaultClient } from "@openparachute/surface-client";
 import { RateLimiter } from "../applet/contract";
-import { allowedDestination, parseRequest, PF, type Events, type FrameApplets, type FrameHome, type FrameComponents, type FramePointer, type FrameVault, type Decided, type Method, type Query } from "../bridge/protocol";
+import { allowedDestination, FRAME_LIMITS, parseRequest, PF, type Events, type FrameApplets, type FrameHome, type FrameComponents, type FramePointer, type FrameVault, type Decided, type Method, type Query } from "../bridge/protocol";
 import type { VaultRecord } from "../vault/store";
+export { FRAME_LIMITS };
 
 export type HostDeps = {
   vaults(): VaultRecord[];
@@ -43,8 +44,6 @@ export type HostDeps = {
   now?: () => number;
 };
 
-/** How much a frame may ask: calls waiting at once, and calls in a ten-second window. */
-export const FRAME_LIMITS = { pending: 32, perWindow: 300, windowMs: 10_000 };
 /** The addresses a link out may open: the web, mail and phone. */
 export const LINK_OUT = /^(https?:\/\/|mailto:|tel:)/i;
 

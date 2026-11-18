@@ -3,8 +3,9 @@
 // BUZZ_KEYS a folder with owner.hex (the relay's owner), alice.hex and bob.hex. Each run makes its own two rooms.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { deflateSync } from "node:zlib";
 import { expect, test, type Page } from "@playwright/test";
-import { getPublicKey } from "nostr-tools/pure";
+import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { VAULT } from "./hub";
 import { installApplet, ui } from "./helpers";
 import { person } from "./services/client";
@@ -14,6 +15,14 @@ const KEYS = process.env.BUZZ_KEYS ?? "";
 test.skip(!RELAY || !KEYS, "needs our Buzz relay (BUZZ_RELAY, BUZZ_KEYS): e2e/services/README.md");
 test.use({ storageState: "e2e/.signed-in.json" });
 
+/** A small picture of its own colour (a PNG with nothing else in it), so each is a file of its own. */
+function swatch(n: number): Buffer {
+  const crc = (b: Buffer) => { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); } return ~c >>> 0; };
+  const chunk = (type: string, data: Buffer) => { const t = Buffer.from(type), len = Buffer.alloc(4), sum = Buffer.alloc(4); len.writeUInt32BE(data.length); sum.writeUInt32BE(crc(Buffer.concat([t, data]))); return Buffer.concat([len, t, data, sum]); };
+  const w = 16, ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(w, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: w }, () => [n * 20 % 256, 120, 255 - n * 20 % 256]).flat())]);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(Buffer.concat(Array(w).fill(row)))), chunk("IEND", Buffer.alloc(0))]);
+}
 const secret = (n: string) => readFileSync(join(KEYS, `${n}.hex`), "utf8").trim();
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
 
@@ -385,6 +394,78 @@ test("a room opens at once from what the list holds, at its foot once its own re
     await expect(app.getByRole("log")).toContainText(`Yard note 3 ${stamp}`, { timeout: 15_000 });
     await expect.poll(fromFoot, { timeout: 5_000 }).toBeGreaterThan(left - 60);
     expect(await fromFoot()).toBeLessThan(left + 60);
+  } finally {
+    await made.remove();
+    bob.close();
+  }
+});
+
+test("in twenty-six rooms, a room full of asks and pictures opens and reads: nothing is refused for being too busy", async ({ page }) => {
+  test.setTimeout(360_000);
+  // her own key for this test: exactly these rooms, however many earlier runs left on the relay
+  const hers = Buffer.from(generateSecretKey()).toString("hex");
+  const alice = getPublicKey(Uint8Array.from(Buffer.from(hers, "hex")));
+  const bob = await person(RELAY!, secret("bob"));
+  const stamp = Date.now().toString(36);
+  const owner = await person(RELAY!, secret("owner"));
+  // under the relay's ten a second, and its sixty a minute for one key (a refusal names its wait)
+  const send = async (who: typeof bob, ev: { kind: number; content?: string; tags: string[][] }) => {
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 120));
+      const r = await who.publish(ev);
+      const wait = /retry in (\d+)s/.exec(r.msg)?.[1];
+      if (r.ok || !wait) return r;
+      await new Promise((res) => setTimeout(res, Number(wait) * 1000 + 500));
+    }
+  };
+  for (const p of [alice, bob.pubkey]) await owner.publish({ kind: 9030, tags: [["p", p]] });
+  // twenty-five quiet rooms, and one that wants a lot of her
+  const rooms = [...Array.from({ length: 25 }, (_, i) => ({ id: crypto.randomUUID(), name: `Plot ${i + 1} ${stamp}` })), { id: crypto.randomUUID(), name: `Asks ${stamp}` }];
+  for (const r of rooms) {
+    expect((await send(owner, { kind: 9007, tags: [["h", r.id], ["name", r.name], ["about", "a plot in the garden"], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+    expect((await send(owner, { kind: 9000, tags: [["h", r.id], ["p", alice], ["p", bob.pubkey]] })).ok).toBe(true);
+  }
+  owner.close();
+  // each ask is a card the shell checks, each picture a file it fetches: all asked for the moment the room is drawn
+  const asks = rooms[25].id, until = Math.floor(Date.now() / 1000) + 3600;
+  for (let i = 1; i <= 12; i++) {
+    const pic = await bob.upload(swatch(i), "image/png");
+    expect((await send(bob, { kind: 9, content: `Ask ${i}\n\n\`\`\`uni-ask\n${JSON.stringify({ v: 1, kind: "choose", what: `Which bed for row ${i}?`, why: "Planting week.", until, options: [{ id: "north", label: "North bed" }, { id: "south", label: "South bed" }] })}\n\`\`\``, tags: [["h", asks], ["p", alice]] })).ok).toBe(true);
+    expect((await send(bob, { kind: 9, content: `Row ${i}: ![image](${pic.url})`, tags: [["h", asks], ["imeta", `url ${pic.url}`, "m image/png", `x ${pic.sha256}`, `size ${pic.size}`, `filename row-${i}.png`, `alt row ${i}`]] })).ok).toBe(true);
+  }
+  await new Promise((r) => setTimeout(r, 1100));
+  expect((await send(bob, { kind: 9, content: `The newest line ${stamp}`, tags: [["h", asks]] })).ok).toBe(true);
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, hers);
+  // a phone's distance from the relay: each read and each file a moment late, so the calls overlap as they do there
+  await page.routeWebSocket((url) => url.href.startsWith(RELAY!), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((m) => { if (String(m).startsWith('["REQ"')) setTimeout(() => server.send(m), 800); else server.send(m); });
+  });
+  await page.route((url) => url.href.startsWith(RELAY!.replace(/^ws/, "http") + "/media/"), async (route) => { await new Promise((r) => setTimeout(r, 800)); await route.continue(); });
+  const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
+  try {
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = frame(page);
+    const list = app.getByRole("list", { name: "Your rooms" });
+    const row = list.getByRole("button", { name: new RegExp(`Asks ${stamp}`) });
+    await expect(row).toContainText(`The newest line ${stamp}`, { timeout: 60_000 });
+    await expect(list.getByRole("button", { name: new RegExp(`Plot 25 ${stamp}`) })).toBeVisible();
+    await expect(app.getByRole("status")).toHaveCount(0); // no "Couldn't read your rooms"
+    // in at once, drawn from what the list holds: every card and picture asks the shell at the same moment as the room's read
+    await row.click();
+    const log = app.getByRole("log");
+    await expect(log.getByRole("group", { name: /Wants you: Which bed for row 12/ })).toBeVisible({ timeout: 30_000 });
+    await expect(log.getByRole("group", { name: /Wants you: Which bed for row 1\?/ })).toBeVisible();
+    // what a phone showed: "Couldn't read the room: too_many_pending", and pictures "unavailable"
+    await expect(log.locator("img")).toHaveCount(12, { timeout: 30_000 });
+    await expect(log.getByText("Image unavailable")).toHaveCount(0);
+    await expect(app.getByText(/Couldn't read the room/)).toHaveCount(0);
+    // and the room is live: its own read and subscription went through
+    await send(bob, { kind: 9, content: `After it opened ${stamp}`, tags: [["h", asks]] });
+    await expect(log).toContainText(`After it opened ${stamp}`, { timeout: 15_000 });
+    await expect(app.getByText(/Couldn't read the room|too_many_pending|rate_limited/)).toHaveCount(0);
   } finally {
     await made.remove();
     bob.close();

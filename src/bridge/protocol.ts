@@ -13,6 +13,9 @@ import type { Note } from "@openparachute/surface-client";
 import type { Opens } from "../applet/opens.ts";
 
 export const PF = 1;
+/** How much a frame may ask: calls waiting at once, and calls in a ten-second window. The shell refuses past them
+ *  (shell/frameBridge.ts); the frame keeps its calls within them (frame/bridge.ts). */
+export const FRAME_LIMITS = { pending: 32, perWindow: 300, windowMs: 10_000 };
 
 /** A vault as the frame sees it: no token, no client id, nothing to sign in with. `whose` (vault/whose.ts): mine,
  *  someone else's, or someone else's that the person trusts; `home`: the person's home vault. */
