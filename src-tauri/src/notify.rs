@@ -10,7 +10,8 @@
 //! `notify` names one; `push_register` signs the registration (NIP-98, only to that gateway, only this request's shape)
 //! and sends it with the endpoint and push keys the phone's UnifiedPush distributor gave `PushService.kt` for that
 //! gateway (one UnifiedPush instance per gateway, so no gateway learns another's endpoint and keys). The
-//! foreground service is the fallback for a phone without a distributor, off unless the person turns it on.
+//! foreground service is the fallback for what no push service delivers (no distributor installed): on unless the
+//! person turns it off, and idle while push serves everything.
 //!
 //! Desktop: not in this step; `notify_set` answers that it is Android only.
 

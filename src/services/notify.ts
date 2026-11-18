@@ -60,7 +60,7 @@ export type PushStatus = {
   distributor?: string | null;
   /** Some gateway's push instance has an endpoint (each gateway gets its own, asked for when it registers). */
   endpoint?: boolean;
-  /** "Listen without a push service": the foreground listener, off unless turned on. */
+  /** Parachute's own connection for what no push service delivers: on unless the person turned it off. */
   fallback?: boolean;
   registered?: { gateway: string; relay: string }[];
 };

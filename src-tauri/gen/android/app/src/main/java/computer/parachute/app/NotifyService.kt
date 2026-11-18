@@ -71,8 +71,10 @@ class NotifyService : Service() {
 
     fun save(ctx: Context, entries: String): Boolean = prefs(ctx).edit().putString("entries", entries).commit()
 
-    /** "Listen without a push service": off unless the person turns it on (Settings). */
-    fun fallbackOn(ctx: Context): Boolean = prefs(ctx).getBoolean("fallback", false)
+    /** Parachute's own connection, for what no push service delivers (a phone without a distributor: GrapheneOS with
+     *  nothing installed yet). On unless the person turns it off in Settings: what push serves it leaves alone
+     *  (`listening`), so with a push service working it isn't running at all. */
+    fun fallbackOn(ctx: Context): Boolean = prefs(ctx).getBoolean("fallback", true)
 
     fun setFallback(ctx: Context, on: Boolean): Boolean = prefs(ctx).edit().putBoolean("fallback", on).commit()
 

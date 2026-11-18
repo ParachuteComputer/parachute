@@ -257,14 +257,33 @@ the phone uses now (after a key switch the old key's registration lives out its 
 allowed applet that asked and shows "A message for you in <room>" through the one notification
 path (`MessageNotices.kt`, shared with the fallback below); a tap opens `parachute://notify?subject=…&room=…&event=…`.
 
-**The fallback.** For a phone without a distributor, Settings says "Install ntfy (F-Droid) to get notifications while
-Parachute is closed" and offers "Listen without a push service (uses more battery)", off by default: the foreground
-service with its own relay connection (KEYRING.md). It serves only what no push registration serves, never both for
-one applet. It doesn't verify event signatures before matching: the relay the person signed in to is trusted for what it
+**The fallback.** For a phone without a working distributor (a de-Googled phone with nothing installed yet, or one whose
+distributor was removed), Parachute keeps its own connection: the foreground service with its own relay connection
+(KEYRING.md), on unless the person turns it off, so notifications work from the first minute. Settings says it costs
+battery and offers **Get ntfy** (its F-Droid page) first. It serves only what no push registration serves, never both
+for one applet: once ntfy delivers, it has nothing left to listen for and stops. Its notifications may show the message's first
+words ("Bob in Garden: …"): it reads them from the relay itself, on the phone, so no third party carries them; a push
+never carries words. It doesn't verify event signatures before matching: the relay the person signed in to is trusted for what it
 sends there (a hostile relay could raise a notification that opens the applet at a message id; the applet then reads
 that message from the relay itself).
 
 **Desktop.** Nothing while closed: the app notifies only while it runs (PARITY.md).
+
+**Order (Aaron, 11-17: GrapheneOS first).** Built and proven now: UnifiedPush through ntfy against our own ntfy, and
+the app's own connection. Later, each one more sender in the gateway (`services/push-gateway/src/push.ts` sends to a
+registration's endpoint; a registration gains a `transport`, `unifiedpush` today), each optional server config, the
+gateway still running with no Google or Apple credentials at all for people who don't want them, and every path carrying
+the same sealed blob (wake, room, kind: never words), so Google and Apple see only ciphertext:
+
+- **Google phones (FCM).** Aaron creates a Firebase project and an Android app in it for `computer.parachute.app`. The
+  app's build gets its four public values (API key, app id, project id, sender id) as build env, without the
+  google-services plugin; the gateway gets a service account JSON with the "Firebase Cloud Messaging API Admin" role
+  (HTTP v1 API, OAuth2 from that JSON). On a phone with Google Play services FCM would be the default, nothing to install;
+  on one without, UnifiedPush as now.
+- **Apple (APNs).** Aaron's Apple Developer account (paid) gives: the Team ID; an APNs auth key (a .p8 file) and its Key
+  ID; the app's bundle id (the topic); sandbox for development builds, production for TestFlight/App Store. The gateway
+  holds the .p8 and signs ES256 tokens; an iOS build (none yet) would register its device token with the gateway and
+  decrypt the blob in a Notification Service Extension. The Mac keeps its own connection while running.
 
 | Threat | What stops it |
 |---|---|

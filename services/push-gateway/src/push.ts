@@ -59,11 +59,19 @@ function post(url: string, body: Uint8Array, headers: Record<string, string>, al
   });
 }
 
+/** How a sealed push reaches a phone: the HTTP status the push service answered (0: none). One sender per transport;
+ *  UnifiedPush (Web Push to the distributor's endpoint) is the only one built. FCM and APNs would each be one more
+ *  here, optional server config, carrying the same sealed bytes (docs/design/SERVICES.md, "Order"). */
+export type Sender = (reg: Reg, sealed: Uint8Array) => Promise<number>;
+
 export class Pusher {
   private budget = new Budget(10, 6_000);
   private quietUntil = new Map<string, number>();
   private opts: { allowLoopback: boolean; privateHosts?: string[]; log: Log; gone: (endpoint: string) => void };
   constructor(opts: { allowLoopback: boolean; privateHosts?: string[]; log: Log; gone: (endpoint: string) => void }) { this.opts = opts; }
+
+  /** UnifiedPush: RFC 8030 to the endpoint. TTL: a phone off for a day still hears; Urgency high: worth waking for. */
+  private unifiedpush: Sender = (reg, body) => post(reg.endpoint, body, { "content-encoding": "aes128gcm", "content-type": "application/octet-stream", ttl: "86400", urgency: "high" }, this.opts.allowLoopback, this.opts.privateHosts ?? []);
 
   /** Seal and send one push. Answers what happened, for the log and the tests. */
   async send(reg: Reg, push: Push, now = Date.now()): Promise<"sent" | "gone" | "limited" | "failed"> {
@@ -73,8 +81,7 @@ export class Pusher {
       return "limited";
     }
     const body = encrypt(new TextEncoder().encode(JSON.stringify(push)), reg.keys);
-    // TTL: a phone off for a day still hears; Urgency high: a mention is worth waking for
-    const status = await post(reg.endpoint, body, { "content-encoding": "aes128gcm", "content-type": "application/octet-stream", ttl: "86400", urgency: "high" }, this.opts.allowLoopback, this.opts.privateHosts ?? []);
+    const status = await this.unifiedpush(reg, body);
     if (status === 404 || status === 410) {
       this.opts.gone(reg.endpoint);
       this.opts.log(`push to ${where}: ${status}, unregistered`);

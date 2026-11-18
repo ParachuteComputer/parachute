@@ -99,6 +99,9 @@ class PushService : org.unifiedpush.android.connector.PushService() {
     fun serves(ctx: Context, gateway: String, relay: String): Boolean {
       val instance = instanceFor(gateway) ?: return false
       if (endpoint(ctx, instance) == null) return false
+      // a distributor uninstalled since keeps its endpoint here but delivers nothing: then push serves nobody
+      val using = org.unifiedpush.android.connector.UnifiedPush.getSavedDistributor(ctx) ?: return false
+      if (using !in org.unifiedpush.android.connector.UnifiedPush.getDistributors(ctx)) return false
       val a = try { JSONArray(registered(ctx)) } catch (e: Exception) { return false }
       return (0 until a.length()).any { a.optJSONObject(it)?.let { p -> p.optString("gateway") == gateway && p.optString("relay") == relay } == true }
     }

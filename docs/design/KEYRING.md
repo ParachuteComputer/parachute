@@ -210,8 +210,8 @@ watches the relay and sends a sealed push (room and message ids, no words) throu
 distributor (ntfy from F-Droid, or another); `PushService.kt` shows "A message for you in <room>". Rust signs the
 gateway registration; the phone holds no relay connection of its own.
 
-**The fallback**, off unless the person turns on "Listen without a push service (uses more battery)" in Settings, for a
-phone without a distributor: a foreground service (type `remoteMessaging`, with its quiet ongoing line "Listening for
+**The fallback**, on unless the person turns it off in Settings ("Parachute's own connection, for what no push service
+delivers"), for a phone without a working distributor (GrapheneOS with nothing installed yet, or ntfy removed): a foreground service (type `remoteMessaging`, with its quiet ongoing line "Listening for
 your rooms") that holds its own relay connection (Kotlin, OkHttp), and signs the relay's NIP-42 challenge through one
 JNI entry point in the app's Rust library, which it loads itself (so it works after Android restarts the service
 without the app): the service opens the everyday key from the Keystore-wrapped store as the app does, hands it to that
