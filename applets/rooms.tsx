@@ -22,8 +22,10 @@ const CLIENT = "parachute-rooms";
 // ── what the list last showed, kept on this device so the next open paints at once ──
 // One value (storage sends it in one call, whatever its size): the rooms, each room's newest few messages as they read
 // now, the names in them and where you had read to, for this relay and key. At most 64 KB, so drafts keep the rest.
+// It paints before the shell has said whose key this is (that waits for the device's key store): a snapshot of another
+// key's list is cleared the moment it says.
 type Snapshot = { v: 2; relay: string; me: string; rooms: RoomMeta[]; read: Record<string, number>; names: Record<string, string>; msgs: Ev[] };
-const SNAP = (me: string) => `list:${me}`;
+const SNAP = "list";
 const SNAP_MAX = 64_000;
 
 function snapshotOf(s: Store["s"], relay: string): Snapshot | null {
@@ -40,16 +42,16 @@ function snapshotOf(s: Store["s"], relay: string): Snapshot | null {
   return null;
 }
 
-/** The list as it was last shown, for this relay and key: false when there is none. */
-function paint(st: Store, snap: unknown, relay: string, me: string): boolean {
+/** The list as it was last shown on this relay: its key, or null when there is none. */
+function paint(st: Store, snap: unknown, relay: string): string | null {
   const x = snap as Snapshot | null;
-  if (!x || x.v !== 2 || x.relay !== relay || x.me !== me || !Array.isArray(x.rooms) || !Array.isArray(x.msgs)) return false;
+  if (!x || x.v !== 2 || x.relay !== relay || typeof x.me !== "string" || !Array.isArray(x.rooms) || !Array.isArray(x.msgs)) return null;
   const s = st.s;
   for (const r of x.rooms) if (r && typeof r.id === "string") s.rooms.set(r.id, r);
   for (const [k, v] of Object.entries(x.names ?? {})) if (typeof v === "string") s.names.set(k, v);
   s.read = { ...x.read };
   x.msgs.forEach(st.add);
-  return true;
+  return x.me;
 }
 
 // ── read state, as the Uni app keeps it (max per room across every slot) ──
@@ -121,7 +123,7 @@ export default function Rooms() {
       k.timer = null;
       const snap = snapshotOf(s, k.relay); if (!snap) return;
       const json = JSON.stringify(snap);
-      if (json !== k.written) storage.set(SNAP(s.me), snap).then(() => { k.written = json; }, () => {});
+      if (json !== k.written) storage.set(SNAP, snap).then(() => { k.written = json; }, () => {});
     }, 2000);
   };
 
@@ -132,10 +134,11 @@ export default function Rooms() {
       const ctx: any = await ready();
       const url = String((ctx?.services ?? []).find((x: any) => x?.id === "rooms")?.url ?? "");
       try {
+        // the list as it was last shown, at once; then whose key this is, and the relay, read again
+        const painted = paint(st, await storage.get(SNAP).catch(() => null), url);
+        if (painted && on) { s.me = painted; st.bump(); setStatus(""); }
         s.me = (await services.me()).pubkey;
-        // the list as it was last shown, at once; then the relay, read again
-        const painted = paint(st, await storage.get(SNAP(s.me)).catch(() => null), url, s.me);
-        if (painted && on) { st.bump(); setStatus(""); }
+        if (painted && painted !== s.me) { s.rooms.clear(); s.msgs.clear(); s.names.clear(); s.read = {}; st.bump(); setStatus("Reading your rooms…"); }
         const [members, read] = await Promise.all([relay.query([{ kinds: [39002], "#p": [s.me], limit: 500 }]), loadRead(relay)]);
         const ids = [...new Set(members.map((e: Ev) => tag(e, "d")).filter(Boolean))] as string[];
         // what comes after starts now: anything posted while the history below is read still arrives
