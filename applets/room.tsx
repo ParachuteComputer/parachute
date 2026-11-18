@@ -18,7 +18,7 @@
 // Which key is Uni's is the service's own declaration (ready().services: approvals.from, else notify.from): without
 // one there is no turn line, no Stop and no listening switch. Its named exports (the store, the cards' readers, the
 // time words) are for the importer's own list.
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { app, onShown, ready, services, shown as onScreen, storage, voice } from "parachute";
 
 /** Whether a person can be looking: the applet on screen (the app keeps it running while hidden, kit `shown`/`onShown`,
@@ -464,7 +464,7 @@ export function lastText(s: Store["s"], e: Ev) {
 // ── the room ──
 type Place = { get(): number | null; set(fromFoot: number | null): void };
 type Props = { service: string; room: string; name?: string; at?: string; readAt?: number; onRead?: (latest: number) => void; onBack?: () => void;
-  seed?: { msgs: Ev[]; names: Map<string, string> }; place?: Place };
+  seed?: { msgs: Ev[]; names: Map<string, string>; me?: string }; place?: Place };
 
 export default function Room({ service, room, name: named, at, readAt, onRead, onBack, seed, place }: Props) {
   const st = useMemo(createStore, [service, room]);
@@ -476,6 +476,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   const [uni, setUni] = useState<string | null>(null);
   const [listening, setListening] = useState(true);
   const [loaded, setLoaded] = useState(() => !!seed?.msgs.length && !at);
+  // the room's own read has landed (a room drawn from the list's messages is placed again then, below)
+  const [read, setRead] = useState(false);
   const [older, setOlder] = useState<"more" | "loading" | "start">("more");
   const [err, setErr] = useState("");
   const [posting, setPosting] = useState(false);
@@ -496,6 +498,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   // what the importer already holds, drawn at once (opening at a message waits for the read, which finds it)
   useMemo(() => {
     if (!seed || at) return;
+    if (seed.me) st.s.me = seed.me;
     for (const [k, v] of seed.names) st.s.names.set(k, v);
     seed.msgs.forEach(st.add);
   }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -535,7 +538,14 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
         const target = at ? s.msgs.get(room)?.get(at) : undefined;
         const root = target ? rootOf(target) : null;
         if (root) setThread(root);
-        st.bump(); setLoaded(true);
+        // a message the list held that the read, covering its time, no longer has was deleted meanwhile (the relay drops those)
+        if (seed && !at) {
+          const kept = new Set((got as Ev[]).filter((e) => e.kind === 9).map((e) => e.id));
+          const from = Math.min(...(got as Ev[]).filter((e) => e.kind === 9).map((e) => e.created_at), Infinity);
+          const m = s.msgs.get(room);
+          for (const e of seed.msgs) if (e.kind === 9 && !kept.has(e.id) && e.created_at >= from) m?.delete(e.id);
+        }
+        st.bump(); setLoaded(true); setRead(true);
         void names((got as Ev[]).map((e) => e.pubkey));
         // new posts, edits, deletions, reactions and typing (one room a subscription, as a Buzz relay sends them)
         stop = relay.subscribe([{ kinds: [9, 5, 7, 40003, 9005], "#h": [room], since }, { kinds: [20002], "#h": [room], since }],
@@ -554,13 +564,22 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     if (!loaded) return;
     const sc = scroller.current;
     const el = !placed.current && at ? sc?.querySelector<HTMLElement>(`[data-id="${at}"]`) : null;
-    // back in a room you left partway up: there again, measured from the foot (older messages may have come in above)
+    // back in a room you left partway up: there again, measured from the foot (and again once the read has landed, above)
     const left = !placed.current && !at && !thread ? place?.get() ?? null : null;
     placed.current = true;
     if (el && sc) { sc.scrollTop = Math.max(0, el.offsetTop - sc.clientHeight / 3); atBottom.current = false; }
-    else if (left !== null && sc) { sc.scrollTop = Math.max(0, sc.scrollHeight - sc.clientHeight - left); atBottom.current = false; }
-    else toBottom();
+    else if (left !== null && sc) { sc.scrollTop = Math.max(0, sc.scrollHeight - sc.clientHeight - left); atBottom.current = false; placedFoot.current = left; }
+    else { toBottom(); placedFoot.current = 0; }
   }, [loaded, thread]);
+  // drawn from the list's messages, then the read brings older ones above: placed again, at the same distance from the
+  // foot, unless the person has scrolled since (a browser without scroll anchoring, as WebKit, would leave them far up)
+  const touched = useRef(false);
+  const placedFoot = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const sc = scroller.current;
+    if (!read || !seed || at || thread || touched.current || !sc || placedFoot.current === null) return;
+    sc.scrollTop = Math.max(0, sc.scrollHeight - sc.clientHeight - placedFoot.current);
+  }, [read]); // eslint-disable-line react-hooks/exhaustive-deps
   // where it was left, for the next open
   const placeNow = useRef(place);
   placeNow.current = place;
@@ -658,7 +677,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
       <button className="back" onClick={() => (thread ? setThread(null) : onBack?.())}>{thread ? `← ${title}` : "← Rooms"}</button>
       <h2>{thread ? "Thread" : title}</h2>
     </div>}
-    <div className="scroll" ref={scroller} onScroll={(e) => { const x = e.currentTarget, d = x.scrollHeight - x.scrollTop - x.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }}>
+    <div className="scroll" ref={scroller} onScroll={(e) => { const x = e.currentTarget, d = x.scrollHeight - x.scrollTop - x.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }}
+      onWheel={() => { touched.current = true; }} onTouchStart={() => { touched.current = true; }} onPointerDown={() => { touched.current = true; }} onKeyDown={() => { touched.current = true; }}>
       <div className="page">
         {!thread && (older === "start" ? <p className="day">Start of {title}</p> : <button className="older" onClick={loadOlder} disabled={older === "loading"}>{older === "loading" ? "Loading older messages…" : "Load older messages"}</button>)}
         <div className="log" role="log" aria-label={`Messages in ${name || "the room"}`}>
@@ -789,7 +809,8 @@ function SealedCard({ e }: { e: Ev }) {
   const [view, setView] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { let on = true; services.card(svc, e).then((v: any) => { if (on) setView(v); }, (x: any) => { if (on) setView({ refused: x?.code === "not_granted" ? "This applet isn't allowed to answer approvals." : said(x), rows: [] }); }); return () => { on = false; }; }, [e.id]);
+  // checked again when the message is replaced by another copy of it (a signed one after an early draw)
+  useEffect(() => { let on = true; services.card(svc, e).then((v: any) => { if (on) setView(v); }, (x: any) => { if (on) setView({ refused: x?.code === "not_granted" ? "This applet isn't allowed to answer approvals." : said(x), rows: [] }); }); return () => { on = false; }; }, [e.id, (e as Ev & { sig?: string }).sig, e.content]);
   const answer = async (decision: "approve" | "deny", rids: string[]) => {
     setBusy(true); setErr(null);
     try { const r: any = await services.answer(svc, e, decision, rids); setView(r.view); if (r.failed) setErr(`Not sent: ${r.failed}. Try again.`); }
@@ -826,7 +847,7 @@ function SealedCard({ e }: { e: Ev }) {
 
 function SecretCard({ e }: { e: Ev }) {
   const svc = useContext(Svc);
-  const req = useMemo(() => { const m = /```uni-secret-request\n([\s\S]*?)\n```/.exec(e.content); try { return m ? JSON.parse(m[1]) : null; } catch { return null; } }, [e.id]);
+  const req = useMemo(() => { const m = /```uni-secret-request\n([\s\S]*?)\n```/.exec(e.content); try { return m ? JSON.parse(m[1]) : null; } catch { return null; } }, [e.id, e.content]);
   const [state, setState] = useState<"ask" | "sent" | "forgot">("ask");
   const [err, setErr] = useState<string | null>(null);
   if (!req) return null;

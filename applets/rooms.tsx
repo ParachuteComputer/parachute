@@ -232,7 +232,11 @@ export default function Rooms() {
   const open = (id: string, event?: string) => { listY.current = window.scrollY; setView({ at: "room", id, ...(event ? { event } : {}) }); };
   if (view.at === "list") return <main><style>{CSS}</style><RoomList st={st} status={status} open={open} y={listY.current} /></main>;
   const id = view.id;
-  const seed = { msgs: [...(s.msgs.get(id)?.values() ?? [])].filter((e) => visible(s, e)).map((e) => ({ ...e, content: textOf(s, e) })), names: s.names };
+  // only messages as the relay sent them (signed, unchanged): a card in one is checked by its signature; the snapshot's
+  // shortened copies (no signature) wait for the room's own read; edits go along as their own events
+  const held = [...(s.msgs.get(id)?.values() ?? [])].filter((e) => visible(s, e) && (e as Ev & { sig?: string }).sig);
+  const heldIds = new Set(held.map((e) => e.id));
+  const seed = { msgs: [...held, ...[...s.edits.entries()].filter(([t]) => heldIds.has(t)).map(([, ed]) => ed)], names: s.names, me: s.me };
   const place = { get: () => places.current.get(id) ?? null, set: (d: number | null) => { places.current.set(id, d); } };
   return <main className="in-room"><style>{CSS}</style>
     <Room key={id + (view.event ?? "")} service="rooms" room={id} name={s.rooms.get(id)?.name} at={view.event} readAt={s.read[id] ?? 0} seed={seed} place={place}

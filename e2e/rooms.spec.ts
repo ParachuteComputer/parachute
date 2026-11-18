@@ -328,8 +328,8 @@ test("Rooms paints the list it last showed at once, keeps it while the relay is 
   }
 });
 
-test("a room opens at once from what the list holds, and where you left it", async ({ page }) => {
-  test.setTimeout(150_000);
+test("a room opens at once from what the list holds, at its foot once its own read lands, and where you left it", async ({ page }) => {
+  test.setTimeout(180_000);
   const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
   const bob = await person(RELAY!, secret("bob"));
   const stamp = Date.now().toString(36);
@@ -340,47 +340,52 @@ test("a room opens at once from what the list holds, and where you left it", asy
   for (const p of [alice, bob.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", yard], ["p", p]] })).ok).toBe(true);
   owner.close();
   await bob.publish({ kind: 0, content: JSON.stringify({ name: "Bob", display_name: "Bob" }) });
-  // enough lines to scroll: 30, paced under the relay's rate
-  for (let i = 1; i <= 30; i++) {
+  // more lines than the list reads for a room (40), so the room's own read brings older ones above what was drawn
+  const N = 56;
+  for (let i = 1; i <= N; i++) {
     expect((await bob.publish({ kind: 9, content: `Yard note ${i} ${stamp}: ${"the fence by the compost needs another post. ".repeat(2)}`, tags: [["h", yard]] })).ok).toBe(true);
     // paced under the relay's rate, and the last one a second after the rest (the newest by its time)
-    if (i % 8 === 0 || i === 29) await new Promise((r) => setTimeout(r, 1200));
+    if (i % 8 === 0 || i === N - 1) await new Promise((r) => setTimeout(r, 1200));
   }
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
-  let away = false;
-  await page.routeWebSocket((url) => url.href.startsWith(RELAY!), (ws) => { if (away) ws.close(); else ws.connectToServer(); });
+  // while `slow`, the room's own read (its 150 newest) reaches the relay 4 s late; everything else as it comes
+  let slow = false;
+  await page.routeWebSocket((url) => url.href.startsWith(RELAY!), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((m) => { const t = String(m); if (slow && t.startsWith('["REQ"') && t.includes('"limit":150')) setTimeout(() => server.send(m), 4000); else server.send(m); });
+  });
   const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   const app = frame(page);
   const row = () => app.getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Yard ${stamp}`) });
   const scroller = () => app.locator(".room .scroll");
   const fromFoot = () => scroller().evaluate((x) => x.scrollHeight - x.scrollTop - x.clientHeight);
+  const back = () => app.getByRole("button", { name: "← Rooms" }).click();
   try {
     await page.goto(`/v/${VAULT}`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
-    await expect(row()).toContainText(`Yard note 30 ${stamp}`, { timeout: 30_000 });
+    await expect(row()).toContainText(`Yard note ${N} ${stamp}`, { timeout: 30_000 });
 
-    // in the room, partway up; back to the list and in again: where it was left
+    // the room's read held back: it draws at once from what the list holds; as a browser without scroll anchoring
+    // (WebKit) would, it is at its foot again once the read lands with older lines above
+    await app.locator("head").evaluate(() => { const st = document.createElement("style"); st.textContent = ".room .scroll { overflow-anchor: none; }"; document.head.appendChild(st); });
+    slow = true;
     await row().click();
-    await expect(app.getByRole("log")).toContainText(`Yard note 30 ${stamp}`, { timeout: 15_000 });
+    await expect(app.getByRole("log")).toContainText(`Yard note ${N} ${stamp}`, { timeout: 1_500 });
+    await expect(app.getByRole("log")).toContainText(`Yard note 3 ${stamp}`, { timeout: 15_000 }); // the read landed
+    await expect.poll(fromFoot, { timeout: 3_000 }).toBeLessThan(60);
+    slow = false;
+
+    // partway up, back to the list and in again: where it was left
     await scroller().evaluate((x) => { x.scrollTop = Math.max(0, x.scrollHeight - x.clientHeight - 600); x.dispatchEvent(new Event("scroll")); });
     const left = await fromFoot();
     expect(left).toBeGreaterThan(400);
-    await app.getByRole("button", { name: /Rooms/ }).first().click(); // the room's "← Rooms"
+    await back();
     await row().click();
+    await expect(app.getByRole("log")).toContainText(`Yard note 3 ${stamp}`, { timeout: 15_000 });
     await expect.poll(fromFoot, { timeout: 5_000 }).toBeGreaterThan(left - 60);
     expect(await fromFoot()).toBeLessThan(left + 60);
-
-    // the relay away: the room still opens with what the list holds (its newest lines), once the list is kept
-    await app.getByRole("button", { name: /Rooms/ }).first().click();
-    await expect.poll(() => page.evaluate((st) => Object.keys(localStorage).some((k) => k.startsWith("parachute.applet-storage.v1:") && (localStorage.getItem(k) ?? "").includes(`Yard note 30 ${st}`)), stamp), { timeout: 10_000 }).toBe(true);
-    away = true;
-    await page.goto(`/v/${VAULT}`);
-    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
-    await row().click();
-    await expect(app.getByRole("log")).toContainText(`Yard note 30 ${stamp}`, { timeout: 5_000 });
   } finally {
-    away = false;
     await made.remove();
     bob.close();
   }
