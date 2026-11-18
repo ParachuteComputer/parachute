@@ -19,17 +19,19 @@
 // one there is no turn line, no Stop and no listening switch. Its named exports (the store, the cards' readers, the
 // time words) are for the importer's own list.
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { app, onShown, ready, services, shown, storage, voice } from "parachute";
+import { app, onShown, ready, services, shown as onScreen, storage, voice } from "parachute";
 
-/** Whether a person can be looking: the applet on screen (the app keeps it running while hidden, kit `onShown`) and the
- *  app in front. What is new is read only then. An older app without `shown` counts as on screen. */
+/** Whether a person can be looking: the applet on screen (the app keeps it running while hidden, kit `shown`/`onShown`,
+ *  imported as onScreen: `shown` below is the media cache's) and the app in front. What is new is read only then. An
+ *  older app without them counts as on screen. */
 export function useLooking() {
-  const now = () => (typeof shown === "function" ? shown() : true) && document.visibilityState === "visible";
+  const now = () => (typeof onScreen === "function" ? onScreen() : true) && document.visibilityState === "visible";
   const [looking, setLooking] = useState(now);
   useEffect(() => {
     const f = () => setLooking(now());
     const off = typeof onShown === "function" ? onShown(f) : () => {};
     document.addEventListener("visibilitychange", f);
+    f(); // what changed between the first render and here (a ready that said hidden)
     return () => { off(); document.removeEventListener("visibilitychange", f); };
   }, []);
   return looking;
