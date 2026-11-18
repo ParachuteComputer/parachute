@@ -57,7 +57,7 @@ test("first run: four applets, four short cards; changed code says whether it as
     await expect(card(page).getByRole("heading")).toHaveText("Allow Rooms?");
     await expect(face(page).getByText(`As you on ${relayHost} on this device`)).toBeVisible();
     await expect(face(page).locator("strong", { hasText: "High risk, with your approval key:" })).toBeVisible();
-    await expect(face(page)).toContainText("from Uni there (your approval key is your everyday key for now). Powerful ones ask for your device unlock.");
+    await expect(face(page)).toContainText(`from Uni on ${relayHost} on this device (your approval key is your everyday key for now). Powerful ones ask for your device unlock.`);
     await expect(face(page)).toContainText("which gets your public key and where to reach this phone");
     await expect(face(page).locator("strong", { hasText: "Opens web addresses" })).toBeVisible();
     await expect(card(page).getByText("Also: the microphone when you press record, files you pick, saving to Downloads, 256 KB for drafts")).toBeVisible();
@@ -99,7 +99,7 @@ test("first run: four applets, four short cards; changed code says whether it as
     await api(st, "PATCH", `notes/${made[2].id}`, { content: `${journal.content}\n// a new line of code`, if_updated_at: journal.updatedAt });
     await open(page, /Journal/);
     await expect(card(page).getByRole("heading")).toHaveText("Journal changed");
-    await expect(card(page).getByRole("status")).toHaveText("This applet's code changed since you allowed it. Only the version you allow runs. It asks for nothing new.");
+    await expect(card(page).getByRole("status")).toHaveText("This applet's code changed since you allowed it. On this device an applet could send what it reads to the internet, so only code you've approved runs. It asks for no new permissions.");
     await expect(card(page).locator(".grant-new")).toHaveCount(0);
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await measure(page, "journal-code-changed");
@@ -113,7 +113,7 @@ test("first run: four applets, four short cards; changed code says whether it as
     await open(page, /Claude accounts/);
     await expect(card(page).getByRole("heading")).toHaveText("Claude accounts asks again");
     await expect(card(page).getByRole("status")).toHaveText("It now asks for something other than what you allowed. What is new is marked New.");
-    await expect(face(page).locator(".grant-fresh")).toHaveText("NewRead and change notes in Workers/");
+    await expect(face(page).locator(".grant-fresh")).toHaveText("New Read and change notes in Workers/");
     await expect(face(page).locator(".grant-fresh")).toHaveCount(1);
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await measure(page, "accounts-asks-more");

@@ -11,7 +11,7 @@ type GrantedUnder = "sealed" | "approved-code";
  *  kept to mark what is new when it asks again. A grant made before them has neither (the card then says it plainly). */
 type Record_ = { scope: string; html: string; grantedAt: string; grantedUnder: GrantedUnder; expires?: string; face?: string[]; others?: string[] };
 export type Asked = { face: string[]; others: string[] };
-const strings = (x: unknown): string[] | undefined => (Array.isArray(x) && x.length <= 200 && x.every((v) => typeof v === "string") ? x as string[] : undefined);
+const strings = (x: unknown): string[] | undefined => (Array.isArray(x) && x.length <= 200 && x.every((v) => typeof v === "string" && v.length <= 4000) ? x as string[] : undefined);
 /** What a grant is stored under: the vault (this device's key for it) and the applet's note. */
 export const subjectOf = (vaultKey: string, subject: string) => `${vaultKey}\u0000${subject}`;
 export type GrantStatus = "none" | "ok" | "updated";
@@ -46,9 +46,9 @@ export function createGrantStore(storage: StorageLike | null = typeof localStora
       return r.html === html ? "ok" : "updated";
     },
     /** When it was allowed and when it ends, for the card; null without a grant. */
-    record(subject: string): { grantedAt: string; expires: string | null; scope: string; asked: Asked | null } | null {
+    record(subject: string): { grantedAt: string; expires: string | null; scope: string; code: string; asked: Asked | null } | null {
       const r = read().get(subject);
-      return r ? { grantedAt: r.grantedAt, expires: r.expires ?? null, scope: r.scope, asked: r.face && r.others ? { face: r.face, others: r.others } : null } : null;
+      return r ? { grantedAt: r.grantedAt, expires: r.expires ?? null, scope: r.scope, code: r.html, asked: r.face && r.others ? { face: r.face, others: r.others } : null } : null;
     },
     /** The gate mode the grant was made under; a record without one (or with an unknown value) counts as `sealed`. */
     grantedUnder(subject: string): GrantedUnder | null { return read().get(subject)?.grantedUnder ?? null; },

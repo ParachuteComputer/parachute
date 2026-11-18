@@ -69,27 +69,37 @@ describe("the face keeps every stressed line's facts", () => {
 });
 
 describe("why it asks again", () => {
-  const now = (o: Partial<Parameters<typeof changeOf>[1]> = {}) => ({ scope: "s1", status: "updated" as const, face: ["A", "B"], others: [], ...o });
+  const now = (o: Partial<Parameters<typeof changeOf>[1]> = {}) => ({ scope: "s1", code: "c2", status: "updated" as const, face: ["A", "B"], others: [], ...o });
+  const was = (o: Partial<NonNullable<Parameters<typeof changeOf>[0]>> = {}) => ({ scope: "s1", code: "c1", asked: { face: ["A", "B"], others: [] }, ...o });
   it("never allowed: first", () => expect(changeOf(null, now({ status: "none" })).kind).toBe("first"));
   it("same asks, other code: nothing new", () => {
-    const c = changeOf({ scope: "s1", asked: { face: ["A", "B"], others: [] } }, now());
-    expect(c).toMatchObject({ kind: "code", nothingNew: true });
+    const c = changeOf(was(), now());
+    expect(c).toMatchObject({ kind: "code", nothingNew: true, codeMoved: true });
     expect(c.fresh?.size).toBe(0);
   });
   it("same asks, but a new import from someone else's vault: not nothing new", () => {
-    expect(changeOf({ scope: "s1", asked: { face: ["A", "B"], others: [] } }, now({ others: ["x@techne"] })).nothingNew).toBe(false);
+    expect(changeOf(was(), now({ others: ["x@techne"] })).nothingNew).toBe(false);
+  });
+  it("same key, but a line reads otherwise (an approver no longer trusted): not nothing new, and it is marked", () => {
+    const c = changeOf(was(), now({ face: ["A", "B from a key you haven't trusted"] }));
+    expect(c.nothingNew).toBe(false);
+    expect([...c.fresh!]).toEqual(["B from a key you haven't trusted"]);
   });
   it("a grant from before this kept nothing: nothing new only when nothing is imported from elsewhere", () => {
-    expect(changeOf({ scope: "s1", asked: null }, now()).nothingNew).toBe(true);
-    expect(changeOf({ scope: "s1", asked: null }, now({ others: ["x@techne"] })).nothingNew).toBe(false);
-    expect(changeOf({ scope: "s1", asked: null }, now()).fresh).toBeNull();
+    expect(changeOf(was({ asked: null }), now()).nothingNew).toBe(true);
+    expect(changeOf(was({ asked: null }), now({ others: ["x@techne"] })).nothingNew).toBe(false);
+    expect(changeOf(was({ asked: null }), now()).fresh).toBeNull();
   });
   it("other asks: what is new is marked, what went is listed", () => {
-    const c = changeOf({ scope: "s0", asked: { face: ["A", "C"], others: [] } }, now({ status: "none" }));
-    expect(c.kind).toBe("asks");
+    const c = changeOf(was({ scope: "s0", asked: { face: ["A", "C"], others: [] } }), now({ status: "none" }));
+    expect(c).toMatchObject({ kind: "asks", nothingNew: false });
     expect([...c.fresh!]).toEqual(["B"]);
     expect(c.gone).toEqual(["C"]);
   });
-  it("the same asks, its year run out: expired", () => expect(changeOf({ scope: "s1", asked: { face: ["A", "B"], others: [] } }, now({ status: "none" })).kind).toBe("expired"));
+  it("the same asks, its year run out: expired, and whether its code moved too", () => {
+    expect(changeOf(was({ code: "c2" }), now({ status: "none" }))).toMatchObject({ kind: "expired", codeMoved: false });
+    expect(changeOf(was(), now({ status: "none" }))).toMatchObject({ kind: "expired", codeMoved: true });
+  });
+  it("the same asks and code, shown anyway: the device moved to approved code only", () => expect(changeOf(was({ code: "c2" }), now({ status: "ok" })).kind).toBe("mode"));
   it("imports kept by vault and host", () => expect(othersOf([{ id: "c", name: "C", vault: "t", host: "h", own: false, whose: "trusted", kind: "tsx", source: "", hash: "" }])).toEqual(["c@t@h:trusted"]));
 });

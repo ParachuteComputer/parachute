@@ -28,7 +28,7 @@ The rule (`face.test.ts`): every line the details stress keeps its facts on the 
 applet names, an untrusted approver's key, the gateway). Only unstressed lines fold away: private notes, the note on
 what an approval card shows, tagging, components from the applet's own vault.
 
-**Show details** sits beside the buttons, so opening it never moves Allow under a finger. It holds the old card,
+**Show details** sits beside the buttons. On a page, opening it never moves Allow; on an embed's sheet (which grows upward) Allow settles again after each toggle, so a tap meant for something else can't land on it. It holds the old card,
 word for word: every line from `grantLines`, the full closing sentence, when the grant ends, and its fingerprint.
 
 ## Asking again
@@ -37,13 +37,13 @@ The card says why before anything else:
 
 | Why | Heading | Line |
 |---|---|---|
-| Code changed, same asks | «Rooms» changed | …Only the version you allow runs. *It asks for nothing new.* (only when no code from someone else's vault is new either) |
-| It asks for something else | «Rooms» asks again | It now asks for something other than what you allowed. What is new is marked **New**; what went is listed. |
-| Its year ran out | Allow «Rooms» again? | A year has passed since you allowed it, so it asks again. |
+| Code changed, same asks | «Rooms» changed | …Only the version you allow runs (on Android: new code could send what it reads to the internet). *It asks for no new permissions.* Only when no line on the card reads differently and no code from someone else's vault is new. |
+| It asks for something else | «Rooms» asks again | It now asks for something other than what you allowed. What is new is marked **New** (on the face, or under Show details when only a detail changed); what went is listed. |
+| Its year ran out | Allow «Rooms» again? («Rooms» changed, with Allow this version, when its code changed too) | A year has passed since you allowed it, so it asks again. |
 | The device moved to approved code only | Allow «Rooms»? | You allowed it when applets here were sealed… |
 | Changed since it was brought in from another vault | «Rooms» changed | techne changed «Rooms» since you brought it in. |
 
-To mark what is new, a grant now keeps what its card said (`face`) and its imports from someone else's vault
+To mark what is new, a grant now keeps what its card said (`face`: the face's lines and every detail line) and its imports from someone else's vault
 (`others`). A grant made before has neither: its card says plainly that it changed, and marks nothing.
 
 ## What didn't change

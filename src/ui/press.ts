@@ -4,14 +4,16 @@
 // when it reached the button counts as begun before anything.
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 
-export function useSettledPress(holdMs: number) {
+/** `epoch`: when it changes (what the question shows moved, say), the press settles again from that paint. */
+export function useSettledPress(holdMs: number, epoch: unknown = null) {
   const paintedAt = useRef(Infinity), downAt = useRef(-Infinity), keyAt = useRef(Infinity);
   const [armed, setArmed] = useState(false);
   useEffect(() => {
+    paintedAt.current = Infinity; setArmed(false);
     let id = requestAnimationFrame(() => { id = requestAnimationFrame(() => { paintedAt.current = performance.now(); }); });
     const t = window.setTimeout(() => setArmed(true), holdMs + 50);
     return () => { cancelAnimationFrame(id); window.clearTimeout(t); };
-  }, [holdMs]);
+  }, [holdMs, epoch]);
   return {
     armed,
     /** Spread on the button that answers. */

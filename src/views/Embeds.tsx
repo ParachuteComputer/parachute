@@ -209,7 +209,7 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
         </div>}
       {asking && <Sheet label={`${name} is asking for access`} onClose={() => setAsking(false)} back={placeEl}>
         <GrantCard what="component" name={name} glyph={glyph} vault={found.rec.vault} whose={found.whose} host={hostOf(found.rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"}
-          grant={grant} ownFolder={ownFolder(found.path)} scope={keys.scope} status={status} was={grants.record(subject)} modeChanged={decision === "ask-updated" && status === "ok"}
+          grant={grant} ownFolder={ownFolder(found.path)} scope={keys.scope} code={keys.hash} status={status} was={grants.record(subject)}
           broughtChanged={pinMoved} handed={keys.props} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())} settle={LINK_OUT_HOLD_MS}
           onAllow={(asked) => {
             grants.grant(subject, keys.scope, keys.hash, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry, asked);

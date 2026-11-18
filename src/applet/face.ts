@@ -34,11 +34,11 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
       const posts = [9, 7, 40003, 20002].filter((k) => s.publish.includes(k)).map((k) => (k === 40003 ? "edits" : NAMED_KINDS[k]));
       const does = [...(posts.length ? [`posts ${joinWords(posts)} ${roomsWords(s)}`] : ["signs in"]), ...(s.publish.includes(5) ? [`deletes what you posted${s.rooms?.length && !posts.length ? ` ${roomsWords(s)}` : ""}`] : []), ...(s.media ? ["uploads and opens files"] : [])];
       lines.push({ lead: `As you on ${at}`, rest: ` (your everyday key): ${does.length > 1 ? `${does.slice(0, -1).join(", ")}, and ${does[does.length - 1]}` : does[0]}. What it reads can go there.`, risky: true });
-      if (s.approvals) lines.push({ lead: "High risk, with your approval key:", rest: ` answers approval cards and secret requests from ${joinWords(s.approvals.from.map(who))} there${same}. Powerful ones ask for your device unlock.`, risky: true });
+      if (s.approvals) lines.push({ lead: "High risk, with your approval key:", rest: ` answers approval cards and secret requests from ${joinWords(s.approvals.from.map(who))} on ${at}${same}. Powerful ones ask for your device unlock.`, risky: true });
       if (s.notify) {
         const what = [s.notify.mentions ? "messages that name you" : "", s.notify.from.length ? `every message from ${joinWords(s.notify.from.map(who))}` : ""].filter(Boolean).join(" and ");
         const gw = s.notify.gateway ? hostWords({ kind: "http", url: s.notify.gateway }) : null;
-        lines.push({ lead: "Notifies you while Parachute is closed", rest: `: ${what} there${s.rooms?.length ? `, ${roomsWords(s)}` : ""}${gw ? `. Through ${gw}, which gets your public key and where to reach this phone` : ""}.`, risky: !!gw });
+        lines.push({ lead: "Notifies you while Parachute is closed", rest: `: ${what} on ${at}${s.rooms?.length ? `, ${roomsWords(s)}` : ""}${gw ? `. Through ${gw}, which gets your public key and where to reach this phone` : ""}.`, risky: !!gw });
       }
     } else {
       lines.push(s.auth === "nip98" ? { lead: `As you on ${at}`, rest: " (your everyday key): sends requests signed as you. What it reads can go there.", risky: true }
@@ -64,23 +64,38 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
 
 /** Everything the face says, one string per line: what a grant keeps, to mark what is new when an applet asks again. */
 export const faceTexts = (f: Face): string[] => [...f.lines.map(faceText), ...(f.also.length ? [alsoLine(f.also)] : [])];
+/** How a line under Show details is kept among what the card said. */
+export const DETAIL = "detail: ";
+/** What a card says, as its grant keeps it (grants.ts `Asked`): the face's lines, every detail line, and its imports from
+ *  someone else's vault. */
+export function askedOf(g: Grant, ownFolder: string | null, opts: LineOptions = {}, imports: readonly Imported[] = []): { face: string[]; others: string[] } {
+  const details = [...grantLines(g, ownFolder, opts), ...importLines(imports)];
+  return { face: [...faceTexts(faceOf(g, ownFolder, opts, imports)), ...details.map((l) => `${DETAIL}${l.text}`)], others: othersOf(imports) };
+}
 /** Imports from someone else's vault, as a grant keeps them: a code change that adds one is never "nothing new". */
 export const othersOf = (imports: readonly Imported[]): string[] => imports.filter((i) => !i.own).map((i) => `${i.id}@${i.vault}@${i.host}:${i.whose}`).sort();
 
 /** Why the card shows again, from the grant this device holds for it (grants.ts `record`) and the grant asked now:
  *  - `first`: never allowed here (or revoked);
- *  - `code`: the same asks, other code (`status` "updated"); `nothingNew` only when no import from someone else's vault
- *    is new either (a grant made before imports were kept knows none, so it says nothing of what is new);
- *  - `expired`: the same asks, but its year ran out;
- *  - `asks`: it asks for something else.
- *  `fresh`: the face lines that weren't on its card when it was allowed (null when that card wasn't kept). */
-export type Change = { kind: "first" | "code" | "expired" | "asks"; nothingNew: boolean; fresh: Set<string> | null; gone: string[] };
-export function changeOf(was: { scope: string; asked: { face: string[]; others: string[] } | null } | null, now: { scope: string; status: "none" | "ok" | "updated"; face: string[]; others: string[] }): Change {
-  if (!was) return { kind: "first", nothingNew: false, fresh: null, gone: [] };
+ *  - `asks`: it asks for something else;
+ *  - `code`: the same asks, other code (`status` "updated");
+ *  - `expired`: the same asks, its year ran out (`codeMoved`: and its code changed too);
+ *  - `mode`: the same asks and code, allowed under sealed frames, and the device now runs approved code only.
+ *  `fresh`: the lines (face, and "detail: " ones) that weren't on its card when it was allowed; null when that card
+ *  wasn't kept (a grant from before). `nothingNew`: the same asks, no line new, and no import from someone else's vault
+ *  new either (a grant from before knows none, so then only when nothing is imported from elsewhere). */
+export type Change = { kind: "first" | "code" | "expired" | "asks" | "mode"; nothingNew: boolean; codeMoved: boolean; fresh: Set<string> | null; gone: string[] };
+type Was = { scope: string; code: string; asked: { face: string[]; others: string[] } | null };
+type Now = { scope: string; code: string; status: "none" | "ok" | "updated"; face: string[]; others: string[] };
+export function changeOf(was: Was | null, now: Now): Change {
+  if (!was) return { kind: "first", nothingNew: false, codeMoved: false, fresh: null, gone: [] };
   const a = was.asked;
   const fresh = a ? new Set(now.face.filter((t) => !a.face.includes(t))) : null;
   const gone = a ? a.face.filter((t) => !now.face.includes(t)) : [];
+  const codeMoved = was.code !== now.code;
   const noNewOthers = a ? now.others.every((o) => a.others.includes(o)) : now.others.length === 0;
-  if (was.scope !== now.scope) return { kind: "asks", nothingNew: false, fresh, gone };
-  return { kind: now.status === "updated" ? "code" : "expired", nothingNew: noNewOthers, fresh, gone };
+  const nothingNew = was.scope === now.scope && noNewOthers && (fresh === null || fresh.size === 0);
+  if (was.scope !== now.scope) return { kind: "asks", nothingNew: false, codeMoved, fresh, gone };
+  const kind = now.status === "updated" ? "code" : now.status === "ok" ? "mode" : "expired";
+  return { kind, nothingNew, codeMoved, fresh, gone };
 }
