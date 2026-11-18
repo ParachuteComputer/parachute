@@ -7,7 +7,10 @@
 // - only while it runs: allowed, started, the person's own code with nothing imported from another vault, and no note
 //   handed to it (AppletScreen says so: `keepable`). One that is stopped, revoked, asking on its card, refused or
 //   loading goes when the person leaves it, as every screen did before;
+// - not a page with embeds (its embeds may run another vault's code);
 // - at most KEEP of them hidden; the one left longest ago goes first.
+// A notification's tap (room, message) reaches a kept Rooms as a `launch` event, without a new tap: it was started by
+// one, and the launch carries only a room id and a message id. A grant that expires while hidden is seen when shown.
 // While hidden an applet gets no tap (shell/appDeps.ts `tappingIn` and views/ShellSheets.tsx `useTapOnce` need its frame
 // on screen), its recorder or picker is cancelled, and it is told (`shown` event, kit `onShown`) so it can hold what
 // only a person looking may do (a room marks nothing read). Shown again, its record is read again: changed code or a
@@ -23,15 +26,17 @@ const APPLET = /^\/v\/([^/]+)\/a\/([^/]+)$/;
 /** The query words that keep an address the applet's own (a notification's launch); any other makes it a fresh screen. */
 const LAUNCH_WORDS = new Set(["room", "event"]);
 
+/** A path segment as the router reads it (decoded), so one applet written two ways is one screen. */
+const seg = (x: string) => { try { return decodeURIComponent(x); } catch { return null; } };
 /** The applet an address is in, its own address or not. */
-const appletOf = (pathname: string) => { const m = APPLET.exec(pathname); return m ? `${m[1]}|${m[2]}` : null; };
+const appletOf = (pathname: string) => { const m = APPLET.exec(pathname); const v = m && seg(m[1]), a = m && seg(m[2]); return v !== null && a !== null && m ? `${v}|${a}` : null; };
 
 /** The kept screen this address is, or null when it is no applet's own address. */
 export function keptId(location: Pick<Location, "pathname" | "search">): string | null {
-  const m = APPLET.exec(location.pathname);
-  if (!m) return null;
+  const id = appletOf(location.pathname);
+  if (!id) return null;
   for (const k of new URLSearchParams(location.search).keys()) if (!LAUNCH_WORDS.has(k)) return null;
-  return `${m[1]}|${m[2]}`;
+  return id;
 }
 
 type Entry = { id: string; location: Location; keepable: boolean; at: number };
@@ -60,7 +65,10 @@ export function KeptApplets({ active }: { active: boolean }) {
   const fresh = !current ? appletOf(location.pathname) : null;
   useEffect(() => {
     setEntries((was) => {
-      const next = current ? [...was.filter((e) => e.id !== current), { id: current, location, keepable: said.current.get(current) ?? false, at: ++at.current }] : was.filter((e) => e.id !== fresh);
+      // in place, never reordered: a kept screen moved in the page would reload its frame (an iframe moved is loaded again)
+      const next = !current ? was.filter((e) => e.id !== fresh)
+        : was.some((e) => e.id === current) ? was.map((e) => (e.id === current ? { ...e, location, at: ++at.current } : e))
+        : [...was, { id: current, location, keepable: said.current.get(current) ?? false, at: ++at.current }];
       return stays(next, current);
     });
   }, [current, fresh, location]);
