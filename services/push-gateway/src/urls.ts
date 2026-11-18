@@ -22,7 +22,37 @@ export function privateAddress(ip: string): boolean {
 
 export const isLoopbackHost = (host: string) => LOOPBACK.has(host);
 
-/** `privateHosts`: push servers the operator named that may be on a private network (a tailnet's ntfy), https only. */
+/** A push server on a private network the operator trusts (a tailnet's ntfy): one host, one port, one push path. */
+export type Trusted = { host: string; port: string; path: string };
+
+/**
+ * `PUSH_GATEWAY_PRIVATE_HOSTS` entries: `host:port[/path/]`, a name (never an address) and its port, both required. The
+ * path is UnifiedPush's on ntfy (`/up`, then the topic) unless named. A trusted host is trusted for its push server only,
+ * never for the other services beside it on that machine (a hub, a mail bridge): an endpoint there is one path segment
+ * (8 to 128 letters, digits, `-` or `_`) after the push path, on that port, with no query but ntfy's `?up=1`. Throws on
+ * an entry that isn't one, so an old bare-host setting stops the gateway at start rather than trusting port 443.
+ */
+export function trustedHosts(entries: readonly string[]): Trusted[] {
+  return entries.filter((raw) => raw.trim()).map((raw) => {
+    const m = /^((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z](?:[a-z0-9-]*[a-z0-9])?):(\d{1,5})(\/(?:[a-z0-9_-]+\/)*[a-z0-9_-]*)?$/i.exec(raw.trim());
+    if (!m || +m[2] < 1 || +m[2] > 65535 || m[3] === "/") throw new Error(`PUSH_GATEWAY_PRIVATE_HOSTS: "${raw}" is not host:port[/path/]`);
+    return { host: m[1].toLowerCase(), port: String(+m[2]), path: m[3] ?? "/up" };
+  });
+}
+
+/** A URL's host as trusted hosts are named: lower case, without a trailing dot. */
+const hostOf = (u: URL) => u.hostname.toLowerCase().replace(/\.$/, "");
+const PUSH_SEGMENT = /^[A-Za-z0-9_-]{8,128}$/;
+/** Is this https URL a push endpoint on a trusted host's push server (its host, its port, its path, one segment)? */
+export function onTrustedHost(u: URL, trusted: readonly Trusted[]): boolean {
+  if (u.protocol !== "https:" || (u.search !== "" && u.search !== "?up=1")) return false;
+  const port = u.port || "443", host = hostOf(u);
+  return trusted.some((t) => t.host === host && t.port === port && u.pathname.startsWith(t.path) && PUSH_SEGMENT.test(u.pathname.slice(t.path.length)));
+}
+/** A URL on a trusted host's machine but not its push server: another service there, never to be reached. */
+export const besideTrustedHost = (u: URL, trusted: readonly Trusted[]) => !onTrustedHost(u, trusted) && trusted.some((t) => t.host === hostOf(u));
+
+/** `privateHosts`: push servers the operator named that may be on a private network (`trustedHosts`), https only. */
 export function endpointOk(raw: unknown, allowLoopback: boolean, privateHosts: readonly string[] = []): Parsed<string> {
   if (typeof raw !== "string" || raw.length > 1024 || /[\s\u0000-\u001f\u007f]/.test(raw)) return { ok: false, error: "endpoint is one URL" };
   let u: URL;
@@ -32,7 +62,10 @@ export function endpointOk(raw: unknown, allowLoopback: boolean, privateHosts: r
   const loop = isLoopbackHost(u.hostname) || isLoopbackHost(host);
   if (u.protocol === "http:" && !(allowLoopback && loop)) return { ok: false, error: "endpoint must be https" };
   if (u.protocol !== "https:" && u.protocol !== "http:") return { ok: false, error: "endpoint must be https" };
-  if (u.protocol === "https:" && privateHosts.includes(u.hostname)) return { ok: true, value: u.href };
+  const trusted = trustedHosts(privateHosts);
+  if (onTrustedHost(u, trusted)) return { ok: true, value: u.href };
+  // a trusted host's other ports and paths are another service on that machine: refused, wherever its name resolves
+  if (besideTrustedHost(u, trusted)) return { ok: false, error: "endpoint on that host must be its push server" };
   if (!(allowLoopback && loop) && (loop || (isIP(host) && privateAddress(host)))) return { ok: false, error: "endpoint can't be on a private network" };
   return { ok: true, value: u.href };
 }

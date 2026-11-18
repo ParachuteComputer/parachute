@@ -7,7 +7,7 @@ import { request as httpsRequest } from "node:https";
 import { lookup } from "node:dns";
 import { isIP, type LookupFunction } from "node:net";
 import { encrypt } from "./webpush.ts";
-import { privateAddress, redact } from "./urls.ts";
+import { besideTrustedHost, onTrustedHost, privateAddress, redact, trustedHosts } from "./urls.ts";
 import type { Push } from "./match.ts";
 import type { Reg } from "./registry.ts";
 
@@ -32,8 +32,9 @@ export class Budget {
 }
 
 // Node asks for one address or for all of them (to try both families); either way, only public ones are handed back.
-const safeLookup = (allowLoopback: boolean, privateHosts: readonly string[]): LookupFunction => (host, options, cb) => {
-  const allowed = (a: string) => !privateAddress(a) || (allowLoopback && (a === "127.0.0.1" || a === "::1")) || privateHosts.includes(host);
+// `trusted`: the endpoint is a trusted host's push server (urls.ts `onTrustedHost`: host, port and path), which may be private.
+const safeLookup = (allowLoopback: boolean, trusted: boolean): LookupFunction => (host, options, cb) => {
+  const allowed = (a: string) => !privateAddress(a) || (allowLoopback && (a === "127.0.0.1" || a === "::1")) || trusted;
   lookup(host, { ...options, all: true }, (err, addresses) => {
     const ok = err ? [] : addresses.filter((a) => allowed(a.address));
     if (!ok.length) return (cb as (e: Error) => void)(err ?? new Error("endpoint resolves to a private address"));
@@ -42,14 +43,26 @@ const safeLookup = (allowLoopback: boolean, privateHosts: readonly string[]): Lo
   });
 };
 
+/** Whether a push may go to this URL at all, decided before any connection (`trusted`: it is a trusted host's push server,
+ *  which may resolve to a private address). Checked here, not only in the lookup: a kept-alive connection to a trusted
+ *  host's port skips the lookup, and a registration kept from before its host was trusted this narrowly may name
+ *  another path there. */
+export function sendable(u: URL, allowLoopback: boolean, privateHosts: readonly string[]): { ok: false } | { ok: true; trusted: boolean } {
+  // an address written as the host skips the lookup: checked here (a registration was checked too)
+  const literal = u.hostname.replace(/^\[|\]$/g, "");
+  if (isIP(literal) && privateAddress(literal) && !(allowLoopback && (literal === "127.0.0.1" || literal === "::1"))) return { ok: false };
+  const trusted = trustedHosts(privateHosts);
+  if (besideTrustedHost(u, trusted)) return { ok: false };
+  return { ok: true, trusted: onTrustedHost(u, trusted) };
+}
+
 /** POST bytes, no redirects, a short timeout; the status, or 0 when it didn't get one. */
 function post(url: string, body: Uint8Array, headers: Record<string, string>, allowLoopback: boolean, privateHosts: readonly string[]): Promise<number> {
   return new Promise((resolve) => {
     const u = new URL(url);
-    // an address written as the host skips the lookup below: checked here (a registration was checked too)
-    const literal = u.hostname.replace(/^\[|\]$/g, "");
-    if (isIP(literal) && privateAddress(literal) && !(allowLoopback && (literal === "127.0.0.1" || literal === "::1"))) return resolve(0);
-    const req = (u.protocol === "https:" ? httpsRequest : httpRequest)(u, { method: "POST", headers: { ...headers, "content-length": String(body.length) }, lookup: safeLookup(allowLoopback, privateHosts), timeout: 10_000 }, (res) => {
+    const may = sendable(u, allowLoopback, privateHosts);
+    if (!may.ok) return resolve(0);
+    const req = (u.protocol === "https:" ? httpsRequest : httpRequest)(u, { method: "POST", headers: { ...headers, "content-length": String(body.length) }, lookup: safeLookup(allowLoopback, may.trusted), timeout: 10_000 }, (res) => {
       res.resume();
       resolve(res.statusCode ?? 0);
     });
