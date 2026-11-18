@@ -33,7 +33,10 @@ export function parseHub(input: string): HubParse {
 /** What a hub says about itself: where to sign in, where to ask which vaults are the person's, where vaults live.
  *  Tokens go to those addresses, so they must be on the hub's own origin; only Parachute Cloud keeps its vaults and
  *  account on another host of its own domain (cloud.parachute.computer → my.parachute.computer). */
-export type Parachute = { hub: string; issuer: string; accountMcp: string; vaultTemplate: string };
+export type Parachute = { hub: string; issuer: string; accountMcp: string; vaultTemplate: string;
+  /** "cloud": the hub says it is Parachute Cloud (its descriptor's `door`), which keeps the name "Parachute" for its own
+   *  pages: the app registers there under another (oauth.ts CLOUD_CLIENT_NAME) */
+  door?: "cloud" };
 
 /** https, or http on this machine. */
 const safe = (raw: unknown): raw is string => {
@@ -66,7 +69,7 @@ export async function describe(hub: string, fetchImpl: typeof fetch = fetch.bind
   if (issuer !== hub) throw new Error(`That hub calls itself ${String(d.issuer).slice(0, 80)}, not ${hub}. Nothing was added.`);
   const accountMcp = safe(d.account_mcp_endpoint) && onHubOrDomain(d.account_mcp_endpoint, hub) ? d.account_mcp_endpoint : plainHub.accountMcp;
   const vaultTemplate = safe(d.vault_url_template) && (d.vault_url_template as string).includes("{name}") && onHubOrDomain(d.vault_url_template.replace("{name}", "x"), hub) ? d.vault_url_template as string : plainHub.vaultTemplate;
-  return { hub, issuer, accountMcp, vaultTemplate };
+  return { hub, issuer, accountMcp, vaultTemplate, ...(d.door === "cloud" ? { door: "cloud" as const } : {}) };
 }
 
 /** A vault's API root, from where the Parachute says its vaults live. */

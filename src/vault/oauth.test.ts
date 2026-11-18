@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { beginSignIn, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
+import { beginSignIn, CLOUD_CLIENT_NAME, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
 
 const PENDING = "parachute.oauth.pending.v1";
 const P = { hub: "https://hub.example", issuer: "https://hub.example", accountMcp: "https://hub.example/account/mcp", vaultTemplate: "https://hub.example/vault/{name}" };
@@ -126,6 +126,18 @@ describe("beginSignIn", () => {
     const next = new URL(await beginSignIn(begin({ step: "vaults", vaults: ["recipes"] }), discovery(META, reg)));
     expect(next.searchParams.get("client_id")).toBe("client-1");
   });
+  it("on Parachute Cloud, registers under a name Cloud takes from an app outside it (it keeps \"Parachute\" for its own pages)", async () => {
+    const names: string[] = [];
+    const cloud = { ...P, hub: "https://cloud.example", issuer: "https://cloud.example", door: "cloud" as const };
+    const meta = { ...META, issuer: "https://cloud.example", authorization_endpoint: "https://cloud.example/oauth/authorize", token_endpoint: "https://cloud.example/oauth/token", registration_endpoint: "https://cloud.example/oauth/register" };
+    const url = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
+    expect(url.searchParams.get("client_id")).toBe("client-1");
+    expect(names).toEqual([CLOUD_CLIENT_NAME]);
+    // a hub of Parachute's own (core) still sees the app's own name
+    localStorage.clear();
+    await beginSignIn(begin({ step: "list" }), cloudLike(META, names)).catch(() => null);
+    expect(names.at(-1)).toBe("Parachute");
+  });
   it("refuses a hub that names another issuer", async () => {
     await expect(beginSignIn(begin({ step: "vaults", vaults: ["notes"] }, "https://a.example"), discovery({ ...META, issuer: "https://b.example" }, []))).rejects.toThrow(/calls itself/);
     expect(localStorage.getItem(PENDING)).toBeNull();
@@ -134,3 +146,19 @@ describe("beginSignIn", () => {
     await expect(beginSignIn(begin({ step: "vaults", vaults: ["notes"] }), discovery({ ...META, token_endpoint: "https://evil.example/token" }, []))).rejects.toThrow(/aren't on the hub/);
   });
 });
+
+// Parachute Cloud's registration as it answered on 2026-11-18: a name that looks like "Parachute" from an app whose
+// return address isn't Cloud's own is refused with this 400 (parachute-cloud workers/identity/src/oauth-register.ts)
+function cloudLike(meta: Record<string, string>, names: string[]) {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("/.well-known/oauth-authorization-server")) return new Response(JSON.stringify(meta));
+    if (url.endsWith("/oauth/register")) {
+      const name = String(JSON.parse(String(init?.body ?? "{}")).client_name ?? "");
+      names.push(name);
+      if (/p\W*a\W*r\W*a\W*c\W*h\W*u\W*t\W*e/i.test(name)) return new Response(JSON.stringify({ error: "invalid_client_metadata", error_description: "client_name is reserved: an app registered here can't be named Parachute" }), { status: 400 });
+      return new Response(JSON.stringify({ client_id: `client-${names.length}`, status: "pending" }), { status: 201 });
+    }
+    return new Response("not found", { status: 404 });
+  }) as unknown as typeof fetch;
+}
