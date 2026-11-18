@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router";
 import { Bar } from "../ui/Bar";
 import { createKey, errorText, importKey, type KeyInfo } from "./key";
 import { Npub } from "./Npub";
+import { CLOUD, CLOUD_NAME } from "../vault/parachute";
+import { signInWords, startSignIn } from "../vault/signInFlow";
 
 /** Getting a key into the app, in the order most people need: pair it from a device that has it, make a new one, or
  *  (advanced) paste it. On first run this is the first screen; Settings comes here when the device has no key. */
@@ -14,6 +16,14 @@ export default function KeyStart({ first = false }: { first?: boolean }) {
   const [secret, setSecret] = useState("");
   const say = (e: unknown) => setError(errorText(e, "That didn't work."));
 
+  // Parachute Cloud signs in with an email, so a person there needs no key: their account is theirs
+  async function cloud() {
+    setBusy(true); setError(null);
+    try {
+      const next = await startSignIn(CLOUD, "mine", false);
+      if ("go" in next) window.location.assign(next.go); else nav("/add");
+    } catch (e) { setError(signInWords(e)); setBusy(false); }
+  }
   async function make() {
     setBusy(true); setError(null);
     try { setMade(await createKey()); } catch (e) { say(e); } finally { setBusy(false); }
@@ -39,9 +49,14 @@ export default function KeyStart({ first = false }: { first?: boolean }) {
   return (
     <main className="screen">
       <Bar title={first ? "Parachute" : "Your key"} back={first ? undefined : "/settings"} />
+      {first && <section className="card stack">
+        <p className="lead">Your notes on {CLOUD_NAME}?</p>
+        <button type="button" className="primary" onClick={() => void cloud()} disabled={busy}>Sign in with {CLOUD_NAME}</button>
+        <p className="quiet small">With your email. No key needed.</p>
+      </section>}
       <section className="card stack">
-        <p className="lead">Parachute signs you in with your Nostr key.</p>
-        <Link className="primary" to="/key/pair">Pair from a device that has your key</Link>
+        <p className="lead">{first ? "Or sign in with your Nostr key." : "Parachute signs you in with your Nostr key."}</p>
+        <Link className={first ? "secondary" : "primary"} to="/key/pair">Pair from a device that has your key</Link>
         <p className="quiet small">The Uni app or Buzz desktop sends it here, encrypted end to end.</p>
         <button type="button" className="secondary" onClick={() => void make()} disabled={busy}>Make a new key</button>
         <p className="quiet small">If you don't have one yet.</p>

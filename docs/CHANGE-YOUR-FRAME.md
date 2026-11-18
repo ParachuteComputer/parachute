@@ -27,11 +27,11 @@ Its code may import only `react`, `react-dom`, `react-dom/client`, `react/jsx-ru
 
 | From `@parachute/frame` | What it is |
 |---|---|
-| `Launcher`, `VaultView`, `NoteRoute`, `NoteView`, `NoVault`, `Sheet`, `Bar` | The built-in screens and parts (`Home` is the launcher's older name) |
+| `Launcher`, `NotesHome`, `VaultView`, `NoteRoute`, `NoteView`, `NoVault`, `Sheet`, `Bar` | The built-in screens and parts (`Home` is the launcher's older name; `NotesHome` is the simple app's home, [SIMPLE.md](SIMPLE.md)) |
 | `Note`, `Days`, `List`, `Card`, `Field`, `Empty` | The parts applets have ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)), in the theme's look |
 | `installLongPress`, `openSheet`, `closeSheet`, `useOpenWith` | Open with, and the long-press that offers it |
 | `useVaults`, `useVault`, `useVaultQuery`, `readerFor`, `useApplets`, `useDefaults` | The vaults this device holds and reads of them (no sign-ins) |
-| `useHome`, `pinApplet`, `startApplet` | What is on the bar and which applet is home; pin, unpin or choose home (on a tap only). `useHome().parachutes`: your Parachutes, the home's first (`hub`, `host`, `name`, `home`, `signedIn`); a vault belongs to the one whose `hub` is its `issuer`'s origin |
+| `useHome`, `pinApplet`, `startApplet` | What is on the bar and which applet is home (and `app: "simple"` when the person chose the simple app); pin, unpin or choose home (on a tap only). `useHome().parachutes`: your Parachutes, the home's first (`hub`, `host`, `name`, `home`, `signedIn`); a vault belongs to the one whose `hub` is its `issuer`'s origin |
 | `call` | The app's bridge, for anything else it offers |
 | `noteHref`, `titleOf`, `folderOf` | Small helpers |
 

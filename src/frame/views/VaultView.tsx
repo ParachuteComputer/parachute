@@ -31,6 +31,7 @@ export default function VaultView() {
           ))}
         </ul>
       )}
+      <p className="row-buttons"><Link className="secondary" to={`/v/${encodeURIComponent(rec.key)}/new`}>New note</Link></p>
       <input className="search" type="search" placeholder="Search this vault" aria-label="Search this vault" value={q} onChange={(e) => setQ(e.target.value)} />
       {load.state === "loading" && <p className="quiet" role="status">Loading…</p>}
       {load.state === "error" && <p className="error" role="alert">{load.error}</p>}

@@ -3,9 +3,10 @@ import { api, hubState, record, VAULT } from "./hub";
 import { withImports, type AppletRecord } from "../applets/record.ts";
 import { keyDoor } from "./keys";
 
-/** The app back from the hub with every vault kept: on the launcher, `vault`'s chapter shown. */
+/** The app back from the hub with every vault kept: on the launcher, `vault`'s chapter shown; or, for a person whose
+ *  settings choose the simple app (docs/SIMPLE.md), on Notes. */
 async function backOnTheLauncher(page: Page, vault: string) {
-  await expect(ui(page).getByRole("region", { name: vault, exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(ui(page).getByRole("region", { name: vault, exact: true }).or(ui(page).getByRole("heading", { level: 1, name: "Notes" }))).toBeVisible({ timeout: 20_000 });
 }
 
 /** The hub's Approve, as many times as it asks (the app without a key asks twice: to see which vaults are the person's,

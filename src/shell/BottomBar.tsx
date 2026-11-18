@@ -10,12 +10,17 @@ import { Link, useLocation } from "react-router";
 import { move, pinApplet, setStart, useSettings, type Found, type Place } from "./homeSettings";
 import { chooseStart, forgetStart } from "./start";
 import { clearMark } from "../open/mark";
-import { useFrameSource } from "./frameSource";
+import { homeVault, useFrameSource } from "./frameSource";
+import { captureIn } from "../applet/capture";
+import { useApplets } from "../applet/useApplets";
+import { useVaults } from "../vault/hooks";
+import { appletPath } from "../open/paths";
 
 type Item = Found & { place: Place; home: boolean };
 
 export default function BottomBar() {
-  const { bar } = useSettings();
+  const { bar, settings } = useSettings();
+  const simple = settings.app === "simple";
   const ownFrame = useFrameSource().choice.run === "vault";
   const { pathname } = useLocation();
   const [asked, setAsked] = useState<Item | null>(null);
@@ -25,7 +30,8 @@ export default function BottomBar() {
   return (
     <>
       <nav className="home-bar" aria-label="Bar">
-        <Link className="home-bar-place" to="/" aria-current={pathname === "/" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">⁂</span>Launcher</Link>
+        {simple ? <SimplePlaces pathname={pathname} />
+          : <Link className="home-bar-place" to="/" aria-current={pathname === "/" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">⁂</span>Launcher</Link>}
         {items.length > 0 && <span className="home-bar-sep" aria-hidden="true" />}
         {items.map((it) => <Place key={it.href} item={it} current={here(it.href)} onHold={() => setAsked(it)} />)}
         {/* under a frame of the person's own, the app keeps its own way to Settings, whatever that frame draws */}
@@ -38,6 +44,21 @@ export default function BottomBar() {
       {asked && <PlaceSheet item={asked} first={items.filter((x) => !x.home)[0]?.href === asked.href} last={items.filter((x) => !x.home).at(-1)?.href === asked.href} onClose={() => setAsked(null)} />}
     </>
   );
+}
+
+/** The simple app's places (docs/SIMPLE.md): Notes (the home), Capture (the applet in the home vault, or the screen that
+ *  adds it), and Connect an AI. */
+function SimplePlaces({ pathname }: { pathname: string }) {
+  const home = homeVault(useVaults());
+  useApplets(home, false);
+  const capture = captureIn(home);
+  const captureHref = home && capture ? appletPath(home.key, capture) : "/capture";
+  const at = (href: string) => (pathname === href ? "page" : undefined);
+  return <>
+    <Link className="home-bar-place" to="/" aria-current={at("/")}><span className="home-bar-glyph" aria-hidden="true">¶</span>Notes</Link>
+    <Link className="home-bar-place" to={captureHref} aria-current={pathname === captureHref || pathname === "/capture" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">◉{"\uFE0E"}</span>Capture</Link>
+    <Link className="home-bar-place" to="/connect" aria-current={at("/connect")}><span className="home-bar-glyph" aria-hidden="true">⌁</span>Connect</Link>
+  </>;
 }
 
 function Place({ item, current, onHold }: { item: Item; current: boolean; onHold: () => void }) {

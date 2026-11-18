@@ -6,7 +6,7 @@ import { unresolvedLink, type WikilinkResolver } from "@openparachute/surface-re
 import { Bar } from "../../ui/Bar";
 import { useVault, useVaultQuery } from "../data";
 import { call } from "../bridge";
-import { folderOf, isAppPath, isCodeNote, noteHref, titleOf } from "../../vault/notes";
+import { folderOf, isAppOwn, isAppPath, isCodeNote, noteHref, titleOf } from "../../vault/notes";
 import NoVault from "./NoVault";
 import { linkFor } from "../../links/parse";
 
@@ -39,6 +39,9 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
       {note && (
         <article className="note">
           <p className="note-where">{[folderOf(note), ...(note.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · ") || " "}
+            {/* the words are the person's to change, in the app's own editor (a shell screen: the frame writes nothing);
+                never an app's own note or code */}
+            {!isCodeNote(note) && !isAppOwn(note) && <Link className="link-button note-edit" to={`${noteHref(rec.key, note.id)}/edit`}>Edit</Link>}
             <CopyLink link={linkFor(rec.url ?? `${rec.issuer}/vault/${encodeURIComponent(rec.vault)}`, note.id)} /></p>
           {isCodeNote(note)
             ? <pre className="note-code" aria-label="The note's text">{note.content ?? ""}</pre>

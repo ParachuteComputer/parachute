@@ -25,6 +25,7 @@ import { useParachutes } from "../shell/parachutes";
 import { listHub } from "../shell/homeSettings";
 import { signOutOf } from "../vault/signInFlow";
 import { dismissVault } from "../vault/newVaults";
+import AppChoice from "./AppChoice";
 
 /** Signing out of a vault ends what its applets were allowed on this device too, and the embeds on its pages or from it. */
 const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (const s of g.subjects()) if (grantInVault(s, subjectOf(key, ""), key)) g.revoke(s); };
@@ -69,6 +70,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
         )) : <p className="quiet">None yet.</p>}
         <p className="small"><Link to="/add">Add a Parachute</Link></p>
       </section>
+      <AppChoice />
       <ServicesSettings />
       <KeySettings />
       <KeyringSettings />

@@ -50,34 +50,46 @@ export function useParachutes(): ParachuteLine[] {
 
 /** After a sign-in to a Parachute: when this device has no home of the person's own yet, the vault of theirs that
  *  already holds their settings (another device wrote it there) becomes the home; then the Parachute goes on the
- *  person's list in the home vault (written once, on this tap). Best effort: the sign-in stands either way. */
-export async function afterSignIn(hub: string, kept: readonly VaultRecord[]): Promise<void> {
+ *  person's list in the home vault (written once, on this tap), with `app: simple` for a person new to the app on
+ *  Parachute Cloud (`cloud`: the hub said so). Best effort: the sign-in stands either way. */
+export async function afterSignIn(hub: string, kept: readonly VaultRecord[], cloud = false): Promise<void> {
   let chosen: string | null = null;
   try { chosen = localStorage.getItem(HOME_KEY); } catch { chosen = null; }
   const mineNow = listVaults().filter(isMine);
   // only a device with no home of its own before this sign-in looks for the one another device chose
   const hadHome = mineNow.some((v) => v.key === chosen || !kept.some((k) => k.key === v.key));
+  // a person new to this app on Parachute Cloud starts on the simple app (docs/SIMPLE.md, startsSimple); anyone else
+  // starts as before. Settings changes it
+  let newPerson = false;
   if (!hadHome) {
     // the vault of theirs another device made the home (it holds the settings), else the first by name; kept as
     // this device's home, so a later sign-in doesn't move it
-    const holding = await withSettings(kept.filter(isMine));
+    const { holding, unread } = await withSettings(kept.filter(isMine));
     const first = [...kept].filter(isMine).sort((a, b) => a.vault.localeCompare(b.vault))[0];
     if (holding ?? first) setHome((holding ?? first).key);
+    // new only when every vault was read and none holds settings: a vault that couldn't be read may hold them
+    newPerson = !!first && startsSimple(cloud, !!holding, unread);
   }
   await readSettings();
   if (!homeVault()) return;
-  if (settingsNow().hubs.some((h) => h.hub === hub)) return;
-  try { await listHub(hub, true, hub === CLOUD ? CLOUD_NAME : undefined); } catch { /* the list waits for the next sign-in */ }
+  if (settingsNow().hubs.some((h) => h.hub === hub) && !newPerson) return;
+  try { await listHub(hub, true, hub === CLOUD ? CLOUD_NAME : undefined, newPerson ? "simple" : undefined); } catch { /* the list waits for the next sign-in */ }
 }
 
-/** Of these vaults, the one holding a settings note (updated last, if several), or none. */
-async function withSettings(vaults: readonly VaultRecord[]): Promise<VaultRecord | null> {
+/** Who starts on the simple app (docs/SIMPLE.md): a person signing in to Parachute Cloud on a device with no home of
+ *  theirs, with a vault of their own there, when every vault the sign-in brought was read and none holds a settings
+ *  note. */
+export const startsSimple = (cloud: boolean, holding: boolean, unread: number) => cloud && !holding && unread === 0;
+
+/** Of these vaults, the one holding a settings note (updated last, if several), or none; and how many couldn't be read. */
+async function withSettings(vaults: readonly VaultRecord[]): Promise<{ holding: VaultRecord | null; unread: number }> {
+  let unread = 0;
   const found = await Promise.all(vaults.map(async (v) => {
     try {
       const rows = await clientFor(v).queryNotes({ tag: SETTINGS_TAG, limit: 1 });
       return rows.length ? { v, at: (rows[0] as { updatedAt?: string }).updatedAt ?? "" } : null;
-    } catch { return null; }
+    } catch { unread++; return null; }
   }));
   const hits = found.filter((x): x is { v: VaultRecord; at: string } => !!x).sort((a, b) => b.at.localeCompare(a.at));
-  return hits[0]?.v ?? null;
+  return { holding: hits[0]?.v ?? null, unread };
 }

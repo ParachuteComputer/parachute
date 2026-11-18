@@ -11,6 +11,7 @@ One model, everywhere.
 | `/v/<vault>/n/<note>` | A note. It opens in the applet that opens its kind (open-with), else as plain text. |
 | `/v/<vault>/a/<applet>` | An applet. |
 | `/settings` | Settings. |
+| `/connect`, `/capture`, `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | The simple app's screens ([SIMPLE.md](SIMPLE.md)): Connect an AI, Capture (before it is added), a new note, a note's words. |
 
 ## The four rules
 
@@ -71,7 +72,8 @@ reached. Entries it doesn't read are kept as they are when you change the bar.
     "parachute": {
       "bar": [{ "vault": "kitchen", "applet": "Applets/Recipes" }],
       "start": { "vault": "kitchen", "applet": "Applets/Home" },
-      "hubs": [{ "hub": "https://uni.example" }, { "hub": "https://techne.example", "name": "Techne" }]
+      "hubs": [{ "hub": "https://uni.example" }, { "hub": "https://techne.example", "name": "Techne" }],
+      "app": "everything"
     }
   }
 }
@@ -80,6 +82,10 @@ reached. Entries it doesn't read are kept as they are when you change the bar.
 That is the record as `create-record` takes it (on a hub before 0.9, `create-note`, with `metadata` for `fields`).
 `vault` is the vault's name (add `"hub": "https://…"` when two hubs hold vaults of the same name). `applet` is the
 applet note's path or id. A place that names an applet this device can't find is left off the bar, not an error.
+
+`app` says which app your devices open: `"simple"` (Notes, Capture, Connect: [SIMPLE.md](SIMPLE.md)) or
+`"everything"` (the launcher and the bar above). Left out, everything. A person new to the app on Parachute Cloud gets
+`"simple"` at their first sign-in; Settings → **Your app** changes it.
 
 `hubs` lists your Parachutes ([design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md)): each an address (`https://…`, the
 hub's origin) and, if you like, a `name` the launcher shows. The app adds one each time you sign in to a Parachute; an

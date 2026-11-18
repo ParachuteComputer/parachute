@@ -7,6 +7,9 @@
 //                   start: {vault, hub?, applet} | null   the home applet: it opens on start, first on the bar
 //                   hubs:  [{hub, name?}]   the person's Parachutes (docs/design/ONE-SIGN-IN.md): shown, never signed
 //                          in to by themselves
+//                   app:   "simple" | "everything"   which app this person's devices open (docs/SIMPLE.md): the simple
+//                          one (Notes, Capture, Connect) or everything (the launcher, every applet). Absent: everything.
+//                          A new person's first sign-in writes "simple"
 //                   services: [{name, kind, url}]   the servers the person's applets reach (docs/design/SERVICES.md):
 //                          their relay, their mail gateway. Shown in Settings with the applets that reach each; an
 //                          applet's own record still names what it reaches, and its card is what allows it
@@ -37,11 +40,14 @@ export type Place = { vault: string; hub?: string; applet: string };
 export type HubEntry = { hub: string; name?: string };
 /** A server the person's applets reach, as the note lists it. */
 export type ServiceEntry = { name: string; kind: "nostr-relay" | "http"; url: string };
-export type Settings = { bar: Place[]; start: Place | null; hubs: HubEntry[]; services: ServiceEntry[] };
+/** Which app the person's devices open: the simple one (docs/SIMPLE.md), or everything (null: the note says nothing). */
+export type AppChoice = "simple" | "everything";
+export type Settings = { bar: Place[]; start: Place | null; hubs: HubEntry[]; services: ServiceEntry[]; app: AppChoice | null };
 /** A place this device can open: its vault (this device's key) and the applet's note. */
 export type Found = { vault: string; noteId: string; name: string; glyph: string; href: string };
 
-const EMPTY: Settings = { bar: [], start: null, hubs: [], services: [] };
+const EMPTY: Settings = { bar: [], start: null, hubs: [], services: [], app: null };
+const appOf = (x: unknown): AppChoice | null => (x === "simple" || x === "everything" ? x : null);
 const line = (x: unknown, max: number): x is string => typeof x === "string" && x.length > 0 && x.length <= max && !/[\u0000-\u001f]/.test(x);
 
 function placeOf(x: unknown): Place | null {
@@ -69,11 +75,11 @@ export function serviceOf(x: unknown): ServiceEntry | null {
 /** The choices in a settings note's metadata. A place (or a Parachute) that doesn't parse is dropped, never the rest. */
 export function settingsFrom(metadata: unknown): Settings {
   const p = plain(metadata) && plain(metadata.parachute) ? metadata.parachute : null;
-  if (!p) return { ...EMPTY, hubs: [], services: [] };
+  if (!p) return { ...EMPTY, bar: [], hubs: [], services: [] };
   const bar = Array.isArray(p.bar) ? p.bar.slice(0, 200).map(placeOf).filter((x): x is Place => !!x) : [];
   const hubs = (Array.isArray(p.hubs) ? p.hubs.slice(0, 50).map(hubOf).filter((x): x is HubEntry => !!x) : []).filter((h, i, all) => all.findIndex((y) => y.hub === h.hub) === i);
   const services = Array.isArray(p.services) ? p.services.slice(0, 20).map(serviceOf).filter((x): x is ServiceEntry => !!x) : [];
-  return { bar: dedupe(bar), start: placeOf(p.start), hubs, services };
+  return { bar: dedupe(bar), start: placeOf(p.start), hubs, services, app: appOf(p.app) };
 }
 const same = (a: Place, b: Place) => a.vault === b.vault && a.applet === b.applet && (a.hub ?? "") === (b.hub ?? "");
 const dedupe = (xs: Place[]) => xs.filter((x, i) => xs.findIndex((y) => same(x, y)) === i);
@@ -201,11 +207,12 @@ export async function readSettings(): Promise<void> {
 }
 
 /** The note's choices as written, entries this app doesn't read included: a change keeps them. */
-type Raw = { bar: unknown[]; start: unknown; hubs: unknown[] };
+type Raw = { bar: unknown[]; start: unknown; hubs: unknown[]; app?: AppChoice };
 const parsedAs = (x: unknown, f: (p: Place) => boolean) => { const p = placeOf(x); return !!p && f(p); };
 
-/** Change the choices (a tap's): read the note as it is now, change only what was asked, and write it back. */
-async function changeSettings(change: (raw: Raw) => Raw): Promise<void> {
+/** Change the choices (a tap's): read the note as it is now, change only what was asked, and write it back.
+ *  `creating`: there is no settings note yet, and this write makes it. */
+async function changeSettings(change: (raw: Raw, creating: boolean) => Raw): Promise<void> {
   const home = homeVault();
   if (!home) throw new Error("There's no home vault yet.");
   const c = clientFor(home);
@@ -213,8 +220,8 @@ async function changeSettings(change: (raw: Raw) => Raw): Promise<void> {
   const n = pick(rows) as (typeof rows)[number] | null;
   if (!n && rows.length > 1) throw new Error(`Your home vault has ${rows.length} settings notes; keep one, at ${SETTINGS_PATH}.`);
   const was = plain(n?.metadata) && plain(n!.metadata!.parachute) ? n!.metadata!.parachute as Record<string, unknown> : {};
-  const next = change({ bar: Array.isArray(was.bar) ? was.bar : [], start: was.start ?? null, hubs: Array.isArray(was.hubs) ? was.hubs : [] });
-  const parachute = { ...was, bar: next.bar, start: next.start, ...(next.hubs.length || Array.isArray(was.hubs) ? { hubs: next.hubs } : {}) };
+  const next = change({ bar: Array.isArray(was.bar) ? was.bar : [], start: was.start ?? null, hubs: Array.isArray(was.hubs) ? was.hubs : [] }, !n);
+  const parachute = { ...was, bar: next.bar, start: next.start, ...(next.hubs.length || Array.isArray(was.hubs) ? { hubs: next.hubs } : {}), ...(next.app ? { app: next.app } : {}) };
   if (n) {
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), parachute }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
@@ -253,12 +260,17 @@ export const move = (p: Place, by: -1 | 1) => changeSettings((r) => {
   [bar[i], bar[j]] = [bar[j], bar[i]];
   return { ...r, bar };
 });
-/** Put a Parachute on the person's list (after a sign-in to it), unless it is there; or take it off. */
-export const listHub = (hub: string, on: boolean, name?: string) => changeSettings((r) => {
+/** Put a Parachute on the person's list (after a sign-in to it), unless it is there; or take it off. `appIfNew`: which
+ *  app their devices open, written only if this write makes their settings note (a new person's first sign-in): a
+ *  note already there keeps what it says. */
+export const listHub = (hub: string, on: boolean, name?: string, appIfNew?: AppChoice) => changeSettings((r, creating) => {
   const has = r.hubs.some((x) => hubOf(x)?.hub === hub);
-  if (on) return has ? r : { ...r, hubs: [...r.hubs, { hub, ...(name ? { name } : {}) }] };
-  return has ? { ...r, hubs: r.hubs.filter((x) => hubOf(x)?.hub !== hub) } : r;
+  const withApp = appIfNew && creating ? { ...r, app: appIfNew } : r;
+  if (on) return has ? withApp : { ...withApp, hubs: [...r.hubs, { hub, ...(name ? { name } : {}) }] };
+  return has ? { ...withApp, hubs: r.hubs.filter((x) => hubOf(x)?.hub !== hub) } : withApp;
 });
+/** Which app the person's devices open (Settings, a tap). */
+export const setApp = (app: AppChoice) => changeSettings((r) => ({ ...r, app }));
 export const setStart = (p: Place | null) => changeSettings((r) => ({ ...r, start: p }));
 export const samePlace = same;
 
