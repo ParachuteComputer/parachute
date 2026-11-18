@@ -80,4 +80,7 @@ describe("wikiPaths", () => {
     expect(wikiPaths("/Rice", undefined)).toEqual(["Rice"]);
     expect(wikiPaths("Recipes/Rice", "Recipes/Toast")).toEqual(["Recipes/Rice"]);
   });
+  it("is nothing for a target that could climb out of a folder the applet may read", () => {
+    for (const t of ["Recipes/../Journal/Private", "../Journal/Private", "Recipes/./x", "Recipes//x", "Recipes\\..\\x"]) expect(wikiPaths(t, "Recipes/Toast"), t).toEqual([]);
+  });
 });

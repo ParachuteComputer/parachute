@@ -36,7 +36,7 @@ export default function LinkTest() {
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(frame(page).locator("#opened")).toBeVisible();
     await chip(page, /Link test/);
-    await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Take you to a note or an applet when you tap, and see which note links lead to a note");
+    await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Take you to a note or an applet when you tap, see which note links lead to a note, and know its vault's web address");
     await page.getByRole("button", { name: "Allow" }).click();
     const said = frame(page).locator("#said");
     await expect(said.getByRole("link", { name: `${VAULT}:${welcome}` })).toBeVisible();

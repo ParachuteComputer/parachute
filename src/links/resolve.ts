@@ -38,9 +38,11 @@ const bare = (u: string) => u.replace(/\/+$/, "");
 const holds = (rec: VaultRecord, origin: string, vault: string) =>
   rec.vault === vault && (originOf(rec.issuer) === origin || bare(vaultUrlOf(rec)) === `${origin}/vault/${encodeURIComponent(vault)}`);
 
-/** The folders a wikilink's target may be in: as written (a path), then beside the note it is in. */
+/** The folders a wikilink's target may be in: as written (a path), then beside the note it is in. A target that could
+ *  climb out of a folder (a `.` or `..` part, `//`, a backslash) is none: the folder check reads the path as written. */
 export function wikiPaths(target: string, from?: string): string[] {
   const t = target.replace(/^\/+/, "");
+  if (t.includes("\\") || t.includes("//") || t.split("/").some((part) => part === "." || part === "..")) return [];
   const folder = from && from.includes("/") ? from.slice(0, from.lastIndexOf("/") + 1) : "";
   return [...new Set([t, ...(folder && !t.startsWith(folder) ? [folder + t] : [])])].filter(Boolean);
 }
