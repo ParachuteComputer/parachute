@@ -57,17 +57,21 @@ export async function afterSignIn(hub: string, kept: readonly VaultRecord[]): Pr
   const mineNow = listVaults().filter(isMine);
   // only a device with no home of its own before this sign-in looks for the one another device chose
   const hadHome = mineNow.some((v) => v.key === chosen || !kept.some((k) => k.key === v.key));
+  // a person new to Parachute: no home on this device, and no settings note in any vault this sign-in brought
+  let newPerson = false;
   if (!hadHome) {
     // the vault of theirs another device made the home (it holds the settings), else the first by name; kept as
     // this device's home, so a later sign-in doesn't move it
     const holding = await withSettings(kept.filter(isMine));
     const first = [...kept].filter(isMine).sort((a, b) => a.vault.localeCompare(b.vault))[0];
     if (holding ?? first) setHome((holding ?? first).key);
+    newPerson = !holding && !!first;
   }
   await readSettings();
   if (!homeVault()) return;
-  if (settingsNow().hubs.some((h) => h.hub === hub)) return;
-  try { await listHub(hub, true, hub === CLOUD ? CLOUD_NAME : undefined); } catch { /* the list waits for the next sign-in */ }
+  if (settingsNow().hubs.some((h) => h.hub === hub) && !newPerson) return;
+  // a new person starts on the simple app (docs/SIMPLE.md): their notes, capture, and their AI; Settings changes it
+  try { await listHub(hub, true, hub === CLOUD ? CLOUD_NAME : undefined, newPerson && !settingsNow().app ? "simple" : undefined); } catch { /* the list waits for the next sign-in */ }
 }
 
 /** Of these vaults, the one holding a settings note (updated last, if several), or none. */

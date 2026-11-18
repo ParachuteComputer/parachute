@@ -4,7 +4,7 @@
 // react-router and "@parachute/frame", which is all a frame's code may import.
 import { useEffect } from "react";
 import { Route, Routes, useLocation } from "react-router";
-import { closeSheet, installLongPress, Launcher, NoteRoute, Sheet, VaultView } from "@parachute/frame";
+import { closeSheet, installLongPress, Launcher, NoteRoute, NotesHome, Sheet, useHome, VaultView } from "@parachute/frame";
 
 /** The long-press on any link to a note, and the rule that a sheet belongs to the screen it was opened on. */
 function Presses() {
@@ -20,15 +20,20 @@ function NoteRouteKeyed() {
   return <NoteRoute key={location.key} />;
 }
 
+/** The home screen: Notes in the simple app (the person's settings say `app: simple`, docs/SIMPLE.md), else the launcher. */
+function Start() {
+  return useHome().app === "simple" ? <NotesHome /> : <Launcher />;
+}
+
 export default function Frame() {
   return (
     <>
       <Presses />
       <Routes>
-        <Route path="/" element={<Launcher />} />
+        <Route path="/" element={<Start />} />
         <Route path="/v/:vault" element={<VaultView />} />
         <Route path="/v/:vault/n/:id" element={<NoteRouteKeyed />} />
-        <Route path="*" element={<Launcher />} />
+        <Route path="*" element={<Start />} />
       </Routes>
       <Sheet />
     </>

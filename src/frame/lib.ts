@@ -5,6 +5,8 @@ export { default as Launcher } from "./views/Launcher";
 /** The launcher, by its step-2 name: a frame written against `Home` shows the launcher. */
 export { default as Home } from "./views/Launcher";
 export { default as VaultView } from "./views/VaultView";
+/** The simple app's home (docs/SIMPLE.md): every vault's notes in one list, a search across them, a new note. */
+export { default as NotesHome } from "./views/NotesHome";
 export { default as NoteRoute } from "./views/NoteRoute";
 export { default as NoteView } from "./views/NoteView";
 export { default as NoVault } from "./views/NoVault";

@@ -15,6 +15,9 @@ import { useVaults } from "../vault/hooks";
 import { listVaults } from "../vault/store";
 import FrameArea from "./FrameArea";
 import KeyStart from "../key/KeyStart";
+import Connect from "../views/Connect";
+import CaptureEntry from "../views/CaptureEntry";
+import NoteEdit from "../views/NoteEdit";
 import Pair from "../key/Pair";
 import { keysHere, useKey } from "../key/key";
 import BottomBar from "./BottomBar";
@@ -102,14 +105,16 @@ function useStart(): boolean {
 }
 
 /** The addresses the bar is at the foot of: the frame's, an applet's, Settings. */
-const withBar = (path: string, shell: boolean) => !shell || /^\/v\/[^/]+\/a\/[^/]+$/.test(path) || path === "/settings";
+const withBar = (path: string, shell: boolean) => !shell || /^\/v\/[^/]+\/a\/[^/]+$/.test(path) || path === "/settings" || path === "/connect" || path === "/capture";
+/** The app's own editor (a new note, a note's words): a shell screen, so the frame never writes (docs/SIMPLE.md). */
+const isEditor = (path: string) => /^\/v\/[^/]+\/(?:new|n\/[^/]+\/edit)$/.test(path);
 
 /** The shell's own screens; on any other address the frame shows. */
 function ShellRoutes() {
   const location = useLocation();
   const vaults = useVaults();
   const decided = useStart();
-  const shell = /^\/(add|oauth\/callback|settings|open-link|key|key\/pair)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname)
+  const shell = /^\/(add|oauth\/callback|settings|open-link|key|key\/pair|connect|capture)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname) || isEditor(location.pathname)
     || (location.pathname === "/" && !vaults.length);
   if (!decided) return null;
   const bar = withBar(location.pathname, shell) && vaults.length > 0;
@@ -124,6 +129,10 @@ function ShellRoutes() {
         <Route path="/oauth/callback" element={<OAuthCallback />} />
         <Route path="/v/:vault/a/:applet" element={own ? null : <AppletRoute />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/connect" element={<Connect />} />
+        <Route path="/capture" element={<CaptureEntry />} />
+        <Route path="/v/:vault/new" element={<NoteEdit key={location.key} />} />
+        <Route path="/v/:vault/n/:id/edit" element={<NoteEdit key={location.key} />} />
         <Route path="/open-link" element={<OpenLink />} />
       </Routes>}
       {/* the frame exists only while it is shown: hidden, it would keep its bridge (and a tap on a shell screen would

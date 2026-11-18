@@ -25,10 +25,11 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
   // a hub the person runs: which of its vaults are theirs, before the hub's consent
   const [pick, setPick] = useState<VaultPick | null>(null);
 
-  async function go(hubInput: string, withKey: boolean) {
+  async function go(hubInput: string, withKey: boolean, said: "mine" | "theirs" | null = whose) {
     const parsed = parseHub(hubInput);
     if (!parsed.ok) { setError(parsed.error); return; }
-    if (!whose) { setError("Say whose Parachute it is first."); return; }
+    if (!said) { setError("Say whose Parachute it is first."); return; }
+    const whose = said;
     setBusy(true); setError(null); setRefusal(null);
     try {
       const next = await startSignIn(parsed.hub, whose, withKey);
@@ -82,7 +83,8 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
           {keysHere() && key === null && <p className="small"><Link to="/key">Sign in with your Nostr key instead</Link></p>}
         </>}
         {/* Parachute Cloud signs in by an emailed link, on its own page */}
-        <button className="quiet-button" type="button" disabled={busy} onClick={() => { setInput(CLOUD); void go(CLOUD, false); }}>Use {CLOUD_NAME} instead</button>
+        {/* (a Cloud account is the person's own unless they said otherwise: it asks nothing more) */}
+        <button className="quiet-button" type="button" disabled={busy} onClick={() => { setInput(CLOUD); void go(CLOUD, false, whose ?? "mine"); }}>Use {CLOUD_NAME} instead</button>
       </form>
     </main>
   );

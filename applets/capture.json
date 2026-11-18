@@ -1,0 +1,17 @@
+{
+  "path": "Applets/Capture",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "capture",
+      "name": "Capture",
+      "glyph": "◉",
+      "note": "write it down or say it: it lands in Inbox/",
+      "access": [{ "vault": "here", "allow": [{ "path": "Inbox/", "verbs": ["read", "create", "update"] }] }],
+      "reach": ["voice"]
+    },
+    "app": ["open"]
+  }
+}
