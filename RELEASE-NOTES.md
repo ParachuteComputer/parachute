@@ -22,8 +22,10 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
 - **Other Parachutes.** Add an org's Parachute as someone else's; bring its applets into your launcher and put its
   components on your home, each in its own sealed frame with its own card, seeing only what that card allows of their
   vault ([docs/OTHER-PARACHUTES.md](docs/OTHER-PARACHUTES.md)).
-- **Read your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, or in
-  the plain view.
+- **Your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, or in
+  the plain view. Write a new note and edit a note's words in the app.
+- **The simple app** for a Parachute Cloud person: Notes across every vault, Capture (text or voice into Inbox/) and
+  Connect an AI ([docs/SIMPLE.md](docs/SIMPLE.md)).
 - **Applets.** An applet is one note in your vault (TSX, JSX or HTML) that a chat AI with the Parachute MCP can write
   ([docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md)). It runs sealed, only after you allow it, and asks again when its
   code changes. A small kit (`parachute`) gives it record calls and parts to build a screen from.

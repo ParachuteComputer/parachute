@@ -28,7 +28,7 @@ export default function OAuthCallback() {
       const sofar = after ?? before;
       if (!sofar) { setError(/Nothing was added/.test(why) ? why : `${why} Nothing was added.`); return; }
       dropPending();
-      await afterSignIn(sofar.parachute.hub, sofar.done).catch(() => undefined);
+      await afterSignIn(sofar.parachute.hub, sofar.done, sofar.parachute.door === "cloud").catch(() => undefined);
       setError(`${why} The ${sofar.done.length === 1 ? "vault" : `${sofar.done.length} vaults`} signed in to before that stay: ${sofar.done.map((v) => v.vault).join(", ")}.`);
       setKept(true);
     };
@@ -39,7 +39,7 @@ export default function OAuthCallback() {
       if ("pick" in next) { setPick(next.pick); return; }
       if ("go" in next) { setSaying(next.progress ? `Signing in to your vaults: ${next.progress.done} of ${next.progress.of}…` : "Asking your hub for your vaults…"); window.location.assign(next.go); return; }
       setSaying(`Signed in to ${next.done.length === 1 ? "one vault" : `${next.done.length} vaults`}.`);
-      await afterSignIn(next.parachute.hub, next.done).catch(() => undefined);
+      await afterSignIn(next.parachute.hub, next.done, next.parachute.door === "cloud").catch(() => undefined);
       nav("/", { replace: true });
     }, (e: unknown) => {
       if (e instanceof PendingApprovalError) setApprove(e.approveUrl);

@@ -34,6 +34,9 @@ You need a Parachute (a hub of your own, an org's, or Parachute Cloud) and a Nos
 - **Your key.** You sign in with your Nostr key. Pair it from a device that has it (the Uni app or Buzz desktop sends it
   over the Buzz pairing relay, encrypted end to end), make a new one, or paste one. It stays in the app's native side, in
   the platform's secure storage.
+- **The simple app.** For a person whose notes are on Parachute Cloud: their notes across every vault (find, read,
+  edit, write), Capture (a line or a voice note into Inbox/) and Connect an AI (each vault's connector address). A
+  new Cloud person starts there; Settings → Your app switches to everything ([docs/SIMPLE.md](docs/SIMPLE.md)).
 - **Your Parachutes.** Sign in once per hub, with your key or another way the hub offers (a password, or Cloud's own
   sign-in), and every vault you can reach there is in the launcher, grouped by Parachute. The list of your Parachutes
   lives in your home vault ([docs/design/ONE-SIGN-IN.md](docs/design/ONE-SIGN-IN.md)). Browse, search and read notes.

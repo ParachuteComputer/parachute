@@ -50,14 +50,16 @@ export function useParachutes(): ParachuteLine[] {
 
 /** After a sign-in to a Parachute: when this device has no home of the person's own yet, the vault of theirs that
  *  already holds their settings (another device wrote it there) becomes the home; then the Parachute goes on the
- *  person's list in the home vault (written once, on this tap). Best effort: the sign-in stands either way. */
-export async function afterSignIn(hub: string, kept: readonly VaultRecord[]): Promise<void> {
+ *  person's list in the home vault (written once, on this tap), with `app: simple` for a person new to the app on
+ *  Parachute Cloud (`cloud`: the hub said so). Best effort: the sign-in stands either way. */
+export async function afterSignIn(hub: string, kept: readonly VaultRecord[], cloud = false): Promise<void> {
   let chosen: string | null = null;
   try { chosen = localStorage.getItem(HOME_KEY); } catch { chosen = null; }
   const mineNow = listVaults().filter(isMine);
   // only a device with no home of its own before this sign-in looks for the one another device chose
   const hadHome = mineNow.some((v) => v.key === chosen || !kept.some((k) => k.key === v.key));
-  // a person new to Parachute: no home on this device, and no settings note in any vault this sign-in brought
+  // a person new to this app on Parachute Cloud: no home on this device, and no settings note in any vault this
+  // sign-in brought. They start on the simple app (docs/SIMPLE.md); anyone else starts as before (Settings changes it)
   let newPerson = false;
   if (!hadHome) {
     // the vault of theirs another device made the home (it holds the settings), else the first by name; kept as
@@ -65,12 +67,11 @@ export async function afterSignIn(hub: string, kept: readonly VaultRecord[]): Pr
     const holding = await withSettings(kept.filter(isMine));
     const first = [...kept].filter(isMine).sort((a, b) => a.vault.localeCompare(b.vault))[0];
     if (holding ?? first) setHome((holding ?? first).key);
-    newPerson = !holding && !!first;
+    newPerson = cloud && !holding && !!first;
   }
   await readSettings();
   if (!homeVault()) return;
   if (settingsNow().hubs.some((h) => h.hub === hub) && !newPerson) return;
-  // a new person starts on the simple app (docs/SIMPLE.md): their notes, capture, and their AI; Settings changes it
   try { await listHub(hub, true, hub === CLOUD ? CLOUD_NAME : undefined, newPerson && !settingsNow().app ? "simple" : undefined); } catch { /* the list waits for the next sign-in */ }
 }
 
