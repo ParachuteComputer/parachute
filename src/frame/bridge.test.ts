@@ -10,9 +10,11 @@ afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 
 /** The shell, as the frame's parent: its real host, its answers coming back as messages from the parent. */
 function shell(clock: { t: number }) {
-  let waiting = 0, most = 0;
-  const parentWin = { postMessage: (m: unknown) => host.handle(m) };
+  let waiting = 0, most = 0, refused = 0;
+  // what crosses to the parent is copied, as postMessage copies it (a function in it throws DataCloneError)
+  const parentWin = { postMessage: (m: unknown) => host.handle(structuredClone(m)) };
   const host = createFrameHost((m) => {
+    if ((m as { error?: string }).error === "rate_limited") refused++;
     const ev = new MessageEvent("message", { data: m });
     Object.defineProperty(ev, "source", { value: parentWin });
     setTimeout(() => window.dispatchEvent(ev), 0);
@@ -24,7 +26,7 @@ function shell(clock: { t: number }) {
     now: () => clock.t,
   } as unknown as HostDeps);
   vi.stubGlobal("parent", parentWin);
-  return { most: () => most };
+  return { most: () => most, refused: () => refused };
 }
 
 describe("the frame's calls", () => {
@@ -33,12 +35,14 @@ describe("the frame's calls", () => {
     const { call } = await import("./bridge");
     const got = await Promise.allSettled(Array.from({ length: FRAME_LIMITS.pending * 3 }, () => call("vault.roles", { vault: "kitchen" })));
     expect(got.filter((r) => r.status === "rejected")).toEqual([]);
-    expect(s.most()).toBeLessThanOrEqual(FRAME_LIMITS.pending);
+    // it never asked past the shell's limit: the shell refused nothing, and held its most
+    expect(s.refused()).toBe(0);
+    expect(s.most()).toBe(FRAME_LIMITS.pending);
   });
 
   it("wait out the shell's ten-second window and then are answered", async () => {
     const clock = { t: 0 };
-    shell(clock);
+    const s = shell(clock);
     const { call } = await import("./bridge");
     vi.useFakeTimers({ toFake: ["setTimeout"] });
     try {
@@ -47,6 +51,17 @@ describe("the frame's calls", () => {
       for (let i = 0; i < 400; i++) { await vi.advanceTimersByTimeAsync(50); clock.t += 50; }
       const got = await all;
       expect(got.filter((r) => r.status === "rejected")).toEqual([]);
+      // the window did refuse some, and each went again
+      expect(s.refused()).toBeGreaterThan(0);
     } finally { vi.useRealTimers(); }
+  });
+
+  it("fail at once when a call can't be sent, and the others still go", async () => {
+    shell({ t: 0 });
+    const { call } = await import("./bridge");
+    const calls = Array.from({ length: FRAME_LIMITS.pending * 2 }, (_, i) => i === 40 ? call("vault.roles", { vault: () => 1 } as never) : call("vault.roles", { vault: "kitchen" }));
+    const got = await Promise.allSettled(calls);
+    expect(got.filter((r) => r.status === "rejected").length).toBe(1);
+    expect(got[40].status).toBe("rejected");
   });
 });

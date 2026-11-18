@@ -44,40 +44,49 @@ export const FRAME_KIT = String.raw`(function () {
   // The shell holds 8 of a frame's calls waiting at once (src/applet/contract.ts LIMITS.maxPending) and refuses the
   // rest. So the kit sends at most 8 and keeps the others in line; a refusal for being busy (too many waiting, too many
   // in ten seconds) goes back in line after a short wait, within the call's own time. An applet never sees one.
-  var MAX_OUT = 8, line = [], out = 0;
+  var MAX_OUT = 8, line = [], out = 0, seq = 0, paused = false, pauseTimer = null;
   // what the person is waiting on goes ahead of the line: a tap's call (it needs the tap still fresh), a post, the
   // frame's height
   var FIRST = { "app.openLink": 1, "app.save": 1, "app.pick": 1, "app.open": 1, "voice.record": 1, "services.publish": 1, "page.layout": 1 };
   function pump() {
-    while (out < MAX_OUT && line.length) {
+    while (!paused && out < MAX_OUT && line.length) {
       var j = line.shift(); if (j.table[j.id] !== j) continue;
       j.out = true; out++;
       if (!j.timed) { j.timed = true; timeout(j.table, j.id, j.rej, j.ms); }
-      post(j.msg);
+      // what can't be sent (a parameter that can't be copied to the shell) fails at once, and frees its place
+      try { post(j.msg); } catch (err) { j.out = false; out--; delete j.table[j.id]; j.rej(err); }
     }
   }
+  // the line in the order things were asked, what the person waits on first (its own order kept too)
+  function place(j) { var k = line.length; while (k > 0 && line[k - 1].seq > j.seq) k--; line.splice(k, 0, j); }
   function send(table, id, msg, ms, res, rej, first) {
-    var j = { table: table, id: id, msg: msg, ms: ms, res: res, rej: rej, tries: 0, out: false, timed: false };
+    var j = { table: table, id: id, msg: msg, ms: ms, res: res, rej: rej, tries: 0, out: false, timed: false, seq: (first ? -1e12 : 0) + (++seq) };
     table[id] = j;
-    if (first) line.unshift(j); else line.push(j);
+    place(j);
     pump();
   }
-  // its answer came: the slot is free; a busy refusal waits a little and goes again (true), else it is settled
+  // its answer came: its place is free. A busy refusal goes back in line where it was (in the order it was asked, so a
+  // later write never passes it) and the whole line waits a little, growing with its tries; else the call is settled.
   function answered(j, busy) {
     if (j.out) { j.out = false; out--; }
     if (busy) {
       j.tries++;
-      setTimeout(function () { if (j.table[j.id] === j) { line.unshift(j); pump(); } }, Math.min(2000, 100 * Math.pow(2, j.tries)));
-    } else delete j.table[j.id];
-    pump();
-    return busy;
+      place(j);
+      paused = true; clearTimeout(pauseTimer);
+      pauseTimer = setTimeout(function () { paused = false; pump(); }, Math.min(2000, 100 * Math.pow(2, j.tries)));
+      return true;
+    }
+    delete j.table[j.id];
+    return false;
   }
   function timeout(table, id, rej, ms) {
     setTimeout(function () {
       var j = table[id]; if (!j) return;
       delete table[id];
-      if (j.out) { j.out = false; out--; pump(); }
+      var was = j.out;
+      if (was) { j.out = false; out--; }
       rej(new Error("timeout"));
+      if (was) pump();
     }, ms || 20000);
   }
   function call(ns, method, params) {
@@ -133,8 +142,10 @@ export const FRAME_KIT = String.raw`(function () {
     var m = e.data; if (!m || typeof m !== "object") return;
     if (m.pfr === 1) {
       var f = fetches[m.id]; if (!f) return;
-      if (answered(f, m.status === 429 && (m.statusText === "too_many_pending" || m.statusText === "rate_limited"))) return;
-      try { f.res(new Response(m.body, { status: m.status, statusText: m.statusText, headers: m.headers })); } catch (err) { f.rej(err); }
+      if (!answered(f, m.status === 429 && (m.statusText === "too_many_pending" || m.statusText === "rate_limited"))) {
+        try { f.res(new Response(m.body, { status: m.status, statusText: m.statusText, headers: m.headers })); } catch (err) { f.rej(err); }
+      }
+      pump();
       return;
     }
     if (m.uni !== 1) return;
@@ -169,8 +180,10 @@ export const FRAME_KIT = String.raw`(function () {
     }
     var p = pending[m.id]; if (!p) return;
     // the shell's own refusals carry only their code; a module's (one file a second) carries its words and stands
-    if (answered(p, !!m.error && (m.error.code === "too_many_pending" || (m.error.code === "rate_limited" && (m.error.message || "rate_limited") === "rate_limited")))) return;
-    if (m.error) { var er = new Error(m.error.message || m.error.code); er.code = m.error.code; p.rej(er); } else p.res(m.result);
+    if (!answered(p, !!m.error && (m.error.code === "too_many_pending" || (m.error.code === "rate_limited" && (m.error.message || "rate_limited") === "rate_limited")))) {
+      if (m.error) { var er = new Error(m.error.message || m.error.code); er.code = m.error.code; p.rej(er); } else p.res(m.result);
+    }
+    pump();
   });
   function frameFetch(input, init) {
     init = init || {};
