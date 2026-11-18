@@ -26,7 +26,7 @@ function swatch(n: number): Buffer {
 const secret = (n: string) => readFileSync(join(KEYS, `${n}.hex`), "utf8").trim();
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
 
-test("rooms on a real relay: two people talk, with cards, mentions, a reply, a reaction, a picture and a voice note", async ({ page }) => {
+test("rooms on a real relay: two people talk, with cards, mentions, a reply, a picture and a voice note (no reaction buttons)", async ({ page }) => {
   test.setTimeout(180_000);
   const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
   const bob = await person(RELAY!, secret("bob"));
@@ -93,8 +93,11 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     await log.getByRole("button", { name: "Approve once" }).click();
     await expect(log.getByRole("group", { name: "Hermes asks to run a command" })).toContainText("You said /approve");
     const beans = log.locator("article", { hasText: `are up ${stamp}` });
-    await beans.getByRole("button", { name: "React 👍" }).click();
-    await expect(beans.getByRole("button", { name: "👍 1, including yours" })).toBeVisible();
+    // no reaction buttons (Aaron doesn't use them), and none drawn: a reaction bob made shows nothing
+    await expect(log.getByRole("button", { name: /^React / })).toHaveCount(0);
+    expect((await bob.publish({ kind: 7, content: "👍", tags: [["e", ask.ev.id], ["p", alice], ["h", g]] })).ok).toBe(true);
+    await page.waitForTimeout(1500);
+    await expect(log.getByRole("button", { name: /👍/ })).toHaveCount(0);
     const field = app.getByLabel(`Message Garden ${stamp}`);
     await field.fill("Thanks @");
     const bobName = "Bob";
@@ -141,7 +144,7 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     const thanks = seen.find((e) => e.content.includes(`see you at noon ${stamp}`));
     expect(thanks?.tags).toContainEqual(["p", bob.pubkey]);
     expect(seen.find((e) => e.content.includes(`In the thread ${stamp}`))?.tags.some((t) => t[0] === "e" && t[3] === "root")).toBe(true);
-    expect(seen.some((e) => e.kind === 7 && e.content === "👍")).toBe(true);
+    expect(seen.some((e) => e.kind === 7)).toBe(false); // she sent no reaction
     const later = await bob.query({ kinds: [40003, 5], authors: [alice], "#e": [bedsEv!.id] });
     expect(later.find((e) => e.kind === 40003)?.content).toBe(`the raised beds ${stamp}`);
     expect(later.some((e) => e.kind === 5)).toBe(true);
