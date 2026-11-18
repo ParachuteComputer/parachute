@@ -791,13 +791,25 @@ function HoldButton({ label, onDone }: { label: string; onDone: () => void }) {
   </button>;
 }
 
+/** A key trusted from one card: every other card waiting on a key reads itself again, so the room needn't be left. */
+const trusted = new EventTarget();
+
 function SealedCard({ e }: { e: Ev }) {
   const svc = useContext(Svc);
   const [view, setView] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // checked again when the message is replaced by another copy of it (a signed one after an early draw)
-  useEffect(() => { let on = true; services.card(svc, e).then((v: any) => { if (on) setView(v); }, (x: any) => { if (on) setView({ refused: x?.code === "not_granted" ? "This applet isn't allowed to answer approvals." : said(x), rows: [] }); }); return () => { on = false; }; }, [e.id, (e as Ev & { sig?: string }).sig, e.content]);
+  const [again, setAgain] = useState(0);
+  // checked again when the message is replaced by another copy of it (a signed one after an early draw), and when a
+  // key was trusted from another card while this one waits on one
+  useEffect(() => { let on = true; services.card(svc, e).then((v: any) => { if (on) setView(v); }, (x: any) => { if (on) setView({ refused: x?.code === "not_granted" ? "This applet isn't allowed to answer approvals." : said(x), rows: [] }); }); return () => { on = false; }; }, [e.id, (e as Ev & { sig?: string }).sig, e.content, again]);
+  const waits = !!(view?.refused && view?.trust);
+  useEffect(() => {
+    if (!waits) return;
+    const read = () => setAgain((n) => n + 1);
+    trusted.addEventListener("trusted", read);
+    return () => trusted.removeEventListener("trusted", read);
+  }, [waits]);
   const answer = async (decision: "approve" | "deny", rids: string[]) => {
     setBusy(true); setErr(null);
     try { const r: any = await services.answer(svc, e, decision, rids); setView(r.view); if (r.failed) setErr(`Not sent: ${r.failed}. Try again.`); }
@@ -808,7 +820,7 @@ function SealedCard({ e }: { e: Ev }) {
   // signed by the key this applet names for Uni, only not trusted on this device yet: one tap (and the device unlock)
   const trust = async () => {
     setBusy(true); setErr(null);
-    try { setView(await services.trust(svc, e)); }
+    try { setView(await services.trust(svc, e)); trusted.dispatchEvent(new Event("trusted")); }
     catch (x: any) {
       // trusted meanwhile (from another card): the card as it reads now
       const v: any = await services.card(svc, e).catch(() => null);

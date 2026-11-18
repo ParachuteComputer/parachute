@@ -187,6 +187,9 @@ test("on a device that doesn't trust Uni's key yet, Uni's card says so and offer
   // a card as Uni's sealed broker posts it (kind 9, ```uni-sealed-approval, signed by Uni's key)
   const card = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "stripe-test", action: "job.stripe", scope: `Mint a test key ${stamp}`, payload: { v: 1 }, class: "routine", ttl_s: 600 });
   expect((await uni.send(card.event)).ok).toBe(true);
+  // a second card from Uni: trusting the key from one card answers both, without leaving the room
+  const second = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "mail-test", action: "job.mail", scope: `Read the test inbox ${stamp}`, payload: { v: 1 }, class: "routine", ttl_s: 600 });
+  expect((await uni.send(second.event)).ok).toBe(true);
   const forged = makeCard({ uni: bytes(bobKey), sealPubHex: sealPub(aliceSk), room, credential: "forged-cred", action: "job.x", scope: `Not from Uni ${stamp}`, payload: {}, class: "routine", ttl_s: 60 });
   expect((await bob.send(forged.event)).ok).toBe(true);
   // a fresh install: nothing on the device's trusted list
@@ -202,14 +205,14 @@ test("on a device that doesn't trust Uni's key yet, Uni's card says so and offer
     const cards = log.getByRole("group", { name: "Uni's card" });
     // Uni's: what is missing, and the way to it; not "Not signed by Uni."
     const offered = cards.filter({ hasText: "This device doesn't trust the key that signed this card yet." });
-    await expect(offered).toHaveCount(1, { timeout: 20_000 });
+    await expect(offered).toHaveCount(2, { timeout: 20_000 });
     // bob's: refused, and nothing to trust
     const refused = cards.filter({ hasText: "Not signed by Uni." });
     await expect(refused).toHaveCount(1);
     await expect(refused.getByRole("button")).toHaveCount(0);
     await page.waitForTimeout(5100); // a fresh tap
     // the shell's own sheet, over the applet: which applet, the whole key, and the name is the person's to give
-    await offered.getByRole("button", { name: "Trust Uni's key…" }).click();
+    await offered.first().getByRole("button", { name: "Trust Uni's key…" }).click();
     const sheet = page.getByRole("dialog", { name: "Trust a key for approvals" });
     await expect(sheet).toContainText("Rooms shows a card signed by this key");
     await expect(sheet).toContainText(nip19.npubEncode(getPublicKey(uniSk)));
@@ -217,18 +220,21 @@ test("on a device that doesn't trust Uni's key yet, Uni's card says so and offer
     // cancelled: nothing asked, nothing kept
     await sheet.getByRole("button", { name: "Cancel" }).click();
     await expect(sheet).toBeHidden();
-    await expect(offered.getByRole("button", { name: "Trust Uni's key…" })).toBeVisible();
+    await expect(offered.first().getByRole("button", { name: "Trust Uni's key…" })).toBeVisible();
     expect(await page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks?: string[] }).__parachuteE2EUnlocks ?? [])).toEqual([]);
     await page.waitForTimeout(5100);
-    await offered.getByRole("button", { name: "Trust Uni's key…" }).click();
+    await offered.first().getByRole("button", { name: "Trust Uni's key…" }).click();
     await sheet.getByLabel("Whose key is it?").fill("Uni");
     await sheet.getByRole("button", { name: "Trust it" }).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks?: string[] }).__parachuteE2EUnlocks ?? [])).toEqual(["trust Uni"]);
     expect(await page.evaluate(() => (window as unknown as { __parachuteE2EApprovers: { name: string; pubkey: string }[] }).__parachuteE2EApprovers)).toEqual([{ name: "Uni", pubkey: getPublicKey(uniSk) }]);
     // the card now reads as Uni's, with its buttons
     const sealed = log.getByRole("group", { name: "Uni asks to use a credential" });
-    await expect(sealed).toContainText(`Mint a test key ${stamp}`, { timeout: 20_000 });
-    await expect(sealed.getByRole("button", { name: /Approve/ })).toBeVisible();
+    await expect(sealed).toHaveCount(2, { timeout: 20_000 });
+    await expect(sealed.filter({ hasText: `Mint a test key ${stamp}` }).getByRole("button", { name: /Approve/ })).toBeVisible();
+    // the other card of Uni's, in the same room, without leaving it
+    await expect(sealed.filter({ hasText: `Read the test inbox ${stamp}` }).getByRole("button", { name: /Approve/ })).toBeVisible();
+    await expect(offered).toHaveCount(0);
     await expect(refused).toHaveCount(1);
   } finally {
     uni.close(); bob.close();
