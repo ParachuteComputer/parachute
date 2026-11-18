@@ -10,7 +10,7 @@
 // Opening paints the list as it was last shown (its snapshot: the rooms, their last few messages, the names in them and
 // where you had read to, for this relay and key) and then reads the relay again, its queries side by side, and puts what
 // it read in place of the snapshot: a room you left, or a message deleted meanwhile, goes.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { onLaunch, ready, services, storage } from "parachute";
 import Room, { ago, chunk, createStore, glyph, lastText, nameOf, now, openAsks, rootOf, tag, tags, textOf, useStore, visible, withoutFences, type Ev, type RoomMeta, type Store } from "component:room";
 
@@ -35,19 +35,23 @@ const bytesOf = (x: unknown) => new TextEncoder().encode(JSON.stringify(x)).leng
 const keptText = (text: string) => (/```uni-/.test(text) ? (text.length > 1500 ? text.slice(0, 1500) : text) : text.length > 300 ? text.slice(0, 300) : text);
 
 function snapshotOf(s: Store["s"], relay: string): Snapshot | null {
-  const rooms = [...s.rooms.values()];
-  for (const per of [8, 4, 2, 1]) {
-    // each room's newest messages and newest thread replies, as they read now: its last line, and its counts
+  // the rooms most recently active first: when not all fit, the list paints those, and the read brings the rest
+  const lastAt = (id: string) => Math.max(0, ...[...(s.msgs.get(id)?.values() ?? [])].map((e) => e.created_at));
+  const all = [...s.rooms.values()].sort((a, b) => lastAt(b.id) - lastAt(a.id));
+  const take = (rooms: RoomMeta[], per: number): Snapshot => {
+    // each room's newest messages and newest thread replies, as they read now: its last line, and its counts (without
+    // their signatures: nothing checks them here, and the read brings the signed ones)
     const newest = (xs: Ev[]) => xs.sort((a, b) => b.created_at - a.created_at).slice(0, per);
     const msgs = rooms.flatMap((r) => {
-      const all = [...(s.msgs.get(r.id)?.values() ?? [])].filter((e) => visible(s, e));
-      return [...newest(all.filter((e) => !rootOf(e))), ...newest(all.filter((e) => rootOf(e)))];
-    }).map((e) => ({ ...e, content: keptText(textOf(s, e)) }));
+      const xs = [...(s.msgs.get(r.id)?.values() ?? [])].filter((e) => visible(s, e));
+      return [...newest(xs.filter((e) => !rootOf(e))), ...newest(xs.filter((e) => rootOf(e)))];
+    }).map((e) => ({ id: e.id, pubkey: e.pubkey, created_at: e.created_at, kind: e.kind, tags: e.tags, content: keptText(textOf(s, e)) }));
     const authors = new Set(msgs.map((e) => e.pubkey));
-    const snap: Snapshot = { v: 2, relay, me: s.me, rooms, read: Object.fromEntries(rooms.filter((r) => s.read[r.id]).map((r) => [r.id, s.read[r.id]])),
+    return { v: 2, relay, me: s.me, rooms, read: Object.fromEntries(rooms.filter((r) => s.read[r.id]).map((r) => [r.id, s.read[r.id]])),
       names: Object.fromEntries([...s.names].filter(([k]) => authors.has(k))), msgs };
-    if (bytesOf(snap) <= SNAP_MAX) return snap;
-  }
+  };
+  for (const per of [8, 4, 2, 1]) { const snap = take(all, per); if (bytesOf(snap) <= SNAP_MAX) return snap; }
+  for (let n = Math.floor(all.length * 0.8); n >= 1; n = Math.floor(n * 0.8)) { const snap = take(all.slice(0, n), 1); if (bytesOf(snap) <= SNAP_MAX) return snap; }
   return null;
 }
 
@@ -109,6 +113,9 @@ export default function Rooms() {
   const relay = useMemo(() => services.relay("rooms"), []);
   const [status, setStatus] = useState("Reading your rooms…");
   const [view, setView] = useState<View>({ at: "list" });
+  // where the list was scrolled to, and where each room was left (distance from its foot; null: at the foot)
+  const listY = useRef(0);
+  const places = useRef(new Map<string, number | null>());
   const saveTimer = useRef<any>(null);
 
   const saveRead = () => {
@@ -131,17 +138,17 @@ export default function Rooms() {
   // opened from a notification: that room, at that message
   useEffect(() => onLaunch((l: { room: string; event?: string }) => setView({ at: "room", id: l.room, ...(l.event ? { event: l.event } : {}) })), []);
 
-  // the snapshot is written a little after the list changed, at most once in two seconds and only when it changed (a
-  // frame that closes gets no last word)
+  // the snapshot is written right after the first read, then a little after the list changed, at most once in two
+  // seconds and only when it changed (a frame that closes gets no last word)
   const keep = useRef<{ relay: string; timer: any; written: string } | null>(null);
-  const keepSoon = () => {
+  const keepSoon = (now = false) => {
     const k = keep.current; if (!k || k.timer) return;
     k.timer = setTimeout(() => {
       k.timer = null;
       const snap = snapshotOf(s, k.relay); if (!snap) return;
       const json = JSON.stringify(snap);
       if (json !== k.written) storage.set(SNAP, snap).then(() => { k.written = json; }, () => {});
-    }, 2000);
+    }, now ? 0 : 2000);
   };
 
   useEffect(() => {
@@ -186,10 +193,11 @@ export default function Rooms() {
         st.bump();
         const rooms = [...s.rooms.keys()];
         setStatus(rooms.length ? "" : "No rooms yet. When someone writes to you, the room shows here.");
-        keep.current ??= { relay: url, timer: null, written: "" };
-        keepSoon();
         await names([...new Set([...s.msgs.values()].flatMap((m) => [...m.values()].map((e) => e.pubkey)))]);
         if (!on) return;
+        // the first read, with its names, is kept at once: a Rooms closed a moment later still opens painted
+        keep.current ??= { relay: url, timer: null, written: "" };
+        keepSoon(true);
         // what comes after: new posts, edits and deletions, one subscription a room (a Buzz relay sends live events only
         // to a subscription for one room)
         const onEvents = (evs: Ev[]) => { evs.forEach(st.add); st.bump(); keepSoon(); void names(evs.map((e) => e.pubkey)); };
@@ -220,10 +228,19 @@ export default function Rooms() {
     return () => { on = false; stop?.(); off(); const k = keep.current; if (k?.timer) { clearTimeout(k.timer); k.timer = null; } };
   }, []);
 
-  if (view.at === "list") return <main><style>{CSS}</style><RoomList st={st} status={status} open={(id, event) => setView({ at: "room", id, ...(event ? { event } : {}) })} /></main>;
+  // opening a room: drawn at once from what the list holds, and where you left it (each room's place, and the list's)
+  const open = (id: string, event?: string) => { listY.current = window.scrollY; setView({ at: "room", id, ...(event ? { event } : {}) }); };
+  if (view.at === "list") return <main><style>{CSS}</style><RoomList st={st} status={status} open={open} y={listY.current} /></main>;
+  const id = view.id;
+  // only messages as the relay sent them (signed, unchanged): a card in one is checked by its signature; the snapshot's
+  // shortened copies (no signature) wait for the room's own read; edits go along as their own events
+  const held = [...(s.msgs.get(id)?.values() ?? [])].filter((e) => visible(s, e) && (e as Ev & { sig?: string }).sig);
+  const heldIds = new Set(held.map((e) => e.id));
+  const seed = { msgs: [...held, ...[...s.edits.entries()].filter(([t]) => heldIds.has(t)).map(([, ed]) => ed)], names: s.names, me: s.me };
+  const place = { get: () => places.current.get(id) ?? null, set: (d: number | null) => { places.current.set(id, d); } };
   return <main className="in-room"><style>{CSS}</style>
-    <Room key={view.id + (view.event ?? "")} service="rooms" room={view.id} name={s.rooms.get(view.id)?.name} at={view.event} readAt={s.read[view.id] ?? 0}
-      onRead={(latest: number) => markRead(view.id, latest)} onBack={() => setView({ at: "list" })} />
+    <Room key={id + (view.event ?? "")} service="rooms" room={id} name={s.rooms.get(id)?.name} at={view.event} readAt={s.read[id] ?? 0} seed={seed} place={place}
+      onRead={(latest: number) => markRead(id, latest)} onBack={() => setView({ at: "list" })} />
   </main>;
 }
 
@@ -233,8 +250,10 @@ function unreadOf(s: Store["s"], room: string) {
   return { n: r ? list.length : 0, mention: r ? list.some((e) => tags(e, "p").includes(s.me)) : false };
 }
 
-function RoomList({ st, status, open }: { st: Store; status: string; open: (id: string, event?: string) => void }) {
+function RoomList({ st, status, open, y }: { st: Store; status: string; open: (id: string, event?: string) => void; y: number }) {
   const s = st.s;
+  // back from a room: the list where you left it
+  useLayoutEffect(() => { if (y) window.scrollTo(0, y); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Ev[] | null>(null);
   const rows = [...s.rooms.values()].map((room) => {
