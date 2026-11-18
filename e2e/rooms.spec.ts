@@ -371,8 +371,9 @@ test("a room opens at once from what the list holds, and where you left it", asy
     await expect.poll(fromFoot, { timeout: 5_000 }).toBeGreaterThan(left - 60);
     expect(await fromFoot()).toBeLessThan(left + 60);
 
-    // the relay away: the room still opens with what the list holds (its newest lines)
+    // the relay away: the room still opens with what the list holds (its newest lines), once the list is kept
     await app.getByRole("button", { name: /Rooms/ }).first().click();
+    await expect.poll(() => page.evaluate((st) => Object.keys(localStorage).some((k) => k.startsWith("parachute.applet-storage.v1:") && (localStorage.getItem(k) ?? "").includes(`Yard note 30 ${st}`)), stamp), { timeout: 10_000 }).toBe(true);
     away = true;
     await page.goto(`/v/${VAULT}`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();

@@ -138,17 +138,17 @@ export default function Rooms() {
   // opened from a notification: that room, at that message
   useEffect(() => onLaunch((l: { room: string; event?: string }) => setView({ at: "room", id: l.room, ...(l.event ? { event: l.event } : {}) })), []);
 
-  // the snapshot is written a little after the list changed, at most once in two seconds and only when it changed (a
-  // frame that closes gets no last word)
+  // the snapshot is written right after the first read, then a little after the list changed, at most once in two
+  // seconds and only when it changed (a frame that closes gets no last word)
   const keep = useRef<{ relay: string; timer: any; written: string } | null>(null);
-  const keepSoon = () => {
+  const keepSoon = (now = false) => {
     const k = keep.current; if (!k || k.timer) return;
     k.timer = setTimeout(() => {
       k.timer = null;
       const snap = snapshotOf(s, k.relay); if (!snap) return;
       const json = JSON.stringify(snap);
       if (json !== k.written) storage.set(SNAP, snap).then(() => { k.written = json; }, () => {});
-    }, 2000);
+    }, now ? 0 : 2000);
   };
 
   useEffect(() => {
@@ -193,10 +193,11 @@ export default function Rooms() {
         st.bump();
         const rooms = [...s.rooms.keys()];
         setStatus(rooms.length ? "" : "No rooms yet. When someone writes to you, the room shows here.");
-        keep.current ??= { relay: url, timer: null, written: "" };
-        keepSoon();
         await names([...new Set([...s.msgs.values()].flatMap((m) => [...m.values()].map((e) => e.pubkey)))]);
         if (!on) return;
+        // the first read, with its names, is kept at once: a Rooms closed a moment later still opens painted
+        keep.current ??= { relay: url, timer: null, written: "" };
+        keepSoon(true);
         // what comes after: new posts, edits and deletions, one subscription a room (a Buzz relay sends live events only
         // to a subscription for one room)
         const onEvents = (evs: Ev[]) => { evs.forEach(st.add); st.bump(); keepSoon(); void names(evs.map((e) => e.pubkey)); };
