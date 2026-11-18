@@ -101,7 +101,8 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "ready") {
       if (m.data && m.data.theme) applyTheme(m.data.theme);
       if (m.data && m.data.props) applyProps(m.data.props);
-      if (m.data && typeof m.data.shown === "boolean") shownNow = m.data.shown;
+      // booted while hidden: what read shown() before ready (a component's first render) hears the change
+      if (m.data && typeof m.data.shown === "boolean" && m.data.shown !== shownNow) { shownNow = m.data.shown; shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); }
       readyRes(m.data);
       if (m.data && m.data.open) applyOpen(m.data.open);
       if (m.data && m.data.page && (m.data.page.sized || m.data.page.embeds)) startMeasuring();

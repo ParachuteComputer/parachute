@@ -9,8 +9,9 @@
 //   loading goes when the person leaves it, as every screen did before;
 // - not a page with embeds (its embeds may run another vault's code);
 // - at most KEEP of them hidden; the one left longest ago goes first.
-// A notification's tap (room, message) reaches a kept Rooms as a `launch` event, without a new tap: it was started by
-// one, and the launch carries only a room id and a message id. A grant that expires while hidden is seen when shown.
+// A notification's tap (room, message) reaches an applet already running at its own address, shown or kept, as a
+// `launch` event without a new tap: it was started by one, and a launch carries only a room id and a message id. A grant
+// that expires while hidden is seen when shown.
 // While hidden an applet gets no tap (shell/appDeps.ts `tappingIn` and views/ShellSheets.tsx `useTapOnce` need its frame
 // on screen), its recorder or picker is cancelled, and it is told (`shown` event, kit `onShown`) so it can hold what
 // only a person looking may do (a room marks nothing read). Shown again, its record is read again: changed code or a
