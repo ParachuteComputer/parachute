@@ -262,3 +262,50 @@ test("Uni's turn in a room: a quick reply, working and Stop, muted, a draft with
     await made.remove();
   }
 });
+
+test("Rooms paints the list it last showed at once, with the relay away, then reads it again", async ({ page }) => {
+  test.setTimeout(120_000);
+  const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
+  const bob = await person(RELAY!, secret("bob"));
+  const stamp = Date.now().toString(36);
+  const owner = await person(RELAY!, secret("owner"));
+  const porch = crypto.randomUUID();
+  for (const p of [alice, bob.pubkey]) await owner.publish({ kind: 9030, tags: [["p", p]] });
+  expect((await owner.publish({ kind: 9007, tags: [["h", porch], ["name", `Porch ${stamp}`], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+  for (const p of [alice, bob.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", porch], ["p", p]] })).ok).toBe(true);
+  owner.close();
+  await bob.publish({ kind: 0, content: JSON.stringify({ name: "Bob", display_name: "Bob" }) });
+  expect((await bob.publish({ kind: 9, content: `The porch light is fixed ${stamp}.`, tags: [["h", porch]] })).ok).toBe(true);
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+  // while `away`, every connection to the relay closes at once, so nothing the list shows can come from it
+  let away = false;
+  await page.routeWebSocket((url) => url.href.startsWith(RELAY!), (ws) => { if (away) ws.close(); else ws.connectToServer(); });
+  const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
+  const open = async () => {
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+  };
+  const row = () => frame(page).getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Porch ${stamp}`) });
+  try {
+    await open();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(row()).toContainText(`Bob: The porch light is fixed ${stamp}.`, { timeout: 30_000 });
+    // the list is kept on this device a moment after it changed
+    const kept = () => page.evaluate((st) => Object.keys(localStorage).some((k) => k.startsWith("parachute.applet-storage.v1:") && (localStorage.getItem(k) ?? "").includes(`The porch light is fixed ${st}.`)), stamp);
+    await expect.poll(kept, { timeout: 10_000 }).toBe(true);
+
+    away = true;
+    await open();
+    await expect(row()).toContainText(`Bob: The porch light is fixed ${stamp}.`, { timeout: 5_000 });
+    await expect(frame(page).getByRole("status")).toContainText("The relay is away");
+
+    // back: what the relay says now takes the snapshot's place
+    away = false;
+    expect((await bob.publish({ kind: 9, content: `Gate latch done too ${stamp}.`, tags: [["h", porch]] })).ok).toBe(true);
+    await open();
+    await expect(row()).toContainText(`Bob: Gate latch done too ${stamp}.`, { timeout: 30_000 });
+  } finally {
+    await made.remove();
+    bob.close();
+  }
+});
