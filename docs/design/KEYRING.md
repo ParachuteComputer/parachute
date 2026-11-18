@@ -86,6 +86,15 @@ shows each by the list's name ("Uni"), and a key not on the list as "a key you h
 when its author is in `from` **and** on the list, so a hostile applet that declares its own key gets nothing: no card
 of its making shows buttons, and the shell's secret sheet never opens for it.
 
+A fresh install's list is empty. A card from a key the grant names in `approvals.from` but the list doesn't have yet
+says so ("This device doesn't trust the key that signed this card yet.", not "Not signed by Uni.") and the Rooms
+applet offers **Trust Uni's key…** (`services.trust`): the person's tap, then the shell's own sheet over the applet
+(which applet asks, the whole npub, and a name the person types: never the applet's word), then the device unlock
+("Let Uni (npub1…) ask this device for approvals and secrets"), adds it to the list (Rust's `svc_card_trust`). It is
+offered only for a key the grant names, which the person saw on the grant's card; a card from any other key still
+reads "Not signed by Uni." with nothing to tap. A name another key already has is refused (no second "Uni"), here and
+in Settings. Which keys sign Uni's cards: Uni's own Buzz key alone (DAY1 notes, 11-18).
+
 ## The card
 
 On the card's face ([PERMISSIONS.md](PERMISSIONS.md)) the server's line names the everyday key, and `approvals` is its

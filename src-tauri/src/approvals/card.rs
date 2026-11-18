@@ -468,6 +468,10 @@ pub struct CardView {
     /// The key that signed the card (hex), so the applet can say who asks.
     pub author: String,
     pub refused: Option<String>,
+    /// Set when the author is a key the grant names for approvals, not yet on the device's list (its other checks wait
+    /// until it is trusted). The card may offer it: the person's tap, the shell's own sheet, the device unlock (cards.rs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trust: Option<String>,
     pub rows: Vec<RowView>,
 }
 
@@ -479,6 +483,7 @@ pub fn view(ev: &Event, trusted: &[PublicKey], seal: &SealKey, answers: &Answers
         event_id: ev.id.to_hex(),
         author: ev.pubkey.to_hex(),
         refused: Some(r.message().into()),
+        trust: None,
         rows: vec![],
     };
     let earlier = answers.for_card(&ev.id);
@@ -519,7 +524,7 @@ pub fn view(ev: &Event, trusted: &[PublicKey], seal: &SealKey, answers: &Answers
             read_key: read_key_line(&r.action, &r.scope),
         })
         .collect();
-    CardView { kind: Some(card.kind), event_id: ev.id.to_hex(), author: card.author.to_hex(), refused: None, rows }
+    CardView { kind: Some(card.kind), event_id: ev.id.to_hex(), author: card.author.to_hex(), refused: None, trust: None, rows }
 }
 
 /// "45 s", "10 min", "14 h" (CARD.md §4), as the card shows a window.

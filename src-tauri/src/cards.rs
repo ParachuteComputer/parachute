@@ -81,7 +81,33 @@ pub async fn svc_card_view<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeySta
     let r = ready(&app, &keys, &ring, &state, &session, &service, &event).await?;
     let seal = seal_key(&r.approval).map_err(refused)?;
     let answers = Answers::load(&r.dir).map_err(refused)?;
-    Ok(view(&r.ev, &r.trusted, &seal, &answers, now()))
+    let mut v = view(&r.ev, &r.trusted, &seal, &answers, now());
+    // signed by a key the grant names, only not trusted on this device yet: say that (not "not Uni"), and offer it
+    let author = r.ev.pubkey.to_hex();
+    if v.rows.is_empty() && keyring::trust_offer(&r.g.from, &keyring::approvers(&app)?, &author) {
+        v.refused = Some(NOT_TRUSTED_HERE.into());
+        v.trust = Some(author);
+    }
+    Ok(v)
+}
+
+/// What a card from a key the grant names, not yet on this device's list, says instead of "Not signed by Uni."
+pub const NOT_TRUSTED_HERE: &str = "This device doesn't trust the key that signed this card yet.";
+
+/// Trust the card's author for approvals on this device: only a key the applet's grant names in `approvals.from`
+/// (which the person saw on the grant's card), under `name`, behind the device unlock. Nothing else adds a key.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn svc_card_trust<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, ring: State<'_, KeyringState>, state: State<'_, ServicesState>, session: String, service: String, event: Value, name: String) -> Result<(), Refusal> {
+    let r = ready(&app, &keys, &ring, &state, &session, &service, &event).await?;
+    let author = r.ev.pubkey.to_hex();
+    if !keyring::trust_offer(&r.g.from, &keyring::approvers(&app)?, &author) {
+        return Err(no("not_granted", "That key isn't one this applet names for approvals, or it is trusted already."));
+    }
+    keyring::add_approver(&app, &ring, &name, &r.ev.pubkey).await?;
+    // kept: a log that can't be written doesn't undo it
+    let _ = state.broker(&app).and_then(|b| b.log_for(&session, &service, format!("trust a key for approvals as {}", name.trim()), Some(r.ev.id.to_hex())));
+    Ok(())
 }
 
 #[derive(Serialize)]

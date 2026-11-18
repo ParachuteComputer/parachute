@@ -22,7 +22,9 @@ export type CardRow = {
   always_unlock: boolean; asked: number; reach: string | null; read_key: string | null;
 };
 /** A card: its rows when every check passed, else the one line why and nothing to tap. */
-export type CardView = { kind: "single" | "morning" | null; event_id: string; refused: string | null; rows: CardRow[] };
+export type CardView = { kind: "single" | "morning" | null; event_id: string; refused: string | null; rows: CardRow[];
+  /** The author (hex), when the grant names it for approvals and only this device's trust is missing: the card may offer it. */
+  trust?: string };
 /** What an answer hands back to the shell: the wraps to publish (never to the frame), and whether a grace let it through. */
 export type Answered = { wraps: { rid: string; wrap: SignedEvent }[]; graced: boolean; summary: string };
 /** A secret request, for the shell's sheet: who asks (the trusted list's name), and Uni's words for it. */
@@ -49,6 +51,9 @@ export interface Native {
   log(subject: string): Promise<LogLine[]>;
   /** Uni's card in this event, checked (author on the grant's list and the device's, the box opens, digests, replay). */
   cardView(session: string, service: string, event: SignedEvent): Promise<CardView>;
+  /** Trust the card's author for approvals on this device: only a key the grant names, under the name the person gave
+   *  on the shell's sheet, behind the device unlock. */
+  cardTrust(session: string, service: string, event: SignedEvent, name: string): Promise<void>;
   /** Answer rows of a card: the device unlock first (native), the answers kept, the wraps handed back to publish. */
   cardAnswer(session: string, service: string, event: SignedEvent, decision: "approve" | "deny", rids: string[]): Promise<Answered>;
   /** The relay took this row's wrap. */

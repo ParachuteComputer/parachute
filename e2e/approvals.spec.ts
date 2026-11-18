@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import * as nip44 from "nostr-tools/nip44";
+import * as nip19 from "nostr-tools/nip19";
 import { VAULT } from "./hub";
 import { installApplet, ui } from "./helpers";
 import { person } from "./services/client";
@@ -164,6 +165,73 @@ test("an applet without the approvals grant answers no card and can't post a bot
     expect(await uni.query({ kinds: [1059], "#p": [getPublicKey(uniSk)] })).toEqual([]);
   } finally {
     uni.close();
+    await made.remove();
+  }
+});
+
+test("on a device that doesn't trust Uni's key yet, Uni's card says so and offers it: one tap and the unlock, then it can be answered; another key's card gets no offer", async ({ page }) => {
+  test.setTimeout(180_000);
+  const aliceSk = bytes(secret("alice"));
+  const alice = getPublicKey(aliceSk);
+  const uniSk = generateSecretKey();
+  const stamp = Date.now().toString(36);
+  const owner = await person(RELAY!, secret("owner"));
+  const room = crypto.randomUUID();
+  const bobKey = secret("bob");
+  const bob = await person(RELAY!, bobKey);
+  for (const p of [alice, getPublicKey(uniSk), bob.pubkey]) await owner.publish({ kind: 9030, tags: [["p", p]] });
+  expect((await owner.publish({ kind: 9007, tags: [["h", room], ["name", `Fresh ${stamp}`], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+  for (const p of [alice, getPublicKey(uniSk), bob.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", room], ["p", p]] })).ok).toBe(true);
+  owner.close();
+  const uni = await person(RELAY!, hex(uniSk));
+  // a card as Uni's sealed broker posts it (kind 9, ```uni-sealed-approval, signed by Uni's key)
+  const card = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "stripe-test", action: "job.stripe", scope: `Mint a test key ${stamp}`, payload: { v: 1 }, class: "routine", ttl_s: 600 });
+  expect((await uni.send(card.event)).ok).toBe(true);
+  const forged = makeCard({ uni: bytes(bobKey), sealPubHex: sealPub(aliceSk), room, credential: "forged-cred", action: "job.x", scope: `Not from Uni ${stamp}`, payload: {}, class: "routine", ttl_s: 60 });
+  expect((await bob.send(forged.event)).ok).toBe(true);
+  // a fresh install: nothing on the device's trusted list
+  await page.addInitScript((k) => { if (window === window.top) Object.assign(window, { __parachuteE2EKey: k, __parachuteE2EApprovers: [], __parachuteE2EUnlock: "pass" }); }, secret("alice"));
+  const made = await installApplet("rooms", { relay: RELAY!, uni: getPublicKey(uniSk) });
+  try {
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = frame(page);
+    await app.getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Fresh ${stamp}`) }).click({ timeout: 30_000 });
+    const log = app.getByRole("log");
+    const cards = log.getByRole("group", { name: "Uni's card" });
+    // Uni's: what is missing, and the way to it; not "Not signed by Uni."
+    const offered = cards.filter({ hasText: "This device doesn't trust the key that signed this card yet." });
+    await expect(offered).toHaveCount(1, { timeout: 20_000 });
+    // bob's: refused, and nothing to trust
+    const refused = cards.filter({ hasText: "Not signed by Uni." });
+    await expect(refused).toHaveCount(1);
+    await expect(refused.getByRole("button")).toHaveCount(0);
+    await page.waitForTimeout(5100); // a fresh tap
+    // the shell's own sheet, over the applet: which applet, the whole key, and the name is the person's to give
+    await offered.getByRole("button", { name: "Trust Uni's key…" }).click();
+    const sheet = page.getByRole("dialog", { name: "Trust a key for approvals" });
+    await expect(sheet).toContainText("Rooms shows a card signed by this key");
+    await expect(sheet).toContainText(nip19.npubEncode(getPublicKey(uniSk)));
+    await expect(sheet.getByRole("button", { name: "Trust it" })).toBeDisabled();
+    // cancelled: nothing asked, nothing kept
+    await sheet.getByRole("button", { name: "Cancel" }).click();
+    await expect(sheet).toBeHidden();
+    await expect(offered.getByRole("button", { name: "Trust Uni's key…" })).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks?: string[] }).__parachuteE2EUnlocks ?? [])).toEqual([]);
+    await page.waitForTimeout(5100);
+    await offered.getByRole("button", { name: "Trust Uni's key…" }).click();
+    await sheet.getByLabel("Whose key is it?").fill("Uni");
+    await sheet.getByRole("button", { name: "Trust it" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks?: string[] }).__parachuteE2EUnlocks ?? [])).toEqual(["trust Uni"]);
+    expect(await page.evaluate(() => (window as unknown as { __parachuteE2EApprovers: { name: string; pubkey: string }[] }).__parachuteE2EApprovers)).toEqual([{ name: "Uni", pubkey: getPublicKey(uniSk) }]);
+    // the card now reads as Uni's, with its buttons
+    const sealed = log.getByRole("group", { name: "Uni asks to use a credential" });
+    await expect(sealed).toContainText(`Mint a test key ${stamp}`, { timeout: 20_000 });
+    await expect(sealed.getByRole("button", { name: /Approve/ })).toBeVisible();
+    await expect(refused).toHaveCount(1);
+  } finally {
+    uni.close(); bob.close();
     await made.remove();
   }
 });
