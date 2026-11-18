@@ -51,9 +51,9 @@ room reaches both.
 | Write, reply: save the draft, review exactly what will go, send | built | mail.spec: the reply reaches bob's inbox and is in Sent |
 | Open and send a draft; discard | built | not in a spec |
 | Flag, archive | built (when the gateway allows them) | not in a spec (a fresh mailbox has no Archive) |
-| Attachments: shown by name | part: no download, no attaching | — |
-| Uni's mailbox, held sends (approve or decline a send Uni parked) | part: a second mailbox is switchable; held sends aren't drawn | — |
-| Later, Waiting (the Uni app's triage places) | left: the gateway has no triage yet | — |
+| Attachments: shown by name | part: shown by name; no download or attaching in mail yet (rooms has both: the shell's `save` and `attach` are there to use) | — |
+| Uni's mailbox, held sends: **Waiting** (approve or decline a send Uni parked, the whole draft shown first) | built: Approve is signed with the approval key (the mail service's `approve`, KEYRING.md), behind the device unlock in the app; Decline with the everyday key. The gateway still decides by the key it maps until it is told the approval key | mail.spec: one approved (bob gets it), one declined (nobody does); real gateway copy |
+| **Later** (the Uni app's \$flagged triage; Inbox hides a Later thread until something new comes in) | built | mail.spec: Later puts a thread off and Not later brings it back |
 
 ## Journal (applets/journal.tsx)
 
@@ -78,5 +78,7 @@ room reaches both.
 | To Post, Studio, Arcade, Usage, Route suggestions | left | niche or experimental in the Uni app |
 | Messages over Matrix | part: applets/matrix.tsx reads and writes a homeserver's rooms with a token the person gives the app (e2e/matrix.spec.ts, a real homeserver). The Uni app's bridged networks (Signal, WhatsApp…) behind its Matrix door are not linked from here | — |
 | Updates over the air | left: Parachute updates as an app | — |
+| Claude accounts ("New workers use": Auto / A until reset / B until reset; #systems 11-17) | part: applets/accounts.tsx shows each account's use and which one new workers use, from the launcher's note `System/Claude accounts`. Setting it is left: the flag is that note's metadata, and an applet's `vault.update` writes a note's text only (the contract shared with the Uni app). Until a narrow metadata write exists, `mts prefer` sets it | e2e/accounts.spec.ts |
+| Joining a private network (WireGuard with a Nostr-signed member list, ~/Code/mesh) | left: a later Parachute feature on the phone (#systems 11-17) | — |
 | Unlock before powerful approvals, and its grace | built: Android BiometricPrompt (biometric or screen lock), macOS LocalAuthentication, a native OK/Cancel on Linux and Windows. The grace (300 s, routine only, per applet) is on Android only: the desktop asks every time (the Uni app watches the screen lock there; not ported) | emulator (PIN); approvals.spec (the web build's stand-in) |
 | A separate approval key; keys trusted for approvals | built: Settings → Approvals (make one, copy its enrollment for Uni, use the everyday key again; trust or stop trusting a key) | emulator |

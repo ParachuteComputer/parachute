@@ -1,0 +1,15 @@
+{
+  "path": "Applets/Claude accounts",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "claude-accounts",
+      "name": "Claude accounts",
+      "glyph": "◐",
+      "note": "your Claude accounts and which one new workers use",
+      "access": [{ "vault": "here", "allow": [{ "path": "System/", "verbs": ["read"] }] }]
+    }
+  }
+}
