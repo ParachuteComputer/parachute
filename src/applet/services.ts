@@ -21,7 +21,7 @@ export type Room = { id: string; name: string };
 export type Approvals = { from: string[] };
 /** Notifications while Parachute is closed: messages that name you, and every message from these keys (hex). `gateway`:
  *  the push gateway (services/push-gateway) that watches the relay and pushes to this phone through its UnifiedPush
- *  distributor; without one, only the phone's own listener (off unless the person turns it on) can tell. */
+ *  distributor; without one, only the phone's own connection (on unless the person turns it off) can tell. */
 export type Notify = { mentions: boolean; from: string[]; gateway?: string };
 export type RelayService = { id: string; kind: "nostr-relay"; url: string; publish: number[]; media: boolean; private: PrivateEntry[]; rooms?: Room[]; approvals?: Approvals; notify?: Notify };
 /** A request whose JSON body's `field` is one of `ops` is signed with the approval key, and only with it; the everyday

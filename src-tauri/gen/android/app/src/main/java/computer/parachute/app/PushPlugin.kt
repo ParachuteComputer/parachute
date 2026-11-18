@@ -44,6 +44,8 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     private const val ANY = "*"
     // calls waiting for the distributor's answer, by instance (ANY: whichever answers first); on the main thread
     private val waiting = HashMap<String, ArrayList<() -> Unit>>()
+    // the instances asked again of the distributor in this run of the app
+    private val refreshed = HashSet<String>()
 
     /** PushService.kt: the distributor answered for this instance (an endpoint, or none). */
     fun endpointChanged(ctx: Context, instance: String, ok: Boolean) {
@@ -116,9 +118,13 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     val gateway = try { invoke.parseArgs(PushEndpointArgs::class.java).gateway } catch (e: Exception) { "" }
     val instance = PushService.instanceFor(gateway) ?: return invoke.reject("not a gateway's address")
     dropLegacy()
-    PushService.endpoint(activity, instance)?.let { return invoke.resolve(JSObject(it.toString())) }
     val saved = UnifiedPush.getSavedDistributor(activity)
+    val kept = PushService.endpoint(activity, instance)
+    // once a run, the distributor is asked again even with an endpoint kept (UnifiedPush's advice): one reinstalled or
+    // reset since doesn't know the old one, and answers with a new endpoint, which then goes to the gateway
+    if (kept != null && (instance in refreshed || saved == null || saved !in UnifiedPush.getDistributors(activity))) return invoke.resolve(JSObject(kept.toString()))
     if (saved == null || saved !in UnifiedPush.getDistributors(activity)) return invoke.reject("pick a push service in Settings")
+    refreshed.add(instance)
     PushService.asked(activity, instance)
     await(instance) {
       val e = PushService.endpoint(activity, instance)

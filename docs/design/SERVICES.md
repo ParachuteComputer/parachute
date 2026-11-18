@@ -258,7 +258,8 @@ allowed applet that asked and shows "A message for you in <room>" through the on
 path (`MessageNotices.kt`, shared with the fallback below); a tap opens `parachute://notify?subject=…&room=…&event=…`.
 
 **The fallback.** For a phone without a working distributor (a de-Googled phone with nothing installed yet, or one whose
-distributor was removed), Parachute keeps its own connection: the foreground service with its own relay connection
+distributor was removed: from the next time Parachute is opened, as nothing tells it while closed), Parachute keeps
+its own connection: the foreground service with its own relay connection
 (KEYRING.md), on unless the person turns it off, so notifications work from the first minute. Settings says it costs
 battery and offers **Get ntfy** (its F-Droid page) first. It serves only what no push registration serves, never both
 for one applet: once ntfy delivers, it has nothing left to listen for and stops. Its notifications may show the message's first

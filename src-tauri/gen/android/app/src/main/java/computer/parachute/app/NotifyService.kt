@@ -4,8 +4,8 @@ package computer.parachute.app
 // open push service"): the main path is a push from the person's UnifiedPush distributor (PushService.kt). For a phone
 // without one, this foreground service (type remoteMessaging, its quiet ongoing line "Listening for your rooms") keeps
 // its own relay connection for what granted applets asked to be told about (the list NotifyPlugin.kt keeps; checked by
-// notify.rs). It runs only when the person turns on "Listen without a push service" in Settings, and only for what no
-// push registration serves (never both for one applet).
+// notify.rs). It is on unless the person turns it off in Settings, and runs only for what no push registration serves
+// (never both for one applet): with a push service delivering everything, it isn't running at all.
 //
 // It signs one thing, the relay's NIP-42 sign-in, through Rust (`signAuth`, notify.rs): the everyday key is decrypted
 // from the Keystore for that call and the bytes are zeroed after. Then one subscription per room (Buzz sends live events

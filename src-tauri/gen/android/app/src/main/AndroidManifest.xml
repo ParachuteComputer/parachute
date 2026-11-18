@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Notifications while the app is closed: pushes (PushService.kt), and the fallback listener's own relay connection
-         in a foreground service (NotifyService.kt, off unless the person turns it on) -->
+         in a foreground service (NotifyService.kt, on unless the person turns it off; idle while push serves everything) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
