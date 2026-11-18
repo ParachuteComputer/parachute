@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { appletRecord } from "../../applets/record";
 import { readApplet } from "./discovery";
 import { grantLines, grantOf, type Grant } from "./grant";
-import { changeOf, faceOf, faceTexts, othersOf } from "./face";
+import { changeOf, faceOf, faceText, faceTexts, othersOf } from "./face";
 import type { Imported } from "./resolveImports";
 import { importLines } from "./resolveImports";
 import type { LineOptions } from "./services";
@@ -70,7 +70,10 @@ describe("the face keeps every stressed line's facts", () => {
     const face = faceOf(g, folder, trusted);
     expect(grantLines(g, folder, trusted).length).toBeGreaterThanOrEqual(14);
     expect(face.lines.length).toBe(4);
-    expect(face.also).toEqual(["the microphone when you press record", "files you pick", "saving to Downloads", "256 KB for drafts", "takes you to a note or an applet when you tap"]);
+    expect(face.also).toEqual(["the microphone when you press record", "files you pick", "saving to Downloads", "256 KB for drafts"]);
+    // its note links ride on the web addresses' line, so the card is no longer for them; without links they are an Also
+    expect(face.lines.map(faceText)).toContain("Opens web addresses and note links: what it reads could leave that way.");
+    expect(faceOf({ ...g, app: ["open"] }, folder, trusted).also).toEqual(["the microphone when you press record", "opens note links you tap"]);
   });
 });
 
