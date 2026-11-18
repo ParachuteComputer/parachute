@@ -1,6 +1,6 @@
 // Checks every example. A file in examples/ must pass; a file in examples/invalid/ must be refused. Beyond the schemas
 // it checks what a schema can't say: an app's id is its path, signal ids are unique, and an approval is a real signed
-// event that names the applet its path names and lasts a year at most.   node <path>/validate.mjs
+// event that names the record its path names and lasts a year at most; the key list is a real signed event too.   node <path>/validate.mjs
 import { readdirSync } from "node:fs";
 import { Ajv, addFormats, checker, here, json, pathOf, subjectId, verifyEvent, YEAR } from "./lib.mjs";
 const at = (p) => here(import.meta.url, p);
@@ -10,19 +10,27 @@ const schemas = Object.fromEntries(["app", "settings", "signals"].map((n) => [n,
 const ap = checker();
 
 function approval(x) {
-  if (!ap.record(x)) return ap.ajv.errorsText(ap.record.errors);
+  if (!ap.A.record(x)) return ap.ajv.errorsText(ap.A.record.errors);
   const e = x.fields.approval.event;
   if (!verifyEvent({ ...e })) return "the event's id or signature doesn't hold";
   const c = JSON.parse(e.content);
-  if (!ap.content(c)) return "content: " + ap.ajv.errorsText(ap.content.errors);
+  if (!ap.A.content(c)) return "content: " + ap.ajv.errorsText(ap.A.content.errors);
   if (x.path !== pathOf(c.subject) || e.tags.find((t) => t[0] === "d")[1] !== `parachute-approval:${subjectId(c.subject)}`) return "its path or d tag names another applet than its content";
   if (c.approved && Date.parse(c.expires) - Date.parse(c.at) > YEAR) return "it would last more than a year";
   return null;
+}
+function keys(x) {
+  if (!ap.K.record(x)) return ap.ajv.errorsText(ap.K.record.errors);
+  const e = x.fields.keys.event;
+  if (!verifyEvent({ ...e })) return "the event's id or signature doesn't hold";
+  const c = JSON.parse(e.content);
+  return ap.K.content(c) ? null : "content: " + ap.ajv.errorsText(ap.K.content.errors);
 }
 /** null when it holds, else why not. */
 function check(file, x) {
   const kind = file.split("-")[0].replace(".json", "");
   if (kind === "approval") return approval(x);
+  if (kind === "keys") return keys(x);
   const v = schemas[kind];
   if (!v) return `no schema for ${file}`;
   if (!v(x)) return ajv.errorsText(v.errors);

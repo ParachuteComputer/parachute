@@ -15,10 +15,10 @@
             "parachute-approval:https://uni.example/home/01M7ROOMSAPPLET"
           ]
         ],
-        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7ROOMSAPPLET\",\"applet\":\"rooms\"},\"n\":2,\"supersedes\":\"00801daa00043daed0695051dcff4056f9949f91a52e7a626593221ef48a2016\",\"approved\":true,\"code\":\"tsx:f00dcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"scope\":\"5d2caaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"modes\":[\"sealed\"],\"whose\":\"mine\",\"expires\":\"2027-11-18T09:30:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"As you on relay.example (your everyday key): posts messages, edits and typing in your rooms. What it reads can go there.\",\"High risk, with your approval key: answers approval cards and secret requests from Uni there.\",\"Counts and notifies through push.example: mentions and messages from Uni.\",\"Also: the microphone when you press record, files you pick.\"],\"at\":\"2026-11-18T09:30:00.000Z\"}",
-        "pubkey": "b2d19e3ae9e411d5159c30fcbbebe0a456f39b3e73848aba808e4f2a15d2a9a0",
-        "id": "d4ac77f352f6db084d912391890611b0c6680a91beee962fe52089a93866b861",
-        "sig": "c4ef0dc7718bd200000f0b2893f17702ec36841fecd756d90a061e455ed559d2670bd56f294100c5b9369b4d8fa9dd19a55f1ca82937363f09d9e92eb077de57"
+        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7ROOMSAPPLET\",\"applet\":\"rooms\"},\"n\":1794994200,\"approved\":true,\"code\":\"tsx:f00d75c152c9719d93e6471bc7232c609e8028a2d5fd7381c50c74ad9e278989\",\"scope\":\"1bc3d1a0c20ef8f70fbf484e6541512d5c8dc353e26fb8609b91acc3663d7e95\",\"whose\":\"mine\",\"expires\":\"2027-11-18T09:30:00.000Z\",\"face\":[\"As you on relay.example (your everyday key): posts messages, edits and typing in your rooms. What it reads can go there.\",\"High risk, with your approval key: answers approval cards and secret requests from Uni there.\",\"Counts and notifies through push.example: mentions and messages from Uni.\",\"Also: the microphone when you press record, files you pick.\",\"On a phone an applet could send what it reads to the internet: approve only code you trust.\"],\"others\":[],\"device\":\"Pixel\",\"at\":\"2026-11-18T09:30:00.000Z\"}",
+        "pubkey": "dccec693188b7c2ae40ba4f757868c21f15527c777ffb912890f98385911ee2d",
+        "id": "169b53f8da910109c4e819916a940d297ee9335ef362472559c12fcccee55892",
+        "sig": "85bdc0d1a5944bf7238dcd519721fa65bf208a630b45c7fe4427c13dd4e2cce3710092763190477988a98b80d7ac3592913c14fbdb82fec5593782b629d800c2"
       }
     }
   }

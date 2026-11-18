@@ -1,25 +1,31 @@
-// The approval rule played against attacks, with real keys and signatures made here and thrown away. Each line is an
-// attempt, what the client decided, and whether that is what the design says.   node <path>/attacks.mjs
-import { approve, checker, generateSecretKey, getPublicKey } from "./lib.mjs";
-const { decide } = checker();
+// The approval rule (lib.mjs `decide`) played against attacks, with real keys, real signatures and hashes computed
+// from the code and fields. Each line is an attempt, what the client decided, and whether that is what the design
+// says, including the gaps the design admits (marked GAP). It tests the rule's logic. It does not test the app, the
+// native signer or the unlock, none of which exist yet.   node <path>/attacks.mjs
+import { approve, checker, generateSecretKey, getPublicKey, hashesOf, keyList, nOf, scopeHash } from "./lib.mjs";
+const { client, readKeys, decide } = checker();
+const pub = getPublicKey;
 
-const approvalKey = generateSecretKey(), everydayKey = generateSecretKey(), attackerKey = generateSecretKey();
-const rooms = { hub: "https://uni.example", vault: "home", record: "01M7ROOMSAPPLET", applet: "rooms" };
-const scratch = { ...rooms, record: "01M7SCRATCH", applet: "scratch" };
-const events = { hub: "https://techne.example", vault: "techne", record: "01M7EVENTS", applet: "events" };
-const h = (x) => x.padEnd(64, "0");
-const OLD = "tsx:" + h("0001"), NEW = "tsx:" + h("0002"), EVIL = "tsx:" + h("bad0"), ASKS = h("a5c5"), MORE = h("f00d");
-const body = (code, scope = ASKS, extra = {}) => ({ approved: true, code, scope, modes: ["sealed"], whose: "mine", expires: "2027-11-01T00:00:00.000Z", face: ["…"], others: [], ...extra });
-const WHEN = "2026-11-01T00:00:00.000Z";
+const root = generateSecretKey(), approval = generateSecretKey(), everyday = generateSecretKey(), attacker = generateSecretKey();
+const list1 = keyList(root, [{ role: "everyday", key: pub(everyday) }, { role: "approval", key: pub(approval) }], "2026-10-01T00:00:00.000Z");
 
-const v1 = approve(approvalKey, rooms, 1, null, body(OLD), WHEN);
-const v2 = approve(approvalKey, rooms, 2, v1.fields.approval.event.id, body(NEW), WHEN);
-const off = approve(approvalKey, rooms, 3, v2.fields.approval.event.id, { approved: false }, WHEN);
+const rooms = { subject: { hub: "https://uni.example", vault: "home", record: "01M7ROOMSAPPLET", applet: "rooms" }, source: "function Rooms(){ /* November */ }", imports: ["function Room(){}"],
+  fields: { applet: { contract: 2, id: "rooms", name: "Rooms" }, services: [{ id: "rooms", kind: "nostr-relay", url: "wss://relay.example", publish: [9, 5] }] } };
+const october = { ...rooms, source: "function Rooms(){ /* October */ }" };
+const evil = { ...rooms, source: "function Rooms(){ sendEverythingSomewhere() }" };
+const evilImport = { ...rooms, imports: ["function Room(){ sendEverythingSomewhere() }"] };
+const wider = { ...rooms, fields: { ...rooms.fields, services: [{ ...rooms.fields.services[0], publish: [9, 5, 1], url: "wss://elsewhere.example" }] } };
+const scratch = { ...rooms, subject: { ...rooms.subject, record: "01M7SCRATCH", applet: "scratch" } };
+const events = { subject: { hub: "https://techne.example", vault: "techne", record: "01M7EVENTS", applet: "events" }, source: "function Events(){}", fields: { applet: { contract: 2, id: "events", name: "Events" } } };
 
-/** A client: `seen` is what it remembers; `paired` gives a new client the newest counters from the one it paired with. */
-const client = (seen = {}, o = {}) => ({ approvalKey: getPublicKey(approvalKey), seen: { ...seen }, mode: "sealed", whose: (s) => (s.hub === "https://uni.example" ? "mine" : "theirs"), now: Date.parse("2026-11-18T00:00:00Z"), ...o });
-const R = "https://uni.example/home/01M7ROOMSAPPLET";
-const applet = (code, scope = ASKS, subject = rooms) => ({ subject, code, scope });
+const yes = (applet, extra = {}) => ({ approved: true, ...hashesOf(applet), whose: "mine", expires: "2027-10-01T00:00:00.000Z", face: ["…"], others: [], ...extra });
+const oct = approve(approval, rooms.subject, 0, yes(october), "2026-10-02T00:00:00.000Z");
+const nov = approve(approval, rooms.subject, nOf(oct), yes(rooms), "2026-11-02T00:00:00.000Z");
+const off = approve(approval, rooms.subject, nOf(nov), { approved: false }, "2026-11-10T00:00:00.000Z");
+
+/** A client set up with the anchor, that has read the key list. `saw`: approvals it read before the attack. */
+const fresh = (o = {}) => { const c = client(pub(root), o); readKeys(c, list1); return c; };
+const whoSaw = (recs, o = {}) => { const c = fresh(o); for (const [applet, rec] of recs) decide(c, applet, rec); return c; };
 
 let bad = 0;
 function attempt(what, got, wantRun, note = "") {
@@ -27,38 +33,59 @@ function attempt(what, got, wantRun, note = "") {
   if (!right) bad++;
   console.log(`${right ? "ok  " : "FAIL"} ${what}\n       → ${got.run ? "RUNS" : "does not run: " + got.why}${note ? "\n       " + note : ""}`);
 }
+const check = (what, right, note = "") => { if (!right) bad++; console.log(`${right ? "ok  " : "FAIL"} ${what}${note ? "\n       " + note : ""}`); };
 
 console.log("── the ordinary path");
-attempt("Approved on the phone; the laptop reads the record and hashes the code itself", decide(client(), applet(NEW), v2), true);
-attempt("No approval record at all (never approved, or someone deleted it)", decide(client(), applet(NEW), null), false, "Deleting approvals only makes clients ask.");
+attempt("Approved on the phone; the laptop reads the record and hashes the code and fields itself", decide(fresh(), rooms, nov), true);
+attempt("Never approved", decide(fresh(), rooms, null), false);
+check("Two devices that call the vault different names get the same asks' hash (today's hash takes the device's name: they would differ)",
+  scopeHash(rooms.subject, rooms.fields) === scopeHash({ ...rooms.subject }, structuredClone(rooms.fields)) && scopeHash(rooms.subject, rooms.fields) !== scopeHash({ ...rooms.subject, vault: "home@uni.example" }, rooms.fields));
 
-console.log("── someone who can write the vault (a token, the hub) but has no key");
-attempt("Changes the applet's code and leaves the approval", decide(client(), applet(EVIL), v2), false);
-attempt("Changes the code and edits the hash inside the approval to match", decide(client(), applet(EVIL), (() => { const f = structuredClone(v2); f.fields.approval.event.content = f.fields.approval.event.content.replace(NEW, EVIL); return f; })()), false);
-attempt("Changes the code and signs a fresh approval with a key of their own", decide(client(), applet(EVIL), approve(attackerKey, rooms, 9, null, body(EVIL), WHEN)), false);
-attempt("Widens what the applet asks (a new server, a new folder), same code", decide(client(), applet(NEW, MORE), v2), false);
-attempt("Copies Rooms' approval onto another applet's path", decide(client(), applet(NEW, ASKS, scratch), { ...v2, path: "Parachute/Approvals/uni.example/home/01M7SCRATCH" }), false);
-attempt("Puts back last month's approval and last month's code, on a client that saw the new one", decide(client({ [R]: 2 }), applet(OLD), v1), false);
-attempt("Deletes the withdrawal and puts back the approval, on a client that saw the withdrawal", decide(client({ [R]: 3 }), applet(NEW), v2), false);
-attempt("The same, on a NEW client that was paired from one that saw the withdrawal", decide(client({ [R]: 3 }), applet(NEW), v2), false, "Pairing hands over the newest counters with the key.");
-attempt("The same, on a new client that got no counters (pasted key, not paired)", decide(client(), applet(NEW), v2), true, "The stated gap: it runs code you did once approve, with asks you did approve. Never new code.");
-attempt("Makes a ten-year approval out of nothing", decide(client(), applet(NEW), approve(attackerKey, rooms, 5, null, body(NEW, ASKS, { expires: "2036-11-01T00:00:00.000Z" }), WHEN)), false);
+console.log("── someone who can write the vault (a token, an agent, the hub itself) but has no key");
+attempt("Changes the applet's code and leaves the approval", decide(fresh(), evil, nov), false);
+attempt("Leaves the applet's code and changes a component it imports", decide(fresh(), evilImport, nov), false);
+attempt("Changes the code and edits the hash inside the approval to match", decide(fresh(), evil, (() => { const f = structuredClone(nov); f.fields.approval.event.content = f.fields.approval.event.content.replace(hashesOf(rooms).code, hashesOf(evil).code); return f; })()), false);
+attempt("Changes the code and signs a fresh approval with a key of their own", decide(fresh(), evil, approve(attacker, rooms.subject, 0, yes(evil), "2026-11-17T00:00:00.000Z")), false);
+attempt("The same, against a client that already runs Rooms", decide(whoSaw([[rooms, nov]]), evil, approve(attacker, rooms.subject, nOf(nov), yes(evil), "2026-11-17T00:00:00.000Z")), false);
+attempt("After that try, the real Rooms on that client", (() => { const c = whoSaw([[rooms, nov]]); decide(c, evil, approve(attacker, rooms.subject, nOf(nov), yes(evil), "2026-11-17T00:00:00.000Z")); return decide(c, rooms, nov); })(), true, "A stranger's record can't push out the approval a client holds.");
+attempt("Writes a key list naming their own key as the approval key, signed by themselves, then approves with it", (() => { const c = fresh(); readKeys(c, keyList(attacker, [{ role: "everyday", key: pub(everyday) }, { role: "approval", key: pub(attacker) }], "2026-11-17T00:00:00.000Z")); return decide(c, evil, approve(attacker, rooms.subject, 0, yes(evil), "2026-11-17T00:00:00.000Z")); })(), false);
+attempt("Widens what the applet asks (another server, another kind it may sign), same code", decide(fresh(), wider, nov), false);
+attempt("Copies Rooms' approval onto another applet's path", decide(fresh(), scratch, { ...nov, path: "Parachute/Approvals/uni.example/home/01M7SCRATCH" }), false);
+attempt("ROLLBACK: puts back October's approval and October's code, on a client that saw November's", decide(whoSaw([[rooms, nov]]), october, oct), false);
+attempt("Puts back the approval after you withdrew it, on a client that saw the withdrawal", decide(whoSaw([[rooms, nov], [rooms, off]]), rooms, nov), false);
+attempt("Deletes every approval, on a client that had read them", decide(whoSaw([[rooms, nov]]), rooms, null), true, "A client keeps what it verified. Deleting stops nothing that ran, and starts nothing.");
+attempt("Deletes every approval, on a new client", decide(fresh(), rooms, null), false, "It asks. A nuisance, not a breach.");
+attempt("GAP: hides your withdrawal from a client that has not seen it yet, and goes on serving November's approval", decide(whoSaw([[rooms, nov]]), rooms, nov), true, "No client can see what it is not shown. It keeps running code you approved, until the approval's year ends.");
+attempt("GAP: on a brand-new client, serves October's approval with October's code", decide(fresh(), october, oct), true, "Code you did approve, asking what you approved. Never new code.");
 
-console.log("── someone who also holds the EVERYDAY key (it signs sign-ins and chat; other software holds it too)");
-attempt("Signs an approval for new code with the everyday key", decide(client(), applet(EVIL), approve(everydayKey, rooms, 9, null, body(EVIL), WHEN)), false, "Only when the approval key is a separate key. While it is the everyday key, this RUNS: see the design.");
+console.log("── someone who also holds your EVERYDAY key (it signs sign-ins and chat; other software holds it too)");
+attempt("Signs an approval for new code with the everyday key", decide(fresh(), evil, approve(everyday, rooms.subject, nOf(nov), yes(evil), "2026-11-17T00:00:00.000Z")), false, "The key list gives that key the everyday role only.");
+attempt("Signs a new key list with the everyday key that promotes itself", (() => { const c = fresh(); readKeys(c, keyList(everyday, [{ role: "everyday", key: pub(everyday) }, { role: "approval", key: pub(everyday) }], "2026-11-17T00:00:00.000Z")); return decide(c, evil, approve(everyday, rooms.subject, 0, yes(evil), "2026-11-17T00:00:00.000Z")); })(), false);
 
-console.log("── the person's own later acts");
-attempt("Withdrawn on the phone; the laptop reads the withdrawal", decide(client({ [R]: 2 }), applet(NEW), off), false);
-attempt("The approval's year ran out", decide(client({}, { now: Date.parse("2027-12-01T00:00:00Z") }), applet(NEW), v2), false);
-attempt("A new approval key after a lost phone; the old key's approvals", decide(client({}, { approvalKey: getPublicKey(generateSecretKey()) }), applet(NEW), v2), false, "Every approval by the lost key is void at once on a client given the new key.");
-attempt("A client with no approval key to check against (a browser tab)", decide(client({}, { approvalKey: null }), applet(NEW), v2), false);
+console.log("── two approving devices at once, lost counters");
+const a2 = approve(approval, rooms.subject, nOf(oct), yes(rooms), "2026-11-02T00:00:00.000Z");
+const w2 = approve(approval, rooms.subject, nOf(oct), { approved: false }, "2026-11-02T00:00:00.000Z");
+check("Two devices sign at the same second without reading each other: the two get the same number", nOf(a2) === nOf(w2));
+attempt("A client that saw the withdrawal of that pair is shown the approval of that pair", decide(whoSaw([[rooms, w2]]), rooms, a2), false, "It keeps the one it saw. The vault's own write check makes the second signer read again and sign a higher number.");
+attempt("An approving device that lost everything re-approves; a client that held November's reads it", decide(whoSaw([[rooms, nov]]), rooms, approve(approval, rooms.subject, 0, yes(rooms), "2026-11-17T00:00:00.000Z")), true, "The number is the signing time when that is larger, so a device with no memory still signs higher.");
 
-console.log("── someone else's vault (Techne)");
-const ev = approve(approvalKey, events, 1, null, body(OLD, ASKS, { whose: "theirs" }), WHEN);
-attempt("Techne's Events, approved on the phone; the laptop also says techne is someone else's", decide(client(), applet(OLD, ASKS, events), ev), true);
-attempt("Techne changes Events", decide(client(), applet(EVIL, ASKS, events), ev), false);
-attempt("Approved as someone else's; this client was told techne is the person's own (more power here)", decide(client({}, { whose: () => "mine" }), applet(OLD, ASKS, events), ev), false);
-attempt("Approved under sealed; this client's sandbox is weaker (approved-code mode)", decide(client({}, { mode: "approved-code" }), applet(NEW), v2), false);
+console.log("── rotating keys (the list is signed by the root key, kept offline)");
+const approval2 = generateSecretKey();
+const list2 = keyList(root, [{ role: "everyday", key: pub(everyday) }, { role: "approval", key: pub(approval2) }], "2026-11-15T00:00:00.000Z");
+const rotated = () => { const c = whoSaw([[rooms, nov]]); readKeys(c, list2); return c; };
+attempt("The phone is stolen. A new list names a new approval key. The thief approves new code with the old key", decide(rotated(), evil, approve(approval, rooms.subject, nOf(nov), yes(evil), "2026-11-17T00:00:00.000Z")), false);
+attempt("What the old key approved before, on a client that has read the new list", decide(rotated(), rooms, nov), false, "It stops counting the moment the client reads the new list.");
+attempt("The same applet, approved again with the new key", decide(rotated(), rooms, approve(approval2, rooms.subject, nOf(nov), yes(rooms), "2026-11-16T00:00:00.000Z")), true);
+attempt("Someone puts the old key list back, to bring the stolen key back", (() => { const c = rotated(); readKeys(c, list1); return decide(c, evil, approve(approval, rooms.subject, nOf(nov), yes(evil), "2026-11-17T00:00:00.000Z")); })(), false);
+attempt("GAP: the new key list is hidden from a client; the thief also writes the vault, and approves new code with the stolen key", decide(whoSaw([[rooms, nov]]), evil, approve(approval, rooms.subject, nOf(nov), yes(evil), "2026-11-17T00:00:00.000Z")), true, "A stolen approval key plus a vault that hides the new list. Why the list also goes to the relay, and why a client warns when the two differ.");
+
+console.log("── someone else's vault (Techne), and other limits");
+const ev = approve(approval, events.subject, 0, yes(events, { whose: "theirs" }), "2026-11-10T00:00:00.000Z");
+attempt("Techne's Events, approved on the phone, on a laptop that also says techne is someone else's", decide(fresh(), events, ev), true);
+attempt("Techne changes Events", decide(fresh(), { ...events, source: "function Events(){ more() }" }, ev), false);
+attempt("Approved as someone else's; this device was told techne is the person's own (it would get more here)", decide(fresh({ whose: () => "mine" }), events, ev), false);
+attempt("The approval's year ran out", decide(fresh({ now: Date.parse("2027-12-01T00:00:00Z") }), rooms, nov), false);
+attempt("A client with no anchor (a browser tab)", decide(client(null), rooms, nov), false);
 
 console.log(bad ? `${bad} NOT as the design says` : "all as the design says");
 process.exit(bad ? 1 : 0);

@@ -14,7 +14,9 @@
      "applet": "*"
     }
    ],
-   "theme": "Parachute/Grants"
+   "security": {
+    "approval": "no-unlock"
+   }
   }
  }
 }

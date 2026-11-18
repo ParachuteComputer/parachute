@@ -67,6 +67,11 @@
             },
             "services": {
               "description": "Before app records, and for one release after: kept in step with the app named in `app`, so a device not yet updated keeps its bar. Then gone."
+            },
+            "mirror": {
+              "description": "While old and new devices overlap: the hash of the bar, start and services the new app last copied here. If they no longer match it, an old device changed them, and the change is taken into the app record.",
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
             }
           }
         }

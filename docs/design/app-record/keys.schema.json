@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parachute.computer/schema/app-record/keys.schema.json",
+  "title": "The key list",
+  "description": "One record, Parachute/Keys, tagged `parachute-keys`, in the person's home vault (and, being public keys only, on their relay too). It holds one Nostr event signed by the person's anchor: their root key if they keep one offline, else their approval key. It says which keys are theirs now. A client holds the anchor's public half on the device, checks the signature against it, and refuses a list whose `seq` is not higher than the newest it has seen. A key not on the list signs nothing that counts.",
+  "type": "object",
+  "required": [
+    "path",
+    "tags",
+    "fields"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "path": {
+      "const": "Parachute/Keys"
+    },
+    "tags": {
+      "type": "array",
+      "contains": {
+        "const": "parachute-keys"
+      }
+    },
+    "body": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object",
+      "required": [
+        "keys"
+      ],
+      "properties": {
+        "keys": {
+          "type": "object",
+          "required": [
+            "event"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "type": "object",
+              "required": [
+                "id",
+                "pubkey",
+                "created_at",
+                "kind",
+                "tags",
+                "content",
+                "sig"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "pubkey": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "created_at": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "kind": {
+                  "description": "A kind of its own. 30480 in these examples.",
+                  "const": 30480
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "contains": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "const": "d"
+                      },
+                      {
+                        "const": "parachute-keys"
+                      }
+                    ],
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 20000
+                },
+                "sig": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{128}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "content": {
+      "type": "object",
+      "required": [
+        "v",
+        "seq",
+        "at",
+        "keys"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "seq": {
+          "description": "Up with each list: the time of signing in seconds, or one more than the list it replaces, whichever is larger.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "keys": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "required": [
+              "role",
+              "key"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "role": {
+                "description": "everyday: signs in, posts, signs requests as you. approval: approves code and answers approval cards.",
+                "enum": [
+                  "everyday",
+                  "approval"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "name": {
+                "description": "Where it lives, in the person's words. For reading; nothing checks it.",
+                "type": "string",
+                "maxLength": 40
+              }
+            }
+          },
+          "allOf": [
+            {
+              "contains": {
+                "properties": {
+                  "role": {
+                    "const": "approval"
+                  }
+                },
+                "required": [
+                  "role"
+                ]
+              }
+            },
+            {
+              "contains": {
+                "properties": {
+                  "role": {
+                    "const": "everyday"
+                  }
+                },
+                "required": [
+                  "role"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -54,7 +54,7 @@ if (screen === "picker") document.body.innerHTML = `
 <header><h1>Your apps <small>on this phone</small></h1></header>
 <main>
   <h2>In your vault home <a>New app</a></h2>
-  <div class="row app"><span class="g">◉</span><b>Uni <span class="here">open here</span></b><span class="end"><i class="dot" style="font-style:normal">5</i></span>
+  <div class="row app"><span class="g">◉</span><b>Uni <span class="here">open here</span></b><span class="end"><i class="dot" style="font-style:normal">5</i> &nbsp;Settings ›</span>
     <p>everyday: journal, mail, rooms</p><p>Everything in home · Seed log from garden · Events from Techne</p></div>
   <div class="row app"><span class="g">△</span><b>Techne</b><span class="end">Settings ›</span>
     <p>events, members, the shop floor</p><p>Everything in techne · someone else's, at techne.example</p></div>
@@ -67,15 +67,16 @@ else if (screen === "approve") { document.body.className = "tight"; document.bod
 <header><h1>‹ ◎ Rooms</h1></header>
 <main>
   <section class="card"><h3>«Rooms» changed</h3>
-    <p class="say">Its code changed since you approved it on 2 Nov. <b>It asks for nothing new.</b> The old version won't run on any of your devices.</p>
+    <p class="say">Its code changed since you approved it on 2 Nov. <b>It asks for nothing new</b>, but new code can do other things with what it already has. Until you approve, it stays closed on all your devices.</p>
     <ul class="risk">
       <li><b>As you on relay.example</b> (your everyday key): posts messages, edits and typing in your rooms.</li>
       <li><b>High risk, with your approval key:</b> answers approval cards and secret requests from Uni.</li>
       <li><b>Counts and notifies</b> through push.example: mentions and messages from Uni.</li>
+      <li>Also: the microphone when you press record, files you pick. What it reads can go to relay.example, and on a phone to the internet.</li>
     </ul>
     <p class="hash">This version: <code>9b13 cccc … cccc</code> · <u>Show what changed</u></p>
     <div class="actions"><button>Not now</button><button class="primary">Approve this version</button></div>
-    <p class="fine">Asks for this phone's unlock, then signs with your approval key. Your laptop and tablet run this version without asking.</p>
+    <p class="fine">Asks for this phone's unlock, then signs with your approval key. Your other devices then run this version without asking.</p>
   </section>
   <h2>On a device without your approval key</h2>
   <div class="row"><span class="g">◎</span><b>Rooms changed</b><span class="end"></span><p>Approve it on your Pixel. Until then it stays closed here.</p></div>
@@ -84,7 +85,7 @@ else { document.body.className = "tight"; document.body.innerHTML = `
 <header><h1>‹ Uni <small>an app, kept in your vault home</small></h1></header>
 <main>
   <h2>Applets from <a>Add</a></h2>
-  ${row("✳", "Everything in home", "9 applets, 1 hidden · new ones ask first", "›")}
+  ${row("✳", "Everything in home", "9 applets, 1 hidden · <b>New: Ideas.</b> Tap to look", "›")}
   ${row("✿", "Seed log", "one applet, from your vault garden", "›")}
   ${row("◷", "Events", "one applet, from techne · someone else's", "›")}
   <h2>On the bar <a>Change</a></h2>
@@ -93,9 +94,9 @@ else { document.body.className = "tight"; document.body.innerHTML = `
   ${row("◎", "Rooms", "mentions and messages from Uni", `<span class="pick on">Notify + badge</span>`)}
   ${row("✉", "Mail", "unread mail", `<span class="pick">Badge</span>`)}
   ${row("◷", "Events", "new events at Techne", `<span class="pick">Off</span>`)}
-  <h2>Running, approved, the rest</h2>
+  <h2>Running, approved, security</h2>
   ${row("↻", "Kept running: auto", "up to 6 here · drafts are kept either way", "›")}
-  ${row("✓", "7 applets approved", "signed by your approval key · held on your Pixel", "›")}
+  ${row("✓", "Approved and security", "7 applets, signed on your Pixel · unlock to approve", "›")}
   ${row("⋯", "More", "hidden applets, what opens what, theme, servers", "›")}
 </main>${BAR}`; }
 </script>

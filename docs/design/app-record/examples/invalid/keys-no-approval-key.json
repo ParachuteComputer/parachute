@@ -1,0 +1,25 @@
+{
+  "path": "Parachute/Keys",
+  "tags": [
+    "parachute-keys"
+  ],
+  "body": "Which keys are yours now. Signed by your root key (or your approval key, if you keep no root key).",
+  "fields": {
+    "keys": {
+      "event": {
+        "kind": 30480,
+        "created_at": 1793527200,
+        "tags": [
+          [
+            "d",
+            "parachute-keys"
+          ]
+        ],
+        "content": "{\"v\":1,\"seq\":1793527200,\"at\":\"2026-11-01T10:00:00.000Z\",\"keys\":[{\"role\":\"everyday\",\"key\":\"adbc0c4f44b6b4f760656f540212f16a7c71314a4a4f287ae97cc37c4ff674f4\"}]}",
+        "pubkey": "63f8e73ca4aae9af5875b57cda8e0987f127e8cf7adfb6438b77fb4fb7acb8e5",
+        "id": "78e7e8dcb306101f0faf9710a445fd454aff2438e535275039a601b4c2cc43d6",
+        "sig": "bec1c68be26bd6b6772906b6c7604569c4b8b1ceabad7519b61c9d46fba1fe76ef0673feb35b038bf62d7131c3e7484f7ab509671a7609563a30b91457919609"
+      }
+    }
+  }
+}

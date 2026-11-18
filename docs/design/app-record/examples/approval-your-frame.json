@@ -1,0 +1,25 @@
+{
+  "path": "Parachute/Approvals/uni.example/home/01M7FRAME",
+  "tags": [
+    "parachute-approval"
+  ],
+  "body": "Signed by your approval key. Changed by hand, it is void.",
+  "fields": {
+    "approval": {
+      "event": {
+        "kind": 30479,
+        "created_at": 1793707200,
+        "tags": [
+          [
+            "d",
+            "parachute-approval:https://uni.example/home/01M7FRAME"
+          ]
+        ],
+        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7FRAME\",\"applet\":\"frame\",\"kind\":\"frame\"},\"n\":1793707200,\"approved\":true,\"code\":\"tsx:c0de444444444444444444444444444444444444444444444444444444444444\",\"scope\":\"f4a3eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"whose\":\"mine\",\"expires\":\"2027-11-03T12:00:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"Your own frame: it draws the launcher, a vault and a note, and can ask the app to move you and change your bar on a tap.\"],\"at\":\"2026-11-03T12:00:00.000Z\"}",
+        "pubkey": "dccec693188b7c2ae40ba4f757868c21f15527c777ffb912890f98385911ee2d",
+        "id": "797134058566bef374bc0b9b01ad615efec8aa85bb061c106d692f35171174df",
+        "sig": "023d0142793c6e21c471fe04897da265509cdf261dd3b8e1af21f9313f15355282067880f7ea84a93415a3e532684795ad05336b5d433b84d002ddf045b6736a"
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://parachute.computer/schema/app-record/approval.schema.json",
   "title": "An approval record",
-  "description": "One per applet, at Parachute/Approvals/<host>/<vault>/<applet's record id>, tagged `parachute-approval`, in the person's home vault. It holds one Nostr event signed by the person's approval key after the device unlock, never sent to a relay. A client trusts only the event: its id and signature, that the key is the approval key this client was given when it was paired, that `n` is not lower than the newest it has seen for this applet, and that the code and asks it hashes itself are the ones named. `content` is JSON; its shape is $defs/content. Beyond this schema the client checks: the path and the d tag name the same applet as the content, and an approval ends at most a year after it was made.",
+  "description": "One per piece of vault code (an applet, a component, your own frame), at Parachute/Approvals/<host>/<vault>/<its record id>, tagged `parachute-approval`, in the person's home vault. It holds one Nostr event signed by an approval key after the device unlock, never sent to a relay. A client trusts only the event: its id and signature; that the key is an approval key on the person's key list (keys.schema.json); that `n` is higher than the newest it has seen for this code, or it is the very one it saw; and that the code and asks it hashes itself are the ones named. `content` is JSON; its shape is $defs/content. Beyond this schema the client checks: the path and the d tag name the same record as the content, and an approval ends at most a year after it was made.",
   "type": "object",
   "required": [
     "path",
@@ -111,7 +111,6 @@
         "v",
         "subject",
         "n",
-        "supersedes",
         "approved"
       ],
       "properties": {
@@ -142,26 +141,23 @@
             },
             "applet": {
               "type": "string",
-              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "description": "Its id in its own record (an applet's or component's id; `frame` for a frame)."
+            },
+            "kind": {
+              "description": "Left out: an applet.",
+              "enum": [
+                "applet",
+                "component",
+                "frame"
+              ]
             }
           }
         },
         "n": {
-          "description": "This applet's counter: up by one with each approval or withdrawal. A client refuses one lower than the newest it has seen.",
+          "description": "Orders this code's approvals: the time of signing in seconds, or one more than the approval it replaces, whichever is larger. A client refuses one that is not higher than the newest it has seen.",
           "type": "integer",
           "minimum": 1
-        },
-        "supersedes": {
-          "description": "The id of the approval this one replaces; null for the first.",
-          "oneOf": [
-            {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            },
-            {
-              "type": "null"
-            }
-          ]
         },
         "approved": {
           "type": "boolean"
@@ -172,7 +168,6 @@
           "required": [
             "code",
             "scope",
-            "modes",
             "whose",
             "at",
             "expires",
@@ -183,31 +178,18 @@
             "v": true,
             "subject": true,
             "n": true,
-            "supersedes": true,
             "approved": {
               "const": true
             },
             "code": {
-              "description": "The hash of the exact code.",
+              "description": "The hash of the exact code, with everything it imports.",
               "type": "string",
               "pattern": "^(?:(?:tsx|jsx):)?[0-9a-f]{64}$"
             },
             "scope": {
-              "description": "The hash of the manifest and everything it asks (folders, opens, app words, services, signals, embeds): grantKey v4, made from the hub's address and the vault's name so every client gets the same hash.",
+              "description": "The hash of the record's own fields as written (manifest, opens, app, services, signals, embeds) with the hub's address, the vault's name and the record's id: the same on every client.",
               "type": "string",
               "pattern": "^[0-9a-f]{64}$"
-            },
-            "modes": {
-              "description": "The device modes it was approved for. A client in another mode shows the card.",
-              "type": "array",
-              "minItems": 1,
-              "uniqueItems": true,
-              "items": {
-                "enum": [
-                  "sealed",
-                  "approved-code"
-                ]
-              }
             },
             "whose": {
               "description": "What the person had said of the applet's vault on the client that approved. A client where they said otherwise doesn't run it and says why.",
@@ -256,7 +238,6 @@
             "v": true,
             "subject": true,
             "n": true,
-            "supersedes": true,
             "approved": {
               "const": false
             },

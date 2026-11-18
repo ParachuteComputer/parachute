@@ -15,10 +15,10 @@
             "parachute-approval:https://techne.example/techne/01M7EVENTS"
           ]
         ],
-        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://techne.example\",\"vault\":\"techne\",\"record\":\"01M7EVENTS\",\"applet\":\"events\"},\"n\":1,\"supersedes\":null,\"approved\":true,\"code\":\"tsx:77f1000000000000000000000000000000000000000000000000000000000000\",\"scope\":\"0aa3eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"modes\":[\"sealed\",\"approved-code\"],\"whose\":\"theirs\",\"expires\":\"2027-11-10T19:12:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"Someone else's vault, techne at techne.example.\",\"Read notes in Events/\"],\"at\":\"2026-11-10T19:12:00.000Z\"}",
-        "pubkey": "b2d19e3ae9e411d5159c30fcbbebe0a456f39b3e73848aba808e4f2a15d2a9a0",
-        "id": "f438efbe41b62ba129554bcd550ed8c09b56efa48680f76f90e7ef2f9a8185a2",
-        "sig": "f713f0e50ad002e3fb17b9aeb2ced4b56342631d14ffc3ac2eda201fa6b0b9e5e826b5719c2f7be3f8054167a8ce827d07ae492d7d4fe9dd5e79a2849a5624d1"
+        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://techne.example\",\"vault\":\"techne\",\"record\":\"01M7EVENTS\",\"applet\":\"events\"},\"n\":1794337920,\"approved\":true,\"code\":\"tsx:d692c07c26b2a505b0610310ebef76807fffad7c036a1c4d06f82cf1708aad6c\",\"scope\":\"50429da766d6178d49dc3b5a276e96f7c1b3bd351b345b555df011bb9f60b42e\",\"whose\":\"theirs\",\"expires\":\"2027-11-10T19:12:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"Someone else's vault, techne at techne.example.\",\"Read notes in Events/\"],\"at\":\"2026-11-10T19:12:00.000Z\"}",
+        "pubkey": "dccec693188b7c2ae40ba4f757868c21f15527c777ffb912890f98385911ee2d",
+        "id": "e41e313cb5fd2186e5431030241f675704772f11f205f516a522ab08c6881ec2",
+        "sig": "9a7a31095ae8603c3e976c38deb3641c959d1211c121bba762f53f1380f5e6032724374b9b60276b10b2b3efd068a7563f83e59dff3defe750c86ebf4bce25af"
       }
     }
   }
