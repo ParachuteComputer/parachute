@@ -30,7 +30,7 @@ const LAUNCH_WORDS = new Set(["room", "event"]);
 /** A path segment as the router reads it (decoded), so one applet written two ways is one screen. */
 const seg = (x: string) => { try { return decodeURIComponent(x); } catch { return null; } };
 /** The applet an address is in, its own address or not. */
-const appletOf = (pathname: string) => { const m = APPLET.exec(pathname); const v = m && seg(m[1]), a = m && seg(m[2]); return v !== null && a !== null && m ? `${v}|${a}` : null; };
+const appletOf = (pathname: string) => { const m = APPLET.exec(pathname); const v = m && seg(m[1]), a = m && seg(m[2]); return v !== null && a !== null && m ? JSON.stringify([v, a]) : null; };
 
 /** The kept screen this address is, or null when it is no applet's own address. */
 export function keptId(location: Pick<Location, "pathname" | "search">): string | null {

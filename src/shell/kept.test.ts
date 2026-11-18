@@ -5,8 +5,10 @@ const entry = (id: string, at: number, keepable = true) => ({ id, at, keepable, 
 
 describe("kept applets", () => {
   it("an applet's own address is kept; one that hands it a note is not", () => {
-    expect(keptId({ pathname: "/v/home/a/01ABC", search: "" })).toBe("home|01ABC");
-    expect(keptId({ pathname: "/v/home/a/01ABC", search: "?room=r1&event=" + "e".repeat(64) })).toBe("home|01ABC");
+    expect(keptId({ pathname: "/v/home/a/01ABC", search: "" })).toBe('["home","01ABC"]');
+    expect(keptId({ pathname: "/v/home/a/01ABC", search: "?room=r1&event=" + "e".repeat(64) })).toBe('["home","01ABC"]');
+    // two applets whose names would join alike are two screens (one applet's start never carries to another)
+    expect(keptId({ pathname: "/v/a%7Cb/a/c", search: "" })).not.toBe(keptId({ pathname: "/v/a/a/b%7Cc", search: "" }));
     expect(keptId({ pathname: "/v/home/a/01ABC", search: "?note=01N" })).toBeNull();
     expect(keptId({ pathname: "/v/home/a/01ABC", search: "?room=r1&screen=s" })).toBeNull();
     expect(keptId({ pathname: "/v/home/n/01ABC", search: "" })).toBeNull();
