@@ -72,7 +72,7 @@ device, and is "Approve it on your Pixel" acceptable on a device without the app
 | Your agent sets up an app | Writes one record. | Writes one per applet and keeps them in step. |
 | Seen in the vault | One note to read. | The graph shows which apps use an applet. |
 
-**Recommendation: A.** Aaron's words ask for wildcards, and B can't have them. And the choice matters less than it
+**Recommendation: A.** The brief asks for wildcards, and B can't have them. And the choice matters less than it
 looked: the version you trust is in neither. It is in the signed approval, the only thing that lets code start.
 Listing is discovery; the signed hash is trust.
 
@@ -147,7 +147,7 @@ device opens) and `security` ([below](#security-levels)).
 
 ### What opens a note
 
-Aaron: "When we click a parachute note in one applet, what applet does it open in? And how is that specified?"
+The question: when you tap a note inside one applet, which applet opens it, and where is that said?
 
 Today: an applet's record says what it *can* open (`opens: [{ type, path }]`); a tap opens the applet that opens the
 note's kind; long-press offers **Open with…**; "Always" is remembered on one device (`parachute.openwith.v1`).
@@ -168,9 +168,9 @@ link says so with **Sign in**. A choice naming an applet that doesn't declare th
 
 ## Layer 2: running needs a signed approval
 
-Aaron: "Code change should definitely wait for a yes… If the parachute gets compromised, we need to make sure that a
-real client (could just be one client, doesn't need to be all) approves a code change. Otherwise a compromised
-parachute vault could mean your nostr key starts getting used in a lot of places you don't want it to."
+The ask: a code change waits for a yes. And if the vault or the hub is broken into, a real client must still be
+the one that approves a change (one client is enough, not all of them), or the person's key starts being used in
+places they never chose.
 
 Today an Allow lives in one device's `localStorage` (`src/applet/grants.ts`): a tap, with no key behind it, that
 every device asks for again.
@@ -304,9 +304,8 @@ you already approved. The microphone and notifications ask when first used.
 
 ## Keys, and replacing them
 
-Aaron: "If we ever hit a point where my nostr private key gets leaked, I want to be able to quickly and effectively
-rotate that… at some point before too long I'll want to rotate my own nostr private key and make sure the system all
-keeps working well."
+The ask: if a private key ever leaks, replacing it should be quick and sure, and everything should keep working
+afterwards. Not everyone needs this; some people will want to do it soon.
 
 **Three keys**, with the names agreed with #systems:
 
@@ -369,9 +368,8 @@ device is set up again by hand. Nothing here asks them to do more.
 
 ## Security levels
 
-Aaron: "we probably want to have a better default level of security, like we've had in Uni app where I have to enter
-my pin or my fingerprint to approve something… I might want to be able to require a password to do anything if I
-haven't touched it for X many minutes."
+The ask: a better default, like the Uni app's, where approving something takes a PIN or fingerprint; and, for
+those who want it, an unlock before anything at all once the app has sat untouched for some minutes.
 
 `security` says how careful your app is. It is yours, not one app's, so it sits in `Parachute/Settings` and holds
 for every app and device. (The brief said "part of the app record, per person"; with several apps, per person means
@@ -382,7 +380,7 @@ Settings.) Each device enforces it.
 | Approving code | **device unlock, always** | None. No setting turns it off. |
 | Powerful answers from the approval key | **device unlock, each one** | None, as today. |
 | `answers`: routine answers from the approval key (approval cards) | `"each"`: unlock for each one, as the Uni app does | `"five-minutes"`, looser: once per applet, then not again for five minutes. This is what Parachute does today, so the default gets stricter. |
-| `lock_after_idle_minutes` | `null`: never | A number: unlock to open the app after that long untouched. Aaron's "password to do anything". |
+| `lock_after_idle_minutes` | `null`: never | A number: unlock to open the app after that long untouched. |
 | `everyday` | `"open"`: the everyday key signs for approved applets while the app is open | `"unlock"`: each applet's first signature after the app was locked needs the unlock. |
 
 **A record can make a device stricter by itself, never looser.** Your agent can write this record, so a device
@@ -391,8 +389,8 @@ stolen phone the approval key is behind the unlock whatever is set; with the idl
 
 ## Layer 3: an applet's state survives everything
 
-Aaron: "if I'm journaling and then hop to mail then messages and then rooms, I don't want to lose my journal entry.
-Even if I close my app or turn off my phone."
+The ask: write in Journal, hop to Mail, then Rooms, and the journal entry is still there. Even after closing the
+app or turning the phone off.
 
 Today an applet may ask for `storage` (256 KB in `localStorage`), and three hidden applets stay running (`KEEP = 3`,
 `src/shell/kept.tsx`). Nothing is saved when a fourth pushes the first out. A draft survives only if the applet's
@@ -617,7 +615,7 @@ What an approval's signed content says (in the record it is one string, which is
 
 | Old | Replaced by | Goes |
 |---|---|---|
-| `bar`, `start`, `services` in `Parachute/Settings` | the app record | when no device of yours runs the old app. How the app knows that is not designed: each device would have to leave its version somewhere. Until it is, a date Aaron sets. |
+| `bar`, `start`, `services` in `Parachute/Settings` | the app record | when no device of yours runs the old app. How the app knows that is not designed: each device would have to leave its version somewhere. Until it is, a date we set. |
 | Applet pointers (`Parachute/From/…/applet-*`) | a source, and the code hash in the signed approval | same day |
 | Grants in each device's `localStorage` (`parachute.applets.grants.v1`), and the frame's and embeds' own Allows | signed approvals in the home vault | per device, when it has its anchor; a browser tab with no key keeps them |
 | `grantedUnder` (sealed / approved-code) on a grant | nothing: every device runs only approved code | at step 6 |
@@ -646,7 +644,7 @@ Each of these is a choice someone could reasonably make the other way.
 - **A device with no anchor** (a browser tab, or any device before you set it up) can't check approvals. It keeps
   today's behaviour: its own Allow, by a tap, for itself only.
 - **`security` sits in Settings, not in each app record.**
-- **Not designed here:** Aaron would drop reactions from Rooms. That takes kind 7 out of what Rooms may sign, which
+- **Not designed here:** dropping reactions from Rooms, which was also asked for. That takes kind 7 out of what Rooms may sign, which
   changes what it asks, so Rooms would ask once.
 
 ## What I did not verify
@@ -659,7 +657,7 @@ Each of these is a choice someone could reasonably make the other way.
 - That kinds 30479 and 30480 are free in the Nostr kind list. Any unused kinds do.
 - A mail server reporting a count to the gateway does not exist yet, on either side.
 
-## Open questions for Aaron
+## Open questions
 
 1. **Does the approval key live on one device, or can it be on two?** One (the phone) is strongest: a stolen laptop
    can approve nothing. But a changed applet then waits for the phone, and a lost phone means the root key and

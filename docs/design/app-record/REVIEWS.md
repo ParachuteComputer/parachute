@@ -19,7 +19,7 @@ Each reviewer was a fresh Fable session that had not written or seen the design,
 | Schemas allowed `https://*`, an id unlike its path, a theme pointing at signed records, URLs with logins, duplicates, `../`, an end date in year 9999. | All refused, each with an example in `examples/invalid/` shown to fail for that one reason. |
 | The tag `app` is too generic to guard. | `parachute-app`. |
 
-Then Aaron's steer arrived (ADDENDUM-TRUST: a code change waits for a yes signed on a real client; one client is
+Then a steer arrived (a code change waits for a yes signed on a real client; one client is
 enough) and layer 2 was rebuilt on it.
 
 ## Second review (after the rebuild): NO-SHIP
@@ -35,11 +35,11 @@ enough) and layer 2 was rebuilt on it.
 | One record, but `modes` and `whose` are per device; the example would not run on the phone that signed it. | Modes dropped: every device runs only approved code and the card always carries the phone's warning. `whose` stays, and a device that disagrees says why. |
 | Deleting approvals would stop every applet on devices that can't approve. | A client keeps what it checked; deletion stops nothing there. |
 | Switching app would silence Rooms; no marker for approval signals; someone else's applet shown with a signal. | Approval signals stay registered whichever app is open, and are told apart by the service carrying `approvals`. Someone else's applets may declare only vault signals. |
-| No DESIGN.md; the reactions remark missing; a placeholder left in the doc; ADDENDUM-SECURITY unaddressed. | DESIGN.md added; reactions noted under "Decided here"; reviews moved here; security levels, keys and "what opens a note" are sections now. |
+| No DESIGN.md; the reactions remark missing; a placeholder left in the doc; the security addition unaddressed. | DESIGN.md added; reactions noted under "Decided here"; reviews moved here; security levels, keys and "what opens a note" are sections now. |
 | Wrong path cited for the approval-key signer; stale `Grants` in a schema pattern; small wording slips in layer 3. | Fixed. |
 | Too long; decisions buried; question 3 was one the author could settle. | "Decided here, unless you say otherwise" lists them. Question 3 is now who may replace the everyday key. |
 
-Then ADDENDUM-SECURITY arrived (security levels, key rotation through a root-signed key list, what opens a note).
+Then a second addition arrived (security levels, key rotation through a root-signed key list, what opens a note).
 
 ## Third review (with keys and security): NO-SHIP, two blockers
 
