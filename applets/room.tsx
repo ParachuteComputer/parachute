@@ -497,7 +497,6 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     for (const [k, v] of seed.names) st.s.names.set(k, v);
     seed.msgs.forEach(st.add);
   }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [seeded] = useState(() => !!seed?.msgs.length && !at);
 
   useEffect(() => {
     let on = true, stop: (() => void) | null = null;
@@ -563,7 +562,9 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   // where it was left, for the next open
   const placeNow = useRef(place);
   placeNow.current = place;
-  useEffect(() => () => { const sc = scroller.current; if (sc && !thread) placeNow.current?.set(atBottom.current ? null : sc.scrollHeight - sc.scrollTop - sc.clientHeight); }, [thread]);
+  // (kept as it scrolls: by the time a room goes, its scroller is already gone)
+  const fromFoot = useRef<number | null>(null);
+  useEffect(() => () => { if (!thread) placeNow.current?.set(atBottom.current ? null : fromFoot.current); }, [thread]);
   // new posts while it is open are read while you can see them (not while the app or the applet is hidden), and followed
   // when you are at the foot
   const looking = useLooking();
@@ -655,7 +656,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
       <button className="back" onClick={() => (thread ? setThread(null) : onBack?.())}>{thread ? `← ${title}` : "← Rooms"}</button>
       <h2>{thread ? "Thread" : title}</h2>
     </div>}
-    <div className="scroll" ref={scroller} onScroll={(e) => { const x = e.currentTarget; atBottom.current = x.scrollHeight - x.scrollTop - x.clientHeight < 200; }}>
+    <div className="scroll" ref={scroller} onScroll={(e) => { const x = e.currentTarget, d = x.scrollHeight - x.scrollTop - x.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }}>
       <div className="page">
         {!thread && (older === "start" ? <p className="day">Start of {title}</p> : <button className="older" onClick={loadOlder} disabled={older === "loading"}>{older === "loading" ? "Loading older messages…" : "Load older messages"}</button>)}
         <div className="log" role="log" aria-label={`Messages in ${name || "the room"}`}>

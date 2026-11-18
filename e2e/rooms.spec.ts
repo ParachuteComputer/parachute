@@ -327,3 +327,60 @@ test("Rooms paints the list it last showed at once, keeps it while the relay is 
     bob.close();
   }
 });
+
+test("a room opens at once from what the list holds, and where you left it", async ({ page }) => {
+  test.setTimeout(150_000);
+  const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
+  const bob = await person(RELAY!, secret("bob"));
+  const stamp = Date.now().toString(36);
+  const owner = await person(RELAY!, secret("owner"));
+  const yard = crypto.randomUUID();
+  for (const p of [alice, bob.pubkey]) await owner.publish({ kind: 9030, tags: [["p", p]] });
+  expect((await owner.publish({ kind: 9007, tags: [["h", yard], ["name", `Yard ${stamp}`], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+  for (const p of [alice, bob.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", yard], ["p", p]] })).ok).toBe(true);
+  owner.close();
+  await bob.publish({ kind: 0, content: JSON.stringify({ name: "Bob", display_name: "Bob" }) });
+  // enough lines to scroll: 30, paced under the relay's rate
+  for (let i = 1; i <= 30; i++) {
+    expect((await bob.publish({ kind: 9, content: `Yard note ${i} ${stamp}: ${"the fence by the compost needs another post. ".repeat(2)}`, tags: [["h", yard]] })).ok).toBe(true);
+    // paced under the relay's rate, and the last one a second after the rest (the newest by its time)
+    if (i % 8 === 0 || i === 29) await new Promise((r) => setTimeout(r, 1200));
+  }
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+  let away = false;
+  await page.routeWebSocket((url) => url.href.startsWith(RELAY!), (ws) => { if (away) ws.close(); else ws.connectToServer(); });
+  const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
+  const app = frame(page);
+  const row = () => app.getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Yard ${stamp}`) });
+  const scroller = () => app.locator(".room .scroll");
+  const fromFoot = () => scroller().evaluate((x) => x.scrollHeight - x.scrollTop - x.clientHeight);
+  try {
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(row()).toContainText(`Yard note 30 ${stamp}`, { timeout: 30_000 });
+
+    // in the room, partway up; back to the list and in again: where it was left
+    await row().click();
+    await expect(app.getByRole("log")).toContainText(`Yard note 30 ${stamp}`, { timeout: 15_000 });
+    await scroller().evaluate((x) => { x.scrollTop = Math.max(0, x.scrollHeight - x.clientHeight - 600); x.dispatchEvent(new Event("scroll")); });
+    const left = await fromFoot();
+    expect(left).toBeGreaterThan(400);
+    await app.getByRole("button", { name: /Rooms/ }).first().click(); // the room's "← Rooms"
+    await row().click();
+    await expect.poll(fromFoot, { timeout: 5_000 }).toBeGreaterThan(left - 60);
+    expect(await fromFoot()).toBeLessThan(left + 60);
+
+    // the relay away: the room still opens with what the list holds (its newest lines)
+    await app.getByRole("button", { name: /Rooms/ }).first().click();
+    away = true;
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+    await row().click();
+    await expect(app.getByRole("log")).toContainText(`Yard note 30 ${stamp}`, { timeout: 5_000 });
+  } finally {
+    away = false;
+    await made.remove();
+    bob.close();
+  }
+});
