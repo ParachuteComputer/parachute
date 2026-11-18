@@ -15,10 +15,10 @@
             "parachute-keys"
           ]
         ],
-        "content": "{\"v\":1,\"seq\":1793527200,\"at\":\"2026-11-01T10:00:00.000Z\",\"keys\":[{\"role\":\"everyday\",\"key\":\"74e796787fcf92eb92299285cc92f015ecec1df352ae52cbebfd9d1124f99325\"}]}",
-        "pubkey": "e00effde089a3e856bf6e77b9b66c213e529b2b398b713a8a4e5b265b11425f3",
-        "id": "1a283f8f5efc179e503a9bf41e5307ef94b38afaefeb9a671123ebe3b3913254",
-        "sig": "ac4206603bc075994dfe03cee9c489f5c2f4a1604e6b72cbee6d01386530de8f847945bb4be15ba665c678d7425d433a9a153497055c08ed52c665de11eccbd2"
+        "content": "{\"v\":1,\"seq\":1793527200,\"at\":\"2026-11-01T10:00:00.000Z\",\"keys\":[{\"role\":\"everyday\",\"key\":\"305019c62a9d7654c4bd0c6cccd14cc91589c1447ea57136f5e728263018832e\"}]}",
+        "pubkey": "a9f67948260915e765ea6aab39b16f7f5a2b85189b5f29f2901b89a57d19b8d5",
+        "id": "2ee23cff9d9dbdfd8ed3fe7af781a47f1bf935f68d8cf0b7b1d87442287d6c7e",
+        "sig": "99e12571f353219a88ba6722ec23e3ba22591ddd99d7042590ade51e094991007af2ddff365d3dcc23609ddc259845c331f4ef619fc4c67bb8bbfca6efd887d7"
       }
     }
   }

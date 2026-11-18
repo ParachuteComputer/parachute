@@ -82,9 +82,10 @@ export function checker() {
     if (!A.content(a)) return "content: " + ajv.errorsText(A.content.errors).slice(0, 80);
     const id = subjectId(a.subject);
     if (id !== subjectId(subject) || rec.path !== pathOf(a.subject) || e.tags.find((t) => t[0] === "d")[1] !== `parachute-approval:${id}`) return "it is an approval of something else";
-    if (a.n > c.now / 1000 + DAY || Date.parse(a.at) > c.now + DAY * 1000) return "dated from the future";
-    // an approval this client holds from a key that is no longer listed orders nothing: it can't block a new one
-    const held = c.held[id] && approvalKeys(c).includes(c.held[id].pubkey) ? c.held[id] : null;
+    if (a.n > c.now / 1000 + DAY || !(Date.parse(a.at) <= c.now + DAY * 1000)) return "dated from the future";
+    if (a.approved && (isNaN(Date.parse(a.expires)) || isNaN(Date.parse(a.at)))) return "a date in it can't be read";
+    // what this client holds stays the floor even when its key was dropped since: an older one can't come back
+    const held = c.held[id];
     if (held && e.id === held.id) return null;
     if (!approvalKeys(c).includes(e.pubkey)) return "signed by a key that is not an approval key on this person's key list";
     if (held && a.n <= held.a.n) return a.n === held.a.n ? "another approval with the number of the one this client holds" : "older than the one this client holds";

@@ -15,10 +15,10 @@
             "parachute-keys"
           ]
         ],
-        "content": "{\"v\":1,\"seq\":1793527200,\"at\":\"2026-11-01T10:00:00.000Z\",\"keys\":[{\"role\":\"everyday\",\"key\":\"74e796787fcf92eb92299285cc92f015ecec1df352ae52cbebfd9d1124f99325\"},{\"role\":\"approval\",\"key\":\"74e796787fcf92eb92299285cc92f015ecec1df352ae52cbebfd9d1124f99325\"}]}",
-        "pubkey": "e00effde089a3e856bf6e77b9b66c213e529b2b398b713a8a4e5b265b11425f3",
-        "id": "480d5bad1779861d2fd20bd2b5ddbcd3d0d143d588e344392a64deaf14c2a48d",
-        "sig": "4e0db3fb42440c260d7d560ce0dc31a47bb8053b8290cc9f455e8a52254a3acf6bc72aa4122aef095a235f3ee797f40f2a296180611b4202e4045865166fea34"
+        "content": "{\"v\":1,\"seq\":1793527200,\"at\":\"2026-11-01T10:00:00.000Z\",\"keys\":[{\"role\":\"everyday\",\"key\":\"305019c62a9d7654c4bd0c6cccd14cc91589c1447ea57136f5e728263018832e\"},{\"role\":\"approval\",\"key\":\"305019c62a9d7654c4bd0c6cccd14cc91589c1447ea57136f5e728263018832e\"}]}",
+        "pubkey": "a9f67948260915e765ea6aab39b16f7f5a2b85189b5f29f2901b89a57d19b8d5",
+        "id": "aa94d72dc4fdafa44d7a3c7439152c29540094c391dfc010d1979d252ddc3e43",
+        "sig": "229739a31f25f2b6130f84f31c92d534a11a7750d62eaeb3b4a31dfe44d53f9c9d3009f7a37bf6b1580fe2b3e7b5e5406726eb119b7c21c13986126f9ebc1d68"
       }
     }
   }

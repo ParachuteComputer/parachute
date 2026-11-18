@@ -16,9 +16,9 @@
           ]
         ],
         "content": "{\"v\":1,\"subject\":{\"hub\":\"https://techne.example\",\"vault\":\"techne\",\"record\":\"01M7EVENTS\",\"applet\":\"events\"},\"n\":1794337920,\"approved\":true,\"code\":\"tsx:1b970020a39dfff7c2da402e471e2051a56131906bfe3d4d5472ee7c39837518\",\"scope\":\"50429da766d6178d49dc3b5a276e96f7c1b3bd351b345b555df011bb9f60b42e\",\"whose\":\"theirs\",\"expires\":\"2027-11-10T19:12:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"Someone else's vault, techne at techne.example.\",\"Read notes in Events/\"],\"at\":\"2026-11-10T19:12:00.000Z\"}",
-        "pubkey": "679d5c66d6b133f1d8ecc2c7cd675bd7020330155e2be7667c732c93033bc9b9",
-        "id": "39041172a20c9018a1c83cab9b1a8790c300ab5a03cfeb2d9a5e3f35d7b959a8",
-        "sig": "be7d72d0aa21c1e8d98a684a88d5c880a445eeeca888d1ae7a90373b954e0ad7ac725ba6c9c6591cda2dd3f72470ae2776af69dcb8669afdcf1cb8b7a59b4218"
+        "pubkey": "12478185319535c4e6f922ede49f06279750e6a4911afb1102f94072e1b5c177",
+        "id": "51daa6b0d56a63952387452fa80420e1b70cb9fad5af4a1cbeea69306ab4f021",
+        "sig": "6d2eb4dc8c776263befa58deebf31004b2a9b0b009258a0c5b190f432f34069db64100df63d5cf99c09a3702af8ce25ce09dd1be9f2e564dee84228afca6325f"
       }
     }
   }

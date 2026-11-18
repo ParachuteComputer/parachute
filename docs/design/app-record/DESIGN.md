@@ -62,8 +62,8 @@ listing is only discovery, and trust is the signed hash. Nothing depends on grap
 A small script plays 47 attempts against the rule: new code slipped into the vault, a changed component, an edited
 hash, an approval signed by a stranger or by your everyday key, last month's approval put back, a withdrawn one put
 back, a stolen approval key after you replaced it, a changed frame. Each does what the design says. A second script
-turns off each of the rule's 24 checks in turn: the first fails without 14 of them; the other 10 are format checks
-or second lines behind another check. It tests the rule, not an app: none of this is built.
+turns off each of the rule's 25 checks in turn: the first fails without 16 of them; the other 9 refuse malformed
+records or sit behind another check. It tests the rule, not an app: none of this is built.
 
 Three gaps remain, each stated in the design: a device can't know about a withdrawal the vault hides from it; a
 brand-new device will run an older version you once approved; and a stolen approval key together with a broken-into
@@ -77,6 +77,11 @@ vault can fool a device that hasn't read your new key list (which is why the lis
   mail's unread count (never words).
 - A device you haven't set up with your root key's public half (a browser tab, say) can't check approvals. It keeps
   today's behaviour: its own Allow, for itself.
+- The **root key is made in the app, once, and shown as words** to keep off any device. To sign a new key list I
+  lean typing those words into the phone behind its unlock (quick); signing on a machine that is never online is
+  the stricter way.
+- Every approval card carries the phone's warning ("on a phone an applet could send what it reads to the
+  internet"), since one approval now covers every device. Someone else's applets may keep drafts on your device.
 - Not designed here: dropping reactions from Rooms. It changes what Rooms may sign, so Rooms would ask once.
 
 ## Three questions only you can settle

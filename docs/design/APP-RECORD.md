@@ -222,10 +222,10 @@ your Pixel." (Open question 1.)
 ### Tested against attacks
 
 [attacks.mjs](app-record/attacks.mjs) plays the rule with real keys, real signatures and hashes computed from the
-code: 47 attempts. It tests the rule's logic. It can't test the app, the native signer or the unlock, which don't
-exist. [mutate.mjs](app-record/mutate.mjs) then turns off each of the rule's 24 checks in turn: without 14 of them
-the play fails. The other 10 it does not notice: six only refuse malformed records, and four are second lines
-behind another check. It prints which.
+code: 47 attempts on the rule, and two checks that hashes agree. It tests the rule's logic. It can't test the app,
+the native signer or the unlock, which don't exist. [mutate.mjs](app-record/mutate.mjs) then turns off each of the
+rule's 25 `if` checks in turn: without 16 of them the play fails. The other 9 it does not notice, and it lists
+them: each refuses a malformed record, or sits behind another check that catches the same thing.
 
 | Who | Tries | Result |
 |---|---|---|
@@ -241,7 +241,8 @@ behind another check. It prints which.
 | Someone who also holds your **everyday** key | Approves with it, or signs a key list promoting it | Doesn't run: the list gives that key the everyday role only. |
 | Techne | Changes an applet you approved, or a component on your home page | Doesn't run until you approve the new hash. Same rule, same record. |
 | Your agent's token, or a thief's | Changes your own frame | Doesn't run: a frame needs an approval too. Nor can a record approved as a component be passed off as a frame. |
-| A device with a wrong clock, or a thief before you notice | Signs with a number from the far future, to block every later approval | Refused. And what a dropped key signed orders nothing. |
+| A device with a wrong clock, or a thief before you notice | Signs with a number from the far future, to block every later approval | Refused, so it never becomes the one a client holds. |
+| Someone who can write your vault, while you have two approval keys | One key approved, the other took it back and was then dropped; the approval is put back | Doesn't run: what a client holds stays the floor after its key is dropped. |
 | Two of your devices at once | One approves and one withdraws in the same second | Each client keeps the one it saw. The vault's own write check makes the second signer read again and sign higher. |
 
 **Three gaps that remain.**
@@ -328,7 +329,8 @@ A key not on the list signs nothing that counts, and the app stops signing with 
 **Making a root key** (Settings → Keys → **Make a root key**, once). The app makes it, shows it as words to write
 down and keep somewhere that is not a device, and forgets it. Its public half stays: that is this device's anchor.
 
-**The anchor.** Each device holds the root key's public half. You put it there when you set the device up: scan it
+**The anchor.** Each device holds the root key's public half. (Until a device has read a key list, it treats the
+anchor itself as the approval key; that is the no-root case below.) You put it there when you set the device up: scan it
 from a device you hold, or paste it. It is public, and both screens show the same short code to compare. This is the
 one thing a device takes on your word. Everything else it checks against that.
 
@@ -362,8 +364,8 @@ making, checking and obeying it. Theirs, which I did not design or check:
   key here signs one thing only: the key list.
 
 **For someone with no root key** (most people): the anchor is their approval key, which signs the list itself.
-There is then nothing above it: if it is lost or stolen, each device is set up again by hand. Nothing here asks
-them to do more.
+There is then nothing above it: a list can't take that key's own power away, so if it is lost or stolen, each
+device is set up again by hand. Nothing here asks them to do more.
 
 ## Security levels
 
@@ -488,8 +490,8 @@ from the applet's own record: *Rooms · 3 new: mentions and messages from Uni*.
 ```
 
 `notify` is a badge and a notification; `badge` is quiet; `off` isn't registered at all. A device registers the
-signals of all your apps, so opening the Techne app doesn't quiet Rooms; the bar shows badges for the app that is
-open. One exception, for approval requests (a signal on a service that carries `approvals`): a record can't turn
+signals of all your apps, so opening the Techne app doesn't quiet Rooms; where two apps choose differently for one
+signal, the louder wins. The bar shows badges for the app that is open. One exception, for approval requests (a signal on a service that carries `approvals`): a record can't turn
 them off, only the device can. So an agent can't quiet its own approval cards.
 
 **What it costs.** The gateway already knows your public key and your rooms. It would also learn which applets you
@@ -602,8 +604,7 @@ What an approval's signed content says (in the record it is one string, which is
 5. **Applet pointers.** Each `Parachute/From/…/applet-*` pointer is read as a one-applet source; its pinned hash is
    what the approval now carries, signed. The records stay until the overlap ends, so an old device keeps its
    brought-in applets. Component pointers stay for good; embeds own them.
-6. **Keys, then approvals.** A separate approval key if there isn't one; the anchor on each device; a key list if
-   you keep a root key. Then one screen on the approving device, "Sign what you allowed here", with one unlock. It
+6. **Keys, then approvals.** A separate approval key if there isn't one; the anchor on each device; a key list. Then one screen on the approving device, "Sign what you allowed here", with one unlock. It
    lists only applets whose code is still what that device allowed; a changed one shows its card. A signed approval
    keeps the end date its grant had. Until a device has its anchor it keeps its local grants and
    asks for itself, as today, so nothing stops working on the day of the update.
@@ -638,6 +639,10 @@ Each of these is a choice someone could reasonably make the other way.
 - **The gateway learns** which applets you use and your mail's unread count, not only your rooms.
 - **Drafts stay on the device.**
 - **Device modes go**; the card always carries the phone's warning.
+- **Someone else's applets get the saved store** (drafts, on your device only). EMBED.md gives them none today.
+- **The root key is made in the app, once, and shown as words.** For signing a new list I lean typing the words
+  into the phone, behind its unlock: quick, and the key is in memory for a moment. Signing on a machine that is
+  never online is the stricter way; #systems' runbook should choose.
 - **A device with no anchor** (a browser tab, or any device before you set it up) can't check approvals. It keeps
   today's behaviour: its own Allow, by a tap, for itself only.
 - **`security` sits in Settings, not in each app record.**

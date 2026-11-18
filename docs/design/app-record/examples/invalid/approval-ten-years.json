@@ -16,9 +16,9 @@
           ]
         ],
         "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7ROOMSAPPLET\",\"applet\":\"rooms\"},\"n\":1794994201,\"approved\":true,\"code\":\"tsx:9c66c97369bf249c7c2705724f52587a708cb9cc2191ea53301bc743b08389c4\",\"scope\":\"1bc3d1a0c20ef8f70fbf484e6541512d5c8dc353e26fb8609b91acc3663d7e95\",\"whose\":\"mine\",\"expires\":\"2036-11-18T09:30:00.000Z\",\"face\":[\"As you on relay.example (your everyday key): posts messages, edits and typing in your rooms. What it reads can go there.\",\"High risk, with your approval key: answers approval cards and secret requests from Uni there.\",\"Counts and notifies through push.example: mentions and messages from Uni.\",\"Also: the microphone when you press record, files you pick.\",\"On a phone an applet could send what it reads to the internet: approve only code you trust.\"],\"others\":[],\"at\":\"2026-11-18T09:30:00.000Z\"}",
-        "pubkey": "679d5c66d6b133f1d8ecc2c7cd675bd7020330155e2be7667c732c93033bc9b9",
-        "id": "415aa276b228619eab78066c83e93c0deb7c8306d192feaa07ed453812c867d9",
-        "sig": "b706bf4c4cd4d755581d17a688a438a2739605a6199bf614ac34f55aaa677d54c21b5dfffbaf6686a07993c8794be5fa64720d5d2cd7bd4a77a7acab9c20d2f2"
+        "pubkey": "12478185319535c4e6f922ede49f06279750e6a4911afb1102f94072e1b5c177",
+        "id": "980c8b6fae931a64f1459fb56291d8ee1d7820312b1b1aee353bafd05683cfeb",
+        "sig": "6e1c830cbda1422e6632fffd2b51183740158a00de5379b79798cf4072f2a9a4e143eb4869063c375cc7e05c773e4fe78b72a1fb577d69674889c94536edd80c"
       }
     }
   }

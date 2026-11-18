@@ -16,9 +16,9 @@
           ]
         ],
         "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7SCRATCH\",\"applet\":\"scratch\"},\"n\":1794469500,\"approved\":false,\"device\":\"Pixel\",\"at\":\"2026-11-12T07:45:00.000Z\"}",
-        "pubkey": "679d5c66d6b133f1d8ecc2c7cd675bd7020330155e2be7667c732c93033bc9b9",
-        "id": "3ce02d895f459cff1f406cad501044fb9c722ffc437fb912a625e67ad42ca1d8",
-        "sig": "0375f564bf1658a38d7ddc012f1ba4b0a9c85b4d0f8963efec18716fe15e9576142e4f96924c1cf0dc792939edd5f952eb8ebcc85840e01a8a0a920e979dfa83"
+        "pubkey": "12478185319535c4e6f922ede49f06279750e6a4911afb1102f94072e1b5c177",
+        "id": "ceb9aed89a0a358cdcea14a82ad3d3482f98940a0ea582db28a5cc7cf3fcd8fd",
+        "sig": "a52ff64566790860d93503763081537f27f3c57e28c209d0477de25aac903f9e743904a4e4d42458e32926661f531372fd2c1324b9c8d38e895128e2d376f6f3"
       }
     }
   }

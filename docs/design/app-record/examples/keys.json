@@ -15,10 +15,10 @@
             "parachute-keys"
           ]
         ],
-        "content": "{\"v\":1,\"seq\":1793527200,\"at\":\"2026-11-01T10:00:00.000Z\",\"keys\":[{\"role\":\"everyday\",\"key\":\"74e796787fcf92eb92299285cc92f015ecec1df352ae52cbebfd9d1124f99325\",\"name\":\"phone, laptop, Uni\"},{\"role\":\"approval\",\"key\":\"679d5c66d6b133f1d8ecc2c7cd675bd7020330155e2be7667c732c93033bc9b9\",\"name\":\"phone\"}]}",
-        "pubkey": "e00effde089a3e856bf6e77b9b66c213e529b2b398b713a8a4e5b265b11425f3",
-        "id": "d5d313a04b2949bf5332342652ca76270685e49cfde61bd59e3730ac0e90cec3",
-        "sig": "d0b18527d4bfab6b113a8a13b2775826a8660172e734a075c18e804511366768212368308125f657d18ce437b86df125bdb851a1a9df683e25c050f3c7302fcb"
+        "content": "{\"v\":1,\"seq\":1793527200,\"at\":\"2026-11-01T10:00:00.000Z\",\"keys\":[{\"role\":\"everyday\",\"key\":\"305019c62a9d7654c4bd0c6cccd14cc91589c1447ea57136f5e728263018832e\",\"name\":\"phone, laptop, Uni\"},{\"role\":\"approval\",\"key\":\"12478185319535c4e6f922ede49f06279750e6a4911afb1102f94072e1b5c177\",\"name\":\"phone\"}]}",
+        "pubkey": "a9f67948260915e765ea6aab39b16f7f5a2b85189b5f29f2901b89a57d19b8d5",
+        "id": "09c0a28cff56d64052eac0396f18f2103c87c4b662869cf2c9f88dff5bfab802",
+        "sig": "45e2d0c4c28f6650bd51cb57a2c854da24a08756df27b02649851c72564bc64f4783320f43fb27c05afd72d885b027c4ec3b3a768047bbc150778fcd111bc6e1"
       }
     }
   }

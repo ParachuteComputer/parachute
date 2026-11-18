@@ -46,9 +46,9 @@ Then ADDENDUM-SECURITY arrived (security levels, key rotation through a root-sig
 | Objection | Where it stands |
 |---|---|
 | Recovery would re-sign whatever a thief approved: "one unlock signs it all again". | Approve again from a device the thief never held, from what that device had checked before the day the key was lost; anything later is shown apart, one at a time. |
-| "Removing any one check makes the script fail" was false; 31 attempts, not 33. | `mutate.mjs` now does it for all 24 checks and prints the result: 14 caught, 10 not (format checks and second lines). The docs say those numbers. 47 attempts, counted by the script. |
+| "Removing any one check makes the script fail" was false; 31 attempts, not 33. | `mutate.mjs` now does it for each of the rule's `if` checks and prints the result. The docs give its numbers as they stand. |
 | A planned rotation stopped every applet between the new list and the re-signing. | List both keys, sign again, then drop the old one. In the play. |
-| A stolen key could jam an applet for good with a huge number. | Numbers from the future are refused, and what a dropped key signed orders nothing. Both in the play. |
+| A stolen key could jam an applet for good with a huge number. | Numbers from the future are refused. In the play. |
 | `subject.kind` was never checked; a component's approval passed as a frame's. | Kind is part of what an approval names. Frame and component cases are in the play. |
 | The code hash dropped import names; swapping two components' contents gave the same hash. | Imports are hashed under their names. In the play. |
 | Rotation was half answered: no way to make a root key, no signing step, root loss, no word that a dropped everyday key stops signing. | "Making a root key", "Signing a new list", the planned and the leaked case, and root loss are sections now. |
@@ -60,6 +60,16 @@ Then ADDENDUM-SECURITY arrived (security levels, key rotation through a root-sig
 | No-root: "no list to keep" against a schema that accepts one. | The approval key, as anchor, signs the list; said so. |
 | The year cap bound only honest signers; one key could hold both roles. | A start date in the future is refused; a key listed twice is refused. Both in the play. |
 | Layer 3 wording; someone else's applets getting storage reverses EMBED.md unsaid; bulk signing must skip changed code. | Fixed and said. |
+
+## Fourth review (a narrow check of the fixes): SHIP, no blockers
+
+| Objection | Where it stands |
+|---|---|
+| The fix "what a dropped key signed orders nothing" opened a fourth gap: with two approval keys, a withdrawal by a key later dropped could be undone. | Reverted: what a client holds stays the floor after its key is dropped. The jam it was meant to stop is already stopped by refusing numbers from the future. In the play. |
+| "It prints which" and the six/four split were inexact; one row of the attack table passed with its check off. | The split is gone and the script lists what it misses; that attempt now hands the client nothing afterwards. Now 47 attempts and 2 equalities; 16 of 25 checks caught. |
+| A date that can't be parsed slipped past the year cap. | Refused. In the play. |
+| The root key can approve code until a list is read; in the no-root case a dropped key can re-add itself. | Both said in "Keys, and replacing them". |
+| DESIGN.md left out: how the root key signs, that device modes go, storage for someone else's applets. Two apps choosing differently for one signal. | Under "Decided"; the louder wins. |
 
 Not taken: "approvals name record ids while the bar names paths, so another approved record can be moved under a
 bar slot". The record that opens is one you approved, under its own name; the bar shows that name.

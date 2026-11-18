@@ -10,6 +10,7 @@ const dir = fileURLToPath(new URL(".", import.meta.url));
 const lib = readFileSync(join(dir, "lib.mjs"), "utf8").split("\n");
 const start = lib.findIndex((l) => l.startsWith("export function checker"));
 const checks = lib.map((l, i) => ({ l, i })).filter(({ l, i }) => i > start && /^\s+if \(.*\) return /.test(l) && !/return null;/.test(l) && !/return l\.seq ===/.test(l));
+if (spawnSync(process.execPath, [join(dir, "attacks.mjs")]).status !== 0) { console.error("attacks.mjs fails as it is: fix that first"); process.exit(1); }
 let missed = 0;
 for (const { l, i } of checks) {
   const tmp = mkdtempSync(join(tmpdir(), "app-record-mutate-"));
@@ -22,4 +23,4 @@ for (const { l, i } of checks) {
   if (!caught) missed++;
   console.log(`${caught ? "caught" : "MISSED"}  ${l.trim().replace(/^if \((.*)\) return .*$/, "$1").slice(0, 110)}`);
 }
-console.log(`${checks.length - missed} of ${checks.length} checks: the play fails without them. ${missed} it does not notice.`);
+console.log(`${checks.length - missed} of ${checks.length} of the rule's if-checks: the play fails without them. ${missed} it does not notice (each refuses a malformed record, or sits behind another check).`);
