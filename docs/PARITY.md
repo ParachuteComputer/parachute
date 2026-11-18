@@ -14,6 +14,7 @@ room reaches both.
 | Feature | State | Tested |
 |---|---|---|
 | Room list: your rooms (NIP-29 membership), newest first, glyph, time, last line "who: text" | built | e2e/rooms.spec.ts, real relay |
+| The list paints at once when Rooms opens: as it was last shown on this device (its share of `storage`, 64 KB), then the relay read again, its queries side by side, in its place | built | rooms.spec: the list shows with the relay held away |
 | Unread count and "@" when you are named, from the Uni app's own read markers (kind 30078, sealed to you); a room with no marker yet shows no count, as in the Uni app | built | rooms.spec: a mention after you read shows "1 new, mentions you"; the marker on the relay is sealed |
 | "Wants you" on a row for an open ask | built | rooms.spec |
 | Search across rooms | built (the relay's NIP-50 search); a hit opens its room at that message, marked | rooms.spec: "seed potatoes" found, the room opened at it |
