@@ -16,6 +16,8 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
   made.push(settings.id);
   const note = await api(hub, "POST", "notes", { path: `Garden plan ${stamp}`, content: `# Garden plan ${stamp}\n\nKale in the north bed.` }) as Row;
   made.push(note.id);
+  // more captures than Capture lists (12): the newest must still show
+  for (let i = 0; i < 13; i++) made.push((await api(hub, "POST", "notes", { path: `Inbox/2026-01-${String(i + 1).padStart(2, "0")} 09-00 old line ${i} ${stamp}`, content: `old line ${i}` }) as Row).id);
   try {
     await signIn(page);
     // Notes: every vault's newest notes in one list, the vaults as tabs; the bar says Notes, Capture, Connect

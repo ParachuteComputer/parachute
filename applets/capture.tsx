@@ -15,7 +15,14 @@ export function pathFor(text: string, at = new Date()) {
   const words = text.replace(/[#*_`>\[\]\\/:?"<>|^]/g, " ").split(/\s+/).filter(Boolean).slice(0, 10).join(" ").slice(0, 80).trim();
   return `Inbox/${stamp(at)}${words ? ` ${words}` : ""}`;
 }
-const voicePath = (at: Date, n = 0) => `Inbox/${stamp(at)}${n ? `-${pad(at.getSeconds())}` : ""} voice note`;
+const voicePath = (at: Date) => `Inbox/${stamp(at)} voice note`;
+const clash = (e: any) => /conflict/i.test(String(e?.message ?? e));
+/** A new note at this path, or (a note already there: the same words in the same minute) at the next free one. */
+async function make(path: string, body: string): Promise<Rec> {
+  for (let n = 1; ; n++) {
+    try { return await vault.createRecord({ path: n === 1 ? path : `${path} ${n}`, body }); } catch (e) { if (!clash(e) || n >= 9) throw e; }
+  }
+}
 const nameOf = (r: Rec) => r.path.replace(/^Inbox\//, "").replace(/^\d{4}-\d{2}-\d{2} \d{2}-\d{2}(-\d{2})? ?/, "") || "Note";
 const when = (r: Rec) => { const d = new Date(r.createdAt ?? r.updatedAt ?? ""); return Number.isNaN(+d) ? "" : d.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }); };
 /** While a transcript is awaited: read again every 10 seconds, twelve times, not for ever. */
@@ -74,7 +81,7 @@ export default function Capture() {
     if (!body || busy) return;
     setBusy(true); setErr(""); setSaid("");
     try {
-      await vault.createRecord({ path: pathFor(body), body });
+      await make(pathFor(body), body);
       setText(""); setSaid("Saved to Inbox.");
       await load();
     } catch (e: any) { setErr(`Not saved: ${e?.message ?? e}. Your words are still here.`); }
@@ -89,7 +96,7 @@ export default function Capture() {
     setBusy(true);
     try {
       const at = new Date();
-      const made: Rec = await vault.createRecord({ path: voicePath(at), body: PENDING }).catch(() => vault.createRecord({ path: voicePath(at, 1), body: PENDING }));
+      const made: Rec = await make(voicePath(at), PENDING);
       try { await vault.attach(made.id, r.bytes, r.type, { transcribe: true }); } catch (e) {
         await vault.updateRecord(made.id, { body: "_The recording couldn't be attached._", if_updated_at: (made as any).updatedAt }).catch(() => {});
         throw e;

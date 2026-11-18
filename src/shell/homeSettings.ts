@@ -210,8 +210,9 @@ export async function readSettings(): Promise<void> {
 type Raw = { bar: unknown[]; start: unknown; hubs: unknown[]; app?: AppChoice };
 const parsedAs = (x: unknown, f: (p: Place) => boolean) => { const p = placeOf(x); return !!p && f(p); };
 
-/** Change the choices (a tap's): read the note as it is now, change only what was asked, and write it back. */
-async function changeSettings(change: (raw: Raw) => Raw): Promise<void> {
+/** Change the choices (a tap's): read the note as it is now, change only what was asked, and write it back.
+ *  `creating`: there is no settings note yet, and this write makes it. */
+async function changeSettings(change: (raw: Raw, creating: boolean) => Raw): Promise<void> {
   const home = homeVault();
   if (!home) throw new Error("There's no home vault yet.");
   const c = clientFor(home);
@@ -219,7 +220,7 @@ async function changeSettings(change: (raw: Raw) => Raw): Promise<void> {
   const n = pick(rows) as (typeof rows)[number] | null;
   if (!n && rows.length > 1) throw new Error(`Your home vault has ${rows.length} settings notes; keep one, at ${SETTINGS_PATH}.`);
   const was = plain(n?.metadata) && plain(n!.metadata!.parachute) ? n!.metadata!.parachute as Record<string, unknown> : {};
-  const next = change({ bar: Array.isArray(was.bar) ? was.bar : [], start: was.start ?? null, hubs: Array.isArray(was.hubs) ? was.hubs : [] });
+  const next = change({ bar: Array.isArray(was.bar) ? was.bar : [], start: was.start ?? null, hubs: Array.isArray(was.hubs) ? was.hubs : [] }, !n);
   const parachute = { ...was, bar: next.bar, start: next.start, ...(next.hubs.length || Array.isArray(was.hubs) ? { hubs: next.hubs } : {}), ...(next.app ? { app: next.app } : {}) };
   if (n) {
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
@@ -259,11 +260,12 @@ export const move = (p: Place, by: -1 | 1) => changeSettings((r) => {
   [bar[i], bar[j]] = [bar[j], bar[i]];
   return { ...r, bar };
 });
-/** Put a Parachute on the person's list (after a sign-in to it), unless it is there; or take it off. `app`: also say
- *  which app their devices open, in the same write (a new person's first sign-in). */
-export const listHub = (hub: string, on: boolean, name?: string, app?: AppChoice) => changeSettings((r) => {
+/** Put a Parachute on the person's list (after a sign-in to it), unless it is there; or take it off. `appIfNew`: which
+ *  app their devices open, written only if this write makes their settings note (a new person's first sign-in): a
+ *  note already there keeps what it says. */
+export const listHub = (hub: string, on: boolean, name?: string, appIfNew?: AppChoice) => changeSettings((r, creating) => {
   const has = r.hubs.some((x) => hubOf(x)?.hub === hub);
-  const withApp = app ? { ...r, app } : r;
+  const withApp = appIfNew && creating ? { ...r, app: appIfNew } : r;
   if (on) return has ? withApp : { ...withApp, hubs: [...r.hubs, { hub, ...(name ? { name } : {}) }] };
   return has ? { ...withApp, hubs: r.hubs.filter((x) => hubOf(x)?.hub !== hub) } : withApp;
 });

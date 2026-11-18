@@ -11,16 +11,27 @@ import { ago } from "./Launcher";
 type Row = { v: FrameVault; n: Note };
 const updated = (n: Note) => (n as { updatedAt?: string }).updatedAt ?? "";
 const PER_VAULT = 40, SHOWN = 60;
+/** Vaults read at once: well under the frame bridge's 32 calls in flight (FRAME_LIMITS), so none is refused. */
+const AT_ONCE = 6;
 
-function useNotes(vaults: FrameVault[], term: string): Row[] | null {
-  const [rows, setRows] = useState<Row[] | null>(null);
+/** Each item through `f`, at most `n` at a time, in order. */
+async function inTurns<T, R>(items: T[], n: number, f: (x: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (next < items.length) { const i = next++; out[i] = await f(items[i]); } }));
+  return out;
+}
+
+function useNotes(vaults: FrameVault[], term: string): { rows: Row[]; unread: string[] } | null {
+  const [rows, setRows] = useState<{ rows: Row[]; unread: string[] } | null>(null);
   const keys = vaults.map((v) => v.key).join("|");
   useEffect(() => {
     let live = true;
     setRows(null);
-    void Promise.all(vaults.map((v) => readerFor(v).queryNotes(term ? { search: term, limit: PER_VAULT } : { orderBy: "updated_at", sort: "desc", limit: PER_VAULT })
-      .then((ns) => ns.filter((n) => !isAppOwn(n)).map((n) => ({ v, n })), () => [] as Row[])))
-      .then((per) => { if (live) setRows(per.flat().sort((a, b) => updated(b.n).localeCompare(updated(a.n))).slice(0, SHOWN)); });
+    const unread: string[] = [];
+    void inTurns(vaults, AT_ONCE, (v) => readerFor(v).queryNotes(term ? { search: term, limit: PER_VAULT } : { orderBy: "updated_at", sort: "desc", limit: PER_VAULT })
+      .then((ns) => ns.filter((n) => !isAppOwn(n)).map((n) => ({ v, n })), () => { unread.push(v.vault); return [] as Row[]; }))
+      .then((per) => { if (live) setRows({ rows: per.flat().sort((a, b) => updated(b.n).localeCompare(updated(a.n))).slice(0, SHOWN), unread }); });
     return () => { live = false; };
   }, [keys, term]); // eslint-disable-line react-hooks/exhaustive-deps
   return rows;
@@ -45,7 +56,8 @@ export default function NotesHome() {
     if (next.toString() !== params.toString()) setParams(next, { replace: true });
   }, [term]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = chosen ? [chosen] : all;
-  const rows = useNotes(shown, term);
+  const read = useNotes(shown, term);
+  const rows = read?.rows ?? null;
   const home = all.find((v) => v.home) ?? all[0];
   const into = chosen ?? home;
   const tab = (v: FrameVault | null) => {
@@ -68,6 +80,7 @@ export default function NotesHome() {
         </nav>
       )}
       {rows === null && <p className="quiet" role="status">Reading your notes…</p>}
+      {!!read?.unread.length && <p className="quiet small" role="status">Couldn't read {read.unread.join(", ")} just now.</p>}
       {rows && rows.length > 0 && (
         <ul className="rows" aria-label={term ? "Search results" : "Notes"}>
           {rows.map(({ v, n }) => (

@@ -12,7 +12,8 @@ same Parachute app with a smaller set of screens, and Settings switches between 
 | **Capture** | the bar | Write a line, or **Say it** (the app's own recorder): it lands in the home vault's `Inbox/` as a note of its own, and a voice note gets its words from the hub's transcription. |
 | **Connect** | the bar | Each vault's connector address (`https://…/vault/<name>/mcp`) with **Copy**, and how to add it to Claude and ChatGPT. |
 
-The bar says **Notes · Capture · Connect**. Settings (⋯, or the foot of Notes) has **Your app: Simple / Everything**.
+The bar says **Notes · Capture · Connect**. Settings (the foot of Notes, or ⋯ on the other screens) has **Your app:
+Simple / Everything**.
 
 On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key); the key's ways come
 after it.
@@ -22,9 +23,10 @@ after it.
 `parachute.app` in the settings note (`Parachute/Settings` in the home vault, [NAVIGATION.md](NAVIGATION.md)) says
 which app the person's devices open: `"simple"` or `"everything"`. Absent means everything, as before.
 
-A person new to the app on Parachute Cloud gets `"simple"`: their first sign-in on a device that had no home, to a hub
-whose descriptor says `door: "cloud"`, where none of their vaults holds a settings note yet, writes it along with
-their list of Parachutes. Anyone else starts as before. Settings changes it, and so can their agent, by writing the
+A person new to the app on Parachute Cloud gets `"simple"`. That is a first sign-in, on a device that had no home, to a
+hub whose descriptor says `door: "cloud"`. At least one vault the sign-in brought must be the person's own, every one
+was read, and none holds a settings note. That sign-in makes their settings note with `app: "simple"`, along with their
+list of Parachutes. A settings note already there is never changed this way. Anyone else starts as before. Settings changes it, and so can their agent, by writing the
 note.
 
 ## What it is made of (today's mechanisms)
@@ -34,10 +36,12 @@ note.
 - **New note and Edit** are a shell screen (`src/views/NoteEdit.tsx`), not the frame: a frame can be the person's
   own code from their vault, and it still writes nothing. The frame only sends the person there
   (`/v/<vault>/new`, `/v/<vault>/n/<id>/edit`). Edit saves with `if_updated_at`. If the note changed meanwhile (an AI
-  wrote to it), the person chooses between **Show their version** and **Keep mine**. There is no Edit on code or on the app's own notes.
+  wrote to it), the person chooses: **Keep mine** saves their words over the new version, and **Use theirs** drops their
+  changes. There is no Edit on code or on the app's own notes.
 - **Capture** is an ordinary applet: `applets/capture.json` and `.tsx`, shipped with the app. **Add Capture** (one
   tap, on the bar's Capture place) writes it into the home vault as `Applets/Capture`. Its card then asks, as any
-  applet's does: read, add and change notes in `Inbox/`, and the microphone through the app. It uses the kit only
+  applet's does: read, add and change notes in `Inbox/`, the microphone through the app, and to open the notes you tap
+  in it (a capture opens in the app, where it can be edited). It uses the kit only
   (`vault`, `voice.record`, `vault.attach` with `transcribe`, `Link`).
 - **Connect** is a shell screen (`src/views/Connect.tsx`): each vault's address is the vault's own (Parachute Cloud's
   Connect page gives the same one), and copying needs the app's own clipboard.

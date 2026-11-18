@@ -17,7 +17,8 @@ export function captureIn(rec: VaultRecord | null): string | null {
   if (!rec) return null;
   const a = appletsNow(rec.key);
   if (a?.state !== "ok") return null;
-  return (a.found.entries.find((e) => e.manifest.id === CAPTURE_ID) ?? a.found.entries.find((e) => stripExt(e.path) === CAPTURE_PATH))?.noteId ?? null;
+  // the one at its path first: another applet that calls itself "capture" doesn't take its place
+  return (a.found.entries.find((e) => stripExt(e.path) === CAPTURE_PATH) ?? a.found.entries.find((e) => e.manifest.id === CAPTURE_ID))?.noteId ?? null;
 }
 
 /** Put Capture into the home vault (a tap's): its note's id. One already there (by id, or at its path) is used. */

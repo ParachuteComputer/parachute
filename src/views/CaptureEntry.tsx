@@ -35,7 +35,7 @@ export default function CaptureEntry() {
       <Bar title="Capture" back={true} />
       <section className="card stack">
         <p className="lead">Write a line or say it, and it lands in <b>{home.vault}</b>, in Inbox/, as a note of its own.</p>
-        <p className="small">Capture is an applet: a note in your vault (Applets/Capture) that this app runs. Adding it writes that note; then it asks once for what it may do (Inbox/, and the microphone through the app).</p>
+        <p className="small">Capture is an applet: a note in your vault (Applets/Capture) that this app runs. Adding it writes that note; then it asks once for what it may do: Inbox/, the microphone through the app, and opening the notes you tap in it.</p>
         <button type="button" className="primary" disabled={busy} onClick={() => void add()}>{busy ? "Adding…" : "Add Capture"}</button>
         {error && <p className="error" role="alert">{error}</p>}
       </section>

@@ -8,6 +8,7 @@ import { Bar } from "../ui/Bar";
 import { useVault, useVaults } from "../vault/hooks";
 import { clientFor } from "../vault/client";
 import { isAppOwn, isCodeNote, noteHref } from "../vault/notes";
+import { atFirstEntry } from "../ui/history";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 /** A new note's path, from its first line: plain words, no folder (where Parachute Cloud keeps a person's notes). */
@@ -65,7 +66,8 @@ export default function NoteEdit() {
       }
       const at = force ? updatedOf(theirs) : updatedOf(note);
       await c.updateNote(note!.id, { content: text, ...(at ? { if_updated_at: at } : {}) });
-      nav(noteHref(target.key, note!.id), { replace: true });
+      // back to the note the person came from (it reads itself again), so Back after it doesn't show it twice
+      if (atFirstEntry()) nav(noteHref(target.key, note!.id), { replace: true }); else nav(-1);
     } catch (e) {
       if (e instanceof VaultConflictError && !isNew) {
         try { setTheirs(await c.getNote(note!.id)); } catch { /* shown without their words */ }
@@ -92,10 +94,13 @@ export default function NoteEdit() {
         <textarea ref={box} className="note-text" aria-label={isNew ? "The new note" : "The note's words"} placeholder={isNew ? "Write. The first line is its name." : ""}
           value={text} onChange={(e) => setText(e.target.value)} />
         {error && <div className="error" role="alert"><p>{error}</p>
-          {theirs && <div className="row-buttons">
-            <button type="button" className="secondary" onClick={() => { setNote(theirs); setText(theirs.content ?? ""); setTheirs(null); setError(""); }}>Show their version</button>
-            <button type="button" className="secondary" onClick={() => void save(true)}>Keep mine</button>
-          </div>}
+          {theirs && <>
+            <p className="small">Keep mine saves your words over theirs. Use theirs drops your changes.</p>
+            <div className="row-buttons">
+              <button type="button" className="secondary" onClick={() => void save(true)}>Keep mine</button>
+              <button type="button" className="secondary" onClick={() => { setNote(theirs); setText(theirs.content ?? ""); setTheirs(null); setError(""); }}>Use theirs</button>
+            </div>
+          </>}
         </div>}
         <div className="row-buttons note-edit-actions">
           <button type="button" className="primary" disabled={state === "saving" || (isNew && !text.trim())} onClick={() => void save()}>{state === "saving" ? "Saving…" : "Save"}</button>
