@@ -31,8 +31,8 @@ const SNAP_MAX = 64_000;
 /** Its size as kept: storage counts UTF-8 bytes. */
 const bytesOf = (x: unknown) => new TextEncoder().encode(JSON.stringify(x)).length;
 /** A message as kept: the list shows a line of it, so plain text is cut short; a card or an ask is kept whole (its line
- *  is read from what is inside it). */
-const keptText = (text: string) => (/```uni-/.test(text) ? (text.length > 1500 ? text.slice(0, 1500) : text) : text.length > 300 ? text.slice(0, 300) : text);
+ *  is read from what is inside it), unless it is very long (then cut like text: the list shows a plain line for it). */
+const keptText = (text: string) => (/```uni-/.test(text) ? (text.length > 8000 ? text.slice(0, 300) : text) : text.length > 300 ? text.slice(0, 300) : text);
 
 function snapshotOf(s: Store["s"], relay: string): Snapshot | null {
   // the rooms most recently active first: when not all fit, the list paints those, and the read brings the rest
@@ -118,7 +118,11 @@ export default function Rooms() {
   const places = useRef(new Map<string, number | null>());
   const saveTimer = useRef<any>(null);
 
+  // read state is written only once the relay's own has been read into it: the snapshot's may be older than another
+  // device's, and this app's slot is replaced as a whole (a write before then waits for the read)
+  const readMerged = useRef(false), readWaiting = useRef(false);
   const saveRead = () => {
+    if (!readMerged.current) { readWaiting.current = true; return; }
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       relay.savePrivate(SLOT, JSON.stringify({ v: 1, client_id: CLIENT, contexts: s.read })).catch(() => {});
@@ -169,7 +173,8 @@ export default function Rooms() {
         // no rooms at all, over a list it painted: more likely a read cut short than every room left at once (so the
         // rare person who did leave every room keeps seeing the old list, with no live updates, until they are in a room
         // again)
-        if (!on || down || (painted && !synced && !ids.length)) return;
+        if (!on || down) return;
+        if (painted && !synced && !ids.length) { setStatus("This is what you last saw: the relay didn't list your rooms just now."); return; }
         // what comes after starts now: anything posted while the history below is read still arrives
         const since = now() - 5;
         // side by side, but at most a few calls at a time: the shell holds 8 of an applet's calls waiting at once
@@ -178,6 +183,8 @@ export default function Rooms() {
           pooled(chunk(ids, 10), 3, (c) => relay.query(c.map((id) => ({ kinds: [9], "#h": [id], limit: 40 })))),
         ]);
         if (!on || down) return;
+        // rooms listed but none of them described: a read cut short, not every room gone (what is painted stays)
+        if (painted && !synced && ids.length && !(metas as Ev[]).length) { setStatus("This is what you last saw: the relay didn't describe your rooms just now."); return; }
         // what was read now takes the snapshot's place: rooms left and messages gone since go with it
         s.rooms.clear();
         for (const m of metas as Ev[]) {
@@ -188,6 +195,8 @@ export default function Rooms() {
         for (const id of [...s.msgs.keys()]) if (!s.rooms.has(id)) s.msgs.delete(id);
         // read state only moves forward: a room read on this device a moment ago stays read
         for (const [k, v] of Object.entries(read)) if (v > (s.read[k] ?? 0)) s.read[k] = v;
+        readMerged.current = true;
+        if (readWaiting.current) { readWaiting.current = false; saveRead(); }
         history.flat().forEach(st.add);
         synced = true;
         st.bump();
