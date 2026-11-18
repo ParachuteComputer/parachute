@@ -55,3 +55,8 @@ div.pa-row { cursor: default; }
 .pa-note pre { overflow-x: auto; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); }
 .pa-note table { border-collapse: collapse; } .pa-note td, .pa-note th { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: left; }
 .pa-note img { max-width: 100%; }
+
+/* Link and Linked (links.tsx): a link in the accent; held, it asks Open with…, so the webview's own menu stays away */
+.pa-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; cursor: pointer;
+  -webkit-touch-callout: none; }
+.pa-note-link { text-decoration-style: dotted; }

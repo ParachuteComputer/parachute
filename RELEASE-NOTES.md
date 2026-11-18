@@ -33,6 +33,9 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   you, and the app talks to them for it with your key, which the applet never holds. The first: Rooms (your rooms on a
   Buzz relay, with Uni's cards), Mail (through a mail gateway), Journal and Matrix ([docs/PARITY.md](docs/PARITY.md)).
 - **Links in.** `parachute://open?url=<a note's address>` opens a note.
+- **Note links in applets.** A note's address (`https://<hub>/vault/<vault>/view/<id>`, the one form written),
+  Uni's `uni:<ULID>` in a room and a `[[wikilink]]` in a note open the note in the app, through the kit
+  ([docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md#links)). Rooms, Journal, Mail and Area ask for `open` to do it.
 
 ## What doesn't yet
 

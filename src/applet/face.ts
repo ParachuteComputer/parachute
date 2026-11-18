@@ -51,7 +51,8 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
     }
   }
 
-  if (g.app.includes("links")) lines.push({ lead: "Opens web addresses", rest: ": what it reads could leave that way.", risky: true });
+  // notes and applets (open) ride on the web addresses' line when there is one, so a card that has both is no longer for it
+  if (g.app.includes("links")) lines.push({ lead: g.app.includes("open") ? "Opens web addresses, notes and applets" : "Opens web addresses", rest: ": what it reads could leave that way.", risky: true });
   if (g.app.includes("recent")) lines.push({ lead: "Sees the titles of the newest notes", rest: " in every vault on this device.", risky: true });
   for (const l of grantLines({ ...g, allow: [], opens: [], app: [], services: [], reach: [] }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
   for (const l of importLines(imports)) if (l.stress) lines.push({ lead: l.text, rest: "", risky: true });
@@ -61,7 +62,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
   if (g.app.includes("save")) also.push("saving to Downloads");
   if (g.app.includes("storage")) also.push("256 KB for drafts");
   if (g.app.includes("pins")) also.push("sees what is on your bar");
-  if (g.app.includes("open")) also.push("takes you to a note or an applet when you tap");
+  if (g.app.includes("open") && !g.app.includes("links")) also.push("takes you to notes and applets you tap");
   return { lines, also };
 }
 

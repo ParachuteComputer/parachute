@@ -4,9 +4,9 @@
 // Room component (applets/room.tsx, imported below), the same one an area's applet shows.
 // Read state is the Uni app's own (kind 30078 "read-state:<slot>", sealed to the person's key), so both apps agree.
 // What it asks of this device, through the shell (docs/design/KEYRING.md): a voice note recorded on the shell's own
-// sheet (voice), links opened in the browser (app.openLink), a file saved to Downloads (app.save), files picked on the
-// shell's picker (app.pick), and on this device (storage) a draft per room and what the list last showed. A notification's
-// tap opens it at the room and message it was about (onLaunch).
+// sheet (voice), links opened in the browser (links) and notes in the app (open), both through the kit's Link, a file
+// saved to Downloads (app.save), files picked on the shell's picker (app.pick), and on this device (storage) a draft
+// per room and what the list last showed. A notification's tap opens it at the room and message it was about (onLaunch).
 // Opening paints the list as it was last shown (its snapshot: the rooms, their last few messages, the names in them and
 // where you had read to, for this relay and key) and then reads the relay again, its queries side by side, and puts what
 // it read in place of the snapshot: a room you left, or a message deleted meanwhile, goes.

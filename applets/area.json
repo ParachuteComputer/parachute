@@ -12,7 +12,7 @@
       "access": [{ "vault": "here", "allow": [{ "path": "Areas/{{area}}/", "verbs": ["read"] }] }],
       "reach": ["voice"]
     },
-    "app": ["links", "save", "attach", "storage"],
+    "app": ["open", "links", "save", "attach", "storage"],
     "services": [
       {
         "id": "rooms",

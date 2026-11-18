@@ -5,7 +5,9 @@ import { openLinkOut, saveFileOut } from "./device";
 import { markTap } from "../open/mark";
 import { clientFor } from "../vault/client";
 import { isAppOwn, noteHref, titleOf } from "../vault/notes";
-import { listVaults } from "../vault/store";
+import { listVaults, type VaultRecord } from "../vault/store";
+import { addressIn, resolveLink, type Found, type ResolveDeps } from "../links/resolve";
+import { isAppletCode, type VaultNote } from "../applet/modules/vault";
 import { barNow } from "./homeSettings";
 
 /** Notes that are the app's own or an applet's code: never in a list of what the person wrote lately. */
@@ -26,9 +28,63 @@ export const tappingIn = (frame: () => HTMLIFrameElement | null) => {
 /** The shell's own picker sheet (views/DeviceSheets.tsx). */
 export type Picker = { pick(accept: string[], multiple: boolean): Promise<PickedFile[]> };
 
-export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameElement | null, picker: Picker): AppDeps {
+export const MISS_MS = 60_000;
+/** Which notes are there, asked of their vaults once a session (a note that was there is taken to be there still). */
+export function noteFinder(read: (rec: VaultRecord, idOrPath: string) => Promise<VaultNote | null>) {
+  const seen = new Map<string, Promise<Found | null>>();
+  // (an applet's link lookups are charged up front, the same for each link: app.links below)
+  return (rec: VaultRecord, idOrPath: string, ok: (f: Found) => boolean = () => true): Promise<Found | null> => {
+    const k = `${rec.key}\u0000${idOrPath}`;
+    let p = seen.get(k);
+    if (!p) {
+      p = read(rec, idOrPath).then((n) => (n && typeof n.id === "string" ? { id: n.id, path: typeof n.path === "string" ? n.path : "", code: isAppletCode(n) } : null));
+      // a failed read (the network, a refresh) is asked again next time; a note that isn't there, or one this lookup
+      // doesn't take (the hub found it by a path or a title, or outside the folders it may read), after a minute, as a
+      // miss: kept longer, a quick answer later would say it is there (Uni may cite a note a moment before the hub has it)
+      const mine = p;
+      p.then((f) => { if (f === null || !ok(f)) setTimeout(() => { if (seen.get(k) === mine) seen.delete(k); }, MISS_MS); }, () => { if (seen.get(k) === mine) seen.delete(k); });
+      seen.set(k, p);
+    }
+    return p.then((f) => (f && ok(f) ? f : null));
+  };
+}
+
+/** `here`: the applet's own vault (a wikilink's, and where `address` makes its addresses); `reads`: the folders it may
+ *  read there (a wikilink is looked up only in them). */
+export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameElement | null, picker: Picker, here: () => VaultRecord | null = () => null, reads: readonly string[] = []): AppDeps {
   const tappingInApplet = () => tappingIn(frame);
+  const find = noteFinder((rec, idOrPath) => clientFor(rec).getNote(idOrPath).catch((e: unknown) => {
+    // not there: the hub's 404; anything else is asked again later
+    if ((e as { status?: unknown } | null)?.status === 404) return null;
+    throw e;
+  }) as Promise<VaultNote | null>);
+  // a rule's path is a folder ending in / (manifest.ts), as the vault module checks it
+  const mayRead = (path: string) => reads.some((f) => f.endsWith("/") && path.startsWith(f));
+  const resolver = (): ResolveDeps => ({ vaults: listVaults, here, mayRead, find });
   return {
+    async links(links, from, charge) {
+      // the same for every link, read or not (a wikilink may take two): what it costs says nothing of what it names
+      charge(links.length * 2);
+      const deps = resolver();
+      return Promise.all(links.map(async (l) => (await resolveLink(l, from, deps)).answer));
+    },
+    async follow(link, from, choose) {
+      if (!tappingInApplet()) return false;
+      const at = location.href;
+      const r = await resolveLink(link, from, resolver());
+      // a slow answer moves no one: the tap must still count (it wears off in seconds), with the applet still on screen
+      // and the person still where they tapped
+      if (r.answer === null || !tappingInApplet() || location.href !== at) return false;
+      if (r.answer === "note") {
+        markTap(r.href);
+        go(choose ? `${r.href}?with=choose` : r.href);
+      } else go(r.href);
+      return true;
+    },
+    address(note) {
+      const rec = here();
+      return rec ? addressIn(rec, note) : null;
+    },
     async recent(limit, charge) {
       const vaults = listVaults();
       charge(vaults.length);

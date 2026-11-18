@@ -130,7 +130,8 @@ an applet by itself only when this device holds both its Allow and the person's 
   phone's UnifiedPush distributor (ntfy from F-Droid); the shell signs only the gateway registration. Without a
   distributor (a de-Googled phone with nothing installed), `NotifyService.kt` keeps its own relay connection (on unless
   turned off in Settings; idle while push serves everything).
-- `src/links/`: links in, `parachute://open?url=<a note's web address>`.
+- `src/links/`: links in, `parachute://open?url=<a note's web address>`; note links, the one parser and builder
+  (`note.ts`) and what the shell opens for one (`resolve.ts`). The kit draws them (`src/kit/links.tsx`).
 
 An applet's note, as an example:
 

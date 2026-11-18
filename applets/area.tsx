@@ -5,7 +5,7 @@
 // the Room component (applets/room.tsx), the same one the Rooms applet shows; it reads which room, and which key is
 // Uni's, from what this applet was allowed (ready()), so the page has nothing of its own to keep in step.
 import { useEffect, useRef, useState } from "react";
-import { Note, ready, vault } from "parachute";
+import { link, Note, ready, vault } from "parachute";
 import Room from "component:room";
 
 type Rec = { id: string; path: string; updatedAt: string | null; tags?: string[]; fields?: Record<string, unknown>; body?: string };
@@ -67,7 +67,8 @@ export default function Area() {
   const own = notes?.find((r) => title(r) === place.name) ?? null;
   const rest = (notes ?? []).filter((r) => r !== own).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
   const shown = open ?? own;
-  const follow = (target: string) => { const r = notes?.find((x) => title(x) === target || x.path === target); if (r) setOpen(r); };
+  // a note of the area's opens here; any other link (another note, a note link, a web address) through the kit
+  const follow = (target: string) => { const r = notes?.find((x) => title(x) === target || x.path === target); if (r) setOpen(r); else void link.follow(link.parse(target) || /^(https?:|mailto:)/i.test(target) ? target : `[[${target}]]`, { from: shown?.path }); };
 
   return <main className="area">
     <style>{CSS}</style>

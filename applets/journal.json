@@ -12,6 +12,7 @@
       "access": [{ "vault": "here", "allow": [{ "path": "Journal/", "verbs": ["read", "create", "update"] }] }],
       "reach": ["voice"]
     },
+    "app": ["open"],
     "opens": [{ "type": "journal", "path": "Journal/" }]
   }
 }
