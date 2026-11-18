@@ -21,7 +21,7 @@ room reaches both.
 | Messages: markdown (bold, italics, strike, code, fences, quotes, lists, tables, headings, rules), day lines, grouping, "New" line | built | rooms.spec (bold in a message) |
 | Links | built: a tap opens http, https and mail links in the browser, through the shell (`app.openLink`, the `links` line on the card, KEYRING.md) | e2e/devices.spec.ts: the shell's open called with the link |
 | Threads: "N replies", the thread pane, replying in it | built | rooms.spec: the reply carries the root `e` tag; the count shows |
-| Reactions: chips with counts, yours marked; add 👍 ❤️ ✓, take yours back | built | rooms.spec: kind 7 on the relay, the chip "including yours" |
+| Reactions: none shown, none sent (Aaron, 11-18: "I don't really use them"); Uni's 👀 still drives "Uni is working" | removed on purpose | rooms.spec: no React buttons, a reaction draws nothing; the working test |
 | Edits shown "(edited)"; deletions hidden | built (shown) | not in a spec |
 | Editing or deleting your own message (Delete asks for a second tap) | built | rooms.spec: the edit (kind 40003) and the deletion (kind 5) on the relay; the message gone from the room |
 | Mentions: "@" lists the people in the room, picks one, notifies them (`p` tag) | built | rooms.spec: bob's `p` tag on the message |

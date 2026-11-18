@@ -399,7 +399,6 @@ const CSS = `
 .room .edited { color: var(--muted); font-size: .8em; margin-left: 6px; }
 .room .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .room .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 1px 9px; cursor: pointer; font-size: .88em; }
-.room .chip.mine { border-color: var(--text); font-weight: 600; }
 .room .chip.quiet { color: var(--muted); }
 .room .pic { max-width: min(100%, 420px); max-height: 420px; border-radius: 6px; display: block; margin: 6px 0; }
 .room .vid { max-width: 100%; max-height: 420px; display: block; margin: 6px 0; }

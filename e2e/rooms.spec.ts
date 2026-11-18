@@ -87,7 +87,7 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a p
     await expect(audio).toBeVisible({ timeout: 20_000 });
     await expect.poll(() => audio.evaluate((a: HTMLAudioElement) => a.duration), { timeout: 15_000 }).toBeGreaterThan(1);
 
-    // she picks an answer, approves the command once, reacts, and writes back naming bob
+    // she picks an answer, approves the command once, and writes back naming bob
     await log.getByRole("button", { name: "North bed" }).click();
     await expect(log.getByRole("group", { name: "Ended ask" })).toContainText("You picked North bed");
     await log.getByRole("button", { name: "Approve once" }).click();
@@ -96,7 +96,9 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a p
     // no reaction buttons (Aaron doesn't use them), and none drawn: a reaction bob made shows nothing
     await expect(log.getByRole("button", { name: /^React / })).toHaveCount(0);
     expect((await bob.publish({ kind: 7, content: "👍", tags: [["e", ask.ev.id], ["p", alice], ["h", g]] })).ok).toBe(true);
-    await page.waitForTimeout(1500);
+    // the relay sends in order: once bob's next line is here, so is his reaction
+    expect((await bob.publish({ kind: 9, content: `After the reaction ${stamp}`, tags: [["h", g]] })).ok).toBe(true);
+    await expect(log).toContainText(`After the reaction ${stamp}`, { timeout: 15_000 });
     await expect(log.getByRole("button", { name: /👍/ })).toHaveCount(0);
     const field = app.getByLabel(`Message Garden ${stamp}`);
     await field.fill("Thanks @");

@@ -218,7 +218,7 @@ export function serviceLines(services: readonly Service[], opts: LineOptions = {
       out.push({ text: `${EVERYDAY}sign in to ${at} as you`, stress: true });
       const posts = [9, 7, 40003, 20002].filter((k) => s.publish.includes(k)).map((k) => NAMED_KINDS[k]);
       if (posts.length) out.push({ text: `${EVERYDAY}post as you ${roomsWords(s)} there: ${joinWords(posts)}`, stress: true });
-      if (s.publish.includes(5)) out.push({ text: `${EVERYDAY}delete your messages and reactions there${s.rooms?.length ? `, ${roomsWords(s)}` : ""}`, stress: true });
+      if (s.publish.includes(5)) out.push({ text: `${EVERYDAY}delete your messages${s.publish.includes(7) ? " and reactions" : ""} there${s.rooms?.length ? `, ${roomsWords(s)}` : ""}`, stress: true });
       if (s.rooms?.length) out.push({ text: `It reads only those rooms there${s.media || s.private.length ? "; files and private notes there aren't limited to them" : ""}`, stress: false });
       if (s.media) out.push({ text: `${EVERYDAY}send and open files there as you`, stress: true });
       for (const p of s.private) out.push({ text: `Keep private notes there (${p.d}…), sealed to your key: other apps of yours may share them`, stress: false });
