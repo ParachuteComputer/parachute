@@ -148,16 +148,19 @@ export default function Rooms() {
     let stop: (() => void) | null = null, on = true, url = "", painted: string | null = null, mine = false;
     // the relay away: its queries then answer empty or short (a timeout, a dropped connection), so a read made while it
     // is away replaces nothing; the list read goes again when it is back
-    let down = false, synced = false, syncing = false;
+    let down = false, synced = false, syncing = false, again = false;
     const away = (why: string) => setStatus(`The relay is away (${why}). Trying again…`);
     const forget = () => { s.rooms.clear(); s.msgs.clear(); s.names.clear(); s.read = {}; st.bump(); };
     const sync = async () => {
-      if (syncing || !on) return;
+      if (!on) return;
+      // back while a read is still waiting on its timeout: that read, empty, will change nothing, so it goes again after
+      if (syncing) { again = true; return; }
       syncing = true;
       try {
         const [members, read] = await Promise.all([relay.query([{ kinds: [39002], "#p": [s.me], limit: 500 }]), loadRead(relay)]);
         const ids = [...new Set(members.map((e: Ev) => tag(e, "d")).filter(Boolean))] as string[];
-        // no rooms at all, over a list it painted: more likely a read cut short than every room left at once
+        // no rooms at all, over a list it painted: more likely a read cut short than every room left at once (so the
+        // rare person who did leave every room sees the old list until a room changes or Rooms opens again)
         if (!on || down || (painted && !synced && !ids.length)) return;
         // what comes after starts now: anything posted while the history below is read still arrives
         const since = now() - 5;
@@ -190,7 +193,10 @@ export default function Rooms() {
         // to a subscription for one room)
         const onEvents = (evs: Ev[]) => { evs.forEach(st.add); st.bump(); keepSoon(); void names(evs.map((e) => e.pubkey)); };
         stop = relay.subscribeMany(rooms.slice(0, 90).map((id) => [{ kinds: [9, 5, 40003, 9005], "#h": [id], since }]), onEvents);
-      } catch (e: any) { if (on) setStatus(`Couldn't read your rooms: ${e?.message ?? e}`); } finally { syncing = false; }
+      } catch (e: any) { if (on) setStatus(`Couldn't read your rooms: ${e?.message ?? e}`); } finally {
+        syncing = false;
+        if (again && !synced && !down) { again = false; void sync(); }
+      }
     };
     const off = relay.onStatus((x: any) => {
       if (x.sub) return;
