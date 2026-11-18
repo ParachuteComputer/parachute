@@ -160,7 +160,8 @@ export default function Rooms() {
         const [members, read] = await Promise.all([relay.query([{ kinds: [39002], "#p": [s.me], limit: 500 }]), loadRead(relay)]);
         const ids = [...new Set(members.map((e: Ev) => tag(e, "d")).filter(Boolean))] as string[];
         // no rooms at all, over a list it painted: more likely a read cut short than every room left at once (so the
-        // rare person who did leave every room sees the old list until a room changes or Rooms opens again)
+        // rare person who did leave every room keeps seeing the old list, with no live updates, until they are in a room
+        // again)
         if (!on || down || (painted && !synced && !ids.length)) return;
         // what comes after starts now: anything posted while the history below is read still arrives
         const since = now() - 5;
