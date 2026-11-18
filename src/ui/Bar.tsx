@@ -8,8 +8,9 @@ export function backOrLauncher(nav: (to: string | number, o?: { replace?: boolea
   if (!atFirstEntry()) nav(-1); else nav("/", { replace: true });
 }
 
-/** The one top bar: Back (when there is somewhere to go back to), the title, and the way to Settings. */
-export function Bar({ title, back, onBack, children }: { title: string; back?: string | true; onBack?: (nav: (to: string | number, o?: { replace?: boolean }) => void) => void; children?: ReactNode }) {
+/** The one top bar: Back (when there is somewhere to go back to), the title, and ⋯: the way to Settings, or, with
+ *  `onMenu`, the screen's own menu (a running applet's: Stop, Revoke, Settings). */
+export function Bar({ title, back, onBack, onMenu, children }: { title: string; back?: string | true; onBack?: (nav: (to: string | number, o?: { replace?: boolean }) => void) => void; onMenu?: () => void; children?: ReactNode }) {
   const nav = useNavigate();
   const go = nav as (to: string | number, o?: { replace?: boolean }) => void;
   return (
@@ -18,7 +19,8 @@ export function Bar({ title, back, onBack, children }: { title: string; back?: s
         : back ? <Link className="bar-back" aria-label="Back" to={back}>‹</Link> : <span className="bar-mark" aria-hidden="true">◠</span>}
       <h1 className="bar-title">{title}</h1>
       {children}
-      <Link className="bar-menu" aria-label="Settings" to="/settings">⋯</Link>
+      {onMenu ? <button type="button" className="bar-menu" aria-label="Menu" aria-haspopup="dialog" onClick={onMenu}>⋯</button>
+        : <Link className="bar-menu" aria-label="Settings" to="/settings">⋯</Link>}
     </header>
   );
 }
