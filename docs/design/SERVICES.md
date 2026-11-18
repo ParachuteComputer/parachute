@@ -272,7 +272,7 @@ that message from the relay itself).
 
 **Order (Aaron, 11-17: GrapheneOS first).** Built and proven now: UnifiedPush through ntfy against our own ntfy, and
 the app's own connection. Later, each one more sender in the gateway (`services/push-gateway/src/push.ts` sends to a
-registration's endpoint; a registration gains a `transport`, `unifiedpush` today), each optional server config, the
+registration's endpoint; a registration would gain a `transport`, with `unifiedpush` the one built), each optional server config, the
 gateway still running with no Google or Apple credentials at all for people who don't want them, and every path carrying
 the same sealed blob (wake, room, kind: never words), so Google and Apple see only ciphertext:
 

@@ -208,7 +208,7 @@ it to Rust, which checks it and has the native side keep it in the app's private
 **The main path is push** (SERVICES.md, "Notifications through an open push service"): the applet's push gateway
 watches the relay and sends a sealed push (room and message ids, no words) through the person's UnifiedPush
 distributor (ntfy from F-Droid, or another); `PushService.kt` shows "A message for you in <room>". Rust signs the
-gateway registration; the phone holds no relay connection of its own.
+gateway registration; on the push path the phone holds no relay connection of its own.
 
 **The fallback**, on unless the person turns it off in Settings ("Parachute's own connection, for what no push service
 delivers"), for a phone without a working distributor (GrapheneOS with nothing installed yet, or ntfy removed, noticed the next time Parachute opens): a foreground service (type `remoteMessaging`, with its quiet ongoing line "Listening for

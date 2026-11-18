@@ -46,10 +46,13 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     private val waiting = HashMap<String, ArrayList<() -> Unit>>()
     // the instances asked again of the distributor in this run of the app
     private val refreshed = HashMap<String, Long>()
+    // when the distributor last gave each instance an endpoint (main thread)
+    private val answeredAt = HashMap<String, Long>()
 
     /** PushService.kt: the distributor answered for this instance (an endpoint, or none). */
     fun endpointChanged(ctx: Context, instance: String, ok: Boolean) {
       main.post {
+        if (ok) answeredAt[instance] = System.currentTimeMillis()
         val w = (waiting.remove(instance) ?: arrayListOf()) + (waiting.remove(ANY) ?: arrayListOf())
         w.forEach { it() }
       }
@@ -128,9 +131,12 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     // the old endpoint and answers with a new one, which then goes to the gateway. With one kept, the wait is short.
     val install = try { activity.packageManager.getPackageInfo(saved, 0).firstInstallTime } catch (e: Exception) { 0L }
     if (kept != null && refreshed[instance] == install) return invoke.resolve(JSObject(kept.toString()))
-    refreshed[instance] = install
+    val askedAt = System.currentTimeMillis()
     PushService.asked(activity, instance)
     await(instance, if (kept != null) 5_000L else WAIT_MS) {
+      // counted as asked again only when the distributor answered with an endpoint: a timeout or a refusal asks again
+      // at the next sync, so a reinstalled distributor that was slow still gets to give its new endpoint
+      if ((answeredAt[instance] ?: 0L) >= askedAt) refreshed[instance] = install
       val e = PushService.endpoint(activity, instance)
       if (e != null) invoke.resolve(JSObject(e.toString())) else invoke.reject("no endpoint yet")
     }
