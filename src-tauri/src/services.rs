@@ -1809,6 +1809,11 @@ mod tests {
         for fine in vectors["fine"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()) {
             assert!(!is_command_approval(fine), "{fine:?}");
         }
+        // and a few thousand mixed strings, with TS's answers (applet/services.test.ts checks its own against them too)
+        let fuzz: Vec<(String, bool)> = serde_json::from_str(include_str!("../../src/applet/command-approval-fuzz.json")).unwrap();
+        for (text, want) in &fuzz {
+            assert_eq!(is_command_approval(text), *want, "{text:?}");
+        }
         assert!(check_template(&[9], &[], false, &ev("I approve of this", json!([["h", "x"]]))).is_ok());
     }
 
