@@ -12,13 +12,13 @@
         "tags": [
           [
             "d",
-            "parachute-approval:https://techne.example/techne/01M7EVENTS"
+            "parachute-approval:applet:https://techne.example/techne/01M7EVENTS"
           ]
         ],
-        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://techne.example\",\"vault\":\"techne\",\"record\":\"01M7EVENTS\",\"applet\":\"events\"},\"n\":1794337920,\"approved\":true,\"code\":\"tsx:d692c07c26b2a505b0610310ebef76807fffad7c036a1c4d06f82cf1708aad6c\",\"scope\":\"50429da766d6178d49dc3b5a276e96f7c1b3bd351b345b555df011bb9f60b42e\",\"whose\":\"theirs\",\"expires\":\"2027-11-10T19:12:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"Someone else's vault, techne at techne.example.\",\"Read notes in Events/\"],\"at\":\"2026-11-10T19:12:00.000Z\"}",
-        "pubkey": "dccec693188b7c2ae40ba4f757868c21f15527c777ffb912890f98385911ee2d",
-        "id": "e41e313cb5fd2186e5431030241f675704772f11f205f516a522ab08c6881ec2",
-        "sig": "9a7a31095ae8603c3e976c38deb3641c959d1211c121bba762f53f1380f5e6032724374b9b60276b10b2b3efd068a7563f83e59dff3defe750c86ebf4bce25af"
+        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://techne.example\",\"vault\":\"techne\",\"record\":\"01M7EVENTS\",\"applet\":\"events\"},\"n\":1794337920,\"approved\":true,\"code\":\"tsx:1b970020a39dfff7c2da402e471e2051a56131906bfe3d4d5472ee7c39837518\",\"scope\":\"50429da766d6178d49dc3b5a276e96f7c1b3bd351b345b555df011bb9f60b42e\",\"whose\":\"theirs\",\"expires\":\"2027-11-10T19:12:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"Someone else's vault, techne at techne.example.\",\"Read notes in Events/\"],\"at\":\"2026-11-10T19:12:00.000Z\"}",
+        "pubkey": "679d5c66d6b133f1d8ecc2c7cd675bd7020330155e2be7667c732c93033bc9b9",
+        "id": "39041172a20c9018a1c83cab9b1a8790c300ab5a03cfeb2d9a5e3f35d7b959a8",
+        "sig": "be7d72d0aa21c1e8d98a684a88d5c880a445eeeca888d1ae7a90373b954e0ad7ac725ba6c9c6591cda2dd3f72470ae2776af69dcb8669afdcf1cb8b7a59b4218"
       }
     }
   }

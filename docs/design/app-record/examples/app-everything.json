@@ -1,19 +1,43 @@
 {
   "path": "Parachute/Apps/everything",
-  "tags": ["parachute-app"],
+  "tags": [
+    "parachute-app"
+  ],
   "body": "What the app did before app records: every applet in every vault on each of your Parachutes. Written once from Parachute/Settings.",
   "fields": {
     "app": {
       "contract": 1,
       "id": "everything",
-      "name": "Parachute",
+      "name": "Everything",
       "sources": [
-        { "hub": "https://uni.example", "vault": "*", "applet": "*" },
-        { "hub": "https://techne.example", "vault": "*", "applet": "*" }
+        {
+          "hub": "https://uni.example",
+          "vault": "*",
+          "applet": "*"
+        },
+        {
+          "hub": "https://techne.example",
+          "vault": "*",
+          "applet": "*"
+        }
       ],
-      "bar": [{ "vault": "kitchen", "applet": "Applets/Recipes" }],
-      "start": { "vault": "kitchen", "applet": "Applets/Home" },
-      "services": [{ "name": "Rooms", "kind": "nostr-relay", "url": "wss://relay.example" }],
+      "bar": [
+        {
+          "vault": "kitchen",
+          "applet": "Applets/Recipes"
+        }
+      ],
+      "start": {
+        "vault": "kitchen",
+        "applet": "Applets/Home"
+      },
+      "services": [
+        {
+          "name": "Rooms",
+          "kind": "nostr-relay",
+          "url": "wss://relay.example"
+        }
+      ],
       "keep": "auto"
     }
   }

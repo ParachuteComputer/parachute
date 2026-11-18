@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://parachute.computer/schema/app-record/keys.schema.json",
   "title": "The key list",
-  "description": "One record, Parachute/Keys, tagged `parachute-keys`, in the person's home vault (and, being public keys only, on their relay too). It holds one Nostr event signed by the person's anchor: their root key if they keep one offline, else their approval key. It says which keys are theirs now. A client holds the anchor's public half on the device, checks the signature against it, and refuses a list whose `seq` is not higher than the newest it has seen. A key not on the list signs nothing that counts.",
+  "description": "One record, Parachute/Keys, tagged `parachute-keys`, in the person's home vault (and, being public keys only, on their relay too). It holds one Nostr event signed by the person's anchor: their root key if they keep one offline, else their approval key. It says which keys are theirs now. A client holds the anchor's public half on the device, checks the signature against it, and refuses a list whose `seq` is not higher than the newest it has seen. A key not on the list signs nothing that counts. Beyond this schema the client checks: no key is listed twice, and the list is not numbered from the future.",
   "type": "object",
   "required": [
     "path",

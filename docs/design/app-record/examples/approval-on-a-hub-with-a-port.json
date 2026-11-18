@@ -1,0 +1,25 @@
+{
+  "path": "Parachute/Approvals/localhost-1939/play/01M7IDEAS",
+  "tags": [
+    "parachute-approval"
+  ],
+  "body": "Signed by your approval key. Changed by hand, it is void.",
+  "fields": {
+    "approval": {
+      "event": {
+        "kind": 30479,
+        "created_at": 1794916800,
+        "tags": [
+          [
+            "d",
+            "parachute-approval:applet:http://localhost:1939/play/01M7IDEAS"
+          ]
+        ],
+        "content": "{\"v\":1,\"subject\":{\"hub\":\"http://localhost:1939\",\"vault\":\"play\",\"record\":\"01M7IDEAS\",\"applet\":\"ideas\"},\"n\":1794916800,\"approved\":true,\"code\":\"tsx:9461ffff8a03e2b3b6cf233e54ac14145298469101fc7fbb22fa838bb6b98377\",\"scope\":\"76b18ef680f6256a69bd52ef316e7a79707ec8822d113aa207169c387eb32f93\",\"whose\":\"mine\",\"expires\":\"2027-11-17T12:00:00.000Z\",\"device\":\"Laptop\",\"others\":[],\"face\":[\"Asks for nothing.\"],\"at\":\"2026-11-17T12:00:00.000Z\"}",
+        "pubkey": "679d5c66d6b133f1d8ecc2c7cd675bd7020330155e2be7667c732c93033bc9b9",
+        "id": "6633dd37d359f4c558b0b2e36358f2807829dd888339d4a5443cca21e2c64b37",
+        "sig": "1efa42c2b52882742330c0733435ed9fd0acc6ca41c0cb46103edc1f2780c7ab061453319d5727c0af5ec08128906407bcc43d8d3b1f60657e5ec3f78800ac58"
+      }
+    }
+  }
+}

@@ -14,15 +14,17 @@ export const json = (p) => JSON.parse(readFileSync(p, "utf8"));
 
 export const APPROVAL_KIND = 30479, KEYS_KIND = 30480;
 export const YEAR = 366 * 24 * 3600 * 1000;
-export const subjectId = (s) => `${s.hub}/${s.vault}/${s.record}`;
-export const pathOf = (s) => `Parachute/Approvals/${new URL(s.hub).host}/${s.vault}/${s.record}`;
+/** What an approval is of: its kind too, so an approval of a component is never one of a frame or an applet. */
+export const subjectId = (s) => `${s.kind ?? "applet"}:${s.hub}/${s.vault}/${s.record}`;
+export const pathOf = (s) => `Parachute/Approvals/${new URL(s.hub).host.replace(/[^A-Za-z0-9.-]/g, "-")}/${s.vault}/${s.record}`;
+const DAY = 24 * 3600;
 
 // ── the two hashes: every client computes them itself from what it is about to run
 const sha = (x) => createHash("sha256").update(x).digest("hex");
 /** Canonical JSON: sorted keys, no spaces (as src/applet/grant.ts `canonical`). */
 export const canonical = (x) => Array.isArray(x) ? `[${x.map(canonical).join(",")}]` : x && typeof x === "object" ? `{${Object.keys(x).sort().filter((k) => x[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical(x[k])}`).join(",")}}` : JSON.stringify(x ?? null);
-/** The code, with every module it imports (each as its own source text). */
-export const codeHash = (source, imports = []) => "tsx:" + sha(canonical({ source, imports: [...imports].sort() }));
+/** The code, with every module it imports, each under the name it is imported by (as src/applet/imports.ts `compositeHash`). */
+export const codeHash = (source, imports = {}) => "tsx:" + sha(canonical({ source, imports }));
 /** The record's own fields as written, with where it lives. Nothing a device made up is in it. */
 export const scopeHash = (subject, fields) => sha(canonical({ v: 4, hub: subject.hub, vault: subject.vault, record: subject.record, fields }));
 export const hashesOf = (applet) => ({ code: codeHash(applet.source, applet.imports), scope: scopeHash(applet.subject, applet.fields) });
@@ -60,6 +62,8 @@ export function checker() {
     if (e.pubkey !== c.anchor) return "not signed by this person's anchor";
     let l; try { l = JSON.parse(e.content); } catch { return "content isn't JSON"; }
     if (!K.content(l)) return "content: " + ajv.errorsText(K.content.errors).slice(0, 80);
+    if (new Set(l.keys.map((k) => k.key)).size !== l.keys.length) return "a key is listed twice (one key can't hold two roles)";
+    if (l.seq > c.now / 1000 + DAY) return "numbered from the future";
     if (l.seq <= c.keysSeen) return l.seq === c.keysSeen ? null : `older than the newest list this client has seen`;
     c.keysSeen = l.seq; c.keys = l.keys;
     return null;
@@ -78,7 +82,9 @@ export function checker() {
     if (!A.content(a)) return "content: " + ajv.errorsText(A.content.errors).slice(0, 80);
     const id = subjectId(a.subject);
     if (id !== subjectId(subject) || rec.path !== pathOf(a.subject) || e.tags.find((t) => t[0] === "d")[1] !== `parachute-approval:${id}`) return "it is an approval of something else";
-    const held = c.held[id];
+    if (a.n > c.now / 1000 + DAY || Date.parse(a.at) > c.now + DAY * 1000) return "dated from the future";
+    // an approval this client holds from a key that is no longer listed orders nothing: it can't block a new one
+    const held = c.held[id] && approvalKeys(c).includes(c.held[id].pubkey) ? c.held[id] : null;
     if (held && e.id === held.id) return null;
     if (!approvalKeys(c).includes(e.pubkey)) return "signed by a key that is not an approval key on this person's key list";
     if (held && a.n <= held.a.n) return a.n === held.a.n ? "another approval with the number of the one this client holds" : "older than the one this client holds";

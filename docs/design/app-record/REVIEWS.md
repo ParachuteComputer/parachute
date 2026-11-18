@@ -39,4 +39,27 @@ enough) and layer 2 was rebuilt on it.
 | Wrong path cited for the approval-key signer; stale `Grants` in a schema pattern; small wording slips in layer 3. | Fixed. |
 | Too long; decisions buried; question 3 was one the author could settle. | "Decided here, unless you say otherwise" lists them. Question 3 is now who may replace the everyday key. |
 
-THIRD
+Then ADDENDUM-SECURITY arrived (security levels, key rotation through a root-signed key list, what opens a note).
+
+## Third review (with keys and security): NO-SHIP, two blockers
+
+| Objection | Where it stands |
+|---|---|
+| Recovery would re-sign whatever a thief approved: "one unlock signs it all again". | Approve again from a device the thief never held, from what that device had checked before the day the key was lost; anything later is shown apart, one at a time. |
+| "Removing any one check makes the script fail" was false; 31 attempts, not 33. | `mutate.mjs` now does it for all 24 checks and prints the result: 14 caught, 10 not (format checks and second lines). The docs say those numbers. 47 attempts, counted by the script. |
+| A planned rotation stopped every applet between the new list and the re-signing. | List both keys, sign again, then drop the old one. In the play. |
+| A stolen key could jam an applet for good with a huge number. | Numbers from the future are refused, and what a dropped key signed orders nothing. Both in the play. |
+| `subject.kind` was never checked; a component's approval passed as a frame's. | Kind is part of what an approval names. Frame and component cases are in the play. |
+| The code hash dropped import names; swapping two components' contents gave the same hash. | Imports are hashed under their names. In the play. |
+| Rotation was half answered: no way to make a root key, no signing step, root loss, no word that a dropped everyday key stops signing. | "Making a root key", "Signing a new list", the planned and the leaked case, and root loss are sections now. |
+| Security levels were per app, the addendum says per person; routine answers unmentioned; a default stricter than today called "today's behaviour". | `security` moved to Settings; `answers` covers routine cards; the stricter default is said. |
+| A hub on a port could never have an approval. | Fixed; an example and an attempt. |
+| DESIGN.md left out the idle lock, what opens a note, that a root key must be made, and several decisions. | Added as items 6 and 7 and under "Decided". |
+| Opening the Techne app would stop Rooms' notifications. | A device registers the signals of all your apps. |
+| The #systems interface was thin; KEYRING's "second signature" unreconciled. | Three bullets on what their side must redo for a new public key; the root key signs the key list only. |
+| No-root: "no list to keep" against a schema that accepts one. | The approval key, as anchor, signs the list; said so. |
+| The year cap bound only honest signers; one key could hold both roles. | A start date in the future is refused; a key listed twice is refused. Both in the play. |
+| Layer 3 wording; someone else's applets getting storage reverses EMBED.md unsaid; bulk signing must skip changed code. | Fixed and said. |
+
+Not taken: "approvals name record ids while the bar names paths, so another approved record can be moved under a
+bar slot". The record that opens is one you approved, under its own name; the bar shows that name.

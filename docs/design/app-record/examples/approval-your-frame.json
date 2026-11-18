@@ -12,13 +12,13 @@
         "tags": [
           [
             "d",
-            "parachute-approval:https://uni.example/home/01M7FRAME"
+            "parachute-approval:frame:https://uni.example/home/01M7FRAME"
           ]
         ],
-        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7FRAME\",\"applet\":\"frame\",\"kind\":\"frame\"},\"n\":1793707200,\"approved\":true,\"code\":\"tsx:c0de444444444444444444444444444444444444444444444444444444444444\",\"scope\":\"f4a3eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"whose\":\"mine\",\"expires\":\"2027-11-03T12:00:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"Your own frame: it draws the launcher, a vault and a note, and can ask the app to move you and change your bar on a tap.\"],\"at\":\"2026-11-03T12:00:00.000Z\"}",
-        "pubkey": "dccec693188b7c2ae40ba4f757868c21f15527c777ffb912890f98385911ee2d",
-        "id": "797134058566bef374bc0b9b01ad615efec8aa85bb061c106d692f35171174df",
-        "sig": "023d0142793c6e21c471fe04897da265509cdf261dd3b8e1af21f9313f15355282067880f7ea84a93415a3e532684795ad05336b5d433b84d002ddf045b6736a"
+        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7FRAME\",\"applet\":\"frame\",\"kind\":\"frame\"},\"n\":1793707200,\"approved\":true,\"code\":\"tsx:b0c2e7f3f8ac89f02e5aaf0e1a0e0fca5c72a7b6564e4a0ca3fe4a31f920da53\",\"scope\":\"3c62e9bcaeaa6487dbc27b798dd765999a656f72495a926b856acb79edc7a3f1\",\"whose\":\"mine\",\"expires\":\"2027-11-03T12:00:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"Your own frame: it draws the launcher, a vault and a note, and can ask the app to move you and change your bar on a tap.\"],\"at\":\"2026-11-03T12:00:00.000Z\"}",
+        "pubkey": "679d5c66d6b133f1d8ecc2c7cd675bd7020330155e2be7667c732c93033bc9b9",
+        "id": "4f93c3bc87892f488939b43f4f4e9f20920b8ea38694eb0740cb0bb7d0209b6b",
+        "sig": "4b1124e3070b68b321da60501c6b2bcd29c0b6ac534bc514b4e1286ce36774d56e800c2e9b77679ab2064b760aa088baaa67bbc1e426973b13a8553d32c8c54e"
       }
     }
   }

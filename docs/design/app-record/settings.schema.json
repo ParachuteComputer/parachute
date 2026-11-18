@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://parachute.computer/schema/app-record/settings.schema.json",
   "title": "Parachute/Settings, after the app record",
-  "description": "What stays in the settings note: what belongs to the person, not to one app. The bar, start and services move into an app record; they are still allowed here while old and new devices overlap.",
+  "description": "What stays in the settings note: what belongs to the person, not to one app: their Parachutes, the app a new device opens, how careful their app is. The bar, start and services move into an app record; they are still allowed here while old and new devices overlap.",
   "type": "object",
   "required": [
     "path",
@@ -60,18 +60,52 @@
               "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
             },
             "bar": {
-              "description": "Before app records, and for one release after: kept in step with the app named in `app`, so a device not yet updated keeps its bar. Then gone."
+              "description": "Before app records, and while any device of the person's still runs the old app: kept in step with the app named in `app`, so that device keeps its bar. Then gone."
             },
             "start": {
-              "description": "Before app records, and for one release after: kept in step with the app named in `app`, so a device not yet updated keeps its bar. Then gone."
+              "description": "Before app records, and while any device of the person's still runs the old app: kept in step with the app named in `app`, so that device keeps its bar. Then gone."
             },
             "services": {
-              "description": "Before app records, and for one release after: kept in step with the app named in `app`, so a device not yet updated keeps its bar. Then gone."
+              "description": "Before app records, and while any device of the person's still runs the old app: kept in step with the app named in `app`, so that device keeps its bar. Then gone."
             },
             "mirror": {
               "description": "While old and new devices overlap: the hash of the bar, start and services the new app last copied here. If they no longer match it, an old device changed them, and the change is taken into the app record.",
               "type": "string",
               "pattern": "^[0-9a-f]{64}$"
+            },
+            "security": {
+              "description": "How careful the person's app is, on every device and in every app of theirs. A device applies the stricter of this and what it already held; making it looser takes that device's unlock. Approving code always takes the unlock: no setting here can turn that off.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "lock_after_idle_minutes": {
+                  "description": "Ask for the device unlock to open the app after this long untouched. null: never (the default).",
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1440
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "answers": {
+                  "description": "Routine answers the approval key gives (approval cards): the unlock for each one (the default), or once and then not again for five minutes for the same applet (today's behaviour). Powerful answers take the unlock each time whatever this says.",
+                  "enum": [
+                    "each",
+                    "five-minutes"
+                  ]
+                },
+                "everyday": {
+                  "description": "What the everyday key needs: nothing while the app is open (the default), or the unlock for each applet the first time it signs after the app was locked.",
+                  "enum": [
+                    "open",
+                    "unlock"
+                  ]
+                }
+              }
             }
           }
         }

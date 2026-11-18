@@ -393,40 +393,6 @@
               }
             }
           }
-        },
-        "security": {
-          "description": "How careful this app is, for every device that opens it. A device applies the stricter of this and what it already held; making it looser takes that device's unlock. Using the approval key always takes the unlock: no setting here can turn that off.",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "lock_after_idle_minutes": {
-              "description": "Ask for the device unlock to open the app after this long untouched. null: never (the default).",
-              "oneOf": [
-                {
-                  "type": "integer",
-                  "minimum": 1,
-                  "maximum": 1440
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "powerful": {
-              "description": "Answers the approval key gives to powerful requests: unlock for each one (the default), or once and then not again for five minutes.",
-              "enum": [
-                "each",
-                "five-minutes"
-              ]
-            },
-            "everyday": {
-              "description": "What the everyday key needs: nothing while the app is open (the default), or the unlock for each applet the first time it signs after the app was locked.",
-              "enum": [
-                "open",
-                "unlock"
-              ]
-            }
-          }
         }
       }
     }

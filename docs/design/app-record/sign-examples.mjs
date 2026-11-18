@@ -7,7 +7,7 @@ const save = (name, rec) => writeFileSync(here(import.meta.url, `./examples/${na
 const keys = keyList(root, [{ role: "everyday", key: getPublicKey(everyday), name: "phone, laptop, Uni" }, { role: "approval", key: getPublicKey(approval), name: "phone" }], "2026-11-01T10:00:00.000Z");
 save("keys.json", keys);
 
-const rooms = { subject: { hub: "https://uni.example", vault: "home", record: "01M7ROOMSAPPLET", applet: "rooms" }, source: "export default function Rooms() { /* … */ }", imports: ["export default function Room() { /* … */ }"],
+const rooms = { subject: { hub: "https://uni.example", vault: "home", record: "01M7ROOMSAPPLET", applet: "rooms" }, source: "export default function Rooms() { /* … */ }", imports: { room: "export default function Room() { /* … */ }" },
   fields: { applet: { contract: 2, id: "rooms", name: "Rooms", glyph: "◎", access: [], reach: ["voice"] }, app: ["links", "save", "attach"], services: [{ id: "rooms", kind: "nostr-relay", url: "wss://relay.example", publish: [9, 5, 40003, 20002], media: true, approvals: { from: ["3f1c9a5e7b2d4068a1c3e5f7092b4d6e8fa1c3e5072b4d6e8fa1c3e5f7092b4d"] } }],
     signals: [{ id: "for-you", name: "mentions and messages from Uni", count: "new", via: "https://push.example/", from: { service: "rooms", mentions: true } }] } };
 const face = ["As you on relay.example (your everyday key): posts messages, edits and typing in your rooms. What it reads can go there.", "High risk, with your approval key: answers approval cards and secret requests from Uni there.", "Counts and notifies through push.example: mentions and messages from Uni.", "Also: the microphone when you press record, files you pick.", "On a phone an applet could send what it reads to the internet: approve only code you trust."];
@@ -17,8 +17,8 @@ save("approval-rooms.json", second);
 
 const events = { subject: { hub: "https://techne.example", vault: "techne", record: "01M7EVENTS", applet: "events" }, source: "export default function Events() { /* … */ }", fields: { applet: { contract: 2, id: "events", name: "Events", glyph: "◷", access: [{ vault: "here", allow: [{ path: "Events/", verbs: ["read"] }] }] } } };
 save("approval-events-from-techne.json", approve(approval, events.subject, 0, { approved: true, ...hashesOf(events), whose: "theirs", expires: "2027-11-10T19:12:00.000Z", device: "Pixel", others: [], face: ["Someone else's vault, techne at techne.example.", "Read notes in Events/"] }, "2026-11-10T19:12:00.000Z"));
-const frame = { hub: "https://uni.example", vault: "home", record: "01M7FRAME", applet: "frame", kind: "frame" };
-save("approval-your-frame.json", approve(approval, frame, 0, { approved: true, code: "tsx:" + "c0de".padEnd(64, "4"), scope: "f4a3".padEnd(64, "e"), whose: "mine", expires: "2027-11-03T12:00:00.000Z", device: "Pixel", others: [], face: ["Your own frame: it draws the launcher, a vault and a note, and can ask the app to move you and change your bar on a tap."] }, "2026-11-03T12:00:00.000Z"));
+const frame = { subject: { hub: "https://uni.example", vault: "home", record: "01M7FRAME", applet: "frame", kind: "frame" }, source: "export default function Frame() { /* … */ }", fields: { frame: { based_on: "1.4.0" } } };
+save("approval-your-frame.json", approve(approval, frame.subject, 0, { approved: true, ...hashesOf(frame), whose: "mine", expires: "2027-11-03T12:00:00.000Z", device: "Pixel", others: [], face: ["Your own frame: it draws the launcher, a vault and a note, and can ask the app to move you and change your bar on a tap."] }, "2026-11-03T12:00:00.000Z"));
 const scratch = { hub: "https://uni.example", vault: "home", record: "01M7SCRATCH", applet: "scratch" };
 const s1 = approve(approval, scratch, 0, { approved: true, code: "tsx:" + "1200".padEnd(64, "1"), scope: "9911".padEnd(64, "f"), whose: "mine", expires: "2027-11-05T10:00:00.000Z", device: "Pixel", others: [], face: ["Read, add and change notes in Scratch/"] }, "2026-11-05T10:00:00.000Z");
 save("approval-scratch-withdrawn.json", approve(approval, scratch, nOf(s1), { approved: false, device: "Pixel" }, "2026-11-12T07:45:00.000Z"));
@@ -35,3 +35,6 @@ save("invalid/approval-moved-to-another-applet.json", moved);
 const k2 = structuredClone(keys); k2.fields.keys.event.content = k2.fields.keys.event.content.replace(getPublicKey(approval), getPublicKey(generateSecretKey()));
 save("invalid/keys-forged-approval-key.json", k2);
 save("invalid/keys-no-approval-key.json", keyList(root, [{ role: "everyday", key: getPublicKey(everyday) }], "2026-11-01T10:00:00.000Z"));
+const local = { subject: { hub: "http://localhost:1939", vault: "play", record: "01M7IDEAS", applet: "ideas" }, source: "export default function Ideas() {}", fields: { applet: { contract: 2, id: "ideas", name: "Ideas" } } };
+save("approval-on-a-hub-with-a-port.json", approve(approval, local.subject, 0, { approved: true, ...hashesOf(local), whose: "mine", expires: "2027-11-17T12:00:00.000Z", device: "Laptop", others: [], face: ["Asks for nothing."] }, "2026-11-17T12:00:00.000Z"));
+save("invalid/keys-one-key-two-roles.json", keyList(root, [{ role: "everyday", key: getPublicKey(everyday) }, { role: "approval", key: getPublicKey(everyday) }], "2026-11-01T10:00:00.000Z"));

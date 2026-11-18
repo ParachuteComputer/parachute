@@ -12,13 +12,13 @@
         "tags": [
           [
             "d",
-            "parachute-approval:https://uni.example/home/01M7SCRATCH"
+            "parachute-approval:applet:https://uni.example/home/01M7SCRATCH"
           ]
         ],
         "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7SCRATCH\",\"applet\":\"scratch\"},\"n\":1794469500,\"approved\":false,\"device\":\"Pixel\",\"at\":\"2026-11-12T07:45:00.000Z\"}",
-        "pubkey": "dccec693188b7c2ae40ba4f757868c21f15527c777ffb912890f98385911ee2d",
-        "id": "2e8197702c86ecd2755436835eeb60e3680a21103006596c4611cb102c1f0f89",
-        "sig": "ee9ce53926a3a35f25580f5d4f73c43ef3f78c8965d3dca852da823458a12f4acddb15ff3cc9a1b9eef212818bb5c787166427a427fd3a793a9d04e11b22bb4b"
+        "pubkey": "679d5c66d6b133f1d8ecc2c7cd675bd7020330155e2be7667c732c93033bc9b9",
+        "id": "3ce02d895f459cff1f406cad501044fb9c722ffc437fb912a625e67ad42ca1d8",
+        "sig": "0375f564bf1658a38d7ddc012f1ba4b0a9c85b4d0f8963efec18716fe15e9576142e4f96924c1cf0dc792939edd5f952eb8ebcc85840e01a8a0a920e979dfa83"
       }
     }
   }

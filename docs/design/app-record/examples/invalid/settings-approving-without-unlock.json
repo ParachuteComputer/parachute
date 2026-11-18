@@ -1,0 +1,18 @@
+{
+ "path": "Parachute/Settings",
+ "tags": [
+  "parachute-settings"
+ ],
+ "fields": {
+  "parachute": {
+   "hubs": [
+    {
+     "hub": "https://uni.example"
+    }
+   ],
+   "security": {
+    "approving": "no-unlock"
+   }
+  }
+ }
+}

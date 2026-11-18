@@ -97,11 +97,6 @@
             "show": "off"
           }
         ]
-      },
-      "security": {
-        "lock_after_idle_minutes": null,
-        "powerful": "each",
-        "everyday": "open"
       }
     }
   }

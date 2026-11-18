@@ -24,7 +24,8 @@ function keys(x) {
   const e = x.fields.keys.event;
   if (!verifyEvent({ ...e })) return "the event's id or signature doesn't hold";
   const c = JSON.parse(e.content);
-  return ap.K.content(c) ? null : "content: " + ap.ajv.errorsText(ap.K.content.errors);
+  if (!ap.K.content(c)) return "content: " + ap.ajv.errorsText(ap.K.content.errors);
+  return new Set(c.keys.map((k) => k.key)).size === c.keys.length ? null : "a key is listed twice";
 }
 /** null when it holds, else why not. */
 function check(file, x) {

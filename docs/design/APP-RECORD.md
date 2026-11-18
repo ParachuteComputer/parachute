@@ -15,7 +15,7 @@ they found and what changed is in [app-record/REVIEWS.md](app-record/REVIEWS.md)
  │ Parachute/Apps/uni     AN APP: where applets  │      │ your anchor: the public half of    │
  │      DISCOVERY         come from, the bar,    │─────▶│   your root key. You put it there. │
  │      what is offered   start, what opens what,│ read │ the newest key list and approvals  │
- │                        signals, security      │      │   it has checked                   │
+ │                        signals, theme         │      │   it has checked                   │
  │ Parachute/Approvals/…  one per applet: this   │─────▶│ whose each vault is                │
  │      RUNNING           exact code, these asks,│check │ microphone, notifications, unlock  │
  │      what may start    signed by your         │      │ what each applet saved: drafts,    │
@@ -23,8 +23,9 @@ they found and what changed is in [app-record/REVIEWS.md](app-record/REVIEWS.md)
  │ Parachute/Keys         which keys are yours   │─────▶│ which app is open here             │
  │      TRUST             now, signed by your    │check └────────────────────────────────────┘
  │                        ROOT KEY (offline)     │
- │ Parachute/Settings     your Parachutes        │        ONE device holds the approval key
- └───────────────────────┬───────────────────────┘        and signs, after its unlock.
+ │ Parachute/Settings     your Parachutes, and   │        ONE device holds the approval key
+ │                        how careful you are    │        and signs, after its unlock.
+ └───────────────────────┬───────────────────────┘
                          │ an app lists applets; it never runs one
                          ▼
    everything in home  ·  Seed log from garden  ·  Events from techne.example (someone else's)
@@ -99,7 +100,6 @@ agent can write it, and that is safe: nothing in it lets code start.
 | `theme`, `frame` | Which theme and frame record this app wears. A frame is code: it needs an approval too. |
 | `keep` | How many applets stay running: `"auto"` or a number (layer 3). |
 | `signals` | Which applets badge, notify or stay quiet (layer 4). Choices only; no server address. |
-| `security` | How careful this app is ([below](#security-levels)). |
 | `based_on` | Set when you added an app someone else offers: where the copy came from. |
 
 **Sources.** One shape, `{ hub?, vault, applet }`, the same as a place on the bar. A `*` widens it:
@@ -141,7 +141,8 @@ open app names is reached through *Everything* or Settings.
 copies it into your home vault with `based_on`, its sources rewritten to name Techne's hub. The copy is yours: when
 Techne changes theirs, the picker says so and shows what differs. (An app that follows Techne is open question 2.)
 
-**What stays in `Parachute/Settings`:** `hubs` (your Parachutes) and `app` (the app a new device opens).
+**What stays in `Parachute/Settings`:** what is yours, not one app's: `hubs` (your Parachutes), `app` (the app a new
+device opens) and `security` ([below](#security-levels)).
 [Schema](app-record/settings.schema.json).
 
 ### What opens a note
@@ -189,7 +190,7 @@ Anything else, and the card shows instead.
 
 | Hash | Covers |
 |---|---|
-| Code | The record's code and every component it imports (as `compositeHash` does today). |
+| Code | The record's code and every component it imports, each under the name it is imported by (as `compositeHash` does today). |
 | Asks | The record's own fields as written: manifest (folders and verbs, microphone), `opens`, `app` words, `services` (addresses, what it may sign, approvals), `signals`, `embeds`; with the hub's address, the vault's name and the record's id. |
 
 Not in either, and why it is safe: the kit and the transpiler ship with the app. A component *embedded* on a page
@@ -199,8 +200,10 @@ become one kind of record.
 
 **The record.** One per piece of code: `Parachute/Approvals/<host>/<vault>/<record id>`, tagged
 `parachute-approval` ([schema](app-record/approval.schema.json)). It holds one Nostr event, never sent to a relay.
-Its number `n` is the time of signing, or one more than the approval it replaces, whichever is larger; so a device
-that lost its memory still signs higher. Taking an approval back is the next one, saying `"approved": false`.
+It says what kind of code it is of (applet, component, frame), so one can't stand in for another. Its number `n` is
+the time of signing, or one more than the approval it replaces, whichever is larger; so a device that lost its
+memory still signs higher. A number from the future is refused. Taking an approval back is the next one, saying
+`"approved": false`.
 
 **Approving** (third mockup). Today's card, then the device unlock, then native code signs with the approval key.
 The unlock is never skipped for this, whatever the security level. A changed applet costs one unlock, on one device.
@@ -219,8 +222,10 @@ your Pixel." (Open question 1.)
 ### Tested against attacks
 
 [attacks.mjs](app-record/attacks.mjs) plays the rule with real keys, real signatures and hashes computed from the
-code: 33 attempts. It tests the rule's logic; it can't test the app, the native signer or the unlock, which don't
-exist. Each check was removed in turn to see the play fail.
+code: 47 attempts. It tests the rule's logic. It can't test the app, the native signer or the unlock, which don't
+exist. [mutate.mjs](app-record/mutate.mjs) then turns off each of the rule's 24 checks in turn: without 14 of them
+the play fails. The other 10 it does not notice: six only refuse malformed records, and four are second lines
+behind another check. It prints which.
 
 | Who | Tries | Result |
 |---|---|---|
@@ -234,7 +239,9 @@ exist. Each check was removed in turn to see the play fail.
 | | An approval you took back, put back | Doesn't run on a client that saw you take it back. |
 | | Deleting approvals | Nothing stops on clients that had checked them. A new client asks. |
 | Someone who also holds your **everyday** key | Approves with it, or signs a key list promoting it | Doesn't run: the list gives that key the everyday role only. |
-| Techne | Changes an applet you approved | Doesn't run until you approve the new hash. Same rule, same record. |
+| Techne | Changes an applet you approved, or a component on your home page | Doesn't run until you approve the new hash. Same rule, same record. |
+| Your agent's token, or a thief's | Changes your own frame | Doesn't run: a frame needs an approval too. Nor can a record approved as a component be passed off as a frame. |
+| A device with a wrong clock, or a thief before you notice | Signs with a number from the far future, to block every later approval | Refused. And what a dropped key signed orders nothing. |
 | Two of your devices at once | One approves and one withdraws in the same second | Each client keeps the one it saw. The vault's own write check makes the second signer read again and sign higher. |
 
 **Three gaps that remain.**
@@ -251,9 +258,13 @@ exist. Each check was removed in turn to see the play fail.
 
 If it held the approval key, that key is the thief's until you replace it. Getting out:
 
-1. With your root key, sign a key list that names a new approval key ([below](#keys-and-replacing-them)).
-2. Each device reads the list. From then, nothing the old key signed counts there, before or after.
-3. On the device with the new key, one screen lists what you had approved; one unlock signs it all again.
+1. With your root key, sign a key list that names a new approval key and drops the old one
+   ([below](#keys-and-replacing-them)).
+2. Each device reads the list. From then, nothing the old key signed counts there, whenever it was signed.
+3. **Approve again from a device the thief never held, not from the vault.** That device shows what *it* was
+   running: the approvals it had checked before the day you say the key was lost. One unlock signs those. Anything
+   the old key signed after that day is shown apart, one at a time, with what changed, because the thief may have
+   signed it.
 4. What Uni sealed to the old approval key is sealed again, as KEYRING.md already says of losing it.
 
 A device that held only the everyday key: replace that key the same way. It could never approve code.
@@ -305,8 +316,8 @@ keeps working well."
 | **Root key** | offline, never in the app | signs the key list | you, and wherever you keep it |
 
 **The key list.** One record, `Parachute/Keys`, tagged `parachute-keys` ([schema](app-record/keys.schema.json)),
-also posted to your relay. It holds one event signed by the root key: which keys are yours now, each with its role.
-A key not on the list signs nothing that counts.
+also posted to your relay. It holds one event signed by the root key: which keys are yours now, each with one role.
+A key not on the list signs nothing that counts, and the app stops signing with an everyday key that is off it.
 
 ```json
 { "v": 1, "seq": 1793527200, "at": "2026-11-01T10:00:00.000Z",
@@ -314,29 +325,45 @@ A key not on the list signs nothing that counts.
             { "role": "approval", "key": "<hex>", "name": "phone" } ] }
 ```
 
+**Making a root key** (Settings → Keys → **Make a root key**, once). The app makes it, shows it as words to write
+down and keep somewhere that is not a device, and forgets it. Its public half stays: that is this device's anchor.
+
 **The anchor.** Each device holds the root key's public half. You put it there when you set the device up: scan it
-from a device you hold, or paste it; it is public, and both screens show the same short code to compare. This is the
+from a device you hold, or paste it. It is public, and both screens show the same short code to compare. This is the
 one thing a device takes on your word. Everything else it checks against that.
 
-**Replacing a key** (Settings → Keys → **Replace a key**):
+**Signing a new list.** Two ways. Type the root key's words into the app, which signs once behind the device unlock
+and forgets them; or sign on a machine that is never online, and scan the result in. The first is quick, and the
+root key is in a phone's memory for a moment. The second is what "offline" really means. #systems' runbook should
+say which.
 
-1. The app makes the new key (or takes one you paste) and writes the new list, unsigned.
-2. You sign it with the root key, wherever that lives, and bring it back: a code to scan, or a file. The app checks
-   it against the anchor and saves it to the vault and the relay.
-3. **The old key stops counting** on each device the moment it reads the new list: all of it, old signatures too. A
-   leaked key can sign with any date, so there is no "before the leak" to honour.
-4. **What it signed is signed again.** A new approval key: one screen, one unlock, every approval re-signed. A new
-   everyday key: nothing in the vault was signed by it.
-5. **Everyone is told.** Your devices read the list from the vault or the relay; each then needs the new everyday
-   key brought in by pairing. Services read the same list.
+**Replacing a key you still control** (the planned case: Settings → Keys → **Replace a key**). Nothing stops:
+
+1. The app makes the new key. A new list names the old and the new together. You sign it.
+2. A new approval key: one screen, one unlock, and every approval is signed again with it. A new everyday key: each
+   device gets it by pairing, and each service is told (below).
+3. A last list drops the old key. From the moment a device reads it, nothing the old key signed counts there.
+
+**Replacing a key that leaked.** Skip step 1's overlap: one list that drops it now. Its signatures stop counting at
+once, old ones too, because a leaked key can sign with any date. Applets stay closed until you approve them again
+from a device you trust ([a stolen device](#a-stolen-or-broken-device), step 3).
+
+**If the root key is lost,** nothing breaks, but the list can't change. Make a new root key and put the new anchor
+on each device by hand. **If the root key leaks,** do the same, at once.
 
 **The interface with #systems.** The key list is the one thing both sides read: a public, root-signed event that
-says "these are this person's keys now", in the vault and on the relay. The app's side is making, checking and
-obeying it. Theirs is making the relay, the hub (whose roles are granted per key), Hermes and mail obey it, and the
-runbook. I did not design or check their side.
+says "these are this person's keys now", in the vault and on the relay the app's `services` name. The app's side is
+making, checking and obeying it. Theirs, which I did not design or check:
 
-**For someone with no root key** (most people): the anchor is their approval key, and there is no list to keep.
-Replacing a key then means setting each device up again by hand. Nothing here asks them to do more.
+- Each service needs the anchor once, as each device does.
+- A new everyday key is a new public key. Relay memberships, the hub's roles on each vault, and the trusted keys
+  named inside applet records all name the old one. Applets whose records change will ask again.
+- KEYRING.md plans the approval key as "the second signature #systems uses for root actions". That stays. The root
+  key here signs one thing only: the key list.
+
+**For someone with no root key** (most people): the anchor is their approval key, which signs the list itself.
+There is then nothing above it: if it is lost or stolen, each device is set up again by hand. Nothing here asks
+them to do more.
 
 ## Security levels
 
@@ -344,12 +371,15 @@ Aaron: "we probably want to have a better default level of security, like we've 
 my pin or my fingerprint to approve something… I might want to be able to require a password to do anything if I
 haven't touched it for X many minutes."
 
-`security` in the app record says how careful the app is; each device enforces it.
+`security` says how careful your app is. It is yours, not one app's, so it sits in `Parachute/Settings` and holds
+for every app and device. (The brief said "part of the app record, per person"; with several apps, per person means
+Settings.) Each device enforces it.
 
 | Setting | Default | The other choice |
 |---|---|---|
 | Approving code | **device unlock, always** | None. No setting turns it off. |
-| `powerful`: answers the approval key gives to powerful requests | `"each"`: unlock for each one | `"five-minutes"`, looser: once, then not again for five minutes (today's grace). |
+| Powerful answers from the approval key | **device unlock, each one** | None, as today. |
+| `answers`: routine answers from the approval key (approval cards) | `"each"`: unlock for each one, as the Uni app does | `"five-minutes"`, looser: once per applet, then not again for five minutes. This is what Parachute does today, so the default gets stricter. |
 | `lock_after_idle_minutes` | `null`: never | A number: unlock to open the app after that long untouched. Aaron's "password to do anything". |
 | `everyday` | `"open"`: the everyday key signs for approved applets while the app is open | `"unlock"`: each applet's first signature after the app was locked needs the unlock. |
 
@@ -366,8 +396,8 @@ Today an applet may ask for `storage` (256 KB in `localStorage`), and three hidd
 `src/shell/kept.tsx`). Nothing is saved when a fourth pushes the first out. A draft survives only if the applet's
 author thought to save it.
 
-**The guarantee.** What an applet gives the kit to save is on this device's disk within 300 ms of changing, and is
-handed back before the applet's first paint, whether it was hidden, unloaded, the app closed or the phone restarted.
+**The guarantee.** What an applet gives the kit to save reaches the shell within 300 ms of changing, the shell
+writes it to this device's disk at once, and it is handed back before the applet's first paint, whether it was hidden, unloaded, the app closed or the phone restarted.
 
 ```tsx
 <textarea {...saved("draft:" + roomId)} />                  // saved as you type
@@ -385,8 +415,8 @@ const [tab, setTab] = useSaved("tab", "inbox");             // where you were
 - **Only what goes through the kit.** A plain `useState` box is lost as today. So step 1 of the migration converts
   our own applets: Journal's entry box, Rooms' and Mail's composers. WRITE-AN-APPLET.md makes `saved()` the way to
   write a text box.
-- **Every approved applet gets it,** someone else's too: it is the applet's own data on your own device. The
-  `storage` word stays and means the same store.
+- **Every approved applet gets it,** someone else's too: it is the applet's own data on your own device. That
+  changes EMBED.md, which gives someone else's applets no storage. The `storage` word stays and means the same store.
 - **The store** moves out of `localStorage` (5 MB for the whole app) into the app's own data: a file per applet on
   phone and desktop, IndexedDB in a browser. 1 MB per applet, of which 256 KB is held back for drafts so a cache
   can't crowd one out. A full store refuses the write and the kit tells the applet. Keyed hub + vault + record, on
@@ -458,9 +488,9 @@ from the applet's own record: *Rooms · 3 new: mentions and messages from Uni*.
 ```
 
 `notify` is a badge and a notification; `badge` is quiet; `off` isn't registered at all. A device registers the
-signals of the app it has open. Two exceptions, both for approval requests (a signal on a service that carries
-`approvals`): they stay registered whichever app is open, and a record can't turn them off, only the device can. So
-neither switching to the Techne app nor an agent can quiet Uni's approval cards.
+signals of all your apps, so opening the Techne app doesn't quiet Rooms; the bar shows badges for the app that is
+open. One exception, for approval requests (a signal on a service that carries `approvals`): a record can't turn
+them off, only the device can. So an agent can't quiet its own approval cards.
 
 **What it costs.** The gateway already knows your public key and your rooms. It would also learn which applets you
 use, your mail's unread count, when you open the app and roughly when you read. It never sees words. A desktop gets
@@ -475,21 +505,22 @@ All in [app-record/examples/](app-record/examples/), checked by [validate.mjs](a
   [app-everything.json](app-record/examples/app-everything.json): today's behaviour as an app; what migration
   writes. [app-techne.json](app-record/examples/app-techne.json): an app added from Techne's vault.
 - [keys.json](app-record/examples/keys.json): a key list, signed by a root key.
+  [settings.json](app-record/examples/settings.json): what stays in Settings, with `security`.
 - [approval-rooms.json](app-record/examples/approval-rooms.json): Rooms' approval, its hashes computed from the code
   and fields in [sign-examples.mjs](app-record/sign-examples.mjs).
   [approval-events-from-techne.json](app-record/examples/approval-events-from-techne.json): someone else's vault.
   [approval-your-frame.json](app-record/examples/approval-your-frame.json): your own frame.
-  [approval-scratch-withdrawn.json](app-record/examples/approval-scratch-withdrawn.json): one taken back. Real
+  [approval-scratch-withdrawn.json](app-record/examples/approval-scratch-withdrawn.json): one taken back.
+  [approval-on-a-hub-with-a-port.json](app-record/examples/approval-on-a-hub-with-a-port.json). Real
   signatures, from keys made for the examples and thrown away.
 - [signals-rooms.json](app-record/examples/signals-rooms.json),
   [signals-mail.json](app-record/examples/signals-mail.json),
   [signals-tasks.json](app-record/examples/signals-tasks.json): the three kinds of signal.
-- [settings.json](app-record/examples/settings.json),
-  [settings-while-devices-overlap.json](app-record/examples/settings-while-devices-overlap.json).
-- [examples/invalid/](app-record/examples/invalid/): 25 records that must be refused, and are. Among them: every
+- [settings-while-devices-overlap.json](app-record/examples/settings-while-devices-overlap.json).
+- [examples/invalid/](app-record/examples/invalid/): 26 records that must be refused, and are. Among them: every
   hub, a hub with a `*` in it, a version pin slipped into a source, a gateway slipped into the app, a theme that
-  points at the approvals, a security level that drops the unlock, a forged approval, a ten-year one, one moved onto
-  another applet, a key list with a swapped key.
+  points at the approvals, a security setting that drops the unlock, a forged approval, a ten-year one, one moved
+  onto another applet, a key list with a swapped key, a key with two roles.
 
 ```json
 {
@@ -531,8 +562,7 @@ All in [app-record/examples/](app-record/examples/), checked by [validate.mjs](a
           { "vault": "home", "applet": "Applets/Rooms", "signal": "for-you", "show": "notify" },
           { "hub": "https://techne.example", "vault": "techne", "applet": "Applets/Events", "show": "off" }
         ]
-      },
-      "security": { "lock_after_idle_minutes": null, "powerful": "each", "everyday": "open" }
+      }
     }
   }
 }
@@ -573,18 +603,20 @@ What an approval's signed content says (in the record it is one string, which is
    what the approval now carries, signed. The records stay until the overlap ends, so an old device keeps its
    brought-in applets. Component pointers stay for good; embeds own them.
 6. **Keys, then approvals.** A separate approval key if there isn't one; the anchor on each device; a key list if
-   you keep a root key. Then one screen on the approving device, "Sign what you allowed here", with one unlock; a
-   re-signed approval keeps the end date its grant had. Until a device has its anchor it keeps its local grants and
+   you keep a root key. Then one screen on the approving device, "Sign what you allowed here", with one unlock. It
+   lists only applets whose code is still what that device allowed; a changed one shows its card. A signed approval
+   keeps the end date its grant had. Until a device has its anchor it keeps its local grants and
    asks for itself, as today, so nothing stops working on the day of the update.
 7. **Signals.** Rooms' `notify` becomes a signal; the gateway learns counts. Rooms asks once more, because what it
    asks is worded anew.
-8. **Security levels.** `security` in the app record; the idle lock is new; the rest is today's behaviour named.
+8. **Security levels.** `security` in Settings. The idle lock is new, and routine answers get stricter by default
+   (an unlock each, where today there is a five-minute grace).
 
 **Subtract** (what this replaces, and when the old one goes):
 
 | Old | Replaced by | Goes |
 |---|---|---|
-| `bar`, `start`, `services` in `Parachute/Settings` | the app record | when no device of yours runs the old app (each device would have to leave its version somewhere; not designed) |
+| `bar`, `start`, `services` in `Parachute/Settings` | the app record | when no device of yours runs the old app. How the app knows that is not designed: each device would have to leave its version somewhere. Until it is, a date Aaron sets. |
 | Applet pointers (`Parachute/From/…/applet-*`) | a source, and the code hash in the signed approval | same day |
 | Grants in each device's `localStorage` (`parachute.applets.grants.v1`), and the frame's and embeds' own Allows | signed approvals in the home vault | per device, when it has its anchor; a browser tab with no key keeps them |
 | `grantedUnder` (sealed / approved-code) on a grant | nothing: every device runs only approved code | at step 6 |
@@ -606,6 +638,9 @@ Each of these is a choice someone could reasonably make the other way.
 - **The gateway learns** which applets you use and your mail's unread count, not only your rooms.
 - **Drafts stay on the device.**
 - **Device modes go**; the card always carries the phone's warning.
+- **A device with no anchor** (a browser tab, or any device before you set it up) can't check approvals. It keeps
+  today's behaviour: its own Allow, by a tap, for itself only.
+- **`security` sits in Settings, not in each app record.**
 - **Not designed here:** Aaron would drop reactions from Rooms. That takes kind 7 out of what Rooms may sign, which
   changes what it asks, so Rooms would ask once.
 
@@ -632,7 +667,8 @@ Each of these is a choice someone could reasonably make the other way.
 3. **Who may replace your everyday key: only the root key, or the approval key too?** You asked for rotation that is
    quick. Root only is the plain rule, and means fetching the offline key each time. Letting the approval key sign a
    list that swaps the *everyday* key (never itself) makes a leak a two-minute fix on your phone, and means a stolen,
-   unlocked phone could swap your everyday key. I lean **the approval key too, for the everyday key only**.
+   unlocked phone could swap your everyday key. I lean **the approval key too, for the everyday key only**. The
+   design above, its schemas and its attack play are written for root only; a yes here adds one rule.
 
 ## Appendix: what we borrow
 

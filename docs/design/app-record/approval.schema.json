@@ -82,7 +82,7 @@
                       },
                       {
                         "type": "string",
-                        "pattern": "^parachute-approval:https?://[^/\\s]+/[a-z0-9][a-z0-9_-]{0,39}/[A-Za-z0-9_-]{1,64}$"
+                        "pattern": "^parachute-approval:(?:applet|component|frame):https?://[^/\\s]+/[a-z0-9][a-z0-9_-]{0,39}/[A-Za-z0-9_-]{1,64}$"
                       }
                     ],
                     "minItems": 2,

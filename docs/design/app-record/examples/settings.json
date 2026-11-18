@@ -1,10 +1,25 @@
 {
   "path": "Parachute/Settings",
-  "tags": ["parachute-settings"],
+  "tags": [
+    "parachute-settings"
+  ],
   "fields": {
     "parachute": {
-      "hubs": [{ "hub": "https://uni.example" }, { "hub": "https://techne.example", "name": "Techne" }],
-      "app": "uni"
+      "hubs": [
+        {
+          "hub": "https://uni.example"
+        },
+        {
+          "hub": "https://techne.example",
+          "name": "Techne"
+        }
+      ],
+      "app": "uni",
+      "security": {
+        "lock_after_idle_minutes": null,
+        "answers": "each",
+        "everyday": "open"
+      }
     }
   }
 }

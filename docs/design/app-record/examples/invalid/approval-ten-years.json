@@ -12,13 +12,13 @@
         "tags": [
           [
             "d",
-            "parachute-approval:https://uni.example/home/01M7ROOMSAPPLET"
+            "parachute-approval:applet:https://uni.example/home/01M7ROOMSAPPLET"
           ]
         ],
-        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7ROOMSAPPLET\",\"applet\":\"rooms\"},\"n\":1794994201,\"approved\":true,\"code\":\"tsx:3b7f75c152c9719d93e6471bc7232c609e8028a2d5fd7381c50c74ad9e278989\",\"scope\":\"1bc3d1a0c20ef8f70fbf484e6541512d5c8dc353e26fb8609b91acc3663d7e95\",\"whose\":\"mine\",\"expires\":\"2036-11-18T09:30:00.000Z\",\"face\":[\"As you on relay.example (your everyday key): posts messages, edits and typing in your rooms. What it reads can go there.\",\"High risk, with your approval key: answers approval cards and secret requests from Uni there.\",\"Counts and notifies through push.example: mentions and messages from Uni.\",\"Also: the microphone when you press record, files you pick.\",\"On a phone an applet could send what it reads to the internet: approve only code you trust.\"],\"others\":[],\"at\":\"2026-11-18T09:30:00.000Z\"}",
-        "pubkey": "dccec693188b7c2ae40ba4f757868c21f15527c777ffb912890f98385911ee2d",
-        "id": "5fcb175dee846e4c2f8c067f1d21f47f9adb11a56f756f302c8e4c606c84b26b",
-        "sig": "97a291678b9c9d0d8d427381b2f9f736df5fb86aa12fe95e28ad09ea8f93c4057da97507d4d96562062089f1ecfa324f6712ffa20676d843a28822a9b0862708"
+        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7ROOMSAPPLET\",\"applet\":\"rooms\"},\"n\":1794994201,\"approved\":true,\"code\":\"tsx:9c66c97369bf249c7c2705724f52587a708cb9cc2191ea53301bc743b08389c4\",\"scope\":\"1bc3d1a0c20ef8f70fbf484e6541512d5c8dc353e26fb8609b91acc3663d7e95\",\"whose\":\"mine\",\"expires\":\"2036-11-18T09:30:00.000Z\",\"face\":[\"As you on relay.example (your everyday key): posts messages, edits and typing in your rooms. What it reads can go there.\",\"High risk, with your approval key: answers approval cards and secret requests from Uni there.\",\"Counts and notifies through push.example: mentions and messages from Uni.\",\"Also: the microphone when you press record, files you pick.\",\"On a phone an applet could send what it reads to the internet: approve only code you trust.\"],\"others\":[],\"at\":\"2026-11-18T09:30:00.000Z\"}",
+        "pubkey": "679d5c66d6b133f1d8ecc2c7cd675bd7020330155e2be7667c732c93033bc9b9",
+        "id": "415aa276b228619eab78066c83e93c0deb7c8306d192feaa07ed453812c867d9",
+        "sig": "b706bf4c4cd4d755581d17a688a438a2739605a6199bf614ac34f55aaa677d54c21b5dfffbaf6686a07993c8794be5fa64720d5d2cd7bd4a77a7acab9c20d2f2"
       }
     }
   }
