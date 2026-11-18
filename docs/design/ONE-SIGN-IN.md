@@ -46,7 +46,7 @@ showed:
   it is refused (`400 client_name is reserved`). The app registers there as **Vault app** (`CLOUD_CLIENT_NAME`, chosen
   by the descriptor's `door: "cloud"`); core hubs still see "Parachute". Its consent pages say *Unverified app* above
   the ask, as for any app that registered itself.
-- **Its vaults answer the older note API**: `/api/records` is 404, `/api/notes` works, and the app falls back to it.
+- **Its vaults answer the record API** (`/api/records`) and the older `/api/notes`, as core 0.9 does.
 
 Refresh rotates and retires the previous access token, as core 0.9 does. Its vaults live at `my.parachute.computer`.
 From its source: it replaces the stored grant with whatever was last approved, so if a per-vault step ever shows a
