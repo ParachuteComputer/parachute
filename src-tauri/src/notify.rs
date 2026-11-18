@@ -229,14 +229,16 @@ const RENEW_S: u64 = 7 * 24 * 3600;
 /// read) is sent again after this, not a week: a room may add the gateway or the person meanwhile.
 const RENEW_PENDING_S: u64 = 24 * 3600;
 
-/// The `at` to keep for a registration made `now`: a pending one is due again after a day.
-/** What a gateway said when it refused (its answer's `error`), for Settings: one short line, plain characters only. */
+/// What a gateway said when it refused (its answer's `error`), for Settings: one short line of plain characters (no
+/// control, direction or zero-width characters).
 pub fn gateway_said(answer: &[u8]) -> String {
     let why = serde_json::from_slice::<Value>(answer).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_string)).unwrap_or_default();
-    let why: String = why.chars().filter(|c| !c.is_control()).take(120).collect();
+    let plain = |c: &char| !c.is_control() && !matches!(*c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}' | '\u{00AD}');
+    let why: String = why.chars().filter(plain).take(120).collect();
     if why.trim().is_empty() { String::new() } else { format!(": {}", why.trim()) }
 }
 
+/// The `at` to keep for a registration made `now`: a pending one is due again after a day.
 pub fn kept_at(now: u64, answer: &[u8]) -> u64 {
     let pending = serde_json::from_slice::<Value>(answer).ok().and_then(|v| v.get("pending").and_then(Value::as_bool)) == Some(true);
     if pending { now.saturating_sub(RENEW_S - RENEW_PENDING_S) } else { now }
@@ -608,6 +610,7 @@ mod tests {
         assert_eq!(gateway_said(br#"{"error":"  "}"#), "");
         let long = gateway_said(format!(r#"{{"error":"a\nb{}"}}"#, "x".repeat(500)).as_bytes());
         assert!(!long.contains('\n') && long.chars().count() == 2 + 120, "{long}");
+        assert_eq!(gateway_said("{\"error\":\"ok\u{202E}evil\u{200B}\"}".as_bytes()), ": okevil", "no direction or zero-width characters");
     }
 
     #[test]
