@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from "react";
 import { inShell } from "../vault/oauth";
 import { cleanVaultNames } from "../vault/address";
+import type { Parachute } from "../vault/parachute";
 
 export type KeyInfo = { npub: string };
 /** Why a key sign-in didn't happen (src-tauri/src/door.rs `Refusal`). */
@@ -82,6 +83,19 @@ export async function hubVaults(hub: string): Promise<{ vaults: string[]; all: b
     return { vaults: cleanVaultNames(Array.isArray(r.vaults) ? r.vaults : []), all: r.all === true };
   } catch (e) {
     throw asRefusal(e);
+  }
+}
+
+/** The person's vaults on a Parachute, by the key: null when the hub can't answer that (an older one, or one whose
+ *  account MCP is elsewhere, as Cloud's). Throws a Refusal for anything else (no key here, a key the hub doesn't know). */
+export async function listWithKey(p: Parachute): Promise<{ vaults: string[]; all: boolean } | null> {
+  if (p.accountMcp !== `${p.hub}/account/mcp`) return null;
+  try {
+    return await hubVaults(p.hub);
+  } catch (e) {
+    const r = e as Refusal;
+    if (r.code !== "no_list") throw r;
+    return null;
   }
 }
 

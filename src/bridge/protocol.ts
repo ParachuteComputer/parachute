@@ -42,8 +42,9 @@ export type FrameApplets = { ok: true; entries: FrameApplet[]; skipped: number }
 export type FramePlace = { vault: string; noteId: string };
 /** The bar and the home (docs/NAVIGATION.md): what this device can find of the person's settings note. */
 /** One of the person's Parachutes (docs/design/ONE-SIGN-IN.md): a hub this device is signed in to (its vaults are the
- *  ones whose `issuer` is `hub`), or one their list names that this device isn't (`signedIn` false). The home's first. */
-export type FrameParachute = { hub: string; host: string; name: string; home: boolean; signedIn: boolean };
+ *  ones whose `issuer` is `hub`), or one their list names that this device isn't (`signedIn` false). The home's first.
+ *  `fresh`: vaults made there since this device signed in, which it may add (vault/newVaults.ts). */
+export type FrameParachute = { hub: string; host: string; name: string; home: boolean; signedIn: boolean; fresh?: string[] };
 export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[] };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
 export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; includeContent?: boolean; includeMetadata?: boolean };
@@ -78,6 +79,11 @@ export type Calls = {
   /** Put a component on the home applet's page (a pointer when it is from another vault, and the embed); only during a
    *  tap. "already" when it is there. */
   "home.addEmbed": [{ vault: string; noteId: string }, "added" | "already"];
+  /** Add a vault the Parachute offers (FrameParachute.fresh): the shell opens the hub's consent for it; only during a
+   *  tap. */
+  "home.addVault": [{ hub: string; vault: string }, null];
+  /** Don't offer that vault again on this device; only during a tap. */
+  "home.dismissVault": [{ hub: string; vault: string }, null];
   /** Go to an address in the app. `carryFrom`: the address a tap led to, which the app now sends on to `to`. */
   "nav.go": [{ to: string; replace?: boolean; carryFrom?: string }, null];
   "nav.back": [Record<string, never>, null];
@@ -91,7 +97,7 @@ export type Calls = {
 export type Method = keyof Calls;
 export type Params<M extends Method> = Calls[M][0];
 export type Result<M extends Method> = Calls[M][1];
-export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "home.get", "home.pin", "home.start", "pointers.list", "home.bringIn", "components.list", "home.addEmbed", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
+export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "home.get", "home.pin", "home.start", "pointers.list", "home.bringIn", "components.list", "home.addEmbed", "home.addVault", "home.dismissVault", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
 
 export type Events = { location: FrameLocation; changed: { what: "vaults" | "applets" | "defaults" | "home" | "pointers" }; /** the look's tokens (src/theme), each a CSS variable --<key> */ theme: Record<string, string> };
 
@@ -123,6 +129,7 @@ function paramsOk(m: Method, p: Record<string, unknown>): boolean {
     case "vaults.list": case "nav.back": case "home.get": case "pointers.list": return only(p, []);
     case "home.bringIn": case "home.addEmbed": return only(p, ["vault", "noteId"]) && str(p.vault, 120) && str(p.noteId);
     case "components.list": return only(p, ["vault"]) && str(p.vault, 120);
+    case "home.addVault": case "home.dismissVault": return only(p, ["hub", "vault"]) && str(p.hub, 500) && str(p.vault, 120);
     case "home.pin": return only(p, ["vault", "noteId", "on"]) && str(p.vault, 120) && str(p.noteId) && typeof p.on === "boolean";
     case "home.start": return only(p, ["vault", "noteId"]) && str(p.vault, 120) && (p.noteId === null || str(p.noteId));
     case "vault.note": return only(p, ["vault", "id"]) && str(p.vault, 120) && str(p.id);

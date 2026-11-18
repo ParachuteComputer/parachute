@@ -21,7 +21,11 @@ export type HostDeps = {
     /** Write a pointer to that applet or component in the home vault (only ever called during a tap). */
     bringIn(vault: string, noteId: string): Promise<void>;
     /** Put that component on the home applet's page (only ever called during a tap). */
-    addEmbed(vault: string, noteId: string): Promise<"added" | "already"> };
+    addEmbed(vault: string, noteId: string): Promise<"added" | "already">;
+    /** Open the hub's consent for a vault it offers (only ever called during a tap). */
+    addVault(hub: string, vault: string): Promise<void>;
+    /** Stop offering that vault on this device (only ever called during a tap). */
+    dismissVault(hub: string, vault: string): void };
   components(rec: VaultRecord): Promise<FrameComponents>;
   pointers(): Promise<FramePointer[]>;
   go(to: string, replace: boolean): void;
@@ -81,6 +85,8 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "pointers.list": return deps.pointers();
       case "home.bringIn": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); await deps.home.bringIn(p.vault as string, p.noteId as string); return null;
       case "home.addEmbed": vault(p.vault as string); if (!deps.tapNow()) throw new Error("not_allowed"); return deps.home.addEmbed(p.vault as string, p.noteId as string);
+      case "home.addVault": if (!deps.tapNow()) throw new Error("not_allowed"); await deps.home.addVault(p.hub as string, p.vault as string); return null;
+      case "home.dismissVault": if (!deps.tapNow()) throw new Error("not_allowed"); deps.home.dismissVault(p.hub as string, p.vault as string); return null;
       case "components.list": return deps.components(vault(p.vault as string));
       case "nav.go": {
         const to = p.to as string;

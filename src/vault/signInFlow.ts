@@ -5,9 +5,11 @@
 import { beginSignIn, completeSignIn, dropPending, revoke, type Pending } from "./oauth";
 import { describe, listWithToken, reachesEvery, vaultUrlFrom, type Listed, type Parachute } from "./parachute";
 import { limitedFetch } from "./limited";
+import { MAX_VAULTS } from "./address";
 import { listVaults, saveVault, vaultUrlOf, type VaultRecord } from "./store";
 import { setWhose, whoseOf, whoseSaid } from "./whose";
-import { hubVaults, keySignIn, type Refusal } from "../key/key";
+import { keySignIn, listWithKey, type Refusal } from "../key/key";
+import { noteEvery } from "./newVaults";
 import { holdHome } from "../shell/frameSource";
 import type { TokenResponse } from "@openparachute/surface-client";
 
@@ -37,15 +39,8 @@ export async function startSignIn(hub: string, whose: "mine" | "theirs", withKey
   if (!withKey) return { go: await beginSignIn({ parachute, step: "list", whose, how: "page", fresh: true }, f) };
   // the shell signs one `list-vaults` request with the key, to the hub's own account MCP; a hub that can't answer it
   // (an older one, or one whose account MCP is elsewhere) gets the listing sign-in instead, through the same key door
-  let listed: Listed | null = null;
-  if (parachute.accountMcp === `${hub}/account/mcp`) {
-    try {
-      listed = await hubVaults(hub);
-    } catch (e) {
-      const r = e as Refusal;
-      if (r.code !== "no_list") throw r;
-    }
-  }
+  const listed: Listed | null = await listWithKey(parachute);
+  if (listed) noteEvery(hub, listed.all);
   if (listed && !listed.vaults.length) throw { code: "no_vaults", message: "Your key is known there, but no vault is yours yet. Ask the hub's owner to give you one." } satisfies Refusal;
   const door = async (b: Parameters<typeof beginSignIn>[0]) => {
     const authorize = await beginSignIn(b, f);
@@ -82,6 +77,9 @@ export async function finishStep(code: string, state: string): Promise<Next> {
       // the listing token has done its one job: ended before the page moves on
       await revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint });
     }
+    // whether the person reaches every vault there: then the hub's public list is theirs, for vaults made later (newVaults.ts)
+    // (strictly: a list cut at MAX_VAULTS is taken as every vault for the pick, never here)
+    noteEvery(p.hub, listed.all && listed.vaults.length < MAX_VAULTS);
     if (!listed.vaults.length) throw new Error("You're signed in there, but no vault is yours yet. Ask the hub's owner to give you one.");
     // the hub's session is still in place: its consent page comes next, asking for all of them at once
     const consent = (mine: string[] | undefined) => beginSignIn({ parachute: p, step: "vaults", vaults: listed.vaults, whose: pending.whose, how: pending.how, ...(mine ? { mine } : {}) }, f);

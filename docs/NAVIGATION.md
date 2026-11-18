@@ -86,6 +86,10 @@ hub's origin) and, if you like, a `name` the launcher shows. The app adds one ea
 agent can add one by writing an entry. A Parachute on the list that a device isn't signed in to shows in its launcher
 as one line with **Sign in**; nothing is signed in to, or fetched from it, until you tap that and say whose it is.
 
+A vault made on one of your Parachutes after this device signed in there shows up under that Parachute as one quiet
+line, *New: playground, tap to add*, the next time the app opens or the launcher shows. A tap asks your hub to approve
+it once; **Not now** keeps it off this device's launcher ([design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md), step 7).
+
 ## What is whose
 
 The bar is drawn by the app itself, under the frame and under applets, so it is there on every screen, even under a

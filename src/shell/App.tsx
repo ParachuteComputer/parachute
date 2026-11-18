@@ -2,7 +2,7 @@
 // the self-test and the screens that use them (adding a vault, an applet's screen, Settings, a link from outside).
 // Everything else (the vault list, a vault, a note, open-with) is the frame (src/frame), which runs sealed in
 // FrameHost and reaches the shell only through the bridge (src/bridge/protocol.ts).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import AddParachute from "../views/AddParachute";
 import OAuthCallback from "../views/OAuthCallback";
@@ -22,6 +22,7 @@ import { keptId, KeptApplets } from "./kept";
 import { atFirstEntry } from "../ui/history";
 import { startPlace } from "./start";
 import { readSettings } from "./homeSettings";
+import { relistVaults } from "../vault/newVaults";
 import { homeVault, useFrameSource } from "./frameSource";
 import { readTheme, watchTheme } from "../theme/store";
 
@@ -47,6 +48,14 @@ function Taps() {
     return () => { gone = true; off(); };
   }, []);
   useEffect(() => { arrived(location.pathname); }, [location.pathname]);
+  // a vault made on a Parachute since this device signed in: asked when the app opens and each time the launcher
+  // shows, at most once a minute per hub (vault/newVaults.ts)
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current && location.pathname !== "/") return;
+    opened.current = true;
+    void relistVaults();
+  }, [location.pathname]);
   return null;
 }
 

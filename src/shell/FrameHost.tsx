@@ -14,6 +14,7 @@ import { subscribeDefaults } from "../open/defaults";
 import { subscribeApplets } from "../applet/useApplets";
 import { subscribeGate } from "../applet/selftest/run";
 import { subscribeSettings } from "./homeSettings";
+import { subscribeNewVaults } from "../vault/newVaults";
 import { homeNow } from "./frameDeps";
 import { subscribeTheme, tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
@@ -59,7 +60,7 @@ export default function FrameHost({ js, from, onFailed }: { js: string; from: "b
     const homeChanged = () => { const now = JSON.stringify(homeNow()); if (now !== homeWas) { homeWas = now; host.event("changed", { what: "home" }); } };
     themeWasRef.current = JSON.stringify(tokensNow());
     const themeChanged = () => { const t = tokensNow(), now = JSON.stringify(t); if (now !== themeWasRef.current) { themeWasRef.current = now; host.event("theme", t); } };
-    const offs = [subscribeTheme(themeChanged), subscribeVaults(changed("vaults")), subscribeVaults(homeChanged), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets")), subscribeSettings(homeChanged)];
+    const offs = [subscribeTheme(themeChanged), subscribeVaults(changed("vaults")), subscribeVaults(homeChanged), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets")), subscribeSettings(homeChanged), subscribeNewVaults(homeChanged)];
     // a frame from a vault that never starts (or never listens) gives way to the built-in one
     const watchdog = from === "vault" ? window.setTimeout(() => { if (!heard.current) failedRef.current("it didn't start in time", false); }, WATCHDOG_MS) : 0;
     return () => { removeEventListener("message", onMessage); offs.forEach((f) => f()); window.clearTimeout(watchdog); };
