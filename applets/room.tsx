@@ -19,7 +19,13 @@
 // one there is no turn line, no Stop and no listening switch. Its named exports (the store, the cards' readers, the
 // time words) are for the importer's own list.
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { app, Link, Linked, link, onShown, ready, services, shown as onScreen, storage, voice } from "parachute";
+import { app, Link as KitLink, Linked as KitLinked, link as kitLink, onShown, ready, services, shown as onScreen, storage, voice } from "parachute";
+
+// An app from before note links (11-18) has no Link, Linked or link: there a message's links stay text and the room
+// still works. A record applied to a vault is newer than the app on each device until that device updates.
+const link: { find: (text: string) => unknown[]; parse: (raw: string) => { kind: string } | null } = kitLink ?? { find: () => [], parse: () => null };
+const Linked = KitLinked ?? (({ text }: { text: string }) => <>{text}</>);
+const Link = KitLink ?? (({ children }: { to: string; children: any }) => <>{children}</>);
 
 /** Whether a person can be looking: the applet on screen (the app keeps it running while hidden, kit `shown`/`onShown`,
  *  imported as onScreen: `shown` below is the media cache's) and the app in front. What is new is read only then. An
