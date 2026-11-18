@@ -35,14 +35,22 @@ different applets; without having to enter a bunch of different URLs."*
 | One refresh chain for every vault? | A refresh with `resource=<vault>/mcp` re-aims the new token at any vault the grant names. But refresh tokens rotate on every use (a spent one used again after about a minute revokes the whole chain), and **on 0.9 each refresh also retires the access token issued before it**, so one chain can't hold live tokens for two vaults at once (0.8 can). Not used. | spike + source (`resolveRefreshAudience`) |
 | The "All assigned vaults" pick on the consent page? | Mints an account token (aud `account`): opens `list-vaults`, reads no vault, and doesn't cover a later vault consent. | spike |
 
-**Parachute Cloud** (read in its source, the identity worker at parachute-cloud `ccf80de`; not exercised, for want of
-an account): no key door (an emailed link or a password), so the listing sign-in comes first. It takes `account:vaults`
-(not `account:self:vaults`) and always shows that consent; `/account/mcp` answers `list-vaults` to that Bearer token
-only (no NIP-98), CORS open. A consent naming several vaults gives one token for the first; a later authorize for one of
-them alone skips consent (exact scope match). Refresh rotates and retires the previous access token, as core 0.9 does.
-Its vaults live at `my.parachute.computer`. One difference to watch on a first real Cloud sign-in: its source replaces
-the stored grant with whatever was last approved, so if a per-vault step ever shows a consent page, earlier vaults may
-ask again next time.
+**Parachute Cloud**, exercised on production 2026-11-18 (Cloud 0.9, a test account and five test
+vaults, from the web build): no key door (an emailed link, or the 6-digit code in the same mail), so the listing
+sign-in comes first. It takes `account:vaults` (not `account:self:vaults`) and always shows that consent;
+`/account/mcp` answers `list-vaults` to that Bearer token only (no NIP-98), CORS open. One consent named all five
+vaults; the per-vault steps after it came back with no page, as the source said. Two things only the real Cloud
+showed:
+
+- **It keeps the name "Parachute"** for apps whose return address is one of its own: any other registration named like
+  it is refused (`400 client_name is reserved`). The app registers there as **Vault app** (`CLOUD_CLIENT_NAME`, chosen
+  by the descriptor's `door: "cloud"`); core hubs still see "Parachute". Its consent pages say *Unverified app* above
+  the ask, as for any app that registered itself.
+- **Its vaults answer the older note API**: `/api/records` is 404, `/api/notes` works, and the app falls back to it.
+
+Refresh rotates and retires the previous access token, as core 0.9 does. Its vaults live at `my.parachute.computer`.
+From its source: it replaces the stored grant with whatever was last approved, so if a per-vault step ever shows a
+consent page, earlier vaults may ask again next time.
 
 **Aaron's hub** runs hub 0.7.19 with vault 0.7.9 (older than either version tested). Its source has `list-vaults` over
 NIP-98 with `covered`, the same consent skip and audience rule; a live probe confirmed only that a signed list request
