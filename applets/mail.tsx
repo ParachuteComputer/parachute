@@ -5,7 +5,10 @@
 // keyword (the Inbox leaves a Later thread out until something new comes in on it); Waiting is the sends from Uni's
 // account its outbound rules hold for the owner, each approved (signed with the approval key) or declined here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Linked, ready, services } from "parachute";
+import { Linked as KitLinked, ready, services } from "parachute";
+
+// an app from before note links (11-18) has no Linked: there a mail's text is drawn as text
+const Linked = KitLinked ?? (({ text }: { text: string }) => <>{text}</>);
 
 type Addr = { name?: string | null; email: string };
 type Email = { id: string; threadId: string; mailboxIds: Record<string, boolean>; keywords: Record<string, boolean>; from?: Addr[]; to?: Addr[]; replyTo?: Addr[]; cc?: Addr[]; subject?: string; receivedAt: string; preview?: string; hasAttachment?: boolean;
