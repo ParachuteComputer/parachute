@@ -174,6 +174,11 @@ export default function Rooms() {
         // rare person who did leave every room keeps seeing the old list, with no live updates, until they are in a room
         // again)
         if (!on || down) return;
+        // the relay's read state is in hand: merged now, only forward (a room read on this device a moment ago stays read),
+        // so marks made meanwhile can be written, whatever the rest of this read finds
+        for (const [k, v] of Object.entries(read)) if (v > (s.read[k] ?? 0)) s.read[k] = v;
+        readMerged.current = true;
+        if (readWaiting.current) { readWaiting.current = false; saveRead(); }
         if (painted && !synced && !ids.length) { setStatus("This is what you last saw: the relay didn't list your rooms just now."); return; }
         // what comes after starts now: anything posted while the history below is read still arrives
         const since = now() - 5;
@@ -193,10 +198,6 @@ export default function Rooms() {
         }
         for (const id of ids) s.msgs.set(id, new Map());
         for (const id of [...s.msgs.keys()]) if (!s.rooms.has(id)) s.msgs.delete(id);
-        // read state only moves forward: a room read on this device a moment ago stays read
-        for (const [k, v] of Object.entries(read)) if (v > (s.read[k] ?? 0)) s.read[k] = v;
-        readMerged.current = true;
-        if (readWaiting.current) { readWaiting.current = false; saveRead(); }
         history.flat().forEach(st.add);
         synced = true;
         st.bump();
@@ -219,7 +220,8 @@ export default function Rooms() {
     const off = relay.onStatus((x: any) => {
       if (x.sub) return;
       if (x.status === "closed") { down = true; away(x.why ?? "closed"); }
-      if (x.status === "ready") { const was = down; down = false; setStatus(""); if (was && mine && !synced) void sync(); }
+      // ready: a read that never completed goes again (it says why the list may be old until then)
+      if (x.status === "ready") { down = false; if (mine && !synced) void sync(); else setStatus(""); }
     });
     (async () => {
       const ctx: any = await ready();
