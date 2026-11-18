@@ -27,6 +27,6 @@ export function appLines(app: readonly AppWord[]): { text: string; stress: boole
   if (app.includes("links")) out.push({ text: "Open web addresses in your browser: what it reads could leave in an address it opens", stress: true });
   if (app.includes("save")) out.push({ text: "Save files to your device's Downloads", stress: false });
   if (app.includes("attach")) out.push({ text: "Ask you to pick a file or picture to give it", stress: false });
-  if (app.includes("storage")) out.push({ text: "Keep up to 256 KB on this device for itself (drafts)", stress: false });
+  if (app.includes("storage")) out.push({ text: "Keep up to 256 KB on this device for itself (drafts, what it last showed)", stress: false });
   return out;
 }

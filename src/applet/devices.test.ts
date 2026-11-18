@@ -63,7 +63,7 @@ describe("the app words links, save, attach, storage", () => {
       { text: "Open web addresses in your browser: what it reads could leave in an address it opens", stress: true },
       { text: "Save files to your device's Downloads", stress: false },
       { text: "Ask you to pick a file or picture to give it", stress: false },
-      { text: "Keep up to 256 KB on this device for itself (drafts)", stress: false },
+      { text: "Keep up to 256 KB on this device for itself (drafts, what it last showed)", stress: false },
     ]);
   });
   it("each word asks again", async () => {
@@ -177,6 +177,30 @@ describe("storage", () => {
     while ((await code(r.call("storage", "set", { key: `k${n}`, value: piece }, {}))) === "ok") n++;
     expect(n).toBe(Math.floor(STORAGE_MAX / 7010));
     expect(await code(r.call("storage", "set", { key: `k${n}`, value: piece }, {}))).toBe("too_large");
+  });
+  it("a value sent as JSON text in bytes may be any size within the 256 KB: one call keeps a whole list", async () => {
+    const r = createRouter([createStorageModule(true, store())]);
+    const list = { rooms: Array.from({ length: 200 }, (_, i) => ({ id: `room-${i}`, last: "The beans are up along the north fence. ".repeat(4) })) };
+    // an ArrayBuffer of this realm, as the shell gets one from the frame (postMessage clones it into the shell's)
+    const bytes = (x: string) => { const e = new TextEncoder().encode(x), b = new ArrayBuffer(e.length); new Uint8Array(b).set(e); return b; };
+    const text = JSON.stringify(list);
+    expect(text.length).toBeGreaterThan(8 * 1024);
+    // what the frame sends, through the envelope: as bytes it passes; as a plain value it is past a call's 8 KB
+    expect(parseEnvelope({ uni: 1, id: "1", ns: "storage", method: "set", params: { key: "list", bytes: bytes(text) } }).kind).toBe("uni");
+    expect(parseEnvelope({ uni: 1, id: "2", ns: "storage", method: "set", params: { key: "list", value: list } })).toMatchObject({ kind: "bad", error: "too_large" });
+    await r.call("storage", "set", { key: "list", bytes: bytes(text) }, {});
+    expect(await r.call("storage", "get", { key: "list" }, {})).toEqual(list);
+    // bigger than all of its storage: refused before it is read; not JSON, not UTF-8, or both forms at once: refused
+    expect(await code(r.call("storage", "set", { key: "big", bytes: new ArrayBuffer(STORAGE_MAX + 1) }, {}))).toBe("too_large");
+    expect(await code(r.call("storage", "set", { key: "bad", bytes: bytes("{not json") }, {}))).toBe("bad_params");
+    const notUtf8 = new ArrayBuffer(3); new Uint8Array(notUtf8).set([0x7b, 0xff, 0x7d]);
+    expect(await code(r.call("storage", "set", { key: "bad", bytes: notUtf8 }, {}))).toBe("bad_params");
+    expect(await code(r.call("storage", "set", { key: "bad", bytes: bytes("1"), value: 1 }, {}))).toBe("bad_params");
+    expect(await code(r.call("storage", "set", { key: "bad", bytes: "1" }, {}))).toBe("bad_params");
+    // the 256 KB in all still holds: a second list this size doesn't fit beside the first
+    const half = JSON.stringify({ x: "y".repeat(STORAGE_MAX / 2) });
+    await r.call("storage", "set", { key: "half", bytes: bytes(half) }, {});
+    expect(await code(r.call("storage", "set", { key: "half2", bytes: bytes(half) }, {}))).toBe("too_large");
   });
 });
 

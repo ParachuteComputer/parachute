@@ -3,6 +3,8 @@
 // shell per applet (its grant's subject), 256 KB in all as JSON; never synced, never in a vault.
 //   storage.get({key})          → its value, or null
 //   storage.set({key, value})   → null; a null value removes the key. Keys are 1 to 100 characters; values are JSON.
+//   storage.set({key, bytes})   → the same, the value as JSON text in bytes (an ArrayBuffer): how the kit sends one, so a
+//                                 value may be any size within the 256 KB, past the 8 KB a call's parameters may be
 //   storage.keys()              → its keys, sorted
 import { ContractError, ERROR_CODES, hasHidden, hasOnly, plain } from "../contract.ts";
 import type { UniModule } from "../router.ts";
@@ -26,7 +28,13 @@ export function createStorageModule(allowed: boolean, deps: StorageDeps): UniMod
         cap: null,
         validate: (p) => {
           need();
-          if (!plain(p) || !hasOnly(p, ["key", "value"]) || !keyOk(p.key)) return { ok: false };
+          if (!plain(p) || !hasOnly(p, ["key", "value", "bytes"]) || !keyOk(p.key) || ("bytes" in p && "value" in p)) return { ok: false };
+          if ("bytes" in p) {
+            // checked for size before it is read: nothing bigger than all of its storage is decoded
+            if (!(p.bytes instanceof ArrayBuffer)) return { ok: false };
+            if (p.bytes.byteLength > STORAGE_MAX) throw new ContractError(ERROR_CODES.tooLarge, "its storage on this device is full (256 KB)");
+            try { return { ok: true, value: { key: p.key, value: JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(p.bytes)) as unknown } }; } catch { return { ok: false }; }
+          }
           const value = p.value === null || p.value === undefined ? null : asJson(p.value);
           return value === undefined ? { ok: false } : { ok: true, value: { key: p.key, value } };
         },
