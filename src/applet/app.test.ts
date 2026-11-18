@@ -28,7 +28,7 @@ describe("metadata.app", () => {
     expect(lines).toEqual([
       { text: "See the titles of the newest notes in every vault on this device", stress: true },
       { text: "See what is on your bar", stress: false },
-      { text: "Take you to a note or an applet when you tap", stress: false },
+      { text: "Take you to a note or an applet when you tap, and see which note links lead to a note", stress: false },
     ]);
   });
   it("adding a word asks again; an applet that asks nothing keeps the key it had (no grant lost to this change)", async () => {

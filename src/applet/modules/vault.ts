@@ -67,7 +67,7 @@ const writablePath = (p: unknown): p is string => typeof p === "string" && p.len
 /** A note no applet may change: a code note (HTML, TSX, JSX: an applet's or a component's code), or one tagged `applet`,
  *  `component` or `parachute-pointer` (docs/design/EMBED.md). */
 const GUARDED_TAGS = ["applet", "component", "parachute-pointer"];
-const isAppletCode = (n: VaultNote) => isCodeExtension(n)
+export const isAppletCode = (n: VaultNote) => isCodeExtension(n)
   || (n.tags ?? []).some((t) => GUARDED_TAGS.some((g) => t === g || t.startsWith(`${g}/`)));
 const bodyOf = (raw: string | null, keys: readonly string[], required: readonly string[]): Record<string, string> | null => {
   if (raw === null) return null;

@@ -7,11 +7,14 @@ const ID = "01KA3Z9V6B2W8XQJ4M7N5P0R1S", OTHER = "01KA3Z9V6B2W8XQJ4M7N5P0R1T";
 const rec = (vault: string, issuer = "https://hub.example", more: Partial<VaultRecord> = {}): VaultRecord =>
   ({ key: vault, issuer, vault, tokenEndpoint: "x", clientId: "x", accessToken: "x", scope: "", addedAt: "", ...more });
 const kitchen = rec("kitchen"), cloud = rec("notes", "https://hub.example", { key: "notes", url: "https://cloud.example/vault/notes" });
-/** The notes each vault holds, by id and by path. */
-const notes: Record<string, Record<string, string>> = { kitchen: { [ID]: ID, "Recipes/Tomato toast": ID, "Recipes/Rice and beans": OTHER }, notes: { [OTHER]: OTHER } };
+/** The notes each vault holds, by id and by path: what the hub answers for each (it also matches a title, or another case). */
+const notes: Record<string, Record<string, { id: string; path: string; code?: boolean }>> = {
+  kitchen: { [ID]: { id: ID, path: "Recipes/Tomato toast" }, "Recipes/Tomato toast": { id: ID, path: "Recipes/Tomato toast" }, "Recipes/Rice and beans": { id: OTHER, path: "Recipes/Rice and beans" } },
+  notes: { [OTHER]: { id: OTHER, path: "Notes/x" } },
+};
 function deps(): ResolveDeps & { asked: string[] } {
   const asked: string[] = [];
-  return { asked, vaults: () => [kitchen, cloud], here: () => kitchen, mayRead: (p) => p.startsWith("Recipes/"), find: async (r, p) => { asked.push(`${r.vault}:${p}`); return notes[r.vault]?.[p] ?? null; } };
+  return { asked, vaults: () => [kitchen, cloud], here: () => kitchen, mayRead: (p) => p.startsWith("Recipes/"), find: async (r, p) => { asked.push(`${r.vault}:${p}`); const n = notes[r.vault]?.[p]; return n ? { id: n.id, path: n.path, code: n.code ?? false } : null; } };
 }
 
 describe("resolveLink", () => {
@@ -44,10 +47,17 @@ describe("resolveLink", () => {
     expect(await resolveLink("[[Rice and beans]]", undefined, deps())).toEqual({ answer: null });
   });
   it("a wikilink outside the folders the applet may read isn't looked up: a path can be guessed", async () => {
-    notes.kitchen["Journal/Private"] = ID;
+    notes.kitchen["Journal/Private"] = { id: ID, path: "Journal/Private" };
     const d = deps();
     expect(await resolveLink("[[Journal/Private]]", undefined, d)).toEqual({ answer: null });
     expect(d.asked).toEqual([]);
+  });
+  it("a wikilink whose note the hub finds outside those folders (a title, another case) or in an applet's code is nothing", async () => {
+    // a readable-looking path that the hub resolves by title to a note in Journal/, or to an applet's code
+    notes.kitchen["Recipes/Plan"] = { id: OTHER, path: "Journal/Plan" };
+    notes.kitchen["Recipes/Box"] = { id: OTHER, path: "Recipes/Box", code: true };
+    expect(await resolveLink("[[Recipes/Plan]]", undefined, deps())).toEqual({ answer: null });
+    expect(await resolveLink("[[Recipes/Box]]", undefined, deps())).toEqual({ answer: null });
   });
   it("anything else is nothing", async () => {
     for (const raw of ["https://example.com/", "javascript:alert(1)", "/v/kitchen/n/x", ""]) expect(await resolveLink(raw, undefined, deps())).toEqual({ answer: null });

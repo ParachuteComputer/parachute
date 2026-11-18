@@ -6,7 +6,8 @@ import { markTap } from "../open/mark";
 import { clientFor } from "../vault/client";
 import { isAppOwn, noteHref, titleOf } from "../vault/notes";
 import { listVaults, type VaultRecord } from "../vault/store";
-import { addressIn, resolveLink, type ResolveDeps } from "../links/resolve";
+import { addressIn, resolveLink, type Found, type ResolveDeps } from "../links/resolve";
+import { isAppletCode, type VaultNote } from "../applet/modules/vault";
 import { barNow } from "./homeSettings";
 
 /** Notes that are the app's own or an applet's code: never in a list of what the person wrote lately. */
@@ -29,14 +30,14 @@ export type Picker = { pick(accept: string[], multiple: boolean): Promise<Picked
 
 export const MISS_MS = 60_000;
 /** Which notes are there, asked of their vaults once a session (a note that was there is taken to be there still). */
-export function noteFinder(read: (rec: VaultRecord, idOrPath: string) => Promise<{ id: string } | null>) {
-  const seen = new Map<string, Promise<string | null>>();
+export function noteFinder(read: (rec: VaultRecord, idOrPath: string) => Promise<VaultNote | null>) {
+  const seen = new Map<string, Promise<Found | null>>();
   return (rec: VaultRecord, idOrPath: string, charge: () => void = () => {}) => {
     const k = `${rec.key}\u0000${idOrPath}`;
     let p = seen.get(k);
     if (!p) {
       charge();
-      p = read(rec, idOrPath).then((n) => (n && typeof n.id === "string" ? n.id : null));
+      p = read(rec, idOrPath).then((n) => (n && typeof n.id === "string" ? { id: n.id, path: typeof n.path === "string" ? n.path : "", code: isAppletCode(n) } : null));
       // a failed read (the network, a refresh) is asked again next time; a note that isn't there, after a minute (Uni
       // may cite a note a moment before the hub has it)
       const mine = p;
@@ -55,13 +56,15 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
     // not there: the hub's 404; anything else is asked again later
     if ((e as { status?: unknown } | null)?.status === 404) return null;
     throw e;
-  }) as Promise<{ id: string } | null>);
+  }) as Promise<VaultNote | null>);
   // a rule's path is a folder ending in / (manifest.ts), as the vault module checks it
   const mayRead = (path: string) => reads.some((f) => f.endsWith("/") && path.startsWith(f));
   const resolver = (charge?: () => void): ResolveDeps => ({ vaults: listVaults, here, mayRead, find: (rec, p) => find(rec, p, charge) });
   return {
     async links(links, from, charge) {
-      const deps = resolver(() => charge(1));
+      // the same for every link, read or not (a wikilink may take two): what it costs says nothing of what it names
+      charge(links.length * 2);
+      const deps = resolver();
       return Promise.all(links.map(async (l) => (await resolveLink(l, from, deps)).answer));
     },
     async follow(link, from, choose) {

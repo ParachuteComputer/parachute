@@ -45,7 +45,7 @@ test("Uni's kitchen:<ULID> in a room is a link: a tap opens the recipe in the Re
     await expect(frame(page).locator("#opened")).toBeVisible();
 
     await chip(page, /Rooms/);
-    await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Take you to a note or an applet when you tap");
+    await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Take you to a note or an applet when you tap, and see which note links lead to a note");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
     await app.getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Pantry ${stamp}`) }).click({ timeout: 30_000 });

@@ -5,15 +5,18 @@
 //           the link's screen, which says so and offers to add that Parachute (/open-link)
 //   null    nothing to open: a vault name this device doesn't hold, a note that isn't there, or not a note link. Drawn
 //           as plain text: no guess.
-// A short form or a wikilink is "note" only for a note that is there, so an applet can't learn which vaults the person
-// holds by asking about names: it learns a vault is held only when it already knows a note's id in it. A wikilink names
-// a path, which can be guessed, so it is looked up only in the folders the applet may read.
+// A short form or a wikilink is "note" only for a note that is there: the answer itself says a vault is held only to an
+// applet that already knows a note's id in it. (How long an answer takes can still hint that a name is held: that is
+// what `open`'s card line says it may learn.) Each link costs the same, whatever it names (shell/appDeps.ts). A wikilink
+// names a path, which can be guessed, so it is looked up only in the folders the applet may read, and the note found
+// must be in one of them and not an applet's code (the hub also matches a path's other case, or a title).
 import { noteHref } from "../vault/notes";
 import { originOf, vaultUrlOf, type VaultRecord } from "../vault/store";
 import { noteAddress, parseNoteRef } from "./note";
 import { linkFor } from "./parse";
 
 export type Answer = "note" | "away" | null;
+export type Found = { id: string; path: string; code: boolean };
 export type Resolved = { answer: "note"; href: string } | { answer: "away"; href: string } | { answer: null };
 
 export type ResolveDeps = {
@@ -23,8 +26,8 @@ export type ResolveDeps = {
   /** Whether the applet may read notes at this path: a wikilink names a path, which anyone can guess, so it is looked
    *  up only where the applet could read it anyway. */
   mayRead(path: string): boolean;
-  /** The note's id when `idOrPath` names a note in `rec`, else null. */
-  find(rec: VaultRecord, idOrPath: string): Promise<string | null>;
+  /** The note `idOrPath` names in `rec` (its id, its path, whether it is an applet's code), else null. */
+  find(rec: VaultRecord, idOrPath: string): Promise<Found | null>;
 };
 
 const bare = (u: string) => u.replace(/\/+$/, "");
@@ -42,16 +45,16 @@ export function wikiPaths(target: string, from?: string): string[] {
 export async function resolveLink(raw: string, from: string | undefined, d: ResolveDeps): Promise<Resolved> {
   const ref = parseNoteRef(raw);
   if (!ref) return { answer: null };
-  const first = async (recs: readonly VaultRecord[], idsOrPaths: string[]): Promise<Resolved | null> => {
+  const first = async (recs: readonly VaultRecord[], idsOrPaths: string[], ok: (f: Found) => boolean = () => true): Promise<Resolved | null> => {
     for (const rec of recs) for (const p of idsOrPaths) {
-      const id = await d.find(rec, p).catch(() => null);
-      if (id) return { answer: "note", href: noteHref(rec.key, id) };
+      const f = await d.find(rec, p).catch(() => null);
+      if (f && ok(f)) return { answer: "note", href: noteHref(rec.key, f.id) };
     }
     return null;
   };
   if (ref.kind === "wiki") {
     const here = d.here();
-    return (here && (await first([here], wikiPaths(ref.target, from).filter((p) => d.mayRead(p))))) || { answer: null };
+    return (here && (await first([here], wikiPaths(ref.target, from).filter((p) => d.mayRead(p)), (f) => d.mayRead(f.path) && !f.code))) || { answer: null };
   }
   if (ref.kind === "short") return (await first(d.vaults().filter((r) => r.vault === ref.vault), [ref.note])) || { answer: null };
   const held = d.vaults().filter((r) => holds(r, ref.issuer, ref.vault));

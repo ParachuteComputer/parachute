@@ -23,7 +23,7 @@ export function appLines(app: readonly AppWord[]): { text: string; stress: boole
   const out: { text: string; stress: boolean }[] = [];
   if (app.includes("recent")) out.push({ text: "See the titles of the newest notes in every vault on this device", stress: true });
   if (app.includes("pins")) out.push({ text: "See what is on your bar", stress: false });
-  if (app.includes("open")) out.push({ text: "Take you to a note or an applet when you tap", stress: false });
+  if (app.includes("open")) out.push({ text: "Take you to a note or an applet when you tap, and see which note links lead to a note", stress: false });
   if (app.includes("links")) out.push({ text: "Open web addresses in your browser: what it reads could leave in an address it opens", stress: true });
   if (app.includes("save")) out.push({ text: "Save files to your device's Downloads", stress: false });
   if (app.includes("attach")) out.push({ text: "Ask you to pick a file or picture to give it", stress: false });
