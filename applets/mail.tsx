@@ -35,8 +35,9 @@ const opId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
 // Waiting and Later aren't mailboxes: Waiting is the held sends, Later the threads with $flagged on any message
 const PLACES: { role: string; name: string }[] = [{ role: "inbox", name: "Inbox" }, { role: "waiting", name: "Waiting" }, { role: "later", name: "Later" }, { role: "drafts", name: "Drafts" }, { role: "sent", name: "Sent" }, { role: "archive", name: "Archive" }, { role: "junk", name: "Junk" }];
 const placeName = (role: string) => PLACES.find((p) => p.role === role)?.name;
-/** The Inbox leaves out a Later thread unless something new came in on it: a message unread and not flagged. */
-const NOT_LATER = { operator: "OR", conditions: [{ noneInThreadHaveKeyword: "$flagged" }, { operator: "AND", conditions: [{ notKeyword: "$seen" }, { notKeyword: "$flagged" }] }] };
+/** The Inbox leaves out a Later thread unless something came in on it since (a message not flagged): opening that one
+ *  marks it seen and it stays, until Later puts the whole thread off again. */
+const NOT_LATER = { operator: "OR", conditions: [{ noneInThreadHaveKeyword: "$flagged" }, { notKeyword: "$flagged" }] };
 /** Still to decide: listed, and not sent or declined here. */
 /** A gateway answer (refused, unconfirmed) is final; only a call that never got one (the network, no tap) may be tried again. */
 const waiting = (h: Held) => h.listed && (!h.outcome || h.outcome.kind === "error");

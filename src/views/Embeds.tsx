@@ -3,6 +3,7 @@
 // the theme; its height), its own grant per place, and every decision on a sheet above the page. The shell's sentences
 // say why one can't run; a hostile component can't hide them.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { NO_DEVICES } from "../applet/frame";
 import { Link } from "react-router";
 import { VaultAuthError, VaultPermissionError, VaultUnreachableError, type Note } from "@openparachute/surface-client";
 import { PAGE_STOPPED_MESSAGE, useSealedFrame } from "../applet/frame";
@@ -317,5 +318,5 @@ function EmbedIframe({ html, name, router, grant, ready, height, props, onPageSt
   useEffect(() => { if (stopped === "unnamed") onPageStopped(); }, [stopped]); // eslint-disable-line react-hooks/exhaustive-deps
   if (stopped === "unnamed") return <p className="embed-said error" role="alert">{PAGE_STOPPED_MESSAGE}</p>;
   if (stopped) return <p className="embed-said error" role="alert">«{name}» tried to leave its sandbox and was stopped.</p>;
-  return <iframe ref={frame} className="embed-frame" title={name} sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={live} onLoad={onLoad} style={{ height }} />;
+  return <iframe ref={frame} className="embed-frame" title={name} sandbox="allow-scripts" allow={NO_DEVICES} referrerPolicy="no-referrer" srcDoc={live} onLoad={onLoad} style={{ height }} />;
 }

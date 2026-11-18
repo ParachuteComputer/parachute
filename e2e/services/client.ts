@@ -1,7 +1,7 @@
 // A second person on a real relay, for the local tests against our Buzz relay: signs in (NIP-42) with a test key,
 // publishes, queries, uploads a file (Blossom, kind 24242).
 import WebSocket from "ws";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { finalizeEvent, getPublicKey, type Event } from "nostr-tools/pure";
 
 export async function person(relay: string, secretHex: string) {
@@ -46,7 +46,7 @@ export function mailAs(bridge: string, secretHex: string) {
   const post = async (path: string, body: unknown) => {
     const raw = JSON.stringify(body);
     const url = `${bridge}/mail/${path}`;
-    const ev = finalizeEvent({ kind: 27235, created_at: Math.floor(Date.now() / 1000), content: "", tags: [["u", url], ["method", "POST"], ["payload", createHash("sha256").update(raw).digest("hex")]] }, sk);
+    const ev = finalizeEvent({ kind: 27235, created_at: Math.floor(Date.now() / 1000), content: "", tags: [["u", url], ["method", "POST"], ["payload", createHash("sha256").update(raw).digest("hex")], ["nonce", randomBytes(8).toString("hex")]] }, sk);
     const r = await fetch(url, { method: "POST", headers: { authorization: `Nostr ${Buffer.from(JSON.stringify(ev)).toString("base64")}`, "content-type": "application/json" }, body: raw });
     const out = await r.json();
     if (r.status >= 300) throw new Error(`${path}: ${r.status} ${JSON.stringify(out)}`);

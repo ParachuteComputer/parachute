@@ -1,17 +1,19 @@
 package computer.parachute.app
 
-// Hand-written. Notifications while the app is closed (docs/design/KEYRING.md, "Notifications while closed"): a
-// foreground service (type remoteMessaging, its quiet ongoing line "Listening for your rooms") that keeps its own relay
-// connection for what granted applets asked to be told about (the list NotifyPlugin.kt keeps; checked by notify.rs).
+// Hand-written. Notifications while the app is closed, the fallback (docs/design/SERVICES.md, "Notifications through an
+// open push service"): the main path is a push from the person's UnifiedPush distributor (PushService.kt). For a phone
+// without one, this foreground service (type remoteMessaging, its quiet ongoing line "Listening for your rooms") keeps
+// its own relay connection for what granted applets asked to be told about (the list NotifyPlugin.kt keeps; checked by
+// notify.rs). It runs only when the person turns on "Listen without a push service" in Settings, and only for what no
+// push registration serves (never both for one applet).
 //
 // It signs one thing, the relay's NIP-42 sign-in, through Rust (`signAuth`, notify.rs): the everyday key is decrypted
 // from the Keystore for that call and the bytes are zeroed after. Then one subscription per room (Buzz sends live events
 // only to a one-room subscription), paced under the relay's rate. A new message that names the person (`p`) or comes
-// from a `from` key, never their own, is shown as "<who> in <room>" and its first words; a tap opens
-// parachute://notify?subject=…&room=…&event=…. Nothing is shown while the app is in front, and what was shown is cleared
-// when it comes back. Nothing about a message (and never the key) is written to the log.
+// from a `from` key, never their own, is shown as "<who> in <room>" and its first words, through MessageNotices.kt (the
+// one notification path); a tap opens parachute://notify?subject=…&room=…&event=…. Nothing about a message (and never
+// the key) is written to the log.
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -19,15 +21,12 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import okhttp3.OkHttpClient
@@ -47,11 +46,7 @@ class NotifyService : Service() {
     private const val TAG = "ParachuteNotify"
     private const val PREFS = "parachute_notify"
     private const val CHANNEL_LISTENING = "listening"
-    private const val CHANNEL_MESSAGES = "messages"
-    private const val GROUP = "computer.parachute.app.MESSAGES"
     private const val ONGOING_ID = 1
-    private const val SUMMARY_ID = 2
-    private const val MESSAGE_ID = 3 // one per room, tagged with the room id
     /** Buzz's limit for apps is a burst of 10 then 7 a second; one frame every 150 ms stays under it. */
     private const val PACE_MS = 150L
     private const val REDISCOVER_MIN = 15L
@@ -64,20 +59,8 @@ class NotifyService : Service() {
     /** Messages that arrive together are shown together: one alert, one update per room. */
     private const val FLUSH_MS = 800L
     private const val MAX_TEXT = 140
-    private const val MAX_LINES = 5
 
-    /** MainActivity is resumed: nothing is shown. */
-    @Volatile @JvmStatic var appInFront = false
     @Volatile @JvmStatic var running = false
-
-    // what is shown, per room: unseen count, the last few lines and the newest message (the activity clears it from the
-    // main thread; the service's thread writes it)
-    private val lock = Any()
-    private val unseen = HashMap<String, Int>()
-    private val lines = HashMap<String, ArrayDeque<String>>()
-    private val newest = HashMap<String, Newest>()
-
-    private class Newest(val title: String, val text: String, val app: String, val link: String, val whenMs: Long)
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -88,47 +71,50 @@ class NotifyService : Service() {
 
     fun save(ctx: Context, entries: String): Boolean = prefs(ctx).edit().putString("entries", entries).commit()
 
-    /** Start (or reload) the service when the list asks for anything, stop it when it doesn't. */
+    /** "Listen without a push service": off unless the person turns it on (Settings). */
+    fun fallbackOn(ctx: Context): Boolean = prefs(ctx).getBoolean("fallback", false)
+
+    fun setFallback(ctx: Context, on: Boolean): Boolean = prefs(ctx).edit().putBoolean("fallback", on).commit()
+
+    /** The entries this service listens for: with the switch on, those no push registration serves (an applet whose
+     *  gateway took its registration, on a phone whose distributor gave an endpoint, is told by push only). */
+    fun listening(ctx: Context): JSONArray {
+      val out = JSONArray()
+      if (!fallbackOn(ctx)) return out
+      val all = try { JSONArray(saved(ctx)) } catch (e: Exception) { JSONArray() }
+      for (i in 0 until all.length()) {
+        val o = all.optJSONObject(i) ?: continue
+        if (PushService.serves(ctx, o.optString("gateway"), o.optString("relay"))) continue
+        out.put(o)
+      }
+      return out
+    }
+
+    /** Start (or reload) the service when the switch is on and the list asks for anything it serves, stop it when not. */
     fun sync(ctx: Context) {
-      val n = try { JSONArray(saved(ctx)).length() } catch (e: Exception) { 0 }
       val intent = Intent(ctx, NotifyService::class.java)
-      if (n > 0) ContextCompat.startForegroundService(ctx, intent) else ctx.stopService(intent)
+      if (listening(ctx).length() > 0) ContextCompat.startForegroundService(ctx, intent) else ctx.stopService(intent)
     }
 
     /** The key is going: forget the list and stop. */
     fun turnOff(ctx: Context) {
       save(ctx, "[]")
       ctx.stopService(Intent(ctx, NotifyService::class.java))
-      clearShown(ctx)
+      MessageNotices.clearShown(ctx)
     }
 
     /** The app is in front: what was shown is cleared, and the service is started again if the list asks for it and
      *  it isn't running (Android may have declined to restart it while the app was away). */
     fun appResumed(ctx: Context) {
-      appInFront = true
-      clearShown(ctx)
+      MessageNotices.appInFront = true
+      MessageNotices.clearShown(ctx)
       if (!running) try { sync(ctx) } catch (e: Exception) { Log.w(TAG, "couldn't start: ${e.javaClass.simpleName}") }
     }
 
     /** The app leaves the front: what came before now, the person has had in front of them. */
     fun appPaused(ctx: Context) {
-      appInFront = false
+      MessageNotices.appInFront = false
       prefs(ctx).edit().putLong("front", System.currentTimeMillis() / 1000).apply()
-    }
-
-    private fun clearShown(ctx: Context) {
-      val rooms = synchronized(lock) {
-        val r = unseen.keys.toList()
-        unseen.clear()
-        lines.clear()
-        newest.clear()
-        r
-      }
-      // the ones known here by name (one posted a moment ago may not be listed as active yet), then any others
-      val nm = ctx.getSystemService(NotificationManager::class.java)
-      for (r in rooms) nm.cancel(r, MESSAGE_ID)
-      nm.cancel(SUMMARY_ID)
-      for (s in nm.activeNotifications) if (s.id == MESSAGE_ID) nm.cancel(s.tag, s.id)
     }
   }
 
@@ -176,9 +162,7 @@ class NotifyService : Service() {
       description = "Shown while Parachute listens for messages with the app closed."
       setShowBadge(false)
     })
-    nm.createNotificationChannel(NotificationChannel(CHANNEL_MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH).apply {
-      description = "Messages that name you, or come from someone an applet listens for."
-    })
+    MessageNotices.channel(this)
     val now = System.currentTimeMillis() / 1000
     val alive = prefs(this).getLong("alive", 0L)
     val front = prefs(this).getLong("front", 0L)
@@ -245,7 +229,7 @@ class NotifyService : Service() {
   // ---- the list -----------------------------------------------------------------------------------------------------
 
   private fun entries(): List<Entry> = try {
-    val a = JSONArray(saved(this))
+    val a = listening(this)
     (0 until a.length()).map { i ->
       val o = a.getJSONObject(i)
       val rooms = o.optJSONArray("rooms")?.let { r -> (0 until r.length()).map { r.getString(it) } }
@@ -317,6 +301,7 @@ class NotifyService : Service() {
     private var draining = false
     private var nextSub = 0
     private val roomSubs = HashMap<String, String>() // room -> sub id
+    private val refused = HashSet<String>() // rooms the relay closed for good since the last rediscovery
     private val subRooms = HashMap<String, String>() // sub id -> room
     private var discoverSub: String? = null
     private var discovered = HashSet<String>()
@@ -329,7 +314,9 @@ class NotifyService : Service() {
 
     /** Up, and listening in every room it wants: only then does "last up" move (a resume reads from before it). */
     fun alive(now: Long): Boolean {
-      val up = authed && ws != null && discoverSub == null && !resubscribing && roomSubs.keys.containsAll(wanted())
+      // a room the relay refused for good (not a member any more) doesn't hold "last up" back: it is asked again at the
+      // next rediscovery
+      val up = authed && ws != null && discoverSub == null && !resubscribing && roomSubs.keys.containsAll(wanted() - refused)
       if (up) aliveS = now
       return up
     }
@@ -434,6 +421,7 @@ class NotifyService : Service() {
     /** Which rooms: the named ones, and every room the person is in when an applet asked for all. */
     fun discover() {
       if (!authed) return
+      refused.clear()
       if (entries.any { it.rooms == null }) {
         discoverSub?.let { send(JSONArray().put("CLOSE").put(it)) }
         val s = sub("d")
@@ -502,7 +490,8 @@ class NotifyService : Service() {
       }
       roomSubs.remove(room)
       Log.i(TAG, "the relay closed a room's subscription (${why.substringBefore(':')})")
-      if (Regex("^(rate-limited|auth-required|error)").containsMatchIn(why)) {
+      if (!Regex("^(rate-limited|auth-required|error)").containsMatchIn(why)) refused.add(room)
+      else {
         if (!resubscribing) {
           resubscribing = true
           val g = gen
@@ -534,8 +523,12 @@ class NotifyService : Service() {
       if (tag(ev, "h") != room || ev.optLong("created_at") < (roomFrom[room] ?: return)) return
       if (!seen.add(id)) return
       if (seen.size > 2000) seen.remove(seen.first())
+      // `seen` lives as long as this process: the ids shown lately per room are kept too, so a restarted service (which
+      // reads from before "last up") doesn't show them again; older unseen ones still are, in whatever order they come
+      if (wasShown(room, id)) return
       val named = tags(ev, "p").contains(me)
       val entry = entries.firstOrNull { e -> (e.rooms == null || room in e.rooms) && ((e.mentions && named) || author in e.from) } ?: return
+      markShown(room, id)
       val post = { show(entry, room, roomNames[room], authorName(author), ev) }
       if (author in authors) post() else {
         val list = waiting.getOrPut(author) { mutableListOf() }
@@ -551,6 +544,14 @@ class NotifyService : Service() {
     }
 
     private fun authorName(pk: String) = authors[pk]?.takeIf { it.isNotEmpty() } ?: (pk.take(8) + "…")
+  }
+
+  private fun wasShown(room: String, id: String): Boolean = prefs(this).getString("shown:$room", "")!!.split(" ").contains(id)
+
+  /** The last 50 ids shown in a room (a resume reads back at most a few minutes). */
+  private fun markShown(room: String, id: String) {
+    val ids = prefs(this).getString("shown:$room", "")!!.split(" ").filter { it.isNotEmpty() && it != id }.takeLast(49) + id
+    prefs(this).edit().putString("shown:$room", ids.joinToString(" ")).apply()
   }
 
   private fun tag(ev: JSONObject, name: String): String? = tags(ev, name).firstOrNull()
@@ -574,33 +575,16 @@ class NotifyService : Service() {
 
   /** Keep the message for the next flush. Nothing while the app is in front, or without the permission. */
   private fun show(entry: Entry, room: String, roomName: String?, author: String, ev: JSONObject) {
-    if (appInFront) return
-    if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+    if (!MessageNotices.mayShow(this)) return
     val text = gist(ev)
-    val link = Uri.Builder().scheme("parachute").authority("notify")
-      .appendQueryParameter("subject", entry.subject)
-      .appendQueryParameter("room", room)
-      .appendQueryParameter("event", ev.optString("id"))
-      .build().toString()
-    val active = activeRooms()
-    synchronized(lock) {
-      // a notification the person swiped away starts again from one
-      if (room !in active && room !in pending) { unseen.remove(room); lines.remove(room) }
-      unseen[room] = (unseen[room] ?: 0) + 1
-      val l = lines.getOrPut(room) { ArrayDeque() }
-      l.addLast("$author: $text")
-      while (l.size > MAX_LINES) l.removeFirst()
-      newest[room] = Newest("$author in ${roomName ?: "a room"}", text, entry.name, link, ev.optLong("created_at") * 1000)
-    }
+    val link = MessageNotices.link(entry.subject, room, ev.optString("id"))
+    MessageNotices.add(this, room, "$author: $text", MessageNotices.Newest("$author in ${roomName ?: "a room"}", text, entry.name, link, ev.optLong("created_at") * 1000))
     if (pending.isEmpty()) {
       awake()
       later(FLUSH_MS) { flush() }
     }
     pending.add(room)
   }
-
-  private fun activeRooms(): Set<String> =
-    getSystemService(NotificationManager::class.java).activeNotifications.filter { it.id == MESSAGE_ID }.mapNotNull { it.tag }.toSet()
 
   /** Post what came in since the last flush: one notification per room, and the group's summary with the total. */
   private fun flush() {
@@ -623,59 +607,6 @@ class NotifyService : Service() {
   private fun flushNow() {
     val rooms = pending.toList()
     pending.clear()
-    if (appInFront) return
-    val active = activeRooms()
-    val compat = NotificationManagerCompat.from(this)
-    try {
-      var latest: Newest? = null
-      for (room in rooms) {
-        val (count, recent, n) = synchronized(lock) { Triple(unseen[room] ?: 0, lines[room]?.toList() ?: emptyList(), newest[room]) }
-        if (n == null || count == 0) continue // cleared meanwhile
-        val style = if (count > 1) NotificationCompat.InboxStyle().also { st -> recent.forEach { st.addLine(it) } } else NotificationCompat.BigTextStyle().bigText(n.text)
-        compat.notify(room, MESSAGE_ID, NotificationCompat.Builder(this, CHANNEL_MESSAGES)
-          .setSmallIcon(R.drawable.ic_notify)
-          .setContentTitle(n.title)
-          .setContentText(n.text)
-          .setStyle(style)
-          .setSubText(n.app)
-          .setNumber(count)
-          .setWhen(n.whenMs)
-          .setShowWhen(true)
-          .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-          .setPriority(NotificationCompat.PRIORITY_HIGH)
-          .setGroup(GROUP)
-          .setAutoCancel(true)
-          .setContentIntent(open(n.link, room.hashCode()))
-          .build())
-        if (latest == null || n.whenMs >= latest.whenMs) latest = n
-      }
-      val total = synchronized(lock) {
-        // only rooms still on screen count toward the total
-        for (r in unseen.keys.toList()) if (r !in active && r !in rooms) { unseen.remove(r); lines.remove(r); newest.remove(r) }
-        unseen.values.sum()
-      }
-      if (latest == null || total == 0) return
-      compat.notify(SUMMARY_ID, NotificationCompat.Builder(this, CHANNEL_MESSAGES)
-        .setSmallIcon(R.drawable.ic_notify)
-        .setContentTitle("$total new")
-        .setNumber(total)
-        .setGroup(GROUP)
-        .setGroupSummary(true)
-        .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
-        .setOnlyAlertOnce(true)
-        .setAutoCancel(true)
-        .setContentIntent(open(latest.link, 0))
-        .build())
-      Log.i(TAG, "shown: ${rooms.size} room(s), $total unseen")
-    } catch (e: SecurityException) {
-      Log.w(TAG, "not allowed to notify")
-    }
-    // the app came to the front while these went up: it has them in view
-    if (appInFront) clearShown(this)
-  }
-
-  private fun open(link: String, code: Int): PendingIntent {
-    val i = Intent(Intent.ACTION_VIEW, Uri.parse(link), this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    return PendingIntent.getActivity(this, code, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    MessageNotices.flush(this, rooms)
   }
 }

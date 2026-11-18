@@ -202,20 +202,33 @@ alone are refused. Not room-scoped, said on the card's notes: media on that rela
 ## Notifications while closed
 
 `notify` on a relay service. The shell keeps one list of what granted applets asked for (relay, your public key, the
-service's `rooms` or none, `mentions`, the `from` keys on the trusted list, which applet) and hands it to Rust, which
-checks it and has the native side keep it in the app's private preferences. On Android a foreground service (type `remoteMessaging`, with its quiet ongoing line "Listening for your rooms")
-that holds its own relay connection (Kotlin, OkHttp), and signs the relay's NIP-42 challenge through one JNI entry point
-in the app's Rust library, which it loads itself (so it works after Android restarts the service without the app):
-the service opens the everyday key from the Keystore-wrapped store as the app does, hands it to that entry point, and
-gets back only a kind 22242 for the relay it names. Rooms: the service's `rooms` when the grant has them, else the
-person's rooms read from the relay (kind 39002 `#p` you), read again on reconnect and every 15 minutes. It subscribes
-one room at a time (Buzz sends live events only to a one-room subscription), and posts a
-notification for a new kind 9 that names you (`p`) or comes from a `from` key, never your own. It shows who and the
-first words; tapping opens the applet at that message (`parachute://notify?…`); the launcher badge counts what is
-unseen, cleared when the applet opens. Nothing is shown while the app is in front. "Closed" means swiped away from
-recents; Force stop kills any service, as Android means it to. The service stops when no grant asks for it, the key is
-removed, or the person turns it off in Settings. Android asks for the notification permission when the first such grant
-is allowed. Desktop: not in this step (the Uni app notifies only while running there); said in PARITY.md.
+service's `rooms` or none, `mentions`, the `from` keys on the trusted list, its push `gateway`, which applet) and hands
+it to Rust, which checks it and has the native side keep it in the app's private preferences.
+
+**The main path is push** (SERVICES.md, "Notifications through an open push service"): the applet's push gateway
+watches the relay and sends a sealed push (room and message ids, no words) through the person's UnifiedPush
+distributor (ntfy from F-Droid, or another); `PushService.kt` shows "A message for you in <room>". Rust signs the
+gateway registration; the phone holds no relay connection of its own.
+
+**The fallback**, off unless the person turns on "Listen without a push service (uses more battery)" in Settings, for a
+phone without a distributor: a foreground service (type `remoteMessaging`, with its quiet ongoing line "Listening for
+your rooms") that holds its own relay connection (Kotlin, OkHttp), and signs the relay's NIP-42 challenge through one
+JNI entry point in the app's Rust library, which it loads itself (so it works after Android restarts the service
+without the app): the service opens the everyday key from the Keystore-wrapped store as the app does, hands it to that
+entry point, and gets back only a kind 22242 for the relay it names. It serves only what no push registration serves.
+Rooms: the service's `rooms` when the grant has them, else the person's rooms read from the relay (kind 39002 `#p`
+you), read again on reconnect and every 15 minutes. It subscribes one room at a time, and posts a notification for a
+new kind 9 that names you (`p`) or comes from a `from` key, never your own. It shows who and the first words. The newest
+message shown per room is kept, so a restarted service doesn't show it again.
+
+Both paths post through `MessageNotices.kt`: one notification per room, a group summary with the count (the launcher's
+badge). Tapping opens `parachute://notify?…`: the applet's screen at that message. The applet waits stopped there, with
+its Open button (one more tap): a link from outside the app never starts an applet by itself, and the shell can't yet
+tell its own notification's link from any other app's. What was shown is cleared, and the badge with it, when the app
+comes back to the front (not when that applet opens). Nothing is shown while the app is in front. "Closed" means swiped
+away from recents; Force stop kills any service and stops a distributor's deliveries, as Android means it to. Nothing
+is shown when no grant asks or the key is removed. Android asks for the notification permission when the first such
+grant is allowed. Desktop: not in this step (the app notifies only while running there); said in PARITY.md.
 
 ## Threat model, additions
 
@@ -223,14 +236,16 @@ is allowed. Desktop: not in this step (the Uni app notifies only while running t
 |---|---|
 | An applet declares its own key as an approver | `from` counts only for keys on the device's trusted list, added by the person behind the unlock. |
 | An applet approves on its own | Every approve needs a tap in its frame; the grace belongs to the applet that earned it and each use shows the shell's line. |
-| An applet posts Hermes's `/approve` | Only an applet with the `approvals` grant, during a tap, until Hermes takes sealed answers. |
+| An applet posts Hermes's `/approve` | Only an applet with the `approvals` grant, during a tap, until Hermes takes sealed answers. The text is read as leniently as Hermes reads it (white space, controls, invisible characters and leading mentions such as `@Uni` dropped first). **Not closed:** while Hermes waits on a prompt it also takes bare words ("yes", "ok", "approve", 👍) as an approval, and refusing those would stop ordinary chat; any applet that may post in that room can say them. This ends when Hermes takes only sealed answers from the approval key. |
+| A "tap" that isn't one | A tap is the browser's user activation in the applet's frame: a keystroke counts too, so a hostile applet with the grant can spend the person's typing on an answer (one per activation, and a powerful one still asks for the unlock). |
 | An applet without the grant gets an approval signature | `Role::Approval` signs only through `services.answer`/`secret` and http `approve` ops, each refused without the grant line; tested with a separate key (its pubkey never appears) and with the same key (no kind 13 is ever signed). |
 | An applet approves a card the person didn't see | The grant says it may; the card says "high risk". Powerful ones need the device unlock, which shows the shell's own words (credential, action, window, uses, the job's digest), not the applet's. |
 | A forged card (another key, a replayed real box) | Author must be in the grant's `from` and on the device's trusted list; the request digest binds every field; the ledger refuses a replayed `rid` or `rpk`. |
 | The data key or a secret reaches the applet | The view never carries `dek`; secrets are typed on the shell's sheet and sealed in Rust. |
 | An applet scoped to one room posts or reads elsewhere | `rooms`: one `h` in the list on every event (web side and Rust), targets checked, filters refused without an in-scope `#h`. |
 | Posting rights approve a held send | The everyday key never signs a body whose `field` is an approve op, and a body read two ways is refused (fails closed); full separation needs the gateway to know the approval key (said). |
-| A notification leaks a message | It shows only what a mention would: who and the first words, on the lock screen as Android's settings allow. |
+| A notification leaks a message | Pushed: no words reach the gateway's push, the push server or the screen ("A message for you in <room>"). Fallback listener: who and the first words, on the lock screen as Android's settings allow. |
+| A push is forged or sent in someone's name | Sealed to the phone's push keys (RFC 8291): one that doesn't open is dropped; the gateway takes a registration only signed by the key it registers. |
 | An applet exfiltrates through a link or a saved file | `links` is stressed on the card; a saved file goes where the person's own files are. |
 
 ## Testing
@@ -242,7 +257,8 @@ is allowed. Desktop: not in this step (the Uni app notifies only while running t
   sheet, a scoped applet refused elsewhere, voice recorded (Chromium's fake microphone), sent and played back, a link
   opened, a file saved, a file attached.
 - **Emulator** (the real app): a powerful card approved with the PIN asked; the answer opened and checked by Uni's
-  verifier; a mention while the app is swiped away posts a notification, and tapping it opens the room.
+  verifier; with ntfy as the distributor and the push gateway on the host, a mention while the app is swiped away posts
+  a notification, and tapping it opens the room.
 
 ## Subtract
 

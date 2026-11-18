@@ -125,6 +125,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       try {
         await opened;
         const res = await native.http(session, s.id, { method, path: p.path, headers, ...(bytes ? { body: toB64(bytes) } : {}) });
+        if (res.graced) shell.say("Approved with your approval key: your unlock a moment ago covered it.");
         const body = fromB64(res.body);
         const as = p.as ?? "text";
         const out = as === "bytes" ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) : new TextDecoder().decode(body);

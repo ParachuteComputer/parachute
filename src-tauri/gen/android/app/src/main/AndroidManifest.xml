@@ -4,7 +4,8 @@
     <!-- The shell's recorder sheet, its own page only (ShellOnlyMedia.kt, docs/design/KEYRING.md) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- Notifications while the app is closed (NotifyService.kt): its own relay connection in a foreground service -->
+    <!-- Notifications while the app is closed: pushes (PushService.kt), and the fallback listener's own relay connection
+         in a foreground service (NotifyService.kt, off unless the person turns it on) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
@@ -50,6 +51,16 @@
             android:name=".NotifyService"
             android:exported="false"
             android:foregroundServiceType="remoteMessaging" />
+
+        <!-- Notifications while the app is closed, the main path: what the person's UnifiedPush distributor delivers
+             (PushService.kt). The connector library adds the receiver the distributor talks to. -->
+        <service
+            android:name=".PushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+            </intent-filter>
+        </service>
 
         <provider
           android:name="androidx.core.content.FileProvider"

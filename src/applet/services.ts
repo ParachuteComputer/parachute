@@ -19,8 +19,10 @@ export type PrivateEntry = { kind: 30078; d: string; t: string };
 export type Room = { id: string; name: string };
 /** Answer cards and secret requests from these keys (hex), with the approval key. */
 export type Approvals = { from: string[] };
-/** Notifications while Parachute is closed: messages that name you, and every message from these keys (hex). */
-export type Notify = { mentions: boolean; from: string[] };
+/** Notifications while Parachute is closed: messages that name you, and every message from these keys (hex). `gateway`:
+ *  the push gateway (services/push-gateway) that watches the relay and pushes to this phone through its UnifiedPush
+ *  distributor; without one, only the phone's own listener (off unless the person turns it on) can tell. */
+export type Notify = { mentions: boolean; from: string[]; gateway?: string };
 export type RelayService = { id: string; kind: "nostr-relay"; url: string; publish: number[]; media: boolean; private: PrivateEntry[]; rooms?: Room[]; approvals?: Approvals; notify?: Notify };
 /** A request whose JSON body's `field` is one of `ops` is signed with the approval key, and only with it; the everyday
  *  key signs only a JSON body whose `field` is a string not in `ops` (docs/design/KEYRING.md). */
@@ -122,12 +124,19 @@ function parseOne(x: unknown, isHub: (origin: string) => boolean): Parsed<Servic
     }
     let notify: Notify | undefined;
     if (x.notify !== undefined) {
-      if (!plain(x.notify) || !hasOnly(x.notify, ["mentions", "from"])) return fail(`${id}: notify is {mentions?, from?}`);
+      if (!plain(x.notify) || !hasOnly(x.notify, ["mentions", "from", "gateway"])) return fail(`${id}: notify is {mentions?, from?, gateway?}`);
       if (x.notify.mentions !== undefined && typeof x.notify.mentions !== "boolean") return fail(`${id}: notify.mentions is true or false`);
       const from = x.notify.from === undefined ? [] : hexKeys(x.notify.from, 0);
       if (!from) return fail(`${id}: notify.from is a list of at most ${LIMITS.trusted} public keys (hex)`);
       if (x.notify.mentions !== true && !from.length) return fail(`${id}: notify says what to tell you about: mentions, or from`);
-      notify = { mentions: x.notify.mentions === true, from };
+      let gateway: string | undefined;
+      if (x.notify.gateway !== undefined) {
+        const g = normalUrl(x.notify.gateway, ["https", "http"], true);
+        if (!g.ok) return fail(`${id}: notify.gateway: ${g.error.replace("an http service's url", "a gateway's url")}`);
+        if (isHub(g.value.origin)) return fail(`${id}: notify.gateway is a Parachute hub, which no applet reaches as a service`);
+        gateway = g.value.href;
+      }
+      notify = { mentions: x.notify.mentions === true, from, ...(gateway ? { gateway } : {}) };
     }
     const s: RelayService = { id, kind: "nostr-relay", url: u.value.href.replace(/\/$/, ""), publish: [...publish].sort((a, b) => a - b), media: x.media === true, private: entries,
       ...(rooms.value.length ? { rooms: rooms.value } : {}), ...(approvals ? { approvals } : {}), ...(notify ? { notify } : {}) };
@@ -219,7 +228,9 @@ export function serviceLines(services: readonly Service[], opts: LineOptions = {
       }
       if (s.notify) {
         const what = [s.notify.mentions ? "that name you" : "", s.notify.from.length ? `from ${joinWords(s.notify.from.map(who))}` : ""].filter(Boolean).join(", and every message ");
-        out.push({ text: `Tell you about messages ${roomsWords(s)} there ${what}, even when Parachute is closed`, stress: false });
+        const gw = s.notify.gateway ? hostWords({ kind: "http", url: s.notify.gateway }) : null;
+        out.push({ text: `Tell you about messages ${roomsWords(s)} there ${what}, even when Parachute is closed${gw ? `, through ${gw}` : ""}`, stress: false });
+        if (gw) out.push({ text: `${gw} gets your public key and where to reach this phone. It reads the rooms their admins added it to, and sends this phone only which room and message, sealed`, stress: true });
       }
     } else {
       out.push(s.auth === "nip98" ? { text: `${EVERYDAY}send requests to ${at} signed as you`, stress: true }
@@ -239,7 +250,7 @@ export const servicesKeyPart = (services: readonly Service[]) =>
     ? { id: s.id, kind: s.kind, url: s.url, publish: [...s.publish].sort((a, b) => a - b), media: s.media, private: s.private.map((p) => `${p.kind}/${p.d}/${p.t}`).sort(),
         ...(s.rooms?.length ? { rooms: s.rooms.map((r) => `${r.id}/${r.name}`).sort() } : {}),
         ...(s.approvals ? { approvals: [...s.approvals.from].sort() } : {}),
-        ...(s.notify ? { notify: { mentions: s.notify.mentions, from: [...s.notify.from].sort() } } : {}) }
+        ...(s.notify ? { notify: { mentions: s.notify.mentions, from: [...s.notify.from].sort(), ...(s.notify.gateway ? { gateway: s.notify.gateway } : {}) } } : {}) }
     : { id: s.id, kind: s.kind, url: s.url, auth: s.auth, ...(s.approve ? { approve: { field: s.approve.field, ops: [...s.approve.ops].sort() } } : {}) })).sort((a, b) => a.id.localeCompare(b.id));
 
 // ── the checks on each call ──
@@ -285,7 +296,19 @@ export function checkFilters(raw: unknown, rooms?: readonly Room[]): Parsed<Reco
 
 /** Text a bot may take as the owner's approval (Hermes's `/approve`, `/deny`), as Rust reads it: leading whitespace
  *  trimmed, case ignored. Only an applet holding the approvals grant posts it, during a tap (docs/design/KEYRING.md). */
-export const isCommandApproval = (content: string) => /^\s*\/(approve|deny)/i.test(content);
+export function isCommandApproval(content: string): boolean {
+  // what a bot's parser drops before a command: white space, C0/C1 controls, invisible format characters; then a
+  // leading mention (@name, nostr:npub1…, npub1…, a 64-hex key, with : or , after it). The same rule as Rust's.
+  const DROP = /^[\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u180e\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff]+/;
+  let t = content;
+  for (let i = 0; i < 8; i++) {
+    t = t.replace(DROP, "");
+    const m = /^(?:@[^\s\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff:,]+|nostr:npub1[^\s:,]*|npub1[^\s:,]*|[0-9a-fA-F]{64}(?=[\s:,]|$))[:,]?/i.exec(t);
+    if (!m || !m[0]) break;
+    t = t.slice(m[0].length).replace(/^[:,]+/, "");
+  }
+  return /^\/(approve|deny)/i.test(t.replace(DROP, ""));
+}
 
 export type Template = { kind: number; content: string; tags: string[][] };
 /** An event the applet asks the shell to sign: a kind it may publish there, plain tags (none shaped like auth), and

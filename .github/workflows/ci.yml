@@ -27,6 +27,8 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
+      - name: Push gateway (services/push-gateway)
+        run: cd services/push-gateway && npm ci && npm run typecheck && npm test
       # the app's bundle has no test signer (src/services/e2eNative.ts); the e2e build below has one
       - name: No test signer in the app's bundle
         run: npm run build && scripts/no-test-signer.sh dist

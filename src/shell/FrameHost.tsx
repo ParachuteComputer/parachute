@@ -3,6 +3,7 @@
 // Only messages from its own window are read. The shell sends it each address it should show, and tells it when vaults,
 // applets or the person's choices change.
 import { useEffect, useMemo, useRef } from "react";
+import { NO_DEVICES } from "../applet/frame";
 import { useLocation, useNavigate } from "react-router";
 import frameKit from "virtual:frame-kit";
 import { createFrameHost } from "./frameBridge";
@@ -66,5 +67,5 @@ export default function FrameHost({ js, from, onFailed }: { js: string; from: "b
 
   useEffect(sendLocation, [location.key, location.pathname, location.search]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <iframe ref={ref} className="app-frame" data-frame={from} title="Parachute" sandbox="allow-scripts" referrerPolicy="no-referrer" srcDoc={doc} />;
+  return <iframe ref={ref} className="app-frame" data-frame={from} title="Parachute" sandbox="allow-scripts" allow={NO_DEVICES} referrerPolicy="no-referrer" srcDoc={doc} />;
 }

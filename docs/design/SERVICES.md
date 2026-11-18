@@ -206,10 +206,74 @@ Left, said plainly: an allowed applet can post its granted kinds to any room the
 service names `rooms` (KEYRING.md); it can read whatever the relay lets the person read there and send it to its
 declared servers. Each is a line on the card. Hermes still takes a plain "/approve" message as the owner's OK for a
 command it flagged; until it takes sealed answers, the shell signs such a message only for an applet with the approvals
-grant, during a tap (KEYRING.md).
+grant, during a tap (KEYRING.md). While Hermes waits it also takes bare "yes" or "ok" as an approval, which any applet
+that may post there can say: that gap closes only when Hermes takes sealed answers.
+
+## Notifications through an open push service
+
+Aaron, 11-17: "we want to use a good open notification service … open is always our default." A phone hears about a
+message while Parachute is closed through **UnifiedPush**: the person's distributor app (ntfy, from F-Droid, pointed at
+a server they trust, or any other distributor) keeps one connection for every app on the phone. No Google or Apple in
+the path by default; FCM or APNs can be added later as distributors for people who want them.
+
+**The declaration.** `notify` on a relay service names its push gateway: `notify: { mentions, from, gateway:
+https://push.example/ }`. `gateway` is read like an http service's url (https, or http to this device; a prefix ending
+in `/`; never a hub) and is part of the grant's key only when present (a grant made before it holds). The card adds
+"…even when Parachute is closed, through push.example" and, stressed, "push.example gets your public key and where to
+reach this phone. It reads the rooms their admins added it to, and sends this phone only which room and message,
+sealed". Without `gateway` nothing is registered anywhere.
+
+**The gateway** (`services/push-gateway/`, runnable on any box; its README has the run book and threat table). It
+watches the relay with **its own key**: the relay's owner lets it in (kind 9030), a room's admins add it (kind 9000),
+and the room's member list shows it, as any bot. It never holds a person's key. Considered and set aside, checked in
+buzz-relay and on our relay: NIP-OA delegation (`BUZZ_ALLOW_NIP_OA_AUTH`) only lets a delegate's key into the relay;
+reading a room still needs the delegate's own membership, and it isn't read-only. Buzz's push leases (NIP-PL) would
+let the relay itself match with the person's own read rights, but v1 has no UnifiedPush profile and its push carries
+no room or message (a fixed "reconnect"); when it gains one, the gateway's relay reading goes. On our relay (production's
+image) a key let in reads every **open** room without being added, and a private room once added: so run the gateway
+beside the relay, by the relay's operator, who already sees every message.
+
+**Registering.** The shell keeps the list `notify_set` checked (notify.rs). For each `(gateway, relay)` on it,
+`push_register` builds `POST <gateway>register` itself: the body from that checked entry and the endpoint and push keys
+the phone's distributor gave (`{endpoint, keys: {p256dh, auth}, relay, rooms, mentions, from}`; never the applet's name
+or address), signed NIP-98 with the everyday key over exactly that URL and body, after the hub check (`guard`), no
+redirect followed, and a line in the applet's signature log. It refuses a gateway the list doesn't name, and any other
+path. It is sent again only when something changed or a week has passed (the gateway forgets one after 30 days); a
+gateway no grant names any more gets `POST <gateway>unregister`. The web side (`services/notify.ts`) only says which
+pairs: it never sees a signature. Registered at start, on every grant change, and when the app comes back to the front
+(a distributor may hand out a new endpoint).
+
+**What a push carries.** `{v, relay, room, event, kind, why}`: no words, no author. It is sealed with Web Push
+encryption (RFC 8291) to keys the UnifiedPush connector made on the phone, so the push server sees only its size and
+time; the phone drops a push that doesn't open with them (no one who learns the endpoint can make a notification). The
+gateway pushes only to someone the room's member list has, never for their own message, only in the rooms they named,
+only for messages from after they registered. On the phone, `PushService.kt` (plain Kotlin, in a cold process after
+the swipe) finds the allowed applet that asked and shows "A message for you in <room>" through the one notification
+path (`MessageNotices.kt`, shared with the fallback below); a tap opens `parachute://notify?subject=…&room=…&event=…`.
+
+**The fallback.** For a phone without a distributor, Settings says "Install ntfy (F-Droid) to get notifications while
+Parachute is closed" and offers "Listen without a push service (uses more battery)", off by default: the foreground
+service with its own relay connection (KEYRING.md). It serves only what no push registration serves, never both for
+one applet. It doesn't verify event signatures before matching: the relay the person signed in to is trusted for what it
+sends there (a hostile relay could raise a notification that opens the applet at a message id; the applet then reads
+that message from the relay itself).
+
+**Desktop.** Nothing while closed: the app notifies only while it runs (PARITY.md).
+
+| Threat | What stops it |
+|---|---|
+| An applet registers the person somewhere they didn't see | Only the gateway the card names, only that request's shape, built by Rust; the signature is logged. |
+| A gateway is a hub (NIP-98 there is the whole account) | Refused at parse; `push_register` runs the hub check before it signs. |
+| The gateway or push server reads messages | The push holds no words and is sealed; the gateway reads only the rooms it was added to, as a member (said on the card). |
+| A forged push | Doesn't open with the phone's keys: dropped. One that opens but names no allowed applet's relay and room: dropped. |
+| Someone learns a room's activity by registering for it | The gateway pushes only to keys the room's member list has. |
+| A forgotten key's registration lives on | Gateways forget registrations after 30 days; a 404 or 410 from the push server unregisters the endpoint. |
 
 ## Testing
 
+- **Push (services/push-gateway):** `npm test` (signatures, Web Push against RFC 8291's example, matching, endpoints,
+  a 410 unregistering) and `npm run e2e` (our relay, a throwaway ntfy, the gateway, a subscriber standing in for the
+  phone: a mention arrives sealed, opens to room and event, and carries no words).
 - **Unit (vitest):** the declaration parser (every rule above), the card's lines, the grant key (old grants hold; a
   changed URL or kind asks again), filters, publish checks, path joining, the transport's byte path.
 - **Shell (cargo):** `services.rs` against real verifiers: NIP-98 to a real throwaway hub's `/account/mcp` passes when
@@ -232,3 +296,8 @@ grant, during a tap (KEYRING.md).
 This replaces nothing in Parachute (applets had no network before). It is the second home of the Uni app's rooms, mail
 and journal; the Uni app is retired once its person has switched (their call, after daily use). Cut from this version:
 `basic` auth, kinds beyond the five named, vault by URL, services for embedded components.
+
+Push (above) replaces the phone's own relay listener as the way to hear while closed, from 2026-11-17: the listener
+stays only as the off-by-default fallback for phones without a distributor (two ways, because a phone without one
+otherwise hears nothing). Uni's own ntfy pushes for cards and asks (`~/services/push`, not in this repo) stay until
+Uni's cards name Aaron in his rooms on the relay; then the gateway covers them and that watcher goes (Uni's call).

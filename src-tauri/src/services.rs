@@ -137,7 +137,7 @@ pub fn origin_key(u: &Url) -> String {
 
 /// A service's address made plain, as `src/applet/services.ts normalUrl`: one secure scheme, or the plain one to this
 /// device only; no user, password, query or fragment; a path of plain segments; the host without its trailing dot.
-fn normal_url(raw: &Value, secure: &str, plain: &str, prefix: bool) -> Result<Url, String> {
+pub(crate) fn normal_url(raw: &Value, secure: &str, plain: &str, prefix: bool) -> Result<Url, String> {
     let raw = raw.as_str().ok_or("url must be one plain address")?;
     if raw.is_empty() || raw.encode_utf16().count() > 300 || raw.chars().any(|c| hidden(c) || c.is_whitespace() || c == '\\') {
         return Err("url must be one plain address".into());
@@ -313,7 +313,7 @@ pub fn parse_service(x: &Value) -> Result<Service, Refusal> {
             };
             match o.get("notify") {
                 None => {}
-                Some(Value::Object(n)) if only_keys(n, &["mentions", "from"]) => {
+                Some(Value::Object(n)) if only_keys(n, &["mentions", "from", "gateway"]) => {
                     let mentions = match n.get("mentions") {
                         None => false,
                         Some(Value::Bool(b)) => *b,
@@ -326,8 +326,13 @@ pub fn parse_service(x: &Value) -> Result<Service, Refusal> {
                     if !mentions && from.is_empty() {
                         return Err(bad(format!("{id}: notify says what to tell you about")));
                     }
+                    // the push gateway (docs/design/SERVICES.md): an http service's kind of address; push_register
+                    // checks it again, and that it isn't a hub, before it signs anything for it (notify.rs)
+                    if let Some(g) = n.get("gateway") {
+                        normal_url(g, "https", "http", true).map_err(|e| bad(format!("{id}: notify.gateway: {e}")))?;
+                    }
                 }
-                _ => return Err(bad(format!("{id}: notify is {{mentions?, from?}}"))),
+                _ => return Err(bad(format!("{id}: notify is {{mentions?, from?, gateway?}}"))),
             }
             let url = u.as_str().strip_suffix('/').unwrap_or(u.as_str()).to_string();
             let twin = format!("{}://{}", if u.scheme() == "wss" { "https" } else { "http" }, origin_key(&u).split_once("://").map(|x| x.1).unwrap_or(""));
@@ -485,9 +490,34 @@ pub fn http_role(approve: Option<&Approve>, body: Option<&[u8]>) -> Result<Role,
     }
 }
 
-/// Text a bot may take as the owner's approval: `/approve` or `/deny`, leading whitespace trimmed, case ignored.
+/// Characters a bot's parser may drop before a command: Unicode white space, C0 and C1 controls, and the invisible
+/// format characters (zero-width, bidi marks, word joiners, the byte-order mark).
+fn droppable(c: char) -> bool {
+    c.is_whitespace() || c.is_control() || matches!(c, '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202f}' | '\u{2060}'..='\u{206f}' | '\u{feff}' | '\u{00ad}' | '\u{034f}' | '\u{180e}')
+}
+
+/// Text a bot may take as the owner's approval (Hermes's `/approve`, `/deny`), read as leniently as such a bot reads
+/// it: what it drops before a command (droppable characters, then a leading mention: `@name`, `nostr:npub1…`,
+/// `npub1…`, a 64-hex key, each with `:` or `,` after it) is dropped here too, case ignored. Same rule as
+/// applet/services.ts `isCommandApproval`. Bare words a bot may take while it waits ("yes", "ok") are not caught:
+/// that would stop ordinary chat; KEYRING.md says so.
 pub fn is_command_approval(content: &str) -> bool {
-    let t = content.trim_start().to_lowercase();
+    let mut t: &str = content;
+    for _ in 0..8 {
+        t = t.trim_start_matches(droppable);
+        let word_end = t.find(|c: char| droppable(c) || c == ':' && !t.starts_with("nostr:") || c == ',').unwrap_or(t.len());
+        let word = &t[..word_end];
+        let lower = word.to_lowercase();
+        let mention = lower.starts_with('@')
+            || lower.starts_with("nostr:npub1")
+            || lower.starts_with("npub1")
+            || (word.len() == 64 && word.bytes().all(|b| b.is_ascii_hexdigit()));
+        if !mention || word.is_empty() {
+            break;
+        }
+        t = t[word_end..].trim_start_matches(|c: char| droppable(c) || c == ':' || c == ',');
+    }
+    let t = t.to_lowercase();
     t.starts_with("/approve") || t.starts_with("/deny")
 }
 
@@ -686,7 +716,7 @@ pub struct LogLine {
 
 // ── files in the app's data directory ──
 
-fn read_json<T: for<'de> Deserialize<'de> + Default>(path: &Path) -> T {
+pub(crate) fn read_json<T: for<'de> Deserialize<'de> + Default>(path: &Path) -> T {
     std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
 }
 
@@ -752,6 +782,9 @@ pub struct HttpRes {
     pub headers: BTreeMap<String, String>,
     /// base64
     pub body: String,
+    /// An approve op an earlier unlock covered (keyring.rs grace): the shell says so over the applet.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub graced: bool,
 }
 
 #[derive(Serialize, Debug)]
@@ -897,6 +930,18 @@ impl Broker {
         if !folded {
             lines.push(LogLine { at, applet: call.applet.clone(), service: call.service.id.clone(), what, id, count: None });
         }
+        if lines.len() > LOG_LINES {
+            lines.drain(..lines.len() - LOG_LINES);
+        }
+        write_json(&path, &lines).map_err(|_| no("storage", "The log couldn't be written, so nothing was signed."))
+    }
+
+    /// A line for a signature made for an applet outside a frame's session: its push gateway registration (notify.rs).
+    pub(crate) fn log_outside(&self, subject: &str, applet: &str, service: &str, what: String, id: Option<String>) -> Result<(), Refusal> {
+        let _g = self.files.lock().unwrap_or_else(|e| e.into_inner());
+        let path = self.log_path(subject);
+        let mut lines: Vec<LogLine> = read_json(&path);
+        lines.push(LogLine { at: nostr::Timestamp::now().as_secs(), applet: applet.to_string(), service: service.to_string(), what, id, count: None });
         if lines.len() > LOG_LINES {
             lines.drain(..lines.len() - LOG_LINES);
         }
@@ -1061,7 +1106,7 @@ impl Broker {
             }
         }
         let body = read_capped(res, MAX_BYTES).await?;
-        Ok(HttpRes { status, headers: out, body: B64.encode(body) })
+        Ok(HttpRes { status, headers: out, body: B64.encode(body), graced: false })
     }
 
     fn media_server(call: &Call) -> Result<(), Refusal> {
@@ -1301,8 +1346,12 @@ pub async fn svc_http<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, 
             let subject = broker.subject_of(&session)?;
             let host = broker.host_of(&session, &service)?;
             let graced = ring.confirm(&app, &subject, &format!("{service}:{op}"), true, "Approve with your approval key", &format!("Send {op} to {host}, signed with your approval key.")).await?;
-            let _ = graced;
-            broker.http(crate::approvals::for_approve_op(&approval), &role, &session, &service, &req).await
+            let mut res = broker.http(crate::approvals::for_approve_op(&approval), &role, &session, &service, &req).await?;
+            if graced {
+                broker.log_for(&session, &service, format!("{op}: within an unlock"), None)?;
+                res.graced = true;
+            }
+            Ok(res)
         }
     }
 }
@@ -1719,12 +1768,16 @@ mod tests {
         let r = parse_service(&json!({ "id": "rooms", "kind": "nostr-relay", "url": "wss://relay.example", "publish": [9],
             "rooms": [{ "id": "garden-1", "name": "Garden" }], "approvals": { "from": [uni] }, "notify": { "mentions": true } })).unwrap();
         assert_eq!(r.kind, ServiceKind::Relay { publish: vec![9], media: false, private: vec![], rooms: vec!["garden-1".into()], approvals: vec![uni.clone()] });
+        assert!(parse_service(&json!({ "id": "rooms", "kind": "nostr-relay", "url": "wss://relay.example", "notify": { "mentions": true, "gateway": "https://push.example/" } })).is_ok());
+        assert!(parse_service(&json!({ "id": "rooms", "kind": "nostr-relay", "url": "wss://relay.example", "notify": { "mentions": true, "gateway": "http://localhost:8790/" } })).is_ok());
         let h = parse_service(&json!({ "id": "mail", "kind": "http", "url": "https://mail.example/mail/", "auth": "nip98", "approve": { "field": "op", "ops": ["send.approve"] } })).unwrap();
         assert_eq!(h.kind, ServiceKind::Http { auth: Auth::Nip98, approve: Some(Approve { field: "op".into(), ops: vec!["send.approve".into()] }) });
         for bad in [
             json!({ "rooms": [] }), json!({ "rooms": [{ "id": "a b", "name": "x" }] }), json!({ "rooms": [{ "id": "a", "name": "x" }, { "id": "a", "name": "y" }] }),
             json!({ "approvals": { "from": [] } }), json!({ "approvals": { "from": ["npub1x"] } }), json!({ "approvals": { "from": [uni, uni] } }),
             json!({ "notify": {} }), json!({ "notify": { "mentions": 1 } }),
+            json!({ "notify": { "mentions": true, "gateway": "http://push.example/" } }), json!({ "notify": { "mentions": true, "gateway": "https://push.example/push" } }),
+            json!({ "notify": { "mentions": true, "gateway": 5 } }), json!({ "notify": { "mentions": true, "gateway": "https://push.example/?x" } }),
         ] {
             let mut x = json!({ "id": "rooms", "kind": "nostr-relay", "url": "wss://relay.example" });
             for (k, v) in bad.as_object().unwrap() { x[k] = v.clone(); }
@@ -1744,9 +1797,13 @@ mod tests {
         for tags in [json!([]), json!([["h", "finance"]]), json!([["h", "garden"], ["h", "finance"]])] {
             assert_eq!(code(check_template(&[9], &rooms, false, &ev("hi", tags.clone()))), "out_of_scope", "{tags}");
         }
-        for text in ["/approve", "  /Approve once", "\n/DENY", "/deny"] {
+        for text in ["/approve", "  /Approve once", "\n/DENY", "/deny", "@Uni /approve", "@uni: /approve", "nostr:npub1abc /deny", "npub1abc, /approve",
+            &format!("{} /approve", "a".repeat(64)), "\u{1c}/approve", "\u{85}/approve", "\u{200b}\u{feff}/approve", "@Uni \u{200b} @Hermes /approve"] {
             assert_eq!(code(check_template(&[9], &[], false, &ev(text, json!([["h", "x"]])))), "not_granted", "{text}");
             assert!(check_template(&[9], &[], true, &ev(text, json!([["h", "x"]]))).is_ok(), "{text}");
+        }
+        for fine in ["I approve of this", "@Uni please /approve later", "approve", "see /approve docs"] {
+            assert!(!is_command_approval(fine), "{fine}");
         }
         assert!(check_template(&[9], &[], false, &ev("I approve of this", json!([["h", "x"]]))).is_ok());
     }

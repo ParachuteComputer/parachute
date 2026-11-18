@@ -107,6 +107,7 @@ pub fn run() {
         .plugin(key_plugin())
         .plugin(unlock_plugin())
         .plugin(notify::plugin())
+        .plugin(notify::push_plugin())
         .plugin(files::plugin());
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
@@ -119,6 +120,7 @@ pub fn run() {
         .manage(pairing::PairState::default())
         .manage(services::ServicesState::default())
         .manage(keyring::KeyringState::default())
+        .manage(notify::NotifyState::default())
         .invoke_handler(tauri::generate_handler![
             app_version,
             webview_runtime,
@@ -157,7 +159,10 @@ pub fn run() {
             services::svc_token_set,
             services::svc_token_has,
             services::svc_log,
-            notify::notify_set
+            notify::notify_set,
+            notify::push_status,
+            notify::push_setup,
+            notify::push_register
         ])
         .setup(|app| {
             #[cfg(desktop)]

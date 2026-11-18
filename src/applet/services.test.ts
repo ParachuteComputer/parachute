@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkFilters, checkPublish, parseServices, requestUrl, serviceLines, type HttpService, type RelayService } from "./services";
+import { checkFilters, checkPublish, isCommandApproval, parseServices, requestUrl, serviceLines, servicesKeyPart, type HttpService, type RelayService } from "./services";
 import { grantKey, grantLines, grantOf } from "./grant";
 import { parseManifest } from "./manifest";
 import { readApplet } from "./discovery";
@@ -193,5 +193,39 @@ describe("the keyring's additions (docs/design/KEYRING.md)", () => {
     expect(checkPublish(s, { kind: 9, content: "hi", tags: [] }).ok).toBe(false);
     expect(checkPublish(s, { kind: 9, content: "hi", tags: [["h", garden.id], ["h", "other"]] }).ok).toBe(false);
     expect(checkPublish(s, { kind: 7, content: "+", tags: [["e", id], ["h", garden.id]] }).ok).toBe(true);
+  });
+});
+
+describe("notifications through a push gateway (docs/design/SERVICES.md)", () => {
+  const gw = (gateway: unknown) => relay({ notify: { mentions: true, gateway } });
+  it("reads the gateway like an http service's url, and never a hub", () => {
+    expect(one<RelayService>(gw("https://Push.Example./")).notify).toEqual({ mentions: true, from: [], gateway: "https://push.example/" });
+    expect(one<RelayService>(gw("http://localhost:8790/")).notify?.gateway).toBe("http://localhost:8790/");
+    expect(one<RelayService>(gw("https://push.example")).notify?.gateway).toBe("https://push.example/");
+    for (const bad of ["http://push.example/", "https://push.example/push", "https://push.example/a?x=1", "https://u@push.example/", "wss://push.example/", 5, ""])
+      expect(parse([gw(bad)]).ok, String(bad)).toBe(false);
+    expect(parse([gw("https://hub.example/")], (o) => o === "https://hub.example").ok).toBe(false);
+  });
+  it("says on the card whom it goes through and what that server gets", () => {
+    const lines = serviceLines([one<RelayService>(gw("https://push.example/"))]).map((l) => l.text);
+    expect(lines).toContain("Tell you about messages in your rooms there that name you, even when Parachute is closed, through push.example");
+    expect(lines).toContain("push.example gets your public key and where to reach this phone. It reads the rooms their admins added it to, and sends this phone only which room and message, sealed");
+    expect(serviceLines([one<RelayService>(relay({ notify: { mentions: true } }))]).map((l) => l.text).join("\n")).not.toMatch(/gets your public key/);
+  });
+  it("keeps the key of a grant without a gateway exactly as before, and asks again for a new gateway", async () => {
+    const [plain] = servicesKeyPart([one<RelayService>(relay({ notify: { mentions: true } }))]) as { notify: unknown }[];
+    expect(plain.notify).toEqual({ mentions: true, from: [] });
+    const m = (() => { const r = parseManifest({ contract: 2, id: "rooms", name: "Rooms", access: [{ vault: "here", allow: [{ path: "Rooms/", verbs: ["read"] }] }] }); if (!r.ok) throw new Error(r.error); return r.manifest; })();
+    const k = (x: Record<string, unknown>) => grantKey(grantOf(m, "v", [], [], [one(relay(x))]), "Applets/Rooms");
+    const keys = await Promise.all([k({ notify: { mentions: true } }), k({ notify: { mentions: true, gateway: "https://push.example/" } }), k({ notify: { mentions: true, gateway: "https://other.example/" } })]);
+    expect(new Set(keys).size).toBe(3);
+  });
+});
+
+describe("a bot's approval, read as leniently as the bot reads it", () => {
+  it("catches /approve and /deny behind white space, controls, invisible characters and leading mentions", () => {
+    for (const t of ["/approve", "  /Approve once", "\n/DENY", "@Uni /approve", "@uni: /approve", "nostr:npub1abc /deny", "npub1abc, /approve", `${"a".repeat(64)} /approve`, "\u001c/approve", "\u0085/approve", "\u200b\ufeff/approve", "@Uni \u200b @Hermes /approve"])
+      expect(isCommandApproval(t), JSON.stringify(t)).toBe(true);
+    for (const t of ["I approve of this", "@Uni please /approve later", "approve", "see /approve docs"]) expect(isCommandApproval(t), t).toBe(false);
   });
 });

@@ -22,7 +22,7 @@
         "media": true,
         "private": [{ "kind": 30078, "d": "read-state:", "t": "read-state" }],
         "approvals": { "from": ["{{uni}}"] },
-        "notify": { "mentions": true, "from": ["{{uni}}"] }
+        "notify": { "mentions": true, "from": ["{{uni}}"], "gateway": "{{push?}}" }
       }
     ]
   }

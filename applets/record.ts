@@ -13,8 +13,13 @@ export function appletRecord(name: string, vars: Record<string, string> = {}): A
   const meta = JSON.parse(readFileSync(new URL(`${name}.json`, dir), "utf8")) as Omit<AppletRecord, "body">;
   const file = ["tsx", "jsx", "html"].map((e) => new URL(`${name}.${e}`, dir)).find((u) => existsSync(u));
   if (!file) throw new Error(`no code for ${name}`);
-  const fill = (s: string) => s.replace(/\{\{(\w+)\}\}/g, (_m, k: string) => { if (!(k in vars)) throw new Error(`${name} needs ${k}`); return vars[k]; });
-  return { path: fill(meta.path), extension: meta.extension, tags: meta.tags, fields: JSON.parse(fill(JSON.stringify(meta.fields))), body: readFileSync(file, "utf8") };
+  // {{name}} must be given; {{name?}} may be left out (an empty value), and a notify gateway left empty is dropped
+  const fill = (s: string) => s.replace(/\{\{(\w+)(\??)\}\}/g, (_m, k: string, opt: string) => { if (!(k in vars)) { if (opt) return ""; throw new Error(`${name} needs ${k}`); } return vars[k]; });
+  const dropEmpty = (fields: Record<string, unknown>) => {
+    for (const s of (fields.services as { notify?: { gateway?: string } }[] | undefined) ?? []) if (s.notify && s.notify.gateway === "") delete s.notify.gateway;
+    return fields;
+  };
+  return { path: fill(meta.path), extension: meta.extension, tags: meta.tags, fields: dropEmpty(JSON.parse(fill(JSON.stringify(meta.fields)))), body: readFileSync(file, "utf8") };
 }
 
 /** The components an applet imports, each from this folder (its id is its file's name), then the applet itself. */

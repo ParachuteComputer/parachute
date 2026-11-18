@@ -494,7 +494,13 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
         if (m2) setMembers(tags(m2, "p"));
         (got as Ev[]).forEach(st.add);
         // the message it opens at, when it is older than what was read
-        if (at && !s.msgs.get(room)?.has(at)) (await relay.query([{ kinds: [9], "#h": [room], ids: [at] }]).catch(() => [])).forEach(st.add);
+        if (at && !s.msgs.get(room)?.has(at)) {
+          const oldest = Math.min(...[...(s.msgs.get(room)?.values() ?? [])].map((e) => e.created_at), now());
+          const found = (await relay.query([{ kinds: [9], "#h": [room], ids: [at] }]).catch(() => [])) as Ev[];
+          found.forEach(st.add);
+          // and what came between it and what was read, so the room has no gap ("Load older" reads before the oldest)
+          if (found[0]) (await relay.query([{ kinds: [9], "#h": [room], since: found[0].created_at, until: oldest - 1, limit: 500 }]).catch(() => [])).forEach(st.add);
+        }
         if (!on) return;
         const target = at ? s.msgs.get(room)?.get(at) : undefined;
         const root = target ? rootOf(target) : null;
@@ -570,7 +576,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   const postAs = async (body: string) => {
     if (posting) return;
     const naming = !!uni && (body === STOP || toUni);
-    const target = thread ? (s.msgs.get(room)?.has(thread) ? thread : shown[shown.length - 1]?.id ?? null) : null;
+    // Stop answers Uni's turn on the main line (where the turn line comes from), wherever it is pressed
+    const target = body === STOP ? null : thread ? (s.msgs.get(room)?.has(thread) ? thread : shown[shown.length - 1]?.id ?? null) : null;
     setPosting(true); setErr("");
     try {
       const r = await relay.publish({ kind: 9, content: body, tags: [["h", room], ...(naming ? [["p", uni!]] : []), ...(target ? [["e", target, "", "root"]] : [])] });
@@ -673,7 +680,7 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
     </div>
       : body && !ask && !prompt && <div className="body"><Markdown text={body} names={names} />{s.edits.get(e.id)?.pubkey === e.pubkey && <span className="edited" title="Edited by the author">(edited)</span>}</div>}
     {ask && <AskCard e={e} ask={ask} answeredBy={answeredBy} mine={mine} answer={answer} />}
-    {prompt && <PromptCard p={prompt} settled={settled} send={send} />}
+    {prompt && <PromptCard p={prompt} settled={settled} send={(c) => send(c, [], [e.pubkey])} />}
     {sealed && <SealedCard e={e} />}
     {secret && <SecretCard e={e} />}
     {media.map((m) => <Attachment key={m.sha} m={m} />)}

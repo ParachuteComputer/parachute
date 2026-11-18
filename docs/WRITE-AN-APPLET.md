@@ -84,7 +84,7 @@ A relay service may also name (all optional, each a line on the card; [design/KE
 ```yaml
     rooms: [{ id: <room id>, name: Garden }]   # only these rooms: posts, reads and reactions stay in them
     approvals: { from: [<Uni's key, hex>] }    # high risk: answer Uni's cards and secret requests, with your approval key
-    notify: { mentions: true, from: [<hex>] }  # notifications while Parachute is closed
+    notify: { mentions: true, from: [<hex>], gateway: https://push.example/ }  # pushed through that gateway while Parachute is closed
 ```
 
 `approvals` counts only for keys the person trusts on this device (Settings → Approvals). The applet hands a card's

@@ -26,7 +26,14 @@ const cors = (req: IncomingMessage, res: import("node:http").ServerResponse) => 
   if (req.method === "OPTIONS") { res.writeHead(204).end(); return true; }
   return false;
 };
-const listen = (s: Server) => new Promise<number>((res) => s.listen(0, "127.0.0.1", () => res((s.address() as { port: number }).port)));
+/** On a free port below the ephemeral range (see hub.ts freePort). */
+const listen = async (s: Server): Promise<number> => {
+  for (let i = 0; i < 50; i++) {
+    const p = 20000 + Math.floor(Math.random() * 12000);
+    if (await new Promise<boolean>((res) => { const fail = () => res(false); s.once("error", fail); s.listen(p, "127.0.0.1", () => { s.off("error", fail); res(true); }); })) return p;
+  }
+  throw new Error("no free port");
+};
 
 function matches(e: Event, f: Record<string, unknown>): boolean {
   if (Array.isArray(f.ids) && !f.ids.includes(e.id)) return false;

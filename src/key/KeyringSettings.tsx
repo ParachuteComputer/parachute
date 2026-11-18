@@ -22,11 +22,13 @@ export default function KeyringSettings() {
   const [npub, setNpub] = useState("");
   const [room, setRoom] = useState("");
   const [copied, setCopied] = useState(false);
+  const [forKey, setForKey] = useState("");
   useEffect(() => { if (keysHere()) void keyringNow(true).then(setK); }, []);
   if (!keysHere() || !k) return null;
   // the notification list names trusted keys too: it follows a change here
   const run = (f: () => Promise<unknown>) => { setError(null); f().then(() => keyringNow(true).then((x) => { setK(x); void syncNotify(); }), (e: unknown) => setError(said(e))); };
-  const uni = k.approvers[0];
+  // the enrollment is for the trusted key the person picks (Uni's, normally)
+  const uni = k.approvers.find((a) => a.pubkey === forKey) ?? k.approvers.find((a) => a.name.toLowerCase() === "uni") ?? k.approvers[0];
   return (
     <section className="card" aria-labelledby="s-keyring">
       <h2 id="s-keyring">Approvals</h2>
@@ -44,7 +46,8 @@ export default function KeyringSettings() {
         <p>Approval key: <code>{shortNpub(k.approval)}</code></p>
         <p className="small">Give it to Uni and Hermes outside the rooms: copy the enrollment below for <code>sealed enroll</code> on the box Uni runs on. Not as a message: anything that can post as you could post a fake one.</p>
         {uni ? <div className="row-buttons">
-          <input aria-label="Uni's room id" placeholder="Uni's room id" value={room} onChange={(e) => setRoom(e.target.value.trim())} />
+          {k.approvers.length > 1 && <select aria-label="For" value={uni.pubkey} onChange={(e) => setForKey(e.target.value)}>{k.approvers.map((a) => <option key={a.pubkey} value={a.pubkey}>{a.name}</option>)}</select>}
+          <input aria-label={`${uni.name}'s room id`} placeholder={`${uni.name}'s room id`} value={room} onChange={(e) => setRoom(e.target.value.trim())} />
           <button type="button" className="quiet-button" disabled={!room} onClick={() => run(async () => { const ev = await invoke<unknown>("keyring_enrollment", { room, uni: uni.pubkey }); await navigator.clipboard.writeText(JSON.stringify(ev)); setCopied(true); })}>{copied ? "Copied" : `Copy the enrollment for ${uni.name}`}</button>
         </div> : <p className="small quiet">Trust Uni's key below first.</p>}
         {removing ? <div className="stack">

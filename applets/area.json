@@ -22,7 +22,7 @@
         "media": true,
         "rooms": [{ "id": "{{area_room}}", "name": "{{area}}" }],
         "approvals": { "from": ["{{uni}}"] },
-        "notify": { "mentions": true, "from": ["{{uni}}"] }
+        "notify": { "mentions": true, "from": ["{{uni}}"], "gateway": "{{push?}}" }
       }
     ]
   }
