@@ -5,7 +5,8 @@ import { openLinkOut, saveFileOut } from "./device";
 import { markTap } from "../open/mark";
 import { clientFor } from "../vault/client";
 import { isAppOwn, noteHref, titleOf } from "../vault/notes";
-import { listVaults } from "../vault/store";
+import { listVaults, type VaultRecord } from "../vault/store";
+import { addressIn, resolveLink, type ResolveDeps } from "../links/resolve";
 import { barNow } from "./homeSettings";
 
 /** Notes that are the app's own or an applet's code: never in a list of what the person wrote lately. */
@@ -26,9 +27,57 @@ export const tappingIn = (frame: () => HTMLIFrameElement | null) => {
 /** The shell's own picker sheet (views/DeviceSheets.tsx). */
 export type Picker = { pick(accept: string[], multiple: boolean): Promise<PickedFile[]> };
 
-export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameElement | null, picker: Picker): AppDeps {
+export const MISS_MS = 60_000;
+/** Which notes are there, asked of their vaults once a session (a note that was there is taken to be there still). */
+export function noteFinder(read: (rec: VaultRecord, idOrPath: string) => Promise<{ id: string } | null>) {
+  const seen = new Map<string, Promise<string | null>>();
+  return (rec: VaultRecord, idOrPath: string, charge: () => void = () => {}) => {
+    const k = `${rec.key}\u0000${idOrPath}`;
+    let p = seen.get(k);
+    if (!p) {
+      charge();
+      p = read(rec, idOrPath).then((n) => (n && typeof n.id === "string" ? n.id : null));
+      // a failed read (the network, a refresh) is asked again next time; a note that isn't there, after a minute (Uni
+      // may cite a note a moment before the hub has it)
+      const mine = p;
+      p.then((id) => { if (id === null) setTimeout(() => { if (seen.get(k) === mine) seen.delete(k); }, MISS_MS); }, () => { if (seen.get(k) === mine) seen.delete(k); });
+      seen.set(k, p);
+    }
+    return p;
+  };
+}
+
+/** `here`: the applet's own vault (a wikilink's, and where `address` makes its addresses); `reads`: the folders it may
+ *  read there (a wikilink is looked up only in them). */
+export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameElement | null, picker: Picker, here: () => VaultRecord | null = () => null, reads: readonly string[] = []): AppDeps {
   const tappingInApplet = () => tappingIn(frame);
+  const find = noteFinder((rec, idOrPath) => clientFor(rec).getNote(idOrPath).catch((e: unknown) => {
+    // not there: the hub's 404; anything else is asked again later
+    if ((e as { status?: unknown } | null)?.status === 404) return null;
+    throw e;
+  }) as Promise<{ id: string } | null>);
+  // a rule's path is a folder ending in / (manifest.ts), as the vault module checks it
+  const mayRead = (path: string) => reads.some((f) => f.endsWith("/") && path.startsWith(f));
+  const resolver = (charge?: () => void): ResolveDeps => ({ vaults: listVaults, here, mayRead, find: (rec, p) => find(rec, p, charge) });
   return {
+    async links(links, from, charge) {
+      const deps = resolver(() => charge(1));
+      return Promise.all(links.map(async (l) => (await resolveLink(l, from, deps)).answer));
+    },
+    async follow(link, from, choose) {
+      if (!tappingInApplet()) return false;
+      const r = await resolveLink(link, from, resolver());
+      if (r.answer === null) return false;
+      if (r.answer === "note") {
+        markTap(r.href);
+        go(choose ? `${r.href}?with=choose` : r.href);
+      } else go(r.href);
+      return true;
+    },
+    address(note) {
+      const rec = here();
+      return rec ? addressIn(rec, note) : null;
+    },
     async recent(limit, charge) {
       const vaults = listVaults();
       charge(vaults.length);

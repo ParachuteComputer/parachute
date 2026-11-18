@@ -4,9 +4,10 @@
 // an applet that imports `Note` gets reactNoteEntry.ts instead.
 import { Card, Days, Empty, Field, List } from "../../kit/parts";
 import { useTheme } from "../../kit/useTheme";
+import { Link, Linked, link } from "../../kit/links";
 import { setModules } from "./modules";
 
 function Note() {
   throw new Error("Note isn't loaded here: import it by name (import { Note } from \"parachute\")");
 }
-setModules({ Card, Days, Empty, Field, List, Note, useTheme });
+setModules({ Card, Days, Empty, Field, Link, Linked, List, Note, link, useTheme });

@@ -20,6 +20,7 @@ room reaches both.
 | Search across rooms | built (the relay's NIP-50 search); a hit opens its room at that message, marked | rooms.spec: "seed potatoes" found, the room opened at it |
 | Messages: markdown (bold, italics, strike, code, fences, quotes, lists, tables, headings, rules), day lines, grouping, "New" line | built | rooms.spec (bold in a message) |
 | Links | built: a tap opens http, https and mail links in the browser, through the shell (`app.openLink`, the `links` line on the card, KEYRING.md) | e2e/devices.spec.ts: the shell's open called with the link |
+| Note links | built: `uni:<ULID>` (any `<vault>:<ULID>` of a vault the person has), a note's address and a `[[wikilink]]` open the note in the app, through the kit (`Link`, `Linked`, `Note`; the `open` line on the card); a vault name they don't have stays text | e2e/notelinks.spec.ts; e2e/roomlinks.spec.ts (a real relay) |
 | Threads: "N replies", the thread pane, replying in it | built | rooms.spec: the reply carries the root `e` tag; the count shows |
 | Reactions: chips with counts, yours marked; add 👍 ❤️ ✓, take yours back | built | rooms.spec: kind 7 on the relay, the chip "including yours" |
 | Edits shown "(edited)"; deletions hidden | built (shown) | not in a spec |

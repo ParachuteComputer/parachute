@@ -104,7 +104,7 @@ describe("what the calls accept", () => {
 });
 
 const appDeps = (log: string[] = []): AppDeps => ({
-  recent: async () => [], pins: () => [], open: () => true,
+  recent: async () => [], pins: () => [], open: () => true, links: async (l) => l.map(() => null), follow: async () => false, address: () => null,
   openLink: async (url) => { log.push(`link ${url}`); return true; },
   save: async (name, bytes, type) => { log.push(`save ${name} ${bytes.byteLength} ${type}`); return name; },
   pick: async (accept, multiple) => { log.push(`pick ${accept.join(",")} ${multiple}`); return []; },
@@ -142,6 +142,18 @@ describe("the calls, refused without their word", () => {
     expect(saves.filter((c) => c === "rate_limited")).toHaveLength(2);
     t += 1100;
     expect(await code(r.call("app", "save", { name: "f4.txt", bytes: new ArrayBuffer(1), type: "text/plain" }, {}))).toBe("ok");
+  });
+  it("app: note links (links, follow, address) are open's: not_granted without it, and read strictly", async () => {
+    const none = createRouter([createAppModule(["links"], appDeps())]);
+    expect(await code(none.call("app", "links", { links: ["kitchen:01KA3Z9V6B2W8XQJ4M7N5P0R1S"] }, {}))).toBe("not_granted");
+    expect(await code(none.call("app", "follow", { link: "kitchen:01KA3Z9V6B2W8XQJ4M7N5P0R1S" }, {}))).toBe("not_granted");
+    expect(await code(none.call("app", "address", { note: "01KA3Z9V6B2W8XQJ4M7N5P0R1S" }, {}))).toBe("not_granted");
+    const r = createRouter([createAppModule(["open"], appDeps())]);
+    expect(await r.call("app", "links", { links: ["a", "b"], from: "Recipes/Toast" }, {})).toEqual([null, null]);
+    for (const bad of [{ links: "a" }, { links: Array(51).fill("a") }, { links: ["x".repeat(2001)] }, { links: [""] }, { links: [], token: "x" }, { links: [], from: 1 }])
+      expect(await code(r.call("app", "links", bad, {})), JSON.stringify(bad).slice(0, 40)).toBe("bad_params");
+    for (const bad of [{ link: 1 }, { link: "a", choose: "yes" }, { link: "a", href: "/settings" }]) expect(await code(r.call("app", "follow", bad, {}))).toBe("bad_params");
+    for (const bad of [{ note: "../x" }, { note: "" }, { note: "a/b" }]) expect(await code(r.call("app", "address", bad, {}))).toBe("bad_params");
   });
   it("voice: not_granted without reach voice; at most 10 minutes", async () => {
     const asked: number[] = [];

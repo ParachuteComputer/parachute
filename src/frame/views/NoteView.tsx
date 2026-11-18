@@ -39,7 +39,7 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
       {note && (
         <article className="note">
           <p className="note-where">{[folderOf(note), ...(note.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · ") || " "}
-            <CopyLink link={linkFor(rec.issuer, rec.vault, note.id)} /></p>
+            <CopyLink link={linkFor(rec.url ?? `${rec.issuer}/vault/${encodeURIComponent(rec.vault)}`, note.id)} /></p>
           {isCodeNote(note)
             ? <pre className="note-code" aria-label="The note's text">{note.content ?? ""}</pre>
             : <div className="rn-theme-uni"><NoteRenderer className="prose-note" rich calm note={drawn!} resolve={resolve} linkComponent={RouterLink}

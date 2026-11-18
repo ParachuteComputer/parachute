@@ -12,7 +12,7 @@
       "access": [],
       "reach": ["voice"]
     },
-    "app": ["links", "save", "attach", "storage"],
+    "app": ["open", "links", "save", "attach", "storage"],
     "services": [
       {
         "id": "rooms",

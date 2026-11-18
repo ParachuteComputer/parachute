@@ -37,7 +37,7 @@ import { PageEmbeds, PAGE_MAX } from "./Embeds";
 import { isMine, useWhose, whoseOf } from "../vault/whose";
 import { pageMarks } from "../applet/pageMark";
 import { MAX_CODE_CHARS } from "../vault/limited";
-import { hostOf } from "../vault/store";
+import { findVault, hostOf } from "../vault/store";
 import { screenOf } from "../applet/manifest";
 import { createRouter } from "../applet/router";
 import { createVaultModule } from "../applet/modules/vault";
@@ -259,7 +259,7 @@ export default function AppletScreen() {
   const router = useMemo(() => (rec && entry ? createRouter([
     createVaultModule(vaultDeps(clientFor(rec)), { opens: entry.opens, name: rec.vault }),
     createThemeModule({ theme: tokensNow }),
-    createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current, device)),
+    createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current, device, () => findVault(rec.key), entry.manifest.allow.filter((r) => r.verbs.includes("read")).map((r) => r.path))),
     // the microphone (manifest `reach: [voice]`) and a little storage on this device (`app: [storage]`): not_granted without
     createVoiceModule(!!entry.manifest.reach?.includes("voice"), { record: (max) => (tappingIn(() => frameEl.current) ? device.record(max) : Promise.reject(notTapped())) }),
     createStorageModule(entry.app.includes("storage"), storageFor(subjectOf(rec.key, entry.noteId))),

@@ -124,6 +124,7 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
 | `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above), while they tap inside the applet. Resolves to whether it went. |
+| `app.links(links, from)`, `app.follow(link, { from, choose })`, `app.address(noteId)` | With `open`: the calls under the kit's note links. Use `Link`, `Linked`, `Note` and `link` (see [Links](#links)) rather than these. |
 | `app.openLink(url)` | With `links`: an `http`, `https` or `mailto` address in the person's browser, while they tap, at most one a second. Resolves to whether it went. |
 | `app.save(name, bytes, type)` | With `save`: a file (an `ArrayBuffer`, 25 MB at most) into the person's Downloads, while they tap. The name is made bare (no folder, no leading dot, 100 characters at most) and the app picks a free one. Resolves `{ saved: name }`. |
 | `app.pick({ accept, multiple })` | With `attach`: the app's own picker, while they tap (`accept`: like `"image/*,.pdf"`). Resolves the files chosen, `[{ name, type, bytes }]` (25 MB each, 10 at most), or `[]`. |
@@ -165,7 +166,10 @@ does. Use them, or your own markup on the CSS variables, or both.
 
 | Part | What it draws |
 |---|---|
-| `<Note body path? tags? fields? onLink? />` | A note's text as the app's note view draws it: markdown, and rich notes (a recipe with servings and timers, tasks, logs, callouts, charts from tables); give the record's `tags` and `fields` so a typed note (tagged `recipe`) draws as its type, and its `path`, which tells one note from the next. A tapped link never leaves the applet: `onLink(target)` gets a wikilink's target as written (`[[Green herb rice]]` gives `Green herb rice`) or a web address. The renderer is large, so the app loads it only for an applet that imports `Note`. |
+| `<Note body path? tags? fields? onLink? />` | A note's text as the app's note view draws it: markdown, and rich notes (a recipe with servings and timers, tasks, logs, callouts, charts from tables); give the record's `tags` and `fields` so a typed note (tagged `recipe`) draws as its type, and its `path`, which tells one note from the next. Its links are the kit's ([Links](#links)): a `[[wikilink]]`, a `<vault>:<ULID>` and a note's address open the note in the app, a web address the browser. With `onLink(target)` a tap goes there instead, with a wikilink's target as written (`[[Green herb rice]]` gives `Green herb rice`), the `<vault>:<ULID>` or the address: open it yourself, or hand it to `link.follow`. The renderer is large, so the app loads it only for an applet that imports `Note`. |
+| `<Link to from? >…</Link>` | One link: a note's address, `<vault>:<ULID>`, `[[target]]` (with `from`, the path of the note it is in) or a web address. See [Links](#links). |
+| `<Linked text web? />` | Plain text with its note links drawn as `Link`s: a message, a mail. With `web`, its other web addresses too (they open only with `links`). |
+| `link (.to, .follow, .parse, .find)` | The links as calls: `await link.to(record)` is the address to write for a note of the applet's vault; `link.follow(target, { from })` opens one on a tap; `link.parse(text)` says what a link names (or null); `link.find(text)` gives the links in plain text. |
 | `<Days times? counts? days? label? inline? />` | What changed, a day at a time: a column of ink marks per day, weeks set apart, today marked. Give `times` (ISO times, counted by day) or `counts` (oldest first). `days` defaults to 28; `inline` draws it inside a line (a row, a link). |
 | `<List label? rows />` | Rows under a label. A row is `{ key?, title, meta?, aside?, glyph?, onPress? }`; one with `onPress` is a button. |
 | `<Card title?>…</Card>` | A raised block with a title. |
@@ -174,6 +178,42 @@ does. Use them, or your own markup on the CSS variables, or both.
 | `useTheme()` | The look as values (`accent`, `bg`, …, `scheme`, `density`), or null until the app has sent it. Most applets need only the CSS variables. |
 
 An HTML applet has no parts: it has the kit's calls and the CSS variables.
+
+### Links
+
+A link to a note is written one way, and stored that way: **the note's address on its hub**,
+
+```
+https://<hub>/vault/<vault>/view/<id>
+```
+
+the page the hub itself serves for the note (to anyone when the note is published, and to someone with a key for that
+vault otherwise). So the link works outside Parachute too, and inside the app it opens the note. Get it with
+`await link.to(record)` (a note of the applet's own vault) and put it in the text you write; never build it by hand.
+
+The kit also reads two short forms, which applets read but never write:
+
+- `<vault>:<ULID>`, a vault by its name and a note's id: `uni:01KA3Z9V6B2W8XQJ4M7N5P0R1S`, as Uni writes in chat.
+- `[[Path or Title]]` inside a note: a note in the same vault, by its path, or beside the note it is in, and only in the
+  folders the applet may read (a path can be guessed: the app won't say what is there to an applet that can't read it).
+
+And the address Parachute's web app shows for a note (`https://<hub>/surface/parachute/v/<vault>/n/<id>`).
+
+Draw links only with the kit: `Linked` for text you show as it is (a message, a mail), `Link` for one link you place,
+and `Note` for a note's text. Each asks the app what a note link leads to, and the app answers from the vaults the
+person has, without telling the applet which those are:
+
+| The link | What the person sees | A tap |
+|---|---|---|
+| a note in a vault they have | a link | opens the note in the app: in the applet whose `opens` takes its kind, else the plain note view |
+| an address of a vault they haven't added | a link | the app's link screen, which says so and offers to add that Parachute |
+| a `<vault>:<ULID>` of a vault they don't have, or of a note that isn't there; a `[[wikilink]]` to nothing | plain text | nothing: no guess |
+| any other web address | a link | the browser (with `links`) |
+
+A long-press (a right-click on a computer) on a note link asks with **Open with…** instead. Note links need `open` in
+`fields.app`; without it they are drawn as text (an address as a web address). The shipped applets link only through
+the kit (`src/kit/links.test.ts` checks it): no `<a>` of their own, no `app.open` or `app.openLink` of their own.
+
 
 ## A worked example
 

@@ -19,7 +19,7 @@
 // one there is no turn line, no Stop and no listening switch. Its named exports (the store, the cards' readers, the
 // time words) are for the importer's own list.
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { app, onShown, ready, services, shown as onScreen, storage, voice } from "parachute";
+import { app, Link, Linked, link, onShown, ready, services, shown as onScreen, storage, voice } from "parachute";
 
 /** Whether a person can be looking: the applet on screen (the app keeps it running while hidden, kit `shown`/`onShown`,
  *  imported as onScreen: `shown` below is the media cache's) and the app in front. What is new is read only then. An
@@ -94,27 +94,28 @@ export const textOf = (st: Store["s"], e: Ev) => { const ed = st.edits.get(e.id)
 export const visible = (st: Store["s"], e: Ev) => !st.removed.has(e.id) && !st.gone.get(e.id)?.has(e.pubkey);
 
 // ── markdown, the Uni app's subset, drawn as React (never as HTML) ──
+// Its links are the kit's (Link, Linked): a web address opens in the browser, a note link (Uni's `uni:<ULID>`, a
+// note's address) opens the note in the app, a vault name this device doesn't hold stays text. The message's text is
+// never rewritten.
 const SAFE = /^(https?:|mailto:)/i;
-/** A link in a message: opened in the browser by the shell when tapped (at most one a second), never in the frame. */
-function Link({ href, children }: { href: string; children: any }) {
-  return <a className="link" href={href} title={href} rel="noreferrer" onClick={(e) => { e.preventDefault(); app.openLink(href).catch(() => {}); }}>{children}</a>;
-}
 function inline(src: string, key: string, mentionNames: string[]): any[] {
   const out: any[] = [];
   let rest = src, i = 0;
-  const push = (x: any) => out.push(typeof x === "string" ? x : { ...x, key: `${key}-${i++}` });
+  // plain text with the note links in it (`uni:<ULID>`) drawn by the kit
+  const push = (x: any) => out.push(typeof x === "string" ? (link.find(x).length ? <Linked key={`${key}-${i++}`} text={x} /> : x) : { ...x, key: `${key}-${i++}` });
   const RX = /(`+)([\s\S]*?)\1|\*\*([^*]+?)\*\*|__([^_]+?)__|~~([^~]+?)~~|(?<![\w*])\*([^*\n]+?)\*(?!\w)|(?<![\w_])_([^_\n]+?)_(?![\w])|\[([^\]\n]{1,1000})\]\(([^)\s]+)\)|<(https?:\/\/[^>\s]+)>|(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])|(@[\p{L}\p{N}_.-]+(?: [\p{Lu}][\p{L}\p{N}_.-]*)?)/u;
   while (rest) {
     const m = RX.exec(rest);
     if (!m) { push(rest); break; }
     if (m.index) push(rest.slice(0, m.index));
     const [all, , code, b1, b2, del, em1, em2, label, href, auto, bare, mention] = m;
-    if (code !== undefined) push(<code>{code}</code>);
+    // `uni:<ULID>` in code is how agents cite a note: tappable when it leads to one
+    if (code !== undefined) push(link.parse(code)?.kind === "short" ? <Link to={code.trim()}><code>{code}</code></Link> : <code>{code}</code>);
     else if (b1 || b2) push(<strong>{inline(b1 || b2, `${key}b${i}`, mentionNames)}</strong>);
     else if (del) push(<del>{del}</del>);
     else if (em1 || em2) push(<em>{inline(em1 || em2, `${key}e${i}`, mentionNames)}</em>);
-    else if (label) push(SAFE.test(href) ? <Link href={href}>{inline(label, `${key}l${i}`, mentionNames)}</Link> : all);
-    else if (auto || bare) push(<Link href={auto || bare}>{auto || bare}</Link>);
+    else if (label) push(SAFE.test(href) ? <Link to={href}>{inline(label, `${key}l${i}`, mentionNames)}</Link> : all);
+    else if (auto || bare) push(<Link to={auto || bare}>{auto || bare}</Link>);
     else if (mention) {
       const hit = mentionNames.find((n) => mention.slice(1).toLowerCase().startsWith(n.toLowerCase()));
       if (hit) { push(<span className="mention">@{mention.slice(1, 1 + hit.length)}</span>); push(mention.slice(1 + hit.length)); } else push(mention);
@@ -393,7 +394,7 @@ const CSS = `
 .room .md pre { background: var(--surface); border: 1px solid var(--line); padding: 8px; overflow-x: auto; font: .9em var(--mono); }
 .room .md code { font-family: var(--mono); font-size: .92em; }
 .room .md blockquote { margin: 4px 0; padding-left: 10px; border-left: 2px solid var(--line); color: var(--muted); }
-.room .md .link { color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.room .md .pa-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .room .md .mention { font-weight: 600; }
 .room .md .table { overflow-x: auto; } .room .md table { border-collapse: collapse; } .room .md td, .room .md th { border: 1px solid var(--line); padding: 2px 8px; }
 .room .edited { color: var(--muted); font-size: .8em; margin-left: 6px; }

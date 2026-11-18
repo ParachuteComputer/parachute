@@ -70,7 +70,7 @@ describe("the face keeps every stressed line's facts", () => {
     const face = faceOf(g, folder, trusted);
     expect(grantLines(g, folder, trusted).length).toBeGreaterThanOrEqual(14);
     expect(face.lines.length).toBe(4);
-    expect(face.also).toEqual(["the microphone when you press record", "files you pick", "saving to Downloads", "256 KB for drafts"]);
+    expect(face.also).toEqual(["the microphone when you press record", "files you pick", "saving to Downloads", "256 KB for drafts", "takes you to a note or an applet when you tap"]);
   });
 });
 

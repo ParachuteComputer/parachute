@@ -5,7 +5,7 @@
 // keyword (the Inbox leaves a Later thread out until something new comes in on it); Waiting is the sends from Uni's
 // account its outbound rules hold for the owner, each approved (signed with the approval key) or declined here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ready, services } from "parachute";
+import { Linked, ready, services } from "parachute";
 
 type Addr = { name?: string | null; email: string };
 type Email = { id: string; threadId: string; mailboxIds: Record<string, boolean>; keywords: Record<string, boolean>; from?: Addr[]; to?: Addr[]; replyTo?: Addr[]; cc?: Addr[]; subject?: string; receivedAt: string; preview?: string; hasAttachment?: boolean;
@@ -235,7 +235,7 @@ function HeldSend({ h, name, ops, decided, back }: { h: Held; name: string; ops:
       <h2>{f?.subject || "(no subject)"}</h2>
       <div className="meta">From {p.sentBy === "Uni" ? "Uni" : "you, as Uni"} ({name}) · to {f ? addrLine(f.to) || "(nobody)" : heldTo(p)}{f?.cc.length ? ` · cc ${addrLine(f.cc)}` : ""}{f?.bcc.length ? ` · bcc ${addrLine(f.bcc)}` : ""}{p.parkedAt ? ` · held ${new Date(p.parkedAt).toLocaleString()}` : ""}</div>
       <p className="why"><b>Why it waits:</b> {p.reason ?? "Uni's outbound rules want your approval."}</p>
-      {f && <div className="body">{f.text || "(no text)"}</div>}
+      {f && <div className="body">{f.text ? <Linked text={f.text} /> : "(no text)"}</div>}
       {!!f?.attachments?.length && <div className="files" aria-label="Files it sends">{f.attachments.map((a, i) => <span key={i}>📎 {a.name} ({Math.max(1, Math.round(a.size / 1024))} KB)</span>)}</div>}
     </article>
     {p.changed && <p className="note" role="note">This draft changed after it was held, so it can't be sent from here. Decline it, and ask Uni to send it again.</p>}
@@ -298,7 +298,7 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
     {!emails ? <p className="quiet">Reading…</p> : emails.map((e) => <article className="msg" key={e.id} aria-label={e.subject || "a message"}>
       <h2>{e.subject || "(no subject)"}</h2>
       <div className="meta">From {who(e.from)} · to {who(e.to)}{e.cc?.length ? ` · cc ${who(e.cc)}` : ""} · {new Date(e.receivedAt).toLocaleString()}</div>
-      <div className="body">{bodyOf(e)}</div>
+      <div className="body"><Linked text={bodyOf(e)} /></div>
       {!!e.attachments?.length && <div className="files">{e.attachments.map((a, i) => <span key={i}>📎 {a.name ?? "file"}</span>)}</div>}
     </article>)}
     {last && <div className="bar" style={{ marginTop: 16 }}>

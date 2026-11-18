@@ -1,5 +1,6 @@
 // A note's route, /v/<vault>/n/<id>: the one place open-with is decided (open/resolve.ts). Links, wikilinks, search
-// hits, Back and links from outside all arrive here. `?with=vault` always shows the plain vault view.
+// hits, Back and links from outside all arrive here. `?with=vault` always shows the plain vault view; `?with=choose` (a
+// long-press on a note link in an applet) asks with the Open with… sheet, whatever the defaults say.
 import { useEffect } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { useVault } from "../data";
@@ -28,7 +29,8 @@ export default function NoteRoute() {
   const ow = useOpenWith(plain ? null : rec, id);
   const kept = (location.state as { decided?: Decided } | null)?.decided;
   if (kept && !decided.has(location.key)) decided.set(location.key, kept);
-  const decision = ow.state === "ok" ? ow.decision : null;
+  const choose = params.get("with") === "choose";
+  const decision = ow.state === "ok" ? (choose ? { kind: "ask" as const, candidates: ow.cands } : ow.decision) : null;
 
   useEffect(() => {
     if (!rec || !id || !decision || decided.has(location.key)) return;

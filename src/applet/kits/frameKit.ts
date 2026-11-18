@@ -14,6 +14,10 @@
 //                                      queryRecords/getRecord/createRecord/updateRecord (body, fields) beside its own
 //   uni.theme.get() / .on(cb)        → the app's look (src/theme): every token is also a CSS var --<key> on <html>
 //   uni.app.recent/pins/open         → what it may ask of the app (modules/app.ts), new here: the Uni app has none
+//   uni.app.links(links, from)       → (open) what each note link leads to: "note", "away" or null (links/resolve.ts);
+//                                      the React kit's Link, Linked, Note and `link` use it: an applet needn't
+//   uni.app.follow(link, {from, choose}) → (open) open what a note link leads to, during a tap: whether it went
+//   uni.app.address(noteId)          → (open) the note's address in the applet's own vault: how a link to it is written
 //   uni.app.openLink(url)            → (links) an http/https/mailto address in the browser, during a tap: whether it went
 //   uni.app.save(name, bytes, type)  → (save) a file into Downloads, during a tap: {saved: name}
 //   uni.app.pick({accept, multiple}) → (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] for none
@@ -47,7 +51,7 @@ export const FRAME_KIT = String.raw`(function () {
   var MAX_OUT = 8, line = [], out = 0, seq = 0, paused = false, pauseTimer = null;
   // what the person is waiting on goes ahead of the line: a tap's call (it needs the tap still fresh), a post, the
   // frame's height
-  var FIRST = { "app.openLink": 1, "app.save": 1, "app.pick": 1, "app.open": 1, "voice.record": 1, "services.publish": 1, "page.layout": 1 };
+  var FIRST = { "app.openLink": 1, "app.follow": 1, "app.save": 1, "app.pick": 1, "app.open": 1, "voice.record": 1, "services.publish": 1, "page.layout": 1 };
   function pump() {
     while (!paused && out < MAX_OUT && line.length) {
       var j = line.shift(); if (j.table[j.id] !== j) continue;
@@ -266,6 +270,14 @@ export const FRAME_KIT = String.raw`(function () {
       recent: function (o) { return call("app", "recent", o || {}); },
       pins: function () { return call("app", "pins", {}); },
       open: function (href) { return call("app", "open", { href: href }); },
+      links: function (links, from) { var p = { links: links }; if (typeof from === "string") p.from = from; return call("app", "links", p); },
+      follow: function (link, o) {
+        var p = { link: link };
+        if (o && typeof o.from === "string") p.from = o.from;
+        if (o && o.choose === true) p.choose = true;
+        return call("app", "follow", p);
+      },
+      address: function (note) { return call("app", "address", { note: note }); },
       openLink: function (url) { return call("app", "openLink", { url: url }); },
       save: function (name, bytes, type) {
         var b = buf(bytes);

@@ -14,6 +14,7 @@ describe("the parts", () => {
     expect(named.sort()).toEqual([...PART_NAMES].sort());
   });
   it("a frame of the person's can use the same parts", () => {
-    for (const p of PART_NAMES.filter((n) => n !== "useTheme")) expect(lib, p).toHaveProperty(p);
+    // not the links: they ask an applet's shell (app.links, app.follow); the frame opens a note by its own route
+    for (const p of PART_NAMES.filter((n) => !["useTheme", "Link", "Linked", "link"].includes(n))) expect(lib, p).toHaveProperty(p);
   });
 });

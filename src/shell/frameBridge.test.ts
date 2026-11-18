@@ -55,7 +55,7 @@ describe("a frame's calls", () => {
   });
   it("the vaults it is told of are names and hubs only", async () => {
     const { ask } = setup();
-    expect((await ask("vaults.list"))?.result).toEqual([{ key: "kitchen", vault: "kitchen", host: "hub.example", issuer: "https://hub.example", hub: "https://hub.example" }]);
+    expect((await ask("vaults.list"))?.result).toEqual([{ key: "kitchen", vault: "kitchen", host: "hub.example", issuer: "https://hub.example", hub: "https://hub.example", url: "https://hub.example/vault/kitchen" }]);
   });
   it("a method that isn't in the table is refused: there is no call that grants, reads a token or writes a note", async () => {
     const { ask } = setup(true);
