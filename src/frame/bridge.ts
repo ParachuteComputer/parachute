@@ -1,9 +1,32 @@
 // The frame's side of the bridge (bridge/protocol.ts): one typed call to the shell, and the shell's events. The frame
 // has no other way to the vaults, the person's choices or the app's address.
-import { PF, type Events, type Method, type Params, type Result } from "../bridge/protocol";
+import { FRAME_LIMITS, PF, type Events, type Method, type Params, type Result } from "../bridge/protocol";
 
-type Pending = { res: (v: unknown) => void; rej: (e: Error) => void };
+// The shell holds FRAME_LIMITS.pending of the frame's calls waiting at once and refuses the rest, and some in a window:
+// so at most that many go out, the others wait in line in the order they were asked, and a refusal for being busy goes
+// back in its place while the whole line waits a little.
+type Pending = { res: (v: unknown) => void; rej: (e: Error) => void; msg: unknown; out: boolean; tries: number; seq: number };
 const pending = new Map<string, Pending>();
+const line: string[] = [];
+let out = 0, seq = 0, paused = false, pauseTimer: ReturnType<typeof setTimeout> | undefined;
+/** Tries before a busy refusal stands (the waits add up past the shell's ten-second window). */
+const TRIES = 8;
+const place = (id: string) => {
+  const s = pending.get(id)!.seq;
+  let k = line.length;
+  while (k > 0 && (pending.get(line[k - 1])?.seq ?? -1) > s) k--;
+  line.splice(k, 0, id);
+};
+const pump = () => {
+  while (!paused && out < FRAME_LIMITS.pending && line.length) {
+    const id = line.shift()!;
+    const p = pending.get(id);
+    if (!p) continue;
+    p.out = true; out++;
+    // what can't be sent (a parameter that can't be copied to the shell) fails at once, and frees its place
+    try { parent.postMessage(p.msg, "*"); } catch (e) { p.out = false; out--; pending.delete(id); p.rej(e instanceof Error ? e : new Error(String(e))); }
+  }
+};
 const listeners = new Map<string, Set<(d: unknown) => void>>();
 let n = 0;
 
@@ -14,15 +37,26 @@ addEventListener("message", (e: MessageEvent) => {
   if (typeof m.event === "string") { listeners.get(m.event)?.forEach((f) => f(m.data)); return; }
   const p = typeof m.id === "string" ? pending.get(m.id) : undefined;
   if (!p) return;
-  pending.delete(m.id as string);
+  const id = m.id as string;
+  if (p.out) { p.out = false; out--; }
+  if (m.error === "rate_limited" && p.tries < TRIES) {
+    p.tries++;
+    place(id);
+    paused = true; clearTimeout(pauseTimer);
+    pauseTimer = setTimeout(() => { paused = false; pump(); }, Math.min(2000, 100 * 2 ** p.tries));
+    return;
+  }
+  pending.delete(id);
   if (typeof m.error === "string") p.rej(Object.assign(new Error(m.error), { code: m.error })); else p.res(m.result);
+  pump();
 });
 
 export function call<M extends Method>(method: M, params: Params<M>): Promise<Result<M>> {
   return new Promise((res, rej) => {
     const id = `c${++n}`;
-    pending.set(id, { res: res as (v: unknown) => void, rej });
-    parent.postMessage({ pf: PF, id, method, params }, "*");
+    pending.set(id, { res: res as (v: unknown) => void, rej, msg: { pf: PF, id, method, params }, out: false, tries: 0, seq: ++seq });
+    line.push(id);
+    pump();
   });
 }
 
