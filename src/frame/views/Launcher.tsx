@@ -3,7 +3,7 @@ import { useHold } from "../../ui/hold";
 import { Link } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVault } from "../../bridge/protocol";
-import { addEmbed, bringIn, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
+import { addEmbed, addVault, bringIn, dismissVault, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
 import { isAppOwn, noteHref, titleOf } from "../../vault/notes";
 import { Days, Empty } from "../../kit/parts";
 import { appletPath } from "../../open/paths";
@@ -93,10 +93,11 @@ export default function Launcher() {
         const chapters = <div className={vaults.length > 1 ? "launcher-spread launcher-pages" : "launcher-spread"}>
           {here.map((v, i) => <Chapter key={v.key} n={from + i} v={v} many={vaults.length > 1} level={p && grouped ? 3 : 2} recent={recent[v.key]} onHold={(a) => setAsked({ v, a })} onPart={(c) => setPart({ v, c })} />)}
         </div>;
-        if (!p || !grouped) return <div key={p?.hub ?? "all"}>{chapters}</div>;
+        if (!p || !grouped) return <div key={p?.hub ?? "all"}>{p && <NewVaults p={p} />}{chapters}</div>;
         return (
           <section key={p.hub} className="parachute" aria-label={`Parachute: ${p.name}`}>
             <h2 className="parachute-name">{p.name}{p.name !== p.host && <span className="parachute-host"> · {p.host}</span>}</h2>
+            <NewVaults p={p} />
             {p.signedIn ? chapters
               : <p className="parachute-out">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`} aria-label={`Sign in to ${p.name}`}>Sign in</Link></p>}
           </section>
@@ -122,6 +123,31 @@ export function byParachute(vaults: FrameVault[], parachutes: FrameParachute[]):
   const rest = vaults.filter((v) => !parachutes.some((p) => v.hub === p.hub));
   if (rest.length || !out.length) out.push({ p: null, vaults: rest, from: n });
   return out;
+}
+
+/** Vaults made on a Parachute since this device signed in there: one quiet line each. A tap opens the hub's consent
+ *  for it (the shell's, vault/newVaults.ts); Not now stops offering it here. */
+function NewVaults({ p }: { p: FrameParachute }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!p.fresh?.length) return null;
+  const add = (v: string) => {
+    if (busy) return;
+    setBusy(true); setError("");
+    // the app leaves for the hub; it stays busy until then
+    addVault(p.hub, v).catch((e: unknown) => { setError(e instanceof Error && e.message !== "not_allowed" ? e.message : "That needs a tap."); setBusy(false); });
+  };
+  return (
+    <ul className="parachute-new plain" aria-label={`New vaults on ${p.name}`}>
+      {p.fresh.map((v) => (
+        <li key={v}>
+          <button type="button" className="parachute-new-add" disabled={busy} onClick={() => add(v)}>New: <b>{v}</b>, tap to add</button>
+          <button type="button" className="quiet-button" disabled={busy} aria-label={`Not now: ${v}`} onClick={() => void dismissVault(p.hub, v).catch(() => undefined)}>Not now</button>
+        </li>
+      ))}
+      {error && <li className="error" role="alert">{error}</li>}
+    </ul>
+  );
 }
 
 /** Whose a chapter is, under its name: the home, or someone else's (and where). The person's other vaults need no word. */

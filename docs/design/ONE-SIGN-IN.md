@@ -74,6 +74,23 @@ real test.
 5. **Sign out of a Parachute** signs out of each of its vaults (each revoked at the hub). Sign out of one vault, as before.
 6. **Signing in again** to a Parachute brings any vault given since, and replaces this device's older sign-in of each
    vault it brings (the old one is revoked at the hub).
+7. **A vault made later** shows up without signing in again (2026-11-18). When the app opens, and each time the
+   launcher shows (at most once a minute per hub; no timer), the app asks each hub it is signed in to which vaults the
+   person reaches, as the sign-in asks it: with the key, the hub's `list-vaults`, signed by the shell; without a key,
+   the hub's public list (`/.well-known/parachute.json`), but only on a hub where the sign-in found the person reaches
+   every vault (they run it: `covered: "all"` by key; without one, they said Mine, had more than one vault there, and
+   their list held every vault the public list names, under the 60-vault cut). That mark changes only at a sign-in. A vault
+   there that this device doesn't hold is one quiet line under that Parachute: *New: playground, tap to add*. The tap
+   is the consent step for that vault alone (`vault:<name>:read vault:<name>:write`): the hub asks once, unless the
+   person's grant already covers it; the vault comes in as the person's when every vault held there is theirs, else as
+   someone else's. **Not now**, or signing out of that one vault in Settings, keeps it off the launcher on this device
+   (`parachute.newvaults.v1`, which also keeps the hubs the person reaches every vault of). Code:
+   `src/vault/newVaults.ts`.
+
+   Why not keep the listing token instead of the public list: an account token can't see a vault made later on 0.9,
+   whose consent grants it per vault (`account:self:vaults:<vault>:<level>`), and a vault token can't call
+   `list-vaults` on either version (it needs audience `account`: core `account-mcp-http.ts`). So a member without a key
+   isn't asked; they sign in again, or use the key (proposal 1 below would let any token ask).
 
 So a person with a key approves once per Parachute; without a key, twice (*see your vaults*, then *read and write
 them*). The web build, which the Playwright e2e drives, has no key: e2e covers the two-Approve path end to end on both
