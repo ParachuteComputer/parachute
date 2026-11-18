@@ -11,7 +11,7 @@ import { b64u, decrypt, encrypt } from "../src/webpush.ts";
 import { matches, MAX_MENTIONS } from "../src/match.ts";
 import { LIMITS, parseRegister, Registry, type Reg } from "../src/registry.ts";
 import { endpointOk, privateAddress, trustedHosts } from "../src/urls.ts";
-import { Pusher } from "../src/push.ts";
+import { Pusher, sendable } from "../src/push.ts";
 import { clientAddress, createGateway } from "../src/server.ts";
 import { rosterFilters } from "../src/watch.ts";
 
@@ -107,21 +107,30 @@ test("endpoints: https to a public host; http only to this machine when allowed"
     assert.equal(endpointOk(e, false).ok, false, e);
   assert.ok(endpointOk("http://localhost:18566/upAbc?up=1", true).ok);
   assert.equal(endpointOk("http://10.0.0.2/up", true).ok, false);
-  assert.ok(endpointOk("https://uni.tailnet.ts.net:8565/upAbc?up=1", false, ["uni.tailnet.ts.net:8565"]).ok, "a push server the operator named");
-  assert.ok(endpointOk("https://uni.tailnet.ts.net/upAbc_-9", false, ["uni.tailnet.ts.net"]).ok, "named without a port: 443");
-  assert.ok(endpointOk("https://uni.tailnet.ts.net/push/Abc", false, ["uni.tailnet.ts.net/push/"]).ok, "named with its own push path");
-  assert.equal(endpointOk("http://uni.tailnet.ts.net/upAbc", false, ["uni.tailnet.ts.net"]).ok, false, "https only");
+  const T = ["uni.tailnet.ts.net:8565"];
+  assert.ok(endpointOk("https://uni.tailnet.ts.net:8565/upAbc12345?up=1", false, T).ok, "a push server the operator named");
+  assert.ok(endpointOk("https://Uni.Tailnet.ts.net.:8565/upAbc12345", false, T).ok, "its name in any case, with a trailing dot");
+  assert.ok(endpointOk("https://uni.tailnet.ts.net/push/Abc12345", false, ["uni.tailnet.ts.net:443/push/"]).ok, "named with its own push path");
+  assert.equal(endpointOk("http://uni.tailnet.ts.net:8565/upAbc12345", false, T).ok, false, "https only");
   // a trusted host is trusted for its push server only: its port and the UnifiedPush path, not the hub or mail beside it
   for (const e of ["https://uni.tailnet.ts.net/vault/uni/api/notes", "https://uni.tailnet.ts.net:8452/mail/send", "https://uni.tailnet.ts.net:8565/vault",
-    "https://uni.tailnet.ts.net:8565/up", "https://uni.tailnet.ts.net:8565/upAbc/x", "https://uni.tailnet.ts.net:8565/up..%2fx", "https://uni.tailnet.ts.net:8565/upAbc?x=1",
-    "https://uni.tailnet.ts.net:443/upAbc", "https://uni.tailnet.ts.net:8566/upAbc", "https://uni.tailnet.ts.net:8565/push/Abc"])
-    assert.equal(endpointOk(e, false, ["uni.tailnet.ts.net:8565"]).ok, false, e);
-  assert.equal(endpointOk("https://uni.tailnet.ts.net:8565/upAbc", false, ["uni.tailnet.ts.net"]).ok, false, "named without a port is 443 only");
-  assert.equal(endpointOk("https://uni.tailnet.ts.net/push/Abc/x", false, ["uni.tailnet.ts.net/push/"]).ok, false, "one segment after its path");
-  assert.equal(endpointOk("https://other.tailnet.ts.net:8565/upAbc", false, ["uni.tailnet.ts.net:8565"]).ok, true, "another name is checked as any public name (after DNS)");
-  for (const bad of ["http://uni.tailnet.ts.net", "uni.tailnet.ts.net:0", "uni.tailnet.ts.net:99999", "uni.tailnet.ts.net/up?x", "u@uni.tailnet.ts.net", "uni.tailnet.ts.net/"])
+    "https://uni.tailnet.ts.net:8565/up", "https://uni.tailnet.ts.net:8565/upload", "https://uni.tailnet.ts.net:8565/upAbc12345/x", "https://uni.tailnet.ts.net:8565/up..%2fx12345",
+    "https://uni.tailnet.ts.net:8565/upAbc12345?x=1", "https://uni.tailnet.ts.net/upAbc12345", "https://uni.tailnet.ts.net:8566/upAbc12345", "https://uni.tailnet.ts.net:8565/push/Abc12345",
+    "https://uni.tailnet.ts.net.:8565/vault", "https://UNI.tailnet.ts.net:8452/mail/"])
+    assert.equal(endpointOk(e, false, T).ok, false, e);
+  assert.equal(endpointOk("https://uni.tailnet.ts.net/push/Abc12345/x", false, ["uni.tailnet.ts.net:443/push/"]).ok, false, "one segment after its path");
+  assert.equal(endpointOk("https://other.tailnet.ts.net:8565/upAbc12345", false, T).ok, true, "another name is checked as any public name (after DNS)");
+  // a bare host (the old form), an address, or anything loose stops the gateway at start
+  for (const bad of ["uni.tailnet.ts.net", "https://uni.tailnet.ts.net:8565", "uni.tailnet.ts.net:0", "uni.tailnet.ts.net:99999", "uni.tailnet.ts.net:8565/up?x", "u@uni.tailnet.ts.net:8565",
+    "uni.tailnet.ts.net:8565/", "100.64.1.2:8565", "[fd00::1]:8565", "-.-:8565", "uni.ts.net.:8565", "uni..ts.net:8565", "uni.ts.net:8565//"])
     assert.throws(() => trustedHosts([bad]), /PRIVATE_HOSTS/, bad);
-  assert.deepEqual(trustedHosts(["Uni.Tailnet.ts.net:8565", " x.example "]).map((t) => [t.host, t.port, t.path]), [["uni.tailnet.ts.net", "8565", "/up"], ["x.example", "443", "/up"]]);
+  assert.deepEqual(trustedHosts(["Uni.Tailnet.ts.net:8565", " x.example:443/Push/ "]).map((t) => [t.host, t.port, t.path]), [["uni.tailnet.ts.net", "8565", "/up"], ["x.example", "443", "/Push/"]]);
+  // the same rule at send time, before any connection (a kept-alive one skips the address check in the lookup)
+  const at = (u: string) => sendable(new URL(u), false, T);
+  assert.deepEqual(at("https://uni.tailnet.ts.net:8565/upAbc12345?up=1"), { ok: true, trusted: true });
+  assert.deepEqual(at("https://ntfy.example/upAbc12345"), { ok: true, trusted: false });
+  for (const u of ["https://uni.tailnet.ts.net:8565/vault/uni/api/notes", "https://uni.tailnet.ts.net/vault/uni/api/notes", "https://uni.tailnet.ts.net.:8565/x", "https://10.0.0.2/upAbc12345"])
+    assert.deepEqual(at(u), { ok: false }, u);
   const opts = { relays: [relay], allowLoopback: false };
   const body = { endpoint: "https://ntfy.example/upX?up=1", keys: device().keys, relay, rooms: null, mentions: true, from: [] };
   assert.ok(parseRegister(body, "a".repeat(64), opts, now()).ok);

@@ -5,7 +5,7 @@
 //   PUSH_GATEWAY_DATA     where registrations are kept (a directory)
 //   PUSH_GATEWAY_BIND / PUSH_GATEWAY_PORT   default 127.0.0.1:8790 (put a TLS proxy in front)
 //   PUSH_GATEWAY_PRIVATE_HOSTS             push servers on a private network you trust (a tailnet's ntfy), comma-separated,
-//                                           each host[:port][/path/]: port 443 and ntfy's /up<topic> unless named
+//                                           each host:port[/path/]: ntfy's /up<topic> unless a path is named
 //   PUSH_GATEWAY_TRUST_PROXY=1              behind your own TLS proxy: count new registrations per client address by the
 //                                           last hop of X-Forwarded-For (without it, by the socket's address)
 //   PUSH_GATEWAY_ALLOW_LOOPBACK=1           tests only: http endpoints on this machine
