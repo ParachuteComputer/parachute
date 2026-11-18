@@ -731,7 +731,10 @@ function HoldButton({ label, onDone }: { label: string; onDone: () => void }) {
   const stop = (fire: boolean) => { if (t.current) clearTimeout(t.current); t.current = null; const was = now.current; set("no"); if (fire && was === "ready") onDone(); };
   // a finger held still on a phone is the browser's long-press: no scrolling, selecting or callout here, so it is ours
   return <button className="primary" style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" } as React.CSSProperties}
-    onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); start(); }} onPointerUp={() => stop(true)} onPointerCancel={() => stop(false)} onLostPointerCapture={() => { if (now.current !== "no") stop(true); }} onContextMenu={(e) => e.preventDefault()}
+    onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); start(); }}
+    // sliding off the button lets go without approving (capture keeps the events coming here, so check where it is)
+    onPointerMove={(e) => { if (now.current === "no") return; const r = e.currentTarget.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) stop(false); }}
+    onPointerUp={(e) => { const r = e.currentTarget.getBoundingClientRect(); stop(e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom); }} onPointerCancel={() => stop(false)} onLostPointerCapture={() => { if (now.current !== "no") stop(true); }} onContextMenu={(e) => e.preventDefault()}
     onKeyDown={(e) => { if ((e.key === " " || e.key === "Enter") && now.current === "no") start(); if (e.key === "Escape") stop(false); }} onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") stop(true); }}>
     {held === "holding" ? "Keep holding…" : held === "ready" ? "Let go to approve" : label}
   </button>;

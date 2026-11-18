@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import vectors from "./command-approval.json";
+import fuzz from "./command-approval-fuzz.json";
 import { checkFilters, checkPublish, isCommandApproval, parseServices, requestUrl, serviceLines, servicesKeyPart, type HttpService, type RelayService } from "./services";
 import { grantKey, grantLines, grantOf } from "./grant";
 import { parseManifest } from "./manifest";
@@ -227,5 +228,8 @@ describe("a bot's approval, read as leniently as the bot reads it", () => {
   it("catches /approve and /deny behind white space, controls, invisible characters and leading mentions (the vectors Rust's test reads too)", () => {
     for (const t of vectors.approves) expect(isCommandApproval(t), JSON.stringify(t)).toBe(true);
     for (const t of vectors.fine) expect(isCommandApproval(t), JSON.stringify(t)).toBe(false);
+  });
+  it("gives the answers Rust's test holds it to, on a few thousand mixed strings", () => {
+    for (const [t, want] of fuzz as [string, boolean][]) expect(isCommandApproval(t), JSON.stringify(t)).toBe(want);
   });
 });

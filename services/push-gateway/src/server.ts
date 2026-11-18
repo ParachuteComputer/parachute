@@ -74,6 +74,9 @@ export function createGateway(cfg: Config) {
   // new keys' registrations per address (renewals and confirmed people's don't count): the pending pool turns over
   // only as fast as many addresses can fill it
   const perAddress = new Budget(30, 10_000);
+  // every signed request from one address, before the gateway-wide budget: one address (fresh keys cost nothing) can't
+  // drain what everyone shares
+  const perAddressAll = new Budget(60, 2_000);
   const pusher = new Pusher({ allowLoopback: cfg.allowLoopback, privateHosts: cfg.privateHosts, log, gone: (e) => registry.dropEndpoint(e) });
   const now = () => Math.floor(Date.now() / 1000);
   const alive = new AliveFile(cfg.file ? `${cfg.file}.alive` : null);
@@ -96,14 +99,15 @@ export function createGateway(cfg: Config) {
     // the URL the signature must name is the gateway's own, never one read from the request
     const signed = checkNip98(req.headers.authorization, { url: `${url}${route}`, method: req.method!, body, now: now() });
     if (!signed.ok) return answer(res, 401, { error: signed.error });
-    if (!perKey.take(signed.pubkey, Date.now()) || !anyone.take("*", Date.now())) return answer(res, 429, { error: "slow down" });
+    const from = clientAddress(req.socket.remoteAddress, req.headers["x-forwarded-for"], !!cfg.trustProxy);
+    if (!perKey.take(signed.pubkey, Date.now()) || !perAddressAll.take(from, Date.now()) || !anyone.take("*", Date.now())) return answer(res, 429, { error: "slow down" });
     if (!burned.use(signed.id, now())) return answer(res, 401, { error: "that signature was used already" });
     let x: unknown;
     try { x = JSON.parse(new TextDecoder().decode(body)); } catch { return answer(res, 400, { error: "the body is JSON" }); }
     if (route === "register") {
       const r = parseRegister(x, signed.pubkey, opts, now());
       if (!r.ok) return answer(res, 400, { error: r.error });
-      if (registry.newcomer(r.value, now()) && !perAddress.take(clientAddress(req.socket.remoteAddress, req.headers["x-forwarded-for"], !!cfg.trustProxy), Date.now())) {
+      if (registry.newcomer(r.value, now()) && !perAddress.take(from, Date.now())) {
         return answer(res, 429, { error: "slow down" });
       }
       const put = registry.put(r.value, now());

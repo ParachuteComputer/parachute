@@ -15,13 +15,26 @@
   "​﻿/approve",
   "@Uni ​ @Hermes /approve",
   "@Uni­/approve",
-  "@Uni͏/approve"
+  "@Uni͏/approve",
+  "@ /approve",
+  "@:/approve",
+  "@Uni : /approve",
+  "@Uni​:/approve",
+  "@Uni ,/approve",
+  "@Uni, ,/approve",
+  "npub1x : /approve",
+  "　/approve",
+  " @Uni /deny",
+  " /approve"
  ],
  "fine": [
   "I approve of this",
   "@Uni please /approve later",
   "approve",
   "see /approve docs",
-  "nostr:npub1abc please /approve"
+  "nostr:npub1abc please /approve",
+  "/approvx",
+  "x/approve",
+  "@Uni say /approve"
  ]
 }

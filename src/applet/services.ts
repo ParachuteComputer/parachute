@@ -296,18 +296,29 @@ export function checkFilters(raw: unknown, rooms?: readonly Room[]): Parsed<Reco
 
 /** Text a bot may take as the owner's approval (Hermes's `/approve`, `/deny`), as Rust reads it: leading whitespace
  *  trimmed, case ignored. Only an applet holding the approvals grant posts it, during a tap (docs/design/KEYRING.md). */
+/** A character a bot's parser may drop before a command: Unicode White_Space, C0/C1 controls, and invisible format
+ *  characters. The same set as Rust's `droppable` (services.rs), written out (JS's \s isn't Unicode's White_Space). */
+const DROPPABLE = /[\u0000-\u0020\u007f-\u00a0\u00ad\u034f\u1680\u180e\u2000-\u200f\u2028-\u202f\u205f-\u206f\u3000\ufeff]/;
+const droppable = (c: string) => DROPPABLE.test(c);
+const trimStartWhile = (t: string, f: (c: string) => boolean) => { let i = 0; while (i < t.length && f(t[i])) i++; return t.slice(i); };
+
+/** Text a bot may take as the owner's approval: the same steps as Rust's `is_command_approval`, line for line (drop
+ *  droppable characters; a leading mention — `@…`, `nostr:npub1…`, `npub1…`, a 64-hex key — up to a droppable
+ *  character, `:` or `,`, then any of those; at most 8 times), then `/approve` or `/deny`, case ignored. */
 export function isCommandApproval(content: string): boolean {
-  // what a bot's parser drops before a command: white space, C0/C1 controls, invisible format characters; then a
-  // leading mention (@name, nostr:npub1…, npub1…, a 64-hex key, with : or , after it). The same rule as Rust's.
-  const DROP = /^[\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u180e\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff]+/;
   let t = content;
-  for (let i = 0; i < 8; i++) {
-    t = t.replace(DROP, "");
-    const m = /^(?:@[^\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u180e\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff:,]+|nostr:npub1[^\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u180e\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff:,]*|npub1[^\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u180e\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff:,]*|[0-9a-fA-F]{64}(?=[\s\u0000-\u001f\u007f-\u009f\u00ad\u034f\u180e\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff:,]|$))[:,]?/i.exec(t);
-    if (!m || !m[0]) break;
-    t = t.slice(m[0].length).replace(/^[:,]+/, "");
+  for (let n = 0; n < 8; n++) {
+    t = trimStartWhile(t, droppable);
+    const skip = t.toLowerCase().startsWith("nostr:") ? 6 : 0;
+    let end = t.length;
+    for (let i = skip; i < t.length; i++) if (droppable(t[i]) || t[i] === ":" || t[i] === ",") { end = i; break; }
+    const word = t.slice(0, end), lower = word.toLowerCase();
+    const mention = lower.startsWith("@") || lower.startsWith("nostr:npub1") || lower.startsWith("npub1") || (word.length === 64 && /^[0-9a-fA-F]+$/.test(word));
+    if (!mention || !word) break;
+    t = trimStartWhile(t.slice(end), (c) => droppable(c) || c === ":" || c === ",");
   }
-  return /^\/(approve|deny)/i.test(t.replace(DROP, ""));
+  t = t.toLowerCase();
+  return t.startsWith("/approve") || t.startsWith("/deny");
 }
 
 export type Template = { kind: number; content: string; tags: string[][] };

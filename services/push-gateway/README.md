@@ -77,6 +77,16 @@ person's rooms, and isn't read-only. Buzz's own push leases (NIP-PL, `docs/nips/
 the relay match with the person's own read rights and drop the gateway's membership, but v1 has no UnifiedPush profile;
 when it gains one, this gateway's relay reading goes.
 
+## Limits
+
+- **One address's share.** Every signed request spends its client address's budget (60 at once, then one each 2 s)
+  before the gateway-wide one, so one address can't use up what everyone shares. Many addresses (a botnet, many IPv6
+  /64s) still can; run it for the people of one relay, behind its operator's proxy.
+- **Big relays.** A newcomer is confirmed by a read of the relay's member lists. When that read reaches the relay's
+  per-filter limit (Buzz: 1,000 rooms) it can't tell who isn't listed, so nobody is confirmed or dropped that round;
+  on a relay whose watched people share that many rooms, newcomers wait in the pending pool (200, oldest dropped
+  first). Aaron's relay is far below this.
+
 ## Run it
 
 ```sh

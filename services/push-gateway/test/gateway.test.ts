@@ -251,3 +251,17 @@ test("new keys' registrations are limited per client address; X-Forwarded-For co
     g.close();
   }
 });
+
+test("one address can't drain the budget everyone shares, with fresh keys or unregisters", async () => {
+  const g = createGateway({ url: "http://push.test/", relays: [relay], secret: generateSecretKey(), file: null, allowLoopback: false, trustProxy: true, log: () => {} });
+  const at = `http://127.0.0.1:${await listenFree(g.server)}`;
+  try {
+  const send = async (route: string, sk: Uint8Array, xff: string, body: string) =>
+    (await fetch(`${at}/${route}`, { method: "POST", headers: { authorization: nip98(sk, `http://push.test/${route}`, "POST", body), "x-forwarded-for": xff }, body })).status;
+  const statuses: number[] = [];
+  for (let i = 0; i < 80; i++) statuses.push(await send("unregister", generateSecretKey(), "1.2.3.4", JSON.stringify({ relay, endpoint: `https://ntfy.example/x${i}` })));
+  assert.equal(statuses.filter((s) => s === 200).length, 60, "one address: its own burst, then refused");
+  const body = JSON.stringify({ endpoint: "https://ntfy.example/real?up=1", keys: device().keys, relay, rooms: null, mentions: true, from: [] });
+  assert.equal(await send("register", generateSecretKey(), "5.6.7.8", body), 200, "someone else still gets in");
+  } finally { g.close(); }
+});
