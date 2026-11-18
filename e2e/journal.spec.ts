@@ -36,5 +36,13 @@ test("journal: a line becomes a dated journal note; the days show, voice entries
     expect(mine?.path).toMatch(new RegExp(`^Journal/\\d{4}/\\d{2}-\\d{2}/\\d{2}-\\d{2} Planted garlic in the north bed`));
     expect(mine?.tags).toContain("journal");
     if (mine) made.push(mine.id);
+
+    // an entry opened from elsewhere (a note link, the vault's list) is shown, not just the list it is somewhere in
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: /Notes|Search results/ }).getByRole("link", { name: new RegExp(`Walked by the river ${stamp}`) }).click();
+    const opened = page.frameLocator("iframe.applet-frame").getByRole("region", { name: "The entry you opened" });
+    await expect(opened).toContainText("The herons were out.");
+    await opened.getByRole("button", { name: "Close" }).click();
+    await expect(opened).toHaveCount(0);
   } finally { for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {}); }
 });

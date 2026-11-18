@@ -5,7 +5,7 @@
 // time-only path and "_Transcript pending._"), and its recording attached with transcribe asked (vault.attach): the hub
 // puts the transcript in place of the marker. It reads the entry again a few times while it waits, not for ever.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Days, Empty, Note, ready, vault, voice } from "parachute";
+import { Days, Empty, Note, onOpen, ready, vault, voice } from "parachute";
 
 type Entry = { id: string; path: string; updatedAt: string | null; createdAt?: string | null; body?: string; tags?: string[]; fields?: Record<string, unknown> };
 
@@ -50,6 +50,9 @@ textarea { width: 100%; box-sizing: border-box; min-height: 5.5em; padding: 12px
 .entry .voice { font-size: .8em; color: var(--muted); margin-left: 8px; }
 .more { display: block; margin: 16px auto; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 16px; font: inherit; color: inherit; cursor: pointer; }
 .err { color: var(--danger); }
+.opened { margin: 0 0 18px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius, 10px); }
+.opened .when { display: flex; justify-content: space-between; font: 600 .78em var(--sans); color: var(--muted); letter-spacing: .03em; }
+.opened .close { border: 0; background: none; color: var(--muted); font: inherit; cursor: pointer; padding: 0; }
 `;
 
 export default function Journal() {
@@ -63,6 +66,11 @@ export default function Journal() {
     setEntries(rows);
   };
   useEffect(() => { ready().then(() => load()).catch((e: Error) => setErr(e.message)); }, []);
+  // an entry opened from a link (a room's uni:<id>, a wikilink): shown under the box, however old it is
+  const [opened, setOpened] = useState<Entry | null>(null);
+  const shown = useRef<HTMLElement>(null);
+  useEffect(() => onOpen((o: { note: { id: string } }) => { vault.getRecord(o.note.id).then((r: Entry) => setOpened(r), () => {}); }), []);
+  useEffect(() => { if (opened) shown.current?.scrollIntoView({ block: "start" }); }, [opened]);
   // while a transcript is awaited, the entries are read again a few times
   const [looks, setLooks] = useState(0);
   const anyWaiting = (entries ?? []).some(waiting);
@@ -117,6 +125,10 @@ export default function Journal() {
       <button className="rec" onClick={record} disabled={busy} aria-label="Record a voice entry">Record</button>
       {err ? <span className="err" role="alert">{err}</span> : <span className="quiet">Saved to Journal/ in this vault.</span>}
     </div>
+    {opened && <section className="opened" aria-label="The entry you opened" ref={shown}>
+      <div className="when">{dayWord(whenOf(opened))}, {TIME.format(whenOf(opened))}<button className="close" onClick={() => setOpened(null)}>Close</button></div>
+      <Note body={(opened.body ?? "").replace(TRANSCRIPT_PENDING, "").trim()} path={opened.path} tags={opened.tags} />
+    </section>}
     <Days times={sorted.map((x) => x.at.toISOString())} label="entries, the last four weeks" />
     {entries === null ? <p className="quiet">Reading…</p> : !sorted.length ? <Empty>Nothing yet. Write the first line above.</Empty> : null}
     {sorted.map(({ e, at }) => {
