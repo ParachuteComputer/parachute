@@ -138,7 +138,7 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a p
     await expect(log.locator("article", { hasText: `the raised beds ${stamp}` })).toHaveCount(0);
 
     // what bob sees, on the relay: each signed by alice, shaped as the Uni app shapes it
-    const seen = [...await bob.query({ kinds: [9], "#h": [g], authors: [alice], limit: 50 }), ...await bob.query({ kinds: [7], authors: [alice], limit: 20 })];
+    const seen = [...await bob.query({ kinds: [9], "#h": [g], authors: [alice], limit: 50 }), ...await bob.query({ kinds: [7], authors: [alice], "#h": [g], limit: 20 })];
     const answer = seen.find((e) => e.tags.some((t) => t[0] === "q" && t[1] === ask.ev.id));
     expect(answer?.content).toContain("Picked: North bed");
     expect(answer?.content).toContain('"pick":"north"');
