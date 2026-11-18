@@ -327,6 +327,6 @@ and journal; the Uni app is retired once its person has switched (their call, af
 `basic` auth, kinds beyond the five named, vault by URL, services for embedded components.
 
 Push (above) replaces the phone's own relay listener as the way to hear while closed, from 2026-11-17: the listener
-stays only as the off-by-default fallback for phones without a distributor (two ways, because a phone without one
-otherwise hears nothing). Uni's own ntfy pushes for cards and asks (`~/services/push`, not in this repo) stay until
+stays as the fallback for what no push serves: on by default, idle while push delivers (two ways, because a phone
+without a distributor otherwise hears nothing, and GrapheneOS comes first). Uni's own ntfy pushes for cards and asks (`~/services/push`, not in this repo) stay until
 Uni's cards name Aaron in his rooms on the relay; then the gateway covers them and that watcher goes (Uni's call).

@@ -21,7 +21,14 @@ export default function NotifySettings() {
   const [s, setS] = useState<PushStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const read = () => invoke<PushStatus>("push_status").then(setS, () => setS(null));
-  useEffect(() => { if (inShell()) void read(); }, []);
+  // read again when the app comes back to the front (after Get ntfy, installed, the person returns here)
+  useEffect(() => {
+    if (!inShell()) return;
+    void read();
+    const back = () => { if (document.visibilityState === "visible") void syncNotify().then(read); };
+    document.addEventListener("visibilitychange", back);
+    return () => document.removeEventListener("visibilitychange", back);
+  }, []);
   if (!s?.available) return null;
   const run = (f: () => Promise<unknown>) => { setError(null); f().then(() => syncNotify()).then(read, (e: unknown) => setError(said(e))); };
   const ds = s.distributors ?? [];
@@ -30,7 +37,9 @@ export default function NotifySettings() {
     <section className="card" aria-labelledby="s-notify">
       <h2 id="s-notify">Notifications while closed</h2>
       {!ds.length ? <>
-        <p>{s.fallback ? "Parachute keeps its own connection open for this. It uses more battery than a push service." : "Off: install a push service, or turn on Parachute's own connection below."}</p>
+        <p>{!s.fallback ? "Off: install a push service, or turn on Parachute's own connection below."
+          : s.listening ? "Parachute keeps its own connection open for this. It uses more battery than a push service."
+          : "No push service yet. When an applet asks to tell you something, Parachute keeps its own connection for it."}</p>
         <div className="row-buttons"><button type="button" className="primary" onClick={() => void openLinkOut(NTFY_FDROID).catch((e: unknown) => setError(said(e)))}>Get ntfy</button></div>
         <p className="small quiet">ntfy (from F-Droid) delivers without Google. Then set its server to your own and come back here.</p>
       </>

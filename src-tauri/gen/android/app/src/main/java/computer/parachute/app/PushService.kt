@@ -100,7 +100,8 @@ class PushService : org.unifiedpush.android.connector.PushService() {
       val instance = instanceFor(gateway) ?: return false
       if (endpoint(ctx, instance) == null) return false
       // a distributor uninstalled since keeps its endpoint here but delivers nothing: then push serves nobody
-      val using = org.unifiedpush.android.connector.UnifiedPush.getSavedDistributor(ctx) ?: return false
+      val using = org.unifiedpush.android.connector.UnifiedPush.getAckDistributor(ctx)
+        ?: org.unifiedpush.android.connector.UnifiedPush.getSavedDistributor(ctx) ?: return false
       if (using !in org.unifiedpush.android.connector.UnifiedPush.getDistributors(ctx)) return false
       val a = try { JSONArray(registered(ctx)) } catch (e: Exception) { return false }
       return (0 until a.length()).any { a.optJSONObject(it)?.let { p -> p.optString("gateway") == gateway && p.optString("relay") == relay } == true }
@@ -131,8 +132,10 @@ class PushService : org.unifiedpush.android.connector.PushService() {
   }
 
   override fun onRegistrationFailed(reason: FailedReason, instance: String) {
+    // asked again with an endpoint kept (once a run: PushPlugin.endpoint) and refused this time (offline, a hiccup):
+    // the endpoint that was working stays, rather than push and the own connection both serving one applet
     Log.w(TAG, "the distributor refused the registration: $reason")
-    forget(this, instance)
+    if (endpoint(this, instance) == null) forget(this, instance)
     PushPlugin.endpointChanged(this, instance, false)
   }
 

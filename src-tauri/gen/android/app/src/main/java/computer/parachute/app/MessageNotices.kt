@@ -2,7 +2,7 @@ package computer.parachute.app
 
 // Hand-written. The one way a message becomes a notification, for both paths that hear about one while the app is
 // closed: a push from the person's UnifiedPush distributor (PushService.kt, the main path) and the fallback listener's
-// own relay connection (NotifyService.kt, off unless turned on). One notification per room, tagged with the room id,
+// own relay connection (NotifyService.kt, on unless turned off, for what no push serves). One notification per room, tagged with the room id,
 // counting what is unseen; a group summary with the total (the launcher's badge); a tap opens
 // parachute://notify?subject=…&room=…&event=… (src/services/notifyLink.ts). Nothing is shown while the app is in front,
 // and what was shown is cleared when it comes back.

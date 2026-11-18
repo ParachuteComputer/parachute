@@ -62,6 +62,8 @@ export type PushStatus = {
   endpoint?: boolean;
   /** Parachute's own connection for what no push service delivers: on unless the person turned it off. */
   fallback?: boolean;
+  /** How many applets' asks the own connection is serving now (0: it isn't running). */
+  listening?: number;
   registered?: { gateway: string; relay: string }[];
 };
 

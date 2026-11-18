@@ -45,7 +45,7 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     // calls waiting for the distributor's answer, by instance (ANY: whichever answers first); on the main thread
     private val waiting = HashMap<String, ArrayList<() -> Unit>>()
     // the instances asked again of the distributor in this run of the app
-    private val refreshed = HashSet<String>()
+    private val refreshed = HashMap<String, Long>()
 
     /** PushService.kt: the distributor answered for this instance (an endpoint, or none). */
     fun endpointChanged(ctx: Context, instance: String, ok: Boolean) {
@@ -59,11 +59,11 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
   private val message = "Parachute: messages for you while it is closed"
 
   /** Answer when the distributor answers for `instance` (or ANY), or after a while with things as they are. */
-  private fun await(instance: String, answer: () -> Unit) {
+  private fun await(instance: String, ms: Long = WAIT_MS, answer: () -> Unit) {
     var done = false
     val once = { if (!done) { done = true; answer() } }
     main.post { waiting.getOrPut(instance) { ArrayList() }.add(once) }
-    main.postDelayed({ waiting[instance]?.remove(once); once() }, WAIT_MS)
+    main.postDelayed({ waiting[instance]?.remove(once); once() }, ms)
   }
 
   /** The default instance from before one per gateway: let go once. */
@@ -84,6 +84,8 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     out.put("distributor", UnifiedPush.getAckDistributor(activity) ?: UnifiedPush.getSavedDistributor(activity))
     out.put("endpoint", PushService.anyEndpoint(activity))
     out.put("fallback", NotifyService.fallbackOn(activity))
+    // what the own connection is serving now (nothing: it isn't running)
+    out.put("listening", NotifyService.listening(activity).length())
     return out
   }
 
@@ -119,14 +121,16 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     val instance = PushService.instanceFor(gateway) ?: return invoke.reject("not a gateway's address")
     dropLegacy()
     val saved = UnifiedPush.getSavedDistributor(activity)
-    val kept = PushService.endpoint(activity, instance)
-    // once a run, the distributor is asked again even with an endpoint kept (UnifiedPush's advice): one reinstalled or
-    // reset since doesn't know the old one, and answers with a new endpoint, which then goes to the gateway
-    if (kept != null && (instance in refreshed || saved == null || saved !in UnifiedPush.getDistributors(activity))) return invoke.resolve(JSObject(kept.toString()))
+    // a distributor gone since: no endpoint to hand out (the gateway's registration then lapses; the own connection serves)
     if (saved == null || saved !in UnifiedPush.getDistributors(activity)) return invoke.reject("pick a push service in Settings")
-    refreshed.add(instance)
+    val kept = PushService.endpoint(activity, instance)
+    // asked again of the distributor once per install of it (UnifiedPush's advice): one reinstalled since doesn't know
+    // the old endpoint and answers with a new one, which then goes to the gateway. With one kept, the wait is short.
+    val install = try { activity.packageManager.getPackageInfo(saved, 0).firstInstallTime } catch (e: Exception) { 0L }
+    if (kept != null && refreshed[instance] == install) return invoke.resolve(JSObject(kept.toString()))
+    refreshed[instance] = install
     PushService.asked(activity, instance)
-    await(instance) {
+    await(instance, if (kept != null) 5_000L else WAIT_MS) {
       val e = PushService.endpoint(activity, instance)
       if (e != null) invoke.resolve(JSObject(e.toString())) else invoke.reject("no endpoint yet")
     }
