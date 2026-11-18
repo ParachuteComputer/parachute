@@ -7,6 +7,33 @@ import type { Shell } from "../services/broker";
 import { onScreen } from "../shell/appDeps";
 
 type Asking = { view: SecretView; done: (value: string | null) => void };
+type Trusting = { applet: string; key: string; done: (name: string | null) => void };
+
+/** Whether to trust a key for approvals on this device, asked by the shell (never the applet's words): which applet
+ *  shows a card signed by it, the whole key, and the name the person gives it. The device unlock follows (Rust). */
+function TrustSheet({ t }: { t: Trusting }) {
+  const [name, setName] = useState("");
+  return (
+    <div className="sheet-scrim sheet-over-frames" role="presentation">
+      <section className="sheet" role="dialog" aria-modal="true" aria-label="Trust a key for approvals">
+        <h2>Trust a key for approvals?</h2>
+        <p>{t.applet} shows a card signed by this key, which it names for approvals. Trusted, it can ask this device for approvals and secrets.</p>
+        <p className="trust-key"><code>{t.key}</code></p>
+        <p className="quiet">Trust it only if you know whose key this is. Uni's key is in your Parachute notes.</p>
+        <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) t.done(name.trim()); }}>
+          <label className="secret-field">
+            <span className="quiet">Whose key is it?</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} autoComplete="off" placeholder="A name, as Uni" />
+          </label>
+          <div className="grant-actions">
+            <button type="button" className="quiet-button" onClick={() => t.done(null)}>Cancel</button>
+            <button type="submit" className="primary" disabled={!name.trim()}>Trust it</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
 
 /** A tap in this applet now, each tap good for one call: live user activation with the focus in its own frame, and none
  *  spent in the last few seconds (an activation lasts that long, and one tap must not pay for several approvals). */
@@ -57,10 +84,11 @@ function SecretSheet({ asking, onDone }: { asking: Asking; onDone: (v: string | 
 export function useShellSheets(frame: () => HTMLIFrameElement | null) {
   const tap = useTapOnce(frame);
   const [asking, setAsking] = useState<Asking | null>(null);
+  const [trusting, setTrusting] = useState<Trusting | null>(null);
   const [line, setLine] = useState<string | null>(null);
   useEffect(() => { if (!line) return; const t = setTimeout(() => setLine(null), 6000); return () => clearTimeout(t); }, [line]);
   // an open sheet answers "cancelled" when the screen goes
-  const open = useRef<Asking | null>(null);
+  const open = useRef<Asking | Trusting | null>(null);
   useEffect(() => () => { open.current?.done(null); }, []);
   const shell: Shell = {
     tap,
@@ -73,9 +101,17 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
       setAsking(a);
     }),
     say: (text) => setLine(text),
+    trust: ({ applet, key }) => new Promise((done) => {
+      const f = frame();
+      if (open.current || !f || !onScreen(f)) { done(null); return; }
+      const t = { applet, key, done: (x: string | null) => { open.current = null; setTrusting(null); done(x); } };
+      open.current = t;
+      setTrusting(t);
+    }),
   };
   const ui = <>
     {asking && <SecretSheet asking={asking} onDone={asking.done} />}
+    {trusting && <TrustSheet t={trusting} />}
     {line && <p className="shell-line" role="status">{line}</p>}
   </>;
   // the screen hid (kept running, shell/kept.tsx): an open sheet answers "cancelled", as when the screen goes

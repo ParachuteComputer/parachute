@@ -117,6 +117,7 @@ export function e2eNative(secretHex: string): Native {
       const s = svc(session, service);
       const from = s.kind === "nostr-relay" ? s.approvals?.from ?? [] : [];
       if (!from.includes(ev.pubkey) || approvers().some((a) => a.pubkey === ev.pubkey)) throw { code: "not_granted", message: "That key isn't one this applet names for approvals, or it is trusted already." };
+      if (approvers().some((a) => a.name.trim().toLowerCase() === name.trim().toLowerCase())) throw { code: "bad_params", message: "Another key already has that name." };
       const hook = window as unknown as { __parachuteE2EUnlock?: string; __parachuteE2EUnlocks?: string[]; __parachuteE2EApprovers?: { name: string; pubkey: string }[] };
       (hook.__parachuteE2EUnlocks ??= []).push(`trust ${name}`);
       if (hook.__parachuteE2EUnlock !== "pass") throw { code: "unlock", message: "The device unlock was cancelled or failed." };

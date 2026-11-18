@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import * as nip44 from "nostr-tools/nip44";
+import * as nip19 from "nostr-tools/nip19";
 import { VAULT } from "./hub";
 import { installApplet, ui } from "./helpers";
 import { person } from "./services/client";
@@ -207,7 +208,21 @@ test("on a device that doesn't trust Uni's key yet, Uni's card says so and offer
     await expect(refused).toHaveCount(1);
     await expect(refused.getByRole("button")).toHaveCount(0);
     await page.waitForTimeout(5100); // a fresh tap
+    // the shell's own sheet, over the applet: which applet, the whole key, and the name is the person's to give
     await offered.getByRole("button", { name: "Trust Uni's key…" }).click();
+    const sheet = page.getByRole("dialog", { name: "Trust a key for approvals" });
+    await expect(sheet).toContainText("Rooms shows a card signed by this key");
+    await expect(sheet).toContainText(nip19.npubEncode(getPublicKey(uniSk)));
+    await expect(sheet.getByRole("button", { name: "Trust it" })).toBeDisabled();
+    // cancelled: nothing asked, nothing kept
+    await sheet.getByRole("button", { name: "Cancel" }).click();
+    await expect(sheet).toBeHidden();
+    await expect(offered.getByRole("button", { name: "Trust Uni's key…" })).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks?: string[] }).__parachuteE2EUnlocks ?? [])).toEqual([]);
+    await page.waitForTimeout(5100);
+    await offered.getByRole("button", { name: "Trust Uni's key…" }).click();
+    await sheet.getByLabel("Whose key is it?").fill("Uni");
+    await sheet.getByRole("button", { name: "Trust it" }).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks?: string[] }).__parachuteE2EUnlocks ?? [])).toEqual(["trust Uni"]);
     expect(await page.evaluate(() => (window as unknown as { __parachuteE2EApprovers: { name: string; pubkey: string }[] }).__parachuteE2EApprovers)).toEqual([{ name: "Uni", pubkey: getPublicKey(uniSk) }]);
     // the card now reads as Uni's, with its buttons

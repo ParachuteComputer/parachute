@@ -84,7 +84,7 @@ pub async fn svc_card_view<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeySta
     let mut v = view(&r.ev, &r.trusted, &seal, &answers, now());
     // signed by a key the grant names, only not trusted on this device yet: say that (not "not Uni"), and offer it
     let author = r.ev.pubkey.to_hex();
-    if v.rows.is_empty() && r.ev.kind.as_u16() == 9 && keyring::trust_offer(&r.g.from, &keyring::approvers(&app)?, &author) {
+    if v.rows.is_empty() && keyring::trust_offer(&r.g.from, &keyring::approvers(&app)?, &author) {
         v.refused = Some(NOT_TRUSTED_HERE.into());
         v.trust = Some(author);
     }
@@ -105,7 +105,8 @@ pub async fn svc_card_trust<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeySt
         return Err(no("not_granted", "That key isn't one this applet names for approvals, or it is trusted already."));
     }
     keyring::add_approver(&app, &ring, &name, &r.ev.pubkey).await?;
-    state.broker(&app)?.log_for(&session, &service, format!("trust {name}'s key for approvals"), Some(r.ev.id.to_hex()))?;
+    // kept: a log that can't be written doesn't undo it
+    let _ = state.broker(&app).and_then(|b| b.log_for(&session, &service, format!("trust a key for approvals as {}", name.trim()), Some(r.ev.id.to_hex())));
     Ok(())
 }
 

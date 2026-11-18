@@ -821,8 +821,12 @@ function SealedCard({ e }: { e: Ev }) {
   // signed by the key this applet names for Uni, only not trusted on this device yet: one tap (and the device unlock)
   const trust = async () => {
     setBusy(true); setErr(null);
-    try { setView(await services.trust(svc, e, "Uni")); }
-    catch (x: any) { setErr(x?.code === "not_granted" ? "Tap the button itself." : said(x)); }
+    try { setView(await services.trust(svc, e)); }
+    catch (x: any) {
+      // trusted meanwhile (from another card): the card as it reads now
+      const v: any = await services.card(svc, e).catch(() => null);
+      if (v && !v.trust) setView(v); else setErr(x?.code === "not_granted" ? "Tap the button itself." : said(x));
+    }
     finally { setBusy(false); }
   };
   if (view.refused && view.trust) return <div className="card" role="group" aria-label="Uni's card">

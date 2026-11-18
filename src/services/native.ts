@@ -51,9 +51,10 @@ export interface Native {
   log(subject: string): Promise<LogLine[]>;
   /** Uni's card in this event, checked (author on the grant's list and the device's, the box opens, digests, replay). */
   cardView(session: string, service: string, event: SignedEvent): Promise<CardView>;
-  /** Answer rows of a card: the device unlock first (native), the answers kept, the wraps handed back to publish. */
-  /** Trust the card's author for approvals on this device: only a key the grant names, behind the device unlock. */
+  /** Trust the card's author for approvals on this device: only a key the grant names, under the name the person gave
+   *  on the shell's sheet, behind the device unlock. */
   cardTrust(session: string, service: string, event: SignedEvent, name: string): Promise<void>;
+  /** Answer rows of a card: the device unlock first (native), the answers kept, the wraps handed back to publish. */
   cardAnswer(session: string, service: string, event: SignedEvent, decision: "approve" | "deny", rids: string[]): Promise<Answered>;
   /** The relay took this row's wrap. */
   cardSent(session: string, service: string, card: string, rid: string): Promise<void>;

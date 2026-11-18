@@ -5,6 +5,7 @@ import { checkFilters, checkPublish, isCommandApproval, METHODS, REQUEST_HEADERS
 import type { Native, SecretView, SignedEvent } from "./native";
 import { RelayConn, type Status } from "./relay";
 import { verifyEvent } from "nostr-tools/pure";
+import * as nip19 from "nostr-tools/nip19";
 
 export class BrokerError extends Error {
   constructor(public code: "not_granted" | "out_of_scope" | "bad_params" | "failed", message?: string) { super(message ?? code); }
@@ -22,8 +23,10 @@ const BATCH_MS = 50, BATCH_MAX = 200, IN_FLIGHT_MAX = 50 * 1024 * 1024;
 /** What the shell around the frame gives the broker for approvals (docs/design/KEYRING.md): a tap in this applet's
  *  frame, used up by the call that takes it; its own sheet for a secret (null: the person cancelled); its own line
  *  over the applet. */
-export type Shell = { tap: () => boolean; secret: (v: SecretView) => Promise<string | null>; say: (text: string) => void };
-const NO_SHELL: Shell = { tap: () => false, secret: async () => null, say: () => {} };
+export type Shell = { tap: () => boolean; secret: (v: SecretView) => Promise<string | null>; say: (text: string) => void;
+  /** The shell's own sheet: whether to trust `key` (npub) for approvals, and the name the person gives it; null for no. */
+  trust: (v: { applet: string; key: string }) => Promise<string | null> };
+const NO_SHELL: Shell = { tap: () => false, secret: async () => null, say: () => {}, trust: async () => null };
 
 export function createBroker(opts: { native: Native; session: string; applet: { name: string; subject: string }; services: Service[]; hubs: string[]; emit: Emit; socket?: (url: string) => WebSocket; shell?: Shell }) {
   const shell = opts.shell ?? NO_SHELL;
@@ -263,16 +266,18 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       return native.cardView(session, s.id, ev);
     },
 
-    /** Trust the card's author for approvals on this device (a key the grant names, not yet on the list), under
-     *  `name`. Needs a tap; the unlock is Rust's. Then the card as it now reads. */
-    async trust(p: { service: string; event: unknown; name: unknown }) {
+    /** Trust the card's author for approvals on this device (a key the grant names, not yet on the list). Needs a tap;
+     *  then the shell's own sheet (the full key, and a name the person gives it: never the applet's word), then Rust's
+     *  device unlock. Returns the card as it now reads. */
+    async trust(p: { service: string; event: unknown }) {
       const s = approverOf(p.service);
       const ev = cardEvent(s, p.event);
-      const name = typeof p.name === "string" && p.name.trim() ? p.name.trim().slice(0, 40) : "";
-      if (!name) throw new BrokerError("bad_params", "a name for the key");
       if (!shell.tap()) throw new BrokerError("not_granted", "this needs your tap in the applet");
       await opened;
-      await native.cardTrust(session, s.id, ev, name);
+      const before = await native.cardView(session, s.id, ev);
+      if (before.trust !== ev.pubkey) return before;
+      const name = await shell.trust({ applet: opts.applet.name, key: nip19.npubEncode(ev.pubkey) });
+      if (name !== null) await native.cardTrust(session, s.id, ev, name);
       return native.cardView(session, s.id, ev);
     },
 

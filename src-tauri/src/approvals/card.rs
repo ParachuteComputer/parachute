@@ -468,8 +468,8 @@ pub struct CardView {
     /// The key that signed the card (hex), so the applet can say who asks.
     pub author: String,
     pub refused: Option<String>,
-    /// Set when the only thing missing is this device's trust: the author is a key the grant names for approvals, not
-    /// yet on the device's list. The card may offer the person to add it (their tap and device unlock; cards.rs).
+    /// Set when the author is a key the grant names for approvals, not yet on the device's list (its other checks wait
+    /// until it is trusted). The card may offer it: the person's tap, the shell's own sheet, the device unlock (cards.rs).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trust: Option<String>,
     pub rows: Vec<RowView>,

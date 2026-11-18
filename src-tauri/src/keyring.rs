@@ -195,6 +195,10 @@ pub fn with_approver(mut list: Vec<Approver>, name: &str, key: &PublicKey) -> Re
         return Err(no("bad_params", "A name is one short line."));
     }
     let hex = key.to_hex();
+    // one name, one key: a second "Uni" beside the real one would read as Uni on the secret sheet
+    if list.iter().any(|a| a.pubkey != hex && a.name.trim().eq_ignore_ascii_case(name.trim())) {
+        return Err(no("bad_params", "Another key already has that name."));
+    }
     list.retain(|a| a.pubkey != hex);
     if list.len() >= MAX_APPROVERS {
         return Err(no("bad_params", "At most 8 keys are trusted for approvals."));
@@ -387,8 +391,7 @@ pub async fn approvers_add<R: Runtime>(app: AppHandle<R>, ring: State<'_, Keyrin
 pub async fn add_approver<R: Runtime>(app: &AppHandle<R>, ring: &KeyringState, name: &str, key: &PublicKey) -> Result<Vec<Approver>, Refusal> {
     let list = with_approver(approvers(app)?, name, key)?;
     let npub = key.to_bech32().unwrap_or_else(|_| key.to_hex());
-    let short = format!("{}…{}", &npub[..12.min(npub.len())], &npub[npub.len().saturating_sub(6)..]);
-    ring.confirm(app, "settings", "approvers", false, "Trust a key for approvals", &format!("Let {} ({short}) ask this device for approvals and secrets.", name.trim())).await?;
+    ring.confirm(app, "settings", "approvers", false, "Trust a key for approvals", &format!("Let {} ({npub}) ask this device for approvals and secrets.", name.trim())).await?;
     crate::services::write_json(&approvers_path(app)?, &list).map_err(|_| no("storage", "The list couldn't be kept."))?;
     Ok(list)
 }
@@ -428,6 +431,10 @@ mod tests {
         assert!(!trust_offer(&from, &[], &other));
         // already trusted: nothing to offer
         assert!(!trust_offer(&from, &[Approver { name: "Uni".into(), pubkey: uni.clone() }], &uni));
+        // a second key can't take a name another key has (a fake "Uni" beside the real one)
+        let list = vec![Approver { name: "Uni".into(), pubkey: uni.clone() }];
+        assert!(with_approver(list.clone(), " uni ", &PublicKey::from_hex(&other).unwrap()).is_err());
+        assert!(with_approver(list, "Uni", &PublicKey::from_hex(&uni).unwrap()).is_ok());
     }
 
     #[test]
