@@ -56,8 +56,9 @@ export type Pending = {
   how: "key" | "page";
 };
 
-/** In the shell, the loopback address the shell catches (src-tauri/src/lib.rs SIGNIN_RETURN): a hub keeps the name
- *  "Parachute" for redirects only this device can receive. In a browser, this page's own origin. */
+/** In the shell, the loopback address the shell catches (src-tauri/src/lib.rs SIGNIN_RETURN): a core hub keeps the
+ *  name "Parachute" for redirects only this device can receive (Parachute Cloud doesn't: CLOUD_CLIENT_NAME). In a
+ *  browser, this page's own origin. */
 export const SHELL_RETURN = "http://127.0.0.1:47219/oauth/callback";
 export const inShell = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 export const redirectUri = (origin: string = window.location.origin) => (inShell() ? SHELL_RETURN : `${origin}/oauth/callback`);

@@ -39,11 +39,11 @@ different applets; without having to enter a bunch of different URLs."*
 vaults, from the web build): no key door (an emailed link, or the 6-digit code in the same mail), so the listing
 sign-in comes first. It takes `account:vaults` (not `account:self:vaults`) and always shows that consent;
 `/account/mcp` answers `list-vaults` to that Bearer token only (no NIP-98), CORS open. One consent named all five
-vaults; the per-vault steps after it came back with no page, as the source said. Two things only the real Cloud
-showed:
+vaults; the per-vault steps after it came back with no page, as the source said. What the real Cloud showed:
 
-- **It keeps the name "Parachute"** for apps whose return address is one of its own: any other registration named like
-  it is refused (`400 client_name is reserved`). The app registers there as **Vault app** (`CLOUD_CLIENT_NAME`, chosen
+- **It keeps the name "Parachute"** for apps whose return address is one of its own, and two exact names of
+  self-hosted Parachute software ("Parachute Notes", "Parachute Hub (agent connector)"): any other registration named
+  like it is refused (`400 client_name is reserved`). The app registers there as **Vault app** (`CLOUD_CLIENT_NAME`, chosen
   by the descriptor's `door: "cloud"`); core hubs still see "Parachute". Its consent pages say *Unverified app* above
   the ask, as for any app that registered itself.
 - **Its vaults answer the record API** (`/api/records`) and the older `/api/notes`, as core 0.9 does.
