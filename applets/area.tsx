@@ -5,8 +5,11 @@
 // the Room component (applets/room.tsx), the same one the Rooms applet shows; it reads which room, and which key is
 // Uni's, from what this applet was allowed (ready()), so the page has nothing of its own to keep in step.
 import { useEffect, useRef, useState } from "react";
-import { link, Note, ready, vault } from "parachute";
+import { link as kitLink, Note, ready, vault } from "parachute";
 import Room from "component:room";
+
+// an app from before note links (11-18) has no link: there only the area's own notes open from a note
+const link: { parse: (raw: string) => unknown; follow: (to: string, o?: { from?: string }) => Promise<unknown> } = kitLink ?? { parse: () => null, follow: async () => false };
 
 type Rec = { id: string; path: string; updatedAt: string | null; tags?: string[]; fields?: Record<string, unknown>; body?: string };
 type Place = { name: string; folder: string; service: string; room: string };

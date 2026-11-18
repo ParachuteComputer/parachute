@@ -179,6 +179,15 @@ does. Use them, or your own markup on the CSS variables, or both.
 
 An HTML applet has no parts: it has the kit's calls and the CSS variables.
 
+An applet lives in the vault, and each device's app updates on its own time, so an applet meets older apps. A part
+an older app doesn't have arrives as `undefined`. `Link`, `Linked` and `link` came after the first builds (11-18): import
+one under another name and fall back, as the shipped applets do (`src/kit/olderApp.test.ts` checks them):
+
+```tsx
+import { Linked as KitLinked } from "parachute";
+const Linked = KitLinked ?? (({ text }: { text: string }) => <>{text}</>);
+```
+
 ### Links
 
 A link to a note is written one way, and stored that way: **the note's address on its hub**,
