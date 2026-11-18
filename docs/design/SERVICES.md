@@ -83,7 +83,9 @@ and the home read their own vault.
 
 ## The card
 
-One line per service, in the app's words; stressed when it acts as the person or opens a way out:
+The face says each server in one line, with what it does there as you and that what it reads can go there
+([PERMISSIONS.md](PERMISSIONS.md)). Under Show details, one line per service, in the app's words; stressed when it acts
+as the person or opens a way out:
 
 - relay: **"Sign in to relay.example as you"**; **"Post as you in your rooms there: messages, reactions, edits,
   typing"**; **"Delete your messages and reactions there"**; **"Send and open files there as you"** (media); **"Keep private notes

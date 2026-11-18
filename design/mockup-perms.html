@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup: permissions, two directions</title>
+<!-- T-476: how an applet asks, two directions. Static; made-up hosts and names. ?dir=a&screen=rooms|journal|changed|new
+     A, "one card per applet": what it means to a person on the face, the exact lines behind Show details.
+     B, "one sheet for your applets": the first run asks once for every applet your own settings bring. -->
+<style>
+  :root { --bg: #f2ede2; --surface: #fbf8f1; --text: #1d1a16; --muted: #6d665a; --line: #d9d1c1; --accent: #4f6b3a;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif; --sans: system-ui, "Noto Sans", sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 var(--sans); }
+  .bar { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--line); font: 600 20px var(--serif); }
+  .screen { padding: 10px 16px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  h2 { margin: 0 0 2px; font: 600 20px/1.25 var(--serif); }
+  .sub { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+  .risk { list-style: none; margin: 0 0 10px; padding: 0; }
+  .risk li { padding: 7px 0; border-top: 1px solid var(--line); }
+  .risk li b { font-weight: 650; }
+  .plain { margin: 0 0 10px; font-size: 15px; }
+  .plain span + span::before { content: " · "; color: var(--muted); }
+  .note { font-size: 14px; margin: 0 0 4px; }
+  .changed { font-size: 15px; margin: 0 0 10px; }
+  .new { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; border: 1px solid var(--text); border-radius: 4px; padding: 0 4px; margin-right: 6px; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  button { font: 600 16px var(--sans); border-radius: 10px; padding: 10px 18px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .more { margin-top: 10px; font-size: 14px; color: var(--muted); text-decoration: underline; }
+  .applet { display: grid; grid-template-columns: 28px 1fr; gap: 0 8px; padding: 9px 0; border-top: 1px solid var(--line); }
+  .applet .g { font-size: 18px; filter: grayscale(1); }
+  .applet p { margin: 0; font-size: 14.5px; }
+  .label { font: italic 15px var(--serif); color: var(--muted); margin: 6px 0 2px; }
+</style>
+</head>
+<body>
+<div class="bar">‹ <span id="title"></span></div>
+<main class="screen" id="out"></main>
+<script>
+const q = new URLSearchParams(location.search), dir = q.get("dir") || "a", screen = q.get("screen") || "rooms";
+const $ = (h) => { document.getElementById("out").innerHTML = h; };
+const ANDROID = `<p class="note">On this phone an applet could send what it reads to the internet, so allow it only if you trust its code. It can't delete notes.</p>`;
+const ACT = (label) => `<div class="actions"><button>Not now</button><button class="primary">${label}</button></div><div class="more">Show details</div>`;
+const ROOMS_RISK = `<ul class="risk">
+  <li><b>As you on buzz.example.org</b> (your everyday key): posts messages, reactions, edits and typing in your rooms, deletes your own, sends files. What it reads can go there.</li>
+  <li><b>High risk, with your approval key:</b> answers approval cards and secret requests from Uni (your approval key is your everyday key for now). Powerful ones ask for your device unlock.</li>
+  <li><b>Notifies you when Parachute is closed</b>, through push.example.org: it gets your public key and where to reach this phone.</li>
+  <li><b>Opens web addresses</b> in your browser: what it reads could leave that way.</li></ul>`;
+const ROOMS_PLAIN = `<p class="plain"><span>Microphone when you press record</span><span>files you pick</span><span>saves to Downloads</span><span>256 KB here for drafts</span></p>`;
+if (dir === "a") {
+  document.getElementById("title").textContent = screen === "journal" ? "✎ Journal" : "◎ Rooms";
+  if (screen === "rooms") $(`<section class="card"><h2>Allow «Rooms»?</h2><p class="sub">An applet in your vault uni, named by its note.</p>${ROOMS_RISK}${ROOMS_PLAIN}${ANDROID}${ACT("Allow")}</section>`);
+  if (screen === "journal") $(`<section class="card"><h2>Allow «Journal»?</h2><p class="sub">An applet in your vault uni, named by its note.</p>
+    <ul class="risk"><li><b>Read, add and change notes in Journal/</b></li></ul><p class="plain"><span>Opens journal notes you tap</span><span>microphone when you press record</span></p>${ANDROID}${ACT("Allow")}</section>`);
+  if (screen === "changed") $(`<section class="card"><h2>«Rooms» changed</h2><p class="changed">Its code changed since you allowed it. <b>It asks for nothing new.</b> Only the version you allow runs.</p>${ROOMS_RISK}${ROOMS_PLAIN}${ANDROID}${ACT("Allow this version")}</section>`);
+  if (screen === "new") $(`<section class="card"><h2>«Rooms» asks for more</h2><p class="changed">It changed what it asks for since you allowed it. New is marked.</p>${ROOMS_RISK.replace("<li><b>Opens", '<li><span class="new">New</span><b>Opens')}${ROOMS_PLAIN}${ANDROID}${ACT("Allow")}</section>`);
+} else {
+  document.getElementById("title").textContent = "Your applets";
+  $(`<section class="card"><h2>Allow your four applets?</h2><p class="sub">Your settings in uni bring them. Each runs on its own; you can revoke any one in Settings.</p>
+  <p class="label">They act as you</p>
+  <div class="applet"><span class="g">◎</span><p><b>Rooms</b>: as you on buzz.example.org (posts, deletes your own, files); <b>high risk:</b> answers Uni's approval cards with your approval key; notifies you through push.example.org; opens web addresses.</p></div>
+  <div class="applet"><span class="g">✉</span><p><b>Mail</b>: as you on mail.example.org; <b>high risk:</b> sends mail with your approval key.</p></div>
+  <p class="label">In your vault</p>
+  <div class="applet"><span class="g">✎</span><p><b>Journal</b>: reads, adds and changes notes in Journal/.</p></div>
+  <div class="applet"><span class="g">◐</span><p><b>Claude accounts</b>: reads notes in System/.</p></div>
+  <p class="plain"><span>Microphone when you press record</span><span>files you pick</span><span>saves to Downloads</span></p>
+  ${ANDROID.replace("an applet", "each applet").replace("allow it", "allow them")}${ACT("Allow all four")}</section>`);
+}
+</script>
+</body>
+</html>

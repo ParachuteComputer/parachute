@@ -454,7 +454,9 @@ the page keeps nothing of its own that could drift from its card.
 
 ### What the card says
 
-Each line is the app's own words, from the declaration:
+The card's face says it short, by what it means to a person (one line per server, the approval key on its own line,
+the small asks on one "Also" line: [design/PERMISSIONS.md](design/PERMISSIONS.md)). Under **Show details**, each line
+in the app's own words, from the declaration:
 
 > Read notes outside its own folder, in Areas/Garden/ ·
 > With your everyday key: post as you only in «Garden» (3f2a1b…), named by the applet there: messages, reactions, edits

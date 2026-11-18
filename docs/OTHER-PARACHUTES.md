@@ -176,7 +176,8 @@ agent writes runs anything: Aaron allows it on his device.
 - **Under his home's own content, Events' place** says *«Events», from techne, asks to run here.* with **Review**.
   Nothing is ever allowed inside the page itself: Review opens the card on a sheet above everything, and its Allow
   counts only for a tap that begins a moment after the sheet appears.
-- **The card** says who is asking and what for: *The component «Events» (a name from its record, not verified), from
+- **The card** is headed *Allow the component «Events»?*, says *Someone else's vault, at techne.example. It acts as you
+  in techne, with your sign-in there…*, and lists what it reads. Its details say it in full: *The component «Events» (a name from its record, not verified), from
   techne (someone else's, at techne.example), would run in its own sealed frame on your page. In the techne vault it
   would: Read notes outside its own folder, in Events/. Your page hands it: days 30.* Then: *It acts as you in techne,
   with your sign-in there. It sees nothing in your own vaults. Your page and it could pass words between them, and
