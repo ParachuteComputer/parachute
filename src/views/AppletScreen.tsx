@@ -283,7 +283,7 @@ export default function AppletScreen() {
     if (declined) return shell(<div className="card"><p>{name} isn't allowed to run.</p><button type="button" className="primary" onClick={tap(() => setDeclined(false))}>Ask again</button> {plainNote}</div>);
     return shell(<>
       {note && <p className="quiet">{name} asks before it opens {titleOf(note)}.</p>}
-      <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"} codeChanged={decision === "ask-updated" && status === "updated"}
+      <GrantCard reaches={entry.services.length > 0 || entry.app.includes("links")} name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"} codeChanged={decision === "ask-updated" && status === "updated"}
         broughtChanged={pinMoved} asksOther={status === "none" && !!grants.record(subject)}
         lines={[...grantLines({ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services), embedsFrom: loaded.state === "ok" ? loaded.from : [] }, ownFolder(entry.path), lineOptions(keyring)), ...importLines(loaded.state === "ok" ? loaded.imports : [])]}
         withImports={loaded.state === "ok" && loaded.imports.length > 0} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}

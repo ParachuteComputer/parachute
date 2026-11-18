@@ -190,7 +190,14 @@ alone are refused. Not room-scoped, said on the card's notes: media on that rela
 - **Vault attachments** (new call `vault.attach(noteId, bytes, type, {transcribe})`): adds a file to a note the applet
   may `update` (its access rule governs it), through the hub's own upload and attach routes; `transcribe` asks the hub
   to transcribe audio.
-- **Save** names are reduced to a bare file name (no separators, no leading dot, at most 100 characters).
+- **Save** names are reduced to a bare file name (no separators, no leading dot, at most 100 characters); one file a
+  second.
+- As built: `voice.record({max_s})` (1–600 s, default 600); `app.pick` gives at most 10 files; `storage.keys()` lists
+  the applet's keys. A voice note's `imeta` carries no `duration`: the relay refuses it on audio ("only valid for
+  video/mp4"), as the Uni app found; Chromium's WebM has no length in it either, so a player may show none until it has
+  played. Linux desktop can't record: the shell turns media off for the whole webview there (`seal_webview`), and the
+  sheet says so. The microphone goes only to the shell's own page: frames get `allow="microphone 'none'"`, and Android's
+  webview grants audio capture to the shell's origin alone.
 
 ## Notifications while closed
 

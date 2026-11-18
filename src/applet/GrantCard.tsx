@@ -23,7 +23,7 @@ export const handedLine = (props: Record<string, unknown>) => `Your page hands i
 
 export const IMPORTS_CHANGED_LINE = "This applet's code, or what it imports, changed since you allowed it. Only the version you allow runs.";
 
-export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, lines, fingerprint, expires, codeChanged, broughtChanged = false, asksOther = false, onAllow, onNotNow, what = "applet", handed, settle, withImports = false }: {
+export default function GrantCard({ reaches = false, name, glyph, vault, whose = "mine", host, runs, lines, fingerprint, expires, codeChanged, broughtChanged = false, asksOther = false, onAllow, onNotNow, what = "applet", handed, settle, withImports = false }: {
   name: string; glyph: string; vault: string; runs: Runs; lines: CardLine[]; fingerprint: string; expires: Date; codeChanged: boolean;
   /** whose the vault is (vault/whose.ts), and its hub's host: someone else's is said so */
   whose?: "mine" | "theirs" | "trusted"; host?: string;
@@ -36,6 +36,8 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
   settle?: number;
   /** It imports components: a code change may be in them. */
   withImports?: boolean;
+  /** It reaches servers or opens links (its lines say which): the closing line doesn't say "can't reach the internet". */
+  reaches?: boolean;
 }) {
   const tap = (f: () => void) => (e: MouseEvent) => { if (e.isTrusted) f(); };
   const press = useSettledPress(settle ?? 0);
@@ -57,6 +59,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
       {handed && Object.keys(handed).length > 0 && <p className="grant-handed">{handedLine(handed)}</p>}
       <p className="grant-rest">{runs === "approved-code"
         ? <><strong>{APPROVED_CODE_LINE}</strong> It can't delete notes or change notes anywhere else.</>
+        : reaches ? <><strong>Nothing else.</strong> It can't delete notes or change notes anywhere else, and it reaches the internet only as the lines above say.</>
         : <><strong>Nothing else.</strong> It can't delete notes, change notes anywhere else, or reach the internet.</>}
         {whose !== "mine" && <> It acts as you in {vault}, with your sign-in there. It sees nothing in your own vaults.</>}
         {whose !== "mine" && what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}
