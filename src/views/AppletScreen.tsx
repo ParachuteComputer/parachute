@@ -294,7 +294,7 @@ export default function AppletScreen() {
     if (shownBefore.current === kept.shown) return;
     shownBefore.current = kept.shown;
     sessionNow.current?.sendEvent("shown", { shown: kept.shown });
-    if (!kept.shown) { device.cancel(); sheets.cancel(); } else setRecheck((n) => n + 1);
+    if (!kept.shown) { device.cancel(); sheets.cancel(); setMenu(false); } else setRecheck((n) => n + 1);
   }, [kept.shown]); // eslint-disable-line react-hooks/exhaustive-deps
   // a grant changed elsewhere (revoked in Settings while this was kept): drawn again, so it stops at once
   useEffect(() => grants.onChange(bump), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -338,7 +338,7 @@ export default function AppletScreen() {
   // how it runs, and Stop and Revoke: in the bar's menu (⋯), so the applet has the screen
   const closeMenu = () => setMenu(false);
   return shell(<>
-    {menu && <AppletMenu glyph={entry.manifest.glyph} name={name} runs={mode === "approved-code" ? "Approved code only" : "Sealed"} onClose={closeMenu}
+    {menu && kept.shown && <AppletMenu glyph={entry.manifest.glyph} name={name} runs={mode === "approved-code" ? "Approved code only" : "Sealed"} onClose={closeMenu}
       note={note ? { title: handed ? titleOf(note) : undefined, href: `${noteHref(rec.key, note.id)}?with=vault` } : null}
       onStop={tap(() => { closeMenu(); setStarted(false); })} onRevoke={tap(() => { closeMenu(); revoke(); })} />}
     {late && "error" in late && late.hash === keys.html && <p className="error" role="alert">This applet can't run: its code doesn't compile: {late.error}.</p>}
@@ -360,10 +360,10 @@ function AppletMenu({ glyph, name, runs, note, onStop, onRevoke, onClose }: { gl
         <h2><span aria-hidden="true">{glyph}</span> {name}</h2>
         <p className="quiet sheet-line">{runs}{note?.title ? ` · ${note.title}` : ""}</p>
         <ul className="plain sheet-list">
-          {note && <li><Link className="sheet-choice" to={note.href}>Open the note in the vault view</Link></li>}
+          {note && <li><Link className="sheet-choice" to={note.href} onClick={onClose}>Open the note in the vault view</Link></li>}
           <li><button type="button" className="sheet-choice" onClick={onStop}>Stop</button></li>
           <li><button type="button" className="sheet-choice" onClick={onRevoke}>Revoke</button></li>
-          <li><Link className="sheet-choice" to="/settings">Settings</Link></li>
+          <li><Link className="sheet-choice" to="/settings" onClick={onClose}>Settings</Link></li>
         </ul>
       </section>
     </div>

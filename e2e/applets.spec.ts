@@ -74,6 +74,13 @@ test("Stop and Revoke are in the bar's menu (⋯), not over the applet: two taps
   await expect(menu.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
+  // to Settings from the menu and back: the applet as it was, the menu closed
+  await page.locator("header.bar").getByRole("button", { name: "Menu" }).click();
+  await menu.getByRole("link", { name: "Settings" }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.goBack();
+  await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
+  await expect(menu).toBeHidden();
   await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
   // Stop, from the menu
   await fromAppletMenu(page, "Stop");
