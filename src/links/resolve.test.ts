@@ -36,7 +36,10 @@ describe("resolveLink", () => {
   it("an address that names a path or a title, not an id, finds nothing in a held vault: no mapping notes outside the grant", async () => {
     notes.kitchen["Welcome"] = { id: ID, path: "Welcome" };
     notes.kitchen["Passwords"] = { id: OTHER, path: "Passwords" };
-    for (const name of ["Welcome", "Passwords"]) expect((await resolveLink(`https://hub.example/vault/kitchen/view/${name}`, undefined, deps())).answer).toBe("away");
+    const d = deps();
+    for (const name of ["Welcome", "Passwords"]) expect((await resolveLink(`https://hub.example/vault/kitchen/view/${name}`, undefined, d)).answer).toBe("away");
+    // not even asked: a word that isn't an id is a path or a title to the hub, and how fast it answers would say
+    expect(d.asked).toEqual([]);
     // the same answer as a vault this device doesn't hold
     expect((await resolveLink("https://hub.example/vault/other/view/Welcome", undefined, deps())).answer).toBe("away");
   });

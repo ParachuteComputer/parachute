@@ -33,18 +33,19 @@ export const MISS_MS = 60_000;
 export function noteFinder(read: (rec: VaultRecord, idOrPath: string) => Promise<VaultNote | null>) {
   const seen = new Map<string, Promise<Found | null>>();
   // (an applet's link lookups are charged up front, the same for each link: app.links below)
-  return (rec: VaultRecord, idOrPath: string) => {
+  return (rec: VaultRecord, idOrPath: string, ok: (f: Found) => boolean = () => true): Promise<Found | null> => {
     const k = `${rec.key}\u0000${idOrPath}`;
     let p = seen.get(k);
     if (!p) {
       p = read(rec, idOrPath).then((n) => (n && typeof n.id === "string" ? { id: n.id, path: typeof n.path === "string" ? n.path : "", code: isAppletCode(n) } : null));
-      // a failed read (the network, a refresh) is asked again next time; a note that isn't there, after a minute (Uni
-      // may cite a note a moment before the hub has it)
+      // a failed read (the network, a refresh) is asked again next time; a note that isn't there, or one this lookup
+      // doesn't take (the hub found it by a path or a title, or outside the folders it may read), after a minute, as a
+      // miss: kept longer, a quick answer later would say it is there (Uni may cite a note a moment before the hub has it)
       const mine = p;
-      p.then((id) => { if (id === null) setTimeout(() => { if (seen.get(k) === mine) seen.delete(k); }, MISS_MS); }, () => { if (seen.get(k) === mine) seen.delete(k); });
+      p.then((f) => { if (f === null || !ok(f)) setTimeout(() => { if (seen.get(k) === mine) seen.delete(k); }, MISS_MS); }, () => { if (seen.get(k) === mine) seen.delete(k); });
       seen.set(k, p);
     }
-    return p;
+    return p.then((f) => (f && ok(f) ? f : null));
   };
 }
 

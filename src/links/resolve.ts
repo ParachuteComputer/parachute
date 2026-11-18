@@ -10,10 +10,11 @@
 // what `open`'s card line says it may learn.) Each link costs the same, whatever it names (shell/appDeps.ts). A wikilink
 // names a path, which can be guessed, so it is looked up only in the folders the applet may read, and the note found
 // must be in one of them and not an applet's code (the hub also matches a path's other case, or a title). A short form
-// or an address counts only a note found by its own id, for the same reason.
+// or an address counts only a note found by its own id, for the same reason, and an address whose note isn't a ULID (an
+// older id, or a guessed path) is not looked up: it goes to the link's screen, as a vault not held does.
 import { noteHref } from "../vault/notes";
 import { originOf, vaultUrlOf, type VaultRecord } from "../vault/store";
-import { noteAddress, parseNoteRef } from "./note";
+import { ULID, noteAddress, parseNoteRef } from "./note";
 import { linkFor } from "./parse";
 
 export type Answer = "note" | "away" | null;
@@ -27,8 +28,9 @@ export type ResolveDeps = {
   /** Whether the applet may read notes at this path: a wikilink names a path, which anyone can guess, so it is looked
    *  up only where the applet could read it anyway. */
   mayRead(path: string): boolean;
-  /** The note `idOrPath` names in `rec` (its id, its path, whether it is an applet's code), else null. */
-  find(rec: VaultRecord, idOrPath: string): Promise<Found | null>;
+  /** The note `idOrPath` names in `rec` (its id, its path, whether it is an applet's code) when `ok` takes it, else null.
+   *  A note `ok` refuses is kept no longer than a miss, so how fast a later answer comes can't say it is there. */
+  find(rec: VaultRecord, idOrPath: string, ok: (f: Found) => boolean): Promise<Found | null>;
 };
 
 const bare = (u: string) => u.replace(/\/+$/, "");
@@ -48,7 +50,7 @@ export async function resolveLink(raw: string, from: string | undefined, d: Reso
   if (!ref) return { answer: null };
   const first = async (recs: readonly VaultRecord[], idsOrPaths: string[], ok: (f: Found) => boolean = () => true): Promise<Resolved | null> => {
     for (const rec of recs) for (const p of idsOrPaths) {
-      const f = await d.find(rec, p).catch(() => null);
+      const f = await d.find(rec, p, ok).catch(() => null);
       if (f && ok(f)) return { answer: "note", href: noteHref(rec.key, f.id) };
     }
     return null;
@@ -60,10 +62,14 @@ export async function resolveLink(raw: string, from: string | undefined, d: Reso
   // a short form or an address names a note by its id: the hub also answers a path or a title there, which can be
   // guessed in any vault, so only a note whose id it is counts (else an address would map notes outside the grant)
   const byId = (f: Found) => f.id === ref.note;
+  // and only an id as core makes them is asked for at all: any other word is a path or a title to the hub
+  if (!ULID.test(ref.note)) return ref.kind === "short" ? { answer: null } : away(ref.issuer, ref.vault, ref.note);
   if (ref.kind === "short") return (await first(d.vaults().filter((r) => r.vault === ref.vault), [ref.note], byId)) || { answer: null };
   const held = d.vaults().filter((r) => holds(r, ref.issuer, ref.vault));
-  return (await first(held, [ref.note], byId)) || { answer: "away", href: `/open-link?url=${encodeURIComponent(linkFor(`${ref.issuer}/vault/${encodeURIComponent(ref.vault)}`, ref.note))}` };
+  return (await first(held, [ref.note], byId)) || away(ref.issuer, ref.vault, ref.note);
 }
+const away = (issuer: string, vault: string, note: string): Resolved =>
+  ({ answer: "away", href: `/open-link?url=${encodeURIComponent(linkFor(`${issuer}/vault/${encodeURIComponent(vault)}`, note))}` });
 
 /** A note's address in a vault, for an applet writing a link to one of its notes. */
 export const addressIn = (rec: VaultRecord, note: string) => noteAddress(vaultUrlOf(rec), note);

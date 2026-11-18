@@ -11,7 +11,8 @@
 // What a link names is only a candidate: the shell opens it only when it holds that vault (links/resolve.ts).
 import { isLoopback, VAULT_NAME } from "../vault/address";
 
-/** A note's id as core makes it now: a ULID (26 Crockford base-32 characters). Older ids are read only in addresses. */
+/** A note's id as core makes it now: a ULID (26 Crockford base-32 characters). Older ids parse in an address, but the app
+ *  doesn't look them up (links/resolve.ts): such a link goes to its screen. */
 export const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 const NOTE = /^[A-Za-z0-9_-]{1,64}$/;
 export const MAX_LINK = 2000;

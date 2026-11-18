@@ -206,9 +206,12 @@ person has, without telling the applet which those are:
 | The link | What the person sees | A tap |
 |---|---|---|
 | a note in a vault they have | a link | opens the note in the app: in the applet whose `opens` takes its kind, else the plain note view |
-| an address of a vault they haven't added | a link | the app's link screen, which says so and offers to add that Parachute |
+| an address of a vault they haven't added (or whose note part isn't an id, or isn't there) | a link | the app's link screen, which says so and offers to add that Parachute |
 | a `<vault>:<ULID>` of a vault they don't have, or of a note that isn't there; a `[[wikilink]]` to nothing | plain text | nothing: no guess |
 | any other web address | a link | the browser (with `links`) |
+
+The app looks a note up by its id only: an address or short form that names a path or a title is never asked for, and
+a note found some other way doesn't count, so an applet can't learn which notes exist outside what it may read.
 
 A long-press (a right-click on a computer) on a note link asks with **Open with…** instead. Note links need `open` in
 `fields.app`; without it they are drawn as text (an address as a web address). The shipped applets link only through

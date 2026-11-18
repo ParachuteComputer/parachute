@@ -1,7 +1,7 @@
 // What an applet's note links cost: the same for every link, whatever it names, so the read budget can't tell an
 // applet which vault names the person holds.
-import { describe, expect, it } from "vitest";
-import { appDeps } from "./appDeps";
+import { describe, expect, it, vi } from "vitest";
+import { MISS_MS, appDeps, noteFinder } from "./appDeps";
 
 describe("app.links", () => {
   it("charges each link the same, read or not", async () => {
@@ -72,5 +72,22 @@ describe("app.follow", () => {
       expect(await p).toBe(false);
       expect(s.went).toEqual([]);
     } finally { s.done(); }
+  });
+});
+
+describe("noteFinder", () => {
+  it("a note the lookup doesn't take is kept no longer than a miss, so a later answer's speed can't say it is there", async () => {
+    vi.useFakeTimers();
+    try {
+      const reads: string[] = [];
+      // the hub answers a path or a title for an id too
+      const find = noteFinder(async (_r, p) => { reads.push(p); return p === "Passwords" ? ({ id: "01KA3Z9V6B2W8XQJ4M7N5P0R1S", path: "Passwords" } as never) : null; });
+      const rec = { key: "uni" } as never;
+      const byId = (word: string) => (f: { id: string }) => f.id === word;
+      for (const word of ["Passwords", "Nothing"]) expect(await find(rec, word, byId(word))).toBeNull();
+      await vi.advanceTimersByTimeAsync(MISS_MS + 1);
+      for (const word of ["Passwords", "Nothing"]) expect(await find(rec, word, byId(word))).toBeNull();
+      expect(reads).toEqual(["Passwords", "Nothing", "Passwords", "Nothing"]);
+    } finally { vi.useRealTimers(); }
   });
 });
