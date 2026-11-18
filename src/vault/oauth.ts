@@ -4,7 +4,7 @@
 //   vaults  one consent naming all those vaults: its token is for the first of them
 //   vault   for each of the others, the same sign-in once more for that vault alone: the hub's grant already covers it,
 //           so it sends the person straight back with a code (no page), and the vault gets a token of its own
-// The app registers itself on each hub as "Parachute"; the hub keeps a new registration pending until its owner
+// The app registers itself on each hub as "Parachute" (on Parachute Cloud, which keeps that name, CLOUD_CLIENT_NAME); the hub keeps a new registration pending until its owner
 // approves it once (the hub's own approve step). In a browser the redirect comes back to the page's own origin,
 // /oauth/callback; in the shell, to a loopback address the shell catches (SHELL_RETURN below).
 
@@ -16,6 +16,9 @@ import { isLoopback } from "./address";
 import { canList, grantedVaults, LIST_SCOPE, scopeForVaults, type Parachute } from "./parachute";
 
 export const CLIENT_NAME = "Parachute";
+/** Parachute Cloud refuses a name like "Parachute" from an app whose return address isn't one of Cloud's own (its guard
+ *  against look-alikes, 2026-11-18): there the app registers under this, which its consent page shows. */
+export const CLOUD_CLIENT_NAME = "Vault app";
 const PENDING_KEY = "parachute.oauth.pending.v1";
 const CLIENTS_KEY = "parachute.oauth.clients.v1";
 /** A flow older than this is stale: its code verifier is dropped. */
@@ -53,8 +56,9 @@ export type Pending = {
   how: "key" | "page";
 };
 
-/** In the shell, the loopback address the shell catches (src-tauri/src/lib.rs SIGNIN_RETURN): a hub keeps the name
- *  "Parachute" for redirects only this device can receive. In a browser, this page's own origin. */
+/** In the shell, the loopback address the shell catches (src-tauri/src/lib.rs SIGNIN_RETURN): a core hub keeps the
+ *  name "Parachute" for redirects only this device can receive (Parachute Cloud doesn't: CLOUD_CLIENT_NAME). In a
+ *  browser, this page's own origin. */
 export const SHELL_RETURN = "http://127.0.0.1:47219/oauth/callback";
 export const inShell = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 export const redirectUri = (origin: string = window.location.origin) => (inShell() ? SHELL_RETURN : `${origin}/oauth/callback`);
@@ -120,7 +124,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "vaults" && stale.how === "key"))) forgetClient(parachute.issuer);
   let clientId = cachedClient(parachute.issuer, redirect);
   if (!clientId) {
-    clientId = (await registerClient(meta.registration_endpoint, { clientName: CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
+    clientId = (await registerClient(meta.registration_endpoint, { clientName: parachute.door === "cloud" ? CLOUD_CLIENT_NAME : CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
     cacheClient(parachute.issuer, redirect, clientId);
   }
   const codeVerifier = generateCodeVerifier();

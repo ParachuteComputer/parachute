@@ -15,8 +15,9 @@ pub mod services;
 
 use tauri::{Runtime, Url};
 
-/// Where the hub sends the person back after signing in, as the shell registers it. A hub keeps the name "Parachute"
-/// for its own apps and for redirects only the person's own device can receive: loopback is one. Nothing listens on
+/// Where the hub sends the person back after signing in, as the shell registers it. A core hub keeps the name
+/// "Parachute" for its own apps and for redirects only the person's own device can receive: loopback is one (Parachute
+/// Cloud doesn't count it: there the app registers under another name, src/vault/oauth.ts CLOUD_CLIENT_NAME). Nothing listens on
 /// this port: the shell catches the navigation in its own webview (`signin_return`) and hands the code to the app.
 pub const SIGNIN_RETURN: &str = "http://127.0.0.1:47219/oauth/callback";
 

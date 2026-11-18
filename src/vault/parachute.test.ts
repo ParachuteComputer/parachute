@@ -25,8 +25,8 @@ group("the list of Parachutes in the settings note is read as untrusted", () => 
 const answering = (status: number, body: unknown) => (async () => new Response(typeof body === "string" ? body : JSON.stringify(body), { status })) as unknown as typeof fetch;
 group("describe", () => {
   it("reads where Cloud keeps its account and its vaults (another host of its own domain)", async () => {
-    const p = await describe(CLOUD, answering(200, { issuer: CLOUD, account_mcp_endpoint: "https://my.parachute.computer/account/mcp", vault_url_template: "https://my.parachute.computer/vault/{name}" }));
-    expect(p).toEqual({ hub: CLOUD, issuer: CLOUD, accountMcp: "https://my.parachute.computer/account/mcp", vaultTemplate: "https://my.parachute.computer/vault/{name}" });
+    const p = await describe(CLOUD, answering(200, { issuer: CLOUD, door: "cloud", account_mcp_endpoint: "https://my.parachute.computer/account/mcp", vault_url_template: "https://my.parachute.computer/vault/{name}" }));
+    expect(p).toEqual({ hub: CLOUD, issuer: CLOUD, accountMcp: "https://my.parachute.computer/account/mcp", vaultTemplate: "https://my.parachute.computer/vault/{name}", door: "cloud" });
     expect(vaultUrlFrom(p.vaultTemplate, "notes")).toBe("https://my.parachute.computer/vault/notes");
   });
   it("never sends a hub's tokens to another host: an address off the hub is read as the hub's own", async () => {

@@ -1,7 +1,7 @@
 // The record door. Core 0.9 serves a vault's records at `/api/records` (record words: `body`, `fields`, `records`,
 // `types` beside `tags`), and `/api/notes` goes away in 1.0. surface-client's VaultClient speaks only `/api/notes`, so
 // this app hands it a fetch that sends every notes call to the record door instead, in record words, and turns the
-// answer back into the note shape the app reads. A hub without the door (0.8, Cloud today) gets the call as it was.
+// answer back into the note shape the app reads. A hub without the door (0.8) gets the call as it was.
 //
 //   detect    once per vault: `GET <vault>/api/records?limit=1`. 200 is the door; 404 is no door. Anything
 //             else (no network, a refused token) decides nothing: that call goes to /api/notes, and the next one asks
