@@ -5,14 +5,16 @@ One app for your vaults and the applets that grow on them. Early: version 0.1.0,
 
 ## Install and sign in
 
-You need a Parachute (a hub of your own, an org's, or Parachute Cloud) and a Nostr key, or a new one.
+You need a Parachute (a hub of your own, an org's, or Parachute Cloud). On Parachute Cloud that is all: on the first
+screen, **Sign in with Parachute Cloud** (your email, then the code it mails you; no key), and the app opens on your
+notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you also need a Nostr key, or a new one:
 
 1. **Get the app** from the [releases page](https://github.com/ParachuteComputer/parachute/releases):
    - **Android** (8 or newer, 64-bit ARM): download the `.apk` on the phone and open it.
    - **Mac** (Apple Silicon): the `.dmg`. It isn't notarised, so macOS asks once:
      [docs/INSTALL-MAC.md](docs/INSTALL-MAC.md). The newest build of `next` is in the
      [Mac workflow's](https://github.com/ParachuteComputer/parachute/actions/workflows/mac.yml) artifacts.
-2. **Your key.** On the first screen, **Make a new key**. If your key is already in the Uni app or
+2. **Your key.** On the first screen, under the Cloud sign-in, **Make a new key**. If your key is already in the Uni app or
    [Buzz](https://github.com/unforcedagi/buzz) desktop, choose **Pair from a device that has your key** instead: on
    that device, Settings → **Pair a device** (in Buzz, **Pair mobile device**); here, scan its QR code (Android) or
    paste its `nostrpair://` link (Mac); check the 6-digit codes match.
