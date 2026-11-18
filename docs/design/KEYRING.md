@@ -106,7 +106,7 @@ a note under it: "It sees what each card asks (the job, never a key), and that c
 `reach: voice`: "Record from your microphone when you press record (the app shows its own recorder)". `links`: "Open
 web addresses in your browser: what it reads could leave in an address it opens" (stressed). `save`: "Save files to
 your device's Downloads". `attach`: "Ask you to pick a file or picture to give it". `storage`: "Keep up to 256 KB on
-this device for itself (drafts)".
+this device for itself (drafts, what it last showed)".
 
 ## Approving inside an applet
 
@@ -184,7 +184,8 @@ alone are refused. Not room-scoped, said on the card's notes: media on that rela
 - **Attach** (`attach`): `app.pick({accept, multiple})` shows the shell's own file picker; the applet gets the files the
   person picked (`{name, type, bytes}`, at most 25 MB each).
 - **Storage** (`storage`): `storage.get(key)` / `storage.set(key, value)`, kept by the shell per applet on this device,
-  256 KB in all. Why not the two places that already keep an applet's state: drafts are written at every pause in
+  256 KB in all; a value goes as JSON text in bytes (`params.bytes`, read only once it is within the 256 KB), so one
+  call keeps a whole list. Why not the two places that already keep an applet's state: drafts are written at every pause in
   typing, belong to this device, and shouldn't sync; a relay's private note is a signed event per write, and a vault
   note would show up as a note and sync everywhere.
 - **Vault attachments** (new call `vault.attach(noteId, bytes, type, {transcribe})`): adds a file to a note the applet

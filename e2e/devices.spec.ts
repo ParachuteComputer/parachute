@@ -69,7 +69,7 @@ test("rooms on a real relay: a voice note, a link, a saved file, an attached fil
     await expect(card).toContainText("Open web addresses in your browser: what it reads could leave in an address it opens");
     await expect(card).toContainText("Save files to your device's Downloads");
     await expect(card).toContainText("Ask you to pick a file or picture to give it");
-    await expect(card).toContainText("Keep up to 256 KB on this device for itself (drafts)");
+    await expect(card).toContainText("Keep up to 256 KB on this device for itself (drafts, what it last showed)");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
     const list = app.getByRole("list", { name: "Your rooms" });

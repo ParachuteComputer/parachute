@@ -262,3 +262,68 @@ test("Uni's turn in a room: a quick reply, working and Stop, muted, a draft with
     await made.remove();
   }
 });
+
+test("Rooms paints the list it last showed at once, keeps it while the relay is away, then reads it again", async ({ page }) => {
+  test.setTimeout(150_000);
+  const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
+  const bob = await person(RELAY!, secret("bob"));
+  const stamp = Date.now().toString(36);
+  const owner = await person(RELAY!, secret("owner"));
+  const rooms = { Porch: crypto.randomUUID(), Shed: crypto.randomUUID() };
+  for (const p of [alice, bob.pubkey]) await owner.publish({ kind: 9030, tags: [["p", p]] });
+  for (const [name, id] of Object.entries(rooms)) {
+    expect((await owner.publish({ kind: 9007, tags: [["h", id], ["name", `${name} ${stamp}`], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+    for (const p of [alice, bob.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", id], ["p", p]] })).ok).toBe(true);
+  }
+  await bob.publish({ kind: 0, content: JSON.stringify({ name: "Bob", display_name: "Bob" }) });
+  expect((await bob.publish({ kind: 9, content: `The shed door sticks ${stamp}.`, tags: [["h", rooms.Shed]] })).ok).toBe(true);
+  await new Promise((r) => setTimeout(r, 1100)); // the porch's line is the newer, by a second
+  expect((await bob.publish({ kind: 9, content: `The gate is painted ${stamp}.`, tags: [["h", rooms.Porch]] })).ok).toBe(true);
+  await new Promise((r) => setTimeout(r, 1100));
+  const light = await bob.publish({ kind: 9, content: `The porch light is fixed ${stamp}.`, tags: [["h", rooms.Porch]] });
+  expect(light.ok).toBe(true);
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+  // while `away`, every connection to the relay closes at once, so nothing the list shows can come from it
+  let away = false;
+  await page.routeWebSocket((url) => url.href.startsWith(RELAY!), (ws) => { if (away) ws.close(); else ws.connectToServer(); });
+  const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
+  const open = async () => {
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+  };
+  const row = (name: string) => frame(page).getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`${name} ${stamp}`) });
+  // what the list keeps on this device, as the shell stores it
+  const kept = () => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("parachute.applet-storage.v1:")).map((k) => localStorage.getItem(k) ?? "").join("\n"));
+  try {
+    await open();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(row("Porch")).toContainText(`Bob: The porch light is fixed ${stamp}.`, { timeout: 30_000 });
+    await expect(row("Shed")).toContainText(`Bob: The shed door sticks ${stamp}.`);
+    await expect.poll(kept, { timeout: 10_000 }).toContain(`The porch light is fixed ${stamp}.`);
+
+    // the relay away: the list paints from what it kept, and is still there (and still kept) well past the relay's
+    // 15 s query timeout, when its reads come back empty
+    away = true;
+    await open();
+    await expect(row("Porch")).toContainText(`Bob: The porch light is fixed ${stamp}.`, { timeout: 5_000 });
+    await expect(frame(page).getByRole("status")).toContainText("The relay is away");
+    await page.waitForTimeout(18_000);
+    await expect(row("Porch")).toContainText(`Bob: The porch light is fixed ${stamp}.`);
+    await expect(row("Shed")).toBeVisible();
+    expect(await kept()).toContain(`The porch light is fixed ${stamp}.`);
+
+    // meanwhile alice leaves the shed and bob takes his porch message back; with the relay back, what it says takes the
+    // snapshot's place: the shed goes, and the porch's line is the one before
+    expect((await owner.publish({ kind: 9001, tags: [["h", rooms.Shed], ["p", alice]] })).ok).toBe(true);
+    expect((await bob.publish({ kind: 5, tags: [["e", light.ev.id], ["h", rooms.Porch]] })).ok).toBe(true);
+    away = false;
+    await open();
+    await expect(row("Porch")).toContainText(`Bob: The gate is painted ${stamp}.`, { timeout: 30_000 });
+    await expect(row("Shed")).toHaveCount(0);
+    await expect.poll(kept, { timeout: 10_000 }).not.toContain(`The porch light is fixed ${stamp}.`);
+  } finally {
+    await made.remove();
+    owner.close();
+    bob.close();
+  }
+});

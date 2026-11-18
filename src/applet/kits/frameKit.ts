@@ -19,7 +19,8 @@
 //   uni.app.pick({accept, multiple}) → (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] for none
 //   uni.voice.record({max_s})        → (reach: [voice]) the shell's recorder sheet, during a tap: {bytes, type, duration}
 //                                      on Send, null on Cancel (docs/design/KEYRING.md "Voice, files, links, storage")
-//   uni.storage.get/set/keys         → (storage) a little JSON kept by the shell on this device for it, 256 KB in all
+//   uni.storage.get/set/keys         → (storage) a little JSON kept by the shell on this device for it, 256 KB in all (a
+//                                      value of any size within it: set sends it as bytes)
 //   uni.vault.attach(noteId, bytes, type, {transcribe}) → a file onto a note it may change, through the hub
 //   uni.services.*                   → the servers it declared (docs/design/SERVICES.md); card/answer/secret: Uni's
 //                                      approvals, with the approval key (docs/design/KEYRING.md)
@@ -225,7 +226,14 @@ export const FRAME_KIT = String.raw`(function () {
     }),
     storage: Object.freeze({
       get: function (key) { return call("storage", "get", { key: key }); },
-      set: function (key, value) { return call("storage", "set", { key: key, value: value === undefined ? null : value }); },
+      // a value goes as JSON text in bytes, so it may be any size within its 256 KB (a call's parameters are 8 KB at most)
+      set: function (key, value) {
+        if (value === undefined || value === null) return call("storage", "set", { key: key, value: null });
+        var text;
+        try { text = JSON.stringify(value); } catch (e) { return Promise.reject(e); }
+        if (text === undefined) return Promise.reject(new TypeError("storage keeps JSON"));
+        return call("storage", "set", { key: key, bytes: new TextEncoder().encode(text).buffer });
+      },
       keys: function () { return call("storage", "keys", {}); }
     }),
     // the servers it declared (docs/design/SERVICES.md): the shell talks to them for it, and signs as the person
