@@ -170,15 +170,15 @@ export default function Rooms() {
       try {
         const [members, read] = await Promise.all([relay.query([{ kinds: [39002], "#p": [s.me], limit: 500 }]), loadRead(relay)]);
         const ids = [...new Set(members.map((e: Ev) => tag(e, "d")).filter(Boolean))] as string[];
-        // no rooms at all, over a list it painted: more likely a read cut short than every room left at once (so the
-        // rare person who did leave every room keeps seeing the old list, with no live updates, until they are in a room
-        // again)
         if (!on || down) return;
         // the relay's read state is in hand: merged now, only forward (a room read on this device a moment ago stays read),
         // so marks made meanwhile can be written, whatever the rest of this read finds
         for (const [k, v] of Object.entries(read)) if (v > (s.read[k] ?? 0)) s.read[k] = v;
         readMerged.current = true;
         if (readWaiting.current) { readWaiting.current = false; saveRead(); }
+        // no rooms at all, over a list it painted: more likely a read cut short than every room left at once (so the
+        // rare person who did leave every room keeps seeing the old list, with no live updates, until they are in a room
+        // again)
         if (painted && !synced && !ids.length) { setStatus("This is what you last saw: the relay didn't list your rooms just now."); return; }
         // what comes after starts now: anything posted while the history below is read still arrives
         const since = now() - 5;
