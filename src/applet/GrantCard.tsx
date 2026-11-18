@@ -1,15 +1,29 @@
-// The grant card: the one place the person allows an applet anything, drawn by the app outside any frame. It names
-// exactly what is granted, row by row (grant.ts `grantLines`); what isn't on the card is refused at runtime. Every
-// sentence is the app's. The only text from a note is the applet's name, shown quoted and marked unverified. Nothing
-// runs until Allow, and only a real tap counts (`isTrusted`). From the Uni app's GrantCard, reworded for this app.
-import type { MouseEvent } from "react";
-import type { CardLine } from "./grant";
+// The grant card: the one place the person allows an applet anything, drawn by the app outside any frame. Its face
+// (face.ts) says what the applet would do by what it means to a person: what it does as you, and anything that could
+// send what it reads elsewhere, each on its own line in bold words; the small everyday asks on one "Also" line. Below the
+// buttons, "Show details" (beside them, so opening it never moves Allow) unfolds every exact line (grant.ts `grantLines`); what isn't on the card is refused at runtime.
+// When it asks again, the card says why first: its code changed (and whether it asks for anything new), its year ran
+// out, or it asks for something else, with what is new marked. Every sentence is the app's. The only text from a note is
+// the applet's name, shown quoted and marked unverified. Nothing runs until Allow, and only a real tap counts
+// (`isTrusted`). From the Uni app's GrantCard, reworded for this app.
+import { useState, type MouseEvent } from "react";
+import { grantLines, type Grant } from "./grant";
+import type { LineOptions } from "./services";
+import { importLines, type Imported } from "./resolveImports";
+import { alsoLine, changeOf, faceOf, faceTexts, faceText, othersOf } from "./face";
+import type { Asked } from "./grants";
 import { useSettledPress } from "../ui/press";
 
 export const CODE_CHANGED_LINE = "This applet's code changed since you allowed it. On this device an applet could send what it reads to the internet, so only code you've approved runs.";
 /** Sealed: the frame can't reach the internet, so the line says only what changed. */
 export const CODE_CHANGED_SEALED_LINE = "This applet's code changed since you allowed it. Only the version you allow runs.";
 export const APPROVED_CODE_LINE = "On this device an applet could send what it reads to the internet (Android's webview can't switch that off), so it is only as safe as its code. Allow it only if you trust it.";
+/** The face's short form of it. */
+export const APPROVED_CODE_SHORT = "On this device an applet could send what it reads to the internet: allow only code you trust.";
+export const NOTHING_NEW = "It asks for nothing new.";
+export const MODE_CHANGED_LINE = "You allowed it when applets here were sealed. This device now runs approved code only, so it asks again.";
+export const EXPIRED_LINE = "A year has passed since you allowed it, so it asks again.";
+export const FRESH_LINE = "It asks for something new since you allowed it, marked New.";
 export type Runs = "sealed" | "approved-code";
 
 const day = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -23,51 +37,88 @@ export const handedLine = (props: Record<string, unknown>) => `Your page hands i
 
 export const IMPORTS_CHANGED_LINE = "This applet's code, or what it imports, changed since you allowed it. Only the version you allow runs.";
 
-export default function GrantCard({ reaches = false, name, glyph, vault, whose = "mine", host, runs, lines, fingerprint, expires, codeChanged, broughtChanged = false, asksOther = false, onAllow, onNotNow, what = "applet", handed, settle, withImports = false }: {
-  name: string; glyph: string; vault: string; runs: Runs; lines: CardLine[]; fingerprint: string; expires: Date; codeChanged: boolean;
+export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, grant, ownFolder, keyring = {}, imports = [], scope, status, was, modeChanged = false, fingerprint, expires, broughtChanged = false, onAllow, onNotNow, what = "applet", handed, settle }: {
+  name: string; glyph: string; vault: string; runs: Runs;
+  /** what it asks (grant.ts), the folder its note is in, and the keyring's names for keys: the card's lines come from these */
+  grant: Grant; ownFolder: string | null; keyring?: LineOptions;
+  /** the components it imports (resolveImports.ts) */
+  imports?: readonly Imported[];
+  /** the grant's key now, the store's status for it, and the grant this device holds (grants.ts `record`), if any */
+  scope: string; status: "none" | "ok" | "updated"; was: { scope: string; asked: Asked | null } | null;
+  /** allowed under sealed frames, and this device now runs approved code only */
+  modeChanged?: boolean;
+  fingerprint: string; expires: Date;
   /** whose the vault is (vault/whose.ts), and its hub's host: someone else's is said so */
   whose?: "mine" | "theirs" | "trusted"; host?: string;
-  /** the code differs from what a pointer brought in; or a grant was here and what it asks changed */
-  broughtChanged?: boolean; asksOther?: boolean;
-  onAllow: () => void; onNotNow: () => void;
+  /** the code differs from what a pointer brought in */
+  broughtChanged?: boolean;
+  /** `asked`: what this card said, for the store to keep */
+  onAllow: (asked: Asked) => void; onNotNow: () => void;
   /** A component, embedded in a page (docs/design/EMBED.md), with the props its page hands it. */
   what?: "applet" | "component"; handed?: Record<string, unknown>;
   /** On a sheet over a page where frames run: Allow counts only for a press that began this long after it showed. */
   settle?: number;
-  /** It imports components: a code change may be in them. */
-  withImports?: boolean;
-  /** It reaches servers or opens links (its lines say which): the closing line doesn't say "can't reach the internet". */
-  reaches?: boolean;
 }) {
   const tap = (f: () => void) => (e: MouseEvent) => { if (e.isTrusted) f(); };
   const press = useSettledPress(settle ?? 0);
-  const allow = (e: MouseEvent) => { if (settle ? press.counts(e) : e.isTrusted) onAllow(); };
+  const face = faceOf(grant, ownFolder, keyring, imports);
+  const texts = faceTexts(face);
+  const others = othersOf(imports);
+  const asked: Asked = { face: texts, others };
+  const allow = (e: MouseEvent) => { if (settle ? press.counts(e) : e.isTrusted) onAllow(asked); };
+  const change = changeOf(was, { scope, status, face: texts, others });
+  const codeChanged = change.kind === "code";
+  const reaches = (grant.services?.length ?? 0) > 0 || grant.app.includes("links");
+  const lines = [...grantLines(grant, ownFolder, keyring), ...importLines(imports)];
+  const isNew = (t: string) => !!change.fresh?.has(t);
+  const New = ({ t }: { t: string }) => (isNew(t) ? <span className="grant-new">New</span> : null);
+  const alsoText = face.also.length ? alsoLine(face.also) : "";
+  const [open, setOpen] = useState(false);
+  const q = <q className="grant-name" data-untrusted="true">{name}</q>;
+  const title = broughtChanged || codeChanged ? <>{q} changed</>
+    : change.kind === "asks" ? <>{q} asks again</>
+    : change.kind === "expired" ? <>Allow {q} again?</>
+    : <>Allow {what === "component" ? "the component " : ""}{q}?</>;
+  const notice = broughtChanged ? broughtChangedLine(vault, name)
+    : codeChanged ? `${imports.length ? IMPORTS_CHANGED_LINE : CODE_CHANGED_SEALED_LINE}${change.nothingNew ? ` ${NOTHING_NEW}` : ""}`
+    : change.kind === "expired" ? `${EXPIRED_LINE}${change.nothingNew && change.fresh?.size === 0 ? ` ${NOTHING_NEW}` : ""}`
+    : change.kind === "asks" ? (change.fresh?.size ? FRESH_LINE : ASKS_OTHER_LINE)
+    : modeChanged ? MODE_CHANGED_LINE : null;
   const where = whose !== "mine" ? <> (someone else's{host ? `, at ${host}` : ""})</> : null;
   return (
     <section className="card grant-card" role="region" aria-label={`${name} is asking for access`}>
       <header className="grant-head">
         <span className="grant-glyph" aria-hidden="true">{glyph}</span>
-        <h2>{what === "component" ? "A component asks for access" : "An applet asks for access"}</h2>
+        <h2>{title}</h2>
       </header>
-      {broughtChanged ? <p className="grant-changed" role="status"><strong>{broughtChangedLine(vault, name)}</strong></p>
-        : codeChanged ? <p className="grant-changed" role="status"><strong>{withImports ? IMPORTS_CHANGED_LINE : runs === "approved-code" ? CODE_CHANGED_LINE : CODE_CHANGED_SEALED_LINE}</strong></p>
-        : asksOther ? <p className="grant-changed" role="status"><strong>{ASKS_OTHER_LINE}</strong></p> : null}
-      {what === "component"
-        ? <p>The component <q className="grant-name" data-untrusted="true">{name}</q> (a name from its record, not verified), from <strong>{vault}</strong>{where}, would run in its own sealed frame on your page. In the {vault} vault it would:</p>
-        : <p>The applet <q className="grant-name" data-untrusted="true">{name}</q> (a name from its note, not verified) would run in a sealed frame. In the <strong>{vault}</strong> vault{where} it would:</p>}
-      {lines.length ? <ul className="grant-lines">{lines.map((l, i) => <li key={i} className={l.stress ? "grant-stress" : undefined}>{l.text}</li>)}</ul> : <p className="quiet">Nothing outside itself.</p>}
+      <p className="grant-sub quiet">{what === "component" ? <>A component from <strong>{vault}</strong>, in its own sealed frame on your page, named by its record.</> : <>An applet in {whose === "mine" ? "your vault " : ""}<strong>{vault}</strong>, named by its note.</>}</p>
+      {notice && <p className="grant-changed" role="status"><strong>{notice}</strong></p>}
+      {whose !== "mine" && <p className="grant-whose"><strong>Someone else's vault{host ? `, at ${host}` : ""}:</strong> it acts as you in {vault}, with your sign-in there. It sees nothing in your own vaults.{what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}</p>}
+      {face.lines.length ? <ul className="grant-face" aria-label="What it would do">{face.lines.map((l) => <li key={faceText(l)} className={isNew(faceText(l)) ? "grant-fresh" : undefined}><New t={faceText(l)} />{l.risky ? <strong>{l.lead}</strong> : l.lead}{l.rest}</li>)}</ul>
+        : !face.also.length ? <p className="quiet">Nothing outside itself.</p> : null}
+      {alsoText && <p className="grant-also"><New t={alsoText} />{alsoText}</p>}
+      {change.gone.length > 0 && <p className="grant-gone quiet">No longer: {change.gone.join("; ")}</p>}
       {handed && Object.keys(handed).length > 0 && <p className="grant-handed">{handedLine(handed)}</p>}
       <p className="grant-rest">{runs === "approved-code"
-        ? <><strong>{APPROVED_CODE_LINE}</strong> It can't delete notes or change notes anywhere else.</>
-        : reaches ? <><strong>Nothing else.</strong> It can't delete notes or change notes anywhere else, and it reaches the internet only as the lines above say.</>
-        : <><strong>Nothing else.</strong> It can't delete notes, change notes anywhere else, or reach the internet.</>}
-        {whose !== "mine" && <> It acts as you in {vault}, with your sign-in there. It sees nothing in your own vaults.</>}
-        {whose !== "mine" && what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}
+        ? <><strong>{APPROVED_CODE_SHORT}</strong> It can't delete notes.</>
+        : reaches ? <><strong>Nothing else.</strong> It can't delete notes.</>
+        : <><strong>Nothing else.</strong> It can't delete notes or reach the internet.</>}
         {whose === "mine" && what === "component" && <> It reads only that vault.</>}</p>
-      <p className="grant-meta quiet">Lasts until {day.format(expires)}, or until you revoke it · Grant <code>{fingerprint}</code></p>
       <div className="grant-actions">
+        <button type="button" className="grant-more" aria-expanded={open} aria-controls="grant-details" onClick={() => setOpen((o) => !o)}>{open ? "Hide details" : "Show details"}</button>
         <button type="button" className="quiet-button" onClick={tap(onNotNow)}>Not now</button>
         <button type="button" className="primary" {...(settle ? press.bind : {})} onClick={allow}>{codeChanged || broughtChanged ? "Allow this version" : "Allow"}</button>
+      </div>
+      <div className="grant-details" id="grant-details" hidden={!open}>
+        {what === "component"
+          ? <p>The component <q className="grant-name" data-untrusted="true">{name}</q> (a name from its record, not verified), from <strong>{vault}</strong>{where}, would run in its own sealed frame on your page. In the {vault} vault it would:</p>
+          : <p>The applet <q className="grant-name" data-untrusted="true">{name}</q> (a name from its note, not verified) would run in a sealed frame. In the <strong>{vault}</strong> vault{where} it would:</p>}
+        {lines.length ? <ul className="grant-lines">{lines.map((l, i) => <li key={i} className={l.stress ? "grant-stress" : undefined}>{l.text}</li>)}</ul> : <p className="quiet">Nothing outside itself.</p>}
+        <p className="grant-rest">{runs === "approved-code"
+          ? <><strong>{APPROVED_CODE_LINE}</strong> It can't delete notes or change notes anywhere else.</>
+          : reaches ? <><strong>Nothing else.</strong> It can't delete notes or change notes anywhere else, and it reaches the internet only as the lines above say.</>
+          : <><strong>Nothing else.</strong> It can't delete notes, change notes anywhere else, or reach the internet.</>}</p>
+        <p className="grant-meta quiet">Lasts until {day.format(expires)}, or until you revoke it · Grant <code>{fingerprint}</code></p>
       </div>
     </section>
   );

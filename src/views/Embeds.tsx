@@ -17,7 +17,7 @@ import { codeHash, modulePage, prepare, usesNote } from "../applet/code";
 import { parseComponent, propsFor, type Component } from "../applet/component";
 import { embedKey, embedSubject, embedTokens, type Embed } from "../applet/embeds";
 import { deviceGrants } from "../applet/grants";
-import { grantExpiry, grantLines, fingerprint, type Grant } from "../applet/grant";
+import { grantExpiry, fingerprint, type Grant } from "../applet/grant";
 import GrantCard from "../applet/GrantCard";
 import { readPointers, repin, type PointerNote } from "../applet/pointers";
 import { runDecision } from "../applet/selftest/gate";
@@ -209,10 +209,10 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
         </div>}
       {asking && <Sheet label={`${name} is asking for access`} onClose={() => setAsking(false)} back={placeEl}>
         <GrantCard what="component" name={name} glyph={glyph} vault={found.rec.vault} whose={found.whose} host={hostOf(found.rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"}
-          codeChanged={status === "updated"} broughtChanged={pinMoved} asksOther={status === "none" && !!grants.record(subject)} handed={keys.props}
-          lines={grantLines(grant, ownFolder(found.path))} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())} settle={LINK_OUT_HOLD_MS}
-          onAllow={() => {
-            grants.grant(subject, keys.scope, keys.hash, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry);
+          grant={grant} ownFolder={ownFolder(found.path)} scope={keys.scope} status={status} was={grants.record(subject)} modeChanged={decision === "ask-updated" && status === "ok"}
+          broughtChanged={pinMoved} handed={keys.props} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())} settle={LINK_OUT_HOLD_MS}
+          onAllow={(asked) => {
+            grants.grant(subject, keys.scope, keys.hash, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry, asked);
             releaseFromPage(pageId, embed.name);
             // the pointer now pins this code: so does what this place remembers of it (a later Revoke asks plainly again)
             const was = found.pointer;
