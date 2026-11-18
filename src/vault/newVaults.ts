@@ -9,7 +9,6 @@
 // (Not now, or signed out of on purpose), so those don't come back.
 import { beginSignIn, dropPending } from "./oauth";
 import { describe, everyVault } from "./parachute";
-import { isMine } from "./whose";
 import { listVaults, originOf } from "./store";
 import { keySignIn, keysHere, listWithKey } from "../key/key";
 
@@ -89,13 +88,14 @@ export async function relistVaults(now = Date.now()): Promise<void> {
 }
 
 /** Add a vault on offer: the hub's consent for it alone (its sign-in, then its Approve, unless the person's grant there
- *  already covers it), and back to the sign-in's return. Resolves to the address to open. The vault comes in as the
- *  person's when every vault this device holds there is theirs, else as someone else's (Settings changes it). */
+ *  already covers it), and back to the sign-in's return. Resolves to the address to open. The vault comes in as
+ *  someone else's: the hub doesn't say whose it is; Settings makes it the person's. */
 export async function startAddVault(hub: string, vault: string): Promise<string> {
   const h = originOf(hub);
   if (!newVaultsOn(h).includes(vault)) throw new Error("That vault isn't on offer here.");
-  const held = listVaults().filter((v) => originOf(v.issuer) === h);
-  const whose = held.every(isMine) ? "mine" : "theirs";
+  // whose it is isn't known from the hub (another account there may have made it): someone else's until the person
+  // says it is theirs in Settings, so a new vault gets none of "mine"'s rights (home, embeds, recent) unasked
+  const whose = "theirs";
   const parachute = await describe(h);
   if (keysHere()) {
     // through the hub's key door, as a sign-in with the key does; a key the hub refuses: the hub's own page

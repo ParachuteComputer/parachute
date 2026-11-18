@@ -82,8 +82,8 @@ real test.
    their list held every vault the public list names, under the 60-vault cut). That mark changes only at a sign-in. A vault
    there that this device doesn't hold is one quiet line under that Parachute: *New: playground, tap to add*. The tap
    is the consent step for that vault alone (`vault:<name>:read vault:<name>:write`): the hub asks once, unless the
-   person's grant already covers it; the vault comes in as the person's when every vault held there is theirs, else as
-   someone else's. **Not now**, or signing out of that one vault in Settings, keeps it off the launcher on this device
+   person's grant already covers it; the vault comes in as someone else's (the hub doesn't say whose; another account
+   may have made it), and Settings makes it the person's. **Not now**, or signing out of that one vault in Settings, keeps it off the launcher on this device
    (`parachute.newvaults.v1`, which also keeps the hubs the person reaches every vault of). Code:
    `src/vault/newVaults.ts`.
 

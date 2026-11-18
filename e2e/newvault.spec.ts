@@ -8,7 +8,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { approveUntilBack, signIn, ui } from "./helpers";
 import { api, cli, hubState, mintToken } from "./hub";
 
-const SHOT = "/home/uni/Code/wt/p-day1/walkthrough/03-new-vault.png";
+/** Where a walkthrough keeps its pictures, when one is being made (WALKTHROUGH_DIR); CI takes none. */
+const SHOT = process.env.WALKTHROUGH_DIR ? `${process.env.WALKTHROUGH_DIR}/03-new-vault.png` : null;
 
 /** A new vault on the home hub, with one applet in it, as Uni made `playground` with its Ideas. */
 async function makeVault(vault: string, applet: string) {
@@ -40,8 +41,7 @@ test("a vault made after signing in is offered on the launcher, and a tap adds i
   await page.getByRole("button", { name: "Back" }).first().click();
   await expect(newLine(page, "garden")).toBeVisible({ timeout: 15_000 });
   await expect(ui(page).getByRole("region", { name: "garden", exact: true })).toHaveCount(0);
-  mkdirSync(dirname(SHOT), { recursive: true });
-  await page.screenshot({ path: SHOT });
+  if (SHOT) { mkdirSync(dirname(SHOT), { recursive: true }); await page.screenshot({ path: SHOT }); }
 
   // the tap: the hub asks once (this vault isn't in what the person approved before), then the vault and its applet
   const app = new URL(page.url()).origin;
