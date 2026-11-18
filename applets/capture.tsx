@@ -1,5 +1,5 @@
 // Capture: the simple app's quick way in (docs/SIMPLE.md). Write a line or say it; it lands in Inbox/ of this vault as
-// a note of its own, where Notes, the vault and your AI read it. A voice note is recorded on the app's own sheet
+// a note of its own, named by its first words (a voice note: "Voice note" and when), where Notes, the vault and your AI read it. A voice note is recorded on the app's own sheet
 // (voice.record: the applet never touches the microphone), written with "_Transcript pending._" and its recording
 // attached with transcribe asked (vault.attach): the hub puts the words in place of the marker. Below the box, the
 // latest captures; a tap opens one in the app, where it can be edited.
@@ -10,19 +10,20 @@ type Rec = { id: string; path: string; updatedAt: string | null; createdAt?: str
 const PENDING = "_Transcript pending._";
 const pad = (n: number) => String(n).padStart(2, "0");
 const stamp = (at: Date) => `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}-${pad(at.getMinutes())}`;
-/** Inbox/2026-11-18 14-05 the first words */
+/** Inbox/<the first words>: a capture is named by what it says (the same words again get " 2") */
 export function pathFor(text: string, at = new Date()) {
-  const words = text.replace(/[#*_`>\[\]\\/:?"<>|^]/g, " ").split(/\s+/).filter(Boolean).slice(0, 10).join(" ").slice(0, 80).trim();
-  return `Inbox/${stamp(at)}${words ? ` ${words}` : ""}`;
+  const words = text.replace(/[#*_`>\[\]\\/:?"<>|^]/g, " ").split(/\s+/).filter(Boolean).slice(0, 10).join(" ").slice(0, 80).trim().replace(/^\.+/, "");
+  return `Inbox/${words || `Note ${stamp(at)}`}`;
 }
-const voicePath = (at: Date) => `Inbox/${stamp(at)} voice note`;
+const voicePath = (at: Date) => `Inbox/Voice note ${stamp(at)}`;
 const clash = (e: any) => /conflict/i.test(String(e?.message ?? e));
-/** A new note at this path, or (a note already there: the same words in the same minute) at the next free one. */
+/** A new note at this path, or (a note already there by that name) at the next free one: "<name> 2", … */
 async function make(path: string, body: string): Promise<Rec> {
   for (let n = 1; ; n++) {
     try { return await vault.createRecord({ path: n === 1 ? path : `${path} ${n}`, body }); } catch (e) { if (!clash(e) || n >= 9) throw e; }
   }
 }
+// (a capture made before it was named by its words starts with the time: shown without it)
 const nameOf = (r: Rec) => r.path.replace(/^Inbox\//, "").replace(/^\d{4}-\d{2}-\d{2} \d{2}-\d{2}(-\d{2})? ?/, "") || "Note";
 const when = (r: Rec) => { const d = new Date(r.createdAt ?? r.updatedAt ?? ""); return Number.isNaN(+d) ? "" : d.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }); };
 /** While a transcript is awaited: read again every 10 seconds, twelve times, not for ever. */

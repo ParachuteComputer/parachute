@@ -84,7 +84,7 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
     await expect(cap.getByRole("list", { name: "Captured" })).toContainText(`Ask about rye flour ${stamp}`);
     const inbox = await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Inbox/")}&include_content=true&limit=20`) as Row[];
     const captured = inbox.find((r) => r.content === `Ask about rye flour ${stamp}`);
-    expect(captured?.path).toMatch(new RegExp(`^Inbox/\\d{4}-\\d{2}-\\d{2} \\d{2}-\\d{2} Ask about rye flour ${stamp}$`));
+    expect(captured?.path, "named by its words").toBe(`Inbox/Ask about rye flour ${stamp}`);
     if (captured) made.push(captured.id);
     // the bar now goes straight to the applet
     await expect(bar.getByRole("link", { name: "Capture" })).toHaveAttribute("href", /\/v\/[^/]+\/a\//);
