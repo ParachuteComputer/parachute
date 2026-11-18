@@ -1,0 +1,25 @@
+{
+  "path": "Parachute/Approvals/techne.example/techne/01M7EVENTS",
+  "tags": [
+    "parachute-approval"
+  ],
+  "body": "Signed by your approval key. Changed by hand, it is void.",
+  "fields": {
+    "approval": {
+      "event": {
+        "kind": 30479,
+        "created_at": 1794337920,
+        "tags": [
+          [
+            "d",
+            "parachute-approval:https://techne.example/techne/01M7EVENTS"
+          ]
+        ],
+        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://techne.example\",\"vault\":\"techne\",\"record\":\"01M7EVENTS\",\"applet\":\"events\"},\"n\":1,\"supersedes\":null,\"approved\":true,\"code\":\"tsx:77f1000000000000000000000000000000000000000000000000000000000000\",\"scope\":\"0aa3eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"modes\":[\"sealed\",\"approved-code\"],\"whose\":\"theirs\",\"expires\":\"2027-11-10T19:12:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"Someone else's vault, techne at techne.example.\",\"Read notes in Events/\"],\"at\":\"2026-11-10T19:12:00.000Z\"}",
+        "pubkey": "b2d19e3ae9e411d5159c30fcbbebe0a456f39b3e73848aba808e4f2a15d2a9a0",
+        "id": "f438efbe41b62ba129554bcd550ed8c09b56efa48680f76f90e7ef2f9a8185a2",
+        "sig": "f713f0e50ad002e3fb17b9aeb2ced4b56342631d14ffc3ac2eda201fa6b0b9e5e826b5719c2f7be3f8054167a8ce827d07ae492d7d4fe9dd5e79a2849a5624d1"
+      }
+    }
+  }
+}

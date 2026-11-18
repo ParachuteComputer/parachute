@@ -1,0 +1,25 @@
+{
+  "path": "Parachute/Approvals/uni.example/home/01M7ROOMSAPPLET",
+  "tags": [
+    "parachute-approval"
+  ],
+  "body": "Signed by your approval key. Changed by hand, it is void.",
+  "fields": {
+    "approval": {
+      "event": {
+        "kind": 30479,
+        "created_at": 1794994200,
+        "tags": [
+          [
+            "d",
+            "parachute-approval:https://uni.example/home/01M7ROOMSAPPLET"
+          ]
+        ],
+        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7ROOMSAPPLET\",\"applet\":\"rooms\"},\"n\":3,\"supersedes\":\"d4ac77f352f6db084d912391890611b0c6680a91beee962fe52089a93866b861\",\"approved\":true,\"code\":\"tsx:9b13cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"scope\":\"5d2caaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"modes\":[\"sealed\"],\"whose\":\"mine\",\"expires\":\"2036-11-18T09:30:00.000Z\",\"device\":\"Pixel\",\"others\":[],\"face\":[\"As you on relay.example (your everyday key): posts messages, edits and typing in your rooms. What it reads can go there.\",\"High risk, with your approval key: answers approval cards and secret requests from Uni there.\",\"Counts and notifies through push.example: mentions and messages from Uni.\",\"Also: the microphone when you press record, files you pick.\"],\"at\":\"2026-11-18T09:30:00.000Z\"}",
+        "pubkey": "b2d19e3ae9e411d5159c30fcbbebe0a456f39b3e73848aba808e4f2a15d2a9a0",
+        "id": "8739859d524d37aa76259a0319b23a7047fbecee94e9fbbaf2767d40705f9c4d",
+        "sig": "e898da80d0c71e25c87eb4beb63a8fa1a83c5fc4e4a75283fcebaa72dafa7d04a3b8855d33cce19c23f5c94b765fc3994c1d773db5c54d944eaa02b93173f9b6"
+      }
+    }
+  }
+}

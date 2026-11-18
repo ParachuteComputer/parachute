@@ -1,0 +1,25 @@
+{
+  "path": "Parachute/Approvals/uni.example/home/01M7SCRATCH",
+  "tags": [
+    "parachute-approval"
+  ],
+  "body": "Signed by your approval key. Changed by hand, it is void.",
+  "fields": {
+    "approval": {
+      "event": {
+        "kind": 30479,
+        "created_at": 1794469500,
+        "tags": [
+          [
+            "d",
+            "parachute-approval:https://uni.example/home/01M7SCRATCH"
+          ]
+        ],
+        "content": "{\"v\":1,\"subject\":{\"hub\":\"https://uni.example\",\"vault\":\"home\",\"record\":\"01M7SCRATCH\",\"applet\":\"scratch\"},\"n\":2,\"supersedes\":\"851f786a0eb1c8462c7c82dfc0e41a02185964cfd775415610808e26fd996ae1\",\"approved\":false,\"device\":\"Pixel\",\"at\":\"2026-11-12T07:45:00.000Z\"}",
+        "pubkey": "b2d19e3ae9e411d5159c30fcbbebe0a456f39b3e73848aba808e4f2a15d2a9a0",
+        "id": "db48ef0c17de901d3f854226c1d37efcca38d4b7f52da2676926c06aeab0dd7c",
+        "sig": "5ad1d15033d445945f668e3c949bb67b93a3d55bb088a3838617122bfa75c68805854926ab11769629a0bf7de51b442ee7cdce6dd98202ac803a2ea999dbbd42"
+      }
+    }
+  }
+}

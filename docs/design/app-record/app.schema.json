@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://parachute.computer/schema/app-record/app.schema.json",
   "title": "An app record",
-  "description": "A record tagged `parachute-app` in the person's home vault, at Parachute/Apps/<id>. `fields.app` says which applets the app shows, where they sit, what opens what, and which signals badge or notify. It grants nothing: what runs is decided by the signed list of grants (grants.schema.json) and a tap on this device. Beyond this schema the app checks: `id` is the last part of `path`; `start` is in a vault that is the person's own; `theme` and `frame` name records tagged parachute-theme and parachute-frame.",
+  "description": "A record tagged `parachute-app` in the person's home vault, at Parachute/Apps/<id>. `fields.app` says which applets the app shows, where they sit, what opens what, and which signals badge or notify. It grants nothing: what runs is decided by a signed approval (approval.schema.json). Beyond this schema the app checks: `id` is the last part of `path`; `start` is in a vault that is the person's own; `theme` and `frame` name records tagged parachute-theme and parachute-frame.",
   "type": "object",
   "required": [
     "path",

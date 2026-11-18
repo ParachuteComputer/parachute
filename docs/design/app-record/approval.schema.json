@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parachute.computer/schema/app-record/approval.schema.json",
+  "title": "An approval record",
+  "description": "One per applet, at Parachute/Approvals/<host>/<vault>/<applet's record id>, tagged `parachute-approval`, in the person's home vault. It holds one Nostr event signed by the person's approval key after the device unlock, never sent to a relay. A client trusts only the event: its id and signature, that the key is the approval key this client was given when it was paired, that `n` is not lower than the newest it has seen for this applet, and that the code and asks it hashes itself are the ones named. `content` is JSON; its shape is $defs/content. Beyond this schema the client checks: the path and the d tag name the same applet as the content, and an approval ends at most a year after it was made.",
+  "type": "object",
+  "required": [
+    "path",
+    "tags",
+    "fields"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "path": {
+      "type": "string",
+      "pattern": "^Parachute/Approvals/[A-Za-z0-9.-]+/[a-z0-9][a-z0-9_-]{0,39}/[A-Za-z0-9_-]{1,64}$"
+    },
+    "tags": {
+      "type": "array",
+      "contains": {
+        "const": "parachute-approval"
+      }
+    },
+    "body": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object",
+      "required": [
+        "approval"
+      ],
+      "properties": {
+        "approval": {
+          "type": "object",
+          "required": [
+            "event"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "type": "object",
+              "required": [
+                "id",
+                "pubkey",
+                "created_at",
+                "kind",
+                "tags",
+                "content",
+                "sig"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "pubkey": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "created_at": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "kind": {
+                  "description": "A kind of its own, which the signer that works for applets refuses by name. 30479 in these examples.",
+                  "const": 30479
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "contains": {
+                    "type": "array",
+                    "prefixItems": [
+                      {
+                        "const": "d"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^parachute-approval:https?://[^/\\s]+/[a-z0-9][a-z0-9_-]{0,39}/[A-Za-z0-9_-]{1,64}$"
+                      }
+                    ],
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "content": {
+                  "type": "string",
+                  "maxLength": 200000
+                },
+                "sig": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{128}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "content": {
+      "type": "object",
+      "required": [
+        "v",
+        "subject",
+        "n",
+        "supersedes",
+        "approved"
+      ],
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "subject": {
+          "type": "object",
+          "required": [
+            "hub",
+            "vault",
+            "record",
+            "applet"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "hub": {
+              "type": "string",
+              "pattern": "^https?://[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?$"
+            },
+            "vault": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$"
+            },
+            "record": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            },
+            "applet": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            }
+          }
+        },
+        "n": {
+          "description": "This applet's counter: up by one with each approval or withdrawal. A client refuses one lower than the newest it has seen.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "supersedes": {
+          "description": "The id of the approval this one replaces; null for the first.",
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approved": {
+          "type": "boolean"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "code",
+            "scope",
+            "modes",
+            "whose",
+            "at",
+            "expires",
+            "face"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "v": true,
+            "subject": true,
+            "n": true,
+            "supersedes": true,
+            "approved": {
+              "const": true
+            },
+            "code": {
+              "description": "The hash of the exact code.",
+              "type": "string",
+              "pattern": "^(?:(?:tsx|jsx):)?[0-9a-f]{64}$"
+            },
+            "scope": {
+              "description": "The hash of the manifest and everything it asks (folders, opens, app words, services, signals, embeds): grantKey v4, made from the hub's address and the vault's name so every client gets the same hash.",
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "modes": {
+              "description": "The device modes it was approved for. A client in another mode shows the card.",
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "sealed",
+                  "approved-code"
+                ]
+              }
+            },
+            "whose": {
+              "description": "What the person had said of the applet's vault on the client that approved. A client where they said otherwise doesn't run it and says why.",
+              "enum": [
+                "mine",
+                "trusted",
+                "theirs"
+              ]
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "expires": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "face": {
+              "description": "What the card said, so the next card can mark what is new.",
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "others": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "device": {
+              "description": "A name for the client that approved. For the person to read; nothing checks it.",
+              "type": "string",
+              "maxLength": 40
+            }
+          }
+        },
+        {
+          "description": "A withdrawal: the approval is taken back.",
+          "additionalProperties": false,
+          "properties": {
+            "v": true,
+            "subject": true,
+            "n": true,
+            "supersedes": true,
+            "approved": {
+              "const": false
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "device": {
+              "type": "string",
+              "maxLength": 40
+            }
+          }
+        }
+      ]
+    }
+  }
+}
