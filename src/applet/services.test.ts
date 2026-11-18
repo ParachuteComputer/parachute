@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import vectors from "./command-approval.json";
 import { checkFilters, checkPublish, isCommandApproval, parseServices, requestUrl, serviceLines, servicesKeyPart, type HttpService, type RelayService } from "./services";
 import { grantKey, grantLines, grantOf } from "./grant";
 import { parseManifest } from "./manifest";
@@ -223,9 +224,8 @@ describe("notifications through a push gateway (docs/design/SERVICES.md)", () =>
 });
 
 describe("a bot's approval, read as leniently as the bot reads it", () => {
-  it("catches /approve and /deny behind white space, controls, invisible characters and leading mentions", () => {
-    for (const t of ["/approve", "  /Approve once", "\n/DENY", "@Uni /approve", "@uni: /approve", "nostr:npub1abc /deny", "npub1abc, /approve", `${"a".repeat(64)} /approve`, "\u001c/approve", "\u0085/approve", "\u200b\ufeff/approve", "@Uni \u200b @Hermes /approve"])
-      expect(isCommandApproval(t), JSON.stringify(t)).toBe(true);
-    for (const t of ["I approve of this", "@Uni please /approve later", "approve", "see /approve docs"]) expect(isCommandApproval(t), t).toBe(false);
+  it("catches /approve and /deny behind white space, controls, invisible characters and leading mentions (the vectors Rust's test reads too)", () => {
+    for (const t of vectors.approves) expect(isCommandApproval(t), JSON.stringify(t)).toBe(true);
+    for (const t of vectors.fine) expect(isCommandApproval(t), JSON.stringify(t)).toBe(false);
   });
 });

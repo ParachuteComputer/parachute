@@ -505,7 +505,9 @@ pub fn is_command_approval(content: &str) -> bool {
     let mut t: &str = content;
     for _ in 0..8 {
         t = t.trim_start_matches(droppable);
-        let word_end = t.find(|c: char| droppable(c) || c == ':' && !t.starts_with("nostr:") || c == ',').unwrap_or(t.len());
+        // a word ends at a droppable character, `:` or `,`; a `nostr:` prefix is part of its word
+        let skip = if t.to_lowercase().starts_with("nostr:") { 6 } else { 0 };
+        let word_end = t[skip..].find(|c: char| droppable(c) || c == ':' || c == ',').map(|i| i + skip).unwrap_or(t.len());
         let word = &t[..word_end];
         let lower = word.to_lowercase();
         let mention = lower.starts_with('@')
@@ -1797,13 +1799,15 @@ mod tests {
         for tags in [json!([]), json!([["h", "finance"]]), json!([["h", "garden"], ["h", "finance"]])] {
             assert_eq!(code(check_template(&[9], &rooms, false, &ev("hi", tags.clone()))), "out_of_scope", "{tags}");
         }
-        for text in ["/approve", "  /Approve once", "\n/DENY", "/deny", "@Uni /approve", "@uni: /approve", "nostr:npub1abc /deny", "npub1abc, /approve",
-            &format!("{} /approve", "a".repeat(64)), "\u{1c}/approve", "\u{85}/approve", "\u{200b}\u{feff}/approve", "@Uni \u{200b} @Hermes /approve"] {
-            assert_eq!(code(check_template(&[9], &[], false, &ev(text, json!([["h", "x"]])))), "not_granted", "{text}");
-            assert!(check_template(&[9], &[], true, &ev(text, json!([["h", "x"]]))).is_ok(), "{text}");
+        // the same vectors as applet/services.test.ts: one rule in Rust and TS
+        let vectors: Value = serde_json::from_str(include_str!("../../src/applet/command-approval.json")).unwrap();
+        for text in vectors["approves"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()) {
+            assert!(is_command_approval(text), "{text:?}");
+            assert_eq!(code(check_template(&[9], &[], false, &ev(text, json!([["h", "x"]])))), "not_granted", "{text:?}");
+            assert!(check_template(&[9], &[], true, &ev(text, json!([["h", "x"]]))).is_ok(), "{text:?}");
         }
-        for fine in ["I approve of this", "@Uni please /approve later", "approve", "see /approve docs"] {
-            assert!(!is_command_approval(fine), "{fine}");
+        for fine in vectors["fine"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()) {
+            assert!(!is_command_approval(fine), "{fine:?}");
         }
         assert!(check_template(&[9], &[], false, &ev("I approve of this", json!([["h", "x"]]))).is_ok());
     }
