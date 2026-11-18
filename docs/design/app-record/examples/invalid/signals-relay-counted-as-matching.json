@@ -1,0 +1,11 @@
+[
+ {
+  "id": "a",
+  "name": "one",
+  "count": "matching",
+  "from": {
+   "service": "rooms",
+   "mentions": true
+  }
+ }
+]

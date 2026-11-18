@@ -1,0 +1,1 @@
+[{ "id": "unread", "name": "unread mail", "from": { "service": "mail", "feed": "unread" } }]

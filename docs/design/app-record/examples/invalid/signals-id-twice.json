@@ -1,0 +1,20 @@
+[
+ {
+  "id": "a",
+  "name": "one",
+  "count": "matching",
+  "from": {
+   "service": "mail",
+   "feed": "unread"
+  }
+ },
+ {
+  "id": "a",
+  "name": "two",
+  "count": "matching",
+  "from": {
+   "service": "mail",
+   "feed": "all"
+  }
+ }
+]

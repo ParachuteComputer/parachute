@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parachute.computer/schema/app-record/signals.schema.json",
+  "title": "An applet's signals",
+  "description": "`fields.signals` on an applet record, beside its manifest: what counts as something for you, and who counts it. Shown on the card and part of the grant's key. Beyond this schema the app checks: ids are unique, a service is one the applet declares, a vault path is one it may read.",
+  "type": "array",
+  "maxItems": 4,
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "name",
+      "count",
+      "from"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string",
+        "maxLength": 40,
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "name": {
+        "description": "What the badge counts, in the words a notification uses: «3 new: mentions and messages from Uni».",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 60,
+        "pattern": "^[^\\n\\t]+$"
+      },
+      "from": {
+        "oneOf": [
+          {
+            "description": "Events on a relay the applet declared in fields.services.",
+            "type": "object",
+            "required": [
+              "service"
+            ],
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "mentions"
+                ]
+              },
+              {
+                "required": [
+                  "authors"
+                ]
+              }
+            ],
+            "properties": {
+              "service": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "mentions": {
+                "const": true
+              },
+              "authors": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            }
+          },
+          {
+            "description": "A count an http service the applet declared reports to the watcher itself (mail: unread).",
+            "type": "object",
+            "required": [
+              "service",
+              "feed"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "service": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "feed": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              }
+            }
+          },
+          {
+            "description": "Notes in the applet's own vault, in a folder it may read.",
+            "type": "object",
+            "required": [
+              "vault",
+              "path"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "vault": {
+                "const": "here"
+              },
+              "path": {
+                "type": "string",
+                "maxLength": 200,
+                "pattern": "^(?!\\.)(?:[^/\\n.][^/\\n]*/)+$"
+              },
+              "type": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)*$"
+              },
+              "where": {
+                "type": "object",
+                "maxProperties": 4,
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "via": {
+        "description": "The watcher that counts this signal while the applet is closed: a push gateway. Shown on the card. Left out: counted only while the app is open.",
+        "type": "string",
+        "maxLength": 300,
+        "pattern": "^https://[^\\s@]+/$"
+      },
+      "count": {
+        "description": "new: things that arrived since you last looked (a relay). matching: how many there are right now (a server's number, notes in a vault).",
+        "enum": [
+          "new",
+          "matching"
+        ]
+      }
+    },
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "from": {
+              "required": [
+                "feed"
+              ]
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "count": {
+              "const": "matching"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "from": {
+              "required": [
+                "vault"
+              ]
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "count": {
+              "const": "matching"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "from": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "feed"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "vault"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "count": {
+              "const": "new"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

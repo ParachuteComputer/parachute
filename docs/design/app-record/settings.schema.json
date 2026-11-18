@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parachute.computer/schema/app-record/settings.schema.json",
+  "title": "Parachute/Settings, after the app record",
+  "description": "What stays in the settings note: what belongs to the person, not to one app. The bar, start and services move into an app record; they are still allowed here while old and new devices overlap.",
+  "type": "object",
+  "required": [
+    "path",
+    "tags",
+    "fields"
+  ],
+  "properties": {
+    "path": {
+      "const": "Parachute/Settings"
+    },
+    "tags": {
+      "type": "array",
+      "contains": {
+        "const": "parachute-settings"
+      }
+    },
+    "fields": {
+      "type": "object",
+      "required": [
+        "parachute"
+      ],
+      "properties": {
+        "parachute": {
+          "type": "object",
+          "required": [
+            "hubs"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "hubs": {
+              "description": "The person's Parachutes, as today.",
+              "type": "array",
+              "maxItems": 50,
+              "items": {
+                "type": "object",
+                "required": [
+                  "hub"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "hub": {
+                    "type": "string",
+                    "pattern": "^https?://[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 40
+                  }
+                }
+              }
+            },
+            "app": {
+              "description": "The app a new device opens: an app record's id. A device's own choice wins.",
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            },
+            "bar": {
+              "description": "Before app records, and for one release after: kept in step with the app named in `app`, so a device not yet updated keeps its bar. Then gone."
+            },
+            "start": {
+              "description": "Before app records, and for one release after: kept in step with the app named in `app`, so a device not yet updated keeps its bar. Then gone."
+            },
+            "services": {
+              "description": "Before app records, and for one release after: kept in step with the app named in `app`, so a device not yet updated keeps its bar. Then gone."
+            }
+          }
+        }
+      }
+    }
+  }
+}

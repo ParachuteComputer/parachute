@@ -1,0 +1,23 @@
+{
+  "path": "Parachute/Apps/techne",
+  "tags": ["parachute-app"],
+  "body": "Added from Techne's vault. This copy is Aaron's: Techne changing theirs changes nothing here until he takes the change.",
+  "fields": {
+    "app": {
+      "contract": 1,
+      "id": "techne",
+      "name": "Techne",
+      "glyph": "△",
+      "note": "events, members, the shop floor",
+      "based_on": { "hub": "https://techne.example", "vault": "techne", "record": "01M7APPTECHNE", "updated": "2026-11-12T17:04:00Z" },
+      "sources": [{ "hub": "https://techne.example", "vault": "techne", "applet": "*" }],
+      "bar": [
+        { "hub": "https://techne.example", "vault": "techne", "applet": "Applets/Events" },
+        { "hub": "https://techne.example", "vault": "techne", "applet": "Applets/Members" }
+      ],
+      "start": null,
+      "keep": 2,
+      "signals": { "default": "off" }
+    }
+  }
+}

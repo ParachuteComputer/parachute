@@ -1,0 +1,12 @@
+[
+ {
+  "id": "a",
+  "name": "one",
+  "count": "new",
+  "via": "https://me:pw@push.example/",
+  "from": {
+   "service": "rooms",
+   "mentions": true
+  }
+ }
+]

@@ -1,0 +1,103 @@
+{
+  "path": "Parachute/Apps/uni",
+  "tags": [
+    "parachute-app"
+  ],
+  "body": "Aaron's everyday app. See docs/design/APP-RECORD.md.",
+  "fields": {
+    "app": {
+      "contract": 1,
+      "id": "uni",
+      "name": "Uni",
+      "glyph": "◉",
+      "note": "everyday: journal, mail, rooms",
+      "sources": [
+        {
+          "vault": "home",
+          "applet": "*"
+        },
+        {
+          "vault": "garden",
+          "applet": "Applets/SeedLog"
+        },
+        {
+          "hub": "https://techne.example",
+          "vault": "techne",
+          "applet": "Applets/Events"
+        }
+      ],
+      "hide": [
+        {
+          "vault": "home",
+          "applet": "Applets/Scratch"
+        }
+      ],
+      "bar": [
+        {
+          "vault": "home",
+          "applet": "Applets/Journal"
+        },
+        {
+          "vault": "home",
+          "applet": "Applets/Mail"
+        },
+        {
+          "vault": "home",
+          "applet": "Applets/Rooms"
+        },
+        {
+          "hub": "https://techne.example",
+          "vault": "techne",
+          "applet": "Applets/Events"
+        }
+      ],
+      "start": {
+        "vault": "home",
+        "applet": "Applets/Home"
+      },
+      "opens": [
+        {
+          "type": "journal",
+          "vault": "home",
+          "applet": "Applets/Journal"
+        },
+        {
+          "type": "task",
+          "vault": "home",
+          "applet": null
+        }
+      ],
+      "services": [
+        {
+          "name": "Rooms",
+          "kind": "nostr-relay",
+          "url": "wss://relay.example"
+        },
+        {
+          "name": "Mail",
+          "kind": "http",
+          "url": "https://mail.example/mail/"
+        }
+      ],
+      "theme": "Parachute/Theme",
+      "keep": "auto",
+      "signals": {
+        "default": "badge",
+        "rules": [
+          {
+            "vault": "home",
+            "applet": "Applets/Rooms",
+            "signal": "for-you",
+            "show": "notify"
+          },
+          {
+            "hub": "https://techne.example",
+            "vault": "techne",
+            "applet": "Applets/Events",
+            "show": "off"
+          }
+        ]
+      }
+    }
+  }
+}

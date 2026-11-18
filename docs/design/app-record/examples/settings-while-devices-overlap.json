@@ -1,0 +1,30 @@
+{
+  "path": "Parachute/Settings",
+  "tags": [
+    "parachute-settings"
+  ],
+  "fields": {
+    "parachute": {
+      "hubs": [
+        {
+          "hub": "https://uni.example"
+        },
+        {
+          "hub": "https://techne.example",
+          "name": "Techne"
+        }
+      ],
+      "app": "everything",
+      "bar": [
+        {
+          "vault": "kitchen",
+          "applet": "Applets/Recipes"
+        }
+      ],
+      "start": {
+        "vault": "kitchen",
+        "applet": "Applets/Home"
+      }
+    }
+  }
+}

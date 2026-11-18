@@ -1,0 +1,15 @@
+[
+  {
+    "id": "for-you",
+    "name": "mentions and messages from Uni",
+    "count": "new",
+    "from": {
+      "service": "rooms",
+      "mentions": true,
+      "authors": [
+        "3f1c9a5e7b2d4068a1c3e5f7092b4d6e8fa1c3e5072b4d6e8fa1c3e5f7092b4d"
+      ]
+    },
+    "via": "https://push.example/"
+  }
+]

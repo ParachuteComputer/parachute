@@ -1,0 +1,29 @@
+{
+ "path": "Parachute/Apps/x",
+ "tags": [
+  "parachute-app"
+ ],
+ "fields": {
+  "app": {
+   "contract": 1,
+   "id": "x",
+   "name": "X",
+   "sources": [
+    {
+     "vault": "home",
+     "applet": "*"
+    }
+   ],
+   "bar": [
+    {
+     "vault": "home",
+     "applet": "a"
+    },
+    {
+     "vault": "home",
+     "applet": "a"
+    }
+   ]
+  }
+ }
+}

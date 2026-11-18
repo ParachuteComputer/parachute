@@ -1,0 +1,10 @@
+{
+  "path": "Parachute/Settings",
+  "tags": ["parachute-settings"],
+  "fields": {
+    "parachute": {
+      "hubs": [{ "hub": "https://uni.example" }, { "hub": "https://techne.example", "name": "Techne" }],
+      "app": "uni"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "unread",
+    "name": "unread mail",
+    "count": "matching",
+    "from": {
+      "service": "mail",
+      "feed": "unread"
+    },
+    "via": "https://push.example/"
+  }
+]

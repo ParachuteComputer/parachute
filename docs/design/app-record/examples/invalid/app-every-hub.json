@@ -1,0 +1,1 @@
+{ "path": "Parachute/Apps/all", "tags": ["parachute-app"], "fields": { "app": { "contract": 1, "id": "all", "name": "All", "sources": [{ "hub": "*", "vault": "*", "applet": "*" }] } } }

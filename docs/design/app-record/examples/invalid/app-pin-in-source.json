@@ -1,0 +1,1 @@
+{ "path": "Parachute/Apps/pin", "tags": ["parachute-app"], "fields": { "app": { "contract": 1, "id": "pin", "name": "Pin", "sources": [{ "vault": "home", "applet": "Applets/Journal", "allowed": true, "code": "tsx:9b13" }] } } }
