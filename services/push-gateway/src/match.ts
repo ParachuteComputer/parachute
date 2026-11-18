@@ -3,7 +3,8 @@
 import type { Reg } from "./registry.ts";
 
 export type Why = "mention" | "from";
-export type Push = { v: 1; relay: string; room: string; event: string; kind: number; why: Why };
+/** `to`: the key the registration was made for (hex), so a phone whose key changed drops what its old key still gets. */
+export type Push = { v: 1; relay: string; room: string; event: string; kind: number; why: Why; to: string };
 type Ev = { id: string; pubkey: string; kind: number; created_at: number; tags: string[][]; content?: string };
 
 /** Clocks differ: a message stamped this much before a registration still counts. */
@@ -29,7 +30,7 @@ export function matches(ev: Ev, relay: string, regs: readonly Reg[], members: (r
     if (reg.relay !== relay || reg.pubkey === ev.pubkey || !inRoom.has(reg.pubkey) || ev.created_at < reg.created - SKEW_S) continue;
     if (reg.rooms && !reg.rooms.includes(room)) continue;
     const why: Why | null = reg.mentions && mentioned.has(reg.pubkey) ? "mention" : reg.from.includes(ev.pubkey) ? "from" : null;
-    if (why) out.push({ reg, push: { v: 1, relay, room, event: ev.id, kind: ev.kind, why } });
+    if (why) out.push({ reg, push: { v: 1, relay, room, event: ev.id, kind: ev.kind, why, to: reg.pubkey } });
   }
   return out;
 }

@@ -15,6 +15,8 @@ services:
       PUSH_GATEWAY_URL: ${PUSH_GATEWAY_URL:?its public address, ending in /}
       PUSH_GATEWAY_RELAYS: ${PUSH_GATEWAY_RELAYS:?the relays it watches, comma-separated}
       PUSH_GATEWAY_KEY_FILE: /run/secrets/gateway-key
+      # 1 when your TLS proxy appends the client to X-Forwarded-For: new registrations are limited per client address
+      PUSH_GATEWAY_TRUST_PROXY: ${PUSH_GATEWAY_TRUST_PROXY:-0}
     volumes:
       - "${PUSH_GATEWAY_KEY:?a file holding the gateway's own key (64 hex)}:/run/secrets/gateway-key:ro"
       - gateway-data:/data

@@ -1,8 +1,9 @@
 // The gateway: POST /register and POST /unregister (each signed NIP-98 by the person's everyday key), GET /health; the
 // relay watchers; the pusher. README.md says what it learns and what it sends.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { isIP } from "node:net";
 import { checkNip98, Burned } from "./nip98.ts";
-import { parseRegister, parseUnregister, Registry, type Opts } from "./registry.ts";
+import { LIMITS, parseRegister, parseUnregister, Registry, type Opts } from "./registry.ts";
 import { AliveFile, RelayWatch } from "./watch.ts";
 import { Budget, Pusher, type Log } from "./push.ts";
 import { relayKey } from "./urls.ts";
@@ -19,6 +20,9 @@ export type Config = {
   allowLoopback: boolean;
   /** Push servers on a private network the operator trusts (a tailnet's ntfy): their hosts, https only. */
   privateHosts?: string[];
+  /** Behind a proxy the operator runs: the client's address is the last hop of X-Forwarded-For (what that proxy
+   *  added), not the socket's. Off unless set: anyone can write the header. */
+  trustProxy?: boolean;
   log?: Log;
 };
 
@@ -32,6 +36,20 @@ function readBody(req: IncomingMessage): Promise<Uint8Array | null> {
     req.on("end", () => resolve(new Uint8Array(Buffer.concat(parts))));
     req.on("error", () => resolve(null));
   });
+}
+
+/** Who is asking, for the per-address limit: the socket's address, or with a trusted proxy the last address in
+ *  X-Forwarded-For (earlier ones are whatever the client wrote). IPv6 counts by its /64, as one subscriber gets one. */
+export function clientAddress(socket: string | undefined, forwarded: string | string[] | undefined, trustProxy: boolean): string {
+  const hops = trustProxy ? [forwarded ?? []].flat().join(",").split(",").map((h) => h.trim()).filter(Boolean) : [];
+  let a = (hops.length && isIP(hops[hops.length - 1]) ? hops[hops.length - 1] : socket ?? "").toLowerCase();
+  if (a.startsWith("::ffff:") && isIP(a.slice(7)) === 4) a = a.slice(7);
+  if (isIP(a) !== 6) return a;
+  // expand "::", then keep the first four groups
+  const [head, tail = ""] = a.split("::");
+  const h = head ? head.split(":") : [], t = a.includes("::") && tail ? tail.split(":") : [];
+  const groups = a.includes("::") ? [...h, ...Array(8 - h.length - t.length).fill("0"), ...t] : h;
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
 
 const answer = (res: ServerResponse, status: number, body: unknown) => {
@@ -53,10 +71,17 @@ export function createGateway(cfg: Config) {
   // is at most 8 KB and its signature one check, so unsigned junk is refused before it can spend anyone's budget
   const anyone = new Budget(600, 100);
   const perKey = new Budget(20, 3_000);
+  // new keys' registrations per address (renewals and confirmed people's don't count): the pending pool turns over
+  // only as fast as many addresses can fill it
+  const perAddress = new Budget(30, 10_000);
   const pusher = new Pusher({ allowLoopback: cfg.allowLoopback, privateHosts: cfg.privateHosts, log, gone: (e) => registry.dropEndpoint(e) });
   const now = () => Math.floor(Date.now() / 1000);
   const alive = new AliveFile(cfg.file ? `${cfg.file}.alive` : null);
-  const watchers = relays.map((r) => new RelayWatch(r, cfg.secret, () => registry.all(now()), (reg, push) => { void pusher.send(reg, push); }, log, alive));
+  const watchers = relays.map((r) => new RelayWatch(r, cfg.secret, () => registry.all(now()), (reg, push) => { void pusher.send(reg, push); }, log, alive,
+    (asked, members) => {
+      const j = registry.judge(r, asked, members);
+      if (j.confirmed || j.dropped) log(`relay ${r}: ${j.confirmed} new registration(s) confirmed, ${j.dropped} dropped (in no room's member list)`);
+    }, LIMITS.pending));
   registry.onChange(() => watchers.forEach((w) => w.changed()));
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -78,10 +103,14 @@ export function createGateway(cfg: Config) {
     if (route === "register") {
       const r = parseRegister(x, signed.pubkey, opts, now());
       if (!r.ok) return answer(res, 400, { error: r.error });
+      if (registry.newcomer(r.value, now()) && !perAddress.take(clientAddress(req.socket.remoteAddress, req.headers["x-forwarded-for"], !!cfg.trustProxy), Date.now())) {
+        return answer(res, 429, { error: "slow down" });
+      }
       const put = registry.put(r.value, now());
       if (!put.ok) return answer(res, 409, { error: put.error });
-      log(`registered ${signed.pubkey.slice(0, 8)} on ${r.value.relay}`);
-      return answer(res, 200, { ok: true, expires: r.value.expires });
+      log(`registered ${signed.pubkey.slice(0, 8)} on ${r.value.relay}${put.pending ? " (until a member list shows the key)" : ""}`);
+      // pending: the app asks again sooner, in case a room adds the gateway or the person after this read
+      return answer(res, 200, { ok: true, expires: r.value.expires, pending: put.pending });
     }
     const u = parseUnregister(x);
     if (!u.ok) return answer(res, 400, { error: u.error });

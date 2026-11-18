@@ -17,17 +17,22 @@ notify: { mentions: true, from: [<hex key>], gateway: https://push.example/ }
    `{endpoint, keys: {p256dh, auth}, relay, rooms, mentions, from}`: where the distributor delivers, the push keys the
    UnifiedPush connector made on the phone, the relay, the rooms the applet named (or `null` for all of the person's),
    and what to tell them about. `POST` (or `DELETE`) `<gateway>unregister` with `{endpoint, relay}` removes it.
-   A registration lasts 30 days; the app registers again at least weekly while it is used.
+   A registration lasts 30 days; the app registers again at least weekly while it is used. The phone uses one
+   UnifiedPush instance per gateway (its own endpoint and push keys), so no gateway learns what another can push to.
 2. **The gateway watches the relay with its own key.** It is a member like any bot: the relay's owner lets its key in
    (kind 9030), and a room's admins add it to the rooms it should watch (kind 9000). It reads the member lists (kind
    39002) of the rooms registered people are in, and listens in each such room it can read (one subscription per room;
-   member lists are read again every 5 minutes and whenever registrations change).
+   member lists are read again every 5 minutes and whenever registrations change). A key's first registration waits
+   until a read shows the key in some room's member list (signed by the relay): then it counts as the gateway's, and
+   if no list has the key it is dropped at that read. The answer to a register says `pending: true` for such a key, and
+   the app registers it again a day later instead of a week (a room may add the gateway or the person meanwhile).
 3. **A new message (kind 9) is matched.** Pushed when it names the person (`p` tag; a message naming more than 20 is
    not a mention) or comes from a key in `from`; never for their own message, only in a room whose member list has
    them, only in the rooms they named (when they named any), only for messages from after they registered.
-4. **The push.** `{"v":1,"relay":…,"room":…,"event":…,"kind":9,"why":"mention"|"from"}`, sealed with Web Push
+4. **The push.** `{"v":1,"relay":…,"room":…,"event":…,"kind":9,"why":"mention"|"from","to":<hex key>}`, sealed with Web Push
    encryption (RFC 8291, aes128gcm) to the phone's push keys, POSTed to the endpoint with `TTL: 86400` and
-   `Urgency: high`. The phone opens it, finds the applet that asked, and shows "A message for you in <room>"; a tap
+   `Urgency: high`. `to` is the key the registration was made for. The phone opens it, drops it unless it came in
+   on that gateway's instance and `to` is the key the phone uses now, finds the applet that asked, and shows "A message for you in <room>"; a tap
    opens the applet at that message. The app reads the message itself from the relay, signed in as the person.
 
 ## What each party learns
@@ -35,7 +40,7 @@ notify: { mentions: true, from: [<hex key>], gateway: https://push.example/ }
 | Who | Learns | Never |
 |---|---|---|
 | The gateway | The person's public key; their relay; the rooms they named; the `from` keys; the push endpoint and keys; from the relay, which rooms they are in (member lists) and every message in the rooms it was added to (it is a member there). | The person's secret key (it holds only its own); anything in rooms it wasn't added to (private rooms); anything sealed. |
-| The push server (ntfy, …) | That a push of ~150 bytes arrived for an endpoint, and when. | Which relay, room or message; who wrote it; any words. |
+| The push server (ntfy, …) | That a push of ~350 bytes arrived for an endpoint, and when. | Which relay, room or message; who wrote it; any words. |
 | The phone's distributor app | The same as the push server. | The same. |
 
 **Run it beside the relay.** The relay's operator already sees every message; a gateway run by the same operator, on
@@ -50,9 +55,12 @@ rooms whose members agree, as with any bot (the room's member list shows its key
 | A signed registration is replayed or reused | `u` must be this gateway's own configured address plus the route, `method` and `payload` (body hash) must match, the time within 60 s, and each event id is used once. |
 | Someone learns when a room is active by registering for it | Pushes go only to a key the room's member list has; a room the gateway can't read gives nothing. |
 | A registration pushed forever after the person forgot their key | Registrations end after 30 days unless renewed; a push server's 404 or 410 unregisters the endpoint. |
+| Someone registers many fresh keys to crowd out real people (the registry's room, the member-list reads) | A key's first registration is pending until a member list the relay signed shows the key in some room; then it counts against the gateway's 20,000. Pending ones are a pool of their own of 200, oldest dropped first, and each read of the member lists drops the ones it finds in no list. A read keeps two of its ten filters for pending keys and asks only confirmed registrations' rooms, so neither side squeezes out the other. New keys' registrations are limited per client address (30, then one every 10 s; IPv6 by /64): the socket's address, or with `PUSH_GATEWAY_TRUST_PROXY=1` the last hop of `X-Forwarded-For`. |
 | The gateway is used to send requests to other servers (SSRF) | Endpoints are https to public hosts only (the address is checked again after DNS, so a public name resolving to a private address gets nothing); no redirects followed; 8 registrations per key; a burst of 10 pushes per endpoint, then one every 6 s; a 429 quiets the endpoint for a minute. |
 | A push server (or anyone with the endpoint) forges a notification | Pushes are sealed to the phone's keys; one that doesn't open with them is dropped on the phone. |
-| A push leaks the message | It carries room id, event id, kind and why, sealed: no words, no author. |
+| A push leaks the message | It carries room id, event id, kind, why and the key it was registered for, sealed: no words, no author. |
+| One gateway pushes as another (it learned the endpoint and keys) | Each gateway gets its own UnifiedPush instance, endpoint and keys; the phone takes a push only for applets whose gateway owns the instance it came in on. |
+| A key the phone no longer uses keeps being pushed | The push names the key it was registered for (`to`); the phone drops one that isn't its current key's. The old registration still ends on its own within 30 days. |
 | Logs leak where people are reached | Endpoints are logged as host and the first characters of the path only. |
 | Flooding the HTTP side | Bodies over 8 KB refused; the signature is checked first, then 20 requests then one per 3 s per key, and a ceiling for all keys together. |
 
@@ -60,7 +68,9 @@ Left, said plainly: after a restart the gateway reads back from shortly before i
 (the phone shows it once: it keeps the last 200 event ids); replays of a signed request within its 60 s are refused only
 while the gateway runs (a replay after a restart repeats the same registration, harmlessly); a phone whose key changes
 can't unregister the old key's registration, which ends on its own within 30 days (its pushes still open only on that
-phone); the gateway operator sees timing and who is registered; a gateway added to a room reads it
+phone, which drops them by `to`); a flood of new keys from many addresses can still turn the pending pool over before a
+new person's first registration is read (the app sends a pending one again a day later); the gateway operator sees
+timing and who is registered; a gateway added to a room reads it
 (Buzz has no read-only member, checked in buzz-relay: a key let in reads every *open* room without being added, and a
 private room once added). NIP-OA delegation doesn't help: it lets a delegate's key into the relay but not into the
 person's rooms, and isn't read-only. Buzz's own push leases (NIP-PL, `docs/nips/NIP-PL.md` in the buzz repo) would let
@@ -80,6 +90,9 @@ A push server on a private network you trust (a tailnet's ntfy) is refused as an
 topics opened for writing (`ntfy access everyone 'up*' write-only`: topics are random and every push is sealed) and
 readable by the phone's account (`ntfy access <user> 'up*' read-only`).
 
+Behind your TLS proxy, set `PUSH_GATEWAY_TRUST_PROXY=1` when the proxy appends the client's address to
+`X-Forwarded-For`; otherwise every phone has the proxy's address and the per-address limit is one for everyone.
+
 It prints its public key: the relay's owner lets it in (kind 9030), room admins add it (kind 9000). It listens on
 127.0.0.1:8790; put TLS in front (`tailscale serve`, a Cloudflare Tunnel, Caddy) at the address in `PUSH_GATEWAY_URL`.
 Without Docker: Node 22.18 or later, `npm ci`, then the same variables plus `PUSH_GATEWAY_KEY_FILE` and
@@ -89,7 +102,10 @@ registrations it holds.
 ## Tests
 
 - `npm test` (node's test runner): signatures (wrong key, URL, method, body, expired, replayed), Web Push against
-  RFC 8291's own example, who a message is for, endpoints, the push carrying no words and a 410 unregistering.
+  RFC 8291's own example, who a message is for, endpoints, the push carrying no words (and its `to`) and a 410
+  unregistering, the pending pool and the member-list read dropping keys no room lists, the per-address limit and
+  when `X-Forwarded-For` counts.
 - `npm run e2e`: our Buzz relay on `ws://localhost:3871`, a throwaway ntfy on `http://127.0.0.1:18566`
-  (`infra/ntfy/up.sh` in the workspace), the gateway, and a subscriber on the ntfy topic standing in for the phone.
+  (`infra/ntfy/up.sh` in the workspace), the gateway, and a subscriber on the ntfy topic standing in for the phone; a
+  key no room lists registers and is dropped at the next read of the relay's member lists.
   Needs `PUSH_E2E_SECRETS`, a folder with `owner.hex` (the relay's owner), `alice.hex`, `bob.hex`, `gateway.hex`.

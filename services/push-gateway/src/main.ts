@@ -5,6 +5,8 @@
 //   PUSH_GATEWAY_DATA     where registrations are kept (a directory)
 //   PUSH_GATEWAY_BIND / PUSH_GATEWAY_PORT   default 127.0.0.1:8790 (put a TLS proxy in front)
 //   PUSH_GATEWAY_PRIVATE_HOSTS             push servers on a private network you trust (a tailnet's ntfy), comma-separated
+//   PUSH_GATEWAY_TRUST_PROXY=1              behind your own TLS proxy: count new registrations per client address by the
+//                                           last hop of X-Forwarded-For (without it, by the socket's address)
 //   PUSH_GATEWAY_ALLOW_LOOPBACK=1           tests only: http endpoints on this machine
 import { readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -27,6 +29,7 @@ const g = createGateway({
   secret,
   file: join(data, "registrations.json"),
   allowLoopback: process.env.PUSH_GATEWAY_ALLOW_LOOPBACK === "1",
+  trustProxy: process.env.PUSH_GATEWAY_TRUST_PROXY === "1",
   privateHosts: (process.env.PUSH_GATEWAY_PRIVATE_HOSTS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
 });
 const port = Number(env("PUSH_GATEWAY_PORT", "8790")), bind = env("PUSH_GATEWAY_BIND", "127.0.0.1");

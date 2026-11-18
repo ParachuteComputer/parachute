@@ -2,13 +2,14 @@
 // throwaway ntfy (http://127.0.0.1:18566) and a subscriber on the ntfy topic standing in for the phone. Bob names
 // Alice in a room they share: the subscriber gets one push, which opens with the device's keys to the room, the event
 // id and "mention", and carries none of the message's words. Bob naming her in a room she isn't in, and her own
-// message, push nothing; after she unregisters, nothing either.
+// message, push nothing; after she unregisters, nothing either. A key no room lists registers too: the gateway's next
+// read of the relay's member lists drops it, and confirms Alice.
 //   PUSH_E2E_SECRETS=<dir with owner.hex alice.hex bob.hex gateway.hex> node test/e2e.ts
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createECDH, randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
-import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
+import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { createGateway } from "../src/server.ts";
 import { b64u, decrypt } from "../src/webpush.ts";
 import { sha256Hex } from "../src/nip98.ts";
@@ -124,6 +125,15 @@ assert.ok(await until(() => gateway.watchers[0].rooms().includes(shared), 15_000
 assert.ok(!gateway.watchers[0].rooms().includes(notHers), "and not in a room she isn't in");
 await sleep(500);
 
+step("a key no room lists registers: the next read of the member lists drops it, and confirms alice");
+const stranger = generateSecretKey();
+const sreg = await signed("register", { endpoint: `${NTFY}/up${randomBytes(9).toString("hex")}?up=1`, keys, relay: RELAY, rooms: null, mentions: true, from: [] }, stranger);
+assert.equal(sreg.status, 200, JSON.stringify(sreg.body));
+assert.ok(await until(() => !gateway.registry.all(Math.floor(Date.now() / 1000)).some((r) => r.pubkey === pk(stranger)), 15_000), `the stranger's registration went (${logs.join(" | ")})`);
+const hers = gateway.registry.all(Math.floor(Date.now() / 1000)).filter((r) => r.pubkey === pk(alice));
+assert.ok(hers.length === 1 && !hers[0].pending, "alice's stays, confirmed");
+await sleep(500);
+
 step("bob names alice in the shared room");
 const b = await person(bob);
 const words = "the seedlings need water before noon";
@@ -133,7 +143,7 @@ assert.ok(await until(() => sub.got.length >= 1, 15_000), `a push reached the to
 const [first] = sub.got;
 assert.ok(!first.raw.includes("seedlings") && !first.raw.includes(shared) && !first.raw.includes(pk(bob)), "ntfy saw no words, no room, no author");
 const opened = JSON.parse(new TextDecoder().decode(decrypt(first.bytes, new Uint8Array(device.getPrivateKey()), new Uint8Array(auth))));
-assert.deepEqual(opened, { v: 1, relay: RELAY, room: shared, event: sent.id, kind: 9, why: "mention" });
+assert.deepEqual(opened, { v: 1, relay: RELAY, room: shared, event: sent.id, kind: 9, why: "mention", to: pk(alice) });
 console.log(`  push opened on the device: ${JSON.stringify(opened)}`);
 
 step("no push: bob names her in a room she isn't in; her own message naming herself");

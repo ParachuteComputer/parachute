@@ -1,7 +1,8 @@
 // Watching one relay with the gateway's own key. The gateway is a member like any bot: the relay's owner lets its key
 // in (kind 9030) and a room's admins add it (kind 9000), and the room's member list shows it. It never holds a
 // person's key. It reads the member lists (kind 39002) of the rooms registered people are in, listens in each such
-// room it can read (one subscription per room), and hands each new message to match.ts.
+// room it can read (one subscription per room), and hands each new message to match.ts. Each finished read of the
+// member lists also tells the registry which keys it asked about and who the lists name (registry.ts `judge`).
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { finalizeEvent } from "nostr-tools/pure";
 import { matches, membersOf, type Push } from "./match.ts";
@@ -13,6 +14,34 @@ const SKEW_S = 10;
 const GAP_S = 120;
 const REFRESH_MS = 5 * 60_000; // member lists change without an event the gateway can listen for (39002 has no `h`)
 const SEEN = 5_000;
+const MAX_FILTERS = 10; // what one REQ may carry on Buzz
+const PER_FILTER = 100;
+const LIMIT = 1000;
+const STUCK_MS = 30_000; // a read of the member lists that hasn't finished by then is asked again
+
+/** The filters one read of the member lists sends, and the keys it asks about. Keys the gateway confirmed come first;
+ *  keys still pending (registry.ts) get their own filters, as many as the pending pool can fill, so a flood of them
+ *  can't push confirmed people out of the read and confirmed people can't keep newcomers from ever being read. Only
+ *  confirmed registrations' named rooms are asked for. Pure. */
+export function rosterFilters(regs: readonly Reg[], relayKey: string | null, pendingCap: number) {
+  const by = relayKey ? { authors: [relayKey] } : {};
+  const chunk = (xs: string[], tag: "#p" | "#d") => {
+    const out: Record<string, unknown>[] = [];
+    for (let i = 0; i < xs.length; i += PER_FILTER) out.push({ kinds: [39002], [tag]: xs.slice(i, i + PER_FILTER), limit: LIMIT, ...by });
+    return out;
+  };
+  const confirmed = [...new Set(regs.filter((r) => !r.pending).map((r) => r.pubkey))];
+  const sure = new Set(confirmed);
+  const pending = [...new Set(regs.filter((r) => r.pending && !sure.has(r.pubkey)).map((r) => r.pubkey))].slice(0, pendingCap);
+  const named = [...new Set(regs.filter((r) => !r.pending).flatMap((r) => r.rooms ?? []))];
+  const forPending = chunk(pending, "#p").slice(0, Math.ceil(pendingCap / PER_FILTER));
+  const forPeople = chunk(confirmed, "#p").slice(0, MAX_FILTERS - forPending.length);
+  const forRooms = chunk(named, "#d").slice(0, MAX_FILTERS - forPending.length - forPeople.length);
+  const filters = [...forPeople, ...forPending, ...forRooms];
+  const asked = new Set(filters.flatMap((f) => (f["#p"] as string[] | undefined) ?? []));
+  const whole = asked.size === confirmed.length + pending.length && forRooms.length * PER_FILTER >= named.length;
+  return { filters, asked, whole };
+}
 
 type Frame = unknown[];
 
@@ -45,7 +74,8 @@ export class RelayWatch {
   private nextSub = 0;
   private roomSubs = new Map<string, string>(); // room → sub id
   private subRooms = new Map<string, string>(); // sub id → room
-  private roster: { sub: string; found: Map<string, Set<string>> } | null = null;
+  private roster: { sub: string; found: Map<string, Set<string>>; asked: Set<string>; at: number } | null = null;
+  private again = false;
   private members = new Map<string, Set<string>>();
   private seen = new Set<string>();
   private aliveS = 0;
@@ -60,19 +90,27 @@ export class RelayWatch {
   private onPush: (reg: Reg, push: Push) => void;
   private log: Log;
   private alive: AliveFile;
+  private judge: (asked: ReadonlySet<string>, members: ReadonlySet<string>) => void;
+  private pendingCap: number;
   /** The relay's own key (NIP-11 `self`, read at each connection): only member lists it signed count. Null when it
    *  doesn't say (then the relay's refusal of member lists from anyone else is what holds; Buzz refuses them). */
   private relayKey: string | null = null;
+  /** The most events one filter gets (NIP-11 `limitation.max_limit`, at most what the gateway asks for). */
+  private pageLimit = LIMIT;
 
-  constructor(relay: string, secret: Uint8Array, regs: () => Reg[], onPush: (reg: Reg, push: Push) => void, log: Log, alive = new AliveFile(null)) {
+  constructor(relay: string, secret: Uint8Array, regs: () => Reg[], onPush: (reg: Reg, push: Push) => void, log: Log, alive = new AliveFile(null),
+    judge: (asked: ReadonlySet<string>, members: ReadonlySet<string>) => void = () => {}, pendingCap = 200) {
     this.relay = relay; this.secret = secret; this.regs = regs; this.onPush = onPush; this.log = log; this.alive = alive;
+    this.judge = judge; this.pendingCap = pendingCap;
     this.aliveS = alive.get(relay);
   }
 
   private async readInfo() {
     try {
       const r = await fetch(this.relay.replace(/^ws/, "http"), { headers: { accept: "application/nostr+json" }, redirect: "manual", signal: AbortSignal.timeout(10_000) });
-      const info = await r.json() as { self?: unknown; pubkey?: unknown };
+      const info = await r.json() as { self?: unknown; pubkey?: unknown; limitation?: { max_limit?: unknown } };
+      const max = info.limitation?.max_limit;
+      this.pageLimit = typeof max === "number" && max > 0 ? Math.min(LIMIT, max) : LIMIT;
       // `self` is the relay's own key (what signs member lists); `pubkey` is its operator's contact, not used here
       this.relayKey = typeof info.self === "string" && /^[0-9a-f]{64}$/.test(info.self) ? info.self : null;
     } catch { /* keep what it said last time */ }
@@ -94,9 +132,10 @@ export class RelayWatch {
     this.ws = null;
   }
 
-  /** Registrations changed: read the member lists again shortly (changes that come together are read once). */
+  /** Registrations changed: read the member lists again shortly (changes that come together are read once). A read
+   *  already due isn't put off, so a steady stream of registrations can't keep the read from happening. */
   changed() {
-    if (this.soon) clearTimeout(this.soon);
+    if (this.soon) return;
     this.soon = setTimeout(() => { this.soon = null; this.refresh(); }, 300);
   }
 
@@ -171,22 +210,20 @@ export class RelayWatch {
     }
   }
 
-  /** Read the member lists of the rooms registered people are in (and the rooms registrations name). */
+  /** Read the member lists of the rooms registered people are in (and the rooms registrations name). One read at a
+   *  time: a change while one runs reads again when it finishes. */
   refresh() {
     if (!this.authed) return;
+    if (this.roster && Date.now() - this.roster.at < STUCK_MS) { this.again = true; return; }
+    this.again = false;
     const regs = this.regs().filter((r) => r.relay === this.relay);
     if (this.roster) this.send(["CLOSE", this.roster.sub]);
     if (!regs.length) { this.roster = null; this.members = new Map(); this.listen(); return; }
-    const people = [...new Set(regs.map((r) => r.pubkey))];
-    const named = [...new Set(regs.flatMap((r) => r.rooms ?? []))];
-    const by = this.relayKey ? { authors: [this.relayKey] } : {};
-    const filters: Record<string, unknown>[] = [];
-    for (let i = 0; i < people.length; i += 100) filters.push({ kinds: [39002], "#p": people.slice(i, i + 100), limit: 1000, ...by });
-    for (let i = 0; i < named.length; i += 100) filters.push({ kinds: [39002], "#d": named.slice(i, i + 100), limit: 1000, ...by });
-    if (filters.length > 10) this.log(`relay ${this.relay}: more registered people and rooms than one read takes; some rooms aren't watched`);
+    const { filters, asked, whole } = rosterFilters(regs, this.relayKey, this.pendingCap);
+    if (!whole) this.log(`relay ${this.relay}: more registered people and rooms than one read takes; some rooms aren't watched`);
     const sub = this.sub("r");
-    this.roster = { sub, found: new Map() };
-    this.send(["REQ", sub, ...filters.slice(0, 10)]);
+    this.roster = { sub, found: new Map(), asked, at: Date.now() };
+    this.send(["REQ", sub, ...filters]);
   }
 
   /** One subscription per room someone registered is in; the rest closed. */
@@ -213,14 +250,18 @@ export class RelayWatch {
   private eose(s: string) {
     if (this.roster?.sub === s) {
       this.send(["CLOSE", s]);
-      this.members = this.roster.found;
+      const { found, asked } = this.roster;
+      this.members = found;
       this.roster = null;
+      // a read that may have stopped at a filter's limit can't say who isn't listed
+      if (found.size < this.pageLimit) this.judge(asked, new Set([...found.values()].flatMap((m) => [...m])));
       this.listen();
+      if (this.again) this.refresh();
     }
   }
 
   private closed(s: string, why: string) {
-    if (this.roster?.sub === s) { this.roster = null; this.log(`relay ${this.relay}: member lists refused (${why.split(":")[0]})`); return; }
+    if (this.roster?.sub === s) { this.roster = null; this.again = false; this.log(`relay ${this.relay}: member lists refused (${why.split(":")[0]})`); return; }
     const room = this.subRooms.get(s);
     if (!room) return;
     this.subRooms.delete(s); this.roomSubs.delete(room);

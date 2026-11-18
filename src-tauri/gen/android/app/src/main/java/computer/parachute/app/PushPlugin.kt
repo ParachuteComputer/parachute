@@ -1,9 +1,9 @@
 package computer.parachute.app
 
 // Hand-written. The Rust side's way to the UnifiedPush connector (src-tauri/src/notify.rs): which distributors are
-// installed, use one (the person's pick, else the one in use or the only one) and wait for its endpoint, hand Rust the
-// endpoint and push keys for a gateway registration, and the fallback listener's switch. Registered from Rust; no
-// JavaScript-facing permission.
+// installed, use one (the person's pick, else the one in use or the only one), hand Rust a gateway's endpoint and push
+// keys for its registration (one UnifiedPush instance per gateway, asked for when first needed and let go when no
+// registration uses it), and the fallback listener's switch. Registered from Rust; no JavaScript-facing permission.
 
 import android.app.Activity
 import android.content.Context
@@ -31,22 +31,42 @@ class PushRegisteredArgs {
   lateinit var pairs: String
 }
 
+@InvokeArg
+class PushEndpointArgs {
+  lateinit var gateway: String
+}
+
 @TauriPlugin
 class PushPlugin(private val activity: Activity) : Plugin(activity) {
   companion object {
     private const val WAIT_MS = 20_000L
     private val main = Handler(Looper.getMainLooper())
-    // setups waiting for the distributor's answer (answered on the main thread)
-    private val waiting = ArrayList<() -> Unit>()
+    private const val ANY = "*"
+    // calls waiting for the distributor's answer, by instance (ANY: whichever answers first); on the main thread
+    private val waiting = HashMap<String, ArrayList<() -> Unit>>()
 
-    /** PushService.kt: the distributor answered (an endpoint, or none). */
-    fun endpointChanged(ctx: Context, ok: Boolean) {
+    /** PushService.kt: the distributor answered for this instance (an endpoint, or none). */
+    fun endpointChanged(ctx: Context, instance: String, ok: Boolean) {
       main.post {
-        val w = ArrayList(waiting)
-        waiting.clear()
+        val w = (waiting.remove(instance) ?: arrayListOf()) + (waiting.remove(ANY) ?: arrayListOf())
         w.forEach { it() }
       }
     }
+  }
+
+  private val message = "Parachute: messages for you while it is closed"
+
+  /** Answer when the distributor answers for `instance` (or ANY), or after a while with things as they are. */
+  private fun await(instance: String, answer: () -> Unit) {
+    var done = false
+    val once = { if (!done) { done = true; answer() } }
+    main.post { waiting.getOrPut(instance) { ArrayList() }.add(once) }
+    main.postDelayed({ waiting[instance]?.remove(once); once() }, WAIT_MS)
+  }
+
+  /** The default instance from before one per gateway: let go once. */
+  private fun dropLegacy() {
+    if (PushService.dropLegacy(activity)) PushService.unregister(activity, INSTANCE_DEFAULT)
   }
 
   private fun label(pkg: String): String = try {
@@ -60,7 +80,7 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     for (d in UnifiedPush.getDistributors(activity)) ds.put(JSObject().put("id", d).put("name", label(d)))
     out.put("distributors", ds)
     out.put("distributor", UnifiedPush.getAckDistributor(activity) ?: UnifiedPush.getSavedDistributor(activity))
-    out.put("endpoint", PushService.endpoint(activity) != null)
+    out.put("endpoint", PushService.anyEndpoint(activity))
     out.put("fallback", NotifyService.fallbackOn(activity))
     return out
   }
@@ -70,12 +90,18 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     invoke.resolve(status())
   }
 
-  /** The (gateway, relay) pairs Rust registered: the fallback listener leaves those to push (NotifyService.listening). */
+  /** The (gateway, relay) pairs Rust registered: the fallback listener leaves those to push (NotifyService.listening),
+   *  and an instance no pair uses any more is let go at the distributor. */
   @Command
   fun registered(invoke: Invoke) {
     try {
       val args = invoke.parseArgs(PushRegisteredArgs::class.java)
       PushService.setRegistered(activity, org.json.JSONArray(args.pairs).toString())
+      val used = PushService.inUse(activity)
+      for (i in PushService.instances(activity)) if (i !in used) {
+        PushService.drop(activity, i)
+        PushService.unregister(activity, i)
+      }
       NotifyService.sync(activity)
       invoke.resolve(status())
     } catch (e: Exception) {
@@ -83,11 +109,22 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     }
   }
 
-  /** The endpoint and keys, for the registration Rust signs; rejected when there is none yet. */
+  /** This gateway's endpoint and keys, for the registration Rust signs: its instance's, asked of the distributor the
+   *  first time (and waited for); rejected when there is none. */
   @Command
   fun endpoint(invoke: Invoke) {
-    val e = PushService.endpoint(activity) ?: return invoke.reject("no endpoint yet")
-    invoke.resolve(JSObject(e.toString()))
+    val gateway = try { invoke.parseArgs(PushEndpointArgs::class.java).gateway } catch (e: Exception) { "" }
+    val instance = PushService.instanceFor(gateway) ?: return invoke.reject("not a gateway's address")
+    dropLegacy()
+    PushService.endpoint(activity, instance)?.let { return invoke.resolve(JSObject(it.toString())) }
+    val saved = UnifiedPush.getSavedDistributor(activity)
+    if (saved == null || saved !in UnifiedPush.getDistributors(activity)) return invoke.reject("pick a push service in Settings")
+    PushService.asked(activity, instance)
+    await(instance) {
+      val e = PushService.endpoint(activity, instance)
+      if (e != null) invoke.resolve(JSObject(e.toString())) else invoke.reject("no endpoint yet")
+    }
+    UnifiedPush.register(activity, instance, message, null)
   }
 
   @Command
@@ -108,16 +145,14 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
       // several and none chosen: the person picks one in Settings (no chooser pops up on its own)
       return invoke.reject(if (installed.isEmpty()) "no push service installed" else "pick a push service in Settings")
     }
+    dropLegacy()
+    val moved = pick != UnifiedPush.getSavedDistributor(activity)
     UnifiedPush.saveDistributor(activity, pick)
-    register(invoke)
-  }
-
-  /** Ask the distributor for an endpoint and answer when it gives one (or after a while, with the state as it is). */
-  private fun register(invoke: Invoke) {
-    var done = false
-    val answer = { if (!done) { done = true; invoke.resolve(status()) } }
-    main.post { waiting.add(answer) }
-    main.postDelayed({ waiting.remove(answer); answer() }, WAIT_MS)
-    UnifiedPush.register(activity, INSTANCE_DEFAULT, "Parachute: messages for you while it is closed", null)
+    val instances = PushService.instances(activity)
+    if (instances.isEmpty()) return invoke.resolve(status()) // each gateway's instance is asked for when it registers
+    // every gateway's instance with this distributor; a new one's endpoints replace the old (Rust registers them again)
+    if (moved) instances.forEach { PushService.forget(activity, it) }
+    await(ANY) { invoke.resolve(status()) }
+    instances.forEach { UnifiedPush.register(activity, it, message, null) }
   }
 }

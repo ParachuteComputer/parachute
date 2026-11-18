@@ -724,11 +724,15 @@ const said = (x: any) => String(x?.message ?? x ?? "it failed").slice(0, 200);
 /** Approve on release after holding a second (the tap the shell needs comes with letting go); a plain tap does nothing. */
 function HoldButton({ label, onDone }: { label: string; onDone: () => void }) {
   const [held, setHeld] = useState<"no" | "holding" | "ready">("no");
+  const now = useRef<"no" | "holding" | "ready">("no");
   const t = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const start = () => { setHeld("holding"); t.current = setTimeout(() => setHeld("ready"), 1000); };
-  const stop = (fire: boolean) => { if (t.current) clearTimeout(t.current); t.current = null; const was = held; setHeld("no"); if (fire && was === "ready") onDone(); };
-  return <button className="primary" onPointerDown={start} onPointerUp={() => stop(true)} onPointerLeave={() => stop(false)} onPointerCancel={() => stop(false)} onContextMenu={(e) => e.preventDefault()}
-    onKeyDown={(e) => { if ((e.key === " " || e.key === "Enter") && held === "no") start(); if (e.key === "Escape") stop(false); }} onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") stop(true); }}>
+  const set = (h: "no" | "holding" | "ready") => { now.current = h; setHeld(h); };
+  const start = () => { set("holding"); t.current = setTimeout(() => set("ready"), 1000); };
+  const stop = (fire: boolean) => { if (t.current) clearTimeout(t.current); t.current = null; const was = now.current; set("no"); if (fire && was === "ready") onDone(); };
+  // a finger held still on a phone is the browser's long-press: no scrolling, selecting or callout here, so it is ours
+  return <button className="primary" style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" } as React.CSSProperties}
+    onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); start(); }} onPointerUp={() => stop(true)} onPointerCancel={() => stop(false)} onLostPointerCapture={() => { if (now.current !== "no") stop(true); }} onContextMenu={(e) => e.preventDefault()}
+    onKeyDown={(e) => { if ((e.key === " " || e.key === "Enter") && now.current === "no") start(); if (e.key === "Escape") stop(false); }} onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") stop(true); }}>
     {held === "holding" ? "Keep holding…" : held === "ready" ? "Let go to approve" : label}
   </button>;
 }

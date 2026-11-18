@@ -1,7 +1,7 @@
-// Sending a push: the minimal JSON (relay, room, event id, kind, why; never the message's words, never who wrote it),
-// sealed to the registration's keys (webpush.ts), POSTed to its endpoint. No redirects followed; the address is checked
-// again after DNS (a public name that resolves to a private address gets nothing). Each endpoint has a budget; one the
-// push server says is gone (404, 410) is unregistered.
+// Sending a push: the minimal JSON (relay, room, event id, kind, why, and the key it was registered for; never the
+// message's words, never who wrote it), sealed to the registration's keys (webpush.ts), POSTed to its endpoint. No
+// redirects followed; the address is checked again after DNS (a public name that resolves to a private address gets
+// nothing). Each endpoint has a budget; one the push server says is gone (404, 410) is unregistered.
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { lookup } from "node:dns";

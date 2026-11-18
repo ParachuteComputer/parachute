@@ -235,20 +235,26 @@ beside the relay, by the relay's operator, who already sees every message.
 
 **Registering.** The shell keeps the list `notify_set` checked (notify.rs). For each `(gateway, relay)` on it,
 `push_register` builds `POST <gateway>register` itself: the body from that checked entry and the endpoint and push keys
-the phone's distributor gave (`{endpoint, keys: {p256dh, auth}, relay, rooms, mentions, from}`; never the applet's name
-or address), signed NIP-98 with the everyday key over exactly that URL and body, after the hub check (`guard`), no
-redirect followed, and a line in the applet's signature log. It refuses a gateway the list doesn't name, and any other
+the phone's distributor gave for that gateway (`{endpoint, keys: {p256dh, auth}, relay, rooms, mentions, from}`; never
+the applet's name or address). Each gateway has its own UnifiedPush instance, named by its origin
+(`PushService.instanceFor`) and asked for when it first registers, so a gateway never learns the endpoint and keys
+another gateway pushes to; an instance no registration uses any more is let go. The request is signed NIP-98 with the
+everyday key over exactly that URL and body, after the hub check (`guard`), no redirect followed, and a line in the
+applet's signature log. It refuses a gateway the list doesn't name, and any other
 path. It is sent again only when something changed or a week has passed (the gateway forgets one after 30 days); a
 gateway no grant names any more gets `POST <gateway>unregister`. The web side (`services/notify.ts`) only says which
 pairs: it never sees a signature. Registered at start, on every grant change, and when the app comes back to the front
 (a distributor may hand out a new endpoint).
 
-**What a push carries.** `{v, relay, room, event, kind, why}`: no words, no author. It is sealed with Web Push
+**What a push carries.** `{v, relay, room, event, kind, why, to}`: no words, no author; `to` is the key it was
+registered for. It is sealed with Web Push
 encryption (RFC 8291) to keys the UnifiedPush connector made on the phone, so the push server sees only its size and
 time; the phone drops a push that doesn't open with them (no one who learns the endpoint can make a notification). The
 gateway pushes only to someone the room's member list has, never for their own message, only in the rooms they named,
 only for messages from after they registered. On the phone, `PushService.kt` (plain Kotlin, in a cold process after
-the swipe) finds the allowed applet that asked and shows "A message for you in <room>" through the one notification
+the swipe) takes a push only for an applet whose gateway owns the instance it came in on and only when `to` is the key
+the phone uses now (after a key switch the old key's registration lives out its 30 days, its pushes dropped), finds the
+allowed applet that asked and shows "A message for you in <room>" through the one notification
 path (`MessageNotices.kt`, shared with the fallback below); a tap opens `parachute://notify?subject=…&room=…&event=…`.
 
 **The fallback.** For a phone without a distributor, Settings says "Install ntfy (F-Droid) to get notifications while
@@ -266,6 +272,9 @@ that message from the relay itself).
 | A gateway is a hub (NIP-98 there is the whole account) | Refused at parse; `push_register` runs the hub check before it signs. |
 | The gateway or push server reads messages | The push holds no words and is sealed; the gateway reads only the rooms it was added to, as a member (said on the card). |
 | A forged push | Doesn't open with the phone's keys: dropped. One that opens but names no allowed applet's relay and room: dropped. |
+| One applet's gateway pushes as another's | Each gateway has its own instance, endpoint and keys; a push counts only for applets whose gateway owns the instance it came in on. |
+| A switched key's registration keeps pushing | The push names the key (`to`); the phone drops one that isn't its current key's. |
+| Someone floods a gateway with fresh keys | A key's first registration waits in a small pool of its own until the relay's member lists show it, and is dropped at that read if none does; new keys' registrations are limited per client address (gateway README). |
 | Someone learns a room's activity by registering for it | The gateway pushes only to keys the room's member list has. |
 | A forgotten key's registration lives on | Gateways forget registrations after 30 days; a 404 or 410 from the push server unregisters the endpoint. |
 

@@ -3,19 +3,28 @@
 // for their own message; a gone endpoint is unregistered. Run: node --test test/*.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import { createECDH, randomBytes } from "node:crypto";
-import type { AddressInfo } from "node:net";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { checkNip98, sha256Hex, Burned } from "../src/nip98.ts";
 import { b64u, decrypt, encrypt } from "../src/webpush.ts";
 import { matches, MAX_MENTIONS } from "../src/match.ts";
-import { parseRegister, Registry, type Reg } from "../src/registry.ts";
+import { LIMITS, parseRegister, Registry, type Reg } from "../src/registry.ts";
 import { endpointOk, privateAddress } from "../src/urls.ts";
 import { Pusher } from "../src/push.ts";
-import { createGateway } from "../src/server.ts";
+import { clientAddress, createGateway } from "../src/server.ts";
+import { rosterFilters } from "../src/watch.ts";
 
 const now = () => Math.floor(Date.now() / 1000);
+/** Listen on a fixed port in 20000–32000 (this machine's ephemeral range can run out under listen(0)). */
+async function listenFree(srv: Server): Promise<number> {
+  for (let i = 0; i < 50; i++) {
+    const p = 20000 + Math.floor(Math.random() * 12000);
+    const ok = await new Promise<boolean>((res) => { srv.once("error", () => res(false)); srv.listen(p, "127.0.0.1", () => res(true)); });
+    if (ok) return p;
+  }
+  throw new Error("no free port");
+}
 const enc = (s: string) => new TextEncoder().encode(s);
 const nip98 = (sk: Uint8Array, url: string, method: string, body: string, at = now(), kind = 27235) =>
   `Nostr ${Buffer.from(JSON.stringify(finalizeEvent({ kind, created_at: at, content: "", tags: [["u", url], ["method", method], ["payload", sha256Hex(enc(body))]] }, sk))).toString("base64")}`;
@@ -70,7 +79,7 @@ const members = (room: string) => (room === "garden" ? new Set(["a".repeat(64), 
 
 test("who a message is for: a mention or a listened-for author, in a room they are in, never their own", () => {
   const [m] = matches(msg(), relay, [reg()], members);
-  assert.deepEqual(m.push, { v: 1, relay, room: "garden", event: "e".repeat(64), kind: 9, why: "mention" });
+  assert.deepEqual(m.push, { v: 1, relay, room: "garden", event: "e".repeat(64), kind: 9, why: "mention", to: "a".repeat(64) });
   assert.ok(!JSON.stringify(m.push).includes("secret") && !JSON.stringify(m.push).includes("b".repeat(64)), "no words, no author");
   assert.equal(matches(msg({ pubkey: "a".repeat(64) }), relay, [reg()], members).length, 0, "never their own");
   assert.equal(matches(msg({ tags: [["h", "finance"], ["p", "a".repeat(64)]] }), relay, [reg()], members).length, 0, "a room the gateway has no members for");
@@ -111,8 +120,8 @@ test("a push is sealed, carries no words, and a gone endpoint is unregistered", 
   const got: { body: Buffer; headers: Record<string, unknown> }[] = [];
   let status = 200;
   const srv = createServer((req, res) => { const parts: Buffer[] = []; req.on("data", (c) => parts.push(c)); req.on("end", () => { got.push({ body: Buffer.concat(parts), headers: req.headers }); res.writeHead(status).end(); }); });
-  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
-  const endpoint = `http://localhost:${(srv.address() as AddressInfo).port}/upX?up=1`;
+  const port = await listenFree(srv);
+  const endpoint = `http://localhost:${port}/upX?up=1`;
   const d = device();
   const registry = new Registry(null);
   const r = reg({ endpoint, keys: d.keys });
@@ -122,12 +131,14 @@ test("a push is sealed, carries no words, and a gone endpoint is unregistered", 
   assert.equal(await pusher.send(r, m.push), "sent");
   assert.equal(got[0].headers["content-encoding"], "aes128gcm");
   assert.ok(!got[0].body.toString("latin1").includes("secret") && !got[0].body.toString("latin1").includes("garden"), "the push server sees no room and no words");
-  assert.deepEqual(JSON.parse(new TextDecoder().decode(decrypt(new Uint8Array(got[0].body), d.priv, d.auth))), m.push);
+  const opened = JSON.parse(new TextDecoder().decode(decrypt(new Uint8Array(got[0].body), d.priv, d.auth)));
+  assert.deepEqual(opened, m.push);
+  assert.equal(opened.to, r.pubkey, "the key it was registered for rides inside the seal: a phone whose key changed drops it");
   status = 410;
   assert.equal(await pusher.send(r, m.push), "gone");
   assert.equal(registry.all(now()).length, 0, "unregistered on 410");
   const loose = new Pusher({ allowLoopback: false, log: () => {}, gone: () => {} });
-  assert.equal(await loose.send(reg({ endpoint: `https://[::ffff:7f00:1]:${(srv.address() as AddressInfo).port}/x` }), m.push), "failed", "an address written as the host is checked at send time too");
+  assert.equal(await loose.send(reg({ endpoint: `https://[::ffff:7f00:1]:${port}/x` }), m.push), "failed", "an address written as the host is checked at send time too");
   assert.equal(await loose.send(reg({ endpoint: endpoint.replace("http:", "https:") }), m.push), "failed", "a name that resolves to this machine gets nothing");
   const many = new Pusher({ allowLoopback: true, log: () => {}, gone: () => {} });
   status = 200;
@@ -139,13 +150,14 @@ test("a push is sealed, carries no words, and a gone endpoint is unregistered", 
 
 test("the HTTP side: registers with the person's own signature over the gateway's own URL, once", async () => {
   const g = createGateway({ url: "http://push.test/", relays: [relay], secret: generateSecretKey(), file: null, allowLoopback: false, log: () => {} });
-  await new Promise<void>((r) => g.server.listen(0, "127.0.0.1", r));
-  const at = `http://127.0.0.1:${(g.server.address() as AddressInfo).port}`;
+  const at = `http://127.0.0.1:${await listenFree(g.server)}`;
   const sk = generateSecretKey();
   const body = JSON.stringify({ endpoint: "https://ntfy.example/upX?up=1", keys: device().keys, relay, rooms: ["garden"], mentions: true, from: [] });
   const post = (path: string, auth: string, b = body, method = "POST") => fetch(`${at}/${path}`, { method, headers: { authorization: auth, "content-type": "application/json" }, body: b });
   const auth = nip98(sk, "http://push.test/register", "POST", body);
-  assert.equal((await post("register", auth)).status, 200);
+  const first = await post("register", auth);
+  assert.equal(first.status, 200);
+  assert.equal((await first.json()).pending, true, "a key no member list has shown yet: the app asks again sooner");
   assert.equal((await post("register", auth)).status, 401, "a signature works once");
   assert.equal((await post("register", nip98(sk, `${at}/register`, "POST", body))).status, 401, "signed for the address it was reached at, not its own");
   assert.equal(g.registry.all(now()).length, 1);
@@ -157,4 +169,85 @@ test("the HTTP side: registers with the person's own signature over the gateway'
   assert.equal(g.registry.all(now()).length, 0);
   assert.equal((await fetch(`${at}/health`)).status, 200);
   g.close();
+});
+
+const hex = (i: number) => i.toString(16).padStart(64, "0");
+
+test("a key no room lists waits in a small pool of its own and goes at the next member-list read", () => {
+  const registry = new Registry(null);
+  const t = now();
+  // a real person: registered, then seen in a member list
+  const alice = "a".repeat(64);
+  assert.equal((registry.put(reg({ pubkey: alice, created: t - 1000 }), t) as { pending: boolean }).pending, true, "a new key waits");
+  assert.deepEqual(registry.judge(relay, new Set([alice]), new Set([alice, "b".repeat(64)])), { confirmed: 1, dropped: 0 });
+  // a flood of fresh keys: the pool keeps the newest LIMITS.pending, oldest made first out; alice is untouched
+  for (let i = 1; i <= LIMITS.pending + 5; i++) assert.ok(registry.put(reg({ pubkey: hex(i), endpoint: `https://ntfy.example/up${i}?up=1`, created: t - 900 + i }), t).ok);
+  const all = registry.all(t);
+  assert.equal(all.filter((r) => r.pending).length, LIMITS.pending, "the pending pool is bounded");
+  assert.ok(all.some((r) => r.pubkey === alice && !r.pending), "a confirmed person isn't pushed out");
+  assert.ok(!all.some((r) => r.pubkey === hex(1)) && all.some((r) => r.pubkey === hex(6)), "the oldest pending went first");
+  // a confirmed key's new endpoint (another gateway instance, a new phone) is confirmed at once and not a newcomer
+  const second = reg({ pubkey: alice, endpoint: "https://ntfy.example/upOther?up=1" });
+  assert.equal(registry.newcomer(second, t), false);
+  assert.equal((registry.put(second, t) as { pending: boolean }).pending, false);
+  assert.equal(registry.newcomer(reg({ pubkey: hex(9999) }), t), true);
+  // the next read: asked about some pending keys, one of them listed; the listed one stays, the rest asked about go,
+  // the ones not asked about wait for a read that asks
+  const asked = new Set([hex(6), hex(7), hex(8)]);
+  assert.deepEqual(registry.judge(relay, asked, new Set([alice, hex(7)])), { confirmed: 1, dropped: 2 });
+  const after = registry.all(t);
+  assert.ok(after.some((r) => r.pubkey === hex(7) && !r.pending), "listed: confirmed");
+  assert.ok(!after.some((r) => r.pubkey === hex(6) || r.pubkey === hex(8)), "in no member list: dropped");
+  assert.ok(after.some((r) => r.pubkey === hex(9) && r.pending), "not asked about: still waiting");
+  assert.equal(after.filter((r) => r.pubkey === alice).length, 2, "confirmed ones stay even when a read doesn't list them");
+  assert.deepEqual(registry.judge(relay, asked, new Set([alice, hex(7)])), { confirmed: 0, dropped: 0 }, "a second read changes nothing (no save, no new read)");
+  assert.deepEqual(registry.judge("wss://elsewhere.example", new Set([hex(9)]), new Set()), { confirmed: 0, dropped: 0 }, "another relay's read judges only its own");
+});
+
+test("a read of the member lists keeps room for confirmed people and for newcomers, and asks no newcomer's rooms", () => {
+  const regs = [
+    ...Array.from({ length: 950 }, (_, i) => reg({ pubkey: hex(i), rooms: ["garden"] })),
+    ...Array.from({ length: LIMITS.pending }, (_, i) => reg({ pubkey: hex(10_000 + i), rooms: [`flood${i}`], pending: true })),
+  ];
+  const { filters, asked, whole } = rosterFilters(regs, "f".repeat(64), LIMITS.pending);
+  assert.ok(filters.length <= 10);
+  assert.ok(Array.from({ length: LIMITS.pending }, (_, i) => hex(10_000 + i)).every((k) => asked.has(k)), "every newcomer asked about");
+  assert.equal([...asked].filter((k) => k < hex(10_000)).length, 800, "confirmed people fill the rest");
+  assert.equal(whole, false);
+  assert.ok(!JSON.stringify(filters).includes("flood"), "a newcomer's named rooms aren't read");
+  assert.ok(filters.every((f) => (f.authors as string[])[0] === "f".repeat(64)), "only the relay's own lists");
+  // a flood can't push people out: with a full pool of newcomers, 800 confirmed people are still all read
+  const small = rosterFilters(regs.slice(150), null, LIMITS.pending);
+  assert.ok(Array.from({ length: 800 }, (_, i) => hex(150 + i)).every((k) => small.asked.has(k)));
+});
+
+test("new keys' registrations are limited per client address; X-Forwarded-For counts only from a trusted proxy", async () => {
+  assert.equal(clientAddress("127.0.0.1", "6.6.6.6", false), "127.0.0.1", "the header is ignored unless trusted");
+  assert.equal(clientAddress("127.0.0.1", "6.6.6.6, 1.2.3.4", true), "1.2.3.4", "the last hop, which the proxy added");
+  assert.equal(clientAddress("127.0.0.1", ["9.9.9.9", "6.6.6.6, 1.2.3.4"], true), "1.2.3.4");
+  assert.equal(clientAddress("127.0.0.1", "1.2.3.4, junk", true), "127.0.0.1", "a last hop that isn't an address: the socket's");
+  assert.equal(clientAddress("::ffff:10.1.2.3", undefined, true), "10.1.2.3");
+  assert.equal(clientAddress("2001:db8:1:2:3:4:5:6", undefined, false), "2001:db8:1:2::/64");
+  assert.equal(clientAddress("2001:db8::7", undefined, false), "2001:db8:0:0::/64", "one /64, however it is written");
+  assert.equal(clientAddress(undefined, "2001:db8:0:0:ffff::1", true), "2001:db8:0:0::/64");
+
+  for (const trustProxy of [true, false]) {
+    const g = createGateway({ url: "http://push.test/", relays: [relay], secret: generateSecretKey(), file: null, allowLoopback: false, trustProxy, log: () => {} });
+    const at = `http://127.0.0.1:${await listenFree(g.server)}`;
+    const register = async (sk: Uint8Array, xff: string, n = 0) => {
+      const body = JSON.stringify({ endpoint: `https://ntfy.example/up${n}?up=1`, keys: device().keys, relay, rooms: null, mentions: true, from: [] });
+      return (await fetch(`${at}/register`, { method: "POST", headers: { authorization: nip98(sk, "http://push.test/register", "POST", body), "x-forwarded-for": xff }, body })).status;
+    };
+    const statuses = [];
+    // one address, many fresh keys, each claiming another address in the part of the header a client writes
+    for (let i = 0; i < 31; i++) statuses.push(await register(generateSecretKey(), `10.0.0.${i}, 1.2.3.4`));
+    assert.deepEqual([statuses.filter((s) => s === 200).length, statuses[30]], [30, 429], `a burst of 30 from one address (trustProxy ${trustProxy})`);
+    const elsewhere = await register(generateSecretKey(), "6.6.6.6, 5.6.7.8");
+    assert.equal(elsewhere, trustProxy ? 200 : 429, trustProxy ? "another client behind the proxy has its own budget" : "untrusted, the header changes nothing");
+    // a key already registered renews without spending the address's budget
+    const known = generateSecretKey();
+    g.registry.put({ ...reg({ pubkey: getPublicKey(known), endpoint: "https://ntfy.example/up7?up=1" }), pending: undefined }, now());
+    assert.equal(await register(known, "1.2.3.4", 7), 200, "a confirmed key isn't a newcomer");
+    g.close();
+  }
 });

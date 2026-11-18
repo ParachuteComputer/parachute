@@ -8,7 +8,8 @@
 //!
 //! The main path is a push gateway (docs/design/SERVICES.md, "Notifications through an open push service"): an applet's
 //! `notify` names one; `push_register` signs the registration (NIP-98, only to that gateway, only this request's shape)
-//! and sends it with the endpoint and push keys the phone's UnifiedPush distributor gave `PushService.kt`. The
+//! and sends it with the endpoint and push keys the phone's UnifiedPush distributor gave `PushService.kt` for that
+//! gateway (one UnifiedPush instance per gateway, so no gateway learns another's endpoint and keys). The
 //! foreground service is the fallback for a phone without a distributor, off unless the person turns it on.
 //!
 //! Desktop: not in this step; `notify_set` answers that it is Android only.
@@ -148,7 +149,8 @@ impl PushOp {
     }
 }
 
-/// Where the phone's distributor delivers, and the keys its pushes are sealed to (PushService.kt).
+/// Where the phone's distributor delivers for one gateway, and the keys its pushes are sealed to (PushService.kt keeps
+/// one per gateway).
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 pub struct Endpoint {
     pub endpoint: String,
@@ -222,6 +224,15 @@ pub struct Kept {
 
 pub const KEPT_FILE: &str = "push-registered.json";
 const RENEW_S: u64 = 7 * 24 * 3600;
+/// A registration the gateway answered `pending` (no member list it reads shows the key yet: it drops it at its next
+/// read) is sent again after this, not a week: a room may add the gateway or the person meanwhile.
+const RENEW_PENDING_S: u64 = 24 * 3600;
+
+/// The `at` to keep for a registration made `now`: a pending one is due again after a day.
+pub fn kept_at(now: u64, answer: &[u8]) -> u64 {
+    let pending = serde_json::from_slice::<Value>(answer).ok().and_then(|v| v.get("pending").and_then(Value::as_bool)) == Some(true);
+    if pending { now.saturating_sub(RENEW_S - RENEW_PENDING_S) } else { now }
+}
 
 /// The list the last `notify_set` checked: `push_register` registers only what is on it.
 #[derive(Default)]
@@ -304,20 +315,22 @@ async fn push_call<R: Runtime>(app: &AppHandle<R>, cmd: &str, args: Value) -> Re
     plugin.run_mobile_plugin_async::<Value>(cmd, args).await.map_err(|e| format!("The push service didn't answer ({e})."))
 }
 
-/// The endpoint and keys the distributor gave the phone (PushService.kt keeps them).
-async fn endpoint<R: Runtime>(app: &AppHandle<R>) -> Result<Endpoint, String> {
+/// The endpoint and keys the distributor gave the phone for this gateway: its own UnifiedPush instance, asked for the
+/// first time it is needed (PushPlugin.kt works out the instance from the gateway; nothing here does).
+async fn endpoint<R: Runtime>(app: &AppHandle<R>, gateway: &str) -> Result<Endpoint, String> {
     #[cfg(target_os = "android")]
     {
-        serde_json::from_value(push_call(app, "endpoint", json!({})).await?).map_err(|_| "The push service has no endpoint yet.".to_string())
+        serde_json::from_value(push_call(app, "endpoint", json!({ "gateway": gateway })).await?).map_err(|_| "The push service has no endpoint yet.".to_string())
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = app;
+        let _ = (app, gateway);
         Err("Notifications while the app is closed are Android only for now.".into())
     }
 }
 
-/// The fallback listener serves only what no registration does: Android keeps which (gateway, relay) are registered.
+/// The fallback listener serves only what no registration does: Android keeps which (gateway, relay) are registered,
+/// and lets go of a gateway's push instance once no pair uses it.
 async fn tell_native<R: Runtime>(app: &AppHandle<R>, kept: &[Kept]) {
     #[cfg(target_os = "android")]
     {
@@ -411,13 +424,23 @@ pub async fn push_register<R: Runtime>(
                 .send()
                 .await
                 .map_err(|_| "The gateway didn't answer.".to_string())?;
-            Ok::<u16, String>(res.status().as_u16())
+            let status = res.status().as_u16();
+            // the answer's first 4 KB at most (`{ok, expires, pending}`)
+            let mut res = res;
+            let mut answer = Vec::new();
+            while let Ok(Some(chunk)) = res.chunk().await {
+                answer.extend_from_slice(&chunk[..chunk.len().min(4096 - answer.len())]);
+                if answer.len() >= 4096 {
+                    break;
+                }
+            }
+            Ok::<(u16, Vec<u8>), String>((status, answer))
         }
     };
     match op {
         PushOp::Register => {
             let e = entry.ok_or("No allowed applet names that gateway for that relay.")?;
-            let ep = endpoint(&app).await?.checked()?;
+            let ep = endpoint(&app, &gateway).await?.checked()?;
             let body = register_body(&e, &ep);
             let hash = crate::services::sha256_hex(&[e.me.as_bytes(), b"\n", gateway.as_bytes(), b"\n", &body].concat());
             if let Some(i) = had {
@@ -430,12 +453,12 @@ pub async fn push_register<R: Runtime>(
                     let _ = send(PushOp::Unregister, unregister_body(&kept[i].endpoint, &relay), e.subject.clone(), e.name.clone()).await;
                 }
             }
-            let status = send(PushOp::Register, body, e.subject.clone(), e.name.clone()).await?;
+            let (status, answer) = send(PushOp::Register, body, e.subject.clone(), e.name.clone()).await?;
             if !(200..300).contains(&status) {
                 return Err(format!("The gateway refused the registration ({status})."));
             }
             kept.retain(|x| !(x.gateway == gateway && x.relay == relay));
-            kept.push(Kept { me: e.me.clone(), gateway: gateway.clone(), relay: relay.clone(), endpoint: ep.endpoint, hash, at: now });
+            kept.push(Kept { me: e.me.clone(), gateway: gateway.clone(), relay: relay.clone(), endpoint: ep.endpoint, hash, at: kept_at(now, &answer) });
             crate::services::write_json(&path, &kept).map_err(|_| "The registration couldn't be kept.".to_string())?;
             tell_native(&app, &kept).await;
             Ok(json!({ "status": "registered" }))
@@ -443,7 +466,7 @@ pub async fn push_register<R: Runtime>(
         PushOp::Unregister => {
             let i = had.ok_or("This device didn't register with that gateway.")?;
             let (subject, name) = entry.map(|e| (e.subject, e.name)).unwrap_or_else(|| ("push".into(), "Notifications".into()));
-            let status = send(PushOp::Unregister, unregister_body(&kept[i].endpoint, &relay), subject, name).await?;
+            let (status, _) = send(PushOp::Unregister, unregister_body(&kept[i].endpoint, &relay), subject, name).await?;
             // an answer is an answer: a 4xx won't change by asking again (the gateway forgets it in 30 days anyway)
             if status >= 500 {
                 return Err(format!("The gateway didn't take the unregistration ({status})."));
@@ -568,6 +591,16 @@ mod tests {
             assert!(bad.clone().checked().is_err(), "{bad:?}");
         }
         assert!(Endpoint { endpoint: "http://localhost:18566/upAbc?up=1".into(), ..ep.clone() }.checked().is_ok(), "a push server on this device (tests)");
+    }
+
+    #[test]
+    fn a_pending_registration_is_sent_again_after_a_day() {
+        let now = 10 * RENEW_S;
+        assert_eq!(kept_at(now, br#"{"ok":true,"expires":1,"pending":false}"#), now);
+        assert_eq!(kept_at(now, b"not json"), now);
+        let at = kept_at(now, br#"{"ok":true,"expires":1,"pending":true}"#);
+        // the renewal check (`now - at < RENEW_S` keeps it) lets it go again one day on
+        assert!(now - at < RENEW_S && (now + RENEW_PENDING_S) - at >= RENEW_S);
     }
 
     #[test]

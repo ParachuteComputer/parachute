@@ -1,6 +1,7 @@
 // Notifications while Parachute is closed (docs/design/KEYRING.md, docs/design/SERVICES.md "Notifications through an
 // open push service"): the list of what allowed applets asked for, handed to the native side (src-tauri/src/notify.rs),
-// then each applet's push gateway registered through Rust (`push_register` signs it; this side never sees a signature),
+// then each applet's push gateway registered through Rust (`push_register` signs it with that gateway's own endpoint and
+// push keys, one UnifiedPush instance per gateway; this side never sees a signature),
 // and the gateways of grants that went unregistered. Made again when the app starts, when it comes back to the front,
 // and whenever a grant is made or revoked. Only allowed applets of the person's own vaults count, and only `from` keys
 // the device trusts.
@@ -57,6 +58,7 @@ export type PushStatus = {
   /** Installed UnifiedPush distributors (package names) and the one in use. */
   distributors?: { id: string; name: string }[];
   distributor?: string | null;
+  /** Some gateway's push instance has an endpoint (each gateway gets its own, asked for when it registers). */
   endpoint?: boolean;
   /** "Listen without a push service": the foreground listener, off unless turned on. */
   fallback?: boolean;
@@ -85,9 +87,10 @@ export function syncNotify(): Promise<void> {
     const status = await invoke<PushStatus>("push_status");
     if (!status.available) return;
     const plan = pushPlan(entries, status.registered ?? []);
-    // the distributor's endpoint first: the one in use, or the only one installed (with several, the person picks in
-    // Settings: no chooser pops up on its own)
-    if (plan.register.length && !status.endpoint && (status.distributor || status.distributors?.length === 1)) await invoke("push_setup", {}).catch(() => {});
+    // a distributor first: with none chosen and only one installed, that one (with several, the person picks in
+    // Settings: no chooser pops up on its own). Each gateway's endpoint is asked of it when that gateway registers.
+    const chosen = status.distributors?.some((d) => d.id === status.distributor);
+    if (plan.register.length && !chosen && status.distributors?.length === 1) await invoke("push_setup", {}).catch(() => {});
     const hubs = knownHubs();
     for (const r of plan.unregister) await invoke("push_register", { ...r, op: "unregister", hubs }).catch(() => {});
     for (const r of plan.register) await invoke("push_register", { ...r, op: "register", hubs }).catch(() => {});
