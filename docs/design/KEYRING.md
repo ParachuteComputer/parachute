@@ -88,7 +88,9 @@ of its making shows buttons, and the shell's secret sheet never opens for it.
 
 ## The card
 
-Each relay line now names the key: "**With your everyday key:** sign in to relay.example as you; post as you there:
+On the card's face ([PERMISSIONS.md](PERMISSIONS.md)) the server's line names the everyday key, and `approvals` is its
+own line: "**High risk, with your approval key:** answers approval cards and secret requests from Uni there…". The
+lines below are the details. Each relay line now names the key: "**With your everyday key:** sign in to relay.example as you; post as you there:
 messages, reactions…". With `rooms`: "…only in «Garden» (3f2a1b…), named by the applet". The id is what is
 enforced; the name is the applet's word and marked so, because before Allow the shell has no connection to the relay
 to read the room's own name (signing in there is part of what the card asks).

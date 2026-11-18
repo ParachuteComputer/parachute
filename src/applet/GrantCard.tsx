@@ -23,7 +23,7 @@ export const APPROVED_CODE_SHORT = "On this device an applet could send what it 
 export const NOTHING_NEW = "It asks for nothing new.";
 export const MODE_CHANGED_LINE = "You allowed it when applets here were sealed. This device now runs approved code only, so it asks again.";
 export const EXPIRED_LINE = "A year has passed since you allowed it, so it asks again.";
-export const FRESH_LINE = "It asks for something new since you allowed it, marked New.";
+
 export type Runs = "sealed" | "approved-code";
 
 const day = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -31,6 +31,7 @@ const day = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short",
 /** The heading when the code changed since it was brought into the person's Parachute (a pointer's pin). */
 export const broughtChangedLine = (vault: string, name: string) => `${vault} changed «${name}» since you brought it in. Only the version you allow runs.`;
 export const ASKS_OTHER_LINE = "It now asks for something other than what you allowed.";
+export const FRESH_LINE = `${ASKS_OTHER_LINE} What is new is marked New.`;
 
 /** The props a page hands a component, as the card shows them: every one, in full. */
 export const handedLine = (props: Record<string, unknown>) => `Your page hands it: ${Object.entries(props).map(([k, v]) => `${k} ${JSON.stringify(v)}`).join(", ")}.`;
@@ -93,7 +94,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
       </header>
       <p className="grant-sub quiet">{what === "component" ? <>A component from <strong>{vault}</strong>, in its own sealed frame on your page, named by its record.</> : <>An applet in {whose === "mine" ? "your vault " : ""}<strong>{vault}</strong>, named by its note.</>}</p>
       {notice && <p className="grant-changed" role="status"><strong>{notice}</strong></p>}
-      {whose !== "mine" && <p className="grant-whose"><strong>Someone else's vault{host ? `, at ${host}` : ""}:</strong> it acts as you in {vault}, with your sign-in there. It sees nothing in your own vaults.{what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}</p>}
+      {whose !== "mine" && <p className="grant-whose"><strong>Someone else's vault{host ? `, at ${host}` : ""}.</strong> It acts as you in {vault}, with your sign-in there. It sees nothing in your own vaults.{what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}</p>}
       {face.lines.length ? <ul className="grant-face" aria-label="What it would do">{face.lines.map((l) => <li key={faceText(l)} className={isNew(faceText(l)) ? "grant-fresh" : undefined}><New t={faceText(l)} />{l.risky ? <strong>{l.lead}</strong> : l.lead}{l.rest}</li>)}</ul>
         : !face.also.length ? <p className="quiet">Nothing outside itself.</p> : null}
       {alsoText && <p className="grant-also"><New t={alsoText} />{alsoText}</p>}

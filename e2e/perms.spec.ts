@@ -112,7 +112,7 @@ test("first run: four applets, four short cards; changed code says whether it as
     await api(st, "PATCH", `notes/${made[3].id}`, { metadata: { ...accounts.metadata, applet }, if_updated_at: accounts.updatedAt });
     await open(page, /Claude accounts/);
     await expect(card(page).getByRole("heading")).toHaveText("Claude accounts asks again");
-    await expect(card(page).getByRole("status")).toHaveText("It asks for something new since you allowed it, marked New.");
+    await expect(card(page).getByRole("status")).toHaveText("It now asks for something other than what you allowed. What is new is marked New.");
     await expect(face(page).locator(".grant-fresh")).toHaveText("NewRead and change notes in Workers/");
     await expect(face(page).locator(".grant-fresh")).toHaveCount(1);
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
