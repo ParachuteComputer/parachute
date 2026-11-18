@@ -28,18 +28,35 @@ type Snapshot = { v: 2; relay: string; me: string; rooms: RoomMeta[]; read: Reco
 const SNAP = "list";
 const SNAP_MAX = 64_000;
 
+/** Its size as kept: storage counts UTF-8 bytes. */
+const bytesOf = (x: unknown) => new TextEncoder().encode(JSON.stringify(x)).length;
+/** A message as kept: the list shows a line of it, so plain text is cut short; a card or an ask is kept whole (its line
+ *  is read from what is inside it). */
+const keptText = (text: string) => (/```uni-/.test(text) ? (text.length > 1500 ? text.slice(0, 1500) : text) : text.length > 300 ? text.slice(0, 300) : text);
+
 function snapshotOf(s: Store["s"], relay: string): Snapshot | null {
   const rooms = [...s.rooms.values()];
   for (const per of [8, 4, 2, 1]) {
-    // a long message is cut short: the list shows a line of it
-    const msgs = rooms.flatMap((r) => [...(s.msgs.get(r.id)?.values() ?? [])].filter((e) => visible(s, e)).sort((a, b) => b.created_at - a.created_at).slice(0, per))
-      .map((e) => { const text = textOf(s, e); return { ...e, content: text.length > 1500 ? text.slice(0, 1500) : text }; });
+    // each room's newest messages and newest thread replies, as they read now: its last line, and its counts
+    const newest = (xs: Ev[]) => xs.sort((a, b) => b.created_at - a.created_at).slice(0, per);
+    const msgs = rooms.flatMap((r) => {
+      const all = [...(s.msgs.get(r.id)?.values() ?? [])].filter((e) => visible(s, e));
+      return [...newest(all.filter((e) => !rootOf(e))), ...newest(all.filter((e) => rootOf(e)))];
+    }).map((e) => ({ ...e, content: keptText(textOf(s, e)) }));
     const authors = new Set(msgs.map((e) => e.pubkey));
     const snap: Snapshot = { v: 2, relay, me: s.me, rooms, read: Object.fromEntries(rooms.filter((r) => s.read[r.id]).map((r) => [r.id, s.read[r.id]])),
       names: Object.fromEntries([...s.names].filter(([k]) => authors.has(k))), msgs };
-    if (JSON.stringify(snap).length <= SNAP_MAX) return snap;
+    if (bytesOf(snap) <= SNAP_MAX) return snap;
   }
   return null;
+}
+
+/** At most n of these at a time, in order. */
+async function pooled<T, R>(xs: T[], n: number, f: (x: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(xs.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, xs.length) }, async () => { while (i < xs.length) { const k = i++; out[k] = await f(xs[k]); } }));
+  return out;
 }
 
 /** The list as it was last shown on this relay: its key, or null when there is none. */
@@ -108,7 +125,7 @@ export default function Rooms() {
     const want = pks.filter((p) => !s.names.has(p) && !s.asked.has(p));
     want.forEach((p) => s.asked.add(p));
     for (const c of chunk(want, 100)) (await relay.query([{ kinds: [0], authors: c }]).catch(() => [])).forEach(st.add);
-    if (want.length) st.bump();
+    if (want.length) { st.bump(); keepSoon(); }
   };
 
   // opened from a notification: that room, at that message
@@ -128,26 +145,28 @@ export default function Rooms() {
   };
 
   useEffect(() => {
-    let stop: (() => void) | null = null, on = true;
-    const off = relay.onStatus((x: any) => { if (x.status === "closed" && !x.sub) setStatus(`The relay is away (${x.why ?? "closed"}). Trying again…`); if (x.status === "ready" && !x.sub) setStatus(""); });
-    (async () => {
-      const ctx: any = await ready();
-      const url = String((ctx?.services ?? []).find((x: any) => x?.id === "rooms")?.url ?? "");
+    let stop: (() => void) | null = null, on = true, url = "", painted: string | null = null, mine = false;
+    // the relay away: its queries then answer empty or short (a timeout, a dropped connection), so a read made while it
+    // is away replaces nothing; the list read goes again when it is back
+    let down = false, synced = false, syncing = false;
+    const away = (why: string) => setStatus(`The relay is away (${why}). Trying again…`);
+    const forget = () => { s.rooms.clear(); s.msgs.clear(); s.names.clear(); s.read = {}; st.bump(); };
+    const sync = async () => {
+      if (syncing || !on) return;
+      syncing = true;
       try {
-        // the list as it was last shown, at once; then whose key this is, and the relay, read again
-        const painted = paint(st, await storage.get(SNAP).catch(() => null), url);
-        if (painted && on) { s.me = painted; st.bump(); setStatus(""); }
-        s.me = (await services.me()).pubkey;
-        if (painted && painted !== s.me) { s.rooms.clear(); s.msgs.clear(); s.names.clear(); s.read = {}; st.bump(); setStatus("Reading your rooms…"); }
         const [members, read] = await Promise.all([relay.query([{ kinds: [39002], "#p": [s.me], limit: 500 }]), loadRead(relay)]);
         const ids = [...new Set(members.map((e: Ev) => tag(e, "d")).filter(Boolean))] as string[];
+        // no rooms at all, over a list it painted: more likely a read cut short than every room left at once
+        if (!on || down || (painted && !synced && !ids.length)) return;
         // what comes after starts now: anything posted while the history below is read still arrives
         const since = now() - 5;
+        // side by side, but at most a few calls at a time: the shell holds 8 of an applet's calls waiting at once
         const [metas, history] = await Promise.all([
           ids.length ? relay.query(chunk(ids, 100).map((c) => ({ kinds: [39000], "#d": c }))) : Promise.resolve([]),
-          Promise.all(chunk(ids, 10).map((c) => relay.query(c.map((id) => ({ kinds: [9], "#h": [id], limit: 40 }))))),
+          pooled(chunk(ids, 10), 3, (c) => relay.query(c.map((id) => ({ kinds: [9], "#h": [id], limit: 40 })))),
         ]);
-        if (!on) return;
+        if (!on || down) return;
         // what was read now takes the snapshot's place: rooms left and messages gone since go with it
         s.rooms.clear();
         for (const m of metas as Ev[]) {
@@ -159,10 +178,11 @@ export default function Rooms() {
         // read state only moves forward: a room read on this device a moment ago stays read
         for (const [k, v] of Object.entries(read)) if (v > (s.read[k] ?? 0)) s.read[k] = v;
         history.flat().forEach(st.add);
+        synced = true;
         st.bump();
         const rooms = [...s.rooms.keys()];
         setStatus(rooms.length ? "" : "No rooms yet. When someone writes to you, the room shows here.");
-        keep.current = { relay: url, timer: null, written: "" };
+        keep.current ??= { relay: url, timer: null, written: "" };
         keepSoon();
         await names([...new Set([...s.msgs.values()].flatMap((m) => [...m.values()].map((e) => e.pubkey)))]);
         if (!on) return;
@@ -170,7 +190,25 @@ export default function Rooms() {
         // to a subscription for one room)
         const onEvents = (evs: Ev[]) => { evs.forEach(st.add); st.bump(); keepSoon(); void names(evs.map((e) => e.pubkey)); };
         stop = relay.subscribeMany(rooms.slice(0, 90).map((id) => [{ kinds: [9, 5, 40003, 9005], "#h": [id], since }]), onEvents);
-      } catch (e: any) { if (on) setStatus(`Couldn't read your rooms: ${e?.message ?? e}`); }
+      } catch (e: any) { if (on) setStatus(`Couldn't read your rooms: ${e?.message ?? e}`); } finally { syncing = false; }
+    };
+    const off = relay.onStatus((x: any) => {
+      if (x.sub) return;
+      if (x.status === "closed") { down = true; away(x.why ?? "closed"); }
+      if (x.status === "ready") { const was = down; down = false; setStatus(""); if (was && mine && !synced) void sync(); }
+    });
+    (async () => {
+      const ctx: any = await ready();
+      url = String((ctx?.services ?? []).find((x: any) => x?.id === "rooms")?.url ?? "");
+      // the list as it was last shown, at once (a snapshot it can't read is dropped)
+      try { painted = paint(st, await storage.get(SNAP).catch(() => null), url); }
+      catch { painted = null; forget(); storage.set(SNAP, null).catch(() => {}); }
+      if (painted && on) { s.me = painted; st.bump(); if (!down) setStatus(""); }
+      // then whose key this is: another key's list goes at once
+      try { s.me = (await services.me()).pubkey; mine = true; }
+      catch (e: any) { if (painted) forget(); if (on) setStatus(`Couldn't read your rooms: ${e?.message ?? e}`); return; }
+      if (painted && painted !== s.me) { painted = null; forget(); setStatus("Reading your rooms…"); }
+      await sync();
     })();
     return () => { on = false; stop?.(); off(); const k = keep.current; if (k?.timer) { clearTimeout(k.timer); k.timer = null; } };
   }, []);

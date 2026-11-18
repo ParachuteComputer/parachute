@@ -53,19 +53,22 @@ export function KeptApplets({ active }: { active: boolean }) {
   const current = active ? keptId(location) : null;
   const [entries, setEntries] = useState<Entry[]>([]);
   const at = useRef(0);
+  // what each screen last said about being kept, also before its entry is in `entries` (a screen's effects run before
+  // this component's, so its first word can come before the entry that would hold it)
+  const said = useRef(new Map<string, boolean>());
   // an address that hands a kept applet a note opens it fresh: the kept one goes, so it never runs twice
   const fresh = !current ? appletOf(location.pathname) : null;
   useEffect(() => {
     setEntries((was) => {
-      const next = current ? [...was.filter((e) => e.id !== current), { id: current, location, keepable: was.find((e) => e.id === current)?.keepable ?? false, at: ++at.current }] : was.filter((e) => e.id !== fresh);
+      const next = current ? [...was.filter((e) => e.id !== current), { id: current, location, keepable: said.current.get(current) ?? false, at: ++at.current }] : was.filter((e) => e.id !== fresh);
       return stays(next, current);
     });
   }, [current, fresh, location]);
-  const keepable = (id: string) => (yes: boolean) => setEntries((was) => {
+  const keepable = (id: string) => (yes: boolean) => { said.current.set(id, yes); setEntries((was) => {
     const e = was.find((x) => x.id === id);
     if (!e || e.keepable === yes) return was;
     return stays(was.map((x) => (x.id === id ? { ...x, keepable: yes } : x)), current);
-  });
+  }); };
   // the screen at the address now draws at once, before the effect above has added it
   const list = (current && !entries.some((e) => e.id === current) ? [...entries, { id: current, location, keepable: false, at: Infinity }] : entries).filter((e) => e.id !== fresh);
   return <>{list.map((e) => {

@@ -197,6 +197,9 @@ describe("storage", () => {
     expect(await code(r.call("storage", "set", { key: "bad", bytes: notUtf8 }, {}))).toBe("bad_params");
     expect(await code(r.call("storage", "set", { key: "bad", bytes: bytes("1"), value: 1 }, {}))).toBe("bad_params");
     expect(await code(r.call("storage", "set", { key: "bad", bytes: "1" }, {}))).toBe("bad_params");
+    // nested deeper than a call's parameters may be: refused, so what is kept can always be handed back
+    expect(await code(r.call("storage", "set", { key: "deep", bytes: bytes("[".repeat(40) + "]".repeat(40)) }, {}))).toBe("bad_params");
+    expect(await code(r.call("storage", "set", { key: "ok", bytes: bytes(JSON.stringify({ msgs: [{ tags: [["h", "x"]] }] })) }, {}))).toBe("ok");
     // the 256 KB in all still holds: a second list this size doesn't fit beside the first
     const half = JSON.stringify({ x: "y".repeat(STORAGE_MAX / 2) });
     await r.call("storage", "set", { key: "half", bytes: bytes(half) }, {});
