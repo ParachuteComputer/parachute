@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
-import { hubState, VAULT } from "./hub";
+import { api, hubState, record, VAULT } from "./hub";
+import { withImports, type AppletRecord } from "../applets/record.ts";
 import { keyDoor } from "./keys";
 
 /** The app back from the hub with every vault kept: on the launcher, `vault`'s chapter shown. */
@@ -71,4 +72,23 @@ export async function signInWithKey(page: Page, hub: { origin: string }, vault: 
   const asked = await approveUntilBack(page, hub.origin, app, onPick);
   await backOnTheLauncher(page, vault);
   return asked;
+}
+
+/** An applet from applets/ put in the e2e vault with the components it imports (the Room in Rooms), as
+ *  scripts/install-applets.ts puts them in; `change` adjusts the applet's own record (another path, a line taken out).
+ *  `remove` deletes everything it made (not a component that was there already): call it in a finally, as the vault is
+ *  shared by every spec, and remove in the reverse order of installing. */
+export async function installApplet(name: string, vars: Record<string, string> = {}, change: (r: AppletRecord) => AppletRecord = (r) => r) {
+  const recs = withImports(name, vars);
+  const made: string[] = [];
+  const remove = async () => { for (const id of made.splice(0).reverse()) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {}); };
+  try {
+    for (const [i, r] of recs.entries()) {
+      const last = i === recs.length - 1;
+      // a component another applet here already brought in is shared, not made twice (one path, one id in a vault)
+      if (!last && ((await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent(r.path)}&limit=20`)) as { path: string }[]).some((x) => x.path === r.path)) continue;
+      made.push((await record(hubState(), "create", last ? change(r) : r)).id as string);
+    }
+  } catch (e) { await remove(); throw e; }
+  return { id: made[made.length - 1], remove };
 }

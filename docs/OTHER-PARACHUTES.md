@@ -222,7 +222,10 @@ import Events from "component:events";
 ```
 
 `component:<id>` names a component in the applet's own vault, or a pointer in your home vault to one. Imported code
-runs inside your applet and sees everything your applet sees, so it is only for code you would write yourself. The
+runs inside your applet and sees everything your applet sees (its services and grant too), so it is only for code you
+would write yourself. An import is a module: its named exports come with it (`import Room, { glyph } from
+"component:room"`), and it takes any React props, functions too; `props` in its fields is only what a page may hand it
+as an embed. `applets/room.tsx`, which Rooms and every area's applet import, is one ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)). The
 applet's card lists each import (*Includes «Events» from techne (trusted): its code runs inside this applet and sees
 what it sees*), and the applet's code hash covers them: when an import changes, the applet asks again. An applet that
 imports from another Parachute can't open while that Parachute can't be reached. One level only: a component that

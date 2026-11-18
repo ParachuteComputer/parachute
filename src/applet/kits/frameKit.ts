@@ -2,7 +2,7 @@
 // Copied from the Uni app (src/interface/kits/frameKit.ts) so one applet note runs in both apps; chat and note.open are
 // left out (this app has no rooms), and `open` is new. It runs inside the frame, so it is a string. Kept free of
 // backticks and `${`.
-//   uni.ready()                      → Promise of the host's context: {contract, applet: {id, name}, theme, open?}
+//   uni.ready()                      → Promise of the host's context: {contract, applet: {id, name}, access, services, theme, open?, launch?}
 //                                      `open`: {note: {id, path}, screen} when the app opened a note in this applet.
 //                                      The Uni app never sends it: an applet must work without it.
 //   uni.onOpen(cb)                   → cb({note, screen}) now (if the app opened a note) and whenever it opens another.

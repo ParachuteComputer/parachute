@@ -1,0 +1,29 @@
+{
+  "path": "Applets/{{area}}",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "{{area_id}}",
+      "name": "{{area}}",
+      "glyph": "❦",
+      "note": "the {{area}} room, to talk with Uni there, beside the area's notes",
+      "access": [{ "vault": "here", "allow": [{ "path": "Areas/{{area}}/", "verbs": ["read"] }] }],
+      "reach": ["voice"]
+    },
+    "app": ["links", "save", "attach", "storage"],
+    "services": [
+      {
+        "id": "rooms",
+        "kind": "nostr-relay",
+        "url": "{{relay}}",
+        "publish": [9, 7, 5, 40003, 20002],
+        "media": true,
+        "rooms": [{ "id": "{{area_room}}", "name": "{{area}}" }],
+        "approvals": { "from": ["{{uni}}"] },
+        "notify": { "mentions": true, "from": ["{{uni}}"] }
+      }
+    ]
+  }
+}

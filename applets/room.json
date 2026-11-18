@@ -1,0 +1,15 @@
+{
+  "path": "Components/Room",
+  "extension": "tsx",
+  "tags": ["component"],
+  "fields": {
+    "component": {
+      "contract": 1,
+      "id": "room",
+      "name": "Room",
+      "glyph": "◎",
+      "note": "one room on a Buzz relay, with Uni: import it into an applet that declares the relay",
+      "props": { "service": "string", "room": "string", "name": "string", "at": "string", "readAt": "number" }
+    }
+  }
+}

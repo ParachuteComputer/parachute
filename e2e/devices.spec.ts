@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { getPublicKey } from "nostr-tools/pure";
 import { api, hubState, record, VAULT } from "./hub";
-import { ui } from "./helpers";
+import { installApplet, ui } from "./helpers";
 import { person } from "./services/client";
 import { appletRecord } from "../applets/record.ts";
 
@@ -54,7 +54,7 @@ test("rooms on a real relay: a voice note, a link, a saved file, an attached fil
     w.__opened = [];
     window.open = (url?: string | URL) => { w.__opened.push(String(url)); return null; };
   }, secret("alice"));
-  const note = await record(hubState(), "create", appletRecord("rooms", { relay: RELAY!, uni: bob.pubkey }));
+  const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   try {
     // bob posts a link and a PDF (a file that isn't a picture, a video or a voice note)
     expect((await bob.publish({ kind: 9, content: `The seed list is at https://example.org/seeds-${stamp} for now.`, tags: [["h", g]] })).ok).toBe(true);
@@ -135,7 +135,7 @@ test("rooms on a real relay: a voice note, a link, a saved file, an attached fil
     expect(kept).toHaveLength(1);
   } finally {
     bob.close();
-    await api(hubState(), "DELETE", `notes/${note.id}`);
+    await made.remove();
   }
 });
 

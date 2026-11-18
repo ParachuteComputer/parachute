@@ -1,7 +1,9 @@
 // Mail: the person's mail through their mail gateway (the Uni app's mail bridge: JMAP behind it, NIP-98 in front). The
 // applet holds no password and no key: the shell signs each request as the person (services "mail"), and the gateway
 // holds the mailbox's own credentials. Reading is JMAP (read-only methods); every change is one of the gateway's named
-// operations, so a send is always: save the draft, review exactly what will go, send that.
+// operations, so a send is always: save the draft, review exactly what will go, send that. Later is the $flagged
+// keyword (the Inbox leaves a Later thread out until something new comes in on it); Waiting is the sends from Uni's
+// account its outbound rules hold for the owner, each approved (signed with the approval key) or declined here.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ready, services } from "parachute";
 
@@ -10,7 +12,12 @@ type Email = { id: string; threadId: string; mailboxIds: Record<string, boolean>
   textBody?: { partId: string }[]; htmlBody?: { partId: string }[]; bodyValues?: Record<string, { value: string }>; attachments?: { name?: string; type?: string; size?: number }[] };
 type Box = { id: string; name: string; role: string | null; unreadEmails?: number; totalEmails?: number };
 type Session = { account: string; primaryAccounts: Record<string, string>; accounts: Record<string, { name: string }>; roles: Record<string, string>; operations: Record<string, string[]> };
-type View = { at: "list" } | { at: "read"; id: string } | { at: "compose"; draft?: Draft; reply?: Email };
+type View = { at: "list" } | { at: "read"; id: string } | { at: "compose"; draft?: Draft; reply?: Email } | { at: "held"; opId: string };
+/** A send from Uni's account held for the owner (the gateway's send.parked). fields and fingerprint are of the same bytes. */
+type Parked = { opId: string; draftId: string | null; reason: string | null; sentBy: string | null; parkedAt: string | null; recipients: string[];
+  fingerprint?: string; changed?: boolean; plain?: boolean; problem?: string; fields?: { to: Addr[]; cc: Addr[]; bcc: Addr[]; subject: string; text: string; attachments?: { name: string; type: string; size: number }[] } };
+/** One held send as shown: listed while the gateway still lists it; its outcome once decided here. */
+type Held = { account: string; item: Parked; listed: boolean; outcome?: { kind: "sent" | "declined" | "refused" | "unconfirmed" | "error"; text: string } };
 type Draft = { draftId?: string; fingerprint?: string; fields: Fields };
 type Fields = { to: Addr[]; cc: Addr[]; bcc: Addr[]; subject: string; text: string; inReplyTo?: string };
 
@@ -25,7 +32,19 @@ const jmap = (calls: unknown[]) => post("jmap", { calls }).then((b) => b.methodR
 const op = (name: string, accountId: string, args: Record<string, unknown>) => post("op", { op: name, accountId, ...args });
 const opId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
 
-const PLACES: { role: string; name: string }[] = [{ role: "inbox", name: "Inbox" }, { role: "drafts", name: "Drafts" }, { role: "sent", name: "Sent" }, { role: "archive", name: "Archive" }, { role: "junk", name: "Junk" }];
+// Waiting and Later aren't mailboxes: Waiting is the held sends, Later the threads with $flagged on any message
+const PLACES: { role: string; name: string }[] = [{ role: "inbox", name: "Inbox" }, { role: "waiting", name: "Waiting" }, { role: "later", name: "Later" }, { role: "drafts", name: "Drafts" }, { role: "sent", name: "Sent" }, { role: "archive", name: "Archive" }, { role: "junk", name: "Junk" }];
+const placeName = (role: string) => PLACES.find((p) => p.role === role)?.name;
+/** The Inbox leaves out a Later thread unless something new came in on it: a message unread and not flagged. */
+const NOT_LATER = { operator: "OR", conditions: [{ noneInThreadHaveKeyword: "$flagged" }, { operator: "AND", conditions: [{ notKeyword: "$seen" }, { notKeyword: "$flagged" }] }] };
+/** Still to decide: listed, and not sent or declined here. */
+/** A gateway answer (refused, unconfirmed) is final; only a call that never got one (the network, no tap) may be tried again. */
+const waiting = (h: Held) => h.listed && (!h.outcome || h.outcome.kind === "error");
+const heldTo = (p: Parked) => (p.fields ? [...p.fields.to, ...p.fields.cc, ...p.fields.bcc].map((a) => a.email) : p.recipients).join(", ") || "(nobody)";
+/** Everything it sends is on screen: plain text alone, or text plus the files the gateway listed. */
+const shownWhole = (p: Parked) => { const n = p.fields?.attachments?.length ?? 0; return p.plain === true ? n === 0 : p.plain === false && n > 0; };
+/** Approve is offered only when what is shown is exactly what goes: the gateway offers it, and the draft is shown whole, unchanged. */
+const canApprove = (ops: string[], p: Parked) => ops.includes("send.approve") && !!p.fingerprint && !!p.fields && !p.changed && !p.problem && shownWhole(p);
 const LIST_PROPS = ["threadId", "mailboxIds", "keywords", "from", "to", "replyTo", "subject", "receivedAt", "preview", "hasAttachment"];
 const who = (a?: Addr[]) => (a ?? []).map((x) => x.name || x.email).join(", ") || "(nobody)";
 const addrs = (s: string): Addr[] => s.split(/[,;]/).map((x) => x.trim()).filter(Boolean).map((x) => { const m = /^(.*)<([^>]+)>$/.exec(x); return m ? { name: m[1].trim().replace(/^"|"$/g, "") || undefined, email: m[2].trim() } : { email: x }; });
@@ -68,6 +87,9 @@ div.compose textarea { min-height: 14em; font-family: var(--serif); line-height:
 .review { border: 1.5px solid var(--text); border-radius: var(--radius, 10px); padding: 12px 14px; margin: 12px 0; background: var(--surface); }
 .review pre { white-space: pre-wrap; font: .95em/1.5 var(--serif); margin: 8px 0 0; }
 .flag { margin-left: 6px; }
+.held .why { border-left: 3px solid var(--text); padding: 2px 10px; margin: 8px 0 12px; }
+.held .note { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; margin: 10px 0; }
+.outcome { font-weight: 600; margin: 12px 0; }
 `;
 
 export default function Mail() {
@@ -80,8 +102,12 @@ export default function Mail() {
   const [searched, setSearched] = useState<string | null>(null);
   const [view, setView] = useState<View>({ at: "list" });
   const [err, setErr] = useState("");
+  const [held, setHeld] = useState<Held[]>([]);
+  const [heldErr, setHeldErr] = useState("");
   const ops = (account && session?.operations?.[account]) || [];
   const can = (o: string) => ops.includes(o);
+  // the accounts whose held sends are this key's to see (Uni's, for the owner); Waiting shows whichever mailbox is open
+  const heldAccounts = session ? Object.keys(session.operations ?? {}).filter((id) => session.operations[id]?.includes("send.parked")) : [];
 
   useEffect(() => {
     ready().then(async () => {
@@ -98,27 +124,51 @@ export default function Mail() {
     setBoxes(r.list);
   };
   const load = async () => {
-    if (!account) return;
+    if (!account || (place === "waiting" && !searched)) return;
     setErr("");
     try {
       const box = boxes.find((b) => b.role === place);
-      if (!box && !searched) { setList([]); return; }
-      const filter = searched ? { text: searched } : { inMailbox: box!.id };
+      if (!box && !searched && place !== "later") { setList([]); return; }
+      const away = boxes.filter((b) => b.role === "junk" || b.role === "trash").map((b) => b.id);
+      const filter = searched ? { text: searched }
+        : place === "later" ? { operator: "AND", conditions: [{ someInThreadHaveKeyword: "$flagged", ...(away.length ? { inMailboxOtherThan: away } : {}) }, { notKeyword: "$draft" }] }
+        : place === "inbox" ? { operator: "AND", conditions: [{ inMailbox: box!.id }, NOT_LATER] }
+        : { inMailbox: box!.id };
       const res = await jmap([
-        ["Email/query", { accountId: account, filter, sort: [{ property: "receivedAt", isAscending: false }], limit: 60 }, "q"],
+        ["Email/query", { accountId: account, filter, sort: [{ property: "receivedAt", isAscending: false }], ...(place === "later" && !searched ? { collapseThreads: true } : {}), limit: 60 }, "q"],
         ["Email/get", { accountId: account, "#ids": { resultOf: "q", name: "Email/query", path: "/ids" }, properties: LIST_PROPS }, "g"],
       ]);
       setList((res.find((x) => x[0] === "Email/get")?.[1].list ?? []) as Email[]);
-    } catch (e: any) { setErr(`Couldn't read ${searched ? "the search" : place}: ${e?.message ?? e}`); setList([]); }
+    } catch (e: any) { setErr(`Couldn't read ${searched ? "the search" : placeName(place) ?? place}: ${e?.message ?? e}`); setList([]); }
   };
+  /** The held sends, listed again: a send decided here keeps its outcome (it stays on screen after it leaves the list). */
+  const loadHeld = async () => {
+    if (!heldAccounts.length) return;
+    try {
+      const lists = await Promise.all(heldAccounts.map(async (a) => ({ a, parked: ((await op("send.parked", a, {})).parked ?? []) as Parked[] })));
+      setHeldErr("");
+      setHeld((before) => {
+        const now: Held[] = lists.flatMap(({ a, parked }) => parked.map((item) => ({ account: a, item, listed: true, outcome: before.find((h) => h.item.opId === item.opId)?.outcome })));
+        for (const h of before) if (h.outcome && !now.some((x) => x.item.opId === h.item.opId)) now.push({ ...h, listed: false });
+        return now;
+      });
+    } catch (e: any) { setHeldErr(`Couldn't list what is waiting: ${e?.message ?? e}`); }
+  };
+  const decided = (opId: string, outcome: Held["outcome"]) => setHeld((hs) => hs.map((h) => (h.item.opId === opId ? { ...h, outcome } : h)));
   useEffect(() => { void loadBoxes().catch((e) => setErr(String(e?.message ?? e))); }, [account]);
   useEffect(() => { if (boxes.length || searched) void load(); }, [boxes, place, searched]);
+  useEffect(() => { if (place === "waiting" || !held.length) void loadHeld(); }, [session, place]);
 
   const accountNames = session ? Object.keys(session.roles).map((id) => ({ id, name: session.accounts[id]?.name ?? id, role: session.roles[id] })) : [];
+  const waitingCount = held.filter(waiting).length;
   const css = <style>{CSS}</style>;
   if (!session) return <main>{css}<h1>Mail</h1>{err ? <p className="err" role="alert">{err}</p> : <p className="quiet">Opening your mail…</p>}</main>;
   if (view.at === "read") return <main>{css}<Thread id={view.id} account={account!} me={session.accounts[account!]?.name ?? session.account} can={can} back={() => { setView({ at: "list" }); void load(); void loadBoxes(); }} reply={(e) => setView({ at: "compose", reply: e })} edit={(d) => setView({ at: "compose", draft: d })} inDrafts={place === "drafts"} /></main>;
   if (view.at === "compose") return <main>{css}<Compose account={account!} can={can} draft={view.draft} reply={view.reply} done={(sent) => { setView({ at: "list" }); if (sent) setPlace("sent"); void loadBoxes(); void load(); }} /></main>;
+  const openHeld = view.at === "held" ? held.find((h) => h.item.opId === view.opId) : undefined;
+  if (openHeld) return <main>{css}<HeldSend h={openHeld} name={session.accounts[openHeld.account]?.name ?? "Uni's account"} ops={session.operations[openHeld.account] ?? []} decided={decided} back={() => { setView({ at: "list" }); void loadHeld(); }} /></main>;
+  const shown = PLACES.filter((p) => p.role === "waiting" ? heldAccounts.length > 0 : p.role === "later" ? boxes.some((b) => b.role === "inbox") : boxes.some((b) => b.role === p.role));
+  const count = (role: string) => role === "inbox" ? boxes.find((b) => b.role === "inbox")?.unreadEmails : role === "waiting" ? waitingCount : 0;
   return <main>
     {css}
     <h1>Mail</h1>
@@ -127,19 +177,78 @@ export default function Mail() {
       {can("draft.save") && <button className="primary" onClick={() => setView({ at: "compose" })}>Write</button>}
     </div>
     {accountNames.length > 1 && <p className="quiet">Mailbox: {accountNames.map((a) => <button key={a.id} className="plainbtn" aria-pressed={a.id === account} onClick={() => { setAccount(a.id); setPlace("inbox"); }}>{a.name}</button>)}</p>}
-    {searched ? <p className="quiet">Found for “{searched}” <button className="plainbtn" onClick={() => { setSearched(null); setQ(""); }}>Back to {PLACES.find((p) => p.role === place)?.name}</button></p> :
-      <nav className="places" aria-label="Places">{PLACES.filter((p) => boxes.some((b) => b.role === p.role)).map((p) => { const b = boxes.find((x) => x.role === p.role)!; return <button key={p.role} aria-current={place === p.role ? "page" : undefined} onClick={() => setPlace(p.role)}>{p.name}{p.role === "inbox" && b.unreadEmails ? ` · ${b.unreadEmails}` : ""}</button>; })}</nav>}
+    {searched ? <p className="quiet">Found for “{searched}” <button className="plainbtn" onClick={() => { setSearched(null); setQ(""); }}>Back to {placeName(place)}</button></p> :
+      <nav className="places" aria-label="Places">{shown.map((p) => <button key={p.role} aria-current={place === p.role ? "page" : undefined} onClick={() => setPlace(p.role)}>{p.name}{count(p.role) ? ` · ${count(p.role)}` : ""}</button>)}</nav>}
     {err && <p className="err" role="alert">{err}</p>}
-    {list === null ? <p className="quiet">Reading…</p> : !list.length ? <p className="quiet">{searched ? "Nothing found." : "Nothing here."}</p> :
-      <ul className="rows" aria-label={searched ? "Found" : PLACES.find((p) => p.role === place)?.name}>{list.map((e) => <li key={e.id}>
+    {place === "waiting" && !searched ? <>
+      {heldErr && <p className="err" role="alert">{heldErr}</p>}
+      {!held.length ? <p className="quiet">{heldErr ? "" : "Nothing from Uni is waiting for you."}</p> :
+        <ul className="rows" aria-label="Waiting">{held.map((h) => <li key={h.item.opId}>
+          <button className={`row${waiting(h) ? " unseen" : ""}`} onClick={() => setView({ at: "held", opId: h.item.opId })}>
+            <span className="from">{h.item.sentBy === "Uni" ? "Uni" : "You, as Uni"} to {heldTo(h.item)}</span>
+            <span className="t">{h.outcome?.kind === "sent" ? "Sent" : h.outcome?.kind === "declined" ? "Declined" : h.outcome?.kind === "unconfirmed" ? "Unconfirmed" : h.outcome?.kind === "refused" ? "Not sent" : h.listed ? "Waiting" : "Not sent"}</span>
+            <span className="subj">{h.item.fields?.subject || "(no subject)"}{h.item.fields?.attachments?.length ? ` · 📎 ${h.item.fields.attachments.length}` : ""}</span>
+            <span className="pre">{h.outcome?.text ?? h.item.problem ?? h.item.reason ?? ""}</span>
+          </button>
+        </li>)}</ul>}
+    </> : list === null ? <p className="quiet">Reading…</p> : !list.length ? <p className="quiet">{searched ? "Nothing found." : place === "later" ? "Nothing put off for later." : "Nothing here."}</p> :
+      <ul className="rows" aria-label={searched ? "Found" : placeName(place)}>{list.map((e) => <li key={e.id}>
         <button className={`row${e.keywords?.$seen ? "" : " unseen"}`} onClick={() => setView({ at: "read", id: e.id })}>
-          <span className="from">{place === "sent" || place === "drafts" ? `To ${who(e.to)}` : who(e.from)}{e.keywords?.$flagged && <span className="flag" aria-label="flagged">⚑</span>}</span>
+          <span className="from">{place === "sent" || place === "drafts" ? `To ${who(e.to)}` : who(e.from)}{e.keywords?.$flagged && place !== "later" && <span className="flag" aria-label="in Later">⚑</span>}</span>
           <span className="t">{when(e.receivedAt)}</span>
           <span className="subj">{e.subject || "(no subject)"}{e.hasAttachment ? " · 📎" : ""}</span>
           <span className="pre">{e.preview}</span>
         </button>
       </li>)}</ul>}
   </main>;
+}
+
+/** A held send in full: who sent it, to whom, what it says, why it waits; Approve sends exactly that, Decline sends nothing. */
+function HeldSend({ h, name, ops, decided, back }: { h: Held; name: string; ops: string[]; decided: (opId: string, o: Held["outcome"]) => void; back: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const p = h.item, f = p.fields;
+  const open = waiting(h);
+  const approvable = open && canApprove(ops, p);
+  const declinable = open && ops.includes("send.decline");
+  const decide = async (kind: "approve" | "decline") => {
+    if (busy) return;
+    setBusy(true);
+    let outcome: Held["outcome"];
+    try {
+      // the request goes in the tap itself: an approval is signed with the approval key, and the shell asks for a tap
+      const r = kind === "approve" ? await op("send.approve", h.account, { opId: p.opId, fingerprint: p.fingerprint })
+        : await op("send.decline", h.account, { opId: p.opId });
+      outcome = kind === "approve"
+        ? r.state === "cleaned" || r.state === "submitted" ? { kind: "sent", text: "Sent." }
+          : r.state === "declined" ? { kind: "declined", text: "Declined earlier. Nothing was sent." }
+          : ["unknown", "submitting", "reserved"].includes(r.state) ? { kind: "unconfirmed", text: "Couldn't confirm it was sent. It won't be sent twice." }
+          : { kind: "refused", text: `Not sent: ${r.reason ?? r.state}.` }
+        : r.state === "declined" ? { kind: "declined", text: "Declined. Nothing was sent." } : { kind: "refused", text: `Not declined: it is ${r.state}.` };
+    } catch (e: any) { outcome = { kind: "error", text: `${kind === "approve" ? "Not sent" : "Not declined"}: ${e?.message ?? e}` }; }
+    decided(p.opId, outcome);
+    setBusy(false);
+  };
+  return <>
+    <button className="back" onClick={back}>← Waiting</button>
+    <article className="msg held" aria-label={f?.subject || "a held send"}>
+      <h2>{f?.subject || "(no subject)"}</h2>
+      <div className="meta">From {p.sentBy === "Uni" ? "Uni" : "you, as Uni"} ({name}) · to {f ? addrLine(f.to) || "(nobody)" : heldTo(p)}{f?.cc.length ? ` · cc ${addrLine(f.cc)}` : ""}{f?.bcc.length ? ` · bcc ${addrLine(f.bcc)}` : ""}{p.parkedAt ? ` · held ${new Date(p.parkedAt).toLocaleString()}` : ""}</div>
+      <p className="why"><b>Why it waits:</b> {p.reason ?? "Uni's outbound rules want your approval."}</p>
+      {f && <div className="body">{f.text || "(no text)"}</div>}
+      {!!f?.attachments?.length && <div className="files" aria-label="Files it sends">{f.attachments.map((a, i) => <span key={i}>📎 {a.name} ({Math.max(1, Math.round(a.size / 1024))} KB)</span>)}</div>}
+    </article>
+    {p.changed && <p className="note" role="note">This draft changed after it was held, so it can't be sent from here. Decline it, and ask Uni to send it again.</p>}
+    {p.problem && <p className="note" role="note">Can't show it: {p.problem}. Nothing can be sent from here.</p>}
+    {f && !p.problem && !shownWhole(p) && <p className="note" role="note">It has parts this can't show in full, so only Decline is offered.</p>}
+    {h.outcome && <p className={`outcome${["refused", "error"].includes(h.outcome.kind) ? " err" : ""}`} role="status">{h.outcome.text}</p>}
+    {(approvable || declinable) && <>
+      <div className="bar">
+        {approvable && <button className="primary" disabled={busy} onClick={() => void decide("approve")}>{busy ? "Working…" : "Approve"}</button>}
+        {declinable && <button className="plainbtn" disabled={busy} onClick={() => void decide("decline")}>Decline</button>}
+      </div>
+      <p className="quiet">{approvable ? `Approve sends it from ${name} to ${heldTo(p)}, exactly as shown. ` : ""}Decline sends nothing; Uni can change or drop the draft.</p>
+    </>}
+  </>;
 }
 
 function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: string; account: string; me: string; can: (o: string) => boolean; back: () => void; reply: (e: Email) => void; edit: (d: Draft) => void; inDrafts: boolean }) {
@@ -171,7 +280,17 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
     if (t) return t;
     return htmlText((e.htmlBody ?? []).map((p) => e.bodyValues?.[p.partId]?.value ?? "").join("\n"));
   };
-  const act = async (name: string, args: Record<string, unknown>, words: string) => { try { await op(name, account, args); setNote(words); } catch (e: any) { setErr(`${words.split(" ")[0]} didn't happen: ${e?.message ?? e}`); } };
+  const act = async (name: string, args: Record<string, unknown>, words: string) => { try { await op(name, account, args); setNote(words); return true; } catch (e: any) { setErr(`${words.split(" ")[0]} didn't happen: ${e?.message ?? e}`); return false; } };
+  // Later is the thread's: $flagged on any of its messages (another mail app may flag just one), so Not later clears them all
+  const flagged = (emails ?? []).filter((e) => e.keywords?.$flagged).map((e) => e.id);
+  // in Later while every message but drafts is flagged; one that came in since (unflagged) brings it back, and Later
+  // puts it off again
+  const isLater = flagged.length > 0 && (emails ?? []).every((e) => e.keywords?.$draft || e.keywords?.$flagged);
+  const later = async (on: boolean) => {
+    const ids = on ? (emails ?? []).filter((e) => !e.keywords?.$draft).map((e) => e.id) : flagged;
+    if (!ids.length || !(await act("flag", { emailIds: ids, flagged: on }, on ? "Put off for later." : "Not later any more."))) return;
+    setEmails((es) => es && es.map((e) => (ids.includes(e.id) ? { ...e, keywords: { ...e.keywords, $flagged: on } } : e)));
+  };
   return <>
     <button className="back" onClick={back}>← Mail</button>
     {err && <p className="err" role="alert">{err}</p>}
@@ -184,7 +303,7 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
     {last && <div className="bar" style={{ marginTop: 16 }}>
       {inDrafts && last.keywords?.$draft && can("draft.save") ? <button className="primary" onClick={async () => { const r = await op("draft.review", account, { draftId: last.id }); edit({ draftId: last.id, fingerprint: r.fingerprint, fields: { to: r.fields.to ?? [], cc: r.fields.cc ?? [], bcc: r.fields.bcc ?? [], subject: r.fields.subject ?? "", text: r.fields.text ?? "" } }); }}>Open the draft</button>
         : can("draft.save") && answering && <button className="primary" onClick={() => reply(answering)}>Reply</button>}
-      {can("flag") && <button className="plainbtn" onClick={() => act("flag", { emailIds: [last.id], flagged: !last.keywords?.$flagged }, last.keywords?.$flagged ? "Unflagged." : "Flagged.")}>{last.keywords?.$flagged ? "Unflag" : "Flag"}</button>}
+      {can("flag") && <button className="plainbtn" onClick={() => void later(!isLater)}>{isLater ? "Not later" : "Later"}</button>}
       {can("archive") && !last.keywords?.$draft && <button className="plainbtn" onClick={() => act("archive", { emailIds: emails.map((e) => e.id) }, "Archived.")}>Archive</button>}
       {note && <span className="quiet" role="status">{note}</span>}
     </div>}

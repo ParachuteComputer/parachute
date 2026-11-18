@@ -259,7 +259,9 @@ export default function AppletScreen() {
   // a notification's tap opens the applet at a room and message (services/notifyLink.ts)
   const launch = launchOf(params);
   const launchKey = launch ? `${launch.room}|${launch.event ?? ""}` : "";
-  const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, ...(handed ? { open: handed } : {}), ...(sized ? { page: { embeds: entry!.embeds.map((e) => e.name) } } : {}), ...(launch ? { launch } : {}) }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized, launchKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // what it was allowed, as its card said it (the folders, and each server with its rooms and keys): an applet reads its
+  // room, or which key is Uni's, from here rather than from a copy of its own
+  const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, access: entry?.manifest.allow ?? [], services: entry?.services ?? [], ...(handed ? { open: handed } : {}), ...(sized ? { page: { embeds: entry!.embeds.map((e) => e.name) } } : {}), ...(launch ? { launch } : {}) }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized, launchKey, entry]); // eslint-disable-line react-hooks/exhaustive-deps
   const sessionNow = useRef<Session | null>(null);
   useEffect(() => { if (launch) sessionNow.current?.sendEvent("launch", launch); }, [launchKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const tap = (f: () => void) => (e: React.MouseEvent) => { if (e.isTrusted) f(); };
