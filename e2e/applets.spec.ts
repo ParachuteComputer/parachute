@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ui } from "./helpers";
+import { fromAppletMenu, ui } from "./helpers";
 import { api, hubState, VAULT } from "./hub";
 
 const idOf = async (path: string) => (await api(hubState(), "GET", `notes?id=${encodeURIComponent(path)}`)).id as string;
@@ -57,9 +57,42 @@ test("a vault's role tag is no applet's to open: the card leaves it out", async 
   }
 });
 
+test("Stop and Revoke are in the bar's menu (⋯), not over the applet: two taps each, and Escape closes it", async ({ page }) => {
+  await allow(page);
+  // nothing above the frame but the bar
+  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Revoke" })).toHaveCount(0);
+  const barFoot = await page.locator("header.bar").evaluate((b) => b.getBoundingClientRect().bottom);
+  const frameTop = await page.locator("iframe.applet-frame").evaluate((f) => f.getBoundingClientRect().top);
+  expect(frameTop - barFoot).toBeLessThan(16);
+  // ⋯ opens the applet's menu: how it runs, Stop, Revoke and Settings
+  await page.locator("header.bar").getByRole("button", { name: "Menu" }).click();
+  const menu = page.getByRole("dialog", { name: "Recipe box menu" });
+  await expect(menu).toContainText(/Approved code only|Sealed/);
+  await expect(menu.getByRole("button", { name: "Stop" })).toBeVisible();
+  await expect(menu.getByRole("button", { name: "Revoke" })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  // to Settings from the menu and back: the applet as it was, the menu closed
+  await page.locator("header.bar").getByRole("button", { name: "Menu" }).click();
+  await menu.getByRole("link", { name: "Settings" }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.goBack();
+  await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
+  await expect(menu).toBeHidden();
+  await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
+  // Stop, from the menu
+  await fromAppletMenu(page, "Stop");
+  await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+  // stopped, ⋯ is the way to Settings again
+  await expect(page.locator("header.bar").getByRole("link", { name: "Settings" })).toBeVisible();
+});
+
 test("Revoke takes it back: the card shows again", async ({ page }) => {
   await allow(page);
-  await page.getByRole("button", { name: "Revoke" }).click();
+  await fromAppletMenu(page, "Revoke");
   await expect(page.getByRole("button", { name: "Allow" })).toBeVisible();
   await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });
@@ -123,7 +156,7 @@ test("Back and Forward never start it: a screen still running is as it was, a st
   await page.goForward();
   await expect(page.locator("iframe.applet-frame")).toHaveCount(1);
   expect(await doc.evaluate(() => (window as unknown as { __here?: number }).__here)).toBe(1);
-  await page.getByRole("button", { name: "Stop" }).click();
+  await fromAppletMenu(page, "Stop");
   await page.goBack();
   await page.goForward();
   await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
@@ -134,7 +167,7 @@ test("Stop holds: leaving and coming Back doesn't start it again", async ({ page
   await openFromStrip(page);
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
-  await page.getByRole("button", { name: "Stop" }).click();
+  await fromAppletMenu(page, "Stop");
   // Back returns where the person came from: the vault
   await page.getByRole("button", { name: "Back" }).click();
   // the vault view drawn first, so the applet's screen is really left

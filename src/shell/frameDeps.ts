@@ -15,7 +15,8 @@ import { addToHome } from "../applet/addToHome";
 import { bringIn, readPointers } from "../applet/pointers";
 import { isMine, whoseOf } from "../vault/whose";
 import type { FrameComponents, FramePointer } from "../bridge/protocol";
-import { originOf, listVaults, type VaultRecord } from "../vault/store";
+import { originOf, listVaults, hostOf, type VaultRecord } from "../vault/store";
+import { dismissVault, newVaultsOn, startAddVault } from "../vault/newVaults";
 import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
 import { barNow, pinApplet, startApplet } from "./homeSettings";
@@ -29,7 +30,10 @@ import { parachutesNow } from "./parachutes";
 export const homeNow = () => {
   const b = barNow();
   return { start: b.start ? { vault: b.start.vault, noteId: b.start.noteId } : null, bar: b.pins.map((p) => ({ vault: p.vault, noteId: p.noteId })),
-    parachutes: parachutesNow().map((p) => ({ hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0 })) };
+    parachutes: parachutesNow().map((p) => {
+      const fresh = newVaultsOn(p.hub);
+      return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}) };
+    }) };
 };
 /** For a frame of the person's own, a write into their vault is asked about once more on the shell's own sheet. */
 const confirmed = (from: "built-in" | "vault", q: WriteAsk) => (from === "vault" ? confirmWrite(q) : Promise.resolve(true)).then((yes) => { if (!yes) throw new Error("not_allowed"); });
@@ -37,6 +41,13 @@ const homeDeps = (from: "built-in" | "vault"): HostDeps["home"] => ({
   get: homeNow,
   bringIn: async (vault, noteId) => { await confirmed(from, { title: "Bring this into your Parachute?", body: "Your frame asks to write a pointer to it in your home vault. Nothing of it runs until you allow it.", act: "Bring it in" }); await bringThingIn(vault, noteId); },
   addEmbed: async (vault, noteId) => { await confirmed(from, { title: "Add this to your home?", body: "Your frame asks to put this component on your home applet's page. It asks before it runs.", act: "Add to home" }); return addToHome(vault, noteId); },
+  addVault: async (hub, vault) => {
+    // only a vault the shell itself found on offer: the sheet below never words what a frame made up
+    if (!newVaultsOn(hub).includes(vault)) throw new Error("not_allowed");
+    await confirmed(from, { title: `Add ${vault}?`, body: `Your frame asks to add the vault ${vault} from ${hostOf(hub)}. Your hub asks you to approve it first, unless you already have.`, act: "Add it" });
+    window.location.assign(await startAddVault(hub, vault));
+  },
+  dismissVault: (hub, vault) => dismissVault(hub, vault),
   pin: (vault, noteId, on) => pinApplet(vault, noteId, on),
   start: async (vault, noteId) => {
     await startApplet(vault, noteId);

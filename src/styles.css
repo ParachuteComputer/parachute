@@ -78,8 +78,6 @@ fieldset.plain legend { padding: 0; }
 .applet-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); text-decoration: none; white-space: nowrap; font-size: 15px; }
 .applet-chip span[aria-hidden] { color: var(--accent); }
 .applet-screen { display: flex; flex-direction: column; min-height: calc(100dvh - 64px); }
-.applet-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; font-size: 14px; }
-.applet-bar .quiet { flex: 1; }
 .applet-frame { flex: 1; width: 100%; min-height: 70dvh; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 /* a page with embeds (docs/design/EMBED.md): the host as tall as its content, then each embed, the page scrolling whole */
 .applet-frame.applet-frame-sized { flex: none; min-height: 0; }
@@ -159,6 +157,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .with-bar .sheet-scrim { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
 .sheet-list li + li { border-top: 1px solid var(--line); }
 .sheet-list .sheet-choice { padding: 12px 2px; font-size: 16px; }
+.sheet-list a.sheet-choice { display: block; color: inherit; text-decoration: none; }
+.sheet-line { margin: -6px 0 6px; font-size: 14px; }
 .start-line { margin: 0 0 8px; font: italic 15px var(--serif); }
 
 /* The launcher (src/frame/views/Launcher.tsx): a page of an almanac (design/kit/WHY.md). A masthead with hills drawn in
@@ -214,6 +214,12 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .parachute-host { font-weight: 400; letter-spacing: .06em; text-transform: none; color: var(--muted); }
 .parachute-out { margin: 8px 0 0; font: italic 17px/1.4 var(--serif); color: var(--muted); }
 .parachute-out a { margin-left: 6px; font: 15px var(--sans); font-style: normal; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+/* a vault made there since this device signed in (vault/newVaults.ts): one quiet line, a tap adds it */
+.parachute-new { margin: 8px 0 4px; }
+.parachute-new li { display: flex; align-items: baseline; gap: 10px; padding: 2px 0; }
+.parachute-new-add { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: italic 17px/1.4 var(--serif); color: var(--muted); }
+.parachute-new-add b { font-style: normal; font-weight: 600; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.parachute-new .quiet-button { margin-left: auto; font-size: 13px; padding: 2px 8px; color: var(--muted); }
 .launcher-foot { display: flex; gap: 18px; margin: 22px 0 0; font-size: 14px; }
 .launcher-foot a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 @media (min-width: 700px) {

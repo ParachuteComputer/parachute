@@ -24,6 +24,7 @@ import { AskWhose, WhoseLine } from "./Whose";
 import { useParachutes } from "../shell/parachutes";
 import { listHub } from "../shell/homeSettings";
 import { signOutOf } from "../vault/signInFlow";
+import { dismissVault } from "../vault/newVaults";
 
 /** Signing out of a vault ends what its applets were allowed on this device too, and the embeds on its pages or from it. */
 const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (const s of g.subjects()) if (grantInVault(s, subjectOf(key, ""), key)) g.revoke(s); };
@@ -56,7 +57,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
                 {p.vaults.map((v) => (
                   <li key={v.key} className="line">
                     <span><strong>{v.vault}</strong> <WhoseLine v={v} /></span>
-                    <button type="button" className="quiet-button" aria-label={`Sign out of ${v.vault}`} onClick={() => signOutVault(v)}>Sign out</button>
+                    <button type="button" className="quiet-button" aria-label={`Sign out of ${v.vault}`} onClick={() => { dismissVault(v.issuer, v.vault); signOutVault(v); }}>Sign out</button>
                   </li>
                 ))}
               </ul>

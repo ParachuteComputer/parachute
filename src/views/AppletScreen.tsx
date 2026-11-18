@@ -133,6 +133,7 @@ export default function AppletScreen() {
   // new screen
   useEffect(() => { if (startedByTap.get(location.key)) setStarted(true); }, [location.key]);
   const [declined, setDeclined] = useState(false);
+  const [menu, setMenu] = useState(false);
   const [, setBump] = useState(0);
   const bump = () => setBump((n) => n + 1);
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
@@ -293,7 +294,7 @@ export default function AppletScreen() {
     if (shownBefore.current === kept.shown) return;
     shownBefore.current = kept.shown;
     sessionNow.current?.sendEvent("shown", { shown: kept.shown });
-    if (!kept.shown) { device.cancel(); sheets.cancel(); } else setRecheck((n) => n + 1);
+    if (!kept.shown) { device.cancel(); sheets.cancel(); setMenu(false); } else setRecheck((n) => n + 1);
   }, [kept.shown]); // eslint-disable-line react-hooks/exhaustive-deps
   // a grant changed elsewhere (revoked in Settings while this was kept): drawn again, so it stops at once
   useEffect(() => grants.onChange(bump), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -304,7 +305,7 @@ export default function AppletScreen() {
   const back = backOrLauncher;
   const plainNote = note ? <Link to={`${noteHref(rec.key, note.id)}?with=vault`}>Open {titleOf(note)} in the vault view</Link> : null;
   const theirsLabel = notMine ? ` · ${rec.vault}'s` : "";
-  const shell = (body: React.ReactNode) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : "Applet"} back={true} onBack={back} />{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;
+  const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu} />{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;
 
   if (mode === "closed") return shell(<div className="card" role="status"><p>Applets are off on this device until its self-test passes. See Settings.</p>{plainNote}</div>);
   if (loaded.state === "loading" || (loaded.state === "ok" && !keys)) return shell(<p className="quiet" role="status">Opening…</p>);
@@ -334,17 +335,37 @@ export default function AppletScreen() {
     <p>{name} is stopped.{note && claim ? ` It will open ${titleOf(note)}.` : ""}</p>
     <button type="button" className="primary" onClick={tap(() => { chooseHere(); setStarted(true); })}>Open {name}</button> {plainNote}
   </div>);
+  // how it runs, and Stop and Revoke: in the bar's menu (⋯), so the applet has the screen
+  const closeMenu = () => setMenu(false);
   return shell(<>
-    <div className="applet-bar">
-      <span className="quiet">{mode === "approved-code" ? "Approved code only" : "Sealed"}{handed ? ` · ${titleOf(note!)}` : ""}</span>
-      {plainNote && <Link className="quiet-button" to={`${noteHref(rec.key, note!.id)}?with=vault`}>Vault</Link>}
-      <button type="button" className="quiet-button" onClick={tap(() => setStarted(false))}>Stop</button>
-      <button type="button" className="quiet-button" onClick={tap(revoke)}>Revoke</button>
-    </div>
+    {menu && kept.shown && <AppletMenu glyph={entry.manifest.glyph} name={name} runs={mode === "approved-code" ? "Approved code only" : "Sealed"} onClose={closeMenu}
+      note={note ? { title: handed ? titleOf(note) : undefined, href: `${noteHref(rec.key, note.id)}?with=vault` } : null}
+      onStop={tap(() => { closeMenu(); setStarted(false); })} onRevoke={tap(() => { closeMenu(); revoke(); })} />}
     {late && "error" in late && late.hash === keys.html && <p className="error" role="alert">This applet can't run: its code doesn't compile: {late.error}.</p>}
     {router && page && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
     {sheets.ui}
     {device.ui}
     {router && page && sized && rec && isMine(rec) && <PageEmbeds host={rec} hostNote={entry.noteId} embeds={entry.embeds} from={loaded.state === "ok" ? loaded.from : []} />}
-  </>);
+  </>, () => setMenu(true));
+}
+
+/** A running applet's menu, from the bar's ⋯: how it runs (and the note it was handed), then the note in the vault,
+ *  Stop, Revoke and Settings. A sheet over the frame, as the bar's own long-press menu is. */
+function AppletMenu({ glyph, name, runs, note, onStop, onRevoke, onClose }: { glyph: string; name: string; runs: string; note: { title?: string; href: string } | null;
+  onStop: (e: React.MouseEvent) => void; onRevoke: (e: React.MouseEvent) => void; onClose: () => void }) {
+  useEffect(() => { const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; addEventListener("keydown", esc); return () => removeEventListener("keydown", esc); }, [onClose]);
+  return (
+    <div className="sheet-scrim sheet-over-frames" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <section className="sheet" role="dialog" aria-modal="true" aria-label={`${name} menu`}>
+        <h2><span aria-hidden="true">{glyph}</span> {name}</h2>
+        <p className="quiet sheet-line">{runs}{note?.title ? ` · ${note.title}` : ""}</p>
+        <ul className="plain sheet-list">
+          {note && <li><Link className="sheet-choice" to={note.href} onClick={onClose}>Open the note in the vault view</Link></li>}
+          <li><button type="button" className="sheet-choice" onClick={onStop}>Stop</button></li>
+          <li><button type="button" className="sheet-choice" onClick={onRevoke}>Revoke</button></li>
+          <li><Link className="sheet-choice" to="/settings" onClick={onClose}>Settings</Link></li>
+        </ul>
+      </section>
+    </div>
+  );
 }

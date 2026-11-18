@@ -93,7 +93,7 @@ test("an applet reaches only the servers it declared, the shell signing for it; 
     const host = new URL(relay.origin).host;
     await expect(card).toContainText(`With your everyday key: sign in to ${host} on this device as you`);
     await expect(card).toContainText("With your everyday key: post as you in your rooms there: messages");
-    await expect(card).toContainText("With your everyday key: delete your messages and reactions there");
+    await expect(card).toContainText("With your everyday key: delete your messages there");
     await expect(card).toContainText("With your everyday key: send and open files there as you");
     await expect(card).toContainText(`With your everyday key: send requests to ${new URL(http.origin).host} on this device signed as you`);
     await expect(card).toContainText(`What it reads here could reach ${new URL(http.origin).host}`);

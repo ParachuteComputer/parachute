@@ -18,7 +18,7 @@
         "id": "rooms",
         "kind": "nostr-relay",
         "url": "{{relay}}",
-        "publish": [9, 7, 5, 40003, 20002],
+        "publish": [9, 5, 40003, 20002],
         "media": true,
         "rooms": [{ "id": "{{area_room}}", "name": "{{area}}" }],
         "approvals": { "from": ["{{uni}}"] },

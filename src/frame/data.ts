@@ -126,4 +126,7 @@ export function useComponents(vault: string | undefined): FrameComponents | null
   return got;
 }
 /** Put a component on the home applet's page (during a tap only). */
+/** Add a vault its Parachute offers (the shell opens the hub's consent), or stop offering it. */
+export const addVault = (hub: string, vault: string) => call("home.addVault", { hub, vault });
+export const dismissVault = (hub: string, vault: string) => call("home.dismissVault", { hub, vault }).then(() => home.load());
 export const addEmbed = (vault: string, noteId: string) => call("home.addEmbed", { vault, noteId }).then((r) => { void pointers.load(); return r; });

@@ -1,5 +1,5 @@
 // Room: one room on a Buzz relay (a NIP-29 group), as the Uni app shows it: its messages and threads, the composer,
-// Uni's cards and asks, reactions, media, voice notes, typing, and Uni's turn (working, Stop, listening). A component
+// Uni's cards and asks, media, voice notes, typing, and Uni's turn (working, Stop, listening). A component
 // record (Components/Room, id room) that applets import, `import Room from "component:room"`, and draw with
 // `<Room service="rooms" room={id} />`: it runs in the importing applet's frame, with that applet's services and what
 // its card allows, so a grant scoped to one room keeps it to that room. It talks to the relay only through the shell
@@ -400,7 +400,6 @@ const CSS = `
 .room .edited { color: var(--muted); font-size: .8em; margin-left: 6px; }
 .room .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .room .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 1px 9px; cursor: pointer; font-size: .88em; }
-.room .chip.mine { border-color: var(--text); font-weight: 600; }
 .room .chip.quiet { color: var(--muted); }
 .room .pic { max-width: min(100%, 420px); max-height: 420px; border-radius: 6px; display: block; margin: 6px 0; }
 .room .vid { max-width: 100%; max-height: 420px; display: block; margin: 6px 0; }
@@ -657,11 +656,6 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     const r = await relay.publish({ kind: 9, content: `${words}\n\n\`\`\`uni-answer\n${JSON.stringify(body)}\n\`\`\``, tags: [["h", room], ["q", ask.id, "", ask.pubkey], ...(a === "pick" || a === "did" ? [["p", ask.pubkey]] : [])] });
     if (r.ok) { st.add(r.event); st.bump(); } else setErr(`Not sent: ${r.message}`);
   };
-  const react = async (e: Ev, emoji: string) => {
-    const mine = [...(s.reacts.get(e.id)?.values() ?? [])].find((x) => x.pubkey === s.me && x.content === emoji && visible(s, x));
-    const r = mine ? await relay.publish({ kind: 5, content: "", tags: [["e", mine.id], ["h", room]] }) : await relay.publish({ kind: 7, content: emoji, tags: [["e", e.id], ["p", e.pubkey], ["h", room]] });
-    if (r.ok) { st.add(r.event); st.bump(); } else setErr(`Not sent: ${r.message}`);
-  };
   /** Your own message: a new text (an edit, kind 40003) or gone (a deletion, kind 5). */
   const change = async (e: Ev, text: string | null) => {
     const r = text === null ? await relay.publish({ kind: 5, content: "", tags: [["e", e.id], ["h", room]] }) : await relay.publish({ kind: 40003, content: text, tags: [["h", room], ["e", e.id]] });
@@ -702,7 +696,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
             lastDay = day; prev = e;
             const mark = !thread && !newShown && firstUnread.current && e.created_at > firstUnread.current && e.pubkey !== s.me ? (newShown = true, <p className="new" key={`n${e.id}`}>New</p>) : null;
             return [sep, mark, <Message key={e.id} st={st} e={e} grouped={!!grouped} root={thread === e.id} marked={e.id === at} replies={thread ? 0 : replies.get(e.id)?.length ?? 0}
-              openThread={() => setThread(e.id)} answer={answer} answeredBy={answered.get(e.id)} settled={settled.has(e.id)} react={react} send={send} change={change} />];
+              openThread={() => setThread(e.id)} answer={answer} answeredBy={answered.get(e.id)} settled={settled.has(e.id)} send={send} change={change} />];
           })}
           {thread && shown.length <= 1 && <p className="day">No replies yet</p>}
         </div>
@@ -718,8 +712,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   </section></Svc.Provider>;
 }
 
-function Message({ st, e, grouped, root, marked, replies, openThread, answer, answeredBy, settled, react, send, change }: { st: Store; e: Ev; grouped: boolean; root: boolean; marked: boolean; replies: number; openThread: () => void;
-  answer: (ask: Ev, a: "pick" | "did" | "seen" | "later", pick?: { id: string; label: string }) => void; answeredBy?: Ev; settled: boolean; react: (e: Ev, emoji: string) => void; send: (c: string) => Promise<boolean>; change: (e: Ev, text: string | null) => Promise<boolean> }) {
+function Message({ st, e, grouped, root, marked, replies, openThread, answer, answeredBy, settled, send, change }: { st: Store; e: Ev; grouped: boolean; root: boolean; marked: boolean; replies: number; openThread: () => void;
+  answer: (ask: Ev, a: "pick" | "did" | "seen" | "later", pick?: { id: string; label: string }) => void; answeredBy?: Ev; settled: boolean; send: (c: string) => Promise<boolean>; change: (e: Ev, text: string | null) => Promise<boolean> }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [sure, setSure] = useState(false);
   const s = st.s;
@@ -728,12 +722,6 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
   const ask = askOf(e), prompt = promptOf(e), sealed = /```uni-sealed-(approval|morning)\n/.test(e.content), secret = !sealed && /```uni-secret-request\n/.test(e.content);
   const media = mediaOf(e);
   const body = withoutFences(text).replace(/^!?\[[^\]]*\]\(https?:\/\/\S+\/media\/[0-9a-f]{64}\.[a-z0-9]+\)\s*$/gm, "").trim();
-  const reacts = new Map<string, { n: number; mine: boolean }>();
-  for (const r of s.reacts.get(e.id)?.values() ?? []) {
-    if (!visible(s, r)) continue;
-    const k = r.content === "+" || r.content === "" ? "👍" : r.content === "-" ? "👎" : r.content;
-    const x = reacts.get(k) ?? { n: 0, mine: false }; x.n++; x.mine ||= r.pubkey === s.me; reacts.set(k, x);
-  }
   const named = tags(e, "p").includes(s.me) && !mine;
   const names = [...s.names.values()];
   return <article className={`msg${grouped ? " grouped" : ""}${mine ? " mine" : ""}${named ? " me-named" : ""}${root ? " root" : ""}${marked ? " at" : ""}`} data-id={e.id} aria-label={`${mine ? "You" : nameOf(s, e.pubkey)}, ${TIME.format(new Date(e.created_at * 1000))}`}>
@@ -749,8 +737,6 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
     {secret && <SecretCard e={e} />}
     {media.map((m) => <Attachment key={m.sha} m={m} />)}
     <div className="acts">
-      {[...reacts].map(([k, v]) => <button key={k} className={`chip${v.mine ? " mine" : ""}`} aria-label={`${k} ${v.n}${v.mine ? ", including yours" : ""}`} onClick={() => react(e, k)}>{k} {v.n}</button>)}
-      {!mine && ["👍", "❤️", "✓"].filter((k) => !reacts.get(k)?.mine).map((k) => <button key={`r${k}`} className="chip quiet" aria-label={`React ${k}`} onClick={() => react(e, k)}>{k}</button>)}
       {!root && <button className="thread-link" onClick={openThread}>{replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : "Reply"}</button>}
       {mine && !ask && editing === null && <button className="thread-link" onClick={() => setEditing(body)}>Edit</button>}
       {mine && <button className="thread-link" onClick={async () => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } await change(e, null); }}>{sure ? "Tap again to delete" : "Delete"}</button>}

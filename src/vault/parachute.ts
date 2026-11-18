@@ -106,14 +106,20 @@ export async function listWithToken(accountMcp: string, token: string, fetchImpl
 /** Does the person reach every vault on the hub (they run it)? The hub's public list of its vaults
  *  (`/.well-known/parachute.json`, core 0.8 and 0.9; Cloud has none) against theirs. Without that list: no. */
 export async function reachesEvery(hub: string, theirs: readonly string[], fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<boolean> {
+  const every = await everyVault(hub, fetchImpl);
+  // a list cut at MAX_VAULTS can't show it covers every vault: asked, rather than taken as the person's
+  return !!every && every.length > 1 && (theirs.length >= MAX_VAULTS || every.every((n) => theirs.includes(n)));
+}
+
+/** Every vault on the hub, from its public list (`/.well-known/parachute.json`, core 0.8 and 0.9; Cloud has none):
+ *  names a vault can have, each once. Null when the hub has no such list or didn't answer. */
+export async function everyVault(hub: string, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<string[] | null> {
   try {
     const res = await fetchImpl(`${hub}/.well-known/parachute.json`, { headers: { Accept: "application/json" } });
-    if (!res.ok) return false;
+    if (!res.ok) return null;
     const d = (await res.json()) as { vaults?: { name?: unknown }[] };
-    const every = (Array.isArray(d.vaults) ? d.vaults : []).map((v) => v?.name).filter(isVaultName);
-    // a list cut at MAX_VAULTS can't show it covers every vault: asked, rather than taken as the person's
-    return every.length > 1 && (theirs.length >= MAX_VAULTS || every.every((n) => theirs.includes(n)));
-  } catch { return false; }
+    return [...new Set((Array.isArray(d.vaults) ? d.vaults : []).map((v) => v?.name).filter(isVaultName))];
+  } catch { return null; }
 }
 
 /** The scope that asks for every vault named: read and write each (the hub gives read only where that is all the
