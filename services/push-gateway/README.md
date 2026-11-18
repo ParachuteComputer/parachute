@@ -96,7 +96,9 @@ PUSH_GATEWAY_URL=https://push.example/ PUSH_GATEWAY_RELAYS=wss://relay.example P
 ```
 
 A push server on a private network you trust (a tailnet's ntfy) is refused as an endpoint unless named:
-`PUSH_GATEWAY_PRIVATE_HOSTS=uni.example.ts.net` (https only). An ntfy that denies anonymous access needs its UnifiedPush
+`PUSH_GATEWAY_PRIVATE_HOSTS=uni.example.ts.net:8565` (https only). A named host is trusted for its push server only:
+that port (443 when none is given) and ntfy's UnifiedPush path, `/up<topic>`; name another push path as
+`host:port/path/`. The hub, mail or anything else on that machine stays out of reach. An ntfy that denies anonymous access needs its UnifiedPush
 topics opened for writing (`ntfy access everyone 'up*' write-only`: topics are random and every push is sealed) and
 readable by the phone's account (`ntfy access <user> 'up*' read-only`).
 
