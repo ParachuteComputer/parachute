@@ -49,7 +49,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
   /** the grant's key and the code's hash now, the store's status for them, and the grant this device holds
    *  (grants.ts `record`), if any. Shown with a grant `ok`: it was allowed under sealed frames, and the device now runs
    *  approved code only. */
-  scope: string; code: string; status: "none" | "ok" | "updated"; was: { scope: string; code: string; asked: Asked | null } | null;
+  scope: string; code: string; status: "none" | "ok" | "updated"; was: { scope: string; code: string; grantedUnder: Runs; asked: Asked | null } | null;
   fingerprint: string; expires: Date;
   /** whose the vault is (vault/whose.ts), and its hub's host: someone else's is said so */
   whose?: "mine" | "theirs" | "trusted"; host?: string;
@@ -71,7 +71,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
   const lines = [...grantLines(grant, ownFolder, keyring), ...importLines(imports)];
   const asked: Asked = askedOf(grant, ownFolder, keyring, imports);
   const allow = (e: MouseEvent) => { if (settle ? press.counts(e) : e.isTrusted) onAllow(asked); };
-  const change = changeOf(was, { scope, code, status, ...asked });
+  const change = changeOf(was, { scope, code, status, runs, ...asked });
   const codeChanged = change.kind === "code" || (change.kind === "expired" && change.codeMoved);
   const reaches = (grant.services?.length ?? 0) > 0 || grant.app.includes("links");
   const isNew = (t: string) => !!change.fresh?.has(t);
@@ -83,12 +83,13 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
     : change.kind === "asks" ? <>{q} asks again</>
     : change.kind === "expired" ? <>Allow {q} again?</>
     : <>Allow {what === "component" ? "the component " : ""}{q}?</>;
-  // "no new permissions" only when nothing it asks is new, and not where new code could reach the internet anyway
+  // "no new permissions" only when its card was kept, nothing on it reads differently, and the device's mode held
   const nothingNew = change.nothingNew ? ` ${NOTHING_NEW}` : "";
+  const modeLine = change.modeMoved && change.kind !== "mode" ? ` ${MODE_CHANGED_LINE}` : "";
   const codeLine = imports.length ? IMPORTS_CHANGED_LINE : runs === "approved-code" ? CODE_CHANGED_LINE : CODE_CHANGED_SEALED_LINE;
   const notice = broughtChanged ? broughtChangedLine(vault, name)
-    : change.kind === "code" ? `${codeLine}${nothingNew}`
-    : change.kind === "expired" ? `${EXPIRED_LINE}${change.codeMoved ? ` ${codeLine}` : ""}${nothingNew}`
+    : change.kind === "code" ? `${codeLine}${modeLine}${nothingNew}`
+    : change.kind === "expired" ? `${EXPIRED_LINE}${change.codeMoved ? ` ${codeLine}` : ""}${modeLine}${nothingNew}`
     : change.kind === "asks" ? (freshOnFace ? FRESH_LINE : change.fresh?.size ? FRESH_DETAILS_LINE : ASKS_OTHER_LINE)
     : change.kind === "mode" ? MODE_CHANGED_LINE : null;
   const where = whose !== "mine" ? <> (someone else's{host ? `, at ${host}` : ""})</> : null;
@@ -101,7 +102,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
       <p className="grant-sub quiet">{what === "component" ? <>A component from <strong>{vault}</strong>, in its own sealed frame on your page, named by its record (not verified).</> : <>An applet in {whose === "mine" ? "your vault " : ""}<strong>{vault}</strong>, named by its note (not verified).</>}</p>
       {notice && <p className="grant-changed" role="status"><strong>{notice}</strong></p>}
       {whose !== "mine" && <p className="grant-whose"><strong>Someone else's vault{host ? `, at ${host}` : ""}.</strong> It acts as you in {vault}, with your sign-in there. It sees nothing in your own vaults.{what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}</p>}
-      {face.lines.length ? <ul className="grant-face" aria-label="What it would do">{face.lines.map((l, i) => <li key={i} className={isNew(faceText(l)) ? "grant-fresh" : undefined}><New t={faceText(l)} />{l.risky ? <strong>{l.lead}</strong> : l.lead}{l.rest}</li>)}</ul>
+      {face.lines.length ? <ul className="grant-face" role="list" aria-label="What it would do">{face.lines.map((l, i) => <li key={i} className={isNew(faceText(l)) ? "grant-fresh" : undefined}><New t={faceText(l)} />{l.risky ? <strong>{l.lead}</strong> : l.lead}{l.rest}</li>)}</ul>
         : !face.also.length ? <p className="quiet">Nothing outside itself.</p> : null}
       {alsoText && <p className="grant-also"><New t={alsoText} />{alsoText}</p>}
       {change.gone.some((t) => !t.startsWith(DETAIL)) && <p className="grant-gone quiet">No longer: {change.gone.filter((t) => !t.startsWith(DETAIL)).join("; ")}</p>}

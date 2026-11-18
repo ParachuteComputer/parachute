@@ -46,9 +46,9 @@ export function createGrantStore(storage: StorageLike | null = typeof localStora
       return r.html === html ? "ok" : "updated";
     },
     /** When it was allowed and when it ends, for the card; null without a grant. */
-    record(subject: string): { grantedAt: string; expires: string | null; scope: string; code: string; asked: Asked | null } | null {
+    record(subject: string): { grantedAt: string; expires: string | null; scope: string; code: string; grantedUnder: GrantedUnder; asked: Asked | null } | null {
       const r = read().get(subject);
-      return r ? { grantedAt: r.grantedAt, expires: r.expires ?? null, scope: r.scope, code: r.html, asked: r.face && r.others ? { face: r.face, others: r.others } : null } : null;
+      return r ? { grantedAt: r.grantedAt, expires: r.expires ?? null, scope: r.scope, code: r.html, grantedUnder: r.grantedUnder, asked: r.face && r.others ? { face: r.face, others: r.others } : null } : null;
     },
     /** The gate mode the grant was made under; a record without one (or with an unknown value) counts as `sealed`. */
     grantedUnder(subject: string): GrantedUnder | null { return read().get(subject)?.grantedUnder ?? null; },
@@ -56,7 +56,7 @@ export function createGrantStore(storage: StorageLike | null = typeof localStora
     /** `asked`: what its card said (face.ts), kept to mark what is new next time. */
     grant(subject: string, scope: string, html: string, mode: GrantedUnder = "sealed", expires?: (from: Date) => Date, asked?: Asked): void {
       const at = new Date(now());
-      read().set(subject, { scope, html, grantedAt: at.toISOString(), grantedUnder: mode, ...(expires ? { expires: expires(at).toISOString() } : {}), ...(asked ? { face: [...asked.face], others: [...asked.others] } : {}) }); write();
+      read().set(subject, { scope, html, grantedAt: at.toISOString(), grantedUnder: mode, ...(expires ? { expires: expires(at).toISOString() } : {}), ...(asked && strings(asked.face) && strings(asked.others) ? { face: [...asked.face], others: [...asked.others] } : {}) }); write();
     },
     revoke(subject: string): void { read().delete(subject); write(); },
     /** Called after any grant or revoke (the notification list follows the grants: services/notify.ts). */

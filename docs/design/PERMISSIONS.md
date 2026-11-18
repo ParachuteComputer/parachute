@@ -37,10 +37,10 @@ The card says why before anything else:
 
 | Why | Heading | Line |
 |---|---|---|
-| Code changed, same asks | «Rooms» changed | …Only the version you allow runs (on Android: new code could send what it reads to the internet). *It asks for no new permissions.* Only when no line on the card reads differently and no code from someone else's vault is new. |
+| Code changed, same asks | «Rooms» changed | …Only the version you allow runs (on Android: new code could send what it reads to the internet). *It asks for no new permissions.* Only when its card was kept, no line on it reads differently, no code from someone else's vault is new, and the device's mode held. |
 | It asks for something else | «Rooms» asks again | It now asks for something other than what you allowed. What is new is marked **New** (on the face, or under Show details when only a detail changed); what went is listed. |
 | Its year ran out | Allow «Rooms» again? («Rooms» changed, with Allow this version, when its code changed too) | A year has passed since you allowed it, so it asks again. |
-| The device moved to approved code only | Allow «Rooms»? | You allowed it when applets here were sealed… |
+| The device moved to approved code only | Allow «Rooms»? | You allowed it when applets here were sealed… (also said beside changed code or a year run out) |
 | Changed since it was brought in from another vault | «Rooms» changed | techne changed «Rooms» since you brought it in. |
 
 To mark what is new, a grant now keeps what its card said (`face`: the face's lines and every detail line) and its imports from someone else's vault

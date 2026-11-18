@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 const RECIPES: Grant = { applet: { id: "recipes", name: "Recipes" }, vault: "kitchen", allow: [{ path: "Recipes/", verbs: ["read", "create"] }], opens: [], app: [] };
 const ROOMS: Grant = { ...RECIPES, allow: [], services: [{ id: "r", kind: "nostr-relay", url: "wss://buzz.example.org/", publish: [9], media: false, private: [] }] };
-type Was = { scope: string; code: string; asked: { face: string[]; others: string[] } | null } | null;
+type Was = { scope: string; code: string; grantedUnder: "sealed" | "approved-code"; asked: { face: string[]; others: string[] } | null } | null;
 const card = (o: { runs?: "sealed" | "approved-code"; grant?: Grant; status?: "none" | "ok" | "updated"; was?: Was; scope?: string } = {}) =>
   render(<GrantCard name="Recipes" glyph="❀" vault="kitchen" runs={o.runs ?? "sealed"} grant={o.grant ?? RECIPES} ownFolder="Applets/" scope={o.scope ?? "s1"} code="c2" status={o.status ?? "none"} was={o.was ?? null}
     fingerprint="9b13 b2ae" expires={new Date(2027, 0, 1)} onAllow={() => {}} onNotNow={() => {}} />).container;
@@ -40,7 +40,7 @@ describe("the card's face", () => {
 });
 
 describe("asking again says why", () => {
-  const kept = (g: Grant, o: Partial<NonNullable<Was>> = {}) => ({ scope: "s1", code: "c1", asked: askedOf(g, "Applets/"), ...o });
+  const kept = (g: Grant, o: Partial<NonNullable<Was>> = {}) => ({ scope: "s1", code: "c1", grantedUnder: "sealed" as const, asked: askedOf(g, "Applets/"), ...o });
   it("changed code, the same asks: no new permissions, Allow this version", () => {
     const c = card({ status: "updated", was: kept(RECIPES) });
     expect(face(c)).toContain(`${CODE_CHANGED_SEALED_LINE} ${NOTHING_NEW}`);
@@ -48,7 +48,7 @@ describe("asking again says why", () => {
     expect(c.querySelector("button.primary")!.textContent).toBe("Allow this version");
   });
   it("approved code only: changed code says it could reach the internet", () => {
-    expect(face(card({ runs: "approved-code", status: "updated", was: kept(RECIPES) }))).toContain(`${CODE_CHANGED_LINE} ${NOTHING_NEW}`);
+    expect(face(card({ runs: "approved-code", status: "updated", was: kept(RECIPES, { grantedUnder: "approved-code" }) }))).toContain(`${CODE_CHANGED_LINE} ${NOTHING_NEW}`);
   });
   it("changed code with a line that reads otherwise: never 'no new permissions' beside a New mark", () => {
     const c = card({ status: "updated", was: kept(RECIPES, { asked: { face: ["something else"], others: [] } }) });
@@ -69,6 +69,21 @@ describe("asking again says why", () => {
     const t = face(card({ runs: "approved-code", status: "ok", was: kept(RECIPES, { code: "c2" }) }));
     expect(t).toContain(MODE_CHANGED_LINE);
     expect(t).not.toContain(EXPIRED_LINE);
+    expect(t).not.toContain(NOTHING_NEW);
+  });
+  it("changed code on a device that moved to approved code only: both said, never 'no new permissions'", () => {
+    const t = face(card({ runs: "approved-code", status: "updated", was: kept(RECIPES) }));
+    expect(t).toContain(`${CODE_CHANGED_LINE} ${MODE_CHANGED_LINE}`);
+    expect(t).not.toContain(NOTHING_NEW);
+  });
+  it("allowed as it is (a stopped page's Review): no notice", () => {
+    const c = card({ status: "ok", was: kept(RECIPES, { code: "c2" }) });
+    expect(c.querySelector(".grant-changed")).toBeNull();
+    expect(c.querySelector("h2")!.textContent).toBe("Allow Recipes?");
+  });
+  it("a grant from before this kept nothing: it says the code changed, and nothing more", () => {
+    const t = face(card({ status: "updated", was: kept(RECIPES, { asked: null }) }));
+    expect(t).toContain(CODE_CHANGED_SEALED_LINE);
     expect(t).not.toContain(NOTHING_NEW);
   });
   it("other asks: what is new is marked, what went is said", () => {
