@@ -88,11 +88,10 @@ describe("why it asks again", () => {
   it("a grant from before this kept nothing: never 'nothing new', and nothing marked", () => {
     expect(changeOf(was({ asked: null }), now())).toMatchObject({ kind: "code", nothingNew: false, fresh: null });
   });
-  it("other asks: what is new is marked, what went is listed", () => {
+  it("other asks: what is new is marked", () => {
     const c = changeOf(was({ scope: "s0", asked: { face: ["A", "C"], others: [] } }), now({ status: "none" }));
     expect(c).toMatchObject({ kind: "asks", nothingNew: false });
     expect([...c.fresh!]).toEqual(["B"]);
-    expect(c.gone).toEqual(["C"]);
   });
   it("the same asks, its year run out: expired, and whether its code moved too", () => {
     expect(changeOf(was({ code: "c2" }), now({ status: "none" }))).toMatchObject({ kind: "expired", codeMoved: false });

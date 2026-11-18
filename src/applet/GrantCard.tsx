@@ -105,7 +105,6 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
       {face.lines.length ? <ul className="grant-face" role="list" aria-label="What it would do">{face.lines.map((l, i) => <li key={i} className={isNew(faceText(l)) ? "grant-fresh" : undefined}><New t={faceText(l)} />{l.risky ? <strong>{l.lead}</strong> : l.lead}{l.rest}</li>)}</ul>
         : !face.also.length ? <p className="quiet">Nothing outside itself.</p> : null}
       {alsoText && <p className="grant-also"><New t={alsoText} />{alsoText}</p>}
-      {change.gone.some((t) => !t.startsWith(DETAIL)) && <p className="grant-gone quiet">No longer: {change.gone.filter((t) => !t.startsWith(DETAIL)).join("; ")}</p>}
       {handed && Object.keys(handed).length > 0 && <p className="grant-handed">{handedLine(handed)}</p>}
       <p className="grant-rest">{runs === "approved-code"
         ? <><strong>{APPROVED_CODE_SHORT}</strong> It can't delete notes.</>

@@ -82,22 +82,22 @@ export const othersOf = (imports: readonly Imported[]): string[] => imports.filt
  *  - `expired`: the same asks, its year ran out (`codeMoved`: and its code changed too);
  *  - `mode`: the same asks and code, allowed under sealed frames, and the device now runs approved code only;
  *  - `same`: allowed as it is (Review on a page that was stopped, say): nothing to say.
- *  `modeMoved`: allowed under sealed frames, and the device now runs approved code only (said with any of the above).
+ *  `modeMoved`: allowed under sealed frames, and the device now runs approved code only (said with `code` and `expired`).
+ *  What it no longer asks isn't said: a line reworded or widened would read as gone while it still holds.
  *  `fresh`: the lines (face, and "detail: " ones) that weren't on its card when it was allowed; null when that card
  *  wasn't kept (a grant from before). `nothingNew`: the same asks, its card kept and no line on it new, no import from
  *  someone else's vault new, and the device's mode where it was. */
-export type Change = { kind: "first" | "code" | "expired" | "asks" | "mode" | "same"; nothingNew: boolean; codeMoved: boolean; modeMoved: boolean; fresh: Set<string> | null; gone: string[] };
+export type Change = { kind: "first" | "code" | "expired" | "asks" | "mode" | "same"; nothingNew: boolean; codeMoved: boolean; modeMoved: boolean; fresh: Set<string> | null };
 type Was = { scope: string; code: string; grantedUnder: "sealed" | "approved-code"; asked: { face: string[]; others: string[] } | null };
 type Now = { scope: string; code: string; status: "none" | "ok" | "updated"; runs: "sealed" | "approved-code"; face: string[]; others: string[] };
 export function changeOf(was: Was | null, now: Now): Change {
-  if (!was) return { kind: "first", nothingNew: false, codeMoved: false, modeMoved: false, fresh: null, gone: [] };
+  if (!was) return { kind: "first", nothingNew: false, codeMoved: false, modeMoved: false, fresh: null };
   const a = was.asked;
   const fresh = a ? new Set(now.face.filter((t) => !a.face.includes(t))) : null;
-  const gone = a ? a.face.filter((t) => !now.face.includes(t)) : [];
   const codeMoved = was.code !== now.code;
   const modeMoved = was.grantedUnder === "sealed" && now.runs === "approved-code";
   const nothingNew = !!a && was.scope === now.scope && fresh!.size === 0 && now.others.every((o) => a.others.includes(o)) && !modeMoved;
-  if (was.scope !== now.scope) return { kind: "asks", nothingNew: false, codeMoved, modeMoved, fresh, gone };
+  if (was.scope !== now.scope) return { kind: "asks", nothingNew: false, codeMoved, modeMoved, fresh };
   const kind = now.status === "updated" ? "code" : now.status === "none" ? "expired" : modeMoved ? "mode" : "same";
-  return { kind, nothingNew, codeMoved, modeMoved, fresh, gone };
+  return { kind, nothingNew, codeMoved, modeMoved, fresh };
 }
