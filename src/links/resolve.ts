@@ -9,7 +9,8 @@
 // applet that already knows a note's id in it. (How long an answer takes can still hint that a name is held: that is
 // what `open`'s card line says it may learn.) Each link costs the same, whatever it names (shell/appDeps.ts). A wikilink
 // names a path, which can be guessed, so it is looked up only in the folders the applet may read, and the note found
-// must be in one of them and not an applet's code (the hub also matches a path's other case, or a title).
+// must be in one of them and not an applet's code (the hub also matches a path's other case, or a title). A short form
+// or an address counts only a note found by its own id, for the same reason.
 import { noteHref } from "../vault/notes";
 import { originOf, vaultUrlOf, type VaultRecord } from "../vault/store";
 import { noteAddress, parseNoteRef } from "./note";
@@ -56,9 +57,12 @@ export async function resolveLink(raw: string, from: string | undefined, d: Reso
     const here = d.here();
     return (here && (await first([here], wikiPaths(ref.target, from).filter((p) => d.mayRead(p)), (f) => d.mayRead(f.path) && !f.code))) || { answer: null };
   }
-  if (ref.kind === "short") return (await first(d.vaults().filter((r) => r.vault === ref.vault), [ref.note])) || { answer: null };
+  // a short form or an address names a note by its id: the hub also answers a path or a title there, which can be
+  // guessed in any vault, so only a note whose id it is counts (else an address would map notes outside the grant)
+  const byId = (f: Found) => f.id === ref.note;
+  if (ref.kind === "short") return (await first(d.vaults().filter((r) => r.vault === ref.vault), [ref.note], byId)) || { answer: null };
   const held = d.vaults().filter((r) => holds(r, ref.issuer, ref.vault));
-  return (await first(held, [ref.note])) || { answer: "away", href: `/open-link?url=${encodeURIComponent(linkFor(`${ref.issuer}/vault/${encodeURIComponent(ref.vault)}`, ref.note))}` };
+  return (await first(held, [ref.note], byId)) || { answer: "away", href: `/open-link?url=${encodeURIComponent(linkFor(`${ref.issuer}/vault/${encodeURIComponent(ref.vault)}`, ref.note))}` };
 }
 
 /** A note's address in a vault, for an applet writing a link to one of its notes. */

@@ -62,7 +62,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
   if (g.app.includes("save")) also.push("saving to Downloads");
   if (g.app.includes("storage")) also.push("256 KB for drafts");
   if (g.app.includes("pins")) also.push("sees what is on your bar");
-  if (g.app.includes("open") && !g.app.includes("links")) also.push("opens note links you tap");
+  if (g.app.includes("open") && !g.app.includes("links")) also.push("takes you to notes and applets you tap");
   return { lines, also };
 }
 

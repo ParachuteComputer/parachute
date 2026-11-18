@@ -69,8 +69,11 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
     },
     async follow(link, from, choose) {
       if (!tappingInApplet()) return false;
+      const at = location.href;
       const r = await resolveLink(link, from, resolver());
-      if (r.answer === null) return false;
+      // a slow answer moves no one: the tap must still count (it wears off in seconds), with the applet still on screen
+      // and the person still where they tapped
+      if (r.answer === null || !tappingInApplet() || location.href !== at) return false;
       if (r.answer === "note") {
         markTap(r.href);
         go(choose ? `${r.href}?with=choose` : r.href);

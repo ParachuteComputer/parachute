@@ -33,6 +33,13 @@ describe("resolveLink", () => {
     expect(await resolveLink(`https://hub.example/vault/kitchen/view/${ID}`, undefined, deps())).toEqual({ answer: "note", href: `/v/kitchen/n/${ID}` });
     expect(await resolveLink(`https://cloud.example/vault/notes/view/${OTHER}`, undefined, deps())).toEqual({ answer: "note", href: `/v/notes/n/${OTHER}` });
   });
+  it("an address that names a path or a title, not an id, finds nothing in a held vault: no mapping notes outside the grant", async () => {
+    notes.kitchen["Welcome"] = { id: ID, path: "Welcome" };
+    notes.kitchen["Passwords"] = { id: OTHER, path: "Passwords" };
+    for (const name of ["Welcome", "Passwords"]) expect((await resolveLink(`https://hub.example/vault/kitchen/view/${name}`, undefined, deps())).answer).toBe("away");
+    // the same answer as a vault this device doesn't hold
+    expect((await resolveLink("https://hub.example/vault/other/view/Welcome", undefined, deps())).answer).toBe("away");
+  });
   it("an address of a vault or hub not held leads to the link's screen, which offers to add it", async () => {
     const r = await resolveLink(`https://other.example/vault/garden/view/${ID}`, undefined, deps());
     expect(r.answer).toBe("away");

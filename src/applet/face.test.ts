@@ -73,7 +73,7 @@ describe("the face keeps every stressed line's facts", () => {
     expect(face.also).toEqual(["the microphone when you press record", "files you pick", "saving to Downloads", "256 KB for drafts"]);
     // its note links ride on the web addresses' line, so the card is no longer for them; without links they are an Also
     expect(face.lines.map(faceText)).toContain("Opens web addresses and note links: what it reads could leave that way.");
-    expect(faceOf({ ...g, app: ["open"] }, folder, trusted).also).toEqual(["the microphone when you press record", "opens note links you tap"]);
+    expect(faceOf({ ...g, app: ["open"] }, folder, trusted).also).toEqual(["the microphone when you press record", "takes you to notes and applets you tap"]);
   });
 });
 

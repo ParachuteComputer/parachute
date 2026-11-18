@@ -33,3 +33,44 @@ describe("app.links through a real session", () => {
     expect(c.error).toEqual({ code: "rate_limited", message: LINKS_WAIT });
   });
 });
+
+describe("app.follow", () => {
+  // the hub is the network: faked, answering when the test says
+  const ID = "01KA3Z9V6B2W8XQJ4M7N5P0R1S";
+  async function setup() {
+    const { saveVault } = await import("../vault/store");
+    saveVault({ issuer: "https://hub.example", vault: "kitchen", tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", accessToken: "t", scope: "vault:kitchen:read", addedAt: "" } as never);
+    let answer: () => void = () => {};
+    const gate = new Promise<void>((r) => { answer = r; });
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => { await gate; const id = new URL(String(input instanceof Request ? input.url : input)).searchParams.get("id"); return new Response(JSON.stringify([{ id, path: "Recipes/Toast", content: "" }]), { status: 200, headers: { "content-type": "application/json" } }); }) as typeof fetch;
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    frame.getClientRects = () => [{}] as unknown as DOMRectList;
+    frame.focus();
+    let active = true;
+    Object.defineProperty(navigator, "userActivation", { configurable: true, get: () => ({ isActive: active }) });
+    const went: string[] = [];
+    const d = appDeps((h) => went.push(h), () => frame, { pick: async () => [] });
+    return { d, went, answer, wearOff: () => { active = false; }, done: () => { globalThis.fetch = realFetch; frame.remove(); } };
+  }
+  it("a tap whose note answers at once opens it", async () => {
+    const s = await setup();
+    try {
+      const p = s.d.follow(`kitchen:${ID}`, undefined, false);
+      s.answer();
+      expect(await p).toBe(true);
+      expect(s.went).toEqual([`/v/kitchen/n/${ID}`]);
+    } finally { s.done(); }
+  });
+  it("a slow answer moves no one once the tap has worn off", async () => {
+    const s = await setup();
+    try {
+      const p = s.d.follow(`kitchen:${"01KA3Z9V6B2W8XQJ4M7N5P0R1T"}`, undefined, false);
+      s.wearOff();
+      s.answer();
+      expect(await p).toBe(false);
+      expect(s.went).toEqual([]);
+    } finally { s.done(); }
+  });
+});
