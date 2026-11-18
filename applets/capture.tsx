@@ -10,18 +10,24 @@ type Rec = { id: string; path: string; updatedAt: string | null; createdAt?: str
 const PENDING = "_Transcript pending._";
 const pad = (n: number) => String(n).padStart(2, "0");
 const stamp = (at: Date) => `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}-${pad(at.getMinutes())}`;
-/** Inbox/<the first words>: a capture is named by what it says (the same words again get " 2") */
+/** Inbox/<the first words>: a capture is named by what it says (the same words again also get the time: make) */
 export function pathFor(text: string, at = new Date()) {
   const words = text.replace(/[#*_`>\[\]\\/:?"<>|^]/g, " ").split(/\s+/).filter(Boolean).slice(0, 10).join(" ").slice(0, 80).trim().replace(/^\.+/, "");
   return `Inbox/${words || `Note ${stamp(at)}`}`;
 }
 const voicePath = (at: Date) => `Inbox/Voice note ${stamp(at)}`;
-const clash = (e: any) => /conflict/i.test(String(e?.message ?? e));
-/** A new note at this path, or (a note already there by that name) at the next free one: "<name> 2", … */
-async function make(path: string, body: string): Promise<Rec> {
-  for (let n = 1; ; n++) {
-    try { return await vault.createRecord({ path: n === 1 ? path : `${path} ${n}`, body }); } catch (e) { if (!clash(e) || n >= 9) throw e; }
+/** The vault refused the name: a note is there already (the kit's vault client says 409, "edited elsewhere"). */
+const clash = (e: any) => e?.status === 409 || /conflict|elsewhere/i.test(String(e?.message ?? e));
+/** A new note at this path; a name already taken (the same words again) gets the time, then a number:
+ *  "milk", "milk 2026-11-18 14-05", "milk 2026-11-18 14-05 2", … so only the same words ten times in one minute fail. */
+async function make(path: string, body: string, at = new Date(), timed = false): Promise<Rec> {
+  // (a name that has the time already, a voice note's, gets only the number)
+  const base = timed ? path : `${path} ${stamp(at)}`;
+  const names = [path, ...(timed ? [] : [base]), ...Array.from({ length: 8 }, (_, i) => `${base} ${i + 2}`)];
+  for (const [i, name] of names.entries()) {
+    try { return await vault.createRecord({ path: name, body }); } catch (e) { if (!clash(e) || i === names.length - 1) throw e; }
   }
+  throw new Error("no free name");
 }
 // (a capture made before it was named by its words starts with the time: shown without it)
 const nameOf = (r: Rec) => r.path.replace(/^Inbox\//, "").replace(/^\d{4}-\d{2}-\d{2} \d{2}-\d{2}(-\d{2})? ?/, "") || "Note";
@@ -97,7 +103,7 @@ export default function Capture() {
     setBusy(true);
     try {
       const at = new Date();
-      const made: Rec = await make(voicePath(at), PENDING);
+      const made: Rec = await make(voicePath(at), PENDING, at, true);
       try { await vault.attach(made.id, r.bytes, r.type, { transcribe: true }); } catch (e) {
         await vault.updateRecord(made.id, { body: "_The recording couldn't be attached._", if_updated_at: (made as any).updatedAt }).catch(() => {});
         throw e;

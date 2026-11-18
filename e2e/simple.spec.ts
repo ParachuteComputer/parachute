@@ -86,6 +86,13 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
     const captured = inbox.find((r) => r.content === `Ask about rye flour ${stamp}`);
     expect(captured?.path, "named by its words").toBe(`Inbox/Ask about rye flour ${stamp}`);
     if (captured) made.push(captured.id);
+    // the same words again: a note of its own, its name with the time
+    await cap.getByRole("textbox", { name: "Write it down" }).fill(`Ask about rye flour ${stamp}`);
+    await cap.getByRole("button", { name: "Save" }).click();
+    await expect.poll(async () => ((await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Inbox/")}&include_content=true&limit=30`)) as Row[])
+      .filter((r) => r.content === `Ask about rye flour ${stamp}`).map((r) => r.path).sort()).toEqual([
+      `Inbox/Ask about rye flour ${stamp}`, expect.stringMatching(new RegExp(`^Inbox/Ask about rye flour ${stamp} \\d{4}-\\d{2}-\\d{2} \\d{2}-\\d{2}$`))]);
+    for (const r of (await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Inbox/")}&limit=30`)) as Row[]) if (r.path.startsWith(`Inbox/Ask about rye flour ${stamp} `)) made.push(r.id);
     // the bar now goes straight to the applet
     await expect(bar.getByRole("link", { name: "Capture" })).toHaveAttribute("href", /\/v\/[^/]+\/a\//);
   } finally {
