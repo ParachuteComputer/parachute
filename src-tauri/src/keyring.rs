@@ -380,10 +380,22 @@ pub async fn keyring_enrollment<R: Runtime>(app: AppHandle<R>, keys: State<'_, K
 #[tauri::command]
 pub async fn approvers_add<R: Runtime>(app: AppHandle<R>, ring: State<'_, KeyringState>, name: String, key: String) -> Result<Vec<Approver>, Refusal> {
     let k = parse_public(&key).ok_or_else(|| no("bad_params", "That isn't a public key (npub1… or 64 hex characters)."))?;
-    let list = with_approver(approvers(&app)?, &name, &k)?;
-    ring.confirm(&app, "settings", "approvers", false, "Trust a key for approvals", &format!("Let {} ask this device for approvals and secrets.", name.trim())).await?;
-    crate::services::write_json(&approvers_path(&app)?, &list).map_err(|_| no("storage", "The list couldn't be kept."))?;
+    add_approver(&app, &ring, &name, &k).await
+}
+
+/// `key` trusted under `name`, behind the device unlock: the one way a key joins the list (Settings, or a card's offer).
+pub async fn add_approver<R: Runtime>(app: &AppHandle<R>, ring: &KeyringState, name: &str, key: &PublicKey) -> Result<Vec<Approver>, Refusal> {
+    let list = with_approver(approvers(app)?, name, key)?;
+    let npub = key.to_bech32().unwrap_or_else(|_| key.to_hex());
+    let short = format!("{}…{}", &npub[..12.min(npub.len())], &npub[npub.len().saturating_sub(6)..]);
+    ring.confirm(app, "settings", "approvers", false, "Trust a key for approvals", &format!("Let {} ({short}) ask this device for approvals and secrets.", name.trim())).await?;
+    crate::services::write_json(&approvers_path(app)?, &list).map_err(|_| no("storage", "The list couldn't be kept."))?;
     Ok(list)
+}
+
+/// A card's author the grant names in `from` but the device's list doesn't have yet: what a card may offer to trust.
+pub fn trust_offer(from: &[String], list: &[Approver], author: &str) -> bool {
+    from.iter().any(|k| k.eq_ignore_ascii_case(author)) && !list.iter().any(|a| a.pubkey.eq_ignore_ascii_case(author))
 }
 
 #[tauri::command]
@@ -403,6 +415,20 @@ pub async fn approvers_remove<R: Runtime>(app: AppHandle<R>, ring: State<'_, Key
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_card_offers_to_trust_only_a_key_its_grant_names_and_the_device_lacks() {
+        let uni = Keys::generate().public_key().to_hex();
+        let other = Keys::generate().public_key().to_hex();
+        let from = vec![uni.clone()];
+        // named by the grant, not on the list: offered (whatever the hex case)
+        assert!(trust_offer(&from, &[], &uni));
+        assert!(trust_offer(&[uni.to_uppercase()], &[], &uni));
+        // a key the grant doesn't name: never, so an applet can't get its own key trusted from a card
+        assert!(!trust_offer(&from, &[], &other));
+        // already trusted: nothing to offer
+        assert!(!trust_offer(&from, &[Approver { name: "Uni".into(), pubkey: uni.clone() }], &uni));
+    }
 
     #[test]
     fn the_trusted_list_takes_plain_names_and_real_keys_and_trusts_only_what_both_name() {

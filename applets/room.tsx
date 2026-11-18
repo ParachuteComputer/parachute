@@ -818,6 +818,19 @@ function SealedCard({ e }: { e: Ev }) {
     finally { setBusy(false); }
   };
   if (!view) return <div className="card ended" role="group" aria-label="Uni's card"><p>◇ Uni's card · checking…</p></div>;
+  // signed by the key this applet names for Uni, only not trusted on this device yet: one tap (and the device unlock)
+  const trust = async () => {
+    setBusy(true); setErr(null);
+    try { setView(await services.trust(svc, e, "Uni")); }
+    catch (x: any) { setErr(x?.code === "not_granted" ? "Tap the button itself." : said(x)); }
+    finally { setBusy(false); }
+  };
+  if (view.refused && view.trust) return <div className="card" role="group" aria-label="Uni's card">
+    <p>◆ Uni's card · {view.refused}</p>
+    <p className="why">Uni's key ({view.trust.slice(0, 8)}…{view.trust.slice(-4)}) is the one this applet names for approvals. Trust it once on this device, and its cards here can be answered.</p>
+    <div className="btns"><button className="primary" disabled={busy} onClick={trust}>Trust Uni's key…</button></div>
+    {err && <p className="error" role="alert">{err}</p>}
+  </div>;
   if (view.refused) return <div className="card ended" role="group" aria-label="Uni's card"><p>◇ Uni's card · {view.refused}</p></div>;
   const morning = view.kind === "morning";
   // a morning card is answered once, as a whole: after any row's answer the rest wait for a new card (as the Uni app)

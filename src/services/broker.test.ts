@@ -25,7 +25,7 @@ const native = (): Native => ({
   http: async () => ({ status: 200, headers: {}, body: "" }), upload: async () => ({}), media: async () => ({ type: "", body: "" }),
   privateOpen: async () => "", privateSave: async () => ev("p"), tokenSet: async () => {}, tokenHas: async () => false, log: async () => [],
   cardView: async (_s, _v, e) => ({ kind: null, event_id: e.id, refused: "no", rows: [] }), cardAnswer: async () => ({ wraps: [], graced: false, summary: "" }), cardSent: async () => {},
-  secretView: async () => { throw new Error("no"); }, secretSend: async () => ev("w"), secretForget: async () => ev("w"),
+  secretView: async () => { throw new Error("no"); }, secretSend: async () => ev("w"), secretForget: async () => ev("w"), cardTrust: async () => {},
   keyring: async () => ({ everyday: "", approval: "", same: true, seal_pub: "", approvers: [] }),
 });
 const relay: Service = { id: "rooms", kind: "nostr-relay", url: "wss://relay.example", publish: [9], media: false, private: [] };

@@ -128,6 +128,7 @@ pub fn run() {
             files::save_file,
             key::key_status,
             cards::svc_card_view,
+            cards::svc_card_trust,
             cards::svc_card_answer,
             cards::svc_card_sent,
             cards::svc_secret_view,

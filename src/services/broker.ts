@@ -263,6 +263,19 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       return native.cardView(session, s.id, ev);
     },
 
+    /** Trust the card's author for approvals on this device (a key the grant names, not yet on the list), under
+     *  `name`. Needs a tap; the unlock is Rust's. Then the card as it now reads. */
+    async trust(p: { service: string; event: unknown; name: unknown }) {
+      const s = approverOf(p.service);
+      const ev = cardEvent(s, p.event);
+      const name = typeof p.name === "string" && p.name.trim() ? p.name.trim().slice(0, 40) : "";
+      if (!name) throw new BrokerError("bad_params", "a name for the key");
+      if (!shell.tap()) throw new BrokerError("not_granted", "this needs your tap in the applet");
+      await opened;
+      await native.cardTrust(session, s.id, ev, name);
+      return native.cardView(session, s.id, ev);
+    },
+
     /** Answer rows of a card. Needs a tap in this applet; the unlock is Rust's. The wraps go to the relay from here and
      *  never reach the frame. */
     async answer(p: { service: string; event: unknown; decision: unknown; rids: unknown }) {

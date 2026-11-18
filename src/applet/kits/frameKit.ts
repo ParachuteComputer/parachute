@@ -287,6 +287,8 @@ export const FRAME_KIT = String.raw`(function () {
       card: function (service, event) { return call("services", "card", { service: service, event: event }); },
       answer: function (service, event, decision, rids) { return call("services", "answer", { service: service, event: event, decision: decision, rids: rids }); },
       secret: function (service, event) { return call("services", "secret", { service: service, event: event }); },
+      // a card from a key the grant names that this device doesn't trust yet: trust it (a tap, then the device unlock)
+      trust: function (service, event, name) { return call("services", "trust", { service: service, event: event, name: name }); },
       forgetSecret: function (service, event) { return call("services", "forgetSecret", { service: service, event: event }); }
     }),
     theme: {

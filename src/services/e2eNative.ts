@@ -105,7 +105,23 @@ export function e2eNative(secretHex: string): Native {
         return { kind: "single", event_id: ev.id, refused: null, rows: c.rows.map((r) => ({ rid: r.f.rid as string, action: r.f.action as string, credential: r.f.credential as string, class: r.f.class as "routine" | "powerful",
           scope: r.f.scope as string, ttl_s: r.f.ttl_s as number, uses: r.f.uses as number, payload: r.f.payload, request_digest: r.digest, expires: r.f.expires as number,
           answer: answers?.find((a) => a.rid === r.f.rid) ?? null, always_unlock: r.f.class === "powerful", asked: ev.created_at, reach: null, read_key: null })) } satisfies CardView;
-      } catch (e) { return { kind: null, event_id: ev.id, refused: (e as Error).message, rows: [] }; }
+      } catch (e) {
+        const s = svc(session, service);
+        const from = s.kind === "nostr-relay" ? s.approvals?.from ?? [] : [];
+        if ((e as Error).message === "Not signed by Uni." && verifyEvent(ev as Parameters<typeof verifyEvent>[0]) && from.includes(ev.pubkey) && !approvers().some((a) => a.pubkey === ev.pubkey))
+          return { kind: null, event_id: ev.id, refused: "This device doesn't trust the key that signed this card yet.", trust: ev.pubkey, rows: [] };
+        return { kind: null, event_id: ev.id, refused: (e as Error).message, rows: [] };
+      }
+    },
+    async cardTrust(session, service, ev, name) {
+      const s = svc(session, service);
+      const from = s.kind === "nostr-relay" ? s.approvals?.from ?? [] : [];
+      if (!from.includes(ev.pubkey) || approvers().some((a) => a.pubkey === ev.pubkey)) throw { code: "not_granted", message: "That key isn't one this applet names for approvals, or it is trusted already." };
+      const hook = window as unknown as { __parachuteE2EUnlock?: string; __parachuteE2EUnlocks?: string[]; __parachuteE2EApprovers?: { name: string; pubkey: string }[] };
+      (hook.__parachuteE2EUnlocks ??= []).push(`trust ${name}`);
+      if (hook.__parachuteE2EUnlock !== "pass") throw { code: "unlock", message: "The device unlock was cancelled or failed." };
+      hook.__parachuteE2EApprovers = [...approvers(), { name, pubkey: ev.pubkey }];
+      log(session, service, `trust ${name}'s key for approvals`, ev.id);
     },
     async cardAnswer(session, service, ev, decision, rids) {
       const c = checkCard(ev, trusted(session, service), sk);
