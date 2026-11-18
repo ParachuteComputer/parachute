@@ -9,7 +9,8 @@
       "name": "Journal",
       "glyph": "✎",
       "note": "write a line, see your days",
-      "access": [{ "vault": "here", "allow": [{ "path": "Journal/", "verbs": ["read", "create"] }] }]
+      "access": [{ "vault": "here", "allow": [{ "path": "Journal/", "verbs": ["read", "create", "update"] }] }],
+      "reach": ["voice"]
     },
     "opens": [{ "type": "journal", "path": "Journal/" }]
   }

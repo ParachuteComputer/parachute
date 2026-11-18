@@ -99,11 +99,13 @@ fieldset.plain legend { padding: 0; }
 .grant-glyph { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 10px; font-size: 18px; color: var(--accent); }
 .grant-name { font-weight: 600; font-style: normal; }
 .grant-lines { margin: 0 0 8px; padding: 6px 0 6px 1.2em; border-block: 1px solid var(--line); }
-.grant-lines li { padding: 3px 0; }
+.grant-lines li { padding: 3px 0; overflow-wrap: anywhere; } /* a key (npub1…) is one long word: it wraps, not over the buttons */
 .grant-stress { font-weight: 600; }
 .grant-rest, .grant-changed { font-size: 14px; }
 .grant-meta { font-size: 12.5px; margin: 6px 0 0; }
 .grant-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, nothing that moves but the figures */
+.record-time { margin: 6px 0; font-size: 20px; font-variant-numeric: tabular-nums; }
 .notice { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: 0 0 8px; font-size: 14px; }
 .check-list { list-style: none; padding: 0; margin: 6px 0 0; font-size: 13px; columns: 2; }
 .check-list .fail { color: var(--danger); }
@@ -229,3 +231,9 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .swatch { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--text); }
 .choice { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 12px; }
 .choice legend { width: 100%; }
+
+/* the shell's own words over a running applet (views/ShellSheets.tsx): a secret's sheet, and a passing line */
+.secret-field { display: grid; gap: 4px; margin: 10px 0; }
+.secret-field input { font: 16px/1.4 var(--mono, ui-monospace, monospace); padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; }
+.shell-line { position: fixed; left: 50%; bottom: calc(var(--bar-h, 0px) + 18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 31; margin: 0; max-width: min(520px, 92vw);
+  padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 14px; }

@@ -48,6 +48,12 @@ export function createServicesModule(broker: () => Promise<Broker | null>, why: 
       loadPrivate: { cap: null, validate: shape(["service", "d"], (p) => str(p.service, 40) && str(p.d, 40)), run: wrap((x, p: Record<string, unknown>) => x.loadPrivate(p as { service: string; d: string })) },
       savePrivate: { cap: null, validate: shape(["service", "d", "text"], (p) => str(p.service, 40) && str(p.d, 128) && typeof p.text === "string"), run: wrap((x, p: Record<string, unknown>) => x.savePrivate(p as { service: string; d: string; text: string })) },
       upload: { cap: null, validate: shape(["service", "bytes", "type"], (p) => str(p.service, 40) && p.bytes instanceof ArrayBuffer && str(p.type, 100)), run: wrap((x, p: Record<string, unknown>) => x.upload(p as { service: string; bytes: ArrayBuffer; type: string })) },
+      // approvals (docs/design/KEYRING.md): the card's signed event is the applet's to hand over; the rest is the shell's
+      card: { cap: null, validate: shape(["service", "event"], (p) => str(p.service, 40) && plain(p.event)), run: wrap((x, p: Record<string, unknown>) => x.card(p as { service: string; event: unknown })) },
+      answer: { cap: null, validate: shape(["service", "event", "decision", "rids"], (p) => str(p.service, 40) && plain(p.event) && (p.decision === "approve" || p.decision === "deny") && Array.isArray(p.rids)),
+        run: wrap((x, p: Record<string, unknown>) => x.answer(p as { service: string; event: unknown; decision: unknown; rids: unknown })) },
+      secret: { cap: null, validate: shape(["service", "event"], (p) => str(p.service, 40) && plain(p.event)), run: wrap((x, p: Record<string, unknown>) => x.secret(p as { service: string; event: unknown })) },
+      forgetSecret: { cap: null, validate: shape(["service", "event"], (p) => str(p.service, 40) && plain(p.event)), run: wrap((x, p: Record<string, unknown>) => x.forgetSecret(p as { service: string; event: unknown })) },
       media: { cap: null, validate: shape(["service", "sha256", "ext"], (p) => str(p.service, 40) && str(p.sha256, 64) && str(p.ext, 8)), run: wrap((x, p: Record<string, unknown>) => x.media(p as { service: string; sha256: string; ext: string })) },
     },
   };

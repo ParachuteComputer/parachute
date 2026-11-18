@@ -1,5 +1,6 @@
 // Override of the wry 0.55.1 template (src/android/kotlin/RustWebView.kt). The generated copy under
-// generated/ is excluded from compilation in app/build.gradle.kts. Only the init scripts differ: each is guarded (main frame, app origin) on every path that runs it.
+// generated/ is excluded from compilation in app/build.gradle.kts. Two things differ: the init scripts are guarded (main frame, app origin) on
+// every path that runs them, and setWebChromeClient wraps wry's client so only the shell's own page gets the microphone (ShellOnlyMedia.kt).
 // src-tauri/build.rs fails an Android build if wry is not 0.55.1, so this copy cannot silently go stale.
 // Copyright 2020-2023 Tauri Programme within The Commons Conservancy
 // SPDX-License-Identifier: Apache-2.0
@@ -101,5 +102,8 @@ class RustWebView(context: Context, rawInitScripts: Array<String>, val id: Strin
         return cookieManager.getCookie(url)
     }
 
-    
+    // wry sets its RustWebChromeClient here, which grants any frame any media: only the shell's page gets the microphone.
+    override fun setWebChromeClient(client: WebChromeClient?) {
+        super.setWebChromeClient(if (client == null || client is ShellOnlyMedia) client else ShellOnlyMedia(client))
+    }
 }

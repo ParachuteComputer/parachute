@@ -1,0 +1,18 @@
+{
+  "name": "parachute-push-gateway",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Tells a person's phone, through their UnifiedPush distributor, that a relay message names them. No message text.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test test/*.test.ts",
+    "e2e": "node test/e2e.ts",
+    "typecheck": "tsc -p . --noEmit"
+  },
+  "dependencies": {
+    "nostr-tools": "^2.26.1"
+  }
+}

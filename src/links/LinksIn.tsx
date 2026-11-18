@@ -15,7 +15,11 @@ import { parseLinkIn } from "./parse";
 import { Bar } from "../ui/Bar";
 
 export const HANDLED_KEY = "parachute.links.handled";
-export const openLinkPath = (raw: string) => `/open-link?url=${encodeURIComponent(raw)}`;
+/** Where a link goes: a notification's tap (parachute://notify, services/notify.ts) to the applet at that message;
+ *  anything else to /open-link, which says what it is or why not. */
+export const openLinkPath = (raw: string) => notifyPath(raw) ?? `/open-link?url=${encodeURIComponent(raw)}`;
+
+import { notifyPath } from "../services/notifyLink";
 
 type Plugin = { getCurrent(): Promise<string[] | null>; onOpenUrl(cb: (urls: string[]) => void): Promise<() => void> };
 

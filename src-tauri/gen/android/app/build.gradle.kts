@@ -94,6 +94,13 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
+    // NotifyService.kt's relay connection (Android has no WebSocket client of its own)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // PushService.kt: notifications while closed through the person's UnifiedPush distributor (ntfy or another; no
+    // Google services). It also opens the Web Push encryption (RFC 8291) the push gateway seals each push with.
+    implementation("org.unifiedpush.android:connector:3.0.10")
+    // UnlockPlugin.kt: the device unlock before an approval (as the Uni app)
+    implementation("androidx.biometric:biometric:1.1.0")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")

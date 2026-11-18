@@ -19,4 +19,9 @@ describe("the card for changed code says what holds in each mode", () => {
     expect(t).toContain(CODE_CHANGED_LINE);
     expect(t).not.toContain(CODE_CHANGED_SEALED_LINE);
   });
+  it("an applet that reaches servers isn't told it can't reach the internet", () => {
+    const t = render(<GrantCard reaches name="Rooms" glyph="◎" vault="uni" runs="sealed" lines={[]} fingerprint="9b13 b2ae" expires={new Date(2027, 0, 1)} codeChanged={false} onAllow={() => {}} onNotNow={() => {}} />).container.textContent ?? "";
+    expect(t).not.toContain("or reach the internet");
+    expect(t).toContain("reaches the internet only as the lines above say");
+  });
 });

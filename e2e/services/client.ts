@@ -1,7 +1,7 @@
 // A second person on a real relay, for the local tests against our Buzz relay: signs in (NIP-42) with a test key,
 // publishes, queries, uploads a file (Blossom, kind 24242).
 import WebSocket from "ws";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { finalizeEvent, getPublicKey, type Event } from "nostr-tools/pure";
 
 export async function person(relay: string, secretHex: string) {
@@ -27,6 +27,8 @@ export async function person(relay: string, secretHex: string) {
       const ev = finalizeEvent({ created_at: Math.floor(Date.now() / 1000), content: "", tags: [], ...t }, sk);
       waiting.set(ev.id, (ok, msg) => res({ ok, msg, ev })); ws.send(JSON.stringify(["EVENT", ev]));
     }),
+    /** An event signed elsewhere (a card a synthetic Uni made), as it is. */
+    send: (ev: Event) => new Promise<{ ok: boolean; msg: string }>((res) => { waiting.set(ev.id, (ok, msg) => res({ ok, msg })); ws.send(JSON.stringify(["EVENT", ev])); }),
     query: (...filters: Record<string, unknown>[]) => new Promise<Event[]>((res) => { const id = `q${Math.random().toString(36).slice(2)}`; subs.set(id, { events: [], done: res }); ws.send(JSON.stringify(["REQ", id, ...filters])); }),
     upload: async (bytes: Buffer, type: string) => {
       const x = createHash("sha256").update(bytes).digest("hex");
@@ -44,7 +46,7 @@ export function mailAs(bridge: string, secretHex: string) {
   const post = async (path: string, body: unknown) => {
     const raw = JSON.stringify(body);
     const url = `${bridge}/mail/${path}`;
-    const ev = finalizeEvent({ kind: 27235, created_at: Math.floor(Date.now() / 1000), content: "", tags: [["u", url], ["method", "POST"], ["payload", createHash("sha256").update(raw).digest("hex")]] }, sk);
+    const ev = finalizeEvent({ kind: 27235, created_at: Math.floor(Date.now() / 1000), content: "", tags: [["u", url], ["method", "POST"], ["payload", createHash("sha256").update(raw).digest("hex")], ["nonce", randomBytes(8).toString("hex")]] }, sk);
     const r = await fetch(url, { method: "POST", headers: { authorization: `Nostr ${Buffer.from(JSON.stringify(ev)).toString("base64")}`, "content-type": "application/json" }, body: raw });
     const out = await r.json();
     if (r.status >= 300) throw new Error(`${path}: ${r.status} ${JSON.stringify(out)}`);

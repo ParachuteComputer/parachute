@@ -27,7 +27,15 @@ export type HubState = { origin: string; password: string; home: string; pid: nu
 export type State = HubState & { key: string; techne?: HubState };
 
 const BIN = process.env.PARACHUTE_CORE || "parachute-core";
-const freePort = () => new Promise<number>((res, rej) => { const s = createServer(); s.listen(0, "127.0.0.1", () => { const p = (s.address() as { port: number }).port; s.close(() => res(p)); }); s.on("error", rej); });
+/** A free port below the ephemeral range (a machine whose ephemeral ports are nearly all held can't give one there). */
+const freePort = async (): Promise<number> => {
+  for (let i = 0; i < 50; i++) {
+    const p = 20000 + Math.floor(Math.random() * 12000);
+    const ok = await new Promise<boolean>((res) => { const s = createServer(); s.once("error", () => res(false)); s.listen(p, "127.0.0.1", () => s.close(() => res(true))); });
+    if (ok) return p;
+  }
+  throw new Error("no free port");
+};
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => { const p = join(dir, f); return statSync(p).isDirectory() ? files(p) : [p]; });

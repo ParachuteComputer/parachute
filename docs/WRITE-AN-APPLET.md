@@ -13,7 +13,7 @@ the Parachute app reads the record, shows the person what it asks for, and runs 
 | `tags` | `["applet"]`. That tag is what makes it an applet. |
 | `fields.applet` | The manifest: what it is and what it may do (below). |
 | `fields.opens` | Optional: which kind of note opens in it when the person taps one. |
-| `fields.app` | Optional: what it asks of the app beyond its vault: any of `recent`, `pins`, `open` (below). Anything else is ignored, and the applet then asks nothing of the app. |
+| `fields.app` | Optional: what it asks of the app beyond its vault: any of `recent`, `pins`, `open`, `links`, `save`, `attach`, `storage` (below). Anything else is ignored, and the applet then asks nothing of the app. |
 | `fields.services` | Optional: the servers it talks to, through the app (below). |
 | `body` | The code: one self-contained file. |
 
@@ -34,11 +34,14 @@ search:                      # optional: what it offers to search
   - { what: recipes, vault: here, path: Recipes/ }
 screens:                     # optional: its screens; the first is the one that opens
   - { id: home, name: Recipe cards }
+reach: [voice]               # optional: the microphone, through the app's own recorder (voice.record below)
 ```
 
 Rules the app holds to. An unknown key, a hidden character or an over-long value refuses the whole applet: it is not
 repaired. A rule can't reach `.parachute/`. No applet can change a code note (HTML, TSX, JSX) or a note tagged
-`applet`, `component` or `parachute-pointer`, whatever its rules say.
+`applet`, `component` or `parachute-pointer`, whatever its rules say. `reach` takes only `voice`: a room in it
+(`{room: …}`) is refused, since rooms are named on a relay service. An applet in someone else's vault gets no
+microphone.
 
 ### What it opens (`fields.opens`)
 
@@ -73,8 +76,22 @@ services:
 ```
 
 A Parachute hub is never a server here (the app refuses it), and an applet in someone else's vault reaches none. The
-rules, and why, are in [design/SERVICES.md](design/SERVICES.md). Two applets that do it: `applets/rooms.tsx` and
-`applets/mail.tsx` in this repository.
+rules, and why, are in [design/SERVICES.md](design/SERVICES.md). Applets that do it: `applets/rooms.tsx`,
+`applets/area.tsx` and `applets/mail.tsx` in this repository.
+
+A relay service may also name (all optional, each a line on the card; [design/KEYRING.md](design/KEYRING.md)):
+
+```yaml
+    rooms: [{ id: <room id>, name: Garden }]   # only these rooms: posts, reads and reactions stay in them
+    approvals: { from: [<Uni's key, hex>] }    # high risk: answer Uni's cards and secret requests, with your approval key
+    notify: { mentions: true, from: [<hex>], gateway: https://push.example/ }  # pushed through that gateway while Parachute is closed
+```
+
+`approvals` counts only for keys the person trusts on this device (Settings → Approvals). The applet hands a card's
+signed message to the app (`services.card`), draws it, and on a tap answers (`services.answer`); the app checks the
+card, asks for the device unlock for powerful ones, seals the answer and sends it. A secret is typed on the app's own
+sheet (`services.secret`): the applet never sees it. An http service may name `approve: { field: op, ops: [...] }`:
+those requests are signed with the approval key.
 
 ## The code
 
@@ -96,7 +113,8 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 
 | Call | What it does |
 |---|---|
-| `ready()` | Resolves when the app has started it: `{ applet: { id, name }, theme, open? }`. |
+| `ready()` | Resolves when the app has started it: `{ applet: { id, name }, access, services, theme, open?, launch? }`. `access` is the folders it was allowed (`[{ path, verbs }]`) and `services` its servers as its card allowed them (a relay's `rooms`, `approvals`, `notify`): read your room, or which key is Uni's, from here rather than keeping a copy in the code. |
+| `launch()`, `onLaunch(cb)` | What the app opened it for from a notification's tap: `{ room, event? }` (or null), and each later one. |
 | `onOpen(cb)` | `cb({ note: { id, path }, screen })` when the person opened a note in it (now, and each time after). |
 | `vault.queryRecords({ pathPrefix, tag, search, limit, includeBody, includeFields })` | Records in folders it may read: `{ id, path, updatedAt }`, and with `tag`, `includeBody` or `includeFields` also `tags` and `fields` (and with `includeBody` the `body`). |
 | `vault.getRecord(idOrPath)` | One record it may read, with its body. |
@@ -105,11 +123,20 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
 | `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above), while they tap inside the applet. Resolves to whether it went. |
+| `app.openLink(url)` | With `links`: an `http`, `https` or `mailto` address in the person's browser, while they tap, at most one a second. Resolves to whether it went. |
+| `app.save(name, bytes, type)` | With `save`: a file (an `ArrayBuffer`, 25 MB at most) into the person's Downloads, while they tap. The name is made bare (no folder, no leading dot, 100 characters at most) and the app picks a free one. Resolves `{ saved: name }`. |
+| `app.pick({ accept, multiple })` | With `attach`: the app's own picker, while they tap (`accept`: like `"image/*,.pdf"`). Resolves the files chosen, `[{ name, type, bytes }]` (25 MB each, 10 at most), or `[]`. |
+| `voice.record({ max_s })` | With `reach: [voice]`: the app's own recorder sheet over the applet, while they tap (Record, Stop, Send, Cancel; 10 minutes unless `max_s` is less). Resolves `{ bytes, type: "audio/webm", duration }` on Send, `null` on Cancel. The applet never touches the microphone. |
+| `storage.get(key)`, `storage.set(key, value)`, `storage.keys()` | With `storage`: JSON kept by the app on this device for this applet (drafts), 256 KB in all, keys up to 100 characters. `set(key, null)` removes it. Never synced. |
+| `vault.attach(id, bytes, type, { transcribe })` | A file (25 MB at most) onto a record it may `update`, through the hub. `transcribe: true` asks the hub to transcribe audio: write the record with `_Transcript pending._` and the hub puts the words in its place. Resolves `{ id, path, type, transcribe }`. |
 | `props()`, `onProps(cb)` | In a component a page embeds: the plain data the page hands it (also its React props), and each change after. Empty in an applet. |
 | `services.fetch(id, path, { method, headers, body, as })` | With `services`: a request to that server, under its url. `as`: `text`, `json` or `bytes`. Resolves `{ status, headers, body }`. |
 | `services.relay(id)` | With `services`: the relay. `.subscribe(filters, onEvents, onEose?)` (returns a function that stops it; one room per subscription on a Buzz relay), `.query(filters)`, `.publish({ kind, content, tags })` (resolves `{ ok, id, message, event }`), `.loadPrivate(prefix)`, `.savePrivate(d, text)`, `.onStatus(cb)`. |
 | `services.upload(id, bytes, type)`, `services.media(id, sha256, ext)` | With `media`: a file up (the server's descriptor) or down (`{ bytes, type }`, for a `blob:` address an `<img>`, `<audio>` or `<video>` plays). |
 | `services.me()` | Who the app signs as: `{ pubkey }`. |
+| `services.card(id, event)` | With `approvals`: Uni's card in that signed message, as the app checked it: `{ kind, refused, rows: [{ rid, credential, action, class, scope, ttl_s, uses, expires, always_unlock, answer, … }] }`. Never a key. |
+| `services.answer(id, event, "approve" \| "deny", rids)` | On a tap: the app asks for the unlock when it must, seals the answer with the approval key and sends it. Resolves `{ view, sent, failed? }`. A tap answers once. |
+| `services.secret(id, event)`, `services.forgetSecret(id, event)` | On a tap: the app's own sheet takes the secret (`{ sent }`); or asks the requester to forget it. |
 | `theme.get()`, `theme.now()`, `theme.on(cb)` | The app's look, which the person can change ([THEME.md](THEME.md)): `get` asks for it, `now` gives the last one sent (or null), `on` calls back now and at each change and returns a function that stops it. Beside the values below, it says `scheme` (`light` or `dark`) and `density`. Every value is also a CSS variable: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. |
 
 A call outside what it was allowed fails with `out_of_scope` or `not_granted`. It never reaches anything else.
@@ -363,6 +390,97 @@ export default function Home() {
   );
 }
 ```
+
+## An applet for an area
+
+A page for one area of your life (the garden, a client, a class) where you talk with Uni about it beside its notes:
+the area's room on the relay, and its folder in the vault. Two columns on a wide screen, the room kept in view; one
+column on a phone (the area's note, the room, then the other notes). `applets/area.tsx` and `applets/area.json` in this
+repository are the worked example; `e2e/area.spec.ts` runs it against a real relay.
+
+### What it declares
+
+The record for the area Garden. `<…>` are the values for this person: the relay, Garden's room (its NIP-29 id) and
+Uni's key (hex). The body is `applets/area.tsx`, unchanged for every area.
+
+```json
+{
+  "path": "Applets/Garden",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2, "id": "garden", "name": "Garden", "glyph": "❦",
+      "note": "the Garden room, to talk with Uni there, beside the area's notes",
+      "access": [{ "vault": "here", "allow": [{ "path": "Areas/Garden/", "verbs": ["read"] }] }],
+      "reach": ["voice"]
+    },
+    "app": ["links", "save", "attach", "storage"],
+    "services": [{
+      "id": "rooms", "kind": "nostr-relay", "url": "<wss://relay.example>",
+      "publish": [9, 7, 5, 40003, 20002], "media": true,
+      "rooms": [{ "id": "<Garden's room>", "name": "Garden" }],
+      "approvals": { "from": ["<Uni's key>"] },
+      "notify": { "mentions": true, "from": ["<Uni's key>"] }
+    }]
+  }
+}
+```
+
+- **One folder, to read.** The notes are `Areas/Garden/`; the area's own note, shown first, is the one in it named for
+  the area (`Areas/Garden/Garden`). A rule is a folder, so a note at `Areas/Garden` beside the folder isn't in it.
+- **One room.** `rooms` keeps every post, read and reaction to Garden's room: a filter without its `#h` is refused, and
+  so is an event for another room. Media on the relay's server and private notes aren't limited to it, and the card
+  says so.
+- **Uni.** `approvals` lets Uni's cards in that room be answered here (high risk: the card says so); `notify` tells you
+  of a mention, and of every message from Uni, while Parachute is closed. The room reads which key is Uni's from these.
+- **What the room uses.** `links`, `save`, `attach`, `storage` (drafts) and `reach: [voice]` are what the Room
+  component asks of the app. Leave one out and only that one thing stops working.
+
+### The room is a component
+
+```tsx
+import Room from "component:room";
+// …
+<Room service="rooms" room={roomId} name="Garden" />
+```
+
+`Components/Room` (`applets/room.json`, tagged `component`, id `room`) must be in the same vault; it runs inside the
+applet's own frame, with its services and nothing more, so the scope above holds for it. The Rooms applet imports the
+same component, so a room looks and works the same in both. Its props: `service` (the relay service's id), `room`,
+`name` (shown until the relay's own name comes), `at` (a message to open at, marked), and, for a list like Rooms,
+`readAt`, `onRead` and `onBack`. `applets/area.tsx` reads the room and the folder from `ready()` (`services`, `access`):
+the page keeps nothing of its own that could drift from its card.
+
+### What the card says
+
+Each line is the app's own words, from the declaration:
+
+> Read notes outside its own folder, in Areas/Garden/ ·
+> With your everyday key: post as you only in «Garden» (3f2a1b…), named by the applet there: messages, reactions, edits
+> of your messages and typing · It reads only those rooms there; files and private notes there aren't limited to them ·
+> **High risk.** With your approval key: answer approval cards and secret requests there from Uni … ·
+> Tell you about messages only in «Garden» (3f2a1b…), named by the applet there that name you, and every message from
+> Uni, even when Parachute is closed · Includes «Room», a component from this vault: its code runs inside this applet
+
+with the lines for links, files, drafts and the microphone. «Garden» is the applet's word for the room; the id beside
+it is what is enforced.
+
+### Another area
+
+Each area is its own applet record, with its own card: the same code, other values. With the installer:
+
+```sh
+node scripts/install-applets.ts --hub https://hub.example --vault home --token-file ~/token --applet area \
+  --set relay=wss://relay.example --set uni=<Uni's key, hex> \
+  --set area=Kitchen --set area_id=kitchen --set area_room=<the Kitchen room's id> [--apply]
+```
+
+It puts `Components/Room` in first if the vault doesn't have it, then `Applets/Kitchen`. When `area.tsx` or `room.tsx`
+changes, run it again once per area; each area's card asks again. By an agent, it is two `create-record` calls: the component once per vault
+(`applets/room.json`'s fields, `applets/room.tsx` as the body), then the applet (the record above with the Kitchen's
+values, `applets/area.tsx` as the body). The room must exist on the relay with the person in it; the folder may be
+empty, and the page says what to write first.
 
 ## What the person sees
 

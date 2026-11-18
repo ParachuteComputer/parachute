@@ -7,11 +7,15 @@
 //     --bar rooms,mail,journal --start rooms --service "Rooms=nostr-relay:wss://relay.example" \
 //     --service "Mail=http:https://mail.example/mail/" [--apply]
 //
+// A component an applet imports (`import Room from "component:room"`, applets/room.json) goes in with it, before it.
+// An area's applet (applets/area.json) is one per area: --applet area --set area=Garden --set area_id=garden
+// --set area_room=<the room's id> (with relay and uni), again with other values for the next area.
+//
 // The token is a vault write token (`parachute auth mint-token --scope vault:<vault>:write`). A record already at an
 // applet's path is updated in place (its code and fields), so running it again changes only what changed. Each applet
 // still asks the person on its card before it runs; changed code or a changed server asks again.
 import { readFileSync } from "node:fs";
-import { appletRecord, type AppletRecord } from "../applets/record.ts";
+import { appletRecord, withImports, type AppletRecord } from "../applets/record.ts";
 
 type Args = { hub: string; vault: string; token: string; applets: string[]; vars: Record<string, string>; bar: string[] | null; start: string | null; services: { name: string; kind: string; url: string }[]; apply: boolean };
 
@@ -76,11 +80,14 @@ async function main() {
   const api = hubApi(a);
   const say = (s: string) => console.log(a.apply ? s : `(would) ${s}`);
   const records: Record<string, AppletRecord> = Object.fromEntries(a.applets.map((n) => [n, appletRecord(n, a.vars)]));
-  for (const [name, rec] of Object.entries(records)) {
+  // the components they import first, each once, so an applet never opens before what it imports is there
+  const parts = new Map<string, AppletRecord>();
+  for (const n of a.applets) for (const r of withImports(n, a.vars).slice(0, -1)) parts.set(r.path, r);
+  for (const [name, rec] of [...[...parts.values()].map((r) => [r.path, r] as const), ...Object.entries(records)]) {
     const was = await api.find(rec.path);
     if (!was) { say(`add ${name} at ${rec.path}`); if (a.apply) await api.write("create", { ...rec }); continue; }
     const fieldsWere = { ...(was.metadata ?? {}) };
-    if (was.content === rec.body && same(fieldsWere.applet, rec.fields.applet) && same(fieldsWere.services, rec.fields.services) && same(fieldsWere.opens, rec.fields.opens)) { console.log(`${name}: unchanged`); continue; }
+    if (was.content === rec.body && same(fieldsWere.applet, rec.fields.applet) && same(fieldsWere.services, rec.fields.services) && same(fieldsWere.opens, rec.fields.opens) && same(fieldsWere.component, rec.fields.component) && same(fieldsWere.app, rec.fields.app)) { console.log(`${name}: unchanged`); continue; }
     say(`update ${name} at ${rec.path} (its card will ask again)`);
     if (a.apply) await api.write("update", { id: was.id, body: rec.body, fields: { ...fieldsWere, ...rec.fields }, ...(was.updatedAt ? { if_updated_at: was.updatedAt } : {}) });
   }

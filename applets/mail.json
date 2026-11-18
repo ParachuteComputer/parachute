@@ -11,6 +11,6 @@
       "note": "your mail, through your mail gateway",
       "access": []
     },
-    "services": [{ "id": "mail", "kind": "http", "url": "{{mail}}", "auth": "nip98" }]
+    "services": [{ "id": "mail", "kind": "http", "url": "{{mail}}", "auth": "nip98", "approve": { "field": "op", "ops": ["send.approve"] } }]
   }
 }

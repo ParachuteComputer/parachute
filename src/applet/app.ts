@@ -1,10 +1,12 @@
 // What an applet may ask of the app beyond its own vault: `metadata.app` on its note, beside the manifest (the manifest
 // itself is the Uni app's contract 2 and takes no new key). A home applet uses these: the newest notes across the
 // vaults this device holds (titles only), what is on the bar, and a move to a note or an applet on a tap. Each word is
-// a line on the card and part of the grant's key, so adding one asks again. Pure.
+// a line on the card and part of the grant's key, so adding one asks again. The shell's own capabilities for the Uni
+// app's rooms (docs/design/KEYRING.md "Voice, files, links, storage"): links, save, attach (a file the person picks)
+// and storage (a little, on this device). Pure.
 //
-//   app: [recent, pins, open]
-export const APP_WORDS = ["recent", "pins", "open"] as const;
+//   app: [recent, pins, open, links, save, attach, storage]
+export const APP_WORDS = ["recent", "pins", "open", "links", "save", "attach", "storage"] as const;
 export type AppWord = (typeof APP_WORDS)[number];
 
 /** `metadata.app`: absent is none; anything but a short list of known words, each once, is refused (the applet then
@@ -16,11 +18,15 @@ export function parseApp(raw: unknown): { ok: true; app: AppWord[] } | { ok: fal
   return { ok: true, app: APP_WORDS.filter((w) => raw.includes(w)) };
 }
 
-/** The card's lines for what it asks of the app. Reading across every vault is stressed. */
+/** The card's lines for what it asks of the app. Reading across every vault, and links out, are stressed. */
 export function appLines(app: readonly AppWord[]): { text: string; stress: boolean }[] {
   const out: { text: string; stress: boolean }[] = [];
   if (app.includes("recent")) out.push({ text: "See the titles of the newest notes in every vault on this device", stress: true });
   if (app.includes("pins")) out.push({ text: "See what is on your bar", stress: false });
   if (app.includes("open")) out.push({ text: "Take you to a note or an applet when you tap", stress: false });
+  if (app.includes("links")) out.push({ text: "Open web addresses in your browser: what it reads could leave in an address it opens", stress: true });
+  if (app.includes("save")) out.push({ text: "Save files to your device's Downloads", stress: false });
+  if (app.includes("attach")) out.push({ text: "Ask you to pick a file or picture to give it", stress: false });
+  if (app.includes("storage")) out.push({ text: "Keep up to 256 KB on this device for itself (drafts)", stress: false });
   return out;
 }

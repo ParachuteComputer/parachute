@@ -17,7 +17,9 @@
 //
 // Strict: an unknown key or verb, a hidden character or an over-long value is refused, never repaired. The Uni app
 // refuses a key it doesn't know too, so nothing new goes in here: what an applet opens goes beside it (opens.ts).
-// Kept from the Uni app's keys: `reach` parses, but this app has no rooms, so an applet that reaches one is refused.
+// Kept from the Uni app's keys: `reach`. `reach: [voice]` is the microphone (the shell records on its own sheet and
+// hands the applet the recording, docs/design/KEYRING.md); `reach: [{room, …}]` is refused: rooms are named on the
+// relay service, where the posting rights are.
 // Doors are refused (a sealed frame holds no key). New here: an access rule under `.parachute/` is refused.
 // Pure: no React, no Tauri.
 
@@ -31,7 +33,11 @@ export type Verb = (typeof VERBS)[number];
 export type Rule = { path: string; verbs: Verb[] };
 export type SearchOffer = { what: string; path?: string; type?: string };
 export type Screen = { id: string; name: string };
-export type Manifest = { contract: 2; id: string; name: string; glyph: string; note?: string; allow: Rule[]; search: SearchOffer[]; screens: Screen[] };
+/** What it reaches beyond its vault, in the Uni app's word: only the microphone here. */
+export const REACH_WORDS = ["voice"] as const;
+export type Reach = (typeof REACH_WORDS)[number];
+/** `reach` is set only when the manifest names something, so a manifest without it reads (and keys) as before. */
+export type Manifest = { contract: 2; id: string; name: string; glyph: string; note?: string; allow: Rule[]; search: SearchOffer[]; screens: Screen[]; reach?: Reach[] };
 export type Parse = { ok: true; manifest: Manifest } | { ok: false; error: string };
 
 export const LIMITS = { id: 40, name: 40, note: 120, access: 8, rules: 8, search: 8, what: 40, screens: 8 };
@@ -112,7 +118,12 @@ export function parseManifest(raw: unknown): Parse {
 
   const reach = list(raw.reach, 6);
   if (!reach) return fail("reach must be a short list");
-  if (reach.length) return fail("it reaches a room or the microphone, and Parachute has neither yet");
+  for (const r of reach) {
+    if (plain(r) && "room" in r) return fail("it reaches a room in its manifest, and rooms are named on the relay service (services: rooms)");
+    if (typeof r !== "string" || !(REACH_WORDS as readonly string[]).includes(r)) return fail(`reach is a list of ${REACH_WORDS.join(", ")}`);
+  }
+  if (new Set(reach).size !== reach.length) return fail("reach names voice twice");
+  if (reach.length) m.reach = REACH_WORDS.filter((w) => reach.includes(w));
 
   const search = list(raw.search, LIMITS.search);
   if (!search) return fail("search must be a short list");

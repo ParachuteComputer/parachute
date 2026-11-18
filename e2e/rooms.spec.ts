@@ -5,10 +5,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { getPublicKey } from "nostr-tools/pure";
-import { api, hubState, record, VAULT } from "./hub";
-import { ui } from "./helpers";
+import { VAULT } from "./hub";
+import { installApplet, ui } from "./helpers";
 import { person } from "./services/client";
-import { appletRecord } from "../applets/record.ts";
 
 const RELAY = process.env.BUZZ_RELAY;
 const KEYS = process.env.BUZZ_KEYS ?? "";
@@ -35,7 +34,7 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
   // bob has a name (his profile): the @ list and the room show it
   await bob.publish({ kind: 0, content: JSON.stringify({ name: "Bob", display_name: "Bob" }) });
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
-  const note = await record(hubState(), "create", appletRecord("rooms", { relay: RELAY! }));
+  const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   try {
     // bob writes first: a plain message, an ask, Hermes's command prompt, a picture and a voice note
     const g = rooms.Garden;
@@ -56,7 +55,7 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     await page.goto(`/v/${VAULT}`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
-    await expect(card).toContainText(`Sign in to ${new URL(RELAY!.replace(/^ws/, "http")).host} on this device as you`);
+    await expect(card).toContainText(`With your everyday key: sign in to ${new URL(RELAY!.replace(/^ws/, "http")).host} on this device as you`);
     await expect(card).toContainText("Keep private notes there (read-state:…), sealed to your key: other apps of yours may share them");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
@@ -104,8 +103,9 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     await app.getByRole("button", { name: `← Garden ${stamp}` }).click();
     await expect(log.locator("article", { hasText: `are up ${stamp}` }).getByRole("button", { name: "1 reply" })).toBeVisible();
 
-    // a picture of her own, through the shell's upload
-    await app.locator("input[type=file]").setInputFiles({ name: "beds.png", mimeType: "image/png", buffer: png });
+    // a picture of her own, picked on the shell's own picker and sent through the shell's upload
+    await app.getByRole("button", { name: "Choose files to attach" }).click();
+    await page.getByRole("dialog", { name: "Rooms asks for files" }).locator("input[type=file]").setInputFiles({ name: "beds.png", mimeType: "image/png", buffer: png });
     await field.fill(`the beds ${stamp}`);
     await app.getByRole("button", { name: "Send message" }).click(); // on a phone Enter is a new line
     await expect(log.locator("article.mine", { hasText: `the beds ${stamp}` }).getByRole("img", { name: "beds.png" })).toBeVisible({ timeout: 20_000 });
@@ -148,6 +148,117 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a r
     expect(marks[0].content).not.toContain(g);
   } finally {
     bob.close();
-    await api(hubState(), "DELETE", `notes/${note.id}`);
+    await made.remove();
+  }
+});
+
+test("Uni's turn in a room: a quick reply, working and Stop, muted, a draft with its mention, a launch at a message, and search", async ({ page }) => {
+  test.setTimeout(180_000);
+  const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
+  const bob = await person(RELAY!, secret("bob")); // Uni, here: the key the grant names
+  const stamp = Date.now().toString(36);
+  const owner = await person(RELAY!, secret("owner"));
+  const rooms = { Beds: crypto.randomUUID(), Shed: crypto.randomUUID() };
+  for (const p of [alice, bob.pubkey]) await owner.publish({ kind: 9030, tags: [["p", p]] });
+  for (const [name, id] of Object.entries(rooms)) {
+    expect((await owner.publish({ kind: 9007, tags: [["h", id], ["name", `${name} ${stamp}`], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+    for (const p of [alice, bob.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", id], ["p", p]] })).ok).toBe(true);
+  }
+  owner.close();
+  await bob.publish({ kind: 0, content: JSON.stringify({ name: "Bob", display_name: "Bob" }) });
+  const b = rooms.Beds;
+  expect((await bob.publish({ kind: 9, content: `The beds are dug ${stamp}. Shall I order more seed potatoes?`, tags: [["h", b], ["p", alice]] })).ok).toBe(true);
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+  const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
+  const mine = async (text: string) => (await bob.query({ kinds: [9], "#h": [b], authors: [alice], limit: 30 })).filter((e) => e.content === text || e.content.includes(text));
+  try {
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+    await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Tell you about messages in your rooms there that name you, and every message from");
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = frame(page);
+    const appUrl = page.url();
+    const list = app.getByRole("list", { name: "Your rooms" });
+    await list.getByRole("button", { name: new RegExp(`Beds ${stamp}`) }).click({ timeout: 30_000 });
+    const log = app.getByRole("log");
+
+    // a yes-or-no question from Uni: Yes · No · Not now under it; Yes goes to Uni (listening)
+    const quick = app.getByRole("group", { name: "Quick replies" });
+    await expect(quick.getByRole("button")).toHaveText(["Yes", "No", "Not now"], { timeout: 20_000 });
+    await quick.getByRole("button", { name: "Yes" }).click();
+    await expect(quick).toHaveCount(0);
+    await expect.poll(async () => (await mine("Yes")).length, { timeout: 15_000 }).toBe(1);
+    const yes = (await mine("Yes"))[0];
+    expect(yes.content).toBe("Yes");
+    expect(yes.tags).toContainEqual(["p", bob.pubkey]);
+
+    // Uni takes it (its 👀) and works: one quiet status line, its ping one quiet line, and Stop
+    expect((await bob.publish({ kind: 7, content: "👀", tags: [["e", yes.id], ["p", alice], ["h", b]] })).ok).toBe(true);
+    const turn = app.getByRole("status", { name: "Uni is working" });
+    await expect(turn).toBeVisible({ timeout: 15_000 });
+    expect((await bob.publish({ kind: 9, content: "⏳ Working — 3 min — iteration 4/90, terminal", tags: [["h", b]] })).ok).toBe(true);
+    await expect(turn).toContainText("Running a command", { timeout: 15_000 });
+    await expect(log.locator("p.ping", { hasText: "Working — 3 min" })).toHaveCount(0); // said once, on the turn's line
+    await turn.getByRole("button", { name: "Stop Uni" }).click();
+    await expect(turn).toHaveCount(0, { timeout: 15_000 });
+    // stopped, the ping stays as one quiet line, never a message
+    await expect(log.locator("p.ping", { hasText: "Working — 3 min" })).toBeVisible();
+    await expect(log.locator("article", { hasText: "Working — 3 min" })).toHaveCount(0);
+    await expect(log.getByText("You stopped Uni")).toBeVisible();
+    await expect.poll(async () => (await mine("/stop")).length, { timeout: 15_000 }).toBe(1);
+    expect((await mine("/stop"))[0].tags).toContainEqual(["p", bob.pubkey]);
+
+    // muted: what she sends here doesn't name Uni, and the switch says so
+    await app.getByRole("button", { name: "Uni is listening. Mute Uni for your messages" }).click();
+    await expect(app.getByRole("button", { name: "Uni is muted. Let Uni listen again" })).toHaveAttribute("aria-pressed", "false");
+    const field = app.getByLabel(`Message Beds ${stamp}`);
+    await field.fill(`Just noting ${stamp}`);
+    await app.getByRole("button", { name: "Send message" }).click();
+    await expect.poll(async () => (await mine(`Just noting ${stamp}`)).length, { timeout: 15_000 }).toBe(1);
+    expect((await mine(`Just noting ${stamp}`))[0].tags.filter((t) => t[0] === "p" && t[1] === bob.pubkey)).toEqual([]);
+
+    // a draft, with the person it names, kept per room: away to another room and back, it is there, and sends to Bob
+    await field.fill("Thanks @");
+    await app.getByRole("listbox", { name: "People in this room" }).getByRole("button", { name: "Bob" }).click();
+    await field.pressSequentially(`for the beds ${stamp}`);
+    await page.waitForTimeout(900); // kept half a second after the last key
+    await app.getByRole("button", { name: "← Rooms" }).click();
+    await list.getByRole("button", { name: new RegExp(`Shed ${stamp}`) }).click();
+    await app.getByLabel(`Message Shed ${stamp}`).fill(`a shed draft ${stamp}`);
+    await page.waitForTimeout(900);
+    await app.getByRole("button", { name: "← Rooms" }).click();
+    await list.getByRole("button", { name: new RegExp(`Beds ${stamp}`) }).click();
+    await expect(field).toHaveValue(`Thanks @Bob for the beds ${stamp}`);
+    await expect(app.getByRole("button", { name: "Uni is muted. Let Uni listen again" })).toBeVisible(); // muted stays, per room
+    await app.getByRole("button", { name: "Send message" }).click();
+    await expect.poll(async () => (await mine(`for the beds ${stamp}`)).length, { timeout: 15_000 }).toBe(1);
+    expect((await mine(`for the beds ${stamp}`))[0].tags).toContainEqual(["p", bob.pubkey]); // the mention came back with the text
+    await expect(field).toHaveValue("");
+    await app.getByRole("button", { name: "← Rooms" }).click();
+    await list.getByRole("button", { name: new RegExp(`Shed ${stamp}`) }).click();
+    await expect(app.getByLabel(`Message Shed ${stamp}`)).toHaveValue(`a shed draft ${stamp}`);
+    await app.getByRole("button", { name: "← Rooms" }).click();
+
+    // search across rooms (the relay's NIP-50): a hit opens its room at that message
+    await app.getByLabel("Search your rooms").fill("seed potatoes");
+    await app.getByLabel("Search your rooms").press("Enter");
+    const found = app.getByRole("region", { name: "Found" });
+    await expect(found.getByRole("button", { name: new RegExp(`Beds ${stamp}`) })).toBeVisible({ timeout: 15_000 });
+    await found.getByRole("button", { name: new RegExp(`Beds ${stamp}`) }).first().click();
+    await expect(log.locator("article.at")).toContainText(`The beds are dug ${stamp}`, { timeout: 15_000 });
+
+    // a notification's tap: the app opens the applet at that room and message
+    const roof = await bob.publish({ kind: 9, content: `Look at the shed roof ${stamp}`, tags: [["h", rooms.Shed], ["p", alice]] });
+    expect(roof.ok).toBe(true);
+    // (a link into the app starts nothing by itself: the applet waits, stopped, for the person's tap)
+    await page.goto(`${appUrl}?room=${rooms.Shed}&event=${roof.ev.id}`);
+    await page.getByRole("button", { name: "Open Rooms" }).click();
+    const at = frame(page).locator(`article[data-id="${roof.ev.id}"]`);
+    await expect(at).toHaveClass(/\bat\b/, { timeout: 30_000 });
+    await expect(at).toBeInViewport();
+    await expect(frame(page).getByRole("heading", { name: `Shed ${stamp}` })).toBeVisible();
+  } finally {
+    bob.close();
+    await made.remove();
   }
 });

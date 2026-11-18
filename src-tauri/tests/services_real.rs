@@ -4,7 +4,7 @@
 use nostr::base64::engine::general_purpose::STANDARD as B64;
 use nostr::base64::Engine;
 use nostr::Keys;
-use parachute_lib::services::{Applet, Broker, HttpReq};
+use parachute_lib::services::{Applet, Broker, HttpReq, Role};
 use serde_json::{json, Value};
 
 fn keys() -> Option<Keys> {
@@ -28,12 +28,12 @@ async fn the_mail_gateway_takes_what_the_native_side_signs() {
     let b = broker("mail", &k, &[json!({ "id": "mail", "kind": "http", "url": format!("{bridge}/mail/"), "auth": "nip98" })]);
     let mut r = HttpReq { method: "POST".into(), path: "session".into(), body: Some(B64.encode(b"{}")), ..Default::default() };
     r.headers.insert("content-type".into(), "application/json".into());
-    let res = b.http(&k, "s", "mail", &r).await.unwrap();
+    let res = b.http(&k, &Role::Everyday, "s", "mail", &r).await.unwrap();
     let body: Value = serde_json::from_slice(&B64.decode(res.body).unwrap()).unwrap();
     assert_eq!(res.status, 200, "{body}");
     assert!(body["primaryAccounts"]["urn:ietf:params:jmap:mail"].is_string(), "{body}");
     // the same request twice: a fresh nonce each time, so the gateway's replay cache takes both
-    assert_eq!(b.http(&k, "s", "mail", &r).await.unwrap().status, 200);
+    assert_eq!(b.http(&k, &Role::Everyday, "s", "mail", &r).await.unwrap().status, 200);
 }
 
 #[tokio::test(flavor = "multi_thread")]

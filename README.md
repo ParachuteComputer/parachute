@@ -125,6 +125,11 @@ an applet by itself only when this device holds both its Allow and the person's 
 - `src/services/` and `src-tauri/src/services.rs`: the broker for an applet's servers. The web side holds the policy and
   the relay connections; the native side signs, seals and sends, checking each call again (named kinds only, never a
   Parachute hub) and writing down what it signed.
+- `src-tauri/src/notify.rs`, `PushService.kt` and `services/push-gateway/`: notifications while the app is closed
+  (Android). An applet's push gateway watches the relay with its own key and sends a sealed push (no words) through the
+  phone's UnifiedPush distributor (ntfy from F-Droid); the shell signs only the gateway registration. Without a
+  distributor (a de-Googled phone with nothing installed), `NotifyService.kt` keeps its own relay connection (on unless
+  turned off in Settings; idle while push serves everything).
 - `src/links/`: links in, `parachute://open?url=<a note's web address>`.
 
 An applet's note, as an example:

@@ -1,0 +1,40 @@
+{
+ "approves": [
+  "/approve",
+  "  /Approve once",
+  "\n/DENY",
+  "/deny",
+  "@Uni /approve",
+  "@uni: /approve",
+  "nostr:npub1abc /deny",
+  "nostr:npub1abc:/approve",
+  "npub1abc, /approve",
+  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa /approve",
+  "\u001c/approve",
+  "/approve",
+  "​﻿/approve",
+  "@Uni ​ @Hermes /approve",
+  "@Uni­/approve",
+  "@Uni͏/approve",
+  "@ /approve",
+  "@:/approve",
+  "@Uni : /approve",
+  "@Uni​:/approve",
+  "@Uni ,/approve",
+  "@Uni, ,/approve",
+  "npub1x : /approve",
+  "　/approve",
+  " @Uni /deny",
+  " /approve"
+ ],
+ "fine": [
+  "I approve of this",
+  "@Uni please /approve later",
+  "approve",
+  "see /approve docs",
+  "nostr:npub1abc please /approve",
+  "/approvx",
+  "x/approve",
+  "@Uni say /approve"
+ ]
+}

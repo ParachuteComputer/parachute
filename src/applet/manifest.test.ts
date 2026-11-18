@@ -30,8 +30,10 @@ describe("parseManifest", () => {
     [withRule({ path: "../Recipes/", verbs: ["read"] }), /plain folder/],
     [withRule({ path: ".parachute/", verbs: ["read"] }), /\.parachute\//],
     [withRule({ path: ".Parachute/settings/", verbs: ["read"] }), /\.parachute\//],
-    [{ ...RECIPES, reach: [{ room: "abc", verbs: ["read"] }] }, /room/],
-    [{ ...RECIPES, reach: ["voice"] }, /microphone/],
+    [{ ...RECIPES, reach: [{ room: "abc", verbs: ["read"] }] }, /rooms are named on the relay service/],
+    [{ ...RECIPES, reach: ["voice", "voice"] }, /twice/],
+    [{ ...RECIPES, reach: ["camera"] }, /reach is a list of voice/],
+    [{ ...RECIPES, reach: "voice" }, /short list/],
     [{ ...RECIPES, search: [{ what: "notes", vault: "here", path: "Journal/" }] }, /can't read them/],
   ])("refuses %j", (raw, why) => refused(raw, why));
 });

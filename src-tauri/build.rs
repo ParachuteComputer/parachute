@@ -10,7 +10,8 @@ fn main() {
         .unwrap_or("unknown");
     println!("cargo:rustc-env=PARACHUTE_WRY_VERSION={version}");
     // gen/android/app/src/main/java/computer/parachute/app/{RustWebView,Ipc}.kt are copies of wry 0.55.1's templates
-    // with the main-frame-only fix (MainFrameOnly.kt). A different wry must have them re-derived and the self-test re-run.
+    // with the main-frame-only fix (MainFrameOnly.kt). ShellOnlyMedia.kt wraps wry's RustWebChromeClient and forwards each
+    // method that template overrides. A different wry must have all three re-derived and the self-test re-run.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") && version != "0.55.1" {
         panic!("wry is {version}, but the Android RustWebView.kt/Ipc.kt overrides are derived from 0.55.1: re-derive them from the new wry templates (see MainFrameOnly.kt), then update this check");
     }

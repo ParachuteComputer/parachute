@@ -38,7 +38,7 @@ export type Discovery = { entries: AppletEntry[]; skipped: number };
 type Row = { id?: unknown; path?: unknown; tags?: unknown; metadata?: unknown };
 
 /** `theirs`: the vault isn't the person's own (vault/whose.ts): its applets ask nothing of the app, whatever `app` says,
- *  and reach no service. `isHub`: is an origin one of the person's Parachute hubs (never a service). */
+ *  reach no service and no microphone. `isHub`: is an origin one of the person's Parachute hubs (never a service). */
 export function readApplet(r: Row, vault: string, theirs = false, isHub: (origin: string) => boolean = () => false): { ok: true; entry: AppletEntry } | { ok: false; error: string } {
   if (typeof r.id !== "string" || !r.id || typeof r.path !== "string" || !r.path) return { ok: false, error: "it isn't a note" };
   if (!Array.isArray(r.tags) || !r.tags.includes("applet")) return { ok: false, error: "it isn't tagged applet" };
@@ -47,6 +47,8 @@ export function readApplet(r: Row, vault: string, theirs = false, isHub: (origin
   if (!parsed.ok) return { ok: false, error: `its manifest is invalid: ${parsed.error}` };
   if (BUILT_IN_IDS.includes(parsed.manifest.id)) return { ok: false, error: `the id ${parsed.manifest.id} is the app's own` };
   if (meta.interface !== undefined && meta.interface !== null) return { ok: false, error: "a contract 2 applet has one manifest. Its note must not carry interface too" };
+  // as with `app`: an applet in someone else's vault gets no microphone, whatever its manifest says
+  if (theirs && parsed.manifest.reach) { const { reach: _dropped, ...rest } = parsed.manifest; parsed.manifest = rest; }
   // as with `opens`: a bad `app` costs the applet what it asked of the app, not the applet
   const app = theirs ? { ok: false as const, error: "an applet in someone else's vault can't ask the app for anything" } : parseApp(meta.app);
   const opens = parseOpens(meta.opens, parsed.manifest);

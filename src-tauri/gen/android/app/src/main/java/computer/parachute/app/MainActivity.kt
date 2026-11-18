@@ -46,6 +46,18 @@ class MainActivity : TauriActivity() {
     v.setBackgroundColor(if (night) 0xFF171613.toInt() else 0xFFF2EDE2.toInt())
   }
 
+  // While the app is in front, NotifyService shows nothing, and what it showed is cleared: the person is looking. (It is
+  // also started again here if Android declined to restart it while the app was away.)
+  override fun onResume() {
+    super.onResume()
+    NotifyService.appResumed(this)
+  }
+
+  override fun onPause() {
+    NotifyService.appPaused(this)
+    super.onPause()
+  }
+
   // A link tapped while the activity exists becomes its intent: if the deep-link plugin isn't loaded yet (the process was
   // just recreated), it reads the link from here when it loads; a later recreate still drops it (above).
   override fun onNewIntent(intent: Intent) {

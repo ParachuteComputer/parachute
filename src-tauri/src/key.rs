@@ -145,13 +145,35 @@ pub async fn key_forget<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState
     state.forget(&app).await
 }
 
-/// The platform's secure storage for the one secret this app keeps.
-mod store {
+/// The platform's secure storage for the secrets this app keeps: the everyday key, and the approval key when the person
+/// made a separate one (keyring.rs).
+pub(crate) mod store {
     use tauri::{AppHandle, Runtime};
     use zeroize::Zeroizing;
 
-    #[cfg(target_os = "android")]
-    const SLOT: &str = "nostr_key";
+    /// Which secret: each has its own entry (Android: a named entry under the one Keystore key; desktop: a keyring item).
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Which {
+        Everyday,
+        Approval,
+    }
+
+    impl Which {
+        #[cfg(target_os = "android")]
+        fn slot(self) -> &'static str {
+            match self {
+                Which::Everyday => "nostr_key",
+                Which::Approval => "approval_key",
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        fn account(self) -> &'static str {
+            match self {
+                Which::Everyday => desktop::ACCOUNT,
+                Which::Approval => desktop::APPROVAL_ACCOUNT,
+            }
+        }
+    }
 
     #[cfg(target_os = "android")]
     fn plugin<R: Runtime>(app: &AppHandle<R>) -> Result<tauri::plugin::PluginHandle<R>, String> {
@@ -175,6 +197,7 @@ mod store {
 
         pub const SERVICE: &str = "computer.parachute.app";
         pub const ACCOUNT: &str = "nostr-key";
+        pub const APPROVAL_ACCOUNT: &str = "approval-key";
 
         fn entry(account: &str) -> Result<keyring::Entry, String> {
             keyring::Entry::new(SERVICE, account).map_err(|e| format!("This computer's keyring can't be used ({e})."))
@@ -202,7 +225,19 @@ mod store {
     }
 
     /// An `Err` is storage not answering this time (try again); `Unreadable` is for good.
-    pub async fn load<R: Runtime>(_app: &AppHandle<R>) -> Result<Stored, String> {
+    pub async fn load<R: Runtime>(app: &AppHandle<R>) -> Result<Stored, String> {
+        load_which(app, Which::Everyday).await
+    }
+
+    pub async fn save<R: Runtime>(app: &AppHandle<R>, nsec: &Zeroizing<String>) -> Result<(), String> {
+        save_which(app, Which::Everyday, nsec).await
+    }
+
+    pub async fn clear<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+        clear_which(app, Which::Everyday).await
+    }
+
+    pub async fn load_which<R: Runtime>(_app: &AppHandle<R>, which: Which) -> Result<Stored, String> {
         #[cfg(target_os = "android")]
         {
             #[derive(serde::Deserialize)]
@@ -212,7 +247,7 @@ mod store {
                 unreadable: bool,
             }
             let loaded: Loaded = plugin(_app)?
-                .run_mobile_plugin_async("loadSecret", serde_json::json!({ "name": SLOT }))
+                .run_mobile_plugin_async("loadSecret", serde_json::json!({ "name": which.slot() }))
                 .await
                 .map_err(|_| "The key store couldn't be read. Try again, or close and reopen the app.".to_string())?;
             Ok(match (loaded.secret, loaded.unreadable) {
@@ -223,11 +258,11 @@ mod store {
         }
         #[cfg(not(target_os = "android"))]
         {
-            tauri::async_runtime::spawn_blocking(|| desktop::load(desktop::ACCOUNT)).await.map_err(|e| e.to_string())?
+            tauri::async_runtime::spawn_blocking(move || desktop::load(which.account())).await.map_err(|e| e.to_string())?
         }
     }
 
-    pub async fn save<R: Runtime>(_app: &AppHandle<R>, nsec: &Zeroizing<String>) -> Result<(), String> {
+    pub async fn save_which<R: Runtime>(_app: &AppHandle<R>, which: Which, nsec: &Zeroizing<String>) -> Result<(), String> {
         #[cfg(target_os = "android")]
         {
             #[derive(serde::Serialize)]
@@ -236,7 +271,7 @@ mod store {
                 secret: &'a str,
             }
             plugin(_app)?
-                .run_mobile_plugin_async::<serde_json::Value>("saveSecret", Args { name: SLOT, secret: nsec.as_str() })
+                .run_mobile_plugin_async::<serde_json::Value>("saveSecret", Args { name: which.slot(), secret: nsec.as_str() })
                 .await
                 .map_err(|_| "The key couldn't be kept on this device.".to_string())?;
             Ok(())
@@ -244,22 +279,22 @@ mod store {
         #[cfg(not(target_os = "android"))]
         {
             let nsec = nsec.clone();
-            tauri::async_runtime::spawn_blocking(move || desktop::save(desktop::ACCOUNT, &nsec)).await.map_err(|e| e.to_string())?
+            tauri::async_runtime::spawn_blocking(move || desktop::save(which.account(), &nsec)).await.map_err(|e| e.to_string())?
         }
     }
 
-    pub async fn clear<R: Runtime>(_app: &AppHandle<R>) -> Result<(), String> {
+    pub async fn clear_which<R: Runtime>(_app: &AppHandle<R>, which: Which) -> Result<(), String> {
         #[cfg(target_os = "android")]
         {
             plugin(_app)?
-                .run_mobile_plugin_async::<serde_json::Value>("clearSecret", serde_json::json!({ "name": SLOT }))
+                .run_mobile_plugin_async::<serde_json::Value>("clearSecret", serde_json::json!({ "name": which.slot() }))
                 .await
                 .map_err(|_| "The key couldn't be removed.".to_string())?;
             Ok(())
         }
         #[cfg(not(target_os = "android"))]
         {
-            tauri::async_runtime::spawn_blocking(|| desktop::clear(desktop::ACCOUNT)).await.map_err(|e| e.to_string())?
+            tauri::async_runtime::spawn_blocking(move || desktop::clear(which.account())).await.map_err(|e| e.to_string())?
         }
     }
 }

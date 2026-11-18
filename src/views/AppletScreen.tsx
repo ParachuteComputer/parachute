@@ -40,13 +40,20 @@ import { createRouter } from "../applet/router";
 import { createVaultModule } from "../applet/modules/vault";
 import { createThemeModule } from "../applet/modules/theme";
 import { tokensNow } from "../theme/store";
-import { createAppModule } from "../applet/modules/app";
+import { createAppModule, notTapped } from "../applet/modules/app";
+import { createVoiceModule } from "../applet/modules/voice";
+import { createStorageModule } from "../applet/modules/storage";
+import { storageFor } from "../shell/device";
+import { useDeviceSheets } from "./DeviceSheets";
 import { createServicesModule } from "../applet/modules/services";
 import { createBroker, type Broker } from "../services/broker";
+import { useShellSheets } from "./ShellSheets";
+import { lineOptions, useKeyring } from "../services/keyring";
+import { launchOf } from "../services/notifyLink";
 import { nativeNow } from "../services/native";
 import { hubCheck, knownHubs } from "../services/hubs";
 import type { Session } from "../applet/session";
-import { appDeps } from "../shell/appDeps";
+import { appDeps, tappingIn } from "../shell/appDeps";
 import { runDecision } from "../applet/selftest/gate";
 import { useGate } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
@@ -210,22 +217,34 @@ export default function AppletScreen() {
   // the servers it declared (docs/design/SERVICES.md): a broker for each of its frame's sessions, opened with the session
   // and closed with it; its calls wait for it
   const brokerRef = useRef<{ session: Session; broker: Promise<Broker | null> } | null>(null);
+  const sheets = useShellSheets(() => frameEl.current);
+  // the recorder and the file picker (docs/design/KEYRING.md "Voice, files, links, storage"): stable, as the router keeps them
+  const device = useDeviceSheets(entry?.manifest.name ?? "This applet");
+  const keyring = useKeyring();
   const servicesWhy = useRef<string | null>(null);
+  const sessionRef = useRef<Session | null>(null);
   const onSession = (s: Session | null) => {
+    sessionNow.current = s;
     const was = brokerRef.current;
     if (was && was.session !== s) { void was.broker.then((b) => b?.close()); brokerRef.current = null; }
+    // a recorder or picker open for the frame that went answers none (its session can't take the answer)
+    if (sessionRef.current && sessionRef.current !== s) device.cancel();
+    sessionRef.current = s;
     if (!s || !entry?.services.length || !rec || !subject) return;
     const services = entry.services;
     brokerRef.current = { session: s, broker: nativeNow().then((native) => {
       if (!native) { servicesWhy.current = "its servers need the Parachute app on a device, which holds your key"; return null; }
-      return createBroker({ native, session: `s${Math.random().toString(36).slice(2)}`, applet: { name: entry.manifest.name, subject }, services, hubs: knownHubs(), emit: (event, data) => s.sendEvent(event, data) });
+      return createBroker({ native, session: `s${Math.random().toString(36).slice(2)}`, applet: { name: entry.manifest.name, subject }, services, hubs: knownHubs(), emit: (event, data) => s.sendEvent(event, data), shell: sheets.shell });
     }) };
   };
   useEffect(() => () => { void brokerRef.current?.broker.then((b) => b?.close()); brokerRef.current = null; }, []);
   const router = useMemo(() => (rec && entry ? createRouter([
     createVaultModule(vaultDeps(clientFor(rec)), { opens: entry.opens, name: rec.vault }),
     createThemeModule({ theme: tokensNow }),
-    createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current)),
+    createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current, device)),
+    // the microphone (manifest `reach: [voice]`) and a little storage on this device (`app: [storage]`): not_granted without
+    createVoiceModule(!!entry.manifest.reach?.includes("voice"), { record: (max) => (tappingIn(() => frameEl.current) ? device.record(max) : Promise.reject(notTapped())) }),
+    createStorageModule(entry.app.includes("storage"), storageFor(subjectOf(rec.key, entry.noteId))),
     ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
@@ -237,7 +256,14 @@ export default function AppletScreen() {
   const handed = decision === "run" && claim && note ? { note: { id: note.id, path: note.path ?? "" }, screen: screenOf(entry!.manifest, claim.screen ?? askedScreen).id } : null;
   const name = entry?.manifest.name ?? "Applet";
   const sized = !!entry?.embeds.length;
-  const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, ...(handed ? { open: handed } : {}), ...(sized ? { page: { embeds: entry!.embeds.map((e) => e.name) } } : {}) }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a notification's tap opens the applet at a room and message (services/notifyLink.ts)
+  const launch = launchOf(params);
+  const launchKey = launch ? `${launch.room}|${launch.event ?? ""}` : "";
+  // what it was allowed, as its card said it (the folders, and each server with its rooms and keys): an applet reads its
+  // room, or which key is Uni's, from here rather than from a copy of its own
+  const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, access: entry?.manifest.allow ?? [], services: entry?.services ?? [], ...(handed ? { open: handed } : {}), ...(sized ? { page: { embeds: entry!.embeds.map((e) => e.name) } } : {}), ...(launch ? { launch } : {}) }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized, launchKey, entry]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sessionNow = useRef<Session | null>(null);
+  useEffect(() => { if (launch) sessionNow.current?.sendEvent("launch", launch); }, [launchKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const tap = (f: () => void) => (e: React.MouseEvent) => { if (e.isTrusted) f(); };
 
   if (!rec) return <NoVault />;
@@ -257,9 +283,9 @@ export default function AppletScreen() {
     if (declined) return shell(<div className="card"><p>{name} isn't allowed to run.</p><button type="button" className="primary" onClick={tap(() => setDeclined(false))}>Ask again</button> {plainNote}</div>);
     return shell(<>
       {note && <p className="quiet">{name} asks before it opens {titleOf(note)}.</p>}
-      <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"} codeChanged={decision === "ask-updated" && status === "updated"}
+      <GrantCard reaches={entry.services.length > 0 || entry.app.includes("links")} name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"} codeChanged={decision === "ask-updated" && status === "updated"}
         broughtChanged={pinMoved} asksOther={status === "none" && !!grants.record(subject)}
-        lines={[...grantLines({ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services), embedsFrom: loaded.state === "ok" ? loaded.from : [] }, ownFolder(entry.path)), ...importLines(loaded.state === "ok" ? loaded.imports : [])]}
+        lines={[...grantLines({ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services), embedsFrom: loaded.state === "ok" ? loaded.from : [] }, ownFolder(entry.path), lineOptions(keyring)), ...importLines(loaded.state === "ok" ? loaded.imports : [])]}
         withImports={loaded.state === "ok" && loaded.imports.length > 0} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         onAllow={() => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry); if (brought && pinMoved) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); }}
         onNotNow={() => setDeclined(true)} />
@@ -284,6 +310,8 @@ export default function AppletScreen() {
     </div>
     {late && "error" in late && late.hash === keys.html && <p className="error" role="alert">This applet can't run: its code doesn't compile: {late.error}.</p>}
     {router && page && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
+    {sheets.ui}
+    {device.ui}
     {router && page && sized && rec && isMine(rec) && <PageEmbeds host={rec} hostNote={entry.noteId} embeds={entry.embeds} from={loaded.state === "ok" ? loaded.from : []} />}
   </>);
 }

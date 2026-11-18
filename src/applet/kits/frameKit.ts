@@ -2,7 +2,7 @@
 // Copied from the Uni app (src/interface/kits/frameKit.ts) so one applet note runs in both apps; chat and note.open are
 // left out (this app has no rooms), and `open` is new. It runs inside the frame, so it is a string. Kept free of
 // backticks and `${`.
-//   uni.ready()                      → Promise of the host's context: {contract, applet: {id, name}, theme, open?}
+//   uni.ready()                      → Promise of the host's context: {contract, applet: {id, name}, access, services, theme, open?, launch?}
 //                                      `open`: {note: {id, path}, screen} when the app opened a note in this applet.
 //                                      The Uni app never sends it: an applet must work without it.
 //   uni.onOpen(cb)                   → cb({note, screen}) now (if the app opened a note) and whenever it opens another.
@@ -11,6 +11,15 @@
 //                                      queryRecords/getRecord/createRecord/updateRecord (body, fields) beside its own
 //   uni.theme.get() / .on(cb)        → the app's look (src/theme): every token is also a CSS var --<key> on <html>
 //   uni.app.recent/pins/open         → what it may ask of the app (modules/app.ts), new here: the Uni app has none
+//   uni.app.openLink(url)            → (links) an http/https/mailto address in the browser, during a tap: whether it went
+//   uni.app.save(name, bytes, type)  → (save) a file into Downloads, during a tap: {saved: name}
+//   uni.app.pick({accept, multiple}) → (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] for none
+//   uni.voice.record({max_s})        → (reach: [voice]) the shell's recorder sheet, during a tap: {bytes, type, duration}
+//                                      on Send, null on Cancel (docs/design/KEYRING.md "Voice, files, links, storage")
+//   uni.storage.get/set/keys         → (storage) a little JSON kept by the shell on this device for it, 256 KB in all
+//   uni.vault.attach(noteId, bytes, type, {transcribe}) → a file onto a note it may change, through the hub
+//   uni.services.*                   → the servers it declared (docs/design/SERVICES.md); card/answer/secret: Uni's
+//                                      approvals, with the approval key (docs/design/KEYRING.md)
 //   uni.props() / uni.onProps(cb)    → a component's props (plain data from the page's record), and later changes
 // On a page with embeds (docs/design/EMBED.md), `ready` says `page: {embeds: [names]}`, and in an embedded component's
 // frame `page: {sized: true}`: the kit then reports the frame's content height (`page.layout`), and nothing else. The
@@ -19,17 +28,22 @@
 
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
-  var svcSubs = {}, svcStatus = [];
+  var svcSubs = {}, svcStatus = [], launchCbs = [];
   var measuring = false, lastHeight = -1, queued = false;
   var readyP = new Promise(function (r) { readyRes = r; });
+  // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen
+  var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000 };
+  // bytes as an ArrayBuffer (what the shell takes), from an ArrayBuffer or a view of one
+  function buf(b) { return b instanceof ArrayBuffer ? b : b && ArrayBuffer.isView(b) ? b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) : null; }
   function post(m) { parent.postMessage(m, "*"); }
   function timeout(table, id, rej, ms) { setTimeout(function () { if (table[id]) { delete table[id]; rej(new Error("timeout")); } }, ms || 20000); }
   function call(ns, method, params) {
     return new Promise(function (res, rej) {
       var id = "k" + (++n); pending[id] = { res: res, rej: rej };
       post({ uni: 1, id: id, ns: ns, method: method, params: params || {} });
-      // a server can take a while (an upload, a relay's history): services calls wait longer
-      timeout(pending, id, rej, ns === "services" ? 120000 : 20000);
+      // a server can take a while (an upload, a relay's history): services calls wait longer; so do the person (a
+      // recording of up to 10 minutes, a file being chosen) and a file going out
+      timeout(pending, id, rej, ns === "services" ? 120000 : WAITS[ns + "." + method] || 20000);
     });
   }
   function applyTheme(t) {
@@ -92,6 +106,7 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "props") { applyProps(m.data); return; }
     if (m.event === "theme") { applyTheme(m.data); return; }
     if (m.event === "open") { applyOpen(m.data); return; }
+    if (m.event === "launch") { launchCbs.slice().forEach(function (f) { try { f(m.data); } catch (e) {} }); return; }
     if (m.event === "services.events") {
       var d = m.data || {}, h = svcSubs[d.service + "|" + d.sub];
       if (h) { if (d.events && d.events.length) { h.tries = 0; try { h.onEvents(d.events); } catch (e) {} } if (d.eose && h.onEose) { try { h.onEose(); } catch (e) {} } }
@@ -161,6 +176,13 @@ export const FRAME_KIT = String.raw`(function () {
   var uni = {
     contract: 1,
     ready: function () { return readyP; },
+    // what the app opened it for, from a notification's tap: {room, event?}, or null; and each later one
+    launch: function () { return readyP.then(function (d) { return (d && d.launch) || null; }); },
+    onLaunch: function (cb) {
+      launchCbs.push(cb);
+      readyP.then(function (d) { if (d && d.launch) { try { cb(d.launch); } catch (e) {} } });
+      return function () { var i = launchCbs.indexOf(cb); if (i >= 0) launchCbs.splice(i, 1); };
+    },
     onOpen: function (cb) {
       if (typeof cb !== "function") throw new TypeError("onOpen needs a function");
       openCbs.push(cb); if (opened) { try { cb(opened); } catch (e) {} }
@@ -177,7 +199,22 @@ export const FRAME_KIT = String.raw`(function () {
     app: Object.freeze({
       recent: function (o) { return call("app", "recent", o || {}); },
       pins: function () { return call("app", "pins", {}); },
-      open: function (href) { return call("app", "open", { href: href }); }
+      open: function (href) { return call("app", "open", { href: href }); },
+      openLink: function (url) { return call("app", "openLink", { url: url }); },
+      save: function (name, bytes, type) {
+        var b = buf(bytes);
+        if (!b) return Promise.reject(new TypeError("save takes bytes (an ArrayBuffer)"));
+        return call("app", "save", { name: name, bytes: b, type: type });
+      },
+      pick: function (o) { return call("app", "pick", o || {}); }
+    }),
+    voice: Object.freeze({
+      record: function (o) { return call("voice", "record", o || {}); }
+    }),
+    storage: Object.freeze({
+      get: function (key) { return call("storage", "get", { key: key }); },
+      set: function (key, value) { return call("storage", "set", { key: key, value: value === undefined ? null : value }); },
+      keys: function () { return call("storage", "keys", {}); }
     }),
     // the servers it declared (docs/design/SERVICES.md): the shell talks to them for it, and signs as the person
     services: Object.freeze({
@@ -220,11 +257,17 @@ export const FRAME_KIT = String.raw`(function () {
         });
       },
       upload: function (service, bytes, type) {
-        var b = bytes instanceof ArrayBuffer ? bytes : bytes && ArrayBuffer.isView(bytes) ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : null;
+        var b = buf(bytes);
         if (!b) return Promise.reject(new TypeError("upload takes bytes (an ArrayBuffer)"));
         return call("services", "upload", { service: service, bytes: b, type: type });
       },
-      media: function (service, sha256, ext) { return call("services", "media", { service: service, sha256: sha256, ext: ext }); }
+      media: function (service, sha256, ext) { return call("services", "media", { service: service, sha256: sha256, ext: ext }); },
+      // Uni's cards and secret requests (docs/design/KEYRING.md): hand the signed message over; the shell checks it,
+      // asks for the device unlock when it must, seals the answer with the approval key and sends it
+      card: function (service, event) { return call("services", "card", { service: service, event: event }); },
+      answer: function (service, event, decision, rids) { return call("services", "answer", { service: service, event: event, decision: decision, rids: rids }); },
+      secret: function (service, event) { return call("services", "secret", { service: service, event: event }); },
+      forgetSecret: function (service, event) { return call("services", "forgetSecret", { service: service, event: event }); }
     }),
     theme: {
       get: function () { return call("theme", "get", {}); },
@@ -246,6 +289,15 @@ export const FRAME_KIT = String.raw`(function () {
     vc.getRecord = function (id) { return vc.getNote(id).then(rec); };
     vc.createRecord = function (o) { return vc.createNote(renamed(o || {}, IN)).then(rec); };
     vc.updateRecord = function (id, o) { return vc.updateNote(id, renamed(o || {}, IN)).then(rec); };
+    // a file onto a note it may change (the hub's upload and attach routes, through the shell); transcribe asks the
+    // hub to transcribe audio
+    vc.attach = function (noteId, bytes, type, o) {
+      var b = buf(bytes);
+      if (!b) return Promise.reject(new TypeError("attach takes bytes (an ArrayBuffer)"));
+      var p = { noteId: noteId, bytes: b, type: type };
+      if (o && o.transcribe !== undefined) p.transcribe = o.transcribe === true;
+      return call("vault", "attach", p);
+    };
     uni.vault = vc;
   }
   Object.freeze(uni.theme);

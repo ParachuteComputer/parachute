@@ -3,8 +3,13 @@
 //! pairing.rs, used to sign in to a hub by door.rs and for an allowed applet's services by services.rs). Everything else
 //! lives in the web app.
 
+mod approvals;
+mod cards;
 pub mod door;
+mod files;
 pub mod key;
+pub mod keyring;
+pub mod notify;
 pub mod pairing;
 pub mod services;
 
@@ -59,6 +64,22 @@ fn signin_return<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
 #[cfg(target_os = "android")]
 pub(crate) mod android {
     pub struct KeyPluginHandle<R: tauri::Runtime>(pub tauri::plugin::PluginHandle<R>);
+    /// The device unlock and the app's leave-the-screen count (gen/android/.../UnlockPlugin.kt): keyring.rs.
+    pub struct UnlockPluginHandle<R: tauri::Runtime>(pub tauri::plugin::PluginHandle<R>);
+}
+
+fn unlock_plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    tauri::plugin::Builder::<R>::new("parachute-unlock")
+        .setup(|_app, _api| {
+            #[cfg(target_os = "android")]
+            {
+                use tauri::Manager;
+                let handle = _api.register_android_plugin("computer.parachute.app", "UnlockPlugin")?;
+                _app.manage(android::UnlockPluginHandle(handle));
+            }
+            Ok(())
+        })
+        .build()
 }
 
 fn key_plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
@@ -83,17 +104,41 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(signin_return())
-        .plugin(key_plugin());
+        .plugin(key_plugin())
+        .plugin(unlock_plugin())
+        .plugin(notify::plugin())
+        .plugin(notify::push_plugin())
+        .plugin(files::plugin());
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+    // the native OK/Cancel before an approval where there is no device unlock to ask (keyring.rs); Rust calls it, the
+    // web side has no permission for it
+    #[cfg(all(desktop, not(target_os = "macos")))]
+    let builder = builder.plugin(tauri_plugin_dialog::init());
     builder
         .manage(key::KeyState::default())
         .manage(pairing::PairState::default())
         .manage(services::ServicesState::default())
+        .manage(keyring::KeyringState::default())
+        .manage(notify::NotifyState::default())
         .invoke_handler(tauri::generate_handler![
             app_version,
             webview_runtime,
+            files::open_link,
+            files::save_file,
             key::key_status,
+            cards::svc_card_view,
+            cards::svc_card_answer,
+            cards::svc_card_sent,
+            cards::svc_secret_view,
+            cards::svc_secret_send,
+            cards::svc_secret_forget,
+            keyring::keyring_status,
+            keyring::keyring_make_approval,
+            keyring::keyring_remove_approval,
+            keyring::keyring_enrollment,
+            keyring::approvers_add,
+            keyring::approvers_remove,
             key::key_create,
             key::key_import,
             key::key_forget,
@@ -113,7 +158,11 @@ pub fn run() {
             services::svc_private_save,
             services::svc_token_set,
             services::svc_token_has,
-            services::svc_log
+            services::svc_log,
+            notify::notify_set,
+            notify::push_status,
+            notify::push_setup,
+            notify::push_register
         ])
         .setup(|app| {
             #[cfg(desktop)]

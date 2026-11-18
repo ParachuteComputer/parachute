@@ -31,7 +31,8 @@ export function createGrantStore(storage: StorageLike | null = typeof localStora
     } catch { parsed.clear(); }
     return (memory = parsed);
   };
-  const write = () => { try { storage?.setItem(GRANTS_KEY, JSON.stringify(Object.fromEntries(read()))); } catch { /* session only */ } };
+  const listeners = new Set<() => void>();
+  const write = () => { try { storage?.setItem(GRANTS_KEY, JSON.stringify(Object.fromEntries(read()))); } catch { /* session only */ } listeners.forEach((f) => { try { f(); } catch { /* one listener's failure is its own */ } }); };
   return {
     status(subject: string, scope: string, html: string): GrantStatus {
       const r = read().get(subject);
@@ -48,6 +49,8 @@ export function createGrantStore(storage: StorageLike | null = typeof localStora
       read().set(subject, { scope, html, grantedAt: at.toISOString(), grantedUnder: mode, ...(expires ? { expires: expires(at).toISOString() } : {}) }); write();
     },
     revoke(subject: string): void { read().delete(subject); write(); },
+    /** Called after any grant or revoke (the notification list follows the grants: services/notify.ts). */
+    onChange(f: () => void): () => void { listeners.add(f); return () => { listeners.delete(f); }; },
     /** Every subject with a grant. */
     subjects(): string[] { return [...read().keys()]; },
   };

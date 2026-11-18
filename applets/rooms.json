@@ -9,8 +9,10 @@
       "name": "Rooms",
       "glyph": "◎",
       "note": "your rooms on a Buzz relay",
-      "access": []
+      "access": [],
+      "reach": ["voice"]
     },
+    "app": ["links", "save", "attach", "storage"],
     "services": [
       {
         "id": "rooms",
@@ -18,7 +20,9 @@
         "url": "{{relay}}",
         "publish": [9, 7, 5, 40003, 20002],
         "media": true,
-        "private": [{ "kind": 30078, "d": "read-state:", "t": "read-state" }]
+        "private": [{ "kind": 30078, "d": "read-state:", "t": "read-state" }],
+        "approvals": { "from": ["{{uni}}"] },
+        "notify": { "mentions": true, "from": ["{{uni}}"], "gateway": "{{push?}}" }
       }
     ]
   }

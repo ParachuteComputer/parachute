@@ -28,6 +28,23 @@ import { readTheme, watchTheme } from "../theme/store";
 function Taps() {
   const location = useLocation();
   useEffect(() => installTapListener(), []);
+  // notifications while the app is closed follow the grants (services/notify.ts): sent at start, on every change, and
+  // when the app comes back to the front
+  useEffect(() => {
+    let off = () => {};
+    let gone = false;
+    void import("../services/notify").then(async ({ syncNotify }) => {
+      const { deviceGrants } = await import("../applet/grants");
+      if (gone) return;
+      void syncNotify();
+      const offGrants = deviceGrants().onChange(() => { void syncNotify(); });
+      // back in front: the push distributor may have given a new endpoint meanwhile (notify.rs keeps what is unchanged)
+      const back = () => { if (document.visibilityState === "visible") void syncNotify(); };
+      document.addEventListener("visibilitychange", back);
+      off = () => { offGrants(); document.removeEventListener("visibilitychange", back); };
+    });
+    return () => { gone = true; off(); };
+  }, []);
   useEffect(() => { arrived(location.pathname); }, [location.pathname]);
   return null;
 }

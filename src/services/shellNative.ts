@@ -22,4 +22,11 @@ export const shellNative: Native = {
   tokenSet: (subject, service, token) => invoke("svc_token_set", { subject: plainSubject(subject), service, token }),
   tokenHas: (subject, service) => invoke("svc_token_has", { subject: plainSubject(subject), service }),
   log: (subject) => invoke("svc_log", { subject: plainSubject(subject) }),
+  cardView: (session, service, event) => invoke("svc_card_view", { session, service, event }),
+  cardAnswer: (session, service, event, decision, rids) => invoke("svc_card_answer", { session, service, event, decision, rids }),
+  cardSent: (session, service, card, rid) => invoke("svc_card_sent", { session, service, card, rid }),
+  secretView: (session, service, event) => invoke("svc_secret_view", { session, service, event }),
+  secretSend: (session, service, event, value) => invoke("svc_secret_send", { session, service, event, value }),
+  secretForget: (session, service, event) => invoke("svc_secret_forget", { session, service, event }),
+  keyring: () => invoke("keyring_status"),
 };
