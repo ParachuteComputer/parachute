@@ -15,7 +15,7 @@ import { ContractError, ERROR_CODES, hasOnly, plain } from "../contract.ts";
 import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 import type { Answer } from "../../links/resolve.ts";
-import { MAX_LINK } from "../../links/note.ts";
+import { LINKS_PER_CALL, MAX_LINK } from "../../links/note.ts";
 import { bareName, FILE_MAX, LINK_GAP_MS, linkOk, mediaType, parseAccept, SAVE_GAP_MS } from "../files.ts";
 
 /** A note as `recent` gives it: its title, its vault's name, when it changed, and where it opens. No folder, no content. */
@@ -49,7 +49,7 @@ export const notTapped = () => new ContractError(ERROR_CODES.failed, "it asks on
 
 export const RECENT_MAX = 40;
 /** The most note links one `links` call asks about. */
-export const LINKS_MAX = 50;
+export const LINKS_MAX = LINKS_PER_CALL;
 const linkStr = (v: unknown) => typeof v === "string" && v.length > 0 && v.length <= MAX_LINK;
 const fromOk = (v: unknown) => v === undefined || (typeof v === "string" && v.length <= 1000);
 const SHAPE = /^\/(?:v\/[^/?#\\]+(?:\/[na]\/[^/?#\\]+)?)?$/;

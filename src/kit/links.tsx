@@ -10,7 +10,7 @@
 //   Linked   plain text with every link in it drawn as a Link
 // What a link leads to is asked of the shell (app.links), a batch at a time, once a link a frame.
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
-import { findLinks, parseNoteRef } from "../links/note";
+import { findLinks, LINKS_PER_CALL, parseNoteRef } from "../links/note";
 import "./parts.css";
 
 export type Answer = "note" | "away" | null;
@@ -30,17 +30,20 @@ function flush() {
   waiting = [];
   const groups = new Map<string, typeof all>();
   for (const w of all) { const k = w.from ?? ""; groups.set(k, [...(groups.get(k) ?? []), w]); }
-  for (const [from, ws] of groups) for (let i = 0; i < ws.length; i += 50) {
-    const part = ws.slice(i, i + 50);
-    const ask = app().links;
+  // a few links a call, one call after another: each costs reads from the frame's budget, so a long history's links
+  // are asked over a little time instead of all at once (the kit's line waits out a busy shell)
+  const parts: [string, typeof all][] = [];
+  for (const [from, ws] of groups) for (let i = 0; i < ws.length; i += LINKS_PER_CALL) parts.push([from, ws.slice(i, i + LINKS_PER_CALL)]);
+  const ask = app().links;
+  void parts.reduce((prev, [from, part]) => prev.then(() => {
     // without the shell's answer (an applet not allowed `open`, an older app) nothing is a note link
     const asked = ask ? ask(part.map((w) => w.link), from || undefined) : Promise.reject(new Error("no links call"));
-    asked.then((a) => part.forEach((w, j) => w.res(Array.isArray(a) && (a[j] === "note" || a[j] === "away") ? a[j] : null)), () => part.forEach((w) => {
+    return asked.then((a) => part.forEach((w, j) => w.res(Array.isArray(a) && (a[j] === "note" || a[j] === "away") ? a[j] : null)), () => part.forEach((w) => {
       // asked again by the next draw that wants it (a busy shell, a lapse); for now it is text
       answers.delete(keyOf(w.link, w.from));
       w.res(null);
     }));
-  }
+  }), Promise.resolve());
 }
 /** What a note link leads to, asked of the shell once a frame. */
 export function answerFor(link: string, from?: string): Promise<Answer> {

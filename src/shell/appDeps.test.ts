@@ -12,3 +12,22 @@ describe("app.links", () => {
     expect(spent).toEqual([4]);
   });
 });
+
+describe("app.links through a real session", () => {
+  it("a full call fits the frame's read budget; one link past it is refused; a second full call at once waits its turn", async () => {
+    const { createSession } = await import("../applet/session");
+    const { createRouter } = await import("../applet/router");
+    const { createAppModule, LINKS_MAX } = await import("../applet/modules/app");
+    const posts: { id?: string; result?: unknown; error?: { code: string } }[] = [];
+    const session = createSession({ post: (m) => posts.push(m as never), router: createRouter([createAppModule(["open"], appDeps(() => {}, () => null, { pick: async () => [] }))]), grant: {} as never, now: () => 0 });
+    const ask = async (id: string, n: number) => {
+      session.handle({ uni: 1, id, ns: "app", method: "links", params: { links: Array.from({ length: n }, (_, i) => `nosuch:01KA3Z9V6B2W8XQJ4M7N5P0R${String(i).padStart(2, "0")}`) } });
+      await new Promise((r) => setTimeout(r, 0));
+      return posts.find((p) => p.id === id)!;
+    };
+    expect((await ask("a", LINKS_MAX)).result).toEqual(Array(LINKS_MAX).fill(null));
+    expect((await ask("b", LINKS_MAX + 1)).error?.code).toBe("bad_params");
+    // the window is spent for now: refused as busy, which the kit waits out (frameKit's line)
+    expect((await ask("c", LINKS_MAX)).error?.code).toBe("rate_limited");
+  });
+});

@@ -87,3 +87,7 @@ const count = (s: string, c: string) => s.split(c).length - 1;
 
 /** Only the note links in plain text. */
 export const findNoteRefs = (text: string): (Found & { ref: NoteRef })[] => findLinks(text).filter((f): f is Found & { ref: NoteRef } => f.ref !== null);
+
+/** Most links one `app.links` call takes. Each costs the applet two vault reads, whatever it names (shell/appDeps.ts),
+ *  and a frame has 60 reads in ten seconds (applet/contract.ts): 20 fit with room for the applet's own reads. */
+export const LINKS_PER_CALL = 20;

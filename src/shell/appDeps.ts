@@ -32,11 +32,11 @@ export const MISS_MS = 60_000;
 /** Which notes are there, asked of their vaults once a session (a note that was there is taken to be there still). */
 export function noteFinder(read: (rec: VaultRecord, idOrPath: string) => Promise<VaultNote | null>) {
   const seen = new Map<string, Promise<Found | null>>();
-  return (rec: VaultRecord, idOrPath: string, charge: () => void = () => {}) => {
+  // (an applet's link lookups are charged up front, the same for each link: app.links below)
+  return (rec: VaultRecord, idOrPath: string) => {
     const k = `${rec.key}\u0000${idOrPath}`;
     let p = seen.get(k);
     if (!p) {
-      charge();
       p = read(rec, idOrPath).then((n) => (n && typeof n.id === "string" ? { id: n.id, path: typeof n.path === "string" ? n.path : "", code: isAppletCode(n) } : null));
       // a failed read (the network, a refresh) is asked again next time; a note that isn't there, after a minute (Uni
       // may cite a note a moment before the hub has it)
@@ -59,7 +59,7 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
   }) as Promise<VaultNote | null>);
   // a rule's path is a folder ending in / (manifest.ts), as the vault module checks it
   const mayRead = (path: string) => reads.some((f) => f.endsWith("/") && path.startsWith(f));
-  const resolver = (charge?: () => void): ResolveDeps => ({ vaults: listVaults, here, mayRead, find: (rec, p) => find(rec, p, charge) });
+  const resolver = (): ResolveDeps => ({ vaults: listVaults, here, mayRead, find });
   return {
     async links(links, from, charge) {
       // the same for every link, read or not (a wikilink may take two): what it costs says nothing of what it names
