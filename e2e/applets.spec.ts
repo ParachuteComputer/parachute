@@ -112,8 +112,18 @@ test("a link that arrives while the applet runs doesn't inherit its start", asyn
   await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });
 
-test("Back and Forward never start it, even to a screen a tap once started", async ({ page }) => {
+// Back and Forward start nothing. Since applets are kept running while the person is elsewhere (src/shell/kept.tsx), a
+// screen still running comes back as it was (the same document, nothing started again); one that was stopped waits
+// with Open, as before.
+test("Back and Forward never start it: a screen still running is as it was, a stopped one waits with Open", async ({ page }) => {
   await allow(page);
+  const doc = page.locator("iframe.applet-frame").contentFrame().locator("body");
+  await doc.evaluate(() => { (window as unknown as { __here: number }).__here = 1; });
+  await page.goBack();
+  await page.goForward();
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(1);
+  expect(await doc.evaluate(() => (window as unknown as { __here?: number }).__here)).toBe(1);
+  await page.getByRole("button", { name: "Stop" }).click();
   await page.goBack();
   await page.goForward();
   await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();

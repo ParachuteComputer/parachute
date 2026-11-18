@@ -103,7 +103,17 @@ fieldset.plain legend { padding: 0; }
 .grant-stress { font-weight: 600; }
 .grant-rest, .grant-changed { font-size: 14px; }
 .grant-meta { font-size: 12.5px; margin: 6px 0 0; }
-.grant-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+/* the card's face (face.ts): a short list, the risky asks in bold words; the exact lines fold under Show details */
+.grant-sub { font-size: 14px; margin: 0 0 8px; }
+.grant-face { list-style: none; margin: 0 0 8px; padding: 0; }
+.grant-face li { padding: 6px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; font-size: 15px; line-height: 1.4; }
+.grant-face li strong, .grant-whose strong { font-weight: 650; }
+.grant-also { margin: 0 0 8px; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.grant-whose { font-size: 15px; margin: 0 0 8px; }
+.grant-new { display: inline-block; margin-right: 6px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 1px; }
+.grant-more { margin-right: auto; min-height: 44px; padding: 6px 0; border: 0; background: none; font: inherit; font-size: 14px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.grant-details { margin-top: 12px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 14px; }
+.grant-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
 /* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, nothing that moves but the figures */
 .record-time { margin: 6px 0; font-size: 20px; font-variant-numeric: tabular-nums; }
 .notice { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: 0 0 8px; font-size: 14px; }

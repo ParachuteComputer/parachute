@@ -3,7 +3,7 @@
 // applet's push gateway sends. Without one (a de-Googled phone with nothing installed yet), Parachute keeps its own
 // connection to the relay: on unless turned off here; it costs battery, so ntfy is offered first. Android only.
 import { useEffect, useState } from "react";
-import { syncNotify, type PushStatus } from "../services/notify";
+import { notifyOutcome, onNotifyOutcome, outcomeLines, syncNotify, type PushStatus } from "../services/notify";
 import { inShell } from "../vault/oauth";
 import { openLinkOut } from "../shell/device";
 
@@ -20,6 +20,9 @@ const host = (url: string) => { try { return new URL(url).host; } catch { return
 export default function NotifySettings() {
   const [s, setS] = useState<PushStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // how the last bringing-up-to-date went (services/notify.ts): a vault it couldn't read, a gateway that refused
+  const [outcome, setOutcome] = useState(notifyOutcome);
+  useEffect(() => onNotifyOutcome(() => setOutcome(notifyOutcome())), []);
   const read = () => invoke<PushStatus>("push_status").then(setS, () => setS(null));
   // read again when the app comes back to the front (after Get ntfy, installed, the person returns here)
   useEffect(() => {
@@ -49,6 +52,7 @@ export default function NotifySettings() {
         {ds.map((d) => <button key={d.id} type="button" className="quiet-button" aria-pressed={d.id === s.distributor} onClick={() => run(() => invoke("push_setup", { distributor: d.id }))}>{d.name}</button>)}
       </div> : null}
       {s.registered?.length ? <p className="small quiet">Registered with {[...new Set(s.registered.map((r) => host(r.gateway)))].join(", ")}.</p> : null}
+      {outcomeLines(outcome, host).map((l) => <p key={l} className="small" role="status">{l}</p>)}
       <label className="line"><span><input type="checkbox" checked={!!s.fallback} onChange={(e) => run(() => invoke("push_setup", { fallback: e.target.checked }))} /> Parachute's own connection, for what no push service delivers (uses more battery)</span></label>
       {error ? <p className="error" role="alert">{error}</p> : null}
     </section>

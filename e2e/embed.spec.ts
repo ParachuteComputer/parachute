@@ -62,11 +62,22 @@ test("Techne's Events on the home: the host's card says what its page shows, the
     const sheet = page.getByRole("dialog", { name: /Events is asking/ });
     // it takes the focus: a screen reader moves into it, and no frame holds the focus while it is open
     await expect(sheet).toBeFocused();
-    await expect(sheet).toContainText("A component asks for access");
+    await expect(sheet.getByRole("heading")).toHaveText("Allow the component Events?");
     await expect(sheet).toContainText(`from techne (someone else's, at ${hostOf(techneState().origin)})`);
     await expect(sheet).toContainText("Read notes outside its own folder, in Events/");
     await expect(sheet).toContainText("Your page hands it: days 30.");
-    await expect(sheet).toContainText("It acts as you in techne, with your sign-in there. It sees nothing in your own vaults.");
+    await expect(sheet.getByText("It acts as you in techne, with your sign-in there. It sees nothing in your own vaults.")).toBeVisible();
+    // Show details grows the sheet upward, moving Allow: a press right after counts for nothing, until it settles again
+    await page.waitForTimeout(800);
+    const allowAt = async () => { const b = (await sheet.getByRole("button", { name: "Allow" }).boundingBox())!; return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+    const before = await allowAt();
+    await sheet.getByRole("button", { name: "Show details" }).click();
+    const after = await allowAt();
+    expect(after.y).not.toBe(before.y);
+    await page.mouse.click(after.x, after.y);
+    await expect(sheet.getByText("(a name from its record, not verified)")).toBeVisible();
+    await expect(sheet).toBeVisible();
+    await expect(embed(page, "Events").getByText("Seed swap")).toHaveCount(0);
     await page.waitForTimeout(800);
     await sheet.getByRole("button", { name: "Allow" }).click();
     await expect(embed(page, "Events").getByText("Seed swap")).toBeVisible();

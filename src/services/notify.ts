@@ -43,14 +43,37 @@ export function entriesFrom(k: KeyringStatus | null, reads: readonly { key: stri
   return out.slice(0, 8);
 }
 
-/** What allowed applets of the person's own vaults ask for, or null when something couldn't be read. */
-export async function notifyEntries(): Promise<NotifyEntry[] | null> {
+/** What allowed applets of the person's own vaults ask for (null when something couldn't be read), and the vaults that
+ *  couldn't be read. */
+export async function notifyEntries(): Promise<{ entries: NotifyEntry[] | null; unread: string[]; noKey: boolean }> {
   const k = await keyringNow(true);
   // read as the applet screen keys them (refreshApplets): with the vault record, so an applet that imports a component
   // (Rooms and an area import Room) hashes with its imports and its grant reads as allowed
-  const reads = await Promise.all(listVaults().filter((rec) => isMine(rec)).map(async (rec) => ({ key: rec.key, read: await readApplets(clientFor(rec), rec.key, false, rec).catch(() => null) })));
+  const reads = await Promise.all(listVaults().filter((rec) => isMine(rec)).map(async (rec) => ({ key: rec.key, name: rec.vault, read: await readApplets(clientFor(rec), rec.key, false, rec).catch(() => null) })));
   const g = deviceGrants();
-  return entriesFrom(k, reads, (subject, scope, html) => g.status(subject, scope, html));
+  return { entries: entriesFrom(k, reads, (subject, scope, html) => g.status(subject, scope, html)), unread: reads.filter((r) => !r.read).map((r) => r.name), noKey: !k || !npubDecode(k.everyday) };
+}
+
+/** How the last bringing-up-to-date went, for Settings: vaults it couldn't read (then nothing was handed on), how many
+ *  applets ask to tell the person something, and each gateway that didn't take this phone, with why. */
+export type NotifyOutcome = { unread: string[]; noKey: boolean; asking: number; failed: { gateway: string; why: string }[]; error?: string };
+let outcome: NotifyOutcome | null = null;
+const outcomeListeners = new Set<() => void>();
+export const notifyOutcome = () => outcome;
+export function onNotifyOutcome(f: () => void): () => void { outcomeListeners.add(f); return () => { outcomeListeners.delete(f); }; }
+const said = (e: unknown) => (e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : String(e));
+
+/** What Settings says about it, a line each, none twice. Pure. */
+export function outcomeLines(o: NotifyOutcome | null, host: (url: string) => string): string[] {
+  if (!o) return [];
+  if (o.noKey) return ["Couldn't read this device's key just now, so notifications weren't updated."];
+  if (o.unread.length) return [`Couldn't reach ${o.unread.join(", ")} just now, so notifications weren't updated. Parachute tries again when you come back to it.`];
+  const lines = [
+    ...(o.error ? [`Notifications weren't updated: ${o.error}`] : []),
+    ...(o.asking || o.error ? [] : ["No applet asks to tell you anything yet. Rooms does once you allow it."]),
+    ...o.failed.map((f) => `Couldn't register with ${host(f.gateway)}: ${f.why}`),
+  ];
+  return [...new Set(lines)];
 }
 
 export type PushStatus = {
@@ -76,26 +99,44 @@ export function pushPlan(entries: readonly NotifyEntry[], registered: readonly {
   return { register: [...want.values()], unregister: drop };
 }
 
+/** The registrations to make: with a push service in use, all of them; none without one (Parachute's own connection then
+ *  serves the applets, and a registration would only fail). A distributor first: with none chosen and only one
+ *  installed, that one (`setup`; with several, the person picks in Settings: no chooser pops up on its own). Each
+ *  gateway's endpoint is asked of the distributor when that gateway registers. */
+export async function toRegister<T>(want: readonly T[], status: Pick<PushStatus, "distributors" | "distributor">, setup: () => Promise<unknown>): Promise<T[]> {
+  if (!want.length) return [];
+  if (status.distributors?.some((d) => d.id === status.distributor)) return [...want];
+  if (status.distributors?.length === 1 && await setup().then(() => true, () => false)) return [...want];
+  return [];
+}
+
 let running: Promise<void> | null = null;
 /** Hand the list to the native side, then bring the gateways in line (the app on a device only). A second call while
  *  one runs waits for it, then runs. */
 export function syncNotify(): Promise<void> {
   if (!inShell()) return Promise.resolve();
   const go = async () => {
-    const entries = await notifyEntries();
-    if (!entries) return; // something couldn't be read: the native side keeps the last list
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("notify_set", { entries });
-    const status = await invoke<PushStatus>("push_status");
-    if (!status.available) return;
-    const plan = pushPlan(entries, status.registered ?? []);
-    // a distributor first: with none chosen and only one installed, that one (with several, the person picks in
-    // Settings: no chooser pops up on its own). Each gateway's endpoint is asked of it when that gateway registers.
-    const chosen = status.distributors?.some((d) => d.id === status.distributor);
-    if (plan.register.length && !chosen && status.distributors?.length === 1) await invoke("push_setup", {}).catch(() => {});
-    const hubs = knownHubs();
-    for (const r of plan.unregister) await invoke("push_register", { ...r, op: "unregister", hubs }).catch(() => {});
-    for (const r of plan.register) await invoke("push_register", { ...r, op: "register", hubs }).catch(() => {});
+    const failed: NotifyOutcome["failed"] = [];
+    let read: Awaited<ReturnType<typeof notifyEntries>> | null = null;
+    const told = (error?: string) => {
+      outcome = { unread: read?.unread ?? [], noKey: read?.noKey ?? false, asking: read?.entries?.length ?? 0, failed, ...(error ? { error } : {}) };
+      outcomeListeners.forEach((f) => f());
+    };
+    try {
+      read = await notifyEntries();
+      const entries = read.entries;
+      if (!entries) { told(); return; } // something couldn't be read: the native side keeps the last list
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("notify_set", { entries });
+      const status = await invoke<PushStatus>("push_status");
+      if (!status.available) { told(); return; }
+      const plan = pushPlan(entries, status.registered ?? []);
+      const register = await toRegister(plan.register, status, () => invoke("push_setup", {}));
+      const hubs = knownHubs();
+      for (const r of plan.unregister) await invoke("push_register", { ...r, op: "unregister", hubs }).catch(() => {});
+      for (const r of register) await invoke("push_register", { ...r, op: "register", hubs }).catch((e: unknown) => { failed.push({ gateway: r.gateway, why: said(e) }); });
+      told();
+    } catch (e) { told(said(e)); }
   };
   running = (running ?? Promise.resolve()).then(go, go).catch(() => {});
   return running;

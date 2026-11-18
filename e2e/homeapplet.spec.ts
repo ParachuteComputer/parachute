@@ -56,7 +56,7 @@ test("a home applet written only by create-note opens on start after Allow: the 
     // a pin takes the person to that applet
     await applet(page).getByRole("region", { name: "Pinned" }).getByRole("button", { name: /Recipe box/ }).click();
     await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/a/`));
-    await expect(page.getByRole("heading", { name: /Recipe box/ })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /Recipe box/ })).toBeVisible();
   } finally {
     await api(hubState(), "DELETE", `notes/${home.id}`);
     await api(hubState(), "DELETE", `notes/${s.id}`);

@@ -24,10 +24,10 @@ import GrantCard from "../applet/GrantCard";
 import { readApplet, resolvedOf, ownFolder, type AppletEntry } from "../applet/discovery";
 import { claimOf, withoutRoles } from "../applet/opens";
 import { readRoleTags } from "../open/roles";
-import { fingerprint, grantExpiry, grantKey, grantLines, grantOf } from "../applet/grant";
+import { fingerprint, grantExpiry, grantKey, grantOf } from "../applet/grant";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { codeHash, codeKindOf, extensionOf, modulePage, prepare, usesNote, type CodeKind } from "../applet/code";
-import { importLines, readImports, type Imported } from "../applet/resolveImports";
+import { readImports, type Imported } from "../applet/resolveImports";
 import { compositeHash } from "../applet/imports";
 import reactKitSource from "virtual:react-kit";
 import reactNoteKitSource from "virtual:react-note-kit";
@@ -316,11 +316,11 @@ export default function AppletScreen() {
     if (declined) return shell(<div className="card"><p>{name} isn't allowed to run.</p><button type="button" className="primary" onClick={tap(() => setDeclined(false))}>Ask again</button> {plainNote}</div>);
     return shell(<>
       {note && <p className="quiet">{name} asks before it opens {titleOf(note)}.</p>}
-      <GrantCard reaches={entry.services.length > 0 || entry.app.includes("links")} name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"} codeChanged={decision === "ask-updated" && status === "updated"}
-        broughtChanged={pinMoved} asksOther={status === "none" && !!grants.record(subject)}
-        lines={[...grantLines({ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services), embedsFrom: loaded.state === "ok" ? loaded.from : [] }, ownFolder(entry.path), lineOptions(keyring)), ...importLines(loaded.state === "ok" ? loaded.imports : [])]}
-        withImports={loaded.state === "ok" && loaded.imports.length > 0} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
-        onAllow={() => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry); if (brought && pinMoved) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); }}
+      <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"}
+        grant={{ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services), embedsFrom: loaded.state === "ok" ? loaded.from : [] }} ownFolder={ownFolder(entry.path)} keyring={lineOptions(keyring)}
+        imports={loaded.state === "ok" ? loaded.imports : []} scope={keys.scope} code={keys.html} status={status} was={grants.record(subject)}
+        broughtChanged={pinMoved} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
+        onAllow={(asked) => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry, asked); if (brought && pinMoved) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); }}
         onNotNow={() => setDeclined(true)} />
     </>);
   }
