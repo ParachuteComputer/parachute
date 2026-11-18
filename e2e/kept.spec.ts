@@ -16,7 +16,7 @@ export default function Kept() {
   const [seen, setSeen] = useState<string[]>([]);
   useEffect(() => onShown((on: boolean) => {
     setSeen((s) => [...s, on ? "shown" : "hidden"]);
-    if (!on) Promise.resolve(app.open("/settings")).then((r: unknown) => setSeen((s) => [...s, "open while hidden: " + String(r)]), () => setSeen((s) => [...s, "open while hidden: refused"]));
+    if (!on) Promise.resolve(app.open("/v/" + "x" + "/a/" + "y")).then((r: unknown) => setSeen((s) => [...s, "open while hidden: " + String(r)]), () => setSeen((s) => [...s, "open while hidden: refused"]));
   }), []);
   return <main><h1>Kept</h1><p id="booted">Booted {booted}</p><p id="seen">{seen.join(", ")}</p></main>;
 }
@@ -31,6 +31,7 @@ test("an applet left for another screen keeps running hidden, and is the same fr
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Kept/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const booted = (await frame(page).locator("#booted").textContent())!;
+    const own = page.url();
     expect(booted).toMatch(/^Booted \w+$/);
 
     // elsewhere in the app (the bar's Launcher): its frame stays, hidden; it is told, and a tap-only call is refused
@@ -43,7 +44,7 @@ test("an applet left for another screen keeps running hidden, and is the same fr
     await page.goBack();
     await expect(frame(page).locator("#booted")).toHaveText(booted, { timeout: 1_000 });
     await expect(frame(page).locator("#seen")).toHaveText("hidden, open while hidden: false, shown");
-    await expect(page).toHaveURL(/\/a\//); // still the applet's own address, nothing else opened
+    await expect(page).toHaveURL(own); // still the applet's own address: what it tried to open while hidden didn't
 
     // its code changes while it is kept: shown again, the card asks before the new code runs
     await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Launcher" }).click();
