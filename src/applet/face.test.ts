@@ -59,6 +59,12 @@ describe("the face keeps every stressed line's facts", () => {
     expect(t).toContain("bücher.example (xn--bcher-kva.example)");
     expect(t).toContain("only in «Garden» (abcdef01…), named by the applet");
   });
+  it("two relays: each approval line names its own server, so a second one reads apart from the first", () => {
+    const { g, folder } = grantFor("rooms");
+    const two = { ...g, services: [...g.services!, { ...g.services![0], id: "other", url: "wss://other.example.org/" }] };
+    const t = faceTexts(holds(two, folder, trusted));
+    expect(t.filter((l) => l.startsWith("High risk")).map((l) => l.includes("on buzz.example.org") || l.includes("on other.example.org"))).toEqual([true, true]);
+  });
   it("Rooms says in a few lines what the details say in fifteen", () => {
     const { g, folder } = grantFor("rooms");
     const face = faceOf(g, folder, trusted);

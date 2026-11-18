@@ -28,17 +28,20 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
   for (const l of grantLines({ ...g, opens: [], app: [], services: [], reach: [], embedsFrom: [] }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
   for (const o of g.opens) also.push(`opens ${o.type} notes you tap`);
 
+  // with one server, its approval and notification lines say "there"; with several, each names its own
+  const several = (g.services ?? []).filter((x) => x.kind === "nostr-relay").length > 1;
   for (const s of g.services ?? []) {
     const at = hostWords(s);
+    const there = several ? `on ${at}` : "there";
     if (s.kind === "nostr-relay") {
       const posts = [9, 7, 40003, 20002].filter((k) => s.publish.includes(k)).map((k) => (k === 40003 ? "edits" : NAMED_KINDS[k]));
       const does = [...(posts.length ? [`posts ${joinWords(posts)} ${roomsWords(s)}`] : ["signs in"]), ...(s.publish.includes(5) ? [`deletes what you posted${s.rooms?.length && !posts.length ? ` ${roomsWords(s)}` : ""}`] : []), ...(s.media ? ["uploads and opens files"] : [])];
       lines.push({ lead: `As you on ${at}`, rest: ` (your everyday key): ${does.length > 1 ? `${does.slice(0, -1).join(", ")}, and ${does[does.length - 1]}` : does[0]}. What it reads can go there.`, risky: true });
-      if (s.approvals) lines.push({ lead: "High risk, with your approval key:", rest: ` answers approval cards and secret requests from ${joinWords(s.approvals.from.map(who))} on ${at}${same}. Powerful ones ask for your device unlock.`, risky: true });
+      if (s.approvals) lines.push({ lead: "High risk, with your approval key:", rest: ` answers approval cards and secret requests from ${joinWords(s.approvals.from.map(who))} ${there}${same}. Powerful ones ask for your device unlock.`, risky: true });
       if (s.notify) {
         const what = [s.notify.mentions ? "messages that name you" : "", s.notify.from.length ? `every message from ${joinWords(s.notify.from.map(who))}` : ""].filter(Boolean).join(" and ");
         const gw = s.notify.gateway ? hostWords({ kind: "http", url: s.notify.gateway }) : null;
-        lines.push({ lead: "Notifies you while Parachute is closed", rest: `: ${what} on ${at}${s.rooms?.length ? `, ${roomsWords(s)}` : ""}${gw ? `. Through ${gw}, which gets your public key and where to reach this phone` : ""}.`, risky: !!gw });
+        lines.push({ lead: "Notifies you while Parachute is closed", rest: `: ${what} ${there}${s.rooms?.length ? `, ${roomsWords(s)}` : ""}${gw ? `. Through ${gw}, which gets your public key and where to reach this phone` : ""}.`, risky: !!gw });
       }
     } else {
       lines.push(s.auth === "nip98" ? { lead: `As you on ${at}`, rest: " (your everyday key): sends requests signed as you. What it reads can go there.", risky: true }
