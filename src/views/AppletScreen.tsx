@@ -9,6 +9,9 @@
 //   stopped, with an Open button;
 // - it is handed a note (`ready().open`) only when that note is one it claims (opens.ts), and only when the code that
 //   loaded is the code that was allowed.
+// At its own address it is a kept screen (shell/kept.tsx): while it runs, the person's own code, it stays running hidden
+// when they go elsewhere, and shows again at once; hidden, it gets no tap and is told so (`shown`); shown again, its
+// note is read again, and changed code or a changed grant puts the card in its place.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
@@ -62,6 +65,7 @@ import { chooseStart, startChosenHere, takeStart } from "../shell/start";
 import { barNow, settingsReadNow } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
+import { useKept } from "../shell/kept";
 
 const grants = deviceGrants();
 
@@ -130,6 +134,11 @@ export default function AppletScreen() {
   const bump = () => setBump((n) => n + 1);
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
   const [keys, setKeys] = useState<{ scope: string; html: string } | null>(null);
+  const kept = useKept();
+  // shown again after being kept hidden: its note is read again (below), quietly while nothing changed
+  const [recheck, setRecheck] = useState(0);
+  const was = useRef({ loaded, keys });
+  was.current = { loaded, keys };
   // a page with embeds: how tall its own content is (and the last few steps it grew by, to stop a page that measures
   // the screen growing for ever)
   const [hostHeight, setHostHeight] = useState<{ h: number; steps: number[] }>({ h: 0, steps: [] });
@@ -143,7 +152,9 @@ export default function AppletScreen() {
   useEffect(() => {
     if (!rec || !appletId) return;
     let on = true;
-    setLoaded({ state: "loading" }); setKeys(null);
+    // a recheck of a screen that runs keeps it running unless what was allowed changed
+    const quiet = recheck > 0 && was.current.loaded.state === "ok" && !!was.current.keys;
+    if (!quiet) { setLoaded({ state: "loading" }); setKeys(null); }
     const c = clientFor(rec);
     void (async () => {
       try {
@@ -171,6 +182,7 @@ export default function AppletScreen() {
           late || imports.length ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), pointerFor(rec, n.id).catch(() => null)]);
         const hash = imports.length && kind !== "html" ? await compositeHash(kind, source, imports) : code.hash;
         if (!on) return;
+        if (quiet && was.current.keys?.scope === scope && was.current.keys?.html === hash) return;
         if (code.compiled && !code.compiled.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${code.compiled.error}` }); return; }
         let page: string | null = null;
         if (kind === "html") page = source;
@@ -180,11 +192,12 @@ export default function AppletScreen() {
         setKeys({ scope, html: hash });
         setBrought(pointer);
       } catch (e) {
-        if (on) setLoaded({ state: "error", error: e instanceof Error ? e.message : "the vault couldn't be read" });
+        // a recheck the vault couldn't answer (offline a moment) leaves the running screen as it is
+        if (on && !quiet) setLoaded({ state: "error", error: e instanceof Error ? e.message : "the vault couldn't be read" });
       }
     })();
     return () => { on = false; };
-  }, [rec?.key, appletId, askedNote, notMine]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rec?.key, appletId, askedNote, notMine, recheck]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const entry = loaded.state === "ok" ? loaded.entry : null;
   const subject = rec && entry ? subjectOf(rec.key, entry.noteId) : null;
@@ -264,6 +277,20 @@ export default function AppletScreen() {
   const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, access: entry?.manifest.allow ?? [], services: entry?.services ?? [], ...(handed ? { open: handed } : {}), ...(sized ? { page: { embeds: entry!.embeds.map((e) => e.name) } } : {}), ...(launch ? { launch } : {}) }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized, launchKey, entry]); // eslint-disable-line react-hooks/exhaustive-deps
   const sessionNow = useRef<Session | null>(null);
   useEffect(() => { if (launch) sessionNow.current?.sendEvent("launch", launch); }, [launchKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // kept running while hidden (shell/kept.tsx) only while it runs the person's own code, with nothing from another vault,
+  // and no note handed to it
+  const keepable = granted && started && !!page && !handed && !!rec && isMine(rec) && loaded.state === "ok" && loaded.imports.every((i) => i.own && i.whose === "mine");
+  useEffect(() => { kept.keepable(keepable); }, [keepable]); // eslint-disable-line react-hooks/exhaustive-deps
+  // hidden: it is told, and a sheet or recorder open for it closes; shown again: told, and its note read again
+  const shownBefore = useRef(kept.shown);
+  useEffect(() => {
+    if (shownBefore.current === kept.shown) return;
+    shownBefore.current = kept.shown;
+    sessionNow.current?.sendEvent("shown", { shown: kept.shown });
+    if (!kept.shown) { device.cancel(); sheets.cancel(); } else setRecheck((n) => n + 1);
+  }, [kept.shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a grant changed elsewhere (revoked in Settings while this was kept): drawn again, so it stops at once
+  useEffect(() => grants.onChange(bump), []); // eslint-disable-line react-hooks/exhaustive-deps
   const tap = (f: () => void) => (e: React.MouseEvent) => { if (e.isTrusted) f(); };
 
   if (!rec) return <NoVault />;
