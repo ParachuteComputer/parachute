@@ -11,6 +11,10 @@
 //   onRead   optional: called with the newest message's time while the room is open and looked at (the importer keeps
 //            read state): not while the app is in the background or the applet is kept hidden (useLooking)
 //   onBack   optional: a "← Rooms" link back to the importer's list
+//   seed     optional: the room's messages the importer already holds (and their authors' names): drawn at once, before
+//            the room's own read, unless it opens at a message
+//   place    optional: where it was left, kept by the importer across opens: `get()` the distance from the foot it was
+//            left at (null: at the foot), `set(d)` when it goes
 // Which key is Uni's is the service's own declaration (ready().services: approvals.from, else notify.from): without
 // one there is no turn line, no Stop and no listening switch. Its named exports (the store, the cards' readers, the
 // time words) are for the importer's own list.
@@ -456,9 +460,11 @@ export function lastText(s: Store["s"], e: Ev) {
 
 
 // ── the room ──
-type Props = { service: string; room: string; name?: string; at?: string; readAt?: number; onRead?: (latest: number) => void; onBack?: () => void };
+type Place = { get(): number | null; set(fromFoot: number | null): void };
+type Props = { service: string; room: string; name?: string; at?: string; readAt?: number; onRead?: (latest: number) => void; onBack?: () => void;
+  seed?: { msgs: Ev[]; names: Map<string, string> }; place?: Place };
 
-export default function Room({ service, room, name: named, at, readAt, onRead, onBack }: Props) {
+export default function Room({ service, room, name: named, at, readAt, onRead, onBack, seed, place }: Props) {
   const st = useMemo(createStore, [service, room]);
   const s = useStore(st);
   const relay = useMemo(() => services.relay(service), [service]);
@@ -467,7 +473,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   const [members, setMembers] = useState<string[]>([]);
   const [uni, setUni] = useState<string | null>(null);
   const [listening, setListening] = useState(true);
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(() => !!seed?.msgs.length && !at);
   const [older, setOlder] = useState<"more" | "loading" | "start">("more");
   const [err, setErr] = useState("");
   const [posting, setPosting] = useState(false);
@@ -484,6 +490,14 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     for (const c of chunk(want, 100)) (await relay.query([{ kinds: [0], authors: c }]).catch(() => [])).forEach(st.add);
     if (want.length) st.bump();
   };
+
+  // what the importer already holds, drawn at once (opening at a message waits for the read, which finds it)
+  useMemo(() => {
+    if (!seed || at) return;
+    for (const [k, v] of seed.names) st.s.names.set(k, v);
+    seed.msgs.forEach(st.add);
+  }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [seeded] = useState(() => !!seed?.msgs.length && !at);
 
   useEffect(() => {
     let on = true, stop: (() => void) | null = null;
@@ -537,10 +551,19 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   // opened: at the message it was opened for (once), else at the newest; a thread opens at its newest
   useEffect(() => {
     if (!loaded) return;
-    const el = !placed.current && at ? scroller.current?.querySelector<HTMLElement>(`[data-id="${at}"]`) : null;
+    const sc = scroller.current;
+    const el = !placed.current && at ? sc?.querySelector<HTMLElement>(`[data-id="${at}"]`) : null;
+    // back in a room you left partway up: there again, measured from the foot (older messages may have come in above)
+    const left = !placed.current && !at && !thread ? place?.get() ?? null : null;
     placed.current = true;
-    if (el && scroller.current) { scroller.current.scrollTop = Math.max(0, el.offsetTop - scroller.current.clientHeight / 3); atBottom.current = false; } else toBottom();
+    if (el && sc) { sc.scrollTop = Math.max(0, el.offsetTop - sc.clientHeight / 3); atBottom.current = false; }
+    else if (left !== null && sc) { sc.scrollTop = Math.max(0, sc.scrollHeight - sc.clientHeight - left); atBottom.current = false; }
+    else toBottom();
   }, [loaded, thread]);
+  // where it was left, for the next open
+  const placeNow = useRef(place);
+  placeNow.current = place;
+  useEffect(() => () => { const sc = scroller.current; if (sc && !thread) placeNow.current?.set(atBottom.current ? null : sc.scrollHeight - sc.scrollTop - sc.clientHeight); }, [thread]);
   // new posts while it is open are read while you can see them (not while the app or the applet is hidden), and followed
   // when you are at the foot
   const looking = useLooking();
