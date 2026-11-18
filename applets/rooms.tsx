@@ -184,7 +184,8 @@ export default function Rooms() {
         const since = now() - 5;
         // side by side, but at most a few calls at a time: the shell holds 8 of an applet's calls waiting at once
         const [metas, history] = await Promise.all([
-          ids.length ? relay.query(chunk(ids, 100).map((c) => ({ kinds: [39000], "#d": c }))) : Promise.resolve([]),
+          // a call for each hundred rooms: one naming every room is over a frame's request budget past about two hundred
+          pooled(chunk(ids, 100), 3, (c) => relay.query([{ kinds: [39000], "#d": c }])).then((xs) => xs.flat()),
           pooled(chunk(ids, 10), 3, (c) => relay.query(c.map((id) => ({ kinds: [9], "#h": [id], limit: 40 })))),
         ]);
         if (!on || down) return;
@@ -276,7 +277,9 @@ function RoomList({ st, status, open, y }: { st: Store; status: string; open: (i
   const search = async () => {
     if (!q.trim()) { setFound(null); return; }
     const ids = [...s.rooms.keys()];
-    const out = await services.relay("rooms").query(chunk(ids, 100).map((c) => ({ kinds: [9], "#h": c, search: q.trim(), limit: 30 }))).catch(() => []);
+    const relay = services.relay("rooms");
+    // a call for each hundred rooms, as the list's read
+    const out = (await pooled(chunk(ids, 100), 3, (c) => relay.query([{ kinds: [9], "#h": c, search: q.trim(), limit: 30 }]).catch(() => []))).flat();
     setFound((out as Ev[]).sort((a, b) => b.created_at - a.created_at));
   };
   return <>
