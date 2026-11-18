@@ -50,6 +50,8 @@ export const notTapped = () => new ContractError(ERROR_CODES.failed, "it asks on
 export const RECENT_MAX = 40;
 /** The most note links one `links` call asks about. */
 export const LINKS_MAX = LINKS_PER_CALL;
+/** What a links call over the frame's read budget hears: wait, then ask again (kit/links.tsx). */
+export const LINKS_WAIT = "links: ask again in a few seconds";
 const linkStr = (v: unknown) => typeof v === "string" && v.length > 0 && v.length <= MAX_LINK;
 const fromOk = (v: unknown) => v === undefined || (typeof v === "string" && v.length <= 1000);
 const SHAPE = /^\/(?:v\/[^/?#\\]+(?:\/[na]\/[^/?#\\]+)?)?$/;
@@ -90,7 +92,10 @@ export function createAppModule(allowed: readonly AppWord[], deps: AppDeps, now:
           return plain(p) && hasOnly(p, ["links", "from"]) && Array.isArray(p.links) && p.links.length <= LINKS_MAX && p.links.every(linkStr) && fromOk(p.from)
             ? { ok: true, value: { links: p.links as string[], from: p.from as string | undefined } } : { ok: false };
         },
-        run: async (v: { links: string[]; from?: string }, _s, ctx) => deps.links(v.links, v.from, (n) => ctx.charge(n)),
+        // over the read budget: refused in its own words, so the kit's line doesn't stop for it (the kit asks again later)
+        run: async (v: { links: string[]; from?: string }, _s, ctx) => deps.links(v.links, v.from, (n) => {
+          try { ctx.charge(n); } catch (e) { throw e instanceof ContractError && e.code === ERROR_CODES.rateLimited ? new ContractError(ERROR_CODES.rateLimited, LINKS_WAIT) : e; }
+        }),
       },
       follow: {
         cap: null,

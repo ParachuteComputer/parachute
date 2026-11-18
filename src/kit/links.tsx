@@ -35,9 +35,13 @@ function flush() {
   const parts: [string, typeof all][] = [];
   for (const [from, ws] of groups) for (let i = 0; i < ws.length; i += LINKS_PER_CALL) parts.push([from, ws.slice(i, i + LINKS_PER_CALL)]);
   const ask = app().links;
+  // over the frame's read budget, the shell says so in its own words: this batch waits out the ten seconds by itself,
+  // without stopping the applet's other calls
+  const once = (links: string[], from: string | undefined, tries = 0): Promise<unknown> => ask!(links, from).catch((e: { code?: string; message?: string }) =>
+    e?.code === "rate_limited" && e.message !== "rate_limited" && tries < 6 ? new Promise((r) => setTimeout(r, 5000)).then(() => once(links, from, tries + 1)) : Promise.reject(e));
   void parts.reduce((prev, [from, part]) => prev.then(() => {
     // without the shell's answer (an applet not allowed `open`, an older app) nothing is a note link
-    const asked = ask ? ask(part.map((w) => w.link), from || undefined) : Promise.reject(new Error("no links call"));
+    const asked = ask ? once(part.map((w) => w.link), from || undefined) : Promise.reject(new Error("no links call"));
     return asked.then((a) => part.forEach((w, j) => w.res(Array.isArray(a) && (a[j] === "note" || a[j] === "away") ? a[j] : null)), () => part.forEach((w) => {
       // asked again by the next draw that wants it (a busy shell, a lapse); for now it is text
       answers.delete(keyOf(w.link, w.from));
@@ -76,9 +80,9 @@ const isWeb = (s: string) => WEB.test(s) && !/[\u0000- \u007f]/.test(s);
 /** Open what a link leads to: a note link through the shell (an address it can't place opens as a web address). */
 async function go(to: string, from: string | undefined, choose: boolean): Promise<boolean> {
   const ref = parseNoteRef(to);
+  // the shell decides at once (its answer may still be on its way here): the tap is fresh only for a moment
   if (ref) {
-    const a = await answerFor(to, from);
-    if (a) return (await app().follow?.(to, { from, choose }).catch(() => false)) ?? false;
+    if ((await app().follow?.(to, { from, choose }).catch(() => false)) === true) return true;
     if (ref.kind !== "address") return false;
   }
   return isWeb(to) ? ((await app().openLink?.(to).catch(() => false)) ?? false) : false;

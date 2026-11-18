@@ -17,7 +17,7 @@ describe("app.links through a real session", () => {
   it("a full call fits the frame's read budget; one link past it is refused; a second full call at once waits its turn", async () => {
     const { createSession } = await import("../applet/session");
     const { createRouter } = await import("../applet/router");
-    const { createAppModule, LINKS_MAX } = await import("../applet/modules/app");
+    const { createAppModule, LINKS_MAX, LINKS_WAIT } = await import("../applet/modules/app");
     const posts: { id?: string; result?: unknown; error?: { code: string } }[] = [];
     const session = createSession({ post: (m) => posts.push(m as never), router: createRouter([createAppModule(["open"], appDeps(() => {}, () => null, { pick: async () => [] }))]), grant: {} as never, now: () => 0 });
     const ask = async (id: string, n: number) => {
@@ -28,6 +28,8 @@ describe("app.links through a real session", () => {
     expect((await ask("a", LINKS_MAX)).result).toEqual(Array(LINKS_MAX).fill(null));
     expect((await ask("b", LINKS_MAX + 1)).error?.code).toBe("bad_params");
     // the window is spent for now: refused as busy, which the kit waits out (frameKit's line)
-    expect((await ask("c", LINKS_MAX)).error?.code).toBe("rate_limited");
+    // refused in its own words, so the kit line goes on and the links ask again by themselves
+    const c = await ask("c", LINKS_MAX);
+    expect(c.error).toEqual({ code: "rate_limited", message: LINKS_WAIT });
   });
 });
