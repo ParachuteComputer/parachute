@@ -129,6 +129,9 @@ export default function AppletScreen() {
   // a tap counts for the first screen drawn for this entry only: Back or Forward to it later starts nothing (but the home
   // the person chose here, above)
   useEffect(() => () => { startedByTap.set(location.key, false); }, [location.key]);
+  // a kept screen lives across history entries: a tap that led to a new one (the bar, a pin) starts it, as it would a
+  // new screen
+  useEffect(() => { if (startedByTap.get(location.key)) setStarted(true); }, [location.key]);
   const [declined, setDeclined] = useState(false);
   const [, setBump] = useState(0);
   const bump = () => setBump((n) => n + 1);
@@ -137,6 +140,7 @@ export default function AppletScreen() {
   const kept = useKept();
   // shown again after being kept hidden: its note is read again (below), quietly while nothing changed
   const [recheck, setRecheck] = useState(0);
+  const rechecked = useRef(0);
   const was = useRef({ loaded, keys });
   was.current = { loaded, keys };
   // a page with embeds: how tall its own content is (and the last few steps it grew by, to stop a page that measures
@@ -153,7 +157,8 @@ export default function AppletScreen() {
     if (!rec || !appletId) return;
     let on = true;
     // a recheck of a screen that runs keeps it running unless what was allowed changed
-    const quiet = recheck > 0 && was.current.loaded.state === "ok" && !!was.current.keys;
+    const quiet = recheck !== rechecked.current && was.current.loaded.state === "ok" && !!was.current.keys;
+    rechecked.current = recheck;
     if (!quiet) { setLoaded({ state: "loading" }); setKeys(null); }
     const c = clientFor(rec);
     void (async () => {
@@ -274,12 +279,13 @@ export default function AppletScreen() {
   const launchKey = launch ? `${launch.room}|${launch.event ?? ""}` : "";
   // what it was allowed, as its card said it (the folders, and each server with its rooms and keys): an applet reads its
   // room, or which key is Uni's, from here rather than from a copy of its own
-  const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, access: entry?.manifest.allow ?? [], services: entry?.services ?? [], ...(handed ? { open: handed } : {}), ...(sized ? { page: { embeds: entry!.embeds.map((e) => e.name) } } : {}), ...(launch ? { launch } : {}) }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized, launchKey, entry]); // eslint-disable-line react-hooks/exhaustive-deps
+  // `shown`: a frame that boots while its screen is kept hidden knows so from the start
+  const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, access: entry?.manifest.allow ?? [], services: entry?.services ?? [], ...(handed ? { open: handed } : {}), ...(sized ? { page: { embeds: entry!.embeds.map((e) => e.name) } } : {}), ...(launch ? { launch } : {}), shown: kept.shown }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized, launchKey, entry, kept.shown]); // eslint-disable-line react-hooks/exhaustive-deps
   const sessionNow = useRef<Session | null>(null);
   useEffect(() => { if (launch) sessionNow.current?.sendEvent("launch", launch); }, [launchKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  // kept running while hidden (shell/kept.tsx) only while it runs the person's own code, with nothing from another vault,
-  // and no note handed to it
-  const keepable = granted && started && !!page && !handed && !!rec && isMine(rec) && loaded.state === "ok" && loaded.imports.every((i) => i.own && i.whose === "mine");
+  // kept running while hidden (shell/kept.tsx) only while it runs the person's own code, with nothing from another vault
+  // (no imports from one, no embeds), and no note handed to it
+  const keepable = granted && started && !!page && !handed && !sized && !!rec && isMine(rec) && loaded.state === "ok" && loaded.imports.every((i) => i.own && i.whose === "mine");
   useEffect(() => { kept.keepable(keepable); }, [keepable]); // eslint-disable-line react-hooks/exhaustive-deps
   // hidden: it is told, and a sheet or recorder open for it closes; shown again: told, and its note read again
   const shownBefore = useRef(kept.shown);

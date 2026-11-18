@@ -65,7 +65,9 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
   const shell: Shell = {
     tap,
     secret: (view) => new Promise((done) => {
-      if (open.current) { done(null); return; }
+      // one at a time, and never for a screen that is hidden (kept running, shell/kept.tsx): it would wait there unseen
+      const f = frame();
+      if (open.current || !f || !onScreen(f)) { done(null); return; }
       const a = { view, done: (x: string | null) => { open.current = null; setAsking(null); done(x); } };
       open.current = a;
       setAsking(a);

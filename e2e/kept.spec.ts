@@ -23,6 +23,11 @@ export default function Kept() {
 `;
 const ARGS = { path: "Applets/Kept", extension: "tsx", tags: ["applet"], body: CODE,
   fields: { applet: { contract: 2, id: "kept", name: "Kept", glyph: "◇", note: "a test applet", access: [] }, app: ["open"] } };
+const OTHER = { ...ARGS, path: "Applets/Kept too", body: CODE.replace("<h1>Kept</h1>", "<h1>Kept too</h1>"), fields: { ...ARGS.fields, applet: { ...ARGS.fields.applet, id: "kept-too", name: "Kept too" } } };
+const openChip = async (page: Page, name: RegExp) => {
+  await page.goto(`/v/${VAULT}`);
+  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name }).click();
+};
 
 test("an applet left for another screen keeps running hidden, and is the same frame when the person comes back", async ({ page }) => {
   const note = await record(hubState(), "create", ARGS);
@@ -80,5 +85,35 @@ test("an applet that is stopped or asking is not kept: back to it is as before",
     await expect(page.getByText("Kept is stopped.")).toBeVisible();
   } finally {
     await api(hubState(), "DELETE", `notes/${note.id}`);
+  }
+});
+
+test("two applets kept: back and forth between them, each is the frame it was, booted once", async ({ page }) => {
+  const a = await record(hubState(), "create", ARGS), b = await record(hubState(), "create", OTHER);
+  try {
+    // A allowed (then left, kept), B allowed; in-app moves only from here (a reload would start everything again)
+    await openChip(page, /Kept(?! too)/);
+    await page.getByRole("button", { name: "Allow" }).click();
+    const bootA = (await frame(page).locator("#booted").textContent())!;
+    const atA = page.url();
+    await page.goBack();
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Kept too/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(frame(page).getByRole("heading", { name: "Kept too" })).toBeVisible();
+    const bootB = (await frame(page).locator("#booted").textContent())!;
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(2);
+    // back to A, then to B again, by their chips: neither frame is loaded again (moving a frame in the page would reload it)
+    const chip = (name: RegExp) => ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name });
+    await page.goBack();
+    await chip(/Kept(?! too)/).click();
+    await expect(page).toHaveURL(atA);
+    await expect(frame(page).locator("#booted")).toHaveText(bootA, { timeout: 1_000 });
+    await page.goBack();
+    await chip(/Kept too/).click();
+    await expect(frame(page).locator("#booted")).toHaveText(bootB, { timeout: 1_000 });
+    await expect(frame(page).locator("#seen")).toHaveText("hidden, open while hidden: false, shown");
+  } finally {
+    await api(hubState(), "DELETE", `notes/${a.id}`);
+    await api(hubState(), "DELETE", `notes/${b.id}`);
   }
 });
