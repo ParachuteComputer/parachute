@@ -40,7 +40,7 @@ test("a change to the frame (one MCP update) shows the card again; the version a
   await page.getByRole("button", { name: "Make this mine" }).click();
   await expect(status(page)).toHaveText("Your frame runs: Parachute/Frame.");
   const [rec] = await frameNotes();
-  const changed = rec.content.replace('<Route path="/" element={<Launcher />} />', '<Route path="/" element={<><h2>My own frame</h2><Launcher /></>} />');
+  const changed = rec.content.replace('<Route path="/" element={<Start />} />', '<Route path="/" element={<><h2>My own frame</h2><Start /></>} />');
   expect(changed).not.toBe(rec.content);
   await mcp(hubState(), "update-note", { id: rec.id, content: changed, if_updated_at: rec.updatedAt });
   await page.goto("/");
