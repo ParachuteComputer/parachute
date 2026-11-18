@@ -294,15 +294,14 @@ export function checkFilters(raw: unknown, rooms?: readonly Room[]): Parsed<Reco
   return { ok: true, value: out };
 }
 
-/** Text a bot may take as the owner's approval (Hermes's `/approve`, `/deny`), as Rust reads it: leading whitespace
- *  trimmed, case ignored. Only an applet holding the approvals grant posts it, during a tap (docs/design/KEYRING.md). */
 /** A character a bot's parser may drop before a command: Unicode White_Space, C0/C1 controls, and invisible format
  *  characters. The same set as Rust's `droppable` (services.rs), written out (JS's \s isn't Unicode's White_Space). */
 const DROPPABLE = /[\u0000-\u0020\u007f-\u00a0\u00ad\u034f\u1680\u180e\u2000-\u200f\u2028-\u202f\u205f-\u206f\u3000\ufeff]/;
 const droppable = (c: string) => DROPPABLE.test(c);
 const trimStartWhile = (t: string, f: (c: string) => boolean) => { let i = 0; while (i < t.length && f(t[i])) i++; return t.slice(i); };
 
-/** Text a bot may take as the owner's approval: the same steps as Rust's `is_command_approval`, line for line (drop
+/** Text a bot may take as the owner's approval (Hermes's `/approve`, `/deny`; only an applet holding the approvals
+ *  grant posts it, during a tap: docs/design/KEYRING.md): the same steps as Rust's `is_command_approval`, line for line (drop
  *  droppable characters; a leading mention — `@…`, `nostr:npub1…`, `npub1…`, a 64-hex key — up to a droppable
  *  character, `:` or `,`, then any of those; at most 8 times), then `/approve` or `/deny`, case ignored. */
 export function isCommandApproval(content: string): boolean {

@@ -735,6 +735,7 @@ function HoldButton({ label, onDone }: { label: string; onDone: () => void }) {
     // sliding off the button lets go without approving (capture keeps the events coming here, so check where it is)
     onPointerMove={(e) => { if (now.current === "no") return; const r = e.currentTarget.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) stop(false); }}
     onPointerUp={(e) => { const r = e.currentTarget.getBoundingClientRect(); stop(e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom); }} onPointerCancel={() => stop(false)} onLostPointerCapture={() => { if (now.current !== "no") stop(true); }} onContextMenu={(e) => e.preventDefault()}
+    onBlur={() => stop(false)}
     onKeyDown={(e) => { if ((e.key === " " || e.key === "Enter") && now.current === "no") start(); if (e.key === "Escape") stop(false); }} onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") stop(true); }}>
     {held === "holding" ? "Keep holding…" : held === "ready" ? "Let go to approve" : label}
   </button>;
