@@ -1,7 +1,7 @@
 // Connect an AI (docs/SIMPLE.md): each vault's connector address, to paste into Claude, ChatGPT or any app that speaks
 // MCP, and how. The address is the vault's own (`<vault>/mcp`, as Parachute Cloud's Connect page gives it); the AI then
 // asks the person on their hub's page, so nothing here grants anything.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bar } from "../ui/Bar";
 import { useVaults } from "../vault/hooks";
 import { vaultUrlOf, type VaultRecord } from "../vault/store";
@@ -11,16 +11,21 @@ import { isMine } from "../vault/whose";
 export const connectorAddress = (r: Pick<VaultRecord, "issuer" | "vault" | "url">) => `${vaultUrlOf(r).replace(/\/$/, "")}/mcp`;
 
 function Address({ r }: { r: VaultRecord }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"no" | "yes" | "failed">("no");
   const address = connectorAddress(r);
+  useEffect(() => { if (copied !== "yes") return; const t = setTimeout(() => setCopied("no"), 2500); return () => clearTimeout(t); }, [copied]);
+  const copy = () => {
+    if (!navigator.clipboard) { setCopied("failed"); return; }
+    navigator.clipboard.writeText(address).then(() => setCopied("yes"), () => setCopied("failed"));
+  };
   return (
     <li className="connect-vault">
       <span className="connect-name">{r.vault}</span>
       <code className="connect-address">{address}</code>
-      <button type="button" className="secondary connect-copy" aria-label={`${copied ? "Copied" : "Copy"} the address of ${r.vault}`}
-        onClick={() => { void navigator.clipboard?.writeText(address).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); }, () => setCopied(false)); }}>
-        {copied ? "Copied" : "Copy"}
+      <button type="button" className="secondary connect-copy" aria-label={`${copied === "yes" ? "Copied" : "Copy"} the address of ${r.vault}`} onClick={copy}>
+        {copied === "yes" ? "Copied" : "Copy"}
       </button>
+      {copied === "failed" && <span className="small error connect-failed" role="alert">This device didn't let the app copy it: press and hold the address to select it.</span>}
     </li>
   );
 }

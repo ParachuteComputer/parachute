@@ -11,7 +11,8 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
   const hub = hubState();
   const stamp = Date.now().toString(36);
   const made: string[] = [];
-  // the person's settings say simple (a Cloud person's first sign-in writes it; here their agent did)
+  // the person's settings say simple (a Cloud person's first sign-in writes it; here their agent did), the only note so
+  for (const n of await api(hub, "GET", "notes?tag=parachute-settings") as Row[]) await api(hub, "DELETE", `notes/${n.id}`);
   const settings = await api(hub, "POST", "notes", { path: "Parachute/Settings", tags: ["parachute-settings"], content: "settings", metadata: { parachute: { app: "simple" } } }) as Row;
   made.push(settings.id);
   const note = await api(hub, "POST", "notes", { path: `Garden plan ${stamp}`, content: `# Garden plan ${stamp}\n\nKale in the north bed.` }) as Row;

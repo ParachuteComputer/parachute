@@ -12,7 +12,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const stamp = (at: Date) => `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}-${pad(at.getMinutes())}`;
 /** Inbox/<the first words>: a capture is named by what it says (the same words again also get the time: make) */
 export function pathFor(text: string, at = new Date()) {
-  const words = text.replace(/[#*_`>\[\]\\/:?"<>|^]/g, " ").split(/\s+/).filter(Boolean).slice(0, 10).join(" ").slice(0, 80).trim().replace(/^\.+/, "");
+  const words = text.replace(/[#*_`>\[\]\\/:?"<>|^]/g, " ").split(/\s+/).filter(Boolean).slice(0, 10).join(" ").slice(0, 80).replace(/^[.\s]+/, "").trim();
   return `Inbox/${words || `Note ${stamp(at)}`}`;
 }
 const voicePath = (at: Date) => `Inbox/Voice note ${stamp(at)}`;
@@ -67,9 +67,8 @@ export default function Capture() {
   const load = async () => {
     const rows: Rec[] = await vault.queryRecords({ pathPrefix: "Inbox/", includeBody: true, limit: 12 });
     setItems(rows);
-    const out: Record<string, string> = {};
-    for (const r of rows) out[r.id] = await link.to(r).catch(() => "");
-    setAddr(out);
+    const links = await Promise.all(rows.map((r) => link.to(r).catch(() => "")));
+    setAddr(Object.fromEntries(rows.map((r, i) => [r.id, links[i]])));
   };
   useEffect(() => { ready().then(load).catch((e: Error) => setErr(e.message)); }, []);
   // a transcript awaited: read again a few times
@@ -89,9 +88,10 @@ export default function Capture() {
     setBusy(true); setErr(""); setSaid("");
     try {
       await make(pathFor(body), body);
-      setText(""); setSaid("Saved to Inbox.");
-      await load();
-    } catch (e: any) { setErr(`Not saved: ${e?.message ?? e}. Your words are still here.`); }
+    } catch (e: any) { setErr(`Not saved: ${e?.message ?? e}. Your words are still here.`); setBusy(false); return; }
+    setText(""); setSaid("Saved to Inbox.");
+    // (saved: a list that can't be read just now doesn't make it unsaved)
+    await load().catch(() => {});
     setBusy(false);
   };
   const speak = async () => {
@@ -108,9 +108,9 @@ export default function Capture() {
         await vault.updateRecord(made.id, { body: "_The recording couldn't be attached._", if_updated_at: (made as any).updatedAt }).catch(() => {});
         throw e;
       }
-      setLooks(0); setSaid(`Saved ${Math.round(r.duration)} s of voice. The words follow in a moment.`);
-      await load();
-    } catch (e: any) { setErr(`Voice note not saved: ${e?.message ?? e}`); }
+    } catch (e: any) { setErr(`Voice note not saved: ${e?.message ?? e}`); setBusy(false); return; }
+    setLooks(0); setSaid(`Saved ${Math.round(r.duration)} s of voice. The words follow in a moment.`);
+    await load().catch(() => {});
     setBusy(false);
   };
 

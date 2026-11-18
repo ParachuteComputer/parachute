@@ -279,3 +279,5 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .connect-address { grid-column: 1; font: 12.5px/1.35 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 .connect-copy { grid-column: 2; grid-row: 1 / span 2; border-radius: 999px; padding: 8px 16px; }
 .connect-how p { margin: 0; font-size: 15px; line-height: 1.45; }
+.connect-address { user-select: all; -webkit-user-select: all; }
+.connect-failed { grid-column: 1 / -1; }

@@ -26,11 +26,12 @@ export async function addCapture(home: VaultRecord): Promise<string> {
   await refreshApplets(home);
   const had = captureIn(home);
   if (had) return had;
+  let taken = false;
   try {
     await clientFor(home).createNote({ path: record.path, content: body, tags: record.tags, metadata: record.fields, extension: record.extension } as Parameters<ReturnType<typeof clientFor>["createNote"]>[0]);
-  } catch (e) { if (!(e instanceof VaultConflictError)) throw e; }
+  } catch (e) { if (!(e instanceof VaultConflictError)) throw e; taken = true; }
   await refreshApplets(home);
   const now = captureIn(home);
-  if (!now) throw new Error("Capture was written, but this vault doesn't list it as an applet.");
+  if (!now) throw new Error(taken ? `A note at ${record.path} that isn't Capture is in ${home.vault} already: rename it, then add Capture again.` : "Capture was written, but this vault doesn't list it as an applet.");
   return now;
 }

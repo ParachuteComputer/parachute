@@ -28,7 +28,8 @@ export default function OAuthCallback() {
       const sofar = after ?? before;
       if (!sofar) { setError(/Nothing was added/.test(why) ? why : `${why} Nothing was added.`); return; }
       dropPending();
-      await afterSignIn(sofar.parachute.hub, sofar.done, sofar.parachute.door === "cloud").catch(() => undefined);
+      // (a sign-in that stopped partway never picks the person's app: a vault it didn't reach may hold their settings)
+      await afterSignIn(sofar.parachute.hub, sofar.done, false).catch(() => undefined);
       setError(`${why} The ${sofar.done.length === 1 ? "vault" : `${sofar.done.length} vaults`} signed in to before that stay: ${sofar.done.map((v) => v.vault).join(", ")}.`);
       setKept(true);
     };
