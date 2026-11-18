@@ -261,7 +261,9 @@ path (`MessageNotices.kt`, shared with the fallback below); a tap opens `parachu
 distributor was removed: from the next time Parachute is opened, as nothing tells it while closed), Parachute keeps
 its own connection: the foreground service with its own relay connection
 (KEYRING.md), on unless the person turns it off, so notifications work from the first minute. Settings says it costs
-battery and offers **Get ntfy** (its F-Droid page) first. It serves only what no push registration serves, never both
+battery and offers **Get ntfy** (its F-Droid page) first. It also says when the last bringing-up-to-date fell short: a
+vault it couldn't read (then nothing is handed on, since an empty list would stop every notification), no applet asking
+yet, or a gateway that didn't take this phone, with the gateway's own reason. It serves only what no push registration serves, never both
 for one applet: once ntfy delivers, it has nothing left to listen for and stops. Its notifications may show the message's first
 words ("Bob in Garden: …"): it reads them from the relay itself, on the phone, so no third party carries them; a push
 never carries words. It doesn't verify event signatures before matching: the relay the person signed in to is trusted for what it

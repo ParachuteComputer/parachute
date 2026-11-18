@@ -230,6 +230,13 @@ const RENEW_S: u64 = 7 * 24 * 3600;
 const RENEW_PENDING_S: u64 = 24 * 3600;
 
 /// The `at` to keep for a registration made `now`: a pending one is due again after a day.
+/** What a gateway said when it refused (its answer's `error`), for Settings: one short line, plain characters only. */
+pub fn gateway_said(answer: &[u8]) -> String {
+    let why = serde_json::from_slice::<Value>(answer).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_string)).unwrap_or_default();
+    let why: String = why.chars().filter(|c| !c.is_control()).take(120).collect();
+    if why.trim().is_empty() { String::new() } else { format!(": {}", why.trim()) }
+}
+
 pub fn kept_at(now: u64, answer: &[u8]) -> u64 {
     let pending = serde_json::from_slice::<Value>(answer).ok().and_then(|v| v.get("pending").and_then(Value::as_bool)) == Some(true);
     if pending { now.saturating_sub(RENEW_S - RENEW_PENDING_S) } else { now }
@@ -456,7 +463,7 @@ pub async fn push_register<R: Runtime>(
             }
             let (status, answer) = send(PushOp::Register, body, e.subject.clone(), e.name.clone()).await?;
             if !(200..300).contains(&status) {
-                return Err(format!("The gateway refused the registration ({status})."));
+                return Err(format!("The gateway refused the registration ({status}{}).", gateway_said(&answer)));
             }
             kept.retain(|x| !(x.gateway == gateway && x.relay == relay));
             kept.push(Kept { me: e.me.clone(), gateway: gateway.clone(), relay: relay.clone(), endpoint: ep.endpoint, hash, at: kept_at(now, &answer) });
@@ -592,6 +599,15 @@ mod tests {
             assert!(bad.clone().checked().is_err(), "{bad:?}");
         }
         assert!(Endpoint { endpoint: "http://localhost:18566/upAbc?up=1".into(), ..ep.clone() }.checked().is_ok(), "a push server on this device (tests)");
+    }
+
+    #[test]
+    fn a_refusal_says_what_the_gateway_said_in_one_short_plain_line() {
+        assert_eq!(gateway_said(br#"{"error":"endpoint on that host must be its push server"}"#), ": endpoint on that host must be its push server");
+        assert_eq!(gateway_said(b"<html>bad gateway</html>"), "");
+        assert_eq!(gateway_said(br#"{"error":"  "}"#), "");
+        let long = gateway_said(format!(r#"{{"error":"a\nb{}"}}"#, "x".repeat(500)).as_bytes());
+        assert!(!long.contains('\n') && long.chars().count() == 2 + 120, "{long}");
     }
 
     #[test]
