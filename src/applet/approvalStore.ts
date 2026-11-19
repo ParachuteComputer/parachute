@@ -93,16 +93,19 @@ export async function approvalFor(s: Subject, code: string, scope: string, now =
 }
 
 /** Sign (on this device, after its unlock) and write an approval of this exact code, or with `approved: false` the
- *  taking back of one. Throws when it can't be signed (no key, the unlock cancelled, a wrong passcode) or written. */
-export async function signApproval(o: { subject: Subject; name: string; approved: boolean; code: string; scope: string; face?: string[]; passcode?: string | null }): Promise<SignedEvent> {
+ *  taking back of one. Throws when it can't be signed (no key, the unlock cancelled, a wrong passcode); `written`
+ *  says whether it reached the home vault. */
+export async function signApproval(o: { subject: Subject; name: string; approved: boolean; code: string; scope: string; face?: string[]; passcode?: string | null }): Promise<{ ev: SignedEvent; written: boolean }> {
   const home = homeVault();
   const native = await nativeNow();
   if (!home || !native) throw new Error("Approving for every device needs the Parachute app with your key.");
   const content = approvalContent({ subject: o.subject, approved: o.approved, code: o.code, scope: o.scope, now: Date.now(), seen: floorOf(o.subject), face: o.face, device: deviceName() });
   const ev = await native.approvalSign(JSON.stringify(content), dOf(o.subject), o.name, o.passcode ?? null) as SignedEvent;
   raiseFloor(o.subject, content.n);
-  await writeApproval(home, o.subject, o.name, ev);
-  return ev;
+  // signed: a home Parachute may only read (docs/design/SCOPES.md) still leaves this device's own Allow; the other
+  // devices then ask for themselves
+  const written = await writeApproval(home, o.subject, o.name, ev).then(() => true, () => false);
+  return { ev, written };
 }
 
 async function writeApproval(home: VaultRecord, s: Subject, name: string, ev: SignedEvent): Promise<void> {
