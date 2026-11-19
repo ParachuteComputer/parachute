@@ -35,7 +35,7 @@ function args(argv: string[]): Args {
     else if (k === "--start") a.start = take();
     else if (k === "--service") { const m = /^([^=]+)=(nostr-relay|http):(.+)$/.exec(take()); if (!m) throw new Error("--service is Name=kind:url"); a.services.push({ name: m[1], kind: m[2], url: m[3] }); }
     else if (k === "--apply") a.apply = true;
-    else if (k === "--app") { a.app = take(); if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(a.app)) throw new Error("--app is an id: lower case, digits and dashes"); }
+    else if (k === "--app") { a.app = take(); if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(a.app)) throw new Error("--app is an id: lower case, digits and dashes"); if (a.app === "everything" || a.app === "simple") throw new Error(`${a.app} is built in: its bar and home are --bar and --start`); }
     else if (k === "--app-name") a.appName = take();
     else if (k === "--source") a.sources.push(take());
     else throw new Error(`unknown ${k}`);

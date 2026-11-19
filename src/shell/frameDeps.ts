@@ -142,7 +142,8 @@ export function appDefaults(vault: string, app: App = openAppNow()): Record<stri
   for (const o of app.opens) {
     if ((o.hub ?? app.hubOf ?? originOf(home.issuer)) !== originOf(rec.issuer) || o.vault !== rec.vault || o.type in out) continue;
     if (o.applet === null) { out[o.type] = VAULT; continue; }
-    const e = a?.state === "ok" ? a.found.entries.find((x) => namesApplet(o.applet!, x) && x.opens.some((y) => y.type === o.type)) : undefined;
+    const held = { hub: originOf(rec.issuer), vault: rec.vault };
+    const e = a?.state === "ok" ? a.found.entries.find((x) => namesApplet(o.applet!, x) && x.opens.some((y) => y.type === o.type) && (app.look === "notes" || offered(app, held, x, originOf(home.issuer)))) : undefined;
     if (e) out[o.type] = e.noteId;
   }
   return out;
