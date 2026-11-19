@@ -1,6 +1,6 @@
 // saved module: what the kit saves for an applet as the person goes (docs/WRITE-AN-APPLET.md "Saved state"): its drafts,
 // the screen it was on, where it was scrolled. Every applet that runs has it, someone else's too: it is the applet's
-// own data on the person's own device. The kit sends what changed within 300 ms, and the shell writes it to this
+// own data on the person's own device. The kit sends what changed 250 ms after the last change, and the shell writes it to this
 // device's disk at once (shell/saved.ts); the whole store comes back in `ready` when the applet starts again, whether
 // it was hidden, unloaded, the app closed or the phone restarted. The same store as `storage` (modules/storage.ts).
 //   saved.put({bytes})   → null. bytes: an ArrayBuffer of a JSON object {key: value | null}; null removes a key. Keys are
@@ -41,7 +41,9 @@ export function createSavedModule(deps: SavedDeps): UniModule {
           return { ok: true, value: entries };
         },
         run: async (entries: Record<string, unknown>) => {
-          if ((await deps.put(entries)) === "full") throw new ContractError(ERROR_CODES.tooLarge, "what it saves on this device is full (256 KB)");
+          let r: "ok" | "full";
+          try { r = await deps.put(entries); } catch { throw new ContractError(ERROR_CODES.failed, "it couldn't be written on this device"); }
+          if (r === "full") throw new ContractError(ERROR_CODES.tooLarge, "what it saves on this device is full (256 KB)");
           return null;
         },
       },

@@ -51,7 +51,7 @@ export function createStorageModule(allowed: boolean, deps: StorageDeps): UniMod
           return null;
         },
       },
-      keys: { cap: null, validate: (p) => { need(); return plain(p) && hasOnly(p, []) ? { ok: true, value: null } : { ok: false }; }, run: async () => Object.keys(await deps.read()).sort() },
+      keys: { cap: null, validate: (p) => { need(); return plain(p) && hasOnly(p, []) ? { ok: true, value: null } : { ok: false }; }, run: async () => Object.keys(await deps.read()).filter((k) => !k.startsWith("parachute:")).sort() },
     },
   };
 }
