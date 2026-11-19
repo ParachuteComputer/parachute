@@ -348,12 +348,16 @@ async function readAppRecords(home: VaultRecord): Promise<RawApp[]> {
     if (!there) { out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
     try {
       // a slow Parachute of theirs never holds up the start: past a few seconds, the copy kept from before
-      const listed = await Promise.race([clientFor(there).queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 }), new Promise<never>((_, no) => setTimeout(() => no(new Error("slow")), 3000))]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const listed = await Promise.race([clientFor(there).queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 }), new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error("slow")), 3000); })]).finally(() => clearTimeout(timer));
       const theirs = listed.find((x) => stripExt(x.path ?? "") === stripExt(a.live!.path));
       const t = theirs && plain(theirs.metadata) ? theirs.metadata.app : undefined;
       // their record, under the person's own id and name for it; its places mean their hub when they name none
       out.push(plain(t) ? { app: { ...t, contract: 1, id: a.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: a.live }, path: r.path ?? null, noteId: r.id, hubOf: a.live.hub } : { app: raw, path: r.path ?? null, noteId: r.id });
-    } catch { out.push({ app: raw, path: r.path ?? null, noteId: r.id }); }
+    } catch {
+      const was = keptNow()?.vault === home.key ? keptNow()?.apps?.find((x) => x.noteId === r.id && x.hubOf) : undefined;
+      out.push(was ?? { app: raw, path: r.path ?? null, noteId: r.id });
+    }
   }
   return out;
 }
@@ -403,8 +407,11 @@ async function changeChoices(f: (raw: Raw, creating: boolean) => Raw): Promise<v
   if (app.noteId && !n) throw new Error("The app's record is gone; read it again.");
   const s = settingsNow();
   const was: Record<string, unknown> = n && plain(n.metadata) && plain(n.metadata.app) ? n.metadata.app : recordOf({ ...app, bar: s.bar, start: s.start });
-  const r = f({ bar: Array.isArray(was.bar) ? was.bar : s.bar, start: was.start === undefined ? s.start : was.start, hubs: [] }, false);
-  const body = { ...was, bar: r.bar, start: r.start ?? null };
+  const before: Raw = { bar: Array.isArray(was.bar) ? was.bar : s.bar, start: was.start === undefined ? s.start : was.start, hubs: [] };
+  const r = f(before, false);
+  // only what the change touched, or what the record already said, is written: the rest stays the settings note's
+  const body = { ...was, ...(Array.isArray(was.bar) || JSON.stringify(r.bar) !== JSON.stringify(before.bar) ? { bar: r.bar } : {}),
+    ...(was.start !== undefined || JSON.stringify(r.start ?? null) !== JSON.stringify(before.start ?? null) ? { start: r.start ?? null } : {}) };
   if (n) {
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), app: body }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);

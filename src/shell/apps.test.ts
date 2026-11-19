@@ -49,3 +49,21 @@ describe("the app record", () => {
     expect(appOf(recordOf(uni), "Parachute/Apps/uni", "n")).toEqual({ ...uni, noteId: "n" });
   });
 });
+
+describe("the bar and home an app gives", async () => {
+  const { effective } = await import("./homeSettings");
+  const S = { bar: [{ vault: "home", applet: "Applets/Mail" }], start: { vault: "home", applet: "Applets/Rooms" }, hubs: [], services: [], app: null as string | null };
+  it("no record: the settings note's, as before", () => {
+    expect(effective(S, appsFrom([]))).toMatchObject({ bar: S.bar, start: S.start });
+  });
+  it("a record's own bar, and the settings note's home when it says none; an explicit null home is none", () => {
+    const only = appOf({ contract: 1, id: "lab", name: "Lab", sources: [], bar: [{ vault: "home", applet: "Applets/Ideas" }] }, "Parachute/Apps/lab", "1")!;
+    expect(effective({ ...S, app: "lab" }, appsFrom([only]))).toMatchObject({ bar: only.bar, start: S.start });
+    const none = appOf({ contract: 1, id: "lab", name: "Lab", sources: [], start: null }, "Parachute/Apps/lab", "1")!;
+    expect(effective({ ...S, app: "lab" }, appsFrom([none]))).toMatchObject({ bar: S.bar, start: null });
+  });
+  it("a live app's places that name no hub are on its Parachute", () => {
+    const live = { ...appOf({ contract: 1, id: "techne", name: "Techne", sources: [], bar: [{ vault: "techne", applet: "Applets/Events" }] }, "Parachute/Apps/techne", "1")!, hubOf: "https://techne.example" };
+    expect(effective({ ...S, app: "techne" }, appsFrom([live])).bar).toEqual([{ vault: "techne", applet: "Applets/Events", hub: "https://techne.example" }]);
+  });
+});
