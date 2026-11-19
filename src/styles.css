@@ -111,6 +111,23 @@ fieldset.plain legend { padding: 0; }
 .grant-new { display: inline-block; margin-right: 6px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 1px; }
 .grant-more { margin-right: auto; min-height: 44px; padding: 6px 0; border: 0; background: none; font: inherit; font-size: 14px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .grant-details { margin-top: 12px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 14px; }
+/* the card's rows (docs/design/PERMISSIONS.md): a mark, a plain name, the line, and (?) for the exact detail */
+.grant-rows li { display: grid; grid-template-columns: 28px 1fr auto; gap: 4px 10px; align-items: start; padding: 10px 0; }
+.grant-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); color: var(--accent); font-size: 15px; }
+.grant-row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.grant-row-title { font: 600 15.5px/1.3 var(--serif); }
+.grant-row-line { font-size: 14px; color: var(--muted); line-height: 1.4; }
+.grant-row-line strong { color: var(--text); }
+.grant-q { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted); font: 600 13px/1 var(--sans); cursor: pointer; }
+.grant-q[aria-expanded="true"] { background: var(--text); color: var(--bg); }
+.grant-about { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--surface); font-size: 13.5px; }
+.grant-about p { margin: 6px 0 0; }
+.grant-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.grant-table th, .grant-table td { padding: 3px 6px; border-bottom: 1px solid var(--line); text-align: center; }
+.grant-table th[scope="row"], .grant-table thead th:first-child { text-align: left; font-weight: 600; }
+.grant-from { margin: 0 0 8px; }
+.grant-warn { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--danger, #b4532a) 12%, var(--bg)); font-size: 14px; }
+.passcode-line { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
 .grant-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
 /* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, nothing that moves but the figures */
 .record-time { margin: 6px 0; font-size: 20px; font-variant-numeric: tabular-nums; }

@@ -31,6 +31,10 @@ export type App = {
   /** null: the settings note's (an app without its own). */
   bar: Place[] | null; start: Place | null | undefined;
   opens: OpensChoice[]; keep: Keep;
+  /** How careful the app is (docs/design/APP-RECORD.md "Security levels"): approving code always takes the device
+   *  unlock; `passcode` adds the passcode this device keeps (its own secret, not the phone's). A record can ask for more,
+   *  never less: no level drops the unlock. */
+  security: { approve: "unlock" | "passcode" };
   /** An app someone else offers, followed live: where its record is. */
   live?: { hub: string; vault: string; path: string };
   /** Where this app's record is: the home vault's note id, or none for a built-in. */
@@ -91,6 +95,7 @@ export function appOf(raw: unknown, path: string | null, noteId: string | null):
     start: raw.start === null ? null : raw.start === undefined ? undefined : placeOf(raw.start) ?? undefined,
     opens: list(raw.opens, 200, opensOf),
     keep,
+    security: { approve: plain(raw.security) && raw.security.approve === "passcode" ? "passcode" : "unlock" },
     ...(live ? { live } : {}),
     noteId,
   };
@@ -100,8 +105,8 @@ export function appOf(raw: unknown, path: string | null, noteId: string | null):
  *  on every Parachute this device holds (`anyHub`). */
 export function builtInApp(id: "everything" | "simple"): App {
   return id === "simple"
-    ? { id, name: "Simple", glyph: "¶", note: "your notes, Capture, and Connect an AI", look: "notes", sources: [], hide: [], bar: null, start: undefined, opens: [], keep: "auto", noteId: null }
-    : { id, name: "Everything", glyph: "⁂", note: "the launcher, with every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", noteId: null };
+    ? { id, name: "Simple", glyph: "¶", note: "your notes, Capture, and Connect an AI", look: "notes", sources: [], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: { approve: "unlock" }, noteId: null }
+    : { id, name: "Everything", glyph: "⁂", note: "the launcher, with every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: { approve: "unlock" }, noteId: null };
 }
 /** Stands for every hub in the built-in Everything only: no record can say it (`hubOk` refuses it). */
 export const ANY_HUB = "*";
@@ -144,5 +149,6 @@ export function recordOf(app: App): Record<string, unknown> {
     sources: app.sources.filter((s) => s.hub !== ANY_HUB), ...(app.sources.some((s) => s.hub === ANY_HUB) ? { everywhere: true } : {}),
     ...(app.hide.length ? { hide: app.hide } : {}), ...(app.bar ? { bar: app.bar } : {}), ...(app.start !== undefined ? { start: app.start } : {}),
     ...(app.opens.length ? { opens: app.opens } : {}), ...(app.keep !== "auto" ? { keep: app.keep } : {}),
+    ...(app.security.approve !== "unlock" ? { security: app.security } : {}),
   };
 }

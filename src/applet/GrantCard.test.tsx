@@ -89,13 +89,13 @@ describe("asking again says why", () => {
   it("other asks: what is new is marked, and nothing is said to be gone", () => {
     const c = card({ grant: ROOMS, scope: "s2", was: kept(RECIPES, { scope: "s1" }) });
     expect(face(c)).toContain(FRESH_LINE);
-    expect(c.querySelector(".grant-fresh")!.textContent).toMatch(/^New As you on buzz\.example\.org/);
+    expect(c.querySelector(".grant-fresh .grant-row-line")!.textContent).toMatch(/^New As you on buzz\.example\.org/);
     expect(face(c)).not.toContain("No longer");
   });
   it("a widened ask (read, now read and add) is marked New, never called gone", () => {
     const wider: Grant = { ...RECIPES, allow: [{ path: "Recipes/", verbs: ["read", "create", "update"] }] };
     const c = card({ grant: wider, scope: "s2", was: kept(RECIPES) });
-    expect(c.querySelector(".grant-fresh")!.textContent).toBe("New Read, add and change notes in Recipes/");
+    expect(c.querySelector(".grant-fresh .grant-row-line")!.textContent).toBe("New Read, add and change notes in Recipes/");
     expect(face(c)).not.toMatch(/No longer|Read and add notes in Recipes/);
   });
   it("other asks seen only in the details: it says where", () => {

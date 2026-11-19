@@ -1402,6 +1402,17 @@ pub async fn svc_log<R: Runtime>(app: AppHandle<R>, state: State<'_, ServicesSta
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn no_applet_can_have_an_approval_or_a_key_list_signed() {
+        // even a declaration that names them: an applet signs only the short list of kinds the shell can name
+        for kind in [crate::approve::APPROVAL_KIND, crate::approve::KEYS_KIND] {
+            let t = serde_json::json!({ "kind": kind, "content": "{}", "tags": [["d", "x"]] });
+            assert!(check_template(&[9, 7, kind], &[], true, &t).is_err(), "kind {kind}");
+            assert!(!NAMED_KINDS.contains(&kind));
+        }
+        assert_ne!(PRIVATE_KIND, crate::approve::APPROVAL_KIND);
+    }
+
     use super::*;
     use serde_json::json;
 

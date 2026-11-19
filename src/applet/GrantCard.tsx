@@ -10,7 +10,8 @@ import { useId, useState, type MouseEvent } from "react";
 import { grantLines, type Grant } from "./grant";
 import type { LineOptions } from "./services";
 import { importLines, type Imported } from "./resolveImports";
-import { alsoLine, askedOf, changeOf, DETAIL, faceOf, faceText } from "./face";
+import { alsoLine, askedOf, changeOf, DETAIL, faceOf, faceText, type FaceLine } from "./face";
+import type { CardLine } from "./grant";
 import type { Asked } from "./grants";
 import { useSettledPress } from "../ui/press";
 
@@ -40,7 +41,45 @@ export const handedLine = (props: Record<string, unknown>) => `Your page hands i
 
 export const IMPORTS_CHANGED_LINE = "This applet's code, or what it imports, changed since you allowed it. Only the version you allow runs.";
 
-export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, grant, ownFolder, keyring = {}, imports = [], scope, code, status, was, fingerprint, expires, broughtChanged = false, onAllow, onNotNow, what = "applet", handed, settle, hubAsk = null }: {
+/** One row of the card's face (docs/design/PERMISSIONS.md): a mark, a plain name, the line itself, and on (?) the exact
+ *  detail. Names and marks only group what the face says; the words that carry the facts are the face's own. */
+type Row = { mark: string; title: string; line: FaceLine | null; text: string; detail: (props: { vault: string; host?: string; lines: CardLine[] }) => React.ReactNode };
+const folderName = (p: string) => (p ? p.replace(/\/$/, "") : "every folder");
+function rowsOf(grant: Grant, face: { lines: FaceLine[]; also: string[] }): Row[] {
+  const notes = new Map(grantLines({ ...grant, opens: [], app: [], services: [], reach: [], embedsFrom: [] }, null).map((l, i) => [l.text, grant.allow[i]]));
+  const rows: Row[] = [];
+  for (const l of face.lines) {
+    const t = faceText(l);
+    const rule = notes.get(l.lead);
+    if (rule) {
+      const writes = rule.verbs.some((v) => v !== "read");
+      rows.push({ mark: writes ? "✎" : "◫", title: `${writes ? "Write in" : "Read"} ${folderName(rule.path)}`, line: l, text: t, detail: ({ vault, host }) => <>
+        <table className="grant-table"><thead><tr><th scope="col">Folder</th><th scope="col">Read</th><th scope="col">Create</th><th scope="col">Update</th><th scope="col">Delete</th></tr></thead>
+          <tbody><tr><th scope="row">{rule.path || "every folder"}</th>{(["read", "create", "update"] as const).map((v) => <td key={v}>{rule.verbs.includes(v) ? "✓" : "–"}</td>)}<td>–</td></tr></tbody></table>
+        <p>Towards: <strong>{vault}</strong>{host ? <> on {host}</> : null}. Your hub's scope: <code>vault:{vault}:{writes ? "write" : "read"}</code>.</p>
+      </> });
+      continue;
+    }
+    const at = /^As you on (.+)$/.exec(l.lead)?.[1] ?? /^Sends requests to (.+)$/.exec(l.lead)?.[1] ?? null;
+    const [mark, title] = at ? ["◉", l.lead.startsWith("As you") ? `Act as you on ${at}` : `Reach ${at}`]
+      : l.lead.startsWith("High risk") ? ["⚑", "Answer approvals as you"]
+      : l.lead.startsWith("Notifies") ? ["◔", "Tell you when something comes"]
+      : l.lead.startsWith("Opens web") ? ["↗", "Open links"]
+      : l.lead.startsWith("Sees the titles") ? ["☰", "See your newest notes"]
+      : l.lead.startsWith("With a token") ? ["◉", "Use a token you give it"]
+      : /someone else|from .* \(someone/.test(t) ? ["⧉", "Show someone else's things"]
+      : ["·", l.lead.replace(/[:.]$/, "")];
+    const words = at ? at.split(" ")[0] : null;
+    rows.push({ mark, title, line: l, text: t, detail: ({ lines }) => {
+      const mine = lines.filter((x) => (words ? x.text.includes(words) : x.text === t || t.includes(x.text)));
+      return mine.length ? <ul className="grant-lines">{mine.map((x, i) => <li key={i} className={x.stress ? "grant-stress" : undefined}>{x.text}</li>)}</ul> : <p>{t}</p>;
+    } });
+  }
+  if (face.also.length) { const t = alsoLine(face.also); rows.push({ mark: "·", title: "Small things", line: null, text: t, detail: ({ lines }) => <ul className="grant-lines">{lines.filter((x) => !x.stress).map((x, i) => <li key={i}>{x.text}</li>)}</ul> }); }
+  return rows;
+}
+
+export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, grant, ownFolder, keyring = {}, imports = [], scope, code, status, was, fingerprint, expires, broughtChanged = false, onAllow, onNotNow, onBack, what = "applet", handed, settle, hubAsk = null, approvedElsewhere = null, signing = null }: {
   name: string; glyph: string; vault: string; runs: Runs;
   /** what it asks (grant.ts), the folder its note is in, and the keyring's names for keys: the card's lines come from these */
   grant: Grant; ownFolder: string | null; keyring?: LineOptions;
@@ -64,7 +103,14 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
   /** What the hub is asked for after Allow, when this device doesn't hold it yet (vault/reach.ts): the vault's host and
    *  the level. Said on the card, so the hub's page that follows is no surprise. */
   hubAsk?: { host: string; level: "read" | "write" } | null;
+  /** Back: leave the card, as the bar's Back does. */
+  onBack?: () => void;
+  /** This exact version was approved on another device (its name): this one only asks its hub. */
+  approvedElsewhere?: string | null;
+  /** Why the approval wasn't signed (the unlock cancelled, a passcode wrong). */
+  signing?: string | null;
 }) {
+  const [about, setAbout] = useState<number | null>(null);
   const tap = (f: () => void) => (e: MouseEvent) => { if (e.isTrusted) f(); };
   const [open, setOpen] = useState(false);
   const detailsId = useId();
@@ -80,7 +126,6 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
   const isNew = (t: string) => !!change.fresh?.has(t);
   const New = ({ t }: { t: string }) => (isNew(t) ? <><span className="grant-new">New</span>{" "}</> : null);
   const freshOnFace = [...(change.fresh ?? [])].some((t) => !t.startsWith(DETAIL));
-  const alsoText = face.also.length ? alsoLine(face.also) : "";
   const q = <q className="grant-name" data-untrusted="true">{name}</q>;
   const title = broughtChanged || codeChanged ? <>{q} changed</>
     : change.kind === "asks" ? <>{q} asks again</>
@@ -96,18 +141,29 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
     : change.kind === "asks" ? (freshOnFace ? FRESH_LINE : change.fresh?.size ? FRESH_DETAILS_LINE : ASKS_OTHER_LINE)
     : change.kind === "mode" ? MODE_CHANGED_LINE : null;
   const where = whose !== "mine" ? <> (someone else's{host ? `, at ${host}` : ""})</> : null;
+  const rows = rowsOf(grant, face);
+  const from = whose === "mine" ? <>From your vault <strong>{vault}</strong>{host ? <> on {host}</> : null}</> : <>From <strong>{vault}</strong>, someone else's vault{host ? <> at {host}</> : null}</>;
   return (
     <section className="card grant-card" role="region" aria-label={`${name} is asking for access`}>
       <header className="grant-head">
         <span className="grant-glyph" aria-hidden="true">{glyph}</span>
-        <h2>{title}</h2>
+        <h2>{approvedElsewhere ? <>{q} is approved</> : title}</h2>
       </header>
-      <p className="grant-sub quiet">{what === "component" ? <>A component from <strong>{vault}</strong>, in its own sealed frame on your page, named by its record (not verified).</> : <>An applet in {whose === "mine" ? "your vault " : ""}<strong>{vault}</strong>, named by its note (not verified).</>}</p>
-      {notice && <p className="grant-changed" role="status"><strong>{notice}</strong></p>}
-      {whose !== "mine" && <p className="grant-whose"><strong>Someone else's vault{host ? `, at ${host}` : ""}.</strong> It acts as you in {vault}, with your sign-in there. It sees nothing in your own vaults.{what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}</p>}
-      {face.lines.length ? <ul className="grant-face" role="list" aria-label="What it would do">{face.lines.map((l, i) => <li key={i} className={isNew(faceText(l)) ? "grant-fresh" : undefined}><New t={faceText(l)} />{l.risky ? <strong>{l.lead}</strong> : l.lead}{l.rest}</li>)}</ul>
-        : !face.also.length ? <p className="quiet">Nothing outside itself.</p> : null}
-      {alsoText && <p className="grant-also"><New t={alsoText} />{alsoText}</p>}
+      <p className="grant-sub grant-from">{what === "component" ? <>A component, in its own sealed frame on your page. {from}.</> : <>{from}.</>} <span className="quiet">Its name is its note's, not verified.</span></p>
+      {whose !== "mine" && <p className="grant-warn" role="note"><strong>Not made by you. Only continue if you trust the people who made it.</strong> It acts as you in {vault}, with your sign-in there, and sees nothing in your own vaults.{what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}</p>}
+      {approvedElsewhere && <p className="grant-changed" role="status"><strong>You approved this exact version on {approvedElsewhere}.</strong> On this device your hub asks first.</p>}
+      {!approvedElsewhere && notice && <p className="grant-changed" role="status"><strong>{notice}</strong></p>}
+      {rows.length ? <ul className="grant-face grant-rows" role="list" aria-label="What it would do">{rows.map((r, i) => (
+        <li key={i} className={isNew(r.text) ? "grant-fresh" : undefined}>
+          <span className="grant-mark" aria-hidden="true">{r.mark}</span>
+          <span className="grant-row">
+            <span className="grant-row-title">{r.title}</span>
+            <span className="grant-row-line"><New t={r.text} />{r.line ? <>{r.line.risky ? <strong>{r.line.lead}</strong> : r.line.lead}{r.line.rest}</> : r.text}</span>
+            {about === i && <span className="grant-about" role="note">{r.detail({ vault, host, lines })}</span>}
+          </span>
+          <button type="button" className="grant-q" aria-expanded={about === i} aria-label={`About: ${r.title}`} onClick={() => setAbout((a) => (a === i ? null : i))}>?</button>
+        </li>))}</ul>
+        : <p className="quiet">Nothing outside itself.</p>}
       {handed && Object.keys(handed).length > 0 && <p className="grant-handed">{handedLine(handed)}</p>}
       <p className="grant-rest">{runs === "approved-code"
         ? <><strong>{APPROVED_CODE_SHORT}</strong> It can't delete notes.</>
@@ -115,10 +171,12 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
         : <><strong>Nothing else.</strong> It can't delete notes or reach the internet.</>}
         {whose === "mine" && what === "component" && <> It reads only that vault.</>}</p>
       {hubAsk && <p className="grant-hub" role="note">Then your hub ({hubAsk.host}) asks you to let Parachute {hubAsk.level === "write" ? <>change notes in <strong>{vault}</strong></> : <>read <strong>{vault}</strong></>}: only this vault.</p>}
+      {signing && <p className="error" role="alert">{signing}</p>}
       <div className="grant-actions">
         <button type="button" className="grant-more" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen((o) => !o)}>{open ? "Hide details" : "Show details"}</button>
-        <button type="button" className="quiet-button" onClick={tap(onNotNow)}>Not now</button>
-        <button type="button" className="primary" {...(settle ? press.bind : {})} onClick={allow}>{codeChanged || broughtChanged ? "Allow this version" : "Allow"}</button>
+        {onBack && <button type="button" className="quiet-button" onClick={tap(onBack)}>Back</button>}
+        <button type="button" className="quiet-button" onClick={tap(onNotNow)}>Deny</button>
+        <button type="button" className="primary" {...(settle ? press.bind : {})} onClick={allow}>{approvedElsewhere ? "Continue" : codeChanged || broughtChanged ? "Allow this version" : "Allow"}</button>
       </div>
       <div className="grant-details" id={detailsId} hidden={!open}>
         {what === "component"

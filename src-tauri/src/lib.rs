@@ -4,6 +4,7 @@
 //! lives in the web app.
 
 mod approvals;
+pub mod approve;
 mod cards;
 pub mod door;
 mod files;
@@ -122,6 +123,7 @@ pub fn run() {
         .manage(pairing::PairState::default())
         .manage(services::ServicesState::default())
         .manage(keyring::KeyringState::default())
+        .manage(approve::PasscodeState::default())
         .manage(notify::NotifyState::default())
         .invoke_handler(tauri::generate_handler![
             app_version,
@@ -130,6 +132,9 @@ pub fn run() {
             files::save_file,
             saved::saved_get,
             saved::saved_put,
+            approve::approval_sign,
+            approve::passcode_status,
+            approve::passcode_set,
             key::key_status,
             cards::svc_card_view,
             cards::svc_card_trust,

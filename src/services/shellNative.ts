@@ -30,4 +30,7 @@ export const shellNative: Native = {
   secretSend: (session, service, event, value) => invoke("svc_secret_send", { session, service, event, value }),
   secretForget: (session, service, event) => invoke("svc_secret_forget", { session, service, event }),
   keyring: () => invoke("keyring_status"),
+  approvalSign: (content, d, name, passcode) => invoke("approval_sign", { content, d, name, passcode }),
+  passcodeStatus: () => invoke("passcode_status"),
+  passcodeSet: (old, next) => invoke("passcode_set", { old, new: next }),
 };

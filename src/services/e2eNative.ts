@@ -24,6 +24,7 @@ export function e2eNative(secretHex: string): Native {
   const keepTokens = () => { try { sessionStorage.setItem(KEPT, JSON.stringify(Object.fromEntries(tokens))); } catch { /* this page only */ } };
   const logs = new Map<string, LogLine[]>();
   const now = () => Math.floor(Date.now() / 1000);
+  let passcode: string | null = null;
   const sign = (kind: number, content: string, tags: string[][]): SignedEvent => finalizeEvent({ kind, content, tags, created_at: now() }, sk) as SignedEvent;
   const sess = (id: string) => { const s = sessions.get(id); if (!s) throw new Error("no session"); return s; };
   const svc = (id: string, service: string) => { const s = sess(id).services.get(service); if (!s) throw new Error("no service"); return s; };
@@ -147,5 +148,18 @@ export function e2eNative(secretHex: string): Native {
     async secretSend(session, service, ev, value) { if (!trusted(session, service).includes(ev.pubkey)) throw new Error("untrusted"); const w = deliveryWrap(sk, ev, secretRequest(ev), value); log(session, service, "secret (approval key)", w.id); return w; },
     async secretForget(session, service, ev) { if (!trusted(session, service).includes(ev.pubkey)) throw new Error("untrusted"); return forgetWrap(sk, ev, secretRequest(ev)); },
     async keyring() { return { everyday: pubkey, approval: pubkey, same: true, seal_pub: sealPub(sk), approvers: approvers() }; },
+    // approvals of code (src-tauri/src/approve.rs): the device unlock passes unless the test cancels it
+    // (window.__parachuteE2EApprove = "cancel"); each prompt is kept in window.__parachuteE2EApprovals
+    async approvalSign(content, d, name, code) {
+      if (passcode !== null && code !== passcode) throw { code: "passcode", message: code === null ? "Your passcode is needed for this." : "That passcode isn't it." };
+      const hook = window as unknown as { __parachuteE2EApprove?: string; __parachuteE2EApprovals?: string[] };
+      (hook.__parachuteE2EApprovals ??= []).push(name);
+      if (hook.__parachuteE2EApprove === "cancel") throw { code: "unlock", message: "The device unlock was cancelled or failed." };
+      const c = JSON.parse(content) as { subject?: { hub?: string; vault?: string; record?: string } };
+      if (d !== `${c.subject?.hub}|${c.subject?.vault}|${c.subject?.record}`) throw { code: "bad_request", message: "The approval names another applet than it says." };
+      return finalizeEvent({ kind: 30479, created_at: now(), tags: [["d", d]], content }, sk) as SignedEvent;
+    },
+    async passcodeStatus() { return passcode !== null; },
+    async passcodeSet(old, next) { if (passcode !== null && old !== passcode) throw { code: "passcode", message: "That passcode isn't it." }; passcode = next; },
   };
 }
