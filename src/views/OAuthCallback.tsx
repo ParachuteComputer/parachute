@@ -7,6 +7,7 @@ import PickVaults from "./PickVaults";
 import { afterSignIn, listWaiting } from "../shell/parachutes";
 import { homeVault } from "../shell/frameSource";
 import { listVaults } from "../vault/store";
+import { markTap } from "../open/mark";
 
 /** Where the hub sends the person back: after a sign-in's listing, on to the consent for one vault (or a pick first);
  *  after a vault's consent, to the launcher, or back where the ask came from (an applet's Allow, a change that needed
@@ -40,6 +41,9 @@ export default function OAuthCallback() {
       if (next.signIn) await afterSignIn(next.parachute.hub, [next.done], next.parachute.door === "cloud", next.firstHome).catch(() => undefined);
       // the home may be written now: the person's list of Parachutes, waiting for that, goes there
       else if (next.done.key === homeVault()?.key && next.done.scope.includes(`vault:${next.done.vault}:write`)) await listWaiting().catch(() => undefined);
+      // an applet allowed on its card, and then by the hub: it opens as after the Allow tap (the tap was the person's,
+      // and this return is the one their Allow started: its state was this app's, used once)
+      if (next.why === "allow" && next.back) markTap(new URL(next.back, window.location.origin).pathname);
       nav(next.back ?? "/", { replace: true });
     }, (e: unknown) => {
       if (e instanceof PendingApprovalError) setApprove(e.approveUrl);

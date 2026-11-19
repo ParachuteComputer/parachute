@@ -1,6 +1,7 @@
 // The app's own editor (docs/SIMPLE.md): a new note in a vault, or a note's words changed. A shell screen, so the frame
 // (which a person's vault can replace) never writes: it only sends the person here. Only the person's own words: never
 // an app's own note (settings, frame, theme, pointers) or code, which the note view offers no Edit for either.
+import { heldLevel } from "../vault/reach";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { VaultConflictError, type Note } from "@openparachute/surface-client";
@@ -19,7 +20,6 @@ export function pathFromText(text: string, at = new Date()): string {
 }
 const updatedOf = (n: Note | null) => (n as { updatedAt?: string } | null)?.updatedAt ?? null;
 /** May this device write in the vault? Its sign-in's scope says (a vault given to read only can't be changed here). */
-export const canWrite = (r: { scope: string }) => !r.scope.trim() || r.scope.split(/\s+/).some((w) => w === "vault:write" || w.endsWith(":write"));
 
 export default function NoteEdit() {
   const { vault: key, id } = useParams();
@@ -51,8 +51,10 @@ export default function NoteEdit() {
   }, [rec?.key, id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (state === "ready") box.current?.focus(); }, [state]);
 
-  const writable = vaults.filter(canWrite);
-  const target = writable.find((v) => v.key === into) ?? (rec && canWrite(rec) ? rec : null);
+  // any vault this device reads takes a new note: one it may only read asks first (vault/reach.ts, the shell's WriteAsk)
+  const writable = vaults;
+  const target = writable.find((v) => v.key === into) ?? rec ?? null;
+  const asksFirst = !!target && heldLevel(target) !== "write";
   async function save(force = false) {
     if (!target || state === "saving") return;
     setState("saving"); setError("");
@@ -85,7 +87,6 @@ export default function NoteEdit() {
   }
 
   if (!rec) return <main className="screen"><Bar title="Note" back={true} /><p className="error" role="alert">This device doesn't hold that vault.</p></main>;
-  if (!isNew && !canWrite(rec)) return <main className="screen"><Bar title="Edit" back={true} /><p className="error" role="alert">{rec.vault} is given to you to read only: its notes can't be changed here.</p></main>;
   return (
     <main className="screen note-edit">
       <Bar title={isNew ? "New note" : "Edit"} back={true} />
@@ -111,7 +112,7 @@ export default function NoteEdit() {
         </div>}
         <div className="row-buttons note-edit-actions">
           <button type="button" className="primary" disabled={state === "saving" || !target || (isNew && !text.trim())} onClick={() => void save()}>{state === "saving" ? "Saving…" : "Save"}</button>
-          <span className="quiet small">{isNew ? (target ? `Into ${target.vault}` : "No vault here takes new notes from this device.") : `In ${rec.vault}`}</span>
+          <span className="quiet small">{isNew ? (target ? `Into ${target.vault}` : "No vault here takes new notes from this device.") : `In ${rec.vault}`}{asksFirst ? ". Your hub asks you first." : ""}</span>
         </div>
       </>}
       {state === "error" && <p className="error" role="alert">{error}</p>}

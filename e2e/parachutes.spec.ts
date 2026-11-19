@@ -1,11 +1,10 @@
 // One sign-in per Parachute (docs/design/ONE-SIGN-IN.md), on two real hubs: the person's own (three vaults, each with
 // an applet) and Techne's (two vaults, one of them given to the person's key). Nobody types a vault's address: each hub
-// is signed in to once, and every vault the person may reach there comes with it. A second device that signs in to the
-// home Parachute finds Techne on the person's list.
+// is signed in to once; it reads the home (docs/design/SCOPES.md), and every other vault the person may reach there is
+// a tap away. A second device that signs in to the home Parachute finds Techne on the person's list.
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mintToken, MORE_VAULTS, NOT_GIVEN, ORG_VAULT, techneState, VAULT } from "./hub";
-import { approveUntilBack, signInWithKey, ui } from "./helpers";
-import { keyDoor } from "./keys";
+import { approveUntilBack, held, letWrite, openVault, signInWithKey, ui } from "./helpers";
 
 const hostOf = (origin: string) => new URL(origin).host;
 const parachute = (page: Page, origin: string) => ui(page).getByRole("region", { name: `Parachute: ${hostOf(origin)}` });
@@ -23,7 +22,7 @@ async function tidy() {
 test.use({ storageState: { cookies: [], origins: [] } });
 test.afterEach(tidy);
 
-test("sign in once per hub with the key: every vault of yours, with its applets, and none you weren't given; no vault address typed", async ({ page }) => {
+test("sign in once per hub with the key: the home read, every other vault of yours a tap away, none you weren't given; no vault address typed", async ({ page }) => {
   // a fresh device: nothing held
   await page.goto("/");
   await expect(page.getByLabel("Your Parachute's address")).toBeVisible();
@@ -31,42 +30,52 @@ test("sign in once per hub with the key: every vault of yours, with its applets,
 
   // the person's own Parachute, signed in with their key (linked to its owner)
   const asked = await signInWithKey(page, hubState(), VAULT, "Mine");
-  // without a key in the page (the web build), the hub asks twice: to list the vaults, then for all of them at once
+  // without a key in the page (the web build), the hub asks twice: to list the vaults, then to read the home
   expect(asked).toBe(2);
-  // one Parachute: its vaults' chapters, no heading over them
-  for (const v of [VAULT, ...MORE_VAULTS.map((m) => m.vault)]) await expect(ui(page).getByRole("region", { name: v, exact: true })).toBeVisible();
-  for (const m of MORE_VAULTS) await expect(ui(page).getByRole("region", { name: m.vault, exact: true }).getByRole("link", { name: new RegExp(m.applet) })).toBeVisible();
+  expect(Object.keys(await held(page))).toEqual([VAULT]);
+  // one Parachute: the home's chapter, and a line for each other vault
+  await expect(ui(page).getByRole("region", { name: VAULT, exact: true })).toBeVisible();
+  for (const m of MORE_VAULTS) {
+    await expect(ui(page).getByRole("region", { name: m.vault, exact: true })).toHaveCount(0);
+    await expect(ui(page).getByRole("button", { name: `Open ${m.vault}`, exact: true })).toBeVisible();
+  }
 
   // Techne's, as someone else's: only the vault the person was given
   expect(await signInWithKey(page, techneState(), ORG_VAULT)).toBe(2);
   // two Parachutes: each its own part, the home's first
   const mine = parachute(page, hubState().origin);
-  for (const v of [VAULT, ...MORE_VAULTS.map((m) => m.vault)]) await expect(mine.getByRole("region", { name: v, exact: true })).toBeVisible();
+  await expect(mine.getByRole("region", { name: VAULT, exact: true })).toBeVisible();
   const org = parachute(page, techneState().origin);
   await expect(org.getByRole("region", { name: ORG_VAULT, exact: true })).toContainText(`someone else's · at ${hostOf(techneState().origin)}`);
   await expect(ui(page).getByRole("region", { name: NOT_GIVEN, exact: true })).toHaveCount(0);
+  await expect(ui(page).getByRole("button", { name: `Open ${NOT_GIVEN}`, exact: true })).toHaveCount(0);
   // the home Parachute first, with the home vault
   await expect(ui(page).getByRole("region", { name: /^Parachute: / }).first()).toHaveAccessibleName(`Parachute: ${hostOf(hubState().origin)}`);
   await expect(mine.getByRole("region", { name: VAULT, exact: true })).toContainText("your home");
 
-  // an applet of another vault runs, through that vault's own token (minted from the one sign-in)
-  await mine.getByRole("region", { name: "letters", exact: true }).getByRole("link", { name: /Post/ }).click();
+  // another vault, opened: the hub asks to read that one, and its applet runs through that vault's own token
+  expect(await openVault(page, "letters")).toBe(1);
+  await parachute(page, hubState().origin).getByRole("region", { name: "letters", exact: true }).getByRole("link", { name: /Post/ }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(page.frameLocator("iframe.applet-frame").getByText("In letters.")).toBeVisible();
 
-  // both Parachutes are on the person's list, in their home vault
-  const [note] = await home("GET", "notes?tag=parachute-settings&include_metadata=true");
-  expect(note.metadata.parachute.hubs.map((h: { hub: string }) => h.hub).sort()).toEqual([hubState().origin, techneState().origin].sort());
+  // the person's list of Parachutes waits for a home Parachute may write; once they let it, both are listed there
+  expect(await home("GET", "notes?tag=parachute-settings&include_metadata=true")).toEqual([]);
+  await letWrite(page, VAULT);
+  await expect.poll(async () => ((await home("GET", "notes?tag=parachute-settings&include_metadata=true"))[0]?.metadata?.parachute?.hubs ?? []).map((h: { hub: string }) => h.hub).sort())
+    .toEqual([hubState().origin, techneState().origin].sort());
 
   // Settings: one place per Parachute; whose came from the one answer for all its vaults
   await page.goto("/settings");
   const s = page.getByRole("region", { name: `Parachute: ${hostOf(hubState().origin)}` });
-  for (const v of [VAULT, ...MORE_VAULTS.map((m) => m.vault)]) await expect(s.getByRole("combobox", { name: `Whose ${v} is` })).toHaveValue("mine");
+  for (const v of [VAULT, "letters"]) await expect(s.getByRole("combobox", { name: `Whose ${v} is` })).toHaveValue("mine");
+  await expect(s).toContainText("reads and changes notes");
   await expect(page.getByRole("region", { name: `Parachute: ${hostOf(techneState().origin)}` }).getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
 });
 
 test("each vault keeps a sign-in of its own: one refreshed, the others untouched", async ({ page }) => {
   await signInWithKey(page, hubState(), VAULT, "Mine");
+  for (const m of MORE_VAULTS) await openVault(page, m.vault);
   type Rec = { vault: string; accessToken: string; refreshToken: string; clientId: string };
   const held = () => page.evaluate(() => JSON.parse(localStorage.getItem("parachute.vaults.v1")!) as Rec[]);
   const before = await held();
@@ -91,38 +100,32 @@ test("each vault keeps a sign-in of its own: one refreshed, the others untouched
   await expect(ui(page).getByRole("list", { name: "Notes" })).toContainText("Post");
 });
 
-test("a sign-in stopped partway keeps the vaults it had, and says which", async ({ page }) => {
-  // the hub says no to the last vault's own sign-in (as if the person pressed Deny on a page it showed)
-  await page.route((u) => u.pathname === "/oauth/authorize" && u.searchParams.get("vault") === "pantry" && u.searchParams.get("scope") !== null && !u.searchParams.get("scope")!.includes("kitchen"), async (r) => {
+test("a no on the hub's page for one vault keeps what the app held, and says so", async ({ page }) => {
+  await signInWithKey(page, hubState(), VAULT, "Mine");
+  // the hub says no to pantry (as if the person pressed Deny on its page)
+  await page.route((u) => u.pathname === "/oauth/authorize" && u.searchParams.get("vault") === "pantry", async (r) => {
     const u = new URL(r.request().url());
     await r.fulfill({ status: 302, headers: { location: `${u.searchParams.get("redirect_uri")}?error=access_denied&state=${u.searchParams.get("state")}` } });
   });
-  const cookies = await keyDoor(hubState().origin, hubState().key);
-  await page.context().addCookies(cookies.map((c) => ({ ...c, url: hubState().origin })));
-  await page.goto("/");
-  await page.getByLabel("Your Parachute's address").fill(hubState().origin);
-  await page.getByRole("radio", { name: "Mine" }).check();
-  await page.getByRole("button", { name: "Sign in" }).click();
-  // the pages without a key: see which vaults are yours, which of them are (the person runs this hub), then all of
-  // them; the hops after stop at pantry
-  for (const name of ["Approve", "Continue", "Approve"]) {
-    const before = page.url();
-    await page.getByRole("button", { name }).click();
-    await page.waitForURL((u) => u.href !== before);
-  }
-  await expect(page.getByRole("alert")).toContainText("You said no on the hub. The 2 vaults signed in to before that stay: kitchen, letters.");
+  await ui(page).getByRole("button", { name: "Open pantry", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("You said no on the hub. Nothing changed.");
   await page.getByRole("link", { name: "Open your launcher" }).click();
-  for (const v of [VAULT, "letters"]) await expect(ui(page).getByRole("region", { name: v, exact: true })).toBeVisible();
+  await expect(ui(page).getByRole("region", { name: VAULT, exact: true })).toBeVisible();
   await expect(ui(page).getByRole("region", { name: "pantry", exact: true })).toHaveCount(0);
+  await expect(ui(page).getByRole("button", { name: "Open pantry", exact: true })).toBeVisible();
+  expect(Object.keys(await held(page))).toEqual([VAULT]);
 });
 
 test("on a hub the person runs, they say which of its vaults are theirs; the others come in as someone else's", async ({ page }) => {
   await signInWithKey(page, hubState(), VAULT, "Mine", async (p) => {
-    await expect(p.getByRole("group", { name: /Every vault on .* comes in\. Which are yours\?/ })).toBeVisible();
+    await expect(p.getByRole("group", { name: /Which vaults on .* are yours\?/ })).toBeVisible();
     // all ticked to begin with: a good default for a hub of one's own
     for (const v of [VAULT, "letters", "pantry"]) await expect(p.getByRole("checkbox", { name: v })).toBeChecked();
     await p.getByRole("checkbox", { name: "pantry" }).uncheck();
+    // the home is one of the person's own: pantry isn't offered any more
+    await expect(p.getByRole("radio", { name: "pantry" })).toHaveCount(0);
   });
+  await openVault(page, "pantry");
   await expect(ui(page).getByRole("region", { name: "pantry", exact: true })).toContainText("someone else's");
   await page.goto("/settings");
   await expect(page.getByRole("combobox", { name: "Whose pantry is" })).toHaveValue("theirs");
@@ -154,14 +157,20 @@ test("signing in again never changes what the person said of a vault", async ({ 
   await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("mine");
 });
 
-test("a new device takes as home the vault of the person's that holds their settings, wherever it is", async ({ page }) => {
+test("a new device asks which vault is home; the one chosen is read, and the settings there are the person's", async ({ page }) => {
   // another device made pantry the home: its settings note is there (and lists Techne); none in the kitchen
   for (const n of await home("GET", "notes?tag=parachute-settings")) await home("DELETE", `notes/${n.id}`);
   const pantry = { ...hubState(), token: mintToken("vault:pantry:write") };
   const note = await api(pantry, "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar: [], start: null, hubs: [{ hub: techneState().origin }] } } }, "pantry");
   try {
-    await signInWithKey(page, hubState(), VAULT, "Mine");
-    await expect(parachute(page, hubState().origin).getByRole("region", { name: "pantry", exact: true })).toContainText("your home");
+    await signInWithKey(page, hubState(), "pantry", "Mine", async (p) => {
+      // the first by name to begin with; the person picks theirs
+      await expect(p.getByRole("radio", { name: VAULT })).toBeChecked();
+      await p.getByRole("radio", { name: "pantry" }).check();
+    });
+    expect(Object.keys(await held(page))).toEqual(["pantry"]);
+    // the home is the one vault read: the settings there name Techne
+    await expect(parachute(page, hubState().origin).getByRole("region", { name: "pantry", exact: true })).toBeVisible();
     await expect(parachute(page, techneState().origin)).toContainText("not signed in on this device");
   } finally {
     await api(pantry, "DELETE", `notes/${note.id}`, undefined, "pantry");
@@ -175,13 +184,15 @@ test("a second device that signs in to the home Parachute finds Techne on the li
   const a = await first.newPage();
   await signInWithKey(a, hubState(), VAULT, "Mine");
   await signInWithKey(a, techneState(), ORG_VAULT);
+  // the list is written once the person lets Parachute change notes in their home
+  await letWrite(a, VAULT);
   await first.close();
 
   const second = await fresh();
   const b = await second.newPage();
   await signInWithKey(b, hubState(), VAULT, "Mine");
   // the same home, and Techne listed but not signed in here
-  await expect(parachute(b, hubState().origin).getByRole("region", { name: VAULT, exact: true })).toContainText("your home");
+  expect(Object.keys(await held(b))).toEqual([VAULT]);
   const org = parachute(b, techneState().origin);
   await expect(org).toContainText("not signed in on this device");
   await expect(org.getByRole("region", { name: ORG_VAULT, exact: true })).toHaveCount(0);

@@ -1,6 +1,7 @@
 // A vault made on the person's Parachute after this device signed in there comes to the launcher as one quiet line,
-// "New: <vault>, tap to add" (src/vault/newVaults.ts), asked when the app opens and when the launcher shows again, at
-// most once a minute per hub. A tap goes through the hub's consent for it, once; Not now keeps it away. It signs in
+// "Open <vault>" (src/vault/newVaults.ts; the same line as every vault the sign-in didn't read), asked when the app
+// opens and when the launcher shows again, at most once a minute per hub. A tap goes through the hub's consent to read
+// it, once; Not now keeps it away. It signs in
 // itself (the shared sign-in would be retired by it), so it runs with the sign-in specs, last.
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -20,7 +21,7 @@ async function makeVault(vault: string, applet: string) {
 }
 const dropVault = (vault: string) => { try { cli(hubState(), ["vault", "remove", vault, "--yes"]); } catch { /* gone already */ } };
 
-const newLine = (page: Page, vault: string) => ui(page).getByRole("button", { name: `New: ${vault}, tap to add` });
+const newLine = (page: Page, vault: string) => ui(page).getByRole("button", { name: `Open ${vault}`, exact: true });
 
 test.afterAll(() => { dropVault("garden"); dropVault("attic"); });
 
@@ -53,8 +54,8 @@ test("a vault made after signing in is offered on the launcher, and a tap adds i
   await expect(garden.getByRole("link", { name: /Seeds/ })).toBeVisible();
   await expect(newLine(page, "garden")).toHaveCount(0);
   const recs = await page.evaluate(() => (JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]") as { vault: string; scope: string }[]));
-  // a token for that vault alone, as the hub granted it
-  expect(recs.find((r) => r.vault === "garden")?.scope.split(" ").sort()).toEqual(["vault:garden:read", "vault:garden:write"]);
+  // a token for that vault alone, read only, as the hub granted it
+  expect(recs.find((r) => r.vault === "garden")?.scope).toBe("vault:garden:read");
 });
 
 test("Not now keeps a new vault off the launcher, also after the app opens again", async ({ page }) => {

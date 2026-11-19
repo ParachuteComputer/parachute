@@ -135,8 +135,9 @@ export const scopeFor = (vault: string, level: Level) => (level === "write" ? `v
  *  asked: the person holds only read there). */
 export function levelIn(scope: string | undefined, vault: string): Level | null {
   const words = new Set((scope ?? "").split(/\s+/));
-  if (words.has(`vault:${vault}:write`) || words.has(`vault:${vault}:admin`)) return "write";
-  return words.has(`vault:${vault}:read`) ? "read" : null;
+  // (a record kept from an older sign-in may hold the vault-wide words, `vault:write`, that its audience pins)
+  if (words.has(`vault:${vault}:write`) || words.has(`vault:${vault}:admin`) || words.has("vault:write") || words.has("vault:admin")) return "write";
+  return words.has(`vault:${vault}:read`) || words.has("vault:read") ? "read" : null;
 }
 /** Does `held` cover `need`? */
 export const covers = (held: Level | null, need: Level) => held === "write" || (held === "read" && need === "read");
