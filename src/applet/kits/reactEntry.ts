@@ -2,7 +2,7 @@
 // the app puts in the frame of an applet written as a module. It sets `window.__ParachuteModules`, which the module
 // loader (code.ts) serves as the module's imports; `parts` joins the `parachute` import. Without the note renderer:
 // an applet that imports `Note` gets reactNoteEntry.ts instead.
-import { Card, Days, Empty, Field, List } from "../../kit/parts";
+import { Card, Days, Empty, Field, List, useSaved } from "../../kit/parts";
 import { useTheme } from "../../kit/useTheme";
 import { Link, Linked, link } from "../../kit/links";
 import { setModules } from "./modules";
@@ -10,4 +10,4 @@ import { setModules } from "./modules";
 function Note() {
   throw new Error("Note isn't loaded here: import it by name (import { Note } from \"parachute\")");
 }
-setModules({ Card, Days, Empty, Field, Link, Linked, List, Note, link, useTheme });
+setModules({ Card, Days, Empty, Field, Link, Linked, List, Note, link, useSaved, useTheme });

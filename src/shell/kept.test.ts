@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keptId, KEEP, stays } from "./kept";
+import { keptId, KEEP, KEEP_DESKTOP, stays } from "./kept";
 
 const entry = (id: string, at: number, keepable = true) => ({ id, at, keepable, location: { pathname: `/v/x/a/${id}`, search: "", hash: "", state: null, key: id } });
 
@@ -16,8 +16,12 @@ describe("kept applets", () => {
   });
   it("the one shown stays; of the others only those that run, the most recently shown first, KEEP of them", () => {
     const all = [entry("a", 1), entry("b", 2), entry("c", 3, false), entry("d", 4), entry("e", 5), entry("f", 6)];
-    expect(stays(all, "a").map((e) => e.id).sort()).toEqual(["a", "d", "e", "f"]);
-    expect(stays(all, "a")).toHaveLength(1 + KEEP);
+    expect(stays(all, "a", 3).map((e) => e.id).sort()).toEqual(["a", "d", "e", "f"]);
+    expect(stays(all, "a", 3)).toHaveLength(4);
+    // a computer (the tests' browser) keeps 12
+    expect(KEEP).toBe(KEEP_DESKTOP);
+    const many = Array.from({ length: 20 }, (_, i) => entry(`x${i}`, i));
+    expect(stays(many, null)).toHaveLength(KEEP);
     // the one shown stays even while it can't be kept (asking, stopped)
     expect(stays([entry("c", 3, false)], "c").map((e) => e.id)).toEqual(["c"]);
     // nothing shown (the launcher): only the ones that run

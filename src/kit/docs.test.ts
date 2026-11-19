@@ -15,6 +15,7 @@ describe("the parts", () => {
   });
   it("a frame of the person's can use the same parts", () => {
     // not the links: they ask an applet's shell (app.links, app.follow); the frame opens a note by its own route
-    for (const p of PART_NAMES.filter((n) => !["useTheme", "Link", "Linked", "link"].includes(n))) expect(lib, p).toHaveProperty(p);
+    // nor saved state: it is an applet's, kept by its shell
+    for (const p of PART_NAMES.filter((n) => !["useTheme", "useSaved", "Link", "Linked", "link"].includes(n))) expect(lib, p).toHaveProperty(p);
   });
 });

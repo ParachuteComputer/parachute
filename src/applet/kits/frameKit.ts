@@ -25,6 +25,12 @@
 //                                      on Send, null on Cancel (docs/design/KEYRING.md "Voice, files, links, storage")
 //   uni.storage.get/set/keys         → (storage) a little JSON kept by the shell on this device for it, 256 KB in all (a
 //                                      value of any size within it: set sends it as bytes)
+//   uni.saved.get(key) / .set(key, value) / .all() / .flush() → what it saves on this device as the person goes (drafts,
+//                                      the screen it was on): handed back in ready, so get() answers at once after it;
+//                                      set() reaches the shell 250 ms after the last change (a second at most while
+//                                      typing; at once when the applet is hidden), which writes it to disk. A null value
+//                                      removes the key; keys are 1 to 100 plain characters. Where the page was scrolled
+//                                      is kept by itself. The React kit's useSaved is built on it.
 //   uni.vault.attach(noteId, bytes, type, {transcribe}) → a file onto a note it may change, through the hub
 //   uni.services.*                   → the servers it declared (docs/design/SERVICES.md); card/answer/secret: Uni's
 //                                      approvals, with the approval key (docs/design/KEYRING.md)
@@ -38,6 +44,9 @@
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
   var svcSubs = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [];
+  // saved state (docs/WRITE-AN-APPLET.md "Saved state"): what the shell handed back, and what changed since it was sent
+  // savedOn: the app hands saved state to this frame (an applet's own screen; an embed's has none)
+  var savedVals = {}, savedDirty = null, savedTimer = null, savedFirst = 0, savedOn = false, SAVE_MS = 250, SAVE_MAX_MS = 1000, SCROLL = "parachute:scroll";
   var measuring = false, lastHeight = -1, queued = false;
   var readyP = new Promise(function (r) { readyRes = r; });
   // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen
@@ -141,6 +150,61 @@ export const FRAME_KIT = String.raw`(function () {
     };
     go();
   }
+  // what changed goes in batches of at most 64 keys; a batch that failed to be written goes back in line (unless something
+  // newer replaced it), so a draft is never dropped by one failed write
+  function savedFlush() {
+    if (savedTimer) { clearTimeout(savedTimer); savedTimer = null; }
+    savedFirst = 0;
+    if (!savedDirty || !savedOn) return Promise.resolve(null);
+    var all = savedDirty, keys = Object.keys(all); savedDirty = null;
+    var sends = [];
+    for (var i = 0; i < keys.length; i += 64) {
+      var part = {}; keys.slice(i, i + 64).forEach(function (k) { part[k] = all[k]; });
+      sends.push(call("saved", "put", { bytes: new TextEncoder().encode(JSON.stringify(part)).buffer }).then(null, (function (part) { return function (e) {
+        try { console.warn("saved: " + (e && e.message)); } catch (x) {}
+        // only what may pass next time goes back in line (the disk, a busy shell, no answer); a refusal for what it is
+        // (a bad key or value, a full store) would block every later save, so it is dropped, said once in the console
+        var code = e && e.code;
+        if (code && code !== "failed" && code !== "rate_limited" && code !== "too_many_pending") return null;
+        savedDirty = savedDirty || {};
+        Object.keys(part).forEach(function (k) { if (!Object.prototype.hasOwnProperty.call(savedDirty, k)) savedDirty[k] = part[k]; });
+        if (!savedTimer) savedTimer = setTimeout(savedFlush, SAVE_MAX_MS);
+        return null;
+      }; })(part)));
+    }
+    return Promise.all(sends).then(function () { return null; });
+  }
+  function savedSet(key, value) {
+    if (typeof key !== "string" || !key || key.length > 100 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(key)) throw new TypeError("saved needs a key of 1 to 100 plain characters");
+    var v = value === undefined ? null : value;
+    if (v !== null) { var text = JSON.stringify(v); if (text === undefined) throw new TypeError("saved keeps JSON"); v = JSON.parse(text); }
+    if (v === null) delete savedVals[key]; else savedVals[key] = v;
+    (savedDirty = savedDirty || {})[key] = v;
+    // 250 ms after the last change, and never more than a second after the first: one call while typing, not four
+    var now = Date.now(); if (!savedFirst) savedFirst = now;
+    if (savedTimer) clearTimeout(savedTimer);
+    savedTimer = setTimeout(savedFlush, Math.max(0, Math.min(SAVE_MS, savedFirst + SAVE_MAX_MS - now)));
+  }
+  // where the page was scrolled: kept as the person scrolls, put back once when the page is tall enough again
+  var scrollBack = null;
+  function restoreScroll() {
+    var want = savedVals[SCROLL]; if (typeof want !== "number" || want <= 0) return;
+    var until = Date.now() + 4000, done = false;
+    function tryIt() {
+      if (done || Date.now() > until) return;
+      if (document.documentElement.scrollHeight - innerHeight >= want) { scrollTo(0, want); done = true; return; }
+      setTimeout(tryIt, 100);
+    }
+    scrollBack = function () { done = true; };
+    tryIt();
+  }
+  addEventListener("scroll", function () { if (savedOn) savedSet(SCROLL, Math.round(scrollY) || null); }, { passive: true });
+  // the person scrolling first wins over putting the old place back
+  addEventListener("wheel", function () { if (scrollBack) scrollBack(); }, { passive: true });
+  addEventListener("touchstart", function () { if (scrollBack) scrollBack(); }, { passive: true });
+  // nothing waits on a way out, but where there is a moment, what changed goes now
+  addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") savedFlush(); });
+  addEventListener("pagehide", function () { savedFlush(); });
   addEventListener("message", function (e) {
     if (e.source !== parent) return;
     var m = e.data; if (!m || typeof m !== "object") return;
@@ -154,6 +218,7 @@ export const FRAME_KIT = String.raw`(function () {
     }
     if (m.uni !== 1) return;
     if (m.event === "ready") {
+      if (m.data && m.data.saved && typeof m.data.saved === "object") { savedOn = true; savedVals = m.data.saved; restoreScroll(); }
       if (m.data && m.data.theme) applyTheme(m.data.theme);
       if (m.data && m.data.props) applyProps(m.data.props);
       // booted while hidden: what read shown() before ready (a component's first render) hears the change
@@ -167,7 +232,7 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "theme") { applyTheme(m.data); return; }
     if (m.event === "open") { applyOpen(m.data); return; }
     if (m.event === "launch") { launchCbs.slice().forEach(function (f) { try { f(m.data); } catch (e) {} }); return; }
-    if (m.event === "shown") { shownNow = !!(m.data && m.data.shown); shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); return; }
+    if (m.event === "shown") { shownNow = !!(m.data && m.data.shown); if (!shownNow) savedFlush(); shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); return; }
     if (m.event === "services.events") {
       var d = m.data || {}, h = svcSubs[d.service + "|" + d.sub];
       if (h) { if (d.events && d.events.length) { h.tries = 0; try { h.onEvents(d.events); } catch (e) {} } if (d.eose && h.onEose) { try { h.onEose(); } catch (e) {} } }
@@ -288,6 +353,12 @@ export const FRAME_KIT = String.raw`(function () {
     }),
     voice: Object.freeze({
       record: function (o) { return call("voice", "record", o || {}); }
+    }),
+    saved: Object.freeze({
+      get: function (key) { return Object.prototype.hasOwnProperty.call(savedVals, key) ? savedVals[key] : null; },
+      set: savedSet,
+      all: function () { return JSON.parse(JSON.stringify(savedVals)); },
+      flush: savedFlush
     }),
     storage: Object.freeze({
       get: function (key) { return call("storage", "get", { key: key }); },

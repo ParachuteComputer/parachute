@@ -4,6 +4,8 @@
 // (applet/modules/app.ts, storage.ts), and Rust checks a link and a name again.
 import { inShell } from "../vault/oauth";
 import type { StorageDeps } from "../applet/modules/storage";
+import { deviceSaved } from "./saved";
+import { ContractError, ERROR_CODES } from "../applet/contract";
 
 async function invoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
@@ -32,21 +34,16 @@ export async function saveFileOut(name: string, bytes: ArrayBuffer, type: string
   return name;
 }
 
-/** Where an applet's storage is kept: one localStorage entry per applet (its grant's subject). */
-export const STORAGE_PREFIX = "parachute.applet-storage.v1:";
-
+/** Where an applet's storage is kept: the saved store (shell/saved.ts), one per applet (its grant's subject). */
 export function storageFor(subject: string): StorageDeps {
-  const key = STORAGE_PREFIX + encodeURIComponent(subject);
+  const store = deviceSaved();
   return {
-    read() {
-      try {
-        const v = JSON.parse(localStorage.getItem(key) ?? "{}") as unknown;
-        return v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>)) : {};
-      } catch { return {}; }
-    },
-    write(all) {
-      if (Object.keys(all).length) localStorage.setItem(key, JSON.stringify(all));
-      else localStorage.removeItem(key);
+    read: () => store.load(subject),
+    async write(all) {
+      // what is gone from it is removed, the rest set: one write to the same store the kit's saved state uses
+      const entries: Record<string, unknown> = { ...all };
+      for (const k of Object.keys(store.now(subject))) if (!Object.hasOwn(all, k)) entries[k] = null;
+      if (Object.keys(entries).length && (await store.put(subject, entries)) === "full") throw new ContractError(ERROR_CODES.tooLarge, "its storage on this device is full (256 KB)");
     },
   };
 }

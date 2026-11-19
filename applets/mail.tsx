@@ -5,7 +5,9 @@
 // keyword (the Inbox leaves a Later thread out until something new comes in on it); Waiting is the sends from Uni's
 // account its outbound rules hold for the owner, each approved (signed with the approval key) or declined here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Linked as KitLinked, ready, services } from "parachute";
+import { Linked as KitLinked, ready, services, useSaved as KitUseSaved } from "parachute";
+// kept on this device by the kit (docs/WRITE-AN-APPLET.md "Saved state"); an app from before it keeps it for the visit only
+const useSaved: <T>(key: string, initial: T) => [T, (v: T | ((was: T) => T)) => void] = KitUseSaved ?? ((_key: string, initial: any) => useState(initial));
 
 // an app from before note links (11-18) has no Linked: there a mail's text is drawn as text
 const Linked = KitLinked ?? (({ text }: { text: string }) => <>{text}</>);
@@ -100,7 +102,8 @@ export default function Mail() {
   const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<string | null>(null);
   const [boxes, setBoxes] = useState<Box[]>([]);
-  const [place, setPlace] = useState("inbox");
+  // which box it was on is kept, so Mail opens there again
+  const [place, setPlace] = useSaved("place", "inbox");
   const [list, setList] = useState<Email[] | null>(null);
   const [q, setQ] = useState("");
   const [searched, setSearched] = useState<string | null>(null);
@@ -316,10 +319,15 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
 
 function Compose({ account, can, draft, reply, done }: { account: string; can: (o: string) => boolean; draft?: Draft; reply?: Email; done: (sent: boolean) => void }) {
   const init: Fields = draft?.fields ?? (reply ? { to: (reply.replyTo?.length ? reply.replyTo : reply.from) ?? [], cc: [], bcc: [], subject: /^re:/i.test(reply.subject ?? "") ? reply.subject! : `Re: ${reply.subject ?? ""}`, text: "", inReplyTo: reply.id } : { to: [], cc: [], bcc: [], subject: "", text: "" });
-  const [to, setTo] = useState(addrLine(init.to));
-  const [cc, setCc] = useState(addrLine(init.cc));
-  const [subject, setSubject] = useState(init.subject);
-  const [text, setText] = useState(init.text);
+  // what is typed is kept on this device as it is typed (one per message being written: new, a reply, a draft opened),
+  // so leaving Mail, closing the app or a restart loses none of it; sending or discarding forgets it
+  const [kept, keep] = useSaved<{ to: string; cc: string; subject: string; text: string } | null>(`compose:${draft?.draftId ?? (reply ? `re:${reply.id}` : "new")}`.slice(0, 100), null);
+  const [to, setTo] = useState(kept?.to ?? addrLine(init.to));
+  const [cc, setCc] = useState(kept?.cc ?? addrLine(init.cc));
+  const [subject, setSubject] = useState(kept?.subject ?? init.subject);
+  const [text, setText] = useState(kept?.text ?? init.text);
+  const typed = useRef(false);
+  useEffect(() => { if (typed.current) keep({ to, cc, subject, text }); typed.current = true; }, [to, cc, subject, text]);
   const [saved, setSaved] = useState<{ draftId: string; fingerprint: string } | null>(draft?.draftId && draft.fingerprint ? { draftId: draft.draftId, fingerprint: draft.fingerprint } : null);
   const [review, setReview] = useState<any>(null);
   const [state, setState] = useState("");
@@ -346,13 +354,13 @@ function Compose({ account, can, draft, reply, done }: { account: string; can: (
     setBusy(true); setErr("");
     try {
       const r = await op("send", account, { opId: send.current, draftId: review.draftId, fingerprint: review.fingerprint });
-      if (r.state === "cleaned" || r.state === "submitted") { setState("Sent."); setTimeout(() => done(true), 600); }
-      else if (r.state === "awaiting-approval") setState("Held: it waits for your OK before it goes.");
+      if (r.state === "cleaned" || r.state === "submitted") { setState("Sent."); keep(null); setTimeout(() => done(true), 600); }
+      else if (r.state === "awaiting-approval") { setState("Held: it waits for your OK before it goes."); keep(null); }
       else setState(`Not sent: ${r.reason ?? r.state}`);
     } catch (e: any) { setErr(`Not sent: ${e?.message ?? e}`); }
     setBusy(false);
   };
-  const discard = async () => { if (saved && can("draft.discard")) await op("draft.discard", account, { draftId: saved.draftId }).catch(() => {}); done(false); };
+  const discard = async () => { if (saved && can("draft.discard")) await op("draft.discard", account, { draftId: saved.draftId }).catch(() => {}); keep(null); done(false); };
   const valid = addrs(to).length > 0 && addrs(to).every((a) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a.email));
   return <>
     <button className="back" onClick={() => done(false)}>← Mail</button>

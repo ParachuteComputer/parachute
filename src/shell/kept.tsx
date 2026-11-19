@@ -8,7 +8,8 @@
 //   handed to it (AppletScreen says so: `keepable`). One that is stopped, revoked, asking on its card, refused or
 //   loading goes when the person leaves it, as every screen did before;
 // - not a page with embeds (its embeds may run another vault's code);
-// - at most KEEP of them hidden; the one left longest ago goes first.
+// - at most KEEP of them hidden (6 on a phone, 12 on a computer); the one left longest ago goes first. One that goes
+//   loses nothing it saved through the kit (shell/saved.ts): it starts again with its drafts and where it was.
 // A notification's tap (room, message) reaches an applet already running at its own address, shown or kept, as a
 // `launch` event without a new tap: it was started by one, and a launch carries only a room id and a message id. A grant
 // that expires while hidden is seen when shown.
@@ -20,8 +21,11 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Route, Routes, useLocation, type Location } from "react-router";
 import AppletScreen from "../views/AppletScreen";
 
-/** How many applets may stay running while hidden. */
-export const KEEP = 3;
+/** How many applets may stay running while hidden: 6 on a phone, 12 on a computer. Only speed hangs on it now: an
+ *  applet that goes keeps what it saved (shell/saved.ts) and starts again where it was. */
+export const KEEP_PHONE = 6, KEEP_DESKTOP = 12;
+const phone = () => typeof navigator !== "undefined" && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+export const KEEP = phone() ? KEEP_PHONE : KEEP_DESKTOP;
 
 const APPLET = /^\/v\/([^/]+)\/a\/([^/]+)$/;
 /** The query words that keep an address the applet's own (a notification's launch); any other makes it a fresh screen. */
@@ -47,8 +51,8 @@ const KeptContext = createContext<Kept>({ shown: true, keepable: () => {} });
 export const useKept = () => useContext(KeptContext);
 
 /** Which entries stay: the one shown, and up to KEEP others that may be kept, the most recently shown first. */
-export function stays(entries: readonly Entry[], current: string | null): Entry[] {
-  const hidden = entries.filter((e) => e.id !== current && e.keepable).sort((a, b) => b.at - a.at).slice(0, KEEP);
+export function stays(entries: readonly Entry[], current: string | null, keep = KEEP): Entry[] {
+  const hidden = entries.filter((e) => e.id !== current && e.keepable).sort((a, b) => b.at - a.at).slice(0, keep);
   return entries.filter((e) => e.id === current || hidden.includes(e));
 }
 
