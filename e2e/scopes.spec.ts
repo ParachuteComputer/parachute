@@ -27,6 +27,7 @@ function asksOf(page: Page): string[] {
 const consentText = async (page: Page) => (await page.locator("body").innerText()).replace(/\s+/g, " ");
 
 test("a fresh sign-in asks for the list of vaults and to read the home; Journal asks for its vault alone; revoking it ends the hub's write", async ({ page }) => {
+  test.setTimeout(180_000);
   const hub = hubState();
   const asks = asksOf(page);
   const consents: string[] = [];
@@ -103,8 +104,14 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
     await expect.poll(() => held(page), { timeout: 20_000 }).toEqual({ [VAULT]: `vault:${VAULT}:read`, [OTHER]: `vault:${OTHER}:read` });
     expect(asks).toEqual([`vault:${OTHER}:read`]);
     // at the hub: the token that could write is ended, both halves
-    const write = await fetch(`${hub.origin}/vault/${OTHER}/api/notes`, { method: "POST", headers: { authorization: `Bearer ${before.accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ path: `Scratch/${stamp}`, content: "x" }) });
-    expect(write.status).toBe(401);
+    // (core 0.9 refuses it at once; 0.8's vault reads the hub's revocations within about a minute)
+    const scratch: string[] = [];
+    await expect.poll(async () => {
+      const w = await fetch(`${hub.origin}/vault/${OTHER}/api/notes`, { method: "POST", headers: { authorization: `Bearer ${before.accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ path: `Scratch/${stamp}-${scratch.length}`, content: "x" }) });
+      if (w.status === 201) scratch.push(((await w.json()) as { id: string }).id);
+      return w.status;
+    }, { timeout: 90_000, intervals: [2_000, 5_000, 10_000] }).toBe(401);
+    for (const id of scratch) await api(there, "DELETE", `notes/${id}`, undefined, OTHER).catch(() => {});
     const again = await fetch(before.tokenEndpoint, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: before.refreshToken, client_id: before.clientId }) });
     expect(again.status).toBeGreaterThanOrEqual(400);
     // and what the app holds now can't write there

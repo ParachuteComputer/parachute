@@ -87,7 +87,8 @@ shot 13-hub-consent
 ax press "Approve" || fail "no Approve on the hub's page"
 # the launcher: the home's chapter, and the other vault a line to open (the sign-in read the home only)
 ax wait "Open the vault" 40 || fail "the launcher didn't open"
-ax wait "Open letters" 20 || fail "the other vault isn't offered to open"
+# (its line is "Open letters": the name is in its own run of text there)
+ax wait "letters" 20 || fail "the other vault isn't offered to open"
 ax wait "recipes" 10 || fail "the home isn't in the launcher"
 sleep 2
 shot 14-launcher

@@ -89,7 +89,7 @@ Signing out of a vault (Settings) revokes its token, as before.
 | `account:vaults` with any other scope | refused (`invalid_scope`) | refused | refused |
 | `vault:<v>:read` alone | page, read-only token (write → 403) | the same | the same |
 | Widening read → write | a page with both lines | the same | the same |
-| Revoked token | 401 within seconds | 401 | listed in its revocation document; vaults refuse it within a minute |
+| Revoked token | the hub refuses its refresh at once; the vault refuses the access token within about a minute (it reads the hub's revocations; 40 s in CI) | refused at once (401) | listed in its revocation document; vaults refuse it within a minute |
 | Revoke drops the grant | no | no | no (Disconnect in Cloud's account page does) |
 | A new registration with the same name and loopback return | inherits the grant: no page | the same | — (Cloud keeps per-app connections; a reconnect *replaces* the same app's earlier one) |
 
