@@ -72,8 +72,6 @@ export async function repin(p: PointerNote, code: string, c: Pick<VaultClient, "
   return true;
 }
 
-/** The other vaults a page's embeds come from, as "<vault> at <host>", for its host's card and grant (EMBED.md): pointers
- *  to a vault that isn't the person's own and isn't the host's. */
 /** Where a page's embeds point, every one (hub and vault), whoever's: the same on every device, for the asks' hash. */
 export async function embedTargets(embeds: readonly { record: string }[], all?: PointerNote[]): Promise<string[]> {
   if (!embeds.length) return [];
@@ -86,6 +84,8 @@ export async function embedTargets(embeds: readonly { record: string }[], all?: 
   return [...out].sort();
 }
 
+/** The other vaults a page's embeds come from, as "<vault> at <host>", for its host's card and grant (EMBED.md): pointers
+ *  to a vault that isn't the person's own and isn't the host's. */
 export async function embedsFrom(host: Pick<VaultRecord, "issuer" | "vault">, embeds: readonly { record: string }[], all?: PointerNote[]): Promise<string[]> {
   if (!embeds.length) return [];
   // no pointers read is no answer: the host's card must not leave out where its embeds come from (it fails closed)
