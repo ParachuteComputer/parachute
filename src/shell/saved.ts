@@ -61,8 +61,9 @@ export function createSavedStore(backend: SavedBackend) {
   // writes for one subject go out one after another, so an older copy never lands after a newer one
   const writing = new Map<string, Promise<void>>();
   const persist = (subject: string, all: Values) => {
-    const next = (writing.get(subject) ?? Promise.resolve()).then(() => backend.write(subject, all)).catch(() => { /* kept in memory for the session */ });
-    writing.set(subject, next);
+    // a failed write is the caller's to hear (the kit puts the change back in line); the next write goes after it either way
+    const next = (writing.get(subject) ?? Promise.resolve()).catch(() => {}).then(() => backend.write(subject, all));
+    writing.set(subject, next.catch(() => {}));
     return next;
   };
   return {
@@ -89,10 +90,10 @@ export function createSavedStore(backend: SavedBackend) {
       await persist(subject, next);
       return "ok";
     },
-    /** Everything it saved, gone ("Clear what it saved", Forget this vault). */
+    /** Everything it saved, gone. */
     async clear(subject: string): Promise<void> { memory.set(subject, {}); await persist(subject, {}); },
     /** Wait for every write already started (tests, and before the app leaves). */
-    async settled(): Promise<void> { await Promise.all([...writing.values()]); },
+    async settled(): Promise<void> { await Promise.all([...writing.values()]).catch(() => {}); },
   };
 }
 export type SavedStore = ReturnType<typeof createSavedStore>;

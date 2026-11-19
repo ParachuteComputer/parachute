@@ -51,3 +51,39 @@ test("hostile: a record can't widen its sources with every hub or a star inside 
   await expect(ui(page).getByRole("link", { name: /Recipe box/ })).toHaveCount(0);
   await expect(ui(page).getByRole("link", { name: /Cook mode/ })).toHaveCount(0);
 });
+
+test("Settings → Your app: choose between Simple, Everything and an app record; this device opens it, and a new one does too", async ({ page }) => {
+  await api(hubState(), "POST", "notes", { path: "Parachute/Apps/kitchen-table", content: "an app", tags: ["parachute-app"], metadata: { app: {
+    contract: 1, id: "kitchen-table", name: "Kitchen table", note: "just the recipes", sources: [{ vault: VAULT, applet: "Applets/Recipes" }] } } });
+  await start(page);
+  await page.goto("/settings");
+  const choice = page.getByRole("region", { name: "Your app" }).or(page.locator("section", { has: page.getByRole("heading", { name: "Your app" }) }));
+  await expect(choice.getByRole("radio")).toHaveCount(3);
+  await expect(choice.getByRole("radio", { name: /Everything/ })).toBeChecked();
+  await choice.getByRole("radio", { name: /Simple/ }).check();
+  await expect.poll(async () => (await tagged("parachute-settings"))[0]?.metadata.parachute.app).toBe("simple");
+  await page.goto("/");
+  await expect(bar(page).getByRole("link", { name: /Notes/ })).toBeVisible();
+  await expect(bar(page).getByRole("link", { name: /Connect/ })).toBeVisible();
+  await page.goto("/settings");
+  await choice.getByRole("radio", { name: /Kitchen table/ }).check();
+  await expect.poll(async () => (await tagged("parachute-settings"))[0]?.metadata.parachute.app).toBe("kitchen-table");
+  await page.goto("/");
+  const entries = ui(page).getByRole("list", { name: `Applets in ${VAULT}` });
+  await expect(entries.getByRole("link", { name: /Recipe box/ })).toBeVisible();
+  await expect(entries.getByRole("link", { name: /Cook mode/ })).toHaveCount(0);
+  await page.goto("/settings");
+  await choice.getByRole("radio", { name: /Everything/ }).check();
+  await expect.poll(async () => (await tagged("parachute-settings"))[0]?.metadata.parachute.app).toBe("everything");
+  await page.goto("/");
+  await expect(entries.getByRole("link", { name: /Cook mode/ })).toBeVisible();
+});
+
+test("with no app record, a pin still lands in the settings note, as before", async ({ page }) => {
+  await start(page);
+  await ui(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
+  await ui(page).getByRole("button", { name: "Pin to the bar" }).click();
+  await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
+  expect((await tagged("parachute-settings"))[0].metadata.parachute.bar).toEqual([{ vault: VAULT, applet: "Applets/Recipes" }]);
+  expect(await tagged("parachute-app")).toEqual([]);
+});

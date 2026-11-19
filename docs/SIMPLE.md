@@ -59,7 +59,8 @@ screens. Capture writes into one folder of one vault, so it can be an applet.
 
 Simple is one of the two apps the app always has ([NAVIGATION.md](NAVIGATION.md#apps)): `Settings.app: "simple"`
 names it, the same field with the same value as before. A record `Parachute/Apps/simple` (`"look": "notes"`) changes
-it, for instance to put more on its bar; the Notes home, Capture and Connect stay the app's own screens. Capture's code
+it, for instance to put more on its bar; the Notes home, Capture and Connect stay the app's own screens. Its
+`sources` don't narrow Notes, which shows every vault this device holds. Capture's code
 comes with the app and is written into the vault on a tap; its card then asks as any applet's does.
 
 ## What this replaces (subtract)

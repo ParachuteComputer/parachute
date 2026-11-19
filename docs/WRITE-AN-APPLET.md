@@ -208,9 +208,10 @@ const [tab, setTab] = useSaved("tab", "inbox");        // where it was
 <textarea value={draft} onChange={(e) => setDraft(e.target.value)} />
 ```
 
-- **Saved as it changes.** The kit sends each change to the app within 250 ms (at once when the applet is hidden or the
-  page goes), and the app writes it to the device's disk then: a file of the applet's own in the app, localStorage in a
-  browser. Nothing waits for a way out, so a force-stop loses at most the last quarter second.
+- **Saved as it changes.** The kit sends what changed 250 ms after the last change (at most a second while the person
+  keeps typing; at once when the applet is hidden), and the app writes it to the device's disk then: a file of the
+  applet's own in the app, localStorage in a browser. Nothing waits for a way out, so a force-stop or leaving the
+  applet loses at most that last moment. A write that fails is tried again; keys are 1 to 100 plain characters.
 - **Setting it back to `initial` forgets it.** Clear a draft when it is sent.
 - **Where the page was scrolled** is kept by itself and put back once the page is tall enough again.
 - **On this device only**, never synced and never in a vault. A draft that should follow the person to another device

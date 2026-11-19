@@ -347,7 +347,9 @@ async function readAppRecords(home: VaultRecord): Promise<RawApp[]> {
     const there = listVaults().find((v) => originOf(v.issuer) === a.live!.hub && v.vault === a.live!.vault);
     if (!there) { out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
     try {
-      const theirs = (await clientFor(there).queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 })).find((x) => stripExt(x.path ?? "") === stripExt(a.live!.path));
+      // a slow Parachute of theirs never holds up the start: past a few seconds, the copy kept from before
+      const listed = await Promise.race([clientFor(there).queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 }), new Promise<never>((_, no) => setTimeout(() => no(new Error("slow")), 3000))]);
+      const theirs = listed.find((x) => stripExt(x.path ?? "") === stripExt(a.live!.path));
       const t = theirs && plain(theirs.metadata) ? theirs.metadata.app : undefined;
       // their record, under the person's own id and name for it; its places mean their hub when they name none
       out.push(plain(t) ? { app: { ...t, contract: 1, id: a.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: a.live }, path: r.path ?? null, noteId: r.id, hubOf: a.live.hub } : { app: raw, path: r.path ?? null, noteId: r.id });
@@ -381,43 +383,39 @@ export const openAppNow = (): App => openApp(appsNow(), deviceApp(), settingsNow
 /** The bar and home as the open app gives them: its own, or the settings note's when it has none. */
 export function effective(s: Settings, apps: readonly App[]): Settings {
   const app = openApp(apps, deviceApp(), s.app);
-  return { ...s, bar: app.bar ?? s.bar, start: app.start === undefined ? s.start : app.start };
+  // an app someone else offers: a place that names no hub is on theirs
+  const at = (p: Place): Place => (app.hubOf && !p.hub ? { ...p, hub: app.hubOf } : p);
+  return { ...s, bar: app.bar ? app.bar.map(at) : s.bar, start: app.start === undefined ? s.start : app.start && at(app.start) };
 }
 
-/** Change the open app's record (its bar or home), made from the built-in the first time. Everything's and Simple's
- *  choices are also kept in the settings note, which older apps read. */
-async function changeAppRecord(change: (a: App) => App): Promise<void> {
+/** A change to the bar or the home: to the open app's record (read now, changed only where asked, written back with
+ *  if_updated_at; made from the built-in the first time), or the settings note. Simple's and Everything's are kept in the
+ *  settings note too, which older apps read. */
+async function changeChoices(f: (raw: Raw, creating: boolean) => Raw): Promise<void> {
+  if (!toRecord()) return changeSettings(f);
   const home = homeVault();
   if (!home) throw new Error("There's no home vault yet.");
   const app = openAppNow();
   if (app.live) throw new Error(`${app.name} is offered by someone else: its bar is theirs.`);
-  const s = settingsNow();
-  const next = change({ ...app, bar: app.bar ?? s.bar, start: app.start === undefined ? s.start : app.start });
   const c = clientFor(home);
-  const body = recordOf(next);
-  if (app.noteId) {
-    const rows = await c.queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 });
-    const n = rows.find((r) => r.id === app.noteId);
-    if (!n) throw new Error("The app's record is gone; read it again.");
+  const rows = await c.queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 });
+  const n = rows.find((r) => (app.noteId ? r.id === app.noteId : stripExt(r.path ?? "") === `${APP_FOLDER}${app.id}`)) ?? null;
+  if (app.noteId && !n) throw new Error("The app's record is gone; read it again.");
+  const s = settingsNow();
+  const was: Record<string, unknown> = n && plain(n.metadata) && plain(n.metadata.app) ? n.metadata.app : recordOf({ ...app, bar: s.bar, start: s.start });
+  const r = f({ bar: Array.isArray(was.bar) ? was.bar : s.bar, start: was.start === undefined ? s.start : was.start, hubs: [] }, false);
+  const body = { ...was, bar: r.bar, start: r.start ?? null };
+  if (n) {
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), app: body }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
   } else {
-    await c.createNote({ path: `${APP_FOLDER}${app.id}`, content: `The ${app.name} app: where its applets come from, its bar and its home. See docs/design/APP-RECORD.md.`, tags: [APP_TAG], metadata: { app: body } } as Parameters<typeof c.createNote>[0]);
+    await c.createNote({ path: `${APP_FOLDER}${app.id}`, content: `The ${app.name} app: where its applets come from, its bar and its home. See docs/NAVIGATION.md.`, tags: [APP_TAG], metadata: { app: body } } as Parameters<typeof c.createNote>[0]);
   }
-}
-/** A change to the bar or the home: to the open app's record, or the settings note (both, for Everything with a
- *  record of its own, so an older app on another device shows the same bar). */
-async function changeChoices(f: (raw: Raw, creating: boolean) => Raw): Promise<void> {
-  if (!toRecord()) return changeSettings(f);
-  await changeAppRecord((a) => {
-    const r = f({ bar: a.bar ?? [], start: a.start ?? null, hubs: [] }, false);
-    return { ...a, bar: r.bar.map(placeOf).filter((x): x is Place => !!x), start: placeOf(r.start) };
-  });
-  if (openAppNow().id === "everything") await changeSettings(f); else await readSettings();
+  if (app.id === "everything" || app.id === "simple") await changeSettings(f); else await readSettings();
 }
 /** Whether a change to the bar or home goes to the open app's record (an app other than the two built-ins, or one of
- *  them that has a record of its own); else to the settings note, as before. */
-const toRecord = () => { const a = openAppNow(); return a.id !== "everything" && a.id !== "simple" ? true : a.noteId !== null && a.bar !== null; };
+ *  them whose record has a bar or a home of its own); else to the settings note, as before. */
+const toRecord = () => { const a = openAppNow(); return a.id !== "everything" && a.id !== "simple" ? true : a.noteId !== null && (a.bar !== null || a.start !== undefined); };
 
 // what `find` answers changes with the applets read and the vaults held: followed from the first subscriber on (not at
 // load: the applet list imports this module's readers back)
