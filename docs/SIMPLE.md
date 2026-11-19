@@ -55,47 +55,16 @@ never tells it which vaults the person has. A Cloud person's notes sit at the ro
 applet couldn't see them. Notes needs every vault, and Connect needs every vault's address, so both are the app's own
 screens. Capture writes into one folder of one vault, so it can be an applet.
 
-## When the app record lands (#50)
+## As an app record
 
-The app record design (PR #50, `docs/design/APP-RECORD.md`, a draft) makes "an app" a record, `Parachute/Apps/<id>`, and keeps
-`app` in Settings as "the app a new device opens". The simple app moves over as one record. `Settings.app: "simple"`
-then names it, the same field with the same value:
-
-```json
-{
-  "path": "Parachute/Apps/simple",
-  "tags": ["parachute-app"],
-  "fields": {
-    "app": {
-      "contract": 1,
-      "id": "simple",
-      "name": "Simple",
-      "glyph": "¶",
-      "note": "your notes, Capture, and Connect an AI",
-      "sources": [{ "vault": "home", "applet": "Applets/Capture" }],
-      "bar": [{ "vault": "home", "applet": "Applets/Capture" }],
-      "frame": "builtin:notes"
-    }
-  }
-}
-```
-
-What #50 needs for that, beyond what it has:
-
-1. **A built-in frame by name.** `frame` names a frame record in the home vault. The simple app's frame is the app's
-   own (its Notes home), so `frame` should also take a built-in name such as `builtin:notes`, which needs no
-   approval, because it is the app's code.
-2. **The app's own screens on the bar.** A bar place is an applet. Notes and Connect are the app's own screens, so a
-   place should also be able to name one (`{ "screen": "notes" }`, `{ "screen": "connect" }`). Until then, the
-   simple app's bar is drawn by the shell from `app: "simple"` (`src/shell/BottomBar.tsx`).
-3. **An applet the app ships.** Capture's code comes with the app and is written into the vault on a tap. The
-   approval is then for the code that was written, as for any other applet. If a later app version ships newer
-   Capture code, it should be offered as "Make this mine" offers a newer frame. Today the vault's copy stays as it
-   was written.
+Simple is one of the two apps the app always has ([NAVIGATION.md](NAVIGATION.md#apps)): `Settings.app: "simple"`
+names it, the same field with the same value as before. A record `Parachute/Apps/simple` (`"look": "notes"`) changes
+it, for instance to put more on its bar; the Notes home, Capture and Connect stay the app's own screens. Capture's code
+comes with the app and is written into the vault on a tap; its card then asks as any applet's does.
 
 ## What this replaces (subtract)
 
 Nothing old runs beside it. For a new Cloud person, the launcher's "No applets here yet." chapters and the key-first
 first screen are replaced by Notes and **Sign in with Parachute Cloud**. Everyone else's app is unchanged, and **Your
-app** switches between the two. When #50 is built, `app: "simple"` becomes the record above, and the shell's
-special-cased bar (point 2) goes.
+app** switches between the two. The simple app's bar is still drawn by the shell (`src/shell/BottomBar.tsx`) from the
+app's `look`; a record can add places after Notes, Capture and Connect.
