@@ -1,5 +1,10 @@
 # One sign-in per Parachute (design, and what core could add)
 
+**Since 2026-11-18 the sign-in reads the home only** ([SCOPES.md](SCOPES.md)): steps 3 and 4 below (one consent for
+every vault, then a hop per vault) are replaced by one consent for the home, and every other vault is asked for when
+the person opens it or allows an applet in it. The rest of this page (the descriptor, the listing, whose, the list of
+Parachutes, the home's choice) stands, with the changes marked.
+
 Status: step 7. The app side is built against today's hubs (core 0.8.0 and 0.9.0-pre.1 behave the same in every case
 below); the last section is a proposal for core, for Uni. Every hub fact here was checked on real throwaway hubs of
 both versions (the spikes are in the step's worktree, not this repo) or read in core's source, as marked.
@@ -11,8 +16,9 @@ different applets; without having to enter a bunch of different URLs."*
 
 1. **First run asks for one address**: *Where is your Parachute?* The hub's address (`uni.example`, or any address on
    it, a vault's included), or **Parachute Cloud**. Then *Whose Parachute is this?* and **Sign in with your key**.
-2. **One sign-in, every vault.** The hub's key door, then its consent page once, listing every vault the person can
-   reach there. Approve, and the launcher shows all of them with their applets. No vault address is typed, ever.
+2. **One sign-in, every vault in reach.** The hub's key door, then its consent page once, for the home vault. Approve,
+   and the launcher shows the home with its applets, and every other vault the person can reach there as an **Open**
+   line ([SCOPES.md](SCOPES.md)). No vault address is typed, ever.
 3. **Your Parachutes.** The hubs the person uses (their own, Cloud, Techne's) are a list in their home vault. A new
    device that signs in to the home Parachute finds the others listed, each a tap from signed in. An agent can add one
    by writing the list.
@@ -71,10 +77,10 @@ real test.
      command signs nothing else: the URL is the hub's own `/account/mcp`, the body is the one fixed call.
    - **Without a key** (a browser, a password, Cloud's emailed link): an OAuth sign-in for `account:vaults` (one
      Approve on the hub's page), `list-vaults` with that token, then the token is revoked.
-3. **One consent for all of them.** An authorize naming `vault:<name>:read vault:<name>:write` for each listed vault.
+3. *(Replaced 2026-11-18 by [SCOPES.md](SCOPES.md): one consent for the home, `vault:<home>:read`.)* **One consent for all of them.** An authorize naming `vault:<name>:read vault:<name>:write` for each listed vault.
    The hub's page lists them; one Approve. Only names from the hub's own list are asked for (an unlisted one strands the
    person on the mismatch page).
-4. **Each vault its own token.** The code buys a token for the first vault the hub granted (its audience). The vaults
+4. *(Replaced 2026-11-18: each vault is its own consent, when it is opened.)* **Each vault its own token.** The code buys a token for the first vault the hub granted (its audience). The vaults
    the sign-in holds are read from the token's `scope` (the hub's word, not the app's list). For each of the others,
    the app goes through the same authorize once more, for that vault alone and exactly the scope it was granted; the
    hub's grant already covers it, so it answers at once with a code (no page; the app's screen says *Signing in to your
@@ -82,7 +88,7 @@ real test.
    top-level redirects because the hub's session cookie is `SameSite=Lax`: a fetch or a hidden frame wouldn't carry it.
    If the person stops partway, the vaults already kept stay.
 5. **Sign out of a Parachute** signs out of each of its vaults (each revoked at the hub). Sign out of one vault, as before.
-6. **Signing in again** to a Parachute brings any vault given since, and replaces this device's older sign-in of each
+6. **Signing in again** to a Parachute lists any vault given since (as an **Open** line), and replaces this device's older sign-in of each
    vault it brings (the old one is revoked at the hub).
 7. **A vault made later** shows up without signing in again (2026-11-18). When the app opens, and each time the
    launcher shows (at most once a minute per hub; no timer), the app asks each hub it is signed in to which vaults the
@@ -102,8 +108,8 @@ real test.
    `list-vaults` on either version (it needs audience `account`: core `account-mcp-http.ts`). So a member without a key
    isn't asked; they sign in again, or use the key (proposal 1 below would let any token ask).
 
-So a person with a key approves once per Parachute; without a key, twice (*see your vaults*, then *read and write
-them*). The web build, which the Playwright e2e drives, has no key: e2e covers the two-Approve path end to end on both
+So a person with a key approves once per Parachute; without a key, twice (*see your vaults*, then *read your home*;
+before 2026-11-18, *read and write them all*). The web build, which the Playwright e2e drives, has no key: e2e covers the two-Approve path end to end on both
 hub versions, with a member who can reach only some of a hub's vaults, and the owner's pick. The key path is covered by
 the shell's tests (the signed request's shape; `list-vaults` against real 0.8 and 0.9 hubs as owner and as member), the
 Mac workflow (`scripts/mac-signin.sh`, the real app against a real hub, as its owner) and the emulator device steps

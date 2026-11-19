@@ -50,8 +50,10 @@ signature until the app is signed with an Apple Developer ID). Enter your Mac pa
 Type your Parachute's address (your hub's, like `your-hub.example`; a vault's address works too), say whose it is
 (**Mine**, or **Someone else's** for an org's or a friend's: [OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)), and press
 **Sign in with your key**. If you run the hub, Parachute first asks which of its vaults are yours (all ticked; untick
-another person's). The hub's own page asks "Approve Parachute?" once, listing every vault you can reach there (it
-may call Parachute a third-party app). Press **Approve**, and you're back in Parachute with all of them in the launcher.
+another person's) and which one is your home. The hub's own page asks "Approve Parachute?" once, to read your home
+vault (it may call Parachute a third-party app). Press **Approve**, and you're back in Parachute. Your other vaults
+are a line each on the launcher (**Open letters**): each asks your hub when you open it, and an applet asks for more
+when you allow it ([design/SCOPES.md](design/SCOPES.md)).
 Add another Parachute later from **Add a Parachute** at the foot of the launcher.
 
 - A hub on your tailnet needs Tailscale running on the Mac.

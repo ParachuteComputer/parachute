@@ -36,12 +36,14 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
 - **Your key.** You sign in with your Nostr key. Pair it from a device that has it (the Uni app or Buzz desktop sends it
   over the Buzz pairing relay, encrypted end to end), make a new one, or paste one. It stays in the app's native side, in
   the platform's secure storage.
-- **The simple app.** For a person whose notes are on Parachute Cloud: their notes across every vault (find, read,
+- **The simple app.** For a person whose notes are on Parachute Cloud: their notes across the vaults they've opened (find, read,
   edit, write), Capture (a line or a voice note into Inbox/) and Connect an AI (each vault's connector address). A
   new Cloud person starts there; Settings → Your app switches to everything ([docs/SIMPLE.md](docs/SIMPLE.md)).
 - **Your Parachutes.** Sign in once per hub, with your key or another way the hub offers (a password, or Cloud's own
-  sign-in), and every vault you can reach there is in the launcher, grouped by Parachute. The list of your Parachutes
-  lives in your home vault ([docs/design/ONE-SIGN-IN.md](docs/design/ONE-SIGN-IN.md)). Browse, search and read notes.
+  sign-in). The sign-in reads your home vault only; each other vault you can reach there is one tap away in the
+  launcher, grouped by Parachute, and an applet asks your hub for its vault when you allow it
+  ([docs/design/SCOPES.md](docs/design/SCOPES.md)). The list of your Parachutes lives in your home vault
+  ([docs/design/ONE-SIGN-IN.md](docs/design/ONE-SIGN-IN.md)). Browse, search and read notes.
 - **Applets.** An applet is one note in your vault: its metadata is the manifest (what it may read and write, which
   kinds of note it opens), its content is the code: one TSX or JSX module, or an HTML page. Any chat AI with the
   Parachute MCP can make one by writing that note: see [docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md). It runs

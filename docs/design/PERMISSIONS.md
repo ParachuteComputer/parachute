@@ -31,6 +31,14 @@ what an approval card shows, tagging, components from the applet's own vault.
 **Show details** sits beside the buttons. On a page, opening it never moves Allow; on an embed's sheet (which grows upward) Allow settles again after each toggle, so a tap meant for something else can't land on it. It holds the old card,
 word for word: every line from `grantLines`, the full closing sentence, when the grant ends, and its fingerprint.
 
+## The hub's step
+
+When the person's hub must be asked for more than the device holds of the applet's vault (its manifest adds or changes
+notes, and the app reads that vault only), the card says so above its buttons: *Then your hub (uni.example) asks you to
+let Parachute change notes in letters: only this vault.* Allow goes to the hub's page, and the grant is kept only when
+the hub says yes ([SCOPES.md](SCOPES.md)). Revoke gives that write back to the hub when nothing else allowed there needs
+it.
+
 ## Asking again
 
 The card says why before anything else:
