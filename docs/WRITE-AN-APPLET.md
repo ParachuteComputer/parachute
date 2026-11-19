@@ -135,7 +135,8 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 | `app.save(name, bytes, type)` | With `save`: a file (an `ArrayBuffer`, 25 MB at most) into the person's Downloads, while they tap. The name is made bare (no folder, no leading dot, 100 characters at most) and the app picks a free one. Resolves `{ saved: name }`. |
 | `app.pick({ accept, multiple })` | With `attach`: the app's own picker, while they tap (`accept`: like `"image/*,.pdf"`). Resolves the files chosen, `[{ name, type, bytes }]` (25 MB each, 10 at most), or `[]`. |
 | `voice.record({ max_s })` | With `reach: [voice]`: the app's own recorder sheet over the applet, while they tap (Record, Stop, Send, Cancel; 10 minutes unless `max_s` is less). Resolves `{ bytes, type: "audio/webm", duration }` on Send, `null` on Cancel. The applet never touches the microphone. |
-| `storage.get(key)`, `storage.set(key, value)`, `storage.keys()` | With `storage`: JSON kept by the app on this device for this applet (drafts; what it last showed, so its next open paints at once), 256 KB in all, keys up to 100 characters. A value may be any size within the 256 KB: the kit sends it as JSON text in bytes, past the 8 KB a call's parameters may be. `set(key, null)` removes it. Never synced. |
+| `saved.get(key)`, `saved.set(key, value)`, `saved.all()`, `saved.flush()` | What the app keeps for this applet on this device as it goes ([Saved state](#saved-state)): handed back with `ready`, so `get` answers at once after it; `set` reaches the app within 250 ms. |
+| `storage.get(key)`, `storage.set(key, value)`, `storage.keys()` | With `storage`: JSON kept by the app on this device for this applet (drafts; what it last showed, so its next open paints at once), 256 KB in all with what it saved, keys up to 100 characters. A value may be any size within the 256 KB: the kit sends it as JSON text in bytes, past the 8 KB a call's parameters may be. `set(key, null)` removes it. Never synced. |
 | `vault.attach(id, bytes, type, { transcribe })` | A file (25 MB at most) onto a record it may `update`, through the hub. `transcribe: true` asks the hub to transcribe audio: write the record with `_Transcript pending._` and the hub puts the words in its place. Resolves `{ id, path, type, transcribe }`. |
 | `props()`, `onProps(cb)` | In a component a page embeds: the plain data the page hands it (also its React props), and each change after. Empty in an applet. |
 | `services.fetch(id, path, { method, headers, body, as })` | With `services`: a request to that server, under its url. `as`: `text`, `json` or `bytes`. Resolves `{ status, headers, body }`. |
@@ -182,17 +183,42 @@ does. Use them, or your own markup on the CSS variables, or both.
 | `<Field label placeholder? action? onAction? value? onChange? clearOnAction? />` | A line to write on, and one action (its button, or Enter). It keeps its own text unless `value` is given, and clears after the action unless `clearOnAction` is false. `onAction` should catch its own errors and show them: a failed action leaves the text as it was. |
 | `<Empty>…</Empty>` | What shows when there is nothing yet: a sprig and a line. |
 | `useTheme()` | The look as values (`accent`, `bg`, …, `scheme`, `density`), or null until the app has sent it. Most applets need only the CSS variables. |
+| `useSaved(key, initial)` | `useState` that the app keeps on this device: a draft, the box it was on, the item open. See [Saved state](#saved-state). |
 
 An HTML applet has no parts: it has the kit's calls and the CSS variables.
 
 An applet lives in the vault, and each device's app updates on its own time, so an applet meets older apps. A part
-an older app doesn't have arrives as `undefined`. `Link`, `Linked` and `link` came after the first builds (11-18): import
+an older app doesn't have arrives as `undefined`. `Link`, `Linked` and `link` came after the first builds (11-18), `useSaved` on 11-19: import
 one under another name and fall back, as the shipped applets do (`src/kit/olderApp.test.ts` checks them):
 
 ```tsx
 import { Linked as KitLinked } from "parachute";
 const Linked = KitLinked ?? (({ text }: { text: string }) => <>{text}</>);
 ```
+
+### Saved state
+
+An applet can stop at any moment and lose nothing. The app may unload it to make room (it keeps 6 running on a phone,
+12 on a computer), the person may close the app, the phone may restart. What the applet gives the kit to save comes
+back when it starts again, before its first paint:
+
+```tsx
+const [draft, setDraft] = useSaved("draft", "");      // what is being written
+const [tab, setTab] = useSaved("tab", "inbox");        // where it was
+<textarea value={draft} onChange={(e) => setDraft(e.target.value)} />
+```
+
+- **Saved as it changes.** The kit sends each change to the app within 250 ms (at once when the applet is hidden or the
+  page goes), and the app writes it to the device's disk then: a file of the applet's own in the app, localStorage in a
+  browser. Nothing waits for a way out, so a force-stop loses at most the last quarter second.
+- **Setting it back to `initial` forgets it.** Clear a draft when it is sent.
+- **Where the page was scrolled** is kept by itself and put back once the page is tall enough again.
+- **On this device only**, never synced and never in a vault. A draft that should follow the person to another device
+  is a note, written by the applet in its own folder.
+- **256 KB per applet**, the same store as `storage` (`storage.get/set` and `useSaved` see each other's keys). Every
+  applet that runs has it, someone else's too; no word in `fields.app` is needed.
+- A plain `useState` is lost when the applet stops, as before. In an HTML applet, the calls are
+  `parachute.saved.get(key)` (after `ready()`), `parachute.saved.set(key, value)` and `parachute.saved.flush()`.
 
 ### Links
 

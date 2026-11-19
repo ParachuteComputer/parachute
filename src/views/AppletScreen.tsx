@@ -51,6 +51,8 @@ import { createAppModule, notTapped } from "../applet/modules/app";
 import { createVoiceModule } from "../applet/modules/voice";
 import { createStorageModule } from "../applet/modules/storage";
 import { storageFor } from "../shell/device";
+import { deviceSaved } from "../shell/saved";
+import { createSavedModule } from "../applet/modules/saved";
 import { useDeviceSheets } from "./DeviceSheets";
 import { createServicesModule } from "../applet/modules/services";
 import { createBroker, type Broker } from "../services/broker";
@@ -283,6 +285,8 @@ export default function AppletScreen() {
     // the microphone (manifest `reach: [voice]`) and a little storage on this device (`app: [storage]`): not_granted without
     createVoiceModule(!!entry.manifest.reach?.includes("voice"), { record: (max) => (tappingIn(() => frameEl.current) ? device.record(max) : Promise.reject(notTapped())) }),
     createStorageModule(entry.app.includes("storage"), storageFor(subjectOf(rec.key, entry.noteId))),
+    // what the kit saves as the person goes (drafts, where it was): every applet's, the same store as `storage`
+    createSavedModule({ all: () => deviceSaved().load(subjectOf(rec.key, entry.noteId)), put: (entries) => deviceSaved().put(subjectOf(rec.key, entry.noteId), entries) }),
     ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
@@ -300,7 +304,18 @@ export default function AppletScreen() {
   // what it was allowed, as its card said it (the folders, and each server with its rooms and keys): an applet reads its
   // room, or which key is Uni's, from here rather than from a copy of its own
   // `shown`: a frame that boots while its screen is kept hidden knows so from the start
-  const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, access: entry?.manifest.allow ?? [], services: entry?.services ?? [], ...(handed ? { open: handed } : {}), ...(sized ? { page: { embeds: entry!.embeds.map((e) => e.name) } } : {}), ...(launch ? { launch } : {}), shown: kept.shown }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized, launchKey, entry, kept.shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  // what it saved (drafts, where it was), read before its frame starts and handed back in `ready`, so its first paint has it
+  const [saved, setSaved] = useState<{ subject: string; values: Record<string, unknown> } | null>(null);
+  useEffect(() => {
+    if (!subject) return;
+    let on = true;
+    void deviceSaved().load(subject).then((values) => { if (on) setSaved({ subject, values }); });
+    return () => { on = false; };
+  }, [subject]);
+  const savedNow = saved && saved.subject === subject ? saved : null;
+  const ready = useMemo(() => ({ applet: { id: entry?.manifest.id, name }, access: entry?.manifest.allow ?? [], services: entry?.services ?? [], ...(handed ? { open: handed } : {}), ...(sized ? { page: { embeds: entry!.embeds.map((e) => e.name) } } : {}), ...(launch ? { launch } : {}), shown: kept.shown,
+    // read as it is sent (frame.tsx spreads it at each start), so a frame started again gets what was saved since
+    get saved() { return subject ? deviceSaved().now(subject) : {}; } }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized, launchKey, entry, kept.shown, savedNow]); // eslint-disable-line react-hooks/exhaustive-deps
   const sessionNow = useRef<Session | null>(null);
   useEffect(() => { if (launch) sessionNow.current?.sendEvent("launch", launch); }, [launchKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // kept running while hidden (shell/kept.tsx) only while it runs the person's own code, with nothing from another vault
@@ -374,7 +389,7 @@ export default function AppletScreen() {
       note={note ? { title: handed ? titleOf(note) : undefined, href: `${noteHref(rec.key, note.id)}?with=vault` } : null}
       onStop={tap(() => { closeMenu(); setStarted(false); })} onRevoke={tap(() => { closeMenu(); revoke(); })} />}
     {late && "error" in late && late.hash === keys.html && <p className="error" role="alert">This applet can't run: its code doesn't compile: {late.error}.</p>}
-    {router && page && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
+    {router && page && savedNow && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
     {sheets.ui}
     {device.ui}
     {router && page && sized && rec && isMine(rec) && <PageEmbeds host={rec} hostNote={entry.noteId} embeds={entry.embeds} from={loaded.state === "ok" ? loaded.from : []} />}

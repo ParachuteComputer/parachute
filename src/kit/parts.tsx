@@ -8,7 +8,7 @@
 //   Field   a line to write on, with one action (Enter does it too)
 //   Empty   what shows when there is nothing yet: a sprig and a line
 //   Note    in parts-note.tsx: a note's text drawn by surface-render, rich notes included (a heavier bundle)
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useId, useMemo, useState, type ReactNode } from "react";
 import "./parts.css";
 
 const DAY = 86_400_000;
@@ -130,4 +130,33 @@ const sprig = (
 /** What shows when there is nothing yet. */
 export function Empty({ children }: { children?: ReactNode }) {
   return <div className="pa-empty">{sprig}{children && <p>{children}</p>}</div>;
+}
+
+// ── saved state (docs/WRITE-AN-APPLET.md "Saved state") ──
+
+type SavedKit = { saved?: { get(key: string): unknown; set(key: string, value: unknown): void } };
+const savedKit = () => (globalThis as unknown as { parachute?: SavedKit }).parachute?.saved;
+
+/**
+ * useState that the app keeps on this device: a draft, the tab it was on, the item open. What it holds comes back when
+ * the applet starts again, after it was hidden, unloaded, the app closed or the phone restarted. Setting it back to
+ * `initial` forgets it. Values are JSON.
+ *   const [draft, setDraft] = useSaved("draft", "");
+ */
+export function useSaved<T>(key: string, initial: T): [T, (next: T | ((was: T) => T)) => void] {
+  const read = (k: string): T => { const kept = savedKit()?.get(k); return kept === null || kept === undefined ? initial : (kept as T); };
+  const [state, setState] = useState<{ key: string; value: T }>(() => ({ key, value: read(key) }));
+  // another key (the draft of another room): what that one holds
+  const value = state.key === key ? state.value : read(key);
+  if (state.key !== key) setState({ key, value });
+  const setValue = (f: (was: T) => T) => setState((s) => ({ key, value: f(s.key === key ? s.value : read(key)) }));
+  const initialText = JSON.stringify(initial);
+  const set = useCallback((next: T | ((was: T) => T)) => {
+    setValue((was) => {
+      const v = typeof next === "function" ? (next as (w: T) => T)(was) : next;
+      savedKit()?.set(key, JSON.stringify(v) === initialText ? null : v);
+      return v;
+    });
+  }, [key, initialText]); // eslint-disable-line react-hooks/exhaustive-deps
+  return [value, set];
 }

@@ -5,7 +5,9 @@
 // time-only path and "_Transcript pending._"), and its recording attached with transcribe asked (vault.attach): the hub
 // puts the transcript in place of the marker. It reads the entry again a few times while it waits, not for ever.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Days, Empty, Note, onOpen, ready, vault, voice } from "parachute";
+import { Days, Empty, Note, onOpen, ready, useSaved as KitUseSaved, vault, voice } from "parachute";
+// kept on this device by the kit (docs/WRITE-AN-APPLET.md "Saved state"); an app from before it keeps it for the visit only
+const useSaved: <T>(key: string, initial: T) => [T, (v: T | ((was: T) => T)) => void] = KitUseSaved ?? ((_key: string, initial: any) => useState(initial));
 
 type Entry = { id: string; path: string; updatedAt: string | null; createdAt?: string | null; body?: string; tags?: string[]; fields?: Record<string, unknown> };
 
@@ -57,7 +59,8 @@ textarea { width: 100%; box-sizing: border-box; min-height: 5.5em; padding: 12px
 
 export default function Journal() {
   const [entries, setEntries] = useState<Entry[] | null>(null);
-  const [text, setText] = useState("");
+  // what is being written is kept on this device as it is typed: leaving, closing the app or a restart loses none of it
+  const [text, setText] = useSaved("draft", "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [limit, setLimit] = useState(60);
@@ -67,9 +70,16 @@ export default function Journal() {
   };
   useEffect(() => { ready().then(() => load()).catch((e: Error) => setErr(e.message)); }, []);
   // an entry opened from a link (a room's uni:<id>, a wikilink): shown under the box, however old it is
+  // (which one is kept too, so it is still open when Journal starts again)
   const [opened, setOpened] = useState<Entry | null>(null);
+  const [openId, setOpenId] = useSaved<string | null>("open", null);
   const shown = useRef<HTMLElement>(null);
-  useEffect(() => onOpen((o: { note: { id: string } }) => { vault.getRecord(o.note.id).then((r: Entry) => setOpened(r), () => {}); }), []);
+  useEffect(() => onOpen((o: { note: { id: string } }) => setOpenId(o.note.id)), []);
+  useEffect(() => {
+    if (!openId) { setOpened(null); return; }
+    if (opened?.id === openId) return;
+    ready().then(() => vault.getRecord(openId)).then((r: Entry) => setOpened(r), () => setOpenId(null));
+  }, [openId]);
   useEffect(() => { if (opened) shown.current?.scrollIntoView({ block: "start" }); }, [opened]);
   // while a transcript is awaited, the entries are read again a few times
   const [looks, setLooks] = useState(0);
@@ -126,7 +136,7 @@ export default function Journal() {
       {err ? <span className="err" role="alert">{err}</span> : <span className="quiet">Saved to Journal/ in this vault.</span>}
     </div>
     {opened && <section className="opened" aria-label="The entry you opened" ref={shown}>
-      <div className="when">{dayWord(whenOf(opened))}, {TIME.format(whenOf(opened))}<button className="close" onClick={() => setOpened(null)}>Close</button></div>
+      <div className="when">{dayWord(whenOf(opened))}, {TIME.format(whenOf(opened))}<button className="close" onClick={() => setOpenId(null)}>Close</button></div>
       <Note body={(opened.body ?? "").replace(TRANSCRIPT_PENDING, "").trim()} path={opened.path} tags={opened.tags} />
     </section>}
     <Days times={sorted.map((x) => x.at.toISOString())} label="entries, the last four weeks" />

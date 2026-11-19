@@ -149,7 +149,11 @@ const LOADER_TAIL = String.raw`
       R.useEffect(function () { return kit.onProps ? kit.onProps(function (p) { s[1](p); }) : undefined; }, []);
       return R.createElement(C, s[0]);
     }
-    M["react-dom/client"].createRoot(root).render(R.createElement(WithProps));
+    // first paint after the shell's ready, which hands back what it saved (a draft shows at once, never blank first);
+    // an app that never sends ready still paints, a moment later
+    var go = function () { M["react-dom/client"].createRoot(root).render(R.createElement(WithProps)); };
+    var once = false, start = function () { if (!once) { once = true; try { go(); } catch (e) { fail(e); } } };
+    if (kit.ready) { kit.ready().then(start, start); setTimeout(start, 1500); } else start();
   }).catch(fail);
 })();`;
 

@@ -11,6 +11,7 @@ pub mod key;
 pub mod keyring;
 pub mod notify;
 pub mod pairing;
+pub mod saved;
 pub mod services;
 
 use tauri::{Runtime, Url};
@@ -127,6 +128,8 @@ pub fn run() {
             webview_runtime,
             files::open_link,
             files::save_file,
+            saved::saved_get,
+            saved::saved_put,
             key::key_status,
             cards::svc_card_view,
             cards::svc_card_trust,
