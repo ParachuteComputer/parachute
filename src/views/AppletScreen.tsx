@@ -53,7 +53,7 @@ import { createStorageModule } from "../applet/modules/storage";
 import { storageFor } from "../shell/device";
 import { deviceSaved } from "../shell/saved";
 import { asksHash } from "../applet/approvals";
-import { approvalFor, approvalsHere, passcodeHere, signApproval, subjectOf as approvalSubject } from "../applet/approvalStore";
+import { approvalFor, floorOf, passcodeHere, signApproval, signsHere, subjectOf as approvalSubject } from "../applet/approvalStore";
 import type { Decision } from "../applet/approvals";
 import { openAppNow } from "../shell/homeSettings";
 import { createSavedModule } from "../applet/modules/saved";
@@ -212,7 +212,8 @@ export default function AppletScreen() {
         if (kind === "html") page = source;
         else if (!late && !imports.length) page = appletPage(kind, source, code.compiled?.js ?? null);
         else if (!late) { const built = await buildPage(kind, source, imports); if (!on) return; if (!built.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${built.error}` }); return; } page = built.page; }
-        const asks = await asksHash(approvalSubject(rec, n.id, a.entry.manifest.id), a.entry.path, (n.metadata ?? {}) as Record<string, unknown>);
+        const asks = await asksHash(approvalSubject(rec, n.id, a.entry.manifest.id), a.entry.path, (n.metadata ?? {}) as Record<string, unknown>,
+          { opens: a.entry.opens.map((o) => ({ type: o.type, path: o.path, screen: o.screen ?? null })), from });
         if (!on) return;
         setLoaded({ state: "ok", entry: a.entry, page, source: { kind, text: source }, imports, note, from, asks });
         setKeys({ scope, html: hash });
@@ -243,15 +244,19 @@ export default function AppletScreen() {
     return () => { on = false; };
   }, [signedFor, recheck]); // eslint-disable-line react-hooks/exhaustive-deps
   const signedNow = signed && signed.for === signedFor ? signed.d : undefined;
-  // taken back on another device after it was allowed here: it stops here too
+  // taken back on another device after it was allowed here, or a newer approval for other code (this code was put back
+  // over it): it stops here too
   useEffect(() => {
-    if (!subject || !signedNow || signedNow.run || signedNow.why !== "withdrawn" || !signedNow.newest) return;
+    if (!subject || !signedNow || signedNow.run || (signedNow.why !== "withdrawn" && signedNow.why !== "other") || !signedNow.newest) return;
     const r = grants.record(subject);
     if (r && Date.parse(r.grantedAt) < Date.parse(signedNow.newest.at)) { grants.revoke(subject); setStarted(false); bump(); }
   }, [signedNow, subject]); // eslint-disable-line react-hooks/exhaustive-deps
   // approved on another device, for this exact code and asks: allowed here too, when this device already holds what
   // its vault needs at the hub (else the card says so, and one tap asks the hub)
-  const approvedElsewhere = !!signedNow?.run && status !== "ok";
+  // only from an approval no older than what this device has seen since (a Revoke here raises that), and, on a device
+  // that runs approved code only, one made under that same warning
+  const approvedElsewhere = !!signedNow?.run && status !== "ok" && !!subject && signedNow.content.n >= Math.floor(floorOf(approvalSubject(rec!, entry!.noteId, entry!.manifest.id)) ?? 0)
+    && (mode !== "approved-code" || signedNow.content.runs === "approved-code");
   const hubCovers = !!entry && !!rec && covers(heldLevel(rec), appletLevel(entry.manifest));
   useEffect(() => {
     if (!approvedElsewhere || !hubCovers || !subject || !keys || !signedNow?.run) return;
@@ -403,11 +408,11 @@ export default function AppletScreen() {
         onAllow={(asked) => void (async () => {
           // on a device with the person's key, Allow is an approval for every device: signed here, after the device
           // unlock (and the passcode, when one is set), and kept in the home vault. Approved elsewhere already: no new one
-          if (!approvedElsewhere && await approvalsHere()) {
+          if (!approvedElsewhere && await signsHere()) {
             if (openAppNow().security.approve === "passcode" && !needsPasscode) { setSigning("Your app asks for a passcode before approving code. Set one in Settings → Approvals."); return; }
             setSigning(null);
             try {
-              await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode ? passcode : null });
+              await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" });
             } catch (e) {
               setSigning(`Not approved: ${e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "it couldn't be signed"}.`);
               return;
@@ -429,10 +434,18 @@ export default function AppletScreen() {
   // revoked: when nothing else allowed here needs write, the app gives write back to the hub (vault/reach.ts)
   const revoke = () => {
     void (async () => {
-      // on a device with the person's key, Revoke takes the approval back on every device (signed, after the unlock)
-      if (await approvalsHere()) await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: false, code: "", scope: "" }).catch(() => {});
+      // on a device with the person's key, Revoke takes the approval back on every device (signed, after the unlock;
+      // stopping never asks the passcode). It stops here whatever happens there, and says when it couldn't go further.
+      let said: string | null = null;
+      if (await signsHere()) {
+        try {
+          const r = await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: false, code: "", scope: "" });
+          if (!r.written) said = `Stopped on this device. Your other devices keep running it until Parachute can change notes in your home vault.`;
+        } catch (e) { said = `Stopped on this device only: ${e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "the taking back couldn't be signed"}.`; }
+      }
+      grants.revoke(subject); setSigned(null); setStarted(false); setHubError(said); bump(); setRecheck((n) => n + 1);
+      void giveBack(rec.key, `${location.pathname}${location.search}`);
     })();
-    grants.revoke(subject); setStarted(false); bump(); void giveBack(rec.key, `${location.pathname}${location.search}`);
   };
   // code imported from another vault runs inside it: a start after it hung the app holds it, until a tap
   if (heldForHang) return shell(<div className="card" role="status">

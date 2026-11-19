@@ -115,6 +115,11 @@ test("Revoke on one device takes it back on the others; a cancelled unlock appro
     // the laptop revokes: taken back on every device
     await fromAppletMenu(laptopB, "Revoke");
     await expect.poll(async () => JSON.parse((await approvals())[0].metadata.approval!.content).approved).toBe(false);
+    // and here: the card, not allowed again from the approval it just took back
+    await expect(card(laptopB)).toBeVisible();
+    await open(laptopB);
+    await expect(card(laptopB)).toBeVisible();
+    await expect(journal(laptopB)).toHaveCount(0);
     await open(phoneA);
     await expect(card(phoneA)).toBeVisible();
     await expect(journal(phoneA)).toHaveCount(0);

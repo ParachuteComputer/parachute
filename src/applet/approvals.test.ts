@@ -62,6 +62,19 @@ describe("a signed approval", () => {
     expect(decide([approve(me, { now: LATER + 86_400_000 })], subject, "tsx:v1", "asks1", mine, LATER, null)).toMatchObject({ run: false, refused: ["it is dated in the future"] });
     expect(decide([approve(me)], subject, "tsx:v1", "asks1", mine, T0 + 366 * 86_400_000, null)).toMatchObject({ run: false, refused: ["its year has run out"] });
   });
+  it("two in one second: the taking back wins; and one put back with a taking back's number is refused where it was seen", () => {
+    const yes = approve(me, { now: T0 }), no = approve(me, { approved: false, now: T0 });
+    expect(decide([yes, no], subject, "tsx:v1", "asks1", mine, LATER, null)).toMatchObject({ run: false, why: "withdrawn" });
+    expect(decide([no, yes], subject, "tsx:v1", "asks1", mine, LATER, null)).toMatchObject({ run: false, why: "withdrawn" });
+    // the device that saw the taking back keeps it half a step higher (approvalStore.ts)
+    expect(decide([yes], subject, "tsx:v1", "asks1", mine, LATER, JSON.parse(no.content).n + 0.5)).toMatchObject({ run: false, why: "older" });
+  });
+  it("the asks' hash covers what the fields resolve to elsewhere: embeds from another Parachute, opens once role tags are out", async () => {
+    const f = { applet: { id: "rooms" } };
+    const plain = await asksHash(subject, "Applets/Rooms", f, { opens: [], from: [] });
+    expect(await asksHash(subject, "Applets/Rooms", f, { opens: [], from: ["techne at techne.example"] })).not.toBe(plain);
+    expect(await asksHash(subject, "Applets/Rooms", f, { opens: [{ type: "task", path: "Tasks/", screen: null }], from: [] })).not.toBe(plain);
+  });
   it("a device signing next signs higher than any it has seen, even with a clock behind", () => {
     expect(approvalContent({ subject, approved: true, code: "c", scope: "s", now: T0, seen: Math.floor(T0 / 1000) + 50 }).n).toBe(Math.floor(T0 / 1000) + 51);
   });

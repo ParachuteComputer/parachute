@@ -151,7 +151,7 @@ export function e2eNative(secretHex: string): Native {
     // approvals of code (src-tauri/src/approve.rs): the device unlock passes unless the test cancels it
     // (window.__parachuteE2EApprove = "cancel"); each prompt is kept in window.__parachuteE2EApprovals
     async approvalSign(content, d, name, code) {
-      if (passcode !== null && code !== passcode) throw { code: "passcode", message: code === null ? "Your passcode is needed for this." : "That passcode isn't it." };
+      if (passcode !== null && code !== passcode && (JSON.parse(content) as { approved?: boolean }).approved) throw { code: "passcode", message: code === null ? "Your passcode is needed for this." : "That passcode isn't it." };
       const hook = window as unknown as { __parachuteE2EApprove?: string; __parachuteE2EApprovals?: string[] };
       (hook.__parachuteE2EApprovals ??= []).push(name);
       if (hook.__parachuteE2EApprove === "cancel") throw { code: "unlock", message: "The device unlock was cancelled or failed." };

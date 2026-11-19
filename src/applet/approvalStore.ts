@@ -65,7 +65,9 @@ export async function trustedNow(): Promise<Set<string>> {
   return trustedKeys({ own: await ownKey(), anchor, list });
 }
 
-/** Whether this device checks and signs approvals: it holds the person's key (or an anchor), and a home of theirs. */
+/** Whether this device signs approvals: it holds the person's key, and a home of theirs. */
+export async function signsHere(): Promise<boolean> { const home = homeVault(); return !!home && isMine(home) && !!(await ownKey()); }
+/** Whether this device checks approvals: it holds the person's key (or an anchor), and a home of theirs. */
 export async function approvalsHere(): Promise<boolean> {
   const home = homeVault();
   return !!home && isMine(home) && (!!(await ownKey()) || !!anchorNow());
@@ -88,20 +90,20 @@ export async function approvalFor(s: Subject, code: string, scope: string, now =
   const events = (await rowsFor(home, s).catch(() => [])).map((r) => r.metadata?.approval);
   const d = decide(events, s, code, scope, await trustedNow(), now, floorOf(s));
   const newest = d.run ? d.content : d.newest;
-  if (newest && (d.run || d.why !== "older")) raiseFloor(s, newest.n);
+  if (newest && (d.run || d.why !== "older")) raiseFloor(s, newest.n + (newest.approved ? 0 : 0.5));
   return d;
 }
 
 /** Sign (on this device, after its unlock) and write an approval of this exact code, or with `approved: false` the
  *  taking back of one. Throws when it can't be signed (no key, the unlock cancelled, a wrong passcode); `written`
  *  says whether it reached the home vault. */
-export async function signApproval(o: { subject: Subject; name: string; approved: boolean; code: string; scope: string; face?: string[]; passcode?: string | null }): Promise<{ ev: SignedEvent; written: boolean }> {
+export async function signApproval(o: { subject: Subject; name: string; approved: boolean; code: string; scope: string; face?: string[]; passcode?: string | null; runs?: "sealed" | "approved-code" }): Promise<{ ev: SignedEvent; written: boolean }> {
   const home = homeVault();
   const native = await nativeNow();
   if (!home || !native) throw new Error("Approving for every device needs the Parachute app with your key.");
-  const content = approvalContent({ subject: o.subject, approved: o.approved, code: o.code, scope: o.scope, now: Date.now(), seen: floorOf(o.subject), face: o.face, device: deviceName() });
+  const content = approvalContent({ subject: o.subject, approved: o.approved, code: o.code, scope: o.scope, now: Date.now(), seen: floorOf(o.subject), face: o.face, device: deviceName(), runs: o.runs });
   const ev = await native.approvalSign(JSON.stringify(content), dOf(o.subject), o.name, o.passcode ?? null) as SignedEvent;
-  raiseFloor(o.subject, content.n);
+  raiseFloor(o.subject, content.n + (o.approved ? 0 : 0.5));
   // signed: a home Parachute may only read (docs/design/SCOPES.md) still leaves this device's own Allow; the other
   // devices then ask for themselves
   const written = await writeApproval(home, o.subject, o.name, ev).then(() => true, () => false);

@@ -1,7 +1,7 @@
 // Settings → Approving code (docs/design/APP-RECORD.md): what an Allow does on a device with the person's key, the
 // passcode this device asks before approving (its own secret, never the phone's unlock), and, for someone who keeps a
-// root key, its public half (the anchor): then only the keys on the list it signed count. Each change is native, behind
-// the device unlock.
+// root key, its public half (the anchor): then only the keys on the list it signed count. The passcode is set natively,
+// behind the device unlock; the anchor is a public key kept on this device (it can only narrow which keys count).
 import { useEffect, useState } from "react";
 import { nativeNow, type Native } from "../services/native";
 import { anchorNow, forgetOwnKey, ownKey, setAnchor } from "../applet/approvalStore";

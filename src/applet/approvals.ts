@@ -38,6 +38,9 @@ export type Content = {
   face?: string[];
   /** Which device signed it, in the person's words ("Pixel"). */
   device?: string;
+  /** How applets ran on the device that approved it (gate.ts): a device that runs approved code only, where an applet
+   *  could send what it reads to the internet, takes only an approval made under the same warning. */
+  runs?: "sealed" | "approved-code";
 };
 
 export const dOf = (s: Subject) => `${s.hub}|${s.vault}|${s.record}`;
@@ -46,17 +49,20 @@ export const approvalPath = (s: Subject) => `${APPROVAL_FOLDER}${hostOf(hub(s))}
 const hub = (s: Subject) => s.hub;
 
 /** The asks' hash: the applet's fields as written (its manifest, what it opens, what it asks of the app, its servers,
- *  its embeds), its note's path, and the subject. The same on every device, whatever it calls the vault. */
-export function asksHash(subject: Subject, notePath: string, fields: Record<string, unknown>): Promise<string> {
+ *  its embeds), its note's path, and the subject; and what those resolve to from other notes: what it opens once the
+ *  vault's role tags are taken out, and which Parachutes its page's embeds come from. The same on every device,
+ *  whatever it calls the vault. */
+export function asksHash(subject: Subject, notePath: string, fields: Record<string, unknown>, resolved: { opens?: unknown; from?: readonly string[] } = {}): Promise<string> {
   const pick = (k: string) => (fields[k] === undefined ? null : fields[k]);
-  return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds") }));
+  return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds"),
+    resolved: { opens: resolved.opens ?? null, from: resolved.from ? [...resolved.from].sort() : [] } }));
 }
 
 /** The content a device signs: the next number is the time, or one more than the newest it has seen. */
-export function approvalContent(o: { subject: Subject; approved: boolean; code: string; scope: string; now: number; seen: number | null; face?: string[]; device?: string }): Content {
+export function approvalContent(o: { subject: Subject; approved: boolean; code: string; scope: string; now: number; seen: number | null; face?: string[]; device?: string; runs?: "sealed" | "approved-code" }): Content {
   const nowS = Math.floor(o.now / 1000);
   const at = new Date(o.now);
-  return { v: 1, subject: o.subject, n: Math.max(nowS, (o.seen ?? 0) + 1), approved: o.approved, code: o.approved ? o.code : "", scope: o.approved ? o.scope : "",
+  return { v: 1, subject: o.subject, n: Math.max(nowS, Math.floor(o.seen ?? 0) + 1), ...(o.runs ? { runs: o.runs } : {}), approved: o.approved, code: o.approved ? o.code : "", scope: o.approved ? o.scope : "",
     at: at.toISOString(), expires: new Date(o.now + APPROVAL_DAYS * 86_400_000).toISOString(), ...(o.face ? { face: o.face.slice(0, 60) } : {}), ...(o.device ? { device: o.device.slice(0, 40) } : {}) };
 }
 
@@ -97,14 +103,16 @@ export type Decision =
   /** `withdrawn`: the newest says no. `other`: the newest approves other code or asks (this one changed since). */
   | { run: false; why: "none" | "withdrawn" | "other" | "older"; newest: Content | null; refused: string[] };
 
-/** What the approvals in the vault say about this code, given the highest number this device has seen (`floor`). */
+/** What the approvals in the vault say about this code, given the highest number this device has seen (`floor`; a
+ *  taking back seen is kept half a step higher, so an approval with its number can't be put back over it). */
 export function decide(events: readonly unknown[], subject: Subject, code: string, scope: string, trusted: ReadonlySet<string>, now: number, floor: number | null): Decision {
   const refused: string[] = [];
   let newest: Content | null = null;
   for (const ev of events) {
     const r = checkApproval(ev, subject, trusted, now);
     if (!r.ok) { refused.push(r.why); continue; }
-    if (!newest || r.content.n > newest.n) newest = r.content;
+    // two with one number (two devices in one second): the taking back wins
+    if (!newest || r.content.n > newest.n || (r.content.n === newest.n && !r.content.approved)) newest = r.content;
   }
   if (!newest) return { run: false, why: "none", newest: null, refused };
   // a client that saw a newer one keeps that as its floor: an older one put back (October's, or one taken back) is refused
