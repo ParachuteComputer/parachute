@@ -18,7 +18,8 @@ One model, everywhere.
 1. **The bar is for your pinned places.** It sits at the bottom of the launcher, a vault, a note and an applet. On it:
    the launcher (always), your home applet if you have one, then the applets you pinned, in your order (up to 12).
    Under a frame of your own it also ends with the app's own way to Settings (not one of the twelve; always on screen).
-2. **The launcher is for everything.** Every applet in every vault, and the vaults themselves.
+2. **The launcher is your app.** Every applet the open app offers ([Apps](#apps)), and the vaults themselves. In
+   Everything, that is every applet in every vault.
 3. **Back returns where you came from.** The app's Back and the phone's Back both go one step back in what you did. On
    the first screen of a start, the app's Back goes to the launcher, and the phone's Back leaves the app.
 4. **A note opens in its applet.** Tap a note and it opens in the applet that opens its kind; long-press it for "Open
@@ -83,9 +84,54 @@ That is the record as `create-record` takes it (on a hub before 0.9, `create-not
 `vault` is the vault's name (add `"hub": "https://…"` when two hubs hold vaults of the same name). `applet` is the
 applet note's path or id. A place that names an applet this device can't find is left off the bar, not an error.
 
-`app` says which app your devices open: `"simple"` (Notes, Capture, Connect: [SIMPLE.md](SIMPLE.md)) or
-`"everything"` (the launcher and the bar above). Left out, everything. A person new to the app on Parachute Cloud gets
-`"simple"` at their first sign-in; Settings → **Your app** changes it.
+`app` says which app a new device opens: `"simple"` (Notes, Capture, Connect: [SIMPLE.md](SIMPLE.md)),
+`"everything"` (the launcher and the bar above), or the id of one of your app records (below). Left out, everything.
+A person new to the app on Parachute Cloud gets `"simple"` at their first sign-in; Settings → **Your app** changes it.
+
+## Apps
+
+An app is a record in your home vault, `Parachute/Apps/<id>`, tagged `parachute-app`, everything under `fields.app`
+(`metadata.app` on a hub before 0.9). It says which applets the launcher offers, and its own bar and home:
+
+```json
+{
+  "path": "Parachute/Apps/uni",
+  "tags": ["parachute-app"],
+  "fields": { "app": {
+    "contract": 1, "id": "uni", "name": "Uni",
+    "sources": [
+      { "vault": "home", "applet": "*" },
+      { "vault": "garden", "applet": "Applets/SeedLog" },
+      { "hub": "https://techne.example", "vault": "techne", "applet": "Applets/Events" },
+      { "hub": "https://uni.example", "vault": "*", "applet": "*" }
+    ],
+    "hide": [{ "vault": "home", "applet": "Applets/Scratch" }],
+    "bar": [{ "vault": "home", "applet": "Applets/Journal" }],
+    "start": { "vault": "home", "applet": "Applets/Rooms" },
+    "opens": [{ "type": "journal", "vault": "home", "applet": "Applets/Journal" }, { "type": "task", "vault": "home", "applet": null }],
+    "keep": 6
+  } }
+}
+```
+
+- **Sources** are one applet, every applet in a vault (`"applet": "*"`), or every vault on a named hub. No hub means
+  your home's hub. There is no "every hub" and no star inside a name; a source that says one is left out.
+- **Listed is not allowed.** Being offered runs nothing: an applet still shows its card the first time, and again when
+  its code changes.
+- **`bar` and `start`** are this app's; without them it uses the settings note's. A pin or an Open on start made while
+  this app is open goes to its record. Everything's are kept in the settings note too, which older apps read.
+- **`opens`** says which applet opens a kind of note, for every device; `"applet": null` is the plain view. This
+  device's own **Always** still wins here.
+- **`keep`**: how many applets stay running while hidden (`"auto"`: 6 on a phone, 12 on a computer). Only speed hangs
+  on it: an applet that stops keeps its drafts ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md#saved-state)).
+- **Someone else's app** is followed live: your record says `"live": { "hub": …, "vault": …, "path": … }` and the app
+  reads theirs from that vault each time, so their changes show. Its applets still ask you, and ask again when their
+  code changes.
+- **Simple and Everything** are always there. A record with the id `simple` or `everything` changes them.
+
+Which app is open is this device's choice (Settings → **Your app**), else the settings note's `app`, else
+Everything. Choosing one also makes it the one a new device opens. Your agent can write app records; nothing in them
+lets code start.
 
 `hubs` lists your Parachutes ([design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md)): each an address (`https://…`, the
 hub's origin) and, if you like, a `name` the launcher shows. The app adds one each time you sign in to a Parachute; an

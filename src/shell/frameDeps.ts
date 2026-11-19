@@ -19,7 +19,8 @@ import { originOf, listVaults, hostOf, type VaultRecord } from "../vault/store";
 import { dismissVault, newVaultsOn, startAddVault } from "../vault/newVaults";
 import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
-import { barNow, pinApplet, settingsNow, startApplet } from "./homeSettings";
+import { barNow, openAppNow, pinApplet, startApplet } from "./homeSettings";
+import { offered, namesApplet, type App } from "./apps";
 import { chooseStart, forgetStart } from "./start";
 import { parachutesNow } from "./parachutes";
 
@@ -33,7 +34,7 @@ export const homeNow = () => {
     parachutes: parachutesNow().map((p) => {
       const fresh = newVaultsOn(p.hub);
       return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}) };
-    }), ...(settingsNow().app === "simple" ? { app: "simple" as const } : {}) };
+    }), ...(openAppNow().look === "notes" ? { app: "simple" as const } : {}) };
 };
 /** For a frame of the person's own, a write into their vault is asked about once more on the shell's own sheet. */
 const confirmed = (from: "built-in" | "vault", q: WriteAsk) => (from === "vault" ? confirmWrite(q) : Promise.resolve(true)).then((yes) => { if (!yes) throw new Error("not_allowed"); });
@@ -63,9 +64,13 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   const e = appletsNow(rec.key);
   if (!ok || e?.state !== "ok") return { ok: false, error: e?.state === "error" ? e.error : "the applets couldn't be read" };
   const status = statusOf(rec.key, gateNow());
+  // only what the open app offers (shell/apps.ts): listing is all it decides; what runs is still each applet's card
+  const app = openAppNow(), home = homeVault();
+  const held = { hub: originOf(rec.issuer), vault: rec.vault };
+  const inApp = (a: { noteId: string; path: string }) => app.look === "notes" || !home || offered(app, held, a, originOf(home.issuer));
   return {
     ok: true, skipped: e.found.skipped,
-    entries: e.found.entries.map((a) => ({ noteId: a.noteId, path: a.path, vault: a.vault, opens: a.opens, status: status(a),
+    entries: e.found.entries.filter(inApp).map((a) => ({ noteId: a.noteId, path: a.path, vault: a.vault, opens: a.opens, status: status(a),
       manifest: { id: a.manifest.id, name: a.manifest.name, glyph: a.manifest.glyph, ...(a.manifest.note ? { note: a.manifest.note } : {}), screens: a.manifest.screens } })),
   };
 }
@@ -126,6 +131,24 @@ function setChoice(vault: string, type: string, choice: string | null) {
   setDefault(vault, type, choice);
 }
 
+/** What the open app's record says opens each kind of note in this vault (its `opens`), as the device's choices are
+ *  kept: an applet's note id here, or "vault" for the plain view. The device's own "Always" wins over it. A choice
+ *  naming an applet this device hasn't read, or one that doesn't open that kind, is left out. */
+export function appDefaults(vault: string, app: App = openAppNow()): Record<string, string> {
+  const rec = listVaults().find((v) => v.key === vault), home = homeVault();
+  if (!rec || !home || !app.opens.length) return {};
+  const a = appletsNow(vault);
+  const out: Record<string, string> = {};
+  for (const o of app.opens) {
+    if ((o.hub ?? app.hubOf ?? originOf(home.issuer)) !== originOf(rec.issuer) || o.vault !== rec.vault || o.type in out) continue;
+    if (o.applet === null) { out[o.type] = VAULT; continue; }
+    const held = { hub: originOf(rec.issuer), vault: rec.vault };
+    const e = a?.state === "ok" ? a.found.entries.find((x) => namesApplet(o.applet!, x) && x.opens.some((y) => y.type === o.type) && (app.look === "notes" || offered(app, held, x, originOf(home.issuer)))) : undefined;
+    if (e) out[o.type] = e.noteId;
+  }
+  return out;
+}
+
 /** Open a link outside the app: the system's browser (or mail, or phone) in the shell, a new tab on the web. */
 async function openOut(url: string) {
   if (inShell()) { const { openUrl } = await import("@tauri-apps/plugin-opener"); await openUrl(url); }
@@ -153,7 +176,7 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
     client: clientFor,
     roles: (rec) => readRoleTags(clientFor(rec)),
     applets,
-    defaults: { get: defaultsFor, set: setChoice },
+    defaults: { get: (vault) => ({ ...appDefaults(vault), ...defaultsFor(vault) }), set: setChoice },
     home: homeDeps(from),
     pointers,
     components,

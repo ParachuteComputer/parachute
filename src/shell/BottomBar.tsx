@@ -19,8 +19,8 @@ import { appletPath } from "../open/paths";
 type Item = Found & { place: Place; home: boolean };
 
 export default function BottomBar() {
-  const { bar, settings } = useSettings();
-  const simple = settings.app === "simple";
+  const { bar, app } = useSettings();
+  const simple = app.look === "notes";
   const ownFrame = useFrameSource().choice.run === "vault";
   const { pathname } = useLocation();
   const [asked, setAsked] = useState<Item | null>(null);

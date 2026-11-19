@@ -1,32 +1,37 @@
-// Which app this person's devices open (docs/SIMPLE.md): the simple one, or everything. Kept in their settings note
-// (`parachute.app`), so every device of theirs follows it, and their agent can change it there too.
+// Which app opens (docs/NAVIGATION.md "Apps"): Simple, Everything, or one of the person's app records. The choice is this
+// device's, and the settings note's `app` follows it, so a new device of theirs opens the same one; their agent can
+// change that note too.
 import { useState } from "react";
-import { setApp, useSettings, type AppChoice as Choice } from "../shell/homeSettings";
+import { chooseApp, useSettings } from "../shell/homeSettings";
 import { homeVault } from "../shell/frameSource";
 import { useVaults } from "../vault/hooks";
 
 export default function AppChoice() {
-  const { settings } = useSettings();
+  const { app, apps } = useSettings();
   const home = homeVault(useVaults());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   if (!home) return null;
-  const now: Choice = settings.app ?? "everything";
-  const pick = (c: Choice) => {
-    if (c === now || busy) return;
+  const pick = (id: string) => {
+    if (id === app.id || busy) return;
     setBusy(true); setError("");
-    setApp(c).then(() => setBusy(false), (e: unknown) => { setError(e instanceof Error ? e.message : "That couldn't be saved."); setBusy(false); });
+    chooseApp(id).then(() => setBusy(false), (e: unknown) => { setError(e instanceof Error ? e.message : "That couldn't be saved."); setBusy(false); });
   };
+  // the built-ins first (Simple, Everything), then the person's own, by name
+  const order = [...apps].sort((a, b) => rank(a.id) - rank(b.id) || a.name.localeCompare(b.name));
   return (
     <section className="card" aria-labelledby="s-app">
       <h2 id="s-app">Your app</h2>
       <fieldset className="plain" disabled={busy}>
         <legend className="sr-only">Which app opens</legend>
-        <label className="line"><span><input type="radio" name="app" checked={now === "simple"} onChange={() => pick("simple")} /> <b>Simple</b>: your notes, Capture, and Connect an AI</span></label>
-        <label className="line"><span><input type="radio" name="app" checked={now === "everything"} onChange={() => pick("everything")} /> <b>Everything</b>: the launcher, with every applet in every vault</span></label>
+        {order.map((a) => (
+          <label key={a.id} className="line"><span><input type="radio" name="app" checked={a.id === app.id} onChange={() => pick(a.id)} /> <span aria-hidden="true">{a.glyph}</span> <b>{a.name}</b>{a.note ? <>: {a.note}</> : null}{a.live ? <span className="quiet"> · from {hostOfHub(a.live.hub)}</span> : null}</span></label>
+        ))}
       </fieldset>
-      <p className="quiet small">Kept in {home.vault}, so your other devices open the same one.</p>
+      <p className="quiet small">Opens on this device now. Kept in {home.vault} too, so a new device opens the same one.</p>
       {error && <p className="error" role="alert">{error}</p>}
     </section>
   );
 }
+const rank = (id: string) => (id === "simple" ? 0 : id === "everything" ? 1 : 2);
+const hostOfHub = (hub: string) => { try { return new URL(hub).host; } catch { return hub; } };
