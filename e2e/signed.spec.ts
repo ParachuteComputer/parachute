@@ -24,13 +24,17 @@ async function open(p: Page) {
   await ui(p).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
 }
 type Row = { id: string; path: string; updatedAt: string; metadata: { approval?: { content: string; tags: string[][]; pubkey: string } } };
-const approvals = async () => { const r = await api(hubState(), "GET", "notes?tag=parachute-approval&include_metadata=true"); return (Array.isArray(r) ? r : r.notes ?? []) as Row[]; };
+/** The approvals of one applet (its record id ends the path): tests running beside this one keep their own. */
+let only = "";
+const approvals = async () => { const r = await api(hubState(), "GET", "notes?tag=parachute-approval&include_metadata=true"); return ((Array.isArray(r) ? r : r.notes ?? []) as Row[]).filter((x) => x.path.endsWith(`/${only}`)); };
+test.describe.configure({ mode: "serial" });
 const bytes = (b: Uint8Array | string) => typeof b === "string" ? Uint8Array.from(Buffer.from(b, "hex")) : b;
 
 test("one approval covers every device; changed code stops until approved again; a forged or stranger's approval runs nothing", async ({ browser }) => {
   test.setTimeout(120_000);
   const me = newKey(), stranger = newKey();
   const made = await record(hubState(), "create", appletRecord("journal"));
+  only = made.id;
   const base = String((await api(hubState(), "GET", `notes/${made.id}`)).content);
   const setCode = async (src: string) => { const n = await api(hubState(), "GET", `notes/${made.id}`); await api(hubState(), "PATCH", `notes/${made.id}`, { content: src, if_updated_at: n.updatedAt }); };
   const phoneA = await device(browser, me), laptopB = await device(browser, me);
@@ -93,6 +97,7 @@ test("Revoke on one device takes it back on the others; a cancelled unlock appro
   test.setTimeout(90_000);
   const me = newKey();
   const made = await record(hubState(), "create", appletRecord("journal"));
+  only = made.id;
   const phoneA = await device(browser, me), laptopB = await device(browser, me);
   try {
     await phoneA.evaluate(() => { (window as unknown as { __parachuteE2EApprove: string }).__parachuteE2EApprove = "cancel"; });

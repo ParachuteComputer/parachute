@@ -61,7 +61,8 @@ function rowsOf(grant: Grant, face: { lines: FaceLine[]; also: string[] }): Row[
       continue;
     }
     const at = /^As you on (.+)$/.exec(l.lead)?.[1] ?? /^Sends requests to (.+)$/.exec(l.lead)?.[1] ?? null;
-    const [mark, title] = at ? ["◉", l.lead.startsWith("As you") ? `Act as you on ${at}` : `Reach ${at}`]
+    const host = at ? at.split(" ")[0] : "";
+    const [mark, title] = at ? ["◉", l.lead.startsWith("As you") ? `Act as you on ${host}` : `Reach ${host}`]
       : l.lead.startsWith("High risk") ? ["⚑", "Answer approvals as you"]
       : l.lead.startsWith("Notifies") ? ["◔", "Tell you when something comes"]
       : l.lead.startsWith("Opens web") ? ["↗", "Open links"]
@@ -150,7 +151,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
         <h2>{approvedElsewhere ? <>{q} is approved</> : title}</h2>
       </header>
       <p className="grant-sub grant-from">{what === "component" ? <>A component, in its own sealed frame on your page. {from}.</> : <>{from}.</>} <span className="quiet">Its name is its note's, not verified.</span></p>
-      {whose !== "mine" && <p className="grant-warn" role="note"><strong>Not made by you. Only continue if you trust the people who made it.</strong> It acts as you in {vault}, with your sign-in there, and sees nothing in your own vaults.{what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}</p>}
+      {whose !== "mine" && <p className="grant-warn" role="note"><strong>Not made by you. Only continue if you trust the people who made it.</strong> It acts as you in {vault}, with your sign-in there. It sees nothing in your own vaults.{what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}</p>}
       {approvedElsewhere && <p className="grant-changed" role="status"><strong>You approved this exact version on {approvedElsewhere}.</strong> On this device your hub asks first.</p>}
       {!approvedElsewhere && notice && <p className="grant-changed" role="status"><strong>{notice}</strong></p>}
       {rows.length ? <ul className="grant-face grant-rows" role="list" aria-label="What it would do">{rows.map((r, i) => (
