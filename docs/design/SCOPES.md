@@ -110,7 +110,7 @@ what it asked for. To see the new pages, remove the old Parachute approval on th
 On Cloud a consent for a vault may retire **another device's** connection to that vault (the Allow page's *replace*
 box, ticked to begin with). That was true before this change; per-vault asks make it more likely to show. Proposal 3.
 
-## How this rides on the app record (#50)
+## How this rides on the app record ([APP-RECORD.md](APP-RECORD.md))
 
 The app record lists where applets come from and the approvals say which code may run, signed once for every device.
 Two fits:

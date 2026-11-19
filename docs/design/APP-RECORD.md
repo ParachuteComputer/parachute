@@ -100,4 +100,4 @@ the app's `keep`.
 | `KEEP = 3`, `parachute.applet-storage.v1:*` | `keep`, the saved store | now (copied once) |
 | "The launcher is for everything" | the open app | now |
 | `bar` and `start` in `Parachute/Settings` | the app record | when no device runs a build from before 11-19 (date for Uni to set) |
-| Draft PR #50 | this note | close it when this merges |
+| Draft PR #50 | this note | closed 11-19, when #66 merged |
