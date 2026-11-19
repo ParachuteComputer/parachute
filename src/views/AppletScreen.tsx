@@ -39,7 +39,8 @@ import { pageMarks } from "../applet/pageMark";
 import { MAX_CODE_CHARS } from "../vault/limited";
 import { findVault, hostOf } from "../vault/store";
 import { covers } from "../vault/parachute";
-import { appletLevel, giveBack, heldLevel } from "../vault/reach";
+import { appletLevel, canWrite, giveBack, heldLevel } from "../vault/reach";
+import { homeVault } from "../shell/frameSource";
 import { askVault } from "../vault/signInFlow";
 import { screenOf } from "../applet/manifest";
 import { createRouter } from "../applet/router";
@@ -101,6 +102,10 @@ const startedAtStart = new Map<string, { chosen: boolean; vault: string; noteId:
 /** `page` is null for code from someone else's vault until it is allowed: it is transpiled only then (`source` waits). */
 type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string }
   | { state: "ok"; entry: AppletEntry; page: string | null; source: { kind: CodeKind; text: string }; imports: Imported[]; note: Note | null; from: string[] };
+
+/** The pointer in the home is repinned only while the app may change notes there (a home read only waits: no ask is
+ *  raised for something the person didn't do). */
+const homeWritable = () => { const h = homeVault(); return !!h && canWrite(h.key); };
 
 export default function AppletScreen() {
   const { vault: key, applet: appletId } = useParams();
@@ -222,7 +227,7 @@ export default function AppletScreen() {
   const repinned = useRef<string | null>(null);
   useEffect(() => {
     if (!granted || !pinMoved || !brought || !keys || !subject || repinned.current === keys.html) return;
-    if (grants.record(subject)?.code !== keys.html) return;
+    if (grants.record(subject)?.code !== keys.html || !homeWritable()) return;
     repinned.current = keys.html;
     void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {});
   }, [granted, pinMoved, keys?.html]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -347,7 +352,7 @@ export default function AppletScreen() {
               .then((url) => window.location.assign(url), (e: unknown) => setHubError(e instanceof Error ? e.message : "Your hub didn't answer."));
             return;
           }
-          grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry, asked); if (brought && pinMoved) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); }}
+          grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry, asked); if (brought && pinMoved && homeWritable()) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); }}
         onNotNow={() => setDeclined(true)} />
     </>);
   }

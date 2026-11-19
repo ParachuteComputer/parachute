@@ -23,18 +23,18 @@ const updatedOf = (n: Note | null) => (n as { updatedAt?: string } | null)?.upda
 /** May this device write in the vault? Its sign-in's scope says (a vault given to read only can't be changed here). */
 
 /** The words typed before the app left for the hub's write ask, if this opening is the way back from it. */
-function takeDraft(k: string): { text: string; base: string | null } | null {
+function takeDraft(k: string): { text: string; base: string | null; into: string | null } | null {
   try {
     const back = sessionStorage.getItem(DRAFT_RETURN) === k;
     sessionStorage.removeItem(DRAFT_RETURN);
     const raw = sessionStorage.getItem(k);
     sessionStorage.removeItem(k);
     if (!back || !raw) return null;
-    const d = JSON.parse(raw) as { text?: unknown; base?: unknown };
-    return typeof d.text === "string" ? { text: d.text, base: typeof d.base === "string" ? d.base : null } : null;
+    const d = JSON.parse(raw) as { text?: unknown; base?: unknown; into?: unknown };
+    return typeof d.text === "string" ? { text: d.text, base: typeof d.base === "string" ? d.base : null, into: typeof d.into === "string" ? d.into : null } : null;
   } catch { return null; }
 }
-function keepDraft(k: string, text: string, base: string | null) { try { sessionStorage.setItem(k, JSON.stringify({ text, base })); sessionStorage.setItem(DRAFT_LATEST, k); } catch { /* this screen only */ } }
+function keepDraft(k: string, text: string, base: string | null, into: string) { try { sessionStorage.setItem(k, JSON.stringify({ text, base, into })); sessionStorage.setItem(DRAFT_LATEST, k); } catch { /* this screen only */ } }
 const leavingForHub = () => { try { return !!sessionStorage.getItem(DRAFT_RETURN); } catch { return false; } };
 
 export default function NoteEdit() {
@@ -52,10 +52,13 @@ export default function NoteEdit() {
   const [text, setTextNow] = useState(draft?.text ?? "");
   // the version the person's words were written against: the conflict check is against it, not a later read
   const base = useRef<string | null>(draft?.base ?? null);
-  const setText = (t: string) => { setTextNow(t); keepDraft(draftKey, t, base.current); };
+  const intoRef = useRef<string>(draft?.into ?? key ?? "");
+  const setText = (t: string) => { setTextNow(t); keepDraft(draftKey, t, base.current, intoRef.current); };
   const dropDraft = () => { try { sessionStorage.removeItem(draftKey); } catch { /* nothing kept */ } };
   useEffect(() => () => { if (!leavingForHub()) dropDraft(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [into, setInto] = useState(key ?? "");
+  // the vault a new note goes into, kept with the draft: back from the hub, it is the one the person chose
+  const [into, setIntoNow] = useState(draft?.into ?? key ?? "");
+  const setInto = (v: string) => { intoRef.current = v; setIntoNow(v); keepDraft(draftKey, text, base.current, v); };
   const [state, setState] = useState<"loading" | "ready" | "saving" | "error">(isNew ? "ready" : "loading");
   const [error, setError] = useState("");
   // the note changed elsewhere (an AI, another device) since it was opened: the person's text stays, and they choose.
@@ -135,7 +138,7 @@ export default function NoteEdit() {
             <p className="small">Keep mine saves your words over theirs. Use theirs drops your changes.</p>
             <div className="row-buttons">
               <button type="button" className="secondary" onClick={() => void save(true)}>Keep mine</button>
-              {theirs && <button type="button" className="secondary" onClick={() => { setNote(theirs); setText(theirs.content ?? ""); setTheirs(null); setConflictAt(null); setError(""); }}>Use theirs</button>}
+              {theirs && <button type="button" className="secondary" onClick={() => { base.current = updatedOf(theirs); setNote(theirs); setText(theirs.content ?? ""); setTheirs(null); setConflictAt(null); setError(""); }}>Use theirs</button>}
             </div>
           </>}
         </div>}

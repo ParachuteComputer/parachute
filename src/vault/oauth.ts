@@ -207,21 +207,23 @@ export async function completeSignIn(code: string, state: string, fetchImpl?: ty
   let token: TokenResponse;
   try { token = JSON.parse(text) as TokenResponse; } catch { throw new Error("The hub's answer couldn't be read."); }
   if (!token.access_token) throw new Error("The hub's answer had no token.");
+  // a token refused below is ended at the hub first: nothing on this device holds it
+  const endIt = () => revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint });
   if (pending.step === "list") {
-    if (!canList(token.scope)) throw new Error("The hub didn't let Parachute see which vaults are yours. Nothing was added.");
+    if (!canList(token.scope)) { await endIt(); throw new Error("The hub didn't let Parachute see which vaults are yours. Nothing was added."); }
     return { pending, token, vault: null, level: null };
   }
   // what the token holds of the vault asked for: the hub's word (its scope); a token for something else (account-wide,
   // or another vault) is refused, not stored
   const vault = pending.vault!;
   const level = levelIn(token.scope, vault);
-  if (!level) throw new Error(`The hub didn't give Parachute the ${vault} vault. Nothing was added.`);
+  if (!level) { await endIt(); throw new Error(`The hub didn't give Parachute the ${vault} vault. Nothing was added.`); }
   // more than was asked (the hub's page lets the person tick extra access): not kept; the app holds only what it asked
   const extra = (token.scope ?? "").split(/\s+/).filter((w) => w && !scopeFor(vault, pending.level ?? "read").split(" ").includes(w));
   // (the token it gave is ended at once: nothing holds it)
-  if (extra.length) { await revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint }); throw new Error(`The hub gave more than Parachute asked for (${extra.join(", ").slice(0, 120)}). Nothing was added: ask again without the extra access.`); }
+  if (extra.length) { await endIt(); throw new Error(`The hub gave more than Parachute asked for (${extra.join(", ").slice(0, 120)}). Nothing was added: ask again without the extra access.`); }
   const aud = audienceVault(token.access_token) ?? token.vault ?? vault;
-  if (aud !== vault) { await revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint }); throw new Error("The hub's token is for a vault it wasn't asked for. Nothing was added."); }
+  if (aud !== vault) { await endIt(); throw new Error("The hub's token is for a vault it wasn't asked for. Nothing was added."); }
   return { pending, token, vault, level };
 }
 

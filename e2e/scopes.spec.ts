@@ -160,3 +160,28 @@ test("someone else's vault where the person may only read: an applet that writes
     expect(grants.filter((g) => g.includes(journal.id))).toEqual([]);
   } finally { await api(there, "DELETE", `notes/${journal.id}`, undefined, ORG_VAULT).catch(() => {}); }
 });
+
+test("a new note asks for write in the vault the person chose, and lands there after the hub's yes", async ({ page }) => {
+  const hub = hubState();
+  await signIn(page);
+  await openVault(page, OTHER);
+  const stamp = Date.now().toString(36);
+  await page.goto(`/v/${OTHER}/new`);
+  const app = new URL(page.url()).origin;
+  await page.getByRole("combobox").selectOption({ label: VAULT });
+  await page.getByLabel("The new note").fill(`Chosen vault ${stamp}\n\nInto the home.`);
+  await page.getByRole("button", { name: "Save" }).click();
+  const ask = page.getByRole("dialog", { name: `Change notes in ${VAULT}` });
+  await expect(ask).toBeVisible();
+  await ask.getByRole("button", { name: /^Continue to / }).click();
+  await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
+  expect(await approveUntilBack(page, hub.origin, app, undefined, `/v/${OTHER}/new`)).toBe(1);
+  // back: the words, and the vault the person chose
+  await expect(page.getByLabel("The new note")).toHaveValue(/Into the home\./);
+  await expect(page.getByRole("combobox")).toHaveValue(VAULT);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect.poll(async () => ((await api(hub, "GET", `notes?search=${encodeURIComponent(stamp)}&limit=5`)) as { path: string }[]).map((n) => n.path)).toContain(`Chosen vault ${stamp}`);
+  const there = { origin: hub.origin, token: mintToken(`vault:${OTHER}:write`) };
+  expect(((await api(there, "GET", `notes?search=${encodeURIComponent(stamp)}&limit=5`, undefined, OTHER)) as unknown[]).length).toBe(0);
+  for (const n of (await api(hub, "GET", `notes?search=${encodeURIComponent(stamp)}&limit=5`)) as { id: string }[]) await api(hub, "DELETE", `notes/${n.id}`).catch(() => {});
+});
