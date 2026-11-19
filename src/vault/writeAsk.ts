@@ -36,3 +36,12 @@ export function noteOwnWrite(r: Pick<VaultRecord, "issuer" | "vault">) { const k
 export function forgetOwnWrite(r: Pick<VaultRecord, "issuer" | "vault">) { setOwn(ownWrites().filter((k) => k !== ownKey(r))); }
 export const ownWrite = (r: Pick<VaultRecord, "issuer" | "vault">) => ownWrites().includes(ownKey(r));
 
+
+/** The editor's words while the app is away at the hub's write ask (views/NoteEdit.tsx): the editor's draft key
+ *  (`DRAFT_LATEST`, kept as the person types) and the one to bring back (`DRAFT_RETURN`, set when the ask leaves). */
+export const DRAFT_LATEST = "parachute.draft.latest.v1";
+export const DRAFT_RETURN = "parachute.draft.return.v1";
+/** Leaving for the hub from an editor: its words come back on the return. */
+export function markDraftReturn(onEditor: boolean) {
+  try { const k = sessionStorage.getItem(DRAFT_LATEST); if (onEditor && k) sessionStorage.setItem(DRAFT_RETURN, k); else sessionStorage.removeItem(DRAFT_RETURN); } catch { /* the words are typed again */ }
+}

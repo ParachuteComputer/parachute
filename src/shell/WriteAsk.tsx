@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { askOwnWrite } from "../vault/reach";
-import { clearWriteAsk, onWriteAsk } from "../vault/writeAsk";
+import { clearWriteAsk, markDraftReturn, onWriteAsk } from "../vault/writeAsk";
 import { findVault, hostOf } from "../vault/store";
 
 export default function WriteAsk() {
@@ -13,17 +13,22 @@ export default function WriteAsk() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const location = useLocation();
-  // after Not now, the same vault doesn't ask again for a little while (a change retried by itself can't nag)
+  // after Not now, the same vault doesn't ask again for a few seconds (a change retried by itself can't nag)
   const quiet = useRef(new Map<string, number>());
   useEffect(() => onWriteAsk((k) => { if ((quiet.current.get(k) ?? 0) > Date.now()) return; setKey(k); setError(""); setBusy(false); }), []);
   const rec = key ? findVault(key) : null;
   if (!key || !rec) return null;
-  const close = () => { quiet.current.set(key, Date.now() + 20_000); clearWriteAsk(); setKey(null); };
+  const close = () => { quiet.current.set(key, Date.now() + 5_000); clearWriteAsk(); setKey(null); };
   const go = async (e: React.MouseEvent) => {
     // only a real tap leaves for the hub
     if (!e.isTrusted) return;
     setBusy(true); setError("");
-    try { window.location.assign(await askOwnWrite(key, `${location.pathname}${location.search}`)); }
+    try {
+      const to = await askOwnWrite(key, `${location.pathname}${location.search}`);
+      // from a note's editor, the words typed come back with the person (views/NoteEdit.tsx)
+      markDraftReturn(/^\/v\/[^/]+\/(?:new|n\/[^/]+\/edit)$/.test(location.pathname));
+      window.location.assign(to);
+    }
     catch (e) { setBusy(false); setError(e instanceof Error ? e.message : "Your hub didn't answer."); }
   };
   return (

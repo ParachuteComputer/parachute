@@ -218,9 +218,10 @@ export async function completeSignIn(code: string, state: string, fetchImpl?: ty
   if (!level) throw new Error(`The hub didn't give Parachute the ${vault} vault. Nothing was added.`);
   // more than was asked (the hub's page lets the person tick extra access): not kept; the app holds only what it asked
   const extra = (token.scope ?? "").split(/\s+/).filter((w) => w && !scopeFor(vault, pending.level ?? "read").split(" ").includes(w));
-  if (extra.length) throw new Error(`The hub gave more than Parachute asked for (${extra.join(", ").slice(0, 120)}). Nothing was added: ask again without the extra access.`);
+  // (the token it gave is ended at once: nothing holds it)
+  if (extra.length) { await revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint }); throw new Error(`The hub gave more than Parachute asked for (${extra.join(", ").slice(0, 120)}). Nothing was added: ask again without the extra access.`); }
   const aud = audienceVault(token.access_token) ?? token.vault ?? vault;
-  if (aud !== vault) throw new Error("The hub's token is for a vault it wasn't asked for. Nothing was added.");
+  if (aud !== vault) { await revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint }); throw new Error("The hub's token is for a vault it wasn't asked for. Nothing was added."); }
   return { pending, token, vault, level };
 }
 

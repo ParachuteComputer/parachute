@@ -2,6 +2,7 @@
 // (which a person's vault can replace) never writes: it only sends the person here. Only the person's own words: never
 // an app's own note (settings, frame, theme, pointers) or code, which the note view offers no Edit for either.
 import { heldLevel } from "../vault/reach";
+import { DRAFT_LATEST, DRAFT_RETURN } from "../vault/writeAsk";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { VaultConflictError, type Note } from "@openparachute/surface-client";
@@ -21,6 +22,21 @@ export function pathFromText(text: string, at = new Date()): string {
 const updatedOf = (n: Note | null) => (n as { updatedAt?: string } | null)?.updatedAt ?? null;
 /** May this device write in the vault? Its sign-in's scope says (a vault given to read only can't be changed here). */
 
+/** The words typed before the app left for the hub's write ask, if this opening is the way back from it. */
+function takeDraft(k: string): { text: string; base: string | null } | null {
+  try {
+    const back = sessionStorage.getItem(DRAFT_RETURN) === k;
+    sessionStorage.removeItem(DRAFT_RETURN);
+    const raw = sessionStorage.getItem(k);
+    sessionStorage.removeItem(k);
+    if (!back || !raw) return null;
+    const d = JSON.parse(raw) as { text?: unknown; base?: unknown };
+    return typeof d.text === "string" ? { text: d.text, base: typeof d.base === "string" ? d.base : null } : null;
+  } catch { return null; }
+}
+function keepDraft(k: string, text: string, base: string | null) { try { sessionStorage.setItem(k, JSON.stringify({ text, base })); sessionStorage.setItem(DRAFT_LATEST, k); } catch { /* this screen only */ } }
+const leavingForHub = () => { try { return !!sessionStorage.getItem(DRAFT_RETURN); } catch { return false; } };
+
 export default function NoteEdit() {
   const { vault: key, id } = useParams();
   const rec = useVault(key);
@@ -30,11 +46,15 @@ export default function NoteEdit() {
   const [note, setNote] = useState<Note | null>(null);
   // what the person typed, kept for this tab while the hub is asked for write (shell/WriteAsk.tsx leaves the page):
   // back here, it is as they left it
+  // Only on the way back from that ask (WriteAsk marks it): any other opening of the editor starts from the note.
   const draftKey = `parachute.draft.v1:${key ?? ""}:${id ?? "new"}`;
-  const draft = (() => { try { return sessionStorage.getItem(draftKey); } catch { return null; } })();
-  const [text, setTextNow] = useState(draft ?? "");
-  const setText = (t: string) => { setTextNow(t); try { sessionStorage.setItem(draftKey, t); } catch { /* this screen only */ } };
+  const [draft] = useState(() => takeDraft(draftKey));
+  const [text, setTextNow] = useState(draft?.text ?? "");
+  // the version the person's words were written against: the conflict check is against it, not a later read
+  const base = useRef<string | null>(draft?.base ?? null);
+  const setText = (t: string) => { setTextNow(t); keepDraft(draftKey, t, base.current); };
   const dropDraft = () => { try { sessionStorage.removeItem(draftKey); } catch { /* nothing kept */ } };
+  useEffect(() => () => { if (!leavingForHub()) dropDraft(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [into, setInto] = useState(key ?? "");
   const [state, setState] = useState<"loading" | "ready" | "saving" | "error">(isNew ? "ready" : "loading");
   const [error, setError] = useState("");
@@ -51,7 +71,8 @@ export default function NoteEdit() {
       if (!live) return;
       if (!n) { setState("error"); setError("There's no such note."); return; }
       if (isCodeNote(n) || isAppOwn(n)) { setState("error"); setError("This note is the app's own, or code: it isn't changed here."); return; }
-      setNote(n); setTextNow(draft ?? n.content ?? ""); setState("ready");
+      if (!draft) base.current = updatedOf(n);
+      setNote(n); setTextNow(draft?.text ?? n.content ?? ""); setState("ready");
     }, (e: unknown) => { if (live) { setState("error"); setError(e instanceof Error ? e.message : "The note couldn't be read."); } });
     return () => { live = false; };
   }, [rec?.key, id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -78,7 +99,7 @@ export default function NoteEdit() {
           } catch (e) { if (!(e instanceof VaultConflictError) || n >= 20) throw e; }
         }
       }
-      const at = force ? (updatedOf(theirs) ?? conflictAt) : updatedOf(note);
+      const at = force ? (updatedOf(theirs) ?? conflictAt) : base.current ?? updatedOf(note);
       await c.updateNote(note!.id, { content: text, ...(at ? { if_updated_at: at } : {}) });
       dropDraft();
       // back to the note the person came from (it reads itself again), so Back after it doesn't show it twice

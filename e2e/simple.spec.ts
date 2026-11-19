@@ -60,6 +60,14 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
     await page.getByRole("button", { name: "Keep mine" }).click();
     await expect(ui(page).getByText("Mine, from the phone.")).toBeVisible();
 
+    // words typed and left unsaved don't come back: the editor opens on the note as it is now
+    await ui(page).getByRole("link", { name: "Edit" }).click();
+    await words.fill(`# Garden plan ${stamp}\n\nLeft unsaved.`);
+    await page.getByRole("button", { name: "Back" }).first().click();
+    await ui(page).getByRole("link", { name: "Edit" }).click();
+    await expect(words).toHaveValue(/Mine, from the phone\./);
+    await page.getByRole("button", { name: "Back" }).first().click();
+
     // a new note: its first line names it
     await bar.getByRole("link", { name: "Notes" }).click();
     await ui(page).getByRole("link", { name: "New note" }).click();

@@ -217,6 +217,15 @@ export default function AppletScreen() {
   const granted = decision === "run";
   // brought in at other code than this: the card is headed so, even where this device never allowed it
   const pinMoved = !!brought && !!keys && brought.pointer.code !== keys.html;
+  // an Allow that went through the hub (vault/signInFlow.ts finishStep) was recorded on the way back, for this exact
+  // code: the pointer that brought it in follows, as it does after an Allow made here
+  const repinned = useRef<string | null>(null);
+  useEffect(() => {
+    if (!granted || !pinMoved || !brought || !keys || !subject || repinned.current === keys.html) return;
+    if (grants.record(subject)?.code !== keys.html) return;
+    repinned.current = keys.html;
+    void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {});
+  }, [granted, pinMoved, keys?.html]); // eslint-disable-line react-hooks/exhaustive-deps
   // someone else's code, allowed: transpiled now, once
   const [late, setLate] = useState<{ hash: string; page: string } | { hash: string; error: string } | null>(null);
   useEffect(() => {
