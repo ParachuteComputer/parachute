@@ -112,6 +112,18 @@ test("Revoke on one device takes it back on the others; a cancelled unlock appro
     await expect(journal(phoneA)).toBeVisible();
     await open(laptopB);
     await expect(journal(laptopB)).toBeVisible();
+    // a Revoke whose unlock is cancelled stops it here, says so, and isn't undone by the approval still standing
+    const setApprove = (p: Page, v: string) => p.evaluate((x) => { (window as unknown as { __parachuteE2EApprove: string }).__parachuteE2EApprove = x; }, v);
+    await setApprove(laptopB, "cancel");
+    await fromAppletMenu(laptopB, "Revoke");
+    await expect(laptopB.getByRole("alert")).toContainText("Stopped on this device only");
+    await expect(card(laptopB)).toBeVisible();
+    await open(laptopB);
+    await expect(card(laptopB)).toBeVisible();
+    await expect(journal(laptopB)).toHaveCount(0);
+    await setApprove(laptopB, "pass");
+    await laptopB.getByRole("button", { name: "Allow" }).click();
+    await expect(journal(laptopB)).toBeVisible();
     // the laptop revokes: taken back on every device
     await fromAppletMenu(laptopB, "Revoke");
     await expect.poll(async () => JSON.parse((await approvals())[0].metadata.approval!.content).approved).toBe(false);

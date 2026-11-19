@@ -31,7 +31,7 @@ import { readImports, type Imported } from "../applet/resolveImports";
 import { compositeHash } from "../applet/imports";
 import reactKitSource from "virtual:react-kit";
 import reactNoteKitSource from "virtual:react-note-kit";
-import { embedsFrom, pointerFor, repin, type PointerNote } from "../applet/pointers";
+import { embedsFrom, embedTargets, pointerFor, repin, type PointerNote } from "../applet/pointers";
 import { createPageModule } from "../applet/modules/page";
 import { PageEmbeds, PAGE_MAX } from "./Embeds";
 import { isMine, useWhose, whoseOf } from "../vault/whose";
@@ -53,7 +53,7 @@ import { createStorageModule } from "../applet/modules/storage";
 import { storageFor } from "../shell/device";
 import { deviceSaved } from "../shell/saved";
 import { asksHash } from "../applet/approvals";
-import { approvalFor, floorOf, passcodeHere, signApproval, signsHere, subjectOf as approvalSubject } from "../applet/approvalStore";
+import { approvalFor, floorOf, passcodeHere, raiseFloor, signApproval, signsHere, subjectOf as approvalSubject } from "../applet/approvalStore";
 import type { Decision } from "../applet/approvals";
 import { openAppNow } from "../shell/homeSettings";
 import { createSavedModule } from "../applet/modules/saved";
@@ -213,7 +213,7 @@ export default function AppletScreen() {
         else if (!late && !imports.length) page = appletPage(kind, source, code.compiled?.js ?? null);
         else if (!late) { const built = await buildPage(kind, source, imports); if (!on) return; if (!built.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${built.error}` }); return; } page = built.page; }
         const asks = await asksHash(approvalSubject(rec, n.id, a.entry.manifest.id), a.entry.path, (n.metadata ?? {}) as Record<string, unknown>,
-          { opens: a.entry.opens.map((o) => ({ type: o.type, path: o.path, screen: o.screen ?? null })), from });
+          { opens: a.entry.opens.map((o) => ({ type: o.type, path: o.path, screen: o.screen ?? null })), from: await embedTargets(a.entry.embeds).catch(() => ["unread"]) });
         if (!on) return;
         setLoaded({ state: "ok", entry: a.entry, page, source: { kind, text: source }, imports, note, from, asks });
         setKeys({ scope, html: hash });
@@ -437,6 +437,10 @@ export default function AppletScreen() {
       // on a device with the person's key, Revoke takes the approval back on every device (signed, after the unlock;
       // stopping never asks the passcode). It stops here whatever happens there, and says when it couldn't go further.
       let said: string | null = null;
+      // whatever happens to the taking back, this device won't allow it again from an approval it saw before
+      const sub = approvalSubject(rec, entry.noteId, entry.manifest.id);
+      const seen = signedNow && (signedNow.run ? signedNow.content : signedNow.newest);
+      if (seen) raiseFloor(sub, seen.n + 0.5);
       if (await signsHere()) {
         try {
           const r = await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: false, code: "", scope: "" });
