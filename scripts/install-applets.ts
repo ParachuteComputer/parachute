@@ -9,7 +9,8 @@
 //
 // A component an applet imports (`import Room from "component:room"`, applets/room.json) goes in with it, before it.
 // --app uni [--app-name Uni] also writes the app record Parachute/Apps/uni (docs/design/APP-RECORD.md): every applet in
-// the vault (and each --source vault[/applet path]), with the same bar and home, and makes it the app a device opens.
+// the vault (and each --source: "*" for every vault on the hub, a vault, or vault/applet path), with the same bar and
+// home, and makes it the app a device opens.
 // An area's applet (applets/area.json) is one per area: --applet area --set area=Garden --set area_id=garden
 // --set area_room=<the room's id> (with relay and uni), again with other values for the next area.
 //
@@ -112,7 +113,8 @@ async function main() {
   if (a.app) next.app = a.app;
   // the app record: its own bar and home, the same as the settings note's (which older apps read)
   if (a.app) {
-    const sources = [{ vault: a.vault, applet: "*" }, ...a.sources.map((x) => { const i = x.indexOf("/"); return i < 0 ? { vault: x, applet: "*" } : { vault: x.slice(0, i), applet: x.slice(i + 1) }; })];
+    // --source "*": every vault on this hub; "garden": every applet in garden; "garden/Applets/SeedLog": one applet
+    const sources = [{ vault: a.vault, applet: "*" }, ...a.sources.map((x) => { if (x === "*") return { hub: new URL(a.hub).origin, vault: "*", applet: "*" }; const i = x.indexOf("/"); return i < 0 ? { vault: x, applet: "*" } : { vault: x.slice(0, i), applet: x.slice(i + 1) }; })];
     const app = { contract: 1, id: a.app, name: a.appName ?? a.app[0].toUpperCase() + a.app.slice(1), look: "launcher", sources, ...(next.bar ? { bar: next.bar } : {}), ...(next.start ? { start: next.start } : {}) };
     const path = `Parachute/Apps/${a.app}`;
     const had = await api.find(path);
