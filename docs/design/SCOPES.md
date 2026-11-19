@@ -47,6 +47,16 @@ The hub's own pages, as they read on core 0.9 (`spike/`, the throwaway hubs):
   them … Account-wide*, with each vault at Read to begin with. **This is wider than the app needs**, and the app can't
   ask for less: there is no names-only scope (proposal 1). The app uses the token once, to list, and revokes it.
 
+Parachute Cloud's pages, as they read on 2026-11-18 (the test account, `walk/cloud-web` in the worktree):
+
+- Home: *Vault app wants to read notes in uni-test-simple. · Read the whole vault uni-test-simple: every note, tag and
+  attachment, and its settings*, Deny / Allow, the raw scope behind *Technical details*. Plain and specific: this is
+  the page core's should match (proposal 5).
+- Allowing Capture there: *Vault app wants to read and write notes in uni-test-simple.*
+- The listing, without a key: *Vault app wants to see and work with the vaults in your account. · List, create, and
+  search across the vaults in your account*, with **Create new vaults** ticked and **Any vault — current and future**
+  chosen to begin with. Far wider than the names the app reads (proposal 1).
+
 ## Asking for more later
 
 **One token per vault, widened or narrowed; not a token per applet.** The hub's tokens are already one per vault (each
@@ -131,8 +141,10 @@ Nothing here changes the app record's open questions.
 4. **Narrower than a vault**, per the 1.0 grants spec (core `docs/SPEC-1.0-grants.md` §5.3, §7.3): an applet's grant
    narrowed by type, enforced by the vault. An applet's folder is the same shape; the shell's folder rule then becomes
    the hub's. Until then the hub can't narrow below a vault, and the app says so on the card ("only this vault").
-5. **Consent copy like Techne's**: a short title and one line per scope that says its limit, the raw scope behind
-   details. Today core shows the raw `vault:kitchen:read` first, then *read*, then the sentence.
+5. **Consent copy like Techne's** (and like Cloud's per-vault page already is): one sentence naming the vault and the
+   verb, one line saying what that reaches, the raw scope behind details. Today core shows the raw `vault:kitchen:read`
+   first, then *read*, then the sentence, and offers write and admin as *Grant additional access* (the app refuses a
+   token wider than it asked, so ticking them ends the step with a message).
 
 ## Threats
 
