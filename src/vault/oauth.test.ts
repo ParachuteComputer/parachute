@@ -23,7 +23,7 @@ describe("completeSignIn", () => {
   });
   it("refuses a second use of the same flow", async () => {
     localStorage.setItem(PENDING, JSON.stringify(pending()));
-    await completeSignIn("code", "s1", hub(200, { access_token: "t", vault: "recipes", scope: "vault:recipes:read vault:recipes:write" }));
+    await completeSignIn("code", "s1", hub(200, { access_token: "t", vault: "recipes", scope: "vault:recipes:read" }));
     await expect(completeSignIn("code", "s1", hub(200, { access_token: "t", vault: "recipes" }))).rejects.toThrow(/expired or was already used/);
   });
   it("refuses a flow older than half an hour", async () => {
@@ -39,6 +39,12 @@ describe("completeSignIn", () => {
     await expect(completeSignIn("code", "s1", hub(200, { access_token: "t", scope: "vault:secret:read vault:secret:write" }))).rejects.toThrow(/didn't give Parachute the recipes vault/);
     localStorage.setItem(PENDING, JSON.stringify(pending()));
     await expect(completeSignIn("code", "s1", hub(200, { access_token: jwt("vault.secret"), scope: "vault:recipes:read" }))).rejects.toThrow(/wasn't asked for/);
+  });
+  it("refuses more than was asked (extra access ticked on the hub's page): the app holds only what it asked for", async () => {
+    localStorage.setItem(PENDING, JSON.stringify(pending()));
+    await expect(completeSignIn("code", "s1", hub(200, { access_token: jwt("vault.recipes"), scope: "vault:recipes:read vault:recipes:admin" }))).rejects.toThrow(/more than Parachute asked for \(vault:recipes:admin\)/);
+    localStorage.setItem(PENDING, JSON.stringify(pending()));
+    await expect(completeSignIn("code", "s1", hub(200, { access_token: jwt("vault.recipes"), scope: "vault:recipes:read vault:recipes:write" }))).rejects.toThrow(/more than Parachute asked for/);
   });
   it("says what the hub gave of the vault: read where read was asked, read where it capped a write ask", async () => {
     localStorage.setItem(PENDING, JSON.stringify(pending()));

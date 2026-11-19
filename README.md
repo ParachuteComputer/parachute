@@ -21,9 +21,12 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
 3. **Your hub knows your key.** The hub's owner links it once: `parachute auth link-pubkey --user <name> <npub>`. The
    app shows your `npub1…`.
 4. **Your Parachute.** Type its address (`your-hub.example`), say whose it is (**Mine**), press **Sign in with your key**,
-   and press **Approve** once on the hub's page. Every vault you can reach there comes with it, applets and all; you
-   never type a vault's address. If you run the hub, Parachute first asks which of its vaults are yours (all ticked). **Use Parachute Cloud instead** and **Other ways to sign in** use the hub's own sign-in
-   (an emailed link, a password); the hub then asks twice: to show Parachute your vaults, then for all of them.
+   and press **Approve** once on the hub's page: it lets Parachute read your home vault. Each other vault you can reach
+   there is a line to open, and an applet asks the hub for its own vault when you allow it
+   ([docs/design/SCOPES.md](docs/design/SCOPES.md)); you never type a vault's address. If you run the hub, Parachute
+   first asks which of its vaults are yours (all ticked) and which is home. **Use Parachute Cloud instead** and
+   **Other ways to sign in** use the hub's own sign-in (an emailed link, a password); the hub then asks twice: to show
+   Parachute your vaults, then to read your home.
 5. **More Parachutes** (an org's, a friend's): **Add a Parachute** at the foot of the launcher, the same way, as
    **Someone else's**. Each one you add is listed in your home vault, so another device you sign in on finds them all,
    each a tap from signed in.

@@ -7,7 +7,7 @@ import { CLOUD, CLOUD_NAME } from "../vault/parachute";
 import { originOf, listVaults, subscribeVaults, hostOf, type VaultRecord } from "../vault/store";
 import { homeVault } from "./frameSource";
 import { levelIn } from "../vault/parachute";
-import { listHub, readSettings, settingsNow, startSimpleHere, subscribeSettings, SETTINGS_TAG } from "./homeSettings";
+import { listHub, readSettings, settingsNow, forgetSimpleHere, startSimpleHere, subscribeSettings, SETTINGS_TAG } from "./homeSettings";
 
 export type ParachuteLine = {
   /** the Parachute's address (its issuer origin) */
@@ -49,7 +49,8 @@ export function useParachutes(): ParachuteLine[] {
 }
 
 /** After a sign-in to a Parachute (docs/design/SCOPES.md): the sign-in read one vault, the home when it chose one
- *  (`firstHome`: this device had no home before). Then the Parachute goes on the person's list in the home vault, when
+ *  (`firstHome`: this device had no home before, and the hub listed that one vault only: with more, another may hold
+ *  the person's settings, so nobody is taken for new). Then the Parachute goes on the person's list in the home vault, when
  *  Parachute may write there (the sign-in asks to read only: the list waits for the first time the person lets it change
  *  notes in their home, vault/reach.ts), and a person new to the app on Parachute Cloud (`cloud`: the hub said so)
  *  starts on the simple app. Best effort: the sign-in stands either way. */
@@ -60,7 +61,7 @@ export async function afterSignIn(hub: string, kept: readonly VaultRecord[], clo
     // a home that holds no settings yet: a person new to this app (another device would have written them)
     const { holding, unread } = await withSettings([home]);
     newPerson = startsSimple(cloud, !!holding, unread);
-    if (newPerson) startSimpleHere();
+    if (newPerson) startSimpleHere(); else forgetSimpleHere();
   }
   await readSettings();
   if (!homeVault()) return;

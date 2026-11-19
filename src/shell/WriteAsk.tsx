@@ -2,7 +2,7 @@
 // until something the person allows needs more. A change it can't make yet (a note, their settings, adding Capture)
 // is refused before it is sent (vault/reach.ts), and this sheet says why and offers the hub's consent for that one vault.
 // The change itself is made again after: nothing is done behind the person's back.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { askOwnWrite } from "../vault/reach";
 import { clearWriteAsk, onWriteAsk } from "../vault/writeAsk";
@@ -13,11 +13,15 @@ export default function WriteAsk() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const location = useLocation();
-  useEffect(() => onWriteAsk((k) => { setKey(k); setError(""); setBusy(false); }), []);
+  // after Not now, the same vault doesn't ask again for a little while (a change retried by itself can't nag)
+  const quiet = useRef(new Map<string, number>());
+  useEffect(() => onWriteAsk((k) => { if ((quiet.current.get(k) ?? 0) > Date.now()) return; setKey(k); setError(""); setBusy(false); }), []);
   const rec = key ? findVault(key) : null;
   if (!key || !rec) return null;
-  const close = () => { clearWriteAsk(); setKey(null); };
-  const go = async () => {
+  const close = () => { quiet.current.set(key, Date.now() + 20_000); clearWriteAsk(); setKey(null); };
+  const go = async (e: React.MouseEvent) => {
+    // only a real tap leaves for the hub
+    if (!e.isTrusted) return;
     setBusy(true); setError("");
     try { window.location.assign(await askOwnWrite(key, `${location.pathname}${location.search}`)); }
     catch (e) { setBusy(false); setError(e instanceof Error ? e.message : "Your hub didn't answer."); }
@@ -31,7 +35,7 @@ export default function WriteAsk() {
         {error && <p className="error" role="alert">{error}</p>}
         <div className="grant-actions">
           <button type="button" className="quiet-button" disabled={busy} onClick={close}>Not now</button>
-          <button type="button" className="primary" disabled={busy} onClick={() => void go()}>{busy ? "Opening your hub…" : `Continue to ${hostOf(rec.issuer)}`}</button>
+          <button type="button" className="primary" disabled={busy} onClick={(e) => void go(e)}>{busy ? "Opening your hub…" : `Continue to ${hostOf(rec.issuer)}`}</button>
         </div>
       </section>
     </div>

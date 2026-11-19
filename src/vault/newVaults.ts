@@ -66,6 +66,13 @@ export function dismissVault(hub: string, vault: string) {
   told();
 }
 
+/** A new sign-in to `hub`: the vaults waved away there are offered again. */
+export function undismissOn(hub: string) {
+  const k = read(), h = originOf(hub);
+  const left = k.dismissed.filter((x) => !x.startsWith(`${h} `));
+  if (left.length !== k.dismissed.length) { write({ ...k, dismissed: left }); told(); }
+}
+
 /** The vaults on offer on `hub`: found there, not held on this device, not waved away. */
 export function newVaultsOn(hub: string): string[] {
   const h = originOf(hub);

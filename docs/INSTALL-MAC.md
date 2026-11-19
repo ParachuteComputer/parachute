@@ -59,7 +59,7 @@ Add another Parachute later from **Add a Parachute** at the foot of the launcher
 - A hub on your tailnet needs Tailscale running on the Mac.
 - If the hub says it doesn't know your key, send its owner the `npub1…` it shows.
 - **Other ways to sign in** (and **Use Parachute Cloud instead**) open the hub's own sign-in: a password, or Cloud's
-  emailed link. Without your key the hub asks twice: to show Parachute which vaults are yours, then for all of them.
+  emailed link. Without your key the hub asks twice: to show Parachute which vaults are yours, then to read your home.
 
 ## If something goes wrong
 

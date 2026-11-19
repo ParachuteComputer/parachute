@@ -4,13 +4,13 @@
 // Every other vault is asked for alone, when something the person allows needs it (vault/reach.ts). The screens (Add a
 // Parachute, the sign-in's return, the launcher's Open, an applet's Allow, a change that needs write) call these.
 import { beginSignIn, completeSignIn, dropPending, revoke, type AllowAfter, type Pending, type Why } from "./oauth";
-import { describe, listWithToken, reachesEvery, vaultUrlFrom, type Level, type Listed, type Parachute } from "./parachute";
+import { describe, levelIn, listWithToken, reachesEvery, vaultUrlFrom, type Level, type Listed, type Parachute } from "./parachute";
 import { limitedFetch } from "./limited";
 import { MAX_VAULTS } from "./address";
 import { listVaults, originOf, saveVault, vaultUrlOf, type VaultRecord } from "./store";
 import { setWhose, whoseOf, whoseSaid } from "./whose";
 import { keySignIn, keysHere, listWithKey, type Refusal } from "../key/key";
-import { noteEvery, noteListed } from "./newVaults";
+import { noteEvery, noteListed, undismissOn } from "./newVaults";
 import { holdHome, homeVault, setHome } from "../shell/frameSource";
 import { deviceGrants } from "../applet/grants";
 import { noteOwnWrite } from "./writeAsk";
@@ -25,7 +25,9 @@ export type VaultPick = { hub: string; vaults: string[]; askMine: boolean; mine:
   go: (mine: string[], first: string) => Promise<string> };
 /** Where to go next: the hub (its sign-in or consent page), a pick first, or done, with the vault now held and where to
  *  go after (`back`). `signIn`: this finished a sign-in to the Parachute (its list and home follow, afterSignIn). */
-export type Next = { go: string } | { pick: VaultPick } | { done: VaultRecord; parachute: Parachute; back?: string; signIn: boolean; firstHome: boolean; why: Why };
+export type Next = { go: string } | { pick: VaultPick } | { done: VaultRecord; parachute: Parachute; back?: string; signIn: boolean; firstHome: boolean;
+  /** the sign-in listed one vault, the person's own (a new person on Cloud has one; another vault may hold settings) */
+  solo: boolean; why: Why };
 
 const fetchFor = (whose: "mine" | "theirs") => (whose === "mine" ? fetch.bind(globalThis) : limitedFetch());
 
@@ -35,19 +37,35 @@ function homeHere(parachute: Parachute, vaults: readonly string[]): string | nul
   return h && originOf(h.issuer) === originOf(parachute.issuer) && vaults.includes(h.vault) ? h.vault : null;
 }
 
+/** What the person says of the vaults a sign-in listed (whose each is), carried through the hub's consent and kept only
+ *  when it comes back (finishStep): a sign-in stopped at the hub changes nothing. */
+export type Marks = { listed: string[]; whose: "mine" | "theirs"; mine: string[] | null; solo: boolean };
+
+/** Say whose each listed vault is, as the person did: on a hub they run, by their pick; else what they said of the
+ *  Parachute, for each vault this device hasn't been told about (signing in again never changes what they already said
+ *  of a vault; Settings does). */
+function sayWhose(issuer: string, m: Marks) {
+  for (const v of m.listed) {
+    const at = { issuer, vault: v };
+    if (m.mine) setWhose(at, m.mine.includes(v) ? "mine" : whoseOf(at) === "trusted" ? "trusted" : "theirs");
+    else if (whoseSaid(at) === null) setWhose(at, m.whose);
+  }
+}
+
+/** What a sign-in asks of the vault it reads: read, or write when this device already holds write there (signing in
+ *  again never takes away what something allowed needs). */
+function levelAt(parachute: Parachute, vault: string): Level {
+  const held = listVaults().find((v) => originOf(v.issuer) === originOf(parachute.issuer) && v.vault === vault);
+  return held && levelIn(held.scope, held.vault) === "write" ? "write" : "read";
+}
+
 /** After the listing: keep what it found, then the vault to read first (the home on a Parachute of the person's own),
  *  asked of the person only when it isn't clear. */
-function readFirst(parachute: Parachute, listed: Listed, whose: "mine" | "theirs", open: (first: string, home: boolean) => Promise<string>): { go: Promise<string> } | { pick: VaultPick } {
+function readFirst(parachute: Parachute, listed: Listed, whose: "mine" | "theirs", open: (first: string, home: boolean, marks: Marks) => Promise<string>): { go: Promise<string> } | { pick: VaultPick } {
   noteListed(parachute.hub, listed.vaults);
+  // a new sign-in offers again the vaults waved away on this device
+  undismissOn(parachute.hub);
   const at = (vault: string) => ({ issuer: parachute.issuer, vault });
-  // what the person says of the Parachute holds for each vault it lists that this device hasn't been told about (a
-  // later Open keeps it); signing in again never changes what they already said of a vault (Settings does)
-  const sayWhose = (mine: readonly string[] | null) => {
-    for (const v of listed.vaults) {
-      if (mine) setWhose(at(v), mine.includes(v) ? "mine" : whoseOf(at(v)) === "trusted" ? "trusted" : "theirs");
-      else if (whoseSaid(at(v)) === null) setWhose(at(v), whose);
-    }
-  };
   const askMine = whose === "mine" && listed.all && listed.vaults.length > 1;
   const mine = whose !== "mine" ? [] : listed.vaults.filter((v) => !askMine || [null, "mine"].includes(whoseSaid(at(v))));
   const known = homeHere(parachute, listed.vaults);
@@ -55,9 +73,10 @@ function readFirst(parachute: Parachute, listed: Listed, whose: "mine" | "theirs
   const home = whose === "mine" && (!homeVault() || !!known);
   const candidates = whose === "mine" ? mine : listed.vaults;
   const first = known ?? [...candidates].sort()[0] ?? listed.vaults[0];
-  if (!askMine && (known || candidates.length <= 1)) { sayWhose(null); return { go: open(first, home) }; }
+  const marks = (m: string[] | null): Marks => ({ listed: listed.vaults, whose, mine: m, solo: (m ?? candidates).length === 1 && listed.vaults.length === 1 });
+  if (!askMine && (known || candidates.length <= 1)) return { go: open(first, home, marks(null)) };
   return { pick: { hub: parachute.hub, vaults: listed.vaults, askMine, mine, first, home,
-    go: (m, f) => { sayWhose(askMine ? m : null); return open(f, home && (!askMine || m.includes(f))); } } };
+    go: (m, f) => open(f, home && (!askMine || m.includes(f)), marks(askMine ? m : null)) } };
 }
 
 /** Start: read the hub, and with the key learn the person's vaults at once and open the hub's key door. Throws a
@@ -81,7 +100,7 @@ export async function startSignIn(hub: string, whose: "mine" | "theirs", withKey
     }
   };
   if (!listed) return { go: await door({ parachute, step: "list", whose, how: "key", fresh: true }) };
-  const next = readFirst(parachute, listed, whose, (first, home) => door({ parachute, step: "open", vault: first, level: "read", why: "signin", whose, how: "key", fresh: true, home }));
+  const next = readFirst(parachute, listed, whose, (first, home, marks) => door({ parachute, step: "open", vault: first, level: levelAt(parachute, first), why: "signin", whose, how: "key", fresh: true, home, marks }));
   return "pick" in next ? next : { go: await next.go };
 }
 
@@ -124,7 +143,7 @@ export async function finishStep(code: string, state: string): Promise<Next> {
     if (!listed.vaults.length) throw new Error("You're signed in there, but no vault is yours yet. Ask the hub's owner to give you one.");
     // the hub's session is still in place: its consent for the one vault comes next
     const whose = pending.whose ?? "theirs";
-    const next = readFirst(p, listed, whose, (first, home) => beginSignIn({ parachute: p, step: "open", vault: first, level: "read", why: "signin", whose, how: pending.how, home }, f));
+    const next = readFirst(p, listed, whose, (first, home, marks) => beginSignIn({ parachute: p, step: "open", vault: first, level: levelAt(p, first), why: "signin", whose, how: pending.how, home, marks }, f));
     return "pick" in next ? next : { go: await next.go };
   }
 
@@ -132,11 +151,15 @@ export async function finishStep(code: string, state: string): Promise<Next> {
   // vault it held would otherwise count as newer)
   if (pending.why === "signin") holdHome();
   const hadHome = !!homeVault();
+  // whose each listed vault is, as the person said before the consent
+  if (pending.why === "signin" && pending.marks) sayWhose(p.issuer, pending.marks);
   const rec = keep(pending, token, vault!);
   // the vault the person chose as home (or the one this device already called home there)
   if (pending.why === "signin" && pending.home && whoseOf(rec) === "mine") setHome(rec.key);
   // the person's own change needed write, and the hub gave it: kept as theirs (vault/reach.ts)
   if (pending.why === "write" && level === "write") noteOwnWrite(rec);
+  // the hub gave read where the person asked to change notes: they hold read only there, and asking again won't help
+  if (pending.why === "write" && level !== "write") throw new Error(`Your hub lets you read ${vault} only, so Parachute can't change notes there.`);
   // an applet allowed on its card is recorded only now that the hub gave what it needs
   if (pending.allow) {
     if (level === "write" || pending.level !== "write") {
@@ -144,7 +167,7 @@ export async function finishStep(code: string, state: string): Promise<Next> {
       deviceGrants().grant(a.subject, a.scope, a.html, a.mode, grantExpiry, a.asked);
     } else throw new Error(`Your hub gave Parachute read only in ${vault}, so it can't let this applet change notes there. Nothing was allowed.`);
   }
-  return { done: rec, parachute: p, ...(pending.back ? { back: pending.back } : {}), signIn: pending.why === "signin", firstHome: !hadHome && !!pending.home, why: pending.why };
+  return { done: rec, parachute: p, ...(pending.back ? { back: pending.back } : {}), signIn: pending.why === "signin", firstHome: !hadHome && !!pending.home, solo: !!pending.marks?.solo, why: pending.why };
 }
 
 /** Keep one vault, with its own token; an older sign-in of the same vault here is ended. */

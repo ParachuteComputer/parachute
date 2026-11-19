@@ -161,10 +161,11 @@ const bump = (p: Partial<State> = {}) => { state = { ...state, ...p, rev: state.
 export function settingsNow(): Settings {
   const k = keptNow();
   const home = homeVault();
-  const s = k && home && k.vault === home.key ? k.settings : { ...EMPTY };
+  if (k && home && k.vault === home.key && (k.noteId || !simpleHere())) return k.settings;
   // a new person's simple app, chosen at their first sign-in, until the note can say so (docs/SIMPLE.md): the sign-in
-  // reads the home only, so the note is written the first time they let Parachute change notes there
-  return s.app === null && simpleHere() ? { ...s, app: "simple" } : s;
+  // reads the home only, so the note is written the first time they let Parachute change notes there. Only while the
+  // home has no settings note: one there says what it says
+  return simpleHere() && home ? { ...EMPTY, app: "simple" } : { ...EMPTY };
 }
 
 const SIMPLE_HERE_KEY = "parachute.app.simple-here.v1";
@@ -280,7 +281,7 @@ export const listHub = (hub: string, on: boolean, name?: string, appIfNew?: AppC
   return has ? { ...withApp, hubs: r.hubs.filter((x) => hubOf(x)?.hub !== hub) } : withApp;
 });
 /** Which app the person's devices open (Settings, a tap). */
-export const setApp = (app: AppChoice) => changeSettings((r) => ({ ...r, app }));
+export const setApp = async (app: AppChoice) => { await changeSettings((r) => ({ ...r, app })); forgetSimpleHere(); };
 export const setStart = (p: Place | null) => changeSettings((r) => ({ ...r, start: p }));
 export const samePlace = same;
 

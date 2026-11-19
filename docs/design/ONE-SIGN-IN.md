@@ -22,8 +22,9 @@ different applets; without having to enter a bunch of different URLs."*
 3. **Your Parachutes.** The hubs the person uses (their own, Cloud, Techne's) are a list in their home vault. A new
    device that signs in to the home Parachute finds the others listed, each a tap from signed in. An agent can add one
    by writing the list.
-4. **The home is chosen for them**: the vault that already holds their settings, else the first of their own vaults by
-   name. Settings changes it.
+4. **The home**: this device's, else their only vault, else they pick it before the consent (*Which one is your
+   home?*, the first by name to begin with; since 2026-11-18 the app reads no other vault to look for their settings,
+   [SCOPES.md](SCOPES.md)). Settings changes it.
 5. **The launcher is grouped by Parachute**: the home Parachute first, then the rest, each marked whose it is; a
    Parachute on the list that this device isn't signed in to is one line with **Sign in**.
 
@@ -96,10 +97,11 @@ real test.
    the hub's public list (`/.well-known/parachute.json`), but only on a hub where the sign-in found the person reaches
    every vault (they run it: `covered: "all"` by key; without one, they said Mine, had more than one vault there, and
    their list held every vault the public list names, under the 60-vault cut). That mark changes only at a sign-in. A vault
-   there that this device doesn't hold is one quiet line under that Parachute: *New: playground, tap to add*. The tap
-   is the consent step for that vault alone (`vault:<name>:read vault:<name>:write`): the hub asks once, unless the
-   person's grant already covers it; the vault comes in as someone else's (the hub doesn't say whose; another account
-   may have made it), and Settings makes it the person's. **Not now**, or signing out of that one vault in Settings, keeps it off the launcher on this device
+   there that this device doesn't hold is one quiet line under that Parachute: **Open playground** (the same line as each
+   vault the sign-in didn't read). The tap is the consent step for that vault alone (`vault:<name>:read`): the hub asks
+   once, unless the person's grant already covers it; a vault made since the sign-in comes in as someone else's (the hub
+   doesn't say whose; another account may have made it), and Settings makes it the person's. **Not now** keeps it off
+   the launcher on this device until the next sign-in there; signing out of a vault in Settings makes it an Open line again
    (`parachute.newvaults.v1`, which also keeps the hubs the person reaches every vault of). Code:
    `src/vault/newVaults.ts`.
 
@@ -126,7 +128,7 @@ per vault, on its card. The home is always one of the person's own vaults.
 **A hub the person runs.** Its owner reaches every vault on it, some of which may be other people's (a family
 member's, a client's). When the person answers Mine and the hub gives them every vault (the shell's list says
 `covered: "all"`; without a key, their list holds every vault the hub's public `/.well-known/parachute.json` names), the
-app asks before the consent: *Every vault on uni.example comes in. Which are yours?*, each vault a checkbox, all
+app asks before the consent: *Which vaults on uni.example are yours?*, each vault a checkbox, all
 ticked to begin with (vaults this device already knows keep what was said). The ones left unticked come in as someone
 else's. Only the person's own vaults are looked through for the home. (A member given every vault on a hub sees the
 same question; nothing follows from it but their answer. Without a key on 0.9, an owner can also untick vaults on the
@@ -171,8 +173,7 @@ note there (the list of Parachutes), a second device finds the same home.
 | 4 | A stray or replayed code lands on the app's return page | Each step's `state` and PKCE verifier are kept for that one step and used once (`oauth.ts`), as before; a token for a vault not asked for at that step is refused, not kept. |
 | 5 | Someone else's vault becomes home | The home is only ever one of the person's own vaults (whose stays device-held). On a hub the person runs, they tick which vaults are theirs before anything is kept, so a member's vault (and its settings note) isn't taken for theirs. |
 | 7 | An agent relabels a Parachute (the list's `name`) | A name from the list is shown only for a Parachute this device isn't signed in to; one it is signed in to is called by its address. |
-| 8 | A hub lists a great many vaults | At most 60 come with one sign-in (each is a page load of its own sign-in): the first 60 by name; the rest are left out (proposal 3 would lift this). A list cut there is never taken as "every vault": the person is asked which are theirs. |
-| 6 | Many vaults at once | The scope grows by ~40 characters a vault; Aaron's hub (10 vaults) is well inside any URL limit. |
+| 8 | A hub lists a great many vaults | At most 60 are listed (the first 60 by name); each is opened alone. A list cut there is never taken as "every vault": the person is asked which are theirs. |
 
 ## Proposals for core (for Uni)
 

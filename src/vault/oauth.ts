@@ -49,6 +49,8 @@ export type Pending = {
   allow?: AllowAfter;
   /** at sign-in: the vault asked for is to be this device's home */
   home?: boolean;
+  /** at sign-in: whose each listed vault is, as the person said; kept only when the hub's consent comes back */
+  marks?: { listed: string[]; whose: "mine" | "theirs"; mine: string[] | null; solo: boolean };
   issuer: string;
   tokenEndpoint: string;
   /** where Sign out ends the sign-in, when the hub names one on its own origin */
@@ -102,7 +104,7 @@ export function forgetClient(issuer: string) {
   try { localStorage.setItem(CLIENTS_KEY, JSON.stringify(all)); } catch { /* nothing to do */ }
 }
 
-export type Begin = { parachute: Parachute; step: "list" | "open"; vault?: string; level?: Level; why?: Why; back?: string; allow?: AllowAfter; home?: boolean; whose?: "mine" | "theirs"; how: "key" | "page";
+export type Begin = { parachute: Parachute; step: "list" | "open"; vault?: string; level?: Level; why?: Why; back?: string; allow?: AllowAfter; home?: boolean; marks?: Pending["marks"]; whose?: "mine" | "theirs"; how: "key" | "page";
   /** a new sign-in (not the next step of one): a registration a sign-in that never came back used is dropped */
   fresh?: boolean };
 
@@ -134,7 +136,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   const state = generateState();
   const revocation = (meta as { revocation_endpoint?: unknown }).revocation_endpoint;
   const pending: Pending = { parachute, step: b.step, ...(b.step === "open" ? { vault: b.vault, level: b.level ?? "read" } : {}), why: b.why ?? "signin",
-    ...(b.back ? { back: b.back } : {}), ...(b.allow ? { allow: b.allow } : {}), ...(b.home ? { home: true } : {}),
+    ...(b.back ? { back: b.back } : {}), ...(b.allow ? { allow: b.allow } : {}), ...(b.home ? { home: true } : {}), ...(b.marks ? { marks: b.marks } : {}),
     issuer: parachute.issuer, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, parachute.issuer) ? { revocationEndpoint: revocation } : {}),
     clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now(), how: b.how, ...(b.whose ? { whose: b.whose } : {}) };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
@@ -214,6 +216,9 @@ export async function completeSignIn(code: string, state: string, fetchImpl?: ty
   const vault = pending.vault!;
   const level = levelIn(token.scope, vault);
   if (!level) throw new Error(`The hub didn't give Parachute the ${vault} vault. Nothing was added.`);
+  // more than was asked (the hub's page lets the person tick extra access): not kept; the app holds only what it asked
+  const extra = (token.scope ?? "").split(/\s+/).filter((w) => w && !scopeFor(vault, pending.level ?? "read").split(" ").includes(w));
+  if (extra.length) throw new Error(`The hub gave more than Parachute asked for (${extra.join(", ").slice(0, 120)}). Nothing was added: ask again without the extra access.`);
   const aud = audienceVault(token.access_token) ?? token.vault ?? vault;
   if (aud !== vault) throw new Error("The hub's token is for a vault it wasn't asked for. Nothing was added.");
   return { pending, token, vault, level };

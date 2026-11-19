@@ -38,7 +38,7 @@ export default function OAuthCallback() {
       if ("pick" in next) { setPick(next.pick); return; }
       if ("go" in next) { setSaying("Asking your hub for your home vault…"); window.location.assign(next.go); return; }
       setSaying(next.signIn ? "Signed in." : `Parachute now ${next.done.scope.includes(`vault:${next.done.vault}:write`) ? "reads and changes" : "reads"} ${next.done.vault}.`);
-      if (next.signIn) await afterSignIn(next.parachute.hub, [next.done], next.parachute.door === "cloud", next.firstHome).catch(() => undefined);
+      if (next.signIn) await afterSignIn(next.parachute.hub, [next.done], next.parachute.door === "cloud", next.firstHome && next.solo).catch(() => undefined);
       // the home may be written now: the person's list of Parachutes, waiting for that, goes there
       else if (next.done.key === homeVault()?.key && next.done.scope.includes(`vault:${next.done.vault}:write`)) await listWaiting().catch(() => undefined);
       // an applet allowed on its card, and then by the hub: it opens as after the Allow tap (the tap was the person's,

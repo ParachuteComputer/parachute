@@ -23,8 +23,7 @@ import NotifySettings from "./NotifySettings";
 import { AskWhose, WhoseLine } from "./Whose";
 import { useParachutes } from "../shell/parachutes";
 import { listHub } from "../shell/homeSettings";
-import { signOutOf } from "../vault/signInFlow";
-import { dismissVault } from "../vault/newVaults";
+import { askVault, signOutOf } from "../vault/signInFlow";
 import AppChoice from "./AppChoice";
 import { appletsNeedingWrite, forgetOwnWrite, giveBack, heldLevel } from "../vault/reach";
 
@@ -36,6 +35,7 @@ const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (cons
 const forgetVault = (key: string) => { dropClient(key); forgetApplets(key); revokeVaultGrants(key); clearDefaults(key); forgetVaultFrame(key); forgetVaultStart(key); forgetVaultSettings(key); forgetVaultTheme(key); };
 /** Sign out of one vault: off this device, and its sign-in ended at the hub. */
 function signOutVault(v: VaultRecord) {
+  forgetOwnWrite(v);
   removeVault(v.key);
   forgetVault(v.key);
   void revoke(v);
@@ -68,7 +68,8 @@ export default function Settings({ children }: { children?: ReactNode }) {
                 {p.vaults.map((v) => (
                   <li key={v.key} className="line">
                     <span><strong>{v.vault}</strong> <WhoseLine v={v} /> <Holds v={v} /></span>
-                    <button type="button" className="quiet-button" aria-label={`Sign out of ${v.vault}`} onClick={() => { dismissVault(v.issuer, v.vault); signOutVault(v); }}>Sign out</button>
+                    <button type="button" className="quiet-button" aria-label={`Sign out of ${v.vault}`} onClick={() => signOutVault(v)}>Sign out</button>
+                    <button type="button" className="quiet-button" aria-label={`Sign in again to ${v.vault}`} onClick={() => void askVault(v, heldLevel(v) ?? "read", "open", "/settings").then((u) => window.location.assign(u), () => undefined)}>Sign in again</button>
                   </li>
                 ))}
               </ul>

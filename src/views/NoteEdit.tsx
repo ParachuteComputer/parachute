@@ -28,7 +28,13 @@ export default function NoteEdit() {
   const nav = useNavigate();
   const isNew = id === undefined;
   const [note, setNote] = useState<Note | null>(null);
-  const [text, setText] = useState("");
+  // what the person typed, kept for this tab while the hub is asked for write (shell/WriteAsk.tsx leaves the page):
+  // back here, it is as they left it
+  const draftKey = `parachute.draft.v1:${key ?? ""}:${id ?? "new"}`;
+  const draft = (() => { try { return sessionStorage.getItem(draftKey); } catch { return null; } })();
+  const [text, setTextNow] = useState(draft ?? "");
+  const setText = (t: string) => { setTextNow(t); try { sessionStorage.setItem(draftKey, t); } catch { /* this screen only */ } };
+  const dropDraft = () => { try { sessionStorage.removeItem(draftKey); } catch { /* nothing kept */ } };
   const [into, setInto] = useState(key ?? "");
   const [state, setState] = useState<"loading" | "ready" | "saving" | "error">(isNew ? "ready" : "loading");
   const [error, setError] = useState("");
@@ -45,7 +51,7 @@ export default function NoteEdit() {
       if (!live) return;
       if (!n) { setState("error"); setError("There's no such note."); return; }
       if (isCodeNote(n) || isAppOwn(n)) { setState("error"); setError("This note is the app's own, or code: it isn't changed here."); return; }
-      setNote(n); setText(n.content ?? ""); setState("ready");
+      setNote(n); setTextNow(draft ?? n.content ?? ""); setState("ready");
     }, (e: unknown) => { if (live) { setState("error"); setError(e instanceof Error ? e.message : "The note couldn't be read."); } });
     return () => { live = false; };
   }, [rec?.key, id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -66,6 +72,7 @@ export default function NoteEdit() {
         for (let n = 1; ; n++) {
           try {
             const made = await c.createNote({ path: n === 1 ? base : `${base} ${n}`, content: text });
+            dropDraft();
             nav(noteHref(target.key, made.id), { replace: true });
             return;
           } catch (e) { if (!(e instanceof VaultConflictError) || n >= 20) throw e; }
@@ -73,6 +80,7 @@ export default function NoteEdit() {
       }
       const at = force ? (updatedOf(theirs) ?? conflictAt) : updatedOf(note);
       await c.updateNote(note!.id, { content: text, ...(at ? { if_updated_at: at } : {}) });
+      dropDraft();
       // back to the note the person came from (it reads itself again), so Back after it doesn't show it twice
       if (atFirstEntry()) nav(noteHref(target.key, note!.id), { replace: true }); else nav(-1);
     } catch (e) {
