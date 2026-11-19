@@ -150,8 +150,8 @@ export const FRAME_KIT = String.raw`(function () {
     };
     go();
   }
-  // what changed goes in batches of at most 64 keys; a batch the shell refused goes back in line (unless something newer
-  // replaced it), so a draft is never dropped by one failed write
+  // what changed goes in batches of at most 64 keys; a batch that failed to be written goes back in line (unless something
+  // newer replaced it), so a draft is never dropped by one failed write
   function savedFlush() {
     if (savedTimer) { clearTimeout(savedTimer); savedTimer = null; }
     savedFirst = 0;
@@ -162,9 +162,13 @@ export const FRAME_KIT = String.raw`(function () {
       var part = {}; keys.slice(i, i + 64).forEach(function (k) { part[k] = all[k]; });
       sends.push(call("saved", "put", { bytes: new TextEncoder().encode(JSON.stringify(part)).buffer }).then(null, (function (part) { return function (e) {
         try { console.warn("saved: " + (e && e.message)); } catch (x) {}
+        // only what may pass next time goes back in line (the disk, a busy shell, no answer); a refusal for what it is
+        // (a bad key or value, a full store) would block every later save, so it is dropped, said once in the console
+        var code = e && e.code;
+        if (code && code !== "failed" && code !== "rate_limited" && code !== "too_many_pending") return null;
         savedDirty = savedDirty || {};
         Object.keys(part).forEach(function (k) { if (!Object.prototype.hasOwnProperty.call(savedDirty, k)) savedDirty[k] = part[k]; });
-        if (!savedTimer && !(e && e.code === "too_large")) savedTimer = setTimeout(savedFlush, SAVE_MAX_MS);
+        if (!savedTimer) savedTimer = setTimeout(savedFlush, SAVE_MAX_MS);
         return null;
       }; })(part)));
     }
