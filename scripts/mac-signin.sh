@@ -71,23 +71,24 @@ ax wait "Sign in with your key" 20 || fail "the key wasn't kept"
 keychain || fail "the key isn't in the login Keychain"
 echo "the key is in the login Keychain (computer.parachute.app / nostr-key)"
 
-say "sign in to the Parachute with the key: every vault, one Approve"
+say "sign in to the Parachute with the key: one Approve, to read the home"
 ax type "Your Parachute's address" "http://127.0.0.1:$port" || fail "no Parachute address field"
 # Add a Parachute asks whose it is, every time (docs/OTHER-PARACHUTES.md)
 ax press "Mine" || fail "no Mine on Add a Parachute"
 shot 12-add-parachute
 ax press "Sign in with your key" || fail "no Sign in with your key"
-# the key is the hub owner's: it reaches every vault, so the app asks which are theirs (all ticked) before the consent
-ax wait "Every vault on 127.0.0.1:$port comes in. Which are yours?" 30 || fail "no pick of the person's own vaults"
+# the key is the hub owner's: it reaches every vault, so the app asks which are theirs (all ticked) and which is home
+# (the first by name) before the consent (docs/design/SCOPES.md)
+ax wait "Which vaults on 127.0.0.1:$port are yours?" 30 || fail "no pick of the person's own vaults"
 shot 12b-pick
 ax press "Continue" || fail "no Continue on the pick"
 ax wait "Approve Parachute?" 30 || fail "the hub's Approve page didn't open"
 shot 13-hub-consent
 ax press "Approve" || fail "no Approve on the hub's page"
-# the launcher, with a chapter for each vault: the second came without a page of its own
+# the launcher: the home's chapter, and the other vault a line to open (the sign-in read the home only)
 ax wait "Open the vault" 40 || fail "the launcher didn't open"
-ax wait "letters" 20 || fail "the second vault didn't come with the sign-in"
-ax wait "recipes" 10 || fail "the first vault isn't in the launcher"
+ax wait "Open letters" 20 || fail "the other vault isn't offered to open"
+ax wait "recipes" 10 || fail "the home isn't in the launcher"
 sleep 2
 shot 14-launcher
 ax dump > "$out/14-launcher-ui.txt" 2>&1 || true

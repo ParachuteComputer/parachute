@@ -36,7 +36,7 @@ export async function approveUntilBack(page: Page, hubOrigin: string, appOrigin:
 }
 
 /** Add the person's own Parachute (the e2e home hub) and sign in through the hub's own pages: its sign-in with the
- *  owner's password, then its Approves. Every vault there comes with it; the app opens on the launcher. */
+ *  owner's password, then its Approves. It reads the home (`vault`, picked if asked); the app opens on the launcher. */
 export async function signIn(page: Page, vault = VAULT) {
   const hub = hubState();
   await page.goto("/");

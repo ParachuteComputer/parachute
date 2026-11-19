@@ -10,8 +10,8 @@ import { Npub } from "../key/Npub";
 const isRefusal = (e: unknown): e is Refusal => !!e && typeof e === "object" && typeof (e as Refusal).code === "string" && typeof (e as Refusal).message === "string" && !(e instanceof Error);
 
 /** Add a Parachute (docs/design/ONE-SIGN-IN.md): its address, or Parachute Cloud; whose it is; then one sign-in on its
- *  hub that brings every vault the person may reach there. With this device's key: the hub's key door and one consent.
- *  Without: the hub's own sign-in, a consent to see which vaults are theirs, and one for all of them. */
+ *  hub that reads their home vault and lists the others (docs/design/SCOPES.md). With this device's key: the hub's key door and one consent.
+ *  Without: the hub's own sign-in, a consent to see which vaults are theirs, and one to read the home. */
 export default function AddParachute({ first = false }: { first?: boolean }) {
   const key = useKey();
   const [params] = useSearchParams();
@@ -56,7 +56,7 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
     <main className="screen">
       <Bar title={first ? "Parachute" : "Add a Parachute"} back={first ? undefined : "/"} />
       <form className="card stack" onSubmit={submit}>
-        {first && <p className="lead">Your notes live in vaults on your Parachute. Sign in there once and every vault comes with it.</p>}
+        {first && <p className="lead">Your notes live in vaults on your Parachute. Sign in there once: Parachute reads your home vault, and asks before it reads any other.</p>}
         <label className="field">
           <span>Your Parachute's address</span>
           <input type="url" inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} placeholder="your-hub.example"
