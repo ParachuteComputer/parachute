@@ -355,7 +355,7 @@ function Compose({ account, can, draft, reply, done }: { account: string; can: (
     try {
       const r = await op("send", account, { opId: send.current, draftId: review.draftId, fingerprint: review.fingerprint });
       if (r.state === "cleaned" || r.state === "submitted") { setState("Sent."); keep(null); setTimeout(() => done(true), 600); }
-      else if (r.state === "awaiting-approval") setState("Held: it waits for your OK before it goes.");
+      else if (r.state === "awaiting-approval") { setState("Held: it waits for your OK before it goes."); keep(null); }
       else setState(`Not sent: ${r.reason ?? r.state}`);
     } catch (e: any) { setErr(`Not sent: ${e?.message ?? e}`); }
     setBusy(false);
