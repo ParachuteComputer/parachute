@@ -101,7 +101,8 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
     asks.length = 0;
     await fromAppletMenu(page, "Revoke");
     // the app asks for read alone (the hub's grant covers it: no page) and comes back
-    await expect.poll(() => held(page), { timeout: 20_000 }).toEqual({ [VAULT]: `vault:${VAULT}:read`, [OTHER]: `vault:${OTHER}:read` });
+    // (the page may be on its way to the hub and back while this reads: that read is just not yet)
+    await expect.poll(() => held(page).catch(() => ({})), { timeout: 20_000 }).toEqual({ [VAULT]: `vault:${VAULT}:read`, [OTHER]: `vault:${OTHER}:read` });
     expect(asks).toEqual([`vault:${OTHER}:read`]);
     // at the hub: the token that could write is ended, both halves
     // (core 0.9 refuses it at once; 0.8's vault reads the hub's revocations within about a minute)
@@ -148,7 +149,8 @@ test("someone else's vault where the person may only read: an applet that writes
     await expect(page.getByRole("status").filter({ hasText: /approved code only|run sealed/ })).toBeVisible({ timeout: 45_000 });
     await page.goto(`/v/${ORG_VAULT}/a/${journal.id}`);
     const card = page.getByRole("region", { name: /asking for access/ });
-    await expect(card.getByRole("note")).toContainText(`change notes in ${ORG_VAULT}`);
+    // the hub's step is its own note (the other is the warning: someone else's vault)
+    await expect(card.getByRole("note").filter({ hasText: "Then your hub" })).toContainText(`change notes in ${ORG_VAULT}`);
     const app = new URL(page.url()).origin;
     await card.getByRole("button", { name: "Allow" }).click();
     await page.waitForURL((u) => u.origin === org.origin || u.pathname === "/oauth/callback");
