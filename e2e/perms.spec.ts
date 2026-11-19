@@ -113,7 +113,7 @@ test("first run: four applets, four short cards; changed code says whether it as
     await open(page, /Claude accounts/);
     await expect(card(page).getByRole("heading")).toHaveText("Claude accounts asks again");
     await expect(card(page).getByRole("status")).toHaveText("It now asks for something other than what you allowed. What is new is marked New.");
-    await expect(face(page).locator(".grant-fresh")).toHaveText("New Read and change notes in Workers/");
+    await expect(face(page).locator(".grant-fresh .grant-row-line")).toHaveText("New Read and change notes in Workers/");
     await expect(face(page).locator(".grant-fresh")).toHaveCount(1);
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await measure(page, "accounts-asks-more");

@@ -16,7 +16,6 @@ const said = (e: unknown) => (e && typeof e === "object" && "message" in e ? Str
 export default function KeyringSettings() {
   const [k, setK] = useState<KeyringStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [making, setMaking] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [name, setName] = useState("");
   const [npub, setNpub] = useState("");
@@ -32,16 +31,10 @@ export default function KeyringSettings() {
   return (
     <section className="card" aria-labelledby="s-keyring">
       <h2 id="s-keyring">Approvals</h2>
-      <p className="small">Your <strong>everyday key</strong> chats and signs in. Your <strong>approval key</strong> answers Uni's approval cards and secret requests, behind this device's unlock. Your <strong>root key</strong> stays offline and is never on this device.</p>
+      <p className="small">One key is yours: it chats, signs in, and answers Uni's approval cards and secret requests, the risky ones behind this device's unlock. A <strong>root key</strong>, if you keep one, is recovery only: written down, never on this device.</p>
       {k.same ? <div className="stack">
-        <p>Your approval key is your everyday key for now.</p>
-        {making ? <div className="stack">
-          <p className="small">A separate key means posting rights alone can never approve. Switching has a cost: every credential Uni holds is sealed to this key now, so Uni must seal each again to the new one (on Uni's side), and Uni and Hermes must be told the new key before they accept it. Until then, Uni's cards can't be answered here. The new key has no backup: if this device is lost, everything sealed to it is sealed again from the source.</p>
-          <div className="row-buttons">
-            <button type="button" className="quiet-button" onClick={() => run(() => invoke("keyring_make_approval").then(() => setMaking(false)))}>Make it</button>
-            <button type="button" className="quiet-button" onClick={() => setMaking(false)}>Not now</button>
-          </div>
-        </div> : <button type="button" className="quiet-button" onClick={() => setMaking(true)}>Make a separate approval key</button>}
+        <p>Your key answers approvals too.</p>
+        {null /* one personal key (Aaron, 11-18): no new separate approval keys; one made before can still be removed below */}
       </div> : <div className="stack">
         <p>Approval key: <code>{shortNpub(k.approval)}</code></p>
         <p className="small">Give it to Uni and Hermes outside the rooms: copy the enrollment below for <code>sealed enroll</code> on the box Uni runs on. Not as a message: anything that can post as you could post a fake one.</p>

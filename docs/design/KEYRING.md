@@ -8,6 +8,11 @@ closed, links, files, a little storage). It extends SERVICES.md; everything ther
 
 ## Three keys
 
+**Decided 11-18 (Aaron): one personal key.** No separate approval key is made any more (Settings no longer offers
+it); a device that made one before can still remove it. Risky actions take a level instead: nothing, the device
+unlock, or a typed passcode ([APP-RECORD.md](APP-RECORD.md) "Security levels"); approving code always takes the
+unlock. The root key is recovery only. The table below is how the roles are kept apart in Rust, which still holds.
+
 | Key | Where | Signs |
 |---|---|---|
 | **everyday key** | this device (the key Parachute has today: Keystore / OS keyring) | sign-ins, chat, reactions, edits, NIP-98, media, private notes: everything SERVICES.md lists |

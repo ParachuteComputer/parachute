@@ -3,6 +3,17 @@
 One card per applet, on the screen where it would run. Nothing runs until Allow, and only a real tap counts. The card
 has a short face and, under **Show details**, every exact line.
 
+## How it looks (11-19, after Techne's consent page)
+
+One screen, a few rows. At the top, where it comes from ("From your vault journal on uni.example"); an applet from
+someone else's vault adds a tinted line: *Not made by you. Only continue if you trust the people who made it.* Each
+row has a mark, a plain name (*Read Journal*, *Write in Journal*, *Act as you on relay.example*, *Small things*), the
+face's own line under it, and **?**, which opens the exact detail: for notes, a table of the folder against Read,
+Create, Update and Delete, and the hub scope it needs (`vault:journal:write`), towards which vault on which Parachute;
+for a server, every line about it. The buttons are **Back**, **Deny** and **Allow**. On a device with your key, Allow
+is an approval for every device ([APP-RECORD.md](APP-RECORD.md)); a device that finds one already says *You approved
+this exact version on …* and **Continue** asks only its hub.
+
 ## The face (`src/applet/face.ts`)
 
 It says what the applet would do by what it means to a person:

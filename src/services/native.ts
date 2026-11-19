@@ -63,6 +63,12 @@ export interface Native {
   secretSend(session: string, service: string, event: SignedEvent, value: string): Promise<SignedEvent>;
   secretForget(session: string, service: string, event: SignedEvent): Promise<SignedEvent>;
   keyring(): Promise<KeyringStatus>;
+  /** Sign an approval of an applet's exact code (applet/approvals.ts) with the person's key: the passcode when one is
+   *  set here, then the device unlock, always. `d`: hub|vault|record; `name`: the applet's, for the prompt. */
+  approvalSign(content: string, d: string, name: string, passcode: string | null): Promise<SignedEvent>;
+  /** Whether this device asks a passcode before approving code; and setting, changing or removing it. */
+  passcodeStatus(): Promise<boolean>;
+  passcodeSet(old: string | null, next: string | null): Promise<void>;
 }
 
 import { inShell } from "../vault/oauth";
