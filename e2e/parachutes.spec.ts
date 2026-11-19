@@ -60,10 +60,10 @@ test("sign in once per hub with the key: the home read, every other vault of you
   await expect(page.frameLocator("iframe.applet-frame").getByText("In letters.")).toBeVisible();
 
   // the person's list of Parachutes waits for a home Parachute may write; once they let it, both are listed there
-  expect(await home("GET", "notes?tag=parachute-settings&include_metadata=true")).toEqual([]);
+  const listed = async () => ((await home("GET", "notes?tag=parachute-settings&include_metadata=true"))[0]?.metadata?.parachute?.hubs ?? []).map((h: { hub: string }) => h.hub).sort();
+  expect(await listed()).toEqual([]);
   await letWrite(page, VAULT);
-  await expect.poll(async () => ((await home("GET", "notes?tag=parachute-settings&include_metadata=true"))[0]?.metadata?.parachute?.hubs ?? []).map((h: { hub: string }) => h.hub).sort())
-    .toEqual([hubState().origin, techneState().origin].sort());
+  await expect.poll(listed).toEqual([hubState().origin, techneState().origin].sort());
 
   // Settings: one place per Parachute; whose came from the one answer for all its vaults
   await page.goto("/settings");
