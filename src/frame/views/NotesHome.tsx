@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameVault } from "../../bridge/protocol";
-import { readerFor, useVaults } from "../data";
+import { readerFor, useHome, useVaults } from "../data";
 import { isAppOwn, noteHref, titleOf } from "../../vault/notes";
 import { Empty } from "../../kit/parts";
-import { ago } from "./Launcher";
+import { ago, VaultsToOpen } from "./Launcher";
 
 /** The newest notes (or what a search finds) of the chosen vaults, newest first: one list across them. */
 type Row = { v: FrameVault; n: Note };
@@ -55,6 +55,7 @@ export default function NotesHome() {
     if (term) next.set("q", term); else next.delete("q");
     if (next.toString() !== params.toString()) setParams(next, { replace: true });
   }, [term]); // eslint-disable-line react-hooks/exhaustive-deps
+  const parachutes = useHome().parachutes ?? [];
   const shown = chosen ? [chosen] : all;
   const read = useNotes(shown, term);
   const rows = read?.rows ?? null;
@@ -79,6 +80,7 @@ export default function NotesHome() {
           {all.map((v) => <button key={v.key} type="button" className="notes-tab" aria-pressed={chosen?.key === v.key} onClick={() => tab(v)}>{v.vault}</button>)}
         </nav>
       )}
+      {parachutes.map((p) => <VaultsToOpen key={p.hub} p={p} />)}
       {rows === null && <p className="quiet" role="status">Reading your notes…</p>}
       {!!read?.unread.length && <p className="quiet small" role="status">Couldn't read {read.unread.join(", ")} just now.</p>}
       {rows && rows.length > 0 && (

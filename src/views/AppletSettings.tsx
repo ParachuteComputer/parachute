@@ -1,4 +1,5 @@
 // Settings → Applets: the self-test's result (and Run again), and each applet this device has allowed, with Revoke.
+import { giveBack } from "../vault/reach";
 import { useState } from "react";
 import { runSelfTest, useGate, useSelfTestRun } from "../applet/selftest/run";
 import { deviceGrants, subjectOf } from "../applet/grants";
@@ -36,7 +37,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
     return (
       <li key={subject} className="line">
         <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
-        <button type="button" className="quiet-button" onClick={() => { grants.revoke(subject); onChange(); }}>Revoke</button>
+        <button type="button" className="quiet-button" onClick={() => { grants.revoke(subject); onChange(); void giveBack(rec.key, "/settings"); }}>Revoke</button>
         {a && (a.services.length > 0 || a.servicesError) && <AppletServices subject={subject} entry={a} />}
       </li>
     );

@@ -1,7 +1,10 @@
 // Who starts on the simple app (docs/SIMPLE.md): a person new to the app signing in to Parachute Cloud, and no one
-// else. The hub is faked at the network (its notes API); the app's own modules run as they are.
+// else; and the list of Parachutes, written only where Parachute may write (docs/design/SCOPES.md: the sign-in reads the
+// home only). The hub is faked at the network (its notes API); the app's own modules run as they are.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { afterSignIn } from "./parachutes";
+import { afterSignIn, listWaiting } from "./parachutes";
+import { setHome } from "./frameSource";
+import { settingsNow } from "./homeSettings";
 import { saveVault, type VaultRecord } from "../vault/store";
 import { dropClient } from "../vault/client";
 import { setWhose } from "../vault/whose";
@@ -13,9 +16,10 @@ let refuse: Set<string>;
 const writes: { method: string; vault: string; body: Record<string, unknown> }[] = [];
 
 /** A vault this sign-in brought, the person's own (as they said on Add a Parachute) unless `theirs`. */
-function hold(vault: string, theirs = false): VaultRecord {
-  const rec = saveVault({ issuer: HUB, vault, tokenEndpoint: `${HUB}/oauth/token`, clientId: "c", accessToken: "t", scope: `vault:${vault}:read vault:${vault}:write`, addedAt: "2026-11-18T00:00:00Z" });
+function hold(vault: string, theirs = false, level: "read" | "write" = "read"): VaultRecord {
+  const rec = saveVault({ issuer: HUB, vault, tokenEndpoint: `${HUB}/oauth/token`, clientId: "c", accessToken: "t", scope: level === "write" ? `vault:${vault}:read vault:${vault}:write` : `vault:${vault}:read`, addedAt: "2026-11-18T00:00:00Z" });
   setWhose(rec, theirs ? "theirs" : "mine");
+  if (!theirs) setHome(rec.key);
   return rec;
 }
 
@@ -52,27 +56,44 @@ afterEach(() => { vi.unstubAllGlobals(); for (const k of ["garden", "work"]) dro
 const settingsWritten = () => writes.find((w) => (w.body.metadata as { parachute?: unknown } | undefined)?.parachute)?.body.metadata as { parachute: Record<string, unknown> } | undefined;
 
 describe("who starts on the simple app", () => {
-  it("a person new to the app on Parachute Cloud: their settings note is made with app: simple", async () => {
-    const kept = [hold("garden"), hold("work")];
-    await afterSignIn(HUB, kept, true);
+  it("a person new to the app on Parachute Cloud, with their home read only: nothing is written, this device opens the simple app, and the note follows once they let Parachute change notes there", async () => {
+    const home = hold("garden");
+    await afterSignIn(HUB, [home], true, true);
+    expect(writes).toEqual([]);
+    expect(settingsNow().app).toBe("simple");
+    // the person lets Parachute change notes in their home (vault/reach.ts): the list and the app are written then
+    saveVault({ ...home, scope: "vault:garden:read vault:garden:write" });
+    dropClient(home.key);
+    await listWaiting();
+    expect(settingsWritten()?.parachute).toMatchObject({ app: "simple", hubs: [{ hub: HUB }] });
+    expect(writes.every((w) => w.vault === "garden")).toBe(true);
+  });
+  it("a home that may be written already: the note is made with app: simple", async () => {
+    await afterSignIn(HUB, [hold("garden", false, "write")], true, true);
     expect(settingsWritten()?.parachute).toMatchObject({ app: "simple", hubs: [{ hub: HUB }] });
   });
-  it("a person whose vault already holds settings: what the note says stays", async () => {
+  it("a person whose home already holds settings: what the note says stays", async () => {
     notes.work = [{ id: "s1", path: "Parachute/Settings", tags: ["parachute-settings"], metadata: { parachute: { hubs: [] } }, content: "", updatedAt: "2026-11-01T00:00:00Z" }];
-    await afterSignIn(HUB, [hold("garden"), hold("work")], true);
+    await afterSignIn(HUB, [hold("work", false, "write")], true, true);
     expect(settingsWritten()?.parachute).not.toHaveProperty("app");
+    expect(settingsNow().app).toBeNull();
   });
-  it("a vault that couldn't be read may hold settings: no app is chosen", async () => {
+  it("a home that couldn't be read may hold settings: no app is chosen", async () => {
     refuse.add("work");
-    await afterSignIn(HUB, [hold("garden"), hold("work")], true);
+    await afterSignIn(HUB, [hold("work")], true, true);
+    expect(settingsWritten()?.parachute ?? {}).not.toHaveProperty("app");
+    expect(settingsNow().app).toBeNull();
+  });
+  it("a device that had a home already: no app is chosen", async () => {
+    await afterSignIn(HUB, [hold("garden", false, "write")], true, false);
     expect(settingsWritten()?.parachute ?? {}).not.toHaveProperty("app");
   });
   it("someone else's vaults on Cloud only (none of the person's own): no settings note, no app", async () => {
-    await afterSignIn(HUB, [hold("garden", true)], true);
+    await afterSignIn(HUB, [hold("garden", true)], true, true);
     expect(settingsWritten()).toBeUndefined();
   });
-  it("a hub that isn't Parachute Cloud: as before", async () => {
-    await afterSignIn(HUB, [hold("garden")], false);
+  it("a hub that isn't Parachute Cloud: listed when the home may be written, no app", async () => {
+    await afterSignIn(HUB, [hold("garden", false, "write")], false, true);
     expect(settingsWritten()?.parachute).toBeDefined();
     expect(settingsWritten()?.parachute).not.toHaveProperty("app");
   });

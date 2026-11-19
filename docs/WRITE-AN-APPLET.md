@@ -37,6 +37,12 @@ screens:                     # optional: its screens; the first is the one that 
 reach: [voice]               # optional: the microphone, through the app's own recorder (voice.record below)
 ```
 
+What the person's hub is asked for follows from `access` ([design/SCOPES.md](design/SCOPES.md)): an applet whose
+verbs are all `read` needs the app to read its vault; any `create` or `update` needs it to change notes there. When the
+person allows the applet and the app doesn't hold that yet, the hub asks them for that one vault, after the card. Ask
+for the least that works: an applet that only reads never brings that second page. The hub can't narrow to a folder;
+the folders here are the app's rule, enforced on every call.
+
 Rules the app holds to. An unknown key, a hidden character or an over-long value refuses the whole applet: it is not
 repaired. A rule can't reach `.parachute/`. No applet can change a code note (HTML, TSX, JSX) or a note tagged
 `applet`, `component` or `parachute-pointer`, whatever its rules say. `reach` takes only `voice`: a room in it

@@ -1,28 +1,32 @@
-// A vault made on a Parachute after this device signed in there (docs/design/ONE-SIGN-IN.md, "A vault made later"):
-// the launcher offers it as one quiet line, "New: <vault>, tap to add", and a tap adds it through the hub's consent.
+// The person's vaults on a Parachute that this device doesn't read (docs/design/SCOPES.md): the sign-in reads only the
+// home, so every other vault the hub listed, and any made there later (docs/design/ONE-SIGN-IN.md, "A vault made
+// later"), is one quiet line on the launcher, "Open <vault>", and a tap asks the hub to read that one vault.
 //
 // Which vaults the person reaches is asked the way the sign-in asks it: with the key, the hub's own `list-vaults` (signed
 // by the shell); without one, the hub's public list of its vaults, and only on a hub where the sign-in found the person
 // reaches every vault (they run it: `every` below). A hub where neither holds (a member's, without a key) is not asked.
 // Asked when the app opens and each time the launcher shows, at most once a minute per hub: no timer.
-// Kept on this device, never in a record: which hubs the person reaches every vault of, and the vaults they waved away
-// (Not now, or signed out of on purpose), so those don't come back.
+// Kept on this device, never in a record: what the hub last listed, which hubs the person reaches every vault of, and the
+// vaults they waved away (Not now, or signed out of on purpose), so those don't come back.
 import { beginSignIn, dropPending } from "./oauth";
 import { describe, everyVault } from "./parachute";
 import { listVaults, originOf } from "./store";
+import { whoseSaid } from "./whose";
 import { keySignIn, keysHere, listWithKey } from "../key/key";
 
 export const NEW_VAULTS_KEY = "parachute.newvaults.v1";
 /** At most this often per hub. */
 export const RELIST_MS = 60_000;
-type Kept = { every: string[]; dismissed: string[] };
+type Kept = { every: string[]; dismissed: string[]; listed: Record<string, string[]> };
 
 const read = (): Kept => {
   try {
     const v = JSON.parse(localStorage.getItem(NEW_VAULTS_KEY) ?? "null") as Partial<Kept> | null;
     const strs = (x: unknown) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === "string").slice(-500) : []);
-    return { every: strs(v?.every), dismissed: strs(v?.dismissed) };
-  } catch { return { every: [], dismissed: [] }; }
+    const listed: Record<string, string[]> = {};
+    if (v?.listed && typeof v.listed === "object" && !Array.isArray(v.listed)) for (const [h, names] of Object.entries(v.listed).slice(0, 50)) listed[h] = strs(names);
+    return { every: strs(v?.every), dismissed: strs(v?.dismissed), listed };
+  } catch { return { every: [], dismissed: [], listed: {} }; }
 };
 const write = (k: Kept) => { try { localStorage.setItem(NEW_VAULTS_KEY, JSON.stringify(k)); } catch { /* lasts this session */ } };
 const keyOf = (hub: string, vault: string) => `${originOf(hub)} ${vault}`;
@@ -30,8 +34,20 @@ const keyOf = (hub: string, vault: string) => `${originOf(hub)} ${vault}`;
 const listeners = new Set<() => void>();
 const told = () => { rev++; listeners.forEach((f) => f()); };
 let rev = 0;
-/** What the last listing of each hub found there (every vault the person reaches), by hub origin. */
+/** What the last listing of each hub found there (every vault the person reaches), by hub origin; this session's, over
+ *  what the device kept from before. */
 const found = new Map<string, string[]>();
+const listedOn = (hub: string) => found.get(hub) ?? read().listed[hub] ?? [];
+
+/** What a sign-in (or a later listing) found the person reaches on `hub`: kept, so the launcher offers the ones this
+ *  device doesn't read. */
+export function noteListed(hub: string, vaults: readonly string[]) {
+  const h = originOf(hub);
+  found.set(h, [...vaults]);
+  const k = read();
+  if (JSON.stringify(k.listed[h] ?? []) !== JSON.stringify(vaults)) write({ ...k, listed: { ...k.listed, [h]: [...vaults] } });
+  told();
+}
 const askedAt = new Map<string, number>();
 
 /** The sign-in learned whether the person reaches every vault on `hub` (they run it). */
@@ -50,13 +66,20 @@ export function dismissVault(hub: string, vault: string) {
   told();
 }
 
+/** A new sign-in to `hub`: the vaults waved away there are offered again. */
+export function undismissOn(hub: string) {
+  const k = read(), h = originOf(hub);
+  const left = k.dismissed.filter((x) => !x.startsWith(`${h} `));
+  if (left.length !== k.dismissed.length) { write({ ...k, dismissed: left }); told(); }
+}
+
 /** The vaults on offer on `hub`: found there, not held on this device, not waved away. */
 export function newVaultsOn(hub: string): string[] {
   const h = originOf(hub);
   const held = new Set(listVaults().filter((v) => originOf(v.issuer) === h).map((v) => v.vault));
   if (!held.size) return [];
   const away = new Set(read().dismissed);
-  return (found.get(h) ?? []).filter((v) => !held.has(v) && !away.has(keyOf(h, v)));
+  return listedOn(h).filter((v) => !held.has(v) && !away.has(keyOf(h, v)));
 }
 
 export function subscribeNewVaults(f: () => void): () => void { listeners.add(f); return () => { listeners.delete(f); }; }
@@ -81,29 +104,28 @@ export async function relistVaults(now = Date.now()): Promise<void> {
     askedAt.set(hub, now);
     const names = await reachable(hub).catch(() => null);
     if (!names) return;
-    const before = JSON.stringify(found.get(hub) ?? []);
-    found.set(hub, names);
-    if (JSON.stringify(names) !== before) told();
+    if (JSON.stringify(names) !== JSON.stringify(listedOn(hub))) noteListed(hub, names);
   }));
 }
 
-/** Add a vault on offer: the hub's consent for it alone (its sign-in, then its Approve, unless the person's grant there
- *  already covers it), and back to the sign-in's return. Resolves to the address to open. The vault comes in as
- *  someone else's: the hub doesn't say whose it is; Settings makes it the person's. */
+/** Open a vault on offer: the hub's consent to read it alone (its sign-in, then its Approve, unless the person's grant
+ *  there already covers it), and back to the sign-in's return. Resolves to the address to open. Whose it is: what the
+ *  person said at sign-in (of the Parachute, or of that vault on a hub they run); a vault made later is someone
+ *  else's until they say otherwise in Settings (the hub doesn't say whose; another account may have made it). */
 export async function startAddVault(hub: string, vault: string): Promise<string> {
   const h = originOf(hub);
   if (!newVaultsOn(h).includes(vault)) throw new Error("That vault isn't on offer here.");
-  // whose it is isn't known from the hub (another account there may have made it): someone else's until the person
-  // says it is theirs in Settings, so a new vault gets none of "mine"'s rights (home, embeds, recent) unasked
-  const whose = "theirs";
+  const said = whoseSaid({ issuer: h, vault });
+  const whose: "mine" | "theirs" = said === "mine" ? "mine" : "theirs";
   const parachute = await describe(h);
+  const b = { parachute, step: "open" as const, vault, level: "read" as const, why: "open" as const, whose };
   if (keysHere()) {
     // through the hub's key door, as a sign-in with the key does; a key the hub refuses: the hub's own page
     try {
-      return await keySignIn(h, await beginSignIn({ parachute, step: "vaults", vaults: [vault], whose, how: "key" }));
+      return await keySignIn(h, await beginSignIn({ ...b, how: "key" }));
     } catch { dropPending(); }
   }
-  return beginSignIn({ parachute, step: "vaults", vaults: [vault], whose, how: "page" });
+  return beginSignIn({ ...b, how: "page" });
 }
 
 /** For tests: forget what was found and when. */

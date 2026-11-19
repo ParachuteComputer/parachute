@@ -16,15 +16,17 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
 
 - **Sign in with your Nostr key.** Pair it from the Uni app or Buzz desktop (encrypted end to end; a 6-digit code to
   check), make a new one, or paste one. It stays in the Android Keystore or the Mac's Keychain, never in the web side.
-- **Your Parachutes.** Sign in once per hub (0.8 or 0.9) with your key, a password, or Parachute Cloud's own page, and
-  every vault you can reach there comes with it, grouped by Parachute in the launcher. The list of your Parachutes is
-  kept in your home vault, so a new device finds them all.
+- **Your Parachutes.** Sign in once per hub (0.8 or 0.9) with your key, a password, or Parachute Cloud's own page. It
+  asks to read your home vault only; each other vault is an **Open** line in the launcher, and an applet asks your hub
+  for its own vault (read, or change notes) when you allow it, and gives it back when you revoke it
+  ([docs/design/SCOPES.md](docs/design/SCOPES.md)). The list of your Parachutes is kept in your home vault, so a new
+  device finds them all.
 - **Other Parachutes.** Add an org's Parachute as someone else's; bring its applets into your launcher and put its
   components on your home, each in its own sealed frame with its own card, seeing only what that card allows of their
   vault ([docs/OTHER-PARACHUTES.md](docs/OTHER-PARACHUTES.md)).
 - **Your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, or in
   the plain view. Write a new note and edit a note's words in the app.
-- **The simple app** for a Parachute Cloud person: Notes across every vault, Capture (text or voice into Inbox/) and
+- **The simple app** for a Parachute Cloud person: Notes across the vaults you've opened, Capture (text or voice into Inbox/) and
   Connect an AI ([docs/SIMPLE.md](docs/SIMPLE.md)).
 - **Applets.** An applet is one note in your vault (TSX, JSX or HTML) that a chat AI with the Parachute MCP can write
   ([docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md)). It runs sealed, only after you allow it, and asks again when its

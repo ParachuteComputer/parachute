@@ -1,6 +1,8 @@
 // The app's own editor (docs/SIMPLE.md): a new note in a vault, or a note's words changed. A shell screen, so the frame
 // (which a person's vault can replace) never writes: it only sends the person here. Only the person's own words: never
 // an app's own note (settings, frame, theme, pointers) or code, which the note view offers no Edit for either.
+import { heldLevel } from "../vault/reach";
+import { DRAFT_LATEST, DRAFT_RETURN } from "../vault/writeAsk";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { VaultConflictError, type Note } from "@openparachute/surface-client";
@@ -19,7 +21,21 @@ export function pathFromText(text: string, at = new Date()): string {
 }
 const updatedOf = (n: Note | null) => (n as { updatedAt?: string } | null)?.updatedAt ?? null;
 /** May this device write in the vault? Its sign-in's scope says (a vault given to read only can't be changed here). */
-export const canWrite = (r: { scope: string }) => !r.scope.trim() || r.scope.split(/\s+/).some((w) => w === "vault:write" || w.endsWith(":write"));
+
+/** The words typed before the app left for the hub's write ask, if this opening is the way back from it. */
+function takeDraft(k: string): { text: string; base: string | null; into: string | null } | null {
+  try {
+    const back = sessionStorage.getItem(DRAFT_RETURN) === k;
+    sessionStorage.removeItem(DRAFT_RETURN);
+    const raw = sessionStorage.getItem(k);
+    sessionStorage.removeItem(k);
+    if (!back || !raw) return null;
+    const d = JSON.parse(raw) as { text?: unknown; base?: unknown; into?: unknown };
+    return typeof d.text === "string" ? { text: d.text, base: typeof d.base === "string" ? d.base : null, into: typeof d.into === "string" ? d.into : null } : null;
+  } catch { return null; }
+}
+function keepDraft(k: string, text: string, base: string | null, into: string) { try { sessionStorage.setItem(k, JSON.stringify({ text, base, into })); sessionStorage.setItem(DRAFT_LATEST, k); } catch { /* this screen only */ } }
+const leavingForHub = () => { try { return !!sessionStorage.getItem(DRAFT_RETURN); } catch { return false; } };
 
 export default function NoteEdit() {
   const { vault: key, id } = useParams();
@@ -28,8 +44,21 @@ export default function NoteEdit() {
   const nav = useNavigate();
   const isNew = id === undefined;
   const [note, setNote] = useState<Note | null>(null);
-  const [text, setText] = useState("");
-  const [into, setInto] = useState(key ?? "");
+  // what the person typed, kept for this tab while the hub is asked for write (shell/WriteAsk.tsx leaves the page):
+  // back here, it is as they left it
+  // Only on the way back from that ask (WriteAsk marks it): any other opening of the editor starts from the note.
+  const draftKey = `parachute.draft.v1:${key ?? ""}:${id ?? "new"}`;
+  const [draft] = useState(() => takeDraft(draftKey));
+  const [text, setTextNow] = useState(draft?.text ?? "");
+  // the version the person's words were written against: the conflict check is against it, not a later read
+  const base = useRef<string | null>(draft?.base ?? null);
+  const intoRef = useRef<string>(draft?.into ?? key ?? "");
+  const setText = (t: string) => { setTextNow(t); keepDraft(draftKey, t, base.current, intoRef.current); };
+  const dropDraft = () => { try { sessionStorage.removeItem(draftKey); } catch { /* nothing kept */ } };
+  useEffect(() => () => { if (!leavingForHub()) dropDraft(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // the vault a new note goes into, kept with the draft: back from the hub, it is the one the person chose
+  const [into, setIntoNow] = useState(draft?.into ?? key ?? "");
+  const setInto = (v: string) => { intoRef.current = v; setIntoNow(v); keepDraft(draftKey, text, base.current, v); };
   const [state, setState] = useState<"loading" | "ready" | "saving" | "error">(isNew ? "ready" : "loading");
   const [error, setError] = useState("");
   // the note changed elsewhere (an AI, another device) since it was opened: the person's text stays, and they choose.
@@ -45,14 +74,17 @@ export default function NoteEdit() {
       if (!live) return;
       if (!n) { setState("error"); setError("There's no such note."); return; }
       if (isCodeNote(n) || isAppOwn(n)) { setState("error"); setError("This note is the app's own, or code: it isn't changed here."); return; }
-      setNote(n); setText(n.content ?? ""); setState("ready");
+      if (!draft) base.current = updatedOf(n);
+      setNote(n); setTextNow(draft?.text ?? n.content ?? ""); setState("ready");
     }, (e: unknown) => { if (live) { setState("error"); setError(e instanceof Error ? e.message : "The note couldn't be read."); } });
     return () => { live = false; };
   }, [rec?.key, id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (state === "ready") box.current?.focus(); }, [state]);
 
-  const writable = vaults.filter(canWrite);
-  const target = writable.find((v) => v.key === into) ?? (rec && canWrite(rec) ? rec : null);
+  // any vault this device reads takes a new note: one it may only read asks first (vault/reach.ts, the shell's WriteAsk)
+  const writable = vaults;
+  const target = writable.find((v) => v.key === into) ?? rec ?? null;
+  const asksFirst = !!target && heldLevel(target) !== "write";
   async function save(force = false) {
     if (!target || state === "saving") return;
     setState("saving"); setError("");
@@ -64,13 +96,15 @@ export default function NoteEdit() {
         for (let n = 1; ; n++) {
           try {
             const made = await c.createNote({ path: n === 1 ? base : `${base} ${n}`, content: text });
+            dropDraft();
             nav(noteHref(target.key, made.id), { replace: true });
             return;
           } catch (e) { if (!(e instanceof VaultConflictError) || n >= 20) throw e; }
         }
       }
-      const at = force ? (updatedOf(theirs) ?? conflictAt) : updatedOf(note);
+      const at = force ? (updatedOf(theirs) ?? conflictAt) : base.current ?? updatedOf(note);
       await c.updateNote(note!.id, { content: text, ...(at ? { if_updated_at: at } : {}) });
+      dropDraft();
       // back to the note the person came from (it reads itself again), so Back after it doesn't show it twice
       if (atFirstEntry()) nav(noteHref(target.key, note!.id), { replace: true }); else nav(-1);
     } catch (e) {
@@ -85,7 +119,6 @@ export default function NoteEdit() {
   }
 
   if (!rec) return <main className="screen"><Bar title="Note" back={true} /><p className="error" role="alert">This device doesn't hold that vault.</p></main>;
-  if (!isNew && !canWrite(rec)) return <main className="screen"><Bar title="Edit" back={true} /><p className="error" role="alert">{rec.vault} is given to you to read only: its notes can't be changed here.</p></main>;
   return (
     <main className="screen note-edit">
       <Bar title={isNew ? "New note" : "Edit"} back={true} />
@@ -105,13 +138,13 @@ export default function NoteEdit() {
             <p className="small">Keep mine saves your words over theirs. Use theirs drops your changes.</p>
             <div className="row-buttons">
               <button type="button" className="secondary" onClick={() => void save(true)}>Keep mine</button>
-              {theirs && <button type="button" className="secondary" onClick={() => { setNote(theirs); setText(theirs.content ?? ""); setTheirs(null); setConflictAt(null); setError(""); }}>Use theirs</button>}
+              {theirs && <button type="button" className="secondary" onClick={() => { base.current = updatedOf(theirs); setNote(theirs); setText(theirs.content ?? ""); setTheirs(null); setConflictAt(null); setError(""); }}>Use theirs</button>}
             </div>
           </>}
         </div>}
         <div className="row-buttons note-edit-actions">
           <button type="button" className="primary" disabled={state === "saving" || !target || (isNew && !text.trim())} onClick={() => void save()}>{state === "saving" ? "Saving…" : "Save"}</button>
-          <span className="quiet small">{isNew ? (target ? `Into ${target.vault}` : "No vault here takes new notes from this device.") : `In ${rec.vault}`}</span>
+          <span className="quiet small">{isNew ? (target ? `Into ${target.vault}` : "No vault here takes new notes from this device.") : `In ${rec.vault}`}{asksFirst ? ". Your hub asks you first." : ""}</span>
         </div>
       </>}
       {state === "error" && <p className="error" role="alert">{error}</p>}

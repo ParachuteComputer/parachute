@@ -43,7 +43,7 @@ export async function readImports(rec: VaultRecord, source: string): Promise<Imp
     if (named.length > 1) return { ok: false, error: `two pointers name «${id}»; keep one` };
     const p = named[0].pointer;
     const from = listVaults().find((v) => originOf(v.issuer) === p.hub && v.vault === p.vault);
-    if (!from) return { ok: false, error: `it imports «${id}» from ${p.vault}, and this device isn't signed in there` };
+    if (!from) return { ok: false, error: `it imports «${id}» from ${p.vault}, and this device doesn't read that vault yet (open it from the launcher)` };
     const whose = whoseOf(from);
     if (whose === "theirs" && from.key !== rec.key) return { ok: false, error: `it imports «${id}» from ${p.vault}, which this device doesn't trust. Embed it instead, or trust ${p.vault} in Settings` };
     let n: Note | null;

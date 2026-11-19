@@ -24,26 +24,30 @@ after it.
 which app the person's devices open: `"simple"` or `"everything"`. Absent means everything, as before.
 
 A person new to the app on Parachute Cloud gets `"simple"`. That is a first sign-in, on a device that had no home, to a
-hub whose descriptor says `door: "cloud"`. At least one vault the sign-in brought must be the person's own, every one
-was read, and none holds a settings note. That sign-in makes their settings note with `app: "simple"`, along with their
-list of Parachutes. A settings note already there is never changed this way. Anyone else starts as before. Settings changes it, and so can their agent, by writing the
+hub whose descriptor says `door: "cloud"`, whose home (the one vault the sign-in reads, [design/SCOPES.md](design/SCOPES.md))
+was read and holds no settings note. The sign-in reads the home and doesn't write it, so this device opens the simple
+app at once, and the settings note with `app: "simple"` (and their list of Parachutes) is written the first time the
+person lets Parachute change notes in their home: their first edit, or adding Capture. A settings note already there
+is never changed this way. Anyone else starts as before. Settings changes it, and so can their agent, by writing the
 note.
 
 ## What it is made of (today's mechanisms)
 
 - **Notes** is the built-in frame's home when `app` is `"simple"` (`src/frame/views/NotesHome.tsx`; the launcher
-  otherwise). It reads every vault this device holds through the frame's reads, as the launcher does.
+  otherwise). It reads every vault this device holds through the frame's reads, as the launcher does: the home at
+  first, and each other vault once the person taps its **Open** line there (the hub asks to read that one).
 - **New note and Edit** are a shell screen (`src/views/NoteEdit.tsx`), not the frame: a frame can be the person's
   own code from their vault, and it still writes nothing. The frame only sends the person there
   (`/v/<vault>/new`, `/v/<vault>/n/<id>/edit`). Edit saves with `if_updated_at`. If the note changed meanwhile (an AI
   wrote to it), the person chooses: **Keep mine** saves their words over the new version, and **Use theirs** drops their
-  changes. There is no Edit on code or on the app's own notes.
+  changes. There is no Edit on code or on the app's own notes. The first Save in a vault Parachute only reads asks
+  first (*Let Parachute change notes in …?*, then the hub's page), and the person saves again after.
 - **Capture** is an ordinary applet: `applets/capture.json` and `.tsx`, shipped with the app. **Add Capture** (one
   tap, on the bar's Capture place) writes it into the home vault as `Applets/Capture`. Its card then asks, as any
   applet's does: read, add and change notes in `Inbox/`, the microphone through the app, and to open the notes you tap
   in it (a capture opens in the app, where it can be edited). It uses the kit only
   (`vault`, `voice.record`, `vault.attach` with `transcribe`, `Link`).
-- **Connect** is a shell screen (`src/views/Connect.tsx`): each vault's address is the vault's own (Parachute Cloud's
+- **Connect** is a shell screen (`src/views/Connect.tsx`): each opened vault's address is the vault's own (Parachute Cloud's
   Connect page gives the same one), and copying needs the app's own clipboard.
 
 Why not three applets: an applet reaches only its own vault and only by folder (`fields.applet.access`), and the app

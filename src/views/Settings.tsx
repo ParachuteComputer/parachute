@@ -23,9 +23,9 @@ import NotifySettings from "./NotifySettings";
 import { AskWhose, WhoseLine } from "./Whose";
 import { useParachutes } from "../shell/parachutes";
 import { listHub } from "../shell/homeSettings";
-import { signOutOf } from "../vault/signInFlow";
-import { dismissVault } from "../vault/newVaults";
+import { askVault, signOutOf } from "../vault/signInFlow";
 import AppChoice from "./AppChoice";
+import { appletsNeedingWrite, forgetOwnWrite, giveBack, heldLevel } from "../vault/reach";
 
 /** Signing out of a vault ends what its applets were allowed on this device too, and the embeds on its pages or from it. */
 const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (const s of g.subjects()) if (grantInVault(s, subjectOf(key, ""), key)) g.revoke(s); };
@@ -35,9 +35,19 @@ const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (cons
 const forgetVault = (key: string) => { dropClient(key); forgetApplets(key); revokeVaultGrants(key); clearDefaults(key); forgetVaultFrame(key); forgetVaultStart(key); forgetVaultSettings(key); forgetVaultTheme(key); };
 /** Sign out of one vault: off this device, and its sign-in ended at the hub. */
 function signOutVault(v: VaultRecord) {
+  forgetOwnWrite(v);
   removeVault(v.key);
   forgetVault(v.key);
   void revoke(v);
+}
+
+/** What Parachute holds of a vault at its hub (docs/design/SCOPES.md), and the person's own write given back. */
+function Holds({ v }: { v: VaultRecord }) {
+  const level = heldLevel(v);
+  // write that no applet allowed here needs (the person's own, or held from before this app asked per vault): theirs to give back
+  const applets = appletsNeedingWrite(v);
+  const own = level === "write" && applets !== null && !applets.length;
+  return <span className="quiet holds">· {level === "write" ? "reads and changes notes" : "reads"}{own && <> <button type="button" className="quiet-button" onClick={() => { forgetOwnWrite(v); void giveBack(v.key, "/settings"); }}>Read only</button></>}</span>;
 }
 
 /** The one place for what this device holds. Later sections (applets, the self-test) join here. */
@@ -57,12 +67,13 @@ export default function Settings({ children }: { children?: ReactNode }) {
               <ul className="plain">
                 {p.vaults.map((v) => (
                   <li key={v.key} className="line">
-                    <span><strong>{v.vault}</strong> <WhoseLine v={v} /></span>
-                    <button type="button" className="quiet-button" aria-label={`Sign out of ${v.vault}`} onClick={() => { dismissVault(v.issuer, v.vault); signOutVault(v); }}>Sign out</button>
+                    <span><strong>{v.vault}</strong> <WhoseLine v={v} /> <Holds v={v} /></span>
+                    <button type="button" className="quiet-button" aria-label={`Sign out of ${v.vault}`} onClick={() => signOutVault(v)}>Sign out</button>
+                    <button type="button" className="quiet-button" aria-label={`Sign in again to ${v.vault}`} onClick={() => void askVault(v, heldLevel(v) ?? "read", "open", "/settings").then((u) => window.location.assign(u), () => undefined)}>Sign in again</button>
                   </li>
                 ))}
               </ul>
-              <p className="small"><Link to={`/add?hub=${encodeURIComponent(p.hub)}`}>Sign in again</Link> <span className="quiet">(brings any vault you've been given since)</span>{" · "}
+              <p className="small"><Link to={`/add?hub=${encodeURIComponent(p.hub)}`}>Sign in again</Link> <span className="quiet">(sees which vaults you have there now)</span>{" · "}
                 <button type="button" className="quiet-button" onClick={() => signOutOf(p.hub, signOutVault)}>Sign out of {p.name}</button></p>
             </> : <p className="small">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`}>Sign in</Link>{" · "}
               <button type="button" className="quiet-button" onClick={() => void listHub(p.hub, false).catch(() => undefined)}>Take off the list</button></p>}

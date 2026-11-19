@@ -2,7 +2,7 @@
 // find a note, change it, write a new one, copy a vault's connector address, add Capture and capture a line into
 // Inbox/. Against the real hub: what the app writes is read back there.
 import { expect, test } from "@playwright/test";
-import { signIn, ui } from "./helpers";
+import { approveUntilBack, signIn, ui } from "./helpers";
 import { api, hubState, VAULT } from "./hub";
 
 type Row = { id: string; path: string; content?: string; tags?: string[] };
@@ -21,9 +21,9 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
   for (let i = 0; i < 13; i++) made.push((await api(hub, "POST", "notes", { path: `Inbox/2026-01-${String(i + 1).padStart(2, "0")} 09-00 old line ${i} ${stamp}`, content: `old line ${i}` }) as Row).id);
   try {
     await signIn(page);
-    // Notes: every vault's newest notes in one list, the vaults as tabs; the bar says Notes, Capture, Connect
+    // Notes: the home's newest notes, and a line for each vault the sign-in didn't read; the bar says Notes, Capture, Connect
     await expect(ui(page).getByRole("heading", { level: 1, name: "Notes" })).toBeVisible();
-    await expect(ui(page).getByRole("navigation", { name: "Vaults" }).getByRole("button", { name: VAULT })).toBeVisible();
+    await expect(ui(page).getByRole("button", { name: "Open letters", exact: true })).toBeVisible();
     const bar = page.getByRole("navigation", { name: "Bar" });
     await expect(bar.getByRole("link", { name: "Notes" })).toHaveAttribute("aria-current", "page");
     await expect(bar.getByRole("link", { name: "Capture" })).toBeVisible();
@@ -35,6 +35,16 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
     const words = page.getByRole("textbox", { name: "The note's words" });
     await expect(words).toHaveValue(/Kale in the north bed/);
     await words.fill(`# Garden plan ${stamp}\n\nKale in the north bed. Garlic by the gate.`);
+    await page.getByRole("button", { name: "Save" }).click();
+    // the sign-in reads the home only: the first change asks the hub first; back from it, the words are as they were
+    // typed, and Save makes the change
+    const ask = page.getByRole("dialog", { name: `Change notes in ${VAULT}` });
+    await expect(ask).toContainText(`Parachute only reads ${VAULT} so far`);
+    const { origin: app, pathname: at } = new URL(page.url());
+    await ask.getByRole("button", { name: /^Continue to / }).click();
+    await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
+    expect(await approveUntilBack(page, hub.origin, app, undefined, at)).toBe(1);
+    await expect(words).toHaveValue(/Garlic by the gate\./);
     await page.getByRole("button", { name: "Save" }).click();
     await expect(ui(page).getByText("Garlic by the gate.")).toBeVisible();
     expect(((await api(hub, "GET", `notes/${note.id}?include_content=true`)) as Row).content).toContain("Garlic by the gate.");
@@ -49,6 +59,14 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
     await expect(words).toHaveValue(/Mine, from the phone/);
     await page.getByRole("button", { name: "Keep mine" }).click();
     await expect(ui(page).getByText("Mine, from the phone.")).toBeVisible();
+
+    // words typed and left unsaved don't come back: the editor opens on the note as it is now
+    await ui(page).getByRole("link", { name: "Edit" }).click();
+    await words.fill(`# Garden plan ${stamp}\n\nLeft unsaved.`);
+    await page.getByRole("button", { name: "Back" }).first().click();
+    await ui(page).getByRole("link", { name: "Edit" }).click();
+    await expect(words).toHaveValue(/Mine, from the phone\./);
+    await page.getByRole("button", { name: "Back" }).first().click();
 
     // a new note: its first line names it
     await bar.getByRole("link", { name: "Notes" }).click();

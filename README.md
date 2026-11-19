@@ -21,9 +21,12 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
 3. **Your hub knows your key.** The hub's owner links it once: `parachute auth link-pubkey --user <name> <npub>`. The
    app shows your `npub1…`.
 4. **Your Parachute.** Type its address (`your-hub.example`), say whose it is (**Mine**), press **Sign in with your key**,
-   and press **Approve** once on the hub's page. Every vault you can reach there comes with it, applets and all; you
-   never type a vault's address. If you run the hub, Parachute first asks which of its vaults are yours (all ticked). **Use Parachute Cloud instead** and **Other ways to sign in** use the hub's own sign-in
-   (an emailed link, a password); the hub then asks twice: to show Parachute your vaults, then for all of them.
+   and press **Approve** once on the hub's page: it lets Parachute read your home vault. Each other vault you can reach
+   there is a line to open, and an applet asks the hub for its own vault when you allow it
+   ([docs/design/SCOPES.md](docs/design/SCOPES.md)); you never type a vault's address. If you run the hub, Parachute
+   first asks which of its vaults are yours (all ticked) and which is home. **Use Parachute Cloud instead** and
+   **Other ways to sign in** use the hub's own sign-in (an emailed link, a password); the hub then asks twice: to show
+   Parachute your vaults, then to read your home.
 5. **More Parachutes** (an org's, a friend's): **Add a Parachute** at the foot of the launcher, the same way, as
    **Someone else's**. Each one you add is listed in your home vault, so another device you sign in on finds them all,
    each a tap from signed in.
@@ -36,12 +39,14 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
 - **Your key.** You sign in with your Nostr key. Pair it from a device that has it (the Uni app or Buzz desktop sends it
   over the Buzz pairing relay, encrypted end to end), make a new one, or paste one. It stays in the app's native side, in
   the platform's secure storage.
-- **The simple app.** For a person whose notes are on Parachute Cloud: their notes across every vault (find, read,
+- **The simple app.** For a person whose notes are on Parachute Cloud: their notes across the vaults they've opened (find, read,
   edit, write), Capture (a line or a voice note into Inbox/) and Connect an AI (each vault's connector address). A
   new Cloud person starts there; Settings → Your app switches to everything ([docs/SIMPLE.md](docs/SIMPLE.md)).
 - **Your Parachutes.** Sign in once per hub, with your key or another way the hub offers (a password, or Cloud's own
-  sign-in), and every vault you can reach there is in the launcher, grouped by Parachute. The list of your Parachutes
-  lives in your home vault ([docs/design/ONE-SIGN-IN.md](docs/design/ONE-SIGN-IN.md)). Browse, search and read notes.
+  sign-in). The sign-in reads your home vault only; each other vault you can reach there is one tap away in the
+  launcher, grouped by Parachute, and an applet asks your hub for its vault when you allow it
+  ([docs/design/SCOPES.md](docs/design/SCOPES.md)). The list of your Parachutes lives in your home vault
+  ([docs/design/ONE-SIGN-IN.md](docs/design/ONE-SIGN-IN.md)). Browse, search and read notes.
 - **Applets.** An applet is one note in your vault: its metadata is the manifest (what it may read and write, which
   kinds of note it opens), its content is the code: one TSX or JSX module, or an HTML page. Any chat AI with the
   Parachute MCP can make one by writing that note: see [docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md). It runs

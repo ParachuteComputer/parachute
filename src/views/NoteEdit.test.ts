@@ -1,6 +1,7 @@
 // The editor's two rules: a new note is named by its first line, and a vault given to read only isn't written.
 import { describe, expect, it } from "vitest";
-import { canWrite, pathFromText } from "./NoteEdit";
+import { pathFromText } from "./NoteEdit";
+import { levelIn } from "../vault/parachute";
 
 describe("a new note's name", () => {
   it("is its first line, plain: no heading mark, folder, or leading dot or space", () => {
@@ -16,9 +17,9 @@ describe("a new note's name", () => {
 
 describe("may this device write there", () => {
   it("as the sign-in's scope says", () => {
-    expect(canWrite({ scope: "vault:garden:read vault:garden:write" })).toBe(true);
-    expect(canWrite({ scope: "vault:read vault:write" })).toBe(true);
-    expect(canWrite({ scope: "vault:garden:read" })).toBe(false);
-    expect(canWrite({ scope: "vault:read" })).toBe(false);
+    expect(levelIn("vault:garden:read vault:garden:write", "garden")).toBe("write");
+    expect(levelIn("vault:read vault:write", "garden")).toBe("write");
+    expect(levelIn("vault:garden:read", "garden")).toBe("read");
+    expect(levelIn("vault:read", "garden")).toBe("read");
   });
 });

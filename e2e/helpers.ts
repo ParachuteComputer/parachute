@@ -10,14 +10,15 @@ async function backOnTheLauncher(page: Page, vault: string) {
 }
 
 /** The hub's Approve, as many times as it asks (the app without a key asks twice: to see which vaults are the person's,
- *  then for all of them at once), until the app is back on its launcher. Returns how many times it asked. */
-export async function approveUntilBack(page: Page, hubOrigin: string, appOrigin: string, onPick?: (page: Page) => Promise<void>): Promise<number> {
+ *  then to read their home), until the app is back on its launcher (or at `backAt`). Returns how many times it asked.
+ *  `onConsent`: called on each consent page before its Approve (what the hub shows, for a test to check). */
+export async function approveUntilBack(page: Page, hubOrigin: string, appOrigin: string, onPick?: (page: Page) => Promise<void>, backAt = "/", onConsent?: (page: Page) => Promise<void>): Promise<number> {
   const approve = page.getByRole("button", { name: "Approve" });
   // on a hub the person runs, the app asks which of its vaults are theirs before the consent: all ticked, Continue
   const pick = page.getByRole("button", { name: "Continue" });
   const where = async () => {
     const u = new URL(page.url());
-    if (u.origin === appOrigin && u.pathname === "/") return "back";
+    if (u.origin === appOrigin && u.pathname === backAt) return "back";
     if (u.origin === appOrigin && await pick.isVisible().catch(() => false)) return "pick";
     return u.origin === hubOrigin && await approve.isVisible().catch(() => false) ? "asked" : "wait";
   };
@@ -27,6 +28,7 @@ export async function approveUntilBack(page: Page, hubOrigin: string, appOrigin:
     if (at === "back") return asked;
     const before = page.url();
     if (at === "pick") await (onPick ? onPick(page) : Promise.resolve());
+    if (at === "asked" && onConsent) await onConsent(page);
     await (at === "pick" ? pick : approve).click();
     if (at === "asked") asked++;
     await page.waitForURL((u) => u.href !== before);
@@ -34,7 +36,7 @@ export async function approveUntilBack(page: Page, hubOrigin: string, appOrigin:
 }
 
 /** Add the person's own Parachute (the e2e home hub) and sign in through the hub's own pages: its sign-in with the
- *  owner's password, then its Approves. Every vault there comes with it; the app opens on the launcher. */
+ *  owner's password, then its Approves. It reads the home (`vault`, picked if asked); the app opens on the launcher. */
 export async function signIn(page: Page, vault = VAULT) {
   const hub = hubState();
   await page.goto("/");
@@ -51,8 +53,45 @@ export async function signIn(page: Page, vault = VAULT) {
     await page.locator('input[type="password"]').fill(hub.password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
   }
-  await approveUntilBack(page, hub.origin, app);
+  // asked which vault is home (more than one could be): `vault`
+  await approveUntilBack(page, hub.origin, app, async (p) => { const home = p.getByRole("radio", { name: vault, exact: true }); if (await home.count()) await home.check(); });
   await backOnTheLauncher(page, vault);
+}
+
+/** Open a vault the sign-in didn't read (docs/design/SCOPES.md): its line on the launcher, then the hub's Approve to read
+ *  it. Returns how many times the hub asked (0: its grant already covered it). */
+export async function openVault(page: Page, vault: string, onConsent?: (page: Page) => Promise<void>): Promise<number> {
+  const hub = hubState();
+  await page.goto("/");
+  const app = new URL(page.url()).origin;
+  await ui(page).getByRole("button", { name: `Open ${vault}`, exact: true }).click();
+  await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
+  const asked = await approveUntilBack(page, hub.origin, app, undefined, "/", onConsent);
+  await backOnTheLauncher(page, vault);
+  return asked;
+}
+
+/** Let the app change notes in a vault, as a person does: a change it can't make yet (a new note) brings the ask, then
+ *  the hub's Approve; back on the same screen. Returns how many times the hub asked. */
+export async function letWrite(page: Page, vault: string, onConsent?: (page: Page) => Promise<void>): Promise<number> {
+  const hub = hubState();
+  const at = `/v/${vault}/new`;
+  await page.goto(at);
+  const app = new URL(page.url()).origin;
+  await page.getByLabel("The new note").fill("Asks before it is saved");
+  await page.getByRole("button", { name: "Save" }).click();
+  const ask = page.getByRole("dialog", { name: `Change notes in ${vault}` });
+  await expect(ask).toBeVisible();
+  await ask.getByRole("button", { name: /^Continue to / }).click();
+  await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
+  const asked = await approveUntilBack(page, hub.origin, app, undefined, at, onConsent);
+  await expect(page.getByLabel("The new note")).toBeVisible();
+  return asked;
+}
+
+/** What the app holds of each vault at the hub (its tokens' scopes), from its own storage. */
+export async function held(page: Page): Promise<Record<string, string>> {
+  return page.evaluate(() => Object.fromEntries((JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]") as { vault: string; scope: string }[]).map((v) => [v.vault, v.scope])));
 }
 
 /** The frame: the vault list, a vault, a note and open-with, in their sealed iframe. The shell's own screens (signing in,

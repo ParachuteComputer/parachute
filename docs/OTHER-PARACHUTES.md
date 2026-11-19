@@ -17,8 +17,9 @@ owner gives it a role on the vault with the `grant-access` tool of the hub's acc
 ```
 
 Then, in the app: **Add a Parachute**, the address (`techne.example`), **Whose Parachute is this? Someone else's**,
-and **Sign in with your key**. The hub shows its usual Approve once, for every vault of Techne's his key may reach
-(here, `techne`). That is all there is to it. Techne goes on the list of his Parachutes in his home vault, so his
+and **Sign in with your key**. The hub shows its usual Approve once, to read the vault of Techne's his key may reach
+(here, `techne`; with more than one, he picks which to open first, and the others are an **Open** line each). That is
+all there is to it. Techne goes on the list of his Parachutes in his home vault, so his
 other devices find it ([design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md)).
 
 Whose a vault is, is Aaron's say, kept on his device, and nothing else can set it: not a record, not an agent. His
