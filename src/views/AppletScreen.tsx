@@ -38,6 +38,9 @@ import { isMine, useWhose, whoseOf } from "../vault/whose";
 import { pageMarks } from "../applet/pageMark";
 import { MAX_CODE_CHARS } from "../vault/limited";
 import { findVault, hostOf } from "../vault/store";
+import { covers } from "../vault/parachute";
+import { appletLevel, giveBack, heldLevel } from "../vault/reach";
+import { askVault } from "../vault/signInFlow";
 import { screenOf } from "../applet/manifest";
 import { createRouter } from "../applet/router";
 import { createVaultModule } from "../applet/modules/vault";
@@ -133,6 +136,8 @@ export default function AppletScreen() {
   // new screen
   useEffect(() => { if (startedByTap.get(location.key)) setStarted(true); }, [location.key]);
   const [declined, setDeclined] = useState(false);
+  // the hub couldn't be asked for what an Allow needs
+  const [hubError, setHubError] = useState<string | null>(null);
   const [menu, setMenu] = useState(false);
   const [, setBump] = useState(0);
   const bump = () => setBump((n) => n + 1);
@@ -317,15 +322,28 @@ export default function AppletScreen() {
     if (declined) return shell(<div className="card"><p>{name} isn't allowed to run.</p><button type="button" className="primary" onClick={tap(() => setDeclined(false))}>Ask again</button> {plainNote}</div>);
     return shell(<>
       {note && <p className="quiet">{name} asks before it opens {titleOf(note)}.</p>}
+      {hubError && <p className="error" role="alert">{hubError}</p>}
       <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"}
         grant={{ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services), embedsFrom: loaded.state === "ok" ? loaded.from : [] }} ownFolder={ownFolder(entry.path)} keyring={lineOptions(keyring)}
         imports={loaded.state === "ok" ? loaded.imports : []} scope={keys.scope} code={keys.html} status={status} was={grants.record(subject)}
         broughtChanged={pinMoved} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
-        onAllow={(asked) => { grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry, asked); if (brought && pinMoved) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); }}
+        hubAsk={covers(heldLevel(rec), appletLevel(entry.manifest)) ? null : { host: hostOf(rec.issuer), level: appletLevel(entry.manifest) }}
+        onAllow={(asked) => {
+          // what its manifest needs at the hub, when this device doesn't hold it yet: asked there first (one vault, one
+          // consent), and the Allow recorded only when the hub says yes (vault/signInFlow.ts finishStep)
+          const need = appletLevel(entry.manifest);
+          if (!covers(heldLevel(rec), need)) {
+            setHubError(null);
+            void askVault(rec, need, "allow", `${location.pathname}${location.search}`, { subject, scope: keys.scope, html: keys.html, mode: mode === "approved-code" ? "approved-code" : "sealed", asked })
+              .then((url) => window.location.assign(url), (e: unknown) => setHubError(e instanceof Error ? e.message : "Your hub didn't answer."));
+            return;
+          }
+          grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry, asked); if (brought && pinMoved) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); }}
         onNotNow={() => setDeclined(true)} />
     </>);
   }
-  const revoke = () => { grants.revoke(subject); setStarted(false); bump(); };
+  // revoked: when nothing else allowed here needs write, the app gives write back to the hub (vault/reach.ts)
+  const revoke = () => { grants.revoke(subject); setStarted(false); bump(); void giveBack(rec.key, `${location.pathname}${location.search}`); };
   // code imported from another vault runs inside it: a start after it hung the app holds it, until a tap
   if (heldForHang) return shell(<div className="card" role="status">
     <p>The app stopped while {name} was running. It imports code from another vault, which may have held it up.</p>

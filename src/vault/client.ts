@@ -5,6 +5,7 @@ import { recordsFetch } from "./records";
 import { findVault, updateVault, vaultUrlOf, type VaultRecord } from "./store";
 import { limitedFetch } from "./limited";
 import { whoseOf } from "./whose";
+import { canWrite, needWrite } from "./writeAsk";
 
 /** The fetch for a vault's hub: someone else's is read up to a limit (limited.ts), the person's own as before. Judged per
  *  call, so a change of whose it is applies at once. */
@@ -82,6 +83,16 @@ export function withCurrentToken(key: string, f: typeof fetch): typeof fetch {
   };
 }
 
+/** A change (anything but a read) to a vault this device holds only read of is refused before it is sent, and the
+ *  person is asked (vault/reach.ts): the hub would refuse it, and the ask is theirs to make. */
+export function writesNeedWrite(key: string, f: typeof fetch): typeof fetch {
+  return (input, init) => {
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    if (method !== "GET" && method !== "HEAD" && !canWrite(key)) needWrite(key);
+    return f(input, init);
+  };
+}
+
 export function clientFor(rec: VaultRecord): VaultClient {
   const hit = clients.get(rec.key);
   const at = `${rec.issuer} ${rec.vault} ${rec.url ?? ""}`;
@@ -91,7 +102,7 @@ export function clientFor(rec: VaultRecord): VaultClient {
     tokenProvider: () => findVault(rec.key)?.accessToken ?? rec.accessToken,
     onAuthError: () => refreshOnce(rec.key),
     // notes calls go through the hub's record door when it has one (records.ts)
-    fetchImpl: recordsFetch(withCurrentToken(rec.key, fetchFor(rec))),
+    fetchImpl: writesNeedWrite(rec.key, recordsFetch(withCurrentToken(rec.key, fetchFor(rec)))),
   });
   clients.set(rec.key, { at, client });
   return client;

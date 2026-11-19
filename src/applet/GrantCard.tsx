@@ -40,7 +40,7 @@ export const handedLine = (props: Record<string, unknown>) => `Your page hands i
 
 export const IMPORTS_CHANGED_LINE = "This applet's code, or what it imports, changed since you allowed it. Only the version you allow runs.";
 
-export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, grant, ownFolder, keyring = {}, imports = [], scope, code, status, was, fingerprint, expires, broughtChanged = false, onAllow, onNotNow, what = "applet", handed, settle }: {
+export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, grant, ownFolder, keyring = {}, imports = [], scope, code, status, was, fingerprint, expires, broughtChanged = false, onAllow, onNotNow, what = "applet", handed, settle, hubAsk = null }: {
   name: string; glyph: string; vault: string; runs: Runs;
   /** what it asks (grant.ts), the folder its note is in, and the keyring's names for keys: the card's lines come from these */
   grant: Grant; ownFolder: string | null; keyring?: LineOptions;
@@ -61,6 +61,9 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
   what?: "applet" | "component"; handed?: Record<string, unknown>;
   /** On a sheet over a page where frames run: Allow counts only for a press that began this long after it showed. */
   settle?: number;
+  /** What the hub is asked for after Allow, when this device doesn't hold it yet (vault/reach.ts): the vault's host and
+   *  the level. Said on the card, so the hub's page that follows is no surprise. */
+  hubAsk?: { host: string; level: "read" | "write" } | null;
 }) {
   const tap = (f: () => void) => (e: MouseEvent) => { if (e.isTrusted) f(); };
   const [open, setOpen] = useState(false);
@@ -111,6 +114,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
         : reaches ? <><strong>Nothing else.</strong> It can't delete notes.</>
         : <><strong>Nothing else.</strong> It can't delete notes or reach the internet.</>}
         {whose === "mine" && what === "component" && <> It reads only that vault.</>}</p>
+      {hubAsk && <p className="grant-hub" role="note">Then your hub ({hubAsk.host}) asks you to let Parachute {hubAsk.level === "write" ? <>change notes in <strong>{vault}</strong></> : <>read <strong>{vault}</strong></>}: only this vault.</p>}
       <div className="grant-actions">
         <button type="button" className="grant-more" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen((o) => !o)}>{open ? "Hide details" : "Show details"}</button>
         <button type="button" className="quiet-button" onClick={tap(onNotNow)}>Not now</button>

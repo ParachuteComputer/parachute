@@ -1,9 +1,11 @@
 // Sign-in to a Parachute (a hub): OAuth 2.1 with PKCE and dynamic client registration, on surface-client's discovery,
-// registration and PKCE helpers (docs/design/ONE-SIGN-IN.md). One sign-in covers every vault the person may reach there:
-//   list    (only without a key) a sign-in for `account:vaults`, whose token asks the hub which vaults are theirs
-//   vaults  one consent naming all those vaults: its token is for the first of them
-//   vault   for each of the others, the same sign-in once more for that vault alone: the hub's grant already covers it,
-//           so it sends the person straight back with a code (no page), and the vault gets a token of its own
+// registration and PKCE helpers (docs/design/ONE-SIGN-IN.md). The app asks a hub only for what something the person
+// allowed needs (docs/design/SCOPES.md), in two kinds of step:
+//   list    (only without a key) a sign-in for `account:vaults`, whose token asks the hub which vaults are theirs, and
+//           is ended at once
+//   open    one vault at one level (read, or read and write): the home at sign-in (read), a vault the person opens
+//           (read), what an applet they allow needs (its vault, read or write), or a change they make (write). Each
+//           vault keeps one token, at the most any of those needs; asking again for more replaces it.
 // The app registers itself on each hub as "Parachute" (on Parachute Cloud, which keeps that name, CLOUD_CLIENT_NAME); the hub keeps a new registration pending until its owner
 // approves it once (the hub's own approve step). In a browser the redirect comes back to the page's own origin,
 // /oauth/callback; in the shell, to a loopback address the shell catches (SHELL_RETURN below).
@@ -13,7 +15,7 @@ import {
   type TokenResponse,
 } from "@openparachute/surface-client";
 import { isLoopback } from "./address";
-import { canList, grantedVaults, LIST_SCOPE, scopeForVaults, type Parachute } from "./parachute";
+import { canList, levelIn, LIST_SCOPE, scopeFor, type Level, type Parachute } from "./parachute";
 
 export const CLIENT_NAME = "Parachute";
 /** Parachute Cloud refuses a name like "Parachute" from an app whose return address isn't one of Cloud's own (its guard
@@ -27,20 +29,26 @@ const PENDING_TTL_MS = 30 * 60_000;
 export { PendingApprovalError };
 import { limitedFetch } from "./limited";
 
+/** What follows when the hub says yes to an `open` step, beyond keeping the token: the applet the person allowed on its
+ *  card, recorded only now (src/applet/grants.ts), so an Allow the hub refused allows nothing. */
+export type AllowAfter = { subject: string; scope: string; html: string; mode: "sealed" | "approved-code"; asked?: { face: string[]; others: string[] } };
+
+/** Why a vault is asked for: shown on the screen between steps, and kept with the vault (vault/reach.ts). */
+export type Why = "signin" | "open" | "allow" | "write" | "narrow";
+
 export type Pending = {
   /** the Parachute (its address, issuer, account MCP and where its vaults live) */
   parachute: Parachute;
-  step: "list" | "vaults" | "vault";
-  /** the vaults asked for (step "vaults"), or the one vault (step "vault") */
-  vaults: string[];
-  /** the vaults still to sign in to after this step, one by one */
-  queue: string[];
-  /** the scope the consent granted (steps "vault"): each vault asks for exactly what it holds, so the hub needn't ask */
-  granted: string;
-  /** the vaults this sign-in has kept so far */
-  kept: string[];
-  /** on a hub the person runs (every vault listed): the ones they said are theirs; the rest are someone else's */
-  mine?: string[];
+  step: "list" | "open";
+  /** step "open": the vault, and how much of it */
+  vault?: string;
+  level?: Level;
+  why: Why;
+  /** where the app goes after (the applet that asked, the screen that needed a change); the launcher when none */
+  back?: string;
+  allow?: AllowAfter;
+  /** at sign-in: the vault asked for is to be this device's home */
+  home?: boolean;
   issuer: string;
   tokenEndpoint: string;
   /** where Sign out ends the sign-in, when the hub names one on its own origin */
@@ -94,21 +102,16 @@ export function forgetClient(issuer: string) {
   try { localStorage.setItem(CLIENTS_KEY, JSON.stringify(all)); } catch { /* nothing to do */ }
 }
 
-export type Begin = { parachute: Parachute; step: "list" | "vaults" | "vault"; vaults?: string[]; queue?: string[]; granted?: string; kept?: string[]; mine?: string[]; whose?: "mine" | "theirs"; how: "key" | "page";
+export type Begin = { parachute: Parachute; step: "list" | "open"; vault?: string; level?: Level; why?: Why; back?: string; allow?: AllowAfter; home?: boolean; whose?: "mine" | "theirs"; how: "key" | "page";
   /** a new sign-in (not the next step of one): a registration a sign-in that never came back used is dropped */
   fresh?: boolean };
 
-/** The scope a vault holds in what a consent granted: its read, and its write if granted. */
-export const scopeIn = (granted: string, vault: string) => granted.split(/\s+/).filter((w) => w === `vault:${vault}:read` || w === `vault:${vault}:write`).join(" ");
-
-/** Start a step of signing in to a Parachute: returns the hub's authorize address to go to. The flow's secrets wait in
+/** Start a step of signing in to a Parachute (or of asking it for one vault): returns the hub's authorize address to go to. The flow's secrets wait in
  *  this app's storage. */
 export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<string> {
   const { parachute } = b;
-  const vaults = b.step === "list" ? [] : [...(b.vaults ?? [])];
-  if (b.step !== "list" && !vaults.length) throw new Error("No vaults to sign in to.");
-  const scope = b.step === "list" ? LIST_SCOPE : b.step === "vaults" ? scopeForVaults(vaults) : scopeIn(b.granted ?? "", vaults[0]);
-  if (!scope) throw new Error(`The hub didn't grant the ${vaults[0]} vault.`);
+  if (b.step === "open" && !b.vault) throw new Error("No vault to sign in to.");
+  const scope = b.step === "list" ? LIST_SCOPE : scopeFor(b.vault!, b.level ?? "read");
   const redirect = redirectUri();
   const meta = await discoverAuthServer(parachute.issuer, fetchImpl);
   // the hub must name itself as its own issuer (RFC 8414 3.3), and keep its sign-in on that origin
@@ -121,7 +124,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   const stale = readJson<Pending>(PENDING_KEY);
   // (only one that stopped at its first step: the listing, or the consent when the key listed the vaults; past that,
   // the hub took the registration, kept so a hub whose owner approves new registrations doesn't have to again)
-  if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "vaults" && stale.how === "key"))) forgetClient(parachute.issuer);
+  if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "open" && stale.why === "signin" && stale.how === "key"))) forgetClient(parachute.issuer);
   let clientId = cachedClient(parachute.issuer, redirect);
   if (!clientId) {
     clientId = (await registerClient(meta.registration_endpoint, { clientName: parachute.door === "cloud" ? CLOUD_CLIENT_NAME : CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
@@ -130,7 +133,9 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   const codeVerifier = generateCodeVerifier();
   const state = generateState();
   const revocation = (meta as { revocation_endpoint?: unknown }).revocation_endpoint;
-  const pending: Pending = { parachute, step: b.step, vaults, queue: [...(b.queue ?? [])], granted: b.granted ?? "", kept: [...(b.kept ?? [])], ...(b.mine ? { mine: [...b.mine] } : {}), issuer: parachute.issuer, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, parachute.issuer) ? { revocationEndpoint: revocation } : {}),
+  const pending: Pending = { parachute, step: b.step, ...(b.step === "open" ? { vault: b.vault, level: b.level ?? "read" } : {}), why: b.why ?? "signin",
+    ...(b.back ? { back: b.back } : {}), ...(b.allow ? { allow: b.allow } : {}), ...(b.home ? { home: true } : {}),
+    issuer: parachute.issuer, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, parachute.issuer) ? { revocationEndpoint: revocation } : {}),
     clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now(), how: b.how, ...(b.whose ? { whose: b.whose } : {}) };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   const url = new URL(meta.authorization_endpoint);
@@ -141,7 +146,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("state", state);
   url.searchParams.set("scope", scope);
-  if (b.step !== "list") url.searchParams.set("vault", vaults[0]);
+  if (b.step === "open") url.searchParams.set("vault", b.vault!);
   return url.toString();
 }
 
@@ -164,7 +169,8 @@ export function takePending(state: string, now = Date.now()): Pending | "mismatc
   return p;
 }
 
-export type SignedIn = { pending: Pending; token: TokenResponse; vaults: string[]; vault: string | null };
+/** A finished step: its token, and for an `open` step the vault it reads and what the hub gave of it. */
+export type SignedIn = { pending: Pending; token: TokenResponse; vault: string | null; level: Level | null };
 
 /** The vault a token is for: its audience (`vault.<name>`), when it says. */
 export function audienceVault(accessToken: string): string | null {
@@ -176,8 +182,7 @@ export function audienceVault(accessToken: string): string | null {
 }
 
 /** Finish a step of signing in: check the state, trade the code for a token. Used once: the flow's secrets are gone
- *  after. `vaults`: the vaults the hub granted (steps "vaults" and "vault"), in the order asked; `vault`: the one this
- *  token reads. */
+ *  after. For an `open` step, the token must be for the vault asked for, and hold at least read of it. */
 export async function completeSignIn(code: string, state: string, fetchImpl?: typeof fetch): Promise<SignedIn> {
   const pending = takePending(state);
   if (!pending) throw new Error("This sign-in has expired or was already used. Start again.");
@@ -202,16 +207,16 @@ export async function completeSignIn(code: string, state: string, fetchImpl?: ty
   if (!token.access_token) throw new Error("The hub's answer had no token.");
   if (pending.step === "list") {
     if (!canList(token.scope)) throw new Error("The hub didn't let Parachute see which vaults are yours. Nothing was added.");
-    return { pending, token, vaults: [], vault: null };
+    return { pending, token, vault: null, level: null };
   }
-  // the vaults this sign-in holds: the hub's word (the token's scope), among those asked for; a token for something
-  // else (account-wide, or other vaults) is refused, not stored
-  const vaults = grantedVaults(token.scope, pending.vaults);
-  if (!vaults.length) throw new Error("The hub signed in to none of the vaults asked for. Nothing was added.");
-  // the token reads the first vault it names (the hub's audience); one for a vault not granted here is refused
-  const aud = audienceVault(token.access_token) ?? token.vault ?? vaults[0];
-  if (!vaults.includes(aud)) throw new Error("The hub's token is for a vault it didn't grant here. Nothing was added.");
-  return { pending, token, vaults, vault: aud };
+  // what the token holds of the vault asked for: the hub's word (its scope); a token for something else (account-wide,
+  // or another vault) is refused, not stored
+  const vault = pending.vault!;
+  const level = levelIn(token.scope, vault);
+  if (!level) throw new Error(`The hub didn't give Parachute the ${vault} vault. Nothing was added.`);
+  const aud = audienceVault(token.access_token) ?? token.vault ?? vault;
+  if (aud !== vault) throw new Error("The hub's token is for a vault it wasn't asked for. Nothing was added.");
+  return { pending, token, vault, level };
 }
 
 /** A fresh access token (and the rotated refresh token) for a record. */

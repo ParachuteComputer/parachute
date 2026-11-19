@@ -125,18 +125,24 @@ export async function everyVault(hub: string, fetchImpl: typeof fetch = fetch.bi
   } catch { return null; }
 }
 
-/** The scope that asks for every vault named: read and write each (the hub gives read only where that is all the
- *  person holds). */
-export const scopeForVaults = (names: readonly string[]) => names.flatMap((n) => [`vault:${n}:read`, `vault:${n}:write`]).join(" ");
+/** How much of one vault the app asks a hub for (docs/design/SCOPES.md): `read` (every note in it), or `write` (read,
+ *  and add, change and delete notes). The hub narrows no further: folders are the app's own rule. */
+export type Level = "read" | "write";
+/** The scope that asks for one vault at one level: read, or read and write. Never more than one vault: each vault is
+ *  asked for when something the person allows needs it. */
+export const scopeFor = (vault: string, level: Level) => (level === "write" ? `vault:${vault}:read vault:${vault}:write` : `vault:${vault}:read`);
+/** What a token's scope holds of a vault: write, read, or nothing. As granted (the hub may give read where write was
+ *  asked: the person holds only read there). */
+export function levelIn(scope: string | undefined, vault: string): Level | null {
+  const words = new Set((scope ?? "").split(/\s+/));
+  if (words.has(`vault:${vault}:write`) || words.has(`vault:${vault}:admin`)) return "write";
+  return words.has(`vault:${vault}:read`) ? "read" : null;
+}
+/** Does `held` cover `need`? */
+export const covers = (held: Level | null, need: Level) => held === "write" || (held === "read" && need === "read");
 /** The scope that asks only to see which vaults are the person's: the un-narrowed account-vaults scope, which core 0.8
  *  and 0.9 and Parachute Cloud all take (Cloud refuses `account:self:vaults`: `self` isn't an account id there). */
 export const LIST_SCOPE = "account:vaults";
 /** Does a token's scope let it list the person's vaults? As granted: `account:vaults`, `account:<id>:vaults` (0.8,
  *  Cloud), or per vault, `account:<id>:vaults:<vault>:<verb>` (0.9). */
 export const canList = (scope: string | undefined) => (scope ?? "").split(/\s+/).some((w) => w === LIST_SCOPE || /^account:[^:\s]+:vaults(:|$)/.test(w));
-
-/** The vaults a token's scope grants: the hub's word on what this sign-in holds, among the ones asked for. */
-export function grantedVaults(scope: string | undefined, asked: readonly string[]): string[] {
-  const words = new Set((scope ?? "").split(/\s+/));
-  return asked.filter((n) => words.has(`vault:${n}:read`) || words.has(`vault:${n}:write`));
-}

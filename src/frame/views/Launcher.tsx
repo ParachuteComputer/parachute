@@ -93,11 +93,11 @@ export default function Launcher() {
         const chapters = <div className={vaults.length > 1 ? "launcher-spread launcher-pages" : "launcher-spread"}>
           {here.map((v, i) => <Chapter key={v.key} n={from + i} v={v} many={vaults.length > 1} level={p && grouped ? 3 : 2} recent={recent[v.key]} onHold={(a) => setAsked({ v, a })} onPart={(c) => setPart({ v, c })} />)}
         </div>;
-        if (!p || !grouped) return <div key={p?.hub ?? "all"}>{p && <NewVaults p={p} />}{chapters}</div>;
+        if (!p || !grouped) return <div key={p?.hub ?? "all"}>{p && <VaultsToOpen p={p} />}{chapters}</div>;
         return (
           <section key={p.hub} className="parachute" aria-label={`Parachute: ${p.name}`}>
             <h2 className="parachute-name">{p.name}{p.name !== p.host && <span className="parachute-host"> · {p.host}</span>}</h2>
-            <NewVaults p={p} />
+            <VaultsToOpen p={p} />
             {p.signedIn ? chapters
               : <p className="parachute-out">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`} aria-label={`Sign in to ${p.name}`}>Sign in</Link></p>}
           </section>
@@ -125,9 +125,10 @@ export function byParachute(vaults: FrameVault[], parachutes: FrameParachute[]):
   return out;
 }
 
-/** Vaults made on a Parachute since this device signed in there: one quiet line each. A tap opens the hub's consent
- *  for it (the shell's, vault/newVaults.ts); Not now stops offering it here. */
-function NewVaults({ p }: { p: FrameParachute }) {
+/** The person's vaults on a Parachute that this device doesn't read yet (docs/design/SCOPES.md): the sign-in reads only
+ *  the home, and each other vault is one quiet line. A tap asks the hub to read that one vault (the shell's,
+ *  vault/newVaults.ts); Not now stops offering it here. */
+export function VaultsToOpen({ p }: { p: FrameParachute }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   if (!p.fresh?.length) return null;
@@ -138,10 +139,10 @@ function NewVaults({ p }: { p: FrameParachute }) {
     addVault(p.hub, v).catch((e: unknown) => { setError(e instanceof Error && e.message !== "not_allowed" ? e.message : "That needs a tap."); setBusy(false); });
   };
   return (
-    <ul className="parachute-new plain" aria-label={`New vaults on ${p.name}`}>
+    <ul className="parachute-new plain" aria-label={`Vaults to open on ${p.name}`}>
       {p.fresh.map((v) => (
         <li key={v}>
-          <button type="button" className="parachute-new-add" disabled={busy} onClick={() => add(v)}>New: <b>{v}</b>, tap to add</button>
+          <button type="button" className="parachute-new-add" disabled={busy} onClick={() => add(v)}>Open <b>{v}</b></button>
           <button type="button" className="quiet-button" disabled={busy} aria-label={`Not now: ${v}`} onClick={() => void dismissVault(p.hub, v).catch(() => undefined)}>Not now</button>
         </li>
       ))}

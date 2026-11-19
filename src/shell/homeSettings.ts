@@ -161,8 +161,18 @@ const bump = (p: Partial<State> = {}) => { state = { ...state, ...p, rev: state.
 export function settingsNow(): Settings {
   const k = keptNow();
   const home = homeVault();
-  return k && home && k.vault === home.key ? k.settings : { ...EMPTY };
+  const s = k && home && k.vault === home.key ? k.settings : { ...EMPTY };
+  // a new person's simple app, chosen at their first sign-in, until the note can say so (docs/SIMPLE.md): the sign-in
+  // reads the home only, so the note is written the first time they let Parachute change notes there
+  return s.app === null && simpleHere() ? { ...s, app: "simple" } : s;
 }
+
+const SIMPLE_HERE_KEY = "parachute.app.simple-here.v1";
+const simpleHere = () => { try { return localStorage.getItem(SIMPLE_HERE_KEY) === "1"; } catch { return false; } };
+/** This device starts on the simple app (a new person on Parachute Cloud), whatever the note says until it says. */
+export function startSimpleHere() { try { localStorage.setItem(SIMPLE_HERE_KEY, "1"); } catch { /* this session */ } bump({}); }
+/** The note now says which app (written, or changed in Settings): the device's own start gives way. */
+export function forgetSimpleHere() { try { localStorage.removeItem(SIMPLE_HERE_KEY); } catch { /* nothing */ } }
 
 /** Whether the settings note was read from the home vault this session (not only the copy kept from before). Stays
  *  true while a later read runs, so a quick Back to the home doesn't find it "not read"; a read that fails clears it. */
@@ -313,10 +323,11 @@ export function barNow(s: Settings = settingsNow()): { start: (Found & { place: 
   return { start: start && s.start ? { ...start, place: s.start } : null, pins };
 }
 
-// what `find` answers changes with the applets read and the vaults held
-subscribeApplets(() => bump());
-subscribeVaults(() => bump());
+// what `find` answers changes with the applets read and the vaults held: followed from the first subscriber on (not at
+// load: the applet list imports this module's readers back)
+let following = false;
 export function subscribeSettings(f: () => void): () => void {
+  if (!following) { following = true; subscribeApplets(() => bump()); subscribeVaults(() => bump()); }
   listeners.add(f);
   return () => { listeners.delete(f); };
 }

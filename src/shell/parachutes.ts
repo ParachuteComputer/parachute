@@ -5,9 +5,9 @@ import { useSyncExternalStore } from "react";
 import { clientFor } from "../vault/client";
 import { CLOUD, CLOUD_NAME } from "../vault/parachute";
 import { originOf, listVaults, subscribeVaults, hostOf, type VaultRecord } from "../vault/store";
-import { isMine } from "../vault/whose";
-import { homeVault, setHome, HOME_KEY } from "./frameSource";
-import { listHub, readSettings, settingsNow, subscribeSettings, SETTINGS_TAG } from "./homeSettings";
+import { homeVault } from "./frameSource";
+import { levelIn } from "../vault/parachute";
+import { listHub, readSettings, settingsNow, startSimpleHere, subscribeSettings, SETTINGS_TAG } from "./homeSettings";
 
 export type ParachuteLine = {
   /** the Parachute's address (its issuer origin) */
@@ -48,32 +48,44 @@ export function useParachutes(): ParachuteLine[] {
   return parachutesNow();
 }
 
-/** After a sign-in to a Parachute: when this device has no home of the person's own yet, the vault of theirs that
- *  already holds their settings (another device wrote it there) becomes the home; then the Parachute goes on the
- *  person's list in the home vault (written once, on this tap), with `app: simple` for a person new to the app on
- *  Parachute Cloud (`cloud`: the hub said so). Best effort: the sign-in stands either way. */
-export async function afterSignIn(hub: string, kept: readonly VaultRecord[], cloud = false): Promise<void> {
-  let chosen: string | null = null;
-  try { chosen = localStorage.getItem(HOME_KEY); } catch { chosen = null; }
-  const mineNow = listVaults().filter(isMine);
-  // only a device with no home of its own before this sign-in looks for the one another device chose
-  const hadHome = mineNow.some((v) => v.key === chosen || !kept.some((k) => k.key === v.key));
-  // a person new to this app on Parachute Cloud starts on the simple app (docs/SIMPLE.md, startsSimple); anyone else
-  // starts as before. Settings changes it
+/** After a sign-in to a Parachute (docs/design/SCOPES.md): the sign-in read one vault, the home when it chose one
+ *  (`firstHome`: this device had no home before). Then the Parachute goes on the person's list in the home vault, when
+ *  Parachute may write there (the sign-in asks to read only: the list waits for the first time the person lets it change
+ *  notes in their home, vault/reach.ts), and a person new to the app on Parachute Cloud (`cloud`: the hub said so)
+ *  starts on the simple app. Best effort: the sign-in stands either way. */
+export async function afterSignIn(hub: string, kept: readonly VaultRecord[], cloud = false, firstHome = false): Promise<void> {
   let newPerson = false;
-  if (!hadHome) {
-    // the vault of theirs another device made the home (it holds the settings), else the first by name; kept as
-    // this device's home, so a later sign-in doesn't move it
-    const { holding, unread } = await withSettings(kept.filter(isMine));
-    const first = [...kept].filter(isMine).sort((a, b) => a.vault.localeCompare(b.vault))[0];
-    if (holding ?? first) setHome((holding ?? first).key);
-    // new only when every vault was read and none holds settings: a vault that couldn't be read may hold them
-    newPerson = !!first && startsSimple(cloud, !!holding, unread);
+  const home = homeVault();
+  if (firstHome && home && kept.some((k) => k.key === home.key)) {
+    // a home that holds no settings yet: a person new to this app (another device would have written them)
+    const { holding, unread } = await withSettings([home]);
+    newPerson = startsSimple(cloud, !!holding, unread);
+    if (newPerson) startSimpleHere();
   }
   await readSettings();
   if (!homeVault()) return;
+  await listThisHub(hub, newPerson);
+}
+
+/** Put a Parachute on the person's list (and the simple app, for a new person) when the home may be written; else it
+ *  waits (listWaiting, after the person lets Parachute change notes in their home). */
+async function listThisHub(hub: string, newPerson: boolean) {
   if (settingsNow().hubs.some((h) => h.hub === hub) && !newPerson) return;
-  try { await listHub(hub, true, hub === CLOUD ? CLOUD_NAME : undefined, newPerson ? "simple" : undefined); } catch { /* the list waits for the next sign-in */ }
+  const home = homeVault();
+  if (!home || levelIn(home.scope, home.vault) !== "write") { wait(hub, newPerson); return; }
+  try { await listHub(hub, true, hub === CLOUD ? CLOUD_NAME : undefined, newPerson ? "simple" : undefined); unwait(hub); } catch { wait(hub, newPerson); }
+}
+
+const WAITING_KEY = "parachute.hubs.waiting.v1";
+type Waiting = { hub: string; simple: boolean }[];
+const waiting = (): Waiting => { try { const v = JSON.parse(localStorage.getItem(WAITING_KEY) ?? "[]") as unknown; return Array.isArray(v) ? v.filter((w): w is Waiting[number] => !!w && typeof (w as Waiting[number]).hub === "string").slice(0, 20) : []; } catch { return []; } };
+const setWaiting = (w: Waiting) => { try { localStorage.setItem(WAITING_KEY, JSON.stringify(w)); } catch { /* this session */ } };
+function wait(hub: string, simple: boolean) { setWaiting([...waiting().filter((w) => w.hub !== hub), { hub, simple: simple || waiting().some((w) => w.hub === hub && w.simple) }]); }
+function unwait(hub: string) { setWaiting(waiting().filter((w) => w.hub !== hub)); }
+
+/** The home may be written now: the Parachutes that waited go on the list. */
+export async function listWaiting(): Promise<void> {
+  for (const w of waiting()) await listThisHub(w.hub, w.simple).catch(() => undefined);
 }
 
 /** Who starts on the simple app (docs/SIMPLE.md): a person signing in to Parachute Cloud on a device with no home of

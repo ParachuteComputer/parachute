@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from "vitest";
-import { canList, CLOUD, describe, grantedVaults, listFrom, parseHub, reachesEvery, rpcAnswer, scopeForVaults, vaultUrlFrom } from "./parachute";
+import { canList, CLOUD, describe, listFrom, parseHub, reachesEvery, rpcAnswer, covers, levelIn, scopeFor, vaultUrlFrom } from "./parachute";
 import { MAX_VAULTS } from "./address";
 import { hubOf, settingsFrom } from "../shell/homeSettings";
 
@@ -79,8 +79,13 @@ group("the vaults a hub lists and grants", () => {
     // an MCP door may answer as one server-sent event
     expect(listFrom(rpcAnswer(`event: message\ndata: ${JSON.stringify(listed([{ name: "kim" }]))}\n\n`)).vaults).toEqual(["kim"]);
   });
-  it("asks read and write of each, and keeps what the hub's scope names among those asked", () => {
-    expect(scopeForVaults(["a", "b"])).toBe("vault:a:read vault:a:write vault:b:read vault:b:write");
-    expect(grantedVaults("vault:b:read vault:a:read vault:a:write vault:z:read", ["a", "b", "c"])).toEqual(["a", "b"]);
+  it("asks for one vault at one level, and reads what a token holds of a vault", () => {
+    expect(scopeFor("a", "read")).toBe("vault:a:read");
+    expect(scopeFor("a", "write")).toBe("vault:a:read vault:a:write");
+    expect(levelIn("vault:b:read vault:a:read vault:a:write vault:z:read", "a")).toBe("write");
+    expect(levelIn("vault:b:read vault:a:write", "b")).toBe("read");
+    expect(levelIn("vault:b:read", "a")).toBeNull();
+    expect(levelIn("account:vaults vault:ab:read", "a")).toBeNull();
+    expect([covers("write", "read"), covers("read", "read"), covers("read", "write"), covers(null, "read")]).toEqual([true, true, false, false]);
   });
 });
