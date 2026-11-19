@@ -48,7 +48,7 @@ trap 'kill $hubpid 2>/dev/null || true; rm -rf "$hub"' EXIT
 for _ in $(seq 120); do grep -q "ready: hub" "$hub/serve.log" && break; sleep 0.25; done
 grep -q "ready: hub" "$hub/serve.log" || { cat "$hub/serve.log"; fail "the hub didn't start"; }
 # a second vault: one sign-in brings both
-PORT=$port "$PARACHUTE_CORE" vault create letters --json --no-mirror > /dev/null
+PORT=$port "$PARACHUTE_CORE" vault create work --json --no-mirror > /dev/null
 
 say "a throwaway key, linked to the hub's owner"
 # a Nostr key is a secp256k1 secret; its public key is the point's x coordinate (the secret never leaves this shell)
@@ -85,11 +85,11 @@ ax press "Continue" || fail "no Continue on the pick"
 ax wait "Approve Parachute?" 30 || fail "the hub's Approve page didn't open"
 shot 13-hub-consent
 ax press "Approve" || fail "no Approve on the hub's page"
-# the launcher: the home's chapter, and the other vault a line to open (the sign-in read the home only)
+# the launcher: the home's chapter (recipes, the first by name, chosen on the pick), and the other vault a line to open
+# (the sign-in read the home only)
 ax wait "Open the vault" 40 || fail "the launcher didn't open"
-# (its line is "Open letters": the name is in its own run of text there)
-ax wait "letters" 20 || fail "the other vault isn't offered to open"
 ax wait "recipes" 10 || fail "the home isn't in the launcher"
+ax wait "Open work" 20 || fail "the other vault isn't offered to open"
 sleep 2
 shot 14-launcher
 ax dump > "$out/14-launcher-ui.txt" 2>&1 || true
