@@ -36,15 +36,15 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
     await expect(words).toHaveValue(/Kale in the north bed/);
     await words.fill(`# Garden plan ${stamp}\n\nKale in the north bed. Garlic by the gate.`);
     await page.getByRole("button", { name: "Save" }).click();
-    // the sign-in reads the home only: the first change asks the hub first, and is made again after its yes
+    // the sign-in reads the home only: the first change asks the hub first; back from it, the words are as they were
+    // typed, and Save makes the change
     const ask = page.getByRole("dialog", { name: `Change notes in ${VAULT}` });
     await expect(ask).toContainText(`Parachute only reads ${VAULT} so far`);
     const { origin: app, pathname: at } = new URL(page.url());
     await ask.getByRole("button", { name: /^Continue to / }).click();
     await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
     expect(await approveUntilBack(page, hub.origin, app, undefined, at)).toBe(1);
-    await expect(words).toHaveValue(/Kale in the north bed/);
-    await words.fill(`# Garden plan ${stamp}\n\nKale in the north bed. Garlic by the gate.`);
+    await expect(words).toHaveValue(/Garlic by the gate\./);
     await page.getByRole("button", { name: "Save" }).click();
     await expect(ui(page).getByText("Garlic by the gate.")).toBeVisible();
     expect(((await api(hub, "GET", `notes/${note.id}?include_content=true`)) as Row).content).toContain("Garlic by the gate.");

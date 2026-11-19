@@ -5,11 +5,13 @@
 //   at the hub, and what the app holds reads only.
 // Runs last (signs-in project): signing in again retires the shared sign-in.
 import { expect, test, type Page } from "@playwright/test";
-import { api, hubState, MORE_VAULTS, mintToken, record, VAULT } from "./hub";
-import { approveUntilBack, fromAppletMenu, held, openVault, ui } from "./helpers";
+import { api, cli, hubState, MORE_VAULTS, mintToken, ORG_VAULT, record, techneState, VAULT, type HubState } from "./hub";
+import { approveUntilBack, fromAppletMenu, held, letWrite, openVault, signIn, signInWithKey, ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";
 
 const OTHER = MORE_VAULTS[0].vault; // letters
+/** A token on another hub of the tests, as its operator. */
+const cliToken = (h: HubState, scope: string) => cli(h, ["auth", "mint-token", "--scope", scope, "--json"]).token as string;
 
 /** Every scope the app sends the hub's authorize, in order. */
 function asksOf(page: Page): string[] {
@@ -110,4 +112,44 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
     const refused = await fetch(`${hub.origin}/vault/${OTHER}/api/notes`, { method: "POST", headers: { authorization: `Bearer ${now}`, "content-type": "application/json" }, body: JSON.stringify({ path: `Scratch/${stamp}`, content: "x" }) });
     expect(refused.status).toBe(403);
   } finally { await api(there, "DELETE", `notes/${journal.id}`, undefined, OTHER).catch(() => {}); }
+});
+
+test("signing in again keeps what the person let the app do: the home stays writable", async ({ page }) => {
+  const hub = hubState();
+  await signIn(page);
+  await letWrite(page, VAULT);
+  expect((await held(page))[VAULT]).toBe(`vault:${VAULT}:read vault:${VAULT}:write`);
+  // Settings → Sign in again on the Parachute: the hub's grant covers it, so no page; the home keeps write
+  const asks = asksOf(page);
+  await page.goto("/settings");
+  const app = new URL(page.url()).origin;
+  await page.getByRole("region", { name: `Parachute: ${new URL(hub.origin).host}` }).getByRole("link", { name: "Sign in again" }).click();
+  await page.getByRole("radio", { name: "Mine" }).check();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await approveUntilBack(page, hub.origin, app);
+  await expect.poll(() => held(page)).toEqual({ [VAULT]: `vault:${VAULT}:read vault:${VAULT}:write` });
+  expect(asks.at(-1)).toBe(`vault:${VAULT}:read vault:${VAULT}:write`);
+});
+
+test("someone else's vault where the person may only read: an applet that writes there isn't allowed, and says why", async ({ page }) => {
+  const org = techneState();
+  const there = { origin: org.origin, token: cliToken(org, `vault:${ORG_VAULT}:write`) };
+  const journal = await record(there, "create", appletRecord("journal"), ORG_VAULT);
+  try {
+    await signInWithKey(page, org, ORG_VAULT);
+    await page.goto("/settings");
+    await expect(page.getByRole("status").filter({ hasText: /approved code only|run sealed/ })).toBeVisible({ timeout: 45_000 });
+    await page.goto(`/v/${ORG_VAULT}/a/${journal.id}`);
+    const card = page.getByRole("region", { name: /asking for access/ });
+    await expect(card.getByRole("note")).toContainText(`change notes in ${ORG_VAULT}`);
+    const app = new URL(page.url()).origin;
+    await card.getByRole("button", { name: "Allow" }).click();
+    await page.waitForURL((u) => u.origin === org.origin || u.pathname === "/oauth/callback");
+    await approveUntilBack(page, org.origin, app, undefined, "/oauth/callback").catch(() => 0);
+    // the hub gave read (the person holds read there): nothing is allowed, and the screen says why
+    await expect(page.getByRole("alert")).toContainText(`read only in ${ORG_VAULT}`);
+    expect((await held(page))[ORG_VAULT]).toBe(`vault:${ORG_VAULT}:read`);
+    const grants = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem("parachute.applets.grants.v1") ?? "{}")));
+    expect(grants.filter((g) => g.includes(journal.id))).toEqual([]);
+  } finally { await api(there, "DELETE", `notes/${journal.id}`, undefined, ORG_VAULT).catch(() => {}); }
 });
