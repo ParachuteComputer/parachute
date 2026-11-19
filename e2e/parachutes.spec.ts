@@ -20,6 +20,7 @@ async function tidy() {
 
 // a fresh device: nothing held, not signed in on either hub
 test.use({ storageState: { cookies: [], origins: [] } });
+test.beforeEach(tidy);
 test.afterEach(tidy);
 
 test("sign in once per hub with the key: the home read, every other vault of yours a tap away, none you weren't given; no vault address typed", async ({ page }) => {
