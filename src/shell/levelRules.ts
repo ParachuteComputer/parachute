@@ -32,7 +32,8 @@ export function askedOf(raw: unknown): Asked {
   if (approvals) out.approvals = approvals;
   if (code) out.code = code;
   if (join) out.join = join;
-  if (idle !== undefined) out.idle = idle;
+  // off (0) asks nothing: it is the loosest, so a record saying it is the same as one saying nothing
+  if (idle) out.idle = idle;
   return out;
 }
 
@@ -49,6 +50,15 @@ export function raise(cur: Levels, asked: Asked): Levels {
     idle: asked.idle !== undefined ? stricterIdle(cur.idle, Math.min(asked.idle, IDLE_MAX)) : cur.idle,
   });
 }
+/** Two records' asks, each field the stricter (a field either names): an app followed live never asks less than the
+ *  person's own record for it. */
+export function stricterAsked(a: Asked, b: Asked): Asked {
+  const out: Asked = { ...b, ...a };
+  for (const k of ["approvals", "code", "join"] as const) if (a[k] && b[k]) out[k] = max(a[k]!, b[k]!);
+  if (a.idle !== undefined && b.idle !== undefined) out.idle = stricterIdle(a.idle, b.idle);
+  return out;
+}
+
 /** Whether `next` is looser than `cur` anywhere. */
 export const loosens = (cur: Levels, next: Levels) =>
   rank(next.approvals) < rank(cur.approvals) || rank(next.code) < rank(cur.code) || rank(next.join) < rank(cur.join) || stricterIdle(cur.idle, next.idle) !== next.idle;

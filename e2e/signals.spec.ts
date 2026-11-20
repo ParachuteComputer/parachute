@@ -62,8 +62,8 @@ test("a note someone else adds to Ideas raises its count on the bar while Ideas 
     await expect(card).toContainText("Show a count on the bar: new ideas from others (notes in Ideas/ that someone else added)");
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Ideas" })).toBeVisible();
-    await bar(page).getByRole("link", { name: "Launcher" }).click();
-    await expect(ui(page).getByRole("list", { name: `Applets in ${VAULT}` })).toBeVisible();
+    await bar(page).getByRole("link", { name: "Applets" }).click();
+    await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
     await expect(badge(page)).toHaveCount(0);
 
     // someone else's idea: counted at once, with Ideas closed
@@ -83,8 +83,8 @@ test("a note someone else adds to Ideas raises its count on the bar while Ideas 
     await bar(page).getByRole("link", { name: /Ideas/ }).click();
     await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Ideas" })).toBeVisible();
     await expect(badge(page)).toHaveCount(0);
-    await bar(page).getByRole("link", { name: "Launcher" }).click();
-    await expect(ui(page).getByRole("list", { name: `Applets in ${VAULT}` })).toBeVisible();
+    await bar(page).getByRole("link", { name: "Applets" }).click();
+    await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
     await expect(badge(page)).toHaveCount(0);
   } finally {
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});

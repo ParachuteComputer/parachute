@@ -76,6 +76,26 @@ the person approved, never new code. And the person's key has copies in other so
 holds it can sign an approval. Making the key on the phone with no export, and other devices signing through it, is
 the rotation step (#systems, T-487).
 
+## What an unsigned record can change
+
+Anyone who can write the home vault (the person's agent, a token, the hub) can change an app record without a
+signature. So the app reads it for three things only: **the home** (`start`), **the pins** (`bar`) and **the list**
+(`sources`, `hide`, `opens`, `keep`, `look`). Everything else in it is read as nothing (`src/shell/apps.ts` `appOf`
+keeps only those fields), and none of the three runs code:
+
+- the home opens on its card, or waits for Open, until the person allowed that exact code and chose it as home on this
+  device (`start.ts`); a pin or an applet in the list asks on its card the first time, and again when its code changes;
+- a record can't grant: a word like `grants`, `approved` or `code` in it is not read;
+- a record can raise the security levels, never lower them ("Security levels" below): each device keeps its own
+  natively and takes from the open app's record only what is stricter, so a record that later says less, breaks, goes,
+  or is replaced by another app that says less (named in the settings note) leaves them as they are; an app someone
+  else offers, followed live, asks each level as the stricter of theirs and the person's own record for it. Lowering is
+  the person's signed approval from an unlocked device.
+
+Tests: `src/shell/appTrust.test.ts` (each field, raised never lowered, the live merge) and `e2e/thinshell.spec.ts` (a hostile
+record opens the home on its card, its pin asks, nothing is granted). A record that doesn't load leaves the plain list
+with *Your app record didn't load* and Settings ([NAVIGATION.md](../NAVIGATION.md#a-way-back)).
+
 ## Security levels
 
 Aaron (11-18): "the app itself should be able to have specified levels of security… require a password to do anything
@@ -199,9 +219,12 @@ lists); the gateway then adds one per event. A mail server reporting its own cou
 | "Make a separate approval key" (KEYRING.md) | one personal key (Aaron, 11-18) | now: not offered; one made before can still be removed |
 | `KEEP = 3`, `parachute.applet-storage.v1:*` | `keep`, the saved store | now (copied once) |
 | "The launcher is for everything" | the open app | now |
+| The launcher's vault chapters, masthead (the week's line, its tally, the hills) and "Lately in" | the list of the app's applets; the home applet for the first page; Settings for vaults | now (11-19, T-476 thin shell) |
+| The launcher and the home placed on the bar by the app | the record's pins, then Applets | now (11-19) |
 | `bar` and `start` in `Parachute/Settings` | the app record | when no device runs a build from before 11-19 (date for Uni to set) |
 | Draft PR #50 | this note | closed 11-19, when #66 merged |
 | `security.approve` in a record, and "a passcode set here means approving code asks it" | `security.code` and the levels (a device that kept a passcode before keeps `code: passcode`) | now: `approve` is still read as `code` until no record says it (Uni to check Aaron's, then drop the alias) |
 | The passcode under Settings → Approving code | Settings → Security | now |
 | The grace ending when the app leaves the screen | ending when the screen goes off (Aaron, 11-18) | now |
+| `src/shell/appFloor.ts` (#73: a web-side, per-home floor for `security.approve`) | the native levels (device-wide, raise-only, lowered only by a signed approval) | now (its `parachute.app.floor.v2` key is no longer read) |
 | Rooms' message notifications as the only thing heard while closed | signals (the message push stays: it opens the room) | nothing removed; `notify` stays the relay's declaration a signal points at |

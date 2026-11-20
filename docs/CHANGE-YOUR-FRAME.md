@@ -1,7 +1,7 @@
 # Change your frame
 
-For a chat AI with the Parachute MCP, and for people. The **frame** is the screens around your notes: the launcher,
-a vault, a note, and "Open with…". The Parachute app has a built-in frame. You can have your own instead: **one note**
+For a chat AI with the Parachute MCP, and for people. The **frame** is the screens around your notes: the list of
+applets, a vault, a note, and "Open with…". The Parachute app has a built-in frame. You can have your own instead: **one note**
 in your home vault. The app never takes sign-ins, grants or the permission card from a vault: those stay in the app.
 
 ## Start from the built-in frame
@@ -27,7 +27,7 @@ Its code may import only `react`, `react-dom`, `react-dom/client`, `react/jsx-ru
 
 | From `@parachute/frame` | What it is |
 |---|---|
-| `Launcher`, `NotesHome`, `VaultView`, `NoteRoute`, `NoteView`, `NoVault`, `Sheet`, `Bar` | The built-in screens and parts (`Home` is the launcher's older name; `NotesHome` is the simple app's home, [SIMPLE.md](SIMPLE.md)) |
+| `Launcher`, `NotesHome`, `VaultView`, `NoteRoute`, `NoteView`, `NoVault`, `Sheet`, `Bar` | The built-in screens and parts (`Launcher` is the list of the app's applets, `Home` its older name; `NotesHome` is the simple app's home, [SIMPLE.md](SIMPLE.md)) |
 | `Note`, `Days`, `List`, `Card`, `Field`, `Empty` | The parts applets have ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)), in the theme's look |
 | `installLongPress`, `openSheet`, `closeSheet`, `useOpenWith` | Open with, and the long-press that offers it |
 | `useVaults`, `useVault`, `useVaultQuery`, `readerFor`, `useApplets`, `useDefaults` | The vaults this device holds and reads of them (no sign-ins) |
@@ -36,14 +36,14 @@ Its code may import only `react`, `react-dom`, `react-dom/client`, `react/jsx-ru
 | `noteHref`, `titleOf`, `folderOf` | Small helpers |
 
 Start from the built-in frame's code (the note "Make this mine" writes) and change what you need: add a screen,
-change the vault view, or put something above the notes. For example, a heading on the launcher:
+change the vault view, or put something above the notes. For example, a heading on the list of applets:
 
 ```tsx
 <Route path="/" element={<><h2>Good morning</h2><Launcher /></>} />
 ```
 
-The bar at the foot of the screen is the app's own, under any frame: what is on it is your settings note
-([NAVIGATION.md](NAVIGATION.md)), not frame code.
+The bar at the foot of the screen is the app's own, under any frame: what is on it is your app record's pins (or your settings note,
+[NAVIGATION.md](NAVIGATION.md)), not frame code.
 
 ## What the person sees
 

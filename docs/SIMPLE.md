@@ -33,8 +33,8 @@ note.
 
 ## What it is made of (today's mechanisms)
 
-- **Notes** is the built-in frame's home when `app` is `"simple"` (`src/frame/views/NotesHome.tsx`; the launcher
-  otherwise). It reads every vault this device holds through the frame's reads, as the launcher does: the home at
+- **Notes** is the built-in frame's home when `app` is `"simple"` (`src/frame/views/NotesHome.tsx`; the list of
+  applets otherwise). It reads every vault this device holds through the frame's reads: the home at
   first, and each other vault once the person taps its **Open** line there (the hub asks to read that one).
 - **New note and Edit** are a shell screen (`src/views/NoteEdit.tsx`), not the frame: a frame can be the person's
   own code from their vault, and it still writes nothing. The frame only sends the person there
@@ -47,6 +47,11 @@ note.
   applet's does: read, add and change notes in `Inbox/`, the microphone through the app, and to open the notes you tap
   in it (a capture opens in the app, where it can be edited). It uses the kit only
   (`vault`, `voice.record`, `vault.attach` with `transcribe`, `Link`).
+- **Home** (`applets/home.json`, `.tsx`) is Parachute Simplified's starter home applet, shipped with the app's other
+  records: a greeting, a line that lands in `Inbox/` (as Capture names it), your newest notes across your vaults, and
+  your pins. It goes in as any applet does (`scripts/install-applets.ts --applet home --start home`), its card asks
+  (add notes in `Inbox/`, the newest notes' titles, the bar, going somewhere on a tap), and the settings note's `start`
+  makes it open first. It is an ordinary applet: the person or their AI can change it.
 - **Connect** is a shell screen (`src/views/Connect.tsx`): each opened vault's address is the vault's own (Parachute Cloud's
   Connect page gives the same one), and copying needs the app's own clipboard.
 
@@ -65,7 +70,7 @@ comes with the app and is written into the vault on a tap; its card then asks as
 
 ## What this replaces (subtract)
 
-Nothing old runs beside it. For a new Cloud person, the launcher's "No applets here yet." chapters and the key-first
+Nothing old runs beside it. For a new Cloud person, the old launcher's "No applets here yet." chapters and the key-first
 first screen are replaced by Notes and **Sign in with Parachute Cloud**. Everyone else's app is unchanged, and **Your
 app** switches between the two. The simple app's bar is still drawn by the shell (`src/shell/BottomBar.tsx`) from the
 app's `look`; a record can add places after Notes, Capture and Connect.

@@ -85,14 +85,17 @@ ax press "Continue" || fail "no Continue on the pick"
 ax wait "Approve Parachute?" 30 || fail "the hub's Approve page didn't open"
 shot 13-hub-consent
 ax press "Approve" || fail "no Approve on the hub's page"
-# the launcher: the home's chapter (recipes, the first by name, chosen on the pick), and the other vault a line to open
-# (the sign-in read the home only)
-ax wait "Open the vault" 40 || fail "the launcher didn't open"
-ax wait "recipes" 10 || fail "the home isn't in the launcher"
-ax wait "Open work" 20 || fail "the other vault isn't offered to open"
+# the list of the app's applets; in Settings, the home (recipes, the first by name, chosen on the pick) to open, and the
+# other vault a line to open (the sign-in read the home only)
+ax wait "No applets here yet." 40 || fail "the list of applets didn't open"
 sleep 2
-shot 14-launcher
-ax dump > "$out/14-launcher-ui.txt" 2>&1 || true
+shot 14-list
+ax press "Settings" || fail "no Settings on the list"
+ax wait "Open recipes" 20 || fail "the home isn't in Settings"
+ax wait "Open work" 20 || fail "the other vault isn't offered to open"
+shot 14b-settings-vaults
+ax dump > "$out/14-settings-ui.txt" 2>&1 || true
+ax press "Back" || fail "no Back from Settings"
 
 say "remove the key, make a new one"
 remove_key
@@ -134,4 +137,4 @@ echo "paired: the sender's key is the app's key, in the Keychain"
 shot 17-paired-key
 
 pkill -x "$exe" || true
-say "ok: pasted, new and paired keys each kept in the Keychain and removed; signed in to a Parachute with a key; both vaults in the launcher"
+say "ok: pasted, new and paired keys each kept in the Keychain and removed; signed in to a Parachute with a key; both vaults in Settings"

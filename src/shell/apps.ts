@@ -11,7 +11,7 @@
 // own record follows (`live`): read from their vault each time, so their changes show; their code still asks.
 // Pure, but for nothing: every reader here takes what it needs.
 import { plain, stripExt } from "../applet/contract";
-import { askedOf, type Asked } from "./levelRules";
+import { askedOf, stricterAsked, type Asked } from "./levelRules";
 
 export const APP_TAG = "parachute-app";
 export const APP_FOLDER = "Parachute/Apps/";
@@ -107,7 +107,7 @@ export function appOf(raw: unknown, path: string | null, noteId: string | null):
 export function builtInApp(id: "everything" | "simple"): App {
   return id === "simple"
     ? { id, name: "Simple", glyph: "¶", note: "your notes, Capture, and Connect an AI", look: "notes", sources: [], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: {}, noteId: null }
-    : { id, name: "Everything", glyph: "⁂", note: "the launcher, with every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: {}, noteId: null };
+    : { id, name: "Everything", glyph: "⁂", note: "every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: {}, noteId: null };
 }
 /** Stands for every hub in the built-in Everything only: no record can say it (`hubOk` refuses it). */
 export const ANY_HUB = "*";
@@ -152,4 +152,12 @@ export function recordOf(app: App): Record<string, unknown> {
     ...(app.opens.length ? { opens: app.opens } : {}), ...(app.keep !== "auto" ? { keep: app.keep } : {}),
     ...(Object.keys(app.security).length ? { security: app.security } : {}),
   };
+}
+
+/** An app someone else offers, as the person follows it: their record, under the person's own id and name for it, and
+ *  never less careful than the person's own record asks: each level the stricter of the two (shell/levelRules.ts). A
+ *  device's levels are raised by the open app's record and never lowered by one (src-tauri/src/levels.rs). */
+export function followed(own: App, raw: unknown, theirs: Record<string, unknown>): Record<string, unknown> {
+  return { ...theirs, contract: 1, id: own.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: own.live,
+    ...(Object.keys(own.security).length || theirs.security !== undefined ? { security: stricterAsked(own.security, askedOf(theirs.security)) } : {}) };
 }

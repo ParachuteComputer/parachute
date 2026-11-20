@@ -1,0 +1,17 @@
+{
+  "path": "Applets/Home",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "home",
+      "name": "Home",
+      "glyph": "◠",
+      "note": "today: a line into Inbox, your newest notes, your pins",
+      "access": [{ "vault": "here", "allow": [{ "path": "Inbox/", "verbs": ["create"] }] }]
+    },
+    "app": ["recent", "pins", "open"],
+    "services": []
+  }
+}

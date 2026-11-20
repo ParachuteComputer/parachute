@@ -17,13 +17,17 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
 - **Sign in with your Nostr key.** Pair it from the Uni app or Buzz desktop (encrypted end to end; a 6-digit code to
   check), make a new one, or paste one. It stays in the Android Keystore or the Mac's Keychain, never in the web side.
 - **Your Parachutes.** Sign in once per hub (0.8 or 0.9) with your key, a password, or Parachute Cloud's own page. It
-  asks to read your home vault only; each other vault is an **Open** line in the launcher, and an applet asks your hub
+  asks to read your home vault only; each other vault is an **Open** line in Settings, and an applet asks your hub
   for its own vault (read, or change notes) when you allow it, and gives it back when you revoke it
   ([docs/design/SCOPES.md](docs/design/SCOPES.md)). The list of your Parachutes is kept in your home vault, so a new
   device finds them all.
-- **Other Parachutes.** Add an org's Parachute as someone else's; bring its applets into your launcher and put its
+- **Other Parachutes.** Add an org's Parachute as someone else's; bring its applets into your own Parachute and put its
   components on your home, each in its own sealed frame with its own card, seeing only what that card allows of their
   vault ([docs/OTHER-PARACHUTES.md](docs/OTHER-PARACHUTES.md)).
+- **Your app.** The app opens on the home applet your app record names (`Parachute/Apps/<id>`), the bar is that
+  record's pins in its order, then **Applets**: one list of the app's applets. Vaults are in Settings. *Changed:* the
+  bar no longer puts your home first by itself: pin it (long-press it in Applets, **Pin to the bar**) to keep it there.
+  A record that doesn't load leaves you the list and Settings ([docs/NAVIGATION.md](docs/NAVIGATION.md)).
 - **Your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, or in
   the plain view. Write a new note and edit a note's words in the app.
 - **The simple app** for a Parachute Cloud person: Notes across the vaults you've opened, Capture (text or voice into Inbox/) and
@@ -32,7 +36,7 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   ([docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md)). It runs sealed, only after you allow it, and asks again when its
   code changes. A small kit (`parachute`) gives it record calls and parts to build a screen from.
 - **One look.** The app and every applet follow one theme note in your home vault ([docs/THEME.md](docs/THEME.md)).
-  Make the launcher your own with a frame note ([docs/CHANGE-YOUR-FRAME.md](docs/CHANGE-YOUR-FRAME.md)).
+  Make the screens around your notes your own with a frame note ([docs/CHANGE-YOUR-FRAME.md](docs/CHANGE-YOUR-FRAME.md)).
 - **Applets that talk to servers.** An applet can name its servers; the card says each and what the app signs there as
   you, and the app talks to them for it with your key, which the applet never holds. The first: Rooms (your rooms on a
   Buzz relay, with Uni's cards), Mail (through a mail gateway), Journal and Matrix ([docs/PARITY.md](docs/PARITY.md)).

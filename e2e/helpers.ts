@@ -3,10 +3,12 @@ import { api, hubState, record, VAULT } from "./hub";
 import { withImports, type AppletRecord } from "../applets/record.ts";
 import { keyDoor } from "./keys";
 
-/** The app back from the hub with every vault kept: on the launcher, `vault`'s chapter shown; or, for a person whose
- *  settings choose the simple app (docs/SIMPLE.md), on Notes. */
+/** The app back from the hub with every vault kept: on the list of applets (once `vault`'s are read: they, or the
+ *  line that there are none); or, for a person whose settings choose the simple app (docs/SIMPLE.md), on Notes. */
 async function backOnTheLauncher(page: Page, vault: string) {
-  await expect(ui(page).getByRole("region", { name: vault, exact: true }).or(ui(page).getByRole("heading", { level: 1, name: "Notes" }))).toBeVisible({ timeout: 20_000 });
+  void vault;
+  const list = ui(page).getByRole("list", { name: "Applets" });
+  await expect(list.getByRole("link").first().or(list.getByText("No applets here yet.")).or(ui(page).getByRole("heading", { level: 1, name: "Notes" }))).toBeVisible({ timeout: 20_000 });
 }
 
 /** The hub's Approve, as many times as it asks (the app without a key asks twice: to see which vaults are the person's,
@@ -58,13 +60,13 @@ export async function signIn(page: Page, vault = VAULT) {
   await backOnTheLauncher(page, vault);
 }
 
-/** Open a vault the sign-in didn't read (docs/design/SCOPES.md): its line on the launcher, then the hub's Approve to read
+/** Open a vault the sign-in didn't read (docs/design/SCOPES.md): its line in Settings, then the hub's Approve to read
  *  it. Returns how many times the hub asked (0: its grant already covered it). */
 export async function openVault(page: Page, vault: string, onConsent?: (page: Page) => Promise<void>): Promise<number> {
   const hub = hubState();
-  await page.goto("/");
+  await page.goto("/settings");
   const app = new URL(page.url()).origin;
-  await ui(page).getByRole("button", { name: `Open ${vault}`, exact: true }).click();
+  await page.getByRole("button", { name: `Open ${vault}`, exact: true }).click();
   await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
   const asked = await approveUntilBack(page, hub.origin, app, undefined, "/", onConsent);
   await backOnTheLauncher(page, vault);
