@@ -1,7 +1,9 @@
 # Parachute
 
-One app for your vaults and the applets that grow on them. Early: version 0.1.0, a pre-release
-([what works and what doesn't](RELEASE-NOTES.md)).
+Parachute is your own vault that any AI can read and write, and an app that shows you what is in it. **This repo is
+the app**: a thin app that shows whatever your vault says (the applets, the home, the pins), each a record you and
+your AI write. Using it and building on it: [parachute.computer/docs](https://parachute.computer/docs/). Early:
+version 0.1.0, not yet released ([what works and what doesn't](RELEASE-NOTES.md)).
 
 ## Install and sign in
 
@@ -9,16 +11,17 @@ You need a Parachute (a hub of your own, an org's, or Parachute Cloud). On Parac
 screen, **Sign in with Parachute Cloud** (your email, then the code it mails you; no key), and the app opens on your
 notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you also need a Nostr key, or a new one:
 
-1. **Get the app** from the [releases page](https://github.com/ParachuteComputer/parachute/releases):
-   - **Android** (8 or newer, 64-bit ARM): download the `.apk` on the phone and open it.
-   - **Mac** (Apple Silicon): the `.dmg`. It isn't notarised, so macOS asks once:
-     [docs/INSTALL-MAC.md](docs/INSTALL-MAC.md). The newest build of `next` is in the
-     [Mac workflow's](https://github.com/ParachuteComputer/parachute/actions/workflows/mac.yml) artifacts.
+1. **Get the app.** There is no public release yet (what the first needs: [docs/LAUNCH.md](docs/LAUNCH.md)); once
+   there is, it is on the [releases page](https://github.com/ParachuteComputer/parachute/releases). Until then:
+   - **Android** (8 or newer, 64-bit ARM): an `.apk` built with `scripts/android-build.sh` (below); open it on the phone.
+   - **Mac** (Apple Silicon): the `.dmg` from the
+     [Mac workflow's](https://github.com/ParachuteComputer/parachute/actions/workflows/mac.yml) artifacts (the newest
+     build of `next`). It isn't notarised, so macOS asks once: [docs/INSTALL-MAC.md](docs/INSTALL-MAC.md).
 2. **Your key.** On the first screen, under the Cloud sign-in, **Make a new key**. If your key is already in the Uni app or
    [Buzz](https://github.com/unforcedagi/buzz) desktop, choose **Pair from a device that has your key** instead: on
    that device, Settings → **Pair a device** (in Buzz, **Pair mobile device**); here, scan its QR code (Android) or
    paste its `nostrpair://` link (Mac); check the 6-digit codes match.
-3. **Your hub knows your key.** The hub's owner links it once: `parachute auth link-pubkey --user <name> <npub>`. The
+3. **Your hub knows your key.** The hub's owner links it once: `parachute user pubkey add --user <name> <npub>` (0.8: `parachute auth link-pubkey`, the same arguments). The
    app shows your `npub1…`.
 4. **Your Parachute.** Type its address (`your-hub.example`), say whose it is (**Mine**), press **Sign in with your key**,
    and press **Approve** once on the hub's page: it lets Parachute read your home vault. Each other vault you can reach
@@ -31,8 +34,9 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
    **Someone else's**. Each one you add is listed in your home vault, so another device you sign in on finds them all,
    each a tap from signed in.
 
-**For agents:** an applet is one note your agent writes with the Parachute MCP; see
-[docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md). Building from source is under [Build](#build).
+**For agents:** an applet is one record your agent writes with the Parachute MCP; see
+[docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md) (on the site, in three parts, from
+[parachute.computer/docs/build/reference/applet](https://parachute.computer/docs/build/reference/applet/)). Building from source is under [Build](#build).
 
 ## What it does
 
