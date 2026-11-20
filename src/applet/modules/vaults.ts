@@ -419,6 +419,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           if (watches.size >= 8) throw new ContractError(ERROR_CODES.tooManyPending, "eight watches at most");
           const id = `w${prefix}${++watchN}`;
           const names = await namesFor(vault).catch(() => new Set<string>());
+          // the frame that asked went while the vault's names were read: no watch for it
+          if (ctx.closed()) throw new ContractError(ERROR_CODES.failed, "the applet's screen went");
           const stop = deps.watch(vault, type ?? null, (e) => {
             // the frame that asked is gone: nothing more goes to it
             if (ctx.closed()) { watches.get(id)?.(); watches.delete(id); return; }

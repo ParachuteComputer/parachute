@@ -28,12 +28,15 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   record's pins in its order, then **Applets**: one list of the app's applets. Vaults are in Settings. *Changed:* the
   bar no longer puts your home first by itself: pin it (long-press it in Applets, **Pin to the bar**) to keep it there.
   A record that doesn't load leaves you the list and Settings ([docs/NAVIGATION.md](docs/NAVIGATION.md)).
-- **Your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, or in
-  the plain view. A typed record shows its fields (name and value). Write a new note and edit a note's words and
+- **Vault**, Parachute's own viewer: your vaults, each one's types with counts, a type's records as a table (sort,
+  filter, group, saved views), a record's fields (changed where they stand), words, links both ways and history; what
+  your AI writes appears while you look; Sharing says what reaches a vault. One tap adds it ([docs/VAULT.md](docs/VAULT.md)).
+- **Your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, else in
+  Vault once it is added, else in the plain view. A typed record shows its fields (name and value). Write a new note and edit a note's words and
   fields in the app.
 - **Parachute Simplified** for a Parachute Cloud person: Notes across the vaults you've opened, Journal, Capture (text or
-  voice into Inbox/) and Connect an AI ([docs/SIMPLE.md](docs/SIMPLE.md)). *Changed:* it was called Simple, and Journal
-  is new on its bar.
+  voice into Inbox/), Vault and Connect an AI ([docs/SIMPLE.md](docs/SIMPLE.md)). *Changed:* it was called Simple, and
+  Journal and Vault are new on its bar.
 - **Applets.** An applet is one note in your vault (TSX, JSX or HTML) that a chat AI with the Parachute MCP can write
   ([docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md)). It runs sealed, only after you allow it, and asks again when its
   code changes. A small kit (`parachute`) gives it record calls and parts to build a screen from; it writes a

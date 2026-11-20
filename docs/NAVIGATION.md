@@ -98,7 +98,7 @@ That is the record as `create-record` takes it (on a hub before 0.9, `create-not
 `vault` is the vault's name (add `"hub": "https://…"` when two hubs hold vaults of the same name). `applet` is the
 applet note's path or id. A place that names an applet this device can't find is left off the bar, not an error.
 
-`bundle` says which bundle a new device opens: `"simple"` (Parachute Simplified: Notes, Journal, Capture, Connect: [SIMPLE.md](SIMPLE.md)),
+`bundle` says which bundle a new device opens: `"simple"` (Parachute Simplified: Notes, Journal, Capture, Vault, Connect: [SIMPLE.md](SIMPLE.md)),
 `"everything"` (every applet, and the bar above), or the id of one of your bundle records (below). Left out,
 everything. A person new to the app on Parachute Cloud gets `"simple"` at their first sign-in; Settings → **Your
 bundle** changes it. Until 2026-12-20 write it under its older name `app` too, with the same id: builds from before

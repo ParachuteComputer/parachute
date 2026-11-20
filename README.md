@@ -40,8 +40,8 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
   over the Buzz pairing relay, encrypted end to end), make a new one, or paste one. It stays in the app's native side, in
   the platform's secure storage.
 - **Parachute Simplified.** For a person whose notes are on Parachute Cloud: their notes across the vaults they've opened
-  (find, read, edit, write), Journal (a line a day, written or said), Capture (a line or a voice note into Inbox/) and
-  Connect an AI (each vault's connector address). A new Cloud person starts there; Settings → Your bundle switches to
+  (find, read, edit, write), Journal (a line a day, written or said), Capture (a line or a voice note into Inbox/), Vault
+  (each vault's types, a type's records as a table, a record's fields, links and history) and Connect an AI (each vault's connector address). A new Cloud person starts there; Settings → Your bundle switches to
   everything ([docs/SIMPLE.md](docs/SIMPLE.md)).
 - **Your Parachutes.** Sign in once per hub, with your key or another way the hub offers (a password, or Cloud's own
   sign-in). The sign-in reads your home vault only; each other vault you can reach there is one tap away in

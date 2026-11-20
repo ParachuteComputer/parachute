@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { carryOn } from "../FrameRouter";
 import ViewerLine, { viewerHref } from "./ViewerLine";
@@ -25,7 +25,10 @@ export default function VaultView() {
   const [stay, setStay] = useState(false);
   // `?with=vault`: the plain view, asked for (the way back when Vault itself won't do)
   const plain = new URLSearchParams(location.search).get("with") === "vault";
-  const toViewer = homeRead && !!rec && viewer?.status === "ok" && !stay && !plain;
+  // decided once per visit: a Vault the home's read finds late doesn't take over a plain view the person is reading
+  const firstRead = useRef<boolean | null>(null);
+  if (homeRead && firstRead.current === null) firstRead.current = viewer?.status === "ok";
+  const toViewer = firstRead.current === true && !!rec && viewer?.status === "ok" && !stay && !plain;
   useEffect(() => { if (toViewer && viewer && rec) carryOn(location.pathname, viewerHref(viewer, rec.key)).catch(() => setStay(true)); }, [toViewer]); // eslint-disable-line react-hooks/exhaustive-deps
   const [term, setTerm] = useState("");
   const load = useVaultQuery<Note[]>(rec, (c) => (term

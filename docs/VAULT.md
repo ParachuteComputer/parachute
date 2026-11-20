@@ -43,7 +43,9 @@ subscription, not a timer).
   `eq` filter work on any field); the table draws only the rows near the screen and reads the next page as its foot
   comes near. Measured: `e2e/viewer5000.spec.ts` (opt-in, `VIEWER_5000=1`).
 - **Kit parts** added for it, for every applet: `Table` and `Fields` (`src/kit/parts-data.tsx`).
-- **Core 0.8** has no types: Vault shows a tag with a schema as a type and a type's change as a tag's.
+- **Core 0.8** has no types: Vault shows a tag with a schema as a type and a type's change as a tag's. That path is
+  unit-tested against 0.8's words (`src/applet/vaults.test.ts`); Vault's e2e runs on 0.9 only (on 0.8 it skips), so it
+  is not yet exercised on a 0.8 hub.
 
 ## Where things open
 

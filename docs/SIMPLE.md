@@ -21,7 +21,7 @@ areas), Matrix, and the key and pairing screens. A person who has another applet
 | **Vault** | the bar | Parachute's own viewer ([VAULT.md](VAULT.md)): each vault's types and counts, a type's records as a table, a record's fields (changed where they stand), words, links and history. A note no other applet opens opens here. |
 | **Connect** | the bar | Each vault's connector address (`https://…/vault/<name>/mcp`) with **Copy**, and how to add it to Claude and ChatGPT. |
 
-The bar says **Notes · Journal · Capture · Vault · Connect**. **Vault** ([VAULT.md](VAULT.md)) is Parachute's own viewer: each vault's types, a type's records as a table, a record's fields, links and history; added with one tap, as Capture is. Settings (the foot of Notes, or ⋯ on the other screens) has
+The bar says **Notes · Journal · Capture · Vault · Connect**; Journal, Capture and Vault are each added with one tap. Settings (the foot of Notes, or ⋯ on the other screens) has
 **Your bundle: Parachute Simplified / Everything**.
 
 On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key); the key's ways come
@@ -77,7 +77,7 @@ screens. Capture and Journal each write into one folder of one vault, so they ca
 
 Parachute Simplified is one of the two bundles the app always has ([NAVIGATION.md](NAVIGATION.md#bundles)): the settings note's
 `bundle: "simple"` names it (`app: "simple"` before 11-20, still read). A record `Parachute/Bundles/simple` (`"look": "notes"`) changes
-it, for instance to put more on its bar; the Notes home, Journal, Capture and Connect stay its places. Its
+it, for instance to put more on its bar; the Notes home, Journal, Capture, Vault and Connect stay its places. Its
 `sources` don't narrow Notes, which shows every vault this device holds. Journal's and Capture's code come with the
 app and are written into the vault on a tap; each card then asks as any applet's does.
 
@@ -86,5 +86,5 @@ app and are written into the vault on a tap; each card then asks as any applet's
 Nothing old runs beside it. For a new Cloud person, the old launcher's "No applets here yet." chapters and the key-first
 first screen are replaced by Notes and **Sign in with Parachute Cloud**. Everyone else's app is unchanged, and **Your
 app** switches between the two. Its bar is still drawn by the shell (`src/shell/BottomBar.tsx`) from the app's `look`;
-a record can add places after Notes, Journal, Capture and Connect. `src/applet/shipped.ts` and `ShippedEntry` replace
+a record can add places after Notes, Journal, Capture, Vault and Connect. `src/applet/shipped.ts` and `ShippedEntry` replace
 Capture's own `capture.ts` and `CaptureEntry` (11-20): one way to add a shipped applet, not one per applet.

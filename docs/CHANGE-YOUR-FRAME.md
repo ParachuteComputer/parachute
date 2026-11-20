@@ -29,7 +29,7 @@ Its code may import only `react`, `react-dom`, `react-dom/client`, `react/jsx-ru
 
 | From `@parachute/frame` | What it is |
 |---|---|
-| `Launcher`, `NotesHome`, `VaultView`, `NoteRoute`, `NoteView`, `NoVault`, `Sheet`, `Bar` | The built-in screens and parts (`Launcher` is the list of the app's applets, `Home` its older name; `NotesHome` is Parachute Simplified's home, [SIMPLE.md](SIMPLE.md)) |
+| `Launcher`, `NotesHome`, `VaultView`, `NoteRoute`, `NoteView`, `NoVault`, `Sheet`, `Bar` | The built-in screens and parts (`Launcher` is the list of the app's applets, `Home` its older name; `NotesHome` is Parachute Simplified's home, [SIMPLE.md](SIMPLE.md); `VaultView` and `NoteRoute` carry on to Vault when it is added and allowed, [VAULT.md](VAULT.md)) |
 | `Note`, `Days`, `List`, `Card`, `Field`, `Empty` | The parts applets have ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)), in the theme's look |
 | `installLongPress`, `openSheet`, `closeSheet`, `useOpenWith` | Open with, and the long-press that offers it |
 | `useVaults`, `useVault`, `useVaultQuery`, `readerFor`, `useApplets`, `useDefaults` | The vaults this device holds and reads of them (no sign-ins) |

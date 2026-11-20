@@ -49,8 +49,9 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
     },
     watch(key, type, on: (e: WatchEvent) => void) {
       try {
-        // the live query sends what matches now first: one record of it is enough to start; then every change
-        return clientFor(rec(key)).subscribe({ ...(type ? { tag: type } : {}), includeContent: false, limit: 1 } as never, {
+        // the live query sends what matches now first (the hub ignores `limit` there: the whole type, or the whole
+        // vault, without bodies), then every change; only the changes go on to the applet
+        return clientFor(rec(key)).subscribe({ ...(type ? { tag: type } : {}), includeContent: false } as never, {
           onSnapshot: () => {},
           onUpsert: (n: unknown) => on({ upsert: n as never }),
           onRemove: (id: string) => on({ remove: id }),

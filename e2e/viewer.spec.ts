@@ -132,4 +132,77 @@ test.describe("Vault", () => {
     await page.getByRole("button", { name: "Open Vault" }).click();
     await expect(vaultUi(page).getByRole("region", { name: "Types" })).toBeVisible();
   });
+
+  test("a tap on a record opens it in Vault, running; a second tap switches it", async ({ page }) => {
+    test.skip(!(await typed()), "types are core 0.9's");
+    await addAndAllow(page);
+    // the plain vault view, asked for, lists the records as links: a tap there is a person's tap
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("link", { name: /^Book 05\b/ }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/a/[^/?]+\\?vault=${VAULT}&record=${made[5]}`));
+    await expect(vaultUi(page).getByRole("article", { name: "Book 05" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open Vault" })).toHaveCount(0);
+    // back to the list, another tap: the Vault that is running switches to it
+    await page.goBack();
+    await ui(page).getByRole("link", { name: /^Book 06\b/ }).first().click();
+    await expect(vaultUi(page).getByRole("article", { name: "Book 06" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open Vault" })).toHaveCount(0);
+  });
+
+  test("a record's words, a tag, a field and its history; a saved view; a new type; Revoke on the app's sheet", async ({ page }) => {
+    test.skip(!(await typed()), "types are core 0.9's");
+    await addAndAllow(page);
+    const v = vaultUi(page);
+    await v.getByRole("button", { name: new RegExp(`^${VAULT}`) }).click();
+    await v.getByRole("region", { name: "Types" }).getByRole("button", { name: /shelfbook/ }).click();
+    const table = v.getByRole("table", { name: "shelfbook" });
+    // a filter saved as a view: a record in Parachute/Views/, and a tab
+    await v.getByRole("button", { name: /^Filter/ }).click();
+    await v.getByLabel("shelf status").selectOption("read");
+    await expect(table.getByRole("row").nth(1)).toContainText("read");
+    await v.getByLabel("Save this view").fill("Read ones");
+    await v.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(v.getByRole("button", { name: "Read ones" })).toBeVisible();
+    const [view] = await api(hub(), "GET", `notes?path=${encodeURIComponent("Parachute/Views/shelfbook/Read ones")}`);
+    expect(view.metadata?.view ?? view.fields?.view).toMatchObject({ where: [{ field: "shelf_status", op: "eq", value: "read" }] });
+    // a record: its words edited, a tag added and taken away, a field added; its history then has the old words
+    await v.getByRole("button", { name: /^Filter/ }).click();
+    await table.getByRole("button", { name: "Open Book 02" }).click();
+    const rec = v.getByRole("article", { name: "Book 02" });
+    const book2 = async () => (await api(hub(), "GET", `notes?path=${encodeURIComponent("Shelf/Book 02")}&include_content=true`))[0];
+    await rec.getByRole("button", { name: "Edit words" }).click();
+    await rec.getByLabel("The record's words").fill("New words for book two.");
+    await rec.getByRole("button", { name: "Save" }).click();
+    await expect.poll(async () => (await book2()).content).toBe("New words for book two.");
+    await rec.getByLabel("Add a tag or type").fill("#fav");
+    await rec.getByRole("button", { name: "Add" }).first().click();
+    await expect.poll(async () => (await book2()).tags).toContain("fav");
+    await rec.getByLabel("Add a field").fill("isbn");
+    await rec.getByRole("button", { name: "Add" }).last().click();
+    await expect.poll(async () => Object.keys((await book2()).metadata ?? {})).toContain("isbn");
+    await rec.getByRole("button", { name: "Show history" }).click();
+    await rec.getByRole("region", { name: "Versions" }).getByRole("button").first().click();
+    await expect(rec.getByText(/As it was before/)).toBeVisible();
+    await expect(rec.getByText("A made-up book.")).toBeVisible();
+    // a new type, made with its first record
+    await rec.getByRole("button", { name: "← Close" }).click();
+    await v.getByRole("button", { name: new RegExp(`${VAULT}$`) }).first().click();
+    await v.getByLabel("New type").fill("seedling");
+    await v.getByRole("button", { name: "Make" }).click();
+    await expect(v.getByRole("article", { name: "First seedling" })).toBeVisible();
+    const types = await api(hub(), "GET", "types");
+    expect(types.some((t: { name: string; kind: string }) => t.name === "seedling" && t.kind === "type")).toBe(true);
+    const [first] = await api(hub(), "GET", `notes?path=${encodeURIComponent("Seedlings/First seedling")}`);
+    if (first) made.push(first.id);
+    // Sharing: Revoke asks on the app's own sheet; yes takes Vault's own access back here
+    await v.getByRole("button", { name: "← Close" }).click();
+    await v.getByRole("button", { name: new RegExp(`${VAULT}$`) }).first().click();
+    await v.getByRole("button", { name: "Sharing" }).click();
+    await v.getByRole("region", { name: "Applets you allowed here" }).getByRole("button", { name: "Revoke" }).click();
+    const sheet = page.getByRole("dialog", { name: "Revoke Vault?" });
+    await expect(sheet).toBeVisible();
+    await page.waitForTimeout(800);
+    await sheet.getByRole("button", { name: "Revoke" }).click();
+    await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible();
+  });
 });
