@@ -117,3 +117,44 @@ test("approving code at the passcode level refuses the unlock alone", async ({ b
     await api(hubState(), "DELETE", `notes/${made.id}`);
   }
 });
+
+// Found in review (T-476): the passcode typed for one card stayed in the box. A screen kept running holds its state, so
+// when its code changed the new card came up with the passcode already filled in, and Allow asked the unlock alone.
+test("the passcode typed for one card isn't left filled in for the next", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const made = await record(hubState(), "create", appletRecord("journal"));
+  const base = String((await api(hubState(), "GET", `notes/${made.id}`)).content);
+  const page = await device(browser, newKey());
+  const card = page.getByRole("region", { name: /asking for access/ });
+  const journal = page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Journal" });
+  try {
+    await page.goto("/settings");
+    await security(page).getByRole("textbox", { name: "New passcode" }).fill("garden-gate");
+    await security(page).getByRole("button", { name: "Set" }).click();
+    await expect(security(page).getByRole("status")).toContainText("Passcode kept");
+    await group(page, "Approving an applet's code").getByRole("button", { name: "Passcode" }).click();
+    await expect(group(page, "Approving an applet's code").getByRole("button", { name: "Passcode" })).toHaveAttribute("aria-pressed", "true");
+
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
+    await page.getByRole("textbox", { name: "Your passcode" }).fill("garden-gate");
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(journal).toBeVisible();
+
+    // its code changes while it is kept running (in-app moves only: the screen stays alive); shown again, the card asks,
+    // and asks the passcode again
+    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
+    const n = await api(hubState(), "GET", `notes/${made.id}`);
+    await api(hubState(), "PATCH", `notes/${made.id}`, { content: `${base}\n// v2\n`, if_updated_at: n.updatedAt });
+    await page.goBack();
+    await expect(card).toContainText("changed");
+    await expect(page.getByRole("textbox", { name: "Your passcode" })).toHaveValue("");
+    await page.getByRole("button", { name: "Allow this version" }).click();
+    await expect(page.getByText(/Not approved/)).toHaveText("Not approved: Your passcode is needed for this.");
+    await expect(journal).toHaveCount(0);
+  } finally {
+    await page.context().close();
+    for (const n of await tagged("parachute-approval")) if (n.path.endsWith(`/${made.id}`)) await api(hubState(), "DELETE", `notes/${n.id}`);
+    await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {});
+  }
+});
