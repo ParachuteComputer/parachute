@@ -37,6 +37,11 @@ notify: { mentions: true, from: [<hex key>], gateway: https://push.example/ }
    on that gateway's instance and `to` is the key the phone uses now, finds the applet that asked, and shows "A message for you in <room>"; a tap
    opens the applet at that message. The app reads the message itself from the relay, signed in as the person.
 
+**Older and newer apps.** An app may be newer or older than its gateway, and either may update first. A field the
+gateway doesn't know, in a registration, an unregistration or a set of counts, is left out, never refused; what it
+does read is checked as above, and only that is kept. (Gateways from before 11-20 refused any field they didn't know,
+`signals` among them.)
+
 ## Signals: the counts behind badges
 
 An applet may declare signals (the app's docs/design/APP-RECORD.md, "Signals"): what counts as something for the

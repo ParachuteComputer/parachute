@@ -21,14 +21,14 @@ export type RegSignal = { subject: string; signal: string; rooms: string[] | nul
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
-const only = (o: Record<string, unknown>, keys: string[]) => Object.keys(o).every((k) => keys.includes(k));
 
-/** The body of POST /signals: `{set: [{subject, signal, count}]}` (none to only read). */
+/** The body of POST /signals: `{set: [{subject, signal, count}]}` (none to only read). Fields this gateway doesn't know
+ *  are left out, as on a registration. */
 export function parseSignals(x: unknown): Parsed<{ subject: string; signal: string; count: number }[]> {
-  if (!plain(x) || !only(x, ["set"]) || !Array.isArray(x.set) || x.set.length > SIGNAL_LIMITS.set) return { ok: false, error: `signals is {set: [up to ${SIGNAL_LIMITS.set} {subject, signal, count}]}` };
+  if (!plain(x) || !Array.isArray(x.set) || x.set.length > SIGNAL_LIMITS.set) return { ok: false, error: `signals is {set: [up to ${SIGNAL_LIMITS.set} {subject, signal, count}]}` };
   const out: { subject: string; signal: string; count: number }[] = [];
   for (const s of x.set) {
-    if (!plain(s) || !only(s, ["subject", "signal", "count"]) || typeof s.subject !== "string" || !SUBJECT.test(s.subject) || !signalOk(s.signal)
+    if (!plain(s) || typeof s.subject !== "string" || !SUBJECT.test(s.subject) || !signalOk(s.signal)
       || typeof s.count !== "number" || !Number.isInteger(s.count) || s.count < 0 || s.count > SIGNAL_LIMITS.max) {
       return { ok: false, error: `each is {subject, signal, count}: an applet's id, a signal's id, 0 to ${SIGNAL_LIMITS.max}` };
     }
@@ -44,7 +44,7 @@ export function parseRegSignals(x: unknown, roomOk: (r: unknown) => boolean): Pa
   if (!Array.isArray(x) || x.length > SIGNAL_LIMITS.perReg) return bad;
   const out: RegSignal[] = [];
   for (const s of x) {
-    if (!plain(s) || !only(s, ["subject", "signal", "rooms"]) || typeof s.subject !== "string" || !SUBJECT.test(s.subject) || !signalOk(s.signal)) return bad;
+    if (!plain(s) || typeof s.subject !== "string" || !SUBJECT.test(s.subject) || !signalOk(s.signal)) return bad;
     if (s.rooms !== null && (!Array.isArray(s.rooms) || !s.rooms.length || s.rooms.length > 50 || !s.rooms.every(roomOk))) return bad;
     out.push({ subject: s.subject, signal: s.signal, rooms: s.rooms === null ? null : [...new Set(s.rooms as string[])].sort() });
   }
