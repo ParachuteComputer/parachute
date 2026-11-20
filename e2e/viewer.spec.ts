@@ -36,7 +36,8 @@ async function cleanup() {
   for (const id of made.splice(0)) await api(hub(), "DELETE", `records/${id}`).catch(() => {});
   for (const n of await api(hub(), "GET", "notes?path=Applets%2FVault")) await api(hub(), "DELETE", `notes/${n.id}`).catch(() => {});
   for (const n of await api(hub(), "GET", "notes?path_prefix=Parachute%2FViews%2F")) await api(hub(), "DELETE", `notes/${n.id}`).catch(() => {});
-  if (await typed()) await api({ ...hub(), token: mintToken(`vault:${VAULT}:admin`) }, "DELETE", "types/shelfbook").catch(() => {});
+  for (const n of await api(hub(), "GET", "notes?path_prefix=Seedlings%2F")) await api(hub(), "DELETE", `notes/${n.id}`).catch(() => {});
+  if (await typed()) for (const t of ["shelfbook", "seedling"]) await api({ ...hub(), token: mintToken(`vault:${VAULT}:admin`) }, "DELETE", `types/${t}`).catch(() => {});
 }
 
 test.describe("Vault", () => {
@@ -159,7 +160,8 @@ test.describe("Vault", () => {
     // a filter saved as a view: a record in Parachute/Views/, and a tab
     await v.getByRole("button", { name: /^Filter/ }).click();
     await v.getByLabel("shelf status").selectOption("read");
-    await expect(table.getByRole("row").nth(1)).toContainText("read");
+    // only "read" (not to-read, not reading) in the status column
+    await expect.poll(async () => [...new Set(await table.getByRole("row").locator(".pa-tcell:nth-child(3)").allTextContents())].filter((x) => x !== "shelf status")).toEqual(["read"]);
     await v.getByLabel("Save this view").fill("Read ones");
     await v.getByRole("button", { name: "Save", exact: true }).click();
     await expect(v.getByRole("button", { name: "Read ones" })).toBeVisible();
@@ -174,14 +176,19 @@ test.describe("Vault", () => {
     await rec.getByLabel("The record's words").fill("New words for book two.");
     await rec.getByRole("button", { name: "Save" }).click();
     await expect.poll(async () => (await book2()).content).toBe("New words for book two.");
+    // the record as read again after the save (a change goes to the version it was read at)
+    await expect(rec.getByText("New words for book two.")).toBeVisible();
+    await expect(rec.getByRole("button", { name: "Edit words" })).toBeVisible();
     await rec.getByLabel("Add a tag or type").fill("#fav");
     await rec.getByRole("button", { name: "Add" }).first().click();
+    await expect(rec.getByText("#fav")).toBeVisible();
     await expect.poll(async () => (await book2()).tags).toContain("fav");
     await rec.getByLabel("Add a field").fill("isbn");
     await rec.getByRole("button", { name: "Add" }).last().click();
     await expect.poll(async () => Object.keys((await book2()).metadata ?? {})).toContain("isbn");
     await rec.getByRole("button", { name: "Show history" }).click();
-    await rec.getByRole("region", { name: "Versions" }).getByRole("button").first().click();
+    // the oldest kept version has the words it was made with
+    await rec.getByRole("region", { name: "Versions" }).getByRole("button").last().click();
     await expect(rec.getByText(/As it was before/)).toBeVisible();
     await expect(rec.getByText("A made-up book.")).toBeVisible();
     // a new type, made with its first record
@@ -192,8 +199,6 @@ test.describe("Vault", () => {
     await expect(v.getByRole("article", { name: "First seedling" })).toBeVisible();
     const types = await api(hub(), "GET", "types");
     expect(types.some((t: { name: string; kind: string }) => t.name === "seedling" && t.kind === "type")).toBe(true);
-    const [first] = await api(hub(), "GET", `notes?path=${encodeURIComponent("Seedlings/First seedling")}`);
-    if (first) made.push(first.id);
     // Sharing: Revoke asks on the app's own sheet; yes takes Vault's own access back here
     await v.getByRole("button", { name: "← Close" }).click();
     await v.getByRole("button", { name: new RegExp(`${VAULT}$`) }).first().click();

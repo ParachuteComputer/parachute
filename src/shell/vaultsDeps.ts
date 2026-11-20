@@ -33,7 +33,9 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
   const req = (key: string) => clientFor(rec(key)) as unknown as VaultClient & Requesting;
   return {
     list: heldVaults,
-    request: (key, method, path, body) => req(key).request(`/api${path}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
+    // never from the browser's cache: the hub sends ETag and Last-Modified with no Cache-Control, so a browser may reuse a
+    // read of a moment ago (heuristic freshness), and a record just changed would read as it was
+    request: (key, method, path, body) => req(key).request(`/api${path}`, { method, cache: "no-store", ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
     door(key) {
       let d = doors.get(key);
       if (!d) {
