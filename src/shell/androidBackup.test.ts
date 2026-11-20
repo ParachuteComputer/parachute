@@ -12,6 +12,7 @@ describe("Android backup", () => {
   it("is off for the app, in the cloud and to a new phone", () => {
     const app = /<application\b[^>]*>/.exec(manifest)?.[0] ?? "";
     expect(app).toContain('android:allowBackup="false"');
+    expect(app).toContain('android:fullBackupContent="false"');
     const rules = /android:dataExtractionRules="@xml\/([a-z_]+)"/.exec(app)?.[1];
     expect(rules).toBeTruthy();
     const xml = readFileSync(new URL(`res/xml/${rules}.xml`, main), "utf8");
