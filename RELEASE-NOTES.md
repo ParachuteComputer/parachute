@@ -29,13 +29,15 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   bar no longer puts your home first by itself: pin it (long-press it in Applets, **Pin to the bar**) to keep it there.
   A record that doesn't load leaves you the list and Settings ([docs/NAVIGATION.md](docs/NAVIGATION.md)).
 - **Your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, or in
-  the plain view. Write a new note and edit a note's words in the app.
+  the plain view. A typed record shows its fields (name and value). Write a new note and edit a note's words and
+  fields in the app.
 - **Parachute Simplified** for a Parachute Cloud person: Notes across the vaults you've opened, Journal, Capture (text or
   voice into Inbox/) and Connect an AI ([docs/SIMPLE.md](docs/SIMPLE.md)). *Changed:* it was called Simple, and Journal
   is new on its bar.
 - **Applets.** An applet is one note in your vault (TSX, JSX or HTML) that a chat AI with the Parachute MCP can write
   ([docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md)). It runs sealed, only after you allow it, and asks again when its
-  code changes. A small kit (`parachute`) gives it record calls and parts to build a screen from.
+  code changes. A small kit (`parachute`) gives it record calls and parts to build a screen from; it writes a
+  record's fields, types and tags too, so what it changes is what your AI reads back.
 - **One look.** The app and every applet follow one theme note in your home vault ([docs/THEME.md](docs/THEME.md)).
   Make the screens around your notes your own with a frame note ([docs/CHANGE-YOUR-FRAME.md](docs/CHANGE-YOUR-FRAME.md)).
 - **Applets that talk to servers.** An applet can name its servers; the card says each and what the app signs there as

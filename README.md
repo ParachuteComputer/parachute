@@ -134,8 +134,8 @@ an applet by itself only when this device holds both its Allow and the person's 
 - `src/open/`: open with. The rule (`resolve.ts`, used by the frame); the defaults kept on this device and the tap marks,
   so an applet starts only on a person's tap (the shell's). The note's route, the sheet and long-press are the frame's.
 - `src/services/` and `src-tauri/src/services.rs`: the broker for an applet's servers. The web side holds the policy and
-  the relay connections; the native side signs, seals and sends, checking each call again (named kinds only, never a
-  Parachute hub) and writing down what it signed.
+  the relay connections; the native side signs, seals and sends, checking each call again (only the kinds the applet declared, never one on
+  its deny list, never a Parachute hub) and writing down what it signed.
 - `src-tauri/src/notify.rs`, `PushService.kt` and `services/push-gateway/`: notifications while the app is closed
   (Android). An applet's push gateway watches the relay with its own key and sends a sealed push (no words) through the
   phone's UnifiedPush distributor (ntfy from F-Droid); the shell signs only the gateway registration. Without a
