@@ -38,7 +38,8 @@ export const REACH_WORDS = ["voice"] as const;
 export type Reach = (typeof REACH_WORDS)[number];
 /** `reach` is set only when the manifest names something, so a manifest without it reads (and keys) as before. */
 export type Manifest = { contract: 2; id: string; name: string; glyph: string; note?: string; allow: Rule[]; search: SearchOffer[]; screens: Screen[]; reach?: Reach[] };
-export type Parse = { ok: true; manifest: Manifest } | { ok: false; error: string };
+/** `newer`: it was refused for a key or a contract this app doesn't know, so it was likely written for a newer app. */
+export type Parse = { ok: true; manifest: Manifest } | { ok: false; error: string; newer?: true };
 
 export const LIMITS = { id: 40, name: 40, note: 120, access: 8, rules: 8, search: 8, what: 40, screens: 8 };
 export const HERE = "here";
@@ -70,8 +71,8 @@ function wordsOf<T extends string>(x: unknown, allowed: readonly T[]): T[] | nul
 /** Validate the `applet` value of a note's metadata. */
 export function parseManifest(raw: unknown): Parse {
   if (!plain(raw)) return fail("applet must be an object");
-  if (raw.contract !== CONTRACT_V2) return fail(`unsupported contract ${String(raw.contract)}`);
-  if (!hasOnly(raw, KEYS)) return fail("applet has a key contract 2 doesn't know");
+  if (raw.contract !== CONTRACT_V2) return typeof raw.contract === "number" && raw.contract > CONTRACT_V2 ? { ok: false, error: `unsupported contract ${raw.contract}`, newer: true } : fail(`unsupported contract ${String(raw.contract)}`);
+  if (!hasOnly(raw, KEYS)) return { ok: false, error: "applet has a key contract 2 doesn't know", newer: true };
   const id = typeof raw.id === "string" && raw.id.length <= LIMITS.id && ID.test(raw.id) ? raw.id : null;
   if (!id) return fail("id must be short kebab-case (a-z, 0-9, -)");
   const name = line(raw.name, LIMITS.name);
@@ -157,6 +158,12 @@ export function parseManifest(raw: unknown): Parse {
   if (!m.screens.length) m.screens.push({ id: "home", name });
   return { ok: true, manifest: m };
 }
+
+/** The name to show for a manifest this app couldn't read (one written for a newer app): its name if that is one short
+ *  visible line, else nothing. */
+export const shownName = (raw: unknown): string | null => (plain(raw) ? line(raw.name, LIMITS.name) : null);
+export const shownGlyph = (raw: unknown): string => { const g = plain(raw) ? line(raw.glyph, 1) : null; return g && !/\s/.test(g) ? g : DEFAULT_GLYPH; };
+export const shownId = (raw: unknown): string | null => (plain(raw) && typeof raw.id === "string" && raw.id.length <= LIMITS.id && ID.test(raw.id) ? raw.id : null);
 
 /** The screen to open: the one asked for when the manifest declares it, else its first. */
 export function screenOf(m: Manifest, asked?: string | null): Screen {

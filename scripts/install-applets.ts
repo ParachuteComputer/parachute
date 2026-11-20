@@ -93,9 +93,11 @@ async function main() {
     const was = await api.find(rec.path);
     if (!was) { say(`add ${name} at ${rec.path}`); if (a.apply) await api.write("create", { ...rec }); continue; }
     const fieldsWere = { ...(was.metadata ?? {}) };
-    if (was.content === rec.body && same(fieldsWere.applet, rec.fields.applet) && same(fieldsWere.services, rec.fields.services) && same(fieldsWere.opens, rec.fields.opens) && same(fieldsWere.component, rec.fields.component) && same(fieldsWere.app, rec.fields.app)) { console.log(`${name}: unchanged`); continue; }
+    if (was.content === rec.body && same(fieldsWere.applet, rec.fields.applet) && same(fieldsWere.services, rec.fields.services) && same(fieldsWere.opens, rec.fields.opens) && same(fieldsWere.component, rec.fields.component) && same(fieldsWere.app, rec.fields.app) && same(fieldsWere.needs, rec.fields.needs)) { console.log(`${name}: unchanged`); continue; }
     say(`update ${name} at ${rec.path} (its card will ask again)`);
-    if (a.apply) await api.write("update", { id: was.id, body: rec.body, fields: { ...fieldsWere, ...rec.fields }, ...(was.updatedAt ? { if_updated_at: was.updatedAt } : {}) });
+    // `needs` (the oldest app it runs on, docs/design/VERSIONS.md) is the code's: one it no longer says goes
+    const { needs: _was, ...kept } = fieldsWere;
+    if (a.apply) await api.write("update", { id: was.id, body: rec.body, fields: { ...kept, ...rec.fields }, ...(was.updatedAt ? { if_updated_at: was.updatedAt } : {}) });
   }
   // the settings note: only what was asked changes; everything else in it stays
   const place = (n: string) => { const r = records[n] ?? (() => { try { return appletRecord(n, new Proxy({}, { has: () => true, get: () => "" })); } catch { return null; } })(); if (!r) throw new Error(`no applet ${n}`); return { vault: a.vault, applet: r.path }; };

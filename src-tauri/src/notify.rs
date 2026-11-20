@@ -622,7 +622,12 @@ pub async fn push_register<R: Runtime>(
                     let _ = send(PushOp::Unregister, unregister_body(&kept[i].endpoint, &relay), e.subject.clone(), e.name.clone()).await;
                 }
             }
-            let (status, answer) = send(PushOp::Register, body, e.subject.clone(), e.name.clone()).await?;
+            let (mut status, mut answer) = send(PushOp::Register, body, e.subject.clone(), e.name.clone()).await?;
+            // a gateway from before signals refuses any field it doesn't know (docs/design/VERSIONS.md): asked again
+            // without them, messages still arrive and only its counts are missing; the next renewal tries them again
+            if status == 400 && !relay_signals.is_empty() {
+                (status, answer) = send(PushOp::Register, register_body(&e, &ep, &[]), e.subject.clone(), e.name.clone()).await?;
+            }
             if !(200..300).contains(&status) {
                 return Err(format!("The gateway refused the registration ({status}{}).", gateway_said(&answer)));
             }

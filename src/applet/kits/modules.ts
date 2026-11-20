@@ -4,13 +4,17 @@ import * as ReactDOM from "react-dom";
 import * as ReactDOMClient from "react-dom/client";
 import * as JSXRuntime from "react/jsx-runtime";
 
-/** The parts an applet can import from "parachute", beside the kit's calls (docs/WRITE-AN-APPLET.md). */
-export const PART_NAMES = [
-  "Button", "Card", "Days", "Empty", "Field", "Link", "Linked", "List", "Loading", "Note", "Page", "Problem", "Record", "Search", "Tabs", "Write",
-  "link", "toast", "useSaved", "useTheme", "useTranscripts", "voiceNote", "when",
-] as const;
+/** The parts an applet can import from "parachute", beside the kit's calls (docs/WRITE-AN-APPLET.md), each with the
+ *  level of the app it came in (level.ts). A new part takes the next level, and APP_LEVEL rises to it; an applet that
+ *  uses a part above its record's `needs` falls back for it (src/kit/olderApp.test.ts). */
+export const PART_LEVEL = {
+  Button: 1, Card: 1, Days: 1, Empty: 1, Field: 1, Link: 1, Linked: 1, List: 1, Loading: 1, Note: 1, Page: 1, Problem: 1, Record: 1, Search: 1, Tabs: 1, Write: 1,
+  link: 1, toast: 1, useSaved: 1, useTheme: 1, useTranscripts: 1, voiceNote: 1, when: 1,
+} as const;
+export type PartName = keyof typeof PART_LEVEL;
+export const PART_NAMES = Object.keys(PART_LEVEL) as PartName[];
 
-export function setModules(parts: Record<(typeof PART_NAMES)[number], unknown>) {
+export function setModules(parts: Record<PartName, unknown>) {
   (window as unknown as { __ParachuteModules: unknown }).__ParachuteModules = Object.freeze({
     react: React, "react-dom": ReactDOM, "react-dom/client": ReactDOMClient, "react/jsx-runtime": JSXRuntime, parts: Object.freeze({ ...parts }),
   });

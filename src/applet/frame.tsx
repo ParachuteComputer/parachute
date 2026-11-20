@@ -24,7 +24,7 @@ export const PAGE_STOPPED_MESSAGE = "Something on this page tried to leave its s
 const KIT_SOURCE = buildKitSource({ vaultClientSource });
 
 /** What runs in the frame for an applet's code: an HTML note as written; a TSX/JSX note as its transpiled module, with React. */
-export const appletPage = (kind: CodeKind, content: string, js: string | null): string => (kind === "html" ? content : modulePage(js ?? "", usesNote(content) ? reactNoteKitSource : reactKitSource));
+export const appletPage = (kind: CodeKind, content: string, js: string | null, name?: string): string => (kind === "html" ? content : modulePage(js ?? "", usesNote(content) ? reactNoteKitSource : reactKitSource, [], name));
 
 /** The sealed srcdoc for an applet: CSP first, WebRTC removed, the kits, the look as it is now (so the parts are drawn
  *  in it from the first paint; later changes come as theme events), then the applet. */

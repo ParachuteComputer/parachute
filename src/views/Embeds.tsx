@@ -279,10 +279,10 @@ function EmbedFrame({ found, name, props, onBroke, onPageStopped }: { found: Fou
     void prepare(found.source, found.kind).then((c) => {
       if (!on) return;
       if (!c.compiled || !c.compiled.ok) { setPage({ ok: false, error: c.compiled && !c.compiled.ok ? c.compiled.error : "it couldn't be read" }); return; }
-      setPage({ ok: true, html: modulePage(c.compiled.js, usesNote(found.source) ? reactNoteKitSource : reactKitSource) });
+      setPage({ ok: true, html: modulePage(c.compiled.js, usesNote(found.source) ? reactNoteKitSource : reactKitSource, [], name) });
     });
     return () => { on = false; };
-  }, [found.source, found.kind]);
+  }, [found.source, found.kind, name]);
   const router = useMemo(() => {
     const deps = vaultDeps(clientFor(found.rec));
     // the shell watches its own calls to that vault: a refusal of this device, or a hub that can't be reached

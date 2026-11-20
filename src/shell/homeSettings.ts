@@ -29,7 +29,7 @@ import { homeVault } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
 import type { Levels } from "./levels";
-import { APP_TAG, appOf as appRecordOf, appsFrom, followed, openApp, recordOf, APP_FOLDER, type App } from "./apps";
+import { APP_TAG, appOf as appRecordOf, appsFrom, followed, newerApp, openApp, recordOf, APP_FOLDER, type App } from "./apps";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -341,7 +341,8 @@ async function readAppRecords(home: VaultRecord): Promise<RawApp[]> {
   for (const r of rows) {
     const raw = plain(r.metadata) ? r.metadata.app : undefined;
     const a = appRecordOf(raw, r.path ?? null, r.id);
-    if (!a) continue;
+    // one made for a newer Parachute is kept as it is (never read here), so the list can say to update
+    if (!a) { if (newerApp(raw)) out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
     if (!a.live) { out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
     const there = listVaults().find((v) => originOf(v.issuer) === a.live!.hub && v.vault === a.live!.vault);
     if (!there) { out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
@@ -390,6 +391,16 @@ export function appMissing(): string | null {
   if (!settingsReadNow() && state.read !== "unreachable") return null;
   const chosen = deviceApp() ?? settingsNow().app;
   return chosen && chosen !== openAppNow().id ? chosen : null;
+}
+
+/** When the app that didn't load was made for a newer Parachute (apps.ts newerApp): its name, for "Update Parachute to
+ *  use …". null otherwise. */
+export function appNewer(): string | null {
+  const chosen = appMissing(), home = homeVault(), k = keptNow();
+  if (!chosen || !home || k?.vault !== home.key) return null;
+  const raw = (k.apps ?? []).map((r) => r.app).find((x) => plain(x) && x.id === chosen && newerApp(x));
+  if (!plain(raw)) return null;
+  return typeof raw.name === "string" && raw.name.length > 0 && raw.name.length <= 60 && !/[\u0000-\u001f]/.test(raw.name) ? raw.name : chosen;
 }
 
 /** The bar and home as the open app gives them: its own, or the settings note's when it has none. */

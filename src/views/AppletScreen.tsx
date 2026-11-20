@@ -22,6 +22,7 @@ import { noteHref, titleOf } from "../vault/notes";
 import AppletFrame, { appletPage } from "../applet/frame";
 import GrantCard from "../applet/GrantCard";
 import { readApplet, resolvedOf, ownFolder, type AppletEntry } from "../applet/discovery";
+import { updateLine } from "../applet/level";
 import { claimOf, withoutRoles } from "../applet/opens";
 import { readRoleTags } from "../open/roles";
 import { fingerprint, grantExpiry, grantKey, grantOf } from "../applet/grant";
@@ -82,7 +83,7 @@ import { useKept } from "../shell/kept";
 const grants = deviceGrants();
 
 /** An applet's page from its code and what it imports, each transpiled (and cached) on its own. */
-async function buildPage(kind: CodeKind, source: string, imports: readonly Imported[]): Promise<{ ok: true; page: string } | { ok: false; error: string }> {
+async function buildPage(kind: CodeKind, source: string, imports: readonly Imported[], name?: string): Promise<{ ok: true; page: string } | { ok: false; error: string }> {
   if (kind === "html") return { ok: true, page: source };
   const [host, ...parts] = await Promise.all([prepare(source, kind), ...imports.map((i) => prepare(i.source, i.kind))]);
   if (host.compiled && !host.compiled.ok) return { ok: false, error: host.compiled.error };
@@ -90,7 +91,7 @@ async function buildPage(kind: CodeKind, source: string, imports: readonly Impor
   if (bad >= 0) return { ok: false, error: `«${imports[bad].id}»: ${(parts[bad].compiled as { error: string }).error}` };
   const js = (c: Awaited<ReturnType<typeof prepare>>) => (c.compiled && c.compiled.ok ? c.compiled.js : "");
   const note = usesNote(source) || imports.some((i) => usesNote(i.source));
-  return { ok: true, page: modulePage(js(host), note ? reactNoteKitSource : reactKitSource, imports.map((i, k) => ({ id: i.id, js: js(parts[k]) }))) };
+  return { ok: true, page: modulePage(js(host), note ? reactNoteKitSource : reactKitSource, imports.map((i, k) => ({ id: i.id, js: js(parts[k]) })), name) };
 }
 
 /** A page with embeds grows to its content, up to PAGE_MAX; one that grows by the same amount three times running (a
@@ -108,7 +109,7 @@ const startedByTap = new Map<string, boolean>();
 const startedAtStart = new Map<string, { chosen: boolean; vault: string; noteId: string }>();
 
 /** `page` is null for code from someone else's vault until it is allowed: it is transpiled only then (`source` waits). */
-type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string }
+type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string } | { state: "newer"; entry: AppletEntry }
   | { state: "ok"; entry: AppletEntry; page: string | null; source: { kind: CodeKind; text: string }; imports: Imported[]; note: Note | null; from: string[];
       /** the hash of what it asks as written, the same on every device (approvals.ts `asksHash`) */
       asks: string };
@@ -191,6 +192,8 @@ export default function AppletScreen() {
         if (notMine && (n.content ?? "").length > MAX_CODE_CHARS) { if (on) setLoaded({ state: "refused", error: "its code is bigger than an applet from someone else's vault may be" }); return; }
         const a = readApplet(n, rec.key, notMine, hubCheck());
         if (!a.ok) { if (on) setLoaded({ state: "refused", error: a.error }); return; }
+        // written for a newer app (level.ts): nothing of it is compiled, asked or run
+        if (a.entry.newer) { if (on) setLoaded({ state: "newer", entry: a.entry }); return; }
         // the vault's role tags are no applet's to open or to tag with: dropped before the card, the key and the writer
         a.entry.opens = withoutRoles(a.entry.opens, await readRoleTags(c));
         const note = askedNote ? await c.getNote(askedNote).catch(() => null) : null;
@@ -212,8 +215,8 @@ export default function AppletScreen() {
         if (code.compiled && !code.compiled.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${code.compiled.error}` }); return; }
         let page: string | null = null;
         if (kind === "html") page = source;
-        else if (!late && !imports.length) page = appletPage(kind, source, code.compiled?.js ?? null);
-        else if (!late) { const built = await buildPage(kind, source, imports); if (!on) return; if (!built.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${built.error}` }); return; } page = built.page; }
+        else if (!late && !imports.length) page = appletPage(kind, source, code.compiled?.js ?? null, a.entry.manifest.name);
+        else if (!late) { const built = await buildPage(kind, source, imports, a.entry.manifest.name); if (!on) return; if (!built.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${built.error}` }); return; } page = built.page; }
         const asks = await asksOf(approvalSubject(rec, n.id, a.entry.manifest.id), a.entry, (n.metadata ?? {}) as Record<string, unknown>, await embedTargets(a.entry.embeds).catch(() => ["unread"]));
         if (!on) return;
         setLoaded({ state: "ok", entry: a.entry, page, source: { kind, text: source }, imports, note, from, asks });
@@ -289,7 +292,7 @@ export default function AppletScreen() {
     if (!granted || loaded.state !== "ok" || loaded.page !== null || !keys || late?.hash === keys.html) return;
     let on = true;
     const { kind, text } = loaded.source;
-    void buildPage(kind, text, loaded.imports).then((b) => { if (on) setLate(b.ok ? { hash: keys.html, page: b.page } : { hash: keys.html, error: b.error }); });
+    void buildPage(kind, text, loaded.imports, loaded.entry.manifest.name).then((b) => { if (on) setLate(b.ok ? { hash: keys.html, page: b.page } : { hash: keys.html, error: b.error }); });
     return () => { on = false; };
   }, [granted, loaded, keys?.html]); // eslint-disable-line react-hooks/exhaustive-deps
   const page = loaded.state === "ok" ? loaded.page ?? (late && keys && late.hash === keys.html && "page" in late ? late.page : null) : null;
@@ -391,12 +394,13 @@ export default function AppletScreen() {
   const back = backOrLauncher;
   const plainNote = note ? <Link to={`${noteHref(rec.key, note.id)}?with=vault`}>Open {titleOf(note)} in the vault view</Link> : null;
   const theirsLabel = notMine ? ` · ${rec.vault}'s` : "";
-  const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu} />{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;
+  const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu} />{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;
 
   if (mode === "closed") return shell(<div className="card" role="status"><p>Applets are off on this device until its self-test passes. See Settings.</p>{plainNote}</div>);
   if (loaded.state === "loading" || (loaded.state === "ok" && !keys)) return shell(<p className="quiet" role="status">Opening…</p>);
   if (loaded.state === "error") return shell(<p className="error" role="alert">Couldn't open this applet: {loaded.error}.</p>);
   if (loaded.state === "refused") return shell(<div className="card" role="alert"><p>This applet can't open. It was not run: {loaded.error}.</p>{plainNote}</div>);
+  if (loaded.state === "newer") return shell(<div className="card" role="status"><p><strong>{updateLine(loaded.entry.manifest.name)}</strong></p><p className="quiet">It was made for a newer Parachute than this one, so nothing of it ran here.</p>{plainNote}</div>);
   if (!entry || !keys || !subject) return null;
 
   if (!granted && signedNow === undefined) return shell(<p className="quiet" role="status">Opening…</p>);

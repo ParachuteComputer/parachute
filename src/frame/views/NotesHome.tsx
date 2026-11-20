@@ -76,6 +76,7 @@ export default function NotesHome() {
         {into && <Link className="primary notes-new" to={`/v/${encodeURIComponent(into.key)}/new`}>New note</Link>}
       </header>
       {homeNow.notice === "app-record" && <p className="launcher-notice" role="status">Your app record didn't load, so this is the simple app. <Link to="/settings">Settings</Link></p>}
+      {homeNow.notice === "app-newer" && <p className="launcher-notice" role="status">Update Parachute to use {homeNow.noticeName ?? "your app"}. It was made for a newer Parachute, so for now this is the simple app.</p>}
       <Search label={chosen ? `Search ${chosen.vault}` : "Search every vault"} value={q} onChange={setQ} onSearch={setTerm} live={250} />
       {all.length > 1 && <Tabs label="Vaults" current={chosen?.key ?? ""} onChange={tab} tabs={[{ key: "", label: "All" }, ...all.map((v) => ({ key: v.key, label: v.vault }))]} />}
       {parachutes.map((p) => <VaultsToOpen key={p.hub} p={p} />)}
