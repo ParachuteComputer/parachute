@@ -3,7 +3,7 @@
 // for the newest notes' titles, the bar and a way to go somewhere on a tap, and adds notes in Inbox/ only. Change it, or
 // ask your AI to: it is a note in your vault (Applets/Home), and its card asks again when its code changes.
 import { useEffect, useState } from "react";
-import { app, Empty, List, Loading, Page, ready, toast, vault, when, Write } from "parachute";
+import { app, Empty, List, Loading, Page, Problem, ready, toast, vault, when, Write } from "parachute";
 
 type Recent = { vaultName: string; title: string; updatedAt: string | null; href: string };
 type Place = { name: string; glyph: string; href: string; home: boolean };
@@ -22,8 +22,9 @@ export default function Home() {
   const [pins, setPins] = useState<Place[]>([]);
   const [line, setLine] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = () => Promise.all([app.recent({ limit: 12 }), app.pins()]).then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); }, () => setRecent([]));
-  useEffect(() => { ready().then(load, () => setRecent([])); }, []);
+  const [failed, setFailed] = useState<unknown>(null);
+  const load = () => Promise.all([app.recent({ limit: 12 }), app.pins()]).then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); setFailed(null); }, (e: unknown) => setFailed(e));
+  useEffect(() => { ready().then(load, (e: unknown) => setFailed(e)); }, []);
   const save = async () => {
     const body = line.trim();
     if (!body || busy) return;
@@ -40,7 +41,8 @@ export default function Home() {
       <style>{CSS}</style>
       <Write line enter="send" label="Write something down" placeholder="Write something down" value={line} onChange={setLine} onSend={save} send={busy ? "Saving…" : "Save"} busy={busy} />
       <List label="Lately" rows={(recent ?? []).map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: when.short(n.updatedAt), onPress: () => void app.open(n.href) }))} />
-      {recent === null ? <Loading /> : !recent.length && <Empty>Nothing written yet. A line above starts it.</Empty>}
+      {failed ? <Problem error={failed} onRetry={() => void load()}>Your newest notes couldn't be read</Problem>
+        : recent === null ? <Loading /> : !recent.length && <Empty>Nothing written yet. A line above starts it.</Empty>}
       {pins.length > 0 && <List label="Pinned" rows={pins.map((p) => ({ key: p.href, title: p.name, glyph: p.glyph, onPress: () => void app.open(p.href) }))} />}
     </Page>
   );

@@ -4,7 +4,7 @@
 // adds entries in Journal/ (the Journal applet's paths), asks the app for the bar (to find Rooms) and to open Rooms at a
 // room on a tap; an entry opens as a note link (link.open). Its install fills UNI (the key whose messages are "from
 // Uni"). Nothing here is the shell's.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { app, Empty, link, List, Loading, Page, Problem, ready, services, toast, vault, when, Write } from "parachute";
 import { askOf, chunk, createStore, lastText, now, openAsks, tag, useStore, type Ev } from "component:room";
 
@@ -40,7 +40,10 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
 
   const loadJournal = () => vault.queryRecords({ pathPrefix: today(), includeBody: true, limit: 40 }).then((rows: Entry[]) => setEntries(rows), () => setEntries([]));
-  const loadRooms = async (on: () => boolean) => {
+  // false once Home is gone: a read that lands later changes nothing
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+  const loadRooms = async () => {
     const relay = services.relay("rooms");
     try {
       s.me = (await services.me()).pubkey;
@@ -48,23 +51,23 @@ export default function Home() {
       const ids = [...new Set(members.map((e) => tag(e, "d")).filter(Boolean))] as string[];
       const since = now() - DAYS * 86400;
       const parts = await Promise.all(chunk(ids, 100).map((c) => Promise.all([relay.query([{ kinds: [39000], "#d": c }]), relay.query([{ kinds: [9], "#h": c, since, limit: 500 }])])));
-      if (!on()) return;
+      if (!mounted.current) return;
+      // what was read now takes the place of what was there: a room archived or left since goes
+      s.rooms.clear(); s.msgs.clear();
       for (const [metas, msgs] of parts) {
         for (const m of metas as Ev[]) { const id = tag(m, "d"); if (id && tag(m, "archived") !== "true") s.rooms.set(id, { id, name: tag(m, "name") || id.slice(0, 8), about: "", dm: false }); }
         (msgs as Ev[]).forEach(st.add);
       }
       st.bump(); setRead("ok");
-    } catch { if (on()) setRead("away"); }
+    } catch { if (mounted.current) setRead("away"); }
   };
   useEffect(() => {
-    let on = true;
     ready().then(async () => {
       void loadJournal();
       // Rooms, as the bar has it: where a tap on a room goes
-      app.pins().then((ps: { name: string; href: string }[]) => { if (on) setRooms(ps.find((p) => p.name === "Rooms")?.href ?? null); }, () => {});
-      await loadRooms(() => on);
+      app.pins().then((ps: { name: string; href: string }[]) => { if (mounted.current) setRooms(ps.find((p) => p.name === "Rooms")?.href ?? null); }, () => {});
+      await loadRooms();
     }, () => setRead("away"));
-    return () => { on = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { wants, fromUni } = useMemo(() => {
@@ -89,14 +92,19 @@ export default function Home() {
     const body = line.trim();
     if (!body || busy) return;
     setBusy(true);
-    try { await vault.createRecord({ path: pathFor(body), body }); setLine(""); await loadJournal(); }
+    const path = pathFor(body);
+    try {
+      // the same words in the same minute: the path is taken, so it gets the seconds
+      await vault.createRecord({ path, body }).catch((e: any) => { if (e?.status === 409 || /conflict|elsewhere/i.test(String(e?.message ?? e))) return vault.createRecord({ path: path.replace(/^(Journal\/[^ ]+)/, `Journal/${when.path(Date.now(), true)}`), body }); throw e; });
+      setLine(""); await loadJournal();
+    }
     catch (e: any) { toast(`Not saved: ${e?.message ?? e}. Your words are still here.`, { error: true }); }
     setBusy(false);
   };
   const sorted = [...(entries ?? [])].sort((a, b) => b.path.localeCompare(a.path));
   const roomRows = (rs: Row[], strong: boolean) => rs.map((r) => ({ key: r.key, title: r.text, meta: `#${r.roomName}`, aside: when.ago(r.at * 1000), strong, ...(rooms ? { onPress: () => openRoom(r) } : {}) }));
   return (
-    <Page title={hello()} className="today" onRefresh={() => Promise.all([loadJournal(), loadRooms(() => true)])}>
+    <Page title={hello()} className="today" onRefresh={() => Promise.all([loadJournal(), loadRooms()])}>
       <style>{CSS}</style>
       {read === "reading" ? <Loading>Reading your rooms…</Loading>
         : read === "away" ? <Problem>Your rooms couldn't be read just now</Problem>

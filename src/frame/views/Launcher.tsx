@@ -35,7 +35,9 @@ export default function Launcher() {
   // how many each vault lists, once read: the list says when there is nothing in it at all
   const [counts, setCounts] = useState<Record<string, number>>({});
   const count = useCallback((key: string, n: number) => setCounts((c) => (c[key] === n ? c : { ...c, [key]: n })), []);
+  // only the vaults held now count (one signed out of while the list shows leaves with its count)
   const read = vaults.every((v) => counts[v.key] !== undefined);
+  const anyApplets = vaults.some((v) => (counts[v.key] ?? 0) > 0);
   const many = vaults.length > 1;
   return (
     <main className="screen launcher">
@@ -43,7 +45,7 @@ export default function Launcher() {
       {home.notice === "app-record" && <p className="launcher-notice" role="status">Your app record didn't load, so here is every applet. <Link to="/settings">Settings</Link></p>}
       <ol className="entries" aria-label="Applets">
         {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
-        {read && !Object.values(counts).some((n) => n > 0) && <li className="entry-quiet">No applets here yet.</li>}
+        {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
       <Components vaults={vaults} onPart={(v, c) => setPart({ v, c })} />
       <p className="launcher-foot"><Link to="/settings">Settings</Link></p>
@@ -77,7 +79,7 @@ function VaultEntries({ v, many, onCount, onHold }: { v: FrameVault; many: boole
 function Components({ vaults, onPart }: { vaults: FrameVault[]; onPart: (v: FrameVault, c: FrameComponent) => void }) {
   const [some, setSome] = useState<Record<string, boolean>>({});
   const tell = useCallback((key: string, yes: boolean) => setSome((s) => (s[key] === yes ? s : { ...s, [key]: yes })), []);
-  const any = Object.values(some).some(Boolean);
+  const any = vaults.some((v) => some[v.key]);
   return (
     <section className={any ? "launcher-parts" : "launcher-parts empty"} aria-label="Components" hidden={!any}>
       <h2 className="lately-label">Components</h2>
