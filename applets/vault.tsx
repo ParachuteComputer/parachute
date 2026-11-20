@@ -290,10 +290,10 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   useEffect(() => { top.current?.scrollIntoView?.({ block: "start" }); }, [id]);
   const shownRef = useRef<Rec | null>(null);
   // a read that fails once the record shows says so and keeps it (the next change reads it again)
-  // a read never puts back an older version than the one shown (reads can land out of order, and after a save)
-  const newer = (cur: Rec | null, x: Rec) => (cur && cur.updatedAt && x.updatedAt && x.updatedAt < cur.updatedAt ? cur : x);
-  const load = () => vaults.get(v.key, id).then((x: Rec) => { setR((cur: Rec | null) => { const n = newer(cur, x); shownRef.current = n; return n; }); setFailed(null); },
-    (e: unknown) => { if (shownRef.current) toast(`Couldn't read it again: ${said(e)}`, { error: true }); else setFailed(e); });
+  // the latest read or save wins: a read that lands after a later one (reads can land out of order) changes nothing
+  const seq = useRef(0);
+  const load = () => { const n = ++seq.current; return vaults.get(v.key, id).then((x: Rec) => { if (n !== seq.current) return; shownRef.current = x; setR(x); setFailed(null); },
+    (e: unknown) => { if (n !== seq.current) return; if (shownRef.current) toast(`Couldn't read it again: ${said(e)}`, { error: true }); else setFailed(e); }); };
   useEffect(() => { void load(); }, [v.key, id]);
   useEffect(() => { if (!r) return; vaults.types(v.key).then((t: TypeRow[]) => setSpec(Object.assign({}, ...t.filter((x) => r.types.includes(x.name)).map((x) => x.fields ?? {}))), () => {}); }, [r?.types.join(",")]);
   // changed elsewhere (an AI, another device) while open: read again, unless the person is writing in it
@@ -304,7 +304,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
     try {
       const x: Rec = await vaults.update(v.key, r.id, { if_updated_at: r.updatedAt, ...c });
       // what the save hands back shows at once (its links come with the read after)
-      if (x?.id) setR((cur: Rec | null) => { const n = cur ? { ...cur, ...x, body: x.body ?? cur.body, links: cur.links } : x; shownRef.current = n; return n; });
+      if (x?.id) { ++seq.current; setR((cur: Rec | null) => { const n = cur ? { ...cur, ...x, body: x.body ?? cur.body, links: cur.links } : x; shownRef.current = n; return n; }); }
       await load(); if (done) toast(done); return x;
     }
     catch (e: any) {
