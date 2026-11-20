@@ -31,7 +31,9 @@ import { limitedFetch } from "./limited";
 
 /** What follows when the hub says yes to an `open` step, beyond keeping the token: the applet the person allowed on its
  *  card, recorded only now (src/applet/grants.ts), so an Allow the hub refused allows nothing. */
-export type AllowAfter = { subject: string; scope: string; html: string; mode: "sealed" | "approved-code"; asked?: { face: string[]; others: string[] } };
+export type AllowAfter = { subject: string; scope: string; html: string; mode: "sealed" | "approved-code"; asked?: { face: string[]; others: string[] };
+  /** the Allow was tapped on the screen a start led to: the person's choice of it as home here, kept with the grant */
+  home?: { vault: string; noteId: string } };
 
 /** Why a vault is asked for: shown on the screen between steps, and kept with the vault (vault/reach.ts). */
 export type Why = "signin" | "open" | "allow" | "write" | "narrow";

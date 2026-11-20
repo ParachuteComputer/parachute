@@ -26,6 +26,7 @@ import { atFirstEntry } from "../ui/history";
 import { startPlace } from "./start";
 import { readSettings } from "./homeSettings";
 import { relistVaults } from "../vault/newVaults";
+import { isMine } from "../vault/whose";
 import { homeVault, useFrameSource } from "./frameSource";
 import { readTheme, watchTheme } from "../theme/store";
 import WriteAsk from "./WriteAsk";
@@ -97,7 +98,8 @@ function FirstRun() {
 }
 
 /** Where the app opens (start.ts): at a start on the launcher (the first entry of this tab's history), the home applet
- *  if the person has one. Nothing is drawn until that is decided, so the launcher never shows and then gives way. */
+ *  if the person has one. Nothing is drawn until that is decided, so the launcher never shows and then gives way; but
+ *  after a first sign-in on this device, the list the sign-in ends on gives way to the home once. */
 function useStart(): boolean {
   const location = useLocation();
   const navigate = useNavigate();
@@ -116,14 +118,15 @@ function useStart(): boolean {
   // the first sign-in on this device: the app started with no vault, so it decided nothing then. When the first one
   // arrives and the person is on the list, it decides as a start does: their settings' home opens, and their Allow or
   // Open on it is their choice of it as home here (otherwise the next start finds it stopped, waiting for a tap)
-  const vaults = useVaults().length;
-  const firstRun = useRef(listVaults().length === 0);
+  // a vault of their own: someone else's first leaves it waiting for theirs
+  const mine = useVaults().filter(isMine).length;
+  const firstRun = useRef(listVaults().filter(isMine).length === 0);
   useEffect(() => {
     // once the sign-in is done and has brought the person to the list (it passes through its own page first)
-    if (!firstRun.current || vaults === 0 || location.pathname !== "/") return;
+    if (!firstRun.current || mine === 0 || location.pathname !== "/") return;
     firstRun.current = false;
     void startPlace({ firstRun: true }).then((to) => { if (to && window.location.pathname === "/") { to.go(); navigate(to.href, { replace: true }); } }, () => {});
-  }, [vaults, location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mine, location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   return decided;
 }
 

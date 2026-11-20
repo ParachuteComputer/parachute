@@ -4,7 +4,9 @@
 //   - the person's Allow for its code (its card, as for any applet), and
 //   - their choice of it as home, made here (a tap: the long-press "Open on start", or Open / Allow on the screen a start
 //     led to).
-// Otherwise the applet's screen shows its card, or waits, stopped, with Open; that tap is the choice.
+// Otherwise the applet's screen shows its card, or waits, stopped, with Open; that tap is the choice (an Allow that goes
+// on to the hub's page carries it, and it is recorded only when the hub says yes). A first sign-in on a device counts as
+// a start (App.tsx useStart), even before the device's self-test has passed.
 import { gateNow, whenGateKnown } from "../applet/selftest/run";
 import { barNow, readSettings } from "./homeSettings";
 import { listVaults } from "../vault/store";
