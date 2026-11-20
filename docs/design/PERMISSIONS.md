@@ -68,7 +68,11 @@ The 4th version today.* A key the person named on their trusted list is called b
 own account "your account"; anything else reads as what it is ("someone else on your hub", "a hub token", "a key you
 haven't named"), so a change nobody expected stands out without reading code. Where this device read an approval of
 other code made on another device, the card says so first: *You approved another version on Android, 3 days ago.*
-(`src/applet/changedBy.ts`; it is what the hub says, and the code still runs only after a tap.)
+Who and when are those of the last write that changed the code (the hub's kept versions say what each write replaced),
+not of a later write of the note's fields. "By Uni" needs Uni to write with its own key (NIP-98, which the hub records
+as `nostr:<key>`) and that key on the person's trusted list; Uni writing with a token of the person's account reads as
+"your account (through MCP)". (`src/applet/changedBy.ts`; it is what the hub says, and the code still runs only after a
+tap.)
 
 To mark what is new, a grant now keeps what its card said (`face`: the face's lines and every detail line) and its imports from someone else's vault
 (`others`). A grant made before has neither: its card says plainly that it changed, and marks nothing.
