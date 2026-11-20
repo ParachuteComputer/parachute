@@ -96,3 +96,15 @@ describe("the shipped records", () => {
     expect(read("journal", vars).signals).toEqual([]);
   });
 });
+
+describe("the card's face", () => {
+  it("says each signal once, under its own name", async () => {
+    const { faceOf } = await import("./face");
+    const m = manifest();
+    const r = parseSignals([ideas], m, []);
+    if (!r.ok) throw new Error(r.error);
+    const leads = faceOf(grantOf(m, "home", [], [], [], r.value), "Applets/").lines.map((l) => l.lead);
+    expect(leads.filter((l) => l.startsWith("Show a count on the bar"))).toHaveLength(1);
+    expect(leads.filter((l) => l.startsWith("Send the count to push.example"))).toHaveLength(1);
+  });
+});

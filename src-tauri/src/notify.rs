@@ -530,6 +530,7 @@ async fn signed_post(
         .body(body)
         .send()
         .await
+        // src/services/signalBook.ts `retryable` reads this wording (and "(429", "(5xx" below): keep them in step
         .map_err(|_| "The gateway didn't answer.".to_string())?;
     let status = res.status().as_u16();
     let mut answer = Vec::new();
