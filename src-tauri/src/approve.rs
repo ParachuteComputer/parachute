@@ -1,7 +1,7 @@
 // Approving code (docs/design/APP-RECORD.md "Running needs a signed approval"): the person's key signs "this exact
 // code, asking exactly this" as a kind 30479 event, only here and only after the device unlock, every time (no grace).
-// When a passcode is set on this device (Settings → Approving code), approving asks it too, checked here; the web side
-// can ask for more but never for less. Taking an approval back asks only the unlock: it can only stop code. Applets can never reach this: their signing paths (services.rs) take only the kinds they
+// When this device's level for approving code is the passcode (Settings → Security; levels.rs), approving asks it too,
+// checked here; the web side can ask for more but never for less. Taking an approval back asks only the unlock: it can only stop code. Applets can never reach this: their signing paths (services.rs) take only the kinds they
 // declared from a short list, which 30479 and 30480 are not on (a test there says so).
 //
 // The passcode is its own secret, never the phone's unlock: a salted hash, many rounds, in the app's data folder.
@@ -23,7 +23,7 @@ use crate::keyring::KeyringState;
 
 pub const APPROVAL_KIND: u16 = 30479;
 pub const KEYS_KIND: u16 = 30480;
-const PASSCODE_FILE: &str = "passcode.json";
+pub const PASSCODE_FILE: &str = "passcode.json";
 const ROUNDS: u32 = 120_000;
 const TRIES: u32 = 5;
 const WAIT: Duration = Duration::from_secs(60);
@@ -62,6 +62,11 @@ fn read(path: &Path) -> Result<Option<Stored>, Refusal> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(_) => Err(no("storage", "The passcode can't be read.")),
     }
+}
+
+/// Whether a passcode is kept at `path`.
+pub fn passcode_kept(path: &Path) -> Result<bool, Refusal> {
+    Ok(read(path)?.is_some())
 }
 
 fn code_ok(code: &str) -> bool {
@@ -139,24 +144,23 @@ pub fn check_content(content: &str, d: &str) -> Result<(), Refusal> {
     Ok(())
 }
 
-/// Sign an approval (or a taking back) of an applet's exact code and asks: the passcode when one is set, then the
-/// device unlock, always.
+/// Sign an approval (or a taking back) of an applet's exact code and asks: this device's level for approving code (the
+/// passcode, when it says so, then the device unlock; levels.rs), the unlock alone for a taking back.
 #[tauri::command]
-pub async fn approval_sign<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, ring: State<'_, KeyringState>, codes: State<'_, PasscodeState>, content: String, d: String, name: String, passcode: Option<String>) -> Result<Event, Refusal> {
+pub async fn approval_sign<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, ring: State<'_, KeyringState>, levels: State<'_, crate::levels::LevelsState>, content: String, d: String, name: String, passcode: Option<String>) -> Result<Event, Refusal> {
     check_content(&content, &d)?;
     let name: String = name.chars().filter(|c| !c.is_control()).take(60).collect();
     let passcode = passcode.map(Zeroizing::new);
     let approved = serde_json::from_str::<Value>(&content).ok().and_then(|v| v.get("approved").and_then(Value::as_bool)).unwrap_or(false);
-    // taking an approval back only stops code: it takes the unlock (it signs with the key), never the passcode
-    if approved {
-        codes.check(&passcode_path(&app)?, passcode.as_ref().map(|p| p.as_str()))?;
-    }
+    // approving takes this device's code level (never below the unlock); taking an approval back only stops code: it
+    // takes the unlock (it signs with the key), never the passcode
+    let level = if approved { levels.levels(&app).await?.code.max(crate::levels::Level::Unlock) } else { crate::levels::Level::Unlock };
     let (title, reason) = if approved {
         (format!("Approve «{name}»"), format!("Approve this exact version of «{name}» on every device of yours"))
     } else {
         (format!("Stop «{name}»"), format!("Take back your approval of «{name}» on every device of yours"))
     };
-    ring.confirm(&app, "approve-code", &d, false, &title, &reason).await?;
+    levels.gate(&app, level, passcode.as_ref().map(|p| p.as_str()), || ring.confirm(&app, "approve-code", &d, false, &title, &reason)).await?;
     let k = keys.get(&app).await.map_err(|m| no("no_key", m))?.ok_or_else(|| no("no_key", "This device has no key."))?;
     crate::services::sign_template(&k, APPROVAL_KIND, &content, &[vec!["d".into(), d]])
 }
@@ -172,7 +176,7 @@ pub async fn passcode_set<R: Runtime>(app: AppHandle<R>, ring: State<'_, Keyring
     let (old, new) = (old.map(Zeroizing::new), new.map(Zeroizing::new));
     let path = passcode_path(&app)?;
     codes.check(&path, old.as_ref().map(|p| p.as_str()))?;
-    ring.confirm(&app, "passcode", "passcode", false, "Your passcode", "Change the passcode Parachute asks before approving code").await?;
+    ring.confirm(&app, "passcode", "passcode", false, "Your passcode", "Change the passcode Parachute asks for what you set to need it").await?;
     set(&path, &codes, old.as_ref().map(|p| p.as_str()), new.as_ref().map(|p| p.as_str()))
 }
 

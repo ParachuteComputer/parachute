@@ -3,16 +3,23 @@ package computer.parachute.app
 // Hand-written. The device unlock before an approval (src-tauri/src/keyring.rs, docs/design/KEYRING.md), from the Uni
 // app's KeystorePlugin: BiometricPrompt with a strong biometric or the screen lock (PIN, pattern, password) from
 // Android 11, the screen-lock confirmation before that. A phone with no screen lock can't approve what needs the
-// unlock. The prompt's words are Rust's, never a web page's. Also the app's leave-the-screen count, which ends the
-// unlock's grace. Only the shell's Rust side calls these: the plugin is registered from Rust and has no JavaScript
+// unlock. The prompt's words are Rust's, never a web page's. Also the screen-off count, which ends the unlock's grace. Only the shell's Rust side calls these: the plugin is registered from Rust and has no JavaScript
 // permission.
+//
+// The grace ends when the screen goes off (Aaron, 11-18: "5 min after an unlock, ends on screen lock"): the count goes
+// up on the screen turning off, not on leaving the app. And the idle lock's clock (src-tauri/src/levels.rs): the newest
+// touch the activity got, and the longest quiet gap between two touches since Rust last asked.
 
 import android.app.Activity
 import android.app.KeyguardManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.activity.result.ActivityResult
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -39,8 +46,36 @@ class UnlockArgs {
 @TauriPlugin
 class UnlockPlugin(private val activity: Activity) : Plugin(activity) {
   companion object {
-    /** Each time the app leaves the screen (another app, home, screen off or locked, and the unlock's own screen). */
-    private val leftScreen = AtomicLong(0)
+    /** Each time the screen goes off (it locks then, or soon after): the end of any grace. */
+    private val screenOff = AtomicLong(0)
+    @Volatile private var watching = false
+
+    /** The newest touch (wall clock, ms, as Rust's), and the longest quiet gap between two since Rust last asked
+     *  (measured on the clock that counts sleep, so a phone asleep in a pocket counts its time). */
+    @Volatile private var lastTouch = 0L
+    @Volatile private var lastTouchUp = 0L
+    @Volatile private var longestGap = 0L
+    private val touchLock = Any()
+
+    /** MainActivity.onUserInteraction. */
+    fun touched() {
+      val up = SystemClock.elapsedRealtime()
+      synchronized(touchLock) {
+        if (lastTouchUp > 0) longestGap = maxOf(longestGap, up - lastTouchUp)
+        lastTouchUp = up
+        lastTouch = System.currentTimeMillis()
+      }
+    }
+  }
+
+  init {
+    // once a process: the screen turning off ends the grace (keyring.rs asks `epoch`)
+    if (!watching) {
+      watching = true
+      ContextCompat.registerReceiver(activity.applicationContext, object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) { screenOff.incrementAndGet() }
+      }, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED)
+    }
   }
 
   private val handler = Handler(Looper.getMainLooper())
@@ -112,14 +147,6 @@ class UnlockPlugin(private val activity: Activity) : Plugin(activity) {
     if (asking === invoke) finish(result.resultCode == Activity.RESULT_OK)
   }
 
-  override fun onPause() {
-    leftScreen.incrementAndGet()
-  }
-
-  override fun onStop() {
-    leftScreen.incrementAndGet()
-  }
-
   override fun onResume() {
     val waiting = waitingForScreen.toList()
     waitingForScreen.clear()
@@ -128,13 +155,25 @@ class UnlockPlugin(private val activity: Activity) : Plugin(activity) {
 
   private fun answer(invoke: Invoke, resumed: Boolean) {
     val out = JSObject()
-    out.put("epoch", leftScreen.get())
+    out.put("epoch", screenOff.get())
     out.put("resumed", resumed)
     invoke.resolve(out)
   }
 
-  /** The leave-the-screen count, and whether the app is in front. Just after an unlock the unlock's own screen may
+  /** The screen-off count, and whether the app is in front. Just after an unlock the unlock's own screen may
    *  still be closing: the answer waits up to two seconds for the app to come back. */
+  /** The idle lock's clock: the newest touch and the longest quiet gap since the last ask (which this resets). */
+  @Command
+  fun touches(invoke: Invoke) {
+    val out = JSObject()
+    synchronized(touchLock) {
+      out.put("last", lastTouch)
+      out.put("gap", longestGap)
+      longestGap = 0L
+    }
+    invoke.resolve(out)
+  }
+
   @Command
   fun epoch(invoke: Invoke) {
     activity.runOnUiThread {
