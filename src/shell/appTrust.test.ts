@@ -3,7 +3,7 @@
 // pins and the list, and nothing else: it never lowers how careful approving is, grants nothing and carries no code.
 import { describe, expect, it } from "vitest";
 import { appOf, followed, openApp, appsFrom, recordOf } from "./apps";
-import { approveLevel, FLOOR_KEY } from "./appFloor";
+import { DEFAULTS, fullOf, raise } from "./levelRules";
 
 /** What a hostile writer might put in a record: a home and pins, plus every field that would loosen or grant. */
 const HOSTILE = {
@@ -17,7 +17,6 @@ const HOSTILE = {
 /** Everything a record can carry into the running app: an App's own fields. */
 const APP_FIELDS = ["id", "name", "glyph", "note", "look", "sources", "hide", "bar", "start", "opens", "keep", "security", "live", "noteId", "hubOf"];
 
-const memory = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); }, m }; };
 
 describe("an unsigned app record", () => {
   it("changes only the home, the pins and the list: every other word it says is read as nothing", () => {
@@ -32,48 +31,49 @@ describe("an unsigned app record", () => {
     expect(Object.keys(recordOf(app)).sort()).toEqual(["bar", "contract", "glyph", "id", "look", "name", "sources", "start"]);
   });
 
-  it("never asks less than the device unlock: any level but passcode reads as unlock", () => {
+  it("never asks less than the device unlock: any word for approving code but passcode leaves it at the unlock", () => {
     for (const approve of ["nothing", "none", "", null, 0, false, "unlock", { level: "nothing" }]) {
-      expect(appOf({ ...HOSTILE, security: { approve } }, "Parachute/Apps/uni", "n")!.security).toEqual({ approve: "unlock" });
+      expect(fullOf(appOf({ ...HOSTILE, security: { approve } }, "Parachute/Apps/uni", "n")!.security).code).toBe("unlock");
+      expect(fullOf(appOf({ ...HOSTILE, security: { code: approve } }, "Parachute/Apps/uni", "n")!.security).code).toBe("unlock");
     }
-    expect(appOf({ ...HOSTILE, security: undefined }, "Parachute/Apps/uni", "n")!.security).toEqual({ approve: "unlock" });
-    expect(appOf({ ...HOSTILE, security: { approve: "passcode" } }, "Parachute/Apps/uni", "n")!.security).toEqual({ approve: "passcode" });
+    expect(fullOf(appOf({ ...HOSTILE, security: undefined }, "Parachute/Apps/uni", "n")!.security).code).toBe("unlock");
+    expect(appOf({ ...HOSTILE, security: { approve: "passcode" } }, "Parachute/Apps/uni", "n")!.security).toEqual({ code: "passcode" });
   });
 
-  it("can't lower the level once this device has read it: passcode stays when a later record drops it", () => {
-    const s = memory();
-    const strict = appOf({ ...HOSTILE, security: { approve: "passcode" } }, "Parachute/Apps/uni", "n")!;
-    const loose = appOf({ ...HOSTILE, security: { approve: "unlock" } }, "Parachute/Apps/uni", "n")!;
-    const gone = appOf({ ...HOSTILE, security: undefined }, "Parachute/Apps/uni", "n")!;
-    expect(approveLevel(loose, "home", s)).toBe("unlock");
-    expect(approveLevel(strict, "home", s)).toBe("passcode");
-    expect(approveLevel(loose, "home", s)).toBe("passcode");
-    expect(approveLevel(gone, "home", s)).toBe("passcode");
-    // a record can't write the floor down either: it is the device's, and only ever raised
-    s.setItem(FLOOR_KEY, JSON.stringify({ home: "unlock" }));
-    expect(approveLevel(strict, "home", s)).toBe("passcode");
-    // another home is its own
-    expect(approveLevel(loose, "other", s)).toBe("unlock");
+  // a device's levels are raised by the open app's record and never lowered by one (src-tauri/src/levels.rs `raise`;
+  // the lowering it takes is the person's signature, levels.test.ts)
+  it("can't lower the levels once this device has read them: they stay when a later record drops them", () => {
+    const rec = (security: unknown) => appOf({ ...HOSTILE, security }, "Parachute/Apps/uni", "n")!.security;
+    let device = DEFAULTS;
+    device = raise(device, rec({ approve: "unlock" }));
+    expect(device.code).toBe("unlock");
+    device = raise(device, rec({ code: "passcode", approvals: "passcode", idle: 5 }));
+    for (const later of [{ approve: "unlock" }, { code: "unlock", approvals: "none", join: "none", idle: 0 }, undefined, { idle: 60 }]) {
+      expect(raise(device, rec(later))).toEqual({ ...DEFAULTS, code: "passcode", approvals: "passcode", idle: 5 });
+    }
   });
 
-  it("can't lower it by breaking the record, deleting it, or naming another app that says less", () => {
-    const s = memory();
-    const strict = appOf({ ...HOSTILE, security: { approve: "passcode" } }, "Parachute/Apps/uni", "n")!;
-    expect(approveLevel(strict, "home", s)).toBe("passcode");
+  it("can't lower them by breaking the record, deleting it, or naming another app that says less", () => {
+    const strict = appOf({ ...HOSTILE, security: { code: "passcode" } }, "Parachute/Apps/uni", "n")!;
+    const device = raise(DEFAULTS, strict.security);
     // the record broken or gone: the device opens the next app it can (Everything, or what the settings note names)
     const fallback = openApp(appsFrom([]), "uni", null);
     expect(fallback.id).toBe("everything");
-    expect(approveLevel(fallback, "home", s)).toBe("passcode");
+    expect(raise(device, fallback.security).code).toBe("passcode");
     // a new record of the agent's, saying less, named in the settings note
-    const other = appOf({ contract: 1, id: "uni2", name: "Uni 2", sources: [{ vault: "home", applet: "*" }], security: { approve: "unlock" } }, "Parachute/Apps/uni2", "m")!;
-    expect(approveLevel(openApp(appsFrom([other]), null, "uni2"), "home", s)).toBe("passcode");
+    const other = appOf({ contract: 1, id: "uni2", name: "Uni 2", sources: [{ vault: "home", applet: "*" }], security: { code: "unlock", approvals: "none" } }, "Parachute/Apps/uni2", "m")!;
+    expect(raise(device, openApp(appsFrom([other]), null, "uni2").security)).toEqual(device);
   });
 
   it("an app someone else offers, followed live, can't lower what the person's own record asks", () => {
     const own = appOf({ contract: 1, id: "techne", name: "Techne", live: { hub: "https://techne.example", vault: "techne", path: "Parachute/Apps/techne" }, security: { approve: "passcode" } }, "Parachute/Apps/techne", "01T")!;
     const theirs = { contract: 1, id: "techne", name: "Their name", sources: [{ vault: "techne", applet: "*" }], security: { approve: "unlock" } };
     const merged = appOf(followed(own, { name: "Techne" }, theirs), "Parachute/Apps/techne", "01T")!;
-    expect(merged.security).toEqual({ approve: "passcode" });
+    expect(merged.security).toEqual({ code: "passcode" });
+    // each level the stricter of the two: theirs may raise what the person's asks, never lower it
+    const own2 = appOf({ contract: 1, id: "techne", name: "Techne", live: { hub: "https://techne.example", vault: "techne", path: "Parachute/Apps/techne" }, security: { approvals: "passcode", idle: 15 } }, "Parachute/Apps/techne", "01T")!;
+    const theirs2 = { ...theirs, security: { approvals: "none", idle: 5, join: "passcode" } };
+    expect(appOf(followed(own2, {}, theirs2), "Parachute/Apps/techne", "01T")!.security).toEqual({ approvals: "passcode", idle: 5, join: "passcode" });
     expect(merged.name).toBe("Techne");
     expect(merged.sources).toEqual([{ vault: "techne", applet: "*" }]);
   });

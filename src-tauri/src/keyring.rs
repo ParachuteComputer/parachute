@@ -8,7 +8,8 @@
 //! - The unlock is decided here, natively: Android's BiometricPrompt (strong biometric or the screen lock), macOS
 //!   LocalAuthentication, elsewhere a native OK/Cancel dialog. Nothing from the web side can say "unlocked".
 //! - The grace: 300 seconds after a passing unlock, for routine approvals only, for the applet (grant subject) that
-//!   earned it, ended when the app leaves the screen (Android's pause/stop count). Never on desktop in this step.
+//!   earned it, ended when the screen goes off (Android's screen-off count) and by the idle lock (levels.rs). Never on
+//!   desktop in this step. What an action asks before the unlock (nothing, the unlock, the passcode) is levels.rs's.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -127,7 +128,18 @@ impl KeyringState {
     /// The device unlock before an approval. `routine`: a grace earned by this applet (`subject`) may cover it; else
     /// it always asks. Returns whether a grace covered it (the shell then says so over the applet). `what`: the card or
     /// request, for the cooldown after a cancel.
+    /// Refused while Parachute is locked (the idle lock, levels.rs): only its own unlock opens it.
     pub async fn confirm<R: Runtime>(&self, app: &AppHandle<R>, subject: &str, what: &str, routine: bool, title: &str, reason: &str) -> Result<bool, Refusal> {
+        if let Some(levels) = app.try_state::<crate::levels::LevelsState>() {
+            if levels.locked(app).await? {
+                return Err(no("locked", "Parachute is locked. Unlock it first."));
+            }
+        }
+        self.ask(app, subject, what, routine, title, reason).await
+    }
+
+    /// The unlock itself, as `confirm` asks it (the idle lock's own unlock calls this).
+    pub async fn ask<R: Runtime>(&self, app: &AppHandle<R>, subject: &str, what: &str, routine: bool, title: &str, reason: &str) -> Result<bool, Refusal> {
         if self.cooling(what) {
             return Err(no("refused", "That was just cancelled. Try again in a moment."));
         }
@@ -217,7 +229,7 @@ pub fn trusted_of(from: &[String], list: &[Approver]) -> Vec<PublicKey> {
 mod platform {
     use tauri::{AppHandle, Runtime};
 
-    /// The app's leave-the-screen count (Android), or None where no grace is given.
+    /// The screen-off count (Android), or None where no grace is given (or the app isn't in front).
     pub async fn epoch<R: Runtime>(_app: &AppHandle<R>) -> Option<u64> {
         #[cfg(target_os = "android")]
         {

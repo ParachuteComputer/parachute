@@ -25,8 +25,27 @@ const BATCH_MS = 50, BATCH_MAX = 200, IN_FLIGHT_MAX = 50 * 1024 * 1024;
  *  over the applet. */
 export type Shell = { tap: () => boolean; secret: (v: SecretView) => Promise<string | null>; say: (text: string) => void;
   /** The shell's own sheet: whether to trust `key` (npub) for approvals, and the name the person gives it; null for no. */
-  trust: (v: { applet: string; key: string }) => Promise<string | null> };
-const NO_SHELL: Shell = { tap: () => false, secret: async () => null, say: () => {}, trust: async () => null };
+  trust: (v: { applet: string; key: string }) => Promise<string | null>;
+  /** The shell's own sheet for this device's passcode, when the level of what is asked says so (src-tauri/src/levels.rs):
+   *  `what` in the shell's words, `wrong` the last try's refusal. null: cancelled. The applet never sees it. */
+  passcode: (v: { what: string; wrong: string | null }) => Promise<string | null> };
+const NO_SHELL: Shell = { tap: () => false, secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null };
+
+/** A native call that may ask this device's passcode: tried without, then with what the person types on the shell's
+ *  sheet, until it passes, they cancel, or five tries (Rust then makes them wait). */
+export async function withPasscode<T>(shell: Pick<Shell, "passcode">, what: string, call: (passcode: string | null) => Promise<T>): Promise<T> {
+  let typed: string | null = null;
+  let wrong: string | null = null;
+  for (let i = 0; ; i++) {
+    try { return await call(typed); } catch (e) {
+      const code = e && typeof e === "object" && "code" in e ? (e as { code: unknown }).code : null;
+      if (code !== "passcode" || i >= 5) throw e;
+      if (typed !== null) wrong = String((e as { message?: unknown }).message ?? "That passcode isn't it.");
+      typed = await shell.passcode({ what, wrong });
+      if (typed === null) throw new BrokerError("failed", "Cancelled: nothing was sent.");
+    }
+  }
+}
 
 export function createBroker(opts: { native: Native; session: string; applet: { name: string; subject: string }; services: Service[]; hubs: string[]; emit: Emit; socket?: (url: string) => WebSocket; shell?: Shell }) {
   const shell = opts.shell ?? NO_SHELL;
@@ -118,16 +137,22 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       const headers: Record<string, string> = {};
       for (const [k, v] of Object.entries(p.headers ?? {})) if (REQUEST_HEADERS.includes(k.toLowerCase()) && typeof v === "string" && v.length <= 1000) headers[k.toLowerCase()] = v;
       const bytes = p.body === undefined ? null : typeof p.body === "string" ? new TextEncoder().encode(p.body) : new Uint8Array(p.body);
-      // an approve op (KEYRING.md) is an approval: a tap pays for it; which key signs it is Rust's to work out again
-      if (s.approve && bytes) {
+      // an approve op (KEYRING.md) is an approval, and a join op asks to join a network: a tap pays for either; which key
+      // signs it, and what it asks first, is Rust's to work out again
+      let held: string | null = null;
+      for (const line of [s.approve, s.join]) {
+        if (!line || !bytes) continue;
         let op: unknown;
-        try { const j = JSON.parse(new TextDecoder().decode(bytes)); op = j && typeof j === "object" && !Array.isArray(j) ? (j as Record<string, unknown>)[s.approve.field] : undefined; } catch { op = undefined; }
-        if (typeof op === "string" && s.approve.ops.includes(op) && !shell.tap()) throw new BrokerError("not_granted", "an approval needs your tap in the applet");
+        try { const j = JSON.parse(new TextDecoder().decode(bytes)); op = j && typeof j === "object" && !Array.isArray(j) ? (j as Record<string, unknown>)[line.field] : undefined; } catch { op = undefined; }
+        if (typeof op === "string" && line.ops.includes(op)) held = op;
       }
+      if (held !== null && !shell.tap()) throw new BrokerError("not_granted", held && s.join?.ops.includes(held) ? "joining a network needs your tap in the applet" : "an approval needs your tap in the applet");
       const release = bytesIn(bytes?.length ?? 0);
       try {
         await opened;
-        const res = await native.http(session, s.id, { method, path: p.path, headers, ...(bytes ? { body: toB64(bytes) } : {}) });
+        const req = { method, path: p.path, headers, ...(bytes ? { body: toB64(bytes) } : {}) };
+        const res = held === null ? await native.http(session, s.id, req)
+          : await withPasscode(shell, s.join?.ops.includes(held) ? `Join a network: ${held} at ${new URL(s.url).host}` : `Approve ${held} at ${new URL(s.url).host}`, (code) => native.http(session, s.id, req, code));
         if (res.graced) shell.say("Approved with your approval key: your unlock a moment ago covered it.");
         const body = fromB64(res.body);
         const as = p.as ?? "text";
@@ -290,7 +315,9 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       if (!Array.isArray(p.rids) || !p.rids.length || p.rids.length > 20 || !p.rids.every((r) => typeof r === "string" && /^[0-9a-f]{32}$/.test(r))) throw new BrokerError("bad_params", "rids are the card's request ids");
       if (!shell.tap()) throw new BrokerError("not_granted", "an answer needs your tap in the applet");
       await opened;
-      const r = await native.cardAnswer(session, s.id, ev, p.decision, p.rids as string[]);
+      const decision = p.decision, rids = p.rids as string[];
+      const r = decision === "deny" ? await native.cardAnswer(session, s.id, ev, decision, rids)
+        : await withPasscode(shell, "Approve Uni's card", (code) => native.cardAnswer(session, s.id, ev, decision, rids, code));
       const sent: string[] = [];
       let failed: string | null = null;
       for (const w of r.wraps) {
