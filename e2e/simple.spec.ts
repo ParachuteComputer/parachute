@@ -1,13 +1,13 @@
-// The simple app (docs/SIMPLE.md), as a person whose settings choose it signs in on a new device: they land on Notes,
-// find a note, change it, write a new one, copy a vault's connector address, add Capture and capture a line into
-// Inbox/. Against the real hub: what the app writes is read back there.
+// Parachute Simplified (docs/SIMPLE.md), as a person whose settings choose it signs in on a new device: they land on
+// Notes, find a note, change it, write a new one, copy a vault's connector address, add Capture and capture a line into
+// Inbox/, add Journal (the Uni app's own) and write an entry. Against the real hub: what the app writes is read back.
 import { expect, test } from "@playwright/test";
 import { approveUntilBack, signIn, ui } from "./helpers";
 import { api, hubState, VAULT } from "./hub";
 
 type Row = { id: string; path: string; content?: string; tags?: string[] };
 
-test("simple app: sign in → Notes → find, edit and write a note → Connect → Capture a line", async ({ page, context }) => {
+test("Parachute Simplified: sign in → Notes → find, edit and write a note → Connect → Capture a line → Journal", async ({ page, context }) => {
   const hub = hubState();
   const stamp = Date.now().toString(36);
   const made: string[] = [];
@@ -114,8 +114,43 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
     for (const r of (await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Inbox/")}&limit=30`)) as Row[]) if (r.path.startsWith(`Inbox/Ask about rye flour ${stamp} `)) made.push(r.id);
     // the bar now goes straight to the applet
     await expect(bar.getByRole("link", { name: "Capture" })).toHaveAttribute("href", /\/v\/[^/]+\/a\//);
+
+    // Journal: the same applet the Uni app runs, added by one tap; an entry lands in Journal/, by day
+    await bar.getByRole("link", { name: "Journal" }).click();
+    await page.getByRole("button", { name: "Add Journal" }).click();
+    await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Journal/");
+    await page.getByRole("button", { name: "Allow" }).click();
+    const jr = page.frameLocator("iframe.applet-frame[title=\"Journal\"]");
+    await jr.getByRole("textbox", { name: "Write in your journal" }).fill(`Planted the garlic ${stamp}`);
+    await jr.getByRole("button", { name: "Save" }).click();
+    await expect(jr.getByText("Saved to Journal.")).toBeVisible();
+    await expect.poll(async () => ((await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=30`)) as Row[])
+      .filter((r) => (r.content ?? "").includes(`Planted the garlic ${stamp}`)).map((r) => r.path)).toEqual([expect.stringMatching(/^Journal\/\d{4}\/\d{2}-\d{2}\//)]);
+    for (const r of (await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=30`)) as Row[]) if ((r.content ?? "").includes(stamp)) made.push(r.id);
+    await expect(bar.getByRole("link", { name: "Journal" })).toHaveAttribute("href", /\/v\/[^/]+\/a\//);
   } finally {
-    const applets = await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Applets/Capture")}&limit=5`).catch(() => []) as Row[];
+    const applets = [...await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Applets/Capture")}&limit=5`).catch(() => []) as Row[],
+      ...await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Applets/Journal")}&limit=5`).catch(() => []) as Row[]];
     for (const id of [...made, ...applets.map((a) => a.id)]) await api(hub, "DELETE", `notes/${id}`).catch(() => {});
+  }
+});
+
+test("Parachute Simplified: Add Journal in a home Parachute only reads asks on the app's sheet, with nothing rawer under the button", async ({ page }) => {
+  const hub = hubState();
+  for (const n of await api(hub, "GET", "notes?tag=parachute-settings") as Row[]) await api(hub, "DELETE", `notes/${n.id}`);
+  const settings = await api(hub, "POST", "notes", { path: "Parachute/Settings", tags: ["parachute-settings"], content: "settings", metadata: { parachute: { app: "simple" } } }) as Row;
+  try {
+    await signIn(page);
+    const bar = page.getByRole("navigation", { name: "Bar" });
+    await bar.getByRole("link", { name: "Journal" }).click();
+    await page.getByRole("button", { name: "Add Journal" }).click();
+    // found on the emulator walk: "POST /api/notes failed: Parachute can only read …" under the button, beside the sheet
+    const ask = page.getByRole("dialog", { name: `Change notes in ${VAULT}` });
+    await expect(ask).toContainText(`Parachute only reads ${VAULT} so far`);
+    await expect(page.getByRole("button", { name: "Add Journal" })).toBeEnabled();
+    await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+    expect((await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Applets/Journal")}&limit=5`)) as Row[]).toEqual([]);
+  } finally {
+    await api(hub, "DELETE", `notes/${settings.id}`).catch(() => {});
   }
 });

@@ -36,7 +36,7 @@ in this repo, so it moves when Uni rewrites it against the guide.
 
 Every applet in `applets/` is written on the kit and the check holds it (`npm test`): Journal and Capture (#68), Mail,
 Area, Accounts, Matrix (#72), Rooms and its room view (#75), Home and Today (written on the kit from the start, #73).
-The simple app's screens (Notes, a vault's notes, Connect) are drawn with the same parts and held to the same rules,
+Parachute Simplified's screens (Notes, a vault's notes, Connect) are drawn with the same parts and held to the same rules,
 less the page. What an applet keeps of its own is named, with why, in `EXCEPTIONS` (`src/kit/conformance.test.ts`):
 Room's @-name listbox and its live lines (Uni's turn, the composer's), and Rooms' note about what the list shows. The
 guide's own examples are checked too. Ideas lives only in a vault (`playground`); it moves when it is next rewritten.

@@ -2,7 +2,7 @@
 // for the person, and the bar shows the count while the applet is closed, counted without running it. Here Ideas
 // counts notes someone else adds to Ideas/: the vault's own live subscription, against the real hub.
 import { expect, test, type Page } from "@playwright/test";
-import { ui } from "./helpers";
+import { barOf, ui } from "./helpers";
 import { api, hubState, mintToken, record, VAULT } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });
@@ -14,29 +14,6 @@ const IDEAS = { extension: "tsx", tags: ["applet"], body: CODE, fields: {
   applet: { contract: 2, id: "ideas", name: "Ideas", glyph: "✦", note: "a test applet", access: [{ vault: "here", allow: [{ path: "Ideas/", verbs: ["read", "create"] }] }] },
   signals: [{ id: "new", name: "new ideas from others", from: { vault: "here", path: "Ideas/", others: true } }],
 } };
-
-type Row = { id: string; updatedAt: string; metadata?: Record<string, unknown> };
-async function settingsNotes(): Promise<Row[]> {
-  const rows = await api(hubState(), "GET", "notes?tag=parachute-settings&include_metadata=true");
-  return (Array.isArray(rows) ? rows : rows.notes ?? []) as Row[];
-}
-
-/** The applet alone on the bar, in the settings note the suite may already hold; answers how to put it back. */
-async function barOf(applet: string): Promise<() => Promise<void>> {
-  const bar = [{ vault: VAULT, applet }];
-  const [n] = await settingsNotes();
-  if (!n) {
-    const made = (await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar } } })) as Row;
-    return async () => { await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {}); };
-  }
-  const before = (await api(hubState(), "GET", `notes/${n.id}`)) as Row;
-  const was = (before.metadata?.parachute ?? {}) as Record<string, unknown>;
-  await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: { ...before.metadata, parachute: { ...was, bar, app: undefined } }, if_updated_at: before.updatedAt });
-  return async () => {
-    const now = (await api(hubState(), "GET", `notes/${n.id}`)) as Row;
-    await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: before.metadata ?? {}, if_updated_at: now.updatedAt }).catch(() => {});
-  };
-}
 
 test("a note someone else adds to Ideas raises its count on the bar while Ideas is closed; opening it clears the count", async ({ page }) => {
   test.setTimeout(90_000);

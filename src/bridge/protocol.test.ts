@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { allowedDestination } from "./protocol";
 
 describe("the frame's destinations", () => {
-  it("the simple app's screens: a new note, a note's words, Connect, Capture", () => {
-    for (const to of ["/v/kitchen/new", "/v/kitchen/n/01ABC/edit", "/connect", "/capture", "/?in=kitchen&q=beans"]) expect(allowedDestination(to), to).toBe(true);
+  it("Parachute Simplified's screens: a new note, a note's words, Connect, Capture, Journal", () => {
+    for (const to of ["/v/kitchen/new", "/v/kitchen/n/01ABC/edit", "/connect", "/capture", "/journal", "/?in=kitchen&q=beans"]) expect(allowedDestination(to), to).toBe(true);
   });
   it("as before: the launcher, a vault, a note, an applet, Settings, Add", () => {
     for (const to of ["/", "/v/kitchen", "/v/kitchen/n/01ABC", "/v/kitchen/a/01DEF", "/settings", "/add"]) expect(allowedDestination(to), to).toBe(true);

@@ -56,7 +56,7 @@ test("hostile: a record can't widen its sources with every hub or a star inside 
   await expect(ui(page).getByRole("link", { name: /Cook mode/ })).toHaveCount(0);
 });
 
-test("Settings → Your bundle: choose between Simple, Everything and a bundle record; this device opens it, and a new one does too", async ({ page }) => {
+test("Settings → Your bundle: choose between Parachute Simplified, Everything and a bundle record; this device opens it, and a new one does too", async ({ page }) => {
   await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/kitchen-table", content: "an app", tags: ["parachute-bundle"], metadata: { bundle: {
     contract: 1, id: "kitchen-table", name: "Kitchen table", note: "just the recipes", sources: [{ vault: VAULT, applet: "Applets/Recipes" }] } } });
   await start(page);
@@ -64,7 +64,7 @@ test("Settings → Your bundle: choose between Simple, Everything and a bundle r
   const choice = page.getByRole("region", { name: "Your bundle" }).or(page.locator("section", { has: page.getByRole("heading", { name: "Your bundle" }) }));
   await expect(choice.getByRole("radio")).toHaveCount(3);
   await expect(choice.getByRole("radio", { name: /Everything/ })).toBeChecked();
-  await choice.getByRole("radio", { name: /Simple/ }).check();
+  await choice.getByRole("radio", { name: /Parachute Simplified/ }).check();
   await expect.poll(async () => (await tagged("parachute-settings"))[0]?.metadata.parachute.bundle).toBe("simple");
   await page.goto("/");
   await expect(bar(page).getByRole("link", { name: /Notes/ })).toBeVisible();

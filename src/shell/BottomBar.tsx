@@ -12,7 +12,7 @@ import { move, pinApplet, setStart, useSettings, type Found, type Place } from "
 import { chooseStart, forgetStart } from "./start";
 import { clearMark } from "../open/mark";
 import { homeVault, useFrameSource } from "./frameSource";
-import { captureIn } from "../applet/capture";
+import { shippedIn } from "../applet/shipped";
 import { useApplets } from "../applet/useApplets";
 import { useVaults } from "../vault/hooks";
 import { appletPath } from "../open/paths";
@@ -48,16 +48,17 @@ export default function BottomBar() {
   );
 }
 
-/** The simple app's places (docs/SIMPLE.md): Notes (the home), Capture (the applet in the home vault, or the screen that
- *  adds it), and Connect an AI. */
+/** Parachute Simplified's places (docs/SIMPLE.md): Notes (the home), Journal and Capture (each the applet in the home
+ *  vault, or the screen that adds it), and Connect an AI. */
 function SimplePlaces({ pathname }: { pathname: string }) {
   const home = homeVault(useVaults());
   useApplets(home, false);
-  const capture = captureIn(home);
-  const captureHref = home && capture ? appletPath(home.key, capture) : "/capture";
+  const hrefOf = (which: "capture" | "journal") => { const id = shippedIn(home, which); return home && id ? appletPath(home.key, id) : `/${which}`; };
+  const journalHref = hrefOf("journal"), captureHref = hrefOf("capture");
   const at = (href: string) => (pathname === href ? "page" : undefined);
   return <>
     <Link className="home-bar-place" to="/" aria-current={at("/")}><span className="home-bar-glyph" aria-hidden="true">¶</span>Notes</Link>
+    <Link className="home-bar-place" to={journalHref} aria-current={pathname === journalHref || pathname === "/journal" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">✎{"\uFE0E"}</span>Journal</Link>
     <Link className="home-bar-place" to={captureHref} aria-current={pathname === captureHref || pathname === "/capture" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">◉{"\uFE0E"}</span>Capture</Link>
     <Link className="home-bar-place" to="/connect" aria-current={at("/connect")}><span className="home-bar-glyph" aria-hidden="true">⌁</span>Connect</Link>
   </>;

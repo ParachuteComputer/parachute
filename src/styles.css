@@ -234,7 +234,7 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
   padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 14px; }
 .trust-key code { display: block; font-size: 13px; word-break: break-all; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
 
-/* The simple app (docs/SIMPLE.md): Notes, the editor, Connect */
+/* Parachute Simplified (docs/SIMPLE.md): Notes, the editor, Connect */
 .notes-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 22px 0 14px; padding-bottom: 10px; border-bottom: 2px solid var(--text); }
 .notes-head h1 { margin: 0; font: 400 calc(var(--size) * 3)/.95 var(--serif); letter-spacing: -.02em; }
 .notes-new { border-radius: 999px; padding: 10px 18px; white-space: nowrap; }
