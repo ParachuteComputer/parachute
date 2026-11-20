@@ -27,7 +27,7 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
    first asks which of its vaults are yours (all ticked) and which is home. **Use Parachute Cloud instead** and
    **Other ways to sign in** use the hub's own sign-in (an emailed link, a password); the hub then asks twice: to show
    Parachute your vaults, then to read your home.
-5. **More Parachutes** (an org's, a friend's): **Add a Parachute** at the foot of the launcher, the same way, as
+5. **More Parachutes** (an org's, a friend's): **Add a Parachute** in Settings, the same way, as
    **Someone else's**. Each one you add is listed in your home vault, so another device you sign in on finds them all,
    each a tap from signed in.
 
@@ -43,8 +43,8 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
   edit, write), Capture (a line or a voice note into Inbox/) and Connect an AI (each vault's connector address). A
   new Cloud person starts there; Settings → Your app switches to everything ([docs/SIMPLE.md](docs/SIMPLE.md)).
 - **Your Parachutes.** Sign in once per hub, with your key or another way the hub offers (a password, or Cloud's own
-  sign-in). The sign-in reads your home vault only; each other vault you can reach there is one tap away in the
-  launcher, grouped by Parachute, and an applet asks your hub for its vault when you allow it
+  sign-in). The sign-in reads your home vault only; each other vault you can reach there is one tap away in
+  Settings, under its Parachute, and an applet asks your hub for its vault when you allow it
   ([docs/design/SCOPES.md](docs/design/SCOPES.md)). The list of your Parachutes lives in your home vault
   ([docs/design/ONE-SIGN-IN.md](docs/design/ONE-SIGN-IN.md)). Browse, search and read notes.
 - **Applets.** An applet is one note in your vault: its metadata is the manifest (what it may read and write, which
@@ -54,9 +54,9 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
 - **The kit and the look.** An applet imports `parachute`: the data calls (in record words), and a few parts to build a
   screen from (a rich note, a tally of days, a list, a card, a field, an empty state). The whole app and every applet
   follow one theme note in your home vault ([docs/THEME.md](docs/THEME.md)); with none, the built-in one.
-- **Other Parachutes.** Add an org's Parachute (or a friend's) with the same key, as someone else's: the launcher marks
-  its vaults.
-  Bring its applets into your own launcher, and put its components on your home, each in its own sealed frame with
+- **Other Parachutes.** Add an org's Parachute (or a friend's) with the same key, as someone else's: the list and Settings
+  mark its vaults.
+  Bring its applets into your own Parachute, and put its components on your home, each in its own sealed frame with
   its own card, seeing only what that card allows of their vault and nothing of yours. From a vault you trust, import
   a component into your own code instead. See [docs/OTHER-PARACHUTES.md](docs/OTHER-PARACHUTES.md) and the trust
   model, [docs/design/EMBED.md](docs/design/EMBED.md).
@@ -92,7 +92,7 @@ the binary if it isn't on your `PATH`.
 
 Two layers. The **shell** (`src/shell/`, started from `src/main.tsx`) is small and fixed: it holds the key, the sign-ins
 and their tokens, the applets' grants and their card, the self-test, and the screens that use them (adding a vault, an applet's
-screen, Settings, a link from outside). The **frame** (`src/frame/`: the launcher, a vault, a note, open-with and its
+screen, Settings, a link from outside). The **frame** (`src/frame/`: the list of applets, a vault, a note, open-with and its
 sheet) is its own bundle (the `virtual:frame-kit` Vite plugin) that the shell runs in a sealed frame: a srcdoc iframe with
 `sandbox="allow-scripts"`, an opaque origin, no network and no storage of its own. It reaches the shell only through one
 typed message interface, `src/bridge/protocol.ts`, which reads vaults (never a token), lists applets with their status,
@@ -110,10 +110,10 @@ that stops gives way to the built-in one. "Make this mine" copies the built-in f
 newer built-in frame is then offered in Settings, never written over theirs. See
 [docs/CHANGE-YOUR-FRAME.md](docs/CHANGE-YOUR-FRAME.md) and `src/shell/frameSource.ts`.
 
-**Moving around** is one model ([docs/NAVIGATION.md](docs/NAVIGATION.md)): the launcher for everything, a bar at the
-foot for the pinned places and the home applet, Back to where you came from, a note in its applet. The bar is the
-shell's (`src/shell/BottomBar.tsx`), drawn under the frame and under applets; what is on it is one settings note in the
-home vault (`src/shell/homeSettings.ts`), which the person's agent can write. Open on start (`src/shell/start.ts`) runs
+**Moving around** is one model ([docs/NAVIGATION.md](docs/NAVIGATION.md)): the open app's home applet first, a bar at the
+foot for its pins (then Applets, the list of the app's applets), Back to where you came from, a note in its applet. The bar is the
+shell's (`src/shell/BottomBar.tsx`), drawn under the frame and under applets; what is on it is the open app's record (or the
+settings note) in the home vault (`src/shell/homeSettings.ts`), which the person's agent can write. Open on start (`src/shell/start.ts`) runs
 an applet by itself only when this device holds both its Allow and the person's choice of it as home.
 
 - `src/vault/`: signing in (OAuth with PKCE and dynamic registration, one sign-in per vault), the vaults this device

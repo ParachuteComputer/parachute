@@ -108,7 +108,7 @@ test("a frame that stops gives way to the built-in one, and Settings says why", 
   await page.goto("/");
   await page.getByRole("button", { name: "Use it" }).click();
   await expect(frameEl(page)).toHaveAttribute("data-frame", "built-in");
-  await expect(ui(page).getByRole("list", { name: `Applets in ${VAULT}` })).toBeVisible();
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
   await page.goto("/settings");
   await expect(status(page)).toHaveText("The built-in frame runs: your frame stopped.");
   await expect(page.locator("q[data-untrusted]")).toContainText("boom");

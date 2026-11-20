@@ -26,13 +26,13 @@ async function withNoticeBoard(run: (id: string) => Promise<void>) {
   }
 }
 
-test("the org's vault, added with the person's key as someone else's, is its own chapter marked whose it is", async ({ page }) => {
+/** In the list (one list, not by vault): Techne's own Notice board says whose it is; the one brought in says where from. */
+const theirs = (page: Page) => ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Notice board/ }).filter({ hasText: `${ORG_VAULT} · someone else's` });
+const brought = (page: Page) => ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Notice board/ }).filter({ hasText: `from ${ORG_VAULT}` });
+
+test("the org's vault, added with the person's key as someone else's, is marked whose it is in Settings", async ({ page }) => {
   await signInWithKey(page, techneState(), ORG_VAULT);
-  await page.goto("/");
-  const techne = ui(page).getByRole("region", { name: ORG_VAULT });
-  await expect(techne).toContainText(`someone else's · at ${hostOf(techneState().origin)}`);
-  await expect(ui(page).getByRole("region", { name: VAULT })).toContainText("your home");
-  // Settings says the same, and offers only the person's own vault as home
+  // Settings says whose each vault is, and offers only the person's own vault as home
   await page.goto("/settings");
   await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
   await expect(page.getByRole("combobox", { name: `Whose ${VAULT} is` })).toHaveValue("mine");
@@ -45,7 +45,7 @@ test("an applet brought in from Techne: a pointer in the home vault, its card sa
   await withNoticeBoard(async (id) => {
     await page.goto("/");
     // long-press (a right-click) on Techne's applet: bring it in; open on start isn't offered for someone else's code
-    await ui(page).getByRole("region", { name: ORG_VAULT }).getByRole("link", { name: /Notice board/ }).click({ button: "right" });
+    await theirs(page).click({ button: "right" });
     const sheet = ui(page).getByRole("dialog", { name: "Notice board" });
     await expect(sheet.getByRole("button", { name: "Open on start" })).toHaveCount(0);
     await sheet.getByRole("button", { name: "Bring into my Parachute" }).click();
@@ -58,9 +58,8 @@ test("an applet brought in from Techne: a pointer in the home vault, its card sa
     expect(pinned).toMatch(/^tsx:[0-9a-f]{64}$/);
 
     // it sits among the home's own applets, saying where it is from
-    const mine = ui(page).getByRole("region", { name: VAULT });
-    await expect(mine.getByRole("link", { name: /Notice board/ })).toContainText(`from ${ORG_VAULT} · at ${hostOf(techneState().origin)}`);
-    await mine.getByRole("link", { name: /Notice board/ }).click();
+    await expect(brought(page)).toContainText(`from ${ORG_VAULT} · at ${hostOf(techneState().origin)}`);
+    await brought(page).click();
     await expect(page.getByRole("heading", { name: /Notice board · techne's/ })).toBeVisible();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText(`In the ${ORG_VAULT} vault (someone else's, at ${hostOf(techneState().origin)})`);
@@ -76,7 +75,7 @@ test("an applet brought in from Techne: a pointer in the home vault, its card sa
     const cur = one(await org("GET", `notes?id=${id}`));
     await org("PATCH", `notes/${id}`, { content: NOTICE.replace("<h1>Notice board</h1>", "<h1>Notice board, new</h1>"), if_updated_at: cur.updatedAt });
     await page.goto("/");
-    await ui(page).getByRole("region", { name: VAULT }).getByRole("link", { name: /Notice board/ }).click();
+    await brought(page).click();
     await expect(page.getByText("techne changed «Notice board» since you brought it in")).toBeVisible();
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await page.getByRole("button", { name: "Allow this version" }).click();

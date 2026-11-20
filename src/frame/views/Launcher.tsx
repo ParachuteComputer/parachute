@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useHold } from "../../ui/hold";
 import { Link } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVault } from "../../bridge/protocol";
-import { addEmbed, addVault, bringIn, dismissVault, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
-import { isAppOwn, noteHref, titleOf } from "../../vault/notes";
-import { Days, Empty } from "../../kit/parts";
+import { addEmbed, addVault, bringIn, dismissVault, pinApplet, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
+import { titleOf } from "../../vault/notes";
+import { Days } from "../../kit/parts";
 import { appletPath } from "../../open/paths";
 
 /** "2 days ago", from an ISO time. */
@@ -19,110 +19,81 @@ export function ago(iso: string | null | undefined, now = Date.now()): string {
   return new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "long" });
 }
 
-const worthShowing = (n: Note) => !isAppOwn(n);
 const updated = (n: Note) => (n as { updatedAt?: string }).updatedAt ?? null;
 
-/** The newest notes of every vault, read once per showing of the launcher. */
-function useRecent(vaults: FrameVault[]): Record<string, Note[]> {
-  const [recent, setRecent] = useState<Record<string, Note[]>>({});
-  const keys = vaults.map((v) => v.key).join("|");
-  useEffect(() => {
-    let live = true;
-    for (const v of vaults) {
-      readerFor(v).queryNotes({ orderBy: "updated_at", sort: "desc", limit: 120 })
-        .then((rows) => { if (live) setRecent((r) => ({ ...r, [v.key]: rows.filter(worthShowing) })); }, () => { /* that vault shows no recent notes */ });
-    }
-    return () => { live = false; };
-  }, [keys]); // eslint-disable-line react-hooks/exhaustive-deps
-  return recent;
-}
-
-const WEEK = 7 * 86_400_000;
-const NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
-const counted = (n: number, one: string, many: string) => `${n <= 12 ? NUMBERS[n - 1] ?? "no" : n} ${n === 1 ? one : many}`;
-const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-/** One line on the week: how much changed, and where most of it did. */
-function weekLine(vaults: FrameVault[], recent: Record<string, Note[]>, now = Date.now()): string {
-  const per = vaults.map((v) => ({ v, n: (recent[v.key] ?? []).filter((n) => now - Date.parse(updated(n) ?? "") < WEEK).length }));
-  const total = per.reduce((a, b) => a + b.n, 0);
-  if (!total) return "Nothing changed this week.";
-  const most = [...per].sort((a, b) => b.n - a.n)[0];
-  return `${capital(counted(total, "note", "notes"))} changed this week${vaults.length > 1 ? `, most of them in ${most.v.vault}` : ""}.`;
-}
-
-/** Hills drawn in ink over a pale wash, under the masthead: ornament only. */
-const Hills = () => (
-  <svg className="launcher-hills" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden="true">
-    <path className="h1" d="M0 80 C180 30 320 40 480 64 S820 14 1200 56 V120 H0Z" />
-    <path className="h2" d="M0 100 C220 70 400 86 620 92 S960 66 1200 86 V120 H0Z" />
-    <path className="h3" d="M0 112 C300 102 640 112 1200 106 V120 H0Z" />
-  </svg>
-);
-
-const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
-
 /**
- * The launcher: every applet in every vault this device holds, and the vaults themselves, laid out like an almanac
- * (design/kit/WHY.md): a masthead with a line on the week and its days as a tally, then a chapter per vault with its
- * applets (each with what changed lately in what it opens, and its last seven days) and its newest notes. A long-press
- * (or a right-click) on an applet offers pinning it to the bar and opening it on start.
+ * The list: the open app's applets (shell/apps.ts decides which), one plain list, whatever vault each is in. It is
+ * where Back from a first screen lands and what the bar's Applets opens; the home page itself is the app's home applet.
+ * Vaults are in Settings (and in a Vault applet, when the app lists one). A long-press (or a right-click) on an applet
+ * offers pinning it to the bar and opening it on start.
  */
 export default function Launcher() {
   const vaults = useVaults();
-  const recent = useRecent(vaults);
+  const home = useHome();
   const [asked, setAsked] = useState<{ v: FrameVault; a: FrameApplet } | null>(null);
   const [part, setPart] = useState<{ v: FrameVault; c: FrameComponent } | null>(null);
-  const today = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
-  // a vault signed out of while the launcher shows leaves the tally with it
-  const all = vaults.flatMap((v) => recent[v.key] ?? []);
-  const groups = byParachute(vaults, useHome().parachutes ?? []);
-  // one Parachute, all of it here: no heading over its chapters
-  const grouped = groups.length > 1 || groups.some((g) => g.p && !g.p.signedIn);
+  // how many each vault lists, once read: the list says when there is nothing in it at all
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const count = useCallback((key: string, n: number) => setCounts((c) => (c[key] === n ? c : { ...c, [key]: n })), []);
+  // only the vaults held now count (one signed out of while the list shows leaves with its count)
+  const read = vaults.every((v) => counts[v.key] !== undefined);
+  const anyApplets = vaults.some((v) => (counts[v.key] ?? 0) > 0);
+  const many = vaults.length > 1;
   return (
-    <main className={vaults.length > 1 ? "screen launcher launcher-wide" : "screen launcher"}>
-      <header className="launcher-head">
-        <Hills />
-        <div className="launcher-words">
-          <h1>Parachute</h1>
-          <p className="launcher-when">{today}</p>
-          <p className="launcher-week">{Object.keys(recent).length ? weekLine(vaults, recent) : "\u00a0"}</p>
-        </div>
-        <Days times={all.map(updated)} label="the last four weeks" />
-      </header>
-      {groups.map(({ p, vaults: here, from }) => {
-        const chapters = <div className={vaults.length > 1 ? "launcher-spread launcher-pages" : "launcher-spread"}>
-          {here.map((v, i) => <Chapter key={v.key} n={from + i} v={v} many={vaults.length > 1} level={p && grouped ? 3 : 2} recent={recent[v.key]} onHold={(a) => setAsked({ v, a })} onPart={(c) => setPart({ v, c })} />)}
-        </div>;
-        if (!p || !grouped) return <div key={p?.hub ?? "all"}>{p && <VaultsToOpen p={p} />}{chapters}</div>;
-        return (
-          <section key={p.hub} className="parachute" aria-label={`Parachute: ${p.name}`}>
-            <h2 className="parachute-name">{p.name}{p.name !== p.host && <span className="parachute-host"> · {p.host}</span>}</h2>
-            <VaultsToOpen p={p} />
-            {p.signedIn ? chapters
-              : <p className="parachute-out">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`} aria-label={`Sign in to ${p.name}`}>Sign in</Link></p>}
-          </section>
-        );
-      })}
-      <p className="launcher-foot"><Link to="/add">Add a Parachute</Link><Link to="/settings">Settings</Link></p>
+    <main className="screen launcher">
+      <h1 className="launcher-title">Applets</h1>
+      {home.notice === "app-record" && <p className="launcher-notice" role="status">Your app record didn't load, so here is every applet. <Link to="/settings">Settings</Link></p>}
+      <ol className="entries" aria-label="Applets">
+        {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
+        {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}
+      </ol>
+      <Components vaults={vaults} onPart={(v, c) => setPart({ v, c })} />
+      <p className="launcher-foot"><Link to="/settings">Settings</Link></p>
       {asked && <AppletSheet v={asked.v} a={asked.a} onClose={() => setAsked(null)} />}
       {part && <ComponentSheet v={part.v} c={part.c} onClose={() => setPart(null)} />}
     </main>
   );
 }
 
-/** The vaults by Parachute, in the order the shell gives the Parachutes (the home's first); a vault no Parachute
- *  names (a frame on an older shell) goes in a group of its own at the end. `from`: the first chapter's number. */
-export function byParachute(vaults: FrameVault[], parachutes: FrameParachute[]): { p: FrameParachute | null; vaults: FrameVault[]; from: number }[] {
-  const out: { p: FrameParachute | null; vaults: FrameVault[]; from: number }[] = [];
-  let n = 0;
-  for (const p of parachutes) {
-    const here = vaults.filter((v) => v.hub === p.hub);
-    out.push({ p, vaults: here, from: n });
-    n += here.length;
-  }
-  const rest = vaults.filter((v) => !parachutes.some((p) => v.hub === p.hub));
-  if (rest.length || !out.length) out.push({ p: null, vaults: rest, from: n });
-  return out;
+/** One vault's applets in the list (and, in the home, the ones brought in from other Parachutes). */
+function VaultEntries({ v, many, onCount, onHold }: { v: FrameVault; many: boolean; onCount: (key: string, n: number) => void; onHold: (a: FrameApplet) => void }) {
+  const applets = useApplets(v.key);
+  const home = useHome();
+  const pointers = usePointers();
+  const shown = applets?.ok ? applets.entries : [];
+  const brought = v.home ? pointers.filter((p) => p.kind === "applet") : [];
+  useEffect(() => { if (applets) onCount(v.key, shown.length + brought.length + (applets.ok ? 0 : 1)); }, [applets, shown.length, brought.length, v.key, onCount]);
+  const where = many || (v.whose && v.whose !== "mine") ? [v.vault, whoseLine(v, false)].filter(Boolean).join(" · ") : "";
+  return <>
+    {shown.map((a) => {
+      const isHome = home.start?.vault === v.key && home.start.noteId === a.noteId;
+      const pinned = home.bar.some((p) => p.vault === v.key && p.noteId === a.noteId);
+      return <Entry key={a.noteId} v={v} a={a} where={where} home={isHome} pinned={pinned} onHold={() => onHold(a)} />;
+    })}
+    {brought.map((p) => <Brought key={p.noteId} p={p} />)}
+    {applets && !applets.ok && <li className="entry-quiet">The applets in {v.vault} couldn't be read.</li>}
+  </>;
+}
+
+/** Components (docs/OTHER-PARACHUTES.md): what can be put on the home applet's page, a tap each. Shown only when there are some. */
+function Components({ vaults, onPart }: { vaults: FrameVault[]; onPart: (v: FrameVault, c: FrameComponent) => void }) {
+  const [some, setSome] = useState<Record<string, boolean>>({});
+  const tell = useCallback((key: string, yes: boolean) => setSome((s) => (s[key] === yes ? s : { ...s, [key]: yes })), []);
+  const any = vaults.some((v) => some[v.key]);
+  return (
+    <section className={any ? "launcher-parts" : "launcher-parts empty"} aria-label="Components" hidden={!any}>
+      <h2 className="lately-label">Components</h2>
+      <ul className="parts-list" aria-label="Components">
+        {vaults.map((v) => <VaultComponents key={v.key} v={v} onSome={tell} onPart={(c) => onPart(v, c)} />)}
+      </ul>
+    </section>
+  );
+}
+function VaultComponents({ v, onSome, onPart }: { v: FrameVault; onSome: (key: string, yes: boolean) => void; onPart: (c: FrameComponent) => void }) {
+  const parts = useComponents(v.key);
+  const list = parts?.ok ? parts.entries : [];
+  useEffect(() => { onSome(v.key, list.length > 0); }, [list.length, v.key, onSome]);
+  return <>{list.map((c) => <li key={c.noteId}><button type="button" className="part-chip" onClick={() => onPart(c)}><span aria-hidden="true">{c.glyph}{"\uFE0E"}</span> {c.name}</button></li>)}</>;
 }
 
 /** The person's vaults on a Parachute that this device doesn't read yet (docs/design/SCOPES.md): the sign-in reads only
@@ -159,52 +130,7 @@ export function whoseLine(v: FrameVault, many: boolean): string | null {
   return null;
 }
 
-function Chapter({ n, v, many, level, recent, onHold, onPart }: { n: number; v: FrameVault; many: boolean; level: 2 | 3; recent: Note[] | undefined; onHold: (a: FrameApplet) => void; onPart: (c: FrameComponent) => void }) {
-  const H = level === 3 ? "h3" : "h2";
-  const parts = useComponents(v.key);
-  const applets = useApplets(v.key);
-  const home = useHome();
-  const pointers = usePointers();
-  const shown = applets?.ok ? applets.entries : [];
-  const whose = whoseLine(v, many);
-  // what the home brings in from other Parachutes sits among its own applets
-  const brought = v.home ? pointers.filter((p) => p.kind === "applet") : [];
-  return (
-    <section className={v.whose && v.whose !== "mine" ? "chapter chapter-theirs" : "chapter"} aria-label={v.vault}>
-      <H className="chapter-head"><span className="chapter-n" aria-hidden="true">{ROMAN[n] ?? n + 1}</span><span className="chapter-name">{v.vault}</span><Link to={`/v/${encodeURIComponent(v.key)}`}>Open the vault</Link></H>
-      {whose && <p className="chapter-whose">{whose}</p>}
-      <ol className="entries" aria-label={`Applets in ${v.vault}`}>
-        {shown.map((a) => {
-          const isHome = home.start?.vault === v.key && home.start.noteId === a.noteId;
-          const pinned = home.bar.some((p) => p.vault === v.key && p.noteId === a.noteId);
-          return <Entry key={a.noteId} v={v} a={a} home={isHome} pinned={pinned} onHold={() => onHold(a)} />;
-        })}
-        {brought.map((p) => <Brought key={p.noteId} p={p} />)}
-        {applets && !applets.ok && <li className="entry-quiet">Its applets couldn't be read.</li>}
-        {applets?.ok && !shown.length && !brought.length && <li className="entry-quiet">No applets here yet.</li>}
-      </ol>
-      {parts?.ok && parts.entries.length > 0 && (
-        <>
-          <h3 className="lately-label">Components in {v.vault}</h3>
-          <ul className="parts-list" aria-label={`Components in ${v.vault}`}>
-            {parts.entries.map((c) => <li key={c.noteId}><button type="button" className="part-chip" onClick={() => onPart(c)}><span aria-hidden="true">{c.glyph}{"\uFE0E"}</span> {c.name}</button></li>)}
-          </ul>
-        </>
-      )}
-      {!!recent?.length && (
-        <>
-          <h3 className="lately-label">Lately in {v.vault}</h3>
-          <ul className="lately" aria-label={`Lately in ${v.vault}`}>
-            {recent.slice(0, 3).map((note) => <li key={note.id}><Link to={noteHref(v.key, note.id)}><span>{titleOf(note)}</span><i>{ago(updated(note))}</i></Link></li>)}
-          </ul>
-        </>
-      )}
-      {recent && !recent.length && <Empty>Nothing written here yet.</Empty>}
-    </section>
-  );
-}
-
-function Entry({ v, a, home, pinned, onHold }: { v: FrameVault; a: FrameApplet; home: boolean; pinned: boolean; onHold: () => void }) {
+function Entry({ v, a, where, home, pinned, onHold }: { v: FrameVault; a: FrameApplet; where: string; home: boolean; pinned: boolean; onHold: () => void }) {
   const hold = useHold(onHold);
   const o = a.opens[0];
   const load = useVaultQuery<Note[]>(o ? v : null, (r) => r.queryNotes({ tag: o!.type, pathPrefix: o!.path, orderBy: "updated_at", sort: "desc", limit: 30 }), [o?.type, o?.path]);
@@ -218,7 +144,7 @@ function Entry({ v, a, home, pinned, onHold }: { v: FrameVault; a: FrameApplet; 
       <Link className="entry" to={appletPath(v.key, a.noteId)} {...hold}>
         <span className="entry-glyph" aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span>
         <span className="entry-name">{a.manifest.name}{home && <span className="entry-home">home</span>}{pinned && !home && <span className="entry-pinned"><span aria-hidden="true">●</span> pinned</span>}</span>
-        <span className="entry-life">{life}</span>
+        <span className="entry-life">{where && <span className="entry-where">{where} · </span>}{life}</span>
         {o && load.state === "ok" && <span className="entry-days" aria-hidden="true"><Days times={load.data.map(updated)} days={7} inline /></span>}
       </Link>
     </li>
@@ -291,7 +217,7 @@ function AppletSheet({ v, a, onClose }: { v: FrameVault; a: FrameApplet; onClose
       <section className="sheet" role="dialog" aria-modal="true" aria-label={a.manifest.name}>
         <h2><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> {a.manifest.name} <span className="quiet">in {v.vault}</span></h2>
         <ul className="plain sheet-list">
-          {!isHome && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => pinApplet(v.key, a.noteId, !pinned))}>{pinned ? "Unpin from the bar" : "Pin to the bar"}</button></li>}
+          <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => pinApplet(v.key, a.noteId, !pinned))}>{pinned ? "Unpin from the bar" : "Pin to the bar"}</button></li>
           {!theirs && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => startApplet(v.key, isHome ? null : a.noteId))}>{isHome ? "Don't open on start" : "Open on start"}</button></li>}
           {theirs && !isBrought && <li><button type="button" className="sheet-choice" disabled={busy} onClick={act(() => bringIn(v.key, a.noteId))}>Bring into my Parachute</button></li>}
           {theirs && isBrought && <li className="quiet sheet-note">Brought into your Parachute.</li>}

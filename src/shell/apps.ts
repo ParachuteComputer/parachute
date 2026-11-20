@@ -106,7 +106,7 @@ export function appOf(raw: unknown, path: string | null, noteId: string | null):
 export function builtInApp(id: "everything" | "simple"): App {
   return id === "simple"
     ? { id, name: "Simple", glyph: "¶", note: "your notes, Capture, and Connect an AI", look: "notes", sources: [], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: { approve: "unlock" }, noteId: null }
-    : { id, name: "Everything", glyph: "⁂", note: "the launcher, with every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: { approve: "unlock" }, noteId: null };
+    : { id, name: "Everything", glyph: "⁂", note: "every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: { approve: "unlock" }, noteId: null };
 }
 /** Stands for every hub in the built-in Everything only: no record can say it (`hubOk` refuses it). */
 export const ANY_HUB = "*";
@@ -151,4 +151,11 @@ export function recordOf(app: App): Record<string, unknown> {
     ...(app.opens.length ? { opens: app.opens } : {}), ...(app.keep !== "auto" ? { keep: app.keep } : {}),
     ...(app.security.approve !== "unlock" ? { security: app.security } : {}),
   };
+}
+
+/** An app someone else offers, as the person follows it: their record, under the person's own id and name for it, and
+ *  never less careful than the person's own record asks (a level is raised by a record, never lowered: appFloor.ts). */
+export function followed(own: App, raw: unknown, theirs: Record<string, unknown>): Record<string, unknown> {
+  return { ...theirs, contract: 1, id: own.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: own.live,
+    ...(own.security.approve === "passcode" ? { security: own.security } : {}) };
 }

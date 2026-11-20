@@ -2,8 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { openVault as openAnother, signIn, ui } from "./helpers";
 import { hubState, MORE_VAULTS, VAULT } from "./hub";
 
-/** From the launcher into a vault, as a person does: its chapter's Open the vault. */
-const openVault = (page: Page, vault = VAULT) => ui(page).getByRole("region", { name: vault, exact: true }).getByRole("link", { name: "Open the vault" }).click();
+/** Into a vault, as a person does: Settings, its Open. */
+const openVault = async (page: Page, vault = VAULT) => { await ui(page).getByRole("link", { name: "Settings" }).click(); await page.getByRole("link", { name: `Open ${vault}`, exact: true }).click(); };
 
 test("sign in to the Parachute on the hub, open a vault, and read a note", async ({ page }) => {
   await signIn(page);
@@ -32,7 +32,7 @@ test("the vaults stay after a reload, and Sign out of the Parachute forgets them
   // the sign-in read the home; a second vault, opened
   await openAnother(page, MORE_VAULTS[0].vault);
   await page.reload();
-  await expect(ui(page).getByRole("region", { name: VAULT, exact: true })).toBeVisible();
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
   const recs = await page.evaluate(() => JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]") as { vault: string; tokenEndpoint: string; refreshToken: string; clientId: string; revocationEndpoint: string }[]);
   expect(recs.map((r) => r.vault).sort()).toEqual([VAULT, MORE_VAULTS[0].vault].sort());
   await ui(page).getByRole("link", { name: "Settings" }).click();

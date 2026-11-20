@@ -47,7 +47,8 @@ export type FramePlace = { vault: string; noteId: string };
  *  `fresh`: vaults made there since this device signed in, which it may add (vault/newVaults.ts). */
 export type FrameParachute = { hub: string; host: string; name: string; home: boolean; signedIn: boolean; fresh?: string[] };
 /** `app`: "simple" when the person's settings choose the simple app (docs/SIMPLE.md): the frame's home is then Notes. */
-export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; app?: "simple" };
+/** `notice: "app-record"`: the app this device chose didn't load (its record is malformed or gone); the list says so. */
+export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; app?: "simple"; notice?: "app-record" };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
 export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; includeContent?: boolean; includeMetadata?: boolean };
 /** `decided`: what the note's route already decided for this history entry (kept by the shell, which outlives the frame). */

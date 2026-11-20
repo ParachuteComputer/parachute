@@ -44,6 +44,11 @@ describe("metadata.app", () => {
   });
   it("open goes only to the app's own places", () => {
     for (const ok of ["/", "/v/kitchen", "/v/kitchen/n/01ABC", "/v/kitchen/a/01ABC", "/v/k%40h/n/Recipes%2FSoup"]) expect(appHref(ok), ok).toBe(true);
+    // an applet at a room (its launch, as a notification's tap gives it), and nothing else in a query
+    const ev = "a".repeat(64);
+    for (const ok of ["/v/home/a/01ROOMS?room=parachute", `/v/home/a/01ROOMS?room=r_1-x&event=${ev}`]) expect(appHref(ok), ok).toBe(true);
+    for (const bad of ["/v/home/n/01X?room=parachute", "/?room=x", "/v/home/a/01R?screen=x", "/v/home/a/01R?room=", "/v/home/a/01R?room=a/b", `/v/home/a/01R?event=${ev}&room=x`,
+      "/v/home/a/01R?room=x&event=zz", "/v/home/a/01R?room=x&next=/settings", "/v/home/a/01R?room=x#h", "/v/home/a/../../settings?room=x", "/v/home/a/01R??room=x"]) expect(appHref(bad), bad).toBe(false);
     for (const bad of ["//evil.example", "https://evil.example", "/settings", "/add", "/v/k/n/x?y=1", "/v/k/x/y", "/oauth/callback", "javascript:alert(1)",
       // what the browser would read as another address: a backslash, encoded or plain dot segments, a stripped tab
       "/v/kitchen/n/a\\..\\..\\..\\..\\settings", "/v/%2e%2e/n/x", "/v/%2E%2E", "/v/k/n/..", "/v/../a/x", "/v/k/n/a\t", "/v/k/n/a\n"]) expect(appHref(bad), bad).toBe(false);

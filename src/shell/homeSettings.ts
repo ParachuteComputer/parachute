@@ -28,7 +28,8 @@ import { isMine } from "../vault/whose";
 import { homeVault } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
-import { APP_TAG, appOf as appRecordOf, appsFrom, openApp, recordOf, APP_FOLDER, type App } from "./apps";
+import { approveLevel } from "./appFloor";
+import { APP_TAG, appOf as appRecordOf, appsFrom, followed, openApp, recordOf, APP_FOLDER, type App } from "./apps";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -216,6 +217,8 @@ export async function readSettings(): Promise<void> {
       if (f) found[keyOf(p)] = f;
     }
     keepNow({ vault: home.key, settings, noteId: n?.id ?? null, updatedAt: (n as { updatedAt?: string } | null)?.updatedAt ?? null, found, apps });
+    // a level a record asks is kept on this device from the first read on: a later record can't drop it (appFloor.ts)
+    for (const a of parseApps(apps)) approveLevel(a, home.key);
     readThisSession = home.key;
     bump({ read: "read" });
   } catch {
@@ -254,17 +257,14 @@ async function changeSettings(change: (raw: Raw, creating: boolean) => Raw): Pro
 function pinRaw(raw: Raw, match: (p: Place) => boolean, add: Place | null): Raw {
   if (!add) return { ...raw, bar: raw.bar.filter((x) => !parsedAs(x, match)) };
   if (raw.bar.some((x) => parsedAs(x, match))) return raw;
-  // the places the bar shows: found here, and not the home (which sits first on its own)
-  const home = (() => { const s = placeOf(raw.start); return s ? find(s) : null; })();
-  const shown = (p: Place) => { const f = find(p); return !!f && !(home && f.vault === home.vault && f.noteId === home.noteId); };
-  const onBar = new Set(raw.bar.map((x) => { const p = placeOf(x); const f = p && shown(p) ? find(p) : null; return f ? `${f.vault}|${f.noteId}` : null; }).filter(Boolean));
+  // the places the bar shows: the ones found here
+  const onBar = new Set(raw.bar.map((x) => { const p = placeOf(x); const f = p ? find(p) : null; return f ? `${f.vault}|${f.noteId}` : null; }).filter(Boolean));
   if (onBar.size >= MAX_PLACES) throw new Error(`The bar holds ${MAX_PLACES} places: unpin one first.`);
   return { ...raw, bar: [...raw.bar, add] };
 }
-/** The raw entries the bar shows, as barNow picks them: found here, not the home, the first name of each applet. */
+/** The raw entries the bar shows, as barNow picks them: found here, the first name of each applet. */
 function shownIndices(r: Raw): number[] {
-  const start = placeOf(r.start), home = start ? find(start) : null;
-  const seen = new Set<string>(home ? [`${home.vault}|${home.noteId}`] : []);
+  const seen = new Set<string>();
   const out: number[] = [];
   r.bar.forEach((x, i) => { const p = placeOf(x), f = p ? find(p) : null; if (f && out.length < MAX_PLACES && !seen.has(`${f.vault}|${f.noteId}`)) { seen.add(`${f.vault}|${f.noteId}`); out.push(i); } });
   return out;
@@ -320,13 +320,14 @@ export async function startApplet(vault: string, noteId: string | null): Promise
   return changeChoices((r) => ({ ...r, start: p }));
 }
 
-/** The bar as this device can show it: the home applet first, then the pins it can find, each once. */
+/** The bar as this device can show it: the pins it can find, in their order, each once; and the home applet, which is on
+ *  the bar only when it is pinned (the record's bar is the bar: the shell adds nothing of its own to it). */
 export function barNow(s: Settings = effective(settingsNow(), appsNow())): { start: (Found & { place: Place }) | null; pins: (Found & { place: Place })[] } {
   const start = s.start ? find(s.start) : null;
   const pins: (Found & { place: Place })[] = [];
   for (const p of s.bar) {
     const f = find(p);
-    if (f && !(start && f.vault === start.vault && f.noteId === start.noteId) && !pins.some((x) => x.vault === f.vault && x.noteId === f.noteId)) pins.push({ ...f, place: p });
+    if (f && !pins.some((x) => x.vault === f.vault && x.noteId === f.noteId)) pins.push({ ...f, place: p });
     if (pins.length === MAX_PLACES) break;
   }
   return { start: start && s.start ? { ...start, place: s.start } : null, pins };
@@ -352,8 +353,9 @@ async function readAppRecords(home: VaultRecord): Promise<RawApp[]> {
       const listed = await Promise.race([clientFor(there).queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 }), new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error("slow")), 3000); })]).finally(() => clearTimeout(timer));
       const theirs = listed.find((x) => stripExt(x.path ?? "") === stripExt(a.live!.path));
       const t = theirs && plain(theirs.metadata) ? theirs.metadata.app : undefined;
-      // their record, under the person's own id and name for it; its places mean their hub when they name none
-      out.push(plain(t) ? { app: { ...t, contract: 1, id: a.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: a.live }, path: r.path ?? null, noteId: r.id, hubOf: a.live.hub } : { app: raw, path: r.path ?? null, noteId: r.id });
+      // its places mean their hub when they name none
+      // their record, under the person's own id and name, and never less careful than the person's own (apps.ts followed)
+      out.push(plain(t) ? { app: followed(a, raw, t), path: r.path ?? null, noteId: r.id, hubOf: a.live.hub } : { app: raw, path: r.path ?? null, noteId: r.id });
     } catch {
       const was = keptNow()?.vault === home.key ? keptNow()?.apps?.find((x) => x.noteId === r.id && x.hubOf) : undefined;
       out.push(was ?? { app: raw, path: r.path ?? null, noteId: r.id });
@@ -383,6 +385,14 @@ export async function chooseApp(id: string): Promise<void> {
 }
 /** The app open on this device now. */
 export const openAppNow = (): App => openApp(appsNow(), deviceApp(), settingsNow().app);
+/** The app this device (or the settings note) chose, when its record didn't load (malformed, gone, or never read and no
+ *  copy kept): the app then opens the next one it can (Everything at the end), and the list says so, with Settings. A
+ *  broken record never locks the person out. null while the settings are first read, and when the chosen app is open. */
+export function appMissing(): string | null {
+  if (!settingsReadNow() && state.read !== "unreachable") return null;
+  const chosen = deviceApp() ?? settingsNow().app;
+  return chosen && chosen !== openAppNow().id ? chosen : null;
+}
 
 /** The bar and home as the open app gives them: its own, or the settings note's when it has none. */
 export function effective(s: Settings, apps: readonly App[]): Settings {

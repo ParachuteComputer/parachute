@@ -1,6 +1,6 @@
 // An applet in this folder as the record a vault keeps (docs/WRITE-AN-APPLET.md): <name>.json holds its path, tags and
-// fields, <name>.tsx (or .html) its code. `{{name}}` in the path and fields is filled from `vars` (a server's address,
-// say); one left unfilled is an error, so no applet goes in with a placeholder. A component an applet imports
+// fields, <name>.tsx (or .html) its code. `{{name}}` in the path and fields, and `"{{name}}"` (quoted) in the code, is
+// filled from `vars` (a server's address, a key); one left unfilled is an error, so no applet goes in with a placeholder. A component an applet imports
 // (`import Room from "component:room"`) is here as <id>.json and <id>.tsx, tagged `component`: `withImports` gives it
 // along with the applet, so both go into the vault together. Runs under Node (type stripping) and the tests.
 import { existsSync, readFileSync } from "node:fs";
@@ -25,7 +25,10 @@ export function appletRecord(name: string, vars: Record<string, string> = {}): A
     if (fields.signals !== undefined) { if (signals.length) fields.signals = signals; else delete fields.signals; }
     return fields;
   };
-  return { path: fill(meta.path), extension: meta.extension, tags: meta.tags, fields: dropEmpty(JSON.parse(fill(JSON.stringify(meta.fields)))), body: readFileSync(file, "utf8") };
+  // in the code, only a whole quoted "{{name}}" is filled (as a string literal): JSX's {{ }} is left alone. The value is
+  // then part of the code, so its card asks again when it changes; `<` is escaped, so a value can't end an html applet's <script>
+  const fillCode = (s: string) => s.replace(/"\{\{(\w+)\}\}"/g, (_m, k: string) => { if (!(k in vars)) throw new Error(`${name} needs ${k}`); return JSON.stringify(vars[k]).replace(/</g, "\\u003c"); });
+  return { path: fill(meta.path), extension: meta.extension, tags: meta.tags, fields: dropEmpty(JSON.parse(fill(JSON.stringify(meta.fields)))), body: fillCode(readFileSync(file, "utf8")) };
 }
 
 /** The components an applet imports, each from this folder (its id is its file's name), then the applet itself. */
