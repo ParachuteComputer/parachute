@@ -179,6 +179,7 @@ pub fn run() {
             services::svc_token_has,
             services::svc_log,
             notify::notify_set,
+            notify::notify_open_settings,
             notify::push_status,
             notify::push_setup,
             notify::push_register,
