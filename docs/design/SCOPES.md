@@ -122,13 +122,13 @@ what it asked for. To see the new pages, remove the old Parachute approval on th
 On Cloud a consent for a vault may retire **another device's** connection to that vault (the Allow page's *replace*
 box, ticked to begin with). That was true before this change; per-vault asks make it more likely to show. Proposal 3.
 
-## How this rides on the app record ([APP-RECORD.md](APP-RECORD.md))
+## How this rides on the bundle record ([APP-RECORD.md](APP-RECORD.md))
 
-The app record lists where applets come from and the approvals say which code may run, signed once for every device.
+The bundle record lists where applets come from and the approvals say which code may run, signed once for every device.
 Two fits:
 
 - **Discovery without reading.** Today the app learns a vault's applets by reading it, so an applet in a vault the
-  device hasn't opened shows as that vault's **Open** line first. With the app record, the home vault names the applets
+  device hasn't opened shows as that vault's **Open** line first. With the bundle record, the home vault names the applets
   ("applets from letters"), so the list can show Journal before letters is read, and its Allow asks for letters in
   one page (read and write together), not two.
 - **Permissions follow the person.** An approval names the hash of exactly what an applet asks; its vault and level
@@ -136,7 +136,7 @@ Two fits:
   what they need: the same `askVault` call, one page per vault, and OAuth consent stays per device, as it must (each
   device is its own registration, holding its own tokens).
 
-Nothing here changes the app record's open questions.
+Nothing here changes the bundle record's open questions.
 
 ## Proposals for the hub
 

@@ -1,4 +1,4 @@
-// Home for a person with rooms and a journal (applets/today.tsx), the app record's home, against our real Buzz relay.
+// Home for a person with rooms and a journal (applets/today.tsx), the bundle record's home, against our real Buzz relay.
 // Local only, as rooms.spec.ts (e2e/services/README.md): BUZZ_RELAY and BUZZ_KEYS. "Uni" here is bob's key: what he
 // asks shows under Wants you, his newest line under From Uni; a line written on Home lands in today's journal; a tap on
 // a room opens Rooms at that room (app.open with the launch a notification's tap carries).
@@ -41,13 +41,13 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
   const rooms = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   const home = await installApplet("today", { relay: RELAY!, uni: bob.pubkey });
   const made: string[] = [];
-  // one settings note and app record: a spec before this one may have left them
-  for (const t of ["parachute-settings", "parachute-app"]) for (const n of await rows(`notes?tag=${t}`)) await api(hubState(), "DELETE", `notes/${n.id}`);
+  // one settings note and bundle record: a spec before this one may have left them
+  for (const t of ["parachute-settings", "parachute-bundle", "parachute-app"]) for (const n of await rows(`notes?tag=${t}`)) await api(hubState(), "DELETE", `notes/${n.id}`);
   try {
-    made.push((await api(hubState(), "POST", "notes", { path: "Parachute/Apps/uni", content: "an app", tags: ["parachute-app"], metadata: { app: {
+    made.push((await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/uni", content: "an app", tags: ["parachute-bundle"], metadata: { bundle: {
       contract: 1, id: "uni", name: "Uni", sources: [{ vault: VAULT, applet: "*" }], start: { vault: VAULT, applet: "Applets/Home" },
       bar: [{ vault: VAULT, applet: "Applets/Home" }, { vault: VAULT, applet: "Applets/Rooms" }] } } })).id);
-    made.push((await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "uni" } } })).id);
+    made.push((await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "uni" } } })).id);
     await page.goto("about:blank");
     await page.goto("/");
     // the record's home opens, and asks: its relay (read only) and Journal/

@@ -1,4 +1,4 @@
-// The thin shell (docs/NAVIGATION.md, docs/design/APP-RECORD.md): the app does what the open app's record says and
+// The thin shell (docs/NAVIGATION.md, docs/design/APP-RECORD.md): the app does what the open bundle's record says and
 // little else. It opens on the record's home, the bar is the record's pins (then Applets, the app's one way to the
 // rest), and the list at `/` is the app's applets, not the vaults. A record that doesn't load, or a home that throws,
 // never locks the person out: the plain list, a calm line, and Settings.
@@ -14,7 +14,7 @@ type Row = { id: string; path: string; metadata: Record<string, any> };
 const tagged = async (tag: string) => { const r = await api(hubState(), "GET", `notes?tag=${tag}&include_metadata=true`); return (Array.isArray(r) ? r : r.notes ?? []) as Row[]; };
 const made: string[] = [];
 const tidy = async () => {
-  for (const t of ["parachute-settings", "parachute-app"]) for (const n of await tagged(t)) await api(hubState(), "DELETE", `notes/${n.id}`);
+  for (const t of ["parachute-settings", "parachute-bundle", "parachute-app"]) for (const n of await tagged(t)) await api(hubState(), "DELETE", `notes/${n.id}`);
   for (const id of made.splice(0)) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
 };
 // before too: a spec before this one may have left a settings note (each test writes its own)
@@ -22,12 +22,12 @@ test.beforeEach(tidy);
 test.afterEach(tidy);
 async function start(page: Page) { await page.goto("about:blank"); await page.goto("/"); }
 async function app(fields: Record<string, unknown>, id = "table") {
-  await api(hubState(), "POST", "notes", { path: `Parachute/Apps/${id}`, content: "an app", tags: ["parachute-app"], metadata: { app: { contract: 1, id, name: "Table", ...fields } } });
-  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: id } } });
+  await api(hubState(), "POST", "notes", { path: `Parachute/Bundles/${id}`, content: "an app", tags: ["parachute-bundle"], metadata: { bundle: { contract: 1, id, name: "Table", ...fields } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: id } } });
 }
 const RECIPES = { vault: VAULT, applet: "Applets/Recipes" }, COOK = { vault: VAULT, applet: "Applets/Cook mode" };
 
-test("an app record naming a home opens on it", async ({ page }) => {
+test("a bundle record naming a home opens on it", async ({ page }) => {
   await app({ sources: [{ vault: VAULT, applet: "*" }], start: COOK, bar: [RECIPES] });
   await start(page);
   await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/a/`));
@@ -41,8 +41,8 @@ test("the bar is the record's pins, in its order, then Applets: nothing else of 
   const names = async () => (await bar(page).getByRole("link").allInnerTexts()).map((n) => n.split("\n").map((x) => x.trim()).filter(Boolean)[1]);
   await expect.poll(names).toEqual(["Cook mode", "Applets"]);
   // pinned in the other order: the bar follows
-  const [rec] = await tagged("parachute-app");
-  await api(hubState(), "PATCH", `notes/${rec.id}`, { metadata: { app: { ...rec.metadata.app, bar: [COOK, RECIPES] } }, if_updated_at: (await api(hubState(), "GET", `notes/${rec.id}`)).updatedAt });
+  const [rec] = await tagged("parachute-bundle");
+  await api(hubState(), "PATCH", `notes/${rec.id}`, { metadata: { bundle: { ...rec.metadata.bundle, bar: [COOK, RECIPES] } }, if_updated_at: (await api(hubState(), "GET", `notes/${rec.id}`)).updatedAt });
   await page.goto("/settings");
   await expect.poll(names).toEqual(["Cook mode", "Recipe box", "Applets"]);
 });
@@ -65,23 +65,23 @@ test("the list is the app's applets, not the vaults: no chapters, no vault links
 
 test("a way back: a record that doesn't load gives the plain list, a calm line and Settings", async ({ page }) => {
   // the settings note names an app whose record is malformed (a contract that isn't a number)
-  await api(hubState(), "POST", "notes", { path: "Parachute/Apps/broken", content: "an app", tags: ["parachute-app"], metadata: { app: { contract: "one", id: "broken", name: "Broken", start: COOK } } });
-  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "broken" } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/broken", content: "an app", tags: ["parachute-bundle"], metadata: { bundle: { contract: "one", id: "broken", name: "Broken", start: COOK } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "broken" } } });
   await start(page);
-  await expect(ui(page).getByText("Your app record didn't load")).toBeVisible();
+  await expect(ui(page).getByText("Your bundle didn't load")).toBeVisible();
   const list = ui(page).getByRole("list", { name: "Applets" });
   await expect(list.getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await expect(list.getByRole("link", { name: /Cook mode/ })).toBeVisible();
   await ui(page).getByRole("link", { name: "Settings" }).first().click();
-  await expect(page.getByRole("heading", { name: "Your app" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your bundle" })).toBeVisible();
 });
 
 test("a record made for a newer Parachute gives the plain list and says to update (docs/design/VERSIONS.md)", async ({ page }) => {
-  await api(hubState(), "POST", "notes", { path: "Parachute/Apps/later", content: "an app", tags: ["parachute-app"], metadata: { app: { contract: 1, needs: 99, id: "later", name: "Later", start: COOK } } });
-  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "later" } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/later", content: "an app", tags: ["parachute-bundle"], metadata: { bundle: { contract: 1, needs: 99, id: "later", name: "Later", start: COOK } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "later" } } });
   await start(page);
   await expect(ui(page).getByText("Update Parachute to use Later.")).toBeVisible();
-  await expect(ui(page).getByText("Your app record didn't load")).toHaveCount(0);
+  await expect(ui(page).getByText("Your bundle didn't load")).toHaveCount(0);
   await expect(ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ })).toBeVisible();
   // nothing of it started: no Cook mode at the start
   await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
@@ -99,7 +99,7 @@ test("a way back: a home applet that throws still leaves the bar, the list and S
   await bar(page).getByRole("link", { name: /Applets/ }).click();
   await expect(ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Thrower/ })).toBeVisible();
   await ui(page).getByRole("link", { name: "Settings" }).first().click();
-  await expect(page.getByRole("heading", { name: "Your app" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your bundle" })).toBeVisible();
 });
 
 test("trust: an unsigned record grants nothing and runs nothing; only home, pins and the list change", async ({ page }) => {
@@ -127,12 +127,12 @@ test("a way back: an address that doesn't decode leaves the app working, Setting
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/settings");
-  await expect(page.getByRole("heading", { name: "Your app" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your bundle" })).toBeVisible();
   // in the app (a link, a deep link): the server never sees it
   const go = (to: string) => page.evaluate((u) => { history.pushState({}, "", u); dispatchEvent(new PopStateEvent("popstate")); }, to);
   await go("/v/%/a/x");
   await page.waitForTimeout(500);
   await go("/settings");
-  await expect(page.getByRole("heading", { name: "Your app" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your bundle" })).toBeVisible();
   expect(errors.filter((m) => /URI/.test(m))).toEqual([]);
 });

@@ -157,7 +157,7 @@ export async function barOf(applet: string): Promise<() => Promise<void>> {
   }
   const before = (await api(hubState(), "GET", `notes/${n.id}`)) as Row;
   const was = (before.metadata?.parachute ?? {}) as Record<string, unknown>;
-  await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: { ...before.metadata, parachute: { ...was, bar, app: undefined } }, if_updated_at: before.updatedAt });
+  await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: { ...before.metadata, parachute: { ...was, bar, app: undefined, bundle: undefined } }, if_updated_at: before.updatedAt });
   return async () => {
     const now = (await api(hubState(), "GET", `notes/${n.id}`)) as Row;
     await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: before.metadata ?? {}, if_updated_at: now.updatedAt }).catch(() => {});

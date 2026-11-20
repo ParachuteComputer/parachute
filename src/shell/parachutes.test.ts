@@ -60,33 +60,33 @@ describe("who starts on Parachute Simplified", () => {
     const home = hold("garden");
     await afterSignIn(HUB, [home], true, true);
     expect(writes).toEqual([]);
-    expect(settingsNow().app).toBe("simple");
+    expect(settingsNow().bundle).toBe("simple");
     // the person lets Parachute change notes in their home (vault/reach.ts): the list and the app are written then
     saveVault({ ...home, scope: "vault:garden:read vault:garden:write" });
     dropClient(home.key);
     await listWaiting();
-    expect(settingsWritten()?.parachute).toMatchObject({ app: "simple", hubs: [{ hub: HUB }] });
+    expect(settingsWritten()?.parachute).toMatchObject({ bundle: "simple", hubs: [{ hub: HUB }] });
     expect(writes.every((w) => w.vault === "garden")).toBe(true);
   });
   it("a home that may be written already: the note is made with app: simple", async () => {
     await afterSignIn(HUB, [hold("garden", false, "write")], true, true);
-    expect(settingsWritten()?.parachute).toMatchObject({ app: "simple", hubs: [{ hub: HUB }] });
+    expect(settingsWritten()?.parachute).toMatchObject({ bundle: "simple", hubs: [{ hub: HUB }] });
   });
   it("a person whose home already holds settings: what the note says stays", async () => {
     notes.work = [{ id: "s1", path: "Parachute/Settings", tags: ["parachute-settings"], metadata: { parachute: { hubs: [] } }, content: "", updatedAt: "2026-11-01T00:00:00Z" }];
     await afterSignIn(HUB, [hold("work", false, "write")], true, true);
-    expect(settingsWritten()?.parachute).not.toHaveProperty("app");
-    expect(settingsNow().app).toBeNull();
+    expect(settingsWritten()?.parachute).not.toHaveProperty("bundle");
+    expect(settingsNow().bundle).toBeNull();
   });
   it("a home that couldn't be read may hold settings: no app is chosen", async () => {
     refuse.add("work");
     await afterSignIn(HUB, [hold("work")], true, true);
-    expect(settingsWritten()?.parachute ?? {}).not.toHaveProperty("app");
-    expect(settingsNow().app).toBeNull();
+    expect(settingsWritten()?.parachute ?? {}).not.toHaveProperty("bundle");
+    expect(settingsNow().bundle).toBeNull();
   });
   it("a device that had a home already: no app is chosen", async () => {
     await afterSignIn(HUB, [hold("garden", false, "write")], true, false);
-    expect(settingsWritten()?.parachute ?? {}).not.toHaveProperty("app");
+    expect(settingsWritten()?.parachute ?? {}).not.toHaveProperty("bundle");
   });
   it("someone else's vaults on Cloud only (none of the person's own): no settings note, no app", async () => {
     await afterSignIn(HUB, [hold("garden", true)], true, true);
@@ -95,6 +95,6 @@ describe("who starts on Parachute Simplified", () => {
   it("a hub that isn't Parachute Cloud: listed when the home may be written, no app", async () => {
     await afterSignIn(HUB, [hold("garden", false, "write")], false, true);
     expect(settingsWritten()?.parachute).toBeDefined();
-    expect(settingsWritten()?.parachute).not.toHaveProperty("app");
+    expect(settingsWritten()?.parachute).not.toHaveProperty("bundle");
   });
 });

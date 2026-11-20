@@ -41,7 +41,7 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
   the platform's secure storage.
 - **Parachute Simplified.** For a person whose notes are on Parachute Cloud: their notes across the vaults they've opened
   (find, read, edit, write), Journal (a line a day, written or said), Capture (a line or a voice note into Inbox/) and
-  Connect an AI (each vault's connector address). A new Cloud person starts there; Settings → Your app switches to
+  Connect an AI (each vault's connector address). A new Cloud person starts there; Settings → Your bundle switches to
   everything ([docs/SIMPLE.md](docs/SIMPLE.md)).
 - **Your Parachutes.** Sign in once per hub, with your key or another way the hub offers (a password, or Cloud's own
   sign-in). The sign-in reads your home vault only; each other vault you can reach there is one tap away in
@@ -111,9 +111,9 @@ that stops gives way to the built-in one. "Make this mine" copies the built-in f
 newer built-in frame is then offered in Settings, never written over theirs. See
 [docs/CHANGE-YOUR-FRAME.md](docs/CHANGE-YOUR-FRAME.md) and `src/shell/frameSource.ts`.
 
-**Moving around** is one model ([docs/NAVIGATION.md](docs/NAVIGATION.md)): the open app's home applet first, a bar at the
+**Moving around** is one model ([docs/NAVIGATION.md](docs/NAVIGATION.md)): the open bundle's home applet first, a bar at the
 foot for its pins (then Applets, the list of the app's applets), Back to where you came from, a note in its applet. The bar is the
-shell's (`src/shell/BottomBar.tsx`), drawn under the frame and under applets; what is on it is the open app's record (or the
+shell's (`src/shell/BottomBar.tsx`), drawn under the frame and under applets; what is on it is the open bundle's record (or the
 settings note) in the home vault (`src/shell/homeSettings.ts`), which the person's agent can write. Open on start (`src/shell/start.ts`) runs
 an applet by itself only when this device holds both its Allow and the person's choice of it as home.
 

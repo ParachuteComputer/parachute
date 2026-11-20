@@ -18,6 +18,8 @@ async function device(browser: Browser, key: string): Promise<Page> {
 }
 type Row = { id: string; path: string; updatedAt: string; metadata: Record<string, any> };
 const tagged = async (tag: string) => { const r = await api(hubState(), "GET", `notes?tag=${tag}&include_metadata=true`); return (Array.isArray(r) ? r : r.notes ?? []) as Row[]; };
+// a vault with no record under the newer names gets a new one under the older (Parachute/Apps, parachute-app, fields.app),
+// which builds from before 11-20 read: a raise made here reaches a device still on one (shell/homeSettings.ts changeBundle)
 const appRecord = async () => (await tagged("parachute-app")).find((n) => n.path.replace(/\.md$/, "") === "Parachute/Apps/everything");
 const security = (p: Page) => p.locator("section", { has: p.getByRole("heading", { name: "Security" }) });
 const group = (p: Page, name: string) => security(p).getByRole("group", { name });
