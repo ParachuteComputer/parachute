@@ -66,7 +66,19 @@ export type Pending = {
   whose?: "mine" | "theirs";
   /** how the person signs in at the hub: with this device's key (its key door) or on the hub's own page */
   how: "key" | "page";
+  /** the hub says who sent each return (RFC 9207 `iss`): a return without its issuer is refused */
+  iss?: true;
+  /** signed in under the hub's reserved id for the app (its `app_client_id`), not a registration of the app's own */
+  reserved?: true;
 };
+
+/** Hubs that refused the app their reserved id: they get a registration again, as before (until the next sign-in to them
+ *  that works with one). */
+const RESERVED_REFUSED_KEY = "parachute.oauth.reserved-refused.v1";
+const reservedRefused = (issuer: string) => { try { return (JSON.parse(localStorage.getItem(RESERVED_REFUSED_KEY) ?? "[]") as string[]).includes(issuer); } catch { return false; } };
+function refuseReserved(issuer: string) {
+  try { const l = JSON.parse(localStorage.getItem(RESERVED_REFUSED_KEY) ?? "[]") as string[]; if (!l.includes(issuer)) localStorage.setItem(RESERVED_REFUSED_KEY, JSON.stringify([...l, issuer].slice(-20))); } catch { /* this session only */ }
+}
 
 /** In the shell, the loopback address the shell catches (src-tauri/src/lib.rs SIGNIN_RETURN): a core hub keeps the
  *  name "Parachute" for redirects only this device can receive (Parachute Cloud doesn't: CLOUD_CLIENT_NAME). In a
@@ -130,8 +142,12 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   // the hub took the registration, kept so a hub whose owner approves new registrations doesn't have to again)
   if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "open" && stale.why === "signin" && stale.how === "key"))) forgetClient(parachute.issuer);
   // the hub's reserved id for this app (Parachute Cloud's `parachute-app`, cloud #421), for the return only the shell
-  // catches: its pages name it Parachute, not an app that registered itself
-  let clientId = parachute.appClientId && redirect === SHELL_RETURN ? parachute.appClientId : cachedClient(parachute.issuer, redirect);
+  // catches: its pages name it Parachute, not an app that registered itself. Only where the hub says who sent each
+  // return (RFC 9207): every hub returns to that one loopback, so a code from another hub under this public id must be
+  // told apart (an authorization server mix-up); and not where the hub refused it before
+  const iss = (meta as { authorization_response_iss_parameter_supported?: unknown }).authorization_response_iss_parameter_supported === true;
+  const reserved = !!parachute.appClientId && redirect === SHELL_RETURN && iss && !reservedRefused(parachute.issuer);
+  let clientId = reserved ? parachute.appClientId! : cachedClient(parachute.issuer, redirect);
   if (!clientId) {
     clientId = (await registerClient(meta.registration_endpoint, { clientName: parachute.door === "cloud" ? CLOUD_CLIENT_NAME : CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
     cacheClient(parachute.issuer, redirect, clientId);
@@ -142,7 +158,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   const pending: Pending = { parachute, step: b.step, ...(b.step === "open" ? { vault: b.vault, level: b.level ?? "read" } : {}), why: b.why ?? "signin",
     ...(b.back ? { back: b.back } : {}), ...(b.allow ? { allow: b.allow } : {}), ...(b.home ? { home: true } : {}), ...(b.marks ? { marks: b.marks } : {}),
     issuer: parachute.issuer, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, parachute.issuer) ? { revocationEndpoint: revocation } : {}),
-    clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now(), how: b.how, ...(b.whose ? { whose: b.whose } : {}) };
+    clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now(), how: b.how, ...(b.whose ? { whose: b.whose } : {}), ...(iss ? { iss: true as const } : {}), ...(reserved ? { reserved: true as const } : {}) };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   const url = new URL(meta.authorization_endpoint);
   url.searchParams.set("response_type", "code");
@@ -189,10 +205,12 @@ export function audienceVault(accessToken: string): string | null {
 
 /** Finish a step of signing in: check the state, trade the code for a token. Used once: the flow's secrets are gone
  *  after. For an `open` step, the token must be for the vault asked for, and hold at least read of it. */
-export async function completeSignIn(code: string, state: string, fetchImpl?: typeof fetch): Promise<SignedIn> {
+export async function completeSignIn(code: string, state: string, fetchImpl?: typeof fetch, iss?: string | null): Promise<SignedIn> {
   const pending = takePending(state);
   if (!pending) throw new Error("This sign-in has expired or was already used. Start again.");
   if (pending === "mismatch") throw new Error("This sign-in doesn't match the one this app started. Start again.");
+  // a hub that says who sent each return (RFC 9207): a code from anyone else is never sent on to its token address
+  if (pending.iss && (typeof iss !== "string" || iss.replace(/\/$/, "") !== pending.issuer)) throw new Error("This sign-in came back from somewhere other than the hub it went to. Nothing was added. Start again.");
   // someone else's hub is read up to a limit (limited.ts); the person's own (or one they didn't say) as before
   const f = fetchImpl ?? (pending.whose === "theirs" ? limitedFetch() : fetch.bind(globalThis));
   const res = await f(pending.tokenEndpoint, {
@@ -206,6 +224,8 @@ export async function completeSignIn(code: string, state: string, fetchImpl?: ty
     try { body = JSON.parse(text) as Record<string, unknown>; } catch { /* not JSON */ }
     if (body.error === "invalid_client" && onOrigin(body.approve_url, pending.issuer)) throw new PendingApprovalError(body.approve_url);
     if (body.error === "invalid_client") forgetClient(pending.issuer);
+    // the hub doesn't take its reserved id from this app: the next sign-in there registers, as before
+    if (pending.reserved && (body.error === "invalid_client" || body.error === "unauthorized_client")) refuseReserved(pending.issuer);
     throw new Error(`The hub refused the sign-in (${res.status}${typeof body.error === "string" ? `, ${body.error}` : ""}).`);
   }
   let token: TokenResponse;
