@@ -20,8 +20,8 @@ import { originOf, listVaults, hostOf, type VaultRecord } from "../vault/store";
 import { dismissVault, newVaultsOn, startAddVault } from "../vault/newVaults";
 import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
-import { appMissing, appNewer, barNow, openAppNow, pinApplet, startApplet } from "./homeSettings";
-import { offered, namesApplet, type App } from "./apps";
+import { bundleMissing, bundleNewer, barNow, openBundleNow, pinApplet, startApplet } from "./homeSettings";
+import { offered, namesApplet, type Bundle } from "./bundles";
 import { chooseStart, forgetStart } from "./start";
 import { parachutesNow } from "./parachutes";
 
@@ -32,12 +32,12 @@ import { parachutesNow } from "./parachutes";
 export const homeNow = () => {
   const b = barNow();
   // the app chosen here didn't load: made for a newer Parachute (its name), or malformed (null)
-  const missing = appMissing(), newer = missing ? appNewer(missing) : null;
+  const missing = bundleMissing(), newer = missing ? bundleNewer(missing) : null;
   return { start: b.start ? { vault: b.start.vault, noteId: b.start.noteId } : null, bar: b.pins.map((p) => ({ vault: p.vault, noteId: p.noteId })),
     parachutes: parachutesNow().map((p) => {
       const fresh = newVaultsOn(p.hub);
       return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}) };
-    }), ...(openAppNow().look === "notes" ? { app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "app-newer" as const, noticeName: newer } : { notice: "app-record" as const }) : {}),
+    }), ...(openBundleNow().look === "notes" ? { app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
     ...viewerNow() };
 };
 /** Vault in the home vault, as this device last read its applets, when applets run here: where a record no other
@@ -89,8 +89,8 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   const e = appletsNow(rec.key);
   if (!ok || e?.state !== "ok") return { ok: false, error: e?.state === "error" ? e.error : "the applets couldn't be read" };
   const status = statusOf(rec.key, gateNow());
-  // only what the open app offers (shell/apps.ts): listing is all it decides; what runs is still each applet's card
-  const app = openAppNow(), home = homeVault();
+  // only what the open bundle offers (shell/bundles.ts): listing is all it decides; what runs is still each applet's card
+  const app = openBundleNow(), home = homeVault();
   const held = { hub: originOf(rec.issuer), vault: rec.vault };
   const inApp = (a: { noteId: string; path: string }) => app.look === "notes" || !home || offered(app, held, a, originOf(home.issuer));
   return {
@@ -156,10 +156,10 @@ function setChoice(vault: string, type: string, choice: string | null) {
   setDefault(vault, type, choice);
 }
 
-/** What the open app's record says opens each kind of note in this vault (its `opens`), as the device's choices are
+/** What the open bundle's record says opens each kind of note in this vault (its `opens`), as the device's choices are
  *  kept: an applet's note id here, or "vault" for the plain view. The device's own "Always" wins over it. A choice
  *  naming an applet this device hasn't read, or one that doesn't open that kind, is left out. */
-export function appDefaults(vault: string, app: App = openAppNow()): Record<string, string> {
+export function appDefaults(vault: string, app: Bundle = openBundleNow()): Record<string, string> {
   const rec = listVaults().find((v) => v.key === vault), home = homeVault();
   if (!rec || !home || !app.opens.length) return {};
   const a = appletsNow(vault);

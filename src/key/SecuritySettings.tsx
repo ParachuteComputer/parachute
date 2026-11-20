@@ -1,6 +1,6 @@
 // Settings → Security (docs/design/APP-RECORD.md "Security levels"; shell/levels.ts, src-tauri/src/levels.rs): how
 // careful Parachute is, per action, and the idle lock, in plain words; and this device's passcode. A stricter choice is
-// a tap (kept here at once, and in the open app's record so the person's other devices follow). A looser one, or the
+// a tap (kept here at once, and in the open bundle's record so the person's other devices follow). A looser one, or the
 // idle lock turned off, asks the passcode (when this device keeps one) and the unlock, and is signed with the person's
 // key for their other devices.
 import { useEffect, useState } from "react";
@@ -20,7 +20,7 @@ const ROWS: Row[] = [
 ];
 
 export default function SecuritySettings() {
-  const { app } = useSettings();
+  const { bundle: app } = useSettings();
   const [native, setNative] = useState<Native | null>(null);
   const [status, setStatus] = useState<LevelsStatus | null>(null);
   const [pending, setPending] = useState<Levels | null>(null);
@@ -41,7 +41,7 @@ export default function SecuritySettings() {
     setPending(null);
     if (!loosens(cur, l)) {
       // stricter: kept here now; the record is for the other devices (a failed write leaves this one stricter)
-      run(async () => { await native.levelsRaise(l); levelsChanged(); await changeSecurity(l).catch(() => undefined); }, "Kept. Your other devices follow when they read your app.");
+      run(async () => { await native.levelsRaise(l); levelsChanged(); await changeSecurity(l).catch(() => undefined); }, "Kept. Your other devices follow when they read your bundle.");
       return;
     }
     setCode("");

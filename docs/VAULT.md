@@ -56,7 +56,7 @@ subscription, not a timer).
   don't run on this device, the plain views stay, with one line at the top that leads to Vault. That is the way back if
   Vault itself breaks (docs/NAVIGATION.md, "A way back").
 - **Listed by default**: Simple's bar has **Vault** (the applet, or the screen that adds it), and Everything's list says
-  **Add Vault** until it is there. Aaron's own app record gets it only after his yes (a record of his, not applied here).
+  **Add Vault** until it is there. Aaron's own bundle gets it only after his yes (a record of his, not applied here).
 
 ## What the shell gave up (subtract)
 

@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createRouter } from "./router";
 import { createSession } from "./session";
-import { createVaultModule, type VaultDeps, type VaultNote } from "./modules/vault";
+import { createVaultModule, isAppletCode, type VaultDeps, type VaultNote } from "./modules/vault";
 import { createThemeModule } from "./modules/theme";
 import { parseManifest } from "./manifest";
 import { resolvedOf } from "./discovery";
@@ -222,3 +222,10 @@ describe("fields on a list, in one ask", () => {
   });
 });
 
+
+describe("notes no applet may change", () => {
+  it("a bundle record, under its name and its older one: it picks what the app shows and pins (docs/design/APP-RECORD.md)", () => {
+    for (const tag of ["parachute-bundle", "parachute-app"]) expect(isAppletCode({ id: "n", path: "Parachute/Bundles/uni", tags: [tag] } as VaultNote), tag).toBe(true);
+    expect(isAppletCode({ id: "n", path: "Notes/a", tags: ["recipe"] } as VaultNote)).toBe(false);
+  });
+});

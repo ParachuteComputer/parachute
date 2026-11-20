@@ -1,26 +1,28 @@
-# The app record, signed approvals and saved state
+# The bundle record, signed approvals and saved state
 
 Built from the design in draft PR #50, with Aaron's answers of 11-18, which change it in three places: **one personal
 key** (no separate approval key), **a level per action** (nothing, the device unlock, or a typed passcode), and **an
-org's app is live** (its changes show; its code still waits for his approval). The root key is recovery only: written
+org's bundle is live** (its changes show; its code still waits for his approval). The root key is recovery only: written
 down, it signs the key list and nothing else. Made-up names in examples.
 
 ```
  YOUR HOME VAULT                                         EACH DEVICE WITH YOUR KEY
- Parachute/Apps/<id>       what an app offers   ──────▶  shows it (listing never runs anything)
+ Parachute/Bundles/<id>    what a bundle offers ──────▶  shows it (listing never runs anything)
  Parachute/Approvals/…     this exact code,     ──────▶  checks the signature, hashes the code itself, runs it
                            signed by your key
  Parachute/Keys            which keys count,    ──────▶  only with a root key's public half on the device
                            signed by your root key
 ```
 
-## Apps (docs/NAVIGATION.md "Apps")
+## Bundles (docs/NAVIGATION.md "Bundles")
 
-An app is `Parachute/Apps/<id>`: where applets come from (one applet, a vault, every vault on a hub), the bar, the
+A bundle is `Parachute/Bundles/<id>` (tagged `parachute-bundle`, under `fields.bundle`; an "app record" at
+`Parachute/Apps/<id>` until 11-20, read until 2026-12-20; builds from before 11-20 read only those names, so until then the app writes the names the
+vault already uses, and `scripts/migrate-bundles.ts` moves them once no device runs such a build): where applets come from (one applet, a vault, every vault on a hub), the bar, the
 home, what opens which kind of note, how many applets stay running, how careful it is (`security`). Parachute
-Simplified (id `simple`) and Everything are always there. Each device opens one (Settings → **Your app**); a new device opens the one the settings
-note names. An org's app is followed live (`live`): read from their vault each time. A record made for a newer
-Parachute says so with `needs`, and an older one then opens the next app it can and says to update; a key it doesn't
+Simplified (id `simple`) and Everything are always there. Each device opens one (Settings → **Your bundle**); a new device opens the one the settings
+note names. An org's bundle is followed live (`live`): read from their vault each time. A record made for a newer
+Parachute says so with `needs`, and an older one then opens the next bundle it can and says to update; a key it doesn't
 know in a place is left out (docs/design/VERSIONS.md).
 
 ## Running needs a signed approval
@@ -90,23 +92,23 @@ the rotation step (#systems, T-487).
 
 ## What an unsigned record can change
 
-Anyone who can write the home vault (the person's agent, a token, the hub) can change an app record without a
+Anyone who can write the home vault (the person's agent, a token, the hub) can change a bundle record without a
 signature. So the app reads it for three things only: **the home** (`start`), **the pins** (`bar`) and **the list**
-(`sources`, `hide`, `opens`, `keep`, `look`). Everything else in it is read as nothing (`src/shell/apps.ts` `appOf`
+(`sources`, `hide`, `opens`, `keep`, `look`). Everything else in it is read as nothing (`src/shell/bundles.ts` `bundleOf`
 keeps only those fields), and none of the three runs code:
 
 - the home opens on its card, or waits for Open, until the person allowed that exact code and chose it as home on this
   device (`start.ts`); a pin or an applet in the list asks on its card the first time, and again when its code changes;
 - a record can't grant: a word like `grants`, `approved` or `code` in it is not read;
 - a record can raise the security levels, never lower them ("Security levels" below): each device keeps its own
-  natively and takes from the open app's record only what is stricter, so a record that later says less, breaks, goes,
-  or is replaced by another app that says less (named in the settings note) leaves them as they are; an app someone
+  natively and takes from the open bundle's record only what is stricter, so a record that later says less, breaks, goes,
+  or is replaced by another bundle that says less (named in the settings note) leaves them as they are; a bundle someone
   else offers, followed live, asks each level as the stricter of theirs and the person's own record for it. Lowering is
   the person's signed approval from an unlocked device.
 
-Tests: `src/shell/appTrust.test.ts` (each field, raised never lowered, the live merge) and `e2e/thinshell.spec.ts` (a hostile
+Tests: `src/shell/bundleTrust.test.ts` (each field, raised never lowered, the live merge) and `e2e/thinshell.spec.ts` (a hostile
 record opens the home on its card, its pin asks, nothing is granted). A record that doesn't load leaves the plain list
-with *Your app record didn't load* and Settings ([NAVIGATION.md](../NAVIGATION.md#a-way-back)).
+with *Your bundle didn't load* and Settings ([NAVIGATION.md](../NAVIGATION.md#a-way-back)).
 
 ## Security levels
 
@@ -140,14 +142,14 @@ a touch never does, every unlock-gated call refuses meanwhile, and any grace end
 a restart past the minutes starts locked. No polling: one timer to the moment it would lock, and a check when the app
 comes back to the front. A browser tab has no idle lock (it has no key and no unlock to ask).
 
-**In the app record**, `security` names any of them:
+**In the bundle record**, `security` names any of them:
 
 ```json
 "security": { "approvals": "passcode", "code": "unlock", "join": "passcode", "idle": 10 }
 ```
 
 **A record only raises.** Each device keeps its own levels (`levels.json` in the app's data folder). Reading the open
-app's record, it takes what is stricter (a shorter idle lock is stricter; off is the loosest) and nothing else. An
+bundle's record, it takes what is stricter (a shorter idle lock is stricter; off is the loosest) and nothing else. An
 unknown word is left out, never read as "none"; the record's older `approve` means `code`.
 
 **Lowering takes the person's signed approval from an unlocked device**, the same as approving code. Settings →
@@ -159,7 +161,7 @@ and the record's `security` is written. Another device whose levels are stricter
 only when that approval checks (`decide`, then Rust again: signed with the key this device holds, newer than its own
 last change, levels exactly the record's). So someone who can write the vault can raise a device, never lower it
 (`levels.rs` and `levels.test.ts`: an unsigned edit, an edited or foreign signature, an older approval put back,
-another app's moved over).
+another bundle's moved over).
 
 | Who | Tries | Result (test) |
 |---|---|---|
@@ -233,10 +235,11 @@ lists); the gateway then adds one per event. A mail server reporting its own cou
 | "The launcher is for everything" | the open app | now |
 | The launcher's vault chapters, masthead (the week's line, its tally, the hills) and "Lately in" | the list of the app's applets; the home applet for the first page; Settings for vaults | now (11-19, T-476 thin shell) |
 | The launcher and the home placed on the bar by the app | the record's pins, then Applets | now (11-19) |
-| `bar` and `start` in `Parachute/Settings` | the app record | when no device runs a build from before 11-19 (date for Uni to set) |
+| `bar` and `start` in `Parachute/Settings` | the bundle record | when no device runs a build from before 11-19 (date for Uni to set) |
 | Draft PR #50 | this note | closed 11-19, when #66 merged |
 | `security.approve` in a record, and "a passcode set here means approving code asks it" | `security.code` and the levels (a device that kept a passcode before keeps `code: passcode`) | now: `approve` is still read as `code` until no record says it (Uni to check Aaron's, then drop the alias) |
 | The passcode under Settings → Approving code | Settings → Security | now |
 | The grace ending when the app leaves the screen | ending when the screen goes off (Aaron, 11-18) | now |
-| `src/shell/appFloor.ts` (#73: a web-side, per-home floor for `security.approve`, raised by every app record in the home) | the native levels (device-wide, raise-only, lowered only by a signed approval), raised by the app a device opens: a record of an app this device doesn't open raises nothing here | now (its `parachute.app.floor.v2` key is no longer read; #73 was in no release) |
+| `src/shell/appFloor.ts` (#73: a web-side, per-home floor for `security.approve`, raised by every bundle record in the home) | the native levels (device-wide, raise-only, lowered only by a signed approval), raised by the app a device opens: a record of an app this device doesn't open raises nothing here | now (its `parachute.app.floor.v2` key is no longer read; #73 was in no release) |
+| The app record (`Parachute/Apps/<id>`, `parachute-app`, `fields.app`) and the settings note's `app` | the bundle record (`Parachute/Bundles/<id>`, `parachute-bundle`, `fields.bundle`) and `bundle` (Aaron, 11-20: the Parachute app is the app) | read until 2026-12-20; the app writes the names the vault already uses (an older record stays older; a new one is older until a record is under the newer), and the settings note says both `bundle` and `app` (`app` read first), so builds from before 11-20 keep working; `scripts/migrate-bundles.ts` moves them all once none runs |
 | Rooms' message notifications as the only thing heard while closed | signals (the message push stays: it opens the room) | nothing removed; `notify` stays the relay's declaration a signal points at |

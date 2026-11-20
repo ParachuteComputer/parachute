@@ -8,9 +8,11 @@
 //     --service "Mail=http:https://mail.example/mail/" [--apply]
 //
 // A component an applet imports (`import Room from "component:room"`, applets/room.json) goes in with it, before it.
-// --app uni [--app-name Uni] also writes the app record Parachute/Apps/uni (docs/design/APP-RECORD.md): every applet in
-// the vault (and each --source: "*" for every vault on the hub, a vault, or vault/applet path), with the same bar and
-// home, and makes it the app a device opens.
+// --bundle uni [--bundle-name Uni] also writes the bundle record Parachute/Bundles/uni (docs/design/APP-RECORD.md): every
+// applet in the vault (and each --source: "*" for every vault on the hub, a vault, or vault/applet path), with the same
+// bar and home, and makes it the bundle a device opens. (--app and --app-name are its older names, read until 2026-12-20.)
+// As the app does, a record is written under the names the vault already uses: the older ones (Parachute/Apps/<id>),
+// which builds from before 11-20 read, until one is under the newer; scripts/migrate-bundles.ts moves them all.
 // An area's applet (applets/area.json) is one per area: --applet area --set area=Garden --set area_id=garden
 // --set area_room=<the room's id> (with relay and uni), again with other values for the next area.
 //
@@ -20,10 +22,10 @@
 import { readFileSync } from "node:fs";
 import { appletRecord, withImports, type AppletRecord } from "../applets/record.ts";
 
-type Args = { hub: string; vault: string; token: string; applets: string[]; vars: Record<string, string>; bar: string[] | null; start: string | null; services: { name: string; kind: string; url: string }[]; apply: boolean; app: string | null; appName: string | null; sources: string[] };
+type Args = { hub: string; vault: string; token: string; applets: string[]; vars: Record<string, string>; bar: string[] | null; start: string | null; services: { name: string; kind: string; url: string }[]; apply: boolean; bundle: string | null; bundleName: string | null; sources: string[] };
 
 function args(argv: string[]): Args {
-  const a: Args = { hub: "", vault: "", token: "", applets: [], vars: {}, bar: null, start: null, services: [], apply: false, app: null, appName: null, sources: [] };
+  const a: Args = { hub: "", vault: "", token: "", applets: [], vars: {}, bar: null, start: null, services: [], apply: false, bundle: null, bundleName: null, sources: [] };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i], v = argv[i + 1];
     const take = () => { i++; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
@@ -36,8 +38,8 @@ function args(argv: string[]): Args {
     else if (k === "--start") a.start = take();
     else if (k === "--service") { const m = /^([^=]+)=(nostr-relay|http):(.+)$/.exec(take()); if (!m) throw new Error("--service is Name=kind:url"); a.services.push({ name: m[1], kind: m[2], url: m[3] }); }
     else if (k === "--apply") a.apply = true;
-    else if (k === "--app") { a.app = take(); if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(a.app)) throw new Error("--app is an id: lower case, digits and dashes"); if (a.app === "everything" || a.app === "simple") throw new Error(`${a.app} is built in: its bar and home are --bar and --start`); }
-    else if (k === "--app-name") a.appName = take();
+    else if (k === "--bundle" || k === "--app") { a.bundle = take(); if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(a.bundle)) throw new Error(`${k} is an id: lower case, digits and dashes`); if (a.bundle === "everything" || a.bundle === "simple") throw new Error(`${a.bundle} is built in: its bar and home are --bar and --start`); }
+    else if (k === "--bundle-name" || k === "--app-name") a.bundleName = take();
     else if (k === "--source") a.sources.push(take());
     else throw new Error(`unknown ${k}`);
   }
@@ -114,26 +116,30 @@ async function main() {
     const kept = Array.isArray(p.services) ? (p.services as { url?: string }[]).filter((s) => !a.services.some((n) => n.url === s.url)) : [];
     next.services = [...kept, ...a.services];
   }
-  if (a.app) next.app = a.app;
-  // the app record: its own bar and home, the same as the settings note's (which older apps read)
-  if (a.app) {
+  // under its older name too, which builds from before 11-20 read (until 2026-12-20)
+  if (a.bundle) { next.bundle = a.bundle; next.app = a.bundle; }
+  // the bundle record: its own bar and home, the same as the settings note's (which older apps read)
+  if (a.bundle) {
     // --source "*": every vault on this hub; "garden": every applet in garden; "garden/Applets/SeedLog": one applet
     const sources = [{ vault: a.vault, applet: "*" }, ...a.sources.map((x) => { if (x === "*") return { hub: new URL(a.hub).origin, vault: "*", applet: "*" }; const i = x.indexOf("/"); return i < 0 ? { vault: x, applet: "*" } : { vault: x.slice(0, i), applet: x.slice(i + 1) }; })];
-    const app = { contract: 1, id: a.app, name: a.appName ?? a.app[0].toUpperCase() + a.app.slice(1), look: "launcher", sources, ...(next.bar ? { bar: next.bar } : {}), ...(next.start ? { start: next.start } : {}) };
-    const path = `Parachute/Apps/${a.app}`;
-    const had = await api.find(path);
-    if (had && same(had.metadata?.app, app)) console.log(`app ${a.app}: unchanged`);
+    const bundle = { contract: 1, id: a.bundle, name: a.bundleName ?? a.bundle[0].toUpperCase() + a.bundle.slice(1), look: "launcher", sources, ...(next.bar ? { bar: next.bar } : {}), ...(next.start ? { start: next.start } : {}) };
+    const fresh = await api.find(`Parachute/Bundles/${a.bundle}`), old = fresh ? null : await api.find(`Parachute/Apps/${a.bundle}`);
+    // a new record takes the names the vault already uses: the older ones (which builds from before 11-20 read) until one
+    // is under the newer
+    const newer = !!fresh || (!old && (await api.findTag("parachute-bundle")).length > 0);
+    const had = fresh ?? old, path = had?.path ?? (newer ? `Parachute/Bundles/${a.bundle}` : `Parachute/Apps/${a.bundle}`), key = newer ? "bundle" : "app";
+    if (had && same(had.metadata?.[key], bundle)) console.log(`bundle ${a.bundle}: unchanged`);
     else {
-      say(`${had ? "update" : "add"} the app ${a.app} at ${path}: ${JSON.stringify(app)}`);
+      say(`${had ? "update" : "add"} the bundle ${a.bundle} at ${path}${old ? " (under its older names until it is moved)" : ""}: ${JSON.stringify(bundle)}`);
       if (a.apply) {
-        if (had) await api.write("update", { id: had.id, fields: { ...(had.metadata ?? {}), app }, ...(had.updatedAt ? { if_updated_at: had.updatedAt } : {}) });
-        else await api.write("create", { path, body: `The ${app.name} app: where its applets come from, its bar and its home. See docs/design/APP-RECORD.md.`, tags: ["parachute-app"], fields: { app } });
+        if (had) await api.write("update", { id: had.id, fields: { ...(had.metadata ?? {}), [key]: bundle }, ...(had.updatedAt ? { if_updated_at: had.updatedAt } : {}) });
+        else await api.write("create", { path, body: `The ${bundle.name} bundle: where its applets come from, its bar and its home. See docs/design/APP-RECORD.md.`, tags: [newer ? "parachute-bundle" : "parachute-app"], fields: { [key]: bundle } });
       }
     }
   }
   if (same(p, next)) console.log("settings: unchanged");
   else {
-    for (const k of ["bar", "start", "services", "app"] as const) if (!same(p[k], next[k])) say(`settings ${k}: ${JSON.stringify(next[k])}`);
+    for (const k of ["bar", "start", "services", "bundle", "app"] as const) if (!same(p[k], next[k])) say(`settings ${k}: ${JSON.stringify(next[k] ?? null)}`);
     if (a.apply) {
       if (was) await api.write("update", { id: was.id, fields: { ...(was.metadata ?? {}), parachute: next }, ...(was.updatedAt ? { if_updated_at: was.updatedAt } : {}) });
       else await api.write("create", { path: "Parachute/Settings", body: "The bar, the home applet, the Parachutes and the servers of the Parachute app. See docs/NAVIGATION.md.", tags: ["parachute-settings"], fields: { parachute: next } });

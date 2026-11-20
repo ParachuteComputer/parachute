@@ -20,8 +20,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Route, Routes, useLocation, type Location } from "react-router";
 import AppletScreen from "../views/AppletScreen";
-import { openAppNow } from "./homeSettings";
-import { keepOf } from "./apps";
+import { openBundleNow } from "./homeSettings";
+import { keepOf } from "./bundles";
 
 /** How many applets may stay running while hidden: 6 on a phone, 12 on a computer. Only speed hangs on it now: an
  *  applet that goes keeps what it saved (shell/saved.ts) and starts again where it was. */
@@ -54,8 +54,8 @@ const KeptContext = createContext<Kept>({ shown: true, keepable: () => {} });
 export const useKept = () => useContext(KeptContext);
 
 /** Which entries stay: the one shown, and up to KEEP others that may be kept, the most recently shown first. */
-/** How many stay here: the open app's `keep` (shell/apps.ts), else this device's default. */
-const keepHere = () => keepOf(openAppNow(), KEEP);
+/** How many stay here: the open bundle's `keep` (shell/bundles.ts), else this device's default. */
+const keepHere = () => keepOf(openBundleNow(), KEEP);
 export function stays(entries: readonly Entry[], current: string | null, keep = keepHere()): Entry[] {
   const hidden = entries.filter((e) => e.id !== current && e.keepable).sort((a, b) => b.at - a.at).slice(0, keep);
   return entries.filter((e) => e.id === current || hidden.includes(e));

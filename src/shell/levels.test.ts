@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { approvalContent, dOf, type SignedEvent, type Subject } from "../applet/approvals";
 import { askedOf, codeOf, DEFAULTS, fullOf, loosens, raise, subjectFor, syncLevels, type Asked, type Levels } from "./levels";
-import { appOf } from "./apps";
+import { bundleOf } from "./bundles";
 
 const home = { issuer: "https://hub.example", vault: "home" };
 const now = Date.parse("2026-11-19T12:00:00Z");
@@ -38,8 +38,8 @@ describe("security levels", () => {
     expect(askedOf({ approvals: "nothing", join: "PASSCODE", idle: -1, code: "none" })).toEqual({ code: "none" });
     expect(fullOf({ code: "none" }).code).toBe("unlock");
     expect(askedOf({ idle: 99999 })).toEqual({ idle: 1440 });
-    expect(appOf({ contract: 1, id: "uni", name: "Uni", security: { approvals: "passcode", idle: 5 } }, "Parachute/Apps/uni", "01A")!.security).toEqual({ approvals: "passcode", idle: 5 });
-    expect(appOf({ contract: 1, id: "uni", name: "Uni" }, "Parachute/Apps/uni", "01A")!.security).toEqual({});
+    expect(bundleOf({ contract: 1, id: "uni", name: "Uni", security: { approvals: "passcode", idle: 5 } }, "Parachute/Bundles/uni", "01A")!.security).toEqual({ approvals: "passcode", idle: 5 });
+    expect(bundleOf({ contract: 1, id: "uni", name: "Uni" }, "Parachute/Bundles/uni", "01A")!.security).toEqual({});
   });
 
   it("lets a record make a device stricter, never looser", () => {
