@@ -82,7 +82,7 @@ function rowsOf(grant: Grant, face: { lines: FaceLine[]; also: string[] }): Row[
   return rows;
 }
 
-export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, grant, ownFolder, keyring = {}, imports = [], scope, code, status, was, fingerprint, expires, broughtChanged = false, onAllow, onNotNow, onBack, what = "applet", handed, settle, hubAsk = null, approvedElsewhere = null, signing = null }: {
+export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, grant, ownFolder, keyring = {}, imports = [], scope, code, status, was, fingerprint, expires, broughtChanged = false, onAllow, onNotNow, onBack, what = "applet", handed, settle, hubAsk = null, approvedElsewhere = null, signing = null, history }: {
   name: string; glyph: string; vault: string; runs: Runs;
   /** what it asks (grant.ts), the folder its note is in, and the keyring's names for keys: the card's lines come from these */
   grant: Grant; ownFolder: string | null; keyring?: LineOptions;
@@ -112,6 +112,9 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
   approvedElsewhere?: string | null;
   /** Why the approval wasn't signed (the unlock cancelled, a passcode wrong). */
   signing?: string | null;
+  /** Who changed it, when and how many times today (changedBy.ts `changedLine`), and an approval of other code this
+   *  device read (`approvedOtherLine`): shown when the code changed since something was allowed, here or elsewhere. */
+  history?: { changed?: string | null; other?: string | null };
 }) {
   const [about, setAbout] = useState<number | null>(null);
   const tap = (f: () => void) => (e: MouseEvent) => { if (e.isTrusted) f(); };
@@ -156,6 +159,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
       {whose !== "mine" && <p className="grant-warn" role="note"><strong>Not made by you. Only continue if you trust the people who made it.</strong> It acts as you in {vault}, with your sign-in there. It sees nothing in your own vaults.{what === "component" && <> Your page and it could pass words between them, and those could reach {vault}.</>}</p>}
       {approvedElsewhere && <p className="grant-changed" role="status"><strong>You approved this exact version on {approvedElsewhere}.</strong> On this device your hub asks first.</p>}
       {!approvedElsewhere && notice && <p className="grant-changed" role="status"><strong>{notice}</strong></p>}
+      {!approvedElsewhere && (history?.other || ((codeChanged || broughtChanged) && history?.changed)) && <p className="grant-sub grant-who">{[history?.other, history?.changed].filter(Boolean).join(" ")}</p>}
       {rows.length ? <ul className="grant-face grant-rows" role="list" aria-label="What it would do">{rows.map((r, i) => (
         <li key={i} className={isNew(r.text) ? "grant-fresh" : undefined}>
           <span className="grant-mark" aria-hidden="true">{r.mark}</span>
