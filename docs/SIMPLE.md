@@ -18,9 +18,10 @@ areas), Matrix, and the key and pairing screens. A person who has another applet
 | **Notes** | the home (`/`) | Every vault's newest notes in one list, a search across all of them, the vaults as tabs, **New note**. A note opens as it always does, with **Edit**. |
 | **Journal** | the bar | The Uni app's Journal: a line a day or many, written or said, kept by day in the home vault's `Journal/`. **Add Journal** (one tap) writes it in as `Applets/Journal`, as Capture is added. |
 | **Capture** | the bar | Write a line, or **Say it** (the app's own recorder): it lands in the home vault's `Inbox/` as a note of its own, and a voice note gets its words from the hub's transcription. |
+| **Vault** | the bar | Parachute's own viewer ([VAULT.md](VAULT.md)): each vault's types and counts, a type's records as a table, a record's fields (changed where they stand), words, links and history. A note no other applet opens opens here. |
 | **Connect** | the bar | Each vault's connector address (`https://…/vault/<name>/mcp`) with **Copy**, and how to add it to Claude and ChatGPT. |
 
-The bar says **Notes · Journal · Capture · Connect**. Settings (the foot of Notes, or ⋯ on the other screens) has
+The bar says **Notes · Journal · Capture · Vault · Connect**. **Vault** ([VAULT.md](VAULT.md)) is Parachute's own viewer: each vault's types, a type's records as a table, a record's fields, links and history; added with one tap, as Capture is. Settings (the foot of Notes, or ⋯ on the other screens) has
 **Your app: Parachute Simplified / Everything**.
 
 On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key); the key's ways come

@@ -1,0 +1,16 @@
+{
+  "path": "Applets/Vault",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "vault-view",
+      "name": "Vault",
+      "glyph": "▦",
+      "note": "your vaults: their types, records, fields, links and history"
+    },
+    "needs": 3,
+    "app": ["vaults", "sharing"]
+  }
+}

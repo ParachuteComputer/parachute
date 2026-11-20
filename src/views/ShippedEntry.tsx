@@ -1,8 +1,8 @@
 // A shipped applet's place on Parachute Simplified's bar before it is in the home vault (docs/SIMPLE.md): what it is,
 // and one tap to add it. Once it is there, the bar goes straight to the applet, and this screen sends anyone who lands
-// here on. Capture and Journal.
+// here on. Capture, Journal and Vault (which hands on a vault and a record it was asked to open).
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router";
+import { Navigate, useLocation, useNavigate } from "react-router";
 import { Bar } from "../ui/Bar";
 import { homeVault } from "../shell/frameSource";
 import { useVaults } from "../vault/hooks";
@@ -17,19 +17,32 @@ const WORDS: Record<ShippedName, { lead: (vault: string) => React.ReactNode; ask
     asks: "Inbox/, the microphone through the app, and opening the notes you tap in it" },
   journal: { lead: (v) => <>A line a day, or many: written or said, kept by day in <b>{v}</b>, in Journal/.</>,
     asks: "Journal/, the microphone through the app, and opening the entries you tap in it" },
+  vault: { lead: () => <>See what is in your vaults: each type and how many records it has, a type's records as a table, and each record's fields, words, links and history. A record no other applet opens opens here.</>,
+    asks: "to see and change records in your vaults, and what reaches them" },
+};
+/** What the address hands on to Vault: a vault and a record in it (its launch, `?vault=&record=`). */
+const handOn = (search: string) => {
+  const p = new URLSearchParams(search), out = new URLSearchParams();
+  const vault = p.get("vault"), record = p.get("record");
+  if (vault && vault.length <= 200) out.set("vault", vault);
+  if (vault && record && /^[A-Za-z0-9_-]{1,64}$/.test(record)) out.set("record", record);
+  return out.size ? `?${out.toString()}` : "";
 };
 
 export default function ShippedEntry({ which }: { which: ShippedName }) {
   const home = homeVault(useVaults());
-  // read the home's applets (again): it may be there already
-  useApplets(home);
+  const location = useLocation();
+  // read the home's applets (again): it may be there already, and until they are read, nothing is offered
+  const read = useApplets(home);
   const nav = useNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const s = SHIPPED[which];
   const there = shippedIn(home, which);
   if (!home) return <main className="screen"><Bar title={s.name} back={true} /><p className="quiet">Sign in to a vault of yours first.</p></main>;
-  if (there && !busy) return <Navigate to={appletPath(home.key, there)} replace />;
+  const on = which === "vault" ? handOn(location.search) : "";
+  if (there && !busy) return <Navigate to={`${appletPath(home.key, there)}${on}`} replace />;
+  if (read.state === "loading" && !busy) return <main className="screen"><Bar title={s.name} back={true} /><p className="quiet" role="status">Reading…</p></main>;
   const add = async () => {
     setBusy(true); setError("");
     try {
@@ -37,7 +50,7 @@ export default function ShippedEntry({ which }: { which: ShippedName }) {
       const to = appletPath(home.key, id);
       // the person's tap led here: the applet's card shows, and their Allow starts it
       markTap(to);
-      nav(to, { replace: true });
+      nav(`${to}${on}`, { replace: true });
     } catch (e) {
       setBusy(false);
       // the home is only read so far: the app's sheet asks to let Parachute change notes there, and says what to do;

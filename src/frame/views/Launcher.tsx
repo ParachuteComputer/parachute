@@ -3,7 +3,7 @@ import { useHold } from "../../ui/hold";
 import { Link } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVault } from "../../bridge/protocol";
-import { addEmbed, addVault, bringIn, dismissVault, pinApplet, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
+import { addEmbed, addVault, bringIn, dismissVault, pinApplet, startApplet, useApplets, useComponents, useHome, useHomeLoaded, usePointers, useVaultQuery, useVaults } from "../data";
 import { titleOf } from "../../vault/notes";
 import { Days } from "../../kit/parts";
 import { when } from "../../kit/when";
@@ -23,6 +23,7 @@ const updated = (n: Note) => (n as { updatedAt?: string }).updatedAt ?? null;
 export default function Launcher() {
   const vaults = useVaults();
   const home = useHome();
+  const homeRead = useHomeLoaded();
   const [asked, setAsked] = useState<{ v: FrameVault; a: FrameApplet } | null>(null);
   const [part, setPart] = useState<{ v: FrameVault; c: FrameComponent } | null>(null);
   // how many each vault lists, once read: the list says when there is nothing in it at all
@@ -41,6 +42,7 @@ export default function Launcher() {
         {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
         {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
+      {homeRead && !home.viewer && vaults.some((v) => v.home) && <p className="launcher-notice"><Link to="/vault"><span aria-hidden="true">▦{"\uFE0E"}</span> Add Vault: your vaults' types, records and fields, where a record opens</Link></p>}
       <Components vaults={vaults} onPart={(v, c) => setPart({ v, c })} />
       <p className="launcher-foot"><Link to="/settings">Settings</Link></p>
       {asked && <AppletSheet v={asked.v} a={asked.a} onClose={() => setAsked(null)} />}

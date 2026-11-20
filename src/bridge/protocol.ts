@@ -50,7 +50,10 @@ export type FrameParachute = { hub: string; host: string; name: string; home: bo
 /** `notice: "app-record"`: the app this device chose didn't load (its record is malformed or gone); the list says so.
  *  `"app-newer"`: it was made for a newer Parachute (`noticeName` is its name); the list says to update. A frame that
  *  doesn't know a notice shows none. */
-export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; app?: "simple"; notice?: "app-record" | "app-newer"; noticeName?: string };
+/** Vault (applet/shipped.ts) in the home vault: where it is, and whether it runs as allowed ("ok"), changed since
+ *  ("updated") or not yet allowed ("none"); absent when it isn't there (or applets don't run on this device). */
+export type FrameViewer = { vault: string; noteId: string; status: "ok" | "updated" | "none" };
+export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; app?: "simple"; notice?: "app-record" | "app-newer"; noticeName?: string; viewer?: FrameViewer };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
 export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; includeContent?: boolean; includeMetadata?: boolean };
 /** `decided`: what the note's route already decided for this history entry (kept by the shell, which outlives the frame). */
@@ -164,6 +167,6 @@ export function allowedDestination(to: string): boolean {
   let u: URL;
   try { u = new URL(to, "http://app.invalid"); } catch { return false; }
   if (u.origin !== "http://app.invalid" || !/^\/(?![\/\\])/.test(to)) return false;
-  return u.pathname === "/" || u.pathname === "/settings" || u.pathname === "/add" || u.pathname === "/connect" || u.pathname === "/capture" || u.pathname === "/journal"
+  return u.pathname === "/" || u.pathname === "/settings" || u.pathname === "/add" || u.pathname === "/connect" || u.pathname === "/capture" || u.pathname === "/journal" || u.pathname === "/vault"
     || /^\/v\/[^/]+(?:\/[na]\/[^/]+|\/n\/[^/]+\/edit|\/new)?$/.test(u.pathname);
 }

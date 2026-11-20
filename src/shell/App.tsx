@@ -131,7 +131,7 @@ function useStart(): boolean {
 }
 
 /** The addresses the bar is at the foot of: the frame's, an applet's, Settings. */
-const withBar = (path: string, shell: boolean) => !shell || /^\/v\/[^/]+\/a\/[^/]+$/.test(path) || path === "/settings" || path === "/connect" || path === "/capture" || path === "/journal";
+const withBar = (path: string, shell: boolean) => !shell || /^\/v\/[^/]+\/a\/[^/]+$/.test(path) || path === "/settings" || path === "/connect" || path === "/capture" || path === "/journal" || path === "/vault";
 /** The app's own editor (a new note, a note's words): a shell screen, so the frame never writes (docs/SIMPLE.md). */
 const isEditor = (path: string) => /^\/v\/[^/]+\/(?:new|n\/[^/]+\/edit)$/.test(path);
 
@@ -140,7 +140,7 @@ function ShellRoutes() {
   const location = useLocation();
   const vaults = useVaults();
   const decided = useStart();
-  const shell = /^\/(add|oauth\/callback|settings|open-link|key|key\/pair|connect|capture|journal)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname) || isEditor(location.pathname)
+  const shell = /^\/(add|oauth\/callback|settings|open-link|key|key\/pair|connect|capture|journal|vault)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname) || isEditor(location.pathname)
     || (location.pathname === "/" && !vaults.length);
   if (!decided) return null;
   const bar = withBar(location.pathname, shell) && vaults.length > 0;
@@ -158,6 +158,7 @@ function ShellRoutes() {
         <Route path="/connect" element={<Connect />} />
         <Route path="/capture" element={<ShippedEntry key="capture" which="capture" />} />
         <Route path="/journal" element={<ShippedEntry key="journal" which="journal" />} />
+        <Route path="/vault" element={<ShippedEntry key={`vault${location.search}`} which="vault" />} />
         <Route path="/v/:vault/new" element={<NoteEdit key={location.key} />} />
         <Route path="/v/:vault/n/:id/edit" element={<NoteEdit key={location.key} />} />
         <Route path="/open-link" element={<OpenLink />} />

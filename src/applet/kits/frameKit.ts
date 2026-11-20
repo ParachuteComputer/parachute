@@ -44,7 +44,7 @@
 
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
-  var svcSubs = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [];
+  var svcSubs = {}, vaultWatches = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [];
   // saved state (docs/WRITE-AN-APPLET.md "Saved state"): what the shell handed back, and what changed since it was sent
   // savedOn: the app hands saved state to this frame (an applet's own screen; an embed's has none)
   var savedVals = {}, savedDirty = null, savedTimer = null, savedFirst = 0, savedOn = false, SAVE_MS = 250, SAVE_MAX_MS = 1000, SCROLL = "parachute:scroll";
@@ -264,6 +264,11 @@ export const FRAME_KIT = String.raw`(function () {
       if (h) { if (d.events && d.events.length) { h.tries = 0; try { h.onEvents(d.events); } catch (e) {} } if (d.eose && h.onEose) { try { h.onEose(); } catch (e) {} } }
       return;
     }
+    if (m.event === "vaults.events") {
+      var vd = m.data || {}, vw = vaultWatches[vd.id];
+      if (vw) { try { vw(vd.upsert ? { upsert: vd.upsert } : { remove: vd.remove }); } catch (e) {} }
+      return;
+    }
     if (m.event === "services.status") {
       // a subscription the relay or the shell closed is made again (the kit holds its filters); the applet hears it too
       var st = m.data || {};
@@ -456,6 +461,31 @@ export const FRAME_KIT = String.raw`(function () {
     }),
     // its own number for a signal its record declares (docs/design/APP-RECORD.md "Signals"): the bar's count
     signal: function (id, count) { return call("signals", "set", { id: id, count: count }); },
+    // with app: [vaults] (the Vault applet's): every vault this device holds; a change goes as JSON text in bytes
+    vaults: Object.freeze({
+      list: function () { return call("vaults", "list", {}); },
+      types: function (vault) { return call("vaults", "types", { vault: vault }); },
+      query: function (vault, q) { var p = { vault: vault }; Object.keys(q || {}).forEach(function (k) { if (q[k] !== undefined) p[k] = q[k]; }); return call("vaults", "query", p); },
+      get: function (vault, id) { return call("vaults", "get", { vault: vault, id: id }); },
+      history: function (vault, id) { return call("vaults", "history", { vault: vault, id: id }); },
+      version: function (vault, id, ix) { return call("vaults", "version", { vault: vault, id: id, ix: ix }); },
+      update: function (vault, id, change) { return call("vaults", "update", { vault: vault, id: id, bytes: new TextEncoder().encode(JSON.stringify(change)).buffer }); },
+      create: function (vault, rec) { return call("vaults", "create", { vault: vault, bytes: new TextEncoder().encode(JSON.stringify(rec)).buffer }); },
+      // cb({upsert: record} | {remove: id}) as changes land; returns a function that stops it
+      watch: function (vault, type, cb) {
+        if (typeof cb !== "function") throw new TypeError("watch needs a function");
+        var id = null, stopped = false;
+        call("vaults", "watch", type ? { vault: vault, type: type } : { vault: vault }).then(function (r) {
+          if (stopped) { call("vaults", "unwatch", { id: r.id }).catch(function () {}); return; }
+          id = r.id; vaultWatches[id] = cb;
+        }, function () {});
+        return function () { stopped = true; if (id) { delete vaultWatches[id]; call("vaults", "unwatch", { id: id }).catch(function () {}); } };
+      },
+      // with app: [sharing]
+      access: function (vault) { return call("vaults", "access", { vault: vault }); },
+      revoke: function (vault, noteId) { return call("vaults", "revoke", { vault: vault, noteId: noteId }); },
+      readOnly: function (vault) { return call("vaults", "readOnly", { vault: vault }); }
+    }),
     theme: {
       get: function () { return call("theme", "get", {}); },
       now: function () { return theme; },

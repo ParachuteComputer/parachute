@@ -59,6 +59,12 @@ describe("the face keeps every stressed line's facts", () => {
     expect(t).toContain("bücher.example (xn--bcher-kva.example)");
     expect(t).toContain("only in «Garden» (abcdef01…), named by the applet");
   });
+  it("Vault: every vault, and what reaches each, said on the face", () => {
+    const { g, folder } = grantFor("vault");
+    const t = faceTexts(holds(g, folder, trusted)).join("\n");
+    expect(t).toContain("Sees and changes records in every vault");
+    expect(t).toContain("Sees what reaches each vault");
+  });
   it("two relays: each approval line names its own server, so a second one reads apart from the first", () => {
     const { g, folder } = grantFor("rooms");
     const two = { ...g, services: [...g.services!, { ...g.services![0], id: "other", url: "wss://other.example.org/" }] };

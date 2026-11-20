@@ -1,0 +1,12 @@
+{
+  "records": 5000,
+  "at": "2026-11-20T19:09:00.971Z",
+  "ms": {
+    "vault: types with counts": 120,
+    "open a type of 2,000: first rows": 459,
+    "scroll to the foot: the next 100": 487,
+    "sort by priority (a field the hub sorts)": 896,
+    "open a record": 502,
+    "search in the type": 261
+  }
+}
