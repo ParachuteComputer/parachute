@@ -60,7 +60,11 @@ function IdleLock({ native }: { native: Native }) {
       if (e.source === null || e.source === window) return;
       if ((navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive) touch();
     };
-    const onVisible = () => { if (document.visibilityState === "visible") { sent.current = -Infinity; ask(); } };
+    // a report still waiting goes with the screen: hidden, nothing is reported; back in front, the check comes first
+    const onVisible = () => {
+      if (later.current) { clearTimeout(later.current); later.current = null; }
+      if (document.visibilityState === "visible") { sent.current = -Infinity; ask(); }
+    };
     ask();
     const opts = { capture: true, passive: true } as const;
     for (const t of ["pointerdown", "keydown", "wheel", "touchstart"]) window.addEventListener(t, onInput, opts);
