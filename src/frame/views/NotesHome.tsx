@@ -5,7 +5,7 @@ import type { FrameVault } from "../../bridge/protocol";
 import { readerFor, useHome, useVaults } from "../data";
 import { isAppOwn, noteHref, titleOf } from "../../vault/notes";
 import { Empty } from "../../kit/parts";
-import { Loading, Search, Tabs } from "../../kit/screen";
+import { Loading, Problem, Search, Tabs } from "../../kit/screen";
 import { when } from "../../kit/when";
 import { VaultsToOpen } from "./Launcher";
 import NoteRows from "./NoteRows";
@@ -80,7 +80,7 @@ export default function NotesHome() {
       {all.length > 1 && <Tabs label="Vaults" current={chosen?.key ?? ""} onChange={tab} tabs={[{ key: "", label: "All" }, ...all.map((v) => ({ key: v.key, label: v.vault }))]} />}
       {parachutes.map((p) => <VaultsToOpen key={p.hub} p={p} />)}
       {rows === null && <Loading>Reading your notes…</Loading>}
-      {!!read?.unread.length && <p className="quiet small">Couldn't read {read.unread.join(", ")} just now.</p>}
+      {!!read?.unread.length && <Problem>Couldn't read {read.unread.join(", ")} just now</Problem>}
       {rows && rows.length > 0 && <NoteRows label={term ? "Search results" : "Notes"} rows={rows.map(({ v, n }) => ({
         key: `${v.key}/${n.id}`, to: noteHref(v.key, n.id), title: titleOf(n), meta: shown.length > 1 ? v.vault : "", aside: when.short(updated(n)),
       }))} />}

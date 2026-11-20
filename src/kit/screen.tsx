@@ -150,7 +150,7 @@ export function Search({ label, placeholder, value, onChange, onSearch, live }: 
   const go = useRef(onSearch);
   go.current = onSearch;
   // what was last searched: a pause in typing searches only for something new (Enter always searches)
-  const last = useRef("");
+  const last = useRef((value ?? "").trim());
   const search = (t: string) => { last.current = t.trim(); go.current(last.current); };
   useEffect(() => {
     if (live === undefined) return;

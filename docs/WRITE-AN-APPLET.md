@@ -157,7 +157,7 @@ all look and behave as one app and follow the person's theme. Reach for the part
 | take words: a line, a box, a chat's composer | `Field`, `Write` |
 | search | `Search` |
 | switch between places in one screen | `Tabs` |
-| a button | `Button` (`primary` for the one main action) |
+| a button | `Button` (`kind="primary"` for the one main action) |
 | record a voice note | `Record`, then `voiceNote` and `useTranscripts` for one the hub transcribes |
 | link to a note, or open one | `Link`, `Linked`, `Note`, `link.open` |
 | keep a draft, or where it was | `useSaved` |
@@ -166,8 +166,9 @@ all look and behave as one app and follow the person's theme. Reach for the part
 Your own CSS is for layout (columns, a card of your own) on those variables. The applets this repo ships are held to
 this: `src/kit/conformance.ts` fails one that formats a date itself, draws its own list, input, button, error or status
 line, or picks its own colour, font or text size, and says which part to use (`npm test`). Write yours the same way:
-an agent can read that file for the exact rules. An applet with a real reason to keep something of its own names the
-reason there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below are checked too.
+an agent can read that file for the exact rules (they run in this repo's tests, not in the app: an applet in a vault is
+asked to follow them, not checked). A shipped applet with a real reason to keep something of its own names the reason
+there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below are checked too.
 
 ### The kit's calls (`import { … } from "parachute"`)
 
@@ -275,7 +276,7 @@ back when it starts again, before its first paint:
 ```tsx
 const [draft, setDraft] = useSaved("draft", "");      // what is being written
 const [tab, setTab] = useSaved("tab", "inbox");        // where it was
-<Write label="Your note" value={draft} onChange={setDraft} onSend={save} />
+<Write label="Your note" value={draft} onChange={setDraft} />
 ```
 
 - **Saved as it changes.** The kit sends what changed 250 ms after the last change (at most a second while the person

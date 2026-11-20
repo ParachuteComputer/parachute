@@ -12,7 +12,6 @@ import { appletPath } from "../../open/paths";
 /** A day inside a line of words: "today", "yesterday", "Monday, November 17". */
 const inLine = (day: string) => (day === "Today" || day === "Yesterday" ? day.toLowerCase() : day);
 
-
 const updated = (n: Note) => (n as { updatedAt?: string }).updatedAt ?? null;
 
 /**

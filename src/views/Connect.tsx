@@ -1,7 +1,7 @@
 // Connect an AI (docs/SIMPLE.md): each vault's connector address, to paste into Claude, ChatGPT or any app that speaks
 // MCP, and how. The address is the vault's own (`<vault>/mcp`, as Parachute Cloud's Connect page gives it); the AI then
 // asks the person on their hub's page, so nothing here grants anything.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bar } from "../ui/Bar";
 import { useVaults } from "../vault/hooks";
 import { vaultUrlOf, type VaultRecord } from "../vault/store";
@@ -16,16 +16,17 @@ export const connectorAddress = (r: Pick<VaultRecord, "issuer" | "vault" | "url"
 function Addresses({ list }: { list: VaultRecord[] }) {
   const [copied, setCopied] = useState<Record<string, "yes" | "failed">>({});
   const was = (k: string, v: "yes" | "failed" | null) => setCopied((c) => { const n = { ...c }; if (v) n[k] = v; else delete n[k]; return n; });
-  // "Copied" goes back to "Copy" after a moment
-  useEffect(() => {
-    const done = Object.keys(copied).filter((k) => copied[k] === "yes");
-    if (!done.length) return;
-    const t = setTimeout(() => done.forEach((k) => was(k, null)), 2500);
-    return () => clearTimeout(t);
-  }, [copied]);
+  // "Copied" goes back to "Copy" after a moment, each row on its own
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const copied_ = (k: string) => {
+    was(k, "yes");
+    clearTimeout(timers.current.get(k));
+    timers.current.set(k, setTimeout(() => was(k, null), 2500));
+  };
   const copy = (r: VaultRecord) => {
     if (!navigator.clipboard) { was(r.key, "failed"); return; }
-    navigator.clipboard.writeText(connectorAddress(r)).then(() => was(r.key, "yes"), () => was(r.key, "failed"));
+    navigator.clipboard.writeText(connectorAddress(r)).then(() => copied_(r.key), () => was(r.key, "failed"));
   };
   return <List label="Your vaults' addresses" hideLabel rows={list.map((r): Row => ({
     key: r.key, title: r.vault,
