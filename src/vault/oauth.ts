@@ -129,7 +129,9 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   // (only one that stopped at its first step: the listing, or the consent when the key listed the vaults; past that,
   // the hub took the registration, kept so a hub whose owner approves new registrations doesn't have to again)
   if (b.fresh && stale && stale.issuer === parachute.issuer && (stale.step === "list" || (stale.step === "open" && stale.why === "signin" && stale.how === "key"))) forgetClient(parachute.issuer);
-  let clientId = cachedClient(parachute.issuer, redirect);
+  // the hub's reserved id for this app (Parachute Cloud's `parachute-app`, cloud #421), for the return only the shell
+  // catches: its pages name it Parachute, not an app that registered itself
+  let clientId = parachute.appClientId && redirect === SHELL_RETURN ? parachute.appClientId : cachedClient(parachute.issuer, redirect);
   if (!clientId) {
     clientId = (await registerClient(meta.registration_endpoint, { clientName: parachute.door === "cloud" ? CLOUD_CLIENT_NAME : CLIENT_NAME, redirectUri: redirect }, fetchImpl)).client_id;
     cacheClient(parachute.issuer, redirect, clientId);

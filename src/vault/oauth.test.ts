@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { beginSignIn, CLOUD_CLIENT_NAME, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
+import { beginSignIn, CLOUD_CLIENT_NAME, SHELL_RETURN, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
 
 const PENDING = "parachute.oauth.pending.v1";
 const P = { hub: "https://hub.example", issuer: "https://hub.example", accountMcp: "https://hub.example/account/mcp", vaultTemplate: "https://hub.example/vault/{name}" };
@@ -141,6 +141,23 @@ describe("beginSignIn", () => {
     localStorage.clear();
     await beginSignIn(begin({ step: "list" }), cloudLike(META, names)).catch(() => null);
     expect(names.at(-1)).toBe("Parachute");
+  });
+  it("on a device, signs in under the id the hub reserves for the app (Cloud's parachute-app): no registration, so its page names Parachute", async () => {
+    const names: string[] = [];
+    const cloud = { ...P, hub: "https://cloud.example", issuer: "https://cloud.example", door: "cloud" as const, appClientId: "parachute-app" };
+    const meta = { ...META, issuer: "https://cloud.example", authorization_endpoint: "https://cloud.example/oauth/authorize", token_endpoint: "https://cloud.example/oauth/token", registration_endpoint: "https://cloud.example/oauth/register" };
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    try {
+      const url = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
+      expect(url.searchParams.get("client_id")).toBe("parachute-app");
+      expect(url.searchParams.get("redirect_uri")).toBe(SHELL_RETURN);
+      expect(names).toEqual([]);
+    } finally { delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__; }
+    // a browser tab's return address isn't the one the id is pinned to: it registers, as before
+    localStorage.clear();
+    const tab = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
+    expect(tab.searchParams.get("client_id")).toBe("client-1");
+    expect(names).toEqual([CLOUD_CLIENT_NAME]);
   });
   it("refuses a hub that names another issuer", async () => {
     await expect(beginSignIn(begin({ vault: "notes" }, "https://a.example"), discovery({ ...META, issuer: "https://b.example" }, []))).rejects.toThrow(/calls itself/);
