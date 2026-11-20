@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from "react";
 import { inShell } from "../vault/oauth";
 import { cleanVaultNames } from "../vault/address";
-import type { Parachute } from "../vault/parachute";
+import { HOME_WAIT_MS, rpcAnswer, type Parachute } from "../vault/parachute";
 
 export type KeyInfo = { npub: string };
 /** Why a key sign-in didn't happen (src-tauri/src/door.rs `Refusal`). */
@@ -97,6 +97,16 @@ export async function listWithKey(p: Parachute): Promise<{ vaults: string[]; all
     if (r.code !== "no_list") throw r;
     return null;
   }
+}
+
+/** The hub's answer to which of the person's vaults hold their settings or app record (vault/parachute.ts homeFrom
+ *  reads it), asked by a second request the shell signs with the key (door.rs `hub_home_records`). Null when it can't
+ *  tell, or after a few seconds: the sign-in goes on with the first by name. */
+export async function homeRecordsWithKey(p: Parachute): Promise<unknown> {
+  if (p.accountMcp !== `${p.hub}/account/mcp`) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const asked = invoke<string | null>("hub_home_records", { hub: p.hub }).then((body) => (body ? rpcAnswer(body) : null), () => null);
+  try { return await Promise.race([asked, new Promise<null>((r) => { timer = setTimeout(() => r(null), HOME_WAIT_MS); })]); } finally { clearTimeout(timer); }
 }
 
 /** The words of a failed command (the shell's commands fail with a sentence), or `fallback`. */

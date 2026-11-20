@@ -82,8 +82,9 @@ export function rpcAnswer(text: string): unknown {
 }
 
 /** The vaults the hub lists for the person, and whether they are every vault on it (`covered: "all"`: the person runs
- *  the hub) rather than the ones given to them. */
-export type Listed = { vaults: string[]; all: boolean };
+ *  the hub) rather than the ones given to them. `home`: the one that holds their settings or app record, when the sign-in
+ *  could ask (homeFrom). */
+export type Listed = { vaults: string[]; all: boolean; home?: string | null };
 
 /** What the hub answered to `list-vaults` (a JSON-RPC result whose text is JSON). Only names a vault can have, each once,
  *  sorted; at most MAX_VAULTS. */
@@ -99,9 +100,58 @@ export function listFrom(body: unknown): Listed {
 /** The one call that lists the person's vaults: `list-vaults` on the hub's account MCP. */
 export const LIST_VAULTS_BODY = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list-vaults", arguments: {} } });
 
+/** The tags of the records that make a vault the person's home: their settings (homeSettings.ts), else their app record
+ *  (apps.ts; `parachute-app`, being renamed `parachute-bundle`). */
+export const HOME_TAGS = ["parachute-settings", "parachute-app", "parachute-bundle"] as const;
+/** The second call a sign-in makes on the account MCP, beside the listing: which of the person's vaults hold those
+ *  records (`query-notes` across every vault the token reaches, at most 50 rows each: the hub's lean rows, with path,
+ *  tags and a short preview, no content and no fields). The key signs this same body (src-tauri/src/door.rs). */
+export const HOME_RECORDS_BODY = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "query-notes", arguments: { tag: [...HOME_TAGS], include_content: false, include_metadata: false, limit: 50 } } });
+
+/** Of `among`, the one vault that holds the person's settings, else the one that holds an app record; null when none
+ *  does, when two do (a hub the person runs may hold someone else's settings too: they pick), or when the answer can't
+ *  be read. A vault the hub couldn't read answers with an error and is passed over. */
+export function homeFrom(body: unknown, among: readonly string[]): string | null {
+  try {
+    const r = body as { result?: { isError?: boolean; content?: { type?: string; text?: string }[] } } | null;
+    if (!r?.result || r.result.isError) return null;
+    const text = r.result.content?.find((c) => c.type === "text")?.text;
+    const parsed = JSON.parse(text ?? "") as { results?: { vault?: unknown; notes?: unknown }[] };
+    const settings = new Set<string>(), apps = new Set<string>();
+    for (const v of Array.isArray(parsed.results) ? parsed.results : []) {
+      if (typeof v?.vault !== "string" || !among.includes(v.vault)) continue;
+      // each vault's answer: its rows, or { notes: rows } (core 0.9)
+      const rows = Array.isArray(v.notes) ? v.notes : Array.isArray((v.notes as { notes?: unknown } | null)?.notes) ? (v.notes as { notes: unknown[] }).notes : [];
+      for (const n of rows as { tags?: unknown }[]) {
+        const tags = Array.isArray(n?.tags) ? n.tags : [];
+        if (tags.includes(HOME_TAGS[0])) settings.add(v.vault);
+        else if (tags.includes(HOME_TAGS[1]) || tags.includes(HOME_TAGS[2])) apps.add(v.vault);
+      }
+    }
+    const one = (s: Set<string>) => (s.size === 1 ? [...s][0] : null);
+    return settings.size ? one(settings) : one(apps);
+  } catch { return null; }
+}
+
+/** One fixed call to the hub's account MCP with an account token: its answer. */
+async function postAccount(accountMcp: string, token: string, body: string, fetchImpl: typeof fetch, signal?: AbortSignal): Promise<Response> {
+  return fetchImpl(accountMcp, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body, ...(signal ? { signal } : {}) });
+}
+
+/** Which of `among` is the person's home, asked with the sign-in's account token (homeFrom). Never throws, and gives up
+ *  after a few seconds: the sign-in goes on with the first by name. */
+export async function homeWithToken(accountMcp: string, token: string, among: readonly string[], fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<string | null> {
+  try {
+    const res = await postAccount(accountMcp, token, HOME_RECORDS_BODY, fetchImpl, AbortSignal.timeout(HOME_WAIT_MS));
+    return res.ok ? homeFrom(rpcAnswer(await res.text()), among) : null;
+  } catch { return null; }
+}
+/** How long a sign-in waits to learn which vault is the home. */
+export const HOME_WAIT_MS = 4000;
+
 /** List the person's vaults with an account token (the sign-in without a key). */
 export async function listWithToken(accountMcp: string, token: string, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<Listed> {
-  const res = await fetchImpl(accountMcp, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: LIST_VAULTS_BODY });
+  const res = await postAccount(accountMcp, token, LIST_VAULTS_BODY, fetchImpl);
   if (!res.ok) throw new Error(`The hub didn't list your vaults (${res.status}).`);
   return listFrom(rpcAnswer(await res.text()));
 }

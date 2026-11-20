@@ -10,7 +10,7 @@ import { addShipped, SHIPPED, shippedIn, type ShippedName } from "../applet/ship
 import { useApplets } from "../applet/useApplets";
 import { appletPath } from "../open/paths";
 import { markTap } from "../open/mark";
-import { pendingWriteAsk } from "../vault/writeAsk";
+import { isWriteRefusal, pendingWriteAsk } from "../vault/writeAsk";
 
 const WORDS: Record<ShippedName, { lead: (vault: string) => React.ReactNode; asks: string }> = {
   capture: { lead: (v) => <>Write a line or say it, and it lands in <b>{v}</b>, in Inbox/, as a note of its own.</>,
@@ -54,8 +54,8 @@ export default function ShippedEntry({ which }: { which: ShippedName }) {
     } catch (e) {
       setBusy(false);
       // the home is only read so far: the app's sheet asks to let Parachute change notes there, and says what to do;
-      // no second, rawer line under the button
-      if (pendingWriteAsk() === home.key) return;
+      // no second, rawer line under the button (any other failure is said here)
+      if (pendingWriteAsk() === home.key && isWriteRefusal(e, home.vault)) return;
       setError(e instanceof Error ? e.message : `${s.name} couldn't be added.`);
     }
   };

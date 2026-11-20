@@ -7,8 +7,8 @@
 //                   start: {vault, hub?, applet} | null   the home applet: it opens on start, first on the bar
 //                   hubs:  [{hub, name?}]   the person's Parachutes (docs/design/ONE-SIGN-IN.md): shown, never signed
 //                          in to by themselves
-//                   app:   "simple" | "everything"   which app this person's devices open (docs/SIMPLE.md): the simple
-//                          one (Notes, Capture, Connect) or everything (the launcher, every applet). Absent: everything.
+//                   app:   "simple" | "everything"   which app this person's devices open (docs/SIMPLE.md): Parachute
+//                          Simplified (Notes, Journal, Capture, Connect) or everything (the launcher, every applet). Absent: everything.
 //                          A new person's first sign-in writes "simple"
 //                   services: [{name, kind, url}]   the servers the person's applets reach (docs/design/SERVICES.md):
 //                          their relay, their mail gateway. Shown in Settings with the applets that reach each; an

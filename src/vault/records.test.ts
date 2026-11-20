@@ -78,6 +78,9 @@ describe("types on a write", () => {
     expect(splitTypes({ path: "A", tags: ["recipe", "x"] }, new Set(["recipe"]))).toEqual({ path: "A", tags: ["x"], types: ["recipe"] });
     expect(splitTypes({ path: "A", tags: ["x"] }, new Set(["recipe"]))).toEqual({ path: "A", tags: ["x"] });
     expect(splitTypes({ records: [{ tags: ["recipe"] }] }, new Set(["recipe"]))).toEqual({ records: [{ tags: [], types: ["recipe"] }] });
+    // a change's {add, remove} too (T-476: an applet that ticks a box may name a type among its tags)
+    expect(splitTypes({ tags: { add: ["recipe", "x"], remove: ["old"] } }, new Set(["recipe", "old"]))).toEqual({ tags: { add: ["x"] }, types: { add: ["recipe"], remove: ["old"] } });
+    expect(splitTypes({ tags: { add: ["x"] }, types: { add: ["dish"] } }, new Set(["recipe"]))).toEqual({ tags: { add: ["x"] }, types: { add: ["dish"] } });
   });
 
   it("asks the vault's types once, and again (with one retry) when the vault says a name became a type", async () => {

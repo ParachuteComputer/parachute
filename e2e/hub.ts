@@ -1,7 +1,7 @@
 // Two real Parachute hubs for the end-to-end tests: `parachute-core` (from @openparachute/core), each in a throwaway home
 // on a loopback port. Nothing here touches any other hub.
 //   home     at 127.0.0.1, the person's own Parachute: three vaults, `kitchen` seeded from e2e/fixtures, `letters` and
-//            `pantry` with an applet each (named after kitchen, so kitchen is the default home: the first by name). The person is its owner (a password) and their key is linked to them.
+//            `pantry` with an applet each (named after kitchen, so kitchen is the default home: the first by name, while no vault holds a settings note). The person is its owner (a password) and their key is linked to them.
 //   techne   at localhost (another host, so the browser keeps its sign-in apart): an org's Parachute with two vaults,
 //            `techne` and `board`. The person is a member there by their Nostr key alone: the hub's owner granted the
 //            key `read` on `techne` only (grant-access), and the person signs in through the hub's key door (keys.ts).

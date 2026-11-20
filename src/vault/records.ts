@@ -12,7 +12,8 @@
 //             record's `types` go back into its `tags` (the door lists a type only under `types`; the app's checks read
 //             tags). Only a record's own keys are renamed: what is inside `fields` (manifests, settings, the theme) is
 //             never touched.
-//   types     on the door a type's name is refused in `tags` ("pass it as types"). So a write that names tags asks the
+//   types     on the door a type's name is refused in `tags` ("pass it as types"). So a write that names tags (a list,
+//             or a change's {add, remove}) asks the
 //             vault which names are types (`GET <vault>/api/types`, kept for the session, asked again when the vault
 //             refuses one) and sends those in `types`. A name the vault doesn't know stays a plain tag, as on /api/notes.
 //   untouched everything not under /api/notes (tags, storage, the live query, the vault's info).
@@ -52,10 +53,26 @@ export function splitTypes(b: unknown, types: Set<string>): unknown {
       out.types = [...new Set([...(Array.isArray(b.types) ? (b.types as unknown[]) : []), ...asTypes])];
     }
   }
+  // a change's {add, remove} (PATCH): each side split the same way, into `types: {add, remove}`
+  if (plain(b.tags) && !Array.isArray(b.tags)) {
+    const was = b.tags as Record<string, unknown>;
+    const had = plain(b.types) ? (b.types as Record<string, unknown>) : {};
+    const tagsOut: Record<string, unknown> = {}, typesOut: Record<string, unknown> = { ...had };
+    let moved = false;
+    for (const side of ["add", "remove"]) {
+      const list = Array.isArray(was[side]) ? (was[side] as unknown[]) : null;
+      if (!list) { if (was[side] !== undefined) tagsOut[side] = was[side]; continue; }
+      const asTypes = list.filter((t): t is string => typeof t === "string" && types.has(t));
+      const rest = list.filter((t) => !(typeof t === "string" && types.has(t)));
+      if (rest.length || !asTypes.length) tagsOut[side] = rest;
+      if (asTypes.length) { moved = true; typesOut[side] = [...new Set([...(Array.isArray(had[side]) ? (had[side] as unknown[]) : []), ...asTypes])]; }
+    }
+    if (moved) { out.tags = tagsOut; out.types = typesOut; }
+  }
   if (Array.isArray(b.records)) out.records = b.records.map((x) => splitTypes(x, types));
   return out;
 }
-const namesTags = (b: unknown): boolean => plain(b) && (Array.isArray(b.tags) || (Array.isArray(b.records) && b.records.some(namesTags)));
+const namesTags = (b: unknown): boolean => plain(b) && (Array.isArray(b.tags) || plain(b.tags) || (Array.isArray(b.records) && b.records.some(namesTags)));
 
 const NOTES = /^(.*\/api)\/notes(\/.*)?$/;
 const QUERY_IN: Record<string, string> = { include_content: "include_body", include_metadata: "include_fields", content_offset: "body_offset", content_length: "body_length" };
