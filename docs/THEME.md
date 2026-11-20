@@ -45,10 +45,15 @@ it uses the built-in theme. Delete the note to go back to it.
 
 ## In an applet
 
-The parts (`Note`, `Days`, `List`, `Card`, `Field`, `Empty`) are drawn on these values, so they follow the theme with
-no work. Each value is also a CSS variable in the applet's frame: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`,
-`--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. Write your CSS on
-these, and the applet changes with the theme. `theme.get()` and `theme.on(cb)` give the same values as an object
+The kit's parts (`Page`, `List`, `Button`, `Write`, `Note` and the rest, [WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)) are
+drawn on these values, so they follow the theme with no work. Each value is also a CSS variable in the applet's frame:
+`--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`,
+`--gap`, `--radius`, `--size`, `--leading`. Write your CSS on these, and the applet changes with the theme.
+
+Text sizes come from one scale, a step each on `--size` (so density moves them all): `--fs-title` (a page's title, 2×),
+`--fs-head` (a heading, 1.35×), `--fs-lead` (a row's or a note's text, 1.12×), `--fs-body` (1×), `--fs-small` (a line
+under a row, 0.875×) and `--fs-label` (a small capital label, 0.75×). The shipped applets size text only with these,
+and a check fails one that doesn't (`src/kit/conformance.ts`), so the same thing is the same size in every applet. `theme.get()` and `theme.on(cb)` give the same values as an object
 ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)).
 
 A component embedded in a page ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)) gets the same look, with two differences:

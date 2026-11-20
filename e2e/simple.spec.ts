@@ -100,7 +100,7 @@ test("simple app: sign in → Notes → find, edit and write a note → Connect 
     await cap.getByRole("textbox", { name: "Write it down" }).fill(`Ask about rye flour ${stamp}`);
     await cap.getByRole("button", { name: "Save" }).click();
     await expect(cap.getByText("Saved to Inbox.")).toBeVisible();
-    await expect(cap.getByRole("list", { name: "Captured" })).toContainText(`Ask about rye flour ${stamp}`);
+    await expect(cap.getByRole("region", { name: "Captured" })).toContainText(`Ask about rye flour ${stamp}`);
     const inbox = await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Inbox/")}&include_content=true&limit=20`) as Row[];
     const captured = inbox.find((r) => r.content === `Ask about rye flour ${stamp}`);
     expect(captured?.path, "named by its words").toBe(`Inbox/Ask about rye flour ${stamp}`);

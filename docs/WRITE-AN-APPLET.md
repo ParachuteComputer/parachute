@@ -176,24 +176,37 @@ does. Use them, or your own markup on the CSS variables, or both.
 | `<Note body path? tags? fields? onLink? />` | A note's text as the app's note view draws it: markdown, and rich notes (a recipe with servings and timers, tasks, logs, callouts, charts from tables); give the record's `tags` and `fields` so a typed note (tagged `recipe`) draws as its type, and its `path`, which tells one note from the next. Its links are the kit's ([Links](#links)): a `[[wikilink]]`, a `<vault>:<ULID>` and a note's address open the note in the app, a web address the browser. With `onLink(target)` a tap goes there instead, with a wikilink's target as written (`[[Green herb rice]]` gives `Green herb rice`), the `<vault>:<ULID>` or the address: open it yourself, or hand it to `link.follow`. The renderer is large, so the app loads it only for an applet that imports `Note`. |
 | `<Link to from? >…</Link>` | One link: a note's address, `<vault>:<ULID>`, `[[target]]` (with `from`, the path of the note it is in) or a web address. See [Links](#links). |
 | `<Linked text web? />` | Plain text with its note links drawn as `Link`s: a message, a mail. With `web`, its other web addresses too (they open only with `links`). |
-| `link (.to, .follow, .parse, .find)` | The links as calls: `await link.to(record)` is the address to write for a note of the applet's vault; `link.follow(target, { from })` opens one on a tap; `link.parse(text)` says what a link names (or null); `link.find(text)` gives the links in plain text. |
+| `link (.to, .follow, .open, .parse, .find)` | The links as calls: `await link.to(record)` is the address to write for a note of the applet's vault; `link.follow(target, { from })` opens one on a tap; `link.open(record)` opens a note of its own vault on a tap (a row's `onPress`); `link.parse(text)` says what a link names (or null); `link.find(text)` gives the links in plain text. |
 | `<Days times? counts? days? label? inline? />` | What changed, a day at a time: a column of ink marks per day, weeks set apart, today marked. Give `times` (ISO times, counted by day) or `counts` (oldest first). `days` defaults to 28; `inline` draws it inside a line (a row, a link). |
-| `<List label? rows />` | Rows under a label. A row is `{ key?, title, meta?, aside?, glyph?, onPress? }`; one with `onPress` is a button. |
+| `<List label? rows more? />` | Rows under a label. A row is `{ key?, title, meta?, aside?, glyph?, onPress?, badge?, strong?, current?, under?, label?, data? }`; one with `onPress` is a button. A long list costs little (a row off screen isn't drawn); `more: { label, onPress }` asks for the next page. |
 | `<Card title?>…</Card>` | A raised block with a title. |
 | `<Field label placeholder? action? onAction? value? onChange? clearOnAction? />` | A line to write on, and one action (its button, or Enter). It keeps its own text unless `value` is given, and clears after the action unless `clearOnAction` is false. `onAction` should catch its own errors and show them: a failed action leaves the text as it was. |
 | `<Empty>…</Empty>` | What shows when there is nothing yet: a sprig and a line. |
+| `<Page title? kicker? aside? onRefresh? className? >…</Page>` | The applet's screen: one width and margin for every applet, its title on the type scale (a small `kicker` above, `aside` at its right), and with `onRefresh` pull down at the top to read again. |
+| `<Loading>…</Loading>` | The quiet line while something is read ("Reading…" unless you say). |
+| `<Problem error? onRetry? >…</Problem>` | What went wrong, said once: your words, then the error's, and Try again with `onRetry`. |
+| `<Button kind? small? busy? onClick >…</Button>` | A button in the app's look: `primary` (the one main action), `plain` (the default) or `quiet`. |
+| `<Search label placeholder? value? onChange? onSearch live? />` | A search box: Enter searches (each pause in typing, with `live` ms); emptying it searches for "". |
+| `<Write label value onChange onSend? send? busy? enter? line? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone, as in a chat). Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows. |
+| `<Record onRecorded label? max_s? disabled? kind? small? >…</Record>` | The microphone button: the app's own recorder sheet (needs `reach: [voice]`); `onRecorded({ bytes, type, duration })` on Send. |
+| `toast(text, { error? })` | A short word after an action ("Saved"), at the foot of the screen, gone by itself. |
+| `voiceNote(recording, create)` | A recording made a note: `create(body)` makes the record (its path is yours), the recording is attached with transcription asked, and the hub writes the words in. |
+| `useTranscripts(bodies, reload)` | While a voice note waits for its words: reads again a few times; `say(body)` is the line to show, `strip(body)` the text without the hub's marker, `again()` after a new recording. |
+| `when (.time, .day, .short, .full, .ago, .stamp, .path, .parse)` | Dates and times, one way in every applet, in the person's language: `when.short(t)` is "9:41 AM" today, "Yesterday", "Mon", "Nov 17". `t` is a Date, an ISO string, milliseconds or seconds. |
 | `useTheme()` | The look as values (`accent`, `bg`, …, `scheme`, `density`), or null until the app has sent it. Most applets need only the CSS variables. |
 | `useSaved(key, initial)` | `useState` that the app keeps on this device: a draft, the box it was on, the item open. See [Saved state](#saved-state). |
 
 An HTML applet has no parts: it has the kit's calls and the CSS variables.
 
-An applet lives in the vault, and each device's app updates on its own time, so an applet meets older apps. A part
-an older app doesn't have arrives as `undefined`. `Link`, `Linked` and `link` came after the first builds (11-18), `useSaved` on 11-19: import
-one under another name and fall back, as the shipped applets do (`src/kit/olderApp.test.ts` checks them):
+**Older apps.** An applet lives in the vault, and each device's app updates on its own time, so an applet meets older
+apps. A part an older app doesn't have arrives as `undefined`, and an applet that draws it stops there with one line
+saying why. The kit of 11-20 is the floor the shipped applets are written on: they need an app from 11-20 or later, so
+their records go to a vault once the person's devices have it. A part added after that is imported under another name
+with a fallback (`src/kit/olderApp.test.ts` checks the shipped applets do):
 
 ```tsx
-import { Linked as KitLinked } from "parachute";
-const Linked = KitLinked ?? (({ text }: { text: string }) => <>{text}</>);
+import { Newer as KitNewer } from "parachute";
+const Newer = KitNewer ?? (({ children }: { children?: unknown }) => <>{children}</>);
 ```
 
 ### Saved state
