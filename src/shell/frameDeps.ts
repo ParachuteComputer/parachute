@@ -1,5 +1,6 @@
 // The shell's real answers to the frame (frameBridge.ts `HostDeps`), from what the shell holds.
-import type { Decided, FrameApplets } from "../bridge/protocol";
+import type { Decided, FrameApplets, FrameViewer } from "../bridge/protocol";
+import { vaultAppletIn } from "../applet/shipped";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
 import { gateNow, whenGateKnown } from "../applet/selftest/run";
 import { statusOf } from "../open/status";
@@ -21,7 +22,7 @@ import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
 import { bundleMissing, bundleNewer, barNow, openBundleNow, pinApplet, startApplet } from "./homeSettings";
 import { offered, namesApplet, type Bundle } from "./bundles";
-import { chooseStart, forgetStart } from "./start";
+import { chooseStart, forgetStart, START_WAIT_MS } from "./start";
 import { parachutesNow } from "./parachutes";
 
 /** The bar and the home as the frame may see them, and the two changes it may ask for on a tap. A frame's tap can't
@@ -36,12 +37,35 @@ export const homeNow = () => {
     parachutes: parachutesNow().map((p) => {
       const fresh = newVaultsOn(p.hub);
       return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}) };
-    }), ...(openBundleNow().look === "notes" ? { app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}) };
+    }), ...(openBundleNow().look === "notes" ? { app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
+    ...viewerNow() };
 };
+/** Vault in the home vault, as this device last read its applets, when applets run here: where a record no other
+ *  applet opens goes (docs/VAULT.md). */
+function viewerNow(): { viewer?: FrameViewer } {
+  const home = homeVault();
+  const id = vaultAppletIn(home);
+  const a = home ? appletsNow(home.key) : null;
+  const e = a?.state === "ok" ? a.found.entries.find((x) => x.noteId === id) : undefined;
+  if (!home || !e) return {};
+  const status = statusOf(home.key, gateNow())(e);
+  return { viewer: { vault: home.key, noteId: e.noteId, status } };
+}
 /** For a frame of the person's own, a write into their vault is asked about once more on the shell's own sheet. */
 const confirmed = (from: "built-in" | "vault", q: WriteAsk) => (from === "vault" ? confirmWrite(q) : Promise.resolve(true)).then((yes) => { if (!yes) throw new Error("not_allowed"); });
+/** The same, once the home vault's applets have been read this session (so Vault, when it is there, is known). */
+const homeRead = async () => {
+  const home = homeVault();
+  // read once if never read this session, or wait for the read already under way: a read that failed isn't asked
+  // again here (each frame's reload of the home would ask it again, and each failure would set off another)
+  const was = home ? appletsNow(home.key) : undefined;
+  // never long: a slow hub or self-test leaves Vault unknown (the plain views, with their line), as a start does
+  const read = (async () => { if (home && (!was || was.state === "loading")) await refreshApplets(home).catch(() => false); await whenGateKnown(); })();
+  await Promise.race([read, new Promise((r) => setTimeout(r, START_WAIT_MS))]);
+  return homeNow();
+};
 const homeDeps = (from: "built-in" | "vault"): HostDeps["home"] => ({
-  get: homeNow,
+  get: homeRead,
   bringIn: async (vault, noteId) => { await confirmed(from, { title: "Bring this into your Parachute?", body: "Your frame asks to write a pointer to it in your home vault. Nothing of it runs until you allow it.", act: "Bring it in" }); await bringThingIn(vault, noteId); },
   addEmbed: async (vault, noteId) => { await confirmed(from, { title: "Add this to your home?", body: "Your frame asks to put this component on your home applet's page. It asks before it runs.", act: "Add to home" }); return addToHome(vault, noteId); },
   addVault: async (hub, vault) => {

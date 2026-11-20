@@ -93,9 +93,12 @@ export async function setDefault(vault: string, type: string, choice: string | n
 // ── the bar and the home ──
 
 const home = store<FrameHome>(() => call("home.get", {}), { start: null, bar: [] });
-on("changed", ({ what }) => { if (what === "home") void home.load(); });
+// Vault's place (FrameHome.viewer) follows the home vault's applets
+on("changed", ({ what }) => { if (what === "home" || what === "applets") void home.load(); });
 /** What is on the bar (the home applet, the pins) as the shell finds them on this device. */
 export const useHome = (): FrameHome => useSyncExternalStore(home.subscribe, home.get);
+/** Whether the bar and the home have been read yet (before, Vault's place isn't known). */
+export const useHomeLoaded = (): boolean => useSyncExternalStore(home.subscribe, home.loaded);
 /** Pin or unpin an applet (during a tap only: the shell refuses otherwise). */
 export const pinApplet = (vault: string, noteId: string, on: boolean) => call("home.pin", { vault, noteId, on }).then(() => home.load());
 /** Make an applet the home, or none (during a tap only). */

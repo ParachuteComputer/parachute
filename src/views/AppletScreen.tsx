@@ -51,6 +51,8 @@ import { createThemeModule } from "../applet/modules/theme";
 import { tokensNow } from "../theme/store";
 import { createAppModule, notTapped } from "../applet/modules/app";
 import { createVoiceModule } from "../applet/modules/voice";
+import { createVaultsModule } from "../applet/modules/vaults";
+import { vaultsDeps } from "../shell/vaultsDeps";
 import { createStorageModule } from "../applet/modules/storage";
 import { storageFor } from "../shell/device";
 import { deviceSaved, forgetSaved } from "../shell/saved";
@@ -69,7 +71,7 @@ import { createServicesModule } from "../applet/modules/services";
 import { createBroker, type Broker } from "../services/broker";
 import { useShellSheets } from "./ShellSheets";
 import { lineOptions, useKeyring } from "../services/keyring";
-import { launchOf } from "../services/notifyLink";
+import { launchOf, vaultLaunchOf } from "../services/notifyLink";
 import { nativeNow } from "../services/native";
 import { hubCheck, knownHubs } from "../services/hubs";
 import type { Session } from "../applet/session";
@@ -357,11 +359,15 @@ export default function AppletScreen() {
   // and closed with it; its calls wait for it
   const brokerRef = useRef<{ session: Session; broker: Promise<Broker | null> } | null>(null);
   const sheets = useShellSheets(() => frameEl.current);
+  const sheetsRef = useRef(sheets);
+  sheetsRef.current = sheets;
   // the recorder and the file picker (docs/design/KEYRING.md "Voice, files, links, storage"): stable, as the router keeps them
   const device = useDeviceSheets(entry?.manifest.name ?? "This applet");
   const servicesWhy = useRef<string | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const onSession = (s: Session | null) => {
+    // a frame made again (or gone) leaves no live watch behind it (modules/vaults.ts): the new one asks for its own
+    if (sessionNow.current && sessionNow.current !== s) vaultsModule?.stop();
     sessionNow.current = s;
     const was = brokerRef.current;
     if (was && was.session !== s) { void was.broker.then((b) => b?.close()); brokerRef.current = null; }
@@ -376,6 +382,10 @@ export default function AppletScreen() {
     }) };
   };
   useEffect(() => () => { void brokerRef.current?.broker.then((b) => b?.close()); brokerRef.current = null; }, []);
+  const vaultsModule = useMemo(() => (rec && entry && (entry.app.includes("vaults") || entry.app.includes("sharing"))
+    ? createVaultsModule(entry.app, vaultsDeps({ confirm: (q) => sheetsRef.current.confirm(q), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search }))
+    : null), [rec?.key, entry]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => vaultsModule?.stop(), [vaultsModule]);
   const router = useMemo(() => (rec && entry ? createRouter([
     createVaultModule(vaultDeps(clientFor(rec)), { opens: entry.opens, name: rec.vault }),
     createThemeModule({ theme: tokensNow }),
@@ -391,7 +401,9 @@ export default function AppletScreen() {
     ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
-  ]) : null), [rec?.key, rec?.issuer, rec?.vault, entry]); // eslint-disable-line react-hooks/exhaustive-deps
+    // every vault this device holds (the Vault applet's words: modules/vaults.ts), and what reaches each
+    ...(vaultsModule ? [vaultsModule] : []),
+  ]) : null), [rec?.key, rec?.issuer, rec?.vault, entry, vaultsModule]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
   const note = loaded.state === "ok" ? loaded.note : null;
@@ -400,8 +412,8 @@ export default function AppletScreen() {
   const name = entry?.manifest.name ?? "Applet";
   const sized = !!entry?.embeds.length;
   // a notification's tap opens the applet at a room and message (services/notifyLink.ts)
-  const launch = launchOf(params);
-  const launchKey = launch ? `${launch.room}|${launch.event ?? ""}` : "";
+  const launch: { room: string; event?: string } | { vault: string; record?: string } | null = launchOf(params) ?? (entry?.app.includes("vaults") ? vaultLaunchOf(params) : null);
+  const launchKey = launch ? ("room" in launch ? `${launch.room}|${launch.event ?? ""}` : `${launch.vault}|${launch.record ?? ""}|${location.key}`) : "";
   // what it was allowed, as its card said it (the folders, and each server with its rooms and keys): an applet reads its
   // room, or which key is Uni's, from here rather than from a copy of its own
   // `shown`: a frame that boots while its screen is kept hidden knows so from the start

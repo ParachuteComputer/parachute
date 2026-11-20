@@ -17,7 +17,7 @@ export type HostDeps = {
   /** `set` refuses (throws) a choice that names no applet of that vault, or one too many. */
   defaults: { get(vault: string): Record<string, string>; set(vault: string, type: string, choice: string | null): void };
   /** The bar and the home; `pin` and `start` write the person's settings note (only ever called during a tap). */
-  home: { get(): FrameHome; pin(vault: string, noteId: string, on: boolean): Promise<void>; start(vault: string, noteId: string | null): Promise<void>;
+  home: { get(): FrameHome | Promise<FrameHome>; pin(vault: string, noteId: string, on: boolean): Promise<void>; start(vault: string, noteId: string | null): Promise<void>;
     /** Write a pointer to that applet or component in the home vault (only ever called during a tap). */
     bringIn(vault: string, noteId: string): Promise<void>;
     /** Put that component on the home applet's page (only ever called during a tap). */

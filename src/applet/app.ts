@@ -5,8 +5,9 @@
 // app's rooms (docs/design/KEYRING.md "Voice, files, links, storage"): links, save, attach (a file the person picks)
 // and storage (a little, on this device). Pure.
 //
-//   app: [recent, pins, open, links, save, attach, storage]
-export const APP_WORDS = ["recent", "pins", "open", "links", "save", "attach", "storage"] as const;
+//   app: [recent, pins, open, links, save, attach, storage, vaults, sharing]
+// `vaults` and `sharing` are the Vault applet's (applets/vault.tsx; modules/vaults.ts): every vault this device holds.
+export const APP_WORDS = ["recent", "pins", "open", "links", "save", "attach", "storage", "vaults", "sharing"] as const;
 export type AppWord = (typeof APP_WORDS)[number];
 
 /** `metadata.app`: absent is none; anything but a short list of known words, each once, is refused (the applet then
@@ -27,6 +28,8 @@ export function appLines(app: readonly AppWord[]): { text: string; stress: boole
   if (app.includes("links")) out.push({ text: "Open web addresses in your browser: what it reads could leave in an address it opens", stress: true });
   if (app.includes("save")) out.push({ text: "Save files to your device's Downloads", stress: false });
   if (app.includes("attach")) out.push({ text: "Ask you to pick a file or picture to give it", stress: false });
+  if (app.includes("vaults")) out.push({ text: "See every record in every vault on this device (its words, fields, types, tags, links and history), and change records where you let Parachute change them; a published record (anyone with its link reads it) only after you say yes on the app's own sheet", stress: true });
+  if (app.includes("sharing")) out.push({ text: "See what reaches each vault (this app, its applets), and, each after you say yes on the app's own sheet: publish a record (anyone with its link can read it), take an applet's access back, or make a vault read only", stress: true });
   if (app.includes("storage")) out.push({ text: "Keep up to 256 KB on this device for itself (drafts, what it last showed)", stress: false });
   return out;
 }

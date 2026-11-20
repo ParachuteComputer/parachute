@@ -48,18 +48,19 @@ export default function BottomBar() {
   );
 }
 
-/** Parachute Simplified's places (docs/SIMPLE.md): Notes (the home), Journal and Capture (each the applet in the home
- *  vault, or the screen that adds it), and Connect an AI. */
+/** Parachute Simplified's places (docs/SIMPLE.md): Notes (the home), Journal, Capture and Vault (each the applet in the
+ *  home vault, or the screen that adds it), and Connect an AI. */
 function SimplePlaces({ pathname }: { pathname: string }) {
   const home = homeVault(useVaults());
   useApplets(home, false);
-  const hrefOf = (which: "capture" | "journal") => { const id = shippedIn(home, which); return home && id ? appletPath(home.key, id) : `/${which}`; };
-  const journalHref = hrefOf("journal"), captureHref = hrefOf("capture");
+  const hrefOf = (which: "capture" | "journal" | "vault") => { const id = shippedIn(home, which); return home && id ? appletPath(home.key, id) : `/${which}`; };
+  const journalHref = hrefOf("journal"), captureHref = hrefOf("capture"), vaultHref = hrefOf("vault");
   const at = (href: string) => (pathname === href ? "page" : undefined);
   return <>
     <Link className="home-bar-place" to="/" aria-current={at("/")}><span className="home-bar-glyph" aria-hidden="true">¶</span>Notes</Link>
     <Link className="home-bar-place" to={journalHref} aria-current={pathname === journalHref || pathname === "/journal" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">✎{"\uFE0E"}</span>Journal</Link>
     <Link className="home-bar-place" to={captureHref} aria-current={pathname === captureHref || pathname === "/capture" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">◉{"\uFE0E"}</span>Capture</Link>
+    <Link className="home-bar-place" to={vaultHref} aria-current={pathname === vaultHref || pathname === "/vault" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">▦{"\uFE0E"}</span>Vault</Link>
     <Link className="home-bar-place" to="/connect" aria-current={at("/connect")}><span className="home-bar-glyph" aria-hidden="true">⌁</span>Connect</Link>
   </>;
 }

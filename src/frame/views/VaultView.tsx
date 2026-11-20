@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useParams } from "react-router";
+import { carryOn } from "../FrameRouter";
+import ViewerLine, { viewerHref } from "./ViewerLine";
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../../ui/Bar";
-import { useApplets, useVault, useVaultQuery } from "../data";
+import { useApplets, useHome, useHomeLoaded, useVault, useVaultQuery } from "../data";
 import { folderOf, noteHref, titleOf } from "../../vault/notes";
 import NoVault from "./NoVault";
 import NoteRows from "./NoteRows";
@@ -11,19 +13,31 @@ import { appletPath } from "../../open/paths";
 
 const LIMIT = 60;
 
-/** The plain vault view: the newest notes, or what a search finds. Every row is a link to the note's own address. */
+/** A vault: in Vault when it is there and allowed (applet/shipped.ts, docs/VAULT.md); else the plain view, the newest
+ *  notes or what a search finds, under a line that leads to Vault. Every row is a link to the note's own address. */
 export default function VaultView() {
   const { vault: key } = useParams();
   const rec = useVault(key);
+  const location = useLocation();
+  const homeRead = useHomeLoaded();
+  const viewer = useHome().viewer;
+  // a carry-on the shell refused (the person already left, say) leaves the plain view here, never "Opening…" for good
+  const [stay, setStay] = useState(false);
+  // `?with=vault`: the plain view, asked for (the way back when Vault itself won't do)
+  const plain = new URLSearchParams(location.search).get("with") === "vault";
+  const toViewer = homeRead && !!rec && viewer?.status === "ok" && !stay && !plain;
+  useEffect(() => { if (toViewer && viewer && rec) carryOn(location.pathname, viewerHref(viewer, rec.key)).catch(() => setStay(true)); }, [toViewer]); // eslint-disable-line react-hooks/exhaustive-deps
   const [term, setTerm] = useState("");
   const load = useVaultQuery<Note[]>(rec, (c) => (term
     ? c.queryNotes({ search: term, limit: LIMIT })
     : c.queryNotes({ orderBy: "updated_at", sort: "desc", limit: LIMIT })), [term]);
   const applets = useApplets(rec?.key);
   if (!rec) return <NoVault />;
+  if (!homeRead || toViewer) return <main className="screen"><Bar title={rec.vault} back={true} /><Loading>Opening…</Loading></main>;
   return (
     <main className="screen">
       <Bar title={rec.vault} back={true} />
+      <ViewerLine vault={rec.key} />
       {applets?.ok && applets.entries.length > 0 && (
         <ul className="applets" aria-label="Applets">
           {applets.entries.map((a) => (
