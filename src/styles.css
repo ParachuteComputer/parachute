@@ -64,6 +64,13 @@ fieldset.plain legend { padding: 0; }
 
 .note { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 4px var(--pad) 12px; }
 .note-where { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.note-fields { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 10px 0 2px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 15px; }
+.note-fields div { display: contents; }
+.note-fields dt { color: var(--muted); }
+.note-fields dd { margin: 0; overflow-wrap: anywhere; }
+.note-edit-fields { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 12px; margin: 10px 0 0; }
+.note-edit-fields input:not([type="checkbox"]), .note-edit-fields select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 15px; min-width: 0; }
+.note-edit-fields input[type="checkbox"] { justify-self: start; width: 20px; height: 20px; }
 .note-code { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 var(--mono); }
 .prose-note { font-family: var(--serif); font-size: 17px; line-height: 1.55; overflow-wrap: anywhere; }
 .prose-note h1, .prose-note h2, .prose-note h3 { line-height: 1.2; margin: 1em 0 .4em; }
