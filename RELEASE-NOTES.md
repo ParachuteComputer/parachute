@@ -56,4 +56,6 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
 - **Key sign-in everywhere.** A hub needs the key door (`parachute-core` 0.8 and later). Parachute Cloud signs you in on
   its own page for now. A hub's owner has to link your key to your account first.
 - **Scanning on a Mac.** The Mac has no QR scan for pairing: copy the pairing link and paste it.
+- **Moving to a new phone.** Nothing of the app is in Android's backup or a phone-to-phone transfer (your sign-ins,
+  drafts and passcode stay on the device they were made on). On a new or restored phone, pair your key and sign in again.
 - **Crash reports.** None are sent. If the app misbehaves, tell us what you did.

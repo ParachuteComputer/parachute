@@ -14,7 +14,13 @@
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
+    <!-- Nothing of the app goes into Android's backup or a device-to-device transfer (drafts an applet saved, the
+         sign-ins, the passcode's hash, the approvals ledger): they are this device's own, "never synced". The key was
+         never in a backup (it is wrapped by this device's Keystore), so a restored copy could not have opened it. -->
     <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.parachute"
