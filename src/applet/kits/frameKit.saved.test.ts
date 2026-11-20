@@ -27,6 +27,7 @@ function frame() {
 const failed = { code: "failed", message: "it couldn't be written on this device" };
 
 describe("the kit's saved state, when a write fails", () => {
+  // saves go one at a time (the kit's line, frameKit.line.test.ts): the second is sent when the first is answered
   it("two saves of one key both fail: the newer value is the one sent again", async () => {
     const f = frame();
     f.kit.saved.set("draft", "Dear Ana, the first words");
@@ -34,29 +35,33 @@ describe("the kit's saved state, when a write fails", () => {
     f.kit.saved.set("draft", "Dear Ana, the first words and the rest");
     void f.kit.saved.flush();
     await f.tick();
-    const [a, b] = f.puts();
-    expect(f.body(a).draft).toBe("Dear Ana, the first words");
-    f.deliver({ uni: 1, id: a.id, error: failed });
-    f.deliver({ uni: 1, id: b.id, error: failed });
+    expect(f.puts().map((m) => f.body(m).draft)).toEqual(["Dear Ana, the first words"]);
+    f.deliver({ uni: 1, id: f.puts()[0].id, error: failed });
+    await f.tick();
+    expect(f.body(f.puts()[1]).draft).toBe("Dear Ana, the first words and the rest");
+    f.deliver({ uni: 1, id: f.puts()[1].id, error: failed });
     await f.tick(1100);
     const again = f.puts().slice(2).map((m) => f.body(m).draft);
     expect(again.length).toBeGreaterThan(0);
-    expect(again.at(-1)).toBe("Dear Ana, the first words and the rest");
     expect(again).not.toContain("Dear Ana, the first words");
+    expect(again.at(-1)).toBe("Dear Ana, the first words and the rest");
   });
 
-  it("an older save fails after a newer one was kept: the older value is never sent over it", async () => {
+  it("an older save fails and a newer one is kept: the older value is never sent over it", async () => {
     const f = frame();
     f.kit.saved.set("draft", "old");
     void f.kit.saved.flush();
     f.kit.saved.set("draft", "old and new");
     void f.kit.saved.flush();
     await f.tick();
-    const [a, b] = f.puts();
-    f.deliver({ uni: 1, id: a.id, error: failed });
-    f.deliver({ uni: 1, id: b.id, result: null });
+    f.deliver({ uni: 1, id: f.puts()[0].id, error: failed });
+    await f.tick();
+    f.deliver({ uni: 1, id: f.puts()[1].id, result: null });
     await f.tick(1100);
-    expect(f.puts().slice(2).map((m) => f.body(m).draft)).not.toContain("old");
+    // what failed goes again, with the value held now
+    const again = f.puts().slice(2).map((m) => f.body(m).draft);
+    expect(again).not.toContain("old");
+    for (const m of f.puts().slice(2)) f.deliver({ uni: 1, id: m.id, result: null });
   });
 
   it("a key removed since the failed save stays removed", async () => {
@@ -66,9 +71,9 @@ describe("the kit's saved state, when a write fails", () => {
     f.kit.saved.set("draft", null);
     void f.kit.saved.flush();
     await f.tick();
-    const [a, b] = f.puts();
-    f.deliver({ uni: 1, id: a.id, error: failed });
-    f.deliver({ uni: 1, id: b.id, result: null });
+    f.deliver({ uni: 1, id: f.puts()[0].id, error: failed });
+    await f.tick();
+    f.deliver({ uni: 1, id: f.puts()[1].id, result: null });
     await f.tick(1100);
     expect(f.puts().slice(2).map((m) => f.body(m).draft)).not.toContain("to be sent");
   });
