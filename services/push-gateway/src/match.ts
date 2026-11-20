@@ -15,7 +15,9 @@ export const MAX_MENTIONS = 20;
 const tagValues = (ev: Ev, name: string) => ev.tags.filter((t) => t[0] === name && typeof t[1] === "string").map((t) => t[1]);
 
 /** For each registration this message is for, why. Never the author's own; only someone the room lists as a member;
- *  only the rooms the registration named (or any of theirs); nothing from before it was made. */
+ *  only the rooms the registration named (or any of theirs); nothing from before it was made. A mention counts only
+ *  from an author the room lists too: a relay may take a post in an open room from a key that isn't its member, and
+ *  naming people there must not reach them (an author the person chose to hear, `from`, still does). */
 export function matches(ev: Ev, relay: string, regs: readonly Reg[], members: (room: string) => ReadonlySet<string> | undefined): { reg: Reg; push: Push }[] {
   if (ev.kind !== 9) return [];
   const rooms = tagValues(ev, "h");
@@ -24,7 +26,7 @@ export function matches(ev: Ev, relay: string, regs: readonly Reg[], members: (r
   const inRoom = members(room);
   if (!inRoom) return [];
   const named = tagValues(ev, "p");
-  const mentioned = new Set(named.length <= MAX_MENTIONS ? named : []);
+  const mentioned = new Set(named.length <= MAX_MENTIONS && inRoom.has(ev.pubkey) ? named : []);
   const out: { reg: Reg; push: Push }[] = [];
   for (const reg of regs) {
     if (reg.relay !== relay || reg.pubkey === ev.pubkey || !inRoom.has(reg.pubkey) || ev.created_at < reg.created - SKEW_S) continue;

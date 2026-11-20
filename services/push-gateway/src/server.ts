@@ -79,8 +79,11 @@ export function createGateway(cfg: Config) {
   // only as fast as many addresses can fill it
   const perAddress = new Budget(30, 10_000);
   // every signed request from one address, before the gateway-wide budget: one address (fresh keys cost nothing) can't
-  // drain what everyone shares
+  // drain what everyone shares. Behind a proxy that isn't trusted for the client's address every phone has one
+  // address, which fresh keys must not be able to spend for the people already here: there, and only there, a key the
+  // gateway already serves (a confirmed registration) isn't counted against the address. It has its own budget.
   const perAddressAll = new Budget(60, 2_000);
+  const served = (pubkey: string) => registry.all(now()).some((r) => r.pubkey === pubkey && !r.pending);
   const pusher = new Pusher({ allowLoopback: cfg.allowLoopback, privateHosts: cfg.privateHosts, log, gone: (e) => registry.dropEndpoint(e) });
   const now = () => Math.floor(Date.now() / 1000);
   const alive = new AliveFile(cfg.file ? `${cfg.file}.alive` : null);
@@ -127,13 +130,14 @@ export function createGateway(cfg: Config) {
     const signed = checkNip98(req.headers.authorization, { url: `${url}${route}`, method: req.method!, body, now: now() });
     if (!signed.ok) return answer(res, 401, { error: signed.error });
     const from = clientAddress(req.socket.remoteAddress, req.headers["x-forwarded-for"], !!cfg.trustProxy);
-    if (!perKey.take(signed.pubkey, Date.now()) || !perAddressAll.take(from, Date.now()) || !anyone.take("*", Date.now())) return answer(res, 429, { error: "slow down" });
+    const here = served(signed.pubkey);
+    if (!perKey.take(signed.pubkey, Date.now()) || (!(here && !cfg.trustProxy) && !perAddressAll.take(from, Date.now())) || !anyone.take("*", Date.now())) return answer(res, 429, { error: "slow down" });
     if (!burned.use(signed.id, now())) return answer(res, 401, { error: "that signature was used already" });
     let x: unknown;
     try { x = JSON.parse(new TextDecoder().decode(body)); } catch { return answer(res, 400, { error: "the body is JSON" }); }
     if (route === "signals") {
       // only for a key this gateway serves (a confirmed registration): a fresh key keeps no numbers here
-      if (!registry.all(now()).some((r) => r.pubkey === signed.pubkey && !r.pending)) return answer(res, 403, { error: "register with this gateway first" });
+      if (!here) return answer(res, 403, { error: "register with this gateway first" });
       const s = parseSignals(x);
       if (!s.ok) return answer(res, 400, { error: s.error });
       // all or nothing: a set that would pass the key's 64 changes none of them
