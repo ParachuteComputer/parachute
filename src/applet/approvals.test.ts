@@ -3,7 +3,7 @@
 // what a vault writer, a stranger's key or an old approval put back can and can't make run.
 import { describe, expect, it } from "vitest";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
-import { APPROVAL_KIND, KEYS_KIND, approvalContent, asksHash, asksOf, checkKeyList, decide, dOf, trustedKeys, type Subject } from "./approvals";
+import { APPROVAL_KIND, KEYS_KIND, approvalContent, asksHash, asksOf, checkKeyList, decide, dOf, revokeFloor, trustedKeys, type Subject } from "./approvals";
 import { appletRecord } from "../../applets/record";
 import { readApplet } from "./discovery";
 
@@ -89,6 +89,31 @@ describe("a signed approval", () => {
   });
 });
 
+// Found in review (T-476): a Revoke whose taking back isn't signed (the unlock cancelled, a device without the key)
+// must still keep this device from allowing the applet again from the approval left standing.
+describe("the floor a Revoke leaves", () => {
+  const nowS = Math.floor(LATER / 1000);
+  it("refuses the approval the screen read, and one it hadn't read yet", () => {
+    const ev = approve(me);
+    const n = JSON.parse(ev.content).n as number;
+    expect(decide([ev], subject, "tsx:v1", "asks1", mine, LATER, revokeFloor(LATER, n, n)).run).toBe(false);
+    expect(decide([ev], subject, "tsx:v1", "asks1", mine, LATER, revokeFloor(LATER, null, null)).run).toBe(false);
+  });
+  it("refuses an approval numbered ahead of this device's clock that it had already seen (Settings has no screen's reading)", () => {
+    // signed on a device whose clock runs two minutes ahead: within what checkApproval takes
+    const ahead = approve(me, { now: LATER + 120_000 });
+    const n = JSON.parse(ahead.content).n as number;
+    expect(n).toBeGreaterThan(nowS);
+    expect(decide([ahead], subject, "tsx:v1", "asks1", mine, LATER, n).run).toBe(true);
+    expect(decide([ahead], subject, "tsx:v1", "asks1", mine, LATER, revokeFloor(LATER, null, n)).run).toBe(false);
+  });
+  it("lets the next Allow through: it is signed past the floor", () => {
+    const floor = revokeFloor(LATER, null, null);
+    const again = approve(me, { now: LATER + 1000, seen: floor });
+    expect(decide([again], subject, "tsx:v1", "asks1", mine, LATER + 2000, floor).run).toBe(true);
+  });
+});
+
 // Found in review (T-476): the hash was of the note's fields alone, but a device leaves some of them out: an applet in
 // a vault that is someone else's there gets no server, no microphone and nothing of the app; a server at one of the
 // device's own hubs is refused. A phone that left the servers out signed an approval that a laptop, where the vault is
@@ -111,6 +136,13 @@ describe("an approval covers what the approving device's card showed, not what a
     expect(phone.services).toEqual([]);
     expect(laptop.services.length).toBeGreaterThan(0);
     expect(await asks(laptop)).not.toBe(await asks(phone));
+  });
+  it("an approval made before this (nothing left out) still holds: the hash is the one the code of 11-19 gave", async () => {
+    const fields = { applet: { id: "rooms", allow: [{ path: "Rooms/", verbs: ["read"] }] }, app: ["open"] };
+    const was = "79b0accc3886562399dff8992f23c17ccee915d1f334f194fd308aeada92ab37";
+    expect(await asksHash(subject, "Applets/Rooms", fields, { opens: [], from: [] })).toBe(was);
+    expect(await asksHash(subject, "Applets/Rooms", fields, { opens: [], from: [], left: [] })).toBe(was);
+    expect(await asksHash(subject, "Applets/Rooms", fields, { opens: [], from: [], left: ["services"] })).not.toBe(was);
   });
   it("two devices that read it the same get the same hash, and nothing left out leaves an approval made before as it was", async () => {
     expect(await asks(read(false))).toBe(await asks(read(false)));

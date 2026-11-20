@@ -57,7 +57,7 @@ export function asksHash(subject: Subject, notePath: string, fields: Record<stri
   // signals only when declared: an approval made before them holds
   // `left` (discovery.ts): which of these fields the approving device left out of its card and its grant (the vault is
   // someone else's there, or a server is one of its hubs). Only when it left something out, so an approval made where
-  // nothing was holds. A device that leaves out less gets another hash, and asks for itself.
+  // nothing was holds. A device that leaves out less (or more) gets another hash, and asks for itself.
   return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds"), signals: fields.signals,
     resolved: { opens: resolved.opens ?? null, from: resolved.from ? [...resolved.from].sort() : [], ...(resolved.left?.length ? { left: [...resolved.left].sort() } : {}) } }));
 }
@@ -130,6 +130,11 @@ export function decide(events: readonly unknown[], subject: Subject, code: strin
   if (newest.code !== code || newest.scope !== scope) return { run: false, why: "other", newest, refused };
   return { run: true, content: newest };
 }
+
+/** The floor a Revoke leaves on this device, whatever becomes of its taking back: past now, past what the screen read
+ *  (`seen`), and past anything this device has already seen (`floor`: an approval from a device whose clock runs ahead,
+ *  or one signed a second ahead after a Revoke and an Allow in a row). No approval made before the Revoke passes it. */
+export const revokeFloor = (nowMs: number, seen: number | null, floor: number | null): number => Math.max(Math.floor(nowMs / 1000), seen ?? 0, floor ?? 0) + 0.5;
 
 // ── the key list ──
 

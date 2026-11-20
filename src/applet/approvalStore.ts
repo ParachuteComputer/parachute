@@ -10,7 +10,7 @@ import { clientFor } from "../vault/client";
 import { isMine } from "../vault/whose";
 import { originOf, type VaultRecord } from "../vault/store";
 import { stripExt } from "./contract";
-import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, approvalContent, approvalPath, checkKeyList, decide, dOf, trustedKeys, type Decision, type KeyList, type SignedEvent, type Subject } from "./approvals";
+import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, approvalContent, approvalPath, checkApproval, checkKeyList, decide, dOf, revokeFloor, trustedKeys, type Decision, type KeyList, type SignedEvent, type Subject } from "./approvals";
 
 const SEEN_KEY = "parachute.approvals.seen.v1";
 const ANCHOR_KEY = "parachute.anchor.v1";
@@ -117,7 +117,7 @@ export async function signApproval(o: { subject: Subject; name: string; approved
  *  taking back went no further than this device, else null. */
 export async function takeBack(rec: Pick<VaultRecord, "issuer" | "vault">, record: string, name: string, applet: string | null, seen: number | null = null): Promise<string | null> {
   const at = subjectOf(rec, record, applet ?? "");
-  raiseFloor(at, Math.max(Math.floor(Date.now() / 1000), seen ?? 0) + 0.5);
+  raiseFloor(at, revokeFloor(Date.now(), seen, floorOf(at)));
   if (!(await signsHere())) return null;
   try {
     const id = applet ?? await approvedApplet(at);
@@ -130,16 +130,21 @@ export async function takeBack(rec: Pick<VaultRecord, "issuer" | "vault">, recor
   }
 }
 
-/** Which applet the approvals kept for this record name (the newest that says). Throws when the home can't be read. */
+/** Which applet the approvals kept for this record name: the newest that is the person's own (signed by a key that
+ *  counts, for the applet it says), so a row someone else wrote into the vault can't aim the taking back elsewhere.
+ *  Throws when the home can't be read. */
 async function approvedApplet(at: Subject): Promise<string | null> {
   const home = homeVault();
   if (!home) return null;
+  const trusted = await trustedNow();
   let best: { n: number; applet: string } | null = null;
   for (const r of await rowsFor(home, at)) {
-    try {
-      const c = JSON.parse(String((r.metadata?.approval as { content?: unknown } | undefined)?.content)) as { n?: unknown; subject?: { applet?: unknown } };
-      if (typeof c.n === "number" && typeof c.subject?.applet === "string" && c.subject.applet && (!best || c.n > best.n)) best = { n: c.n, applet: c.subject.applet };
-    } catch { /* not an approval */ }
+    const ev = r.metadata?.approval;
+    let said: unknown;
+    try { said = (JSON.parse(String((ev as { content?: unknown } | undefined)?.content)) as { subject?: { applet?: unknown } }).subject?.applet; } catch { continue; }
+    if (typeof said !== "string" || !said) continue;
+    const c = checkApproval(ev, { ...at, applet: said }, trusted, Date.now());
+    if (c.ok && (!best || c.content.n > best.n)) best = { n: c.content.n, applet: said };
   }
   return best?.applet ?? null;
 }
