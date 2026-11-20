@@ -81,9 +81,9 @@ export async function notifyEntries(): Promise<{ entries: NotifyEntry[] | null; 
 }
 
 /** How the last bringing-up-to-date went, for Settings: vaults it couldn't read (then nothing was handed on), how many
- *  applets ask to tell the person something, and each gateway that didn't take this phone, with why. */
-/** `off`: applets ask, and the phone's notifications for Parachute are off (the person said no to the one question, or
- *  turned them off since): Settings says so and opens the phone's switch, since Parachute never asks again by itself. */
+ *  applets ask to tell the person something, and each gateway that didn't take this phone, with why. `off`: applets ask,
+ *  and the phone's notifications for Parachute are off (the person said no to the one question, or turned them off
+ *  since): Settings says so and opens the phone's switch, since Parachute never asks again by itself. */
 export type NotifyOutcome = { unread: string[]; noKey: boolean; asking: number; failed: { gateway: string; why: string }[]; error?: string; off?: boolean };
 let outcome: NotifyOutcome | null = null;
 const outcomeListeners = new Set<() => void>();

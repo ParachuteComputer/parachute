@@ -933,10 +933,24 @@ mod tests {
         assert!(!take_ask(&d, true));
         assert!(!take_ask(&d, true));
         let _ = std::fs::remove_dir_all(&d);
-        // a mark that can't be kept asks nothing (asking each time is the loop Android ends by removing the app)
+        // a mark that can't be read, or can't be written, asks nothing (asking each time is the loop Android ends by
+        // removing the app)
         let f = std::env::temp_dir().join(format!("parachute-notify-ask-file-{}", std::process::id()));
         std::fs::write(&f, b"x").unwrap();
         assert!(!take_ask(&f.join("app"), true));
         let _ = std::fs::remove_file(&f);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let ro = std::env::temp_dir().join(format!("parachute-notify-ask-ro-{}", std::process::id()));
+            std::fs::create_dir_all(&ro).unwrap();
+            std::fs::set_permissions(&ro, std::fs::Permissions::from_mode(0o555)).unwrap();
+            // (root writes anyway: then there is nothing to check)
+            if std::fs::write(ro.join("probe"), b"x").is_err() {
+                assert!(!take_ask(&ro, true));
+            }
+            std::fs::set_permissions(&ro, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let _ = std::fs::remove_dir_all(&ro);
+        }
     }
 }
