@@ -13,17 +13,29 @@ import type { HostMessage } from "./contract";
 
 const manifest = (() => { const r = parseManifest(RECIPES); if (!r.ok) throw new Error(r.error); return r.manifest; })();
 let notes: VaultNote[];
-let created: { path: string; tags: string[] }[];
+let created: { path: string; tags: string[]; types?: string[]; metadata?: Record<string, unknown> }[];
+let saved: { id: string; content?: string; metadata?: Record<string, unknown>; types?: unknown; tags?: unknown }[];
 const vault: VaultDeps = {
   async listPaths() { return notes.map((n) => ({ id: n.id, path: n.path ?? null, extension: n.extension ?? "md", updatedAt: n.updatedAt })); },
   async getNote(ref) { const n = notes.find((x) => x.id === ref || x.path === ref); if (!n) throw new Error("missing"); return n; },
   // a search that ignores the folder asked for: the module must judge every hit itself
   async search(q, limit) { return notes.filter((n) => n.content?.includes(q)).slice(0, limit).map((n) => ({ id: n.id, path: n.path ?? null, snippet: "" })); },
-  async create(path, content, tags) { if (notes.some((n) => n.path === path)) throw new Error("exists"); created.push({ path, tags }); const n = { id: `n${notes.length + 1}`, path, content, tags, updatedAt: "2026-11-15" }; notes.push(n); return n; },
-  async save(id, content) { const n = notes.find((x) => x.id === id)!; n.content = content; return n; },
+  async create(path, content, tags, more) {
+    if (notes.some((n) => n.path === path)) throw new Error("exists");
+    created.push({ path, tags, ...(more?.types ? { types: more.types } : {}), ...(more?.metadata ? { metadata: more.metadata } : {}) });
+    const n = { id: `n${notes.length + 1}`, path, content, tags: [...(more?.types ?? []), ...tags], metadata: more?.metadata ?? {}, updatedAt: "2026-11-15" }; notes.push(n); return n;
+  },
+  async save(id, content, _at, more) {
+    const n = notes.find((x) => x.id === id)!;
+    saved.push({ id, ...(content !== undefined ? { content } : {}), ...more });
+    if (content !== undefined) n.content = content;
+    if (more?.metadata) n.metadata = { ...n.metadata, ...more.metadata };
+    return n;
+  },
 };
 beforeEach(() => {
   created = [];
+  saved = [];
   notes = [
     { id: "r1", path: "Recipes/Toast", content: "toast", tags: ["recipe"], updatedAt: "2026-11-02" },
     { id: "j1", path: "Journal/Secret", content: "toast secret", tags: [], updatedAt: "2026-11-03" },
@@ -77,8 +89,16 @@ describe("the vault, from inside a frame", () => {
     expect(r.status).toBe(201);
     expect(created).toEqual([{ path: "Recipes/Soup", tags: ["recipe"] }]);
   });
-  it("can't set tags or metadata itself", async () => {
-    expect((await frame().fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "x", tags: ["applet"] })).status).toBe(400);
+  it("can't give a note the app's own names: applet, component, pointer, any parachute-*", async () => {
+    const f = frame();
+    for (const name of ["applet", "component", "parachute-pointer", "parachute-settings", "parachute-app", "applet/sub"]) {
+      expect((await f.fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "x", tags: [name] })).status).toBe(403);
+      expect((await f.fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "x", types: [name] })).status).toBe(403);
+      expect((await f.fetch("PATCH", "/api/notes/r1", { tags: { add: [name] }, if_updated_at: "x" })).status).toBe(403);
+      expect((await f.fetch("PATCH", "/api/notes/r1", { types: { add: [name] }, if_updated_at: "x" })).status).toBe(403);
+    }
+    expect(created).toEqual([]);
+    expect(saved).toEqual([]);
   });
   it("gets nothing at all without a read grant", async () => {
     expect((await frame({}).fetch("GET", "/api/notes")).status).toBe(403);
@@ -101,6 +121,68 @@ describe("the vault, from inside a frame", () => {
       { uni: 1, id: "c1", error: { code: "unknown_namespace", message: "unknown_namespace" } },
       { uni: 1, id: "c2", error: { code: "bad_version", message: "bad_version" } },
     ]));
+  });
+});
+
+describe("typed writes: fields, types and tags, in the folders its card names (T-476)", () => {
+  it("sets a record's fields in one call, and the answer carries them", async () => {
+    notes[0].metadata = { book_status: "to-read", rating: 3 };
+    const r = await frame().fetch("PATCH", "/api/notes/r1", { metadata: { book_status: "read" }, if_updated_at: "2026-11-02" });
+    expect(r.status).toBe(200);
+    expect(saved).toEqual([{ id: "r1", metadata: { book_status: "read" } }]);
+    expect(r.body.metadata).toEqual({ book_status: "read", rating: 3 });
+  });
+  it("gives and takes away the type its card names for that folder, with or without new text", async () => {
+    const r = await frame().fetch("PATCH", "/api/notes/r1", { content: "toast!", types: { add: ["recipe"] }, tags: { remove: ["recipe"] }, if_updated_at: "2026-11-02" });
+    expect(r.status).toBe(200);
+    expect(saved).toEqual([{ id: "r1", content: "toast!", types: { add: ["recipe"] }, tags: { remove: ["recipe"] } }]);
+  });
+  it("creates a record with its type and fields; the type it opens is added anyway", async () => {
+    const r = await frame().fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "# Soup", types: ["recipe"], metadata: { serves: 4 } });
+    expect(r.status).toBe(201);
+    expect(created).toEqual([{ path: "Recipes/Soup", tags: ["recipe"], types: ["recipe"], metadata: { serves: 4 } }]);
+  });
+  it("gives no other name: not one its card doesn't name, not publish (the open web), not `published`", async () => {
+    const f = frame();
+    for (const name of ["dish", "favourite", "publish", "Recipe", "recipe/sub"]) {
+      expect((await f.fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "x", types: [name] })).status).toBe(403);
+      expect((await f.fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "x", tags: [name] })).status).toBe(403);
+      expect((await f.fetch("PATCH", "/api/notes/r1", { tags: { add: [name] }, if_updated_at: "x" })).status).toBe(403);
+      expect((await f.fetch("PATCH", "/api/notes/r1", { types: { remove: [name] }, if_updated_at: "x" })).status).toBe(403);
+    }
+    for (const key of ["published", "Published"]) {
+      expect((await f.fetch("PATCH", "/api/notes/r1", { metadata: { [key]: true }, if_updated_at: "x" })).status).toBe(400);
+      expect((await f.fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "x", metadata: { [key]: true } })).status).toBe(400);
+    }
+    expect(created).toEqual([]);
+    expect(saved).toEqual([]);
+  });
+  it("only inside the folders its card names, and never on an applet's code", async () => {
+    const f = frame();
+    expect((await f.fetch("PATCH", "/api/notes/j1", { metadata: { x: 1 }, if_updated_at: "x" })).status).toBe(404);
+    expect((await f.fetch("PATCH", "/api/notes/a2", { metadata: { x: 1 }, if_updated_at: "x" })).status).toBe(403);
+    expect((await f.fetch("POST", "/api/notes", { path: "Journal/new", content: "x", metadata: { x: 1 } })).status).toBe(403);
+    // a read-only grant changes no fields
+    const ro = parseManifest({ ...RECIPES, access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }] }] });
+    if (!ro.ok) throw new Error(ro.error);
+    expect((await frame(resolvedOf(ro.manifest)).fetch("PATCH", "/api/notes/r1", { metadata: { x: 1 }, if_updated_at: "x" })).status).toBe(403);
+    expect(saved).toEqual([]);
+  });
+  it("never changes a note of the app's own (its settings) through fields or tags", async () => {
+    notes.push({ id: "s1", path: "Recipes/Settings", content: "s", tags: ["parachute-settings"], metadata: { parachute: { bar: [] } }, updatedAt: "2026-11-02" });
+    const f = frame();
+    expect((await f.fetch("PATCH", "/api/notes/s1", { metadata: { parachute: "x" }, if_updated_at: "x" })).status).toBe(403);
+    expect((await f.fetch("PATCH", "/api/notes/s1", { tags: { remove: ["parachute-settings"] }, if_updated_at: "x" })).status).toBe(403);
+    expect(saved).toEqual([]);
+  });
+  it("refuses fields that aren't plain values, and a change of nothing", async () => {
+    const f = frame();
+    for (const metadata of [{ a: { nested: 1 } }, { "bad key": 1 }, [1], "x", { a: () => 1 }]) {
+      expect((await f.fetch("PATCH", "/api/notes/r1", { metadata, if_updated_at: "x" })).status).toBe(400);
+    }
+    expect((await f.fetch("PATCH", "/api/notes/r1", { if_updated_at: "x" })).status).toBe(400);
+    expect((await f.fetch("PATCH", "/api/notes/r1", { types: ["dish"], if_updated_at: "x" })).status).toBe(400);
+    expect(saved).toEqual([]);
   });
 });
 

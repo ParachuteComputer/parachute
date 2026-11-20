@@ -23,7 +23,9 @@ export type OpensParse = { ok: true; opens: Opens[] } | { ok: false; error: stri
 export const MAX_OPENS = 8;
 const TYPE = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
 /** Types no applet may claim, whatever the letter case: the app's own, and any it may come to own. */
-export const RESERVED_TYPES = ["applet", "view", "capture", "component"];
+// `publish`: the hub serves a note carrying it to anyone, so an applet that tags the notes it adds with it could put
+// what it read on the open web (T-476 review)
+export const RESERVED_TYPES = ["applet", "view", "capture", "component", "publish"];
 export const isReservedType = (type: string) => {
   const t = type.toLowerCase();
   return RESERVED_TYPES.some((r) => t === r || t.startsWith(`${r}/`)) || t.startsWith("parachute");
