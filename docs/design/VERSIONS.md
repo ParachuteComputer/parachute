@@ -38,9 +38,9 @@ whether I install the apk/dmg before or after you do the home thing".
    screen: a React error or a stack means nothing to the person. The applet may have fallen back for the part and
    stopped for another reason; on an updated Parachute nothing is missing, so that reason then shows.
 4. **One wording, one look.** Every screen says it with `updateLine` (`src/applet/level.ts`): the applet's screen, its
-   frame, an embed and the list. The line is plain and a little heavier, the reason quieter under it, as the shell's
-   card draws it (`.card`, `.quiet`); the frame draws its line on the same tokens (`FAILURE_STYLE` in
-   `src/applet/code.ts`). Any other failure in the frame says "This applet stopped:" and the first line of the error,
+   frame, an embed and the list. On the applet's screen, in its frame and in an embed the line is a little heavier,
+   with the reason quieter under it, as the shell's card draws it (`.card`, `.quiet`); the frame draws its line on
+   the same tokens (`FAILURE_STYLE` in `src/applet/code.ts`). The list says it in its own quiet notice line. Any other failure in the frame says "This applet stopped:" and the first line of the error,
    never a stack.
 
 ## Adding something

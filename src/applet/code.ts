@@ -119,7 +119,8 @@ const FAILURE = String.raw`(function () {
   var missing = window.__parachuteMissing = [];
   window.__parachuteFail = function (e) {
     var root = document.getElementById("root"); if (!root) return; root.textContent = "";
-    var why = String(e && e.message ? e.message : e);
+    // the line sits at the frame's edge, like the shell card's text (a style on the element, which the CSP allows)
+    if (document.body) document.body.style.margin = "0";
     // the whole error, stack and all, is for the applet's author, in the console
     try { console.warn("This applet stopped:", e); } catch (x) { /* no console */ }
     var box = document.createElement("div"), p = document.createElement("p");
@@ -132,7 +133,7 @@ const FAILURE = String.raw`(function () {
       q.className = "quiet"; q.textContent = "It uses " + missing.join(", ") + ", which this Parachute doesn't have."; box.appendChild(q);
     } else {
       // its own words, but only their first line, and never a stack
-      var line = why.replace(/^\s+/, "").split("\n")[0];
+      var line = String(e && e.message ? e.message : e).replace(/^\s+/, "").split("\n")[0];
       box.className = "parachute-error"; box.setAttribute("role", "alert"); p.textContent = "This applet stopped: " + (line.length > 300 ? line.slice(0, 299).replace(/[\uD800-\uDBFF]$/, "") + "…" : line);
     }
     root.appendChild(box);
@@ -141,8 +142,7 @@ const FAILURE = String.raw`(function () {
 })();`;
 /** The failure line's look: the text of the shell's card for the same thing (styles.css `.card`, `.quiet`, `.error`;
  *  the frame itself is the card around it), on the theme's tokens, which the frame has (frame.tsx frameSrcDoc, Embeds). */
-const FAILURE_STYLE = "<style>:root:has(#root>.parachute-update,#root>.parachute-error) body{margin:0}"
-  + ".parachute-update,.parachute-error{padding:12px var(--pad);font:var(--size)/var(--leading) var(--sans);color:var(--text);overflow-wrap:anywhere}"
+const FAILURE_STYLE = "<style>.parachute-update,.parachute-error{padding:12px var(--pad);font:var(--size)/var(--leading) var(--sans);color:var(--text);overflow-wrap:anywhere}"
   + ".parachute-update p,.parachute-error p{margin:0 0 6px}.parachute-update .quiet{color:var(--muted)}.parachute-error{color:var(--danger)}</style>";
 const LOADER_HEAD = String.raw`(function () {
   var root = document.getElementById("root"), fail = window.__parachuteFail;
