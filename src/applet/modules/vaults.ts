@@ -175,7 +175,7 @@ export function queryPath(q: Query, door: "records" | "notes"): string {
   const tag = q.type ?? q.tag;
   if (tag) u.set("tag", tag);
   if (q.search) u.set("search", q.search);
-  if (q.path) u.set(door === "records" ? "path_prefix" : "path_prefix", q.path);
+  if (q.path) u.set("path_prefix", q.path);
   // field filters as the hub's JSON form, which keeps a value's type (`true`, `5`), unlike meta[field][op]=text
   if (q.where.length) {
     const m: Record<string, Record<string, unknown>> = Object.create(null);
@@ -185,8 +185,7 @@ export function queryPath(q: Query, door: "records" | "notes"): string {
   if (q.sort && !q.search) {
     const by = q.sort.by === "updated" ? "updated_at" : q.sort.by === "created" ? "created_at" : q.sort.by;
     // the hub has no order by name or path: those are left to the newest first
-    if (by !== "title" && by !== "path") u.set("order_by", by);
-    u.set("sort", q.sort.dir);
+    if (by !== "title" && by !== "path") { u.set("order_by", by); u.set("sort", q.sort.dir); } else { u.set("order_by", "updated_at"); u.set("sort", "desc"); }
   } else if (!q.search) { u.set("order_by", "updated_at"); u.set("sort", "desc"); }
   u.set("limit", String(q.limit + 1));
   if (q.offset) u.set("offset", String(q.offset));
@@ -336,7 +335,11 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         async run({ vault, id }: { vault: string; id: string }, _s, ctx) {
           held(vault); ctx.charge(1);
           const door = await deps.door(vault);
-          const raw = await deps.request(vault, "GET", `/${door}/${encodeURIComponent(id)}/versions?limit=50`).catch(() => null);
+          // a hub that keeps no history (404) has none; any other failure is said, not shown as none
+          const raw = await deps.request(vault, "GET", `/${door}/${encodeURIComponent(id)}/versions?limit=50`).catch((e: unknown) => {
+            if ((e as { status?: number })?.status === 404 || (e as { name?: string })?.name === "VaultNotFoundError") return null;
+            throw failed(e);
+          });
           const list = plain(raw) && Array.isArray(raw.versions) ? raw.versions : [];
           return list.flatMap((v: unknown): Version[] => (plain(v) && typeof v.superseded_at === "string" && typeof v.version_ix === "number"
             ? [{ ix: v.version_ix, at: v.superseded_at, actor: strOr(v.actor), via: strOr(v.via) }] : []));

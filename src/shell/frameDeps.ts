@@ -22,7 +22,7 @@ import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
 import { bundleMissing, bundleNewer, barNow, openBundleNow, pinApplet, startApplet } from "./homeSettings";
 import { offered, namesApplet, type Bundle } from "./bundles";
-import { chooseStart, forgetStart } from "./start";
+import { chooseStart, forgetStart, START_WAIT_MS } from "./start";
 import { parachutesNow } from "./parachutes";
 
 /** The bar and the home as the frame may see them, and the two changes it may ask for on a tap. A frame's tap can't
@@ -59,8 +59,9 @@ const homeRead = async () => {
   // read once if never read this session, or wait for the read already under way: a read that failed isn't asked
   // again here (each frame's reload of the home would ask it again, and each failure would set off another)
   const was = home ? appletsNow(home.key) : undefined;
-  if (home && (!was || was.state === "loading")) await refreshApplets(home).catch(() => false);
-  await whenGateKnown();
+  // never long: a slow hub or self-test leaves Vault unknown (the plain views, with their line), as a start does
+  const read = (async () => { if (home && (!was || was.state === "loading")) await refreshApplets(home).catch(() => false); await whenGateKnown(); })();
+  await Promise.race([read, new Promise((r) => setTimeout(r, START_WAIT_MS))]);
   return homeNow();
 };
 const homeDeps = (from: "built-in" | "vault"): HostDeps["home"] => ({

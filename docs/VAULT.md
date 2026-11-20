@@ -51,7 +51,8 @@ subscription, not a timer).
   vault view) opens in Vault, when Vault is in the home vault and allowed on this device:
   `/v/<vault>/n/<id>` carries on to `/v/<home>/a/<Vault>?vault=<vault>&record=<id>`, which Vault hears as its launch.
   A record an applet opens still opens there; nothing about open-with changed.
-- **A vault's address**, `/v/<vault>`, carries on the same way, to that vault in Vault.
+- **A vault's address**, `/v/<vault>`, carries on the same way, to that vault in Vault. `/v/<vault>?with=vault` (and a note's `?with=vault`) is
+  the plain view, asked for: the way back when Vault itself won't do.
 - **Before Vault is added, or while it waits for its card** (new, or changed since it was allowed), or where applets
   don't run on this device, the plain views stay, with one line at the top that leads to Vault. That is the way back if
   Vault itself breaks (docs/NAVIGATION.md, "A way back").

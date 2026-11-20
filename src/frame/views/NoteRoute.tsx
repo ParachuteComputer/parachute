@@ -1,7 +1,7 @@
 // A note's route, /v/<vault>/n/<id>: the one place open-with is decided (open/resolve.ts). Links, wikilinks, search
 // hits, Back and links from outside all arrive here. `?with=vault` always shows the plain vault view; `?with=choose` (a
 // long-press on a note link in an applet) asks with the Open with… sheet, whatever the defaults say.
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { useHome, useHomeLoaded, useVault } from "../data";
 import ViewerLine, { viewerHref } from "./ViewerLine";
@@ -37,12 +37,14 @@ export default function NoteRoute() {
   const homeRead = useHomeLoaded();
   const viewer = useHome().viewer;
   const toViewer = !!decision && decision.kind === "vault" && !decision.line && viewer?.status === "ok";
+  // a carry-on the shell refused (the person already left, say): this entry shows the record plain, never "Opening…"
+  const [, refused] = useState(0);
   useEffect(() => {
     if (!rec || !id || !decision || decided.has(location.key) || !homeRead) return;
     if (toViewer && viewer) {
       decided.set(location.key, "applet");
       const key = location.key;
-      void carryOn(location.pathname, viewerHref(viewer, rec.key, id)).then(() => call("nav.decided", { key, kind: "applet" }), () => { decided.delete(key); });
+      void carryOn(location.pathname, viewerHref(viewer, rec.key, id)).then(() => call("nav.decided", { key, kind: "applet" }), () => { decided.set(key, "vault"); refused((n) => n + 1); });
       return;
     }
     decided.set(location.key, decision.kind);

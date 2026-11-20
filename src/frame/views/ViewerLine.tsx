@@ -7,18 +7,16 @@ import { useHome } from "../data";
 
 /** Vault's address, at a vault and, given one, a record in it (it hears them as its launch). */
 export function viewerHref(v: FrameViewer, vault: string, record?: string): string {
-  const q = new URLSearchParams({ vault });
-  if (record) q.set("record", record);
-  return `${appletPath(v.vault, v.noteId)}?${q}`;
+  return `${appletPath(v.vault, v.noteId)}${launchQuery(vault, record)}`;
 }
+/** `?vault=…[&record=…]`: what Vault hears as its launch. */
+const launchQuery = (vault: string, record?: string) => `?${new URLSearchParams({ vault, ...(record ? { record } : {}) })}`;
 
 export default function ViewerLine({ vault, id }: { vault: string; id?: string }) {
   const viewer = useHome().viewer;
   // running there already, or applets don't run on this device (nothing to offer)
   if (viewer?.status === "ok" || viewer?.status === "off") return null;
-  const q = new URLSearchParams({ vault });
-  if (id) q.set("record", id);
-  const to = viewer ? viewerHref(viewer, vault, id) : `/vault?${q}`;
+  const to = viewer ? viewerHref(viewer, vault, id) : `/vault${launchQuery(vault, id)}`;
   const words = !viewer ? "See its fields, types, links and history in Vault: add it"
     : viewer.status === "updated" ? "Vault changed since you allowed it: see what changed" : "Open this in Vault";
   return <p className="viewer-line" role="status"><Link to={to}><span aria-hidden="true">▦{"︎"}</span> {words}</Link></p>;

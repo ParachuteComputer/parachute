@@ -71,6 +71,10 @@ describe("the vaults word", () => {
     for (const bad of [{ vault: "home", limit: 5000 }, { vault: "home", where: [{ field: "x;drop", op: "eq", value: 1 }] }, { vault: "home", where: [{ field: "x", op: "like", value: 1 }] }, { vault: "home", path: "../x/" }, { vault: "home", nope: 1 }])
       await expect(call("query", bad)).rejects.toMatchObject({ code: "bad_params" });
   });
+  it("a sort the hub can't do (by name) asks for the newest first, not the oldest", () => {
+    const q = new URLSearchParams(queryPath({ vault: "v", type: "book", where: [], sort: { by: "title", dir: "asc" }, limit: 10, offset: 0 }, "records").split("?")[1]);
+    expect([q.get("order_by"), q.get("sort")]).toEqual(["updated_at", "desc"]);
+  });
   it("on core 0.8 (notes words) a record's types are the vault's typed names among its tags", () => {
     expect(recOf({ id: "a", path: "Books/A", content: "x", tags: ["book", "fav"], metadata: { s: 1 } }, new Set(["book"]))).toMatchObject({ types: ["book"], tags: ["fav"], body: "x", fields: { s: 1 } });
     expect(queryPath({ vault: "v", type: "book", where: [], limit: 10, offset: 0 }, "notes")).toContain("include_metadata=true");

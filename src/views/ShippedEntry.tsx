@@ -10,6 +10,7 @@ import { addShipped, SHIPPED, shippedIn, type ShippedName } from "../applet/ship
 import { useApplets } from "../applet/useApplets";
 import { appletPath } from "../open/paths";
 import { markTap } from "../open/mark";
+import { vaultLaunchOf } from "../services/notifyLink";
 import { isWriteRefusal, pendingWriteAsk } from "../vault/writeAsk";
 
 const WORDS: Record<ShippedName, { lead: (vault: string) => React.ReactNode; asks: string }> = {
@@ -20,13 +21,10 @@ const WORDS: Record<ShippedName, { lead: (vault: string) => React.ReactNode; ask
   vault: { lead: () => <>See what is in your vaults: each type and how many records it has, a type's records as a table, and each record's fields, words, links and history. A record no other applet opens opens here.</>,
     asks: "to see and change records in your vaults, and what reaches them" },
 };
-/** What the address hands on to Vault: a vault and a record in it (its launch, `?vault=&record=`). */
+/** What the address hands on to Vault: a vault and a record in it (its launch, read as the applet's screen reads it). */
 const handOn = (search: string) => {
-  const p = new URLSearchParams(search), out = new URLSearchParams();
-  const vault = p.get("vault"), record = p.get("record");
-  if (vault && vault.length <= 200) out.set("vault", vault);
-  if (vault && record && /^[A-Za-z0-9_-]{1,64}$/.test(record)) out.set("record", record);
-  return out.size ? `?${out.toString()}` : "";
+  const l = vaultLaunchOf(new URLSearchParams(search));
+  return l ? `?${new URLSearchParams({ vault: l.vault, ...(l.record ? { record: l.record } : {}) })}` : "";
 };
 
 export default function ShippedEntry({ which }: { which: ShippedName }) {

@@ -366,6 +366,8 @@ export default function AppletScreen() {
   const servicesWhy = useRef<string | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const onSession = (s: Session | null) => {
+    // a frame made again (or gone) leaves no live watch behind it (modules/vaults.ts): the new one asks for its own
+    if (sessionNow.current && sessionNow.current !== s) vaultsModule?.stop();
     sessionNow.current = s;
     const was = brokerRef.current;
     if (was && was.session !== s) { void was.broker.then((b) => b?.close()); brokerRef.current = null; }
