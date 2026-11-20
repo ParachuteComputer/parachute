@@ -1,19 +1,28 @@
-# The simple app
+# Parachute Simplified
 
 For a person who keeps notes on Parachute (Parachute Cloud, most often) and wants them on their phone: their vaults
-and notes, a quick way to get something in, and a way to connect their AI. No rooms, keys or approvals. It is the
-same Parachute app with a smaller set of screens, and Settings switches between the two.
+and notes, a journal, a quick way to get something in, and a way to connect their AI. No rooms, keys or approvals. It
+is the same Parachute app with a smaller set of screens, and Settings switches between the two. Its id stays `simple`
+(the settings note's `app`, the record `Parachute/Apps/simple`), so nothing written before changes.
+
+**Which applets, and why** (Aaron, 11-19: "the same applets I am using in my primary app; but just maybe not the
+strange weird complex ones"). From his Uni app it takes **Journal**, the same applet and code. It keeps its own
+**Notes**, **Capture** and **Connect**. It leaves out **Rooms** and the approval cards (a relay, a key, Uni), **Mail**
+(his mail gateway signs each request with his key; a Cloud account has neither), **Claude accounts** and the area
+applets (Uni's workers), Matrix, and the key and pairing screens. **Ideas** lives only in his `playground` vault, not
+in the app, so it isn't offered; a person who has it adds it as any applet.
 
 ## What a person sees
 
 | | Where | What it does |
 |---|---|---|
 | **Notes** | the home (`/`) | Every vault's newest notes in one list, a search across all of them, the vaults as tabs, **New note**. A note opens as it always does, with **Edit**. |
+| **Journal** | the bar | The Uni app's Journal: a line a day or many, written or said, kept by day in the home vault's `Journal/`. **Add Journal** (one tap) writes it in as `Applets/Journal`, as Capture is added. |
 | **Capture** | the bar | Write a line, or **Say it** (the app's own recorder): it lands in the home vault's `Inbox/` as a note of its own, and a voice note gets its words from the hub's transcription. |
 | **Connect** | the bar | Each vault's connector address (`https://…/vault/<name>/mcp`) with **Copy**, and how to add it to Claude and ChatGPT. |
 
-The bar says **Notes · Capture · Connect**. Settings (the foot of Notes, or ⋯ on the other screens) has **Your app:
-Simple / Everything**.
+The bar says **Notes · Journal · Capture · Connect**. Settings (the foot of Notes, or ⋯ on the other screens) has
+**Your app: Parachute Simplified / Everything**.
 
 On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key); the key's ways come
 after it.
@@ -47,6 +56,10 @@ note.
   applet's does: read, add and change notes in `Inbox/`, the microphone through the app, and to open the notes you tap
   in it (a capture opens in the app, where it can be edited). It uses the kit only
   (`vault`, `voice.record`, `vault.attach` with `transcribe`, `Link`).
+- **Journal** is the Uni app's own applet (`applets/journal.json` and `.tsx`), the same code. **Add Journal** writes it
+  in as `Applets/Journal`; its card asks for `Journal/` (read, add, change), the microphone through the app, and
+  opening the entries you tap. Both one-tap adds are one module (`src/applet/shipped.ts`) and one screen
+  (`src/views/ShippedEntry.tsx`, at `/capture` and `/journal`).
 - **Home** (`applets/home.json`, `.tsx`) is Parachute Simplified's starter home applet, shipped with the app's other
   records: a greeting, a line that lands in `Inbox/` (as Capture names it), your newest notes across your vaults, and
   your pins. It goes in as any applet does (`scripts/install-applets.ts --applet home --start home`), its card asks
@@ -55,22 +68,23 @@ note.
 - **Connect** is a shell screen (`src/views/Connect.tsx`): each opened vault's address is the vault's own (Parachute Cloud's
   Connect page gives the same one), and copying needs the app's own clipboard.
 
-Why not three applets: an applet reaches only its own vault and only by folder (`fields.applet.access`), and the app
+Why not more applets: an applet reaches only its own vault and only by folder (`fields.applet.access`), and the app
 never tells it which vaults the person has. A Cloud person's notes sit at the root of several vaults, so a Notes
 applet couldn't see them. Notes needs every vault, and Connect needs every vault's address, so both are the app's own
-screens. Capture writes into one folder of one vault, so it can be an applet.
+screens. Capture and Journal each write into one folder of one vault, so they can be applets.
 
 ## As an app record
 
-Simple is one of the two apps the app always has ([NAVIGATION.md](NAVIGATION.md#apps)): `Settings.app: "simple"`
+Parachute Simplified is one of the two apps the app always has ([NAVIGATION.md](NAVIGATION.md#apps)): `Settings.app: "simple"`
 names it, the same field with the same value as before. A record `Parachute/Apps/simple` (`"look": "notes"`) changes
-it, for instance to put more on its bar; the Notes home, Capture and Connect stay the app's own screens. Its
-`sources` don't narrow Notes, which shows every vault this device holds. Capture's code
-comes with the app and is written into the vault on a tap; its card then asks as any applet's does.
+it, for instance to put more on its bar; the Notes home, Journal, Capture and Connect stay its places. Its
+`sources` don't narrow Notes, which shows every vault this device holds. Journal's and Capture's code come with the
+app and are written into the vault on a tap; each card then asks as any applet's does.
 
 ## What this replaces (subtract)
 
 Nothing old runs beside it. For a new Cloud person, the old launcher's "No applets here yet." chapters and the key-first
 first screen are replaced by Notes and **Sign in with Parachute Cloud**. Everyone else's app is unchanged, and **Your
-app** switches between the two. The simple app's bar is still drawn by the shell (`src/shell/BottomBar.tsx`) from the
-app's `look`; a record can add places after Notes, Capture and Connect.
+app** switches between the two. Its bar is still drawn by the shell (`src/shell/BottomBar.tsx`) from the app's `look`;
+a record can add places after Notes, Journal, Capture and Connect. `src/applet/shipped.ts` and `ShippedEntry` replace
+Capture's own `capture.ts` and `CaptureEntry` (11-20): one way to add a shipped applet, not one per applet.

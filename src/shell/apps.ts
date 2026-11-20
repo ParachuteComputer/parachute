@@ -6,7 +6,7 @@
 //
 // Two apps are always there, made by the app itself when no record says otherwise:
 //   everything  every applet in every vault this device holds, with the settings note's bar and home (as before)
-//   simple      Notes, Capture and Connect (docs/SIMPLE.md)
+//   simple      Parachute Simplified: Notes, Journal, Capture and Connect (docs/SIMPLE.md)
 // A record with one of those ids changes that app. An app someone else offers is a record of theirs that the person's
 // own record follows (`live`): read from their vault each time, so their changes show; their code still asks.
 // Pure, but for nothing: every reader here takes what it needs.
@@ -106,7 +106,7 @@ export function appOf(raw: unknown, path: string | null, noteId: string | null):
  *  on every Parachute this device holds (`anyHub`). */
 export function builtInApp(id: "everything" | "simple"): App {
   return id === "simple"
-    ? { id, name: "Simple", glyph: "¶", note: "your notes, Capture, and Connect an AI", look: "notes", sources: [], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: {}, noteId: null }
+    ? { id, name: "Parachute Simplified", glyph: "¶", note: "your notes, Journal, Capture, and Connect an AI", look: "notes", sources: [], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: {}, noteId: null }
     : { id, name: "Everything", glyph: "⁂", note: "every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: {}, noteId: null };
 }
 /** Stands for every hub in the built-in Everything only: no record can say it (`hubOk` refuses it). */

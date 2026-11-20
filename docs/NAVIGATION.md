@@ -11,7 +11,7 @@ One model, everywhere.
 | `/v/<vault>/n/<note>` | A note. It opens in the applet that opens its kind (open-with), else as plain text. |
 | `/v/<vault>/a/<applet>` | An applet. |
 | `/settings` | Settings. |
-| `/connect`, `/capture`, `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | The simple app's screens ([SIMPLE.md](SIMPLE.md)): Connect an AI, Capture (before it is added), a new note, a note's words. |
+| `/connect`, `/capture`, `/journal`, `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | Parachute Simplified's screens ([SIMPLE.md](SIMPLE.md)): Connect an AI, Capture and Journal (before each is added), a new note, a note's words. |
 
 ## The four rules
 
@@ -140,7 +140,7 @@ An app is a record in your home vault, `Parachute/Apps/<id>`, tagged `parachute-
 - **Someone else's app** is followed live: your record says `"live": { "hub": …, "vault": …, "path": … }` and the app
   reads theirs from that vault each time, so their changes show. Its applets still ask you, and ask again when their
   code changes.
-- **Simple and Everything** are always there. A record with the id `simple` or `everything` changes them.
+- **Parachute Simplified** (id `simple`) **and Everything** are always there. A record with the id `simple` or `everything` changes them.
 
 Which app is open is this device's choice (Settings → **Your app**), else the settings note's `app`, else
 Everything. Choosing one also makes it the one a new device opens. Your agent can write app records; nothing in them
