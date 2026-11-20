@@ -57,6 +57,8 @@ import { approvalFor, floorOf, passcodeHere, raiseFloor, signApproval, signsHere
 import type { Decision } from "../applet/approvals";
 import { openAppNow } from "../shell/homeSettings";
 import { createSavedModule } from "../applet/modules/saved";
+import { createSignalsModule } from "../applet/modules/signals";
+import { setOwn } from "../services/signals";
 import { useDeviceSheets } from "./DeviceSheets";
 import { createServicesModule } from "../applet/modules/services";
 import { createBroker, type Broker } from "../services/broker";
@@ -331,6 +333,7 @@ export default function AppletScreen() {
     createStorageModule(entry.app.includes("storage"), storageFor(subjectOf(rec.key, entry.noteId))),
     // what the kit saves as the person goes (drafts, where it was): every applet's, the same store as `storage`
     createSavedModule({ all: () => deviceSaved().load(subjectOf(rec.key, entry.noteId)), put: (entries) => deviceSaved().put(subjectOf(rec.key, entry.noteId), entries) }),
+    createSignalsModule({ set: (id, count) => entry.signals.some((s) => s.id === id) && setOwn(rec.key, entry.noteId, id, count) }),
     ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),

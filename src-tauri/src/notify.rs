@@ -57,6 +57,100 @@ pub struct NotifyEntry {
     pub names: BTreeMap<String, String>,
 }
 
+/// One allowed applet's signal that has a gateway (docs/design/APP-RECORD.md "Signals"; src/services/notify.ts): its
+/// count goes to `gateway` as the opaque `gid` and `signal`, and a push of it is shown as "`name` · n new: `label`",
+/// opening `subject`. `relay` and `rooms`: a relay's signal, which the gateway counts from that registration's messages.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SignalEntry {
+    pub gid: String,
+    pub signal: String,
+    pub gateway: String,
+    pub me: String,
+    pub subject: String,
+    pub name: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rooms: Option<Vec<String>>,
+}
+
+pub const MAX_SIGNALS: usize = 32;
+const MAX_COUNT: u32 = 9999;
+
+fn gid_ok(s: &str) -> bool {
+    (8..=64).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// A signal's id as the record names it: lower-case words joined by `-`.
+fn signal_id_ok(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 40 && s.split('-').all(|w| !w.is_empty() && w.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()))
+}
+
+/// The signal list as the shell keeps it: each for the key this device holds, through a gateway written plain.
+pub fn validate_signals(signals: &[SignalEntry], me: Option<&str>) -> Result<(), String> {
+    if signals.len() > MAX_SIGNALS {
+        return Err(format!("At most {MAX_SIGNALS} signals go to gateways."));
+    }
+    for s in signals {
+        if !gid_ok(&s.gid) || !signal_id_ok(&s.signal) {
+            return Err("A signal's ids aren't ones the app makes.".into());
+        }
+        if me != Some(s.me.as_str()) {
+            return Err("`me` isn't the key this device holds.".into());
+        }
+        if gateway_url(&s.gateway)?.as_str() != s.gateway {
+            return Err("A gateway's address is written as the declaration made it plain.".into());
+        }
+        if !line(&s.subject, MAX_SUBJECT) || !line(&s.name, MAX_NAME) || !line(&s.label, MAX_NAME) {
+            return Err("A signal's subject, name and words are short lines.".into());
+        }
+        if let Some(r) = &s.relay {
+            relay_url(r)?;
+        }
+        if let Some(rooms) = &s.rooms {
+            if s.relay.is_none() || rooms.is_empty() || rooms.len() > MAX_ROOMS || !rooms.iter().all(|r| crate::services::room_id_ok(r)) {
+                return Err("A relay's signal names 1 to 50 of its rooms, or none for all of them.".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The registration's `signals`: what a message for the person on this relay counts toward, by room.
+pub fn relay_signals(signals: &[SignalEntry], gateway: &str, relay: &str) -> Vec<Value> {
+    let mut out: Vec<Value> = signals
+        .iter()
+        .filter(|s| s.gateway == gateway && s.relay.as_deref() == Some(relay))
+        .map(|s| json!({ "subject": s.gid, "signal": s.signal, "rooms": s.rooms }))
+        .collect();
+    out.dedup();
+    out.truncate(8);
+    out
+}
+
+/// What a device tells a gateway: counts for signals the list sends there, nothing else (`<gateway>signals`).
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SetCount {
+    pub subject: String,
+    pub signal: String,
+    pub count: u32,
+}
+
+pub fn signals_body(signals: &[SignalEntry], gateway: &str, set: &[SetCount]) -> Result<Vec<u8>, String> {
+    if set.len() > 16 {
+        return Err("At most 16 counts at once.".into());
+    }
+    for c in set {
+        if c.count > MAX_COUNT || !signals.iter().any(|s| s.gateway == gateway && s.gid == c.subject && s.signal == c.signal) {
+            return Err("No allowed applet sends that count to that gateway.".into());
+        }
+    }
+    serde_json::to_vec(&json!({ "set": set })).map_err(|e| e.to_string())
+}
+
 fn is_hex_key(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
@@ -139,6 +233,7 @@ pub fn push_url(gateway: &str, op: PushOp) -> Result<Url, String> {
 pub enum PushOp {
     Register,
     Unregister,
+    Signals,
 }
 
 impl PushOp {
@@ -146,6 +241,7 @@ impl PushOp {
         match self {
             PushOp::Register => "register",
             PushOp::Unregister => "unregister",
+            PushOp::Signals => "signals",
         }
     }
 }
@@ -200,8 +296,12 @@ pub fn merged(entries: &[NotifyEntry], gateway: &str, relay: &str) -> Option<Not
 }
 
 /// The body of a registration: built here from the checked entry and the distributor's endpoint, never handed in.
-pub fn register_body(e: &NotifyEntry, ep: &Endpoint) -> Vec<u8> {
-    let body = json!({ "endpoint": ep.endpoint, "keys": { "p256dh": ep.p256dh, "auth": ep.auth }, "relay": e.relay, "rooms": e.rooms, "mentions": e.mentions, "from": e.from });
+pub fn register_body(e: &NotifyEntry, ep: &Endpoint, signals: &[Value]) -> Vec<u8> {
+    let mut body = json!({ "endpoint": ep.endpoint, "keys": { "p256dh": ep.p256dh, "auth": ep.auth }, "relay": e.relay, "rooms": e.rooms, "mentions": e.mentions, "from": e.from });
+    // only when an applet counts these messages: a registration without signals reads as before
+    if !signals.is_empty() {
+        body["signals"] = json!(signals);
+    }
     serde_json::to_vec(&body).unwrap_or_default()
 }
 
@@ -247,6 +347,10 @@ pub fn kept_at(now: u64, answer: &[u8]) -> u64 {
 /// The list the last `notify_set` checked: `push_register` registers only what is on it.
 #[derive(Default)]
 pub struct NotifyState(Mutex<Vec<NotifyEntry>>);
+
+/// The signals the last `notify_set` checked: `push_signals` sends only their counts, only to their gateways.
+#[derive(Default)]
+pub struct SignalState(Mutex<Vec<SignalEntry>>);
 
 /// The relay's sign-in, and only that: kind 22242 with the relay and the challenge, signed with the kept key (its text,
 /// as Android keeps it). `None` for anything else: a relay that isn't ws/wss, a challenge that isn't a short line, a key
@@ -394,6 +498,75 @@ pub async fn push_setup<R: Runtime>(app: AppHandle<R>, distributor: Option<Strin
     }
 }
 
+/// One signed request to a gateway: the URL from the gateway and the operation (no other path), after the hub check,
+/// signed NIP-98 with the everyday key over exactly that URL and body, a line in the applet's signature log, no
+/// redirect followed. The status and the answer's first `max` bytes.
+#[allow(clippy::too_many_arguments)]
+async fn signed_post(
+    broker: &crate::services::Broker,
+    hubs: &HashSet<String>,
+    client: &reqwest::Client,
+    k: &nostr::Keys,
+    gateway: &str,
+    op: PushOp,
+    body: Vec<u8>,
+    subject: &str,
+    name: &str,
+    max: usize,
+) -> Result<(u16, Vec<u8>), String> {
+    let url = push_url(gateway, op)?;
+    broker.guard(hubs, &url).await.map_err(|r| r.message)?;
+    let ev = crate::services::nip98_event(k, &url, "POST", Some(&body)).map_err(|r| r.message)?;
+    broker.log_outside(subject, name, "push gateway", format!("POST {}", url.path()), Some(ev.id.to_hex())).map_err(|r| r.message)?;
+    let mut res = client
+        .post(url)
+        .header(reqwest::header::AUTHORIZATION, crate::services::authorization(&ev))
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body)
+        .send()
+        .await
+        .map_err(|_| "The gateway didn't answer.".to_string())?;
+    let status = res.status().as_u16();
+    let mut answer = Vec::new();
+    while let Ok(Some(chunk)) = res.chunk().await {
+        answer.extend_from_slice(&chunk[..chunk.len().min(max - answer.len())]);
+        if answer.len() >= max {
+            break;
+        }
+    }
+    Ok((status, answer))
+}
+
+/// Tell a gateway the counts this device moved, and read what it holds for this key (docs/design/APP-RECORD.md
+/// "Signals"). Only to a gateway an allowed applet's signal names, only counts for those signals: the applet's opaque
+/// id, the signal's id, the number. Answers the gateway's `{ok, counts}`.
+#[tauri::command]
+pub async fn push_signals<R: Runtime>(
+    app: AppHandle<R>,
+    keys: State<'_, KeyState>,
+    services: State<'_, crate::services::ServicesState>,
+    signals: State<'_, SignalState>,
+    gateway: String,
+    set: Vec<SetCount>,
+    hubs: Vec<String>,
+) -> Result<Value, String> {
+    let (body, first) = {
+        let list = signals.0.lock().unwrap_or_else(|e| e.into_inner());
+        let first = list.iter().find(|s| s.gateway == gateway).cloned().ok_or("No allowed applet sends counts to that gateway.")?;
+        (signals_body(&list, &gateway, &set)?, first)
+    };
+    let k = crate::services::held(&app, &keys).await.map_err(|r| r.message)?;
+    let broker = services.broker(&app).map_err(|r| r.message)?;
+    let hubs: HashSet<String> = hubs.into_iter().take(1000).collect();
+    let client = crate::door::http_client(Duration::from_secs(15)).map_err(|_| "Secure connections aren't available.".to_string())?;
+    // a key's counts are at most 64, each a short line: 64 KB holds them
+    let (status, answer) = signed_post(broker, &hubs, &client, &k, &gateway, PushOp::Signals, body, &first.subject, &first.name, 64 * 1024).await?;
+    if !(200..300).contains(&status) {
+        return Err(format!("The gateway didn't take the counts ({status}{}).", gateway_said(&answer)));
+    }
+    serde_json::from_slice(&answer).map_err(|_| "The gateway's answer isn't JSON.".to_string())
+}
+
 /// Register with (or unregister from) the push gateway an allowed applet declared. The shell builds the request: the
 /// URL from the declared gateway, the body from the checked list and the phone's endpoint, signed NIP-98 with the
 /// everyday key over exactly that URL and body. Nothing for a gateway the list doesn't name (or, to unregister, that
@@ -405,6 +578,7 @@ pub async fn push_register<R: Runtime>(
     keys: State<'_, KeyState>,
     services: State<'_, crate::services::ServicesState>,
     list: State<'_, NotifyState>,
+    signals: State<'_, SignalState>,
     gateway: String,
     relay: String,
     op: PushOp,
@@ -419,39 +593,18 @@ pub async fn push_register<R: Runtime>(
     let hubs: HashSet<String> = hubs.into_iter().take(1000).collect();
     let now = nostr::Timestamp::now().as_secs();
     let client = crate::door::http_client(Duration::from_secs(15)).map_err(|_| "Secure connections aren't available.".to_string())?;
+    let relay_signals = relay_signals(&signals.0.lock().unwrap_or_else(|e| e.into_inner()), &gateway, &relay);
     let send = |op: PushOp, body: Vec<u8>, subject: String, name: String| {
         let (broker, hubs, client, k, gateway) = (broker, &hubs, &client, &k, gateway.clone());
-        async move {
-            let url = push_url(&gateway, op)?;
-            broker.guard(hubs, &url).await.map_err(|r| r.message)?;
-            let ev = crate::services::nip98_event(k, &url, "POST", Some(&body)).map_err(|r| r.message)?;
-            broker.log_outside(&subject, &name, "push gateway", format!("POST {}", url.path()), Some(ev.id.to_hex())).map_err(|r| r.message)?;
-            let res = client
-                .post(url)
-                .header(reqwest::header::AUTHORIZATION, crate::services::authorization(&ev))
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .body(body)
-                .send()
-                .await
-                .map_err(|_| "The gateway didn't answer.".to_string())?;
-            let status = res.status().as_u16();
-            // the answer's first 4 KB at most (`{ok, expires, pending}`)
-            let mut res = res;
-            let mut answer = Vec::new();
-            while let Ok(Some(chunk)) = res.chunk().await {
-                answer.extend_from_slice(&chunk[..chunk.len().min(4096 - answer.len())]);
-                if answer.len() >= 4096 {
-                    break;
-                }
-            }
-            Ok::<(u16, Vec<u8>), String>((status, answer))
-        }
+        // the answer's first 4 KB at most (`{ok, expires, pending}`)
+        async move { signed_post(broker, hubs, client, k, &gateway, op, body, &subject, &name, 4096).await }
     };
     match op {
+        PushOp::Signals => Err("Counts go through push_signals.".into()),
         PushOp::Register => {
             let e = entry.ok_or("No allowed applet names that gateway for that relay.")?;
             let ep = endpoint(&app, &gateway).await?.checked()?;
-            let body = register_body(&e, &ep);
+            let body = register_body(&e, &ep, &relay_signals);
             let hash = crate::services::sha256_hex(&[e.me.as_bytes(), b"\n", gateway.as_bytes(), b"\n", &body].concat());
             if let Some(i) = had {
                 if kept[i].hash == hash && now.saturating_sub(kept[i].at) < RENEW_S {
@@ -492,7 +645,7 @@ pub async fn push_register<R: Runtime>(
 /// Keep what granted applets asked to be told about, and start or stop the service to match (an empty list stops it).
 /// Answers the service's state: `{ running, permission, entries }`, or on desktop `{ android_only: true }`.
 #[tauri::command]
-pub async fn notify_set<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState>, mut entries: Vec<NotifyEntry>) -> Result<serde_json::Value, String> {
+pub async fn notify_set<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState>, mut entries: Vec<NotifyEntry>, signals: Option<Vec<SignalEntry>>) -> Result<serde_json::Value, String> {
     // `from` counts only for keys this device trusts (docs/design/KEYRING.md); an entry left asking for nothing goes
     let trusted = crate::keyring::approvers(&app).map_err(|r| r.message)?;
     for e in entries.iter_mut() {
@@ -504,19 +657,23 @@ pub async fn notify_set<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState
         return Err("This device has no key to sign in to a relay with.".into());
     }
     validate(&entries, me.as_deref())?;
+    let signals = signals.unwrap_or_default();
+    validate_signals(&signals, me.as_deref())?;
     *app.state::<NotifyState>().0.lock().unwrap_or_else(|e| e.into_inner()) = entries.clone();
+    *app.state::<SignalState>().0.lock().unwrap_or_else(|e| e.into_inner()) = signals.clone();
     #[cfg(target_os = "android")]
     {
         let plugin = app.try_state::<NotifyPluginHandle<R>>().map(|h| h.0.clone()).ok_or("Notifications aren't ready.")?;
         let entries = serde_json::to_string(&entries).map_err(|e| e.to_string())?;
+        let signals = serde_json::to_string(&signals).map_err(|e| e.to_string())?;
         plugin
-            .run_mobile_plugin_async::<serde_json::Value>("configure", serde_json::json!({ "entries": entries }))
+            .run_mobile_plugin_async::<serde_json::Value>("configure", serde_json::json!({ "entries": entries, "signals": signals }))
             .await
             .map_err(|e| format!("Notifications couldn't be set up ({e})."))
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = (app, entries);
+        let _ = (app, entries, signals);
         Ok(serde_json::json!({ "android_only": true, "note": "Notifications while the app is closed are Android only for now." }))
     }
 }
@@ -587,9 +744,9 @@ mod tests {
         let me = Keys::generate().public_key().to_hex();
         let ep = Endpoint { endpoint: "https://ntfy.example/upAbc?up=1".into(), p256dh: "B".repeat(87), auth: "A".repeat(22) };
         let e = NotifyEntry { rooms: Some(vec!["garden".into()]), from: vec!["c".repeat(64)], gateway: Some("https://push.example/".into()), ..entry(&me) };
-        let body: Value = serde_json::from_slice(&register_body(&e, &ep)).unwrap();
+        let body: Value = serde_json::from_slice(&register_body(&e, &ep, &[])).unwrap();
         assert_eq!(body, json!({ "endpoint": "https://ntfy.example/upAbc?up=1", "keys": { "p256dh": "B".repeat(87), "auth": "A".repeat(22) }, "relay": "wss://relay.example", "rooms": ["garden"], "mentions": true, "from": ["c".repeat(64)] }));
-        assert!(!String::from_utf8(register_body(&e, &ep)).unwrap().contains("Rooms"), "the applet's name and address stay on the phone");
+        assert!(!String::from_utf8(register_body(&e, &ep, &[])).unwrap().contains("Rooms"), "the applet's name and address stay on the phone");
         assert!(ep.clone().checked().is_ok());
         for bad in [
             Endpoint { endpoint: "http://ntfy.example/up".into(), ..ep.clone() },
@@ -652,6 +809,48 @@ mod tests {
         assert!(ok(NotifyEntry { rooms: Some(vec!["garden".into()]), names: names("other", "Other"), ..entry(&me) }).is_err());
         assert!(ok(NotifyEntry { rooms: None, names: names("garden", "Garden"), ..entry(&me) }).is_err());
         assert!(ok(NotifyEntry { rooms: Some(vec!["garden".into()]), names: names("garden", "a\nb"), ..entry(&me) }).is_err());
+    }
+
+    #[test]
+    fn counts_go_only_to_a_signal_s_gateway_and_say_only_which_signal_and_how_many() {
+        let me = Keys::generate().public_key().to_hex();
+        let sig = |gid: &str, gateway: &str| SignalEntry { gid: gid.into(), signal: "new".into(), gateway: gateway.into(), me: me.clone(), subject: "/v/home/a/01I".into(), name: "Ideas".into(), label: "new ideas from others".into(), relay: None, rooms: None };
+        let list = vec![sig("Z2lkLW9mLWlkZWFz", "https://push.example/")];
+        assert!(validate_signals(&list, Some(&me)).is_ok());
+        let body: Value = serde_json::from_slice(&signals_body(&list, "https://push.example/", &[SetCount { subject: "Z2lkLW9mLWlkZWFz".into(), signal: "new".into(), count: 2 }]).unwrap()).unwrap();
+        assert_eq!(body, json!({ "set": [{ "subject": "Z2lkLW9mLWlkZWFz", "signal": "new", "count": 2 }] }), "the opaque id, the signal, the number: not the applet's name or address");
+        assert_eq!(push_url("https://push.example/", PushOp::Signals).unwrap().as_str(), "https://push.example/signals");
+        for (gateway, c) in [
+            ("https://other.example/", SetCount { subject: "Z2lkLW9mLWlkZWFz".into(), signal: "new".into(), count: 1 }),
+            ("https://push.example/", SetCount { subject: "YW5vdGhlci1hcHBsZXQ".into(), signal: "new".into(), count: 1 }),
+            ("https://push.example/", SetCount { subject: "Z2lkLW9mLWlkZWFz".into(), signal: "old".into(), count: 1 }),
+            ("https://push.example/", SetCount { subject: "Z2lkLW9mLWlkZWFz".into(), signal: "new".into(), count: 10_000 }),
+        ] {
+            assert!(signals_body(&list, gateway, &[c.clone()]).is_err(), "{gateway} {c:?}");
+        }
+        let many: Vec<SetCount> = (0..17).map(|_| SetCount { subject: "Z2lkLW9mLWlkZWFz".into(), signal: "new".into(), count: 1 }).collect();
+        assert!(signals_body(&list, "https://push.example/", &many).is_err());
+        let other = Keys::generate().public_key().to_hex();
+        assert!(validate_signals(&list, Some(&other)).is_err(), "another key's");
+        for bad in [
+            SignalEntry { gid: "short".into(), ..list[0].clone() },
+            SignalEntry { signal: "New".into(), ..list[0].clone() },
+            SignalEntry { gateway: "https://push.example".into(), ..list[0].clone() },
+            SignalEntry { gateway: "http://push.example/".into(), ..list[0].clone() },
+            SignalEntry { rooms: Some(vec!["garden".into()]), ..list[0].clone() },
+            SignalEntry { label: "two\nlines".into(), ..list[0].clone() },
+        ] {
+            assert!(validate_signals(&[bad.clone()], Some(&me)).is_err(), "{bad:?}");
+        }
+        // a relay's signal rides that registration, by room; a registration without one reads as before
+        let rooms = SignalEntry { gid: "cm9vbXMtYXBwbGV0".into(), signal: "for-you".into(), relay: Some("wss://relay.example".into()), rooms: Some(vec!["garden".into()]), ..list[0].clone() };
+        let regs = relay_signals(&[rooms, list[0].clone()], "https://push.example/", "wss://relay.example");
+        assert_eq!(regs, vec![json!({ "subject": "cm9vbXMtYXBwbGV0", "signal": "for-you", "rooms": ["garden"] })]);
+        let ep = Endpoint { endpoint: "https://ntfy.example/upAbc?up=1".into(), p256dh: "B".repeat(87), auth: "A".repeat(22) };
+        let e = NotifyEntry { gateway: Some("https://push.example/".into()), ..entry(&me) };
+        let body: Value = serde_json::from_slice(&register_body(&e, &ep, &regs)).unwrap();
+        assert_eq!(body["signals"], json!(regs));
+        assert!(serde_json::from_slice::<Value>(&register_body(&e, &ep, &[])).unwrap().get("signals").is_none());
     }
 
     #[test]

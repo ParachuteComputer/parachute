@@ -103,7 +103,13 @@ export async function exchange(): Promise<void> {
     const set = [...(toTell.get(gateway)?.values() ?? [])];
     toTell.delete(gateway);
     let got: { counts?: { subject: string; signal: string; count: number; at: number }[] };
-    try { got = await invoke("push_signals", { gateway, set, hubs: knownHubs() }); } catch { continue; }
+    try { got = await invoke("push_signals", { gateway, set, hubs: knownHubs() }); } catch {
+      // kept for the next time (a later number for the same signal replaces it)
+      const m = toTell.get(gateway) ?? new Map();
+      for (const c of set) { const l = lit.find((x) => x.gid === c.subject && x.signal.id === c.signal); if (l && !m.has(l.key)) m.set(l.key, c); }
+      toTell.set(gateway, m);
+      continue;
+    }
     for (const c of got.counts ?? []) {
       for (const l of lit.filter((x) => x.gid === c.subject && x.signal.id === c.signal && x.signal.via === gateway)) {
         if (l.signal.from.kind === "vault") {

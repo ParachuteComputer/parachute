@@ -5,7 +5,7 @@
 // keyword (the Inbox leaves a Later thread out until something new comes in on it); Waiting is the sends from Uni's
 // account its outbound rules hold for the owner, each approved (signed with the approval key) or declined here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Linked as KitLinked, ready, services, useSaved as KitUseSaved } from "parachute";
+import { Linked as KitLinked, ready, services, signal, useSaved as KitUseSaved } from "parachute";
 // kept on this device by the kit (docs/WRITE-AN-APPLET.md "Saved state"); an app from before it keeps it for the visit only
 const useSaved: <T>(key: string, initial: T) => [T, (v: T | ((was: T) => T)) => void] = KitUseSaved ?? ((_key: string, initial: any) => useState(initial));
 
@@ -129,6 +129,10 @@ export default function Mail() {
     if (!account) return;
     const [[, r]] = await jmap([["Mailbox/get", { accountId: account, properties: ["name", "role", "unreadEmails", "totalEmails"] }, "b"]]);
     setBoxes(r.list);
+    // the bar's count (its record's signal "unread"): what is unread in the inbox, as Mail knows it; an older record
+    // without the signal refuses, and nothing else changes
+    const inbox = (r.list as Box[]).find((b) => b.role === "inbox");
+    if (inbox && typeof signal === "function") Promise.resolve(signal("unread", Math.min(9999, inbox.unreadEmails ?? 0))).catch(() => {});
   };
   const load = async () => {
     if (!account || (place === "waiting" && !searched)) return;

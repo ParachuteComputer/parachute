@@ -49,11 +49,36 @@ object MessageNotices {
     })
   }
 
-  fun link(subject: String, room: String, event: String): String = Uri.Builder().scheme("parachute").authority("notify")
+  fun link(subject: String, room: String?, event: String?): String = Uri.Builder().scheme("parachute").authority("notify")
     .appendQueryParameter("subject", subject)
-    .appendQueryParameter("room", room)
-    .appendQueryParameter("event", event)
+    .apply { if (room != null) appendQueryParameter("room", room) }
+    .apply { if (event != null) appendQueryParameter("event", event) }
     .build().toString()
+
+  private const val SIGNAL_ID = 4 // one per applet's signal, tagged "<applet's opaque id>/<signal>"
+
+  /** An applet's signal (PushService.onSignal): one notification per signal, its count as the number (the launcher's
+   *  badge), replaced as the count changes. No words from the applet's data: its name, the count, the signal's name. */
+  fun signal(ctx: Context, tag: String, title: String, text: String, count: Int, link: String) {
+    channel(ctx)
+    try {
+      NotificationManagerCompat.from(ctx).notify(tag, SIGNAL_ID, NotificationCompat.Builder(ctx, CHANNEL)
+        .setSmallIcon(R.drawable.ic_notify)
+        .setContentTitle(title)
+        .setContentText(text)
+        .setNumber(count)
+        .setOnlyAlertOnce(false)
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setAutoCancel(true)
+        .setContentIntent(open(ctx, link, tag.hashCode()))
+        .build())
+    } catch (e: SecurityException) {
+      Log.w(TAG, "not allowed to notify")
+    }
+  }
+
+  fun clearSignal(ctx: Context, tag: String) { ctx.getSystemService(NotificationManager::class.java).cancel(tag, SIGNAL_ID) }
 
   /** May anything be shown now? Not while the app is in front, not without the permission. */
   fun mayShow(ctx: Context): Boolean =
@@ -145,7 +170,7 @@ object MessageNotices {
     val nm = ctx.getSystemService(NotificationManager::class.java)
     for (r in rooms) nm.cancel(r, MESSAGE_ID)
     nm.cancel(SUMMARY_ID)
-    for (s in nm.activeNotifications) if (s.id == MESSAGE_ID) nm.cancel(s.tag, s.id)
+    for (s in nm.activeNotifications) if (s.id == MESSAGE_ID || s.id == SIGNAL_ID) nm.cancel(s.tag, s.id)
   }
 
   private fun open(ctx: Context, link: String, code: Int): PendingIntent {

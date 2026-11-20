@@ -13,6 +13,7 @@
 //   uni.VaultClient / uni.vault      → surface-client's VaultClient on frameFetch, with the record-worded calls
 //                                      queryRecords/getRecord/createRecord/updateRecord (body, fields) beside its own
 //   uni.theme.get() / .on(cb)        → the app's look (src/theme): every token is also a CSS var --<key> on <html>
+//   uni.signal(id, count)            → its own number for a signal its record declares: the bar's count (modules/signals.ts)
 //   uni.app.recent/pins/open         → what it may ask of the app (modules/app.ts), new here: the Uni app has none
 //   uni.app.links(links, from)       → (open) what each note link leads to: "note", "away" or null (links/resolve.ts);
 //                                      the React kit's Link, Linked, Note and `link` use it: an applet needn't
@@ -428,6 +429,8 @@ export const FRAME_KIT = String.raw`(function () {
       trust: function (service, event) { return call("services", "trust", { service: service, event: event }); },
       forgetSecret: function (service, event) { return call("services", "forgetSecret", { service: service, event: event }); }
     }),
+    // its own number for a signal its record declares (docs/design/APP-RECORD.md "Signals"): the bar's count
+    signal: function (id, count) { return call("signals", "set", { id: id, count: count }); },
     theme: {
       get: function () { return call("theme", "get", {}); },
       now: function () { return theme; },

@@ -1,9 +1,12 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { parseSignals, signalLines } from "./signals";
 import { parseServices, type Service } from "./services";
 import { parseManifest, type Manifest } from "./manifest";
 import { grantKey, grantOf } from "./grant";
 import { asksHash } from "./approvals";
+import { readApplet } from "./discovery";
+import { appletRecord } from "../../applets/record";
 
 const manifest = (allow: unknown[] = [{ vault: "here", allow: [{ path: "Ideas/", verbs: ["read", "create"] }] }]): Manifest => {
   const m = parseManifest({ contract: 2, id: "ideas", name: "Ideas", glyph: "✦", access: allow });
@@ -69,5 +72,27 @@ describe("an applet's signals", () => {
     const before = await asksHash(subject, "Applets/Ideas", fields);
     expect(await asksHash(subject, "Applets/Ideas", { ...fields, signals: undefined })).toBe(before);
     expect(await asksHash(subject, "Applets/Ideas", { ...fields, signals: [ideas] })).not.toBe(before);
+  });
+});
+
+describe("the shipped records", () => {
+  const read = (name: string, vars: Record<string, string>) => {
+    const r = appletRecord(name, vars);
+    const a = readApplet({ id: "01X", path: r.path, tags: r.tags, metadata: r.fields }, "home");
+    if (!a.ok) throw new Error(a.error);
+    return a.entry;
+  };
+  const vars = { relay: "wss://relay.example", uni: "a".repeat(64), mail: "https://mail.example/mail/" };
+  it("Rooms counts mentions and Uni's messages through its push gateway; with no gateway it declares none", () => {
+    const on = read("rooms", { ...vars, push: GW });
+    expect(on.signalsError).toBeUndefined();
+    expect(on.signals).toEqual([{ id: "for-you", name: "mentions and messages from Uni", from: { kind: "relay", service: "rooms" }, via: GW }]);
+    const off = read("rooms", vars);
+    expect([off.signals, off.signalsError]).toEqual([[], undefined]);
+  });
+  it("Mail counts unread mail, sent to the gateway when there is one; Journal counts nothing", () => {
+    expect(read("mail", { ...vars, push: GW }).signals).toEqual([{ id: "unread", name: "unread mail", from: { kind: "feed", service: "mail", feed: "unread" }, via: GW }]);
+    expect(read("mail", vars).signals).toEqual([{ id: "unread", name: "unread mail", from: { kind: "feed", service: "mail", feed: "unread" } }]);
+    expect(read("journal", vars).signals).toEqual([]);
   });
 });

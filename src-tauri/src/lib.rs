@@ -125,6 +125,7 @@ pub fn run() {
         .manage(keyring::KeyringState::default())
         .manage(approve::PasscodeState::default())
         .manage(notify::NotifyState::default())
+        .manage(notify::SignalState::default())
         .invoke_handler(tauri::generate_handler![
             app_version,
             webview_runtime,
@@ -172,7 +173,8 @@ pub fn run() {
             notify::notify_set,
             notify::push_status,
             notify::push_setup,
-            notify::push_register
+            notify::push_register,
+            notify::push_signals
         ])
         .setup(|app| {
             #[cfg(desktop)]
