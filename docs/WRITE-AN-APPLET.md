@@ -97,7 +97,11 @@ A relay service may also name (all optional, each a line on the card; [design/KE
 signed message to the app (`services.card`), draws it, and on a tap answers (`services.answer`); the app checks the
 card, asks for the device unlock for powerful ones, seals the answer and sends it. A secret is typed on the app's own
 sheet (`services.secret`): the applet never sees it. An http service may name `approve: { field: op, ops: [...] }`:
-those requests are signed with the approval key.
+those requests are signed with the approval key. It may name `join: { field: op, ops: [...] }` for asking to join a
+private network: those requests are signed as the person only after a tap and this device's join level (the passcode
+and the unlock, by default; docs/design/KEYRING.md "Joining a network"). What an answer or a join asks (a tap, the
+unlock, the passcode) is the person's choice in Settings → Security, never the applet's; when it is the passcode, the
+app asks it on its own sheet.
 
 ## The code
 
@@ -206,7 +210,7 @@ does. Use them, or your own markup on the CSS variables, or both.
 | `<Linked text web? />` | Plain text with its note links drawn as `Link`s: a message, a mail. With `web`, its other web addresses too (they open only with `links`). |
 | `link (.to, .follow, .open, .parse, .find)` | The links as calls: `await link.to(record)` is the address to write for a note of the applet's vault; `link.follow(target, { from })` opens one on a tap; `link.open(record)` opens a note of its own vault on a tap (a row's `onPress`); `link.parse(text)` says what a link names (or null); `link.find(text)` gives the links in plain text. |
 | `<Days times? counts? days? label? inline? />` | What changed, a day at a time: a column of ink marks per day, weeks set apart, today marked. Give `times` (ISO times, counted by day) or `counts` (oldest first). `days` defaults to 28; `inline` draws it inside a line (a row, a link). |
-| `<List label? rows more? />` | Rows under a label. A row is `{ key?, title, meta?, aside?, glyph?, onPress?, badge?, strong?, current?, under?, label?, data? }`; one with `onPress` is a button. A long list costs little (a row off screen isn't drawn); `more: { label, onPress }` asks for the next page. |
+| `<List label? hideLabel? rows more? />` | Rows under a label. A row is `{ key?, title, meta?, aside?, glyph?, onPress?, badge?, strong?, current?, under?, label?, data? }`; one with `onPress` is a button. A long list costs little (a row off screen isn't drawn); `more: { label, onPress }` asks for the next page; `hideLabel` says the label to a screen reader only. |
 | `<Card title?>…</Card>` | A raised block with a title. |
 | `<Field label placeholder? action? onAction? value? onChange? clearOnAction? />` | A line to write on, and one action (its button, or Enter). It keeps its own text unless `value` is given, and clears after the action unless `clearOnAction` is false. `onAction` should catch its own errors and show them: a failed action leaves the text as it was. |
 | `<Empty>…</Empty>` | What shows when there is nothing yet: a sprig and a line. |
@@ -216,7 +220,7 @@ does. Use them, or your own markup on the CSS variables, or both.
 | `<Problem error? onRetry? >…</Problem>` | What went wrong, said once: your words, then the error's, and Try again with `onRetry`. |
 | `<Button kind? small? busy? onClick >…</Button>` | A button in the app's look: `primary` (the one main action), `plain` (the default) or `quiet`. |
 | `<Search label placeholder? value? onChange? onSearch live? />` | A search box: Enter searches (each pause in typing, with `live` ms); emptying it searches for "". |
-| `<Write label labelled? value onChange onSend? send? busy? enter? line? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone on a computer, as in a chat). `labelled` shows the label above it, as a Field's. Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows. |
+| `<Write label labelled? value onChange onSend? send? sendLabel? canSend? busy? enter? line? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone on a computer, as in a chat). `labelled` shows the label above it, as a Field's. Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows; `sendLabel` names the action for a screen reader, `canSend` says there is something to send without words (a file). |
 | `<Record onRecorded label? max_s? disabled? kind? small? >…</Record>` | The microphone button: the app's own recorder sheet (needs `reach: [voice]`); `onRecorded({ bytes, type, duration })` on Send. |
 | `toast(text, { error? })` | A short word after an action ("Saved"), at the foot of the screen, gone by itself. |
 | `voiceNote(recording, create)` | A recording made a note: `create(body)` makes the record (its path is yours), the recording is attached with transcription asked, and the hub writes the words in. |

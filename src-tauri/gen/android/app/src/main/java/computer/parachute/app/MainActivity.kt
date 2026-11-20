@@ -58,6 +58,13 @@ class MainActivity : TauriActivity() {
     super.onPause()
   }
 
+  // Every touch and key the app gets, the idle lock's clock (UnlockPlugin.touched; src-tauri/src/levels.rs): scrolling
+  // inside an applet's frame counts too, which the page can't see.
+  override fun onUserInteraction() {
+    super.onUserInteraction()
+    UnlockPlugin.touched()
+  }
+
   // A link tapped while the activity exists becomes its intent: if the deep-link plugin isn't loaded yet (the process was
   // just recreated), it reads the link from here when it loads; a later recreate still drops it (above).
   override fun onNewIntent(intent: Intent) {

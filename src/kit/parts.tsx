@@ -73,10 +73,10 @@ export type Row = {
 };
 /** Rows under a label. A row with `onPress` is a button. A long list costs little: a row off screen isn't drawn until
  *  it scrolls near. `more` puts a button under the last row that asks for the next page (older entries, more mail). */
-export function List({ label, rows, more }: { label?: ReactNode; rows: readonly Row[]; more?: { label: string; onPress: () => void; busy?: boolean } }) {
+export function List({ label, hideLabel, rows, more }: { label?: ReactNode; /** said to a screen reader only: the page's title says it already */ hideLabel?: boolean; rows: readonly Row[]; more?: { label: string; onPress: () => void; busy?: boolean } }) {
   return (
     <section className="pa-list" aria-label={typeof label === "string" ? label : undefined}>
-      {label && <h3 className="pa-list-label">{label}</h3>}
+      {label && <h3 className={hideLabel ? "pa-list-label pa-unseen" : "pa-list-label"}>{label}</h3>}
       <ul>
         {rows.map((r, i) => {
           const data = Object.fromEntries(Object.entries(r.data ?? {}).filter(([k]) => /^[a-z][a-z0-9-]*$/.test(k)).map(([k, v]) => [`data-${k}`, v]));

@@ -28,7 +28,7 @@ import { isMine } from "../vault/whose";
 import { homeVault } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
-import { approveLevel } from "./appFloor";
+import type { Levels } from "./levels";
 import { APP_TAG, appOf as appRecordOf, appsFrom, followed, openApp, recordOf, APP_FOLDER, type App } from "./apps";
 
 export const SETTINGS_TAG = "parachute-settings";
@@ -217,8 +217,6 @@ export async function readSettings(): Promise<void> {
       if (f) found[keyOf(p)] = f;
     }
     keepNow({ vault: home.key, settings, noteId: n?.id ?? null, updatedAt: (n as { updatedAt?: string } | null)?.updatedAt ?? null, found, apps });
-    // a level a record asks is kept on this device from the first read on: a later record can't drop it (appFloor.ts)
-    for (const a of parseApps(apps)) approveLevel(a, home.key);
     readThisSession = home.key;
     bump({ read: "read" });
   } catch {
@@ -430,6 +428,29 @@ async function changeChoices(f: (raw: Raw, creating: boolean) => Raw): Promise<v
   }
   if (app.id === "everything" || app.id === "simple") await changeSettings(f); else await readSettings();
 }
+/** The open app's security levels, written to its record (made from the built-in the first time) so every device that
+ *  opens it follows (shell/levels.ts): only `security` changes. A lowering is signed first (`signLowering`); without
+ *  that signature this write only ever raises another device. */
+export async function changeSecurity(levels: Levels): Promise<void> {
+  const home = homeVault();
+  if (!home) throw new Error("There's no home vault yet.");
+  const app = openAppNow();
+  if (app.live) throw new Error(`${app.name} is offered by someone else: its levels are theirs, and yours can only be stricter.`);
+  const c = clientFor(home);
+  const rows = await c.queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 });
+  const n = rows.find((r) => (app.noteId ? r.id === app.noteId : stripExt(r.path ?? "") === `${APP_FOLDER}${app.id}`)) ?? null;
+  if (app.noteId && !n) throw new Error("The app's record is gone; read it again.");
+  const was: Record<string, unknown> = n && plain(n.metadata) && plain(n.metadata.app) ? n.metadata.app : recordOf(app);
+  const body = { ...was, security: { approvals: levels.approvals, code: levels.code, join: levels.join, idle: levels.idle } };
+  if (n) {
+    const updatedAt = (n as { updatedAt?: string }).updatedAt;
+    await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), app: body }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
+  } else {
+    await c.createNote({ path: `${APP_FOLDER}${app.id}`, content: `The ${app.name} app: where its applets come from, its bar and its home. See docs/NAVIGATION.md.`, tags: [APP_TAG], metadata: { app: body } } as Parameters<typeof c.createNote>[0]);
+  }
+  await readSettings();
+}
+
 /** Whether a change to the bar or home goes to the open app's record (an app other than the two built-ins, or one of
  *  them whose record has a bar or a home of its own); else to the settings note, as before. */
 const toRecord = () => { const a = openAppNow(); return a.id !== "everything" && a.id !== "simple" ? true : a.noteId !== null && (a.bar !== null || a.start !== undefined); };

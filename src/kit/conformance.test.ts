@@ -10,9 +10,17 @@ const dir = join(process.cwd(), "applets");
 const shipped = readdirSync(dir).filter((f) => /\.(tsx|jsx)$/.test(f));
 
 /** Where an applet keeps something of its own on purpose, and why. Each must still be needed (the last test). */
-const EXCEPTIONS: Record<string, Partial<Record<string, string>>> = {};
+const EXCEPTIONS: Record<string, Partial<Record<string, string>>> = {
+  "room.tsx": {
+    lists: "the @-name picker under the composer is a listbox, chosen with the arrow keys, not rows",
+    status: "Uni's turn line (what Uni is doing, and Stop) and the composer's line (who is typing, what wasn't sent) are live lines a screen reader follows",
+  },
+  "rooms.tsx": {
+    status: "a word about what the list shows (\"This is what you last saw…\") is said when it changes, not as a toast that goes",
+  },
+};
 /** Applets not moved onto the kit yet (T-476, a PR at a time): each must still go around it, so the list only shrinks. */
-const NOT_YET = new Set(["room.tsx", "rooms.tsx"]);
+const NOT_YET = new Set<string>([]);
 
 const said = (f: string) => check(readFileSync(join(dir, f), "utf8")).filter((x) => !EXCEPTIONS[f]?.[x.rule]);
 

@@ -70,7 +70,7 @@ test("the rooms applet approves Uni's powerful card behind the unlock, gives a s
     await expect(grant).toContainText("With your everyday key: post as you in your rooms there");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
-    await app.getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Ops ${stamp}`) }).click({ timeout: 30_000 });
+    await app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Ops ${stamp}`) }).click({ timeout: 30_000 });
     const log = app.getByRole("log");
 
     // the forged card shows no buttons
@@ -154,7 +154,7 @@ test("an applet without the approvals grant answers no card and can't post a bot
     await expect(grant).not.toContainText("approval key");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
-    await app.getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Plain ${stamp}`) }).click({ timeout: 30_000 });
+    await app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Plain ${stamp}`) }).click({ timeout: 30_000 });
     const log = app.getByRole("log");
     await expect(log.getByRole("group", { name: "Uni's card" })).toContainText("This applet isn't allowed to answer approvals.", { timeout: 20_000 });
     await log.getByRole("group", { name: "Hermes asks to run a command" }).getByRole("button", { name: "Approve once" }).click();
@@ -200,7 +200,7 @@ test("on a device that doesn't trust Uni's key yet, Uni's card says so and offer
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
-    await app.getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Fresh ${stamp}`) }).click({ timeout: 30_000 });
+    await app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Fresh ${stamp}`) }).click({ timeout: 30_000 });
     const log = app.getByRole("log");
     const cards = log.getByRole("group", { name: "Uni's card" });
     // Uni's: what is missing, and the way to it; not "Not signed by Uni."

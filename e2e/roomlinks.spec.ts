@@ -48,7 +48,7 @@ test("Uni's kitchen:<ULID> in a room is a link: a tap opens the recipe in the Re
     await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Take you to a note or an applet when you tap, see which note links lead to a note, and know its vault's web address");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
-    await app.getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Pantry ${stamp}`) }).click({ timeout: 30_000 });
+    await app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Pantry ${stamp}`) }).click({ timeout: 30_000 });
     const msg = app.getByRole("log").locator("article", { hasText: stamp });
     await expect(msg.getByRole("link", { name: `${VAULT}:${toast}` })).toHaveCount(2, { timeout: 20_000 });
     // the text is as Uni wrote it; a vault this device doesn't hold is plain text

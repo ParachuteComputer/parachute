@@ -144,6 +144,16 @@ async function approvedApplet(at: Subject): Promise<string | null> {
   return best?.applet ?? null;
 }
 
+/** The approvals kept in the home vault for a subject (the events as written; `decide` checks them). */
+export async function readApprovals(s: Subject): Promise<unknown[]> {
+  const home = homeVault();
+  if (!home) return [];
+  return (await rowsFor(home, s)).map((r) => r.metadata?.approval);
+}
+
+/** Keep a signed approval in the home vault, where the person's other devices read it. */
+export const writeApprovalEvent = (home: VaultRecord, s: Subject, name: string, ev: SignedEvent) => writeApproval(home, s, name, ev);
+
 async function writeApproval(home: VaultRecord, s: Subject, name: string, ev: SignedEvent): Promise<void> {
   const c = clientFor(home);
   const [was] = await rowsFor(home, s);
@@ -153,10 +163,10 @@ async function writeApproval(home: VaultRecord, s: Subject, name: string, ev: Si
 }
 
 /** What this device calls itself on an approval it signs. */
-function deviceName(): string {
+export function deviceName(): string {
   const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
   return /Android/i.test(ua) ? "Android" : /Mac/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : /Windows/i.test(ua) ? "Windows" : "a device";
 }
 
-/** Whether this device asks a passcode before approving code. */
-export async function passcodeHere(): Promise<boolean> { const n = await nativeNow(); return n ? n.passcodeStatus().catch(() => false) : false; }
+/** Whether approving code here asks the passcode (this device's level for it, src-tauri/src/levels.rs). */
+export async function passcodeHere(): Promise<boolean> { const n = await nativeNow(); return n ? n.levelsStatus().then((s) => s.levels.code === "passcode", () => false) : false; }
