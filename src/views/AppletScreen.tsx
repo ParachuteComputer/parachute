@@ -41,9 +41,9 @@ import { findVault, hostOf } from "../vault/store";
 import { covers } from "../vault/parachute";
 import { appletLevel, canWrite, giveBack, heldLevel } from "../vault/reach";
 import { homeVault } from "../shell/frameSource";
+import { onLevels } from "../shell/levels";
 import { askVault } from "../vault/signInFlow";
 import { screenOf } from "../applet/manifest";
-import { approveLevel } from "../shell/appFloor";
 import { createRouter } from "../applet/router";
 import { createVaultModule } from "../applet/modules/vault";
 import { createThemeModule } from "../applet/modules/theme";
@@ -56,7 +56,6 @@ import { deviceSaved } from "../shell/saved";
 import { asksHash } from "../applet/approvals";
 import { approvalFor, floorOf, passcodeHere, raiseFloor, signApproval, signsHere, subjectOf as approvalSubject } from "../applet/approvalStore";
 import type { Decision } from "../applet/approvals";
-import { openAppNow } from "../shell/homeSettings";
 import { createSavedModule } from "../applet/modules/saved";
 import { createSignalsModule } from "../applet/modules/signals";
 import { setOwn } from "../services/signals";
@@ -239,7 +238,8 @@ export default function AppletScreen() {
   const [signing, setSigning] = useState<string | null>(null);
   const [passcode, setPasscode] = useState("");
   const [needsPasscode, setNeedsPasscode] = useState(false);
-  useEffect(() => { void passcodeHere().then(setNeedsPasscode); }, []);
+  // asked again when the levels change (the open app's record raised them after this screen opened)
+  useEffect(() => { const ask = () => void passcodeHere().then(setNeedsPasscode); ask(); return onLevels(ask); }, []);
   useEffect(() => {
     if (!signedFor || !entry || !rec || loaded.state !== "ok" || !keys) return;
     let on = true;
@@ -413,12 +413,11 @@ export default function AppletScreen() {
           // on a device with the person's key, Allow is an approval for every device: signed here, after the device
           // unlock (and the passcode, when one is set), and kept in the home vault. Approved elsewhere already: no new one
           if (!approvedElsewhere && await signsHere()) {
-            if (approveLevel(openAppNow(), homeVault()?.key ?? "") === "passcode" && !needsPasscode) { setSigning("Your app asks for a passcode before approving code. Set one in Settings → Approvals."); return; }
             setSigning(null);
             try {
-              await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" });
+              await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode && passcode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" });
             } catch (e) {
-              setSigning(`Not approved: ${e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "it couldn't be signed"}.`);
+              setSigning(`Not approved: ${(e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "it couldn't be signed").replace(/\.$/, "")}.`);
               return;
             }
           }
