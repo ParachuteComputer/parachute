@@ -248,6 +248,11 @@ gateway no grant names any more gets `POST <gateway>unregister`. The web side (`
 pairs: it never sees a signature. Registered at start, on every grant change, and when the app comes back to the front
 (a distributor may hand out a new endpoint).
 
+**Signals.** A relay service's `notify` may back an applet's signal (APP-RECORD.md "Signals"): the registration then
+names it (`signals: [{subject, signal, rooms}]`, the applet as an opaque id) and the gateway adds one per message it
+pushes, so Rooms' count is kept while every device is closed. The same gateway takes the counts the person's devices
+send (`push_signals`) and pushes a change as `{v, kind: "signal", subject, signal, count, to}`.
+
 **What a push carries.** `{v, relay, room, event, kind, why, to}`: no words, no author; `to` is the key it was
 registered for. It is sealed with Web Push
 encryption (RFC 8291) to keys the UnifiedPush connector made on the phone, so the push server sees only its size and
