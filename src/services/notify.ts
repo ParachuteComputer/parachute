@@ -158,8 +158,9 @@ export function syncNotify(): Promise<void> {
       const { invoke } = await import("@tauri-apps/api/core");
       // Android asks for the permission once, the first time an applet asks (notify.rs `take_ask`); after that its answer
       // only shows here
-      const set = await invoke<{ permission?: boolean } | null>("notify_set", { entries, signals: read.signals });
-      off = entries.length > 0 && set?.permission === false;
+      // `on`: what Rust kept still asks something (it drops `from` keys this device doesn't trust)
+      const set = await invoke<{ permission?: boolean; on?: boolean } | null>("notify_set", { entries, signals: read.signals });
+      off = set?.on === true && set.permission === false;
       // the shell sends counts only for signals on the list just set: now they can go
       void import("./signals").then((s) => s.exchange());
       const status = await invoke<PushStatus>("push_status");

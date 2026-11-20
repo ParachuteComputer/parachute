@@ -689,7 +689,8 @@ pub async fn notify_set<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState
     #[cfg(target_os = "android")]
     {
         let plugin = app.try_state::<NotifyPluginHandle<R>>().map(|h| h.0.clone()).ok_or("Notifications aren't ready.")?;
-        let ask = take_ask(&app.path().app_data_dir().map_err(|_| "The app's data folder isn't available.")?, !entries.is_empty());
+        // no data folder: no mark can be kept, so nothing is asked (the list still goes to the service)
+        let ask = app.path().app_data_dir().map(|d| take_ask(&d, !entries.is_empty())).unwrap_or(false);
         let entries = serde_json::to_string(&entries).map_err(|e| e.to_string())?;
         let signals = serde_json::to_string(&signals).map_err(|e| e.to_string())?;
         plugin
