@@ -1,4 +1,4 @@
-// Settings → Frame (shown when the person has a frame of their own: settingsShown.ts; Settings reads the frame record
+// Settings → Frame (shown when the person has a frame of their own, or more than one vault: settingsShown.ts; Settings reads the frame record
 // when it shows; the home vault is chosen under Your bundle): which frame runs, and the person's ways to change that:
 // "Make this mine" (copy the built-in frame into the home vault), looking at their frame again, going back to the
 // built-in one, and a newer built-in frame when one is on offer (never written over theirs without their tap).

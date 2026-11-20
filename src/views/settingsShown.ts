@@ -36,7 +36,7 @@ export function settingsShown(f: SettingsFacts): Shown {
     // held here, so it can be removed.
     approving: f.key && f.home && (applets || f.anchor),
     // the home picker is in Frame while it has more to choose from than one vault
-    frame: f.frame,
+    frame: f.frame || f.ownVaults > 1,
   };
 }
 

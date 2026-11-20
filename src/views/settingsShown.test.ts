@@ -25,9 +25,9 @@ describe("which key sections Settings shows", () => {
     expect(settingsShown({ ...newcomer, key: true, anchor: true }).approving).toBe(true);
     expect(settingsShown({ ...newcomer, anchor: true }).approving).toBe(false);
   });
-  it("Frame: a frame of their own only (the home vault is chosen under Your bundle)", () => {
+  it("Frame: a frame of their own, or more than one vault of theirs (where Make this mine is reached)", () => {
     expect(settingsShown({ ...newcomer, frame: true }).frame).toBe(true);
-    expect(settingsShown({ ...newcomer, ownVaults: 2 }).frame).toBe(false);
+    expect(settingsShown({ ...newcomer, ownVaults: 2 }).frame).toBe(true);
     expect(settingsShown({ ...newcomer, ownVaults: 0 }).frame).toBe(false);
   });
 });
