@@ -61,15 +61,25 @@ pub fn hub_origin(raw: &str) -> Result<url::Url, Refusal> {
 
 /// The hub's account MCP, where `list-vaults` answers which vaults a key's person may reach (docs/design/ONE-SIGN-IN.md).
 pub const ACCOUNT_MCP_PATH: &str = "/account/mcp";
-/// The one call the key signs there: list the person's vaults. Nothing else is ever signed for the web side.
+/// The calls the key signs there for the web side, each a fixed body; nothing else is ever signed for it. The first lists
+/// the person's vaults.
 pub const LIST_VAULTS_BODY: &str = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list-vaults","arguments":{}}}"#;
+/// The second asks which of them hold the person's settings or app record (the hub's lean rows: path, tags and a short
+/// preview, no content and no fields), so a first sign-in offers that vault as the home (vault/parachute.ts
+/// `HOME_RECORDS_BODY`, the same words).
+pub const HOME_RECORDS_BODY: &str = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"query-notes","arguments":{"tag":["parachute-settings","parachute-app","parachute-bundle"],"include_content":false,"include_metadata":false,"limit":50}}}"#;
 
-/// The NIP-98 event for the one `list-vaults` request to this hub: kind 27235, `u` its account MCP on the hub's own
-/// origin, `method` POST, a fresh `nonce` (two asks in the same second are two events), and `payload` the body's hash.
+/// The NIP-98 event for the one `list-vaults` request to this hub.
 pub fn list_vaults_event(origin: &url::Url, nonce: &str) -> Result<EventBuilder, Refusal> {
-    let bad = || refusal("refused", "The request to list your vaults couldn't be made.");
+    account_event(origin, nonce, LIST_VAULTS_BODY)
+}
+
+/// The NIP-98 event for one of those requests to this hub: kind 27235, `u` its account MCP on the hub's own origin,
+/// `method` POST, a fresh `nonce` (two asks in the same second are two events), and `payload` the body's hash.
+fn account_event(origin: &url::Url, nonce: &str, body: &str) -> Result<EventBuilder, Refusal> {
+    let bad = || refusal("refused", "The request to your hub couldn't be made.");
     let u = format!("{}{ACCOUNT_MCP_PATH}", origin.origin().ascii_serialization());
-    let payload = nostr::hashes::sha256::Hash::hash(LIST_VAULTS_BODY.as_bytes()).to_string();
+    let payload = nostr::hashes::sha256::Hash::hash(body.as_bytes()).to_string();
     let tag = |k: &str, v: &str| Tag::parse([k, v]).map_err(|_| bad());
     Ok(EventBuilder::new(Kind::from(SIGN_IN_KIND), "").tags([tag("u", &u)?, tag("method", "POST")?, tag("nonce", nonce)?, tag("payload", &payload)?]))
 }
@@ -120,22 +130,26 @@ fn nonce() -> String {
     format!("{t:x}{:x}", NONCES.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
 }
 
-/// Ask the hub which vaults this key's person may reach.
-pub async fn list_vaults(origin: &url::Url, keys: &nostr::Keys) -> Result<HubVaults, Refusal> {
-    let http = client()?;
-    let event = list_vaults_event(origin, &nonce())?.sign_with_keys(keys).map_err(|_| refusal("refused", "The key couldn't sign."))?;
+/// One signed request to the hub's account MCP, with one of the fixed bodies: its status and answer.
+async fn post_account(origin: &url::Url, keys: &nostr::Keys, body: &'static str, http: reqwest::Client) -> Result<(u16, String), Refusal> {
+    let event = account_event(origin, &nonce(), body)?.sign_with_keys(keys).map_err(|_| refusal("refused", "The key couldn't sign."))?;
     let auth = crate::services::authorization(&event);
     let res = http
         .post(origin.join(ACCOUNT_MCP_PATH).expect("fixed path"))
         .header("Authorization", auth)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json, text/event-stream")
-        .body(LIST_VAULTS_BODY)
+        .body(body)
         .send()
         .await
         .map_err(|_| refusal("unreachable", "The hub didn't answer."))?;
     let status = res.status().as_u16();
-    let body = res.text().await.unwrap_or_default();
+    Ok((status, res.text().await.unwrap_or_default()))
+}
+
+/// Ask the hub which vaults this key's person may reach.
+pub async fn list_vaults(origin: &url::Url, keys: &nostr::Keys) -> Result<HubVaults, Refusal> {
+    let (status, body) = post_account(origin, keys, LIST_VAULTS_BODY, client()?).await?;
     match status {
         200 => vault_names(&body).ok_or_else(|| refusal("no_list", "The hub didn't list your vaults.")),
         401 if body.contains("not linked") || body.contains("unknown_pubkey") => Err(refusal("unknown_key", "This hub doesn't know your key yet.")),
@@ -157,6 +171,25 @@ pub async fn hub_vaults<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>
     }
     listed
 }
+
+/// Which of the person's vaults on `hub` hold their settings or app record: the hub's answer as it came, for the app to
+/// read (vault/parachute.ts `homeFrom`), or none when it didn't answer in time or said no. A first sign-in offers that
+/// vault as the home; without it, the first by name.
+#[tauri::command]
+pub async fn hub_home_records<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, hub: String) -> Result<Option<String>, Refusal> {
+    let origin = hub_origin(&hub)?;
+    let held = keys.get(&app).await.map_err(|m| refusal("no_key", m))?.ok_or_else(|| refusal("no_key", "This device has no key."))?;
+    home_records(&origin, &held).await
+}
+
+/// Ask the hub which of this key's person's vaults hold their settings or app record (hub_home_records).
+pub async fn home_records(origin: &url::Url, keys: &nostr::Keys) -> Result<Option<String>, Refusal> {
+    let http = http_client(Duration::from_secs(5)).map_err(|_| refusal("unreachable", "Secure connections aren't available."))?;
+    let (status, body) = post_account(origin, keys, HOME_RECORDS_BODY, http).await?;
+    Ok((status == 200 && body.len() <= MAX_HOME_RECORDS).then_some(body))
+}
+/// The most of that answer the app takes (paths and tags of a few notes per vault).
+const MAX_HOME_RECORDS: usize = 512 * 1024;
 
 /// The hub's key door took the key, or knew it was a hub's door and didn't know the key: either way it is a hub.
 fn answered_as_hub<T>(r: &Result<T, Refusal>) -> bool {
@@ -404,6 +437,22 @@ mod tests {
         assert!(ev.verify().is_ok());
         let other = list_vaults_event(&o, "n2").unwrap().sign_with_keys(&k).unwrap();
         assert_ne!(ev.id, other.id, "two asks are two events");
+    }
+
+    #[test]
+    fn signs_the_home_records_ask_as_its_own_body() {
+        let o = hub_origin("https://hub.example").unwrap();
+        let k = nostr::Keys::generate();
+        let ev = account_event(&o, "n1", HOME_RECORDS_BODY).unwrap().sign_with_keys(&k).unwrap();
+        let tags: Vec<Vec<String>> = ev.tags.iter().map(|t| t.as_slice().to_vec()).collect();
+        let payload = tags.iter().find(|t| t[0] == "payload").unwrap()[1].clone();
+        assert_eq!(payload, nostr::hashes::sha256::Hash::hash(HOME_RECORDS_BODY.as_bytes()).to_string());
+        assert_ne!(payload, nostr::hashes::sha256::Hash::hash(LIST_VAULTS_BODY.as_bytes()).to_string());
+        // a query that reads no note's content or fields
+        let v: Value = serde_json::from_str(HOME_RECORDS_BODY).unwrap();
+        assert_eq!(v.pointer("/params/name").and_then(Value::as_str), Some("query-notes"));
+        assert_eq!(v.pointer("/params/arguments/include_content"), Some(&Value::Bool(false)));
+        assert_eq!(v.pointer("/params/arguments/include_metadata"), Some(&Value::Bool(false)));
     }
 
     #[test]
