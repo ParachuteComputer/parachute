@@ -226,5 +226,5 @@ lists); the gateway then adds one per event. A mail server reporting its own cou
 | `security.approve` in a record, and "a passcode set here means approving code asks it" | `security.code` and the levels (a device that kept a passcode before keeps `code: passcode`) | now: `approve` is still read as `code` until no record says it (Uni to check Aaron's, then drop the alias) |
 | The passcode under Settings → Approving code | Settings → Security | now |
 | The grace ending when the app leaves the screen | ending when the screen goes off (Aaron, 11-18) | now |
-| `src/shell/appFloor.ts` (#73: a web-side, per-home floor for `security.approve`) | the native levels (device-wide, raise-only, lowered only by a signed approval) | now (its `parachute.app.floor.v2` key is no longer read) |
+| `src/shell/appFloor.ts` (#73: a web-side, per-home floor for `security.approve`, raised by every app record in the home) | the native levels (device-wide, raise-only, lowered only by a signed approval), raised by the app a device opens: a record of an app this device doesn't open raises nothing here | now (its `parachute.app.floor.v2` key is no longer read; #73 was in no release) |
 | Rooms' message notifications as the only thing heard while closed | signals (the message push stays: it opens the room) | nothing removed; `notify` stays the relay's declaration a signal points at |

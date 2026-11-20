@@ -41,6 +41,7 @@ import { findVault, hostOf } from "../vault/store";
 import { covers } from "../vault/parachute";
 import { appletLevel, canWrite, giveBack, heldLevel } from "../vault/reach";
 import { homeVault } from "../shell/frameSource";
+import { onLevels } from "../shell/levels";
 import { askVault } from "../vault/signInFlow";
 import { screenOf } from "../applet/manifest";
 import { createRouter } from "../applet/router";
@@ -237,7 +238,8 @@ export default function AppletScreen() {
   const [signing, setSigning] = useState<string | null>(null);
   const [passcode, setPasscode] = useState("");
   const [needsPasscode, setNeedsPasscode] = useState(false);
-  useEffect(() => { void passcodeHere().then(setNeedsPasscode); }, []);
+  // asked again when the levels change (the open app's record raised them after this screen opened)
+  useEffect(() => { const ask = () => void passcodeHere().then(setNeedsPasscode); ask(); return onLevels(ask); }, []);
   useEffect(() => {
     if (!signedFor || !entry || !rec || loaded.state !== "ok" || !keys) return;
     let on = true;
