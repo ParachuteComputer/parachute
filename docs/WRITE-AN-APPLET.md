@@ -129,7 +129,7 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 | `vault.updateRecord(id, { body, if_updated_at })` | A new body for a record it may `update`. |
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
-| `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above), while they tap inside the applet. Resolves to whether it went. |
+| `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above; an applet at a room with `?room=<id>[&event=<id>]`, which it hears as its launch), while they tap inside the applet. Resolves to whether it went. |
 | `app.links(links, from)`, `app.follow(link, { from, choose })`, `app.address(noteId)` | With `open`: the calls under the kit's note links. Use `Link`, `Linked`, `Note` and `link` (see [Links](#links)) rather than these. |
 | `app.openLink(url)` | With `links`: an `http`, `https` or `mailto` address in the person's browser, while they tap, at most one a second. Resolves to whether it went. |
 | `app.save(name, bytes, type)` | With `save`: a file (an `ArrayBuffer`, 25 MB at most) into the person's Downloads, while they tap. The name is made bare (no folder, no leading dot, 100 characters at most) and the app picks a free one. Resolves `{ saved: name }`. |
@@ -258,7 +258,7 @@ a note found some other way doesn't count, so an applet can't learn which notes 
 
 A long-press (a right-click on a computer) on a note link asks with **Open with…** instead. Note links need `open` in
 `fields.app`; without it they are drawn as text (an address as a web address). The shipped applets link only through
-the kit (`src/kit/links.test.ts` checks it): no `<a>` of their own, no `app.open` or `app.openLink` of their own.
+the kit (`src/kit/links.test.ts` checks it): no `<a>` of their own, no `app.openLink` of their own, and no `app.open` but in a home applet (one that asks for `pins` or `recent`), for the app's own places.
 
 
 ## A worked example
@@ -406,7 +406,14 @@ Then make it the home: write the settings note in the home vault (`Parachute/Set
 ```
 
 The next time the app starts, it opens on Home and shows its card; once the person taps Allow, it opens there by itself.
-They can also long-press it in the launcher and tap **Open on start**.
+They can also long-press it in the list and tap **Open on start**, and pin it first on the bar.
+
+Two home applets ship with the app, in `applets/`: `home` (Parachute Simplified's starter: a line into `Inbox/`, the
+newest notes, the pins) and `today` (for a person with rooms and a journal: what wants you in your rooms, the latest
+from one key, today's journal and a line for it; `--set relay=… --set uni=<hex key>`). `app.open` also takes an applet
+at a room, `/v/<vault>/a/<applet>?room=<id>[&event=<id>]`: the applet hears it as its launch (`onLaunch`), as from a
+notification's tap. The installer fills a quoted `"{{name}}"` in an applet's code from `--set` (`applets/record.ts`), so
+such a value is part of the code the person approves.
 
 The code in `body`, laid out:
 
@@ -582,5 +589,5 @@ empty, and the page says what to write first.
 If the code doesn't compile, the app says so, with the reason, and runs nothing. If it imports something the app doesn't
 provide, or throws while starting, the applet shows one line saying why.
 
-To change the screens around the notes instead (the launcher, a vault, a note), see
+To change the screens around the notes instead (the list, a vault, a note), see
 [CHANGE-YOUR-FRAME.md](CHANGE-YOUR-FRAME.md).
