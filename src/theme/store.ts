@@ -14,7 +14,7 @@ import type { Note } from "@openparachute/surface-client";
 import { plain, stripExt } from "../applet/contract";
 import { clientFor } from "../vault/client";
 import { homeVault } from "../shell/frameSource";
-import { DEFAULT_THEME, recordOf, themeFrom, TOKEN_KEYS, tokensOf, type Theme, type Tokens } from "./theme";
+import { DEFAULT_THEME, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, type Theme, type Tokens } from "./theme";
 
 export const THEME_TAG = "parachute-theme";
 export const THEME_PATH = "Parachute/Theme";
@@ -71,6 +71,7 @@ export function applyToDocument() {
   appliedCss = css;
   const s = document.documentElement.style;
   for (const k of TOKEN_KEYS) s.setProperty(`--${k}`, t[k]);
+  for (const [k, v] of Object.entries(TYPE_SCALE)) s.setProperty(`--fs-${k}`, `calc(var(--size) * ${v})`);
   s.setProperty("color-scheme", t.scheme);
 }
 darkQuery()?.addEventListener?.("change", () => bump());

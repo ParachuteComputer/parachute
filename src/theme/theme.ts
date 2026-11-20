@@ -91,8 +91,17 @@ export function tokensOf(theme: Theme, systemDark: boolean): Tokens {
   return { ...(dark ? theme.dark : theme.colors), ...theme.fonts, ...DENSITY[theme.density], scheme: dark ? "dark" : "light", density: theme.density };
 }
 
-/** The tokens as CSS declarations for `:root` (values are already held to the grammar above). */
-export const cssOf = (t: Tokens): string => `:root{${TOKEN_KEYS.map((k) => `--${k}:${t[k]};`).join("")}color-scheme:${t.scheme};}`;
+/** The type scale: every text size the app and applets use, a step each, as a multiple of the body size (`--size`,
+ *  which density sets). Each is the CSS variable `--fs-<step>`: a page's title, a heading, a row's or a note's lead
+ *  text, the body, a line under a row, and a small capital label. Applets size text only with these
+ *  (src/kit/conformance.ts), so the same thing is the same size in every applet. */
+export const TYPE_SCALE = { title: 2, head: 1.35, lead: 1.12, body: 1, small: 0.875, label: 0.75 } as const;
+export type TypeStep = keyof typeof TYPE_SCALE;
+/** The scale as CSS declarations, each on `--size` so a density (or a theme) moves them all. */
+export const TYPE_SCALE_CSS = (Object.entries(TYPE_SCALE) as [TypeStep, number][]).map(([k, v]) => `--fs-${k}:calc(var(--size) * ${v});`).join("");
+
+/** The tokens as CSS declarations for `:root` (values are already held to the grammar above), and the type scale. */
+export const cssOf = (t: Tokens): string => `:root{${TOKEN_KEYS.map((k) => `--${k}:${t[k]};`).join("")}${TYPE_SCALE_CSS}color-scheme:${t.scheme};}`;
 
 /** The record a person starts from ("Make this mine"): the built-in theme, written out in full so every value is there to change. */
 export const recordOf = (theme: Theme) => ({ colors: { ...theme.colors }, dark: { ...theme.dark }, fonts: { ...theme.fonts }, density: theme.density, scheme: theme.scheme });

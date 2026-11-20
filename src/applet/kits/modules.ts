@@ -5,7 +5,10 @@ import * as ReactDOMClient from "react-dom/client";
 import * as JSXRuntime from "react/jsx-runtime";
 
 /** The parts an applet can import from "parachute", beside the kit's calls (docs/WRITE-AN-APPLET.md). */
-export const PART_NAMES = ["Card", "Days", "Empty", "Field", "Link", "Linked", "List", "Note", "link", "useSaved", "useTheme"] as const;
+export const PART_NAMES = [
+  "Button", "Card", "Days", "Empty", "Field", "Link", "Linked", "List", "Loading", "Note", "Page", "Problem", "Record", "Search", "Write",
+  "link", "toast", "useSaved", "useTheme", "useTranscripts", "voiceNote", "when",
+] as const;
 
 export function setModules(parts: Record<(typeof PART_NAMES)[number], unknown>) {
   (window as unknown as { __ParachuteModules: unknown }).__ParachuteModules = Object.freeze({
