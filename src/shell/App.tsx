@@ -52,6 +52,18 @@ function Taps() {
     return () => { gone = true; off(); };
   }, []);
   useEffect(() => { arrived(location.pathname); }, [location.pathname]);
+  // the bar's counts (services/signals.ts): counted from the start; an applet's are 0 once it is opened, and again as
+  // the person leaves it (what came while it was open was in front of them)
+  useEffect(() => { let off = () => {}; void import("../services/signals").then((s) => { off = s.startSignals(); }); return () => off(); }, []);
+  const inApplet = /^\/v\/([^/]+)\/a\/([^/]+)$/.exec(location.pathname);
+  const appletAt = inApplet ? `${decodeURIComponent(inApplet[1])}\u0000${decodeURIComponent(inApplet[2])}` : null;
+  useEffect(() => {
+    if (!appletAt) return;
+    const [vault, note] = appletAt.split("\u0000");
+    const seen = () => { void import("../services/signals").then((s) => s.opened(vault, note)); };
+    seen();
+    return seen;
+  }, [appletAt]);
   // a vault made on a Parachute since this device signed in: asked when the app opens and each time the launcher
   // shows, at most once a minute per hub (vault/newVaults.ts)
   const opened = useRef(false);
