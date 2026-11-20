@@ -140,3 +140,26 @@ export async function fromAppletMenu(page: Page, choice: "Stop" | "Revoke") {
   await page.locator("header.bar").getByRole("button", { name: "Menu" }).click();
   await page.getByRole("dialog", { name: /menu$/ }).getByRole("button", { name: choice, exact: true }).click();
 }
+
+type Row = { id: string; updatedAt: string; metadata?: Record<string, unknown> };
+async function settingsNotes(): Promise<Row[]> {
+  const rows = await api(hubState(), "GET", "notes?tag=parachute-settings&include_metadata=true");
+  return (Array.isArray(rows) ? rows : rows.notes ?? []) as Row[];
+}
+
+/** The applet alone on the bar, in the settings note the suite may already hold; answers how to put it back. */
+export async function barOf(applet: string): Promise<() => Promise<void>> {
+  const bar = [{ vault: VAULT, applet }];
+  const [n] = await settingsNotes();
+  if (!n) {
+    const made = (await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar } } })) as Row;
+    return async () => { await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {}); };
+  }
+  const before = (await api(hubState(), "GET", `notes/${n.id}`)) as Row;
+  const was = (before.metadata?.parachute ?? {}) as Record<string, unknown>;
+  await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: { ...before.metadata, parachute: { ...was, bar, app: undefined } }, if_updated_at: before.updatedAt });
+  return async () => {
+    const now = (await api(hubState(), "GET", `notes/${n.id}`)) as Row;
+    await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: before.metadata ?? {}, if_updated_at: now.updatedAt }).catch(() => {});
+  };
+}
