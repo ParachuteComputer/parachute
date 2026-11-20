@@ -114,7 +114,7 @@ export function startSignals(): () => void {
   const soon = () => { if (!queued) queued = setTimeout(() => { queued = null; void refreshSignals(); }, 200); };
   for (const rec of listVaults()) if (!appletsNow(rec.key)) void refreshApplets(rec);
   const offs = [subscribeApplets(soon), subscribeVaults(soon), deviceGrants().onChange(soon)];
-  const sight = () => { if (document.visibilityState === "visible") void book.exchange(); else book.hidden(); };
+  const sight = () => { if (document.visibilityState === "visible") { book.shown(); void book.exchange(); } else book.hidden(); };
   document.addEventListener("visibilitychange", sight);
   soon();
   return () => { running = false; offs.forEach((f) => f()); document.removeEventListener("visibilitychange", sight); for (const stop of watches.values()) stop(); watches.clear(); book.stop(); };

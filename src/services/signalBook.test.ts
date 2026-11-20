@@ -133,6 +133,41 @@ describe("the bar's counts", () => {
     expect(gw.counts.get("gid-of-R for-you")?.count).toBe(0);
   });
 
+  it("an applet left on screen in a hidden app isn't looked at: what arrives counts, and a relay's number stays", async () => {
+    let t = Date.parse("2026-11-19T10:00:00Z");
+    const gw = gateway(() => t), b = make(gw, () => t);
+    b.setLit([lit("I", ideas), lit("R", rooms)]);
+    b.setFront("home", "I");
+    b.hidden();
+    t += 600_000;
+    b.notes(lit("I", ideas).key, [{ createdAt: new Date(t - 1_000).toISOString(), createdBy: "friend" }], "me");
+    expect(b.badge("home", "I")).toBe(1);
+    b.setLit([lit("I", ideas), lit("R", rooms)]);
+    expect(b.badge("home", "I")).toBe(1);
+    b.setFront("home", "R");
+    b.setFront("home", "I");
+    gw.set("gid-of-R", "for-you", 1, t / 1000);
+    await b.exchange();
+    expect(gw.counts.get("gid-of-I new")?.count).toBe(1);
+    expect(b.badge("home", "R")).toBe(1);
+    // back in sight on Ideas: seen
+    b.shown();
+    expect(b.badge("home", "I")).toBe(0);
+  });
+
+  it("an open the gateway already knows sends nothing", async () => {
+    const t = Date.parse("2026-11-19T10:00:00Z");
+    const gw = gateway(() => t), b = make(gw, () => t);
+    b.setLit([lit("I", ideas)]);
+    b.setFront("home", "I");
+    await b.exchange();
+    expect(gw.sent.flat(), "the open itself is told once").toEqual([{ subject: "gid-of-I", signal: "new", count: 0 }]);
+    b.setLit([lit("I", ideas)]);
+    b.setLit([lit("I", ideas)]);
+    await b.exchange();
+    expect(gw.sent.slice(1).flat(), "the applets read again while it stays open: nothing more").toEqual([]);
+  });
+
   it("a number that couldn't be sent is kept and sent later; an older answer doesn't undo a newer number here", async () => {
     const t = Date.parse("2026-11-19T10:00:00Z");
     const gw = gateway(() => t), b = make(gw, () => t);

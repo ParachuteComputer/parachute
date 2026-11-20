@@ -33,6 +33,11 @@ export function countNotes(notes: Iterable<NoteSeen>, seen: string | undefined, 
 export class SignalBook {
   private lit: BookLit[] = [];
   private front: { vaultKey: string; noteId: string } | null = null;
+  // the app is in sight: what is on screen counts as seen only then (a minimized window, a phone in a pocket: not)
+  private visible = true;
+  // what each gateway last said, per signal here: an open is told when it changes something there too
+  private heard = new Map<string, number>();
+  private backoffMs: number;
   private watched = new Map<string, { notes: NoteSeen[]; me: string | null }>();
   private toTell = new Map<string, Map<string, SetItem>>();
   private telling: ReturnType<typeof setTimeout> | null = null;
@@ -45,13 +50,14 @@ export class SignalBook {
     let x: Partial<Stored> = {};
     try { x = JSON.parse(storage?.getItem(STORE) ?? "{}") as Partial<Stored>; } catch { /* a fresh store */ }
     this.st = { seen: x.seen && typeof x.seen === "object" ? x.seen : {}, counts: x.counts && typeof x.counts === "object" ? x.counts : {} };
+    this.backoffMs = retryMs;
   }
 
   subscribe(f: () => void): () => void { this.listeners.add(f); return () => { this.listeners.delete(f); }; }
   private changed() { this.version++; this.listeners.forEach((f) => f()); }
   private save() { try { this.storage?.setItem(STORE, JSON.stringify(this.st)); } catch { /* this session only */ } }
   private iso = () => new Date(this.now()).toISOString();
-  private atFront = (l: BookLit) => !!this.front && this.front.vaultKey === l.vaultKey && this.front.noteId === l.noteId;
+  private atFront = (l: BookLit) => this.visible && !!this.front && this.front.vaultKey === l.vaultKey && this.front.noteId === l.noteId;
 
   /** The allowed applets' signals now. */
   setLit(lit: BookLit[]) {
@@ -59,7 +65,7 @@ export class SignalBook {
     this.lit = lit;
     for (const k of [...this.watched.keys()]) if (!lit.some((l) => l.key === k)) this.watched.delete(k);
     // the applet in front may have been lit only now (a cold start from a notification's tap)
-    if (this.front) this.seeAll(this.front.vaultKey, this.front.noteId);
+    if (this.front && this.visible) this.seeAll(this.front.vaultKey, this.front.noteId);
     this.changed();
   }
   litNow(): readonly BookLit[] { return this.lit; }
@@ -71,12 +77,14 @@ export class SignalBook {
 
   /** The applet now on screen (null: none). The one leaving was seen until now; the one arriving is seen now. */
   setFront(vaultKey: string | null, noteId: string | null) {
-    if (this.front) this.seeAll(this.front.vaultKey, this.front.noteId);
+    if (this.front && this.visible) this.seeAll(this.front.vaultKey, this.front.noteId);
     this.front = vaultKey && noteId ? { vaultKey, noteId } : null;
-    if (this.front) this.seeAll(this.front.vaultKey, this.front.noteId);
+    if (this.front && this.visible) this.seeAll(this.front.vaultKey, this.front.noteId);
   }
-  /** The app went out of sight: what was in front was seen until now. */
-  hidden() { if (this.front) this.seeAll(this.front.vaultKey, this.front.noteId); }
+  /** The app went out of sight: what was in front was seen until now, and nothing after. */
+  hidden() { if (this.front && this.visible) this.seeAll(this.front.vaultKey, this.front.noteId); this.visible = false; }
+  /** Back in sight: the applet in front is seen again. */
+  shown() { this.visible = true; if (this.front) this.seeAll(this.front.vaultKey, this.front.noteId); }
 
   private seeAll(vaultKey: string, noteId: string) {
     for (const l of this.lit.filter((x) => x.vaultKey === vaultKey && x.noteId === noteId)) {
@@ -112,7 +120,7 @@ export class SignalBook {
       this.st.counts[l.key] = n;
       this.save();
       this.changed();
-    } else if (how !== "opened") return; // an open is told even when this device had 0: the gateway may not
+    } else if (how !== "opened" || (this.heard.get(l.key) ?? 0) === 0) return; // an open is told when the gateway may hold more
     // a device that never held a number for it has nothing to clear elsewhere
     if (!l.signal.via || how === "heard" || (before === undefined && n === 0 && how === "moved")) return;
     const m = this.toTell.get(l.signal.via) ?? new Map<string, SetItem>();
@@ -129,19 +137,26 @@ export class SignalBook {
       const sent = this.toTell.get(gateway) ?? new Map<string, SetItem>();
       this.toTell.delete(gateway);
       let got: { counts?: GatewayCount[] };
-      try { got = await this.call(gateway, [...sent.values()]); } catch {
-        // kept for the next time (a number moved meanwhile replaces it), and tried again later
+      try { got = await this.call(gateway, [...sent.values()]); } catch (e) {
+        // kept for the next time (a number moved meanwhile replaces it); tried again later, less often each time, only
+        // when the gateway didn't answer (a refusal won't change by asking again: the next change or start asks)
         const m = this.toTell.get(gateway) ?? new Map<string, SetItem>();
         for (const [k, c] of sent) if (!m.has(k)) m.set(k, c);
         this.toTell.set(gateway, m);
-        if (!this.retrying) this.retrying = setTimeout(() => { this.retrying = null; void this.exchange(); }, this.retryMs);
+        if (/didn't answer/.test(String(e)) && !this.retrying) {
+          this.retrying = setTimeout(() => { this.retrying = null; void this.exchange(); }, this.backoffMs);
+          this.backoffMs = Math.min(this.backoffMs * 2, 30 * 60_000);
+        }
         continue;
       }
+      this.backoffMs = this.retryMs;
+      for (const [k, c] of sent) this.heard.set(k, c.count);
       for (const c of got.counts ?? []) {
         // a gateway's clock can't put "seen" in the future
         const at = Math.min(c.at * 1000, this.now());
         for (const l of this.lit.filter((x) => x.gid === c.subject && x.signal.id === c.signal && x.signal.via === gateway)) {
           if (this.toTell.get(gateway)?.has(l.key)) continue; // moved here since this answer left: ours is newer
+          this.heard.set(l.key, c.count);
           if (this.atFront(l) && l.signal.from.kind !== "feed") { if (c.count !== 0) this.set(l, 0, "opened"); continue; }
           if (l.signal.from.kind === "vault") {
             // another device opened it since: what it saw counts as seen here too

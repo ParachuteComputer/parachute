@@ -211,7 +211,8 @@ class PushService : org.unifiedpush.android.connector.PushService() {
     if (count == 0) { MessageNotices.clearSignal(this, tag); return }
     if (!MessageNotices.mayShow(this)) return
     val name = entry.optString("name")
-    MessageNotices.signal(this, tag, "$name · $count new", entry.optString("label"), count, MessageNotices.link(entry.optString("subject"), null, null))
+    // a relay's count rises with a message whose own notification already sounded: this one is quiet
+    MessageNotices.signal(this, tag, "$name · $count new", entry.optString("label"), count, MessageNotices.link(entry.optString("subject"), null, null), entry.has("relay"))
   }
 
   /** Not seen before (the last 200 event ids pushed are kept). */

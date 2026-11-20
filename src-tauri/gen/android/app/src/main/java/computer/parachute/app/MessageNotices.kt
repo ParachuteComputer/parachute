@@ -59,7 +59,7 @@ object MessageNotices {
 
   /** An applet's signal (PushService.onSignal): one notification per signal, its count as the number (the launcher's
    *  badge), replaced as the count changes. No words from the applet's data: its name, the count, the signal's name. */
-  fun signal(ctx: Context, tag: String, title: String, text: String, count: Int, link: String) {
+  fun signal(ctx: Context, tag: String, title: String, text: String, count: Int, link: String, quiet: Boolean) {
     channel(ctx)
     // it sounds only when the count rises (something new); a count going down (read elsewhere) changes it quietly
     val shown = ctx.getSystemService(NotificationManager::class.java).activeNotifications.firstOrNull { it.id == SIGNAL_ID && it.tag == tag }?.notification?.number ?: 0
@@ -69,7 +69,7 @@ object MessageNotices {
         .setContentTitle(title)
         .setContentText(text)
         .setNumber(count)
-        .setSilent(count <= shown)
+        .setSilent(quiet || count <= shown)
         .setCategory(NotificationCompat.CATEGORY_STATUS)
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
