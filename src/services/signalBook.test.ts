@@ -215,3 +215,24 @@ describe("the bar's counts", () => {
     expect(slow.badge("home", "M")).toBe(2);
   });
 });
+
+describe("an applet's own number said before its signal is listed here (found on the emulator walk, T-476 dogfood)", () => {
+  it("is kept, and counts once the signal is listed: Mail says 5 unread on its first draw, the list comes a moment later", () => {
+    const t = 1_000;
+    const b = make(gateway(() => t), () => t);
+    b.setLit([]);
+    // Mail, allowed a moment ago, says its number before the allowed applets were read again
+    b.own("home", "M", "unread", 5);
+    expect(b.badge("home", "M")).toBe(0);
+    b.setLit([lit("M", mail)]);
+    expect(b.badge("home", "M")).toBe(5);
+  });
+  it("a number said for a signal that never gets listed (not allowed) counts nowhere", () => {
+    const t = 1_000;
+    const b = make(gateway(() => t), () => t);
+    b.own("home", "X", "unread", 3);
+    b.setLit([lit("M", mail)]);
+    expect(b.badge("home", "X")).toBe(0);
+    expect(b.badge("home", "M")).toBe(0);
+  });
+});

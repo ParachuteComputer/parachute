@@ -46,6 +46,9 @@ export class SignalBook {
   private telling: ReturnType<typeof setTimeout> | null = null;
   private retrying: ReturnType<typeof setTimeout> | null = null;
   private st: Stored;
+  // an applet's own number said before its signal was listed here (it starts the moment it is allowed; the list follows
+  // a moment later): kept until it is listed, then counted
+  private early = new Map<string, number>();
   private listeners = new Set<() => void>();
   version = 0;
 
@@ -66,6 +69,7 @@ export class SignalBook {
   setLit(lit: BookLit[]) {
     for (const l of lit) if (l.signal.from.kind === "vault" && !this.st.seen[l.key]) { this.st.seen[l.key] = this.iso(); this.save(); }
     this.lit = lit;
+    for (const l of lit) { const n = this.early.get(l.key); if (n !== undefined) { this.early.delete(l.key); if (l.signal.from.kind === "feed") this.set(l, n, "opened"); } }
     for (const k of [...this.watched.keys()]) if (!lit.some((l) => l.key === k)) this.watched.delete(k);
     // the applet in front may have been lit only now (a cold start from a notification's tap)
     if (this.front && this.visible) this.seeAll(this.front.vaultKey, this.front.noteId);
@@ -113,7 +117,12 @@ export class SignalBook {
   /** A running applet's own number for one of its signals. False for one it doesn't declare. */
   own(vaultKey: string, noteId: string, signal: string, count: number): boolean {
     const l = this.lit.find((x) => x.vaultKey === vaultKey && x.noteId === noteId && x.signal.id === signal);
-    if (!l) return false;
+    if (!l) {
+      // none of its signals listed yet (allowed a moment ago): kept for when they are; a few at most
+      if (this.lit.some((x) => x.vaultKey === vaultKey && x.noteId === noteId) || this.early.size >= 50) return false;
+      this.early.set(keyOf(vaultKey, noteId, signal), count);
+      return true;
+    }
     this.set(l, count, "opened");
     return true;
   }
