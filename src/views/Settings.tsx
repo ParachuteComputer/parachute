@@ -31,6 +31,7 @@ import { dismissVault, newVaultsOn, newVaultsRev, startAddVault, subscribeNewVau
 import AppChoice from "./AppChoice";
 import { appletsNeedingWrite, forgetOwnWrite, giveBack, heldLevel } from "../vault/reach";
 import { anchorNow, forgetOwnKey, ownKey } from "../applet/approvalStore";
+import { useKey } from "../key/key";
 import { nativeNow } from "../services/native";
 import { DEFAULTS } from "../shell/levelRules";
 import { onLevels } from "../shell/levels";
@@ -94,21 +95,30 @@ function useShown(vaults: VaultRecord[]) {
   const fs = useFrameSource();
   const home = homeVault(vaults);
   const [key, setKey] = useState(false);
-  const [levelsChanged, setLevelsChanged] = useState(false);
-  // the applets as their section reads them (AppletSettings), across every vault here
-  useSyncExternalStore(subscribeApplets, () => vaults.map((v) => appletsNow(v.key)?.state ?? "").join());
+  const [securitySet, setSecuritySet] = useState(false);
+  // the applets as their section reads them (AppletSettings), across every vault here, read again when it reads them
+  useSyncExternalStore(subscribeApplets, () => vaults.map((v) => { const e = appletsNow(v.key); return e?.state === "ok" ? e.at : e?.state ?? ""; }).join());
   const applets = vaults.flatMap((v) => { const e = appletsNow(v.key); return e?.state === "ok" ? e.found.entries : []; });
+  // the key, again when Settings → Your key adds or removes it (on a device; a test build's key is there from the start)
+  const npub = useKey()?.npub;
   useEffect(() => {
     let on = true;
-    const levels = () => void nativeNow().then((n) => n?.levelsStatus()).then((s) => { if (on && s) setLevelsChanged((Object.keys(DEFAULTS) as (keyof typeof DEFAULTS)[]).some((k) => s.levels[k] !== DEFAULTS[k])); }, () => undefined);
     forgetOwnKey();
-    void ownKey().then((k) => { if (on) setKey(!!k); if (k) levels(); });
+    void ownKey().then((k) => { if (on) setKey(!!k); });
+    return () => { on = false; };
+  }, [npub]);
+  useEffect(() => {
+    let on = true;
+    const levels = () => void nativeNow().then((n) => n?.levelsStatus()).then((s) => {
+      if (on && s) setSecuritySet(s.passcode || (Object.keys(DEFAULTS) as (keyof typeof DEFAULTS)[]).some((k) => s.levels[k] !== DEFAULTS[k]));
+    }, () => undefined);
+    levels();
     const off = onLevels(levels);
     return () => { on = false; off(); };
   }, []);
   // the home's frame record, read when Settings shows (the frame area reads it too, but isn't shown here)
   useEffect(() => { void readFrameRecord(); }, [home?.key]);
-  const shown = settingsShown({ key, home: !!home && isMine(home) === "mine", applets, levelsChanged, anchor: !!anchorNow(),
+  const shown = settingsShown({ key, home: !!home && isMine(home) === "mine", applets, securitySet, anchor: !!anchorNow(),
     frame: ownFrame(fs.read, fs.choice.run), ownVaults: vaults.filter((v) => isMine(v) === "mine").length });
   return { ...shown, cards: key && applets.some(usesCards) };
 }

@@ -10,8 +10,9 @@ export type SettingsFacts = {
   home: boolean;
   /** The applets read in the vaults on this device, each with the services it declares. */
   applets: readonly { services: readonly Service[] }[];
-  /** This device's levels or idle lock differ from the defaults (a record raised them, or the person changed them). */
-  levelsChanged: boolean;
+  /** Something of Security's is set on this device: the levels or the idle lock off the defaults (a record raised them,
+   *  or the person changed them), or a passcode kept here. It needs no key. */
+  securitySet: boolean;
   /** A root key's public half is kept here for the home (approvalStore `anchorNow`). */
   anchor: boolean;
   /** The home vault holds a frame of the person's, or this device runs the copy it kept of one (`ownFrame`). */
@@ -28,8 +29,9 @@ export function settingsShown(f: SettingsFacts): Shown {
   const applets = f.applets.length > 0;
   return {
     // what Parachute asks before it acts: with the key here every Allow is a signed approval of the applet's code, and
-    // approval cards and joins are applets' too. Kept while the levels are not the defaults, so they can be undone.
-    security: f.key && (applets || f.levelsChanged),
+    // approval cards and joins are applets' too. Shown, key or not, while something of it is set here: an idle lock
+    // locks, a passcode is asked, and this is where they are seen and changed.
+    security: (f.key && applets) || f.securitySet,
     // Approving code and its Root key: the key signs each Allow and keeps it in the home vault. Kept while a root key is
     // held here, so it can be removed.
     approving: f.key && f.home && (applets || f.anchor),

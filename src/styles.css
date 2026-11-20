@@ -207,11 +207,11 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .lately-label { margin: 18px 0 6px; font: 600 11px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .parts-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
 .part-chip { border: 1px solid var(--line); border-radius: 999px; background: var(--surface); padding: 4px 12px; font: 16px var(--serif); color: var(--text); cursor: pointer; }
-/* a vault made there since this device signed in (vault/newVaults.ts): one quiet line, a tap adds it (Notes, Settings) */
 /* a vault's line: its name and whose on one row, its buttons wrap beneath on a narrow phone, never past the card */
 .settings-parachute .line { flex-wrap: wrap; justify-content: flex-start; }
 .settings-parachute .line > span { flex: 1 1 12em; min-width: 0; }
 .settings-parachute .line > .quiet-button { white-space: nowrap; }
+/* a vault made there since this device signed in (vault/newVaults.ts): one quiet line, a tap adds it (Notes, Settings) */
 .parachute-new { margin: 8px 0 4px; }
 .parachute-new li { display: flex; align-items: baseline; gap: 10px; padding: 2px 0; }
 .parachute-new-add { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: italic 17px/1.4 var(--serif); color: var(--muted); }

@@ -46,7 +46,6 @@ export default function FrameSettings() {
         </fieldset>
       )}
       {mine.length === 1 && home && <p className="quiet">Home vault: <strong>{home.vault}</strong>.</p>}
-      {!home && vaults.length > 0 && <p className="quiet">No home vault: none of your vaults is marked as yours.</p>}
       <p role="status" className="frame-status">{status}</p>
       {fs.choice.run === "built-in" && fs.choice.why === "failed" && fs.failedWhy && <p className="quiet">It said: <q data-untrusted="true">{fs.failedWhy}</q></p>}
       {home && fs.read?.state === "none" && (
