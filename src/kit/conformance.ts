@@ -7,6 +7,9 @@ export type Rule = { id: string; what: string; use: string; test: RegExp };
 
 const NAMED_COLOR = "white|black|red|green|blue|gray|grey|yellow|orange|purple|pink|brown|silver|navy|teal|maroon|olive|lime|aqua|fuchsia|gold|beige|ivory|tan|crimson|indigo|violet";
 const SIZED = String.raw`[^;\x60"'}]`;
+/** The properties a colour is given in: CSS, and a style object's names for them. */
+const COLOR_PROPS = "color|background(?:-color)?|border(?:-[a-z]+)*|outline(?:-color)?|box-shadow|text-shadow|fill|stroke|caret-color|accent-color|text-decoration(?:-color)?|column-rule"
+  + "|backgroundColor|borderColor|border(?:Top|Right|Bottom|Left)(?:Color)?|outlineColor|boxShadow|textShadow|caretColor|accentColor|textDecorationColor";
 
 export const RULES: readonly Rule[] = [
   // dates and times: said one way, in the person's language
@@ -20,8 +23,10 @@ export const RULES: readonly Rule[] = [
   // the look: the theme's tokens and the type scale, never a value of its own
   { id: "colors", what: "a colour of its own", use: "the theme's colours: var(--bg), var(--surface), var(--text), var(--muted), var(--line), var(--accent), var(--danger)",
     test: new RegExp([
-      // a hex or a named colour anywhere in a declaration's value (border: 1px solid #ccc), or a colour's function
-      String.raw`\b[a-zA-Z-]+\s*:[^;{}\n]*?(?:#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?![-\w])|["'\s:](?:${NAMED_COLOR})\b(?![-\w]))`,
+      // a hex or a named colour in the value of a property that takes one (border: 1px solid #ccc), in CSS or a style
+      // object; an SVG's fill or stroke; or a colour's function
+      String.raw`\b(?:${COLOR_PROPS})\s*:[^;{}\n]*?(?:#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?![-\w])|["'\s:](?:${NAMED_COLOR})\b(?![-\w]))`,
+      String.raw`\b(?:fill|stroke)\s*=\s*["'{]\s*["']?(?:#|(?:${NAMED_COLOR})\b)`,
       String.raw`\b(?:rgba?|hsla?|oklch|oklab|hwb|lab|lch)\s*\(`,
     ].join("|"), "i") },
   { id: "type", what: "a text size of its own", use: "the type scale: var(--fs-title), var(--fs-head), var(--fs-lead), var(--fs-body), var(--fs-small), var(--fs-label)",
