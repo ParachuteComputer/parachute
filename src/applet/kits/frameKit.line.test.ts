@@ -14,7 +14,7 @@ import { createStorageModule } from "../modules/storage";
 
 type Msg = { uni: 1; id: string; ns: string; method: string; params: Record<string, unknown> };
 type Svc = { card(s: string, e: unknown): Promise<unknown>; answer(s: string, e: unknown, d: string, r: string[]): Promise<unknown>; trust(s: string, e: unknown): Promise<unknown>; media(s: string, h: string, x: string): Promise<unknown> };
-type Kit = { services: Svc; app: { follow(l: string): Promise<boolean> }; storage: { set(k: string, v: unknown): Promise<unknown> } };
+type Kit = { services: Svc; app: { follow(l: string): Promise<boolean> }; storage: { set(k: string, v: unknown): Promise<unknown>; get(k: string): Promise<unknown> }; saved: { set(k: string, v: unknown): void; flush(): Promise<unknown> } };
 
 function windowWithKit(shell: { postMessage(m: never): void }) {
   const dom = new JSDOM("<!doctype html><body></body>", { runScripts: "outside-only", pretendToBeVisual: true });
@@ -23,15 +23,16 @@ function windowWithKit(shell: { postMessage(m: never): void }) {
   Object.assign(w, { TextEncoder, TextDecoder });
   w.eval(FRAME_KIT);
   const deliver = (data: unknown) => { const ev = new w.MessageEvent("message", { data }); Object.defineProperty(ev, "source", { value: shell }); w.dispatchEvent(ev); };
-  return { kit: (w as unknown as { parachute: Kit }).parachute, deliver };
+  return { kit: (w as unknown as { parachute: Kit }).parachute, deliver, w };
 }
-/** A shell that answers nothing until told. */
-function frame() {
+/** A shell that answers nothing until told. `late`: the test sends `ready` itself. */
+function frame(late = false) {
   const sent: Msg[] = [];
   const shell = { postMessage: (m: Msg) => { sent.push(m); } };
-  const { kit, deliver } = windowWithKit(shell as never);
-  deliver({ uni: 1, event: "ready", data: { contract: 1, saved: {} } });
-  return { kit, sent: () => sent.filter((m) => m.uni === 1 && m.ns), deliver, tick: (ms = 0) => new Promise((r) => setTimeout(r, ms)) };
+  const { kit, deliver, w } = windowWithKit(shell as never);
+  const start = (data: Record<string, unknown> = {}) => deliver({ uni: 1, event: "ready", data: { contract: 1, saved: {}, ...data } });
+  if (!late) start();
+  return { kit, w, start, sent: () => sent.filter((m) => m.uni === 1 && m.ns), deliver, tick: (ms = 0) => new Promise((r) => setTimeout(r, ms)) };
 }
 const CARD = { id: "e".repeat(64), pubkey: "a".repeat(64), kind: 9, created_at: 1, tags: [], content: "", sig: "s".repeat(128) };
 const picture = (f: ReturnType<typeof frame>, i: number) => void f.kit.services.media("rooms", String(i).padStart(64, "0"), "png").catch(() => {});
@@ -93,5 +94,58 @@ describe("writes land in the order they were asked", () => {
     await Promise.all([win.kit.storage.set("last", "first"), win.kit.storage.set("last", "second")]);
     expect(written).toEqual(["first", "second"]);
     expect(kept.last).toBe("second");
+  });
+});
+
+describe("what must land in order, and what must not wait", () => {
+  const busy = { code: "rate_limited", message: "rate_limited" };
+  it("the frame's height: one refused for being busy is never sent again after a newer one", async () => {
+    const f = frame(true);
+    let height = 116;
+    Object.defineProperty(f.w.document.body, "getBoundingClientRect", { value: () => ({ height }) });
+    const layouts = () => f.sent().filter((m) => m.method === "layout");
+    f.start({ page: { sized: true } });
+    await f.tick(60);
+    expect(layouts().length).toBe(1);
+    const first = layouts()[0].params.height as number;
+    // the shell is busy: it goes back in line; meanwhile the page grows
+    f.deliver({ uni: 1, id: layouts()[0].id, error: busy });
+    height = 216;
+    f.w.dispatchEvent(new f.w.Event("load"));
+    // after the kit's short wait the refused one goes again; the shell takes it, and then the newer one
+    await f.tick(400);
+    expect(layouts().length).toBe(2);
+    f.deliver({ uni: 1, id: layouts()[1].id, result: null });
+    await f.tick(60);
+    // the old height went again (it was asked first), and the newer one after it: the last word is the newer
+    expect(layouts().map((m) => m.params.height)).toEqual([first, first, first + 100]);
+  });
+  it("a read of what it keeps waits for the write asked before it", async () => {
+    const f = frame();
+    void f.kit.storage.set("last", "new").catch(() => {});
+    void f.kit.storage.get("last").catch(() => {});
+    await f.tick();
+    expect(f.sent().map((m) => m.method)).toEqual(["set"]);
+    f.deliver({ uni: 1, id: f.sent()[0].id, result: null });
+    await f.tick();
+    expect(f.sent().map((m) => m.method)).toEqual(["set", "get"]);
+  });
+  it("the last save as the frame goes is sent at once, not behind a save still out", async () => {
+    const f = frame();
+    f.kit.saved.set("draft", "half");
+    void f.kit.saved.flush();
+    await f.tick();
+    f.kit.saved.set("draft", "half a thought");
+    f.w.dispatchEvent(new f.w.Event("pagehide"));
+    const puts = f.sent().filter((m) => m.method === "put");
+    expect(puts.map((m) => JSON.parse(new TextDecoder().decode(m.params.bytes as ArrayBuffer)).draft)).toEqual(["half", "half a thought"]);
+  });
+  it("posts keep no lane: one waiting on a slow relay doesn't hold the next (an approval's tap would wear off)", async () => {
+    const f = frame();
+    const relay = (f.kit.services as unknown as { relay(id: string): { publish(e: unknown): Promise<unknown> } }).relay("rooms");
+    void relay.publish({ kind: 9, content: "one", tags: [] }).catch(() => {});
+    void relay.publish({ kind: 9, content: "/approve", tags: [] }).catch(() => {});
+    await f.tick();
+    expect(f.sent().filter((m) => m.method === "publish").length).toBe(2);
   });
 });
