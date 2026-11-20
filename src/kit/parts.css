@@ -64,6 +64,7 @@ div.pa-row { cursor: default; }
 /* List's newer parts: a long list draws only the rows near the screen (content-visibility), a count after the title,
    a row in bold for what is new, the row open now, a line in the accent under it, and More under the last row */
 .pa-list li { content-visibility: auto; contain-intrinsic-size: auto 3.6em; }
+.pa-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pa-strong .pa-row-title { font-weight: 700; }
 .pa-row[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
 .pa-badge { margin-left: 8px; padding: 0 7px; border: 1.5px solid var(--text); border-radius: 999px; font: 600 var(--fs-label) var(--sans); vertical-align: .15em; }
@@ -75,7 +76,8 @@ div.pa-row { cursor: default; }
 /* The screen parts (screen.tsx). A page: one width, one margin, its title in the scale */
 :root:has(.pa-page) body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-body)/var(--leading) var(--sans); }
 .pa-page { box-sizing: border-box; max-width: 760px; margin: 0 auto; padding: calc(var(--pad) * 1.2) var(--pad) calc(var(--pad) * 4); color: var(--text); }
-.pa-page button, .pa-page input, .pa-page textarea { font: inherit; color: inherit; }
+/* an applet's own controls in the page's type (no weight at all: every part's own rule still wins) */
+:where(.pa-page) :where(button, input, textarea) { font: inherit; color: inherit; }
 .pa-page-head { display: flex; align-items: end; justify-content: space-between; gap: var(--gap); margin: 0 0 var(--gap); }
 .pa-page-aside { display: flex; gap: 8px; flex-wrap: wrap; justify-content: end; }
 .pa-title { margin: 0; font: 400 var(--fs-title)/1.1 var(--serif); letter-spacing: -.01em; }

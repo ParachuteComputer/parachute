@@ -10,6 +10,10 @@ describe("when", () => {
     const d = at(17);
     for (const t of [d, d.toISOString(), d.getTime(), Math.floor(d.getTime() / 1000)]) expect(when.parse(t)?.getTime()).toBe(Math.floor(d.getTime() / 1000) * 1000);
   });
+  it("reads a date alone as that day here, not as midnight in London", () => {
+    expect(when.parse("2026-11-17")?.getDate()).toBe(17);
+    expect(when.day("2026-11-17", now)).toMatch(/Tuesday/);
+  });
   it("gives nothing for what isn't a moment", () => {
     for (const t of [null, undefined, "", "soon", NaN, new Date("x")]) { expect(when.parse(t)).toBeNull(); expect(when.short(t)).toBe(""); expect(when.stamp(t)).toBe(""); }
   });

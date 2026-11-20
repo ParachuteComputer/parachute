@@ -40,8 +40,20 @@ export function Page({ title, kicker, aside, onRefresh, className, children }: {
   const on = !!onRefresh;
   useEffect(() => {
     if (!on) return;
-    let start: number | null = null, dist = 0;
-    const down = (e: TouchEvent) => { start = window.scrollY <= 0 && e.touches.length === 1 ? e.touches[0].clientY : null; dist = 0; };
+    let start: number | null = null, dist = 0, running = false;
+    // a frame drawn at its content's height (a page with embeds) never scrolls itself: the page around it does
+    const sized = () => getComputedStyle(document.documentElement).overflowY === "hidden" || getComputedStyle(document.body).overflowY === "hidden";
+    // a touch for something else: in a box being written in, or in a part scrolled away from its own top
+    const elsewhere = (t: EventTarget | null) => {
+      for (let el = t instanceof Element ? t : null; el && el !== document.body; el = el.parentElement) {
+        if (el.matches("textarea, input, select, [contenteditable]") || el.scrollTop > 0) return true;
+      }
+      return false;
+    };
+    const down = (e: TouchEvent) => {
+      start = !running && window.scrollY <= 0 && e.touches.length === 1 && !sized() && !elsewhere(e.target) ? e.touches[0].clientY : null;
+      dist = 0;
+    };
     const move = (e: TouchEvent) => {
       if (start === null) return;
       if (window.scrollY > 0) { start = null; setPull(0); return; }
@@ -52,9 +64,10 @@ export function Page({ title, kicker, aside, onRefresh, className, children }: {
       if (start === null) return;
       start = null;
       setPull(0);
-      if (dist < PULL) return;
+      if (dist < PULL || running) return;
+      running = true;
       setBusy(true);
-      void Promise.resolve().then(() => refresh.current?.()).catch(() => {}).finally(() => setBusy(false));
+      void Promise.resolve().then(() => refresh.current?.()).catch(() => {}).finally(() => { running = false; setBusy(false); });
     };
     addEventListener("touchstart", down, { passive: true });
     addEventListener("touchmove", move, { passive: true });
@@ -117,17 +130,18 @@ export function Search({ label, placeholder, value, onChange, onSearch, live }: 
   const text = value ?? own;
   const go = useRef(onSearch);
   go.current = onSearch;
-  const last = useRef<string | null>(null);
-  const search = (t: string) => { const term = t.trim(); if (term === last.current) return; last.current = term; go.current(term); };
+  // what was last searched: a pause in typing searches only for something new (Enter always searches)
+  const last = useRef("");
+  const search = (t: string) => { last.current = t.trim(); go.current(last.current); };
   useEffect(() => {
     if (live === undefined) return;
-    const t = setTimeout(() => search(text), Math.max(0, live));
+    const t = setTimeout(() => { if (text.trim() !== last.current) search(text); }, Math.max(0, live));
     return () => clearTimeout(t);
   }, [text, live]); // eslint-disable-line react-hooks/exhaustive-deps
-  const set = (v: string) => { if (value === undefined) setOwn(v); onChange?.(v); if (!v.trim() && live === undefined) search(""); };
+  const set = (v: string) => { if (value === undefined) setOwn(v); onChange?.(v); if (!v.trim() && live === undefined && last.current) search(""); };
   return <input className="pa-search" type="search" aria-label={label} placeholder={placeholder ?? label} value={text} enterKeyHint="search"
     onChange={(e) => set(e.target.value)}
-    onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); search(text); } }} />;
+    onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); search(text); } }} />;
 }
 
 // ── Write ──
@@ -180,7 +194,7 @@ export function Record({ onRecorded, children, max_s, disabled, kind = "plain", 
     try { r = await v.record(max_s ? { max_s } : undefined); } catch (e) { toast(`Not recorded: ${said(e)}`, { error: true }); return; }
     if (!r) return;
     setBusy(true);
-    try { await onRecorded(r); } finally { setBusy(false); }
+    try { await onRecorded(r); } catch (e) { toast(`Not saved: ${said(e)}`, { error: true }); } finally { setBusy(false); }
   };
   return <Button kind={kind} small={small} className="pa-record" busy={busy} disabled={disabled} aria-label={label ?? "Record"} onClick={() => void tap()}>{children ?? "Record"}</Button>;
 }
@@ -227,20 +241,22 @@ export function useTranscripts(bodies: readonly (string | null | undefined)[], r
 // ── toast ──
 
 let host: HTMLElement | null = null;
-/** A short word after an action, at the foot of the screen, gone by itself (an error stays longer, and says so to a
- *  screen reader at once). One at a time: a new one takes the place of the last. */
+/** A short word after an action, at the foot of the screen, gone by itself (an error stays longer, in the danger
+ *  colour). A screen reader says it. One at a time: a new one takes the place of the last. */
 export function toast(text: string, { error = false }: { error?: boolean } = {}) {
   if (typeof document === "undefined") return;
-  if (!host || !host.isConnected) {
+  const fresh = !host || !host.isConnected;
+  if (fresh) {
     host = document.createElement("div");
     host.className = "pa-toasts";
-    host.setAttribute("aria-live", "polite");
+    host.setAttribute("role", "status");
     document.body.appendChild(host);
   }
   const p = document.createElement("p");
   p.className = error ? "pa-toast pa-toast-error" : "pa-toast";
-  if (error) p.setAttribute("role", "alert");
   p.textContent = String(text).slice(0, 300);
-  host.replaceChildren(p);
-  setTimeout(() => p.remove(), error ? 7000 : 3500);
+  const into = host!;
+  // a live region a screen reader has only just met says nothing: the words go in a moment after it is there
+  const show = () => { into.replaceChildren(p); setTimeout(() => p.remove(), error ? 7000 : 3500); };
+  if (fresh) setTimeout(show, 50); else show();
 }

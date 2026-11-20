@@ -44,15 +44,37 @@ const PLANTED: Record<string, string> = {
   status: `<span role="status">{note}</span>`,
   forms: `<textarea value={text} onChange={(e) => setText(e.target.value)} />`,
   search: `<Thing type="search" />`,
-  buttons: `.send { border-radius: 999px; }`,
+  buttons: `<button className="send" onClick={go}>Send</button>`,
   voice: `const r = await voice.record();`,
   transcripts: `const PENDING = "_Transcript pending._";`,
   links: `<a href={url}>{name}</a>`,
-  opening: `void app.open(href);`,
+  opening: `void app.openLink(url);`,
   storage: `localStorage.setItem("draft", text);`,
 };
+// More each rule must catch: what slipped past the first version of the check (review of #68).
+const SLIPPED: [string, string][] = [
+  ["lists", `const accept = "audio/*,image/*";\n<ul className="rows">{rows}</ul>\nconst end = "*/";`],
+  ["lists", `const s = "a // b"; const x = <ol>{items}</ol>;`],
+  ["colors", `.x { color: white; }`],
+  ["colors", `style={{ background: "#fff" }}`],
+  ["buttons", `.pill { border-radius: 999px; }`],
+  ["loading", `<p>Loading...</p>`],
+  ["problems", `<p className="quiet err">{err}</p>`],
+  ["dates", `const wd = d.getDay();`],
+  ["dates", `const day = new Date().toISOString().slice(0, 10);`],
+  ["dates", `new Intl.RelativeTimeFormat(undefined).format(-1, "day")`],
+  ["dates", `new Date(iso).toLocaleString()`],
+  ["type", `.x { font: 600 calc(var(--fs-body) * 1.7) var(--sans); }`],
+];
 const CLEAN = `import { List, Page, when } from "parachute";
 // a comment may say <ul>, #a33, font: 12px, role="alert" or localStorage
+/* and a block one: <button>, color: white */
+const words = (s: string) => s.replace(/[#*_\`>"'<\/]/g, " ").split(/\s+/);
+type T = { font: string; fontSize: string };
+const n = (1234).toLocaleString();
+const said = "Issue #123 is fixed; see #add";
+const go = (href: string) => app.open(href);
+const S = { fontSize: "var(--fs-small)" };
 const CSS = \`.when { font: 600 var(--fs-label) var(--sans); color: var(--muted); } .x { font: inherit; font-weight: 600; }\`;
 export default function A() { return <Page title="A"><List rows={[{ title: "B", aside: when.short(Date.now()) }]} /></Page>; }
 const tags = { "#h": [room], "#e": [id] };`;
@@ -64,5 +86,6 @@ describe("the check", () => {
     expect(found.map((x) => x.rule)).toContain(rule);
     expect(found.find((x) => x.rule === rule)?.line).toBe(2);
   });
-  it("passes code written on the kit, comments and relay tags included", () => expect(check(CLEAN)).toEqual([]));
+  it.each(SLIPPED)("catches %s: %s", (rule, code) => expect(check(code).map((x) => x.rule)).toContain(rule));
+  it("passes code written on the kit, comments, regular expressions and relay tags included", () => expect(check(CLEAN)).toEqual([]));
 });

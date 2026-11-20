@@ -187,8 +187,8 @@ does. Use them, or your own markup on the CSS variables, or both.
 | `<Problem error? onRetry? >…</Problem>` | What went wrong, said once: your words, then the error's, and Try again with `onRetry`. |
 | `<Button kind? small? busy? onClick >…</Button>` | A button in the app's look: `primary` (the one main action), `plain` (the default) or `quiet`. |
 | `<Search label placeholder? value? onChange? onSearch live? />` | A search box: Enter searches (each pause in typing, with `live` ms); emptying it searches for "". |
-| `<Write label value onChange onSend? send? busy? enter? line? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone, as in a chat). Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows. |
-| `<Record onRecorded label? max_s? >…</Record>` | The microphone button: the app's own recorder sheet (needs `reach: [voice]`); `onRecorded({ bytes, type, duration })` on Send. |
+| `<Write label value onChange onSend? send? busy? enter? line? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone, as in a chat). Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows. |
+| `<Record onRecorded label? max_s? disabled? kind? small? >…</Record>` | The microphone button: the app's own recorder sheet (needs `reach: [voice]`); `onRecorded({ bytes, type, duration })` on Send. |
 | `toast(text, { error? })` | A short word after an action ("Saved"), at the foot of the screen, gone by itself. |
 | `voiceNote(recording, create)` | A recording made a note: `create(body)` makes the record (its path is yours), the recording is attached with transcription asked, and the hub writes the words in. |
 | `useTranscripts(bodies, reload)` | While a voice note waits for its words: reads again a few times; `say(body)` is the line to show, `strip(body)` the text without the hub's marker, `again()` after a new recording. |
@@ -198,13 +198,15 @@ does. Use them, or your own markup on the CSS variables, or both.
 
 An HTML applet has no parts: it has the kit's calls and the CSS variables.
 
-An applet lives in the vault, and each device's app updates on its own time, so an applet meets older apps. A part
-an older app doesn't have arrives as `undefined`. `Link`, `Linked` and `link` came after the first builds (11-18), `useSaved` on 11-19: import
-one under another name and fall back, as the shipped applets do (`src/kit/olderApp.test.ts` checks them):
+**Older apps.** An applet lives in the vault, and each device's app updates on its own time, so an applet meets older
+apps. A part an older app doesn't have arrives as `undefined`, and an applet that draws it stops there with one line
+saying why. The kit of 11-20 is the floor the shipped applets are written on: they need an app from 11-20 or later, so
+their records go to a vault once the person's devices have it. A part added after that is imported under another name
+with a fallback (`src/kit/olderApp.test.ts` checks the shipped applets do):
 
 ```tsx
-import { Linked as KitLinked } from "parachute";
-const Linked = KitLinked ?? (({ text }: { text: string }) => <>{text}</>);
+import { Newer as KitNewer } from "parachute";
+const Newer = KitNewer ?? (({ children }: { children?: unknown }) => <>{children}</>);
 ```
 
 ### Saved state

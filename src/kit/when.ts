@@ -1,6 +1,6 @@
-// when: the kit's one way to say a date or a time (docs/WRITE-AN-APPLET.md "Dates and times"). Every applet said
+// when: the kit's one way to say a date or a time (docs/WRITE-AN-APPLET.md, the parts). Every applet said
 // them its own way (docs/INVENTORY.md "Dates and times"); now each says them through these, in the person's language.
-// A moment is a Date, an ISO string, milliseconds, or seconds (a relay's created_at: a number below 1e11 is seconds,
+// A moment is a Date, an ISO string (a date alone is that day where the person is), milliseconds, or seconds (a relay's created_at: a number below 1e11 is seconds,
 // which holds for any date after 1973). Something that isn't a moment gives "" (or null from `parse`).
 //   when.time(t)    9:41 AM
 //   when.day(t)     Today · Yesterday · Monday, November 17 · Monday, November 17, 2025
@@ -18,7 +18,13 @@ const pad = (n: number) => String(n).padStart(2, "0");
 function parse(t: Moment): Date | null {
   if (t instanceof Date) return Number.isNaN(t.getTime()) ? null : t;
   if (typeof t === "number") { if (!Number.isFinite(t)) return null; return new Date(Math.abs(t) < 1e11 ? t * 1000 : t); }
-  if (typeof t === "string" && t.trim()) { const ms = Date.parse(t); return Number.isNaN(ms) ? null : new Date(ms); }
+  if (typeof t === "string" && t.trim()) {
+    // a date alone ("2026-11-17", as a note's fields hold one) is that day here, not midnight in London
+    const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t.trim());
+    if (day) { const d = new Date(+day[1], +day[2] - 1, +day[3]); return Number.isNaN(d.getTime()) ? null : d; }
+    const ms = Date.parse(t);
+    return Number.isNaN(ms) ? null : new Date(ms);
+  }
   return null;
 }
 

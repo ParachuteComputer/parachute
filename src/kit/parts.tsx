@@ -66,7 +66,7 @@ export type Row = {
   current?: boolean;
   /** a line under the rest, in the accent: what wants the person */
   under?: ReactNode;
-  /** what a screen reader says for the row, when its text isn't enough */
+  /** what a screen reader says for a row that is a button, when its text isn't enough */
   label?: string;
   /** data- attributes, for an applet's own tests: { room: "…" } is data-room */
   data?: Record<string, string>;
@@ -92,7 +92,7 @@ export function List({ label, rows, more }: { label?: ReactNode; rows: readonly 
           );
           return <li key={r.key ?? i}>{r.onPress
             ? <button type="button" className={cls} onClick={r.onPress} aria-label={r.label} aria-current={r.current ? "true" : undefined} {...data}>{inner}</button>
-            : <div className={cls} aria-label={r.label} aria-current={r.current ? "true" : undefined} {...data}>{inner}</div>}</li>;
+            : <div className={cls} aria-current={r.current ? "true" : undefined} {...data}>{inner}</div>}</li>;
         })}
       </ul>
       {more && <button type="button" className="pa-more" disabled={more.busy} onClick={more.onPress}>{more.busy ? "Reading…" : more.label}</button>}

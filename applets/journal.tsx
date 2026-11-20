@@ -81,10 +81,11 @@ export default function Journal() {
     setBusy(true);
     try {
       await vault.createRecord({ path: pathFor(body), body });
-      setText("");
-      toast("Saved to Journal.");
-      await load();
-    } catch (e: any) { toast(`Not saved: ${e?.message ?? e}. Your words are still here.`, { error: true }); }
+    } catch (e: any) { toast(`Not saved: ${e?.message ?? e}. Your words are still here.`, { error: true }); setBusy(false); return; }
+    setText("");
+    toast("Saved to Journal.");
+    // (saved: a list that can't be read just now doesn't make it unsaved)
+    await load().catch(() => {});
     setBusy(false);
   };
   let last = "";
