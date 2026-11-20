@@ -81,7 +81,10 @@ export const PUBLISH_FIELD = "published";
 const publishName = (t: string) => PUBLISH_TAGS.includes(t.toLowerCase());
 /** Is this record readable by anyone with its link, by the hub's default rule (the `publish` tag, or the field)? A
  *  vault's own published_tag isn't read (docs/VAULT.md); `published` as a tag is refused to changes, not public. */
-export const isPublic = (r: { tags: string[]; types?: string[]; fields: Record<string, unknown> }) => [...(r.types ?? []), ...r.tags].some((t) => t.toLowerCase() === "publish") || r.fields[PUBLISH_FIELD] === true;
+export const isPublic = (r: { tags: string[]; types?: string[]; fields: Record<string, unknown> }) => [...(r.types ?? []), ...r.tags].some((t) => t === "publish") || r.fields[PUBLISH_FIELD] === true;
+/** Words for the app's own sheet from what an applet or a record names: no control, hidden or direction-changing
+ *  character, so the sheet reads as it is. */
+export const sheetText = (x: string) => x.replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "").slice(0, 200);
 /** The person's yes, said as a contract error otherwise. */
 async function askFirst(deps: VaultsDeps, q: { title: string; body: string; act: string }) {
   const a = await deps.confirm(q);
@@ -375,7 +378,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           // the change is to the version judged above, or none
           if (change.if_updated_at !== now.updatedAt) throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read");
           // what is written into a published record anyone with its link reads: the person says yes first
-          if (isPublic(now)) await askFirst(deps, { title: `Change “${now.path}”?`, body: `It is published from ${v.name} (${v.host}): anyone with its link reads what is written there.`, act: "Change it" });
+          if (isPublic(now)) await askFirst(deps, { title: `Change “${sheetText(now.path)}”?`, body: `It is published from ${sheetText(v.name)} (${sheetText(v.host)}): anyone with its link reads what is written there.`, act: "Change it" });
           const door = await deps.door(vault);
           try {
             const raw = await deps.request(vault, "PATCH", `/${door}/${encodeURIComponent(now.id)}`, bodyFor(door, change));
@@ -444,7 +447,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           // nothing to do: says so; and in any case hands back nothing of the record (sharing alone reads no fields)
           if (isPublic(now) === on) return { published: on, changed: false };
           // making it readable by anyone is the person's to say, on the app's own sheet; taking that back isn't asked
-          if (on) await askFirst(deps, { title: `Publish “${now.path}”?`, body: `Anyone with its link can read “${now.path}”, from ${v.name} (${v.host}), without signing in. You can unpublish it later.`, act: "Publish" });
+          if (on) await askFirst(deps, { title: `Publish “${sheetText(now.path)}”?`, body: `Anyone with its link can read “${sheetText(now.path)}”, from ${sheetText(v.name)} (${sheetText(v.host)}), without signing in. You can unpublish it later.`, act: "Publish" });
           const door = await deps.door(vault);
           // the field works whatever tag a vault names for publishing; off takes away the field and the default tags
           const fields = door === "records" ? "fields" : "metadata";
@@ -466,7 +469,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           const v = held(vault); ctx.charge(1);
           const a = (await deps.access(vault)).applets.find((x) => x.noteId === noteId);
           if (!a) throw refuse("no applet allowed there by that note");
-          await askFirst(deps, { title: `Revoke ${a.name}?`, body: `${a.name} stops in ${v.name} (${v.host}), and asks again before it runs. With your key, your other devices take it back too.`, act: "Revoke" });
+          await askFirst(deps, { title: `Revoke ${sheetText(a.name)}?`, body: `${sheetText(a.name)} stops in ${sheetText(v.name)} (${sheetText(v.host)}), and asks again before it runs. With your key, your other devices take it back too.`, act: "Revoke" });
           await deps.revoke(vault, noteId);
           return null;
         },
@@ -475,7 +478,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         cap: null, validate: one(vaultOnly(), "sharing"),
         async run({ vault }: { vault: string }, _s, ctx) {
           const v = held(vault); ctx.charge(1);
-          await askFirst(deps, { title: `Let Parachute only read ${v.name}?`, body: `${v.name} (${v.host}): a change there, yours or an applet's, asks you again on your hub.`, act: "Read only" });
+          await askFirst(deps, { title: `Let Parachute only read ${sheetText(v.name)}?`, body: `${sheetText(v.name)} (${sheetText(v.host)}): a change there, yours or an applet's, asks you again on your hub.`, act: "Read only" });
           await deps.readOnly(vault);
           return null;
         },

@@ -180,6 +180,18 @@ describe("sharing", () => {
     // a type without such a default goes in as any other
     await expect(call("update", { vault: "home", id: "a", bytes: enc({ if_updated_at: book.updatedAt, types: { add: ["book"] } }) })).resolves.toBeTruthy();
   });
+  it("the sheet's words carry no hidden or direction-changing character from a record's path", async () => {
+    const yes = setup(["sharing"], { a: { ...book, path: "Recipes/\u202Egnp.txet\u202C\u200B" } });
+    await yes.call("publish", { vault: "home", id: "a", on: true });
+    expect(yes.asked).toEqual(["Publish “Recipes/gnp.txet”?"]);
+  });
+  it("public is the hub's rule exactly: the tag publish (its case), or the field", async () => {
+    const { isPublic } = await import("./modules/vaults");
+    expect(isPublic({ tags: ["publish"], fields: {} })).toBe(true);
+    expect(isPublic({ tags: ["Publish"], fields: {} })).toBe(false);
+    expect(isPublic({ tags: ["published"], fields: {} })).toBe(false);
+    expect(isPublic({ tags: [], fields: { published: true } })).toBe(true);
+  });
   it("a published record changes only after the person's yes (anyone with its link reads it)", async () => {
     const pub = { ...book, fields: { published: true } };
     const no = setup(["vaults"], { a: pub }, { yes: false });

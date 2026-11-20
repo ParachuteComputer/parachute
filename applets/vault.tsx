@@ -310,7 +310,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   const links = r.links ?? [];
   const out = links.filter((l) => l.dir === "out"), into = links.filter((l) => l.dir === "in");
   // public as the hub judges it: the field, or its default publish tag (a vault that names another tag isn't known here)
-  const published = r.fields.published === true || [...r.types, ...r.tags].some((t) => t.toLowerCase() === "publish");
+  const published = r.fields.published === true || [...r.types, ...r.tags].some((t) => t === "publish");
   return (
     <article aria-label={r.title} ref={top}>
       <Button kind="quiet" onClick={back.onPress}>{`← ${back.label}`}</Button>
