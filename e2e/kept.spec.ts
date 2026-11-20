@@ -39,7 +39,7 @@ test("an applet left for another screen keeps running hidden, and is the same fr
     const own = page.url();
     expect(booted).toMatch(/^Booted \w+$/);
 
-    // elsewhere in the app (the bar's Launcher): its frame stays, hidden; it is told, and a tap-only call is refused
+    // elsewhere in the app (the bar's Applets): its frame stays, hidden; it is told, and a tap-only call is refused
     await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
     await expect(page).toHaveURL(/\/$/);
     await expect(page.locator("iframe.applet-frame")).toHaveCount(1);

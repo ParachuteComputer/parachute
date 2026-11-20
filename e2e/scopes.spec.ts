@@ -71,7 +71,7 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
     expect(consents[0]).not.toContain(`vault:${OTHER}:write`);
     expect(await held(page)).toEqual({ [VAULT]: `vault:${VAULT}:read`, [OTHER]: `vault:${OTHER}:read` });
 
-    await ui(page).getByRole("region", { name: OTHER, exact: true }).getByRole("link", { name: /Journal/ }).click();
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).filter({ hasText: OTHER }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText("Read, add and change notes in Journal/");
     // the card says the hub asks next, and for what
