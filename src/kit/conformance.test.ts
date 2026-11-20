@@ -12,7 +12,7 @@ const shipped = readdirSync(dir).filter((f) => /\.(tsx|jsx)$/.test(f));
 /** Where an applet keeps something of its own on purpose, and why. Each must still be needed (the last test). */
 const EXCEPTIONS: Record<string, Partial<Record<string, string>>> = {};
 /** Applets not moved onto the kit yet (T-476, a PR at a time): each must still go around it, so the list only shrinks. */
-const NOT_YET = new Set(["accounts.tsx", "area.tsx", "mail.tsx", "matrix.tsx", "room.tsx", "rooms.tsx"]);
+const NOT_YET = new Set(["room.tsx", "rooms.tsx"]);
 
 const said = (f: string) => check(readFileSync(join(dir, f), "utf8")).filter((x) => !EXCEPTIONS[f]?.[x.rule]);
 
@@ -86,7 +86,7 @@ const fruit = { ingredients: ["orange", "lime"] };
 const CARD = \`.card { border: 1px solid var(--line); box-shadow: 3px 3px 0 var(--line); color: var(--text); }\`;
 const S = { fontSize: "var(--fs-small)" };
 const CSS = \`.when { font: 600 var(--fs-label) var(--sans); color: var(--muted); } .x { font: inherit; font-weight: 600; }\`;
-export default function A() { return <Page title="A"><List rows={[{ title: "B", aside: when.short(Date.now()) }]} /></Page>; }
+export default function A() { return <Page title="A"><Loading>Reading your rooms…</Loading><List rows={[{ title: "B", aside: when.short(Date.now()) }]} /></Page>; }
 const tags = { "#h": [room], "#e": [id] };`;
 
 describe("the check", () => {

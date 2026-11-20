@@ -16,7 +16,7 @@ export { useOpenWith } from "./open/useOpenWith";
 export { Bar } from "../ui/Bar";
 /** The parts applets have (docs/WRITE-AN-APPLET.md), for a frame of the person's too. */
 export { Card, Days, Empty, Field, List } from "../kit/parts";
-export { Button, Loading, Page, Problem, Record, Search, toast, useTranscripts, voiceNote, Write } from "../kit/screen";
+export { Button, Loading, Page, Problem, Record, Search, Tabs, toast, useTranscripts, voiceNote, Write } from "../kit/screen";
 export { when } from "../kit/when";
 export { Note } from "../kit/parts-note";
 export { pinApplet, readerFor, startApplet, useApplets, useDefaults, useHome, useVault, useVaultQuery, useVaults } from "./data";
