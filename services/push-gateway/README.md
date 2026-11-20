@@ -1,8 +1,9 @@
 # Parachute push gateway
 
-Tells a person's phone that a message on a Nostr relay names them, while Parachute is closed. The phone hears it
-through its own UnifiedPush distributor (the ntfy app from F-Droid, or another): one connection the distributor already
-keeps for every app, no Google or Apple in the path. What the gateway sends holds no words.
+Tells a person's phone that a message on a Nostr relay names them, while Parachute is closed, and keeps the counts
+behind an applet's badge (signals). The phone hears it through its own UnifiedPush distributor (the ntfy app from
+F-Droid, or another): one connection the distributor already keeps for every app, no Google or Apple in the path. What
+the gateway sends holds no words.
 
 An applet declares which gateway it uses, on its relay service (docs/design/SERVICES.md):
 
@@ -35,11 +36,32 @@ notify: { mentions: true, from: [<hex key>], gateway: https://push.example/ }
    on that gateway's instance and `to` is the key the phone uses now, finds the applet that asked, and shows "A message for you in <room>"; a tap
    opens the applet at that message. The app reads the message itself from the relay, signed in as the person.
 
+## Signals: the counts behind badges
+
+An applet may declare signals (the app's docs/design/APP-RECORD.md, "Signals"): what counts as something for the
+person. The gateway keeps one number per person, applet and signal, so a badge and a notification can show while the
+applet, or all of Parachute, is closed.
+
+- **A registration may name `signals`**: `[{subject, signal, rooms}]` (up to 8). `subject` is the applet as an opaque
+  id the app makes (8 to 64 of `A-Z a-z 0-9 _ -`: a hash of its hub, vault and record), `signal` its id, `rooms` the
+  rooms whose messages count for it (`null`: all of the person's). Each message the gateway pushes for that
+  registration adds one to the signals whose rooms hold it, once however many of the person's phones it goes to.
+- **`POST <gateway>signals`**, signed NIP-98 by the person's key: `{set: [{subject, signal, count}]}` (up to 16; a
+  count 0 to 9999; none, to only read). Only for a key with a confirmed registration here. The answer is
+  `{ok, counts: [{subject, signal, count, at}]}`: every number this key holds (64 at most; one untouched for 30 days
+  goes). The app sends what it counted (a vault's new notes, an applet's own number, 0 when the person opens it).
+- **A number a device changes is pushed** to each of the key's confirmed endpoints, sealed as any push:
+  `{"v":1,"kind":"signal","subject":…,"signal":…,"count":3,"to":<hex key>}`. No room, no event, no words. (A number
+  a message moved isn't pushed: the message's own push went to the phone; other devices read it at their next ask.)
+  Counts have a budget of their own per endpoint (4, then one every 3 s), so a run of them never holds back a message;
+  one held back is sent when there is room, the newest number only. A set that would pass the key's 64 changes
+  nothing.
+
 ## What each party learns
 
 | Who | Learns | Never |
 |---|---|---|
-| The gateway | The person's public key; their relay; the rooms they named; the `from` keys; the push endpoint and keys; from the relay, which rooms they are in (member lists) and every message in the rooms it was added to (it is a member there). | The person's secret key (it holds only its own); anything in rooms it wasn't added to (private rooms); anything sealed. |
+| The gateway | The person's public key; their relay; the rooms they named; the `from` keys; the push endpoint and keys; from the relay, which rooms they are in (member lists) and every message in the rooms it was added to (it is a member there). With signals: an opaque id per applet, the signal ids, their counts and when they move. | The person's secret key (it holds only its own); anything in rooms it wasn't added to (private rooms); anything sealed; which applet, vault or hub a signal is, or what was counted. |
 | The push server (ntfy, …) | That a push of ~350 bytes arrived for an endpoint, and when. | Which relay, room or message; who wrote it; any words. |
 | The phone's distributor app | The same as the push server. | The same. |
 
@@ -62,9 +84,14 @@ rooms whose members agree, as with any bot (the room's member list shows its key
 | One gateway pushes as another (it learned the endpoint and keys) | Each gateway gets its own UnifiedPush instance, endpoint and keys; the phone takes a push only for applets whose gateway owns the instance it came in on. |
 | A key the phone no longer uses keeps being pushed | The push names the key it was registered for (`to`); the phone drops one that isn't its current key's. The old registration still ends on its own within 30 days. |
 | Logs leak where people are reached | Endpoints are logged as host and the first characters of the path only. |
-| Flooding the HTTP side | Bodies over 8 KB refused; the signature is checked first, then 20 requests then one per 3 s per key, and a ceiling for all keys together. |
+| Someone moves another person's counts, or reads them | `POST signals` is signed by the key whose numbers it moves and answers only that key's. |
+| A fresh key keeps numbers here or uses the gateway to push | Only a key with a confirmed registration (a member list the relay signed shows it) keeps numbers: 64 at most, each gone after 30 days untouched; a change goes only to that key's own endpoints, under the same per-endpoint budget. |
+| A count leaks what it counts | The push and the stored number hold an opaque id, a signal id and a number; the app makes the id a hash, so the gateway can't tell which applet or vault. |
+| Flooding the HTTP side | Bodies over 16 KB refused (a registration's signals name 100 rooms at most, so any it takes fits); the signature is checked first, then 20 requests then one per 3 s per key, and a ceiling for all keys together. |
 
-Left, said plainly: after a restart the gateway reads back from shortly before it went down, so a push may go twice
+Left, said plainly: a signal push (about 200 bytes) and a message push (about 350) differ in size, so the push server
+can tell which kind arrived, and roughly how long the count is; after a restart the gateway reads back from shortly
+before it went down, so a message counted toward a signal may count twice (the phone can't tell), and a push may go twice
 (the phone shows it once: it keeps the last 200 event ids); replays of a signed request within its 60 s are refused only
 while the gateway runs (a replay after a restart repeats the same registration, harmlessly); a phone whose key changes
 can't unregister the old key's registration, which ends on its own within 30 days (its pushes still open only on that
@@ -116,7 +143,9 @@ registrations it holds.
 - `npm test` (node's test runner): signatures (wrong key, URL, method, body, expired, replayed), Web Push against
   RFC 8291's own example, who a message is for, endpoints, the push carrying no words (and its `to`) and a 410
   unregistering, the pending pool and the member-list read dropping keys no room lists, the per-address limit and
-  when `X-Forwarded-For` counts.
+  when `X-Forwarded-For` counts; signals (only the key's own signature, only with a confirmed registration, a change
+  pushed as applet id, signal and count and nothing else, a message counted once across the person's phones and only
+  for a signal naming its room).
 - `npm run e2e`: our Buzz relay on `ws://localhost:3871`, a throwaway ntfy on `http://127.0.0.1:18566`
   (`infra/ntfy/up.sh` in the workspace), the gateway, and a subscriber on the ntfy topic standing in for the phone; a
   key no room lists registers and is dropped at the next read of the relay's member lists.

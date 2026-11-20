@@ -8,6 +8,7 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { keysOk, type Keys } from "./webpush.ts";
 import { endpointOk, relayKey } from "./urls.ts";
+import { parseRegSignals, type RegSignal } from "./signals.ts";
 
 export const TTL_S = 30 * 24 * 3600;
 export const LIMITS = { perKey: 8, total: 20_000, pending: 200, rooms: 50, from: 4, endpoint: 1024 };
@@ -27,6 +28,8 @@ export type Reg = {
   expires: number;
   /** Not yet seen in any of the relay's member lists (absent: confirmed, as in a file written before this mark). */
   pending?: true;
+  /** Which applet's signal a message for the person counts toward (signals.ts), by room. Absent: none. */
+  signals?: RegSignal[];
 };
 
 const only = (o: Record<string, unknown>, keys: string[]) => Object.keys(o).every((k) => keys.includes(k));
@@ -35,9 +38,9 @@ const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 
 export type Opts = { relays: string[]; allowLoopback: boolean; privateHosts?: string[] };
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
-/** The body of POST /register: {endpoint, keys: {p256dh, auth}, relay, rooms, mentions, from}, nothing else. */
+/** The body of POST /register: {endpoint, keys: {p256dh, auth}, relay, rooms, mentions, from, signals?}, nothing else. */
 export function parseRegister(x: unknown, pubkey: string, opts: Opts, now: number): Parsed<Reg> {
-  if (!plain(x) || !only(x, ["endpoint", "keys", "relay", "rooms", "mentions", "from"])) return { ok: false, error: "a registration is {endpoint, keys, relay, rooms, mentions, from}" };
+  if (!plain(x) || !only(x, ["endpoint", "keys", "relay", "rooms", "mentions", "from", "signals"])) return { ok: false, error: "a registration is {endpoint, keys, relay, rooms, mentions, from, signals?}" };
   const ep = endpointOk(x.endpoint, opts.allowLoopback, opts.privateHosts);
   if (!ep.ok) return ep;
   if (!keysOk(x.keys) || !only(x.keys as Record<string, unknown>, ["p256dh", "auth"])) return { ok: false, error: "keys is {p256dh, auth}: the push keys the app's connector made" };
@@ -55,8 +58,11 @@ export function parseRegister(x: unknown, pubkey: string, opts: Opts, now: numbe
     return { ok: false, error: `from is up to ${LIMITS.from} public keys (hex)` };
   }
   if (!x.mentions && !x.from.length) return { ok: false, error: "ask for mentions, or name who you hear from" };
+  const signals = parseRegSignals(x.signals, (r) => typeof r === "string" && ROOM_ID.test(r));
+  if (!signals.ok) return signals;
   const keys = x.keys as Keys;
-  return { ok: true, value: { pubkey, endpoint: ep.value, keys: { p256dh: keys.p256dh, auth: keys.auth }, relay, rooms, mentions: x.mentions, from: [...(x.from as string[])].sort(), created: now, expires: now + TTL_S } };
+  return { ok: true, value: { pubkey, endpoint: ep.value, keys: { p256dh: keys.p256dh, auth: keys.auth }, relay, rooms, mentions: x.mentions, from: [...(x.from as string[])].sort(), created: now, expires: now + TTL_S,
+    ...(signals.value.length ? { signals: signals.value } : {}) } };
 }
 
 /** The body of POST /unregister: {endpoint, relay}. */

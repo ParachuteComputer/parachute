@@ -2,7 +2,8 @@
 // make their own <a> or call the shell's link calls: they use these, and the Note part, which uses them too.
 //   link     .to(record)  the one form a link to a note is written in (its address on its hub, links/note.ts), made by
 //                         the shell for a note of the applet's own vault;  .follow(target, {from, choose})  open it;
-//                         .parse(text) what a link names;  .find(text) the links in plain text
+//                         .open(record)  open a note of its own vault;  .parse(text) what a link names;
+//                         .find(text) the links in plain text
 //   Link     one link: a note's address, `<vault>:<ULID>`, `[[target]]` (with `from`, the note it is in) or a web
 //            address. A note link is drawn as a link only when the shell says it leads somewhere ("note" or "away");
 //            until then, and when it leads nowhere (a vault name the person doesn't have), it is the plain text. A tap
@@ -88,6 +89,8 @@ async function go(to: string, from: string | undefined, choose: boolean): Promis
   return isWeb(to) ? ((await app().openLink?.(to).catch(() => false)) ?? false) : false;
 }
 
+/** Each note's address, once asked (a second tap opens at once, inside the tap's moment). */
+const addresses = new Map<string, string>();
 export const link = Object.freeze({
   /** The one form a link to a note of this applet's vault is written in: its address on its hub. */
   async to(record: string | { id: string }): Promise<string> {
@@ -98,6 +101,14 @@ export const link = Object.freeze({
   },
   /** Open what a link leads to (during a tap): a note in the app, a web address in the browser. */
   follow: (to: string, o?: { from?: string; choose?: boolean }) => go(to, o?.from, o?.choose === true),
+  /** Open a note of this applet's vault (during a tap: a row's onPress), where the person reads and edits it. */
+  async open(record: string | { id: string }): Promise<boolean> {
+    const id = typeof record === "string" ? record : record?.id;
+    if (typeof id !== "string") return false;
+    let to = addresses.get(id);
+    if (!to) { to = await link.to(id).catch(() => ""); if (to) addresses.set(id, to); }
+    return to ? go(to, undefined, false) : false;
+  },
   parse: parseNoteRef,
   find: findLinks,
 });
