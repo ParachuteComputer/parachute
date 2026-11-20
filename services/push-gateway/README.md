@@ -28,7 +28,8 @@ notify: { mentions: true, from: [<hex key>], gateway: https://push.example/ }
    if no list has the key it is dropped at that read. The answer to a register says `pending: true` for such a key, and
    the app registers it again a day later instead of a week (a room may add the gateway or the person meanwhile).
 3. **A new message (kind 9) is matched.** Pushed when it names the person (`p` tag; a message naming more than 20 is
-   not a mention) or comes from a key in `from`; never for their own message, only in a room whose member list has
+   not a mention, nor is one from an author the room's member list doesn't have: a relay may take a post in an open
+   room from anyone it admits) or comes from a key in `from`; never for their own message, only in a room whose member list has
    them, only in the rooms they named (when they named any), only for messages from after they registered.
 4. **The push.** `{"v":1,"relay":…,"room":…,"event":…,"kind":9,"why":"mention"|"from","to":<hex key>}`, sealed with Web Push
    encryption (RFC 8291, aes128gcm) to the phone's push keys, POSTed to the endpoint with `TTL: 86400` and
@@ -87,6 +88,7 @@ rooms whose members agree, as with any bot (the room's member list shows its key
 | Someone moves another person's counts, or reads them | `POST signals` is signed by the key whose numbers it moves and answers only that key's. |
 | A fresh key keeps numbers here or uses the gateway to push | Only a key with a confirmed registration (a member list the relay signed shows it) keeps numbers: 64 at most, each gone after 30 days untouched; a change goes only to that key's own endpoints, under the same per-endpoint budget. |
 | A count leaks what it counts | The push and the stored number hold an opaque id, a signal id and a number; the app makes the id a hash, so the gateway can't tell which applet or vault. |
+| A stranger names people to notify them and run up their badge | A mention counts only from an author the room's member list has (the relay takes a post in an open room from anyone it admits). Someone who joins an open room first can still do it, once the gateway has read the list again (five minutes at most): they are then on the list, where the room's admins can remove them. A member who just joined waits the same five minutes before their mentions notify. |
 | Flooding the HTTP side | Bodies over 16 KB refused (a registration's signals name 100 rooms at most, so any it takes fits); the signature is checked first, then 20 requests then one per 3 s per key, and a ceiling for all keys together. |
 
 Left, said plainly: a signal push (about 200 bytes) and a message push (about 350) differ in size, so the push server
@@ -130,7 +132,9 @@ topics opened for writing (`ntfy access everyone 'up*' write-only`: topics are r
 readable by the phone's account (`ntfy access <user> 'up*' read-only`).
 
 Behind your TLS proxy, set `PUSH_GATEWAY_TRUST_PROXY=1` when the proxy appends the client's address to
-`X-Forwarded-For`; otherwise every phone has the proxy's address and the per-address limit is one for everyone.
+`X-Forwarded-For`; otherwise every phone has the proxy's address and the per-address limit is one for everyone who is
+new (without it, a key the gateway already serves keeps its own budget, so a flood of fresh keys can't lock those
+people out; it can still keep new phones from registering until it stops).
 
 It prints its public key: the relay's owner lets it in (kind 9030), room admins add it (kind 9000). It listens on
 127.0.0.1:8790; put TLS in front (`tailscale serve`, a Cloudflare Tunnel, Caddy) at the address in `PUSH_GATEWAY_URL`.

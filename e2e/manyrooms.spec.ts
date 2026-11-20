@@ -30,7 +30,7 @@ test("in 260 rooms the list reads, and a search reaches every room", async ({ pa
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const app = page.frameLocator("iframe.applet-frame");
-    const list = app.getByRole("list", { name: "Your rooms" });
+    const list = app.getByRole("region", { name: "Your rooms" });
 
     await expect(list.getByRole("button", { name: /^Bed 260\b/ })).toBeVisible({ timeout: 30_000 });
     await expect(list.getByRole("button")).toHaveCount(260);

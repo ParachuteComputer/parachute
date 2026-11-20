@@ -41,9 +41,9 @@ import { findVault, hostOf } from "../vault/store";
 import { covers } from "../vault/parachute";
 import { appletLevel, canWrite, giveBack, heldLevel } from "../vault/reach";
 import { homeVault } from "../shell/frameSource";
+import { onLevels } from "../shell/levels";
 import { askVault } from "../vault/signInFlow";
 import { screenOf } from "../applet/manifest";
-import { approveLevel } from "../shell/appFloor";
 import { createRouter } from "../applet/router";
 import { createVaultModule } from "../applet/modules/vault";
 import { createThemeModule } from "../applet/modules/theme";
@@ -53,10 +53,9 @@ import { createVoiceModule } from "../applet/modules/voice";
 import { createStorageModule } from "../applet/modules/storage";
 import { storageFor } from "../shell/device";
 import { deviceSaved } from "../shell/saved";
-import { asksHash } from "../applet/approvals";
-import { approvalFor, floorOf, passcodeHere, raiseFloor, signApproval, signsHere, subjectOf as approvalSubject } from "../applet/approvalStore";
+import { asksOf } from "../applet/approvals";
+import { approvalFor, floorOf, passcodeHere, signApproval, signsHere, subjectOf as approvalSubject, takeBack } from "../applet/approvalStore";
 import type { Decision } from "../applet/approvals";
-import { openAppNow } from "../shell/homeSettings";
 import { createSavedModule } from "../applet/modules/saved";
 import { createSignalsModule } from "../applet/modules/signals";
 import { setOwn } from "../services/signals";
@@ -215,8 +214,7 @@ export default function AppletScreen() {
         if (kind === "html") page = source;
         else if (!late && !imports.length) page = appletPage(kind, source, code.compiled?.js ?? null);
         else if (!late) { const built = await buildPage(kind, source, imports); if (!on) return; if (!built.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${built.error}` }); return; } page = built.page; }
-        const asks = await asksHash(approvalSubject(rec, n.id, a.entry.manifest.id), a.entry.path, (n.metadata ?? {}) as Record<string, unknown>,
-          { opens: a.entry.opens.map((o) => ({ type: o.type, path: o.path, screen: o.screen ?? null })), from: await embedTargets(a.entry.embeds).catch(() => ["unread"]) });
+        const asks = await asksOf(approvalSubject(rec, n.id, a.entry.manifest.id), a.entry, (n.metadata ?? {}) as Record<string, unknown>, await embedTargets(a.entry.embeds).catch(() => ["unread"]));
         if (!on) return;
         setLoaded({ state: "ok", entry: a.entry, page, source: { kind, text: source }, imports, note, from, asks });
         setKeys({ scope, html: hash });
@@ -239,7 +237,8 @@ export default function AppletScreen() {
   const [signing, setSigning] = useState<string | null>(null);
   const [passcode, setPasscode] = useState("");
   const [needsPasscode, setNeedsPasscode] = useState(false);
-  useEffect(() => { void passcodeHere().then(setNeedsPasscode); }, []);
+  // asked again when the levels change (the open app's record raised them after this screen opened)
+  useEffect(() => { const ask = () => void passcodeHere().then(setNeedsPasscode); ask(); return onLevels(ask); }, []);
   useEffect(() => {
     if (!signedFor || !entry || !rec || loaded.state !== "ok" || !keys) return;
     let on = true;
@@ -258,7 +257,7 @@ export default function AppletScreen() {
   // its vault needs at the hub (else the card says so, and one tap asks the hub)
   // only from an approval no older than what this device has seen since (a Revoke here raises that), and, on a device
   // that runs approved code only, one made under that same warning
-  const approvedElsewhere = !!signedNow?.run && status !== "ok" && !!subject && signedNow.content.n >= Math.floor(floorOf(approvalSubject(rec!, entry!.noteId, entry!.manifest.id)) ?? 0)
+  const approvedElsewhere = !!signedNow?.run && status !== "ok" && !!subject && signedNow.content.n >= (floorOf(approvalSubject(rec!, entry!.noteId, entry!.manifest.id)) ?? 0)
     && (mode !== "approved-code" || signedNow.content.runs === "approved-code");
   const hubCovers = !!entry && !!rec && covers(heldLevel(rec), appletLevel(entry.manifest));
   useEffect(() => {
@@ -269,6 +268,9 @@ export default function AppletScreen() {
   }, [approvedElsewhere, hubCovers]); // eslint-disable-line react-hooks/exhaustive-deps
   const decision = runDecision(mode, status, subject ? grants.grantedUnder(subject) : null);
   const granted = decision === "run";
+  // the passcode is typed for one card: gone once that card is answered, and when another takes its place (changed code
+  // on a screen kept running would otherwise find it still filled in, and Allow would ask the unlock alone)
+  useEffect(() => { setPasscode(""); }, [signedFor, granted]);
   // brought in at other code than this: the card is headed so, even where this device never allowed it
   const pinMoved = !!brought && !!keys && brought.pointer.code !== keys.html;
   // an Allow that went through the hub (vault/signInFlow.ts finishStep) was recorded on the way back, for this exact
@@ -413,12 +415,11 @@ export default function AppletScreen() {
           // on a device with the person's key, Allow is an approval for every device: signed here, after the device
           // unlock (and the passcode, when one is set), and kept in the home vault. Approved elsewhere already: no new one
           if (!approvedElsewhere && await signsHere()) {
-            if (approveLevel(openAppNow(), homeVault()?.key ?? "") === "passcode" && !needsPasscode) { setSigning("Your app asks for a passcode before approving code. Set one in Settings → Approvals."); return; }
             setSigning(null);
             try {
-              await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" });
+              await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode && passcode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" });
             } catch (e) {
-              setSigning(`Not approved: ${e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "it couldn't be signed"}.`);
+              setSigning(`Not approved: ${(e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "it couldn't be signed").replace(/\.$/, "")}.`);
               return;
             }
           }
@@ -439,18 +440,10 @@ export default function AppletScreen() {
   const revoke = () => {
     void (async () => {
       // on a device with the person's key, Revoke takes the approval back on every device (signed, after the unlock;
-      // stopping never asks the passcode). It stops here whatever happens there, and says when it couldn't go further.
-      let said: string | null = null;
-      // whatever happens to the taking back, this device won't allow it again from an approval it saw before
-      const sub = approvalSubject(rec, entry.noteId, entry.manifest.id);
+      // stopping never asks the passcode). It stops here whatever happens there, and says when it couldn't go further
+      // (applet/approvalStore.ts `takeBack`, as Revoke in Settings does).
       const seen = signedNow && (signedNow.run ? signedNow.content : signedNow.newest);
-      if (seen) raiseFloor(sub, seen.n + 0.5);
-      if (await signsHere()) {
-        try {
-          const r = await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: false, code: "", scope: "" });
-          if (!r.written) said = `Stopped on this device. Your other devices keep running it until Parachute can change notes in your home vault.`;
-        } catch (e) { said = `Stopped on this device only: ${e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "the taking back couldn't be signed"}.`; }
-      }
+      const said = await takeBack(rec, entry.noteId, name, entry.manifest.id, seen?.n ?? null);
       grants.revoke(subject); setSigned(null); setStarted(false); setHubError(said); bump(); setRecheck((n) => n + 1);
       void giveBack(rec.key, `${location.pathname}${location.search}`);
     })();

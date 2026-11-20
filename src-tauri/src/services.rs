@@ -103,7 +103,9 @@ pub enum ServiceKind {
     /// `rooms`: the NIP-29 ids it is limited to (empty: every room); `approvals`: the keys (hex) whose cards and secret
     /// requests it may answer with the approval key (empty: none).
     Relay { publish: Vec<u16>, media: bool, private: Vec<PrivateEntry>, rooms: Vec<String>, approvals: Vec<String> },
-    Http { auth: Auth, approve: Option<Approve> },
+    /// `join` (docs/design/KEYRING.md "Joining a network"): a JSON body whose `field` is one of its ops asks to join a
+    /// private network, signed with the person's key only after this device's `join` level (levels.rs).
+    Http { auth: Auth, approve: Option<Approve>, join: Option<Approve> },
 }
 
 /// One declared service, normalised: `url` as the web side shows and keys it (a relay's without its trailing `/`, an
@@ -340,8 +342,8 @@ pub fn parse_service(x: &Value) -> Result<Service, Refusal> {
             Ok(Service { id, url, origin, kind: ServiceKind::Relay { publish, media, private, rooms, approvals } })
         }
         Some("http") => {
-            if !only_keys(o, &["id", "kind", "url", "auth", "approve"]) {
-                return Err(bad(format!("{id}: an http service is {{id, kind, url, auth?, approve?}}")));
+            if !only_keys(o, &["id", "kind", "url", "auth", "approve", "join"]) {
+                return Err(bad(format!("{id}: an http service is {{id, kind, url, auth?, approve?, join?}}")));
             }
             let u = normal_url(o.get("url").unwrap_or(&Value::Null), "https", "http", true).map_err(|e| bad(format!("{id}: {e}")))?;
             let auth = match o.get("auth").map(|a| a.as_str()) {
@@ -350,25 +352,35 @@ pub fn parse_service(x: &Value) -> Result<Service, Refusal> {
                 Some(Some("token")) => Auth::Token,
                 _ => return Err(bad(format!("{id}: auth is none, nip98 or token"))),
             };
-            let approve = match o.get("approve") {
-                None => None,
-                Some(Value::Object(a)) if only_keys(a, &["field", "ops"]) && auth == Auth::Nip98 => {
-                    let field = a.get("field").and_then(Value::as_str).filter(|f| field_ok(f)).ok_or_else(|| bad(format!("{id}: approve.field is the JSON body's field that names the op")))?;
-                    let ops = a.get("ops").and_then(Value::as_array).filter(|xs| (1..=4).contains(&xs.len())).ok_or_else(|| bad(format!("{id}: approve.ops is a short list")))?;
-                    let mut out: Vec<String> = Vec::new();
-                    for x in ops {
-                        match x.as_str().filter(|x| op_ok(x)) {
-                            Some(x) if !out.iter().any(|o| o == x) => out.push(x.to_string()),
-                            _ => return Err(bad(format!("{id}: approve.ops are op names, each once"))),
+            let ops_line = |name: &str| -> Result<Option<Approve>, Refusal> {
+                match o.get(name) {
+                    None => Ok(None),
+                    Some(Value::Object(a)) if only_keys(a, &["field", "ops"]) && auth == Auth::Nip98 => {
+                        let field = a.get("field").and_then(Value::as_str).filter(|f| field_ok(f)).ok_or_else(|| bad(format!("{id}: {name}.field is the JSON body's field that names the op")))?;
+                        let ops = a.get("ops").and_then(Value::as_array).filter(|xs| (1..=4).contains(&xs.len())).ok_or_else(|| bad(format!("{id}: {name}.ops is a short list")))?;
+                        let mut out: Vec<String> = Vec::new();
+                        for x in ops {
+                            match x.as_str().filter(|x| op_ok(x)) {
+                                Some(x) if !out.iter().any(|o| o == x) => out.push(x.to_string()),
+                                _ => return Err(bad(format!("{id}: {name}.ops are op names, each once"))),
+                            }
                         }
+                        out.sort();
+                        Ok(Some(Approve { field: field.to_string(), ops: out }))
                     }
-                    out.sort();
-                    Some(Approve { field: field.to_string(), ops: out })
+                    _ => Err(bad(format!("{id}: {name} is {{field, ops}}, on an http service signed with nip98"))),
                 }
-                _ => return Err(bad(format!("{id}: approve is {{field, ops}}, on an http service signed with nip98"))),
             };
+            let approve = ops_line("approve")?;
+            let join = ops_line("join")?;
+            // one op, one meaning: a body can't be both an approval and a join
+            if let (Some(a), Some(j)) = (&approve, &join) {
+                if a.field != j.field || a.ops.iter().any(|op| j.ops.contains(op)) {
+                    return Err(bad(format!("{id}: approve and join name their ops in one field, each op in one of them")));
+                }
+            }
             let origin = Url::parse(&origin_key(&u)).map_err(|_| bad(format!("{id}: url must be an address")))?;
-            Ok(Service { id, url: u.as_str().to_string(), origin, kind: ServiceKind::Http { auth, approve } })
+            Ok(Service { id, url: u.as_str().to_string(), origin, kind: ServiceKind::Http { auth, approve, join } })
         }
         _ => Err(bad(format!("{id}: kind is nostr-relay or http"))),
     }
@@ -433,6 +445,8 @@ pub enum Role {
     Everyday,
     /// The approval key, for this op.
     Approval(String),
+    /// The person's key, for this join op, after the `join` level (levels.rs).
+    Join(String),
 }
 
 /// A JSON object whose top-level keys are each named once (serde_json would keep the last of two silently).
@@ -487,6 +501,18 @@ pub fn http_role(approve: Option<&Approve>, body: Option<&[u8]>) -> Result<Role,
         Some(Value::String(op)) if a.ops.iter().any(|o| o == op) => Ok(Role::Approval(op.clone())),
         Some(Value::String(_)) => Ok(Role::Everyday),
         Some(_) => Err(refused()),
+    }
+}
+
+/// Which key and gate a request takes, with both lines: an approve op, a join op (`Role::Join`), or the everyday key.
+/// Each split fails closed as `http_role` does.
+pub fn roles(approve: Option<&Approve>, join: Option<&Approve>, body: Option<&[u8]>) -> Result<Role, Refusal> {
+    match http_role(approve, body)? {
+        Role::Everyday => match http_role(join, body)? {
+            Role::Approval(op) => Ok(Role::Join(op)),
+            r => Ok(r),
+        },
+        r => Ok(r),
     }
 }
 
@@ -564,9 +590,25 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 /// NIP-98 for one request: kind 27235, `u` the exact URL sent, `method`, a random `nonce`, and `payload` the body's
 /// sha256 when there is a body.
 pub fn nip98_event(keys: &Keys, url: &Url, method: &str, body: Option<&[u8]>) -> Result<Event, Refusal> {
+    nip98_with(keys, url, method, body, None)
+}
+
+/// The tag only a join op's NIP-98 carries (docs/design/KEYRING.md "Joining a network"): the everyday path never adds
+/// it, and no applet signs kind 27235 itself, so an enroller that requires it knows this device's join level passed.
+pub const JOIN_MARK: [&str; 2] = ["parachute", "join"];
+
+/// NIP-98 for a join op: the same event with `JOIN_MARK` and the op.
+pub fn nip98_join_event(keys: &Keys, url: &Url, method: &str, body: Option<&[u8]>, op: &str) -> Result<Event, Refusal> {
+    nip98_with(keys, url, method, body, Some(op))
+}
+
+fn nip98_with(keys: &Keys, url: &Url, method: &str, body: Option<&[u8]>, join: Option<&str>) -> Result<Event, Refusal> {
     let mut tags = vec![tag(&["u", url.as_str()])?, tag(&["method", method])?, tag(&["nonce", &random_nonce()])?];
     if let Some(b) = body {
         tags.push(tag(&["payload", &sha256_hex(b)])?);
+    }
+    if let Some(op) = join {
+        tags.push(tag(&[JOIN_MARK[0], JOIN_MARK[1], op])?);
     }
     sign(keys, EventBuilder::new(Kind::from(HTTP_AUTH_KIND), "").tags(tags))
 }
@@ -1037,9 +1079,9 @@ impl Broker {
     pub fn http_role(&self, session: &str, service: &str, req: &HttpReq) -> Result<Role, Refusal> {
         let call = self.call(session, service)?;
         match &call.service.kind {
-            ServiceKind::Http { auth: Auth::Nip98, approve } => {
+            ServiceKind::Http { auth: Auth::Nip98, approve, join } => {
                 let body = req.body.as_deref().map(decode_body).transpose()?;
-                http_role(approve.as_ref(), body.as_deref())
+                roles(approve.as_ref(), join.as_ref(), body.as_deref())
             }
             ServiceKind::Http { .. } => Ok(Role::Everyday),
             ServiceKind::Relay { .. } => Err(scope(format!("{service} isn't an http service"))),
@@ -1050,8 +1092,8 @@ impl Broker {
     /// and must be the one the caller took the keys for.
     pub async fn http(&self, keys: &Keys, role: &Role, session: &str, service: &str, req: &HttpReq) -> Result<HttpRes, Refusal> {
         let call = self.call(session, service)?;
-        let (auth, approve) = match &call.service.kind {
-            ServiceKind::Http { auth, approve } => (*auth, approve.clone()),
+        let (auth, approve, join) = match &call.service.kind {
+            ServiceKind::Http { auth, approve, join } => (*auth, approve.clone(), join.clone()),
             ServiceKind::Relay { .. } => return Err(scope(format!("{service} isn't an http service"))),
         };
         let method = req.method.to_ascii_uppercase();
@@ -1072,15 +1114,19 @@ impl Broker {
         let body = req.body.as_deref().map(decode_body).transpose()?;
         match auth {
             Auth::Nip98 => {
-                let worked_out = http_role(approve.as_ref(), body.as_deref())?;
+                let worked_out = roles(approve.as_ref(), join.as_ref(), body.as_deref())?;
                 if &worked_out != role {
                     return Err(no("refused", "That request is signed with another key."));
                 }
                 self.guard(&call.hubs, &url).await?;
-                let ev = nip98_event(keys, &url, &method, body.as_deref())?;
+                let ev = match role {
+                    Role::Join(op) => nip98_join_event(keys, &url, &method, body.as_deref(), op)?,
+                    _ => nip98_event(keys, &url, &method, body.as_deref())?,
+                };
                 let with = match role {
                     Role::Everyday => String::new(),
                     Role::Approval(op) => format!(" ({op}, approval key)"),
+                    Role::Join(op) => format!(" ({op}, joining a network)"),
                 };
                 self.log(&call, format!("{method} {}{with}", url.path()), Some(ev.id.to_hex()), false)?;
                 headers.insert(reqwest::header::AUTHORIZATION, reqwest::header::HeaderValue::from_str(&authorization(&ev)).map_err(|_| scope("auth"))?);
@@ -1336,24 +1382,39 @@ pub async fn svc_sign_event<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeySt
 }
 
 #[tauri::command]
-pub async fn svc_http<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, ring: State<'_, crate::keyring::KeyringState>, state: State<'_, ServicesState>, session: String, service: String, req: HttpReq) -> Result<HttpRes, Refusal> {
+#[allow(clippy::too_many_arguments)]
+pub async fn svc_http<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, ring: State<'_, crate::keyring::KeyringState>, levels: State<'_, crate::levels::LevelsState>, state: State<'_, ServicesState>, session: String, service: String, req: HttpReq, passcode: Option<String>) -> Result<HttpRes, Refusal> {
+    let passcode = passcode.map(Zeroizing::new);
     let k = held(&app, &keys).await?;
     let broker = state.broker(&app)?;
     let role = broker.http_role(&session, &service, &req)?;
     match role {
         Role::Everyday => broker.http(&k, &role, &session, &service, &req).await,
-        // the approval key, behind the device unlock (a grace this applet earned may cover it: these are routine)
+        // the approval key, behind this device's approvals level (a grace this applet earned may cover the unlock:
+        // these are routine)
         Role::Approval(ref op) => {
             let approval = ring.approval(&app, &k).await?;
             let subject = broker.subject_of(&session)?;
             let host = broker.host_of(&session, &service)?;
-            let graced = ring.confirm(&app, &subject, &format!("{service}:{op}"), true, "Approve with your approval key", &format!("Send {op} to {host}, signed with your approval key.")).await?;
+            let level = crate::levels::approvals_level(&levels.levels(&app).await?, false);
+            let (what, reason) = (format!("{service}:{op}"), format!("Send {op} to {host}, signed with your approval key."));
+            let graced = levels.gate(&app, level, passcode.as_ref().map(|p| p.as_str()), || ring.confirm(&app, &subject, &what, true, "Approve with your approval key", &reason)).await?;
             let mut res = broker.http(crate::approvals::for_approve_op(&approval), &role, &session, &service, &req).await?;
             if graced {
                 broker.log_for(&session, &service, format!("{op}: within an unlock"), None)?;
                 res.graced = true;
             }
             Ok(res)
+        }
+        // asking to join a private network: the person's key, behind this device's join level (the passcode, then the
+        // unlock, by default), never a grace
+        Role::Join(ref op) => {
+            let subject = broker.subject_of(&session)?;
+            let host = broker.host_of(&session, &service)?;
+            let level = levels.levels(&app).await?.join;
+            let (what, reason) = (format!("{service}:{op}"), format!("Ask {host} to let this device join ({op}), signed with your key."));
+            levels.gate(&app, level, passcode.as_ref().map(|p| p.as_str()), || ring.confirm(&app, &subject, &what, false, "Join a network", &reason)).await?;
+            broker.http(&k, &role, &session, &service, &req).await
         }
     }
 }
@@ -1784,7 +1845,7 @@ mod tests {
         assert!(parse_service(&json!({ "id": "rooms", "kind": "nostr-relay", "url": "wss://relay.example", "notify": { "mentions": true, "gateway": "https://push.example/" } })).is_ok());
         assert!(parse_service(&json!({ "id": "rooms", "kind": "nostr-relay", "url": "wss://relay.example", "notify": { "mentions": true, "gateway": "http://localhost:8790/" } })).is_ok());
         let h = parse_service(&json!({ "id": "mail", "kind": "http", "url": "https://mail.example/mail/", "auth": "nip98", "approve": { "field": "op", "ops": ["send.approve"] } })).unwrap();
-        assert_eq!(h.kind, ServiceKind::Http { auth: Auth::Nip98, approve: Some(Approve { field: "op".into(), ops: vec!["send.approve".into()] }) });
+        assert_eq!(h.kind, ServiceKind::Http { auth: Auth::Nip98, approve: Some(Approve { field: "op".into(), ops: vec!["send.approve".into()] }), join: None });
         for bad in [
             json!({ "rooms": [] }), json!({ "rooms": [{ "id": "a b", "name": "x" }] }), json!({ "rooms": [{ "id": "a", "name": "x" }, { "id": "a", "name": "y" }] }),
             json!({ "approvals": { "from": [] } }), json!({ "approvals": { "from": ["npub1x"] } }), json!({ "approvals": { "from": [uni, uni] } }),
@@ -1826,6 +1887,47 @@ mod tests {
             assert_eq!(is_command_approval(text), *want, "{text:?}");
         }
         assert!(check_template(&[9], &[], false, &ev("I approve of this", json!([["h", "x"]]))).is_ok());
+    }
+
+    #[test]
+    fn only_a_join_ops_nip98_carries_the_join_mark() {
+        let k = Keys::generate();
+        let url = Url::parse("https://enroll.mesh.example/join").unwrap();
+        let marked = |ev: &Event| ev.tags.iter().any(|t| t.as_slice().len() >= 2 && t.as_slice()[0] == JOIN_MARK[0] && t.as_slice()[1] == JOIN_MARK[1]);
+        // everyday: whatever the body says, no mark (an applet without the join line sending {"op":"mesh.join"})
+        let body = br#"{"op":"mesh.join","wg":"x"}"#;
+        assert!(!marked(&nip98_event(&k, &url, "POST", Some(body)).unwrap()));
+        let j = nip98_join_event(&k, &url, "POST", Some(body), "mesh.join").unwrap();
+        assert!(marked(&j));
+        assert!(j.tags.iter().any(|t| t.as_slice() == ["parachute", "join", "mesh.join"]));
+        assert!(j.verify().is_ok());
+    }
+
+    #[test]
+    fn a_join_op_is_its_own_role_and_never_an_approval_or_everyday() {
+        let svc = |extra: Value| {
+            let mut o = json!({ "id": "mesh", "kind": "http", "url": "https://mesh.example/", "auth": "nip98" });
+            for (k, v) in extra.as_object().unwrap() {
+                o[k] = v.clone();
+            }
+            parse_service(&o)
+        };
+        let s = svc(json!({ "join": { "field": "op", "ops": ["mesh.join"] } })).unwrap();
+        let ServiceKind::Http { join, approve, .. } = &s.kind else { panic!() };
+        assert_eq!(join.as_ref().unwrap().ops, vec!["mesh.join".to_string()]);
+        assert!(approve.is_none());
+        assert_eq!(roles(approve.as_ref(), join.as_ref(), Some(br#"{"op":"mesh.join","wg":"x"}"#)).unwrap(), Role::Join("mesh.join".into()));
+        assert_eq!(roles(approve.as_ref(), join.as_ref(), Some(br#"{"op":"mesh.status"}"#)).unwrap(), Role::Everyday);
+        // read two ways: refused, as an approve op is
+        assert!(roles(approve.as_ref(), join.as_ref(), Some(br#"{"op":"mesh.status","op":"mesh.join"}"#)).is_err());
+        // one op can't be both, and both name their op in one field; join needs nip98
+        assert!(svc(json!({ "join": { "field": "op", "ops": ["x.go"] }, "approve": { "field": "op", "ops": ["x.go"] } })).is_err());
+        assert!(svc(json!({ "join": { "field": "op", "ops": ["x.go"] }, "approve": { "field": "kind", "ops": ["y.go"] } })).is_err());
+        assert!(parse_service(&json!({ "id": "mesh", "kind": "http", "url": "https://mesh.example/", "auth": "none", "join": { "field": "op", "ops": ["mesh.join"] } })).is_err());
+        let both = svc(json!({ "join": { "field": "op", "ops": ["mesh.join"] }, "approve": { "field": "op", "ops": ["send.approve"] } })).unwrap();
+        let ServiceKind::Http { join, approve, .. } = &both.kind else { panic!() };
+        assert_eq!(roles(approve.as_ref(), join.as_ref(), Some(br#"{"op":"send.approve"}"#)).unwrap(), Role::Approval("send.approve".into()));
+        assert_eq!(roles(approve.as_ref(), join.as_ref(), Some(br#"{"op":"mesh.join"}"#)).unwrap(), Role::Join("mesh.join".into()));
     }
 
     #[test]

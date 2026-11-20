@@ -68,8 +68,8 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a p
     await expect(card).toContainText("Keep private notes there (read-state:…), sealed to your key: other apps of yours may share them");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
-    await expect(app.getByRole("heading", { name: "Rooms" })).toBeVisible();
-    const list = app.getByRole("list", { name: "Your rooms" });
+    await expect(app.getByRole("heading", { name: "Rooms", exact: true })).toBeVisible();
+    const list = app.getByRole("region", { name: "Your rooms" });
     await expect(list.getByRole("button", { name: new RegExp(`Garden ${stamp}`) })).toBeVisible({ timeout: 30_000 });
     await expect(list.getByRole("button", { name: new RegExp(`Kitchen ${stamp}`) })).toBeVisible();
     await expect(list.getByRole("button", { name: new RegExp(`Garden ${stamp}`) })).toContainText(/wants? you/);
@@ -192,7 +192,7 @@ test("Uni's turn in a room: a quick reply, working and Stop, muted, a draft with
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
     const appUrl = page.url();
-    const list = app.getByRole("list", { name: "Your rooms" });
+    const list = app.getByRole("region", { name: "Your rooms" });
     await list.getByRole("button", { name: new RegExp(`Beds ${stamp}`) }).click({ timeout: 30_000 });
     const log = app.getByRole("log");
 
@@ -305,7 +305,7 @@ test("Rooms paints the list it last showed at once, keeps it while the relay is 
     await page.goto(`/v/${VAULT}`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
   };
-  const row = (name: string) => frame(page).getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`${name} ${stamp}`) });
+  const row = (name: string) => frame(page).getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`${name} ${stamp}`) });
   // what the list keeps on this device, as the shell stores it
   const kept = () => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("parachute.applet-storage.v1:")).map((k) => localStorage.getItem(k) ?? "").join("\n"));
   try {
@@ -320,7 +320,7 @@ test("Rooms paints the list it last showed at once, keeps it while the relay is 
     away = true;
     await open();
     await expect(row("Porch")).toContainText(`Bob: The porch light is fixed ${stamp}.`, { timeout: 5_000 });
-    await expect(frame(page).getByRole("status")).toContainText("The relay is away");
+    await expect(frame(page).getByRole("alert")).toContainText("The relay is away");
     await page.waitForTimeout(18_000);
     await expect(row("Porch")).toContainText(`Bob: The porch light is fixed ${stamp}.`);
     await expect(row("Shed")).toBeVisible();
@@ -370,7 +370,7 @@ test("a room opens at once from what the list holds, at its foot once its own re
   });
   const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   const app = frame(page);
-  const row = () => app.getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Yard ${stamp}`) });
+  const row = () => app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Yard ${stamp}`) });
   const scroller = () => app.locator(".room .scroll");
   const fromFoot = () => scroller().evaluate((x) => x.scrollHeight - x.scrollTop - x.clientHeight);
   const back = () => app.getByRole("button", { name: "← Rooms" }).click();
@@ -453,11 +453,11 @@ test("in twenty-six rooms, a room full of asks and pictures opens and reads: not
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
-    const list = app.getByRole("list", { name: "Your rooms" });
+    const list = app.getByRole("region", { name: "Your rooms" });
     const row = list.getByRole("button", { name: new RegExp(`Asks ${stamp}`) });
     await expect(row).toContainText(`The newest line ${stamp}`, { timeout: 60_000 });
     await expect(list.getByRole("button", { name: new RegExp(`Plot 25 ${stamp}`) })).toBeVisible();
-    await expect(app.getByRole("status")).toHaveCount(0); // no "Couldn't read your rooms"
+    await expect(app.getByRole("alert")).toHaveCount(0); // no "Couldn't read your rooms"
     // in at once, drawn from what the list holds: every card and picture asks the shell at the same moment as the room's read
     await row.click();
     const log = app.getByRole("log");

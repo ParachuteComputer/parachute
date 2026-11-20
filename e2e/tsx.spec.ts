@@ -42,7 +42,7 @@ test("a TSX applet written with one MCP create-note call shows, asks, and runs a
 
     // the code changes (one update-note call): the card shows again before the new version runs
     const cur = await api(hubState(), "GET", `notes?id=${id}`);
-    await record(hubState(), "update", { id, body: ARGS.body.replace("<h1>Recipe cards</h1>", "<h1>Recipe cards, changed</h1>"), if_updated_at: cur.updatedAt });
+    await record(hubState(), "update", { id, body: ARGS.body.replace('title="Recipe cards"', 'title="Recipe cards, changed"'), if_updated_at: cur.updatedAt });
     await openChip(page, /Recipe cards/);
     await expect(page.getByText("code changed since you allowed it")).toBeVisible();
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);

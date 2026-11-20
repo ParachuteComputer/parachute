@@ -13,7 +13,7 @@ const COLOR_PROPS = "color|background(?:-color)?|border(?:-[a-z]+)*|outline(?:-c
 
 export const RULES: readonly Rule[] = [
   // dates and times: said one way, in the person's language
-  { id: "dates", what: "its own date or time formatting", use: "when (when.time, when.day, when.short, when.full, when.ago, when.stamp, when.path)",
+  { id: "dates", what: "its own date or time formatting", use: "when (when.time, when.day, when.date, when.short, when.full, when.ago, when.stamp, when.path)",
     test: new RegExp([
       String.raw`\bIntl\s*\.\s*(?:DateTimeFormat|RelativeTimeFormat)\b`,
       String.raw`\.toLocale(?:Date|Time)String\s*\(`, String.raw`\.toDateString\s*\(`,
