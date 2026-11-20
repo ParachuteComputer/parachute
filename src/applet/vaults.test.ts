@@ -7,7 +7,7 @@ import { createRouter } from "./router";
 const enc = (x: unknown) => new TextEncoder().encode(JSON.stringify(x)).buffer;
 type Call = { method: string; path: string; body?: unknown };
 
-function setup(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], records: Record<string, unknown> = {}, opts: { yes?: boolean; door?: "records" | "notes" } = {}) {
+function setup(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], records: Record<string, unknown> = {}, opts: { yes?: boolean; door?: "records" | "notes"; types?: unknown[] } = {}) {
   const calls: Call[] = [];
   const revoked: string[] = [];
   const asked: string[] = [];
@@ -16,7 +16,7 @@ function setup(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], records:
     door: async () => opts.door ?? "records",
     async request(_v, method, path, body) {
       calls.push({ method, path, body });
-      if (path.startsWith("/types") || path.startsWith("/tags")) return [{ name: "book", kind: "type", count: 2, fields: { status: { type: "string", enum: ["to-read", "read"] } } }];
+      if (path.startsWith("/types") || path.startsWith("/tags")) return [{ name: "book", kind: "type", count: 2, fields: { status: { type: "string", enum: ["to-read", "read"] } } }, ...(opts.types ?? [])];
       const m = /^\/(?:records|notes)\/([^?/]+)/.exec(path);
       if (method === "GET" && m) { const r = records[decodeURIComponent(m[1])]; if (!r) throw new Error("404 not found"); return r; }
       if (method === "GET") return [{ id: "a", path: "Books/A", types: ["book"], tags: [], fields: { status: "read" } }];
@@ -56,6 +56,15 @@ describe("the vaults word", () => {
     const q = new URLSearchParams(calls.at(-1)!.path.split("?")[1]);
     expect(JSON.parse(q.get("metadata")!)).toEqual({ status: { eq: "read" } });
     expect(Object.fromEntries(q)).toMatchObject({ tag: "book", order_by: "rating", sort: "desc", limit: "101", offset: "200", include_fields: "true" });
+  });
+  it("a field named for an object's machinery is refused: nothing reaches the shell's prototypes", async () => {
+    const { call, calls } = setup();
+    for (const field of ["__proto__", "constructor", "prototype"]) {
+      await expect(call("query", { vault: "home", where: [{ field, op: "exists", value: true }] })).rejects.toMatchObject({ code: "bad_params" });
+      await expect(call("query", { vault: "home", sort: { by: field, dir: "asc" } })).rejects.toMatchObject({ code: "bad_params" });
+    }
+    expect(({} as Record<string, unknown>).exists).toBeUndefined();
+    expect(calls).toEqual([]);
   });
   it("a query it can't say is refused before the hub sees it", async () => {
     const { call } = setup();
@@ -146,6 +155,20 @@ describe("sharing", () => {
     await off.call("publish", { vault: "home", id: "a", on: false });
     expect(off.asked).toEqual([]);
     expect(off.calls.at(-1)).toMatchObject({ method: "PATCH", body: { fields: { published: null }, tags: { remove: ["publish"] } } });
+  });
+  it("a publish tag held as a type counts as public, and Unpublish takes it away as a type", async () => {
+    const off = setup(["sharing"], { a: { ...book, types: ["book", "publish"] } });
+    await off.call("publish", { vault: "home", id: "a", on: false });
+    expect(off.calls.at(-1)).toMatchObject({ method: "PATCH", body: { types: { remove: ["publish"] } } });
+  });
+  it("a type whose schema gives published a default can't be given by a change (the hub would fill it in)", async () => {
+    const post = { name: "post", kind: "type", count: 0, fields: { published: { type: "boolean", default: true } } };
+    const { call, calls } = setup(["vaults"], { a: book }, { types: [post] });
+    await expect(call("update", { vault: "home", id: "a", bytes: enc({ if_updated_at: book.updatedAt, types: { add: ["post"] } }) })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(call("create", { vault: "home", bytes: enc({ path: "Posts/A", body: "x", types: ["post"] }) })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
+    // a type without such a default goes in as any other
+    await expect(call("update", { vault: "home", id: "a", bytes: enc({ if_updated_at: book.updatedAt, types: { add: ["book"] } }) })).resolves.toBeTruthy();
   });
   it("a published record changes only after the person's yes (anyone with its link reads it)", async () => {
     const pub = { ...book, fields: { published: true } };

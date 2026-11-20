@@ -310,7 +310,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   const links = r.links ?? [];
   const out = links.filter((l) => l.dir === "out"), into = links.filter((l) => l.dir === "in");
   // public as the hub judges it: the field, or its default publish tag (a vault that names another tag isn't known here)
-  const published = r.fields.published === true || r.tags.some((t) => ["publish", "published"].includes(t.toLowerCase()));
+  const published = r.fields.published === true || [...r.types, ...r.tags].some((t) => t.toLowerCase() === "publish");
   return (
     <article aria-label={r.title} ref={top}>
       <Button kind="quiet" onClick={back.onPress}>{`← ${back.label}`}</Button>
@@ -374,9 +374,9 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const [a, setA] = useState<{ level: string | null; hub: string; connector: string; applets: { noteId: string; name: string; glyph: string; since: string | null; changes: boolean }[] } | null>(null);
   const [pub, setPub] = useState<Rec[] | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
-  // public as the hub judges it: the field, or the default publish tags
+  // public as the hub judges it: the field, or its default publish tag
   const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { where: [{ field: "published", op: "eq", value: true }], limit: 50 }),
-    vaults.query(v.key, { tag: "publish", limit: 50 }), vaults.query(v.key, { tag: "published", limit: 50 })])
+    vaults.query(v.key, { tag: "publish", limit: 50 })])
     .then(([x, ...ps]: [any, ...{ records: Rec[] }[]]) => { setA(x); setPub([...new Map(ps.flatMap((p) => p.records).map((r) => [r.id, r])).values()]); setFailed(null); }, setFailed);
   useEffect(() => { void load(); }, [v.key]);
   return (

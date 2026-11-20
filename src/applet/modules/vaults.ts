@@ -66,7 +66,9 @@ export type VaultsDeps = {
 export const QUERY_MAX = 200;
 export const OPS = ["eq", "ne", "gt", "gte", "lt", "lte", "in", "not_in", "exists"] as const;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9_/-]{0,99}$/;
-const FIELD = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+// a field's name; never one that names an object's own machinery (they key plain objects in the shell)
+const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+const FIELD = { test: (x: string) => FIELD_NAME.test(x) && !["__proto__", "constructor", "prototype"].includes(x) };
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const VIEWS = "Parachute/Views/";
 const VIEW_TAG = "parachute-view";
@@ -78,7 +80,7 @@ export const PUBLISH_TAGS = ["publish", "published"];
 export const PUBLISH_FIELD = "published";
 const publishName = (t: string) => PUBLISH_TAGS.includes(t.toLowerCase());
 /** Is this record readable by anyone with its link (as far as the app can tell: a vault's own published_tag isn't read)? */
-export const isPublic = (r: { tags: string[]; fields: Record<string, unknown> }) => r.tags.some(publishName) || r.fields[PUBLISH_FIELD] === true;
+export const isPublic = (r: { tags: string[]; types?: string[]; fields: Record<string, unknown> }) => [...(r.types ?? []), ...r.tags].some(publishName) || r.fields[PUBLISH_FIELD] === true;
 /** The person's yes, said as a contract error otherwise. */
 async function askFirst(deps: VaultsDeps, q: { title: string; body: string; act: string }) {
   const a = await deps.confirm(q);
@@ -172,8 +174,8 @@ export function queryPath(q: Query, door: "records" | "notes"): string {
   if (q.path) u.set(door === "records" ? "path_prefix" : "path_prefix", q.path);
   // field filters as the hub's JSON form, which keeps a value's type (`true`, `5`), unlike meta[field][op]=text
   if (q.where.length) {
-    const m: Record<string, Record<string, unknown>> = {};
-    for (const w of q.where) (m[w.field] ??= {})[w.op] = w.value;
+    const m: Record<string, Record<string, unknown>> = Object.create(null);
+    for (const w of q.where) (m[w.field] ??= Object.create(null))[w.op] = w.value;
     u.set("metadata", JSON.stringify(m));
   }
   if (q.sort && !q.search) {
@@ -266,6 +268,9 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
     typeNames.set(vault, new Set(out.filter((t) => t.kind === "type").map((t) => t.name)));
     return out;
   }
+  /** Type names whose schema gives `published` a default: the hub fills it in on a create or when the type is added,
+   *  which would publish without the sheet (core applySchemaDefaults). */
+  const publishingTypes = async (vault: string) => new Set((await types(vault)).filter((t) => t.fields && Object.prototype.hasOwnProperty.call(t.fields, PUBLISH_FIELD) && (t.fields[PUBLISH_FIELD] as { default?: unknown })?.default !== undefined).map((t) => t.name));
   const namesFor = async (vault: string) => typeNames.get(vault) ?? new Set((await types(vault)).filter((t) => t.kind === "type").map((t) => t.name));
   async function getRec(vault: string, id: string, body: boolean): Promise<Rec & { extension?: unknown }> {
     const door = await deps.door(vault);
@@ -359,6 +364,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           const named = [...(change.types?.add ?? []), ...(change.types?.remove ?? []), ...(change.tags?.add ?? []), ...(change.tags?.remove ?? [])];
           if (named.some(appsOwn)) throw refuse("an applet can't give or take away the app's own names");
           if (named.some(publishName) || (change.fields && PUBLISH_FIELD in change.fields)) throw refuse("publishing is sharing's, and the person says yes to it");
+          const adding = [...(change.types?.add ?? []), ...(change.tags?.add ?? [])];
+          if (adding.length) { const p = await publishingTypes(vault); if (adding.some((t) => p.has(t))) throw refuse("that type publishes what it is given: publishing is sharing's"); }
           let now: Rec & { extension?: unknown };
           try { now = await getRec(vault, id, false); } catch (e) { throw failed(e); }
           // judged on the record as it is now: never code, an applet, a component or the app's own (but a saved view)
@@ -388,6 +395,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           const view = rec.path.startsWith(VIEWS);
           if ([...rec.types, ...rec.tags].some((t) => appsOwn(t))) throw refuse("an applet can't give the app's own names");
           if ([...rec.types, ...rec.tags].some(publishName) || (rec.fields && PUBLISH_FIELD in rec.fields)) throw refuse("publishing is sharing's, and the person says yes to it");
+          if (rec.types.length || rec.tags.length) { const p = await publishingTypes(vault); if ([...rec.types, ...rec.tags].some((t) => p.has(t))) throw refuse("that type publishes what it is given: publishing is sharing's"); }
           // a saved view is a record of its own kind, in its own folder, and nothing else goes there
           if (view !== rec.tags.includes(VIEW_TAG)) throw refuse("saved views live in Parachute/Views/, tagged parachute-view");
           const door = await deps.door(vault);
@@ -432,14 +440,16 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           let now: Rec & { extension?: unknown };
           try { now = await getRec(vault, id, false); } catch (e) { throw failed(e); }
           if (guarded(now) || (!now.path.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(now.path)) || now.path.startsWith(VIEWS)) throw refuse("this record is the app's own: no applet changes it");
-          if (isPublic(now) === on) return recOf({ ...now }, undefined);
+          // nothing to do: says so, and hands back nothing of the record (sharing alone reads no fields)
+          if (isPublic(now) === on) return null;
           // making it readable by anyone is the person's to say, on the app's own sheet; taking that back isn't asked
           if (on) await askFirst(deps, { title: `Publish ${now.path}?`, body: `Anyone with its link can read ${now.path}, from ${v.name} (${v.host}), without signing in. You can unpublish it later.`, act: "Publish" });
           const door = await deps.door(vault);
           // the field works whatever tag a vault names for publishing; off takes away the field and the default tags
           const fields = door === "records" ? "fields" : "metadata";
           const body = on ? { [fields]: { [PUBLISH_FIELD]: true }, if_updated_at: now.updatedAt }
-            : { [fields]: { [PUBLISH_FIELD]: null }, ...(now.tags.some(publishName) ? { tags: { remove: now.tags.filter(publishName) } } : {}), if_updated_at: now.updatedAt };
+            : { [fields]: { [PUBLISH_FIELD]: null }, ...(now.tags.some(publishName) ? { tags: { remove: now.tags.filter(publishName) } } : {}),
+              ...(door === "records" && now.types.some(publishName) ? { types: { remove: now.types.filter(publishName) } } : {}), if_updated_at: now.updatedAt };
           try {
             const raw = await deps.request(vault, "PATCH", `/${door}/${encodeURIComponent(now.id)}`, body);
             return recOf(raw, await namesFor(vault));

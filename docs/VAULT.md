@@ -89,5 +89,9 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
    on the sheet before changing a record that is already public. **Gap:** a vault whose config names another tag
    (only admin reads the config) isn't known to the app, so that tag could be given by a change without the sheet;
    and tags a tag-scoped key (or `private_tags`) is narrowed by are ordinary tags to `vaults`, so a change can widen or
-   narrow what such a key sees. Proposal: the vault's read scope may read its `published_tag` and `private_tags`.
+   narrow what such a key sees. Proposal: the vault's read scope may read its `published_tag` and `private_tags`. A type
+   whose schema gives `published` a default would publish what it is given (the hub fills defaults in), so `vaults`
+   refuses to give such a type; a field named `__proto__`, `constructor` or `prototype` is refused anywhere.
+5. **Someone else's vault.** `vaults` changes records in any vault the app may change, a shared one of someone else's
+   too (the card says every vault): what it reads in one vault can be written into another the person shares.
 4. **Counts per group**: `aggregate` groups only by an indexed field, so a grouped table counts what it has read.
