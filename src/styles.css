@@ -250,6 +250,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .connect-address { font: var(--fs-small)/1.35 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 .connect-how p { margin: 0; font-size: 15px; line-height: 1.45; }
 .connect-address { user-select: all; -webkit-user-select: all; }
+/* Copy and Copied take the same room, so the address beside it doesn't reflow */
+.connect .pa-row-aside .pa-button { min-width: 6.5em; }
 /* the idle lock (shell/Security.tsx): over everything, the sheets and the applets' frames included */
 .idle-lock { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: var(--pad, 16px); }
 .idle-lock-inner { text-align: center; max-width: 320px; }

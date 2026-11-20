@@ -1003,7 +1003,7 @@ function Composer({ st, relay, room, thread, members, send, typing, setErr, send
         }}
         onSend={go} send={busy ? "Sending…" : "Send"} sendLabel="Send message" canSend={!!text.trim() || files.length > 0} busy={busy}>
         <Button small className="attach" aria-label="Choose files to attach" onClick={attach}>＋</Button>
-        <Record small kind="plain" label="Record a voice note" disabled={busy} onRecorded={voiceMessage}>🎙</Record>
+        <Record small kind="plain" label="Record a voice note" disabled={busy} onRecorded={voiceMessage}>●</Record>
       </Write>
     </div>
   </div>;

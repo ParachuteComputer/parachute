@@ -291,12 +291,13 @@ function RoomList({ st, status, open, y, row }: { st: Store; status: Status; ope
     </section>}
     {status.k === "reading" ? <Loading>Reading your rooms…</Loading> : status.k === "problem" ? <Problem error={status.e}>{status.t}</Problem>
       : status.k === "note" ? <p className="note" role="status">{status.t}</p> : status.k === "empty" ? <Empty>No rooms yet. When someone writes to you, the room shows here.</Empty> : null}
-    <List label="Your rooms" hideLabel rows={rows.map(({ room, last, at, n, mention, asks }) => ({
+    {/* a search's finds take the list's place until it is cleared */}
+    {!found && <List label="Your rooms" hideLabel rows={rows.map(({ room, last, at, n, mention, asks }) => ({
       key: room.id, data: { room: room.id }, glyph: glyph(room.name), title: room.name, strong: n > 0, onPress: () => open(room.id),
       badge: n > 0 ? <span className={mention ? "at" : undefined} aria-label={`${n} new${mention ? ", mentions you" : ""}`}>{mention ? "@ " : ""}{n > 99 ? "99+" : n}</span> : undefined,
       aside: at ? when.ago(at) : "",
       meta: last ? <><b>{last.pubkey === s.me ? "You" : nameOf(s, last.pubkey)}:</b> {lastText(s, last)}</> : room.about,
       under: asks > 0 ? `◆ ${asks === 1 ? "Something wants you" : `${asks} things want you`}` : undefined,
-    }))} />
+    }))} />}
   </>;
 }
