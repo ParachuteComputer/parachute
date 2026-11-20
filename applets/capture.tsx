@@ -29,7 +29,6 @@ async function make(path: string, body: string, at = new Date(), timed = false):
 // (a capture made before it was named by its words starts with the time: shown without it)
 const nameOf = (r: Rec) => r.path.replace(/^Inbox\//, "").replace(/^\d{4}-\d{2}-\d{2} \d{2}-\d{2}(-\d{2})? ?/, "") || "Note";
 
-
 export default function Capture() {
   const [items, setItems] = useState<Rec[] | null>(null);
   const [failed, setFailed] = useState<unknown>(null);

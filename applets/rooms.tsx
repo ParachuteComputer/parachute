@@ -105,7 +105,12 @@ export default function Rooms() {
   const [view, setView] = useState<View>({ at: "list" });
   // where the list was scrolled to, and where each room was left (distance from its foot; null: at the foot)
   const listY = useRef(0);
-  const lastRow = useRef<{ id: string; top: number } | null>(null);
+  // a search and its finds outlive a visit to one of them: back from a hit, the finds are still there
+  const [q, setQ] = useState("");
+  const [found, setFound] = useState<Ev[] | null>(null);
+  const latest = useRef("");
+  const search = { q, setQ, found, setFound, latest };
+  const lastRow = useRef<{ sel: string; top: number } | null>(null);
   const places = useRef(new Map<string, number | null>());
   const saveTimer = useRef<any>(null);
 
@@ -236,10 +241,11 @@ export default function Rooms() {
     listY.current = window.scrollY;
     // and where its row was on the screen: back from the room, that row is put there again (rows not drawn yet are
     // only placeholders, so the page's offset alone can land elsewhere)
-    const row = document.querySelector(`[data-room="${CSS_ESCAPE(id)}"]`);
-    lastRow.current = row ? { id, top: row.getBoundingClientRect().top } : null;
+    const sel = event ? `[data-hit="${CSS_ESCAPE(event)}"]` : `[data-room="${CSS_ESCAPE(id)}"]`;
+    const row = document.querySelector(sel);
+    lastRow.current = row ? { sel, top: row.getBoundingClientRect().top } : null;
     setView({ at: "room", id, ...(event ? { event } : {}) }); };
-  if (view.at === "list") return <Page title="Rooms" className="rooms"><style>{CSS}</style><RoomList st={st} status={status} open={open} y={listY.current} row={lastRow.current} /></Page>;
+  if (view.at === "list") return <Page title="Rooms" className="rooms"><style>{CSS}</style><RoomList st={st} status={status} open={open} y={listY.current} row={lastRow.current} search={search} /></Page>;
   const id = view.id;
   // only messages as the relay sent them (signed, unchanged): a card in one is checked by its signature; the snapshot's
   // shortened copies (no signature) wait for the room's own read; edits go along as their own events
@@ -259,16 +265,15 @@ function unreadOf(s: Store["s"], room: string) {
   return { n: r ? list.length : 0, mention: r ? list.some((e) => tags(e, "p").includes(s.me)) : false };
 }
 
-function RoomList({ st, status, open, y, row }: { st: Store; status: Status; open: (id: string, event?: string) => void; y: number; row: { id: string; top: number } | null }) {
+type Searching = { q: string; setQ: (q: string) => void; found: Ev[] | null; setFound: (f: Ev[] | null) => void; latest: { current: string } };
+function RoomList({ st, status, open, y, row, search: { q, setQ, found, setFound, latest } }: { st: Store; status: Status; open: (id: string, event?: string) => void; y: number; row: { sel: string; top: number } | null; search: Searching }) {
   const s = st.s;
   // back from a room: the list where you left it
   useLayoutEffect(() => {
     if (y) window.scrollTo(0, y);
-    const el = row && document.querySelector(`[data-room="${CSS_ESCAPE(row.id)}"]`);
+    const el = row && document.querySelector(row.sel);
     if (el) window.scrollBy(0, el.getBoundingClientRect().top - row!.top);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [q, setQ] = useState("");
-  const [found, setFound] = useState<Ev[] | null>(null);
   const rows = [...s.rooms.values()].map((room) => {
     const msgs = [...(s.msgs.get(room.id)?.values() ?? [])].filter((e) => visible(s, e) && !rootOf(e));
     const last = msgs.sort((a, b) => b.created_at - a.created_at)[0];
@@ -276,18 +281,20 @@ function RoomList({ st, status, open, y, row }: { st: Store; status: Status; ope
   }).sort((a, b) => b.at - a.at || a.room.name.localeCompare(b.room.name));
   // across every room, by the relay's own search (NIP-50); a hit opens its room at that message
   const search = async (term: string) => {
+    // only the newest search lands: one cleared, or overtaken by another, while the relay answered is dropped
+    latest.current = term;
     if (!term) { setFound(null); return; }
     const ids = [...s.rooms.keys()];
     const relay = services.relay("rooms");
     // a call for each hundred rooms, as the list's read
     const out = (await pooled(chunk(ids, 100), 3, (c) => relay.query([{ kinds: [9], "#h": c, search: term, limit: 30 }]).catch(() => []))).flat();
-    setFound((out as Ev[]).sort((a, b) => b.created_at - a.created_at));
+    if (latest.current === term) setFound((out as Ev[]).sort((a, b) => b.created_at - a.created_at));
   };
   const roomOf = (e: Ev) => s.rooms.get(tag(e, "h")!);
   return <>
     <Search label="Search your rooms" value={q} onChange={setQ} onSearch={(t) => void search(t)} />
-    {found && <section aria-label="Found"><p className="quiet">{found.length ? `${found.length} found` : "Nothing found."} <Button kind="quiet" small onClick={() => { setFound(null); setQ(""); }}>Clear</Button></p>
-      <List rows={found.map((e) => ({ key: e.id, glyph: glyph(roomOf(e)?.name ?? ""), title: roomOf(e)?.name ?? "a room", aside: when.ago(e.created_at), meta: <><b>{e.pubkey === s.me ? "You" : nameOf(s, e.pubkey)}:</b> {lastText(s, e)}</>, onPress: () => open(tag(e, "h")!, e.id) }))} />
+    {found && <section aria-label="Found"><p className="quiet">{found.length ? `${found.length} found` : "Nothing found."} <Button small onClick={() => { latest.current = ""; setFound(null); setQ(""); }}>Back to your rooms</Button></p>
+      <List rows={found.map((e) => ({ key: e.id, data: { hit: e.id }, glyph: glyph(roomOf(e)?.name ?? ""), title: roomOf(e)?.name ?? "a room", aside: when.ago(e.created_at), meta: <><b>{e.pubkey === s.me ? "You" : nameOf(s, e.pubkey)}:</b> {lastText(s, e)}</>, onPress: () => open(tag(e, "h")!, e.id) }))} />
     </section>}
     {status.k === "reading" ? <Loading>Reading your rooms…</Loading> : status.k === "problem" ? <Problem error={status.e}>{status.t}</Problem>
       : status.k === "note" ? <p className="note" role="status">{status.t}</p> : status.k === "empty" ? <Empty>No rooms yet. When someone writes to you, the room shows here.</Empty> : null}
