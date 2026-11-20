@@ -190,7 +190,9 @@ class PushService : org.unifiedpush.android.connector.PushService() {
    *  for an allowed applet's signal whose gateway owns the instance it came in on, for the key the phone uses now, as
    *  "Ideas · 2 new" over the signal's own words; a count of 0 (opened on another device) takes it away. */
   private fun onSignal(o: JSONObject, instance: String) {
-    val subject = o.optString("subject"), signal = o.optString("signal"), to = o.optString("to")
+    val subject = o.optString("subject")
+    val signal = o.optString("signal")
+    val to = o.optString("to")
     val count = o.optInt("count", -1)
     if (o.optInt("v") != 1 || !GID.matches(subject) || signal.length > 40 || !SIGNAL.matches(signal) || count < 0 || count > 9999 || !HEX_KEY.matches(to)) {
       Log.w(TAG, "a signal push that isn't a gateway's: dropped")
