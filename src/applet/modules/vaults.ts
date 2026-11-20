@@ -79,8 +79,9 @@ const GUARDED = ["applet", "component", "parachute-pointer"];
 export const PUBLISH_TAGS = ["publish", "published"];
 export const PUBLISH_FIELD = "published";
 const publishName = (t: string) => PUBLISH_TAGS.includes(t.toLowerCase());
-/** Is this record readable by anyone with its link (as far as the app can tell: a vault's own published_tag isn't read)? */
-export const isPublic = (r: { tags: string[]; types?: string[]; fields: Record<string, unknown> }) => [...(r.types ?? []), ...r.tags].some(publishName) || r.fields[PUBLISH_FIELD] === true;
+/** Is this record readable by anyone with its link, by the hub's default rule (the `publish` tag, or the field)? A
+ *  vault's own published_tag isn't read (docs/VAULT.md); `published` as a tag is refused to changes, not public. */
+export const isPublic = (r: { tags: string[]; types?: string[]; fields: Record<string, unknown> }) => [...(r.types ?? []), ...r.tags].some((t) => t.toLowerCase() === "publish") || r.fields[PUBLISH_FIELD] === true;
 /** The person's yes, said as a contract error otherwise. */
 async function askFirst(deps: VaultsDeps, q: { title: string; body: string; act: string }) {
   const a = await deps.confirm(q);
@@ -374,7 +375,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           // the change is to the version judged above, or none
           if (change.if_updated_at !== now.updatedAt) throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read");
           // what is written into a published record anyone with its link reads: the person says yes first
-          if (isPublic(now)) await askFirst(deps, { title: `Change ${now.path}?`, body: `It is published from ${v.name} (${v.host}): anyone with its link reads what is written there.`, act: "Change it" });
+          if (isPublic(now)) await askFirst(deps, { title: `Change “${now.path}”?`, body: `It is published from ${v.name} (${v.host}): anyone with its link reads what is written there.`, act: "Change it" });
           const door = await deps.door(vault);
           try {
             const raw = await deps.request(vault, "PATCH", `/${door}/${encodeURIComponent(now.id)}`, bodyFor(door, change));
@@ -440,19 +441,22 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           let now: Rec & { extension?: unknown };
           try { now = await getRec(vault, id, false); } catch (e) { throw failed(e); }
           if (guarded(now) || (!now.path.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(now.path)) || now.path.startsWith(VIEWS)) throw refuse("this record is the app's own: no applet changes it");
-          // nothing to do: says so, and hands back nothing of the record (sharing alone reads no fields)
-          if (isPublic(now) === on) return null;
+          // nothing to do: says so; and in any case hands back nothing of the record (sharing alone reads no fields)
+          if (isPublic(now) === on) return { published: on, changed: false };
           // making it readable by anyone is the person's to say, on the app's own sheet; taking that back isn't asked
-          if (on) await askFirst(deps, { title: `Publish ${now.path}?`, body: `Anyone with its link can read ${now.path}, from ${v.name} (${v.host}), without signing in. You can unpublish it later.`, act: "Publish" });
+          if (on) await askFirst(deps, { title: `Publish “${now.path}”?`, body: `Anyone with its link can read “${now.path}”, from ${v.name} (${v.host}), without signing in. You can unpublish it later.`, act: "Publish" });
           const door = await deps.door(vault);
           // the field works whatever tag a vault names for publishing; off takes away the field and the default tags
           const fields = door === "records" ? "fields" : "metadata";
           const body = on ? { [fields]: { [PUBLISH_FIELD]: true }, if_updated_at: now.updatedAt }
-            : { [fields]: { [PUBLISH_FIELD]: null }, ...(now.tags.some(publishName) ? { tags: { remove: now.tags.filter(publishName) } } : {}),
-              ...(door === "records" && now.types.some(publishName) ? { types: { remove: now.types.filter(publishName) } } : {}), if_updated_at: now.updatedAt };
+            // the records door keeps a type apart from tags; the notes door (0.8) has only tags, a type's name among them
+            : door === "records"
+              ? { fields: { [PUBLISH_FIELD]: null }, ...(now.tags.some(publishName) ? { tags: { remove: now.tags.filter(publishName) } } : {}),
+                ...(now.types.some(publishName) ? { types: { remove: now.types.filter(publishName) } } : {}), if_updated_at: now.updatedAt }
+              : { metadata: { [PUBLISH_FIELD]: null }, ...([...now.tags, ...now.types].some(publishName) ? { tags: { remove: [...now.tags, ...now.types].filter(publishName) } } : {}), if_updated_at: now.updatedAt };
           try {
-            const raw = await deps.request(vault, "PATCH", `/${door}/${encodeURIComponent(now.id)}`, body);
-            return recOf(raw, await namesFor(vault));
+            await deps.request(vault, "PATCH", `/${door}/${encodeURIComponent(now.id)}`, body);
+            return { published: on, changed: true };
           } catch (e) { throw failed(e); }
         },
       },

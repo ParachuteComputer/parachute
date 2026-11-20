@@ -21,8 +21,10 @@ export default function VaultView() {
   const location = useLocation();
   const homeRead = useHomeLoaded();
   const viewer = useHome().viewer;
-  const toViewer = homeRead && !!rec && viewer?.status === "ok";
-  useEffect(() => { if (toViewer && viewer && rec) void carryOn(location.pathname, viewerHref(viewer, rec.key)); }, [toViewer]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a carry-on the shell refused (the person already left, say) leaves the plain view here, never "Opening…" for good
+  const [stay, setStay] = useState(false);
+  const toViewer = homeRead && !!rec && viewer?.status === "ok" && !stay;
+  useEffect(() => { if (toViewer && viewer && rec) carryOn(location.pathname, viewerHref(viewer, rec.key)).catch(() => setStay(true)); }, [toViewer]); // eslint-disable-line react-hooks/exhaustive-deps
   const [term, setTerm] = useState("");
   const load = useVaultQuery<Note[]>(rec, (c) => (term
     ? c.queryNotes({ search: term, limit: LIMIT })

@@ -98,14 +98,14 @@ test.describe("Vault", () => {
     const unsigned = async () => (await fetch(`${hub().origin}/vault/${VAULT}/view/${made[1]}`)).status;
     expect(await unsigned()).not.toBe(200);
     await v.getByRole("button", { name: "Publish" }).click();
-    const sheet = page.getByRole("dialog", { name: "Publish Shelf/Book 01?" });
-    await expect(sheet).toContainText("Anyone with its link can read Shelf/Book 01");
+    const sheet = page.getByRole("dialog", { name: "Publish “Shelf/Book 01”?" });
+    await expect(sheet).toContainText("Anyone with its link can read “Shelf/Book 01”");
     await sheet.getByRole("button", { name: "Cancel" }).click();
     await expect(sheet).toHaveCount(0);
     expect(await unsigned()).not.toBe(200);
     await v.getByRole("button", { name: "Publish" }).click();
     await page.waitForTimeout(800);
-    await page.getByRole("dialog", { name: "Publish Shelf/Book 01?" }).getByRole("button", { name: "Publish" }).click();
+    await page.getByRole("dialog", { name: "Publish “Shelf/Book 01”?" }).getByRole("button", { name: "Publish" }).click();
     await expect.poll(unsigned).toBe(200);
     await v.getByRole("button", { name: "Unpublish" }).click();
     await expect.poll(unsigned).not.toBe(200);

@@ -362,7 +362,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       {canWrite && <>
         <p className="sect">Sharing</p>
         <p className="note-meta">{published ? "Published: anyone with its link can read it." : "Only you, and what you let in, can read it."}</p>
-        <Button small onClick={() => vaults.publish(v.key, r.id, !published).then(() => { toast(published ? "No longer published." : "Published."); return load(); }, (e: unknown) => quiet(e, "Not changed"))}>{published ? "Unpublish" : "Publish"}</Button>
+        <Button small onClick={() => vaults.publish(v.key, r.id, !published).then((x: { published: boolean; changed: boolean }) => { toast(x.changed ? (x.published ? "Published." : "No longer published.") : x.published ? "It was published already." : "It wasn't published."); return load(); }, (e: unknown) => quiet(e, "Not changed"))}>{published ? "Unpublish" : "Publish"}</Button>
       </>}
     </article>
   );

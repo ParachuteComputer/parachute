@@ -148,7 +148,7 @@ describe("sharing", () => {
     expect(no.calls.filter((c) => c.method !== "GET")).toEqual([]);
     const yes = setup(["sharing"], { a: book });
     await yes.call("publish", { vault: "home", id: "a", on: true });
-    expect(yes.asked).toEqual(["Publish Books/A?"]);
+    expect(yes.asked).toEqual(["Publish “Books/A”?"]);
     expect(yes.calls.at(-1)).toMatchObject({ method: "PATCH", body: { fields: { published: true }, if_updated_at: book.updatedAt } });
     // off takes the field and any publish tag away, and isn't asked
     const off = setup(["sharing"], { a: { ...book, tags: ["publish"], fields: { published: true } } });
@@ -156,10 +156,20 @@ describe("sharing", () => {
     expect(off.asked).toEqual([]);
     expect(off.calls.at(-1)).toMatchObject({ method: "PATCH", body: { fields: { published: null }, tags: { remove: ["publish"] } } });
   });
-  it("a publish tag held as a type counts as public, and Unpublish takes it away as a type", async () => {
+  it("a publish tag held as a type counts as public, and Unpublish takes it away: as a type, or on 0.8 as the tag it is", async () => {
     const off = setup(["sharing"], { a: { ...book, types: ["book", "publish"] } });
     await off.call("publish", { vault: "home", id: "a", on: false });
     expect(off.calls.at(-1)).toMatchObject({ method: "PATCH", body: { types: { remove: ["publish"] } } });
+    // 0.8: no types; a tag with a schema reads as a type (recOf), and goes back out as a tag
+    const old = setup(["sharing"], { a: { id: "a", path: "Books/A", content: "w", tags: ["book", "publish"], metadata: {}, updatedAt: book.updatedAt } }, { door: "notes", types: [{ name: "publish", kind: "type", count: 1, fields: { x: {} } }] });
+    await old.call("publish", { vault: "home", id: "a", on: false });
+    expect(old.calls.at(-1)).toMatchObject({ method: "PATCH", path: "/notes/a", body: { metadata: { published: null }, tags: { remove: ["publish"] } } });
+  });
+  it("sharing's publish hands back nothing of the record: only whether it is published and whether that changed", async () => {
+    const already = setup(["sharing"], { a: { ...book, fields: { published: true, secret: "x" } } });
+    expect(await already.call("publish", { vault: "home", id: "a", on: true })).toEqual({ published: true, changed: false });
+    const off = setup(["sharing"], { a: { ...book, fields: { published: true, secret: "x" } } });
+    expect(await off.call("publish", { vault: "home", id: "a", on: false })).toEqual({ published: false, changed: true });
   });
   it("a type whose schema gives published a default can't be given by a change (the hub would fill it in)", async () => {
     const post = { name: "post", kind: "type", count: 0, fields: { published: { type: "boolean", default: true } } };
@@ -177,7 +187,7 @@ describe("sharing", () => {
     expect(no.calls.filter((c) => c.method !== "GET")).toEqual([]);
     const yes = setup(["vaults"], { a: { ...book, tags: ["publish"] } });
     await yes.call("update", { vault: "home", id: "a", bytes: enc({ if_updated_at: book.updatedAt, body: "ok" }) });
-    expect(yes.asked).toEqual(["Change Books/A?"]);
+    expect(yes.asked).toEqual(["Change “Books/A”?"]);
   });
   it("a change is to the version it was judged on", async () => {
     const { call, calls } = setup(["vaults"], { a: book });

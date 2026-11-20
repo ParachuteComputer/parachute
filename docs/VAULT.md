@@ -92,6 +92,6 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
    narrow what such a key sees. Proposal: the vault's read scope may read its `published_tag` and `private_tags`. A type
    whose schema gives `published` a default would publish what it is given (the hub fills defaults in), so `vaults`
    refuses to give such a type; a field named `__proto__`, `constructor` or `prototype` is refused anywhere.
+4. **Counts per group**: `aggregate` groups only by an indexed field, so a grouped table counts what it has read.
 5. **Someone else's vault.** `vaults` changes records in any vault the app may change, a shared one of someone else's
    too (the card says every vault): what it reads in one vault can be written into another the person shares.
-4. **Counts per group**: `aggregate` groups only by an indexed field, so a grouped table counts what it has read.
