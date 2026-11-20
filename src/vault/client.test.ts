@@ -38,6 +38,19 @@ describe("refreshOnce", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(revoked).toEqual(["rw2"]);
   });
+  it("the hub refusing a refresh of a sign-in that was replaced meanwhile isn't a refusal of the one held now", async () => {
+    const base = { issuer: "https://hub.example", vault: "attic2", tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", addedAt: "" };
+    saveVault({ ...base, accessToken: "rwA1", refreshToken: "rw1", scope: "vault:attic2:read vault:attic2:write" });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    // the old sign-in was ended at the hub (keep's revoke) before its refresh got there: 400
+    const hub = (async () => { await gate; return new Response("{}", { status: 400 }); }) as unknown as typeof fetch;
+    const running = refreshOnce("attic2", hub);
+    saveVault({ ...base, accessToken: "readA", refreshToken: "read1", scope: "vault:attic2:read" });
+    release();
+    expect(await running).toBe("readA");
+    expect(findVault("attic2")?.refreshToken).toBe("read1");
+  });
   it("a request refused with a token since replaced goes again with the current one; a refusal of the current one stands", async () => {
     // on core 0.9 each refresh retires the token before it: a straggler that refreshed again would take the fresh token
     // away from every other request (seen in CI: a vault's page lost its token to its own parallel reads)

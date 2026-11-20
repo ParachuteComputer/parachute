@@ -46,6 +46,10 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
       refreshFailed.delete(key);
       return t.access_token;
     } catch (e) {
+      // the same, the other way round: the old sign-in was ended at the hub before this refresh of it got there. The
+      // hub's no is for the one that is gone, not for the sign-in the record holds now.
+      const now = findVault(key);
+      if (now && now.refreshToken !== cur.refreshToken) { refreshFailed.delete(key); return now.accessToken; }
       // the hub answering no (a 4xx to the refresh) is a refusal; anything else (no answer, its own trouble) is not
       refreshFailed.set(key, refusedRefresh(e) ? "refused" : "unreachable");
       return null;
