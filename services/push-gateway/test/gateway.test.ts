@@ -313,6 +313,18 @@ test("fresh keys from an address can't lock out the people the gateway already s
     // a key nobody confirmed is still held to the address's budget
     assert.equal(await send("unregister", generateSecretKey(), JSON.stringify({ relay, endpoint: "https://ntfy.example/y" })), 429);
   } finally { g.close(); }
+  // where the proxy is trusted for the client's address, addresses tell people apart and everyone is held to theirs, as before
+  const t = createGateway({ url: "http://push.test/", relays: [relay], secret: generateSecretKey(), file: null, allowLoopback: false, trustProxy: true, log: () => {} });
+  const tAt = `http://127.0.0.1:${await listenFree(t.server)}`;
+  try {
+    const send = async (route: string, sk: Uint8Array, body: string) =>
+      (await fetch(`${tAt}/${route}`, { method: "POST", headers: { authorization: nip98(sk, `http://push.test/${route}`, "POST", body), "x-forwarded-for": "1.2.3.4" }, body })).status;
+    const sk = generateSecretKey(), me = getPublicKey(sk);
+    t.registry.put(reg({ pubkey: me }), now());
+    t.registry.judge(relay, new Set([me]), new Set([me]));
+    for (let i = 0; i < 70; i++) await send("unregister", generateSecretKey(), JSON.stringify({ relay, endpoint: `https://ntfy.example/x${i}` }));
+    assert.equal(await send("signals", sk, JSON.stringify({ set: [] })), 429, "one address is one client there");
+  } finally { t.close(); }
 });
 
 test("signals: the person's own signature moves their numbers; a change reaches their phones as applet, signal and count only; a message adds one, once", async () => {
