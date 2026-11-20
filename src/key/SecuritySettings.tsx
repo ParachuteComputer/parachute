@@ -20,7 +20,7 @@ const ROWS: Row[] = [
 ];
 
 export default function SecuritySettings() {
-  const { app } = useSettings();
+  const { bundle: app } = useSettings();
   const [native, setNative] = useState<Native | null>(null);
   const [status, setStatus] = useState<LevelsStatus | null>(null);
   const [pending, setPending] = useState<Levels | null>(null);

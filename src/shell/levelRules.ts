@@ -1,6 +1,6 @@
 // The rules of the security levels, pure (docs/design/APP-RECORD.md "Security levels"): what a record's `security`
 // says, which of two levels is stricter, and the text a lowering's approval names. The same rules as
-// src-tauri/src/levels.rs, which enforces them. No imports beyond the contract's: the app record (apps.ts) reads these,
+// src-tauri/src/levels.rs, which enforces them. No imports beyond the contract's: the bundle record (bundles.ts) reads these,
 // and it is in the frame's bundle too.
 import { plain } from "../applet/contract";
 
@@ -22,7 +22,7 @@ const max = (a: Level, b: Level): Level => (rank(a) >= rank(b) ? a : b);
 const levelOf = (x: unknown): Level | undefined => (x === "none" || x === "unlock" || x === "passcode" ? x : undefined);
 const idleOf = (x: unknown): number | undefined => (typeof x === "number" && Number.isInteger(x) && x >= 0 ? Math.min(x, IDLE_MAX) : undefined);
 
-/** An app record's `security`, read strictly: an unknown word is left out (it can't be read as "none"). The record's
+/** A bundle record's `security`, read strictly: an unknown word is left out (it can't be read as "none"). The record's
  *  `approve` before levels existed meant approving code. */
 export function askedOf(raw: unknown): Asked {
   if (!plain(raw)) return {};

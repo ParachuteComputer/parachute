@@ -18,7 +18,7 @@ const said = (e: unknown) => (e && typeof e === "object" && "message" in e ? Str
 
 /** Raise this device to what the open app's record asks (and take a lowering only with the person's signed approval). */
 function LevelsSync({ native }: { native: Native }) {
-  const { app, read } = useSettings();
+  const { bundle: app, read } = useSettings();
   const key = `${app.id}|${JSON.stringify(app.security)}|${read}`;
   useEffect(() => {
     if (read !== "read") return;

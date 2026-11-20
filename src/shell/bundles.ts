@@ -1,22 +1,29 @@
-// An app is a record (docs/design/APP-RECORD.md): `Parachute/Apps/<id>` in the person's home vault, tagged
-// `parachute-app`, everything under `fields.app` (metadata `app` on a hub before 0.9). It says where applets come from
-// (one applet, every applet in a vault, every vault on a hub), the bar, the home applet, which applet opens which kind
-// of note, and how many applets stay running. Being listed never runs anything: what runs is decided by the applet's
-// card (and, once there, a signed approval). The person can have several; each device opens one.
+// A bundle is a record (docs/design/APP-RECORD.md): `Parachute/Bundles/<id>` in the person's home vault, tagged
+// `parachute-bundle`, everything under `fields.bundle`. It says where applets come from (one applet, every applet in a
+// vault, every vault on a hub), the bar, the home applet, which applet opens which kind of note, and how many applets
+// stay running. Being listed never runs anything: what runs is decided by the applet's card (and, once there, a signed
+// approval). The person can have several; each device opens one. (Called an "app" record before 11-20: the Parachute
+// app is the app, so the record that picks what it shows is a bundle.)
 //
-// Two apps are always there, made by the app itself when no record says otherwise:
+// Two bundles are always there, made by the app itself when no record says otherwise:
 //   everything  every applet in every vault this device holds, with the settings note's bar and home (as before)
 //   simple      Notes, Capture and Connect (docs/SIMPLE.md)
-// A record with one of those ids changes that app. An app someone else offers is a record of theirs that the person's
-// own record follows (`live`): read from their vault each time, so their changes show; their code still asks.
+// A record with one of those ids changes that bundle. A bundle someone else offers is a record of theirs that the
+// person's own record follows (`live`): read from their vault each time, so their changes show; their code still asks.
+//
+// Older records (`Parachute/Apps/<id>`, tagged `parachute-app`, under `fields.app`) are read the same, for one release
+// (until 2026-12-20): a bundle of the same id wins, and the app's first change to an old one moves it (homeSettings.ts).
 // Pure, but for nothing: every reader here takes what it needs.
 import { plain, stripExt } from "../applet/contract";
 import { APP_LEVEL, tooNew } from "../applet/level";
 import { askedOf, stricterAsked, type Asked } from "./levelRules";
 
-export const APP_TAG = "parachute-app";
-export const APP_FOLDER = "Parachute/Apps/";
-export const BUILT_IN_APPS = ["everything", "simple"] as const;
+export const BUNDLE_TAG = "parachute-bundle";
+export const BUNDLE_FOLDER = "Parachute/Bundles/";
+/** The older names, read for one release (until 2026-12-20), never written. */
+export const OLD_BUNDLE_TAG = "parachute-app";
+export const OLD_BUNDLE_FOLDER = "Parachute/Apps/";
+export const BUILT_IN_BUNDLES = ["everything", "simple"] as const;
 export type Look = "launcher" | "notes";
 
 /** One applet, as the bar names it today: its vault's name (and hub's origin, when not the home's) and its note's path or id. */
@@ -25,7 +32,7 @@ export type Place = { hub?: string; vault: string; applet: string };
 export type Source = { hub?: string; vault: string; applet: string };
 export type OpensChoice = { type: string; hub?: string; vault: string; applet: string | null };
 export type Keep = "auto" | number;
-export type App = {
+export type Bundle = {
   id: string; name: string; glyph: string; note: string;
   /** How its home looks: the launcher, or the simple app's Notes. */
   look: Look;
@@ -76,21 +83,21 @@ function opensOf(x: unknown): OpensChoice | null {
 }
 const list = <T>(x: unknown, max: number, f: (y: unknown) => T | null): T[] => (Array.isArray(x) ? x.slice(0, max).map(f).filter((y): y is T => !!y) : []);
 
-/** Was this app record made for a newer Parachute (`needs` above this build's level, or a later contract: level.ts)?
- *  Then it isn't read here at all: the device opens the next app it can and says to update (homeSettings appNewer). */
-export const newerApp = (raw: unknown, level = APP_LEVEL): boolean => plain(raw) && (tooNew(raw.needs, level) || (typeof raw.contract === "number" && raw.contract > 1));
+/** Was this bundle record made for a newer Parachute (`needs` above this build's level, or a later contract: level.ts)?
+ *  Then it isn't read here at all: the device opens the next app it can and says to update (homeSettings bundleNewer). */
+export const newerBundle = (raw: unknown, level = APP_LEVEL): boolean => plain(raw) && (tooNew(raw.needs, level) || (typeof raw.contract === "number" && raw.contract > 1));
 
-/** An app record's `app` field, read strictly where a mistake would widen what is offered, kindly elsewhere: a
+/** A bundle record's `app` field, read strictly where a mistake would widen what is offered, kindly elsewhere: a
  *  source or place that doesn't parse is left out, never the rest. null when it isn't an app at all, or is newer. */
-export function appOf(raw: unknown, path: string | null, noteId: string | null, level = APP_LEVEL): App | null {
-  if (!plain(raw) || raw.contract !== 1 || newerApp(raw, level) || typeof raw.id !== "string" || !ID.test(raw.id) || raw.id.length > 40) return null;
-  // the id is the last part of its path, so two records can't both claim one app
-  if (path !== null && stripExt(path) !== `${APP_FOLDER}${raw.id}`) return null;
+export function bundleOf(raw: unknown, path: string | null, noteId: string | null, level = APP_LEVEL): Bundle | null {
+  if (!plain(raw) || raw.contract !== 1 || newerBundle(raw, level) || typeof raw.id !== "string" || !ID.test(raw.id) || raw.id.length > 40) return null;
+  // the id is the last part of its path, so two records can't both claim one bundle (an older record's path, alike)
+  if (path !== null && stripExt(path) !== `${BUNDLE_FOLDER}${raw.id}` && stripExt(path) !== `${OLD_BUNDLE_FOLDER}${raw.id}`) return null;
   const live = plain(raw.live) && hubOk(raw.live.hub) && typeof raw.live.vault === "string" && VAULT.test(raw.live.vault) && line(raw.live.path, 300)
     ? { hub: raw.live.hub as string, vault: raw.live.vault, path: raw.live.path as string } : undefined;
   if (!line(raw.name, 60) && !live) return null;
   const keep = raw.keep === "auto" || raw.keep === undefined ? "auto" : typeof raw.keep === "number" && Number.isInteger(raw.keep) && raw.keep >= 0 && raw.keep <= 12 ? raw.keep : "auto";
-  const builtIn = (BUILT_IN_APPS as readonly string[]).includes(raw.id) ? builtInApp(raw.id as "everything" | "simple") : null;
+  const builtIn = (BUILT_IN_BUNDLES as readonly string[]).includes(raw.id) ? builtInBundle(raw.id as "everything" | "simple") : null;
   return {
     id: raw.id, name: line(raw.name, 60) ? raw.name : builtIn?.name ?? raw.id,
     glyph: line(raw.glyph, 4) ? raw.glyph : builtIn?.glyph ?? "◇",
@@ -111,7 +118,7 @@ export function appOf(raw: unknown, path: string | null, noteId: string | null, 
 
 /** The two apps the app always has, as they are when no record changes them. `sources` of everything: every vault
  *  on every Parachute this device holds (`anyHub`). */
-export function builtInApp(id: "everything" | "simple"): App {
+export function builtInBundle(id: "everything" | "simple"): Bundle {
   return id === "simple"
     ? { id, name: "Simple", glyph: "¶", note: "your notes, Capture, and Connect an AI", look: "notes", sources: [], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: {}, noteId: null }
     : { id, name: "Everything", glyph: "⁂", note: "every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: {}, noteId: null };
@@ -120,16 +127,16 @@ export function builtInApp(id: "everything" | "simple"): App {
 export const ANY_HUB = "*";
 
 /** The person's apps: the two built-ins (as their records change them) and every other record, each id once. */
-export function appsFrom(records: readonly App[]): App[] {
-  const byId = new Map<string, App>();
-  for (const id of BUILT_IN_APPS) byId.set(id, builtInApp(id));
+export function bundlesFrom(records: readonly Bundle[]): Bundle[] {
+  const byId = new Map<string, Bundle>();
+  for (const id of BUILT_IN_BUNDLES) byId.set(id, builtInBundle(id));
   for (const r of records) if (!byId.has(r.id) || byId.get(r.id)!.noteId === null) byId.set(r.id, r);
   return [...byId.values()];
 }
 
 /** Which app this device opens: its own choice, else the one the settings note names, else everything. */
-export function openApp(apps: readonly App[], device: string | null, settings: string | null): App {
-  return apps.find((a) => a.id === device) ?? apps.find((a) => a.id === settings) ?? apps.find((a) => a.id === "everything") ?? builtInApp("everything");
+export function openBundle(apps: readonly Bundle[], device: string | null, settings: string | null): Bundle {
+  return apps.find((a) => a.id === device) ?? apps.find((a) => a.id === settings) ?? apps.find((a) => a.id === "everything") ?? builtInBundle("everything");
 }
 
 /** A vault as this device holds it, for matching: its hub's origin and its name. */
@@ -139,19 +146,19 @@ const sameHub = (a: string | undefined, b: string, home: string) => (a ?? home) 
 export const namesApplet = (name: string, a: { noteId: string; path: string }) => name === a.noteId || stripExt(name) === stripExt(a.path);
 
 /** Is this applet offered by the app? `home`: the hub its places mean when they name none. */
-export function offered(app: App, v: Held, a: { noteId: string; path: string }, home: string): boolean {
+export function offered(app: Bundle, v: Held, a: { noteId: string; path: string }, home: string): boolean {
   const base = app.hubOf ?? home;
   const hit = app.sources.some((s) => (s.hub === ANY_HUB || sameHub(s.hub, v.hub, base)) && (s.vault === "*" || s.vault === v.vault) && (s.applet === "*" || namesApplet(s.applet, a)));
   return hit && !app.hide.some((h) => sameHub(h.hub, v.hub, base) && h.vault === v.vault && namesApplet(h.applet, a));
 }
 /** Does the app offer anything in this vault (so its chapter shows)? */
-export const offersIn = (app: App, v: Held, home: string) => app.sources.some((s) => (s.hub === ANY_HUB || sameHub(s.hub, v.hub, app.hubOf ?? home)) && (s.vault === "*" || s.vault === v.vault));
+export const offersIn = (app: Bundle, v: Held, home: string) => app.sources.some((s) => (s.hub === ANY_HUB || sameHub(s.hub, v.hub, app.hubOf ?? home)) && (s.vault === "*" || s.vault === v.vault));
 
 /** How many applets stay running while hidden: the app's number, else the device's default. */
-export const keepOf = (app: App, deviceDefault: number) => (app.keep === "auto" ? deviceDefault : app.keep);
+export const keepOf = (app: Bundle, deviceDefault: number) => (app.keep === "auto" ? deviceDefault : app.keep);
 
 /** The record the app writes for an app (the built-ins' when they are first changed): only what it says. */
-export function recordOf(app: App): Record<string, unknown> {
+export function recordOf(app: Bundle): Record<string, unknown> {
   return {
     contract: 1, id: app.id, name: app.name, glyph: app.glyph, ...(app.note ? { note: app.note } : {}), look: app.look,
     sources: app.sources.filter((s) => s.hub !== ANY_HUB), ...(app.sources.some((s) => s.hub === ANY_HUB) ? { everywhere: true } : {}),
@@ -164,8 +171,8 @@ export function recordOf(app: App): Record<string, unknown> {
 /** An app someone else offers, as the person follows it: their record, under the person's own id and name for it, and
  *  never less careful than the person's own record asks: each level the stricter of the two (shell/levelRules.ts). A
  *  device's levels are raised by the open app's record and never lowered by one (src-tauri/src/levels.rs). */
-export function followed(own: App, raw: unknown, theirs: Record<string, unknown>): Record<string, unknown> {
-  // a later contract of theirs stays as it is, so this app sees it as made for a newer Parachute (newerApp), not as 1
+export function followed(own: Bundle, raw: unknown, theirs: Record<string, unknown>): Record<string, unknown> {
+  // a later contract of theirs stays as it is, so this app sees it as made for a newer Parachute (newerBundle), not as 1
   return { ...theirs, contract: typeof theirs.contract === "number" && theirs.contract > 1 ? theirs.contract : 1, id: own.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: own.live,
     ...(Object.keys(own.security).length || theirs.security !== undefined ? { security: stricterAsked(own.security, askedOf(theirs.security)) } : {}) };
 }

@@ -28,7 +28,7 @@ import { useParachutes } from "../shell/parachutes";
 import { listHub } from "../shell/homeSettings";
 import { askVault, signOutOf } from "../vault/signInFlow";
 import { dismissVault, newVaultsOn, newVaultsRev, startAddVault, subscribeNewVaults } from "../vault/newVaults";
-import AppChoice from "./AppChoice";
+import BundleChoice from "./BundleChoice";
 import { appletsNeedingWrite, forgetOwnWrite, giveBack, heldLevel } from "../vault/reach";
 
 /** Signing out of a vault ends what its applets were allowed on this device too, and the embeds on its pages or from it;
@@ -115,7 +115,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
         )) : <p className="quiet">None yet.</p>}
         <p className="small"><Link to="/add">Add a Parachute</Link></p>
       </section>
-      <AppChoice />
+      <BundleChoice />
       <ServicesSettings />
       <KeySettings />
       <SecuritySettings />

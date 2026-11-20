@@ -18,7 +18,7 @@ async function device(browser: Browser, key: string): Promise<Page> {
 }
 type Row = { id: string; path: string; updatedAt: string; metadata: Record<string, any> };
 const tagged = async (tag: string) => { const r = await api(hubState(), "GET", `notes?tag=${tag}&include_metadata=true`); return (Array.isArray(r) ? r : r.notes ?? []) as Row[]; };
-const appRecord = async () => (await tagged("parachute-app")).find((n) => n.path.replace(/\.md$/, "") === "Parachute/Apps/everything");
+const appRecord = async () => (await tagged("parachute-bundle")).find((n) => n.path.replace(/\.md$/, "") === "Parachute/Bundles/everything");
 const security = (p: Page) => p.locator("section", { has: p.getByRole("heading", { name: "Security" }) });
 const group = (p: Page, name: string) => security(p).getByRole("group", { name });
 const locked = (p: Page) => p.getByRole("dialog", { name: "Parachute is locked" });
@@ -26,7 +26,7 @@ const unlockPasses = (p: Page, yes: boolean) => p.evaluate((y) => { (window as u
 
 test.describe.configure({ mode: "serial" });
 test.afterEach(async () => {
-  for (const n of await tagged("parachute-app")) await api(hubState(), "DELETE", `notes/${n.id}`);
+  for (const n of await tagged("parachute-bundle")) await api(hubState(), "DELETE", `notes/${n.id}`);
   for (const n of await tagged("parachute-approval")) if (n.path.includes("/security-")) await api(hubState(), "DELETE", `notes/${n.id}`);
 });
 
@@ -43,7 +43,7 @@ test("the idle lock engages after its minutes, only the unlock opens it, turning
     // stricter is a tap: kept here, and in the app's record for the other devices
     await group(page, "Lock after").getByRole("button", { name: "1 min", exact: true }).click();
     await expect(security(page).getByRole("status")).toContainText("Kept");
-    await expect.poll(async () => (await appRecord())?.metadata.app.security).toEqual({ approvals: "unlock", code: "unlock", join: "passcode", idle: 1 });
+    await expect.poll(async () => (await appRecord())?.metadata.bundle.security).toEqual({ approvals: "unlock", code: "unlock", join: "passcode", idle: 1 });
 
     // a minute untouched: locked, over everything
     await page.clock.runFor(30_000);
@@ -66,18 +66,18 @@ test("the idle lock engages after its minutes, only the unlock opens it, turning
     await expect(security(page).getByRole("status")).toContainText("signed for your other devices");
     const signed = (await tagged("parachute-approval")).find((n) => n.path.endsWith("/security-everything"));
     expect(JSON.parse(signed!.metadata.approval.content)).toMatchObject({ approved: true, code: "levels:v1:approvals=unlock,code=unlock,join=passcode,idle=0", subject: { vault: VAULT, record: "security-everything", applet: "security" } });
-    await expect.poll(async () => (await appRecord())?.metadata.app.security.idle).toBe(0);
+    await expect.poll(async () => (await appRecord())?.metadata.bundle.security.idle).toBe(0);
 
     // someone who can write the vault, without the key: cards to a tap, joining to a tap. Nothing loosens here
     const r = (await appRecord())!;
-    await api(hubState(), "PATCH", `notes/${r.id}`, { metadata: { app: { ...r.metadata.app, security: { approvals: "none", code: "unlock", join: "none", idle: 0 } } }, if_updated_at: r.updatedAt });
+    await api(hubState(), "PATCH", `notes/${r.id}`, { metadata: { bundle: { ...r.metadata.bundle, security: { approvals: "none", code: "unlock", join: "none", idle: 0 } } }, if_updated_at: r.updatedAt });
     await page.goto("about:blank");
     await page.goto("/settings");
     await expect(group(page, "Approval cards").getByRole("button", { name: "Unlock" })).toHaveAttribute("aria-pressed", "true");
     await expect(group(page, "Joining a network").getByRole("button", { name: "Passcode" })).toHaveAttribute("aria-pressed", "true");
     // and a stricter edit is taken at once
     const r2 = (await appRecord())!;
-    await api(hubState(), "PATCH", `notes/${r2.id}`, { metadata: { app: { ...r2.metadata.app, security: { idle: 5 } } }, if_updated_at: r2.updatedAt });
+    await api(hubState(), "PATCH", `notes/${r2.id}`, { metadata: { bundle: { ...r2.metadata.bundle, security: { idle: 5 } } }, if_updated_at: r2.updatedAt });
     await page.goto("about:blank");
     await page.goto("/settings");
     await expect(group(page, "Lock after").getByRole("button", { name: "5 min", exact: true })).toHaveAttribute("aria-pressed", "true");

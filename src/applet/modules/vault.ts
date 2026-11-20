@@ -65,9 +65,9 @@ const safeRef = (ref: string) => ref.length > 0 && ref.length <= 300 && !/[\u000
 const writablePath = (p: unknown): p is string => typeof p === "string" && p.length <= 300 && !hasHidden(p) && !/%(?:2e|2f|5c|25)/i.test(p)
   && !CODE_PATH.test(p) && p.trim() === p && !p.split("/").some((s) => s.trim() !== s);
 /** A note no applet may change: a code note (HTML, TSX, JSX: an applet's or a component's code), or one tagged `applet`,
- *  `component` or `parachute-pointer` (docs/design/EMBED.md), or an app record, an approval or the key list
- *  (docs/design/APP-RECORD.md). */
-const GUARDED_TAGS = ["applet", "component", "parachute-pointer", "parachute-app", "parachute-approval", "parachute-keys"];
+ *  `component` or `parachute-pointer` (docs/design/EMBED.md), or a bundle record (and one under its older tag), an
+ *  approval or the key list (docs/design/APP-RECORD.md). */
+const GUARDED_TAGS = ["applet", "component", "parachute-pointer", "parachute-bundle", "parachute-app", "parachute-approval", "parachute-keys"];
 export const isAppletCode = (n: VaultNote) => isCodeExtension(n)
   || (n.tags ?? []).some((t) => GUARDED_TAGS.some((g) => t === g || t.startsWith(`${g}/`)));
 const bodyOf = (raw: string | null, keys: readonly string[], required: readonly string[]): Record<string, string> | null => {

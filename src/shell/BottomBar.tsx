@@ -21,7 +21,7 @@ import { useBadge } from "../services/signals";
 type Item = Found & { place: Place; home: boolean };
 
 export default function BottomBar() {
-  const { bar, app } = useSettings();
+  const { bar, bundle: app } = useSettings();
   const simple = app.look === "notes";
   const ownFrame = useFrameSource().choice.run === "vault";
   const { pathname } = useLocation();

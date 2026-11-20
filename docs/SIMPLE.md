@@ -12,7 +12,7 @@ same Parachute app with a smaller set of screens, and Settings switches between 
 | **Capture** | the bar | Write a line, or **Say it** (the app's own recorder): it lands in the home vault's `Inbox/` as a note of its own, and a voice note gets its words from the hub's transcription. |
 | **Connect** | the bar | Each vault's connector address (`https://…/vault/<name>/mcp`) with **Copy**, and how to add it to Claude and ChatGPT. |
 
-The bar says **Notes · Capture · Connect**. Settings (the foot of Notes, or ⋯ on the other screens) has **Your app:
+The bar says **Notes · Capture · Connect**. Settings (the foot of Notes, or ⋯ on the other screens) has **Your bundle:
 Simple / Everything**.
 
 On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key); the key's ways come
@@ -60,10 +60,10 @@ never tells it which vaults the person has. A Cloud person's notes sit at the ro
 applet couldn't see them. Notes needs every vault, and Connect needs every vault's address, so both are the app's own
 screens. Capture writes into one folder of one vault, so it can be an applet.
 
-## As an app record
+## As a bundle record
 
-Simple is one of the two apps the app always has ([NAVIGATION.md](NAVIGATION.md#apps)): `Settings.app: "simple"`
-names it, the same field with the same value as before. A record `Parachute/Apps/simple` (`"look": "notes"`) changes
+Simple is one of the two bundles the app always has ([NAVIGATION.md](NAVIGATION.md#bundles)): the settings note's
+`bundle: "simple"` names it (`app: "simple"` before 11-20, still read). A record `Parachute/Bundles/simple` (`"look": "notes"`) changes
 it, for instance to put more on its bar; the Notes home, Capture and Connect stay the app's own screens. Its
 `sources` don't narrow Notes, which shows every vault this device holds. Capture's code
 comes with the app and is written into the vault on a tap; its card then asks as any applet's does.

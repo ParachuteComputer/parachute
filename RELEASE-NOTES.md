@@ -24,7 +24,7 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
 - **Other Parachutes.** Add an org's Parachute as someone else's; bring its applets into your own Parachute and put its
   components on your home, each in its own sealed frame with its own card, seeing only what that card allows of their
   vault ([docs/OTHER-PARACHUTES.md](docs/OTHER-PARACHUTES.md)).
-- **Your app.** The app opens on the home applet your app record names (`Parachute/Apps/<id>`), the bar is that
+- **Your bundle.** The app opens on the home applet your bundle names (`Parachute/Bundles/<id>`; called an app record before 11-20), the bar is that
   record's pins in its order, then **Applets**: one list of the app's applets. Vaults are in Settings. *Changed:* the
   bar no longer puts your home first by itself: pin it (long-press it in Applets, **Pin to the bar**) to keep it there.
   A record that doesn't load leaves you the list and Settings ([docs/NAVIGATION.md](docs/NAVIGATION.md)).

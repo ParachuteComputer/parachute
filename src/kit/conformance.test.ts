@@ -100,7 +100,7 @@ const tags = { "#h": [room], "#e": [id] };`;
 // The simple app's own screens (Notes, a vault's notes, Connect) are drawn with the same parts: the same rules, less
 // the page (a screen of the app has the app's bar and its router, not an applet's Page) and what each names here.
 const SCREENS: Record<string, string[]> = {
-  "src/frame/views/NotesHome.tsx": ["status"], // the app record's notice is the app's own line, said when it shows
+  "src/frame/views/NotesHome.tsx": ["status"], // the bundle record's notice is the app's own line, said when it shows
   "src/frame/views/VaultView.tsx": ["lists"], // the vault's applets as chips, the app's own
   "src/frame/views/NoteRows.tsx": ["lists"], // List's rows as router links: the frame moves by its router, an applet can't
   "src/views/Connect.tsx": [],

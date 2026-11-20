@@ -7,9 +7,10 @@
 //                   start: {vault, hub?, applet} | null   the home applet: it opens on start, first on the bar
 //                   hubs:  [{hub, name?}]   the person's Parachutes (docs/design/ONE-SIGN-IN.md): shown, never signed
 //                          in to by themselves
-//                   app:   "simple" | "everything"   which app this person's devices open (docs/SIMPLE.md): the simple
-//                          one (Notes, Capture, Connect) or everything (the launcher, every applet). Absent: everything.
-//                          A new person's first sign-in writes "simple"
+//                   bundle: "simple" | "everything" | <id>   which bundle this person's devices open (shell/bundles.ts,
+//                          docs/SIMPLE.md): the simple one (Notes, Capture, Connect), everything (the launcher, every
+//                          applet), or a bundle record's. Absent: everything. A new person's first sign-in writes "simple".
+//                          Its older name `app` is read for one release (until 2026-12-20); a change writes `bundle`
 //                   services: [{name, kind, url}]   the servers the person's applets reach (docs/design/SERVICES.md):
 //                          their relay, their mail gateway. Shown in Settings with the applets that reach each; an
 //                          applet's own record still names what it reaches, and its card is what allows it
@@ -29,7 +30,7 @@ import { homeVault } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
 import type { Levels } from "./levels";
-import { APP_TAG, appOf as appRecordOf, appsFrom, followed, newerApp, openApp, recordOf, APP_FOLDER, type App } from "./apps";
+import { BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, followed, newerBundle, openBundle, recordOf, BUNDLE_FOLDER, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -42,15 +43,15 @@ export type Place = { vault: string; hub?: string; applet: string };
 export type HubEntry = { hub: string; name?: string };
 /** A server the person's applets reach, as the note lists it. */
 export type ServiceEntry = { name: string; kind: "nostr-relay" | "http"; url: string };
-/** Which app the person's devices open: "simple" (docs/SIMPLE.md), "everything", or the id of an app record
- *  (shell/apps.ts); null: the note says nothing. Older apps read any other id as everything. */
-export type AppChoice = string;
-export type Settings = { bar: Place[]; start: Place | null; hubs: HubEntry[]; services: ServiceEntry[]; app: AppChoice | null };
+/** Which bundle the person's devices open: "simple" (docs/SIMPLE.md), "everything", or the id of a bundle record
+ *  (shell/bundles.ts); null: the note says nothing. Older apps read any other id as everything. */
+export type BundleChoice = string;
+export type Settings = { bar: Place[]; start: Place | null; hubs: HubEntry[]; services: ServiceEntry[]; bundle: BundleChoice | null };
 /** A place this device can open: its vault (this device's key) and the applet's note. */
 export type Found = { vault: string; noteId: string; name: string; glyph: string; href: string };
 
-const EMPTY: Settings = { bar: [], start: null, hubs: [], services: [], app: null };
-const appOf = (x: unknown): AppChoice | null => (typeof x === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(x) && x.length <= 40 ? x : null);
+const EMPTY: Settings = { bar: [], start: null, hubs: [], services: [], bundle: null };
+const choiceOf = (x: unknown): BundleChoice | null => (typeof x === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(x) && x.length <= 40 ? x : null);
 const line = (x: unknown, max: number): x is string => typeof x === "string" && x.length > 0 && x.length <= max && !/[\u0000-\u001f]/.test(x);
 
 function placeOf(x: unknown): Place | null {
@@ -82,7 +83,7 @@ export function settingsFrom(metadata: unknown): Settings {
   const bar = Array.isArray(p.bar) ? p.bar.slice(0, 200).map(placeOf).filter((x): x is Place => !!x) : [];
   const hubs = (Array.isArray(p.hubs) ? p.hubs.slice(0, 50).map(hubOf).filter((x): x is HubEntry => !!x) : []).filter((h, i, all) => all.findIndex((y) => y.hub === h.hub) === i);
   const services = Array.isArray(p.services) ? p.services.slice(0, 20).map(serviceOf).filter((x): x is ServiceEntry => !!x) : [];
-  return { bar: dedupe(bar), start: placeOf(p.start), hubs, services, app: appOf(p.app) };
+  return { bar: dedupe(bar), start: placeOf(p.start), hubs, services, bundle: choiceOf(p.bundle) ?? choiceOf(p.app) };
 }
 const same = (a: Place, b: Place) => a.vault === b.vault && a.applet === b.applet && (a.hub ?? "") === (b.hub ?? "");
 const dedupe = (xs: Place[]) => xs.filter((x, i) => xs.findIndex((y) => same(x, y)) === i);
@@ -117,9 +118,10 @@ export async function readPlaces(s: Settings): Promise<void> {
 
 // ── what this device keeps: the last copy read, per home vault, and what its places named then ──
 
-/** `apps`: the app records read from the home vault (and, for one that follows someone else's, from theirs), as written. */
-type RawApp = { app: unknown; path: string | null; noteId: string | null; hubOf?: string };
-type Kept = { vault: string; settings: Settings; noteId: string | null; updatedAt: string | null; found: Record<string, Found>; apps?: RawApp[] };
+/** `bundles`: the bundle records read from the home vault (and, for one that follows someone else's, from theirs), as
+ *  written; `app` is the record's body (its name from before the rename, kept for the copies devices already hold). */
+type RawBundle = { app: unknown; path: string | null; noteId: string | null; hubOf?: string };
+type Kept = { vault: string; settings: Settings; noteId: string | null; updatedAt: string | null; found: Record<string, Found>; apps?: RawBundle[] };
 const storage = () => (typeof localStorage === "undefined" ? null : localStorage);
 const keyOf = (p: Place) => `${p.vault}|${p.hub ?? ""}|${p.applet}`;
 let keptRaw: string | null | undefined, keptParsed: Kept | null = null;
@@ -138,7 +140,7 @@ function parseKept(raw: string | null): Kept | null {
     if (!v || typeof v.vault !== "string") return null;
     const found: Record<string, Found> = {};
     if (plain(v.found)) for (const [k, f] of Object.entries(v.found)) if (plain(f) && line(f.vault, 200) && line(f.noteId, 300) && typeof f.name === "string" && typeof f.glyph === "string" && typeof f.href === "string") found[k] = f as Found;
-    const apps = Array.isArray(v.apps) ? v.apps.filter((a): a is RawApp => plain(a) && (a.path === null || typeof a.path === "string")).slice(0, 50) : [];
+    const apps = Array.isArray(v.apps) ? v.apps.filter((a): a is RawBundle => plain(a) && (a.path === null || typeof a.path === "string")).slice(0, 50) : [];
     return { vault: v.vault, settings: settingsFrom({ parachute: v.settings }), noteId: typeof v.noteId === "string" ? v.noteId : null, updatedAt: typeof v.updatedAt === "string" ? v.updatedAt : null, found, apps };
   } catch { return null; }
 }
@@ -171,7 +173,7 @@ export function settingsNow(): Settings {
   // a new person's simple app, chosen at their first sign-in, until the note can say so (docs/SIMPLE.md): the sign-in
   // reads the home only, so the note is written the first time they let Parachute change notes there. Only while the
   // home has no settings note: one there says what it says
-  return simpleHere() && home ? { ...EMPTY, app: "simple" } : { ...EMPTY };
+  return simpleHere() && home ? { ...EMPTY, bundle: "simple" } : { ...EMPTY };
 }
 
 const SIMPLE_HERE_KEY = "parachute.app.simple-here.v1";
@@ -202,15 +204,15 @@ export async function readSettings(): Promise<void> {
     const n = pick(rows) as (typeof rows)[number] | null;
     if (mine !== generation || homeVault()?.key !== home.key) return;
     const settings = n ? settingsFrom(n.metadata) : { ...EMPTY };
-    const apps = await readAppRecords(home).catch(() => keptNow()?.vault === home.key ? keptNow()?.apps ?? [] : []);
+    const apps = await readBundleRecords(home).catch(() => keptNow()?.vault === home.key ? keptNow()?.apps ?? [] : []);
     if (mine !== generation || homeVault()?.key !== home.key) return;
-    await readPlaces(effective(settings, parseApps(apps)));
+    await readPlaces(effective(settings, parseBundles(apps)));
     if (mine !== generation || homeVault()?.key !== home.key) return;
     // what each place names now; a place in a vault whose applets couldn't be read keeps what it named before
     const was = keptNow();
     const before = was?.vault === home.key ? was.found : {};
     const found: Record<string, Found> = {};
-    const eff = effective(settings, parseApps(apps));
+    const eff = effective(settings, parseBundles(apps));
     for (const p of [...settings.bar, ...(settings.start ? [settings.start] : []), ...eff.bar, ...(eff.start ? [eff.start] : [])]) {
       const rec = vaultFor(p);
       const f = rec && appletsNow(rec.key)?.state === "ok" ? findLive(p) : before[keyOf(p)];
@@ -227,7 +229,7 @@ export async function readSettings(): Promise<void> {
 }
 
 /** The note's choices as written, entries this app doesn't read included: a change keeps them. */
-type Raw = { bar: unknown[]; start: unknown; hubs: unknown[]; app?: AppChoice };
+type Raw = { bar: unknown[]; start: unknown; hubs: unknown[]; bundle?: BundleChoice };
 const parsedAs = (x: unknown, f: (p: Place) => boolean) => { const p = placeOf(x); return !!p && f(p); };
 
 /** Change the choices (a tap's): read the note as it is now, change only what was asked, and write it back.
@@ -241,7 +243,9 @@ async function changeSettings(change: (raw: Raw, creating: boolean) => Raw): Pro
   if (!n && rows.length > 1) throw new Error(`Your home vault has ${rows.length} settings notes; keep one, at ${SETTINGS_PATH}.`);
   const was = plain(n?.metadata) && plain(n!.metadata!.parachute) ? n!.metadata!.parachute as Record<string, unknown> : {};
   const next = change({ bar: Array.isArray(was.bar) ? was.bar : [], start: was.start ?? null, hubs: Array.isArray(was.hubs) ? was.hubs : [] }, !n);
-  const parachute = { ...was, bar: next.bar, start: next.start, ...(next.hubs.length || Array.isArray(was.hubs) ? { hubs: next.hubs } : {}), ...(next.app ? { app: next.app } : {}) };
+  // the choice of bundle is written under its new name; the older `app` goes with the first change that says one
+  const kept = next.bundle ? Object.fromEntries(Object.entries(was).filter(([k]) => k !== "app")) : was;
+  const parachute = { ...kept, bar: next.bar, start: next.start, ...(next.hubs.length || Array.isArray(was.hubs) ? { hubs: next.hubs } : {}), ...(next.bundle ? { bundle: next.bundle } : {}) };
   if (n) {
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), parachute }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
@@ -277,17 +281,17 @@ export const move = (p: Place, by: -1 | 1) => changeChoices((r) => {
   [bar[i], bar[j]] = [bar[j], bar[i]];
   return { ...r, bar };
 });
-/** Put a Parachute on the person's list (after a sign-in to it), unless it is there; or take it off. `appIfNew`: which
- *  app their devices open, written only if this write makes their settings note (a new person's first sign-in): a
- *  note already there keeps what it says. */
-export const listHub = (hub: string, on: boolean, name?: string, appIfNew?: AppChoice) => changeSettings((r, creating) => {
+/** Put a Parachute on the person's list (after a sign-in to it), unless it is there; or take it off. `bundleIfNew`:
+ *  which bundle their devices open, written only if this write makes their settings note (a new person's first
+ *  sign-in): a note already there keeps what it says. */
+export const listHub = (hub: string, on: boolean, name?: string, bundleIfNew?: BundleChoice) => changeSettings((r, creating) => {
   const has = r.hubs.some((x) => hubOf(x)?.hub === hub);
-  const withApp = appIfNew && creating ? { ...r, app: appIfNew } : r;
+  const withApp = bundleIfNew && creating ? { ...r, bundle: bundleIfNew } : r;
   if (on) return has ? withApp : { ...withApp, hubs: [...r.hubs, { hub, ...(name ? { name } : {}) }] };
   return has ? { ...withApp, hubs: r.hubs.filter((x) => hubOf(x)?.hub !== hub) } : withApp;
 });
-/** Which app the person's devices open (Settings, a tap). */
-export const setApp = async (app: AppChoice) => { await changeSettings((r) => ({ ...r, app })); forgetSimpleHere(); };
+/** Which bundle the person's devices open (Settings, a tap). */
+export const setBundle = async (bundle: BundleChoice) => { await changeSettings((r) => ({ ...r, bundle })); forgetSimpleHere(); };
 export const setStart = (p: Place | null) => changeChoices((r) => ({ ...r, start: p }));
 export const samePlace = same;
 
@@ -320,7 +324,7 @@ export async function startApplet(vault: string, noteId: string | null): Promise
 
 /** The bar as this device can show it: the pins it can find, in their order, each once; and the home applet, which is on
  *  the bar only when it is pinned (the record's bar is the bar: the shell adds nothing of its own to it). */
-export function barNow(s: Settings = effective(settingsNow(), appsNow())): { start: (Found & { place: Place }) | null; pins: (Found & { place: Place })[] } {
+export function barNow(s: Settings = effective(settingsNow(), bundlesNow())): { start: (Found & { place: Place }) | null; pins: (Found & { place: Place })[] } {
   const start = s.start ? find(s.start) : null;
   const pins: (Found & { place: Place })[] = [];
   for (const p of s.bar) {
@@ -331,30 +335,40 @@ export function barNow(s: Settings = effective(settingsNow(), appsNow())): { sta
   return { start: start && s.start ? { ...start, place: s.start } : null, pins };
 }
 
-// ── apps (shell/apps.ts): the records, which one is open here, and the bar and home it gives ──
+// ── bundles (shell/bundles.ts): the records, which one is open here, and the bar and home it gives ──
 
-/** The app records in the home vault, and for each that follows someone else's app (`live`), that one as it is in
+type Client = ReturnType<typeof clientFor>;
+type Row = Awaited<ReturnType<Client["queryNotes"]>>[number];
+/** A vault's bundle records with their bodies: the ones under `parachute-bundle` first, then the older ones under
+ *  `parachute-app` (read for one release, until 2026-12-20), so a bundle of the same id wins (bundlesFrom keeps the
+ *  first). `old`: the record still has its older tag, path and field. */
+async function bundleRows(c: Client): Promise<{ row: Row; body: unknown; old: boolean }[]> {
+  const [rows, olds] = await Promise.all([c.queryNotes({ tag: BUNDLE_TAG, includeMetadata: true, limit: 50 }), c.queryNotes({ tag: OLD_BUNDLE_TAG, includeMetadata: true, limit: 50 })]);
+  const seen = new Set(rows.map((r) => r.id));
+  return [...rows.map((row) => ({ row, body: plain(row.metadata) ? row.metadata.bundle : undefined, old: false })),
+    ...olds.filter((r) => !seen.has(r.id)).map((row) => ({ row, body: plain(row.metadata) ? row.metadata.app : undefined, old: true }))];
+}
+const atFolder = (path: string | null | undefined, id: unknown) => [BUNDLE_FOLDER, OLD_BUNDLE_FOLDER].some((f) => stripExt(path ?? "") === `${f}${String(id)}`);
+
+/** The bundle records in the home vault, and for each that follows someone else's bundle (`live`), that one as it is in
  *  their vault now, when this device holds it. */
-async function readAppRecords(home: VaultRecord): Promise<RawApp[]> {
-  const rows = await clientFor(home).queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 });
-  const out: RawApp[] = [];
-  for (const r of rows) {
-    const raw = plain(r.metadata) ? r.metadata.app : undefined;
-    const a = appRecordOf(raw, r.path ?? null, r.id);
+async function readBundleRecords(home: VaultRecord): Promise<RawBundle[]> {
+  const out: RawBundle[] = [];
+  for (const { row: r, body: raw } of await bundleRows(clientFor(home))) {
+    const a = bundleRecordOf(raw, r.path ?? null, r.id);
     // one made for a newer Parachute is kept as it is (never read here), so the list can say to update
-    if (!a) { if (newerApp(raw) && plain(raw) && stripExt(r.path ?? "") === `${APP_FOLDER}${String(raw.id)}`) out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
+    if (!a) { if (newerBundle(raw) && plain(raw) && atFolder(r.path, raw.id)) out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
     if (!a.live) { out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
     const there = listVaults().find((v) => originOf(v.issuer) === a.live!.hub && v.vault === a.live!.vault);
     if (!there) { out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
     try {
       // a slow Parachute of theirs never holds up the start: past a few seconds, the copy kept from before
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const listed = await Promise.race([clientFor(there).queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 }), new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error("slow")), 3000); })]).finally(() => clearTimeout(timer));
-      const theirs = listed.find((x) => stripExt(x.path ?? "") === stripExt(a.live!.path));
-      const t = theirs && plain(theirs.metadata) ? theirs.metadata.app : undefined;
+      const listed = await Promise.race([bundleRows(clientFor(there)), new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error("slow")), 3000); })]).finally(() => clearTimeout(timer));
+      const theirs = listed.find((x) => stripExt(x.row.path ?? "") === stripExt(a.live!.path));
       // its places mean their hub when they name none
-      // their record, under the person's own id and name, and never less careful than the person's own (apps.ts followed)
-      out.push(plain(t) ? { app: followed(a, raw, t), path: r.path ?? null, noteId: r.id, hubOf: a.live.hub } : { app: raw, path: r.path ?? null, noteId: r.id });
+      // their record, under the person's own id and name, and never less careful than the person's own (bundles.ts followed)
+      out.push(theirs && plain(theirs.body) ? { app: followed(a, raw, theirs.body), path: r.path ?? null, noteId: r.id, hubOf: a.live.hub } : { app: raw, path: r.path ?? null, noteId: r.id });
     } catch {
       const was = keptNow()?.vault === home.key ? keptNow()?.apps?.find((x) => x.noteId === r.id && x.hubOf) : undefined;
       out.push(was ?? { app: raw, path: r.path ?? null, noteId: r.id });
@@ -362,109 +376,106 @@ async function readAppRecords(home: VaultRecord): Promise<RawApp[]> {
   }
   return out;
 }
-const parseApps = (raw: readonly RawApp[]): App[] => appsFrom(raw.map((r) => { const a = appRecordOf(r.app, r.path, r.noteId); return a && r.hubOf ? { ...a, hubOf: r.hubOf } : a; }).filter((a): a is App => !!a));
+const parseBundles = (raw: readonly RawBundle[]): Bundle[] => bundlesFrom(raw.map((r) => { const a = bundleRecordOf(r.app, r.path, r.noteId); return a && r.hubOf ? { ...a, hubOf: r.hubOf } : a; }).filter((a): a is Bundle => !!a));
 
-/** The person's apps: the built-ins and their records, as last read. */
-export function appsNow(): App[] {
+/** The person's bundles: the built-ins and their records, as last read. */
+export function bundlesNow(): Bundle[] {
   const k = keptNow(), home = homeVault();
-  return parseApps(k && home && k.vault === home.key ? k.apps ?? [] : []);
+  return parseBundles(k && home && k.vault === home.key ? k.apps ?? [] : []);
 }
-const DEVICE_APP_KEY = "parachute.app.open.v1";
-/** Which app this device opens (its own choice, per home vault), or null to follow the settings note. */
-export function deviceApp(): string | null {
-  try { const v = JSON.parse(localStorage.getItem(DEVICE_APP_KEY) ?? "{}") as Record<string, unknown>; const home = homeVault(); const x = home ? v[home.key] : null; return typeof x === "string" ? x : null; } catch { return null; }
+const DEVICE_BUNDLE_KEY = "parachute.app.open.v1";
+/** Which bundle this device opens (its own choice, per home vault), or null to follow the settings note. */
+export function deviceBundle(): string | null {
+  try { const v = JSON.parse(localStorage.getItem(DEVICE_BUNDLE_KEY) ?? "{}") as Record<string, unknown>; const home = homeVault(); const x = home ? v[home.key] : null; return typeof x === "string" ? x : null; } catch { return null; }
 }
-/** Open this app here (Settings → Your app), and make it the one a new device opens. */
-export async function chooseApp(id: string): Promise<void> {
+/** Open this bundle here (Settings → Your bundle), and make it the one a new device opens. */
+export async function chooseBundle(id: string): Promise<void> {
   const home = homeVault();
   if (!home) throw new Error("There's no home vault yet.");
-  try { const v = JSON.parse(localStorage.getItem(DEVICE_APP_KEY) ?? "{}") as Record<string, unknown>; localStorage.setItem(DEVICE_APP_KEY, JSON.stringify({ ...v, [home.key]: id })); } catch { /* this session */ }
+  try { const v = JSON.parse(localStorage.getItem(DEVICE_BUNDLE_KEY) ?? "{}") as Record<string, unknown>; localStorage.setItem(DEVICE_BUNDLE_KEY, JSON.stringify({ ...v, [home.key]: id })); } catch { /* this session */ }
   bump({});
-  await setApp(id);
+  await setBundle(id);
 }
-/** The app open on this device now. */
-export const openAppNow = (): App => openApp(appsNow(), deviceApp(), settingsNow().app);
-/** The app this device (or the settings note) chose, when its record didn't load (malformed, gone, or never read and no
- *  copy kept): the app then opens the next one it can (Everything at the end), and the list says so, with Settings. A
- *  broken record never locks the person out. null while the settings are first read, and when the chosen app is open. */
-export function appMissing(): string | null {
+/** The bundle open on this device now. */
+export const openBundleNow = (): Bundle => openBundle(bundlesNow(), deviceBundle(), settingsNow().bundle);
+/** The bundle this device (or the settings note) chose, when its record didn't load (malformed, gone, or never read and no
+ *  copy kept): the app then opens the next bundle it can (Everything at the end), and the list says so, with Settings. A
+ *  broken record never locks the person out. null while the settings are first read, and when the chosen bundle is open. */
+export function bundleMissing(): string | null {
   if (!settingsReadNow() && state.read !== "unreachable") return null;
-  const chosen = deviceApp() ?? settingsNow().app;
-  return chosen && chosen !== openAppNow().id ? chosen : null;
+  const chosen = deviceBundle() ?? settingsNow().bundle;
+  return chosen && chosen !== openBundleNow().id ? chosen : null;
 }
 
-/** When the app that didn't load was made for a newer Parachute (apps.ts newerApp): its name, for "Update Parachute to
+/** When the bundle that didn't load was made for a newer Parachute (bundles.ts newerBundle): its name, for "Update Parachute to
  *  use …". null otherwise. */
-export function appNewer(chosen: string | null = appMissing()): string | null {
+export function bundleNewer(chosen: string | null = bundleMissing()): string | null {
   const home = homeVault(), k = keptNow();
   if (!chosen || !home || k?.vault !== home.key) return null;
-  const raw = (k.apps ?? []).find((r) => plain(r.app) && r.app.id === chosen && newerApp(r.app) && stripExt(r.path ?? "") === `${APP_FOLDER}${chosen}`)?.app;
+  const raw = (k.apps ?? []).find((r) => plain(r.app) && r.app.id === chosen && newerBundle(r.app) && atFolder(r.path, chosen))?.app;
   if (!plain(raw)) return null;
   return typeof raw.name === "string" && raw.name.length > 0 && raw.name.length <= 60 && !/[\u0000-\u001f]/.test(raw.name) ? raw.name : chosen;
 }
 
-/** The bar and home as the open app gives them: its own, or the settings note's when it has none. */
-export function effective(s: Settings, apps: readonly App[]): Settings {
-  const app = openApp(apps, deviceApp(), s.app);
-  // an app someone else offers: a place that names no hub is on theirs
+/** The bar and home as the open bundle gives them: its own, or the settings note's when it has none. */
+export function effective(s: Settings, apps: readonly Bundle[]): Settings {
+  const app = openBundle(apps, deviceBundle(), s.bundle);
+  // a bundle someone else offers: a place that names no hub is on theirs
   const at = (p: Place): Place => (app.hubOf && !p.hub ? { ...p, hub: app.hubOf } : p);
   return { ...s, bar: app.bar ? app.bar.map(at) : s.bar, start: app.start === undefined ? s.start : app.start && at(app.start) };
 }
 
-/** A change to the bar or the home: to the open app's record (read now, changed only where asked, written back with
- *  if_updated_at; made from the built-in the first time), or the settings note. Simple's and Everything's are kept in the
- *  settings note too, which older apps read. */
+/** Change the open bundle's record: read it now, change only what `change` touches, and write it back with
+ *  if_updated_at; made from the built-in the first time. An older record (`Parachute/Apps/<id>`, `parachute-app`,
+ *  `fields.app`) is moved by this write: its path, tag and field take their new names, so the next read finds one. */
+async function changeBundle(change: (was: Record<string, unknown>, app: Bundle) => Record<string, unknown>, from: (app: Bundle) => Record<string, unknown>): Promise<void> {
+  const home = homeVault();
+  if (!home) throw new Error("There's no home vault yet.");
+  const app = openBundleNow();
+  const c = clientFor(home);
+  const found = (await bundleRows(c)).find((r) => (app.noteId ? r.row.id === app.noteId : atFolder(r.row.path, app.id))) ?? null;
+  if (app.noteId && !found) throw new Error("The bundle's record is gone; read it again.");
+  const body = change(found && plain(found.body) ? found.body : from(app), app);
+  const content = `The ${app.name} bundle: where its applets come from, its bar and its home. See docs/NAVIGATION.md.`;
+  if (found) {
+    const n = found.row, updatedAt = (n as { updatedAt?: string }).updatedAt;
+    // the hub merges fields: the older one goes with null
+    await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), bundle: body, ...(found.old ? { app: null } : {}) }, ...(updatedAt ? { if_updated_at: updatedAt } : {}),
+      ...(found.old ? { path: `${BUNDLE_FOLDER}${app.id}`, tags: { add: [BUNDLE_TAG], remove: [OLD_BUNDLE_TAG] } } : {}) } as Parameters<typeof c.updateNote>[1]);
+  } else {
+    await c.createNote({ path: `${BUNDLE_FOLDER}${app.id}`, content, tags: [BUNDLE_TAG], metadata: { bundle: body } } as Parameters<typeof c.createNote>[0]);
+  }
+}
+
+/** A change to the bar or the home: to the open bundle's record, or the settings note. Simple's and Everything's are
+ *  kept in the settings note too, which older apps read. */
 async function changeChoices(f: (raw: Raw, creating: boolean) => Raw): Promise<void> {
   if (!toRecord()) return changeSettings(f);
-  const home = homeVault();
-  if (!home) throw new Error("There's no home vault yet.");
-  const app = openAppNow();
-  if (app.live) throw new Error(`${app.name} is offered by someone else: its bar is theirs.`);
-  const c = clientFor(home);
-  const rows = await c.queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 });
-  const n = rows.find((r) => (app.noteId ? r.id === app.noteId : stripExt(r.path ?? "") === `${APP_FOLDER}${app.id}`)) ?? null;
-  if (app.noteId && !n) throw new Error("The app's record is gone; read it again.");
+  if (openBundleNow().live) throw new Error(`${openBundleNow().name} is offered by someone else: its bar is theirs.`);
   const s = settingsNow();
-  const was: Record<string, unknown> = n && plain(n.metadata) && plain(n.metadata.app) ? n.metadata.app : recordOf({ ...app, bar: s.bar, start: s.start });
-  const before: Raw = { bar: Array.isArray(was.bar) ? was.bar : s.bar, start: was.start === undefined ? s.start : was.start, hubs: [] };
-  const r = f(before, false);
-  // only what the change touched, or what the record already said, is written: the rest stays the settings note's
-  const body = { ...was, ...(Array.isArray(was.bar) || JSON.stringify(r.bar) !== JSON.stringify(before.bar) ? { bar: r.bar } : {}),
-    ...(was.start !== undefined || JSON.stringify(r.start ?? null) !== JSON.stringify(before.start ?? null) ? { start: r.start ?? null } : {}) };
-  if (n) {
-    const updatedAt = (n as { updatedAt?: string }).updatedAt;
-    await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), app: body }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
-  } else {
-    await c.createNote({ path: `${APP_FOLDER}${app.id}`, content: `The ${app.name} app: where its applets come from, its bar and its home. See docs/NAVIGATION.md.`, tags: [APP_TAG], metadata: { app: body } } as Parameters<typeof c.createNote>[0]);
-  }
+  await changeBundle((was) => {
+    const before: Raw = { bar: Array.isArray(was.bar) ? was.bar : s.bar, start: was.start === undefined ? s.start : was.start, hubs: [] };
+    const r = f(before, false);
+    // only what the change touched, or what the record already said, is written: the rest stays the settings note's
+    return { ...was, ...(Array.isArray(was.bar) || JSON.stringify(r.bar) !== JSON.stringify(before.bar) ? { bar: r.bar } : {}),
+      ...(was.start !== undefined || JSON.stringify(r.start ?? null) !== JSON.stringify(before.start ?? null) ? { start: r.start ?? null } : {}) };
+  }, (app) => recordOf({ ...app, bar: s.bar, start: s.start }));
+  const app = openBundleNow();
   if (app.id === "everything" || app.id === "simple") await changeSettings(f); else await readSettings();
 }
-/** The open app's security levels, written to its record (made from the built-in the first time) so every device that
- *  opens it follows (shell/levels.ts): only `security` changes. A lowering is signed first (`signLowering`); without
- *  that signature this write only ever raises another device. */
+/** The open bundle's security levels, written to its record (made from the built-in the first time) so every device
+ *  that opens it follows (shell/levels.ts): only `security` changes. A lowering is signed first (`signLowering`);
+ *  without that signature this write only ever raises another device. */
 export async function changeSecurity(levels: Levels): Promise<void> {
-  const home = homeVault();
-  if (!home) throw new Error("There's no home vault yet.");
-  const app = openAppNow();
+  const app = openBundleNow();
   if (app.live) throw new Error(`${app.name} is offered by someone else: its levels are theirs, and yours can only be stricter.`);
-  const c = clientFor(home);
-  const rows = await c.queryNotes({ tag: APP_TAG, includeMetadata: true, limit: 50 });
-  const n = rows.find((r) => (app.noteId ? r.id === app.noteId : stripExt(r.path ?? "") === `${APP_FOLDER}${app.id}`)) ?? null;
-  if (app.noteId && !n) throw new Error("The app's record is gone; read it again.");
-  const was: Record<string, unknown> = n && plain(n.metadata) && plain(n.metadata.app) ? n.metadata.app : recordOf(app);
-  const body = { ...was, security: { approvals: levels.approvals, code: levels.code, join: levels.join, idle: levels.idle } };
-  if (n) {
-    const updatedAt = (n as { updatedAt?: string }).updatedAt;
-    await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), app: body }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
-  } else {
-    await c.createNote({ path: `${APP_FOLDER}${app.id}`, content: `The ${app.name} app: where its applets come from, its bar and its home. See docs/NAVIGATION.md.`, tags: [APP_TAG], metadata: { app: body } } as Parameters<typeof c.createNote>[0]);
-  }
+  await changeBundle((was) => ({ ...was, security: { approvals: levels.approvals, code: levels.code, join: levels.join, idle: levels.idle } }), recordOf);
   await readSettings();
 }
 
-/** Whether a change to the bar or home goes to the open app's record (an app other than the two built-ins, or one of
- *  them whose record has a bar or a home of its own); else to the settings note, as before. */
-const toRecord = () => { const a = openAppNow(); return a.id !== "everything" && a.id !== "simple" ? true : a.noteId !== null && (a.bar !== null || a.start !== undefined); };
+/** Whether a change to the bar or home goes to the open bundle's record (a bundle other than the two built-ins, or one
+ *  of them whose record has a bar or a home of its own); else to the settings note, as before. */
+const toRecord = () => { const a = openBundleNow(); return a.id !== "everything" && a.id !== "simple" ? true : a.noteId !== null && (a.bar !== null || a.start !== undefined); };
 
 // what `find` answers changes with the applets read and the vaults held: followed from the first subscriber on (not at
 // load: the applet list imports this module's readers back)
@@ -476,5 +487,5 @@ export function subscribeSettings(f: () => void): () => void {
 }
 export function useSettings() {
   useSyncExternalStore(subscribeSettings, () => `${state.rev}:${homeVault()?.key ?? ""}`);
-  return { settings: settingsNow(), bar: barNow(), read: state.read, app: openAppNow(), apps: appsNow() };
+  return { settings: settingsNow(), bar: barNow(), read: state.read, bundle: openBundleNow(), bundles: bundlesNow() };
 }

@@ -1,6 +1,6 @@
 // Older and newer (docs/design/VERSIONS.md). Records live in a vault and the app on each device updates on its own
 // time, so any build meets records written for an older or a newer one. Each build has a level; a record may say the
-// oldest level it works on (`needs`, beside `applet` in an applet's fields, or in an app record). A build that is too
+// oldest level it works on (`needs`, beside `applet` in an applet's fields, or in a bundle record). A build that is too
 // old for a record says "Update Parachute to use …" and runs nothing of it, instead of breaking. Pure.
 
 /** This build's level. Raise it by one when the kit gains a part (kits/modules.ts PART_LEVEL) or a record gains a field

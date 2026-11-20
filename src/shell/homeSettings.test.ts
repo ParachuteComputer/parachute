@@ -17,7 +17,13 @@ describe("the settings note", () => {
     expect(s.start).toEqual({ vault: "kitchen", applet: "Applets/Home" });
   });
   it("no note, other metadata, or a bad start: an empty bar and no home", () => {
-    for (const m of [null, {}, { parachute: "x" }, { parachute: { bar: "x", start: "Applets/Home" } }, { parachute: { start: { vault: "k" } } }]) expect(settingsFrom(m)).toEqual({ bar: [], start: null, hubs: [], services: [], app: null });
+    for (const m of [null, {}, { parachute: "x" }, { parachute: { bar: "x", start: "Applets/Home" } }, { parachute: { start: { vault: "k" } } }]) expect(settingsFrom(m)).toEqual({ bar: [], start: null, hubs: [], services: [], bundle: null });
+  });
+  it("the choice of bundle: `bundle`, else its older name `app` (one release), never both read as two", () => {
+    expect(settingsFrom({ parachute: { bundle: "uni" } }).bundle).toBe("uni");
+    expect(settingsFrom({ parachute: { app: "uni" } }).bundle).toBe("uni");
+    expect(settingsFrom({ parachute: { bundle: "lab", app: "uni" } }).bundle).toBe("lab");
+    expect(settingsFrom({ parachute: { app: "Not An Id" } }).bundle).toBeNull();
   });
   it("reads every place it can (the bar shows the first ones it finds), up to a bound", () => {
     const bar = Array.from({ length: 400 }, (_, i) => ({ vault: "k", applet: `A/${i}` }));

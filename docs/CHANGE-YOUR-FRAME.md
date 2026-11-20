@@ -42,7 +42,7 @@ change the vault view, or put something above the notes. For example, a heading 
 <Route path="/" element={<><h2>Good morning</h2><Launcher /></>} />
 ```
 
-The bar at the foot of the screen is the app's own, under any frame: what is on it is your app record's pins (or your settings note,
+The bar at the foot of the screen is the app's own, under any frame: what is on it is your bundle's pins (or your settings note,
 [NAVIGATION.md](NAVIGATION.md)), not frame code.
 
 ## What the person sees
