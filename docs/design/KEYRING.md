@@ -158,19 +158,59 @@ seconds.
 **Unlock**, decided natively and never from a flag the web side sends: Android BiometricPrompt with
 `BIOMETRIC_STRONG | DEVICE_CREDENTIAL` (a PIN, pattern or password counts; a phone with no screen lock can't approve a
 card that needs the unlock, and the card says to set one); macOS LocalAuthentication `DeviceOwnerAuthentication`;
-Linux and Windows a native OK/Cancel dialog (as the Uni app: a click, not a biometric). **Grace**: 300 seconds after a
-passing unlock, for routine approvals only, **for the applet that earned it** (its grant), ended when the app goes to
-the background (Android `onStop`); never granted on desktop (the Uni app watches the screen lock there; this step
-asks every time instead, said in PARITY.md). Each approval that a grace let through shows the shell's own line over
-the applet ("Approved: cloudflare-dns · 1 h") and is written to the signing log. `always_unlock` (the Uni app's rule: a powerful key unless a small
-one; any `mint.` or long-lived child) always asks. Deny never asks.
+Linux and Windows a native OK/Cancel dialog (as the Uni app: a click, not a biometric). **What an approval asks** is
+this device's level for approvals ([APP-RECORD.md](APP-RECORD.md) "Security levels", `src-tauri/src/levels.rs`): the
+tap alone, the unlock (the default), or this device's passcode then the unlock; the passcode is typed on the shell's
+own sheet over the applet, never in its frame. A powerful row asks at least the unlock, fresh. **Grace**: 300 seconds
+after a passing unlock, for routine approvals only, **for the applet that earned it** (its grant), ended when the
+screen goes off (Android's screen-off broadcast; Aaron, 11-18: "ends on screen lock"), by the idle lock, and when the
+app is swiped away; it never stands in for a passcode. Never granted on desktop (the Uni app watches the screen lock
+there; this step asks every time instead, said in PARITY.md). Each approval that a grace let through shows the shell's
+own line over the applet ("Approved: cloudflare-dns · 1 h") and is written to the signing log. `always_unlock` (the Uni
+app's rule: a powerful key unless a small one; any `mint.` or long-lived child) always asks. Deny never asks. While the
+idle lock covers the app, every unlock-gated call is refused.
 
 **Held sends** (mail): `approve: {field, ops}` on an http service. A request whose body is a JSON object with `field`
-one of `ops` is signed with the approval key, behind the same unlock and grace (and a tap). Everything else that service
+one of `ops` is signed with the approval key, behind the same level, unlock and grace (and a tap). Everything else that service
 is sent (no body; JSON without that field, or with another op) is the everyday key's. What a gateway might read
 differently is refused, so the split fails closed: a body that isn't plain JSON (a byte-order mark, NaN, another
 encoding), a key named twice, or the field holding anything but a string. The mail gateway still decides by the key it
 maps; the separation is complete once it is told the approval key (with Uni and Hermes, outside this repo).
+
+## Joining a network
+
+"To get onto my personal wireguard, I want a key plus a passcode" (Aaron, 11-18). The WireGuard side is #systems'
+(the mesh's signed member list, `~/Code/mesh`); the app builds only the signing. An http service may name **join ops**
+beside (or instead of) approve ops:
+
+```yaml
+services:
+  - id: mesh
+    kind: http
+    url: https://enroll.mesh.example/
+    auth: nip98
+    join: { field: op, ops: [mesh.join] }
+```
+
+A request whose body is a JSON object with `op` one of the join ops is sent only after **a tap in the applet**, then
+this device's `join` level: by default **the passcode** (typed on the shell's own sheet), **then the device unlock**,
+every time, never a grace. It is signed with the person's key as NIP-98, as any `nip98` request: an `Authorization:
+Nostr <base64 event>` header whose event is kind 27235 with `["u", <the full URL>]`, `["method", "POST"]`,
+`["payload", <sha256 hex of the body>]` and a nonce, `pubkey` the person's key. The body is the applet's (#systems'
+choice; for example `{"op":"mesh.join","mesh":"home","device":"phone","wg":"<the phone's WireGuard public key>"}`).
+The same field can't name an op as both approve and join, and the split fails closed as held sends do. The card says
+"High risk, joins a network as you: asks enroll.mesh.example to let this device join (mesh.join), each time after your
+passcode and unlock (Settings → Security)."
+
+**What #systems calls and checks.** An applet of theirs declares the service above and calls
+`parachute.services.fetch({service: "mesh", path: "join", method: "POST", body: JSON.stringify({op: "mesh.join", …})})`
+from a button. Their enroller checks the NIP-98 event as NIP-98 says (signature, kind 27235, `u` and `method` equal
+to the request, `payload` equal to the body's hash, `created_at` within a minute, the nonce once) and that its
+`pubkey` is the owner's personal key; then it adds the device to the member list it signs. A passing signature means
+the person's key signed it on a device after that device's join level (the passcode and the unlock unless the person
+lowered it, which is itself signed). The enroller can't tell which level a device used; if #systems needs that
+proven, the key alone can't say it (a device that holds the key could sign without asking), so it stays a device's
+promise, said here.
 
 **Hermes's command prompts** (a plain kind 9 `/approve` or `/deny` today) stay as they are until Hermes moves to sealed
 answers (separately). Meanwhile the everyday key signs a kind 9 whose text, leading whitespace trimmed and case ignored, starts with
@@ -256,6 +296,8 @@ grant is allowed. Desktop: not in this step (the app notifies only while running
 | An applet posts Hermes's `/approve` | Only an applet with the `approvals` grant, during a tap, until Hermes takes sealed answers. The text is read as leniently as Hermes reads it (white space, controls, invisible characters and leading mentions such as `@Uni` dropped first). **Not closed:** while Hermes waits on a prompt it also takes bare words ("yes", "ok", "approve", 👍) as an approval, and refusing those would stop ordinary chat; any applet that may post in that room can say them. This ends when Hermes takes only sealed answers from the approval key. |
 | A "tap" that isn't one | A tap is the browser's user activation in the applet's frame: a keystroke counts too, so a hostile applet with the grant can spend the person's typing on an answer (one per activation, and a powerful one still asks for the unlock). |
 | An applet without the grant gets an approval signature | `Role::Approval` signs only through `services.answer`/`secret` and http `approve` ops, each refused without the grant line; tested with a separate key (its pubkey never appears) and with the same key (no kind 13 is ever signed). |
+| An applet asks to join a network on its own | A tap in its frame, then the device's join level (the passcode and the unlock by default) on the shell's own sheet and prompt, every time; the applet never sees the passcode. |
+| A vault writer lowers the levels | A record only raises; lowering is a signed approval from an unlocked device (APP-RECORD.md "Security levels"). |
 | An applet approves a card the person didn't see | The grant says it may; the card says "high risk". Powerful ones need the device unlock, which shows the shell's own words (credential, action, window, uses, the job's digest), not the applet's. |
 | A forged card (another key, a replayed real box) | Author must be in the grant's `from` and on the device's trusted list; the request digest binds every field; the ledger refuses a replayed `rid` or `rpk`. |
 | The data key or a secret reaches the applet | The view never carries `dek`; secrets are typed on the shell's sheet and sealed in Rust. |

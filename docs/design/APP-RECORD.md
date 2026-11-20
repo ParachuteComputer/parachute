@@ -24,7 +24,7 @@ note names. An org's app is followed live (`live`): read from their vault each t
 ## Running needs a signed approval
 
 On a device that holds the person's key, **Allow is an approval for every device**. The app asks the passcode (when
-this device has one), then the device unlock, then the native side (`src-tauri/src/approve.rs`) signs a kind 30479
+this device's level for approving code says so, "Security levels" below), then the device unlock, then the native side (`src-tauri/src/approve.rs`) signs a kind 30479
 event with the person's key and the app writes it to `Parachute/Approvals/<host>/<vault>/<record id>` (tagged
 `parachute-approval`). Its content:
 
@@ -78,11 +78,70 @@ the rotation step (#systems, T-487).
 
 ## Security levels
 
-`security.approve` in an app record: `"unlock"` (always; no level drops it) or `"passcode"`. The passcode is this
-device's own secret, set in Settings → Approving code, kept as a salted hash in the app's data folder, checked by the
-native side (five wrong and it waits a minute). When a device has one, approving asks it whatever the record says: a
-record can ask for more, never less. Not built yet: the idle lock (unlock to open the app after N minutes) and levels
-for Uni's routine approval cards, which stay as KEYRING.md has them.
+Aaron (11-18): "the app itself should be able to have specified levels of security… require a password to do anything
+if I haven't touched it for X many minutes", and "for some things the key + a passcode would be nice… to get onto my
+personal wireguard". One small gate the shell keeps natively (`src-tauri/src/levels.rs`), not a policy engine: a level
+per action, the idle lock, and the grace. The web side never says which level holds or that the person unlocked.
+
+| Action | Choices | Default | What it covers |
+|---|---|---|---|
+| `approvals` | none, unlock, passcode | unlock | Uni's routine approval cards and held sends (KEYRING.md). A powerful card always asks at least the unlock, fresh |
+| `code` | unlock, passcode | unlock | approving an applet's code (above). Never below the unlock; taking an approval back asks only the unlock |
+| `join` | none, unlock, passcode | passcode | asking to join a private network: an http service's `join` op (KEYRING.md "Joining a network") |
+| `idle` | minutes, 0 = off | off | untouched this long, Parachute is covered until the device unlock |
+
+**none** is the tap alone; **unlock** the device unlock (KEYRING.md "Unlock"); **passcode** this device's passcode,
+then the unlock. The passcode is a secret of the person's own, not the phone's PIN, set in Settings → Security, kept
+only as a salted hash of many rounds in the app's data folder and checked natively (five wrong and it waits a minute).
+A passcode level on a device with no passcode is refused, never passed with the unlock alone. Every leveled action
+asks it each time; no grace covers it.
+
+**The grace**: 5 minutes after an unlock, routine approvals in the applet that earned it go through without another
+(each one says so over the applet). It ends when the screen goes off (Android), when the idle lock engages, and when
+the app is swiped away. Desktop gives none yet (PARITY.md).
+
+**The idle lock**: the native side keeps the last touch: the shell's own input, an applet's call while the browser
+says the person is acting (that activation reaches the shell's window from any frame, and a page can't make it up),
+and on Android every touch the activity gets, scrolling inside an applet included, with the longest quiet gap between
+two. Past the minutes, a cover goes over everything (applets kept below, untouchable) and the device unlock opens it;
+a touch never does, every unlock-gated call refuses meanwhile, and any grace ends. The last touch is kept on disk, so
+a restart past the minutes starts locked. No polling: one timer to the moment it would lock, and a check when the app
+comes back to the front. A browser tab has no idle lock (it has no key and no unlock to ask).
+
+**In the app record**, `security` names any of them:
+
+```json
+"security": { "approvals": "passcode", "code": "unlock", "join": "passcode", "idle": 10 }
+```
+
+**A record only raises.** Each device keeps its own levels (`levels.json` in the app's data folder). Reading the open
+app's record, it takes what is stricter (a shorter idle lock is stricter; off is the loosest) and nothing else. An
+unknown word is left out, never read as "none"; the record's older `approve` means `code`.
+
+**Lowering takes the person's signed approval from an unlocked device**, the same as approving code. Settings →
+Security: a stricter choice is a tap (kept on the device at once and written to the record, so the person's other
+devices follow). A looser one, or the idle lock turned off, asks the passcode (when the device keeps one) and the
+unlock; then the key signs a kind 30479 approval of exactly the new levels (subject `security-<app id>`, applet
+`security`, `code` = `levels:v1:approvals=…,code=…,join=…,idle=…`), kept at `Parachute/Approvals/<host>/<vault>/security-<app id>`,
+and the record's `security` is written. Another device whose levels are stricter than its record takes the record's
+only when that approval checks (`decide`, then Rust again: signed with the key this device holds, newer than its own
+last change, levels exactly the record's). So someone who can write the vault can raise a device, never lower it
+(`levels.rs` and `levels.test.ts`: an unsigned edit, an edited or foreign signature, an older approval put back,
+another app's moved over).
+
+| Who | Tries | Result (test) |
+|---|---|---|
+| A vault writer (a token, an agent, the hub) | `security` edited looser | Nothing changes (`levels.test.ts`, `levels.spec.ts`) |
+| | With an approval of their own key, an edited one, or another app's | Refused (`levels.rs`, `levels.test.ts`) |
+| | An old lowering put back after a raise | Refused: dated before the device's last change (`levels.rs`) |
+| Someone holding the unlocked phone | Approves at a passcode level with the unlock | Refused (`levels.rs` `a_passcode_level_refuses_the_device_unlock_alone`, `levels.spec.ts`) |
+| | Turns the idle lock off, or a level down | Needs the passcode (when kept) and the unlock |
+| Someone picking up the phone later | Uses the app past the idle lock | Covered; a touch doesn't open it (`levels.rs`, `levels.spec.ts`) |
+
+**Gaps, said plainly.** A device that never read a raise (offline) can take an older lowering of the person's that the
+vault serves it. A device with a root key and a key list takes only lowerings signed with its own key (lower there
+too). Desktop and the web side see touches the shell's window sees: reading in an applet for longer than the idle
+lock without a tap or a key can lock it on a computer (Android counts scrolling).
 
 ## Saved state (docs/WRITE-AN-APPLET.md "Saved state")
 
@@ -101,3 +160,6 @@ the app's `keep`.
 | "The launcher is for everything" | the open app | now |
 | `bar` and `start` in `Parachute/Settings` | the app record | when no device runs a build from before 11-19 (date for Uni to set) |
 | Draft PR #50 | this note | closed 11-19, when #66 merged |
+| `security.approve` in a record, and "a passcode set here means approving code asks it" | `security.code` and the levels (a device that kept a passcode before keeps `code: passcode`) | now: `approve` is still read as `code` until no record says it (Uni to check Aaron's, then drop the alias) |
+| The passcode under Settings → Approving code | Settings → Security | now |
+| The grace ending when the app leaves the screen | ending when the screen goes off (Aaron, 11-18) | now |

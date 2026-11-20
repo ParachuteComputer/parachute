@@ -97,7 +97,11 @@ A relay service may also name (all optional, each a line on the card; [design/KE
 signed message to the app (`services.card`), draws it, and on a tap answers (`services.answer`); the app checks the
 card, asks for the device unlock for powerful ones, seals the answer and sends it. A secret is typed on the app's own
 sheet (`services.secret`): the applet never sees it. An http service may name `approve: { field: op, ops: [...] }`:
-those requests are signed with the approval key.
+those requests are signed with the approval key. It may name `join: { field: op, ops: [...] }` for asking to join a
+private network: those requests are signed as the person only after a tap and this device's join level (the passcode
+and the unlock, by default; docs/design/KEYRING.md "Joining a network"). What an answer or a join asks (a tap, the
+unlock, the passcode) is the person's choice in Settings → Security, never the applet's; when it is the passcode, the
+app asks it on its own sheet.
 
 ## The code
 
