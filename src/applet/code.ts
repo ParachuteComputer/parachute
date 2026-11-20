@@ -156,7 +156,8 @@ const LOADER_HEAD = String.raw`(function () {
     if (k === "__esModule") return true;
     if (k === "default" && !("default" in t)) return self;
     var v = t[k];
-    if (v === undefined && typeof k === "string" && k !== "__esModule" && k !== "default" && k !== "then" && !(k in t) && missing.indexOf(k) < 0) missing.push(k);
+    // only a name a part could have: not a probe that looks for something on any object ($$typeof, @@iterator, toJSON)
+    if (v === undefined && typeof k === "string" && /^[A-Za-z][A-Za-z0-9]*$/.test(k) && k !== "then" && k !== "toJSON" && !(k in t) && missing.indexOf(k) < 0) missing.push(k);
     return v;
   } }) : kit;
   var mods = { react: M.react, "react-dom": M["react-dom"], "react-dom/client": M["react-dom/client"], "react/jsx-runtime": M["react/jsx-runtime"], parachute: asked };
