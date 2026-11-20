@@ -72,4 +72,9 @@ describe("the kit's saved state, when a write fails", () => {
     await f.tick(1100);
     expect(f.puts().slice(2).map((m) => f.body(m).draft)).not.toContain("to be sent");
   });
+
+  it("a key the kit can't hold is refused out loud, not taken and lost", () => {
+    const f = frame();
+    expect(() => f.kit.saved.set("__proto__", { a: 1 })).toThrow(/__proto__/);
+  });
 });

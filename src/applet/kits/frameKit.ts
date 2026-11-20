@@ -178,6 +178,8 @@ export const FRAME_KIT = String.raw`(function () {
   }
   function savedSet(key, value) {
     if (typeof key !== "string" || !key || key.length > 100 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(key)) throw new TypeError("saved needs a key of 1 to 100 plain characters");
+    // the kit holds what is saved in plain objects, where this one name would be the object's own workings, not a key
+    if (key === "__proto__") throw new TypeError("saved can't keep a key named __proto__");
     var v = value === undefined ? null : value;
     if (v !== null) { var text = JSON.stringify(v); if (text === undefined) throw new TypeError("saved keeps JSON"); v = JSON.parse(text); }
     if (v === null) delete savedVals[key]; else savedVals[key] = v;
