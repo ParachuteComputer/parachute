@@ -35,7 +35,7 @@ export function settingsShown(f: SettingsFacts): Shown {
     // Approving code and its Root key: the key signs each Allow and keeps it in the home vault. Kept while a root key is
     // held here, so it can be removed.
     approving: f.key && f.home && (applets || f.anchor),
-    // the home picker is in Frame while it has more to choose from than one vault
+    // Make this mine (the way to a frame of one's own) is reached here by someone with more than one vault of theirs
     frame: f.frame || f.ownVaults > 1,
   };
 }

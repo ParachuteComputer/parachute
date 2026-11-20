@@ -438,8 +438,9 @@ export function effective(s: Settings, apps: readonly Bundle[]): Settings {
   const app = openBundle(apps, deviceBundle(), s.bundle);
   // a bundle someone else offers: a place that names no hub is on theirs
   const at = (p: Place): Place => (app.hubOf && !p.hub ? { ...p, hub: app.hubOf } : p);
-  const bar = app.bar ?? [...app.base, ...s.bar];
-  return { ...s, bar: bar.map((e) => (isAppPlace(e) ? e : at(e))), start: app.start === undefined ? s.start : app.start && at(app.start) };
+  // the bundle's own places mean its hub; the settings note's pins are the person's, as written
+  const own = (app.bar ?? app.base).map((e) => (isAppPlace(e) ? e : at(e)));
+  return { ...s, bar: app.bar ? own : [...own, ...s.bar], start: app.start === undefined ? s.start : app.start && at(app.start) };
 }
 
 /** Change the open bundle's record: read it now, change only what `change` touches, and write it back with

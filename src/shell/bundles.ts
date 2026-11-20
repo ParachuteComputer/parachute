@@ -119,7 +119,9 @@ export function bundleOf(raw: unknown, path: string | null, noteId: string | nul
   if (!line(raw.name, 60) && !live && !d) return null;
   const keep = raw.keep === "auto" || raw.keep === undefined ? "auto" : typeof raw.keep === "number" && Number.isInteger(raw.keep) && raw.keep >= 0 && raw.keep <= 12 ? raw.keep : "auto";
   // `everywhere`: every vault this device holds, on every Parachute. Listing runs nothing, so any bundle may say it
-  const everywhere = raw.everywhere === true || (raw.everywhere === undefined && raw.sources === undefined && !!d?.sources.some((x) => x.hub === ANY_HUB));
+  // a record of a default's id that names no sources (none, or the empty list builds before 11-20 wrote for Simplified,
+  // whose Notes look offered every applet then) offers what the default offers
+  const everywhere = raw.everywhere === true || (raw.everywhere === undefined && (raw.sources === undefined || (Array.isArray(raw.sources) && raw.sources.length === 0)) && !!d?.sources.some((x) => x.hub === ANY_HUB));
   const sources = [...(everywhere ? [{ hub: ANY_HUB, vault: "*", applet: "*" }] : []), ...(Array.isArray(raw.sources) ? list(raw.sources, 100, sourceOf) : d && raw.everywhere === undefined ? d.sources.filter((x) => x.hub !== ANY_HUB) : [])];
   return {
     id: raw.id, name: line(raw.name, 60) ? raw.name : d?.name ?? raw.id,

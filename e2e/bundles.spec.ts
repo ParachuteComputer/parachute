@@ -153,7 +153,8 @@ test("scripts/migrate-bundles.ts: shows first, then moves each older record and 
   expect([moved.metadata.bundle.bar, moved.metadata.bundle.start]).toEqual([[{ vault: VAULT, applet: "Applets/Recipes" }], { vault: VAULT, applet: "Applets/Recipes" }]);
   expect(await tagged("parachute-app")).toEqual([]);
   const settings = (await tagged("parachute-settings"))[0].metadata.parachute;
-  expect([settings.bundle, settings.app, settings.bar, settings.start]).toEqual(["kitchen-table", undefined, undefined, undefined]);
+  // the note keeps them until 2026-12-20, for a device on another bundle with no bar of its own
+  expect([settings.bundle, settings.app, settings.bar, settings.start]).toEqual(["kitchen-table", undefined, [{ vault: VAULT, applet: "Applets/Recipes" }], { vault: VAULT, applet: "Applets/Recipes" }]);
   expect(readdirSync(join(dir, "backup")).sort()).toEqual(["Parachute_Apps_kitchen-table.json", "Parachute_Bundles_kitchen-table.json", "Parachute_Settings.json"]);
   expect(run()).toContain("Nothing to move.");
 });
@@ -167,7 +168,7 @@ test("scripts/install-applets.ts: --bar and --start go in the bundle record (onl
   // the vault holds no record under the newer names: the new one goes under the older, which builds from before 11-20 read
   expect(out).toContain("add the bundle simple at Parachute/Apps/simple");
   const [rec] = await tagged("parachute-app");
-  expect(rec.metadata.app).toEqual({ contract: 1, id: "simple", name: "Simple", bar: [{ vault: VAULT, applet: "Applets/Capture" }], start: { vault: VAULT, applet: "Applets/Capture" } });
+  expect(rec.metadata.app).toEqual({ contract: 1, id: "simple", name: "Parachute Simplified", bar: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { screen: "connect" }, { vault: VAULT, applet: "Applets/Capture" }], start: { vault: VAULT, applet: "Applets/Capture" } });
   const settings = (await tagged("parachute-settings"))[0].metadata.parachute;
   expect([settings.bar, settings.start]).toEqual([undefined, undefined]);
   if (!hadCapture) for (const n of await tagged("applet")) if (n.path.startsWith("Applets/Capture")) await api(hubState(), "DELETE", `notes/${n.id}`);

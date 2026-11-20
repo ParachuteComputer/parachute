@@ -22,7 +22,8 @@
 // still asks the person on its card before it runs; changed code or a changed server asks again.
 import { readFileSync } from "node:fs";
 import { appletRecord, withImports, type AppletRecord } from "../applets/record.ts";
-const shipped = (JSON.parse(readFileSync(new URL("../src/shell/default-bundles.json", import.meta.url), "utf8")) as { id: string }[]).map((b) => b.id);
+const defaults = JSON.parse(readFileSync(new URL("../src/shell/default-bundles.json", import.meta.url), "utf8")) as { id: string; name?: string; bar?: unknown[] }[];
+const shipped = defaults.map((b) => b.id);
 
 type Args = { hub: string; vault: string; token: string; applets: string[]; vars: Record<string, string>; bar: string[] | null; start: string | null; services: { name: string; kind: string; url: string }[]; apply: boolean; bundle: string | null; bundleName: string | null; sources: string[] };
 
@@ -125,9 +126,10 @@ async function main() {
     // a new bundle of the person's names itself and says where its applets come from; one the app ships says only what changes
     // (and its name, which a build from before 11-20 needs to read a record)
     const named = (x: string) => a.bundleName ?? x[0].toUpperCase() + x.slice(1);
-    const made = had ? {} : !shipped.includes(id) ? { name: named(id), look: "launcher", sources } : { name: named(id) };
+    const made = had ? {} : !shipped.includes(id) ? { name: named(id), look: "launcher", sources } : { name: a.bundleName ?? defaults.find((d) => d.id === id)?.name ?? named(id) };
     const bundle = { ...body, ...made, ...(a.bundleName ? { name: a.bundleName } : {}), ...(a.sources.length ? { sources } : {}),
-      ...(a.bar ? { bar: a.bar.map(place) } : {}), ...(a.start ? { start: place(a.start) } : {}) };
+      // a bundle the app ships keeps its own places (Notes, Journal, Connect…) before the pins, as the app shows them
+      ...(a.bar ? { bar: [...(Array.isArray(body.bar) ? [] : defaults.find((d) => d.id === id)?.bar ?? []), ...a.bar.map(place)] } : {}), ...(a.start ? { start: place(a.start) } : {}) };
     if (had && same(body, bundle)) console.log(`bundle ${id}: unchanged`);
     else {
       say(`${had ? "update" : "add"} the bundle ${id} at ${path}${old ? " (under its older names until it is moved)" : ""}: ${JSON.stringify(bundle)}`);

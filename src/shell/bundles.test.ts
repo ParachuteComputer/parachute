@@ -38,6 +38,12 @@ describe("the bundle record", () => {
     expect(def("simple")).toMatchObject({ look: "notes", sources: [{ hub: "*", vault: "*", applet: "*" }], bar: null, base: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { screen: "connect" }] });
     expect(def("everything")).toMatchObject({ look: "launcher", base: [] });
   });
+  it("an older build's Simplified record (sources: [], no everywhere) still offers every applet, as its Notes look did", () => {
+    const old = bundleOf({ contract: 1, id: "simple", name: "Simple", look: "notes", sources: [], security: { idle: 5 } }, "Parachute/Apps/simple", "01S")!;
+    expect(offersIn(old, { hub: HOME, vault: "home" }, HOME)).toBe(true);
+    // a bundle of any other id that says no sources offers nothing
+    expect(bundleOf({ contract: 1, id: "lab", name: "Lab", sources: [] }, "Parachute/Bundles/lab", "n")!.sources).toEqual([]);
+  });
   it("a person's record of a default's id says only what it changes: the rest is the default's", () => {
     const mine = bundleOf({ contract: 1, id: "simple", bar: [{ screen: "home" }, { vault: "home", applet: "Applets/Journal" }] }, "Parachute/Bundles/simple", "01S")!;
     expect(mine).toMatchObject({ name: "Parachute Simplified", look: "notes", sources: [{ hub: "*", vault: "*", applet: "*" }], bar: [{ screen: "home" }, { vault: "home", applet: "Applets/Journal" }] });
@@ -76,6 +82,10 @@ describe("the bar and home an app gives", async () => {
     expect(effective({ ...S, bundle: "lab" }, bundlesFrom([only]))).toMatchObject({ bar: only.bar, start: S.start });
     const none = bundleOf({ contract: 1, id: "lab", name: "Lab", sources: [], start: null }, "Parachute/Bundles/lab", "1")!;
     expect(effective({ ...S, bundle: "lab" }, bundlesFrom([none]))).toMatchObject({ bar: S.bar, start: null });
+  });
+  it("a followed bundle with no bar of its own leaves the person's own pins on their own Parachute", () => {
+    const live = { ...bundleOf({ contract: 1, id: "techne", name: "Techne", sources: [] }, "Parachute/Bundles/techne", "1")!, hubOf: "https://techne.example" };
+    expect(effective({ ...S, bundle: "techne" }, bundlesFrom([live])).bar).toEqual(S.bar);
   });
   it("a live app's places that name no hub are on its Parachute", () => {
     const live = { ...bundleOf({ contract: 1, id: "techne", name: "Techne", sources: [], bar: [{ vault: "techne", applet: "Applets/Events" }] }, "Parachute/Bundles/techne", "1")!, hubOf: "https://techne.example" };
