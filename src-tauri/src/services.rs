@@ -1635,6 +1635,24 @@ mod tests {
     }
 
     #[test]
+    fn a_declared_ordinary_kind_is_signed_and_an_undeclared_one_is_not() {
+        // the manifest is the declaration: a note (1) and an article (30023) are signed when its service names them
+        let k = Keys::generate();
+        let b = Broker::new(dir("declared")).unwrap();
+        let blog = json!({ "id": "blog", "kind": "nostr-relay", "url": "wss://relay.example", "publish": [1, 30023] });
+        b.open(&k, "s1", &applet(), &[blog], &[]).unwrap();
+        let note = b.sign_event(&k, "s1", "blog", &json!({ "kind": 1, "content": "hello", "tags": [["t", "garden"]] })).unwrap();
+        assert!(note.verify().is_ok());
+        assert_eq!((note.kind, note.pubkey), (Kind::from(1), k.public_key()));
+        let article = b.sign_event(&k, "s1", "blog", &json!({ "kind": 30023, "content": "# Beds", "tags": [["d", "beds"], ["title", "Beds"]] })).unwrap();
+        assert_eq!(article.kind, Kind::from(30023));
+        // what it didn't declare is refused, even an ordinary kind the shell would sign for another applet
+        for kind in [9, 7, 6, 30024] {
+            assert_eq!(code(b.sign_event(&k, "s1", "blog", &json!({ "kind": kind, "content": "x" }))), "out_of_scope", "kind {kind}");
+        }
+    }
+
+    #[test]
     fn relay_sign_in_is_bound_to_the_declared_relay() {
         let k = Keys::generate();
         let b = broker("auth", &k);
