@@ -287,3 +287,109 @@ test("one address can't drain the budget everyone shares, with fresh keys or unr
   assert.equal(await send("register", generateSecretKey(), "5.6.7.8", body), 200, "someone else still gets in");
   } finally { g.close(); }
 });
+
+test("signals: the person's own signature moves their numbers; a change reaches their phones as applet, signal and count only; a message adds one, once", async () => {
+  const got: Buffer[] = [];
+  const srv = createServer((req, res) => { const parts: Buffer[] = []; req.on("data", (c) => parts.push(c)); req.on("end", () => { got.push(Buffer.concat(parts)); res.writeHead(201).end(); }); });
+  const endpoint = `http://localhost:${await listenFree(srv)}/upS?up=1`;
+  const g = createGateway({ url: "http://push.test/", relays: [relay], secret: generateSecretKey(), file: null, allowLoopback: true, log: () => {} });
+  const at = `http://127.0.0.1:${await listenFree(g.server)}`;
+  const sk = generateSecretKey(), me = getPublicKey(sk), d = device();
+  const subject = "c2lnbmFsLWFwcGxldC0x", rooms = "r00m";
+  const send = (key: Uint8Array, body: unknown) => {
+    const b = JSON.stringify(body);
+    const ev = finalizeEvent({ kind: 27235, created_at: now(), content: "", tags: [["u", "http://push.test/signals"], ["method", "POST"], ["payload", sha256Hex(enc(b))], ["nonce", randomBytes(8).toString("hex")]] }, key);
+    return fetch(`${at}/signals`, { method: "POST", headers: { authorization: `Nostr ${Buffer.from(JSON.stringify(ev)).toString("base64")}`, "content-type": "application/json" }, body: b });
+  };
+  const opened = () => got.map((b) => JSON.parse(new TextDecoder().decode(decrypt(new Uint8Array(b), d.priv, d.auth))));
+  const settle = () => new Promise((r) => setTimeout(r, 150));
+
+  try {
+  assert.equal((await send(sk, { set: [] })).status, 403, "a key with no registration here keeps no numbers");
+  const r = reg({ pubkey: me, endpoint, keys: d.keys, signals: [{ subject: "cm9vbXMtYXBwbGV0", signal: "for-you", rooms: null }] });
+  g.registry.put(r, now());
+  assert.equal((await send(sk, { set: [] })).status, 403, "nor one whose registration no member list has shown yet");
+  g.registry.judge(relay, new Set([me]), new Set([me]));
+  assert.equal((await send(sk, { set: [] })).status, 200, "once a member list shows the key");
+
+  const set = await send(sk, { set: [{ subject, signal: "new", count: 2 }] });
+  assert.equal(set.status, 200);
+  assert.deepEqual((await set.json()).counts.map((c: { subject: string; signal: string; count: number }) => [c.subject, c.signal, c.count]), [[subject, "new", 2]]);
+  await settle();
+  assert.equal(got.length, 1, "the change is pushed to the person's phone");
+  assert.deepEqual(opened()[0], { v: 1, kind: "signal", subject, signal: "new", count: 2, to: me }, "which applet (an opaque id), which signal, the count: nothing else");
+  assert.ok(!got[0].toString("latin1").includes(subject), "sealed: the push server sees none of it");
+  await send(sk, { set: [{ subject, signal: "new", count: 2 }] });
+  await settle();
+  assert.equal(got.length, 1, "the same number again pushes nothing");
+
+  for (const bad of [{ set: [{ subject, signal: "new", count: -1 }] }, { set: [{ subject: "x", signal: "new", count: 1 }] }, { set: [{ subject, signal: "New", count: 1 }] }, { set: [{ subject, signal: "new", count: 1, words: "hi" }] }, { push: 1 }]) {
+    assert.equal((await send(sk, bad)).status, 400, JSON.stringify(bad));
+  }
+  const other = generateSecretKey();
+  g.registry.put(reg({ pubkey: getPublicKey(other), endpoint: "https://ntfy.example/upO?up=1" }), now());
+  g.registry.judge(relay, new Set([getPublicKey(other)]), new Set([getPublicKey(other)]));
+  assert.deepEqual((await (await send(other, { set: [] })).json()).counts, [], "another key reads only its own numbers");
+
+  // a message for the person counts toward the signal its registration names, once however many phones hear it
+  const second = reg({ pubkey: me, endpoint: endpoint.replace("upS", "upT"), keys: device().keys, signals: r.signals });
+  g.registry.put(second, now());
+  const push = { v: 1 as const, relay, room: rooms, event: "e".repeat(64), kind: 9, why: "mention" as const, to: me };
+  g.relayPush(r, push);
+  g.relayPush(second, push);
+  g.relayPush(r, { ...push, event: "f".repeat(64) });
+  assert.equal(g.counts.of(me, now()).find((c) => c.signal === "for-you")?.count, 2, "two messages, two phones: two");
+  const roomOnly = reg({ pubkey: me, endpoint: endpoint.replace("upS", "upU"), signals: [{ subject: "YXJlYS1hcHBsZXQ", signal: "for-you", rooms: ["other"] }] });
+  g.relayPush(roomOnly, { ...push, event: "1".repeat(64) });
+  assert.equal(g.counts.of(me, now()).find((c) => c.subject === "YXJlYS1hcHBsZXQ"), undefined, "a signal named for other rooms doesn't count this one");
+  } finally { g.close(); srv.close(); }
+});
+
+test("counts never hold back a message: their own budget, and the newest held count still arrives", async () => {
+  const got: Buffer[] = [];
+  const srv = createServer((req, res) => { const parts: Buffer[] = []; req.on("data", (c) => parts.push(c)); req.on("end", () => { got.push(Buffer.concat(parts)); res.writeHead(201).end(); }); });
+  const endpoint = `http://localhost:${await listenFree(srv)}/upB?up=1`;
+  const d = device();
+  const r = reg({ endpoint, keys: d.keys });
+  const pusher = new Pusher({ allowLoopback: true, log: () => {}, gone: () => {} });
+  try {
+    const count = (n: number) => ({ v: 1 as const, kind: "signal" as const, subject: "bWFpbC1hcHBsZXQ", signal: "unread", count: n, to: r.pubkey });
+    const results = [];
+    for (let n = 12; n >= 0; n--) results.push(await pusher.send(r, count(n)));
+    assert.ok(results.includes("limited"), "a run of counts is held back past its budget");
+    const [m] = matches(msg(), relay, [r], members);
+    assert.equal(await pusher.send(r, m.push), "sent", "a message still goes at once");
+    await new Promise((res) => setTimeout(res, 3_400));
+    const opened = got.map((b) => JSON.parse(new TextDecoder().decode(decrypt(new Uint8Array(b), d.priv, d.auth))));
+    assert.equal(opened.filter((o) => o.kind === "signal").at(-1).count, 0, "the newest count held back is sent when there is room");
+    // counts leave in order: one held back isn't overtaken by a newer one when the budget refills
+    got.length = 0;
+    const order = new Pusher({ allowLoopback: true, log: () => {}, gone: () => {} });
+    try {
+      for (const n of [1, 2, 3, 4]) await order.send(r, count(n));
+      await new Promise((res) => setTimeout(res, 2_000));
+      await order.send(r, count(5));
+      await new Promise((res) => setTimeout(res, 1_200));
+      await order.send(r, count(0));
+      await new Promise((res) => setTimeout(res, 7_000));
+      const seen = got.map((b) => JSON.parse(new TextDecoder().decode(decrypt(new Uint8Array(b), d.priv, d.auth)))).filter((o) => o.kind === "signal").map((o) => o.count);
+      assert.equal(seen.at(-1), 0, `the last count the phone gets is the newest (got ${seen.join(",")})`);
+    } finally { order.close(); }
+  } finally { pusher.close(); srv.close(); }
+});
+
+test("a set of counts that would pass the key's 64 changes none of them", async () => {
+  const g = createGateway({ url: "http://push.test/", relays: [relay], secret: generateSecretKey(), file: null, allowLoopback: true, log: () => {} });
+  const at = `http://127.0.0.1:${await listenFree(g.server)}`;
+  const sk = generateSecretKey(), me = getPublicKey(sk);
+  try {
+    g.registry.put(reg({ pubkey: me }), now());
+    g.registry.judge(relay, new Set([me]), new Set([me]));
+    for (let i = 0; i < 63; i++) g.counts.move(me, `c3ViamVjdC0${String(i).padStart(3, "0")}`, "new", 1, now());
+    const b = JSON.stringify({ set: [{ subject: "c3ViamVjdC0xxx", signal: "new", count: 5 }, { subject: "c3ViamVjdC0yyy", signal: "new", count: 5 }] });
+    const ev = finalizeEvent({ kind: 27235, created_at: now(), content: "", tags: [["u", "http://push.test/signals"], ["method", "POST"], ["payload", sha256Hex(enc(b))]] }, sk);
+    const res = await fetch(`${at}/signals`, { method: "POST", headers: { authorization: `Nostr ${Buffer.from(JSON.stringify(ev)).toString("base64")}`, "content-type": "application/json" }, body: b });
+    assert.equal(res.status, 409);
+    assert.equal(g.counts.of(me, now()).length, 63, "nothing of it was kept");
+  } finally { g.close(); }
+});
