@@ -9,6 +9,7 @@ import { call } from "../bridge";
 import { folderOf, isAppOwn, isAppPath, isCodeNote, noteHref, titleOf } from "../../vault/notes";
 import NoVault from "./NoVault";
 import { linkFor } from "../../links/parse";
+import { fieldRows } from "../../vault/fields";
 
 // a link out of the app (web, mail, phone): the frame can't open one itself (it has no popups), so it asks the shell,
 // during the tap
@@ -16,7 +17,8 @@ const RouterLink = ({ href, className, children }: { href: string; className?: s
   isAppPath(href) ? <Link to={href} className={className}>{children}</Link>
     : <a href={href} className={className} rel="noreferrer noopener" onClick={(e) => { e.preventDefault(); void call("link.out", { url: href }); }}>{children}</a>;
 
-/** A note, read: its title, where it sits, its tags, and its content drawn by surface-render. An applet's own note is shown as text. */
+/** A note, read: its title, where it sits, its tags, its fields (a typed record's name: value, any type), and its
+ *  content drawn by surface-render. An applet's own note is shown as text, and the app's own notes show no fields. */
 export default function NoteView({ above, note: given }: { above?: ReactNode; /** the note, when the route already read it */ note?: Note | null }) {
   const { vault: key, id } = useParams();
   const rec = useVault(key);
@@ -43,6 +45,7 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
                 never an app's own note or code */}
             {!isCodeNote(note) && !isAppOwn(note) && <Link className="link-button note-edit" to={`${noteHref(rec.key, note.id)}/edit`}>Edit</Link>}
             <CopyLink link={linkFor(rec.url ?? `${rec.issuer}/vault/${encodeURIComponent(rec.vault)}`, note.id)} /></p>
+          {!isCodeNote(note) && !isAppOwn(note) && <Fields metadata={note.metadata} />}
           {isCodeNote(note)
             ? <pre className="note-code" aria-label="The note's text">{note.content ?? ""}</pre>
             : <div className="rn-theme-uni"><NoteRenderer className="prose-note" rich calm note={drawn!} resolve={resolve} linkComponent={RouterLink}
@@ -51,6 +54,13 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
       )}
     </main>
   );
+}
+
+/** A record's fields, as it holds them: name and value, one line each. Changed in the app's editor (Edit). */
+function Fields({ metadata }: { metadata: unknown }) {
+  const rows = fieldRows(metadata);
+  if (!rows.length) return null;
+  return <dl className="note-fields" aria-label="Fields">{rows.map((r) => <div key={r.name}><dt>{r.label}</dt><dd>{r.value}</dd></div>)}</dl>;
 }
 
 /** The note's link for someone else's Parachute (or another app): it opens here only where that vault is held. */

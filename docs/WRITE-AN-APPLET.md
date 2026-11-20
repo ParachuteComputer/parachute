@@ -184,8 +184,15 @@ there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below ar
 | `onOpen(cb)` | `cb({ note: { id, path }, screen })` when the person opened a note in it (now, and each time after). |
 | `vault.queryRecords({ pathPrefix, tag, search, limit, includeBody, includeFields })` | Records in folders it may read: `{ id, path, updatedAt }`, and with `tag`, `includeBody` or `includeFields` also `tags` and `fields` (and with `includeBody` the `body`). |
 | `vault.getRecord(idOrPath)` | One record it may read, with its body. |
-| `vault.createRecord({ path, body })` | A new record, in a folder it may `create` in: `{ id, path, tags, fields, updatedAt }` (`getRecord` for its body). |
-| `vault.updateRecord(id, { body, if_updated_at })` | A new body for a record it may `update`. |
+| `vault.createRecord({ path, body, types?, tags?, fields? })` | A new record, in a folder it may `create` in, with its types, tags and fields: `{ id, path, types, tags, fields, updatedAt }` (`getRecord` for its body). |
+| `vault.updateRecord(id, { if_updated_at, body?, fields?, types?, tags? })` | A change to a record it may `update`, in one call: a new body, fields merged (`null` removes one), and `types` / `tags` as `{ add, remove }`. |
+
+**Keep state in fields.** A box the person ticks is a field on the record (`fields: { book_status: "read" }`), not a
+`- [x]` in its body: the vault, the note view and any AI connected to the vault then read the same value. The type and
+its fields are the AI's to define (`manage-types` over MCP; write access may make a new type). Field values are plain:
+text, numbers, yes/no, or a list of those. The app's own names (`applet`, `component`, `parachute-*`) are never an
+applet's to give, take away, or change on a note that carries them. An app from before this (T-476) refuses a write
+with fields, types or tags (`bad_params`), and its note view doesn't list fields.
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
 | `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above; an applet at a room with `?room=<id>[&event=<id>]`, which it hears as its launch), while they tap inside the applet. Resolves to whether it went. |

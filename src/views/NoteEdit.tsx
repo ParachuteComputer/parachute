@@ -1,4 +1,5 @@
-// The app's own editor (docs/SIMPLE.md): a new note in a vault, or a note's words changed. A shell screen, so the frame
+// The app's own editor (docs/SIMPLE.md): a new note in a vault, or a note's words and fields changed (a typed record's
+// fields, any type, each input shaped by the type's own definition: vault/fields.ts). A shell screen, so the frame
 // (which a person's vault can replace) never writes: it only sends the person here. Only the person's own words: never
 // an app's own note (settings, frame, theme, pointers) or code, which the note view offers no Edit for either.
 import { heldLevel } from "../vault/reach";
@@ -11,6 +12,7 @@ import { useVault, useVaults } from "../vault/hooks";
 import { clientFor } from "../vault/client";
 import { isAppOwn, isCodeNote, noteHref } from "../vault/notes";
 import { atFirstEntry } from "../ui/history";
+import { fieldChanges, fieldInputs, type FieldInput, type FieldSpec } from "../vault/fields";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 /** A new note's path, from its first line: plain words, no folder (where Parachute Cloud keeps a person's notes). */
@@ -66,6 +68,9 @@ export default function NoteEdit() {
   const [theirs, setTheirs] = useState<Note | null>(null);
   const [conflictAt, setConflictAt] = useState<string | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  // the record's fields: the inputs (from its types' definitions and what it holds) and what the person typed
+  const [fields, setFields] = useState<FieldInput[]>([]);
+  const [values, setValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (isNew || !rec || !id) return;
@@ -76,6 +81,16 @@ export default function NoteEdit() {
       if (isCodeNote(n) || isAppOwn(n)) { setState("error"); setError("This note is the app's own, or code: it isn't changed here."); return; }
       if (!draft) base.current = updatedOf(n);
       setNote(n); setTextNow(draft?.text ?? n.content ?? ""); setState("ready");
+      // its types' field definitions (the vault's own), so each field gets the right input; a type that can't be read
+      // leaves its fields as plain text
+      const types = ((n as { types?: string[] }).types ?? n.tags ?? []).slice(0, 6);
+      const c = clientFor(rec);
+      void Promise.all(types.map((t) => c.getTag(t).catch(() => null))).then((defs) => {
+        if (!live) return;
+        const declared: Record<string, FieldSpec> = {};
+        for (const d of defs) for (const [k, v] of Object.entries((d as { fields?: Record<string, FieldSpec> } | null)?.fields ?? {})) declared[k] ??= v;
+        setFields(fieldInputs(n.metadata, declared));
+      });
     }, (e: unknown) => { if (live) { setState("error"); setError(e instanceof Error ? e.message : "The note couldn't be read."); } });
     return () => { live = false; };
   }, [rec?.key, id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -103,7 +118,8 @@ export default function NoteEdit() {
         }
       }
       const at = force ? (updatedOf(theirs) ?? conflictAt) : base.current ?? updatedOf(note);
-      await c.updateNote(note!.id, { content: text, ...(at ? { if_updated_at: at } : {}) });
+      const changed = fieldChanges(fields, values);
+      await c.updateNote(note!.id, { content: text, ...(Object.keys(changed).length ? { metadata: changed } : {}), ...(at ? { if_updated_at: at } : {}) });
       dropDraft();
       // back to the note the person came from (it reads itself again), so Back after it doesn't show it twice
       if (atFirstEntry()) nav(noteHref(target.key, note!.id), { replace: true }); else nav(-1);
@@ -131,6 +147,9 @@ export default function NoteEdit() {
             </select>
           </label>
         )}
+        {fields.length > 0 && <div className="note-edit-fields" role="group" aria-label="Fields">
+          {fields.map((f) => <FieldBox key={f.name} f={f} value={values[f.name] ?? f.value} onChange={(v) => setValues((was) => ({ ...was, [f.name]: v }))} />)}
+        </div>}
         <textarea ref={box} className="note-text" aria-label={isNew ? "The new note" : "The note's words"} placeholder={isNew ? "Write. The first line is its name." : ""}
           value={text} onChange={(e) => setText(e.target.value)} />
         {error && <div className="error" role="alert"><p>{error}</p>
@@ -150,4 +169,18 @@ export default function NoteEdit() {
       {state === "error" && <p className="error" role="alert">{error}</p>}
     </main>
   );
+}
+
+/** One field's input, by its kind: a choice of the type's values, a yes/no box, a number, or text. */
+function FieldBox({ f, value, onChange }: { f: FieldInput; value: string; onChange: (v: string) => void }) {
+  const id = `field-${f.name}`;
+  const input = f.kind === "choice"
+    ? <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">–</option>
+        {[...new Set([...(f.choices ?? []), ...(value && !f.choices?.includes(value) ? [value] : [])])].map((c) => <option key={c} value={c}>{c}</option>)}
+      </select>
+    : f.kind === "yesno"
+      ? <input id={id} type="checkbox" checked={value === "true"} onChange={(e) => onChange(e.target.checked ? "true" : "false")} />
+      : <input id={id} type={f.kind === "number" ? "number" : "text"} value={value} onChange={(e) => onChange(e.target.value)} />;
+  return <><label htmlFor={id}>{f.label}</label>{input}</>;
 }

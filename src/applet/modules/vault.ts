@@ -6,12 +6,16 @@
 //   GET   /api/notes?path_prefix&tag&search&limit&id&path&include_content
 //   GET   /api/notes/:idOrPath
 // Two writes, only for a grant that names them (a contract 2 sealed manifest):
-//   POST  /api/notes            {path, content}            a new note, its path inside a `vault.create` folder
-//   PATCH /api/notes/:idOrPath  {content, if_updated_at}   new content for a note inside a `vault.update` folder
-// A write sets content only (no tags, metadata, links, move or force: the app's writer takes none; the one tag a new
-// note gets is the app's, from what the applet opens: opens.ts `tagsFor`), never touches a
-// code note (HTML, TSX, JSX) or a note tagged `applet`, `component` or `parachute-pointer` (an applet can't rewrite itself, another, a component or a pointer), and is judged on the note as it is
-// read now. A session that has ended writes nothing.
+//   POST  /api/notes            {path, content, types?, tags?, metadata?}   a new record, its path inside a `vault.create` folder
+//   PATCH /api/notes/:idOrPath  {if_updated_at, content?, metadata?, types?: {add?, remove?}, tags?: {add?, remove?}}
+//                                                          a change to a record inside a `vault.update` folder, in one call
+// Typed records end to end (T-476): a write may set a record's fields (`metadata`, merged; null removes a key: plain
+// values only), its types and its tags, so what an applet changes is what an AI reads back. No links, move or force.
+// A new note also gets the tag of the type the applet opens there (opens.ts `tagsFor`). A write never touches a
+// code note (HTML, TSX, JSX) or a note tagged `applet`, `component` or `parachute-pointer` (an applet can't rewrite itself, another, a component or a pointer),
+// never gives or takes away one of those names or any `parachute-*` one, never changes the fields or tags of a note
+// carrying a `parachute-*` name (the app's own: its settings), and is judged on the note as it is read now. A session
+// that has ended writes nothing.
 // One call beside the REST subset (docs/design/KEYRING.md): `vault.attach {noteId, bytes, type, transcribe?}` adds a
 // file to a note the grant lets it change (the same judgment as a PATCH), through the hub's own upload and attach
 // routes; `transcribe` asks the hub to transcribe audio. The kit names it `uni.vault.attach(noteId, bytes, type, {transcribe})`.
@@ -25,7 +29,11 @@ import { tagsFor, type Opens } from "../opens.ts";
 import type { FetchResult } from "./frameFetch.ts";
 
 export type PathRow = { id: string; path: string | null; extension?: string | null; updatedAt?: string | null };
-export type VaultNote = { id: string; path?: string | null; extension?: string | null; content?: string | null; tags?: string[] | null; metadata?: Record<string, unknown> | null; createdAt?: string | null; updatedAt?: string | null };
+export type VaultNote = { id: string; path?: string | null; extension?: string | null; content?: string | null; tags?: string[] | null; types?: string[] | null; metadata?: Record<string, unknown> | null; createdAt?: string | null; updatedAt?: string | null };
+/** A change to a record's types or tags: names to add and to remove. */
+export type NameChange = { add?: string[]; remove?: string[] };
+/** What a typed write sets beside the text: fields (merged; null removes a key), types and tags. */
+export type RecordChange = { metadata?: Record<string, unknown>; types?: NameChange; tags?: NameChange };
 export type VaultDeps = {
   listPaths(): Promise<PathRow[]>;
   /** By id or path; rejects when missing. */
@@ -33,10 +41,10 @@ export type VaultDeps = {
   search(query: string, limit: number, pathPrefix: string | null): Promise<{ id: string; path: string | null; snippet: string }[]>;
   /** The newest notes under a folder with their tags and metadata, no content, in one ask. Absent: fields are read note by note. */
   listFields?(pathPrefix: string, limit: number): Promise<VaultNote[]>;
-  /** A new note at `path` with these tags (refused when one is there). Absent: the host can't write, and every write is 405. */
-  create?(path: string, content: string, tags: string[]): Promise<VaultNote>;
-  /** New content for the note `id`, only if it is still at `ifUpdatedAt`; a rejection whose message starts "conflict:" is a conflict. */
-  save?(id: string, content: string, ifUpdatedAt: string): Promise<VaultNote>;
+  /** A new note at `path` with these tags, and these types and fields (refused when one is there). Absent: the host can't write, and every write is 405. */
+  create?(path: string, content: string, tags: string[], more?: { types?: string[]; metadata?: Record<string, unknown> }): Promise<VaultNote>;
+  /** A change to the note `id` (new content, when given, and `more`), only if it is still at `ifUpdatedAt`; a rejection whose message starts "conflict:" is a conflict. */
+  save?(id: string, content: string | undefined, ifUpdatedAt: string, more?: RecordChange): Promise<VaultNote>;
   /** Upload the bytes to the vault's storage and attach them to the note `id`. Absent: the host can't, and attach is not_granted. */
   attach?(id: string, bytes: ArrayBuffer, type: string, transcribe: boolean): Promise<{ id?: string; path: string; mimeType?: string }>;
 };
@@ -70,16 +78,33 @@ const writablePath = (p: unknown): p is string => typeof p === "string" && p.len
 const GUARDED_TAGS = ["applet", "component", "parachute-pointer", "parachute-app", "parachute-approval", "parachute-keys"];
 export const isAppletCode = (n: VaultNote) => isCodeExtension(n)
   || (n.tags ?? []).some((t) => GUARDED_TAGS.some((g) => t === g || t.startsWith(`${g}/`)));
-const bodyOf = (raw: string | null, keys: readonly string[], required: readonly string[]): Record<string, string> | null => {
+const bodyOf = (raw: string | null, keys: readonly string[], required: readonly string[]): Record<string, unknown> | null => {
   if (raw === null) return null;
   let b: unknown;
   try { b = JSON.parse(raw); } catch { return null; }
-  if (!plain(b) || !hasOnly(b, keys) || !required.every((k) => k in b) || !Object.values(b).every((v) => typeof v === "string")) return null;
-  return b as Record<string, string>;
+  if (!plain(b) || !hasOnly(b, keys) || !required.every((k) => k in b)) return null;
+  return b;
 };
+/** A name the app keeps for itself: no applet gives it, takes it away, or changes a note that carries it. */
+const appsOwnName = (t: string) => /^parachute/i.test(t) || GUARDED_TAGS.some((g) => t === g || t.startsWith(`${g}/`));
+const MAX_NAMES = 20;
+/** A list of type or tag names: 1 to 100 plain characters each, no `#`, at most 20. Null when it isn't one. */
+const namesOf = (v: unknown): string[] | null => Array.isArray(v) && v.length <= MAX_NAMES && v.every((t) => typeof t === "string" && t.length > 0 && t.length <= 100 && !hasHidden(t) && !t.includes("#") && t.trim() === t) ? v as string[] : null;
+/** `{add?, remove?}` of names. Null when it isn't one. */
+const changeOf = (v: unknown): NameChange | null => {
+  if (!plain(v) || !hasOnly(v, ["add", "remove"])) return null;
+  const add = v.add === undefined ? [] : namesOf(v.add), remove = v.remove === undefined ? [] : namesOf(v.remove);
+  return add && remove ? { ...(add.length ? { add } : {}), ...(remove.length ? { remove } : {}) } : null;
+};
+const FIELD_KEY = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+const fieldValue = (v: unknown): boolean => v === null || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && v.length <= 10_000);
+/** Fields an applet may set: a plain object of at most 50 keys, each a plain value or a list of them (null removes the key). */
+const fieldsOf = (v: unknown): Record<string, unknown> | null => plain(v) && Object.keys(v).length <= 50
+  && Object.entries(v).every(([k, x]) => FIELD_KEY.test(k) && (fieldValue(x) || (Array.isArray(x) && x.length <= 100 && x.every((y) => y !== null && fieldValue(y))))) ? v : null;
+const namesIn = (c: NameChange | undefined) => [...(c?.add ?? []), ...(c?.remove ?? [])];
 
 const publicNote = (n: VaultNote, content: boolean) => {
-  const out: Record<string, unknown> = { id: n.id, path: n.path ?? null, createdAt: n.createdAt ?? null, updatedAt: n.updatedAt ?? null, tags: n.tags ?? [], metadata: n.metadata ?? {} };
+  const out: Record<string, unknown> = { id: n.id, path: n.path ?? null, createdAt: n.createdAt ?? null, updatedAt: n.updatedAt ?? null, tags: n.tags ?? [], ...(n.types ? { types: n.types } : {}), metadata: n.metadata ?? {} };
   if (content) out.content = n.content ?? "";
   return out;
 };
@@ -184,17 +209,22 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
 
   const forget = (...refs: (string | null | undefined)[]) => { for (const r of refs) if (r) cache.delete(r); };
 
-  /** POST /api/notes {path, content}: a new note inside a folder the grant lets it add to. */
+  /** POST /api/notes {path, content, types?, tags?, metadata?}: a new record inside a folder the grant lets it add to. */
   async function create(body: string | null, scopes: Resolved, ctx: CallCtx): Promise<FetchResult> {
     const folders = scopes["vault.create"] ?? [];
     if (!folders.length || !deps.create) return fail(403, "not_granted");
-    const b = bodyOf(body, ["path", "content"], ["path", "content"]);
-    if (!b || !writablePath(b.path)) return fail(400, "bad_params");
+    const b = bodyOf(body, ["path", "content", "types", "tags", "metadata"], ["path", "content"]);
+    if (!b || !writablePath(b.path) || typeof b.content !== "string") return fail(400, "bad_params");
+    const types = b.types === undefined ? [] : namesOf(b.types), tags = b.tags === undefined ? [] : namesOf(b.tags);
+    const metadata = b.metadata === undefined ? undefined : fieldsOf(b.metadata);
+    if (!types || !tags || metadata === null) return fail(400, "bad_params");
+    if ([...types, ...tags].some(appsOwnName)) return fail(403, "not_granted");
     if (!inScope(folders, b.path)) return fail(403, "out_of_scope");
     if (ctx.closed()) return fail(502, "failed");
     ctx.charge(1);
     try {
-      const note = await deps.create(b.path, b.content, tagsFor(opens, b.path));
+      const note = await deps.create(b.path, b.content, [...new Set([...tagsFor(opens, b.path), ...tags])],
+        types.length || (metadata && Object.keys(metadata).length) ? { ...(types.length ? { types } : {}), ...(metadata && Object.keys(metadata).length ? { metadata } : {}) } : undefined);
       forget(note.id, note.path, b.path);
       return json(201, "Created", publicNote({ ...note, path: note.path ?? b.path }, false));
     } catch (e) {
@@ -203,21 +233,31 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     }
   }
 
-  /** PATCH /api/notes/:ref {content, if_updated_at}: new content for a note inside a folder the grant lets it change, judged on the note as read now. */
+  /** PATCH /api/notes/:ref {if_updated_at, content?, metadata?, types?, tags?}: a change to a record inside a folder
+   *  the grant lets it change, in one call, judged on the note as read now. */
   async function update(ref: string, body: string | null, scopes: Resolved, ctx: CallCtx): Promise<FetchResult> {
     const folders = scopes["vault.update"] ?? [];
     if (!folders.length || !deps.save) return fail(403, "not_granted");
-    const b = bodyOf(body, ["content", "if_updated_at"], ["content", "if_updated_at"]);
-    if (!b || !b.if_updated_at) return fail(400, "bad_params");
+    const b = bodyOf(body, ["content", "if_updated_at", "metadata", "types", "tags"], ["if_updated_at"]);
+    if (!b || typeof b.if_updated_at !== "string" || !b.if_updated_at || (b.content !== undefined && typeof b.content !== "string")) return fail(400, "bad_params");
+    const metadata = b.metadata === undefined ? undefined : fieldsOf(b.metadata);
+    const types = b.types === undefined ? undefined : changeOf(b.types), tags = b.tags === undefined ? undefined : changeOf(b.tags);
+    if (metadata === null || types === null || tags === null) return fail(400, "bad_params");
+    const more: RecordChange = { ...(metadata && Object.keys(metadata).length ? { metadata } : {}), ...(types && namesIn(types).length ? { types } : {}), ...(tags && namesIn(tags).length ? { tags } : {}) };
+    const typed = Object.keys(more).length > 0;
+    if (b.content === undefined && !typed) return fail(400, "bad_params");
+    if ([...namesIn(more.types), ...namesIn(more.tags)].some(appsOwnName)) return fail(403, "not_granted");
     if (!safeRef(ref)) return notFound();
     ctx.charge(1);
     let note: VaultNote;
     try { note = await deps.getNote(ref); } catch (e) { if (e instanceof ContractError) throw e; return notFound(); }
     // a note it can't even read is absent (no existence oracle); one it reads but may not change is refused
     if (!inScope(folders, note.path) || isAppletCode(note)) return inScope(scopes["vault.read"] ?? [], note.path) ? fail(403, "out_of_scope") : notFound();
+    // the app's own notes (its settings) keep their fields and names
+    if (typed && [...(note.tags ?? []), ...(note.types ?? [])].some(appsOwnName)) return fail(403, "out_of_scope");
     if (ctx.closed()) return fail(502, "failed");
     try {
-      const saved = await deps.save(note.id, b.content, b.if_updated_at);
+      const saved = await deps.save(note.id, b.content as string | undefined, b.if_updated_at, typed ? more : undefined);
       forget(ref, note.id, note.path, saved.id, saved.path);
       return json(200, "OK", publicNote({ ...saved, path: saved.path ?? note.path }, false));
     } catch (e) {
