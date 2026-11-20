@@ -18,6 +18,7 @@ One model, everywhere.
 1. **The bar is for your pinned places.** It sits at the bottom of the launcher, a vault, a note and an applet. On it:
    the launcher (always), your home applet if you have one, then the applets you pinned, in your order (up to 12).
    Under a frame of your own it also ends with the app's own way to Settings (not one of the twelve; always on screen).
+   An applet that declares signals shows its count beside its glyph unless it is the screen in front ([design/APP-RECORD.md](design/APP-RECORD.md), "Signals").
 2. **The launcher is your app.** Every applet the open app offers ([Apps](#apps)), and the vaults themselves. In
    Everything, that is every applet in every vault.
 3. **Back returns where you came from.** The app's Back and the phone's Back both go one step back in what you did. On
