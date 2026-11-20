@@ -24,6 +24,7 @@
         "approvals": { "from": ["{{uni}}"] },
         "notify": { "mentions": true, "from": ["{{uni}}"], "gateway": "{{push?}}" }
       }
-    ]
+    ],
+    "signals": [{ "id": "for-you", "name": "mentions and messages from Uni", "from": { "service": "rooms" } }]
   }
 }

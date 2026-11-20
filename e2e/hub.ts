@@ -128,8 +128,8 @@ export default async function globalSetup() {
 }
 
 /** A token with another scope on the e2e hub (e.g. `vault:kitchen:admin`, to change what a tag is). */
-export function mintToken(scope: string, h: Pick<HubState, "home" | "origin"> = hubState()): string {
-  return cli(h, ["auth", "mint-token", "--scope", scope, "--json"]).token as string;
+export function mintToken(scope: string, h: Pick<HubState, "home" | "origin"> = hubState(), more: string[] = []): string {
+  return cli(h, ["auth", "mint-token", "--scope", scope, ...more, "--json"]).token as string;
 }
 
 export function hubState(): State { return JSON.parse(readFileSync(STATE, "utf8")) as State; }

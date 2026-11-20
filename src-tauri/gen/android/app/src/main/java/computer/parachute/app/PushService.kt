@@ -29,6 +29,8 @@ class PushService : org.unifiedpush.android.connector.PushService() {
     private const val PREFS = "parachute_push"
     private val ROOM = Regex("^[A-Za-z0-9_-]{1,64}$")
     private val HEX_KEY = Regex("^[0-9a-f]{64}$")
+    private val GID = Regex("^[A-Za-z0-9_-]{8,64}$")
+    private val SIGNAL = Regex("^[a-z0-9]+(-[a-z0-9]+)*$")
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -152,6 +154,7 @@ class PushService : org.unifiedpush.android.connector.PushService() {
       return
     }
     val o = try { JSONObject(String(message.content, Charsets.UTF_8)) } catch (e: Exception) { null }
+    if (o?.optString("kind") == "signal") return onSignal(o, instance)
     val relay = o?.optString("relay") ?: ""
     val room = o?.optString("room") ?: ""
     val event = o?.optString("event") ?: ""
@@ -181,6 +184,35 @@ class PushService : org.unifiedpush.android.connector.PushService() {
     val link = MessageNotices.link(entry.getString("subject"), room, event)
     MessageNotices.add(this, room, text, MessageNotices.Newest(title, text, entry.optString("name"), link, System.currentTimeMillis()))
     MessageNotices.flush(this, listOf(room))
+  }
+
+  /** A count changed (docs/design/APP-RECORD.md "Signals"): `{v: 1, kind: "signal", subject, signal, count, to}`. Shown
+   *  for an allowed applet's signal whose gateway owns the instance it came in on, for the key the phone uses now, as
+   *  "Ideas · 2 new" over the signal's own words; a count of 0 (opened on another device) takes it away. */
+  private fun onSignal(o: JSONObject, instance: String) {
+    val subject = o.optString("subject")
+    val signal = o.optString("signal")
+    val to = o.optString("to")
+    val count = o.optInt("count", -1)
+    if (o.optInt("v") != 1 || !GID.matches(subject) || signal.length > 40 || !SIGNAL.matches(signal) || count < 0 || count > 9999 || !HEX_KEY.matches(to)) {
+      Log.w(TAG, "a signal push that isn't a gateway's: dropped")
+      return
+    }
+    val all = try { JSONArray(NotifyService.savedSignals(this)) } catch (e: Exception) { JSONArray() }
+    val entry = (0 until all.length()).mapNotNull { all.optJSONObject(it) }.firstOrNull {
+      it.optString("gid") == subject && it.optString("signal") == signal && instanceFor(it.optString("gateway")) == instance && it.optString("me") == to
+    }
+    if (entry == null) {
+      Log.i(TAG, "a signal no allowed applet sends here: dropped")
+      return
+    }
+    Log.i(TAG, "a signal for an allowed applet")
+    val tag = "$subject/$signal"
+    if (count == 0) { MessageNotices.clearSignal(this, tag); return }
+    if (!MessageNotices.mayShow(this)) return
+    val name = entry.optString("name")
+    // a relay's count rises with a message whose own notification already sounded: this one is quiet
+    MessageNotices.signal(this, tag, "$name · $count new", entry.optString("label"), count, MessageNotices.link(entry.optString("subject"), null, null), entry.has("relay"))
   }
 
   /** Not seen before (the last 200 event ids pushed are kept). */

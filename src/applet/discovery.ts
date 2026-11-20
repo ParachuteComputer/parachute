@@ -11,6 +11,7 @@ import type { Need, Resolved } from "./needs.ts";
 import { resolveNeeds } from "./needs.ts";
 import { parseEmbeds, type Embed } from "./embeds.ts";
 import { parseServices, type Service } from "./services.ts";
+import { parseSignals, type Signal } from "./signals.ts";
 
 /** The app's own applet ids: a note may not take one. */
 export const BUILT_IN_IDS = ["vault"];
@@ -33,6 +34,10 @@ export type AppletEntry = {
   services: Service[];
   /** why `services` was refused, when it was (the applet then reaches no service) */
   servicesError?: string;
+  /** What counts as something for the person (signals.ts): the badge on the bar, and the notification. */
+  signals: Signal[];
+  /** why `signals` was refused, when it was (the applet then shows no count) */
+  signalsError?: string;
 };
 export type Discovery = { entries: AppletEntry[]; skipped: number };
 type Row = { id?: unknown; path?: unknown; tags?: unknown; metadata?: unknown };
@@ -53,8 +58,11 @@ export function readApplet(r: Row, vault: string, theirs = false, isHub: (origin
   const app = theirs ? { ok: false as const, error: "an applet in someone else's vault can't ask the app for anything" } : parseApp(meta.app);
   const opens = parseOpens(meta.opens, parsed.manifest);
   const services = theirs ? (meta.services === undefined ? { ok: true as const, services: [] } : { ok: false as const, error: "an applet in someone else's vault reaches no service" }) : parseServices(meta.services, isHub);
+  // as with `opens`: a bad `signals` costs the applet its counts, not the applet
+  const signals = parseSignals(meta.signals, parsed.manifest, services.ok ? services.services : [], theirs, isHub);
   return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], embeds: theirs ? [] : parseEmbeds(meta.embeds), services: services.ok ? services.services : [],
-    ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }), ...(services.ok ? {} : { servicesError: services.error }) } };
+    signals: signals.ok ? signals.value : [],
+    ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }), ...(services.ok ? {} : { servicesError: services.error }), ...(signals.ok ? {} : { signalsError: signals.error }) } };
 }
 
 export function discoverApplets(rows: readonly Row[], vault: string, theirs = false, isHub: (origin: string) => boolean = () => false): Discovery {
