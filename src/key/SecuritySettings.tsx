@@ -58,7 +58,6 @@ export default function SecuritySettings() {
   }, "Changed, and signed for your other devices.");
 
   const shown = pending ?? cur;
-  const needsCode = [cur.approvals, cur.code, cur.join, shown.approvals, shown.code, shown.join].includes("passcode") && !status.passcode;
   return (
     <section className="card" aria-labelledby="s-security">
       <h2 id="s-security">Security</h2>
@@ -72,7 +71,7 @@ export default function SecuritySettings() {
       </div>
       {ROWS.map((r) => (
         <div className="levels-row" key={r.key}>
-          <span>{r.label}<br /><span className="small quiet">{r.note}</span></span>
+          <span>{r.label}<br /><span className="small quiet">{r.note}{shown[r.key] === "passcode" && !status.passcode ? " Needs a passcode on this device: set one below." : ""}</span></span>
           <span className="levels-choices" role="group" aria-label={r.label}>
             {r.choices.map((c) => <button key={c} type="button" aria-pressed={shown[r.key] === c} onClick={() => choose({ ...cur, [r.key]: c })}>{levelWords[c]}</button>)}
           </span>
@@ -84,7 +83,6 @@ export default function SecuritySettings() {
         <button type="submit" className="primary" disabled={status.passcode && !code}>Change</button>
         <button type="button" className="quiet-button" onClick={() => { setPending(null); setCode(""); }}>Cancel</button>
       </form>}
-      {needsCode && <p className="small error">A passcode level needs a passcode on this device: set one below, or what asks it is refused.</p>}
       <h3>Passcode</h3>
       <p className="small">{status.passcode ? "This device keeps a passcode: your own secret, not the phone's PIN, kept only as a slow hash here." : "A secret of your own, not the phone's PIN, for what you set to Passcode. Kept only as a slow hash on this device."}</p>
       <form className="row-buttons" onSubmit={(e) => { e.preventDefault(); run(async () => { await native.passcodeSet(status.passcode ? old : null, next || null); setOld(""); setNext(""); }, next ? "Passcode kept." : "Passcode removed."); }}>
