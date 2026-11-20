@@ -11,7 +11,9 @@
 /** What the hub says about one write. */
 export type Changed = { at: string | null; by: string | null; via: string | null };
 /** One kept version, as `/versions` lists it: the content before a write (its sha-256), and that write. */
-export type Version = { content_hash: string | null; actor: string | null; via: string | null; superseded_at: string };
+export type Version = { content_hash: string | null; actor: string | null; via: string | null; superseded_at: string;
+  /** its place in the note's history (0: the first write's), null when the hub doesn't say */
+  version_ix: number | null };
 /** The note as read now: its content's hash, and who made it and wrote it last. */
 export type NoteNow = { hash: string; createdAt: string | null; createdBy: string | null; createdVia: string | null; updatedAt: string | null; updatedBy: string | null; updatedVia: string | null };
 
@@ -37,11 +39,13 @@ const ordinal = (n: number) => {
 };
 
 /** The last write that changed the code, and which version of the day the code is (one per write today that changed
- *  it, one more when the note was made today). Without kept versions (an older hub, history off): the note's last
- *  write, which may have changed only its fields, and no count. With versions that show no change of code since they
- *  begin: whoever made the note, when the kept versions reach back that far. */
+ *  it, one more when the note was made today). When the kept versions show no change of code: whoever made the note,
+ *  but only when they reach back to its making (the oldest kept is the first write's, or none was ever replaced).
+ *  Otherwise (history off or pruned, or the versions couldn't be read): when the note was last written, and nobody
+ *  named, since that write may have changed only its fields. */
 export function lastCodeChange(note: NoteNow, versions: readonly Version[] | null, now: number): { changed: Changed; version: number | null } {
-  if (!versions) return { changed: { at: note.updatedAt, by: note.updatedBy, via: note.updatedVia }, version: null };
+  const timeOnly = { at: note.updatedAt, by: null, via: null };
+  if (!versions) return { changed: timeOnly, version: null };
   const day = startOfDay(now);
   const today = (at: string | null | undefined) => { const t = at ? Date.parse(at) : NaN; return !isNaN(t) && t >= day && t <= now + 60_000; };
   let newest: Changed | null = null, count = 0;
@@ -53,9 +57,8 @@ export function lastCodeChange(note: NoteNow, versions: readonly Version[] | nul
   });
   if (today(note.createdAt)) count++;
   const made = { at: note.createdAt, by: note.createdBy, via: note.createdVia };
-  // the kept versions may not reach back to the note's making (pruned): then nothing is said of who wrote the code
-  const reaches = versions.length < 50;
-  return { changed: newest ?? (reaches ? made : { at: null, by: null, via: null }), version: count > 0 ? count : null };
+  const reaches = versions.length ? versions[versions.length - 1].version_ix === 0 : !!note.createdAt && note.createdAt === note.updatedAt;
+  return { changed: newest ?? (reaches ? made : timeOnly), version: count > 0 ? count : null };
 }
 
 const short = (s: string, n = 24) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);

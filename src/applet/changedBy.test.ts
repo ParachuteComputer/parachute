@@ -38,7 +38,7 @@ describe("who changed an applet's code, as its card says it", () => {
 
 describe("the last write that changed the code, from the hub's kept versions", () => {
   const note = (o: Partial<NoteNow> = {}): NoteNow => ({ hash: "h4", createdAt: "2026-11-18T10:00:00Z", createdBy: "u-aaron", createdVia: "api", updatedAt: at(2), updatedBy: "u-aaron", updatedVia: `nostr:${UNI}`, ...o });
-  const v = (before: string | null, min: number, via: string, actor = "u-aaron"): Version => ({ content_hash: before, actor, via, superseded_at: at(min) });
+  const v = (before: string | null, min: number, via: string, actor = "u-aaron", ix: number | null = 0): Version => ({ content_hash: before, actor, via, superseded_at: at(min), version_ix: ix });
   it("a write of the note's fields after the code changed isn't the change: the code's last writer is named", () => {
     // newest first: Uni touched the fields 2 minutes ago (h4 before and after); a token wrote h4 over h3 at 03:12-ish
     const r = lastCodeChange(note(), [v("h4", 2, `nostr:${UNI}`), v("h3", 300, "api", "token:9f2"), v("h2", 400, "mcp"), v("h1", 2000, "mcp")], NOW);
@@ -46,14 +46,18 @@ describe("the last write that changed the code, from the hub's kept versions", (
     expect(r.version).toBe(2);
     expect(changedLine(r.changed, { now: NOW, version: r.version, own, named })).toBe("Changed 5 hours ago by a hub token (through the hub's API). The 2nd version today.");
   });
-  it("made today counts as a version; no versions kept: the note's last write, no count", () => {
+  it("made today counts as a version; versions that couldn't be read: when it was last written, nobody named", () => {
     expect(lastCodeChange(note({ createdAt: at(500) }), [v("h3", 10, "mcp")], NOW).version).toBe(2);
-    expect(lastCodeChange(note(), null, NOW)).toEqual({ changed: { at: at(2), by: "u-aaron", via: `nostr:${UNI}` }, version: null });
+    expect(lastCodeChange(note(), null, NOW)).toEqual({ changed: { at: at(2), by: null, via: null }, version: null });
   });
-  it("no change of code since the versions begin: whoever made it, while the versions reach back to its making", () => {
-    expect(lastCodeChange(note({ createdBy: "u-other" }), [v("h4", 2, "mcp")], NOW).changed).toEqual({ at: "2026-11-18T10:00:00Z", by: "u-other", via: "api" });
-    const full = Array.from({ length: 50 }, (_, i) => v("h4", i + 1, "mcp"));
-    expect(lastCodeChange(note(), full, NOW).changed).toEqual({ at: null, by: null, via: null });
+  it("no change of code in the kept versions: whoever made it only when they reach back to its making", () => {
+    expect(lastCodeChange(note({ createdBy: "u-other" }), [v("h4", 2, "mcp", "u-aaron", 0)], NOW).changed).toEqual({ at: "2026-11-18T10:00:00Z", by: "u-other", via: "api" });
+    // pruned: the oldest kept isn't the first write's, so a stranger's code write may be gone from the list
+    expect(lastCodeChange(note(), Array.from({ length: 20 }, (_, i) => v("h4", i + 1, "mcp", "u-aaron", 40 - i)), NOW).changed).toEqual({ at: at(2), by: null, via: null });
+    // history off: nothing kept although the note was written after its making
+    expect(lastCodeChange(note(), [], NOW).changed).toEqual({ at: at(2), by: null, via: null });
+    // nothing kept and never written since its making: its maker
+    expect(lastCodeChange(note({ updatedAt: "2026-11-18T10:00:00Z" }), [], NOW).changed).toEqual({ at: "2026-11-18T10:00:00Z", by: "u-aaron", via: "api" });
   });
 });
 
