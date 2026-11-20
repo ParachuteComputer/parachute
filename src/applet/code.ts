@@ -118,8 +118,10 @@ const FAILURE = String.raw`(function () {
   var missing = window.__parachuteMissing = [];
   window.__parachuteFail = function (e) {
     var root = document.getElementById("root"); if (!root) return; root.textContent = ""; var p = document.createElement("p");
-    if (missing.length) { p.className = "parachute-update"; p.textContent = "Update Parachute to use " + (window.__parachuteName || "this applet") + ". It uses " + missing.join(", ") + ", which this Parachute doesn't have."; }
-    else { p.className = "parachute-error"; p.textContent = "This applet stopped: " + (e && e.message ? e.message : String(e)); }
+    var why = e && e.message ? e.message : String(e);
+    // it may have fallen back for what was missing and stopped for another reason: the reason is said too
+    if (missing.length) { p.className = "parachute-update"; p.textContent = "Update Parachute to use " + (window.__parachuteName || "this applet") + ". It uses " + missing.join(", ") + ", which this Parachute doesn't have. (It stopped: " + why + ")"; }
+    else { p.className = "parachute-error"; p.textContent = "This applet stopped: " + why; }
     root.appendChild(p);
   };
   addEventListener("error", function (e) { var root = document.getElementById("root"); if (root && !root.firstChild) window.__parachuteFail(e.error || e.message); });
@@ -131,7 +133,11 @@ const LOADER_HEAD = String.raw`(function () {
   // a part or call of the kit this app doesn't have reads as undefined, as always (an applet may fall back for it); the
   // name is noted, so that if the applet then stops, it says to update Parachute (docs/design/VERSIONS.md)
   var missing = window.__parachuteMissing || [];
-  var asked = kit && typeof Proxy === "function" ? new Proxy(kit, { get: function (t, k) {
+  var asked = kit && typeof Proxy === "function" ? new Proxy(kit, { get: function (t, k, self) {
+    // read as a module, so a namespace import (import * as P) and a default import keep this proxy: the transpiler
+    // copies a plain object into a new one, which would no longer note what is missing
+    if (k === "__esModule") return true;
+    if (k === "default" && !("default" in t)) return self;
     var v = t[k];
     if (v === undefined && typeof k === "string" && k !== "__esModule" && k !== "default" && k !== "then" && !(k in t) && missing.indexOf(k) < 0) missing.push(k);
     return v;

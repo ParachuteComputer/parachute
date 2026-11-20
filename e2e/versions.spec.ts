@@ -41,4 +41,29 @@ test("code that uses a part of the kit this app doesn't have says to update, not
     await expect(frame(page).getByText("Update Parachute to use Later page. It uses Timeline, which this Parachute doesn't have.")).toBeVisible();
     await expect(frame(page).getByText(/This applet stopped/)).toHaveCount(0);
   } finally { await api(hubState(), "DELETE", `notes/${note.id}`); }
+  // the same through a namespace import, which the transpiler reads differently
+  const ns = `import * as P from "parachute";\nexport default function App() {\n  return <P.Page title="Later too"><P.Timeline /></P.Page>;\n}\n`;
+  const two = await record(hubState(), "create", { path: "Applets/Later too", extension: "tsx", tags: ["applet"], body: ns, fields: { applet: { contract: 2, id: "later-too", name: "Later too" } } });
+  try {
+    await openChip(page, /Later too/);
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(frame(page).getByText("Update Parachute to use Later too. It uses Timeline, which this Parachute doesn't have.")).toBeVisible();
+  } finally { await api(hubState(), "DELETE", `notes/${two.id}`); }
+});
+
+test("an applet that imports a component made for a newer app says to update, and runs nothing", async ({ page }) => {
+  const part = await record(hubState(), "create", { path: "Components/Later card", extension: "tsx", tags: ["component"],
+    body: `export default function LaterCard() { return <p>later</p>; }\n`, fields: { needs: 99, component: { contract: 1, id: "later-card", name: "Later card" } } });
+  const note = await record(hubState(), "create", { path: "Applets/Uses later", extension: "tsx", tags: ["applet"],
+    body: `import LaterCard from "component:later-card";\nexport default function App() { return <LaterCard />; }\n`, fields: { applet: { contract: 2, id: "uses-later", name: "Uses later" } } });
+  try {
+    await openChip(page, /Uses later/);
+    await expect(page.getByText("Update Parachute to use Uses later.")).toBeVisible();
+    await expect(page.getByText(/Later card.*newer Parachute/)).toBeVisible();
+    await expect(card(page)).toHaveCount(0);
+    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+  } finally {
+    await api(hubState(), "DELETE", `notes/${note.id}`);
+    await api(hubState(), "DELETE", `notes/${part.id}`);
+  }
 });

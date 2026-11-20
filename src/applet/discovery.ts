@@ -5,7 +5,7 @@
 
 import { plain, stripExt } from "./contract.ts";
 import { parseManifest, shownGlyph, shownId, shownName, type Manifest } from "./manifest.ts";
-import { APP_LEVEL, tooNew } from "./level.ts";
+import { APP_LEVEL, neededWhy, tooNew } from "./level.ts";
 import { parseOpens, type Opens } from "./opens.ts";
 import { parseApp, type AppWord } from "./app.ts";
 import type { Need, Resolved } from "./needs.ts";
@@ -47,6 +47,8 @@ export type AppletEntry = {
    *  know: level.ts). Listed by its name so its place on the bar stays, with nothing allowed: its screen says "Update
    *  Parachute to use …" and nothing of it runs. */
   newer?: true;
+  /** Why it reads as newer, in a few words: the level it needs, or the manifest's key this app doesn't know. */
+  newerWhy?: string;
 };
 export type Discovery = { entries: AppletEntry[]; skipped: number };
 type Row = { id?: unknown; path?: unknown; tags?: unknown; metadata?: unknown };
@@ -54,11 +56,11 @@ type Row = { id?: unknown; path?: unknown; tags?: unknown; metadata?: unknown };
 /** `theirs`: the vault isn't the person's own (vault/whose.ts): its applets ask nothing of the app, whatever `app` says,
  *  reach no service and no microphone. `isHub`: is an origin one of the person's Parachute hubs (never a service). */
 /** An applet written for a newer app: its name and glyph (when they read as such), and nothing it asks. */
-function newerEntry(r: { id: string; path: string }, raw: unknown, vault: string): AppletEntry {
+function newerEntry(r: { id: string; path: string }, raw: unknown, vault: string, why: string): AppletEntry {
   const name = shownName(raw) ?? stripExt(r.path).split("/").pop() ?? "this applet";
   const own = shownId(raw);
   const manifest: Manifest = { contract: 2, id: own && !BUILT_IN_IDS.includes(own) ? own : `newer-${r.id.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`.slice(0, 40).replace(/-+$/, ""), name, glyph: shownGlyph(raw), allow: [], search: [], screens: [{ id: "home", name }] };
-  return { manifest, vault, noteId: r.id, path: r.path, opens: [], app: [], embeds: [], services: [], signals: [], newer: true };
+  return { manifest, vault, noteId: r.id, path: r.path, opens: [], app: [], embeds: [], services: [], signals: [], newer: true, newerWhy: why };
 }
 
 /** `level`: this build's (level.ts); a test gives an older one. */
@@ -67,9 +69,9 @@ export function readApplet(r: Row, vault: string, theirs = false, isHub: (origin
   if (!Array.isArray(r.tags) || !r.tags.includes("applet")) return { ok: false, error: "it isn't tagged applet" };
   const meta = plain(r.metadata) ? r.metadata : {};
   // written for a newer app: listed, never read further or run
-  if (tooNew(meta.needs, level)) return { ok: true, entry: newerEntry({ id: r.id, path: r.path }, meta.applet, vault) };
+  if (tooNew(meta.needs, level)) return { ok: true, entry: newerEntry({ id: r.id, path: r.path }, meta.applet, vault, neededWhy(meta.needs, level)) };
   const parsed = parseManifest(meta.applet);
-  if (!parsed.ok && parsed.newer) return { ok: true, entry: newerEntry({ id: r.id, path: r.path }, meta.applet, vault) };
+  if (!parsed.ok && parsed.newer) return { ok: true, entry: newerEntry({ id: r.id, path: r.path }, meta.applet, vault, `its manifest: ${parsed.error}`) };
   if (!parsed.ok) return { ok: false, error: `its manifest is invalid: ${parsed.error}` };
   if (BUILT_IN_IDS.includes(parsed.manifest.id)) return { ok: false, error: `the id ${parsed.manifest.id} is the app's own` };
   if (meta.interface !== undefined && meta.interface !== null) return { ok: false, error: "a contract 2 applet has one manifest. Its note must not carry interface too" };

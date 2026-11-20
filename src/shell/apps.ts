@@ -58,8 +58,8 @@ export function placeOf(x: unknown): Place | null {
   if (x.hub !== undefined && !hubOk(x.hub)) return null;
   return { vault: x.vault, applet: x.applet, ...(x.hub !== undefined ? { hub: x.hub as string } : {}) };
 }
-/** One applet, every applet in a vault, or every vault on a named hub. No "every hub", no "this applet in every vault". */
-/** Where applets come from. Strict: a key it doesn't know might narrow it, so such a source is left out (a narrower app). */
+/** One applet, every applet in a vault, or every vault on a named hub. No "every hub", no "this applet in every vault".
+ *  Strict: a key it doesn't know might narrow it, so such a source is left out (a narrower app). The same for `opens`. */
 export function sourceOf(x: unknown): Source | null {
   if (!plain(x) || !only(x, ["hub", "vault", "applet"])) return null;
   if (x.hub !== undefined && !hubOk(x.hub)) return null;
@@ -69,19 +69,19 @@ export function sourceOf(x: unknown): Source | null {
   return placeOf(x);
 }
 function opensOf(x: unknown): OpensChoice | null {
-  if (!plain(x) || typeof x.type !== "string" || !/^[a-z0-9][a-z0-9_/-]{0,79}$/.test(x.type)) return null;
+  if (!plain(x) || !only(x, ["type", "hub", "vault", "applet"]) || typeof x.type !== "string" || !/^[a-z0-9][a-z0-9_/-]{0,79}$/.test(x.type)) return null;
   if (x.applet === null) { if (typeof x.vault !== "string" || !VAULT.test(x.vault) || (x.hub !== undefined && !hubOk(x.hub))) return null; return { type: x.type, vault: x.vault, applet: null, ...(x.hub ? { hub: x.hub as string } : {}) }; }
   const p = placeOf({ vault: x.vault, applet: x.applet, ...(x.hub !== undefined ? { hub: x.hub } : {}) });
   return p ? { type: x.type, ...p } : null;
 }
 const list = <T>(x: unknown, max: number, f: (y: unknown) => T | null): T[] => (Array.isArray(x) ? x.slice(0, max).map(f).filter((y): y is T => !!y) : []);
 
-/** An app record's `app` field, read strictly where a mistake would widen what is offered, kindly elsewhere: a
- *  source or place that doesn't parse is left out, never the rest. null when it isn't an app at all. */
 /** Was this app record made for a newer Parachute (`needs` above this build's level, or a later contract: level.ts)?
  *  Then it isn't read here at all: the device opens the next app it can and says to update (homeSettings appNewer). */
 export const newerApp = (raw: unknown, level = APP_LEVEL): boolean => plain(raw) && (tooNew(raw.needs, level) || (typeof raw.contract === "number" && raw.contract > 1));
 
+/** An app record's `app` field, read strictly where a mistake would widen what is offered, kindly elsewhere: a
+ *  source or place that doesn't parse is left out, never the rest. null when it isn't an app at all, or is newer. */
 export function appOf(raw: unknown, path: string | null, noteId: string | null, level = APP_LEVEL): App | null {
   if (!plain(raw) || raw.contract !== 1 || newerApp(raw, level) || typeof raw.id !== "string" || !ID.test(raw.id) || raw.id.length > 40) return null;
   // the id is the last part of its path, so two records can't both claim one app
@@ -165,6 +165,7 @@ export function recordOf(app: App): Record<string, unknown> {
  *  never less careful than the person's own record asks: each level the stricter of the two (shell/levelRules.ts). A
  *  device's levels are raised by the open app's record and never lowered by one (src-tauri/src/levels.rs). */
 export function followed(own: App, raw: unknown, theirs: Record<string, unknown>): Record<string, unknown> {
-  return { ...theirs, contract: 1, id: own.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: own.live,
+  // a later contract of theirs stays as it is, so this app sees it as made for a newer Parachute (newerApp), not as 1
+  return { ...theirs, contract: typeof theirs.contract === "number" && theirs.contract > 1 ? theirs.contract : 1, id: own.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: own.live,
     ...(Object.keys(own.security).length || theirs.security !== undefined ? { security: stricterAsked(own.security, askedOf(theirs.security)) } : {}) };
 }

@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import { appletRecord } from "../../applets/record";
 import { discoverApplets, readApplet } from "./discovery";
 import { APP_LEVEL, updateLine } from "./level";
-import { appOf, newerApp, placeOf } from "../shell/apps";
+import { appOf, followed, newerApp, placeOf } from "../shell/apps";
+import { componentNewer, readComponent } from "./component";
 
 const vars = { relay: "wss://relay.example", mail: "https://mail.example/mail/", uni: "a".repeat(64), push: "https://push.example/" };
 const row = (name: string, i: number, change: (f: Record<string, unknown>) => Record<string, unknown> = (f) => f) => {
@@ -34,6 +35,7 @@ describe("an older app opening a newer record set", () => {
     }
     const home = found.entries.find((e) => e.path === "Applets/Home")!;
     expect([home.manifest.name, home.manifest.glyph, home.manifest.id]).toEqual(["Home", "◠", "home"]);
+    expect(home.newerWhy).toBe(`it needs Parachute level ${APP_LEVEL + 1}; this one is level ${APP_LEVEL}`);
     expect(updateLine(home.manifest.name)).toBe("Update Parachute to use Home.");
     // the same record on an app at that level reads as it is
     const there = readApplet(row("today", 0, (f) => ({ ...f, ...later })), "home", false, () => false, APP_LEVEL + 1);
@@ -43,6 +45,8 @@ describe("an older app opening a newer record set", () => {
   it("a manifest key or contract this app doesn't know reads as newer, not as broken", () => {
     const key = readApplet(row("today", 0, (f) => ({ ...f, applet: { ...(f.applet as object), later: { anything: true } } })), "home");
     expect(key.ok && key.entry.newer && key.entry.manifest.name).toBe("Home");
+    // the key is named, so an author can tell a typo from something newer
+    expect(key.ok && key.entry.newerWhy).toBe("its manifest: applet has a key contract 2 doesn't know («later»)");
     const contract = readApplet(row("mail", 1, (f) => ({ ...f, applet: { ...(f.applet as object), contract: 3 } })), "home");
     expect(contract.ok && contract.entry.newer && contract.entry.manifest.name).toBe("Mail");
     // a mistake is still a mistake: a known key with a wrong value is refused, and says why
@@ -65,5 +69,31 @@ describe("an older app opening a newer record set", () => {
     expect(newerApp(app)).toBe(false);
     expect(appOf({ ...app, bar: [{ vault: "uni", applet: "Applets/Home", screen: "today" }] }, "Parachute/Apps/uni", "n1")?.bar).toEqual([{ vault: "uni", applet: "Applets/Home" }]);
     expect(placeOf({ vault: "uni", applet: "Applets/Rooms", later: 1 })).toEqual({ vault: "uni", applet: "Applets/Rooms" });
+  });
+
+  it("a component made for a newer app is found by its id, takes nothing and reaches nothing, and says why", () => {
+    const room = appletRecord("room", vars);
+    const rowOf = (fields: Record<string, unknown>) => ({ id: "01ROOM", path: room.path, tags: room.tags, extension: room.extension, metadata: fields });
+    expect(componentNewer(room.fields)).toBeNull();
+    const now = readComponent(rowOf(room.fields), "home");
+    expect(now.ok && !now.entry.newer).toBe(true);
+    const laters: Record<string, unknown>[] = [{ ...room.fields, needs: APP_LEVEL + 1 }, { ...room.fields, component: { ...(room.fields.component as object), later: 1 } }, { ...room.fields, component: { ...(room.fields.component as object), contract: 2 } }];
+    for (const later of laters) {
+      const c = readComponent(rowOf(later), "home");
+      expect(c.ok, JSON.stringify(later.component)).toBe(true);
+      if (!c.ok) continue;
+      expect(c.entry.newer).toBeTruthy();
+      expect([c.entry.component.id, c.entry.component.allow, c.entry.component.props]).toEqual([(room.fields.component as { id: string }).id, [], {}]);
+    }
+    // a mistake in a component is still refused
+    expect(readComponent(rowOf({ ...room.fields, component: { ...(room.fields.component as object), glyph: "two" } }), "home").ok).toBe(false);
+  });
+
+  it("an org's app followed live keeps its later contract, so it reads as newer here", () => {
+    const own = appOf({ contract: 1, id: "techne", name: "Techne", live: { hub: "https://org.example", vault: "techne", path: "Parachute/Apps/techne" } }, "Parachute/Apps/techne", "n2")!;
+    const theirs = followed(own, { contract: 1, id: "techne" }, { contract: 2, id: "techne", name: "Techne", bar: [] });
+    expect(newerApp(theirs)).toBe(true);
+    expect(appOf(theirs, "Parachute/Apps/techne", "n2")).toBeNull();
+    expect(newerApp(followed(own, { contract: 1, id: "techne" }, { contract: 1, id: "techne", name: "Techne" }))).toBe(false);
   });
 });

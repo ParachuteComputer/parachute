@@ -30,11 +30,13 @@ import { parachutesNow } from "./parachutes";
  *  the next start leads to makes. The built-in frame's "Open on start" is the app's own sheet, so it counts. */
 export const homeNow = () => {
   const b = barNow();
+  // the app chosen here didn't load: made for a newer Parachute (its name), or malformed (null)
+  const missing = appMissing(), newer = missing ? appNewer(missing) : null;
   return { start: b.start ? { vault: b.start.vault, noteId: b.start.noteId } : null, bar: b.pins.map((p) => ({ vault: p.vault, noteId: p.noteId })),
     parachutes: parachutesNow().map((p) => {
       const fresh = newVaultsOn(p.hub);
       return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}) };
-    }), ...(openAppNow().look === "notes" ? { app: "simple" as const } : {}), ...(appMissing() ? (appNewer() ? { notice: "app-newer" as const, noticeName: appNewer()! } : { notice: "app-record" as const }) : {}) };
+    }), ...(openAppNow().look === "notes" ? { app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "app-newer" as const, noticeName: newer } : { notice: "app-record" as const }) : {}) };
 };
 /** For a frame of the person's own, a write into their vault is asked about once more on the shell's own sheet. */
 const confirmed = (from: "built-in" | "vault", q: WriteAsk) => (from === "vault" ? confirmWrite(q) : Promise.resolve(true)).then((yes) => { if (!yes) throw new Error("not_allowed"); });

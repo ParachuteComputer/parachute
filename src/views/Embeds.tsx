@@ -14,7 +14,7 @@ import vaultClientSource from "virtual:vault-client-kit";
 import reactKitSource from "virtual:react-kit";
 import reactNoteKitSource from "virtual:react-note-kit";
 import { codeHash, modulePage, prepare, usesNote } from "../applet/code";
-import { parseComponent, propsFor, type Component } from "../applet/component";
+import { componentNewer, parseComponent, propsFor, type Component } from "../applet/component";
 import { embedKey, embedSubject, embedTokens, type Embed } from "../applet/embeds";
 import { deviceGrants } from "../applet/grants";
 import { grantExpiry, fingerprint, type Grant } from "../applet/grant";
@@ -55,6 +55,7 @@ type Place =
   | { state: "refused"; vault: string }
   | { state: "gone"; name: string; vault: string }
   | { state: "invalid"; name: string; why: string }
+  | { state: "newer"; name: string; why: string }
   | { state: "found"; found: Found };
 
 /** Why a read of someone's vault failed, as the shell says it. A 403 is the vault's plain answer, not a refusal. */
@@ -111,6 +112,8 @@ async function find(host: VaultRecord, embed: Embed): Promise<Place> {
   if (ext !== "tsx" && ext !== "jsx") return { state: "invalid", name, why: "a component is TSX or JSX" };
   const source = n.content ?? "";
   if (whose !== "mine" && source.length > MAX_CODE_CHARS) return { state: "invalid", name, why: "its code is bigger than a component from someone else's vault may be" };
+  const later = componentNewer(n.metadata);
+  if (later) return { state: "newer", name, why: later };
   const c = parseComponent(((n.metadata ?? {}) as Record<string, unknown>).component);
   if (!c.ok) return { state: "invalid", name, why: c.error };
   if (c.component.allow.some((r) => r.path.toLowerCase().startsWith("applets/"))) return { state: "invalid", name: c.component.name, why: "a component can't reach Applets/" };
@@ -188,6 +191,7 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
   if (place.state === "refused") return say(`${place.vault} no longer lets this device in. Sign in to ${place.vault} again.`, <Link to="/settings">Settings</Link>);
   if (place.state === "gone") return say(`«${place.name}» is gone from ${place.vault}.`);
   if (place.state === "invalid") return say(`«${place.name}» can't run: ${place.why}.`);
+  if (place.state === "newer") return say(`Update Parachute to use «${place.name}». It was made for a newer Parachute (${place.why}).`);
   if (!found || !keys) return null;
   if (broke === "refused") return say(`${found.rec.vault} no longer lets this device in. Sign in to ${found.rec.vault} again.`, <Link to="/settings">Settings</Link>);
   if (broke === "offline") return say(`${found.rec.vault} can't be reached right now.`);

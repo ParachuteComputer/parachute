@@ -72,7 +72,11 @@ function wordsOf<T extends string>(x: unknown, allowed: readonly T[]): T[] | nul
 export function parseManifest(raw: unknown): Parse {
   if (!plain(raw)) return fail("applet must be an object");
   if (raw.contract !== CONTRACT_V2) return typeof raw.contract === "number" && raw.contract > CONTRACT_V2 ? { ok: false, error: `unsupported contract ${raw.contract}`, newer: true } : fail(`unsupported contract ${String(raw.contract)}`);
-  if (!hasOnly(raw, KEYS)) return { ok: false, error: "applet has a key contract 2 doesn't know", newer: true };
+  if (!hasOnly(raw, KEYS)) {
+    // named when it reads as a key, so a typo can be told from something newer
+    const k = Object.keys(raw).find((x) => !KEYS.includes(x));
+    return { ok: false, error: `applet has a key contract 2 doesn't know${k && /^[A-Za-z0-9_-]{1,40}$/.test(k) ? ` («${k}»)` : ""}`, newer: true };
+  }
   const id = typeof raw.id === "string" && raw.id.length <= LIMITS.id && ID.test(raw.id) ? raw.id : null;
   if (!id) return fail("id must be short kebab-case (a-z, 0-9, -)");
   const name = line(raw.name, LIMITS.name);

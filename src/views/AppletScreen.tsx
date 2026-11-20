@@ -203,7 +203,7 @@ export default function AppletScreen() {
         const from = a.entry.embeds.length ? await embedsFrom(rec, a.entry.embeds) : [];
         // what it imports (component:<id>), from the person's own vaults or ones they trust: its hash covers each
         const imp = kind === "html" ? { ok: true as const, imports: [] } : await readImports(rec, source);
-        if (!imp.ok) { if (on) setLoaded({ state: "refused", error: imp.error }); return; }
+        if (!imp.ok) { if (on) setLoaded(imp.newer ? { state: "newer", entry: { ...a.entry, newerWhy: imp.error } } : { state: "refused", error: imp.error }); return; }
         const imports = imp.imports;
         // code from someone else's vault, its own or imported, is transpiled only once it is allowed
         const late = notMine || imports.some((i) => i.whose !== "mine");
@@ -400,7 +400,7 @@ export default function AppletScreen() {
   if (loaded.state === "loading" || (loaded.state === "ok" && !keys)) return shell(<p className="quiet" role="status">Opening…</p>);
   if (loaded.state === "error") return shell(<p className="error" role="alert">Couldn't open this applet: {loaded.error}.</p>);
   if (loaded.state === "refused") return shell(<div className="card" role="alert"><p>This applet can't open. It was not run: {loaded.error}.</p>{plainNote}</div>);
-  if (loaded.state === "newer") return shell(<div className="card" role="status"><p><strong>{updateLine(loaded.entry.manifest.name)}</strong></p><p className="quiet">It was made for a newer Parachute than this one, so nothing of it ran here.</p>{plainNote}</div>);
+  if (loaded.state === "newer") return shell(<div className="card" role="status"><p><strong>{updateLine(loaded.entry.manifest.name)}</strong></p><p className="quiet">It was made for a newer Parachute than this one, so nothing of it ran here{loaded.entry.newerWhy ? ` (${loaded.entry.newerWhy})` : ""}.</p>{plainNote}</div>);
   if (!entry || !keys || !subject) return null;
 
   if (!granted && signedNow === undefined) return shell(<p className="quiet" role="status">Opening…</p>);

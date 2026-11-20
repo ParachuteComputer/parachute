@@ -9,9 +9,9 @@ whether I install the apk/dmg before or after you do the home thing".
 
 1. **What a reader doesn't know, it leaves out.** A field, a key or a kit part an older reader doesn't know is ignored.
    The reader uses what it does know and doesn't refuse the rest:
-   - App records (`src/shell/apps.ts`): unknown keys at the top, and in a place on the bar, the home, `hide` and `opens`,
-     are left out. A `source` with a key it doesn't know is left out whole, because the key might narrow it, and that
-     leaves a smaller app.
+   - App records (`src/shell/apps.ts`): unknown keys at the top, and in a place on the bar, the home or `hide`, are
+     left out. A `source` or an `opens` choice with a key it doesn't know is left out whole, because the key might
+     narrow it, and that leaves a smaller app.
    - The push gateway (`services/push-gateway`): unknown fields in a registration, an unregistration or a set of counts
      are left out. Only the fields it read are kept.
    - The kit: a part or call the app doesn't have reads as `undefined`. An applet can fall back for it
@@ -20,9 +20,13 @@ whether I install the apk/dmg before or after you do the home thing".
    A record can say the oldest level it runs on with `needs`. On an applet it goes beside `applet` in the fields; on an
    app record it goes inside `app`. A record with no `needs` needs level 1: the kit and records of 11-20, the floor.
    - An applet whose `needs` is above the build's level is still listed by its name and glyph, and keeps its place on
-     the bar. Nothing of it is asked, allowed, compiled or run. Its screen says **Update Parachute to use Home.** The
-     same applies to a manifest with a top-level key or a contract the build doesn't know, because the manifest is the
-     card and stays strict.
+     the bar. Nothing of it is asked, allowed, compiled or run. Its screen says **Update Parachute to use Home**, with
+     the reason in a smaller line. The same applies to a manifest with a top-level key or a contract the build doesn't
+     know, because the manifest is the card and stays strict. The reason names the key, so an author can tell a typo
+     from something newer.
+   - A component (`needs` beside `component`, or a key or contract the build doesn't know) is listed by its id and
+     name, with no props and no access, and never runs. An applet that imports it says **Update Parachute to use**
+     *the applet*, and an embed of it says the same for the component.
    - An app record that needs more (or has a later `contract`) isn't read at all. The device opens the next app it can,
      and the list says **Update Parachute to use Uni.**
    - A `needs` that isn't a whole number is treated as a newer way of writing it, so it counts as more than any build
@@ -30,7 +34,8 @@ whether I install the apk/dmg before or after you do the home thing".
 3. **A part that came later says so when it is missed.** Each kit part has the level it came in
    (`PART_LEVEL` in `src/applet/kits/modules.ts`). When an applet that touched a part this app doesn't have then stops,
    the frame doesn't say "This applet stopped: …". It says "Update Parachute to use Rooms. It uses Timeline, which this
-   Parachute doesn't have."
+   Parachute doesn't have." and gives the error after it, in case the applet fell back for the part and stopped for
+   another reason.
 
 ## Adding something
 
@@ -40,8 +45,9 @@ whether I install the apk/dmg before or after you do the home thing".
 - **A record field older builds must not ignore** (one that narrows what is allowed, or changes what a place means):
   raise `APP_LEVEL` and have records that use the field say `needs`.
 - **A gateway field:** the app sends it, and an older gateway leaves it out. Gateways from before 11-20 refused any
-  field they didn't know. For those, the app registers again without `signals` when a registration naming them gets a
-  400 (`src-tauri/src/notify.rs`), so messages still arrive.
+  field they didn't know. For those, the app registers again without `signals`, but only when the 400 is that
+  gateway's own words for an unknown field (`refused_for_signals` in `src-tauri/src/notify.rs`). Messages still
+  arrive, and any other refusal is shown.
 
 ## What stays
 
@@ -49,9 +55,12 @@ whether I install the apk/dmg before or after you do the home thing".
   line, as before. Every device needs one update to a level-2 build; after that, install order no longer matters.
 - **The manifest stays strict.** It is what the card shows and what is allowed, so a key it doesn't know is never
   guessed at. The applet is shown as newer instead.
+- **A newer applet asks for nothing on an older app**, its notifications and counts included. Raising `needs` on Rooms
+  stops its notifications on devices that haven't updated, and its screen there says to update.
 
-Tests: `src/applet/level.test.ts` (an older app opening Aaron's records made newer), `e2e/versions.spec.ts` (the
-same in the real build: listed, update line, no card, no frame; a missing part), `src/kit/olderApp.test.ts` (levels and
+Tests: `src/applet/level.test.ts` (an older app opening Aaron's records made newer, components and a followed org's
+app included), `e2e/versions.spec.ts` (the same in the real build: listed, update line, no card, no frame; a missing
+part; an imported newer component), `e2e/thinshell.spec.ts` (an app record made for a newer Parachute), `src/kit/olderApp.test.ts` (levels and
 fallbacks), and the gateway's "a registration from a newer app".
 
 ## Subtract

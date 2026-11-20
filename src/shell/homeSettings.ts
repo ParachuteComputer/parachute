@@ -342,7 +342,7 @@ async function readAppRecords(home: VaultRecord): Promise<RawApp[]> {
     const raw = plain(r.metadata) ? r.metadata.app : undefined;
     const a = appRecordOf(raw, r.path ?? null, r.id);
     // one made for a newer Parachute is kept as it is (never read here), so the list can say to update
-    if (!a) { if (newerApp(raw)) out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
+    if (!a) { if (newerApp(raw) && plain(raw) && stripExt(r.path ?? "") === `${APP_FOLDER}${String(raw.id)}`) out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
     if (!a.live) { out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
     const there = listVaults().find((v) => originOf(v.issuer) === a.live!.hub && v.vault === a.live!.vault);
     if (!there) { out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
@@ -395,10 +395,10 @@ export function appMissing(): string | null {
 
 /** When the app that didn't load was made for a newer Parachute (apps.ts newerApp): its name, for "Update Parachute to
  *  use …". null otherwise. */
-export function appNewer(): string | null {
-  const chosen = appMissing(), home = homeVault(), k = keptNow();
+export function appNewer(chosen: string | null = appMissing()): string | null {
+  const home = homeVault(), k = keptNow();
   if (!chosen || !home || k?.vault !== home.key) return null;
-  const raw = (k.apps ?? []).map((r) => r.app).find((x) => plain(x) && x.id === chosen && newerApp(x));
+  const raw = (k.apps ?? []).find((r) => plain(r.app) && r.app.id === chosen && newerApp(r.app) && stripExt(r.path ?? "") === `${APP_FOLDER}${chosen}`)?.app;
   if (!plain(raw)) return null;
   return typeof raw.name === "string" && raw.name.length > 0 && raw.name.length <= 60 && !/[\u0000-\u001f]/.test(raw.name) ? raw.name : chosen;
 }

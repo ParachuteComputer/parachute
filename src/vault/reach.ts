@@ -32,6 +32,8 @@ export function appletsNeedingWrite(rec: VaultRecord): string[] | null {
   const out: string[] = [];
   for (const s of allowed) {
     const e = read.found.entries.find((x) => subjectOf(rec.key, x.noteId) === s);
+    // one made for a newer app (level.ts): what it needs isn't read here, so nothing is narrowed
+    if (e?.newer) return null;
     // an allowed applet the list no longer shows (deleted, or renamed past its id): not counted
     if (e && appletLevel(e.manifest) === "write" && deviceGrants().status(s, e.keys.scope, e.keys.html) !== "none") out.push(e.manifest.name);
   }
