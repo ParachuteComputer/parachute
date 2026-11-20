@@ -55,10 +55,11 @@ import { storageFor } from "../shell/device";
 import { deviceSaved, forgetSaved } from "../shell/saved";
 import { asksOf } from "../applet/approvals";
 import { approvalFor, floorOf, ownKey, passcodeHere, signApproval, signsHere, subjectOf as approvalSubject, takeBack } from "../applet/approvalStore";
-import { approvedOtherLine, changedLine, versionToday, type Changed } from "../applet/changedBy";
-import { replacedAt } from "../vault/client";
+import { approvedOtherLine, changedLine, lastCodeChange, type NoteNow, type Version } from "../applet/changedBy";
+import { versionsOf } from "../vault/client";
+import { sha256Hex } from "../applet/needs";
 import { userOf } from "../services/signals";
-import type { Decision } from "../applet/approvals";
+import type { Content, Decision } from "../applet/approvals";
 import { createSavedModule } from "../applet/modules/saved";
 import { createSignalsModule } from "../applet/modules/signals";
 import { setOwn } from "../services/signals";
@@ -117,8 +118,8 @@ type Loaded = { state: "loading" } | { state: "error"; error: string } | { state
   | { state: "ok"; entry: AppletEntry; page: string | null; source: { kind: CodeKind; text: string }; imports: Imported[]; note: Note | null; from: string[];
       /** the hash of what it asks as written, the same on every device (approvals.ts `asksHash`) */
       asks: string;
-      /** who wrote its note last, when, and when it was made, as the hub says (applet/changedBy.ts) */
-      changed: Changed & { created: string | null } };
+      /** its note as the hub says it is now: its content's hash, who made it and wrote it last (applet/changedBy.ts) */
+      now: NoteNow };
 
 /** The pointer in the home is repinned only while the app may change notes there (a home read only waits: no ask is
  *  raised for something the person didn't do). */
@@ -224,10 +225,13 @@ export default function AppletScreen() {
         else if (!late) { const built = await buildPage(kind, source, imports); if (!on) return; if (!built.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${built.error}` }); return; } page = built.page; }
         const asks = await asksOf(approvalSubject(rec, n.id, a.entry.manifest.id), a.entry, (n.metadata ?? {}) as Record<string, unknown>, await embedTargets(a.entry.embeds).catch(() => ["unread"]));
         if (!on) return;
-        const said = n as { createdAt?: unknown; updatedAt?: unknown; lastUpdatedBy?: unknown; lastUpdatedVia?: unknown };
+        const said = n as unknown as Record<string, unknown>;
         const str = (x: unknown) => (typeof x === "string" ? x : null);
-        const changed = { at: str(said.updatedAt), by: str(said.lastUpdatedBy), via: str(said.lastUpdatedVia), created: str(said.createdAt) };
-        setLoaded({ state: "ok", entry: a.entry, page, source: { kind, text: source }, imports, note, from, asks, changed });
+        const now: NoteNow = { hash: await sha256Hex(source), createdAt: str(said.createdAt), createdBy: str(said.createdBy), createdVia: str(said.createdVia), updatedAt: str(said.updatedAt), updatedBy: str(said.lastUpdatedBy), updatedVia: str(said.lastUpdatedVia) };
+        if (!on) return;
+        // a reload that isn't a quiet recheck (another note asked of it, say) reads the approvals again, and waits for them
+        if (!quiet) { setSigned(null); setWaitedFor(null); }
+        setLoaded({ state: "ok", entry: a.entry, page, source: { kind, text: source }, imports, note, from, asks, now });
         setKeys({ scope, html: hash });
         setBrought(pointer);
       } catch (e) {
@@ -293,28 +297,29 @@ export default function AppletScreen() {
   const takenBack = !!subject && !!signedNow && !signedNow.run && (signedNow.why === "withdrawn" || signedNow.why === "other") && !!signedNow.newest
     && Date.parse(grants.record(subject)?.grantedAt ?? "") < Date.parse(signedNow.newest.at);
   const granted = decision === "run" && !takenBack;
-  // on the card: who changed it, when, which version of the day it is (the note's earlier versions, read once per code
-  // shown), and an approval of other code this device read (approval fatigue: six changes used to give six cards alike)
-  const [history, setHistory] = useState<{ for: string; changed: string | null; own: string | null } | null>(null);
-  useEffect(() => {
-    if (granted || !rec || !keys || loaded.state !== "ok") return;
-    let on = true;
-    const c = loaded.changed, at = keys.html;
-    void Promise.all([replacedAt(rec, loaded.entry.noteId), ownKey()]).then(([replaced, key]) => {
-      if (!on) return;
-      const now = Date.now();
-      const line = changedLine(c, { now, version: versionToday({ createdAt: c.created, updatedAt: c.at, replaced, now }), own: { key, account: userOf(rec.accessToken) }, named: lineOptions(keyring).approverName });
-      setHistory({ for: at, changed: line, own: key });
-    });
-    return () => { on = false; };
-  }, [granted, keys?.html, loaded.state, keyring]); // eslint-disable-line react-hooks/exhaustive-deps
-  const historyNow = history && keys && history.for === keys.html ? history : null;
-  const otherApproved = signedNow && !signedNow.run && signedNow.why === "other" ? approvedOtherLine(signedNow.newest, Date.now()) : null;
   // the passcode is typed for one card: gone once that card is answered, and when another takes its place (changed code
   // on a screen kept running would otherwise find it still filled in, and Allow would ask the unlock alone)
   useEffect(() => { setPasscode(""); }, [signedFor, granted]);
   // brought in at other code than this: the card is headed so, even where this device never allowed it
   const pinMoved = !!brought && !!keys && brought.pointer.code !== keys.html;
+  // on the card: who changed the code, when, which version of the day it is (the note's kept versions, read once per
+  // code shown, only for a card that says so), and an approval of other code this device read (approval fatigue: six
+  // changes used to give six cards alike)
+  const otherApproved = keys && signedNow && !signedNow.run && signedNow.why === "other" ? approvedOtherLine(signedNow.newest, keys.html, Date.now()) : null;
+  const saysChange = !granted && (status !== "none" || pinMoved || !!otherApproved);
+  const [kept_, setKept] = useState<{ for: string; versions: Version[] | null; key: string | null } | null>(null);
+  useEffect(() => {
+    if (!saysChange || !rec || !keys || loaded.state !== "ok" || kept_?.for === keys.html) return;
+    let on = true;
+    const at = keys.html;
+    void Promise.all([versionsOf(rec, loaded.entry.noteId), ownKey()]).then(([versions, key]) => { if (on) setKept({ for: at, versions, key }); });
+    return () => { on = false; };
+  }, [saysChange, keys?.html, loaded.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  const keptNow = kept_ && keys && kept_.for === keys.html && loaded.state === "ok" ? kept_ : null;
+  const changeNow = keptNow && loaded.state === "ok" ? (() => {
+    const t = Date.now(), c = lastCodeChange(loaded.now, keptNow.versions, t);
+    return changedLine(c.changed, { now: t, version: c.version, own: { key: keptNow.key, account: rec ? userOf(rec.accessToken) : null }, named: lineOptions(keyring).approverName });
+  })() : null;
   // an Allow that went through the hub (vault/signInFlow.ts finishStep) was recorded on the way back, for this exact
   // code: the pointer that brought it in follows, as it does after an Allow made here
   const repinned = useRef<string | null>(null);
@@ -452,14 +457,15 @@ export default function AppletScreen() {
         broughtChanged={pinMoved} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         hubAsk={covers(heldLevel(rec), appletLevel(entry.manifest)) ? null : { host: hostOf(rec.issuer), level: appletLevel(entry.manifest) }}
         approvedElsewhere={approvedElsewhere ? signedNow && signedNow.run ? signedNow.content.device ?? "another device" : null : null}
-        signing={signing} history={{ changed: historyNow?.changed ?? null, other: otherApproved }}
+        signing={signing} history={{ changed: changeNow, other: otherApproved }}
         onAllow={(asked) => void (async () => {
           // on a device with the person's key, Allow is an approval for every device: signed here, after the device
           // unlock (and the passcode, when one is set), and kept in the home vault. Approved elsewhere already: no new one
+          let mine: Content | null = null;
           if (!approvedElsewhere && await signsHere()) {
             setSigning(null);
             try {
-              await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode && passcode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" });
+              mine = JSON.parse((await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode && passcode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" })).ev.content) as Content;
             } catch (e) {
               setSigning(`Not approved: ${(e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "it couldn't be signed").replace(/\.$/, "")}.`);
               return;
@@ -474,7 +480,11 @@ export default function AppletScreen() {
               .then((url) => window.location.assign(url), (e: unknown) => setHubError(e instanceof Error ? e.message : "Your hub didn't answer."));
             return;
           }
-          grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry, asked); if (brought && pinMoved && homeWritable()) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); })()}
+          grants.grant(subject, keys.scope, keys.html, mode === "approved-code" ? "approved-code" : "sealed", grantExpiry, asked);
+          // the approval just signed here is the newest: an older read (a taking back dated by a clock that runs ahead)
+          // can't hold the card up
+          if (mine && signedFor) setSigned({ for: signedFor, d: { run: true, content: mine } });
+          if (brought && pinMoved && homeWritable()) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); })()}
         onNotNow={() => setDeclined(true)} onBack={() => back((to, o) => (typeof to === "number" ? navigate(to) : navigate(to, o)))} />
     </>);
   }

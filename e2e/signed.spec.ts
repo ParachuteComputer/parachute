@@ -286,9 +286,13 @@ test("a device that allowed it waits for the home vault's approvals before start
     await open(laptopB);
     await expect(journal(laptopB)).toBeVisible();
     await revokeOnPhone();
-    await laptopB.route((u) => approvalsRead(u.toString()), async (r) => { await new Promise((ok) => setTimeout(ok, 4000)); await r.continue().catch(() => {}); });
+    // the vault's answer is held until the laptop has started it on what it allowed
+    let answer!: () => void;
+    const held = new Promise<void>((ok) => { answer = ok; });
+    await laptopB.route((u) => approvalsRead(u.toString()), async (r) => { await held; await r.continue().catch(() => {}); });
     await open(laptopB);
-    await expect(journal(laptopB)).toBeVisible({ timeout: 3500 });
+    await expect(journal(laptopB)).toBeVisible();
+    answer();
     await expect(card(laptopB)).toBeVisible({ timeout: 15_000 });
     await expect(journal(laptopB)).toHaveCount(0);
   } finally {

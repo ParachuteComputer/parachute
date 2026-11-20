@@ -134,14 +134,19 @@ export async function signInState(key: string): Promise<"alive" | "refused" | "u
   return t ? "alive" : refreshFailed.get(key) ?? "unreachable";
 }
 
-/** When each earlier version of a note was replaced, newest first, as the hub keeps them (`/versions`): null where it
- *  keeps none or can't say (an older hub, history off for the vault). */
-export async function replacedAt(rec: VaultRecord, id: string, limit = 50): Promise<string[] | null> {
+/** A note's kept versions, newest first, as the hub lists them (`/versions`): each the content before a write (its
+ *  sha-256) and who made that write, when. null where it keeps none or can't say (an older hub, history off). */
+export async function versionsOf(rec: VaultRecord, id: string, limit = 50): Promise<{ content_hash: string | null; actor: string | null; via: string | null; superseded_at: string }[] | null> {
   // the client's own request: the vault's address, its token and a refresh on a 401, as every other call
   const c = clientFor(rec) as unknown as { request<T>(path: string, init?: RequestInit): Promise<T> };
   try {
     const r = await c.request<{ versions?: unknown }>(`/api/notes/${encodeURIComponent(id)}/versions?limit=${limit}`);
     if (!r || !Array.isArray(r.versions)) return null;
-    return r.versions.map((v) => (v && typeof v === "object" ? (v as { superseded_at?: unknown }).superseded_at : null)).filter((t): t is string => typeof t === "string");
+    const str = (x: unknown) => (typeof x === "string" ? x : null);
+    return r.versions.flatMap((v) => {
+      const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+      const at = str(o.superseded_at);
+      return at ? [{ content_hash: str(o.content_hash), actor: str(o.actor), via: str(o.via), superseded_at: at }] : [];
+    });
   } catch { return null; }
 }
