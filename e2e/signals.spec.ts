@@ -10,14 +10,32 @@ test.use({ storageState: "e2e/.signed-in.json" });
 const bar = (page: Page) => page.getByRole("navigation", { name: "Bar" });
 const badge = (page: Page) => bar(page).getByRole("link", { name: /Ideas/ }).locator(".home-bar-badge");
 const CODE = `export default function Ideas() { return <main><h1>Ideas</h1></main>; }\n`;
-const IDEAS = { path: "Applets/Ideas", extension: "tsx", tags: ["applet"], body: CODE, fields: {
+const IDEAS = { extension: "tsx", tags: ["applet"], body: CODE, fields: {
   applet: { contract: 2, id: "ideas", name: "Ideas", glyph: "✦", note: "a test applet", access: [{ vault: "here", allow: [{ path: "Ideas/", verbs: ["read", "create"] }] }] },
   signals: [{ id: "new", name: "new ideas from others", from: { vault: "here", path: "Ideas/", others: true } }],
 } };
 
-async function settingsNotes() {
+type Row = { id: string; updatedAt: string; metadata?: Record<string, unknown> };
+async function settingsNotes(): Promise<Row[]> {
   const rows = await api(hubState(), "GET", "notes?tag=parachute-settings&include_metadata=true");
-  return (Array.isArray(rows) ? rows : rows.notes ?? []) as { id: string }[];
+  return (Array.isArray(rows) ? rows : rows.notes ?? []) as Row[];
+}
+
+/** The applet alone on the bar, in the settings note the suite may already hold; answers how to put it back. */
+async function barOf(applet: string): Promise<() => Promise<void>> {
+  const bar = [{ vault: VAULT, applet }];
+  const [n] = await settingsNotes();
+  if (!n) {
+    const made = (await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar } } })) as Row;
+    return async () => { await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {}); };
+  }
+  const before = (await api(hubState(), "GET", `notes/${n.id}`)) as Row;
+  const was = (before.metadata?.parachute ?? {}) as Record<string, unknown>;
+  await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: { ...before.metadata, parachute: { ...was, bar, app: undefined } }, if_updated_at: before.updatedAt });
+  return async () => {
+    const now = (await api(hubState(), "GET", `notes/${n.id}`)) as Row;
+    await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: before.metadata ?? {}, if_updated_at: now.updatedAt }).catch(() => {});
+  };
 }
 
 test("a note someone else adds to Ideas raises its count on the bar while Ideas is closed; opening it clears the count", async ({ page }) => {
@@ -27,9 +45,13 @@ test("a note someone else adds to Ideas raises its count on the bar while Ideas 
   const me = { origin: hubState().origin, token: mintToken(`vault:${VAULT}:write`, hubState(), ["--user", "owner"]) };
   const made: string[] = [];
   const add = async (who: { origin: string; token: string }, path: string) => { made.push((await api(who, "POST", "notes", { path, content: `an idea ${stamp}` })).id); };
-  const applet = await record(hubState(), "create", IDEAS);
-  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar: [{ vault: VAULT, applet: "Applets/Ideas" }] } } });
+  // a path of its own: nothing another spec (or a retry) left is in the way
+  const path = `Applets/Ideas ${stamp}`;
+  let applet: { id: string } | null = null;
+  let restore = async () => {};
   try {
+    applet = (await record(hubState(), "create", { ...IDEAS, path })) as { id: string };
+    restore = await barOf(path);
     await page.goto("about:blank");
     await page.goto("/");
     await expect(bar(page).getByRole("link", { name: /Ideas/ })).toBeVisible();
@@ -66,7 +88,7 @@ test("a note someone else adds to Ideas raises its count on the bar while Ideas 
     await expect(badge(page)).toHaveCount(0);
   } finally {
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
-    for (const n of await settingsNotes()) await api(hubState(), "DELETE", `notes/${n.id}`).catch(() => {});
-    await api(hubState(), "DELETE", `notes/${applet.id}`).catch(() => {});
+    await restore();
+    if (applet) await api(hubState(), "DELETE", `notes/${applet.id}`).catch(() => {});
   }
 });
