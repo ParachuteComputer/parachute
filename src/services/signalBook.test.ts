@@ -2,7 +2,7 @@
 // as services/push-gateway does (one per subject and signal, with when it last moved, every number answered); only
 // the network is left out.
 import { afterEach, describe, expect, it } from "vitest";
-import { SignalBook, type BookLit, type GatewayCall, type SetItem } from "./signalBook";
+import { retryable, SignalBook, type BookLit, type GatewayCall, type SetItem } from "./signalBook";
 import type { Signal } from "../applet/signals";
 
 const GW = "https://push.example/";
@@ -166,6 +166,32 @@ describe("the bar's counts", () => {
     b.setLit([lit("I", ideas)]);
     await b.exchange();
     expect(gw.sent.slice(1).flat(), "the applets read again while it stays open: nothing more").toEqual([]);
+  });
+
+  it("opening Rooms asks the gateway: a mention it counted since the last ask is seen, there and everywhere", async () => {
+    const t = Date.parse("2026-11-19T10:00:00Z");
+    const gw = gateway(() => t);
+    const b = new SignalBook(memory(), gw.call, () => t, 5, 60_000);
+    books.push(b);
+    gw.set("gid-of-R", "for-you", 0, t / 1000);
+    b.setLit([lit("R", rooms)]);
+    await b.exchange();
+    gw.sent.length = 0;
+    gw.set("gid-of-R", "for-you", 1, t / 1000); // a mention, counted by the gateway; nobody asked since
+    b.setFront("home", "R");
+    await new Promise((r) => setTimeout(r, 60)); // a moment on Rooms
+    await new Promise((r) => setTimeout(r, 60));
+    b.setFront(null, null);
+    expect(gw.counts.get("gid-of-R for-you")?.count).toBe(0);
+    expect(b.badge("home", "R")).toBe(0);
+  });
+
+  it("asks again when the gateway didn't answer or was busy, not when it refused", () => {
+    expect(retryable(new Error("The gateway didn't answer."))).toBe(true);
+    expect(retryable("The gateway didn't take the counts (429: slow down).")).toBe(true);
+    expect(retryable("The gateway didn't take the counts (503).")).toBe(true);
+    expect(retryable("The gateway didn't take the counts (403: register with this gateway first).")).toBe(false);
+    expect(retryable("No allowed applet sends counts to that gateway.")).toBe(false);
   });
 
   it("a number that couldn't be sent is kept and sent later; an older answer doesn't undo a newer number here", async () => {

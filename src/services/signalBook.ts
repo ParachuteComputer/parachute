@@ -30,6 +30,9 @@ export function countNotes(notes: Iterable<NoteSeen>, seen: string | undefined, 
   return n;
 }
 
+/** Worth asking again later: no answer, or the gateway busy or failing (429, 5xx), as notify.rs words them. */
+export const retryable = (e: unknown) => /didn't answer|\((?:429|5\d\d)\b/.test(String(e));
+
 export class SignalBook {
   private lit: BookLit[] = [];
   private front: { vaultKey: string; noteId: string } | null = null;
@@ -87,7 +90,10 @@ export class SignalBook {
   shown() { this.visible = true; if (this.front) this.seeAll(this.front.vaultKey, this.front.noteId); }
 
   private seeAll(vaultKey: string, noteId: string) {
-    for (const l of this.lit.filter((x) => x.vaultKey === vaultKey && x.noteId === noteId)) {
+    const mine = this.lit.filter((x) => x.vaultKey === vaultKey && x.noteId === noteId);
+    // the gateway may have counted since it was last asked (a mention just now): ask, and the answer is seen too
+    if (mine.some((l) => l.signal.via && l.signal.from.kind !== "feed")) this.askSoon();
+    for (const l of mine) {
       if (l.signal.from.kind === "feed") continue; // the applet's own number: it says what is left
       if (l.signal.from.kind === "vault") { this.st.seen[l.key] = this.iso(); this.save(); }
       this.set(l, 0, "opened");
@@ -126,8 +132,10 @@ export class SignalBook {
     const m = this.toTell.get(l.signal.via) ?? new Map<string, SetItem>();
     m.set(l.key, { subject: l.gid, signal: l.signal.id, count: n });
     this.toTell.set(l.signal.via, m);
-    if (!this.telling) this.telling = setTimeout(() => { this.telling = null; void this.exchange(); }, this.delayMs);
+    this.askSoon();
   }
+
+  private askSoon() { if (!this.telling) this.telling = setTimeout(() => { this.telling = null; void this.exchange(); }, this.delayMs); }
 
   /** Tell each gateway what moved here, and take what it holds. */
   async exchange(): Promise<void> {
@@ -143,7 +151,7 @@ export class SignalBook {
         const m = this.toTell.get(gateway) ?? new Map<string, SetItem>();
         for (const [k, c] of sent) if (!m.has(k)) m.set(k, c);
         this.toTell.set(gateway, m);
-        if (/didn't answer/.test(String(e)) && !this.retrying) {
+        if (retryable(e) && !this.retrying) {
           this.retrying = setTimeout(() => { this.retrying = null; void this.exchange(); }, this.backoffMs);
           this.backoffMs = Math.min(this.backoffMs * 2, 30 * 60_000);
         }
