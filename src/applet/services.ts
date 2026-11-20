@@ -33,8 +33,12 @@ export type Approve = { field: string; ops: string[] };
 export type HttpService = { id: string; kind: "http"; url: string; auth: HttpAuth; approve?: Approve; join?: Approve };
 export type Service = RelayService | HttpService;
 
-/** The words a card uses for the kinds it knows. Any other kind a service declares is "kind N events". */
-export const NAMED_KINDS: Record<number, string> = { 9: "messages", 7: "reactions", 40003: "edits of your messages", 5: "deletions", 20002: "typing" };
+/** The words a card uses for the kinds it knows. Any other kind a service declares is "kind N events". Every kind the
+ *  deny list's ranges let through has words here (services.test.ts holds it). */
+export const NAMED_KINDS: Record<number, string> = { 9: "messages", 7: "reactions", 40003: "edits of your messages", 5: "deletions", 20002: "typing", 30023: "articles (it can replace yours)" };
+/** Kinds a room relay files by their `h` tag: with `rooms`, these stay in them. Any other kind goes anywhere on the
+ *  relay, whatever its tags (Buzz keeps a note or an article as global; a relay without rooms scopes nothing). */
+export const ROOM_KINDS = [9, 7, 40003, 5, 20002];
 /** Kinds no applet may have signed, declared or not: they would hand over the person's identity, their money or the
  *  shell's own protocols. The list and why each is on it: services.rs `DENIED_KINDS` (a test there holds this file to it). */
 export const DENIED = denied as { kinds: number[]; ranges: [number, number][]; except: number[] };
@@ -42,10 +46,10 @@ export const deniedKind = (k: number) =>
   DENIED.kinds.includes(k) || (!DENIED.except.includes(k) && DENIED.ranges.some(([a, b]) => k >= a && k <= b));
 /** A kind an applet may declare: a whole number a Nostr kind can be, not on the shell's deny list. */
 const declarable = (k: unknown): k is number => Number.isInteger(k) && (k as number) >= 0 && (k as number) <= 65535 && !deniedKind(k as number);
-/** The card's words for the kinds it posts: those `words` names (of 9, 7, 40003, 20002, in that order), then every kind
- *  without a name as "kind 1 and 30023 events". Deletions (5) have a line of their own. */
+/** The card's words for the kinds it posts: those `words` names (of 9, 7, 40003, 20002, 30023, in that order), then
+ *  every kind without a name as "kind 1 and 1111 events". Deletions (5) have a line of their own. */
 export function kindWords(publish: readonly number[], words: Record<number, string>): string[] {
-  const named = [9, 7, 40003, 20002].filter((k) => publish.includes(k) && words[k]).map((k) => words[k]);
+  const named = [9, 7, 40003, 20002, 30023].filter((k) => publish.includes(k) && words[k]).map((k) => words[k]);
   const others = publish.filter((k) => !(k in NAMED_KINDS)).sort((a, b) => a - b);
   return [...named, ...(others.length ? [`kind ${joinWords(others.map(String))} events`] : [])];
 }
@@ -223,9 +227,11 @@ const shortId = (id: string) => (id.length > 12 ? `${id.slice(0, 8)}…` : id);
 export const roomsWords = (s: RelayService) => (s.rooms?.length
   ? `only in ${joinWords(s.rooms.map((r) => `«${r.name}» (${shortId(r.id)})`))}, named by the applet`
   : "in your rooms");
-/** Where its posts go: its rooms; or, when it may post a kind that isn't a room's (a note, an article) and names no
- *  rooms, anywhere on that relay. */
-export const postsWhere = (s: RelayService) => (!s.rooms?.length && s.publish.some((k) => !(k in NAMED_KINDS)) ? "anywhere" : roomsWords(s));
+/** What it posts, split by where it goes: room kinds in its rooms, every other kind anywhere on the relay. */
+export const postsSplit = (s: RelayService, words: Record<number, string>) => ({
+  rooms: kindWords(s.publish.filter((k) => ROOM_KINDS.includes(k)), words),
+  anywhere: kindWords(s.publish.filter((k) => !ROOM_KINDS.includes(k)), words),
+});
 
 export type LineOptions = {
   /** The approval key is the everyday key for now (no separate one on this device). */
@@ -245,10 +251,11 @@ export function serviceLines(services: readonly Service[], opts: LineOptions = {
     const at = hostWords(s);
     if (s.kind === "nostr-relay") {
       out.push({ text: `${EVERYDAY}sign in to ${at} as you`, stress: true });
-      const posts = kindWords(s.publish, NAMED_KINDS);
-      if (posts.length) out.push({ text: `${EVERYDAY}post as you ${postsWhere(s)} there: ${joinWords(posts)}`, stress: true });
+      const posts = postsSplit(s, NAMED_KINDS);
+      if (posts.rooms.length) out.push({ text: `${EVERYDAY}post as you ${roomsWords(s)} there: ${joinWords(posts.rooms)}`, stress: true });
+      if (posts.anywhere.length) out.push({ text: `${EVERYDAY}post as you anywhere there: ${joinWords(posts.anywhere)}`, stress: true });
       // a deletion is of the person's own events of a kind it posts (broker.ts reads each first)
-      const deletes = kindWords(s.publish, { 9: "messages", 7: "reactions", 40003: "edits" });
+      const deletes = kindWords(s.publish, { 9: "messages", 7: "reactions", 40003: "edits", 30023: "articles" });
       if (s.publish.includes(5)) out.push({ text: `${EVERYDAY}delete your ${joinWords(deletes.length ? deletes : ["messages"])} there${s.rooms?.length ? `, ${roomsWords(s)}` : ""}`, stress: true });
       if (s.rooms?.length) out.push({ text: `It reads only those rooms there${s.media || s.private.length ? "; files and private notes there aren't limited to them" : ""}`, stress: false });
       if (s.media) out.push({ text: `${EVERYDAY}send and open files there as you`, stress: true });

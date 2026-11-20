@@ -94,9 +94,10 @@ test("an applet reaches only the servers it declared, the shell signing for it; 
     const card = page.getByRole("region", { name: /asking for access/ });
     const host = new URL(relay.origin).host;
     await expect(card).toContainText(`With your everyday key: sign in to ${host} on this device as you`);
-    // a kind the shell has no word for, said by its number; it isn't a room's, so it posts anywhere there
-    await expect(card).toContainText("With your everyday key: post as you anywhere there: messages and kind 30023 events");
-    await expect(card).toContainText("With your everyday key: delete your messages and kind 30023 events there");
+    // an article isn't a room's kind: it goes anywhere on the relay, and the card says so on a line of its own
+    await expect(card).toContainText("With your everyday key: post as you in your rooms there: messages");
+    await expect(card).toContainText("With your everyday key: post as you anywhere there: articles (it can replace yours)");
+    await expect(card).toContainText("With your everyday key: delete your messages and articles there");
     await expect(card).toContainText("With your everyday key: send and open files there as you");
     await expect(card).toContainText(`With your everyday key: send requests to ${new URL(http.origin).host} on this device signed as you`);
     await expect(card).toContainText(`What it reads here could reach ${new URL(http.origin).host}`);

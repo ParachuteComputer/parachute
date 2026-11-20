@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import vectors from "./command-approval.json";
 import fuzz from "./command-approval-fuzz.json";
-import { checkFilters, checkPublish, deniedKind, isCommandApproval, parseServices, requestUrl, serviceLines, servicesKeyPart, type HttpService, type RelayService } from "./services";
+import { DENIED, NAMED_KINDS, checkFilters, checkPublish, deniedKind, isCommandApproval, parseServices, requestUrl, serviceLines, servicesKeyPart, type HttpService, type RelayService } from "./services";
 import { grantKey, grantLines, grantOf } from "./grant";
 import { parseManifest } from "./manifest";
 import { readApplet } from "./discovery";
@@ -43,7 +43,7 @@ describe("the declaration", () => {
     ["remote signing", relay({ publish: [24133] })],
     ["a kind no event has", relay({ publish: [65536] })],
     ["a kind that isn't a number", relay({ publish: ["9"] })],
-    ["too many kinds", relay({ publish: Array.from({ length: 17 }, (_, i) => 30000 + i) })],
+    ["too many kinds", relay({ publish: [1, 2, 5, 6, 7, 9, 16, 1063, 1068, 1111, 1311, 1617, 1618, 1619, 1621, 1984, 30023] })],
     ["a kind twice", relay({ publish: [9, 9] })],
     ["auth on a relay", relay({ auth: "nip98" })],
     ["publish on http", http({ publish: [9] })],
@@ -56,8 +56,10 @@ describe("the declaration", () => {
     expect(one<RelayService>(relay({ publish: [30023, 1, 9] })).publish).toEqual([1, 9, 30023]);
     expect(parse([relay({ publish: [20002, 9100, 8999, 50000] })]).ok).toBe(true);
     expect(parse([relay({ publish: [1, 27235] })])).toEqual({ ok: false, error: "rooms: no applet may publish kind 27235: it would sign as you in a way the shell keeps for itself" });
-    for (const k of [443, 30443, 2022, 34128, 0, 3, 62, 9734, 9735, 13194, 23194, 23195, 30078, 30480, 30617, 46042, 1630, 1633, 5000, 7000, 9000, 9099, 10000, 19999, 20000, 29999, 30174, 30179, 30620, 30622, 40000, 49999]) expect(deniedKind(k), `kind ${k}`).toBe(true);
-    for (const k of [1, 1629, 1634, 4999, 7001, 8999, 9100, 20002, 30016, 30021, 30023, 30173, 30180, 30616, 30619, 30623, 39999, 40003, 50000]) expect(deniedKind(k), `kind ${k}`).toBe(false);
+    for (const k of [4, 41, 1985, 3063, 30000, 30001, 30003, 30024, 39999, 443, 30443, 2022, 34128, 0, 3, 62, 9734, 9735, 13194, 23194, 23195, 30078, 30480, 30617, 46042, 1630, 1633, 5000, 7000, 9000, 9099, 10000, 19999, 20000, 29999, 30174, 30179, 30620, 30622, 40000, 49999]) expect(deniedKind(k), `kind ${k}`).toBe(true);
+    for (const k of [1, 1629, 1634, 4999, 7001, 8999, 9100, 20002, 30023, 40003, 50000]) expect(deniedKind(k), `kind ${k}`).toBe(false);
+    // what a denied range lets through is said in words on the card
+    for (const k of DENIED.except) expect(NAMED_KINDS[k], `kind ${k}`).toBeTruthy();
   });
   it("takes plain http and ws to this device", () => {
     expect(parse([relay({ url: "ws://localhost:3871" }), http({ url: "http://127.0.0.1:8452/mail/" })]).ok).toBe(true);
@@ -97,13 +99,17 @@ describe("the card and the key", () => {
   it("says every kind it posts: the named ones in words, any other as its number", () => {
     const lines = serviceLines([one<RelayService>(relay({ publish: [30023, 9, 1, 5, 20002] }))]).map((l) => l.text);
     expect(serviceLines([one<RelayService>(relay({ publish: [9, 40003, 5] }))]).map((l) => l.text)).toContain("With your everyday key: delete your messages and edits there");
-    expect(lines).toContain("With your everyday key: post as you anywhere there: messages, typing and kind 1 and 30023 events");
-    expect(lines).toContain("With your everyday key: delete your messages and kind 1 and 30023 events there");
+    expect(lines).toContain("With your everyday key: post as you in your rooms there: messages and typing");
+    expect(lines).toContain("With your everyday key: post as you anywhere there: articles (it can replace yours) and kind 1 events");
+    expect(lines).toContain("With your everyday key: delete your messages, articles and kind 1 events there");
     expect(serviceLines([one<RelayService>(relay({ publish: [1, 5] }))]).map((l) => l.text)).toEqual(expect.arrayContaining([
       "With your everyday key: post as you anywhere there: kind 1 events", "With your everyday key: delete your kind 1 events there"]));
-    // with rooms, every kind it posts carries one of them (checkPublish)
-    expect(serviceLines([one<RelayService>(relay({ publish: [1], rooms: [{ id: "garden", name: "Garden" }] }))]).map((l) => l.text))
-      .toContain("With your everyday key: post as you only in «Garden» (garden), named by the applet there: kind 1 events");
+  });
+  it("says only room kinds stay in its rooms: a note or an article goes anywhere on the relay, whatever its h tag", () => {
+    const lines = serviceLines([one<RelayService>(relay({ publish: [9, 1, 30023], rooms: [{ id: "garden", name: "Garden" }] }))]).map((l) => l.text);
+    expect(lines).toContain("With your everyday key: post as you only in «Garden» (garden), named by the applet there: messages");
+    expect(lines).toContain("With your everyday key: post as you anywhere there: articles (it can replace yours) and kind 1 events");
+    expect(lines.some((l) => /only in «Garden».*(articles|kind 1)/.test(l))).toBe(false);
   });
   it("shows a look-alike host as written and as punycode, and a loopback one as on this device", () => {
     expect(serviceLines([one<HttpService>(http({ url: "https://аpple.example/x/", auth: "none" }))])[0].text).toBe("Send requests to аpple.example (xn--pple-43d.example)");

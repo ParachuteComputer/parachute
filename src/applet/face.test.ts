@@ -63,7 +63,10 @@ describe("the face keeps every stressed line's facts", () => {
   it("names every kind it posts: messages and reactions in words, any other by its number", () => {
     const { g, folder } = grantFor("rooms", (f) => ({ ...f, services: [{ id: "r", kind: "nostr-relay", url: "wss://buzz.example.org", publish: [9, 7, 40003, 5, 20002, 1, 30023] }] }));
     const t = faceTexts(holds(g, folder, trusted));
-    expect(t).toContain("As you on buzz.example.org (your everyday key): posts messages, reactions, edits, typing and kind 1 and 30023 events anywhere, and deletes what you posted. What it reads can go there.");
+    expect(t).toContain("As you on buzz.example.org (your everyday key): posts messages, reactions, edits and typing in your rooms, posts articles (it can replace yours) and kind 1 events anywhere, and deletes what you posted. What it reads can go there.");
+    // with rooms named, only the room kinds stay in them
+    const garden = grantFor("rooms", (f) => ({ ...f, services: [{ id: "r", kind: "nostr-relay", url: "wss://buzz.example.org", publish: [9, 1], rooms: [{ id: "garden", name: "Garden" }] }] }));
+    expect(faceTexts(holds(garden.g, garden.folder, trusted))).toContain("As you on buzz.example.org (your everyday key): posts messages only in «Garden» (garden), named by the applet, and posts kind 1 events anywhere. What it reads can go there.");
     const one = grantFor("rooms", (f) => ({ ...f, services: [{ id: "r", kind: "nostr-relay", url: "wss://buzz.example.org", publish: [1] }] }));
     expect(faceTexts(holds(one.g, one.folder, trusted))[0]).toBe("As you on buzz.example.org (your everyday key): posts kind 1 events anywhere. What it reads can go there.");
   });

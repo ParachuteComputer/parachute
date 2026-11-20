@@ -41,20 +41,24 @@ use crate::key::KeyState;
 /// These are refused because signing one would hand over the person's identity, their money, an authority they hold
 /// (admin, owner, approver) or one of the shell's own protocols. When it wasn't clear whether a kind was dangerous, it
 /// is here: a later version can take one off when an applet needs it.
-pub const DENIED_KINDS: [u16; 31] = [
+pub const DENIED_KINDS: [u16; 25] = [
     0,     // the profile: who the person is, everywhere
     3,     // the contact list: the people they follow, overwritten whole
+    4,     // a direct message (NIP-04): the applet can't encrypt one, so it would go out as plain text under their name
     8,     // a badge award (NIP-58): the person vouching for others as an issuer
     13,    // a seal (NIP-59): the shell seals its approval answers with the person's key (approvals/wrap.rs)
+    41,    // a channel's metadata (NIP-28): renames and repoints a channel the person made
     62,    // a request to vanish (NIP-62): asks relays to delete everything the person ever posted
-    443,   // an MLS key package (Marmot, NIP-EE) and its addressable twin: a key of the applet's choosing that others'
-    30443, // encrypted groups would invite as the person
-    1776,  // a key migration (NIP-41, draft): the person's identity moving to another key
-    1777,
-    2022,  // a coinjoin (Joinstr): money
+    443,   // an MLS key package (Marmot, NIP-EE): a key of the applet's choosing that others' encrypted groups would
+    //        invite as the person (its addressable twin, 30443, is in the range below)
     1021,  // an auction bid and its confirmation (NIP-15): money owed
     1022,
     1059,  // a gift wrap (NIP-59): the shell's sealed messages travel in these (approvals/wrap.rs)
+    1776,  // a key migration (NIP-41, draft): the person's identity moving to another key
+    1777,
+    1985,  // a label (NIP-32): the person's judgement of others, which other apps act on
+    2022,  // a coinjoin (Joinstr): money
+    3063,  // a software release (Zapstore's asset): a download others install because the person signed it
     4550,  // a community moderator's approval of a post (NIP-72)
     7374,  // a Cashu wallet's quote, token and history (NIP-60): money
     7375,
@@ -62,15 +66,6 @@ pub const DENIED_KINDS: [u16; 31] = [
     9321,  // a nutzap (NIP-61): money
     9734,  // a zap request (NIP-57): money
     9735,  // a zap receipt (NIP-57)
-    30078, // the person's private notes: the shell signs these only sealed, through `private`
-    30350, // a push lease (Buzz NIP-PL): where the person's notifications go
-    30402, // a classified listing and its draft (NIP-99): an offer to sell
-    30403,
-    34128, // a site's file and its manifest (NIP-5A, nsite): the person's website
-    35128,
-    34550, // a community's definition (NIP-72): who moderates it
-    37375, // a Cashu wallet (NIP-60, the first draft): money
-    38383, // a peer-to-peer trade order (NIP-69): money
     // 30479 (an approval of a security change) and 30480 (the person's list of keys, approve.rs) are here by name,
     // so no change to the ranges below could let them through
     crate::approve::APPROVAL_KIND,
@@ -90,29 +85,21 @@ pub const DENIED_KINDS: [u16; 31] = [
 ///   for them: a relay's AUTH (22242), NIP-98 HTTP auth (27235, which would sign the applet in to the person's hub or
 ///   gateway as them), Blossom auth (24242), remote signing (NIP-46, 24133), wallet connect (23194 to 23197), Buzz
 ///   pairing (24134) and identity binding (24243), and NIP-43 joins (28934 to 28936).
-/// - 30017 to 30020, a market's stalls, products and auctions (NIP-15): offers to sell.
-/// - 30174 to 30179, Buzz's agents, personas and teams the person owns (an agent's definition and memory).
-/// - 30617 and 30618, a git repository's announcement and state (NIP-34): Buzz creates repositories from the first and
-///   reads branch protection from it; the second says where each branch points.
-/// - 30620 to 30622, Buzz's workflow definitions, projects and DM visibility.
+/// - 30000 to 39999, addressable events (NIP-01), except articles (30023): each replaces the person's own of that kind
+///   and `d`, whichever app made it, and other apps read many of them as the person's settings or authority: follow
+///   and bookmark sets (Buzz's shared compute reads 30003 as where a member serves its model), private notes (30078),
+///   Buzz's agents, personas, teams, workflows and push leases (30174 to 30179, 30350, 30620 to 30622), markets and
+///   listings (30017 to 30020, 30402, 30403), git repositories (30617, 30618: Buzz reads branch protection there), MLS
+///   key packages (30443), sites (34128, 35128), communities (34550), wallets and trade orders (37375, 38383). One is
+///   let through only with words for the card.
 /// - 40000 to 49999, except edits (40003): Buzz's commands, signed by the person as an order: DMs opened and members
 ///   added (41010 to 41012), agent jobs (43001 to 43006), workflows triggered and their approvals granted or denied
 ///   (46001 to 46031), the shell's own approval desk (46040 to 46042: a secret delivered, a secret forgotten, an
 ///   approval card's answer, approvals/) and admin (48000 to 48999).
-pub const DENIED_RANGES: [(u16, u16); 10] = [
-    (1630, 1633),
-    (5000, 7000),
-    (9000, 9099),
-    (10000, 19999),
-    (20000, 29999),
-    (30017, 30020),
-    (30174, 30179),
-    (30617, 30618),
-    (30620, 30622),
-    (40000, 49999),
-];
-/// Kinds a denied range keeps for applets: typing and edits.
-pub const RANGE_EXCEPTIONS: [u16; 2] = [TYPING_KIND, 40003];
+pub const DENIED_RANGES: [(u16, u16); 7] = [(1630, 1633), (5000, 7000), (9000, 9099), (10000, 19999), (20000, 29999), (30000, 39999), (40000, 49999)];
+/// Kinds a denied range lets through, each with words on the card (src/applet/services.ts `NAMED_KINDS`): typing,
+/// articles (NIP-23) and edits.
+pub const RANGE_EXCEPTIONS: [u16; 3] = [TYPING_KIND, 30023, 40003];
 
 /// Is this kind one no applet may have signed, declared or not.
 pub fn denied_kind(kind: u16) -> bool {
@@ -1564,9 +1551,26 @@ mod tests {
     }
 
     #[test]
+    fn the_addressable_range_is_open_only_through_its_allow_list() {
+        // an addressable event replaces the person's own of that kind and d, and other apps read them as settings
+        // (Buzz's shared compute reads 30003 as where a member serves): only the kinds the card has words for
+        for kind in [30000, 30001, 30003, 30016, 30021, 30024, 30078, 30173, 30180, 30300, 30315, 30616, 30623, 34235, 39999] {
+            assert!(denied_kind(kind), "kind {kind}");
+            let declared = json!({ "id": "x", "kind": "nostr-relay", "url": "wss://relay.example", "publish": [kind] });
+            assert_eq!(code(parse_service(&declared)), "bad_service", "kind {kind}");
+        }
+        assert!(!denied_kind(30023), "articles");
+        // and a few outside it that speak for the person in ways a card's "kind N" can't say
+        for kind in [4, 41, 1985, 3063] {
+            assert!(denied_kind(kind), "kind {kind}");
+            assert_eq!(code(check_template(&[9, kind], &[], true, &json!({ "kind": kind, "content": "x" }))), "out_of_scope", "kind {kind}");
+        }
+    }
+
+    #[test]
     fn a_denied_kind_is_refused_even_when_declared() {
         let denied = [
-            443, 30443, 1776, 1777, 2022, 34128, 35128,
+            443, 30443, 1776, 1777, 2022, 34128, 35128, 4, 41, 1985, 3063, 30001, 30003, 30024, 39999,
             0, 3, 8, 13, 62, 1021, 1022, 1059, 4550, 7374, 7375, 7376, 9321, 9734, 9735, 30078, 30350, 30402, 30403, 30479,
             30480, 34550, 37375, 38383, 1630, 1631, 1633, 5000, 5999, 6000, 7000, 30017, 30020, 30617, 30618,
             9000, 9001, 9005, 9008, 9021, 9030, 9035, 9040, 9044, 9099, 10000, 10002, 10019, 10050, 10063, 10100, 13194, 17375, 19999,
@@ -1588,9 +1592,7 @@ mod tests {
         assert_eq!(web["ranges"], json!(DENIED_RANGES.iter().map(|(a, b)| [*a, *b]).collect::<Vec<_>>()));
         assert_eq!(web["except"], json!(RANGE_EXCEPTIONS));
         // the kinds around the ranges, and typing inside one, are an applet's to declare
-        for kind in [1, 5, 6, 7, 9, 16, 1111, 1617, 1621, 1629, 1634, 1984, 4999, 7001, 8999, 9100, 20002, 30000, 30016, 30021, 30023, 30173,
-            30180, 30300, 30616, 30619, 30623, 39999, 40003, 50000, 65535]
-        {
+        for kind in [1, 5, 6, 7, 9, 16, 1111, 1617, 1621, 1629, 1634, 1984, 4999, 7001, 8999, 9100, 20002, 30023, 40003, 50000, 65535] {
             assert!(!denied_kind(kind), "kind {kind}");
             let declared = json!({ "id": "x", "kind": "nostr-relay", "url": "wss://relay.example", "publish": [kind] });
             assert!(parse_service(&declared).is_ok(), "kind {kind}");
@@ -1672,7 +1674,7 @@ mod tests {
             with(relay(), "publish", json!([65536])),
             with(relay(), "publish", json!([-1])),
             with(relay(), "publish", json!(["9"])),
-            with(relay(), "publish", json!((30000..=30016).collect::<Vec<u16>>())),
+            with(relay(), "publish", json!([1, 2, 5, 6, 7, 9, 16, 1063, 1068, 1111, 1311, 1617, 1618, 1619, 1621, 1984, 30023])),
             with(relay(), "publish", json!([0])),
             with(relay(), "publish", json!([30078])),
             with(relay(), "publish", json!([9, 9])),

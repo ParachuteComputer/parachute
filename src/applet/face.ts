@@ -7,7 +7,7 @@
 import type { Grant } from "./grant";
 import { grantLines } from "./grant";
 import { signalLines } from "./signals";
-import { NAMED_KINDS, hostWords, kindWords, npubOf, postsWhere, roomsWords, type LineOptions } from "./services";
+import { NAMED_KINDS, hostWords, npubOf, postsSplit, roomsWords, type LineOptions } from "./services";
 import type { Imported } from "./resolveImports";
 import { importLines } from "./resolveImports";
 
@@ -35,8 +35,10 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
     const at = hostWords(s);
     const there = several ? `on ${at}` : "there";
     if (s.kind === "nostr-relay") {
-      const posts = kindWords(s.publish, { ...NAMED_KINDS, 40003: "edits" });
-      const does = [...(posts.length ? [`posts ${joinWords(posts)} ${postsWhere(s)}`] : ["signs in"]), ...(s.publish.includes(5) ? [`deletes what you posted${s.rooms?.length && !posts.length ? ` ${roomsWords(s)}` : ""}`] : []), ...(s.media ? ["uploads and opens files"] : [])];
+      // room kinds stay in its rooms; any other kind goes anywhere on the relay (services.ts ROOM_KINDS)
+      const posts = postsSplit(s, { ...NAMED_KINDS, 40003: "edits" });
+      const said = [...(posts.rooms.length ? [`posts ${joinWords(posts.rooms)} ${roomsWords(s)}`] : []), ...(posts.anywhere.length ? [`posts ${joinWords(posts.anywhere)} anywhere`] : [])];
+      const does = [...(said.length ? said : ["signs in"]), ...(s.publish.includes(5) ? [`deletes what you posted${s.rooms?.length && !said.length ? ` ${roomsWords(s)}` : ""}`] : []), ...(s.media ? ["uploads and opens files"] : [])];
       lines.push({ lead: `As you on ${at}`, rest: ` (your everyday key): ${does.length > 1 ? `${does.slice(0, -1).join(", ")}, and ${does[does.length - 1]}` : does[0]}. What it reads can go there.`, risky: true });
       if (s.approvals) lines.push({ lead: "High risk, with your approval key:", rest: ` answers approval cards and secret requests from ${joinWords(s.approvals.from.map(who))} ${there}${same}. Powerful ones ask for your device unlock.`, risky: true });
       if (s.notify) {

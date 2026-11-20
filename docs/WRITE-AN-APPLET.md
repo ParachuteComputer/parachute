@@ -81,11 +81,12 @@ services:
     auth: nip98                     # none | nip98 (each request signed as you) | token (one you give the app)
 ```
 
-`publish` names any kind the applet needs (a note is 1, an article 30023); the card says each, the five above in
-words and any other by its number. A few the app never signs, declared or not, because they would hand over the
-person's identity, money or an authority they hold: the profile, contacts and relay lists, sign-ins, wallets, zaps,
-bids and paid jobs, room, relay and community admin, git maintainers' status, Buzz's commands, and the app's own
-approvals. A declaration that names one is refused.
+`publish` names any kind the applet needs (a note is 1, a comment 1111); the card says each, the five above and
+articles (30023) in words, any other by its number. Only those five stay in its rooms; any other kind goes anywhere on
+the relay, and the card says so. Of the addressable kinds (30000–39999) only articles may be declared. A few the app never signs, declared or not, because they would hand over the
+person's identity, money or an authority they hold: the profile, contacts and relay lists, plain-text DMs, labels,
+sign-ins, wallets, zaps, bids and paid jobs, room, relay and community admin, git maintainers' status, settings sets,
+Buzz's commands, and the app's own approvals. A declaration that names one is refused.
 
 A Parachute hub is never a server here (the app refuses it), and an applet in someone else's vault reaches none. The
 rules, the deny list, and why, are in [design/SERVICES.md](design/SERVICES.md). Applets that do it: `applets/rooms.tsx`,
