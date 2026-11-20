@@ -134,3 +134,23 @@ test("Parachute Simplified: sign in → Notes → find, edit and write a note �
     for (const id of [...made, ...applets.map((a) => a.id)]) await api(hub, "DELETE", `notes/${id}`).catch(() => {});
   }
 });
+
+test("Parachute Simplified: Add Journal in a home Parachute only reads asks on the app's sheet, with nothing rawer under the button", async ({ page }) => {
+  const hub = hubState();
+  for (const n of await api(hub, "GET", "notes?tag=parachute-settings") as Row[]) await api(hub, "DELETE", `notes/${n.id}`);
+  const settings = await api(hub, "POST", "notes", { path: "Parachute/Settings", tags: ["parachute-settings"], content: "settings", metadata: { parachute: { app: "simple" } } }) as Row;
+  try {
+    await signIn(page);
+    const bar = page.getByRole("navigation", { name: "Bar" });
+    await bar.getByRole("link", { name: "Journal" }).click();
+    await page.getByRole("button", { name: "Add Journal" }).click();
+    // found on the emulator walk: "POST /api/notes failed: Parachute can only read …" under the button, beside the sheet
+    const ask = page.getByRole("dialog", { name: `Change notes in ${VAULT}` });
+    await expect(ask).toContainText(`Parachute only reads ${VAULT} so far`);
+    await expect(page.getByRole("button", { name: "Add Journal" })).toBeEnabled();
+    await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+    expect((await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Applets/Journal")}&limit=5`)) as Row[]).toEqual([]);
+  } finally {
+    await api(hub, "DELETE", `notes/${settings.id}`).catch(() => {});
+  }
+});

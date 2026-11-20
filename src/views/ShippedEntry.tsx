@@ -10,6 +10,7 @@ import { addShipped, SHIPPED, shippedIn, type ShippedName } from "../applet/ship
 import { useApplets } from "../applet/useApplets";
 import { appletPath } from "../open/paths";
 import { markTap } from "../open/mark";
+import { pendingWriteAsk } from "../vault/writeAsk";
 
 const WORDS: Record<ShippedName, { lead: (vault: string) => React.ReactNode; asks: string }> = {
   capture: { lead: (v) => <>Write a line or say it, and it lands in <b>{v}</b>, in Inbox/, as a note of its own.</>,
@@ -37,7 +38,13 @@ export default function ShippedEntry({ which }: { which: ShippedName }) {
       // the person's tap led here: the applet's card shows, and their Allow starts it
       markTap(to);
       nav(to, { replace: true });
-    } catch (e) { setError(e instanceof Error ? e.message : `${s.name} couldn't be added.`); setBusy(false); }
+    } catch (e) {
+      setBusy(false);
+      // the home is only read so far: the app's sheet asks to let Parachute change notes there, and says what to do;
+      // no second, rawer line under the button
+      if (pendingWriteAsk() === home.key) return;
+      setError(e instanceof Error ? e.message : `${s.name} couldn't be added.`);
+    }
   };
   return (
     <main className="screen capture-entry">
