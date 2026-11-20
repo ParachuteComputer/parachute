@@ -128,8 +128,9 @@ async function main() {
     const named = (x: string) => a.bundleName ?? x[0].toUpperCase() + x.slice(1);
     const made = had ? {} : !shipped.includes(id) ? { name: named(id), look: "launcher", sources } : { name: a.bundleName ?? defaults.find((d) => d.id === id)?.name ?? named(id) };
     const bundle = { ...body, ...made, ...(a.bundleName ? { name: a.bundleName } : {}), ...(a.sources.length ? { sources } : {}),
-      // a bundle the app ships keeps its own places (Notes, Journal, Connect…) before the pins, as the app shows them
-      ...(a.bar ? { bar: [...(Array.isArray(body.bar) ? [] : defaults.find((d) => d.id === id)?.bar ?? []), ...a.bar.map(place)] } : {}), ...(a.start ? { start: place(a.start) } : {}) };
+      // a bundle the app ships keeps its own places (Notes, Journal, Connect…) before the pins, as the app shows them,
+      // every run (so running it again changes nothing)
+      ...(a.bar ? { bar: [...(defaults.find((d) => d.id === id)?.bar ?? []), ...a.bar.map(place)] } : {}), ...(a.start ? { start: place(a.start) } : {}) };
     if (had && same(body, bundle)) console.log(`bundle ${id}: unchanged`);
     else {
       say(`${had ? "update" : "add"} the bundle ${id} at ${path}${old ? " (under its older names until it is moved)" : ""}: ${JSON.stringify(bundle)}`);

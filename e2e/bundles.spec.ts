@@ -164,12 +164,15 @@ test("scripts/install-applets.ts: --bar and --start go in the bundle record (onl
   const hadCapture = (await tagged("applet")).some((n) => n.path.startsWith("Applets/Capture"));
   const dir = mkdtempSync(join(tmpdir(), "install-applets-"));
   writeFileSync(join(dir, "token"), hubState().token);
-  const out = execFileSync("node", ["scripts/install-applets.ts", "--hub", hubState().origin, "--vault", VAULT, "--token-file", join(dir, "token"), "--applet", "capture", "--bar", "capture", "--start", "capture", "--apply"]).toString();
+  const install = () => execFileSync("node", ["scripts/install-applets.ts", "--hub", hubState().origin, "--vault", VAULT, "--token-file", join(dir, "token"), "--applet", "capture", "--bar", "capture", "--start", "capture", "--apply"]).toString();
+  const out = install();
   // the vault holds no record under the newer names: the new one goes under the older, which builds from before 11-20 read
   expect(out).toContain("add the bundle simple at Parachute/Apps/simple");
   const [rec] = await tagged("parachute-app");
   expect(rec.metadata.app).toEqual({ contract: 1, id: "simple", name: "Parachute Simplified", bar: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { screen: "connect" }, { vault: VAULT, applet: "Applets/Capture" }], start: { vault: VAULT, applet: "Applets/Capture" } });
   const settings = (await tagged("parachute-settings"))[0].metadata.parachute;
   expect([settings.bar, settings.start]).toEqual([undefined, undefined]);
+  // again: nothing changes (Simplified's own places stay first)
+  expect(install()).toContain("bundle simple: unchanged");
   if (!hadCapture) for (const n of await tagged("applet")) if (n.path.startsWith("Applets/Capture")) await api(hubState(), "DELETE", `notes/${n.id}`);
 });
