@@ -383,7 +383,8 @@ export default function AppletScreen() {
     // what the kit saves as the person goes (drafts, where it was): every applet's, the same store as `storage`
     // only while it is allowed: a frame still going for a moment after Revoke leaves nothing behind
     createSavedModule({ all: () => deviceSaved().load(subjectOf(rec.key, entry.noteId)), put: (entries) => (grants.record(subjectOf(rec.key, entry.noteId)) ? deviceSaved().put(subjectOf(rec.key, entry.noteId), entries) : Promise.reject(new Error("not allowed"))) }),
-    createSignalsModule({ set: (id, count) => entry.signals.some((s) => s.id === id) && setOwn(rec.key, entry.noteId, id, count) }),
+    // only while it is allowed, as saved state: a frame still going for a moment after Revoke says nothing
+    createSignalsModule({ set: (id, count) => entry.signals.some((s) => s.id === id) && !!grants.record(subjectOf(rec.key, entry.noteId)) && setOwn(rec.key, entry.noteId, id, count) }),
     ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),

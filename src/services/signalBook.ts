@@ -5,6 +5,8 @@
 //   seen      a vault signal counts notes made after the person last saw the applet: when they opened it, and for as
 //             long as it stays in front; a signal new to this device counts from the moment it is first lit
 //   in front  its counts are 0 (except a feed's: the applet's own number, which it keeps setting)
+//   early     an applet's own number said before its signal is listed here (it runs the moment it is allowed; the
+//             list is read a moment later) is kept EARLY_MS and counted if the signal is listed by then
 //   gateway   what moved here goes to the signal's gateway (`via`); the answer brings what the gateway counted (a
 //             relay's) and what other devices set (a feed's number, a 0 when one was opened). A device that never
 //             held a number doesn't send a 0 for it, and a number this device moved and hasn't sent yet isn't undone
@@ -20,6 +22,8 @@ type StorageLike = Pick<Storage, "getItem" | "setItem">;
 type Stored = { seen: Record<string, string>; counts: Record<string, number> };
 
 export const STORE = "parachute.signals.v1";
+/** How long an applet's own number said before its signal is listed is kept for it. */
+export const EARLY_MS = 10_000;
 export const keyOf = (vaultKey: string, noteId: string, signal: string) => `${vaultKey}\u0000${noteId}\u0000${signal}`;
 
 /** Notes made after `seen` (by someone else, with `others`). Pure. */
@@ -47,8 +51,8 @@ export class SignalBook {
   private retrying: ReturnType<typeof setTimeout> | null = null;
   private st: Stored;
   // an applet's own number said before its signal was listed here (it starts the moment it is allowed; the list follows
-  // a moment later): kept until it is listed, then counted
-  private early = new Map<string, number>();
+  // a moment later): kept a few seconds, counted if the signal is listed by then, else forgotten
+  private early = new Map<string, { n: number; at: number }>();
   private listeners = new Set<() => void>();
   version = 0;
 
@@ -69,7 +73,9 @@ export class SignalBook {
   setLit(lit: BookLit[]) {
     for (const l of lit) if (l.signal.from.kind === "vault" && !this.st.seen[l.key]) { this.st.seen[l.key] = this.iso(); this.save(); }
     this.lit = lit;
-    for (const l of lit) { const n = this.early.get(l.key); if (n !== undefined) { this.early.delete(l.key); if (l.signal.from.kind === "feed") this.set(l, n, "opened"); } }
+    const fresh = this.now() - EARLY_MS;
+    for (const [k, e] of [...this.early]) if (e.at < fresh) this.early.delete(k);
+    for (const l of lit) { const e = this.early.get(l.key); if (e) { this.early.delete(l.key); if (l.signal.from.kind === "feed") this.set(l, e.n, "opened"); } }
     for (const k of [...this.watched.keys()]) if (!lit.some((l) => l.key === k)) this.watched.delete(k);
     // the applet in front may have been lit only now (a cold start from a notification's tap)
     if (this.front && this.visible) this.seeAll(this.front.vaultKey, this.front.noteId);
@@ -118,9 +124,12 @@ export class SignalBook {
   own(vaultKey: string, noteId: string, signal: string, count: number): boolean {
     const l = this.lit.find((x) => x.vaultKey === vaultKey && x.noteId === noteId && x.signal.id === signal);
     if (!l) {
-      // none of its signals listed yet (allowed a moment ago): kept for when they are; a few at most
-      if (this.lit.some((x) => x.vaultKey === vaultKey && x.noteId === noteId) || this.early.size >= 50) return false;
-      this.early.set(keyOf(vaultKey, noteId, signal), count);
+      // none of its signals listed yet (allowed a moment ago): kept a few seconds for when they are; the newest number
+      // for a signal replaces an older one, and only a few are held at once
+      if (this.lit.some((x) => x.vaultKey === vaultKey && x.noteId === noteId)) return false;
+      const k = keyOf(vaultKey, noteId, signal);
+      if (!this.early.has(k) && this.early.size >= 50) return false;
+      this.early.set(k, { n: count, at: this.now() });
       return true;
     }
     this.set(l, count, "opened");

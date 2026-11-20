@@ -235,4 +235,23 @@ describe("an applet's own number said before its signal is listed here (found on
     expect(b.badge("home", "X")).toBe(0);
     expect(b.badge("home", "M")).toBe(0);
   });
+  it("is forgotten after a few seconds: a number said by a frame going on after Revoke doesn't come back on a later Allow", () => {
+    let t = 1_000;
+    const gw = gateway(() => t);
+    const b = make(gw, () => t);
+    b.own("home", "M", "unread", 7);
+    t += 60_000;
+    b.setLit([lit("M", mail)]);
+    expect(b.badge("home", "M")).toBe(0);
+  });
+  it("the newest number held wins, even with many held", () => {
+    const t = 1_000;
+    const b = make(gateway(() => t), () => t);
+    for (let i = 0; i < 50; i++) b.own("home", `X${i}`, "unread", 1);
+    expect(b.own("home", "M", "unread", 5)).toBe(false);
+    for (let i = 0; i < 50; i++) expect(b.own("home", `X${i}`, "unread", 0)).toBe(true);
+    b.own("home", "X0", "unread", 3);
+    b.setLit([lit("X0", mail)]);
+    expect(b.badge("home", "X0")).toBe(3);
+  });
 });
