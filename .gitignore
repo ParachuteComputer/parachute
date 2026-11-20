@@ -11,3 +11,4 @@ src-tauri/gen/schemas
 e2e/.hub-session.json
 e2e/.signed-in.json
 src-tauri/gen/android/buildSrc/.kotlin
+e2e/.viewer-5000.json

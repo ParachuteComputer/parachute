@@ -67,6 +67,8 @@ function rowsOf(grant: Grant, face: { lines: FaceLine[]; also: string[] }): Row[
       : l.lead.startsWith("Notifies") ? ["◔", "Tell you when something comes"]
       : l.lead.startsWith("Opens web") ? ["↗", "Open links"]
       : l.lead.startsWith("Sees the titles") ? ["☰", "See your newest notes"]
+      : l.lead.startsWith("Sees and changes records") ? ["▦", "See and change every vault"]
+      : l.lead.startsWith("Sees what reaches") ? ["⚿", "See and change who reaches them"]
       : l.lead.startsWith("With a token") ? ["◉", "Use a token you give it"]
       : l.lead.startsWith("Show a count on the bar") ? ["◔", "Show a count on the bar"]
       : l.lead.startsWith("Send the count to") ? ["◔", "Tell your phone while closed"]

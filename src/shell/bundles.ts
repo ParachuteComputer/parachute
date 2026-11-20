@@ -32,8 +32,8 @@ export type Look = "launcher" | "notes";
 /** One applet, as the bar names it today: its vault's name (and hub's origin, when not the home's) and its note's path or id. */
 export type Place = { hub?: string; vault: string; applet: string };
 /** A place on the bar that is the app's own: `home` (the bundle's home screen: Notes or the list, by its `look`),
- *  `connect` (Connect an AI), or an applet the app ships (`capture`, `journal`: the home vault's copy, or the screen that adds it). */
-export type AppPlace = { screen: "home" | "connect" } | { shipped: "capture" | "journal" };
+ *  `connect` (Connect an AI), or an applet the app ships (`capture`, `journal`, `vault`: the home vault's copy, or the screen that adds it). */
+export type AppPlace = { screen: "home" | "connect" } | { shipped: "capture" | "journal" | "vault" };
 export type BarEntry = Place | AppPlace;
 export const isAppPlace = (e: BarEntry): e is AppPlace => "screen" in e || "shipped" in e;
 /** Where applets come from: one applet, `applet: "*"` for every applet in a vault, `vault: "*"` (with a hub) for every vault there. */
@@ -72,7 +72,7 @@ const only = (o: Record<string, unknown>, keys: string[]) => Object.keys(o).ever
 function appPlaceOf(x: unknown): AppPlace | null {
   if (!plain(x)) return null;
   if (only(x, ["screen"]) && (x.screen === "home" || x.screen === "connect")) return { screen: x.screen };
-  if (only(x, ["shipped"]) && (x.shipped === "capture" || x.shipped === "journal")) return { shipped: x.shipped };
+  if (only(x, ["shipped"]) && (x.shipped === "capture" || x.shipped === "journal" || x.shipped === "vault")) return { shipped: x.shipped };
   return null;
 }
 const barEntryOf = (x: unknown): BarEntry | null => appPlaceOf(x) ?? placeOf(x);

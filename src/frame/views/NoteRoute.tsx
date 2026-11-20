@@ -1,9 +1,10 @@
 // A note's route, /v/<vault>/n/<id>: the one place open-with is decided (open/resolve.ts). Links, wikilinks, search
 // hits, Back and links from outside all arrive here. `?with=vault` always shows the plain vault view; `?with=choose` (a
 // long-press on a note link in an applet) asks with the Open with… sheet, whatever the defaults say.
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
-import { useVault } from "../data";
+import { useHome, useHomeLoaded, useVault } from "../data";
+import ViewerLine, { viewerHref } from "./ViewerLine";
 import { titleOf } from "../../vault/notes";
 import { openSheet } from "../open/sheetState";
 import { useOpenWith } from "../open/useOpenWith";
@@ -32,8 +33,20 @@ export default function NoteRoute() {
   const choose = params.get("with") === "choose";
   const decision = ow.state === "ok" ? (choose ? { kind: "ask" as const, candidates: ow.cands } : ow.decision) : null;
 
+  // a record no applet opens (or one whose "Always" is the vault view) opens in Vault, when it is there and allowed
+  const homeRead = useHomeLoaded();
+  const viewer = useHome().viewer;
+  const toViewer = !!decision && decision.kind === "vault" && !decision.line && viewer?.status === "ok";
+  // a carry-on the shell refused (the person already left, say): this entry shows the record plain, never "Opening…"
+  const [, refused] = useState(0);
   useEffect(() => {
-    if (!rec || !id || !decision || decided.has(location.key)) return;
+    if (!rec || !id || !decision || decided.has(location.key) || !homeRead) return;
+    if (toViewer && viewer) {
+      decided.set(location.key, "applet");
+      const key = location.key;
+      void carryOn(location.pathname, viewerHref(viewer, rec.key, id)).then(() => call("nav.decided", { key, kind: "applet" }), () => { decided.set(key, "vault"); refused((n) => n + 1); });
+      return;
+    }
     decided.set(location.key, decision.kind);
     // the shell keeps it for a return to this entry; "applet" only once the shell has sent the person on
     if (decision.kind !== "applet") void call("nav.decided", { key: location.key, kind: decision.kind });
@@ -46,12 +59,12 @@ export default function NoteRoute() {
     } else if (decision.kind === "ask" && ow.state === "ok" && ow.note) {
       openSheet(rec.key, id, true, { note: ow.note, cands: decision.candidates });
     }
-  }, [decision, rec, id, location.key, location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [decision, rec, id, location.key, location.pathname, homeRead, toViewer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!rec) return <NoVault />;
   if (plain) return <NoteView />;
   const first = decided.get(location.key) ?? decision?.kind;
-  if (ow.state === "loading" || first === "applet") return <main className="screen"><Bar title="Note" back={true} /><p className="quiet" role="status">Opening…</p></main>;
+  if (ow.state === "loading" || !homeRead || first === "applet") return <main className="screen"><Bar title="Note" back={true} /><p className="quiet" role="status">Opening…</p></main>;
   // what shows is the decision made on arrival (a default stored from the sheet a moment later changes nothing here)
   const l = first === "vault" && decision?.kind === "vault" ? decision.line : null;
   const line = l && ow.state === "ok" && ow.note ? (
@@ -70,6 +83,6 @@ export default function NoteRoute() {
     </p>
   ) : first === "ask" && ow.state === "ok" && ow.note ? (
     <p className="open-line"><button type="button" className="link-button" onClick={() => openSheet(rec.key, ow.note!.id, true, { note: ow.note!, cands: ow.cands })}>Open {titleOf(ow.note)} with…</button></p>
-  ) : null;
+  ) : first === "vault" && ow.state === "ok" && ow.note ? <ViewerLine vault={rec.key} id={ow.note.id} /> : null;
   return <NoteView above={line} note={ow.state === "ok" ? ow.note : undefined} />;
 }

@@ -1,23 +1,29 @@
-// The applets Parachute Simplified offers on its bar (docs/SIMPLE.md): Capture, its own, and Journal, the same applet
-// Aaron's Uni app runs. Their records ship with the app (applets/<name>.json, .tsx), and one tap of the person's puts
+// The applets Parachute Simplified offers on its bar (docs/SIMPLE.md): Capture, its own, Journal, the same applet
+// Aaron's Uni app runs, and Vault, Parachute's own viewer (docs/VAULT.md). Their records ship with the app (applets/<name>.json, .tsx), and one tap of the person's puts
 // one into their home vault, as any applet is: a note tagged applet in Applets/. From there it is an ordinary applet:
 // its card asks before it runs, a change to its code asks again, an AI can read it.
 import captureRecord from "../../applets/capture.json";
 import captureBody from "../../applets/capture.tsx?raw";
 import journalRecord from "../../applets/journal.json";
 import journalBody from "../../applets/journal.tsx?raw";
+import vaultRecord from "../../applets/vault.json";
+import vaultBody from "../../applets/vault.tsx?raw";
 import { VaultConflictError } from "@openparachute/surface-client";
 import { clientFor } from "../vault/client";
 import type { VaultRecord } from "../vault/store";
 import { appletsNow, refreshApplets } from "./useApplets";
 import { stripExt } from "./contract";
 
-export type ShippedName = "capture" | "journal";
+export type ShippedName = "capture" | "journal" | "vault";
 type Shipped = { id: string; name: string; path: string; record: { path: string; extension: string; tags: string[]; fields: unknown }; body: string };
 export const SHIPPED: Record<ShippedName, Shipped> = {
   capture: { id: "capture", name: "Capture", path: captureRecord.path, record: captureRecord, body: captureBody },
   journal: { id: "journal", name: "Journal", path: journalRecord.path, record: journalRecord, body: journalBody },
+  // Parachute's own viewer (docs/VAULT.md): where a record no other applet opens opens; offered by every app
+  vault: { id: "vault-view", name: "Vault", path: vaultRecord.path, record: vaultRecord, body: vaultBody },
 };
+/** Vault in this vault (docs/VAULT.md): its note's id, or null. */
+export const vaultAppletIn = (rec: VaultRecord | null) => shippedIn(rec, "vault");
 
 /** The shipped applet in this vault, as this device last read its applets: its note's id, or null. */
 export function shippedIn(rec: VaultRecord | null, which: ShippedName): string | null {

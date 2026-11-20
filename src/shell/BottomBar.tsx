@@ -53,7 +53,7 @@ export default function BottomBar() {
 }
 
 /** One of the app's own places a bundle's bar names (docs/SIMPLE.md): its home screen (Notes, or the list), Connect an
- *  AI, or an applet the app ships, Journal or Capture (the one in the home vault, or the screen that adds it). */
+ *  AI, or an applet the app ships, Journal, Capture or Vault (the one in the home vault, or the screen that adds it). */
 function AppPlaceLink({ place, notes, pathname }: { place: AppPlace; notes: boolean; pathname: string }) {
   if ("shipped" in place) return <ShippedPlace which={place.shipped} pathname={pathname} />;
   const [href, glyph, name] = place.screen === "connect" ? ["/connect", "⌁", "Connect"] : notes ? ["/", "¶", "Notes"] : ["/", "⁂", "Applets"];
@@ -64,7 +64,7 @@ function ShippedPlace({ which, pathname }: { which: ShippedName; pathname: strin
   useApplets(home, false);
   const id = shippedIn(home, which);
   const href = home && id ? appletPath(home.key, id) : `/${which}`;
-  return <Link className="home-bar-place" to={href} aria-current={pathname === href || pathname === `/${which}` ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{which === "journal" ? "✎" : "◉"}{"\uFE0E"}</span>{SHIPPED[which].name}</Link>;
+  return <Link className="home-bar-place" to={href} aria-current={pathname === href || pathname === `/${which}` ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{which === "journal" ? "✎" : which === "vault" ? "▦" : "◉"}{"\uFE0E"}</span>{SHIPPED[which].name}</Link>;
 }
 
 function Place({ item, current, onHold }: { item: Item; current: boolean; onHold: () => void }) {

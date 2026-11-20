@@ -35,7 +35,7 @@ describe("the bundle record", () => {
     expect(bundleOf({ contract: 1, id: "mine", name: "Mine", everywhere: true }, "Parachute/Bundles/mine", "n")!.sources).toEqual([{ hub: "*", vault: "*", applet: "*" }]);
     for (const raw of DEFAULT_BUNDLES) expect(bundleOf(raw, null, null), String(raw.id)).not.toBeNull();
     // what makes Simple Simple is its record: Notes as home, Capture and Connect on its bar, every applet offered
-    expect(def("simple")).toMatchObject({ look: "notes", sources: [{ hub: "*", vault: "*", applet: "*" }], bar: null, base: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { screen: "connect" }] });
+    expect(def("simple")).toMatchObject({ look: "notes", sources: [{ hub: "*", vault: "*", applet: "*" }], bar: null, base: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { shipped: "vault" }, { screen: "connect" }] });
     expect(def("everything")).toMatchObject({ look: "launcher", base: [] });
   });
   it("an older build's Simplified record (sources: [], no everywhere) still offers every applet, as its Notes look did", () => {
@@ -75,7 +75,7 @@ describe("the bar and home an app gives", async () => {
   const S = { bar: [{ vault: "home", applet: "Applets/Mail" }], start: { vault: "home", applet: "Applets/Rooms" }, hubs: [], services: [], bundle: null as string | null };
   it("no record: the default's start of a bar, then the settings note's pins and home (read until 2026-12-20)", () => {
     expect(effective(S, bundlesFrom([]))).toMatchObject({ bar: S.bar, start: S.start });
-    expect(effective({ ...S, bundle: "simple" }, bundlesFrom([]))).toMatchObject({ bar: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { screen: "connect" }, ...S.bar], start: S.start });
+    expect(effective({ ...S, bundle: "simple" }, bundlesFrom([]))).toMatchObject({ bar: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { shipped: "vault" }, { screen: "connect" }, ...S.bar], start: S.start });
   });
   it("a record's own bar, and the settings note's home when it says none; an explicit null home is none", () => {
     const only = bundleOf({ contract: 1, id: "lab", name: "Lab", sources: [], bar: [{ vault: "home", applet: "Applets/Ideas" }] }, "Parachute/Bundles/lab", "1")!;

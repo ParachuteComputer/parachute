@@ -70,6 +70,12 @@ describe("the face keeps every stressed line's facts", () => {
     const one = grantFor("rooms", (f) => ({ ...f, services: [{ id: "r", kind: "nostr-relay", url: "wss://buzz.example.org", publish: [1] }] }));
     expect(faceTexts(holds(one.g, one.folder, trusted))[0]).toBe("As you on buzz.example.org (your everyday key): posts kind 1 events anywhere. What it reads can go there.");
   });
+  it("Vault: every vault, and what reaches each, said on the face", () => {
+    const { g, folder } = grantFor("vault");
+    const t = faceTexts(holds(g, folder, trusted)).join("\n");
+    expect(t).toContain("Sees and changes records in every vault");
+    expect(t).toContain("Sees what reaches each vault");
+  });
   it("two relays: each approval line names its own server, so a second one reads apart from the first", () => {
     const { g, folder } = grantFor("rooms");
     const two = { ...g, services: [...g.services!, { ...g.services![0], id: "other", url: "wss://other.example.org/" }] };

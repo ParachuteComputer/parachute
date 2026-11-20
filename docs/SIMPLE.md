@@ -18,9 +18,10 @@ areas), Matrix, and the key and pairing screens. A person who has another applet
 | **Notes** | the home (`/`) | Every vault's newest notes in one list, a search across all of them, the vaults as tabs, **New note**. A note opens as it always does, with **Edit**. |
 | **Journal** | the bar | The Uni app's Journal: a line a day or many, written or said, kept by day in the home vault's `Journal/`. **Add Journal** (one tap) writes it in as `Applets/Journal`, as Capture is added. |
 | **Capture** | the bar | Write a line, or **Say it** (the app's own recorder): it lands in the home vault's `Inbox/` as a note of its own, and a voice note gets its words from the hub's transcription. |
+| **Vault** | the bar | Parachute's own viewer ([VAULT.md](VAULT.md)): each vault's types and counts, a type's records as a table, a record's fields (changed where they stand), words, links and history. A note no other applet opens opens here. |
 | **Connect** | the bar | Each vault's connector address (`https://…/vault/<name>/mcp`) with **Copy**, and how to add it to Claude and ChatGPT. |
 
-The bar says **Notes · Journal · Capture · Connect**. Settings (the foot of Notes, or ⋯ on the other screens) has
+The bar says **Notes · Journal · Capture · Vault · Connect**; Journal, Capture and Vault are each added with one tap. Settings (the foot of Notes, or ⋯ on the other screens) has
 **Your bundle: Parachute Simplified / Everything**.
 
 On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key); the key's ways come
@@ -77,7 +78,7 @@ screens. Capture and Journal each write into one folder of one vault, so they ca
 Parachute Simplified is a bundle record the app ships (`src/shell/default-bundles.json`, id `simple`), read like any
 other ([NAVIGATION.md](NAVIGATION.md#bundles)): `"look": "notes"` makes Notes its home, `"everywhere": true` offers
 every applet, and its `bar` is `{"screen": "home"}`, `{"shipped": "journal"}`, `{"shipped": "capture"}`,
-`{"screen": "connect"}`. The settings note's `bundle: "simple"` names it. A record `Parachute/Bundles/simple` says only
+`{"shipped": "vault"}`, `{"screen": "connect"}`. The settings note's `bundle: "simple"` names it. A record `Parachute/Bundles/simple` says only
 what it changes, for instance a longer bar; the shell has no code of its own for Simplified. Journal's and Capture's
 code come with the app and are written into the vault on a tap; each card then asks as any applet's does.
 
@@ -86,5 +87,5 @@ code come with the app and are written into the vault on a tap; each card then a
 Nothing old runs beside it. For a new Cloud person, the old launcher's "No applets here yet." chapters and the key-first
 first screen are replaced by Notes and **Sign in with Parachute Cloud**. Everyone else's app is unchanged, and **Your
 app** switches between the two. Its bar is still drawn by the shell (`src/shell/BottomBar.tsx`) from the app's `look`;
-a record can add places after Notes, Journal, Capture and Connect. `src/applet/shipped.ts` and `ShippedEntry` replace
+a record can add places after Notes, Journal, Capture, Vault and Connect. `src/applet/shipped.ts` and `ShippedEntry` replace
 Capture's own `capture.ts` and `CaptureEntry` (11-20): one way to add a shipped applet, not one per applet.

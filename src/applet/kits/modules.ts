@@ -10,6 +10,8 @@ import * as JSXRuntime from "react/jsx-runtime";
 export const PART_LEVEL = {
   Button: 1, Card: 1, Days: 1, Empty: 1, Field: 1, Link: 1, Linked: 1, List: 1, Loading: 1, Note: 1, Page: 1, Problem: 1, Record: 1, Search: 1, Tabs: 1, Write: 1,
   link: 1, toast: 1, useSaved: 1, useTheme: 1, useTranscripts: 1, voiceNote: 1, when: 1,
+  // Vault's (T-476, docs/VAULT.md): records as a table, and a record's fields changed where they stand
+  Table: 3, Fields: 3,
 } as const;
 export type PartName = keyof typeof PART_LEVEL;
 export const PART_NAMES = Object.keys(PART_LEVEL) as PartName[];

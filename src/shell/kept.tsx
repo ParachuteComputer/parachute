@@ -31,7 +31,8 @@ export const KEEP = phone() ? KEEP_PHONE : KEEP_DESKTOP;
 
 const APPLET = /^\/v\/([^/]+)\/a\/([^/]+)$/;
 /** The query words that keep an address the applet's own (a notification's launch); any other makes it a fresh screen. */
-const LAUNCH_WORDS = new Set(["room", "event"]);
+// a room and a message in it (a notification's tap), or a vault and a record in it (Vault, applet/shipped.ts)
+const LAUNCH_WORDS = new Set(["room", "event", "vault", "record"]);
 
 /** A path segment as the router reads it (decoded), so one applet written two ways is one screen. */
 const seg = (x: string) => { try { return decodeURIComponent(x); } catch { return null; } };

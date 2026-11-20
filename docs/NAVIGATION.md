@@ -7,11 +7,11 @@ One model, everywhere.
 | Address | What it is |
 |---|---|
 | `/` | **The list**: the open bundle's applets, one plain list (not by vault). Always there: the bar's **Applets** opens it. |
-| `/v/<vault>` | A vault: its newest notes, and search. |
-| `/v/<vault>/n/<note>` | A note. It opens in the applet that opens its kind (open-with), else as plain text. |
+| `/v/<vault>` | A vault: in Vault ([VAULT.md](VAULT.md)) when it is there and allowed; else its newest notes, and search. |
+| `/v/<vault>/n/<note>` | A note. It opens in the applet that opens its kind (open-with), else in Vault, else as plain text. |
 | `/v/<vault>/a/<applet>` | An applet. |
 | `/settings` | Settings. |
-| `/connect`, `/capture`, `/journal`, `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | Parachute Simplified's screens ([SIMPLE.md](SIMPLE.md)): Connect an AI, Capture and Journal (before each is added), a new note, a note's words. |
+| `/connect`, `/capture`, `/journal`, `/vault`, `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | Parachute Simplified's screens ([SIMPLE.md](SIMPLE.md)): Connect an AI, Capture, Journal and Vault (before each is added), a new note, a note's words. |
 
 ## The four rules
 
@@ -26,7 +26,7 @@ One model, everywhere.
 3. **Back returns where you came from.** The app's Back and the phone's Back both go one step back in what you did. On
    the first screen of a start, the app's Back goes to the list, and the phone's Back leaves the app.
 4. **A note opens in its applet.** Tap a note and it opens in the applet that opens its kind; long-press it for "Open
-   with…". Nothing about this changed.
+   with…". A note no applet opens opens in Vault, Parachute's own viewer, once it is added ([VAULT.md](VAULT.md)).
 
 ## Pinning
 
@@ -100,7 +100,7 @@ That is the record as `create-record` takes it (on a hub before 0.9, `create-not
 `vault` is the vault's name (add `"hub": "https://…"` when two hubs hold vaults of the same name). `applet` is the
 applet note's path or id. A place that names an applet this device can't find is left off the bar, not an error.
 
-`bundle` says which bundle a new device opens: `"simple"` (Parachute Simplified: Notes, Journal, Capture, Connect: [SIMPLE.md](SIMPLE.md)),
+`bundle` says which bundle a new device opens: `"simple"` (Parachute Simplified: Notes, Journal, Capture, Vault, Connect: [SIMPLE.md](SIMPLE.md)),
 `"everything"` (every applet, and the bar above), or the id of one of your bundle records (below). Left out,
 everything. A person new to the app on Parachute Cloud gets `"simple"` at their first sign-in; Settings → **Your
 bundle** changes it. Until 2026-12-20 write it under its older name `app` too, with the same id: builds from before

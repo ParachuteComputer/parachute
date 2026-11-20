@@ -169,7 +169,7 @@ test("scripts/install-applets.ts: --bar and --start go in the bundle record (onl
   // the vault holds no record under the newer names: the new one goes under the older, which builds from before 11-20 read
   expect(out).toContain("add the bundle simple at Parachute/Apps/simple");
   const [rec] = await tagged("parachute-app");
-  expect(rec.metadata.app).toEqual({ contract: 1, id: "simple", name: "Parachute Simplified", bar: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { screen: "connect" }, { vault: VAULT, applet: "Applets/Capture" }], start: { vault: VAULT, applet: "Applets/Capture" } });
+  expect(rec.metadata.app).toEqual({ contract: 1, id: "simple", name: "Parachute Simplified", bar: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { shipped: "vault" }, { screen: "connect" }, { vault: VAULT, applet: "Applets/Capture" }], start: { vault: VAULT, applet: "Applets/Capture" } });
   const settings = (await tagged("parachute-settings"))[0].metadata.parachute;
   expect([settings.bar, settings.start]).toEqual([undefined, undefined]);
   // again: nothing changes (Simplified's own places stay first)
