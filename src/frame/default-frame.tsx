@@ -20,9 +20,9 @@ function NoteRouteKeyed() {
   return <NoteRoute key={location.key} />;
 }
 
-/** The home screen: Notes when the open bundle's home is Notes (`app: "simple"` from the shell, docs/SIMPLE.md), else the list of its applets. */
+/** The home screen: Notes when the open bundle's look says so (docs/SIMPLE.md), else the list of its applets. */
 function Start() {
-  return useHome().app === "simple" ? <NotesHome /> : <Launcher />;
+  return useHome().look === "notes" ? <NotesHome /> : <Launcher />;
 }
 
 export default function Frame() {

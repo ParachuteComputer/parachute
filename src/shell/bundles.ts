@@ -5,10 +5,11 @@
 // approval). The person can have several; each device opens one. (Called an "app" record before 11-20: the Parachute
 // app is the app, so the record that picks what it shows is a bundle.)
 //
-// Two bundles are always there, made by the app itself when no record says otherwise:
-//   everything  every applet in every vault this device holds, with the settings note's bar and home (as before)
-//   simple      Parachute Simplified: Notes, Journal, Capture and Connect (docs/SIMPLE.md)
-// A record with one of those ids changes that bundle. A bundle someone else offers is a record of theirs that the
+// The app ships two bundles as records (DEFAULT_BUNDLES), read like any other and obeying the same contract:
+//   everything  every applet in every vault this device holds; the list is its home
+//   simple      Parachute Simplified: Notes as its home, Journal, Capture and Connect on its bar (docs/SIMPLE.md)
+// The person's record of the same id is read over a default: what it doesn't say, the default says. Nothing here or in
+// the shell asks which id a bundle has; what a bundle does is what its record says. A bundle someone else offers is a record of theirs that the
 // person's own record follows (`live`): read from their vault each time, so their changes show; their code still asks.
 //
 // Older records (`Parachute/Apps/<id>`, tagged `parachute-app`, under `fields.app`) are read the same, for one release
@@ -25,11 +26,15 @@ export const BUNDLE_FOLDER = "Parachute/Bundles/";
  *  from before 11-20 read only these). */
 export const OLD_BUNDLE_TAG = "parachute-app";
 export const OLD_BUNDLE_FOLDER = "Parachute/Apps/";
-export const BUILT_IN_BUNDLES = ["everything", "simple"] as const;
 export type Look = "launcher" | "notes";
 
 /** One applet, as the bar names it today: its vault's name (and hub's origin, when not the home's) and its note's path or id. */
 export type Place = { hub?: string; vault: string; applet: string };
+/** A place on the bar that is the app's own: `home` (the bundle's home screen: Notes or the list, by its `look`),
+ *  `connect` (Connect an AI), or an applet the app ships (`capture`, `journal`: the home vault's copy, or the screen that adds it). */
+export type AppPlace = { screen: "home" | "connect" } | { shipped: "capture" | "journal" };
+export type BarEntry = Place | AppPlace;
+export const isAppPlace = (e: BarEntry): e is AppPlace => "screen" in e || "shipped" in e;
 /** Where applets come from: one applet, `applet: "*"` for every applet in a vault, `vault: "*"` (with a hub) for every vault there. */
 export type Source = { hub?: string; vault: string; applet: string };
 export type OpensChoice = { type: string; hub?: string; vault: string; applet: string | null };
@@ -39,8 +44,10 @@ export type Bundle = {
   /** How its home looks: the launcher, or Parachute Simplified's Notes. */
   look: Look;
   sources: Source[]; hide: Place[];
-  /** null: the settings note's (an app without its own). */
-  bar: Place[] | null; start: Place | null | undefined;
+  /** null: the record says none, so the settings note's (read until 2026-12-20), after `base`. */
+  bar: BarEntry[] | null; start: Place | null | undefined;
+  /** The bar a default of the same id starts with, when the record says none. */
+  base: BarEntry[];
   opens: OpensChoice[]; keep: Keep;
   /** How careful the app is (docs/design/APP-RECORD.md "Security levels"; shell/levels.ts): per action (approvals,
    *  code, join) none, unlock or passcode, and the idle lock's minutes. It only raises a device's levels: lowering one
@@ -48,7 +55,7 @@ export type Bundle = {
   security: Asked;
   /** An app someone else offers, followed live: where its record is. */
   live?: { hub: string; vault: string; path: string };
-  /** Where this app's record is: the home vault's note id, or none for a built-in. */
+  /** Where this bundle's record is: the home vault's note id, or none for a default no record changes. */
   noteId: string | null;
   /** The hub its places mean when they name none: the home's, or the offering Parachute's for a live app. */
   hubOf?: string;
@@ -59,6 +66,15 @@ const VAULT = /^[a-z0-9][a-z0-9_-]{0,79}$/;
 const line = (x: unknown, max: number): x is string => typeof x === "string" && x.length > 0 && x.length <= max && !/[\u0000-\u001f]/.test(x);
 const hubOk = (x: unknown): x is string => typeof x === "string" && x.length <= 300 && /^https?:\/\/[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?$/.test(x);
 const only = (o: Record<string, unknown>, keys: string[]) => Object.keys(o).every((k) => keys.includes(k));
+
+/** One of the app's own places on a bar, exactly as written; else null. */
+function appPlaceOf(x: unknown): AppPlace | null {
+  if (!plain(x)) return null;
+  if (only(x, ["screen"]) && (x.screen === "home" || x.screen === "connect")) return { screen: x.screen };
+  if (only(x, ["shipped"]) && (x.shipped === "capture" || x.shipped === "journal")) return { shipped: x.shipped };
+  return null;
+}
+const barEntryOf = (x: unknown): BarEntry | null => appPlaceOf(x) ?? placeOf(x);
 
 /** A place on the bar, the home, a hidden one: a key it doesn't know (a newer app's) is left out, not the place. */
 export function placeOf(x: unknown): Place | null {
@@ -97,18 +113,22 @@ export function bundleOf(raw: unknown, path: string | null, noteId: string | nul
   if (path !== null && stripExt(path) !== `${BUNDLE_FOLDER}${raw.id}` && stripExt(path) !== `${OLD_BUNDLE_FOLDER}${raw.id}`) return null;
   const live = plain(raw.live) && hubOk(raw.live.hub) && typeof raw.live.vault === "string" && VAULT.test(raw.live.vault) && line(raw.live.path, 300)
     ? { hub: raw.live.hub as string, vault: raw.live.vault, path: raw.live.path as string } : undefined;
-  if (!line(raw.name, 60) && !live) return null;
+  // what the record doesn't say, a default of its id says (none for any other id)
+  const d = noteId === null ? null : defaultOf(raw.id);
+  if (!line(raw.name, 60) && !live && !d) return null;
   const keep = raw.keep === "auto" || raw.keep === undefined ? "auto" : typeof raw.keep === "number" && Number.isInteger(raw.keep) && raw.keep >= 0 && raw.keep <= 12 ? raw.keep : "auto";
-  const builtIn = (BUILT_IN_BUNDLES as readonly string[]).includes(raw.id) ? builtInBundle(raw.id as "everything" | "simple") : null;
+  // `everywhere`: every vault this device holds, on every Parachute. Listing runs nothing, so any bundle may say it
+  const everywhere = raw.everywhere === true || (raw.everywhere === undefined && raw.sources === undefined && !!d?.sources.some((x) => x.hub === ANY_HUB));
+  const sources = [...(everywhere ? [{ hub: ANY_HUB, vault: "*", applet: "*" }] : []), ...(Array.isArray(raw.sources) ? list(raw.sources, 100, sourceOf) : d && raw.everywhere === undefined ? d.sources.filter((x) => x.hub !== ANY_HUB) : [])];
   return {
-    id: raw.id, name: line(raw.name, 60) ? raw.name : builtIn?.name ?? raw.id,
-    glyph: line(raw.glyph, 4) ? raw.glyph : builtIn?.glyph ?? "◇",
-    note: line(raw.note, 120) ? raw.note : builtIn?.note ?? "",
-    look: raw.look === "notes" || raw.frame === "builtin:notes" ? "notes" : raw.look === "launcher" ? "launcher" : builtIn?.look ?? "launcher",
-    // `everywhere`: every vault this device holds, on every Parachute. Only Everything may say it
-    sources: [...(raw.everywhere === true && raw.id === "everything" ? [{ hub: ANY_HUB, vault: "*", applet: "*" }] : []), ...(Array.isArray(raw.sources) ? list(raw.sources, 100, sourceOf) : builtIn && raw.everywhere === undefined ? builtIn.sources : [])],
+    id: raw.id, name: line(raw.name, 60) ? raw.name : d?.name ?? raw.id,
+    glyph: line(raw.glyph, 4) ? raw.glyph : d?.glyph ?? "◇",
+    note: line(raw.note, 120) ? raw.note : d?.note ?? "",
+    look: raw.look === "notes" || raw.frame === "builtin:notes" ? "notes" : raw.look === "launcher" ? "launcher" : d?.look ?? "launcher",
+    sources,
     hide: list(raw.hide, 200, placeOf),
-    bar: Array.isArray(raw.bar) ? list(raw.bar, 200, placeOf) : null,
+    bar: Array.isArray(raw.bar) ? list(raw.bar, 200, barEntryOf) : null,
+    base: d ? [...(d.bar ?? []), ...d.base] : [],
     start: raw.start === null ? null : raw.start === undefined ? undefined : placeOf(raw.start) ?? undefined,
     opens: list(raw.opens, 200, opensOf),
     keep,
@@ -118,27 +138,38 @@ export function bundleOf(raw: unknown, path: string | null, noteId: string | nul
   };
 }
 
-/** The two apps the app always has, as they are when no record changes them. `sources` of everything: every vault
- *  on every Parachute this device holds (`anyHub`). */
-export function builtInBundle(id: "everything" | "simple"): Bundle {
-  return id === "simple"
-    ? { id, name: "Parachute Simplified", glyph: "¶", note: "your notes, Journal, Capture, and Connect an AI", look: "notes", sources: [], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: {}, noteId: null }
-    : { id, name: "Everything", glyph: "⁂", note: "every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: {}, noteId: null };
-}
-/** Stands for every hub in the built-in Everything only: no record can say it (`hubOk` refuses it). */
+/** Stands for every hub, from `everywhere` only: no source can say it (`hubOk` refuses it). */
 export const ANY_HUB = "*";
 
-/** The person's apps: the two built-ins (as their records change them) and every other record, each id once. */
+/** The bundles the app ships, as records, in the order Settings lists them. Their bar is the start of the bar while the
+ *  person's own record says none (the settings note's pins follow it, read until 2026-12-20). A person new to the app on
+ *  Parachute Cloud starts on NEWCOMER_BUNDLE; a device whose chosen bundle doesn't load opens FALLBACK_BUNDLE. */
+export const DEFAULT_BUNDLES: readonly Record<string, unknown>[] = [
+  { contract: 1, id: "simple", name: "Simple", glyph: "¶", note: "your notes, Capture, and Connect an AI", look: "notes", everywhere: true,
+    bar: [{ screen: "home" }, { shipped: "capture" }, { screen: "connect" }] },
+  { contract: 1, id: "everything", name: "Everything", glyph: "⁂", note: "every applet in every vault", look: "launcher", everywhere: true, bar: [] },
+];
+export const NEWCOMER_BUNDLE = "simple";
+export const FALLBACK_BUNDLE = "everything";
+/** A default as it is read: its bar is the base the person's pins go after, not a bar of its own. */
+function defaultOf(id: string): Bundle | null {
+  const raw = DEFAULT_BUNDLES.find((r) => r.id === id);
+  const b = raw ? bundleOf(raw, null, null) : null;
+  return b && { ...b, bar: null, base: b.bar ?? [] };
+}
+export const defaultBundles = (): Bundle[] => DEFAULT_BUNDLES.map((r) => defaultOf(r.id as string)!);
+
+/** The person's bundles: the defaults (as their records change them) and every other record, each id once. */
 export function bundlesFrom(records: readonly Bundle[]): Bundle[] {
   const byId = new Map<string, Bundle>();
-  for (const id of BUILT_IN_BUNDLES) byId.set(id, builtInBundle(id));
+  for (const d of defaultBundles()) byId.set(d.id, d);
   for (const r of records) if (!byId.has(r.id) || byId.get(r.id)!.noteId === null) byId.set(r.id, r);
   return [...byId.values()];
 }
 
-/** Which app this device opens: its own choice, else the one the settings note names, else everything. */
+/** Which bundle this device opens: its own choice, else the one the settings note names, else the fallback. */
 export function openBundle(apps: readonly Bundle[], device: string | null, settings: string | null): Bundle {
-  return apps.find((a) => a.id === device) ?? apps.find((a) => a.id === settings) ?? apps.find((a) => a.id === "everything") ?? builtInBundle("everything");
+  return apps.find((a) => a.id === device) ?? apps.find((a) => a.id === settings) ?? apps.find((a) => a.id === FALLBACK_BUNDLE) ?? defaultOf(FALLBACK_BUNDLE)!;
 }
 
 /** A vault as this device holds it, for matching: its hub's origin and its name. */
@@ -159,7 +190,7 @@ export const offersIn = (app: Bundle, v: Held, home: string) => app.sources.some
 /** How many applets stay running while hidden: the app's number, else the device's default. */
 export const keepOf = (app: Bundle, deviceDefault: number) => (app.keep === "auto" ? deviceDefault : app.keep);
 
-/** The record the app writes for an app (the built-ins' when they are first changed): only what it says. */
+/** The record the app writes for a bundle (a default's when it is first changed): only what it says. */
 export function recordOf(app: Bundle): Record<string, unknown> {
   return {
     contract: 1, id: app.id, name: app.name, glyph: app.glyph, ...(app.note ? { note: app.note } : {}), look: app.look,
