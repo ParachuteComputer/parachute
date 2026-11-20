@@ -74,11 +74,12 @@ screens. Capture and Journal each write into one folder of one vault, so they ca
 
 ## As a bundle record
 
-Parachute Simplified is one of the two bundles the app always has ([NAVIGATION.md](NAVIGATION.md#bundles)): the settings note's
-`bundle: "simple"` names it (`app: "simple"` before 11-20, still read). A record `Parachute/Bundles/simple` (`"look": "notes"`) changes
-it, for instance to put more on its bar; the Notes home, Journal, Capture and Connect stay its places. Its
-`sources` don't narrow Notes, which shows every vault this device holds. Journal's and Capture's code come with the
-app and are written into the vault on a tap; each card then asks as any applet's does.
+Parachute Simplified is a bundle record the app ships (`src/shell/default-bundles.json`, id `simple`), read like any
+other ([NAVIGATION.md](NAVIGATION.md#bundles)): `"look": "notes"` makes Notes its home, `"everywhere": true` offers
+every applet, and its `bar` is `{"screen": "home"}`, `{"shipped": "journal"}`, `{"shipped": "capture"}`,
+`{"screen": "connect"}`. The settings note's `bundle: "simple"` names it. A record `Parachute/Bundles/simple` says only
+what it changes, for instance a longer bar; the shell has no code of its own for Simplified. Journal's and Capture's
+code come with the app and are written into the vault on a tap; each card then asks as any applet's does.
 
 ## What this replaces (subtract)
 
