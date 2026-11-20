@@ -5,12 +5,11 @@ and notes, a journal, a quick way to get something in, and a way to connect thei
 is the same Parachute app with a smaller set of screens, and Settings switches between the two. Its id stays `simple`
 (the settings note's `app`, the record `Parachute/Apps/simple`), so nothing written before changes.
 
-**Which applets, and why** (Aaron, 11-19: "the same applets I am using in my primary app; but just maybe not the
-strange weird complex ones"). From his Uni app it takes **Journal**, the same applet and code. It keeps its own
-**Notes**, **Capture** and **Connect**. It leaves out **Rooms** and the approval cards (a relay, a key, Uni), **Mail**
-(his mail gateway signs each request with his key; a Cloud account has neither), **Claude accounts** and the area
-applets (Uni's workers), Matrix, and the key and pairing screens. **Ideas** lives only in his `playground` vault, not
-in the app, so it isn't offered; a person who has it adds it as any applet.
+**Which applets, and why.** The same applets as the full app wherever they make sense for most people, without the
+complex ones. From the full app it takes **Journal**, the same applet and code. It keeps its own **Notes**, **Capture**
+and **Connect**. It leaves out **Rooms** and approval cards (they need a relay, a key and an agent), **Mail** (it goes
+through a mail gateway that checks a key's signature; a Cloud account has neither), the agent's applets (accounts,
+areas), Matrix, and the key and pairing screens. A person who has another applet adds it as any applet.
 
 ## What a person sees
 
@@ -34,9 +33,9 @@ which app the person's devices open: `"simple"` or `"everything"`. Absent means 
 
 A person new to the app on Parachute Cloud gets `"simple"`. That is a first sign-in, on a device that had no home, to a
 hub whose descriptor says `door: "cloud"`, whose home (the one vault the sign-in reads, [design/SCOPES.md](design/SCOPES.md))
-was read and holds no settings note. The sign-in reads the home and doesn't write it, so this device opens the simple
-app at once, and the settings note with `app: "simple"` (and their list of Parachutes) is written the first time the
-person lets Parachute change notes in their home: their first edit, or adding Capture. A settings note already there
+was read and holds no settings note. The sign-in reads the home and doesn't write it, so this device opens Parachute
+Simplified at once, and the settings note with `app: "simple"` (and their list of Parachutes) is written the first time the
+person lets Parachute change notes in their home: their first edit, or adding Journal or Capture. A settings note already there
 is never changed this way. Anyone else starts as before. Settings changes it, and so can their agent, by writing the
 note.
 

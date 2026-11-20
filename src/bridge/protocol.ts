@@ -46,7 +46,7 @@ export type FramePlace = { vault: string; noteId: string };
  *  ones whose `issuer` is `hub`), or one their list names that this device isn't (`signedIn` false). The home's first.
  *  `fresh`: vaults made there since this device signed in, which it may add (vault/newVaults.ts). */
 export type FrameParachute = { hub: string; host: string; name: string; home: boolean; signedIn: boolean; fresh?: string[] };
-/** `app`: "simple" when the person's settings choose the simple app (docs/SIMPLE.md): the frame's home is then Notes. */
+/** `app`: "simple" when the person's settings choose Parachute Simplified (docs/SIMPLE.md): the frame's home is then Notes. */
 /** `notice: "app-record"`: the app this device chose didn't load (its record is malformed or gone); the list says so. */
 export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; app?: "simple"; notice?: "app-record" };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
@@ -157,11 +157,11 @@ function paramsOk(m: Method, p: Record<string, unknown>): boolean {
 }
 
 /** The app addresses the frame may send the person to: the vault list, a vault, a note, an applet, Settings, Add; and the
- *  shell's own editor (a new note, a note's words), Connect and Capture (docs/SIMPLE.md). */
+ *  shell's own editor (a new note, a note's words), Connect, Capture and Journal (docs/SIMPLE.md). */
 export function allowedDestination(to: string): boolean {
   let u: URL;
   try { u = new URL(to, "http://app.invalid"); } catch { return false; }
   if (u.origin !== "http://app.invalid" || !/^\/(?![\/\\])/.test(to)) return false;
-  return u.pathname === "/" || u.pathname === "/settings" || u.pathname === "/add" || u.pathname === "/connect" || u.pathname === "/capture"
+  return u.pathname === "/" || u.pathname === "/settings" || u.pathname === "/add" || u.pathname === "/connect" || u.pathname === "/capture" || u.pathname === "/journal"
     || /^\/v\/[^/]+(?:\/[na]\/[^/]+|\/n\/[^/]+\/edit|\/new)?$/.test(u.pathname);
 }

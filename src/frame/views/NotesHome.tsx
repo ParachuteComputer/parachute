@@ -42,7 +42,7 @@ function useNotes(vaults: FrameVault[], term: string): { rows: Row[]; unread: st
 
 /**
  * Notes: the simple app's home (docs/SIMPLE.md). Every vault's newest notes in one list, a search across them, the
- * vaults as tabs, and a new note. A tap opens the note (where Edit is); the bar below has Capture and Connect.
+ * vaults as tabs, and a new note. A tap opens the note (where Edit is); the bar below has Journal, Capture and Connect.
  */
 export default function NotesHome() {
   const all = useVaults();

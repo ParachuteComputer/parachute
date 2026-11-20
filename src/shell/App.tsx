@@ -156,8 +156,8 @@ function ShellRoutes() {
         <Route path="/v/:vault/a/:applet" element={own ? null : <AppletRoute />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/connect" element={<Connect />} />
-        <Route path="/capture" element={<ShippedEntry which="capture" />} />
-        <Route path="/journal" element={<ShippedEntry which="journal" />} />
+        <Route path="/capture" element={<ShippedEntry key="capture" which="capture" />} />
+        <Route path="/journal" element={<ShippedEntry key="journal" which="journal" />} />
         <Route path="/v/:vault/new" element={<NoteEdit key={location.key} />} />
         <Route path="/v/:vault/n/:id/edit" element={<NoteEdit key={location.key} />} />
         <Route path="/open-link" element={<OpenLink />} />
