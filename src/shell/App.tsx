@@ -52,6 +52,12 @@ function Taps() {
     return () => { gone = true; off(); };
   }, []);
   useEffect(() => { arrived(location.pathname); }, [location.pathname]);
+  // the bar's counts (services/signals.ts): counted from the start; the applet on screen has none (what comes while it
+  // is in front of the person is seen)
+  useEffect(() => { let off = () => {}; void import("../services/signals").then((s) => { off = s.startSignals(); }); return () => off(); }, []);
+  const inApplet = /^\/v\/([^/]+)\/a\/([^/]+)$/.exec(location.pathname);
+  const appletAt = inApplet ? [decodeURIComponent(inApplet[1]), decodeURIComponent(inApplet[2])] as const : null;
+  useEffect(() => { void import("../services/signals").then((s) => s.setFront(appletAt?.[0] ?? null, appletAt?.[1] ?? null)); }, [appletAt?.[0], appletAt?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
   // a vault made on a Parachute since this device signed in: asked when the app opens and each time the list or
   // Settings shows, at most once a minute per hub (vault/newVaults.ts)
   const opened = useRef(false);

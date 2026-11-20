@@ -115,6 +115,33 @@ component, or in `style={…}`. Write plain, working code: types are stripped, n
 
 For `html`: a page, run as written, with the same kit on `window.parachute`.
 
+### Something for the person (`fields.signals`)
+
+What counts as something for the person: the count is the badge on the bar while the applet is closed, and on a phone
+the same count is the notification while Parachute is closed ([design/APP-RECORD.md](design/APP-RECORD.md), "Signals").
+Up to four, each a line on the card:
+
+```yaml
+signals:
+  - id: for-you                     # lower-case words joined by -
+    name: mentions and messages from Uni   # the notification's words: "Rooms · 3 new"
+    from: { service: rooms }        # a relay service with notify: its gateway counts what it would tell you about
+  - id: unread
+    name: unread mail
+    from: { service: mail, feed: unread }   # an http service's number: the applet sets it while it runs
+    via: https://push.example/      # the gateway the count goes to, for your other devices and your closed phone
+  - id: new
+    name: new ideas from others
+    from: { vault: here, path: Ideas/, others: true }   # notes in a folder it may read, made since you last opened it
+    via: https://push.example/
+```
+
+Nothing of the applet runs to count. Notes in its vault are counted by the app, live, from the vault (`others`: only
+notes someone else made); a relay's by its push gateway; a feed by the applet itself, with `signal(id, count)` while
+it runs (its own number wins: Mail knows what is unread). Opening the applet makes its counts 0. A gateway gets your
+public key, the applet as a number it can't read back, the signal's id and the count: never what was counted. An
+applet in someone else's vault may count only its notes, and the count goes nowhere.
+
 ### The kit (`import { … } from "parachute"`)
 
 | Call | What it does |
@@ -146,6 +173,7 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 | `services.card(id, event)` | With `approvals`: Uni's card in that signed message, as the app checked it: `{ kind, refused, rows: [{ rid, credential, action, class, scope, ttl_s, uses, expires, always_unlock, answer, … }] }`. Never a key. |
 | `services.answer(id, event, "approve" \| "deny", rids)` | On a tap: the app asks for the unlock when it must, seals the answer with the approval key and sends it. Resolves `{ view, sent, failed? }`. A tap answers once. |
 | `services.secret(id, event)`, `services.forgetSecret(id, event)` | On a tap: the app's own sheet takes the secret (`{ sent }`); or asks the requester to forget it. |
+| `signal(id, count)` | Its own number for a signal its record declares (0 to 9999): the bar's count, and through the signal's gateway, the person's other devices'. Fails with `out_of_scope` for a signal it doesn't declare. |
 | `theme.get()`, `theme.now()`, `theme.on(cb)` | The app's look, which the person can change ([THEME.md](THEME.md)): `get` asks for it, `now` gives the last one sent (or null), `on` calls back now and at each change and returns a function that stops it. Beside the values below, it says `scheme` (`light` or `dark`) and `density`. Every value is also a CSS variable: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. |
 
 A call outside what it was allowed fails with `out_of_scope` or `not_granted`. It never reaches anything else.

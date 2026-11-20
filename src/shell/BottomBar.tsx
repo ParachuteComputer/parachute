@@ -16,6 +16,7 @@ import { captureIn } from "../applet/capture";
 import { useApplets } from "../applet/useApplets";
 import { useVaults } from "../vault/hooks";
 import { appletPath } from "../open/paths";
+import { useBadge } from "../services/signals";
 
 type Item = Found & { place: Place; home: boolean };
 
@@ -65,9 +66,14 @@ function SimplePlaces({ pathname }: { pathname: string }) {
 function Place({ item, current, onHold }: { item: Item; current: boolean; onHold: () => void }) {
   // the click that ends a long-press opens nothing, and the mark the tap listener (on the document, first) made for it goes
   const hold = useHold(onHold, clearMark);
+  // the applet's signals (services/signals.ts): nothing while it is the screen in front
+  const count = useBadge(item.vault, item.noteId);
+  const shown = current ? 0 : count;
   return (
     <Link className="home-bar-place" to={item.href} aria-current={current ? "page" : undefined} {...hold}>
-      <span className="home-bar-glyph" aria-hidden="true">{item.glyph}{"\uFE0E"}</span>{item.name}{item.home && <span className="sr-only"> (home)</span>}
+      <span className="home-bar-glyph" aria-hidden="true">{item.glyph}{"\uFE0E"}</span>
+      {shown > 0 && <span className="home-bar-badge" aria-hidden="true">{shown > 99 ? "99+" : shown}</span>}
+      {item.name}{shown > 0 && <span className="sr-only">, {shown} new</span>}{item.home && <span className="sr-only"> (home)</span>}
     </Link>
   );
 }

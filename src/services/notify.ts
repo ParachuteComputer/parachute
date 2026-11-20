@@ -15,6 +15,8 @@ import { isMine } from "../vault/whose";
 import { readApplets, type Read } from "../applet/useApplets";
 import { deviceGrants, subjectOf, type GrantStatus } from "../applet/grants";
 import type { KeyringStatus } from "./native";
+import { originOf, type VaultRecord } from "../vault/store";
+import { gidOf } from "./signals";
 
 export type NotifyEntry = {
   relay: string; me: string; rooms: string[] | null; mentions: boolean; from: string[]; subject: string; name: string;
@@ -43,15 +45,39 @@ export function entriesFrom(k: KeyringStatus | null, reads: readonly { key: stri
   return out.slice(0, 8);
 }
 
+/** An allowed applet's signal that sends its count to a gateway (applet/signals.ts), as notify.rs `SignalEntry` keeps
+ *  it: the opaque id and signal the gateway knows, and what the phone shows for a push of it. */
+export type SignalEntry = { gid: string; signal: string; gateway: string; me: string; subject: string; name: string; label: string; relay?: string; rooms?: string[] | null };
+
+/** The signals with a gateway, from what was read (the person's own vaults only). */
+export async function signalEntriesFrom(me: string, reads: readonly { rec: VaultRecord; read: Read | null }[], status: (subject: string, scope: string, html: string) => GrantStatus): Promise<SignalEntry[]> {
+  const out: SignalEntry[] = [];
+  for (const { rec, read } of reads) {
+    for (const e of read?.entries ?? []) {
+      if (!e.signals?.length || status(subjectOf(rec.key, e.noteId), e.keys.scope, e.keys.html) !== "ok") continue;
+      const gid = await gidOf(originOf(rec.issuer), rec.vault, e.noteId);
+      for (const s of e.signals) {
+        if (!s.via) continue;
+        const relay = s.from.kind === "relay" ? e.services.find((v) => v.id === (s.from as { service: string }).service) : undefined;
+        out.push({ gid, signal: s.id, gateway: s.via, me, subject: `/v/${encodeURIComponent(rec.key)}/a/${encodeURIComponent(e.noteId)}`, name: e.manifest.name, label: s.name,
+          ...(relay?.kind === "nostr-relay" ? { relay: relay.url, rooms: relay.rooms?.map((r) => r.id) ?? null } : {}) });
+      }
+    }
+  }
+  return out.slice(0, 32);
+}
+
 /** What allowed applets of the person's own vaults ask for (null when something couldn't be read), and the vaults that
  *  couldn't be read. */
-export async function notifyEntries(): Promise<{ entries: NotifyEntry[] | null; unread: string[]; noKey: boolean }> {
+export async function notifyEntries(): Promise<{ entries: NotifyEntry[] | null; signals: SignalEntry[]; unread: string[]; noKey: boolean }> {
   const k = await keyringNow(true);
   // read as the applet screen keys them (refreshApplets): with the vault record, so an applet that imports a component
   // (Rooms and an area import Room) hashes with its imports and its grant reads as allowed
-  const reads = await Promise.all(listVaults().filter((rec) => isMine(rec)).map(async (rec) => ({ key: rec.key, name: rec.vault, read: await readApplets(clientFor(rec), rec.key, false, rec).catch(() => null) })));
+  const reads = await Promise.all(listVaults().filter((rec) => isMine(rec)).map(async (rec) => ({ key: rec.key, name: rec.vault, rec, read: await readApplets(clientFor(rec), rec.key, false, rec).catch(() => null) })));
   const g = deviceGrants();
-  return { entries: entriesFrom(k, reads, (subject, scope, html) => g.status(subject, scope, html)), unread: reads.filter((r) => !r.read).map((r) => r.name), noKey: !k || !npubDecode(k.everyday) };
+  const status = (subject: string, scope: string, html: string) => g.status(subject, scope, html);
+  const me = k ? npubDecode(k.everyday) : null;
+  return { entries: entriesFrom(k, reads, status), signals: me ? await signalEntriesFrom(me, reads, status) : [], unread: reads.filter((r) => !r.read).map((r) => r.name), noKey: !k || !me };
 }
 
 /** How the last bringing-up-to-date went, for Settings: vaults it couldn't read (then nothing was handed on), how many
@@ -127,7 +153,9 @@ export function syncNotify(): Promise<void> {
       const entries = read.entries;
       if (!entries) { told(); return; } // something couldn't be read: the native side keeps the last list
       const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("notify_set", { entries });
+      await invoke("notify_set", { entries, signals: read.signals });
+      // the shell sends counts only for signals on the list just set: now they can go
+      void import("./signals").then((s) => s.exchange());
       const status = await invoke<PushStatus>("push_status");
       if (!status.available) { told(); return; }
       const plan = pushPlan(entries, status.registered ?? []);
