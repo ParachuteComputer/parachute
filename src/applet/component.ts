@@ -16,14 +16,16 @@
 // `app` words. Pure.
 
 import { hasHidden, hasOnly, plain } from "./contract.ts";
-import { parseManifest, type Rule } from "./manifest.ts";
+import { parseManifest, shownGlyph, shownId, shownName, type Rule } from "./manifest.ts";
+import { APP_LEVEL, neededWhy, tooNew } from "./level.ts";
 
 export const COMPONENT_TAG = "component";
 export const COMPONENT_CONTRACT = 1;
 export const PROP_KINDS = ["string", "number", "boolean"] as const;
 export type PropKind = (typeof PROP_KINDS)[number];
 export type Component = { contract: 1; id: string; name: string; glyph: string; note?: string; props: Record<string, PropKind>; allow: Rule[] };
-export type ComponentParse = { ok: true; component: Component } | { ok: false; error: string };
+/** `newer`: refused for a key or contract this app doesn't know, so likely written for a newer app (level.ts). */
+export type ComponentParse = { ok: true; component: Component } | { ok: false; error: string; newer?: true };
 
 const KEYS = ["contract", "id", "name", "glyph", "note", "props", "access"];
 const PROP = /^[a-z][a-zA-Z0-9]{0,31}$/;
@@ -32,8 +34,8 @@ export const MAX_PROPS = 12;
 /** Validate the `component` value of a record's fields. Strict, as an applet's manifest: refused, never repaired. */
 export function parseComponent(raw: unknown): ComponentParse {
   if (!plain(raw)) return { ok: false, error: "component must be an object" };
-  if (raw.contract !== COMPONENT_CONTRACT) return { ok: false, error: `unsupported component contract ${String(raw.contract)}` };
-  if (!hasOnly(raw, KEYS)) return { ok: false, error: "component has a key contract 1 doesn't know" };
+  if (raw.contract !== COMPONENT_CONTRACT) return { ok: false, error: `unsupported component contract ${String(raw.contract)}`, ...(typeof raw.contract === "number" && raw.contract > COMPONENT_CONTRACT ? { newer: true as const } : {}) };
+  if (!hasOnly(raw, KEYS)) { const k = Object.keys(raw).find((x) => !KEYS.includes(x)); return { ok: false, error: `component has a key contract 1 doesn't know${k && /^[A-Za-z0-9_-]{1,40}$/.test(k) ? ` («${k}»)` : ""}`, newer: true }; }
   const props: Record<string, PropKind> = {};
   if (raw.props !== undefined) {
     if (!plain(raw.props) || Object.keys(raw.props).length > MAX_PROPS) return { ok: false, error: `props is a short map of names to ${PROP_KINDS.join(", ")}` };
@@ -46,7 +48,7 @@ export function parseComponent(raw: unknown): ComponentParse {
   // the rest is an applet's manifest, less what a component doesn't have
   const { props: _p, contract: _c, ...rest } = raw;
   const m = parseManifest({ ...rest, contract: 2 });
-  if (!m.ok) return { ok: false, error: m.error.replace(/applet/g, "component").replace(/contract 2/g, "contract 1") };
+  if (!m.ok) return { ok: false, error: m.error.replace(/applet/g, "component").replace(/contract 2/g, "contract 1"), ...(m.newer ? { newer: true as const } : {}) };
   return { ok: true, component: { contract: 1, id: m.manifest.id, name: m.manifest.name, glyph: m.manifest.glyph, ...(m.manifest.note ? { note: m.manifest.note } : {}), props, allow: m.manifest.allow } };
 }
 
@@ -66,7 +68,18 @@ export function propsFor(c: Pick<Component, "props">, given: unknown): Record<st
 
 // ── the components in a vault ──
 
-export type ComponentEntry = { component: Component; vault: string; noteId: string; path: string; kind: "tsx" | "jsx" };
+/** `newer`: written for a newer app (why, in a few words): listed by its id and name so an import or an embed finds it
+ *  and says "Update Parachute to use …"; it takes no props and reaches nothing, and is never run. */
+export type ComponentEntry = { component: Component; vault: string; noteId: string; path: string; kind: "tsx" | "jsx"; newer?: string };
+
+/** Was this component record written for a newer app (`needs` past this build, or a key or contract it doesn't know)?
+ *  Why, in a few words; null when it reads here. */
+export function componentNewer(fields: unknown, level = APP_LEVEL): string | null {
+  const meta = plain(fields) ? fields : {};
+  if (tooNew(meta.needs, level)) return neededWhy(meta.needs, level);
+  const c = parseComponent(meta.component);
+  return !c.ok && c.newer ? `its fields: ${c.error}` : null;
+}
 type Row = { id?: unknown; path?: unknown; tags?: unknown; metadata?: unknown; extension?: unknown };
 
 /** One record as a component, or why not. */
@@ -76,6 +89,13 @@ export function readComponent(r: Row, vault: string): { ok: true; entry: Compone
   const ext = String(r.extension ?? "md").replace(/^\./, "").toLowerCase();
   if (ext !== "tsx" && ext !== "jsx") return { ok: false, error: `its record is ${ext}, and a component is tsx or jsx` };
   const meta = plain(r.metadata) ? r.metadata : {};
+  const newer = componentNewer(meta);
+  if (newer) {
+    const id = shownId(meta.component);
+    if (!id) return { ok: false, error: "it was made for a newer app, and has no id this one reads" };
+    const name = shownName(meta.component) ?? id;
+    return { ok: true, entry: { component: { contract: 1, id, name, glyph: shownGlyph(meta.component), props: {}, allow: [] }, vault, noteId: r.id, path: r.path, kind: ext, newer } };
+  }
   const parsed = parseComponent(meta.component);
   if (!parsed.ok) return { ok: false, error: `its fields are invalid: ${parsed.error}` };
   return { ok: true, entry: { component: parsed.component, vault, noteId: r.id, path: r.path, kind: ext } };

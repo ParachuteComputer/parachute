@@ -19,7 +19,9 @@ down, it signs the key list and nothing else. Made-up names in examples.
 An app is `Parachute/Apps/<id>`: where applets come from (one applet, a vault, every vault on a hub), the bar, the
 home, what opens which kind of note, how many applets stay running, how careful it is (`security`). Simple and
 Everything are always there. Each device opens one (Settings → **Your app**); a new device opens the one the settings
-note names. An org's app is followed live (`live`): read from their vault each time.
+note names. An org's app is followed live (`live`): read from their vault each time. A record made for a newer
+Parachute says so with `needs`, and an older one then opens the next app it can and says to update; a key it doesn't
+know in a place is left out (docs/design/VERSIONS.md).
 
 ## Running needs a signed approval
 

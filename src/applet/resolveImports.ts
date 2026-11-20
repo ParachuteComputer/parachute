@@ -4,7 +4,7 @@
 // refused); two pointers with one id refuse it. Each comes back with its code and hash, for the applet's composite hash.
 import type { Note } from "@openparachute/surface-client";
 import { codeHash } from "./code";
-import { COMPONENT_TAG, parseComponent } from "./component";
+import { COMPONENT_TAG, componentNewer, parseComponent } from "./component";
 import { importsOf, MAX_IMPORTS, plainImportId } from "./imports";
 import { readPointers } from "./pointers";
 import { fullComponent, refreshComponents } from "./useComponents";
@@ -14,7 +14,8 @@ import { originOf, listVaults, type VaultRecord } from "../vault/store";
 import { whoseOf } from "../vault/whose";
 
 export type Imported = { id: string; name: string; vault: string; host: string; own: boolean; whose: "mine" | "theirs" | "trusted"; kind: "tsx" | "jsx"; source: string; hash: string };
-export type ImportsRead = { ok: true; imports: Imported[] } | { ok: false; error: string };
+/** `newer`: what it imports was made for a newer app (level.ts): the applet says "Update Parachute to use …". */
+export type ImportsRead = { ok: true; imports: Imported[] } | { ok: false; error: string; newer?: true };
 const hostOf = (issuer: string) => { try { return new URL(issuer).host; } catch { return issuer; } };
 
 export async function readImports(rec: VaultRecord, source: string): Promise<ImportsRead> {
@@ -33,6 +34,7 @@ export async function readImports(rec: VaultRecord, source: string): Promise<Imp
     const here = listed && !listed.hash ? await fullComponent(rec, listed.noteId).catch(() => null) : listed;
     if (listed && !here) return { ok: false, error: `«${id}» couldn't be read` };
     if (here) {
+      if (here.newer) return { ok: false, error: `«${here.component.name}», which it imports, was made for a newer Parachute: ${here.newer}`, newer: true };
       if (importsOf(here.source).length) return { ok: false, error: `«${id}» imports components itself, and an import is one level only` };
       out.push({ id, name: here.component.name, vault: rec.vault, host: hostOf(rec.issuer), own: true, whose: whoseOf(rec), kind: here.kind, source: here.source, hash: here.hash });
       continue;
@@ -53,6 +55,8 @@ export async function readImports(rec: VaultRecord, source: string): Promise<Imp
     const body = n.content ?? "";
     if (!(n.tags ?? []).includes(COMPONENT_TAG) || (ext !== "tsx" && ext !== "jsx")) return { ok: false, error: `«${id}» in ${p.vault} isn't a TSX or JSX component` };
     if (whose !== "mine" && body.length > MAX_CODE_CHARS) return { ok: false, error: `«${id}» is bigger than a component from someone else's vault may be` };
+    const later = componentNewer(n.metadata);
+    if (later) return { ok: false, error: `«${id}», which it imports, was made for a newer Parachute: ${later}`, newer: true };
     const c = parseComponent(((n.metadata ?? {}) as Record<string, unknown>).component);
     if (!c.ok) return { ok: false, error: `«${id}»'s fields are invalid: ${c.error}` };
     if (importsOf(body).length) return { ok: false, error: `«${id}» imports components itself, and an import is one level only` };

@@ -336,6 +336,14 @@ const RENEW_PENDING_S: u64 = 24 * 3600;
 
 /// What a gateway said when it refused (its answer's `error`), for Settings: one short line of plain characters (no
 /// control, direction or zero-width characters).
+/// Did a gateway from before signals (it refused any field it didn't know) refuse this registration for naming them?
+/// Only that answer, word for word: any other refusal is a real one.
+pub fn refused_for_signals(status: u16, answer: &[u8]) -> bool {
+    status == 400
+        && serde_json::from_slice::<Value>(answer).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_string)).as_deref()
+            == Some("a registration is {endpoint, keys, relay, rooms, mentions, from}")
+}
+
 pub fn gateway_said(answer: &[u8]) -> String {
     let why = serde_json::from_slice::<Value>(answer).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_string)).unwrap_or_default();
     let plain = |c: &char| !c.is_control() && !matches!(*c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}' | '\u{00AD}');
@@ -622,7 +630,15 @@ pub async fn push_register<R: Runtime>(
                     let _ = send(PushOp::Unregister, unregister_body(&kept[i].endpoint, &relay), e.subject.clone(), e.name.clone()).await;
                 }
             }
-            let (status, answer) = send(PushOp::Register, body, e.subject.clone(), e.name.clone()).await?;
+            let (mut status, mut answer) = send(PushOp::Register, body, e.subject.clone(), e.name.clone()).await?;
+            // a gateway from before signals refuses any field it doesn't know (docs/design/VERSIONS.md): asked again
+            // without them, messages still arrive and only its counts are missing; the next renewal tries them again.
+            // Any other refusal stands, and is shown.
+            let mut without = false;
+            if !relay_signals.is_empty() && refused_for_signals(status, &answer) {
+                (status, answer) = send(PushOp::Register, register_body(&e, &ep, &[]), e.subject.clone(), e.name.clone()).await?;
+                without = true;
+            }
             if !(200..300).contains(&status) {
                 return Err(format!("The gateway refused the registration ({status}{}).", gateway_said(&answer)));
             }
@@ -630,7 +646,7 @@ pub async fn push_register<R: Runtime>(
             kept.push(Kept { me: e.me.clone(), gateway: gateway.clone(), relay: relay.clone(), endpoint: ep.endpoint, hash, at: kept_at(now, &answer) });
             crate::services::write_json(&path, &kept).map_err(|_| "The registration couldn't be kept.".to_string())?;
             tell_native(&app, &kept).await;
-            Ok(json!({ "status": "registered" }))
+            Ok(if without { json!({ "status": "registered", "signals": false }) } else { json!({ "status": "registered" }) })
         }
         PushOp::Unregister => {
             let i = had.ok_or("This device didn't register with that gateway.")?;
@@ -857,6 +873,12 @@ mod tests {
         let body: Value = serde_json::from_slice(&register_body(&e, &ep, &regs)).unwrap();
         assert_eq!(body["signals"], json!(regs));
         assert!(serde_json::from_slice::<Value>(&register_body(&e, &ep, &[])).unwrap().get("signals").is_none());
+        // an older gateway's refusal of a field it didn't know is asked again without signals; a real refusal stands
+        assert!(refused_for_signals(400, br#"{"error":"a registration is {endpoint, keys, relay, rooms, mentions, from}"}"#));
+        assert!(!refused_for_signals(400, br#"{"error":"signals is up to 8 {subject, signal, rooms}"}"#));
+        assert!(!refused_for_signals(400, br#"{"error":"a registration is {endpoint, keys, relay, rooms, mentions, from, signals?}"}"#));
+        assert!(!refused_for_signals(429, br#"{"error":"a registration is {endpoint, keys, relay, rooms, mentions, from}"}"#));
+        assert!(!refused_for_signals(400, b"not json"));
         // never more rooms than the gateway takes: 50 + 50, and a third signal of 50 is left out
         let wide = |gid: &str| SignalEntry { gid: gid.into(), signal: "for-you".into(), relay: Some("wss://relay.example".into()), rooms: Some((0..50).map(|i| format!("room{i}")).collect()), ..list[0].clone() };
         assert_eq!(relay_signals(&[wide("YWFhYWFhYWFh"), wide("YmJiYmJiYmJi"), wide("Y2NjY2NjY2Nj")], "https://push.example/", "wss://relay.example").len(), 2);

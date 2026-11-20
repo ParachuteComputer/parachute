@@ -11,6 +11,7 @@
 // own record follows (`live`): read from their vault each time, so their changes show; their code still asks.
 // Pure, but for nothing: every reader here takes what it needs.
 import { plain, stripExt } from "../applet/contract";
+import { APP_LEVEL, tooNew } from "../applet/level";
 import { askedOf, stricterAsked, type Asked } from "./levelRules";
 
 export const APP_TAG = "parachute-app";
@@ -50,13 +51,15 @@ const line = (x: unknown, max: number): x is string => typeof x === "string" && 
 const hubOk = (x: unknown): x is string => typeof x === "string" && x.length <= 300 && /^https?:\/\/[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?$/.test(x);
 const only = (o: Record<string, unknown>, keys: string[]) => Object.keys(o).every((k) => keys.includes(k));
 
+/** A place on the bar, the home, a hidden one: a key it doesn't know (a newer app's) is left out, not the place. */
 export function placeOf(x: unknown): Place | null {
-  if (!plain(x) || !only(x, ["hub", "vault", "applet"])) return null;
+  if (!plain(x)) return null;
   if (typeof x.vault !== "string" || !VAULT.test(x.vault) || !line(x.applet, 300) || x.applet.includes("*")) return null;
   if (x.hub !== undefined && !hubOk(x.hub)) return null;
   return { vault: x.vault, applet: x.applet, ...(x.hub !== undefined ? { hub: x.hub as string } : {}) };
 }
-/** One applet, every applet in a vault, or every vault on a named hub. No "every hub", no "this applet in every vault". */
+/** One applet, every applet in a vault, or every vault on a named hub. No "every hub", no "this applet in every vault".
+ *  Strict: a key it doesn't know might narrow it, so such a source is left out (a narrower app). The same for `opens`. */
 export function sourceOf(x: unknown): Source | null {
   if (!plain(x) || !only(x, ["hub", "vault", "applet"])) return null;
   if (x.hub !== undefined && !hubOk(x.hub)) return null;
@@ -73,10 +76,14 @@ function opensOf(x: unknown): OpensChoice | null {
 }
 const list = <T>(x: unknown, max: number, f: (y: unknown) => T | null): T[] => (Array.isArray(x) ? x.slice(0, max).map(f).filter((y): y is T => !!y) : []);
 
+/** Was this app record made for a newer Parachute (`needs` above this build's level, or a later contract: level.ts)?
+ *  Then it isn't read here at all: the device opens the next app it can and says to update (homeSettings appNewer). */
+export const newerApp = (raw: unknown, level = APP_LEVEL): boolean => plain(raw) && (tooNew(raw.needs, level) || (typeof raw.contract === "number" && raw.contract > 1));
+
 /** An app record's `app` field, read strictly where a mistake would widen what is offered, kindly elsewhere: a
- *  source or place that doesn't parse is left out, never the rest. null when it isn't an app at all. */
-export function appOf(raw: unknown, path: string | null, noteId: string | null): App | null {
-  if (!plain(raw) || raw.contract !== 1 || typeof raw.id !== "string" || !ID.test(raw.id) || raw.id.length > 40) return null;
+ *  source or place that doesn't parse is left out, never the rest. null when it isn't an app at all, or is newer. */
+export function appOf(raw: unknown, path: string | null, noteId: string | null, level = APP_LEVEL): App | null {
+  if (!plain(raw) || raw.contract !== 1 || newerApp(raw, level) || typeof raw.id !== "string" || !ID.test(raw.id) || raw.id.length > 40) return null;
   // the id is the last part of its path, so two records can't both claim one app
   if (path !== null && stripExt(path) !== `${APP_FOLDER}${raw.id}`) return null;
   const live = plain(raw.live) && hubOk(raw.live.hub) && typeof raw.live.vault === "string" && VAULT.test(raw.live.vault) && line(raw.live.path, 300)
@@ -158,6 +165,7 @@ export function recordOf(app: App): Record<string, unknown> {
  *  never less careful than the person's own record asks: each level the stricter of the two (shell/levelRules.ts). A
  *  device's levels are raised by the open app's record and never lowered by one (src-tauri/src/levels.rs). */
 export function followed(own: App, raw: unknown, theirs: Record<string, unknown>): Record<string, unknown> {
-  return { ...theirs, contract: 1, id: own.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: own.live,
+  // a later contract of theirs stays as it is, so this app sees it as made for a newer Parachute (newerApp), not as 1
+  return { ...theirs, contract: typeof theirs.contract === "number" && theirs.contract > 1 ? theirs.contract : 1, id: own.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: own.live,
     ...(Object.keys(own.security).length || theirs.security !== undefined ? { security: stricterAsked(own.security, askedOf(theirs.security)) } : {}) };
 }
