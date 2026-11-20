@@ -141,9 +141,11 @@ test("5,000 records: a type of 2,000 as a table, the next page, a sort, a record
     await t.getByRole("columnheader", { name: "priority" }).getByRole("button").click();
     await t.getByRole("columnheader", { name: "priority" }).getByRole("button").click();
     await expect(t.getByRole("row").nth(1).getByRole("cell").nth(2)).toHaveText("5");
-    await t.getByRole("rowheader").nth(1).getByRole("button").click();
+    // the first row (priority 5, willow orchard 1999) is "doing": the shot after shows it "done"
+    await t.getByRole("rowheader").nth(0).getByRole("button").click();
     const rec = v(m).getByRole("article");
     await expect(rec.getByText("Fields")).toBeVisible();
+    await expect(rec.getByLabel("status")).toHaveValue("doing");
     await shot(m, "mac-04-record");
     await rec.getByLabel("status").selectOption("done");
     await expect(v(m).getByText(/Saved|done/).first()).toBeVisible();
