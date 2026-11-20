@@ -51,7 +51,7 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
   Settings, under its Parachute, and an applet asks your hub for its vault when you allow it
   ([docs/design/SCOPES.md](docs/design/SCOPES.md)). The list of your Parachutes lives in your home vault
   ([docs/design/ONE-SIGN-IN.md](docs/design/ONE-SIGN-IN.md)). Browse, search and read notes.
-- **Applets.** An applet is one note in your vault: its metadata is the manifest (what it may read and write, which
+- **Applets.** An applet is one record in your vault: its fields (`fields.applet`, `metadata.applet` on a hub before 0.9) are the manifest (what it may read and write, which
   kinds of note it opens), its content is the code: one TSX or JSX module, or an HTML page. Any chat AI with the
   Parachute MCP can make one by writing that note: see [docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md). It runs
   sealed, only after you allow it, and changed code asks again.
@@ -69,7 +69,8 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
 - **Servers, through the app.** An applet can name the servers it talks to (a Nostr relay, a mail gateway, a Matrix
   homeserver); its card says each one and what the app will sign there as you. The app talks to them for it and signs
   with your key, which the applet never holds ([docs/design/SERVICES.md](docs/design/SERVICES.md)). `applets/` has
-  the first ones: Rooms (a Buzz relay), Mail (a mail gateway), Journal and Matrix; `scripts/install-applets.ts` puts
+  the first ones: Home, Capture, Journal, Rooms (a Buzz relay), Mail (a mail gateway), Matrix, Claude accounts and an
+  area applet; `scripts/install-applets.ts` puts
   them into a vault and lays out the bar around them. What they cover of the Uni app: [docs/PARITY.md](docs/PARITY.md).
 
 It runs on Android and desktop (Tauri 2); releases are built for Android and Apple Silicon Macs
