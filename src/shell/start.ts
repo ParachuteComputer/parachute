@@ -4,7 +4,9 @@
 //   - the person's Allow for its code (its card, as for any applet), and
 //   - their choice of it as home, made here (a tap: the long-press "Open on start", or Open / Allow on the screen a start
 //     led to).
-// Otherwise the applet's screen shows its card, or waits, stopped, with Open; that tap is the choice.
+// Otherwise the applet's screen shows its card, or waits, stopped, with Open; that tap is the choice (an Allow that goes
+// on to the hub's page carries it, and it is recorded only when the hub says yes). A first sign-in on a device counts as
+// a start (App.tsx useStart), even before the device's self-test has passed.
 import { gateNow, whenGateKnown } from "../applet/selftest/run";
 import { barNow, readSettings } from "./homeSettings";
 import { listVaults } from "../vault/store";
@@ -38,10 +40,12 @@ export function takeStart(path: string): { chosen: boolean; vault: string; noteI
 
 /** Where the app opens: the home applet, or null for the launcher. Waits for the settings note a moment. Call
  *  `go` only if the app is still where it started (a link from outside may have moved it meanwhile). */
-export async function startPlace(): Promise<{ href: string; go(): void } | null> {
+export async function startPlace(o: { firstRun?: boolean } = {}): Promise<{ href: string; go(): void } | null> {
   arrival = null;
   await Promise.race([Promise.all([readSettings(), whenGateKnown()]), new Promise((r) => setTimeout(r, START_WAIT_MS))]);
-  if (gateNow() === "closed") return null;
+  // a first sign-in goes to the home even while the self-test hasn't passed yet: its screen says applets are off until
+  // it does, and shows the card then
+  if (gateNow() === "closed" && !o.firstRun) return null;
   const s = barNow().start;
   // a home in someone else's vault (an agent can write the settings note) never opens by itself
   const rec = s ? listVaults().find((v) => v.key === s.vault) : null;

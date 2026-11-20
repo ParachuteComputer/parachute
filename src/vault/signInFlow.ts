@@ -15,6 +15,7 @@ import { holdHome, homeVault, setHome } from "../shell/frameSource";
 import { deviceGrants } from "../applet/grants";
 import { noteOwnWrite } from "./writeAsk";
 import { grantExpiry } from "../applet/grant";
+import { chooseStart } from "../shell/start";
 import type { TokenResponse } from "@openparachute/surface-client";
 
 /** Before the hub's consent, what only the person can say: on a hub they run (it lists every vault on it), which vaults
@@ -165,6 +166,7 @@ export async function finishStep(code: string, state: string): Promise<Next> {
     if (level === "write" || pending.level !== "write") {
       const a = pending.allow;
       deviceGrants().grant(a.subject, a.scope, a.html, a.mode, grantExpiry, a.asked);
+      if (a.home) chooseStart(a.home.vault, a.home.noteId);
     } else throw new Error(`Your hub gave Parachute read only in ${vault}, so it can't let this applet change notes there. Nothing was allowed.`);
   }
   return { done: rec, parachute: p, ...(pending.back ? { back: pending.back } : {}), signIn: pending.why === "signin", firstHome: !hadHome && !!pending.home, solo: !!pending.marks?.solo, why: pending.why };

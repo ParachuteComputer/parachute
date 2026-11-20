@@ -476,7 +476,10 @@ export default function AppletScreen() {
           const need = appletLevel(entry.manifest);
           if (!covers(heldLevel(rec), need)) {
             setHubError(null);
-            void askVault(rec, need, "allow", `${location.pathname}${location.search}`, { subject, scope: keys.scope, html: keys.html, mode: mode === "approved-code" ? "approved-code" : "sealed", asked })
+            void askVault(rec, need, "allow", `${location.pathname}${location.search}`, { subject, scope: keys.scope, html: keys.html, mode: mode === "approved-code" ? "approved-code" : "sealed", asked,
+              // tapped on the screen a start led to: their choice of it as home, recorded with the grant when the hub says
+              // yes (the page goes to the hub and comes back as another)
+              ...(atStart && !atStart.chosen ? { home: { vault: atStart.vault, noteId: atStart.noteId } } : {}) })
               .then((url) => window.location.assign(url), (e: unknown) => setHubError(e instanceof Error ? e.message : "Your hub didn't answer."));
             return;
           }

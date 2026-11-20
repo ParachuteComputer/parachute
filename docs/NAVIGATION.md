@@ -45,8 +45,10 @@ Any applet in a vault of yours can be your **home** (an applet in someone else's
 [OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)): it opens when the app starts. With no home, the app opens on the list. An applet opens on start by itself only when two things hold on this device: you allowed its code
 (its card), and you chose it as home here (the long-press, or the Open button the app shows the first time). If the
 choice came from somewhere else (your agent wrote it, or a frame of your own set it), the first start shows the
-applet's card or its Open button, and your tap is the choice. Once chosen here, your home runs whenever you come back
-to it (Back, or its place on the bar).
+applet's card or its Open button, and your tap is the choice (also when Allow goes on to your hub's page and back). A
+first sign-in on a new device counts as a start: once it is done, the app opens your home there, not the list (until
+the device's self-test has passed, that screen says applets are off, and shows the card once it has). Once
+chosen here, your home runs whenever you come back to it (Back, or its place on the bar).
 
 A home applet is an ordinary applet that asks the app for a little more: the newest notes across your vaults, what is
 on your bar, and a way to take you somewhere on a tap (an applet at a room too: `?room=…&event=…`, the launch a
