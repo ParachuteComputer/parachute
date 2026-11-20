@@ -27,7 +27,9 @@ export type RelayService = { id: string; kind: "nostr-relay"; url: string; publi
 /** A request whose JSON body's `field` is one of `ops` is signed with the approval key, and only with it; the everyday
  *  key signs only a JSON body whose `field` is a string not in `ops` (docs/design/KEYRING.md). */
 export type Approve = { field: string; ops: string[] };
-export type HttpService = { id: string; kind: "http"; url: string; auth: HttpAuth; approve?: Approve };
+/** `join`: ops that ask to join a private network, signed as you only after this device's join level (the passcode
+ *  and the unlock, by default: docs/design/KEYRING.md "Joining a network"). */
+export type HttpService = { id: string; kind: "http"; url: string; auth: HttpAuth; approve?: Approve; join?: Approve };
 export type Service = RelayService | HttpService;
 
 /** The kinds an applet may ask the shell to sign, each with the words its card uses. Any other is refused. */
@@ -144,20 +146,26 @@ function parseOne(x: unknown, isHub: (origin: string) => boolean): Parsed<Servic
     return { ok: true, value: s };
   }
   if (x.kind === "http") {
-    if (!hasOnly(x, ["id", "kind", "url", "auth", "approve"])) return fail(`${id}: an http service is {id, kind, url, auth?, approve?}`);
+    if (!hasOnly(x, ["id", "kind", "url", "auth", "approve", "join"])) return fail(`${id}: an http service is {id, kind, url, auth?, approve?, join?}`);
     const u = normalUrl(x.url, ["https", "http"], true);
     if (!u.ok) return fail(`${id}: ${u.error}`);
     const auth = x.auth === undefined ? "none" : x.auth;
     if (typeof auth !== "string" || !(HTTP_AUTHS as readonly string[]).includes(auth)) return fail(`${id}: auth is ${HTTP_AUTHS.join(", ")}`);
-    let approve: Approve | undefined;
-    if (x.approve !== undefined) {
-      if (auth !== "nip98") return fail(`${id}: approve needs auth nip98 (the approval key signs those requests)`);
-      const a = x.approve;
-      if (!plain(a) || !hasOnly(a, ["field", "ops"]) || typeof a.field !== "string" || !/^[a-z][a-zA-Z0-9_]{0,39}$/.test(a.field)) return fail(`${id}: approve is {field, ops}: the JSON body's field that names the op`);
-      if (!Array.isArray(a.ops) || !a.ops.length || a.ops.length > LIMITS.ops || new Set(a.ops).size !== a.ops.length || !a.ops.every((o) => typeof o === "string" && /^[a-z][a-z0-9._-]{0,39}$/.test(o))) return fail(`${id}: approve.ops is a short list of op names`);
-      approve = { field: a.field, ops: [...a.ops].sort() };
-    }
-    const s: HttpService = { id, kind: "http", url: u.value.href, auth: auth as HttpAuth, ...(approve ? { approve } : {}) };
+    const opsLine = (name: "approve" | "join"): { ok: true; value?: Approve } | { ok: false; error: string } => {
+      const a = x[name];
+      if (a === undefined) return { ok: true };
+      if (auth !== "nip98") return { ok: false, error: `${id}: ${name} needs auth nip98 (your key signs those requests)` };
+      if (!plain(a) || !hasOnly(a, ["field", "ops"]) || typeof a.field !== "string" || !/^[a-z][a-zA-Z0-9_]{0,39}$/.test(a.field)) return { ok: false, error: `${id}: ${name} is {field, ops}: the JSON body's field that names the op` };
+      if (!Array.isArray(a.ops) || !a.ops.length || a.ops.length > LIMITS.ops || new Set(a.ops).size !== a.ops.length || !a.ops.every((o) => typeof o === "string" && /^[a-z][a-z0-9._-]{0,39}$/.test(o))) return { ok: false, error: `${id}: ${name}.ops is a short list of op names` };
+      return { ok: true, value: { field: a.field, ops: [...(a.ops as string[])].sort() } };
+    };
+    const a = opsLine("approve"), j = opsLine("join");
+    if (!a.ok) return fail(a.error);
+    if (!j.ok) return fail(j.error);
+    const approve = a.value, join = j.value;
+    // one op, one meaning (services.rs refuses the same)
+    if (approve && join && (approve.field !== join.field || approve.ops.some((o) => join.ops.includes(o)))) return fail(`${id}: approve and join name their ops in one field, each op in one of them`);
+    const s: HttpService = { id, kind: "http", url: u.value.href, auth: auth as HttpAuth, ...(approve ? { approve } : {}), ...(join ? { join } : {}) };
     if (isHub(originOf(s))) return fail(`${id}: that address is a Parachute hub, which no applet reaches as a service`);
     return { ok: true, value: s };
   }
@@ -207,6 +215,7 @@ export type LineOptions = {
 };
 export const EVERYDAY = "With your everyday key: ";
 export const APPROVAL = "High risk. With your approval key: ";
+export const JOIN = "High risk. With your key: ";
 
 export function serviceLines(services: readonly Service[], opts: LineOptions = {}): { text: string; stress: boolean }[] {
   const out: { text: string; stress: boolean }[] = [];
@@ -237,6 +246,7 @@ export function serviceLines(services: readonly Service[], opts: LineOptions = {
         : s.auth === "token" ? { text: `Use a token you give it for ${at}`, stress: true }
         : { text: `Send requests to ${at}`, stress: false });
       if (s.approve) out.push({ text: `${APPROVAL}send ${joinWords(s.approve.ops)} requests to ${at}${same}`, stress: true });
+      if (s.join) out.push({ text: `${JOIN}ask ${at} to let this device join a private network (${joinWords(s.join.ops)}), each time after what Settings → Security asks for joining (your passcode and unlock, unless you changed it)`, stress: true });
     }
     out.push({ text: `What it reads here could reach ${at}`, stress: true });
   }
@@ -251,7 +261,8 @@ export const servicesKeyPart = (services: readonly Service[]) =>
         ...(s.rooms?.length ? { rooms: s.rooms.map((r) => `${r.id}/${r.name}`).sort() } : {}),
         ...(s.approvals ? { approvals: [...s.approvals.from].sort() } : {}),
         ...(s.notify ? { notify: { mentions: s.notify.mentions, from: [...s.notify.from].sort(), ...(s.notify.gateway ? { gateway: s.notify.gateway } : {}) } } : {}) }
-    : { id: s.id, kind: s.kind, url: s.url, auth: s.auth, ...(s.approve ? { approve: { field: s.approve.field, ops: [...s.approve.ops].sort() } } : {}) })).sort((a, b) => a.id.localeCompare(b.id));
+    : { id: s.id, kind: s.kind, url: s.url, auth: s.auth, ...(s.approve ? { approve: { field: s.approve.field, ops: [...s.approve.ops].sort() } } : {}),
+        ...(s.join ? { join: { field: s.join.field, ops: [...s.join.ops].sort() } } : {}) })).sort((a, b) => a.id.localeCompare(b.id));
 
 // ── the checks on each call ──
 

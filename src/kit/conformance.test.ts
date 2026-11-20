@@ -10,9 +10,17 @@ const dir = join(process.cwd(), "applets");
 const shipped = readdirSync(dir).filter((f) => /\.(tsx|jsx)$/.test(f));
 
 /** Where an applet keeps something of its own on purpose, and why. Each must still be needed (the last test). */
-const EXCEPTIONS: Record<string, Partial<Record<string, string>>> = {};
+const EXCEPTIONS: Record<string, Partial<Record<string, string>>> = {
+  "room.tsx": {
+    lists: "the @-name picker under the composer is a listbox, chosen with the arrow keys, not rows",
+    status: "Uni's turn line (what Uni is doing, and Stop) and the composer's line (who is typing, what wasn't sent) are live lines a screen reader follows",
+  },
+  "rooms.tsx": {
+    status: "a word about what the list shows (\"This is what you last saw…\") is said when it changes, not as a toast that goes",
+  },
+};
 /** Applets not moved onto the kit yet (T-476, a PR at a time): each must still go around it, so the list only shrinks. */
-const NOT_YET = new Set(["room.tsx", "rooms.tsx"]);
+const NOT_YET = new Set<string>([]);
 
 const said = (f: string) => check(readFileSync(join(dir, f), "utf8")).filter((x) => !EXCEPTIONS[f]?.[x.rule]);
 
@@ -88,6 +96,32 @@ const S = { fontSize: "var(--fs-small)" };
 const CSS = \`.when { font: 600 var(--fs-label) var(--sans); color: var(--muted); } .x { font: inherit; font-weight: 600; }\`;
 export default function A() { return <Page title="A"><Loading>Reading your rooms…</Loading><List rows={[{ title: "B", aside: when.short(Date.now()) }]} /></Page>; }
 const tags = { "#h": [room], "#e": [id] };`;
+
+// The simple app's own screens (Notes, a vault's notes, Connect) are drawn with the same parts: the same rules, less
+// the page (a screen of the app has the app's bar and its router, not an applet's Page) and what each names here.
+const SCREENS: Record<string, string[]> = {
+  "src/frame/views/NotesHome.tsx": ["status"], // the app record's notice is the app's own line, said when it shows
+  "src/frame/views/VaultView.tsx": ["lists"], // the vault's applets as chips, the app's own
+  "src/frame/views/NoteRows.tsx": ["lists"], // List's rows as router links: the frame moves by its router, an applet can't
+  "src/views/Connect.tsx": [],
+};
+describe("the simple app's screens are drawn with the kit", () => {
+  it.each(Object.entries(SCREENS))("%s", (f, allowed) => {
+    const found = check(readFileSync(join(process.cwd(), f), "utf8")).filter((x) => x.rule !== "page" && !allowed.includes(x.rule));
+    expect(found.map((x) => `${f}:${x.line} ${x.what} (use ${x.use}): ${x.text}`)).toEqual([]);
+  });
+});
+
+// The guide teaches the kit: its own code (each tsx block, and each record's body) is held to the same rules.
+const guide = readFileSync(join(process.cwd(), "docs", "WRITE-AN-APPLET.md"), "utf8");
+const guideCode = [...guide.matchAll(/```tsx\n([\s\S]*?)```/g)].map((m) => m[1])
+  .concat([...guide.matchAll(/^  "body": ("(?:[^"\\]|\\.)*")$/gm)].map((m) => JSON.parse(m[1]) as string));
+describe("the guide", () => {
+  it("has code to check", () => expect(guideCode.length).toBeGreaterThan(4));
+  it.each(guideCode.map((c, i) => [i, c] as const))("its code %i goes around the kit nowhere", (_i, c) => {
+    expect(check(c).map((x) => `${x.line} ${x.what} (use ${x.use}): ${x.text}`)).toEqual([]);
+  });
+});
 
 describe("the check", () => {
   it("has a planted violation for every rule, and no other", () => expect(Object.keys(PLANTED).sort()).toEqual(RULES.map((r) => r.id).sort()));

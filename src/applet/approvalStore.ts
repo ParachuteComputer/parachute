@@ -10,7 +10,7 @@ import { clientFor } from "../vault/client";
 import { isMine } from "../vault/whose";
 import { originOf, type VaultRecord } from "../vault/store";
 import { stripExt } from "./contract";
-import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, approvalContent, approvalPath, checkKeyList, decide, dOf, trustedKeys, type Decision, type KeyList, type SignedEvent, type Subject } from "./approvals";
+import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, approvalContent, approvalPath, checkApproval, checkKeyList, decide, dOf, revokeFloor, trustedKeys, type Decision, type KeyList, type SignedEvent, type Subject } from "./approvals";
 
 const SEEN_KEY = "parachute.approvals.seen.v1";
 const ANCHOR_KEY = "parachute.anchor.v1";
@@ -110,6 +110,55 @@ export async function signApproval(o: { subject: Subject; name: string; approved
   return { ev, written };
 }
 
+/** Revoke, wherever the person taps it (the applet's menu, Settings): whatever happens next, this device doesn't allow
+ *  the applet again from an approval made before now; and on a device with the person's key the approval is taken back
+ *  on every device (signed after the unlock, never the passcode). `applet`: its manifest id, or null when its note is
+ *  gone or unread, and the approval in the home vault says which it was. Returns what to tell the person when the
+ *  taking back went no further than this device, else null. */
+export async function takeBack(rec: Pick<VaultRecord, "issuer" | "vault">, record: string, name: string, applet: string | null, seen: number | null = null): Promise<string | null> {
+  const at = subjectOf(rec, record, applet ?? "");
+  raiseFloor(at, revokeFloor(Date.now(), seen, floorOf(at)));
+  if (!(await signsHere())) return null;
+  try {
+    const id = applet ?? await approvedApplet(at);
+    // nothing of this applet's was approved for every device: there is nothing to take back
+    if (id === null) return null;
+    const r = await signApproval({ subject: { ...at, applet: id }, name, approved: false, code: "", scope: "" });
+    return r.written ? null : "Stopped on this device. Your other devices keep running it until Parachute can change notes in your home vault.";
+  } catch (e) {
+    return `Stopped on this device only: ${e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message).replace(/\.$/, "") : "the taking back couldn't be signed"}.`;
+  }
+}
+
+/** Which applet the approvals kept for this record name: the newest that is the person's own (signed by a key that
+ *  counts, for the applet it says), so a row someone else wrote into the vault can't aim the taking back elsewhere.
+ *  Throws when the home can't be read. */
+async function approvedApplet(at: Subject): Promise<string | null> {
+  const home = homeVault();
+  if (!home) return null;
+  const trusted = await trustedNow();
+  let best: { n: number; applet: string } | null = null;
+  for (const r of await rowsFor(home, at)) {
+    const ev = r.metadata?.approval;
+    let said: unknown;
+    try { said = (JSON.parse(String((ev as { content?: unknown } | undefined)?.content)) as { subject?: { applet?: unknown } }).subject?.applet; } catch { continue; }
+    if (typeof said !== "string" || !said) continue;
+    const c = checkApproval(ev, { ...at, applet: said }, trusted, Date.now());
+    if (c.ok && (!best || c.content.n > best.n)) best = { n: c.content.n, applet: said };
+  }
+  return best?.applet ?? null;
+}
+
+/** The approvals kept in the home vault for a subject (the events as written; `decide` checks them). */
+export async function readApprovals(s: Subject): Promise<unknown[]> {
+  const home = homeVault();
+  if (!home) return [];
+  return (await rowsFor(home, s)).map((r) => r.metadata?.approval);
+}
+
+/** Keep a signed approval in the home vault, where the person's other devices read it. */
+export const writeApprovalEvent = (home: VaultRecord, s: Subject, name: string, ev: SignedEvent) => writeApproval(home, s, name, ev);
+
 async function writeApproval(home: VaultRecord, s: Subject, name: string, ev: SignedEvent): Promise<void> {
   const c = clientFor(home);
   const [was] = await rowsFor(home, s);
@@ -119,10 +168,10 @@ async function writeApproval(home: VaultRecord, s: Subject, name: string, ev: Si
 }
 
 /** What this device calls itself on an approval it signs. */
-function deviceName(): string {
+export function deviceName(): string {
   const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
   return /Android/i.test(ua) ? "Android" : /Mac/i.test(ua) ? "Mac" : /Linux/i.test(ua) ? "Linux" : /Windows/i.test(ua) ? "Windows" : "a device";
 }
 
-/** Whether this device asks a passcode before approving code. */
-export async function passcodeHere(): Promise<boolean> { const n = await nativeNow(); return n ? n.passcodeStatus().catch(() => false) : false; }
+/** Whether approving code here asks the passcode (this device's level for it, src-tauri/src/levels.rs). */
+export async function passcodeHere(): Promise<boolean> { const n = await nativeNow(); return n ? n.levelsStatus().then((s) => s.levels.code === "passcode", () => false) : false; }

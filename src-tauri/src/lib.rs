@@ -10,6 +10,7 @@ pub mod door;
 mod files;
 pub mod key;
 pub mod keyring;
+pub mod levels;
 pub mod notify;
 pub mod pairing;
 pub mod saved;
@@ -67,7 +68,8 @@ fn signin_return<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
 #[cfg(target_os = "android")]
 pub(crate) mod android {
     pub struct KeyPluginHandle<R: tauri::Runtime>(pub tauri::plugin::PluginHandle<R>);
-    /// The device unlock and the app's leave-the-screen count (gen/android/.../UnlockPlugin.kt): keyring.rs.
+    /// The device unlock, the screen-off count and the idle lock's touches (gen/android/.../UnlockPlugin.kt):
+    /// keyring.rs, levels.rs.
     pub struct UnlockPluginHandle<R: tauri::Runtime>(pub tauri::plugin::PluginHandle<R>);
 }
 
@@ -124,6 +126,7 @@ pub fn run() {
         .manage(services::ServicesState::default())
         .manage(keyring::KeyringState::default())
         .manage(approve::PasscodeState::default())
+        .manage(levels::LevelsState::default())
         .manage(notify::NotifyState::default())
         .manage(notify::SignalState::default())
         .invoke_handler(tauri::generate_handler![
@@ -134,8 +137,13 @@ pub fn run() {
             saved::saved_get,
             saved::saved_put,
             approve::approval_sign,
-            approve::passcode_status,
             approve::passcode_set,
+            levels::levels_status,
+            levels::levels_raise,
+            levels::levels_lower,
+            levels::levels_adopt,
+            levels::idle_touch,
+            levels::idle_unlock,
             key::key_status,
             cards::svc_card_view,
             cards::svc_card_trust,

@@ -4,6 +4,7 @@
 // which holds for any date after 1973). Something that isn't a moment gives "" (or null from `parse`).
 //   when.time(t)    9:41 AM
 //   when.day(t)     Today · Yesterday · Monday, November 17 · Monday, November 17, 2025
+//   when.date(t)    Monday, November 17 (the year too when it isn't this one), whatever day it is
 //   when.short(t)   9:41 AM today · Yesterday · Mon this week · Nov 17 this year · Nov 17, 2025
 //   when.full(t)    Mon, Nov 17, 9:41 AM (the year too when it isn't this one)
 //   when.ago(t)     now · 5m · 3h · then as short()
@@ -43,6 +44,12 @@ function day(t: Moment, now = new Date()): string {
   const back = daysBack(d, now);
   if (back === 0) return "Today";
   if (back === 1) return "Yesterday";
+  return date(d, now);
+}
+
+function date(t: Moment, now = new Date()): string {
+  const d = parse(t);
+  if (!d) return "";
   return f(d.getFullYear() === now.getFullYear() ? { weekday: "long", month: "long", day: "numeric" } : { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(d);
 }
 
@@ -83,4 +90,4 @@ function path(t: Moment, seconds = false): string {
   return d ? `${d.getFullYear()}/${pad(d.getMonth() + 1)}-${pad(d.getDate())}/${pad(d.getHours())}-${pad(d.getMinutes())}${seconds ? `-${pad(d.getSeconds())}` : ""}` : "";
 }
 
-export const when = Object.freeze({ time, day, short, full, ago, stamp, path, parse });
+export const when = Object.freeze({ time, day, date, short, full, ago, stamp, path, parse });

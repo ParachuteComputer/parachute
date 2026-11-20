@@ -24,4 +24,9 @@ describe("saved.put", () => {
     await expect(createSavedModule({ all: async () => ({}), put: async () => "full" }).methods.put.run({ a: 1 }, {}, ctx)).rejects.toThrow(/full/);
     await expect(createSavedModule({ all: async () => ({}), put: async () => { throw new Error("disk"); } }).methods.put.run({ a: 1 }, {}, ctx)).rejects.toThrow(/couldn't be written/);
   });
+  // found in review (T-476): it was set as the object's prototype and lost, with no error
+  it("a key named __proto__ is a key like any other", () => {
+    const r = put.validate({ bytes: bytes('{"__proto__": {"a": 1}, "b": 2}') });
+    expect(r.ok && Object.keys(r.value as object).sort()).toEqual(["__proto__", "b"]);
+  });
 });

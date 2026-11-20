@@ -85,9 +85,14 @@ token the app holds now gets 403 on a write. Settings shows what the app holds o
 changes notes*), and **Read only** gives back write that no allowed applet needs (the person's own, or write held from
 an install before this change).
 
-What stays at the hub: the grant record. Core and Cloud remember the union of what this registration was ever granted,
-so allowing Journal again goes straight through without the hub's page. The token is dead; the memory of the yes is
-not. Proposal 2 ends that.
+What stays at the hub: on the released hubs (core 0.8, 0.9.0-pre.1), the grant record. They remember the union of what
+this registration was ever granted, so allowing Journal again goes straight through without the hub's page: the token
+is dead, the memory of the yes is not. Proposal 2 ends that, and is merged on both hubs' `next` (core #131, 11-19;
+Cloud #422, 11-20): there a revoke drops from this registration's grant each vault scope no live token of it still
+holds, so the hub asks again. Two limits, found in review (T-476): the trim is per registration, so on core a new
+registration under the same name still inherits an older one's grant (the last row of the table below); and revoking a refresh
+token the hub has already rotated past changes nothing there, so the app ends a token that comes back from a refresh
+after its sign-in was replaced itself (`refreshOnce`, `src/vault/client.ts`).
 
 Signing out of a vault (Settings) revokes its token, as before.
 
@@ -100,7 +105,7 @@ Signing out of a vault (Settings) revokes its token, as before.
 | `vault:<v>:read` alone | page, read-only token (write → 403) | the same | the same |
 | Widening read → write | a page with both lines | the same | the same |
 | Revoked token | the hub refuses its refresh at once; the vault refuses the access token within about a minute (it reads the hub's revocations; 40 s in CI) | refused at once (401) | listed in its revocation document; vaults refuse it within a minute |
-| Revoke drops the grant | no | no | no (Disconnect in Cloud's account page does) |
+| Revoke drops the grant | no | no in 0.9.0-pre.1; yes on `next` (core #131), per registration | no before Cloud #422 (Disconnect in Cloud's account page does); yes on its `next` |
 | A new registration with the same name and loopback return | inherits the grant: no page | the same | — (Cloud keeps per-app connections; a reconnect *replaces* the same app's earlier one) |
 
 The last row matters on reinstall: a hub that already granted "Parachute" everything (the old app) answers the new,
@@ -135,7 +140,7 @@ Nothing here changes the app record's open questions.
 2. **Revoking ends the grant too** (core, Cloud). When a client revokes a refresh token, the hub drops from that
    client's grant each vault scope the token carried that no other live token of the client still carries. Then
    "revoke" means the hub asks again next time, and the grant matches the tokens. (RFC 7009 lets a revocation end the
-   grant behind the token.) PRs: core and Cloud, `revoke-drops-grant`.
+   grant behind the token.) Merged to `next` on both: core #131, Cloud #422.
 3. **Cloud's replace box per device.** Count the app's loopback registrations on different devices as different
    installs, so one device's consent doesn't retire the other's.
 4. **Narrower than a vault**, per the 1.0 grants spec (core `docs/SPEC-1.0-grants.md` §5.3, §7.3): an applet's grant

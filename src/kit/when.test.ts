@@ -23,6 +23,7 @@ describe("when", () => {
     expect(when.day(at(18, 23, 59), now)).toBe("Yesterday");
     expect(when.day(at(17), now)).toMatch(/Tuesday/);
     expect(when.day(at(17, 9, 41, 2025), now)).toMatch(/2025/);
+    expect(when.date(at(19), now)).toMatch(/Thursday/);
   });
   it("short: the time today, Yesterday, the weekday this week, the date after", () => {
     expect(when.short(at(19), now)).toBe(when.time(at(19)));

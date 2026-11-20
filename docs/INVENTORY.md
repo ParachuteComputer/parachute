@@ -31,3 +31,12 @@ in this repo, so it moves when Uni rewrites it against the guide.
 | Voice capture | `voice.record` and its errors by hand: journal.tsx:98, capture.tsx:105, room.tsx:1000; the transcript marker and its reads again: journal.tsx:16-21 and :86-93, capture.tsx:14, :40, :80-87 | `Record`, `voiceNote`, `useTranscripts` |
 | Opening notes | `Link` with addresses gathered first (capture.tsx:70-75), `onOpen` (journal.tsx:77) | `link.open`, `onOpen` |
 | Storage | `storage` for what Rooms last showed (rooms.tsx:14): one way already | `storage`, `useSaved` |
+
+## Where it stands (11-20)
+
+Every applet in `applets/` is written on the kit and the check holds it (`npm test`): Journal and Capture (#68), Mail,
+Area, Accounts, Matrix (#72), Rooms and its room view (#75), Home and Today (written on the kit from the start, #73).
+The simple app's screens (Notes, a vault's notes, Connect) are drawn with the same parts and held to the same rules,
+less the page. What an applet keeps of its own is named, with why, in `EXCEPTIONS` (`src/kit/conformance.test.ts`):
+Room's @-name listbox and its live lines (Uni's turn, the composer's), and Rooms' note about what the list shows. The
+guide's own examples are checked too. Ideas lives only in a vault (`playground`); it moves when it is next rewritten.

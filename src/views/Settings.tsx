@@ -16,10 +16,12 @@ import ThemeSettings from "./ThemeSettings";
 import ServicesSettings from "./ServicesSettings";
 import { forgetApplets } from "../applet/useApplets";
 import { deviceGrants, subjectOf } from "../applet/grants";
-import { grantInVault } from "../applet/embeds";
+import { grantInVault, isEmbedSubject } from "../applet/embeds";
+import { forgetSaved } from "../shell/saved";
 import KeySettings from "../key/KeySettings";
 import KeyringSettings from "../key/KeyringSettings";
 import ApprovalSettings from "../key/ApprovalSettings";
+import SecuritySettings from "../key/SecuritySettings";
 import NotifySettings from "./NotifySettings";
 import { AskWhose, WhoseLine } from "./Whose";
 import { useParachutes } from "../shell/parachutes";
@@ -29,8 +31,9 @@ import { dismissVault, newVaultsOn, newVaultsRev, startAddVault, subscribeNewVau
 import AppChoice from "./AppChoice";
 import { appletsNeedingWrite, forgetOwnWrite, giveBack, heldLevel } from "../vault/reach";
 
-/** Signing out of a vault ends what its applets were allowed on this device too, and the embeds on its pages or from it. */
-const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (const s of g.subjects()) if (grantInVault(s, subjectOf(key, ""), key)) g.revoke(s); };
+/** Signing out of a vault ends what its applets were allowed on this device too, and the embeds on its pages or from it;
+ *  what those applets saved here (drafts) goes with them. */
+const revokeVaultGrants = (key: string) => { const g = deviceGrants(); for (const s of g.subjects()) if (grantInVault(s, subjectOf(key, ""), key)) { g.revoke(s); if (!isEmbedSubject(s)) forgetSaved(s); } };
 
 /** What a vault leaves on this device, gone with it: its client, its applets' grants and the embeds from it, its
  *  "Always" choices, its frame, its home applet, its settings and theme. */
@@ -115,6 +118,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
       <AppChoice />
       <ServicesSettings />
       <KeySettings />
+      <SecuritySettings />
       <ApprovalSettings />
       <KeyringSettings />
       <NotifySettings />

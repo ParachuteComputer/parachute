@@ -8,6 +8,32 @@ import { onScreen } from "../shell/appDeps";
 
 type Asking = { view: SecretView; done: (value: string | null) => void };
 type Trusting = { applet: string; key: string; done: (name: string | null) => void };
+type Coding = { what: string; wrong: string | null; done: (code: string | null) => void };
+
+/** This device's passcode, asked by the shell over the applet when the level of what it asks says so
+ *  (src-tauri/src/levels.rs). Rust checks it; the applet never sees it. The device unlock follows. */
+export function PasscodeSheet({ c }: { c: Coding }) {
+  const [code, setCode] = useState("");
+  return (
+    <div className="sheet-scrim sheet-over-frames" role="presentation">
+      <section className="sheet" role="dialog" aria-modal="true" aria-label="Your passcode">
+        <h2>Your passcode</h2>
+        <p>{c.what}</p>
+        <form onSubmit={(e) => { e.preventDefault(); if (code) { const x = code; setCode(""); c.done(x); } }}>
+          <label className="secret-field">
+            <span className="quiet">This device's passcode, then its unlock</span>
+            <input type="password" value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" autoFocus aria-label="Your passcode" />
+          </label>
+          {c.wrong && <p className="error" role="alert">{c.wrong}</p>}
+          <div className="grant-actions">
+            <button type="button" className="quiet-button" onClick={() => { setCode(""); c.done(null); }}>Cancel</button>
+            <button type="submit" className="primary" disabled={!code}>Continue</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
 
 /** Whether to trust a key for approvals on this device, asked by the shell (never the applet's words): which applet
  *  shows a card signed by it, the whole key, and the name the person gives it. The device unlock follows (Rust). */
@@ -85,10 +111,11 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
   const tap = useTapOnce(frame);
   const [asking, setAsking] = useState<Asking | null>(null);
   const [trusting, setTrusting] = useState<Trusting | null>(null);
+  const [coding, setCoding] = useState<Coding | null>(null);
   const [line, setLine] = useState<string | null>(null);
   useEffect(() => { if (!line) return; const t = setTimeout(() => setLine(null), 6000); return () => clearTimeout(t); }, [line]);
   // an open sheet answers "cancelled" when the screen goes
-  const open = useRef<Asking | Trusting | null>(null);
+  const open = useRef<Asking | Trusting | Coding | null>(null);
   useEffect(() => () => { open.current?.done(null); }, []);
   const shell: Shell = {
     tap,
@@ -108,10 +135,18 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
       open.current = t;
       setTrusting(t);
     }),
+    passcode: ({ what, wrong }) => new Promise((done) => {
+      const f = frame();
+      if (open.current || !f || !onScreen(f)) { done(null); return; }
+      const c = { what, wrong, done: (x: string | null) => { open.current = null; setCoding(null); done(x); } };
+      open.current = c;
+      setCoding(c);
+    }),
   };
   const ui = <>
     {asking && <SecretSheet asking={asking} onDone={asking.done} />}
     {trusting && <TrustSheet t={trusting} />}
+    {coding && <PasscodeSheet key={`${coding.wrong ?? ""}`} c={coding} />}
     {line && <p className="shell-line" role="status">{line}</p>}
   </>;
   // the screen hid (kept running, shell/kept.tsx): an open sheet answers "cancelled", as when the screen goes

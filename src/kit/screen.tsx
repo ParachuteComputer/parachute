@@ -150,7 +150,7 @@ export function Search({ label, placeholder, value, onChange, onSearch, live }: 
   const go = useRef(onSearch);
   go.current = onSearch;
   // what was last searched: a pause in typing searches only for something new (Enter always searches)
-  const last = useRef("");
+  const last = useRef((value ?? "").trim());
   const search = (t: string) => { last.current = t.trim(); go.current(last.current); };
   useEffect(() => {
     if (live === undefined) return;
@@ -169,9 +169,10 @@ export function Search({ label, placeholder, value, onChange, onSearch, live }: 
  *  chat, Enter alone on a computer, Shift Enter a new line). Buttons of your own (`children`) sit beside the action. `line` lays
  *  it out as one line that grows as it is written in (a chat's composer). The text is yours (`value`, `onChange`):
  *  keep a draft with useSaved. No form submits (a sealed frame has none). */
-export function Write({ label, labelled, value, onChange, placeholder, onSend, send = "Save", busy, enter = "newline", line, maxLength, inputRef, onKeyDown, children }: {
+export function Write({ label, labelled, value, onChange, placeholder, onSend, send = "Save", sendLabel, canSend, busy, enter = "newline", line, maxLength, inputRef, onKeyDown, children }: {
   label: string; /** the label shown above the box, as a Field's (else it is only said to a screen reader) */ labelled?: boolean; value: string; onChange: (v: string) => void; placeholder?: string;
-  onSend?: () => void | Promise<unknown>; send?: ReactNode; busy?: boolean; enter?: "newline" | "send"; line?: boolean;
+  onSend?: () => void | Promise<unknown>; send?: ReactNode; /** what a screen reader calls the action, when `send` is short */ sendLabel?: string;
+  /** whether there is something to send (a file with no words); else, whether there are words */ canSend?: boolean; busy?: boolean; enter?: "newline" | "send"; line?: boolean;
   maxLength?: number; inputRef?: Ref<HTMLTextAreaElement>; onKeyDown?: (e: KeyboardEvent<HTMLTextAreaElement>) => void; children?: ReactNode;
 }) {
   const own = useRef<HTMLTextAreaElement | null>(null);
@@ -181,7 +182,8 @@ export function Write({ label, labelled, value, onChange, placeholder, onSend, s
   };
   // a line grows with what is in it, up to a few lines, then scrolls
   useEffect(() => { const el = own.current; if (!line || !el) return; el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight + 2, 9 * 24)}px`; }, [value, line]);
-  const can = !!onSend && !busy && !!value.trim();
+  const something = canSend ?? !!value.trim();
+  const can = !!onSend && !busy && something;
   const keys = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     onKeyDown?.(e);
     if (e.defaultPrevented || e.key !== "Enter" || e.nativeEvent.isComposing || e.keyCode === 229) return;
@@ -194,7 +196,7 @@ export function Write({ label, labelled, value, onChange, placeholder, onSend, s
   const id = useId();
   const box = <textarea ref={setRef} id={id} className="pa-write-box" aria-label={labelled && !line ? undefined : label} placeholder={placeholder} value={value} maxLength={maxLength} rows={line ? 1 : undefined}
     onChange={(e) => onChange(e.target.value)} onKeyDown={keys} />;
-  const action = onSend && <Button kind="primary" className="pa-write-send" busy={busy} disabled={!value.trim()} onClick={() => void onSend()}>{send}</Button>;
+  const action = onSend && <Button kind="primary" className="pa-write-send" busy={busy} disabled={!something} aria-label={sendLabel} onClick={() => void onSend()}>{send}</Button>;
   if (line) return <div className="pa-write pa-line">{children}{box}{action}</div>;
   return <div className="pa-write">{labelled && <label className="pa-field-label" htmlFor={id}>{label}</label>}{box}{(action || children) && <div className="pa-write-row">{action}{children}</div>}</div>;
 }

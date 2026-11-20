@@ -88,6 +88,10 @@ test("who a message is for: a mention or a listened-for author, in a room they a
   assert.equal(matches(msg(), relay, [reg({ rooms: ["garden"] })], members).length, 1);
   assert.equal(matches(msg(), "wss://elsewhere.example", [reg()], members).length, 0, "another relay");
   assert.equal(matches(msg({ tags: [["h", "garden"]] }), relay, [reg()], members).length, 0, "not named");
+  // found in review (T-476): the relay takes a post in an open room from a key that isn't its member. Naming people
+  // there notified each of them and added to their badge, for anyone the relay admits
+  assert.equal(matches(msg({ pubkey: "f".repeat(64) }), relay, [reg()], members).length, 0, "named by someone the room doesn't list: told nothing");
+  assert.equal(matches(msg({ pubkey: "f".repeat(64), tags: [["h", "garden"]] }), relay, [reg({ from: ["f".repeat(64)] })], members)[0]?.push.why, "from", "an author they chose to hear still reaches them");
   const fromB = matches(msg({ tags: [["h", "garden"]] }), relay, [reg({ mentions: false, from: ["b".repeat(64)] })], members);
   assert.equal(fromB[0]?.push.why, "from");
   const many = [["h", "garden"], ...Array.from({ length: MAX_MENTIONS + 1 }, (_, i) => ["p", i === 0 ? "a".repeat(64) : i.toString(16).padStart(64, "0")])];
@@ -286,6 +290,41 @@ test("one address can't drain the budget everyone shares, with fresh keys or unr
   const body = JSON.stringify({ endpoint: "https://ntfy.example/real?up=1", keys: device().keys, relay, rooms: null, mentions: true, from: [] });
   assert.equal(await send("register", generateSecretKey(), "5.6.7.8", body), 200, "someone else still gets in");
   } finally { g.close(); }
+});
+
+// Found in review (T-476): behind a proxy that isn't trusted for X-Forwarded-For (compose's default), every phone has
+// one address. One client with fresh keys (they cost nothing) spent that address's budget, and every person the gateway
+// already serves got 429 on their counts and renewals.
+test("fresh keys from an address can't lock out the people the gateway already serves there", async () => {
+  const g = createGateway({ url: "http://push.test/", relays: [relay], secret: generateSecretKey(), file: null, allowLoopback: false, trustProxy: false, log: () => {} });
+  const at = `http://127.0.0.1:${await listenFree(g.server)}`;
+  try {
+    const send = async (route: string, sk: Uint8Array, body: string) =>
+      (await fetch(`${at}/${route}`, { method: "POST", headers: { authorization: nip98(sk, `http://push.test/${route}`, "POST", body) }, body })).status;
+    // a person the gateway serves: a registration a member list confirmed
+    const sk = generateSecretKey(), me = getPublicKey(sk);
+    g.registry.put(reg({ pubkey: me }), now());
+    g.registry.judge(relay, new Set([me]), new Set([me]));
+    // the flood, from the one address everyone has here
+    const statuses: number[] = [];
+    for (let i = 0; i < 70; i++) statuses.push(await send("unregister", generateSecretKey(), JSON.stringify({ relay, endpoint: `https://ntfy.example/x${i}` })));
+    assert.ok(statuses.includes(429), "the address's own burst is spent");
+    assert.equal(await send("signals", sk, JSON.stringify({ set: [] })), 200, "their counts still answer");
+    // a key nobody confirmed is still held to the address's budget
+    assert.equal(await send("unregister", generateSecretKey(), JSON.stringify({ relay, endpoint: "https://ntfy.example/y" })), 429);
+  } finally { g.close(); }
+  // where the proxy is trusted for the client's address, addresses tell people apart and everyone is held to theirs, as before
+  const t = createGateway({ url: "http://push.test/", relays: [relay], secret: generateSecretKey(), file: null, allowLoopback: false, trustProxy: true, log: () => {} });
+  const tAt = `http://127.0.0.1:${await listenFree(t.server)}`;
+  try {
+    const send = async (route: string, sk: Uint8Array, body: string) =>
+      (await fetch(`${tAt}/${route}`, { method: "POST", headers: { authorization: nip98(sk, `http://push.test/${route}`, "POST", body), "x-forwarded-for": "1.2.3.4" }, body })).status;
+    const sk = generateSecretKey(), me = getPublicKey(sk);
+    t.registry.put(reg({ pubkey: me }), now());
+    t.registry.judge(relay, new Set([me]), new Set([me]));
+    for (let i = 0; i < 70; i++) await send("unregister", generateSecretKey(), JSON.stringify({ relay, endpoint: `https://ntfy.example/x${i}` }));
+    assert.equal(await send("signals", sk, JSON.stringify({ set: [] })), 429, "one address is one client there");
+  } finally { t.close(); }
 });
 
 test("signals: the person's own signature moves their numbers; a change reaches their phones as applet, signal and count only; a message adds one, once", async () => {

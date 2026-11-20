@@ -13,7 +13,9 @@
 .pa-list ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--text); }
 .pa-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0 12px; width: 100%; padding: calc(var(--gap) * .6) 0;
   border: 0; border-bottom: 1px dotted var(--muted); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-button.pa-row:active { background: color-mix(in srgb, var(--line) 40%, transparent); }
+button.pa-row:active, a.pa-row:active { background: color-mix(in srgb, var(--line) 40%, transparent); }
+/* a row that is a link (the app's own lists of notes): no underline, and a held finger doesn't select or preview */
+a.pa-row { text-decoration: none; -webkit-touch-callout: none; user-select: none; }
 div.pa-row { cursor: default; }
 .pa-row-mark { grid-row: 1 / 3; display: inline-grid; place-items: center; width: 2.3em; height: 2.3em; border: 1px solid var(--text); border-radius: 50%;
   box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 4px var(--line); background: var(--surface); font: var(--fs-lead) var(--serif); font-variant-emoji: text; }
@@ -66,6 +68,7 @@ div.pa-row { cursor: default; }
 .pa-list li { content-visibility: auto; contain-intrinsic-size: auto 3.6em; }
 .pa-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pa-strong .pa-row-title { font-weight: 700; }
+.pa-unseen { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .pa-row[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
 .pa-badge { margin-left: 8px; padding: 0 7px; border: 1.5px solid var(--text); border-radius: 999px; font: 600 var(--fs-label) var(--sans); vertical-align: .15em; }
 .pa-row-under { grid-column: 1 / -1; font-size: var(--fs-small); color: var(--accent); }
@@ -94,6 +97,7 @@ div.pa-row { cursor: default; }
 .pa-button.pa-primary { border-color: var(--text); background: var(--text); color: var(--bg); font-weight: 600; }
 .pa-button.pa-quiet { border-color: transparent; background: none; padding-inline: 4px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .pa-button.pa-small { padding: 2px 12px; font-size: var(--fs-small); }
+.pa-button.pa-quiet.pa-small { padding-inline: 0; }
 .pa-button:disabled { opacity: .5; cursor: default; }
 .pa-button[aria-busy="true"] { opacity: .7; }
 /* Page's way back: a quiet button, in the serif, above the title */

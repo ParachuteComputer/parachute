@@ -15,6 +15,42 @@ describe("refreshOnce", () => {
     expect(a).toBe("new1"); expect(b).toBe("new1");
     expect(findVault("recipes")?.refreshToken).toBe("r2");
   });
+  // Found in review (T-476): giving write back keeps a read-only sign-in and ends the one that could write. A refresh
+  // of the old one still on its way then laid its read+write tokens over the record that said "reads".
+  it("a refresh that comes back after the sign-in was replaced is ended at the hub, never laid over the record", async () => {
+    const base = { issuer: "https://hub.example", vault: "letters", tokenEndpoint: "https://hub.example/oauth/token", revocationEndpoint: "https://hub.example/oauth/revoke", clientId: "c", addedAt: "" };
+    saveVault({ ...base, accessToken: "rwA1", refreshToken: "rw1", scope: "vault:letters:read vault:letters:write" });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const revoked: string[] = [];
+    const hub = (async (u: unknown, init?: RequestInit) => {
+      if (String(u).endsWith("/oauth/revoke")) { revoked.push(new URLSearchParams(String(init?.body)).get("token") ?? ""); return new Response("{}"); }
+      await gate;
+      return new Response(JSON.stringify({ access_token: "rwA2", refresh_token: "rw2" }));
+    }) as unknown as typeof fetch;
+    const running = refreshOnce("letters", hub);
+    // the person gave write back meanwhile (signInFlow.ts keep): the record now holds the read-only sign-in
+    saveVault({ ...base, accessToken: "readA", refreshToken: "read1", scope: "vault:letters:read" });
+    release();
+    expect(await running).toBe("readA");
+    const rec = findVault("letters")!;
+    expect({ refresh: rec.refreshToken, access: rec.accessToken, scope: rec.scope }).toEqual({ refresh: "read1", access: "readA", scope: "vault:letters:read" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(revoked).toEqual(["rw2"]);
+  });
+  it("the hub refusing a refresh of a sign-in that was replaced meanwhile isn't a refusal of the one held now", async () => {
+    const base = { issuer: "https://hub.example", vault: "attic2", tokenEndpoint: "https://hub.example/oauth/token", clientId: "c", addedAt: "" };
+    saveVault({ ...base, accessToken: "rwA1", refreshToken: "rw1", scope: "vault:attic2:read vault:attic2:write" });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    // the old sign-in was ended at the hub (keep's revoke) before its refresh got there: 400
+    const hub = (async () => { await gate; return new Response("{}", { status: 400 }); }) as unknown as typeof fetch;
+    const running = refreshOnce("attic2", hub);
+    saveVault({ ...base, accessToken: "readA", refreshToken: "read1", scope: "vault:attic2:read" });
+    release();
+    expect(await running).toBe("readA");
+    expect(findVault("attic2")?.refreshToken).toBe("read1");
+  });
   it("a request refused with a token since replaced goes again with the current one; a refusal of the current one stands", async () => {
     // on core 0.9 each refresh retires the token before it: a straggler that refreshed again would take the fresh token
     // away from every other request (seen in CI: a vault's page lost its token to its own parallel reads)
