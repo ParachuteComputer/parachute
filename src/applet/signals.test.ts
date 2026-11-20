@@ -6,6 +6,7 @@ import { parseManifest, type Manifest } from "./manifest";
 import { grantKey, grantOf } from "./grant";
 import { asksHash } from "./approvals";
 import { readApplet } from "./discovery";
+import { faceOf } from "./face";
 import { appletRecord } from "../../applets/record";
 
 const manifest = (allow: unknown[] = [{ vault: "here", allow: [{ path: "Ideas/", verbs: ["read", "create"] }] }]): Manifest => {
@@ -98,8 +99,7 @@ describe("the shipped records", () => {
 });
 
 describe("the card's face", () => {
-  it("says each signal once, under its own name", async () => {
-    const { faceOf } = await import("./face");
+  it("says each signal once, under its own name", () => {
     const m = manifest();
     const r = parseSignals([ideas], m, []);
     if (!r.ok) throw new Error(r.error);
