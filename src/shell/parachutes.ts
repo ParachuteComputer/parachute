@@ -1,6 +1,7 @@
 // The person's Parachutes (docs/design/ONE-SIGN-IN.md): the hubs this device is signed in to, and the ones their home
 // vault's settings note lists (homeSettings.ts `hubs`), which this device may not be signed in to yet. And what follows
 // a sign-in to a Parachute: the home vault chosen when this device had none, and the Parachute put on the list.
+import { NEWCOMER_BUNDLE } from "./bundles";
 import { useSyncExternalStore } from "react";
 import { clientFor } from "../vault/client";
 import { CLOUD, CLOUD_NAME } from "../vault/parachute";
@@ -74,7 +75,7 @@ async function listThisHub(hub: string, newPerson: boolean) {
   if (settingsNow().hubs.some((h) => h.hub === hub) && !newPerson) return;
   const home = homeVault();
   if (!home || levelIn(home.scope, home.vault) !== "write") { wait(hub, newPerson); return; }
-  try { await listHub(hub, true, hub === CLOUD ? CLOUD_NAME : undefined, newPerson ? "simple" : undefined); unwait(hub); } catch { wait(hub, newPerson); }
+  try { await listHub(hub, true, hub === CLOUD ? CLOUD_NAME : undefined, newPerson ? NEWCOMER_BUNDLE : undefined); unwait(hub); } catch { wait(hub, newPerson); }
 }
 
 const WAITING_KEY = "parachute.hubs.waiting.v1";

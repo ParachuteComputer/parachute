@@ -46,11 +46,12 @@ export type FramePlace = { vault: string; noteId: string };
  *  ones whose `issuer` is `hub`), or one their list names that this device isn't (`signedIn` false). The home's first.
  *  `fresh`: vaults made there since this device signed in, which it may add (vault/newVaults.ts). */
 export type FrameParachute = { hub: string; host: string; name: string; home: boolean; signedIn: boolean; fresh?: string[] };
-/** `app`: "simple" when the person's settings choose Parachute Simplified (docs/SIMPLE.md): the frame's home is then Notes. */
+/** `look`: "notes" when the open bundle's home is Notes (docs/SIMPLE.md), else the list. `app: "simple"` says the same
+ *  for frames written before 11-20, until 2026-12-20. */
 /** `notice: "bundle-record"`: the bundle this device chose didn't load (its record is malformed or gone); the list says
  *  so. `"bundle-newer"`: it was made for a newer Parachute (`noticeName` is its name); the list says to update. A frame that
  *  doesn't know a notice shows none. */
-export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; app?: "simple"; notice?: "bundle-record" | "bundle-newer"; noticeName?: string };
+export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; look?: "notes"; app?: "simple"; notice?: "bundle-record" | "bundle-newer"; noticeName?: string };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
 export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; includeContent?: boolean; includeMetadata?: boolean };
 /** `decided`: what the note's route already decided for this history entry (kept by the shell, which outlives the frame). */

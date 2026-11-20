@@ -72,9 +72,11 @@ components put on your home ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)).
 
 ## Where the choices live
 
-The bar, the home and the list of your Parachutes are one note in your home vault, `Parachute/Settings`, tagged
-`parachute-settings`. You change it
-by long-pressing; your agent can change it by writing that note. The app reads it at each start and each time it shows
+The bar and the home are the open bundle's ([Bundles](#bundles)): you change them by long-pressing, your agent by
+writing that record. The list of your Parachutes, your servers and the bundle a new device opens are one note in your
+home vault, `Parachute/Settings`, tagged `parachute-settings`; its `bar` and `start` from before 11-20 are still read
+until 2026-12-20, while the open bundle has no record of its own, and never written. Your agent can change the note
+by writing it. The app reads it at each start and each time it shows
 the list, a vault or a note, and keeps the last copy (with the names on the bar) for when the vault can't be
 reached. Entries it doesn't read are kept as they are when you change the bar.
 
@@ -112,7 +114,8 @@ A bundle is a record in your home vault, `Parachute/Bundles/<id>`, tagged `parac
 `Parachute/Apps/<id>`, `parachute-app` and `fields.app`, are read until 2026-12-20. Builds from before 11-20 read only those, so until then the app writes the names your
 vault already uses: a record under the older names stays there, a new one goes under the older names until a record
 is under the newer, and the settings note says both `bundle` and `app` (`app` is read first). `node
-scripts/migrate-bundles.ts` moves them all once no device of yours runs such a build.)
+scripts/migrate-bundles.ts` moves them all once no device of yours runs such a build. An agent making a new record does the same: under
+`Parachute/Apps/<id>`, `parachute-app` and `fields.app` while the vault holds none under the newer names.)
 
 ```json
 {
@@ -139,8 +142,10 @@ scripts/migrate-bundles.ts` moves them all once no device of yours runs such a b
   your home's hub. There is no "every hub" and no star inside a name; a source that says one is left out.
 - **Listed is not allowed.** Being offered runs nothing: an applet still shows its card the first time, and again when
   its code changes.
-- **`bar` and `start`** are this bundle's; without them it uses the settings note's. A pin or an Open on start made
-  while this bundle is open goes to its record. Everything's are kept in the settings note too, which older apps read.
+- **`bar` and `start`** are this bundle's, and live nowhere else. A pin or an Open on start made while this bundle is
+  open goes to its record (made the first time). A place on the bar is an applet or one of the app's own: `{"screen":
+  "home"}` (Notes or the list, by `look`), `{"screen": "connect"}`, `{"shipped": "journal"}`, `{"shipped": "capture"}`.
+  When nothing on it leads home, the app adds that one place at the end, so a record can't take the way back away.
 - **`opens`** says which applet opens a kind of note, for every device; `"applet": null` is the plain view. This
   device's own **Always** still wins here.
 - **`keep`**: how many applets stay running while hidden (`"auto"`: 6 on a phone, 12 on a computer). Only speed hangs
@@ -148,7 +153,10 @@ scripts/migrate-bundles.ts` moves them all once no device of yours runs such a b
 - **Someone else's bundle** is followed live: your record says `"live": { "hub": …, "vault": …, "path": … }` and the app
   reads theirs from that vault each time, so their changes show. Its applets still ask you, and ask again when their
   code changes.
-- **Parachute Simplified** (id `simple`) **and Everything** are always there. A record with the id `simple` or `everything` changes them.
+- **Parachute Simplified** (id `simple`) **and Everything** are records the app ships (`src/shell/default-bundles.json`),
+  read like yours; nothing in the app asks which id a bundle has. Your record of the same id says only what it changes:
+  the rest stays the default's. Any bundle may say `"everywhere": true` (every vault on every Parachute this device
+  holds): being listed runs nothing.
 
 Which bundle is open is this device's choice (Settings → **Your bundle**), else the settings note's `bundle`, else
 Everything. Choosing one also makes it the one a new device opens. Your agent can write bundle records; nothing in them
