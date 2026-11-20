@@ -146,7 +146,35 @@ it runs (its own number wins: Mail knows what is unread). Opening the applet mak
 public key, the applet as a number it can't read back, the signal's id and the count: never what was counted. An
 applet in someone else's vault may count only its notes, and the count goes nowhere.
 
-### The kit (`import { … } from "parachute"`)
+### Write it on the kit
+
+The kit is the standard library: for each thing an applet needs, there is one part, and every applet uses it, so they
+all look and behave as one app and follow the person's theme. Reach for the part before writing your own:
+
+| To | Use |
+|---|---|
+| lay out the screen: its width, title, a way back, pull to refresh | `Page` |
+| say a date or a time | `when` (`when.short(t)`, `when.day`, `when.time`, …): never `Intl`, `toLocale…` or `getHours` |
+| show rows of things, short or long | `List` (a long one draws only what is on screen; `more` for the next page) |
+| say it is reading, there is nothing yet, or it failed | `Loading`, `Empty`, `Problem` (with Try again) |
+| say what an action did ("Saved", "Not sent: …") | `toast` |
+| take words: a line, a box, a chat's composer | `Field`, `Write` |
+| search | `Search` |
+| switch between places in one screen | `Tabs` |
+| a button | `Button` (`kind="primary"` for the one main action) |
+| record a voice note | `Record`, then `voiceNote` and `useTranscripts` for one the hub transcribes |
+| link to a note, or open one | `Link`, `Linked`, `Note`, `link.open` |
+| keep a draft, or where it was | `useSaved` |
+| colour and size | the theme's CSS variables and the type scale (`--fs-title` … `--fs-label`, [THEME.md](THEME.md)) |
+
+Your own CSS is for layout (columns, a card of your own) on those variables. The applets this repo ships are held to
+this: `src/kit/conformance.ts` fails one that formats a date itself, draws its own list, input, button, error or status
+line, or picks its own colour, font or text size, and says which part to use (`npm test`). Write yours the same way:
+an agent can read that file for the exact rules (they run in this repo's tests, not in the app: an applet in a vault is
+asked to follow them, not checked). A shipped applet with a real reason to keep something of its own names the reason
+there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below are checked too.
+
+### The kit's calls (`import { … } from "parachute"`)
 
 | Call | What it does |
 |---|---|
@@ -200,8 +228,8 @@ Its own frame, its own card, its own vault; or, from a vault you trust, imported
 
 ### The parts (`import { … } from "parachute"`, TSX and JSX only)
 
-Small pieces to build a screen from, drawn in the app's look: they follow the person's theme, as the rest of the app
-does. Use them, or your own markup on the CSS variables, or both.
+The pieces to build a screen from, drawn in the app's look: they follow the person's theme, as the rest of the app
+does. Each takes plain props; a newer prop is only ever added, never changed.
 
 | Part | What it draws |
 |---|---|
@@ -225,7 +253,7 @@ does. Use them, or your own markup on the CSS variables, or both.
 | `toast(text, { error? })` | A short word after an action ("Saved"), at the foot of the screen, gone by itself. |
 | `voiceNote(recording, create)` | A recording made a note: `create(body)` makes the record (its path is yours), the recording is attached with transcription asked, and the hub writes the words in. |
 | `useTranscripts(bodies, reload)` | While a voice note waits for its words: reads again a few times; `say(body)` is the line to show, `strip(body)` the text without the hub's marker, `again()` after a new recording. |
-| `when (.time, .day, .short, .full, .ago, .stamp, .path, .parse)` | Dates and times, one way in every applet, in the person's language: `when.short(t)` is "9:41 AM" today, "Yesterday", "Mon", "Nov 17". `t` is a Date, an ISO string, milliseconds or seconds. |
+| `when (.time, .day, .date, .short, .full, .ago, .stamp, .path, .parse)` | Dates and times, one way in every applet, in the person's language: `when.short(t)` is "9:41 AM" today, "Yesterday", "Mon", "Nov 17". `t` is a Date, an ISO string, milliseconds or seconds. |
 | `useTheme()` | The look as values (`accent`, `bg`, …, `scheme`, `density`), or null until the app has sent it. Most applets need only the CSS variables. |
 | `useSaved(key, initial)` | `useState` that the app keeps on this device: a draft, the box it was on, the item open. See [Saved state](#saved-state). |
 
@@ -252,7 +280,7 @@ back when it starts again, before its first paint:
 ```tsx
 const [draft, setDraft] = useSaved("draft", "");      // what is being written
 const [tab, setTab] = useSaved("tab", "inbox");        // where it was
-<textarea value={draft} onChange={(e) => setDraft(e.target.value)} />
+<Write label="Your note" value={draft} onChange={setDraft} />
 ```
 
 - **Saved as it changes.** The kit sends what changed 250 ms after the last change (at most a second while the person
@@ -351,7 +379,7 @@ rather than `tags`: `"types": ["applet"]`. The note-named calls in the kit (`que
       }
     ]
   },
-  "body": "import { useEffect, useRef, useState } from \"react\";\nimport { Days, Empty, Field, List, Note, onOpen, ready, vault } from \"parachute\";\n\ntype Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };\nconst nameOf = (r: Recipe) => r.path.replace(\"Recipes/\", \"\");\nconst when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: \"numeric\", month: \"short\" }) : \"\");\n\nconst CSS = `\nmain { max-width: 1100px; margin: 0 auto; padding: 22px var(--pad); }\nh1 { margin: 0 0 4px; font: 400 calc(var(--size) * 2.4)/1.1 var(--serif); }\n.cols { display: grid; gap: calc(var(--gap) * 2); }\n@media (min-width: 900px) { .cols { grid-template-columns: 2fr 3fr; gap: 64px; } }\n.back { margin: 0 0 10px; padding: 0; border: 0; background: none; color: var(--muted); font: italic var(--size) var(--serif); cursor: pointer; }\n`;\n\nexport default function RecipeCards() {\n  const [recipes, setRecipes] = useState<Recipe[] | null>(null);\n  const [open, setOpen] = useState<Recipe | null>(null);\n  const shown = useRef<HTMLElement>(null);\n  const load = () => vault.queryRecords({ pathPrefix: \"Recipes/\", tag: \"recipe\", includeBody: true }).then((rows: Recipe[]) => setRecipes(rows));\n  useEffect(() => {\n    ready().then(load);\n    return onOpen((o: { note: { id: string } }) => vault.getRecord(o.note.id).then(setOpen));\n  }, []);\n  // a recipe opened (or followed from a link) comes into view: below the list on a phone\n  useEffect(() => { if (open) shown.current?.scrollIntoView({ block: \"start\" }); }, [open]);\n  const add = async (name: string) => {\n    const made: Recipe = await vault.createRecord({ path: `Recipes/${name}`, body: `# ${name}\\n\\n## Ingredients\\n\\n## Steps\\n` });\n    await load();\n    setOpen(await vault.getRecord(made.id));\n  };\n  const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };\n  return (\n    <main>\n      <style>{CSS}</style>\n      <div className=\"cols\">\n        <section>\n          <h1>Recipe cards</h1>\n          <Days times={(recipes ?? []).map((r) => r.updatedAt)} label=\"changed, the last four weeks\" />\n          <Field label=\"New recipe\" placeholder=\"A name\" action=\"Add\" onAction={add} />\n          {recipes === null ? <p>Reading…</p> : recipes.length\n            ? <List label=\"Recipes\" rows={recipes.map((r) => ({ key: r.id, title: nameOf(r), aside: when(r.updatedAt), onPress: () => setOpen(r) }))} />\n            : <Empty>No recipes yet. Add one above, or ask your AI to.</Empty>}\n        </section>\n        {open && (\n          <section aria-label=\"Recipe\" ref={shown}>\n            <button type=\"button\" className=\"back\" onClick={() => setOpen(null)}>Close</button>\n            <Note body={open.body ?? \"\"} path={open.path} tags={open.tags} onLink={follow} />\n          </section>\n        )}\n      </div>\n    </main>\n  );\n}\n"
+  "body": "import { useEffect, useRef, useState } from \"react\";\nimport { Button, Days, Empty, Field, List, Loading, Note, onOpen, Page, ready, vault, when } from \"parachute\";\n\ntype Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };\nconst nameOf = (r: Recipe) => r.path.replace(\"Recipes/\", \"\");\n\nconst CSS = `\n.cols { display: grid; gap: calc(var(--gap) * 2); }\n@media (min-width: 900px) { .cols { grid-template-columns: 2fr 3fr; gap: 64px; } }\n`;\n\nexport default function RecipeCards() {\n  const [recipes, setRecipes] = useState<Recipe[] | null>(null);\n  const [open, setOpen] = useState<Recipe | null>(null);\n  const shown = useRef<HTMLElement>(null);\n  const load = () => vault.queryRecords({ pathPrefix: \"Recipes/\", tag: \"recipe\", includeBody: true }).then((rows: Recipe[]) => setRecipes(rows));\n  useEffect(() => {\n    ready().then(load);\n    return onOpen((o: { note: { id: string } }) => vault.getRecord(o.note.id).then(setOpen));\n  }, []);\n  // a recipe opened (or followed from a link) comes into view: below the list on a phone\n  useEffect(() => { if (open) shown.current?.scrollIntoView({ block: \"start\" }); }, [open]);\n  const add = async (name: string) => {\n    const made: Recipe = await vault.createRecord({ path: `Recipes/${name}`, body: `# ${name}\\n\\n## Ingredients\\n\\n## Steps\\n` });\n    await load();\n    setOpen(await vault.getRecord(made.id));\n  };\n  const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };\n  return (\n    <Page title=\"Recipe cards\" wide onRefresh={load}>\n      <style>{CSS}</style>\n      <div className=\"cols\">\n        <section>\n          <Days times={(recipes ?? []).map((r) => r.updatedAt)} label=\"changed, the last four weeks\" />\n          <Field label=\"New recipe\" placeholder=\"A name\" action=\"Add\" onAction={add} />\n          {recipes === null ? <Loading /> : recipes.length\n            ? <List label=\"Recipes\" rows={recipes.map((r) => ({ key: r.id, title: nameOf(r), aside: when.short(r.updatedAt), onPress: () => setOpen(r) }))} />\n            : <Empty>No recipes yet. Add one above, or ask your AI to.</Empty>}\n        </section>\n        {open && (\n          <section aria-label=\"Recipe\" ref={shown}>\n            <Button kind=\"quiet\" onClick={() => setOpen(null)}>Close</Button>\n            <Note body={open.body ?? \"\"} path={open.path} tags={open.tags} onLink={follow} />\n          </section>\n        )}\n      </div>\n    </Page>\n  );\n}\n"
 }
 ```
 
@@ -359,18 +387,14 @@ The code in `body`, laid out:
 
 ```tsx
 import { useEffect, useRef, useState } from "react";
-import { Days, Empty, Field, List, Note, onOpen, ready, vault } from "parachute";
+import { Button, Days, Empty, Field, List, Loading, Note, onOpen, Page, ready, vault, when } from "parachute";
 
 type Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };
 const nameOf = (r: Recipe) => r.path.replace("Recipes/", "");
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "");
 
 const CSS = `
-main { max-width: 1100px; margin: 0 auto; padding: 22px var(--pad); }
-h1 { margin: 0 0 4px; font: 400 calc(var(--size) * 2.4)/1.1 var(--serif); }
 .cols { display: grid; gap: calc(var(--gap) * 2); }
 @media (min-width: 900px) { .cols { grid-template-columns: 2fr 3fr; gap: 64px; } }
-.back { margin: 0 0 10px; padding: 0; border: 0; background: none; color: var(--muted); font: italic var(--size) var(--serif); cursor: pointer; }
 `;
 
 export default function RecipeCards() {
@@ -391,25 +415,24 @@ export default function RecipeCards() {
   };
   const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };
   return (
-    <main>
+    <Page title="Recipe cards" wide onRefresh={load}>
       <style>{CSS}</style>
       <div className="cols">
         <section>
-          <h1>Recipe cards</h1>
           <Days times={(recipes ?? []).map((r) => r.updatedAt)} label="changed, the last four weeks" />
           <Field label="New recipe" placeholder="A name" action="Add" onAction={add} />
-          {recipes === null ? <p>Reading…</p> : recipes.length
-            ? <List label="Recipes" rows={recipes.map((r) => ({ key: r.id, title: nameOf(r), aside: when(r.updatedAt), onPress: () => setOpen(r) }))} />
+          {recipes === null ? <Loading /> : recipes.length
+            ? <List label="Recipes" rows={recipes.map((r) => ({ key: r.id, title: nameOf(r), aside: when.short(r.updatedAt), onPress: () => setOpen(r) }))} />
             : <Empty>No recipes yet. Add one above, or ask your AI to.</Empty>}
         </section>
         {open && (
           <section aria-label="Recipe" ref={shown}>
-            <button type="button" className="back" onClick={() => setOpen(null)}>Close</button>
+            <Button kind="quiet" onClick={() => setOpen(null)}>Close</Button>
             <Note body={open.body ?? ""} path={open.path} tags={open.tags} onLink={follow} />
           </section>
         )}
       </div>
-    </main>
+    </Page>
   );
 }
 ```
@@ -442,7 +465,7 @@ pinned applets. It reads no folder of its own vault, so it has no `access`; it a
       "open"
     ]
   },
-  "body": "import { useEffect, useState } from \"react\";\nimport { app, Days, Empty, List, ready } from \"parachute\";\n\ntype Recent = { vaultName: string; title: string; updatedAt: string | null; href: string };\ntype Place = { name: string; glyph: string; href: string; home: boolean };\n\nconst midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();\nfunction dayOf(iso: string | null): string {\n  if (!iso) return \"Earlier\";\n  const d = new Date(iso), ago = Math.round((midnight(new Date()) - midnight(d)) / 86400000);\n  if (ago <= 0) return \"Today\";\n  if (ago === 1) return \"Yesterday\";\n  if (ago < 7) return d.toLocaleDateString(undefined, { weekday: \"long\" });\n  return d.toLocaleDateString(undefined, { day: \"numeric\", month: \"long\" });\n}\nconst timeOf = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: \"numeric\", minute: \"2-digit\" }) : \"\");\nconst hello = () => { const h = new Date().getHours(); return h < 12 ? \"Good morning.\" : h < 18 ? \"Good afternoon.\" : \"Good evening.\"; };\n\nconst CSS = `\nmain { max-width: 1200px; margin: 0 auto; padding: 22px var(--pad); color: var(--text); }\n.head { display: grid; gap: 12px 32px; align-items: end; padding-bottom: var(--gap); border-bottom: 1px solid var(--text); }\n@media (min-width: 900px) { .head { grid-template-columns: 1fr minmax(240px, 380px); } .cols { grid-template-columns: 3fr 2fr; gap: 64px; } }\n.kick { margin: 0; font: 600 calc(var(--size) * .75) var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }\nh1 { margin: 2px 0 6px; font: 400 calc(var(--size) * 3)/1.05 var(--serif); }\n.sum { margin: 0; font: calc(var(--size) * 1.1)/1.5 var(--serif); }\n.cols { display: grid; gap: calc(var(--gap) * 1.5); padding-top: var(--gap); }\n.river { border-left: 2px solid var(--text); padding-left: 20px; }\n`;\n\nexport default function Home() {\n  const [recent, setRecent] = useState<Recent[] | null>(null);\n  const [pins, setPins] = useState<Place[]>([]);\n  useEffect(() => {\n    ready()\n      .then(() => Promise.all([app.recent({ limit: 40 }), app.pins()]))\n      .then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); }, () => setRecent([]));\n  }, []);\n  const days: { label: string; notes: Recent[] }[] = [];\n  for (const n of (recent ?? []).slice(0, 12)) {\n    const label = dayOf(n.updatedAt);\n    if (days.at(-1)?.label !== label) days.push({ label, notes: [] });\n    days.at(-1)!.notes.push(n);\n  }\n  const vaults = new Set((recent ?? []).map((n) => n.vaultName)).size;\n  return (\n    <main>\n      <style>{CSS}</style>\n      <header className=\"head\">\n        <div>\n          <p className=\"kick\">{new Date().toLocaleDateString(undefined, { weekday: \"long\", day: \"numeric\", month: \"long\" })}</p>\n          <h1>{hello()}</h1>\n          <p className=\"sum\">{recent === null ? \"Reading…\" : `${recent.length} notes lately, in ${vaults} ${vaults === 1 ? \"vault\" : \"vaults\"}.`}</p>\n        </div>\n        <Days times={(recent ?? []).map((n) => n.updatedAt)} days={14} label=\"the last two weeks\" />\n      </header>\n      <div className=\"cols\">\n        <section className=\"river\" aria-label=\"Lately\">\n          {days.map((d) => <List key={d.label} label={d.label} rows={d.notes.map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: timeOf(n.updatedAt), onPress: () => app.open(n.href) }))} />)}\n          {recent !== null && !recent.length && <Empty>Nothing written yet.</Empty>}\n        </section>\n        {pins.length > 0 && <List label=\"Pinned\" rows={pins.map((p) => ({ key: p.href, title: p.name, glyph: p.glyph, onPress: () => app.open(p.href) }))} />}\n      </div>\n    </main>\n  );\n}\n"
+  "body": "import { useEffect, useState } from \"react\";\nimport { app, Days, Empty, List, Loading, Page, ready, when } from \"parachute\";\n\ntype Recent = { vaultName: string; title: string; updatedAt: string | null; href: string };\ntype Place = { name: string; glyph: string; href: string; home: boolean };\n\nconst CSS = `\n.head { display: grid; gap: 12px 32px; align-items: end; padding-bottom: var(--gap); border-bottom: 1px solid var(--text); }\n@media (min-width: 900px) { .head { grid-template-columns: 1fr minmax(240px, 380px); } .cols { grid-template-columns: 3fr 2fr; gap: 64px; } }\n.sum { margin: 0; font: var(--fs-lead)/1.5 var(--serif); }\n.cols { display: grid; gap: calc(var(--gap) * 1.5); padding-top: var(--gap); }\n.river { border-left: 2px solid var(--text); padding-left: 20px; }\n`;\n\nexport default function Home() {\n  const [recent, setRecent] = useState<Recent[] | null>(null);\n  const [pins, setPins] = useState<Place[]>([]);\n  const load = () => Promise.all([app.recent({ limit: 40 }), app.pins()])\n    .then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); }, () => setRecent([]));\n  useEffect(() => { ready().then(load); }, []);\n  const days: { label: string; notes: Recent[] }[] = [];\n  for (const n of (recent ?? []).slice(0, 12)) {\n    const label = when.day(n.updatedAt) || \"Earlier\";\n    if (days.at(-1)?.label !== label) days.push({ label, notes: [] });\n    days.at(-1)!.notes.push(n);\n  }\n  const vaults = new Set((recent ?? []).map((n) => n.vaultName)).size;\n  return (\n    <Page kicker={when.date(new Date())} title=\"Lately\" wide onRefresh={load}>\n      <style>{CSS}</style>\n      <header className=\"head\">\n        {recent === null ? <Loading /> : <p className=\"sum\">{`${recent.length} notes lately, in ${vaults} ${vaults === 1 ? \"vault\" : \"vaults\"}.`}</p>}\n        <Days times={(recent ?? []).map((n) => n.updatedAt)} days={14} label=\"the last two weeks\" />\n      </header>\n      <div className=\"cols\">\n        <section className=\"river\" aria-label=\"Lately\">\n          {days.map((d) => <List key={d.label} label={d.label} rows={d.notes.map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: when.time(n.updatedAt), onPress: () => app.open(n.href) }))} />)}\n          {recent !== null && !recent.length && <Empty>Nothing written yet.</Empty>}\n        </section>\n        {pins.length > 0 && <List label=\"Pinned\" rows={pins.map((p) => ({ key: p.href, title: p.name, glyph: p.glyph, onPress: () => app.open(p.href) }))} />}\n      </div>\n    </Page>\n  );\n}\n"
 }
 ```
 
@@ -466,30 +489,15 @@ The code in `body`, laid out:
 
 ```tsx
 import { useEffect, useState } from "react";
-import { app, Days, Empty, List, ready } from "parachute";
+import { app, Days, Empty, List, Loading, Page, ready, when } from "parachute";
 
 type Recent = { vaultName: string; title: string; updatedAt: string | null; href: string };
 type Place = { name: string; glyph: string; href: string; home: boolean };
 
-const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-function dayOf(iso: string | null): string {
-  if (!iso) return "Earlier";
-  const d = new Date(iso), ago = Math.round((midnight(new Date()) - midnight(d)) / 86400000);
-  if (ago <= 0) return "Today";
-  if (ago === 1) return "Yesterday";
-  if (ago < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "long" });
-}
-const timeOf = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "");
-const hello = () => { const h = new Date().getHours(); return h < 12 ? "Good morning." : h < 18 ? "Good afternoon." : "Good evening."; };
-
 const CSS = `
-main { max-width: 1200px; margin: 0 auto; padding: 22px var(--pad); color: var(--text); }
 .head { display: grid; gap: 12px 32px; align-items: end; padding-bottom: var(--gap); border-bottom: 1px solid var(--text); }
 @media (min-width: 900px) { .head { grid-template-columns: 1fr minmax(240px, 380px); } .cols { grid-template-columns: 3fr 2fr; gap: 64px; } }
-.kick { margin: 0; font: 600 calc(var(--size) * .75) var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
-h1 { margin: 2px 0 6px; font: 400 calc(var(--size) * 3)/1.05 var(--serif); }
-.sum { margin: 0; font: calc(var(--size) * 1.1)/1.5 var(--serif); }
+.sum { margin: 0; font: var(--fs-lead)/1.5 var(--serif); }
 .cols { display: grid; gap: calc(var(--gap) * 1.5); padding-top: var(--gap); }
 .river { border-left: 2px solid var(--text); padding-left: 20px; }
 `;
@@ -497,37 +505,31 @@ h1 { margin: 2px 0 6px; font: 400 calc(var(--size) * 3)/1.05 var(--serif); }
 export default function Home() {
   const [recent, setRecent] = useState<Recent[] | null>(null);
   const [pins, setPins] = useState<Place[]>([]);
-  useEffect(() => {
-    ready()
-      .then(() => Promise.all([app.recent({ limit: 40 }), app.pins()]))
-      .then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); }, () => setRecent([]));
-  }, []);
+  const load = () => Promise.all([app.recent({ limit: 40 }), app.pins()])
+    .then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); }, () => setRecent([]));
+  useEffect(() => { ready().then(load); }, []);
   const days: { label: string; notes: Recent[] }[] = [];
   for (const n of (recent ?? []).slice(0, 12)) {
-    const label = dayOf(n.updatedAt);
+    const label = when.day(n.updatedAt) || "Earlier";
     if (days.at(-1)?.label !== label) days.push({ label, notes: [] });
     days.at(-1)!.notes.push(n);
   }
   const vaults = new Set((recent ?? []).map((n) => n.vaultName)).size;
   return (
-    <main>
+    <Page kicker={when.date(new Date())} title="Lately" wide onRefresh={load}>
       <style>{CSS}</style>
       <header className="head">
-        <div>
-          <p className="kick">{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</p>
-          <h1>{hello()}</h1>
-          <p className="sum">{recent === null ? "Reading…" : `${recent.length} notes lately, in ${vaults} ${vaults === 1 ? "vault" : "vaults"}.`}</p>
-        </div>
+        {recent === null ? <Loading /> : <p className="sum">{`${recent.length} notes lately, in ${vaults} ${vaults === 1 ? "vault" : "vaults"}.`}</p>}
         <Days times={(recent ?? []).map((n) => n.updatedAt)} days={14} label="the last two weeks" />
       </header>
       <div className="cols">
         <section className="river" aria-label="Lately">
-          {days.map((d) => <List key={d.label} label={d.label} rows={d.notes.map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: timeOf(n.updatedAt), onPress: () => app.open(n.href) }))} />)}
+          {days.map((d) => <List key={d.label} label={d.label} rows={d.notes.map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: when.time(n.updatedAt), onPress: () => app.open(n.href) }))} />)}
           {recent !== null && !recent.length && <Empty>Nothing written yet.</Empty>}
         </section>
         {pins.length > 0 && <List label="Pinned" rows={pins.map((p) => ({ key: p.href, title: p.name, glyph: p.glyph, onPress: () => app.open(p.href) }))} />}
       </div>
-    </main>
+    </Page>
   );
 }
 ```

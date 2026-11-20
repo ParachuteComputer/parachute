@@ -3,6 +3,7 @@ import { giveBack } from "../vault/reach";
 import { useState } from "react";
 import { runSelfTest, useGate, useSelfTestRun } from "../applet/selftest/run";
 import { deviceGrants, subjectOf } from "../applet/grants";
+import { takeBack } from "../applet/approvalStore";
 import { useApplets } from "../applet/useApplets";
 import { listVaults, type VaultRecord } from "../vault/store";
 import { embedSubjectParts } from "../applet/embeds";
@@ -28,16 +29,24 @@ function DefaultsIn({ rec }: { rec: VaultRecord }) {
 
 function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }) {
   const applets = useApplets(rec, false);
+  // when a Revoke's taking back went no further than this device (applet/approvalStore.ts `takeBack`)
+  const [said, setSaid] = useState<string | null>(null);
+  // Revoke here is Revoke in the applet's menu: on a device with the person's key the approval is taken back on every
+  // device, and the one left in the home vault never allows it here again
+  const revoke = (subject: string, id: string, a: { manifest: { id: string; name: string } } | undefined) => void (async () => {
+    const told = await takeBack(rec, id, a?.manifest.name ?? "this applet", a?.manifest.id ?? null);
+    grants.revoke(subject); setSaid(told); onChange(); void giveBack(rec.key, "/settings");
+  })();
   // from the grants themselves, so a grant whose applet is gone from the vault can still be revoked
   const subjects = grants.subjects().filter((s) => s.startsWith(subjectOf(rec.key, "")));
-  return <>{subjects.map((subject) => {
+  return <>{said && <li className="line"><p className="error" role="alert">{said}</p></li>}{subjects.map((subject) => {
     const id = subject.slice(subjectOf(rec.key, "").length);
     const a = applets.state === "ok" ? applets.found.entries.find((e) => e.noteId === id) : undefined;
     const r = grants.record(subject);
     return (
       <li key={subject} className="line">
         <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
-        <button type="button" className="quiet-button" onClick={() => { grants.revoke(subject); onChange(); void giveBack(rec.key, "/settings"); }}>Revoke</button>
+        <button type="button" className="quiet-button" onClick={() => revoke(subject, id, a)}>Revoke</button>
         {a && (a.services.length > 0 || a.servicesError) && <AppletServices subject={subject} entry={a} />}
       </li>
     );

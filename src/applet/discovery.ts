@@ -38,6 +38,10 @@ export type AppletEntry = {
   signals: Signal[];
   /** why `signals` was refused, when it was (the applet then shows no count) */
   signalsError?: string;
+  /** Which of the note's asks this device left out (someone else's vault here, a server at one of this device's hubs, a
+   *  field it couldn't read). Part of the asks' hash (approvals.ts): an approval made where its card left something out
+   *  doesn't allow the applet on a device that leaves nothing out. */
+  left?: string[];
 };
 export type Discovery = { entries: AppletEntry[]; skipped: number };
 type Row = { id?: unknown; path?: unknown; tags?: unknown; metadata?: unknown };
@@ -52,7 +56,9 @@ export function readApplet(r: Row, vault: string, theirs = false, isHub: (origin
   if (!parsed.ok) return { ok: false, error: `its manifest is invalid: ${parsed.error}` };
   if (BUILT_IN_IDS.includes(parsed.manifest.id)) return { ok: false, error: `the id ${parsed.manifest.id} is the app's own` };
   if (meta.interface !== undefined && meta.interface !== null) return { ok: false, error: "a contract 2 applet has one manifest. Its note must not carry interface too" };
+  const left: string[] = [];
   // as with `app`: an applet in someone else's vault gets no microphone, whatever its manifest says
+  if (theirs && parsed.manifest.reach) left.push("reach");
   if (theirs && parsed.manifest.reach) { const { reach: _dropped, ...rest } = parsed.manifest; parsed.manifest = rest; }
   // as with `opens`: a bad `app` costs the applet what it asked of the app, not the applet
   const app = theirs ? { ok: false as const, error: "an applet in someone else's vault can't ask the app for anything" } : parseApp(meta.app);
@@ -60,8 +66,11 @@ export function readApplet(r: Row, vault: string, theirs = false, isHub: (origin
   const services = theirs ? (meta.services === undefined ? { ok: true as const, services: [] } : { ok: false as const, error: "an applet in someone else's vault reaches no service" }) : parseServices(meta.services, isHub);
   // as with `opens`: a bad `signals` costs the applet its counts, not the applet
   const signals = parseSignals(meta.signals, parsed.manifest, services.ok ? services.services : [], theirs, isHub);
+  if (meta.app !== undefined && !app.ok) left.push("app");
+  if (!services.ok) left.push("services");
+  if (!signals.ok) left.push("signals");
   return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], embeds: theirs ? [] : parseEmbeds(meta.embeds), services: services.ok ? services.services : [],
-    signals: signals.ok ? signals.value : [],
+    signals: signals.ok ? signals.value : [], ...(left.length ? { left } : {}),
     ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }), ...(services.ok ? {} : { servicesError: services.error }), ...(signals.ok ? {} : { signalsError: signals.error }) } };
 }
 

@@ -5,7 +5,10 @@ import type { FrameVault } from "../../bridge/protocol";
 import { readerFor, useHome, useVaults } from "../data";
 import { isAppOwn, noteHref, titleOf } from "../../vault/notes";
 import { Empty } from "../../kit/parts";
-import { ago, VaultsToOpen } from "./Launcher";
+import { Loading, Problem, Search, Tabs } from "../../kit/screen";
+import { when } from "../../kit/when";
+import { VaultsToOpen } from "./Launcher";
+import NoteRows from "./NoteRows";
 
 /** The newest notes (or what a search finds) of the chosen vaults, newest first: one list across them. */
 type Row = { v: FrameVault; n: Note };
@@ -48,7 +51,6 @@ export default function NotesHome() {
   const chosen = all.find((v) => v.key === pick) ?? null;
   const [q, setQ] = useState(params.get("q") ?? "");
   const [term, setTerm] = useState(q.trim());
-  useEffect(() => { const t = window.setTimeout(() => setTerm(q.trim()), 250); return () => window.clearTimeout(t); }, [q]);
   // the search and the tab live in the address, so Back from a note comes back to the same list
   useEffect(() => {
     const next = new URLSearchParams(params);
@@ -62,9 +64,9 @@ export default function NotesHome() {
   const rows = read?.rows ?? null;
   const home = all.find((v) => v.home) ?? all[0];
   const into = chosen ?? home;
-  const tab = (v: FrameVault | null) => {
+  const tab = (key: string) => {
     const next = new URLSearchParams(params);
-    if (v) next.set("in", v.key); else next.delete("in");
+    if (key) next.set("in", key); else next.delete("in");
     setParams(next, { replace: true });
   };
   return (
@@ -74,27 +76,14 @@ export default function NotesHome() {
         {into && <Link className="primary notes-new" to={`/v/${encodeURIComponent(into.key)}/new`}>New note</Link>}
       </header>
       {homeNow.notice === "app-record" && <p className="launcher-notice" role="status">Your app record didn't load, so this is the simple app. <Link to="/settings">Settings</Link></p>}
-      <input className="search notes-search" type="search" placeholder={chosen ? `Search ${chosen.vault}` : "Search every vault"} aria-label={chosen ? `Search ${chosen.vault}` : "Search every vault"}
-        value={q} onChange={(e) => setQ(e.target.value)} />
-      {all.length > 1 && (
-        <nav className="notes-tabs" aria-label="Vaults">
-          <button type="button" className="notes-tab" aria-pressed={!chosen} onClick={() => tab(null)}>All</button>
-          {all.map((v) => <button key={v.key} type="button" className="notes-tab" aria-pressed={chosen?.key === v.key} onClick={() => tab(v)}>{v.vault}</button>)}
-        </nav>
-      )}
+      <Search label={chosen ? `Search ${chosen.vault}` : "Search every vault"} value={q} onChange={setQ} onSearch={setTerm} live={250} />
+      {all.length > 1 && <Tabs label="Vaults" current={chosen?.key ?? ""} onChange={tab} tabs={[{ key: "", label: "All" }, ...all.map((v) => ({ key: v.key, label: v.vault }))]} />}
       {parachutes.map((p) => <VaultsToOpen key={p.hub} p={p} />)}
-      {rows === null && <p className="quiet" role="status">Reading your notes…</p>}
-      {!!read?.unread.length && <p className="quiet small" role="status">Couldn't read {read.unread.join(", ")} just now.</p>}
-      {rows && rows.length > 0 && (
-        <ul className="rows" aria-label={term ? "Search results" : "Notes"}>
-          {rows.map(({ v, n }) => (
-            <li key={`${v.key}/${n.id}`}><Link className="row" to={noteHref(v.key, n.id)}>
-              <span className="row-title">{titleOf(n)}</span>
-              <span className="row-sub">{[shown.length > 1 ? v.vault : null, ago(updated(n))].filter(Boolean).join(" · ")}</span>
-            </Link></li>
-          ))}
-        </ul>
-      )}
+      {rows === null && <Loading>Reading your notes…</Loading>}
+      {!!read?.unread.length && <Problem>Couldn't read {read.unread.join(", ")} just now</Problem>}
+      {rows && rows.length > 0 && <NoteRows label={term ? "Search results" : "Notes"} rows={rows.map(({ v, n }) => ({
+        key: `${v.key}/${n.id}`, to: noteHref(v.key, n.id), title: titleOf(n), meta: shown.length > 1 ? v.vault : "", aside: when.short(updated(n)),
+      }))} />}
       {rows && !rows.length && (term ? <p className="quiet">Nothing matches “{term}”.</p> : <Empty>Nothing written here yet. Start with New note, or Capture below.</Empty>)}
       <p className="launcher-foot"><Link to="/add">Add a Parachute</Link><Link to="/settings">Settings</Link></p>
     </main>
