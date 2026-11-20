@@ -147,6 +147,8 @@ test("mail: Uni's held sends wait for alice; she approves one (bob gets it) and 
     expect((await uni.post("op", { op: "send.check", accountId: uniAcct, opId: declined })).state).toBe("declined");
     await page.waitForTimeout(3000);
     expect((await bob.inbox()).some((m) => m.subject === `Invoice ${stamp}`)).toBe(false);
+    // and the approved one went once (the cancelled try sent nothing)
+    expect((await bob.inbox()).filter((m) => m.subject === `Seed order ${stamp}`)).toHaveLength(1);
     await app.getByRole("button", { name: "← Waiting" }).click();
     await expect(held.getByRole("button", { name: new RegExp(`Invoice ${stamp}`) })).toContainText("Declined");
     // declining sends nothing, so it asks no unlock

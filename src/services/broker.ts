@@ -30,7 +30,7 @@ export type Shell = { tap: () => boolean | "again"; secret: (v: SecretView) => P
    *  `what` in the shell's words, `wrong` the last try's refusal. null: cancelled. The applet never sees it. */
   passcode: (v: { what: string; wrong: string | null }) => Promise<string | null> };
 /** A second tap within an activation's few seconds: also after a cancelled unlock (nothing was approved, but the tap
- *  was used, and the same request waits out Rust's cooldown anyway). Said plainly, not "needs your tap". */
+ *  was used; the same request may also be inside Rust's cooldown). Said plainly, not "needs your tap". */
 export const TAP_AGAIN = "Tap again in a moment: one tap pays for one approval.";
 const NO_SHELL: Shell = { tap: () => false, secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null };
 

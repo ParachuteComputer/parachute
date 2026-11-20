@@ -131,8 +131,9 @@ live user activation with the focus in its own frame, while its screen is in fro
 second `answer` or `secret` within the activation's few seconds is refused (one call may answer several rows of one
 morning card). This check is the web side's, as SERVICES.md accepts. So an applet can't approve on its
 own, and can't raise unlock prompts out of nowhere; after a cancelled unlock the same card can't ask again for 5
-seconds. A second tap within those seconds reads "Tap again in a moment: one tap pays for one approval." (also right
-after a cancelled unlock: nothing was approved, but the tap was used), not "needs your tap".
+seconds. A second tap within the activation's few seconds reads "Tap again in a moment: one tap pays for one approval."
+(also right after a cancelled unlock: nothing was approved, but the tap was used), not "needs your tap"; a retry after
+that but still inside the cancel's cooldown reads Rust's "That was just cancelled. Try again in a moment."
 
 1. The applet finds a card in a room (a kind 9 with a `uni-sealed-approval`, `uni-sealed-morning` or
    `uni-secret-request` block) and hands the **signed event** to the shell: `services.card(id, event)`.
