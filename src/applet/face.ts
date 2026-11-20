@@ -56,7 +56,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
   // notes and applets (open) ride on the web addresses' line when there is one, so a card that has both is no longer for it
   if (g.app.includes("links")) lines.push({ lead: g.app.includes("open") ? "Opens web addresses, notes and applets" : "Opens web addresses", rest: ": what it reads could leave that way.", risky: true });
   if (g.app.includes("recent")) lines.push({ lead: "Sees the titles of the newest notes", rest: " in every vault on this device.", risky: true });
-  if (g.app.includes("vaults")) lines.push({ lead: "Sees and changes records in every vault", rest: " on this device: their words, fields, types, tags, links and history (a change where Parachute only reads asks you first).", risky: true });
+  if (g.app.includes("vaults")) lines.push({ lead: "Sees and changes records in every vault", rest: " on this device: their words, fields, types, tags, links and history (a change where Parachute only reads asks you first, and so does a change to a published record).", risky: true });
   if (g.app.includes("sharing")) lines.push({ lead: "Sees what reaches each vault", rest: ", and after your yes on the app's own sheet: publishes a record (anyone with its link can read it), takes an applet's access back, or makes a vault read only.", risky: true });
   for (const l of grantLines({ ...g, allow: [], opens: [], app: [], services: [], reach: [], signals: [] }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
   // its signals (signals.ts), as the details say them

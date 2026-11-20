@@ -29,6 +29,12 @@ const shown = (v: unknown) => (v === null || v === undefined || v === "" ? "" : 
 const label = (name: string) => name.replace(/_/g, " ");
 const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "");
 const said = (e: any) => String(e?.message ?? e ?? "it failed").slice(0, 200);
+/** What a refused ask says: nothing for the person's own No; "tap again" when no tap was live; else the reason. */
+const quiet = (e: unknown, what: string) => {
+  const m = said(e);
+  if (/not_confirmed/.test(m)) return;
+  toast(/needs_tap/.test(m) ? "Tap it again." : `${what}: ${m}`, { error: !/needs_tap/.test(m) });
+};
 const clean = (s: string) => s.replace(/[#*`>\[\]\\:?"<>|^]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
 
 const CSS = `
@@ -292,6 +298,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
     if (!r) return;
     try { const x: Rec = await vaults.update(v.key, r.id, { if_updated_at: r.updatedAt, ...c }); await load(); if (done) toast(done); return x; }
     catch (e: any) {
+      if (/not_confirmed|needs_tap/.test(said(e))) { quiet(e, "Not saved"); throw e; }
       toast(/conflict/.test(said(e)) ? "It changed meanwhile. It's read again: try once more." : `Not saved: ${said(e)}`, { error: true });
       if (/conflict/.test(said(e))) void load();
       throw e;
@@ -302,7 +309,8 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   const names = [...new Set([...Object.keys(spec), ...Object.keys(r.fields)])];
   const links = r.links ?? [];
   const out = links.filter((l) => l.dir === "out"), into = links.filter((l) => l.dir === "in");
-  const published = r.tags.includes("published");
+  // public as the hub judges it: the field, or its default publish tag (a vault that names another tag isn't known here)
+  const published = r.fields.published === true || r.tags.some((t) => ["publish", "published"].includes(t.toLowerCase()));
   return (
     <article aria-label={r.title} ref={top}>
       <Button kind="quiet" onClick={back.onPress}>{`← ${back.label}`}</Button>
@@ -310,7 +318,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       <p className="note-meta">{folderOf(r.path) || "/"} · changed {when.ago(r.updatedAt)}{r.updatedVia ? ` · ${r.updatedVia}` : ""}</p>
       <div className="chips">
         {r.types.map((t) => <span key={t} className="chip type">{label(t)}{canWrite && <Button small kind="quiet" onClick={() => void change({ types: { remove: [t] } }, `No longer a ${t}.`)}>×</Button>}</span>)}
-        {r.tags.map((t) => <span key={t} className="chip">#{t}{canWrite && t !== "published" && <Button small kind="quiet" onClick={() => void change({ tags: { remove: [t] } })}>×</Button>}</span>)}
+        {r.tags.map((t) => <span key={t} className="chip">#{t}{canWrite && !["publish", "published"].includes(t.toLowerCase()) && <Button small kind="quiet" onClick={() => void change({ tags: { remove: [t] } })}>×</Button>}</span>)}
       </div>
       {canWrite && <Field label="Add a tag or type" placeholder="#tag, or a type's name" action="Add" onAction={async (x) => {
         const t = x.trim().replace(/^#/, "").toLowerCase().replace(/\s+/g, "-");
@@ -354,7 +362,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       {canWrite && <>
         <p className="sect">Sharing</p>
         <p className="note-meta">{published ? "Published: anyone with its link can read it." : "Only you, and what you let in, can read it."}</p>
-        <Button small onClick={() => vaults.publish(v.key, r.id, !published).then(() => { toast(published ? "No longer published." : "Published."); return load(); }, (e: unknown) => { if (!/not_confirmed/.test(said(e))) toast(`Not changed: ${said(e)}`, { error: true }); })}>{published ? "Unpublish" : "Publish"}</Button>
+        <Button small onClick={() => vaults.publish(v.key, r.id, !published).then(() => { toast(published ? "No longer published." : "Published."); return load(); }, (e: unknown) => quiet(e, "Not changed"))}>{published ? "Unpublish" : "Publish"}</Button>
       </>}
     </article>
   );
@@ -366,17 +374,19 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const [a, setA] = useState<{ level: string | null; hub: string; connector: string; applets: { noteId: string; name: string; glyph: string; since: string | null; changes: boolean }[] } | null>(null);
   const [pub, setPub] = useState<Rec[] | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
-  const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { tag: "published", limit: 50 })])
-    .then(([x, p]: [any, { records: Rec[] }]) => { setA(x); setPub(p.records); setFailed(null); }, setFailed);
+  // public as the hub judges it: the field, or the default publish tags
+  const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { where: [{ field: "published", op: "eq", value: true }], limit: 50 }),
+    vaults.query(v.key, { tag: "publish", limit: 50 }), vaults.query(v.key, { tag: "published", limit: 50 })])
+    .then(([x, ...ps]: [any, ...{ records: Rec[] }[]]) => { setA(x); setPub([...new Map(ps.flatMap((p) => p.records).map((r) => [r.id, r])).values()]); setFailed(null); }, setFailed);
   useEffect(() => { void load(); }, [v.key]);
   return (
     <Page title="Sharing" kicker={v.name} back={back} className="vlt" onRefresh={load}>
       <style>{CSS}</style>
       {failed ? <Problem error={failed} onRetry={load}>What reaches {v.name} couldn't be read</Problem> : !a ? <Loading /> : <>
         <List label="This app" rows={[{ key: "app", title: a.level === "write" ? "Reads and changes records" : "Reads records", meta: `on this device, at ${a.hub.replace(/^https?:\/\//, "")}`,
-          aside: a.level === "write" ? <Button small kind="quiet" onClick={() => vaults.readOnly(v.key).then(load, (e: unknown) => { if (!/not_confirmed/.test(said(e))) toast(said(e), { error: true }); })}>Read only</Button> : undefined }]} />
+          aside: a.level === "write" ? <Button small kind="quiet" onClick={() => vaults.readOnly(v.key).then(load, (e: unknown) => quiet(e, "Not changed"))}>Read only</Button> : undefined }]} />
         {a.applets.length ? <List label="Applets you allowed here" rows={a.applets.map((x) => ({ key: x.noteId, glyph: x.glyph, title: x.name, meta: `${x.changes ? "reads and changes" : "reads"}${x.since ? ` · since ${when.date(x.since)}` : ""}`,
-          aside: <Button small kind="quiet" onClick={() => vaults.revoke(v.key, x.noteId).then(() => { toast(`${x.name} revoked.`); return load(); }, (e: unknown) => { if (!/not_confirmed/.test(said(e))) toast(said(e), { error: true }); })}>Revoke</Button> }))} />
+          aside: <Button small kind="quiet" onClick={() => vaults.revoke(v.key, x.noteId).then(() => { toast(`${x.name} revoked.`); return load(); }, (e: unknown) => quiet(e, "Not revoked"))}>Revoke</Button> }))} />
           : <Empty>No applet is allowed in {v.name} on this device.</Empty>}
         <List label="Published" rows={(pub ?? []).map((r) => ({ key: r.id, title: r.title, meta: "anyone with its link can read it" }))} />
         {pub && !pub.length && <p className="note-meta">Nothing in {v.name} is published.</p>}

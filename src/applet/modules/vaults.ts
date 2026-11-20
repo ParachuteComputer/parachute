@@ -22,7 +22,8 @@
 //
 // What it never does, whatever the card says: change a code record (HTML, TSX, JSX) or one carrying an applet's,
 // component's or the app's own name (`applet`, `component`, `parachute-*`: its settings, apps, approvals, keys), give or
-// take away such a name, or `published` (that is `sharing`'s, behind its sheet), or write into `Applets/`, `Parachute/` or
+// take away such a name, or publish a record (the `publish`/`published` tag or field: that is `sharing`'s, behind its
+// sheet), or change a published record without the person's yes on the sheet, or write into `Applets/`, `Parachute/` or
 // `.parachute/`, except saved views
 // (`Parachute/Views/…`, `parachute-view`), which are the Vault applet's own records. Every call costs the frame's read
 // budget; a change to a vault held only for reading is refused and the person is asked (vault/writeAsk.ts).
@@ -56,8 +57,9 @@ export type VaultsDeps = {
   access(vault: string): Promise<AccessRow>;
   revoke(vault: string, noteId: string): Promise<void>;
   readOnly(vault: string): Promise<void>;
-  /** The app's own yes-or-no sheet over the applet, after a tap of the person's in it; false without one, or for no. */
-  confirm(q: { title: string; body: string; act: string }): Promise<boolean>;
+  /** The app's own yes-or-no sheet over the applet, after a tap of the person's in it: "yes", "no", or "untapped" (no
+   *  live tap in the applet, so no sheet was shown). */
+  confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">;
   emit(event: string, data: unknown): void;
 };
 
@@ -69,8 +71,20 @@ const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const VIEWS = "Parachute/Views/";
 const VIEW_TAG = "parachute-view";
 const GUARDED = ["applet", "component", "parachute-pointer"];
-/** The tag that makes a record readable by anyone with its link (the hub's `published_tag`, by default). */
-export const PUBLISHED = "published";
+/** What makes a record readable by anyone with its link, on the hub (core routes.ts `isNotePublished`): the vault's
+ *  `published_tag` (`publish` unless its config names another, which only an admin reads), or the field `published`
+ *  set to true. No applet sets either through a change: `sharing`'s publish does, after the person's yes. */
+export const PUBLISH_TAGS = ["publish", "published"];
+export const PUBLISH_FIELD = "published";
+const publishName = (t: string) => PUBLISH_TAGS.includes(t.toLowerCase());
+/** Is this record readable by anyone with its link (as far as the app can tell: a vault's own published_tag isn't read)? */
+export const isPublic = (r: { tags: string[]; fields: Record<string, unknown> }) => r.tags.some(publishName) || r.fields[PUBLISH_FIELD] === true;
+/** The person's yes, said as a contract error otherwise. */
+async function askFirst(deps: VaultsDeps, q: { title: string; body: string; act: string }) {
+  const a = await deps.confirm(q);
+  if (a === "untapped") throw new ContractError(ERROR_CODES.failed, "needs_tap: it asks while you tap in it");
+  if (a !== "yes") throw new ContractError(ERROR_CODES.failed, "not_confirmed: the person said no");
+}
 /** A name the app keeps for itself (an applet's, a component's, the app's own), but a saved view's. */
 export const appsOwn = (t: string) => t !== VIEW_TAG && (/^parachute/i.test(t) || GUARDED.some((g) => t === g || t.startsWith(`${g}/`)));
 const str = (x: unknown, max = 300): x is string => typeof x === "string" && x.length > 0 && x.length <= max && !hasHidden(x);
@@ -156,7 +170,12 @@ export function queryPath(q: Query, door: "records" | "notes"): string {
   if (tag) u.set("tag", tag);
   if (q.search) u.set("search", q.search);
   if (q.path) u.set(door === "records" ? "path_prefix" : "path_prefix", q.path);
-  for (const w of q.where) u.set(`meta[${w.field}][${w.op}]`, Array.isArray(w.value) ? w.value.map(String).join(",") : String(w.value));
+  // field filters as the hub's JSON form, which keeps a value's type (`true`, `5`), unlike meta[field][op]=text
+  if (q.where.length) {
+    const m: Record<string, Record<string, unknown>> = {};
+    for (const w of q.where) (m[w.field] ??= {})[w.op] = w.value;
+    u.set("metadata", JSON.stringify(m));
+  }
   if (q.sort && !q.search) {
     const by = q.sort.by === "updated" ? "updated_at" : q.sort.by === "created" ? "created_at" : q.sort.by;
     // the hub has no order by name or path: those are left to the newest first
@@ -336,10 +355,10 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           return c ? { vault: p.vault as string, id: p.id, change: c } : null;
         }),
         async run({ vault, id, change }: { vault: string; id: string; change: Change }, _s, ctx) {
-          held(vault); ctx.charge(2);
+          const v = held(vault); ctx.charge(2);
           const named = [...(change.types?.add ?? []), ...(change.types?.remove ?? []), ...(change.tags?.add ?? []), ...(change.tags?.remove ?? [])];
           if (named.some(appsOwn)) throw refuse("an applet can't give or take away the app's own names");
-          if (named.some((t) => t.toLowerCase() === PUBLISHED)) throw refuse("publishing is sharing's, and the person says yes to it");
+          if (named.some(publishName) || (change.fields && PUBLISH_FIELD in change.fields)) throw refuse("publishing is sharing's, and the person says yes to it");
           let now: Rec & { extension?: unknown };
           try { now = await getRec(vault, id, false); } catch (e) { throw failed(e); }
           // judged on the record as it is now: never code, an applet, a component or the app's own (but a saved view)
@@ -347,6 +366,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           if (now.path.startsWith(VIEWS) && change.types?.remove?.length) throw refuse("a saved view keeps its names");
           // the change is to the version judged above, or none
           if (change.if_updated_at !== now.updatedAt) throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read");
+          // what is written into a published record anyone with its link reads: the person says yes first
+          if (isPublic(now)) await askFirst(deps, { title: `Change ${now.path}?`, body: `It is published from ${v.name} (${v.host}): anyone with its link reads what is written there.`, act: "Change it" });
           const door = await deps.door(vault);
           try {
             const raw = await deps.request(vault, "PATCH", `/${door}/${encodeURIComponent(now.id)}`, bodyFor(door, change));
@@ -366,7 +387,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           held(vault); ctx.charge(2);
           const view = rec.path.startsWith(VIEWS);
           if ([...rec.types, ...rec.tags].some((t) => appsOwn(t))) throw refuse("an applet can't give the app's own names");
-          if ([...rec.types, ...rec.tags].some((t) => t.toLowerCase() === PUBLISHED)) throw refuse("publishing is sharing's, and the person says yes to it");
+          if ([...rec.types, ...rec.tags].some(publishName) || (rec.fields && PUBLISH_FIELD in rec.fields)) throw refuse("publishing is sharing's, and the person says yes to it");
           // a saved view is a record of its own kind, in its own folder, and nothing else goes there
           if (view !== rec.tags.includes(VIEW_TAG)) throw refuse("saved views live in Parachute/Views/, tagged parachute-view");
           const door = await deps.door(vault);
@@ -410,36 +431,37 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           const v = held(vault); ctx.charge(2);
           let now: Rec & { extension?: unknown };
           try { now = await getRec(vault, id, false); } catch (e) { throw failed(e); }
-          if (guarded(now)) throw refuse("this record is the app's own: no applet changes it");
-          if (now.tags.includes(PUBLISHED) === on) return recOf({ ...now }, undefined);
+          if (guarded(now) || (!now.path.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(now.path)) || now.path.startsWith(VIEWS)) throw refuse("this record is the app's own: no applet changes it");
+          if (isPublic(now) === on) return recOf({ ...now }, undefined);
           // making it readable by anyone is the person's to say, on the app's own sheet; taking that back isn't asked
-          if (on && !(await deps.confirm({ title: `Publish ${now.title}?`, body: `Anyone with its link can read ${now.title}, from ${v.name}, without signing in. You can unpublish it later.`, act: "Publish" })))
-            throw new ContractError(ERROR_CODES.failed, "not_confirmed: the person said no");
+          if (on) await askFirst(deps, { title: `Publish ${now.path}?`, body: `Anyone with its link can read ${now.path}, from ${v.name} (${v.host}), without signing in. You can unpublish it later.`, act: "Publish" });
           const door = await deps.door(vault);
+          // the field works whatever tag a vault names for publishing; off takes away the field and the default tags
+          const fields = door === "records" ? "fields" : "metadata";
+          const body = on ? { [fields]: { [PUBLISH_FIELD]: true }, if_updated_at: now.updatedAt }
+            : { [fields]: { [PUBLISH_FIELD]: null }, ...(now.tags.some(publishName) ? { tags: { remove: now.tags.filter(publishName) } } : {}), if_updated_at: now.updatedAt };
           try {
-            const raw = await deps.request(vault, "PATCH", `/${door}/${encodeURIComponent(now.id)}`, { tags: on ? { add: [PUBLISHED] } : { remove: [PUBLISHED] }, if_updated_at: now.updatedAt });
+            const raw = await deps.request(vault, "PATCH", `/${door}/${encodeURIComponent(now.id)}`, body);
             return recOf(raw, await namesFor(vault));
           } catch (e) { throw failed(e); }
         },
       },
       revoke: {
         cap: null, validate: one((p) => (vaultOnly(["noteId"])(p) && typeof p.noteId === "string" && ID.test(p.noteId) ? p as { vault: string; noteId: string } : null), "sharing"),
-        async run({ vault, noteId }: { vault: string; noteId: string }) {
-          const v = held(vault);
+        async run({ vault, noteId }: { vault: string; noteId: string }, _s, ctx) {
+          const v = held(vault); ctx.charge(1);
           const a = (await deps.access(vault)).applets.find((x) => x.noteId === noteId);
           if (!a) throw refuse("no applet allowed there by that note");
-          if (!(await deps.confirm({ title: `Revoke ${a.name}?`, body: `${a.name} stops in ${v.name}, and asks again before it runs. With your key, your other devices take it back too.`, act: "Revoke" })))
-            throw new ContractError(ERROR_CODES.failed, "not_confirmed: the person said no");
+          await askFirst(deps, { title: `Revoke ${a.name}?`, body: `${a.name} stops in ${v.name} (${v.host}), and asks again before it runs. With your key, your other devices take it back too.`, act: "Revoke" });
           await deps.revoke(vault, noteId);
           return null;
         },
       },
       readOnly: {
         cap: null, validate: one(vaultOnly(), "sharing"),
-        async run({ vault }: { vault: string }) {
-          const v = held(vault);
-          if (!(await deps.confirm({ title: `Let Parachute only read ${v.name}?`, body: `A change there (yours, or an applet's) asks you again, on your hub.`, act: "Read only" })))
-            throw new ContractError(ERROR_CODES.failed, "not_confirmed: the person said no");
+        async run({ vault }: { vault: string }, _s, ctx) {
+          const v = held(vault); ctx.charge(1);
+          await askFirst(deps, { title: `Let Parachute only read ${v.name}?`, body: `${v.name} (${v.host}): a change there, yours or an applet's, asks you again on your hub.`, act: "Read only" });
           await deps.readOnly(vault);
           return null;
         },

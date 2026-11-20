@@ -171,11 +171,12 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
     }),
   };
   /** The shell's own yes or no, over a screen the person is looking at, after their tap in it (one tap, one question). */
-  const confirm = (q: Confirm): Promise<boolean> => new Promise((done) => {
+  const confirm = (q: Confirm): Promise<"yes" | "no" | "untapped"> => new Promise((done) => {
     const f = frame();
+    if (open.current || !f || !onScreen(f)) { done("no"); return; }
     // a live tap is enough: the sheet itself is the one answer (a tap spent on an earlier one doesn't make it wait)
-    if (open.current || !f || !onScreen(f) || tap() === false) { done(false); return; }
-    const c: Confirming = { ...q, done: (x) => { open.current = null; setConfirming(null); done(x === true); } };
+    if (tap() === false) { done("untapped"); return; }
+    const c: Confirming = { ...q, done: (x) => { open.current = null; setConfirming(null); done(x === true ? "yes" : "no"); } };
     open.current = c;
     setConfirming(c);
   });

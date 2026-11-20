@@ -17,7 +17,7 @@ Bases, Anytype, Capacities).
 | A vault | its types, each with how many records it has and its fields; its tags; the newest records; a search; **New type**; **Sharing** |
 | A type | its records as a table: the type's fields are the columns, a header's tap sorts by it, the first column stays in view as the rest scroll across. **Filter** (a field's value), **Group** (by a field), **List** or **Table**, a search. Saved views as tabs. **New …** adds a record of the type. A record opens beside the table on a computer, in its place on a phone |
 | A record | its fields, changed where they stand (a choice from the type's list, a box for yes or no, a number, a date), its types and tags, its words (rendered; **Edit words**), what it links to and what links to it, its history (each kept version, by whom; tap one to read it), and **Publish** |
-| Sharing | what reaches the vault: this app (reads, or reads and changes; **Read only**), the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at. **Publish**, **Revoke** and **Read only** each ask on the app's own sheet first |
+| Sharing | what reaches the vault: this app (reads, or reads and changes; **Read only**), the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at. **Publish**, **Revoke** and **Read only** each ask on the app's own sheet first, naming the record's path or the applet, and the vault's host |
 
 What an AI writes shows as it lands: the type's table and an open record follow the vault's live changes (the hub's
 subscription, not a timer).
@@ -33,7 +33,8 @@ subscription, not a timer).
   answers), the kit's `vaults.*` calls.
 - **What it never changes**, whatever its card says: code (HTML, TSX, JSX), a record carrying an applet's, a
   component's or the app's own name (`applet`, `component`, `parachute-*`), or anything in `Applets/`, `Parachute/` or
-  `.parachute/`; it never gives or takes away such a name, nor `published` (only `sharing`'s publish, after the sheet).
+  `.parachute/`; it never gives or takes away such a name, nor publishes (the `publish`/`published` tag or field: only `sharing`'s
+  publish, after the sheet), and a change to a record that is already public asks on the sheet first.
   A change is to the version it was judged on (`if_updated_at` must be the record's as read). Saved views are the one exception it keeps for itself:
   records in `Parachute/Views/<type>/`, tagged `parachute-view`, their settings in one field, `view`.
 - **Changing a vault Parachute only reads** is refused before it is sent, and the person is asked (the hub's page), as a
@@ -81,6 +82,12 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
    to a record; declaring a field on the type (its kind, its choices) is left to an AI with `manage-types`, or the
    person with an admin key. Proposal: the typed work's rule (write may add a new type and fields to a type it made)
    on REST too.
-3. **Per-record sharing** beyond publishing: none in core (`docs/SPEC-1.0-grants.md`: not built). Publish is the
-   vault's `published` tag; a vault that names another tag in its config isn't read (that config is admin's).
+3. **Per-record sharing** beyond publishing: none in core (`docs/SPEC-1.0-grants.md`: not built). The hub serves a
+   record to anyone at `/vault/<name>/view/<id or path>` when it carries the vault's `published_tag` (`publish` unless
+   the vault's config names another) or the field `published: true`. Vault publishes with the field (which every vault
+   honours), after the app's own sheet; `vaults` refuses to give or take `publish`/`published` or that field, and asks
+   on the sheet before changing a record that is already public. **Gap:** a vault whose config names another tag
+   (only admin reads the config) isn't known to the app, so that tag could be given by a change without the sheet;
+   and tags a tag-scoped key (or `private_tags`) is narrowed by are ordinary tags to `vaults`, so a change can widen or
+   narrow what such a key sees. Proposal: the vault's read scope may read its `published_tag` and `private_tags`.
 4. **Counts per group**: `aggregate` groups only by an indexed field, so a grouped table counts what it has read.

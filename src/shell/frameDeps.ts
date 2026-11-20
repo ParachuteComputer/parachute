@@ -56,9 +56,10 @@ const confirmed = (from: "built-in" | "vault", q: WriteAsk) => (from === "vault"
 /** The same, once the home vault's applets have been read this session (so Vault, when it is there, is known). */
 const homeRead = async () => {
   const home = homeVault();
-  // read once if never read this session: a read that failed isn't asked again here (each frame's reload of the home
-  // would ask it again, and each failure would set off another)
-  if (home && !appletsNow(home.key)) await refreshApplets(home).catch(() => false);
+  // read once if never read this session, or wait for the read already under way: a read that failed isn't asked
+  // again here (each frame's reload of the home would ask it again, and each failure would set off another)
+  const was = home ? appletsNow(home.key) : undefined;
+  if (home && (!was || was.state === "loading")) await refreshApplets(home).catch(() => false);
   await whenGateKnown();
   return homeNow();
 };

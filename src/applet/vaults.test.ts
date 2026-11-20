@@ -26,7 +26,7 @@ function setup(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], records:
     access: async () => ({ level: "write", mine: true, home: true, hub: "https://hub.example", connector: "https://hub.example/vault/home/mcp", applets: [{ noteId: "app1", name: "Recipe box", glyph: "❀", since: null, changes: false }] }),
     revoke: async (_v, id) => { revoked.push(id); },
     readOnly: async () => {},
-    confirm: async (q) => { asked.push(q.title); return opts.yes ?? true; },
+    confirm: async (q) => { asked.push(q.title); return (opts.yes ?? true) ? "yes" : "no"; },
     emit: () => {},
   };
   const m = createVaultsModule(words, deps);
@@ -54,7 +54,8 @@ describe("the vaults word", () => {
     const r = await call("query", { vault: "home", type: "book", where: [{ field: "status", op: "eq", value: "read" }], sort: { by: "rating", dir: "desc" }, limit: 100, offset: 200 });
     expect(r.records[0]).toMatchObject({ id: "a", types: ["book"], fields: { status: "read" } });
     const q = new URLSearchParams(calls.at(-1)!.path.split("?")[1]);
-    expect(Object.fromEntries(q)).toMatchObject({ tag: "book", "meta[status][eq]": "read", order_by: "rating", sort: "desc", limit: "101", offset: "200", include_fields: "true" });
+    expect(JSON.parse(q.get("metadata")!)).toEqual({ status: { eq: "read" } });
+    expect(Object.fromEntries(q)).toMatchObject({ tag: "book", order_by: "rating", sort: "desc", limit: "101", offset: "200", include_fields: "true" });
   });
   it("a query it can't say is refused before the hub sees it", async () => {
     const { call } = setup();
@@ -123,20 +124,37 @@ describe("sharing", () => {
     expect(yes.asked).toEqual(["Revoke Recipe box?"]);
     expect(yes.revoked).toEqual(["app1"]);
   });
-  it("publishing is never a tag a change gives: only sharing's publish, after a yes", async () => {
+  it("publishing is never something a change gives: not the tag (publish, published, any case), not the field", async () => {
     const { call, calls } = setup(["vaults"], { a: book });
-    for (const bytes of [enc({ if_updated_at: book.updatedAt, tags: { add: ["published"] } }), enc({ if_updated_at: book.updatedAt, tags: { add: ["Published"] } })])
-      await expect(call("update", { vault: "home", id: "a", bytes })).rejects.toMatchObject({ code: "out_of_scope" });
-    await expect(call("create", { vault: "home", bytes: enc({ path: "Books/B", body: "x", tags: ["published"] }) })).rejects.toMatchObject({ code: "out_of_scope" });
+    for (const c of [{ tags: { add: ["publish"] } }, { tags: { add: ["Published"] } }, { types: { add: ["PUBLISH"] } }, { fields: { published: true } }])
+      await expect(call("update", { vault: "home", id: "a", bytes: enc({ if_updated_at: book.updatedAt, ...c }) })).rejects.toMatchObject({ code: "out_of_scope" });
+    for (const r of [{ tags: ["publish"] }, { tags: ["published"] }, { fields: { published: true } }])
+      await expect(call("create", { vault: "home", bytes: enc({ path: "Books/B", body: "x", ...r }) })).rejects.toMatchObject({ code: "out_of_scope" });
     await expect(call("publish", { vault: "home", id: "a", on: true })).rejects.toMatchObject({ code: "not_granted" });
     expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
+  });
+  it("sharing's publish sets the field the hub honours, after a yes naming the record's path", async () => {
     const no = setup(["sharing"], { a: book }, { yes: false });
     await expect(no.call("publish", { vault: "home", id: "a", on: true })).rejects.toMatchObject({ code: "failed" });
     expect(no.calls.filter((c) => c.method !== "GET")).toEqual([]);
     const yes = setup(["sharing"], { a: book });
     await yes.call("publish", { vault: "home", id: "a", on: true });
-    expect(yes.asked).toEqual(["Publish A?"]);
-    expect(yes.calls.at(-1)).toMatchObject({ method: "PATCH", body: { tags: { add: ["published"] }, if_updated_at: book.updatedAt } });
+    expect(yes.asked).toEqual(["Publish Books/A?"]);
+    expect(yes.calls.at(-1)).toMatchObject({ method: "PATCH", body: { fields: { published: true }, if_updated_at: book.updatedAt } });
+    // off takes the field and any publish tag away, and isn't asked
+    const off = setup(["sharing"], { a: { ...book, tags: ["publish"], fields: { published: true } } });
+    await off.call("publish", { vault: "home", id: "a", on: false });
+    expect(off.asked).toEqual([]);
+    expect(off.calls.at(-1)).toMatchObject({ method: "PATCH", body: { fields: { published: null }, tags: { remove: ["publish"] } } });
+  });
+  it("a published record changes only after the person's yes (anyone with its link reads it)", async () => {
+    const pub = { ...book, fields: { published: true } };
+    const no = setup(["vaults"], { a: pub }, { yes: false });
+    await expect(no.call("update", { vault: "home", id: "a", bytes: enc({ if_updated_at: book.updatedAt, body: "my journal" }) })).rejects.toMatchObject({ code: "failed" });
+    expect(no.calls.filter((c) => c.method !== "GET")).toEqual([]);
+    const yes = setup(["vaults"], { a: { ...book, tags: ["publish"] } });
+    await yes.call("update", { vault: "home", id: "a", bytes: enc({ if_updated_at: book.updatedAt, body: "ok" }) });
+    expect(yes.asked).toEqual(["Change Books/A?"]);
   });
   it("a change is to the version it was judged on", async () => {
     const { call, calls } = setup(["vaults"], { a: book });

@@ -29,7 +29,7 @@ export function heldVaults(): HeldVault[] {
   return listVaults().map((v) => ({ key: v.key, name: v.vault, host: hostOf(v.issuer), mine: isMine(v), home: home?.key === v.key, level: heldLevel(v) }));
 }
 
-export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<boolean>; emit(event: string, data: unknown): void; back(): string }): VaultsDeps {
+export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string }): VaultsDeps {
   const req = (key: string) => clientFor(rec(key)) as unknown as VaultClient & Requesting;
   return {
     list: heldVaults,
