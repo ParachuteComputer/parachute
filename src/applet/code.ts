@@ -122,27 +122,31 @@ const FAILURE = String.raw`(function () {
     var why = String(e && e.message ? e.message : e);
     // the whole error, stack and all, is for the applet's author, in the console
     try { console.warn("This applet stopped:", e); } catch (x) { /* no console */ }
-    var p = document.createElement("p");
-    if (missing.length) {
-      // it may have fallen back for what was missing and stopped for another reason; updating is the fix either way,
-      // so the line says only that, and what is missing goes in a quieter line under it
-      var box = document.createElement("div"), b = document.createElement("strong"), q = document.createElement("p");
-      box.className = "parachute-update"; box.setAttribute("role", "status");
-      b.textContent = window.__parachuteUpdate || "Update Parachute."; p.appendChild(b);
-      q.className = "quiet"; q.textContent = "It uses " + missing.join(", ") + ", which this Parachute doesn't have.";
-      box.appendChild(p); box.appendChild(q); root.appendChild(box);
+    // did what is missing stop it? React's "element type is invalid" (#130 once minified), a TypeError about undefined,
+    // or a missing name in the message. If not, it fell back for the part and stopped for another reason, said as such.
+    var byPart = missing.length > 0 && (/#130\b|element type is invalid/i.test(why) || (e && e.name === "TypeError" && /undefined|is not a (function|constructor)/.test(why))
+      || missing.some(function (n) { return why.indexOf(n) >= 0; }));
+    var box = document.createElement("div"), p = document.createElement("p");
+    box.setAttribute("role", "alert"); box.appendChild(p);
+    if (byPart) {
+      // one short line, what is missing in a quieter line under it, and none of the error
+      var b = document.createElement("strong"), q = document.createElement("p");
+      box.className = "parachute-update"; b.textContent = window.__parachuteUpdate || "Update Parachute."; p.appendChild(b);
+      q.className = "quiet"; q.textContent = "It uses " + missing.join(", ") + ", which this Parachute doesn't have."; box.appendChild(q);
     } else {
-      // its own words, but only the first line of them, and never a stack
-      p.className = "parachute-error"; p.setAttribute("role", "alert");
-      p.textContent = "This applet stopped: " + why.split("\n")[0].slice(0, 300); root.appendChild(p);
+      // its own words, but only their first line, and never a stack
+      var line = why.replace(/^\s+/, "").split("\n")[0];
+      box.className = "parachute-error"; p.textContent = "This applet stopped: " + (line.length > 300 ? line.slice(0, 299) + "…" : line);
     }
+    root.appendChild(box);
   };
   addEventListener("error", function (e) { var root = document.getElementById("root"); if (root && !root.firstChild) window.__parachuteFail(e.error || e.message); });
 })();`;
 /** The failure line's look: the shell's own for the same thing (styles.css `.card`, `.quiet`, `.error`), on the theme's
- *  tokens, which the frame has (frame.tsx frameSrcDoc). The fallbacks are the built-in theme's. */
-const FAILURE_STYLE = "<style>:root:has(#root>.parachute-update,#root>.parachute-error) body{margin:0}.parachute-update,.parachute-error{margin:0;padding:12px var(--pad,14px);font:var(--size,16px)/var(--leading,1.45) var(--sans,system-ui,sans-serif);color:var(--text,#1d1a16)}"
-  + ".parachute-update p{margin:0 0 6px}.parachute-update .quiet{color:var(--muted,#6d665a)}.parachute-error{color:var(--danger,#9a3324);overflow-wrap:anywhere}</style>";
+ *  tokens, which the frame has (frame.tsx frameSrcDoc, Embeds). */
+const FAILURE_STYLE = "<style>:root:has(#root>.parachute-update,#root>.parachute-error) body{margin:0}"
+  + ".parachute-update,.parachute-error{padding:12px var(--pad);font:var(--size)/var(--leading) var(--sans);color:var(--text);overflow-wrap:anywhere}"
+  + ".parachute-update p,.parachute-error p{margin:0 0 6px}.parachute-update .quiet{color:var(--muted)}.parachute-error{color:var(--danger)}</style>";
 const LOADER_HEAD = String.raw`(function () {
   var root = document.getElementById("root"), fail = window.__parachuteFail;
   var M = window.__ParachuteModules || {};

@@ -14,7 +14,9 @@ export const FRAME_IMPORTS = ["react", "react-dom", "react-dom/client", "react/j
 const FAILURE = String.raw`(function () {
   window.__parachuteFail = function (e) {
     var m = e && e.message ? e.message : String(e), root = document.getElementById("root");
-    if (root) { root.textContent = ""; var p = document.createElement("p"); p.className = "parachute-error"; p.textContent = "This frame stopped: " + m; root.appendChild(p); }
+    // the first line of its words, never a stack (the shell shows the built-in frame next, and Settings says why)
+    var line = String(m).replace(/^\s+/, "").split("\n")[0];
+    if (root) { root.textContent = ""; var p = document.createElement("p"); p.className = "parachute-error"; p.textContent = "This frame stopped: " + (line.length > 300 ? line.slice(0, 299) + "…" : line); root.appendChild(p); }
     parent.postMessage({ pf: 1, failed: String(m).slice(0, 300) }, "*");
   };
   addEventListener("error", function (e) { var root = document.getElementById("root"); if (root && !root.firstChild) window.__parachuteFail(e.error || e.message); });

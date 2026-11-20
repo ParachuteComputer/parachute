@@ -35,8 +35,9 @@ whether I install the apk/dmg before or after you do the home thing".
    (`PART_LEVEL` in `src/applet/kits/modules.ts`). When an applet that touched a part this app doesn't have then stops,
    the frame doesn't say "This applet stopped: …". It says **Update Parachute to open Rooms.**, with "It uses Timeline,
    which this Parachute doesn't have." in a quieter line under it. The error itself goes to the console, not the
-   screen: the applet may have fallen back for the part and stopped for another reason, but updating is the fix either
-   way, and a React error or a stack means nothing to the person.
+   screen: a React error or a stack means nothing to the person. When the error isn't one a missing part causes
+   (React's "element type is invalid", a TypeError about undefined, or the part's name in the message), the applet
+   fell back for the part and stopped for another reason, and the frame says "This applet stopped:" and that reason.
 4. **One wording, one look.** Every screen says it with `updateLine` (`src/applet/level.ts`): the applet's screen, its
    frame, an embed and the list. The line is plain and a little heavier, the reason quieter under it, as the shell's
    card draws it (`.card`, `.quiet`); the frame draws its line on the same tokens (`FAILURE_STYLE` in
@@ -66,7 +67,8 @@ whether I install the apk/dmg before or after you do the home thing".
 
 Tests: `src/applet/level.test.ts` (an older app opening Aaron's records made newer, components and a followed org's
 app included), `e2e/versions.spec.ts` (the same in the real build: listed, update line, no card, no frame; a missing
-part: the short line in the app's look, no React error; an imported newer component), `e2e/thinshell.spec.ts` (an app record made for a newer Parachute), `src/kit/olderApp.test.ts` (levels and
+part: the short line in the app's look, no React error; a part fallen back for, then another error; an imported
+newer component), `e2e/thinshell.spec.ts` (an app record made for a newer Parachute), `src/kit/olderApp.test.ts` (levels and
 fallbacks), and the gateway's "a registration from a newer app".
 
 ## Subtract

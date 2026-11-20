@@ -192,7 +192,7 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
   if (place.state === "refused") return say(`${place.vault} no longer lets this device in. Sign in to ${place.vault} again.`, <Link to="/settings">Settings</Link>);
   if (place.state === "gone") return say(`«${place.name}» is gone from ${place.vault}.`);
   if (place.state === "invalid") return say(`«${place.name}» can't run: ${place.why}.`);
-  if (place.state === "newer") return say(<strong>{updateLine(`«${place.name}»`)}</strong>, <p className="quiet">It was made for a newer Parachute ({place.why}).</p>);
+  if (place.state === "newer") return say(<strong>{updateLine(place.name)}</strong>, <p className="quiet">It was made for a newer Parachute ({place.why}).</p>);
   if (!found || !keys) return null;
   if (broke === "refused") return say(`${found.rec.vault} no longer lets this device in. Sign in to ${found.rec.vault} again.`, <Link to="/settings">Settings</Link>);
   if (broke === "offline") return say(`${found.rec.vault} can't be reached right now.`);
