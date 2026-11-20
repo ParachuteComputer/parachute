@@ -103,8 +103,8 @@ test("mail: Uni's held sends wait for alice; she approves one (bob gets it) and 
 
     await page.goto(`/v/${VAULT}`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Mail/ }).click();
-    // the access card says approving goes out with the approval key
-    await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("With your approval key: send send.approve requests to 127.0.0.1:19952");
+    // the access card says approving goes out with the person's key, as high risk
+    await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("High risk. With your key: send send.approve requests to 127.0.0.1:19952");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = page.frameLocator("iframe.applet-frame");
     const places = app.getByRole("navigation", { name: "Places" });

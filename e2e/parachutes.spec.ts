@@ -138,7 +138,8 @@ test("a new device that signs in to someone else's Parachute first takes none of
   await signInWithKey(page, techneState(), ORG_VAULT);
   await page.goto("/settings");
   await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
-  await expect(page.getByText("No home vault: none of your vaults is marked as yours.")).toBeVisible();
+  // no vault of theirs here, so no home: nothing of Frame's (its home picker, their frame) to show
+  await expect(page.getByRole("heading", { name: "Frame", exact: true })).toHaveCount(0);
 });
 
 test("signing in again never changes what the person said of a vault", async ({ page }) => {

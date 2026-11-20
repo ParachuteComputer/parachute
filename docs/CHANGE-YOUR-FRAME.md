@@ -6,8 +6,10 @@ in your home vault. The app never takes sign-ins, grants or the permission card 
 
 ## Start from the built-in frame
 
-In the app, Settings → Frame → **Make this mine**. The app copies its built-in frame into your home vault as the note
-`Parachute/Frame` and runs it. From then on it is yours. When a newer built-in frame comes with an app update,
+In the app, Settings → Frame → **Make this mine** (Settings shows Frame once you have a frame, or more than one vault
+of your own to pick home from). The app copies its built-in frame into your home vault as the note `Parachute/Frame`
+and runs it. Or ask your AI to write that note from the built-in frame's code (`src/frame/default-frame.tsx` in the
+app's repository). From then on it is yours. When a newer built-in frame comes with an app update,
 Settings offers it; taking it keeps your old code beside it as a note of its own. It is never written over yours
 without your tap.
 

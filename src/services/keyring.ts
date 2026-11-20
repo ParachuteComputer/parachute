@@ -1,6 +1,6 @@
 // What the web side may know of the keyring (docs/design/KEYRING.md): the public keys, whether the approval key is still
 // the everyday key, and the device's list of keys trusted for approvals, by name. Read from the native side; the card
-// uses it to name approvers ("Uni") and to say when the approval key is the everyday key.
+// uses it to name approvers (the name the person gave their agent's key).
 import { useEffect, useState } from "react";
 import { nativeNow, type KeyringStatus } from "./native";
 import type { LineOptions } from "../applet/services";
@@ -13,7 +13,6 @@ export function keyringNow(fresh = false): Promise<KeyringStatus | null> {
 }
 
 export const lineOptions = (k: KeyringStatus | null): LineOptions => ({
-  approvalSame: k?.same ?? true,
   approverName: (hex) => k?.approvers.find((a) => a.pubkey === hex)?.name ?? null,
 });
 

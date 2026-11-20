@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Bar, backOrLauncher } from "../ui/Bar";
 import { Link } from "react-router";
 import { useVaults } from "../vault/hooks";
@@ -7,14 +7,14 @@ import { dropClient } from "../vault/client";
 import { revoke } from "../vault/oauth";
 import AppletSettings from "./AppletSettings";
 import FrameSettings from "./FrameSettings";
-import { forgetVaultFrame } from "../shell/frameSource";
+import { forgetVaultFrame, homeVault, readFrameRecord, useFrameSource } from "../shell/frameSource";
 import { clearDefaults } from "../open/defaults";
 import { forgetVaultStart } from "../shell/start";
 import { forgetVaultSettings } from "../shell/homeSettings";
 import { forgetVaultTheme } from "../theme/store";
 import ThemeSettings from "./ThemeSettings";
 import ServicesSettings from "./ServicesSettings";
-import { forgetApplets } from "../applet/useApplets";
+import { appletsNow, forgetApplets, subscribeApplets } from "../applet/useApplets";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { grantInVault, isEmbedSubject } from "../applet/embeds";
 import { forgetSaved } from "../shell/saved";
@@ -30,6 +30,13 @@ import { askVault, signOutOf } from "../vault/signInFlow";
 import { dismissVault, newVaultsOn, newVaultsRev, startAddVault, subscribeNewVaults } from "../vault/newVaults";
 import BundleChoice from "./BundleChoice";
 import { appletsNeedingWrite, forgetOwnWrite, giveBack, heldLevel } from "../vault/reach";
+import { anchorNow, forgetOwnKey, ownKey } from "../applet/approvalStore";
+import { useKey } from "../key/key";
+import { nativeNow } from "../services/native";
+import { DEFAULTS } from "../shell/levelRules";
+import { onLevels } from "../shell/levels";
+import { useWhose } from "../vault/whose";
+import { ownFrame, settingsShown, usesCards } from "./settingsShown";
 
 /** Signing out of a vault ends what its applets were allowed on this device too, and the embeds on its pages or from it;
  *  what those applets saved here (drafts) goes with them. */
@@ -82,10 +89,45 @@ function VaultsToAdd({ hub, name }: { hub: string; name: string }) {
   );
 }
 
+/** What decides which sections for the person's key show (settingsShown.ts), read for this screen. */
+function useShown(vaults: VaultRecord[]) {
+  const isMine = useWhose();
+  const fs = useFrameSource();
+  const home = homeVault(vaults);
+  const [key, setKey] = useState(false);
+  const [securitySet, setSecuritySet] = useState(false);
+  // the applets as their section reads them (AppletSettings), across every vault here, read again when it reads them
+  useSyncExternalStore(subscribeApplets, () => vaults.map((v) => { const e = appletsNow(v.key); return e?.state === "ok" ? e.at : e?.state ?? ""; }).join());
+  const applets = vaults.flatMap((v) => { const e = appletsNow(v.key); return e?.state === "ok" ? e.found.entries : []; });
+  // the key, again when Settings → Your key adds or removes it (on a device; a test build's key is there from the start)
+  const npub = useKey()?.npub;
+  useEffect(() => {
+    let on = true;
+    forgetOwnKey();
+    void ownKey().then((k) => { if (on) setKey(!!k); });
+    return () => { on = false; };
+  }, [npub]);
+  useEffect(() => {
+    let on = true;
+    const levels = () => void nativeNow().then((n) => n?.levelsStatus()).then((s) => {
+      if (on && s) setSecuritySet(s.passcode || (Object.keys(DEFAULTS) as (keyof typeof DEFAULTS)[]).some((k) => s.levels[k] !== DEFAULTS[k]));
+    }, () => undefined);
+    levels();
+    const off = onLevels(levels);
+    return () => { on = false; off(); };
+  }, []);
+  // the home's frame record, read when Settings shows (the frame area reads it too, but isn't shown here)
+  useEffect(() => { void readFrameRecord(); }, [home?.key]);
+  const shown = settingsShown({ key, home: !!home && isMine(home) === "mine", applets, securitySet, anchor: !!anchorNow(),
+    frame: ownFrame(fs.read, fs.choice.run), ownVaults: vaults.filter((v) => isMine(v) === "mine").length });
+  return { ...shown, cards: key && applets.some(usesCards) };
+}
+
 /** The one place for what this device holds. Later sections (applets, the self-test) join here. */
 export default function Settings({ children }: { children?: ReactNode }) {
   const vaults = useVaults();
   const parachutes = useParachutes();
+  const shown = useShown(vaults);
   return (
     <main className="screen">
       <Bar title="Settings" back={true} onBack={backOrLauncher} />
@@ -118,11 +160,11 @@ export default function Settings({ children }: { children?: ReactNode }) {
       <BundleChoice />
       <ServicesSettings />
       <KeySettings />
-      <SecuritySettings />
-      <ApprovalSettings />
-      <KeyringSettings />
+      {shown.security && <SecuritySettings />}
+      {shown.approving && <ApprovalSettings />}
+      <KeyringSettings cards={shown.cards} />
       <NotifySettings />
-      <FrameSettings />
+      {shown.frame && <FrameSettings />}
       <ThemeSettings />
       <AppletSettings vaults={vaults} />
       {children}

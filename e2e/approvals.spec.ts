@@ -66,7 +66,7 @@ test("the rooms applet approves Uni's powerful card behind the unlock, gives a s
     await page.goto(`/v/${VAULT}`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     const grant = page.getByRole("region", { name: /asking for access/ });
-    await expect(grant).toContainText("High risk. With your approval key: answer approval cards and secret requests there from Uni (your approval key is your everyday key for now). Powerful ones ask for your device unlock");
+    await expect(grant).toContainText("High risk. With your key: answer approval cards and secret requests there from Uni. Powerful ones ask for your device unlock");
     await expect(grant).toContainText("With your everyday key: post as you in your rooms there");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);

@@ -57,7 +57,7 @@ export default function KeyStart({ first = false }: { first?: boolean }) {
       <section className="card stack">
         <p className="lead">{first ? "Or sign in with your Nostr key." : "Parachute signs you in with your Nostr key."}</p>
         <Link className={first ? "secondary" : "primary"} to="/key/pair">Pair from a device that has your key</Link>
-        <p className="quiet small">The Uni app or Buzz desktop sends it here, encrypted end to end.</p>
+        <p className="quiet small">The app that holds your key (Buzz desktop, say) sends it here, encrypted end to end.</p>
         <button type="button" className="secondary" onClick={() => void make()} disabled={busy}>Make a new key</button>
         <p className="quiet small">If you don't have one yet.</p>
         <details>

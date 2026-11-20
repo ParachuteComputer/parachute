@@ -21,8 +21,8 @@ It says what the applet would do by what it means to a person:
 - **What it does as you on each server**, one line per server, with the key it signs with and that what it reads can go
   there: *As you on buzz.example.org (your everyday key): posts messages, reactions, edits and typing in your rooms,
   deletes what you posted, and uploads and opens files. What it reads can go there.*
-- **The approval key**, its own line: *High risk, with your approval key: answers approval cards and secret requests
-  from Uni there (your approval key is your everyday key for now). Powerful ones ask for your device unlock.* An
+- **Approvals**, their own line: *High risk, with your key: answers approval cards and secret requests from Uni there.
+  Powerful ones ask for your device unlock.* An
   approver this device doesn't trust is named by its whole key.
 - **Notifications** (bold when a push gateway learns your public key and how to reach the phone), **links out**,
   **the newest titles in every vault**, **things from someone else's vault on its page**, **code from someone else's
