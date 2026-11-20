@@ -147,6 +147,13 @@ class UnlockPlugin(private val activity: Activity) : Plugin(activity) {
     if (asking === invoke) finish(result.resultCode == Activity.RESULT_OK)
   }
 
+  // The screen went off with the app in front: counted here as well, since Android 14 may hold a screen-off broadcast
+  // back from an app it has frozen in the background until it runs again.
+  override fun onStop() {
+    val power = activity.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+    if (!power.isInteractive) screenOff.incrementAndGet()
+  }
+
   override fun onResume() {
     val waiting = waitingForScreen.toList()
     waitingForScreen.clear()
@@ -160,8 +167,6 @@ class UnlockPlugin(private val activity: Activity) : Plugin(activity) {
     invoke.resolve(out)
   }
 
-  /** The screen-off count, and whether the app is in front. Just after an unlock the unlock's own screen may
-   *  still be closing: the answer waits up to two seconds for the app to come back. */
   /** The idle lock's clock: the newest touch and the longest quiet gap since the last ask (which this resets). */
   @Command
   fun touches(invoke: Invoke) {
@@ -174,6 +179,8 @@ class UnlockPlugin(private val activity: Activity) : Plugin(activity) {
     invoke.resolve(out)
   }
 
+  /** The screen-off count, and whether the app is in front. Just after an unlock the unlock's own screen may
+   *  still be closing: the answer waits up to two seconds for the app to come back. */
   @Command
   fun epoch(invoke: Invoke) {
     activity.runOnUiThread {

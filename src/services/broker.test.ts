@@ -27,7 +27,7 @@ const native = (): Native => ({
   cardView: async (_s, _v, e) => ({ kind: null, event_id: e.id, refused: "no", rows: [] }), cardAnswer: async () => ({ wraps: [], graced: false, summary: "" }), cardSent: async () => {},
   secretView: async () => { throw new Error("no"); }, secretSend: async () => ev("w"), secretForget: async () => ev("w"), cardTrust: async () => {},
   keyring: async () => ({ everyday: "", approval: "", same: true, seal_pub: "", approvers: [] }),
-  approvalSign: async () => { throw new Error("no"); }, passcodeStatus: async () => false, passcodeSet: async () => {},
+  approvalSign: async () => { throw new Error("no"); }, passcodeSet: async () => {},
   levelsStatus: async () => { throw new Error("no"); }, levelsRaise: async () => { throw new Error("no"); }, levelsLower: async () => { throw new Error("no"); },
   levelsAdopt: async () => { throw new Error("no"); }, idleTouch: async () => { throw new Error("no"); }, idleUnlock: async () => { throw new Error("no"); },
 });

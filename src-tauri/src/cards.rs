@@ -17,7 +17,7 @@ use crate::approvals::{self, approval_summary, check_answerable, mark_sent, need
 use crate::door::Refusal;
 use crate::key::KeyState;
 use crate::keyring::{self, KeyringState};
-use crate::levels::{Level, LevelsState};
+use crate::levels::LevelsState;
 use crate::services::{held, Grantee, ServicesState};
 
 fn no(code: &'static str, message: impl Into<String>) -> Refusal {
@@ -149,8 +149,7 @@ pub async fn svc_card_answer<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyS
         let (title, reason) = approval_summary(&v, &rids).map_err(refused)?;
         let fresh = needs_fresh_unlock(&v, &rids);
         // this device's level for approvals (levels.rs); a powerful row asks at least the unlock, fresh
-        let level = levels.levels(&app).await?.approvals;
-        let level = if fresh { level.max(Level::Unlock) } else { level };
+        let level = crate::levels::approvals_level(&levels.levels(&app).await?, fresh);
         let card = r.ev.id.to_hex();
         graced = levels.gate(&app, level, passcode.as_ref().map(|p| p.as_str()), || ring.confirm(&app, &r.g.subject, &card, !fresh, &title, &reason)).await?;
         if graced {

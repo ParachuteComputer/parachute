@@ -590,9 +590,25 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 /// NIP-98 for one request: kind 27235, `u` the exact URL sent, `method`, a random `nonce`, and `payload` the body's
 /// sha256 when there is a body.
 pub fn nip98_event(keys: &Keys, url: &Url, method: &str, body: Option<&[u8]>) -> Result<Event, Refusal> {
+    nip98_with(keys, url, method, body, None)
+}
+
+/// The tag only a join op's NIP-98 carries (docs/design/KEYRING.md "Joining a network"): the everyday path never adds
+/// it, and no applet signs kind 27235 itself, so an enroller that requires it knows this device's join level passed.
+pub const JOIN_MARK: [&str; 2] = ["parachute", "join"];
+
+/// NIP-98 for a join op: the same event with `JOIN_MARK` and the op.
+pub fn nip98_join_event(keys: &Keys, url: &Url, method: &str, body: Option<&[u8]>, op: &str) -> Result<Event, Refusal> {
+    nip98_with(keys, url, method, body, Some(op))
+}
+
+fn nip98_with(keys: &Keys, url: &Url, method: &str, body: Option<&[u8]>, join: Option<&str>) -> Result<Event, Refusal> {
     let mut tags = vec![tag(&["u", url.as_str()])?, tag(&["method", method])?, tag(&["nonce", &random_nonce()])?];
     if let Some(b) = body {
         tags.push(tag(&["payload", &sha256_hex(b)])?);
+    }
+    if let Some(op) = join {
+        tags.push(tag(&[JOIN_MARK[0], JOIN_MARK[1], op])?);
     }
     sign(keys, EventBuilder::new(Kind::from(HTTP_AUTH_KIND), "").tags(tags))
 }
@@ -1103,7 +1119,10 @@ impl Broker {
                     return Err(no("refused", "That request is signed with another key."));
                 }
                 self.guard(&call.hubs, &url).await?;
-                let ev = nip98_event(keys, &url, &method, body.as_deref())?;
+                let ev = match role {
+                    Role::Join(op) => nip98_join_event(keys, &url, &method, body.as_deref(), op)?,
+                    _ => nip98_event(keys, &url, &method, body.as_deref())?,
+                };
                 let with = match role {
                     Role::Everyday => String::new(),
                     Role::Approval(op) => format!(" ({op}, approval key)"),
@@ -1377,7 +1396,7 @@ pub async fn svc_http<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, 
             let approval = ring.approval(&app, &k).await?;
             let subject = broker.subject_of(&session)?;
             let host = broker.host_of(&session, &service)?;
-            let level = levels.levels(&app).await?.approvals;
+            let level = crate::levels::approvals_level(&levels.levels(&app).await?, false);
             let (what, reason) = (format!("{service}:{op}"), format!("Send {op} to {host}, signed with your approval key."));
             let graced = levels.gate(&app, level, passcode.as_ref().map(|p| p.as_str()), || ring.confirm(&app, &subject, &what, true, "Approve with your approval key", &reason)).await?;
             let mut res = broker.http(crate::approvals::for_approve_op(&approval), &role, &session, &service, &req).await?;
@@ -1868,6 +1887,20 @@ mod tests {
             assert_eq!(is_command_approval(text), *want, "{text:?}");
         }
         assert!(check_template(&[9], &[], false, &ev("I approve of this", json!([["h", "x"]]))).is_ok());
+    }
+
+    #[test]
+    fn only_a_join_ops_nip98_carries_the_join_mark() {
+        let k = Keys::generate();
+        let url = Url::parse("https://enroll.mesh.example/join").unwrap();
+        let marked = |ev: &Event| ev.tags.iter().any(|t| t.as_slice().len() >= 2 && t.as_slice()[0] == JOIN_MARK[0] && t.as_slice()[1] == JOIN_MARK[1]);
+        // everyday: whatever the body says, no mark (an applet without the join line sending {"op":"mesh.join"})
+        let body = br#"{"op":"mesh.join","wg":"x"}"#;
+        assert!(!marked(&nip98_event(&k, &url, "POST", Some(body)).unwrap()));
+        let j = nip98_join_event(&k, &url, "POST", Some(body), "mesh.join").unwrap();
+        assert!(marked(&j));
+        assert!(j.tags.iter().any(|t| t.as_slice() == ["parachute", "join", "mesh.join"]));
+        assert!(j.verify().is_ok());
     }
 
     #[test]

@@ -136,7 +136,6 @@ pub fn run() {
             saved::saved_get,
             saved::saved_put,
             approve::approval_sign,
-            approve::passcode_status,
             approve::passcode_set,
             levels::levels_status,
             levels::levels_raise,

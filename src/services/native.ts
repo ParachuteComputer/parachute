@@ -70,8 +70,7 @@ export interface Native {
   /** Sign an approval of an applet's exact code (applet/approvals.ts) with the person's key: the passcode when one is
    *  set here, then the device unlock, always. `d`: hub|vault|record; `name`: the applet's, for the prompt. */
   approvalSign(content: string, d: string, name: string, passcode: string | null): Promise<SignedEvent>;
-  /** Whether this device keeps a passcode; and setting, changing or removing it. */
-  passcodeStatus(): Promise<boolean>;
+  /** Set, change or remove this device's passcode (whether it keeps one: `levelsStatus`). */
   passcodeSet(old: string | null, next: string | null): Promise<void>;
   /** This device's security levels and the idle lock (src-tauri/src/levels.rs; docs/design/APP-RECORD.md). */
   levelsStatus(): Promise<LevelsStatus>;

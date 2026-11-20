@@ -144,17 +144,26 @@ pub fn check_content(content: &str, d: &str) -> Result<(), Refusal> {
     Ok(())
 }
 
+/// Whether an approval's content is a change of security levels (levels.rs): its record is `security-<app id>` or its
+/// code names levels. `approval_sign` never signs one: that takes `levels_lower`'s gate (the passcode when kept).
+pub fn is_security(content: &str) -> bool {
+    let v: Value = serde_json::from_str(content).unwrap_or(Value::Null);
+    v.pointer("/subject/record").and_then(Value::as_str).is_some_and(|r| r.starts_with(crate::levels::SECURITY_RECORD))
+        || v.get("code").and_then(Value::as_str).is_some_and(|c| c.starts_with("levels:"))
+}
+
 /// Sign an approval (or a taking back) of an applet's exact code and asks: this device's level for approving code (the
 /// passcode, when it says so, then the device unlock; levels.rs), the unlock alone for a taking back.
 #[tauri::command]
 pub async fn approval_sign<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, ring: State<'_, KeyringState>, levels: State<'_, crate::levels::LevelsState>, content: String, d: String, name: String, passcode: Option<String>) -> Result<Event, Refusal> {
     check_content(&content, &d)?;
+    if is_security(&content) {
+        return Err(no("bad_request", "That is a change of security levels: Settings → Security makes it."));
+    }
     let name: String = name.chars().filter(|c| !c.is_control()).take(60).collect();
     let passcode = passcode.map(Zeroizing::new);
     let approved = serde_json::from_str::<Value>(&content).ok().and_then(|v| v.get("approved").and_then(Value::as_bool)).unwrap_or(false);
-    // approving takes this device's code level (never below the unlock); taking an approval back only stops code: it
-    // takes the unlock (it signs with the key), never the passcode
-    let level = if approved { levels.levels(&app).await?.code.max(crate::levels::Level::Unlock) } else { crate::levels::Level::Unlock };
+    let level = crate::levels::code_level(&levels.levels(&app).await?, approved);
     let (title, reason) = if approved {
         (format!("Approve «{name}»"), format!("Approve this exact version of «{name}» on every device of yours"))
     } else {
@@ -163,11 +172,6 @@ pub async fn approval_sign<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeySta
     levels.gate(&app, level, passcode.as_ref().map(|p| p.as_str()), || ring.confirm(&app, "approve-code", &d, false, &title, &reason)).await?;
     let k = keys.get(&app).await.map_err(|m| no("no_key", m))?.ok_or_else(|| no("no_key", "This device has no key."))?;
     crate::services::sign_template(&k, APPROVAL_KIND, &content, &[vec!["d".into(), d]])
-}
-
-#[tauri::command]
-pub async fn passcode_status<R: Runtime>(app: AppHandle<R>) -> Result<bool, Refusal> {
-    Ok(read(&passcode_path(&app)?)?.is_some())
 }
 
 /// Set, change or remove this device's passcode: the old one, then the device unlock.
@@ -215,6 +219,21 @@ mod tests {
             assert!(s.check(&p, Some("nope")).is_err());
         }
         assert_eq!(s.check(&p, Some("garden-gate")).unwrap_err().message, "Too many wrong passcodes. Try again in a minute.");
+    }
+
+    #[test]
+    fn an_applets_approval_is_never_a_change_of_security_levels() {
+        let applet = r#"{"v":1,"subject":{"hub":"h","vault":"v","record":"01R","applet":"rooms"},"n":5,"approved":true,"code":"tsx:ab","scope":"s"}"#;
+        assert!(!is_security(applet));
+        // an applet may be called "security": only the record and the code mark a change of levels
+        assert!(!is_security(&applet.replace(r#""applet":"rooms""#, r#""applet":"security""#)));
+        for c in [
+            r#"{"v":1,"subject":{"hub":"h","vault":"v","record":"security-uni","applet":"security"},"n":5,"approved":true,"code":"levels:v1:approvals=none,code=unlock,join=none,idle=0","scope":""}"#,
+            r#"{"v":1,"subject":{"hub":"h","vault":"v","record":"security-uni","applet":"rooms"},"n":5,"approved":true,"code":"tsx:ab","scope":""}"#,
+            r#"{"v":1,"subject":{"hub":"h","vault":"v","record":"01R","applet":"rooms"},"n":5,"approved":true,"code":"levels:v1:approvals=none,code=unlock,join=none,idle=0","scope":""}"#,
+        ] {
+            assert!(is_security(c), "{c}");
+        }
     }
 
     #[test]

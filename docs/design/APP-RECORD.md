@@ -133,13 +133,16 @@ another app's moved over).
 |---|---|---|
 | A vault writer (a token, an agent, the hub) | `security` edited looser | Nothing changes (`levels.test.ts`, `levels.spec.ts`) |
 | | With an approval of their own key, an edited one, or another app's | Refused (`levels.rs`, `levels.test.ts`) |
-| | An old lowering put back after a raise | Refused: dated before the device's last change (`levels.rs`) |
+| | An old lowering put back after a raise | Refused on a device that applied the raise: dated before its last change (`levels.rs`). A device that never saw the raise (offline, or new) takes it: the person's older choice, said below |
+| | `approval_sign` (code's gate) used to sign a lowering | Refused: an applet's approval never names a `security-` record or levels (`approve.rs`); a lowering counts only with that record (`levels.rs`) |
 | Someone holding the unlocked phone | Approves at a passcode level with the unlock | Refused (`levels.rs` `a_passcode_level_refuses_the_device_unlock_alone`, `levels.spec.ts`) |
 | | Turns the idle lock off, or a level down | Needs the passcode (when kept) and the unlock |
 | Someone picking up the phone later | Uses the app past the idle lock | Covered; a touch doesn't open it (`levels.rs`, `levels.spec.ts`) |
 
-**Gaps, said plainly.** A device that never read a raise (offline) can take an older lowering of the person's that the
-vault serves it. A device with a root key and a key list takes only lowerings signed with its own key (lower there
+**Gaps, said plainly.** A device that never read a raise (offline, or installed since) can take an older lowering of
+the person's that the vault serves it: a vault writer can put back an older signed choice, never make one. Signing
+raises too would not close it (the vault can hold back the newer signature as well) and would make every stricter tap
+ask the unlock. A device with a root key and a key list takes only lowerings signed with its own key (lower there
 too). Desktop and the web side see touches the shell's window sees: reading in an applet for longer than the idle
 lock without a tap or a key can lock it on a computer (Android counts scrolling).
 

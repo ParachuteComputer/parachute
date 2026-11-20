@@ -48,6 +48,8 @@ export default function SecuritySettings() {
     setPending(l);
   };
   const lower = (l: Levels) => run(async () => {
+    // someone else's app: its record raises this device again, so nothing is signed for it
+    if (app.live) throw new Error(`${app.name} is offered by someone else: its levels are theirs, and yours can only be stricter.`);
     const home = homeVault();
     if (!home || !(await signsHere())) throw new Error("Making Parachute less careful needs your key and your home vault on this device.");
     const { written } = await signLowering(native, home, app.id, l, status.passcode ? code : null);

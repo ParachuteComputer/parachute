@@ -91,6 +91,8 @@ export function e2eNative(secretHex: string): Native {
       if (s.kind === "http" && s.auth === "nip98") {
         const tags = [["u", url], ["method", req.method], ["nonce", crypto.randomUUID()]];
         if (body?.length) tags.push(["payload", await sha256(body)]);
+        // a join op's carries the join mark (services.rs JOIN_MARK)
+        if (s.join && body?.length) { try { const j = JSON.parse(new TextDecoder().decode(body)) as Record<string, unknown>; const op = j[s.join.field]; if (typeof op === "string" && s.join.ops.includes(op)) tags.push(["parachute", "join", op]); } catch { /* not JSON */ } }
         const ev = sign(27235, "", tags); headers.authorization = authHeader(ev); log(session, service, `${req.method} ${new URL(url).pathname}`, ev.id);
       } else if (s.kind === "http" && s.auth === "token") {
         const sealed = tokens.get(tokenKey(sess(session).applet.subject, s));
@@ -202,7 +204,6 @@ export function e2eNative(secretHex: string): Native {
       if (d !== `${c.subject?.hub}|${c.subject?.vault}|${c.subject?.record}`) throw { code: "bad_request", message: "The approval names another applet than it says." };
       return finalizeEvent({ kind: 30479, created_at: now(), tags: [["d", d]], content }, sk) as SignedEvent;
     },
-    async passcodeStatus() { return passcode !== null; },
     async passcodeSet(old, next) { if (passcode !== null && old !== passcode) throw { code: "passcode", message: "That passcode isn't it." }; passcode = next; keep({ ...kept(), passcode }); },
     async levelsStatus() { return idle(false); },
     async levelsRaise(asked) { const k = kept(); const next = raise(k.levels, asked); return codeOf(next) === codeOf(k.levels) ? k.levels : setLevels(next, now()); },

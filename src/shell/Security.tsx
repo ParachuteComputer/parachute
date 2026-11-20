@@ -33,6 +33,7 @@ function IdleLock({ native }: { native: Native }) {
   const [asking, setAsking] = useState(false);
   const sent = useRef(-Infinity);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const later = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let on = true;
@@ -45,11 +46,13 @@ function IdleLock({ native }: { native: Native }) {
       if (!s.locked && s.left_ms !== null) timer.current = setTimeout(() => void native.levelsStatus().then(take, () => undefined), s.left_ms + 250);
     };
     const ask = () => void native.levelsStatus().then(take, () => undefined);
+    // at most one report each TOUCH_EVERY_MS: the first touch at once (a quiet time past the lock is caught then),
+    // and the last one within the window when it ends, so the lock counts from the latest touch, not the first
+    const send = () => { later.current = null; sent.current = performance.now(); void native.idleTouch().then(take, () => undefined); };
     const touch = () => {
-      const t = performance.now();
-      if (t - sent.current < TOUCH_EVERY_MS) return;
-      sent.current = t;
-      void native.idleTouch().then(take, () => undefined);
+      const wait = sent.current + TOUCH_EVERY_MS - performance.now();
+      if (wait <= 0) send();
+      else later.current ??= setTimeout(send, wait);
     };
     const onInput = (e: Event) => { if (e.isTrusted) touch(); };
     // a frame's message while the person is acting (an applet saving what they type, opening, answering)
@@ -68,6 +71,7 @@ function IdleLock({ native }: { native: Native }) {
       offLevels();
       on = false;
       if (timer.current) clearTimeout(timer.current);
+      if (later.current) clearTimeout(later.current);
       for (const t of ["pointerdown", "keydown", "wheel", "touchstart"]) window.removeEventListener(t, onInput, opts);
       window.removeEventListener("message", onMessage);
       document.removeEventListener("visibilitychange", onVisible);

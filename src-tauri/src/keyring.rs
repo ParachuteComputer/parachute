@@ -131,7 +131,7 @@ impl KeyringState {
     /// Refused while Parachute is locked (the idle lock, levels.rs): only its own unlock opens it.
     pub async fn confirm<R: Runtime>(&self, app: &AppHandle<R>, subject: &str, what: &str, routine: bool, title: &str, reason: &str) -> Result<bool, Refusal> {
         if let Some(levels) = app.try_state::<crate::levels::LevelsState>() {
-            if levels.locked(app).await {
+            if levels.locked(app).await? {
                 return Err(no("locked", "Parachute is locked. Unlock it first."));
             }
         }

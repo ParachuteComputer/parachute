@@ -41,6 +41,9 @@ const SKEW_S: u64 = 600;
 /// The subject's `applet` on a lowering's approval: never an applet's id (an applet's approval names its manifest id,
 /// and its record is an applet note).
 pub const SECURITY_SUBJECT: &str = "security";
+/// A lowering's record: `security-<app id>`. No applet's record is (an applet's is its note id), and `approval_sign`
+/// signs none (approve.rs `is_security`).
+pub const SECURITY_RECORD: &str = "security-";
 
 fn no(code: &'static str, message: impl Into<String>) -> Refusal {
     Refusal { code, message: message.into() }
@@ -181,7 +184,9 @@ pub fn adoptable(ev: &Event, own: &PublicKey, kept: &Kept, now: u64) -> Result<L
         return Err(refused("it isn't signed with your key"));
     }
     let c: Value = serde_json::from_str(&ev.content).map_err(|_| refused("it can't be read"))?;
-    if c.pointer("/subject/applet").and_then(Value::as_str) != Some(SECURITY_SUBJECT) || c.get("approved").and_then(Value::as_bool) != Some(true) {
+    let part = |k: &str| c.pointer(&format!("/subject/{k}")).and_then(Value::as_str).unwrap_or("");
+    let d = ev.tags.iter().find(|t| t.as_slice().first().map(String::as_str) == Some("d")).and_then(|t| t.as_slice().get(1).cloned()).unwrap_or_default();
+    if part("applet") != SECURITY_SUBJECT || !part("record").starts_with(SECURITY_RECORD) || d != format!("{}|{}|{}", part("hub"), part("vault"), part("record")) || c.get("approved").and_then(Value::as_bool) != Some(true) {
         return Err(refused("it isn't about security levels"));
     }
     let at = ev.created_at.as_secs();
@@ -192,6 +197,23 @@ pub fn adoptable(ev: &Event, own: &PublicKey, kept: &Kept, now: u64) -> Result<L
         return Err(refused("this device changed its levels after it was signed"));
     }
     c.get("code").and_then(Value::as_str).and_then(parse_code).ok_or_else(|| refused("it names no levels"))
+}
+
+/// What answering approvals asks here: this device's level, and a powerful row (`fresh`) at least the unlock.
+pub fn approvals_level(l: &Levels, fresh: bool) -> Level {
+    if fresh { l.approvals.max(Level::Unlock) } else { l.approvals }
+}
+
+/// What approving code asks: this device's level, never below the unlock; a taking back only the unlock (it can only
+/// stop code).
+pub fn code_level(l: &Levels, approved: bool) -> Level {
+    if approved { l.code.max(Level::Unlock) } else { Level::Unlock }
+}
+
+/// What changing the levels asks: the passcode when this device keeps one (a passcode level can't be lowered with the
+/// unlock alone), else the unlock.
+pub fn lowering_level(passcode_kept: bool) -> Level {
+    if passcode_kept { Level::Passcode } else { Level::Unlock }
 }
 
 /// What an action at `level` asks, in order: this device's passcode (checked here, every time), then the device
@@ -366,8 +388,10 @@ impl LevelsState {
     }
 
     async fn status<R: Runtime>(&self, app: &AppHandle<R>, touched: bool) -> Result<Status, Refusal> {
-        let native = platform::touches(app).await;
         let mut g = self.0.lock().await;
+        // asked under the lock: the native side hands its quiet gap over once, so two checks at once can't split it
+        // (one seeing the gap, the other a recent touch)
+        let native = platform::touches(app).await;
         let min = self.idle(app, &mut g).await?;
         let now = now_ms();
         let was = g.idle.locked;
@@ -390,7 +414,7 @@ impl LevelsState {
         F: FnOnce() -> Fut,
         Fut: Future<Output = Result<bool, Refusal>>,
     {
-        if self.locked(app).await {
+        if self.locked(app).await? {
             return Err(no("locked", "Parachute is locked. Unlock it first."));
         }
         let path = data_dir(app)?.join(crate::approve::PASSCODE_FILE);
@@ -398,9 +422,10 @@ impl LevelsState {
         pass(level, &path, &codes, typed, unlock).await
     }
 
-    /// Whether Parachute is locked now (keyring.rs refuses every unlock-gated call meanwhile).
-    pub async fn locked<R: Runtime>(&self, app: &AppHandle<R>) -> bool {
-        self.status(app, false).await.map(|s| s.locked).unwrap_or(true)
+    /// Whether Parachute is locked now (keyring.rs refuses every unlock-gated call meanwhile). An unreadable levels
+    /// file is its own refusal (nothing passes, and it says why), never "locked".
+    pub async fn locked<R: Runtime>(&self, app: &AppHandle<R>) -> Result<bool, Refusal> {
+        self.status(app, false).await.map(|s| s.locked)
     }
 
     async fn set<R: Runtime>(&self, app: &AppHandle<R>, levels: Levels, since: u64) -> Result<Levels, Refusal> {
@@ -450,12 +475,15 @@ pub async fn levels_raise<R: Runtime>(app: AppHandle<R>, levels: State<'_, Level
 pub async fn levels_lower<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, ring: State<'_, KeyringState>, levels: State<'_, LevelsState>, content: String, d: String, passcode: Option<String>) -> Result<Event, Refusal> {
     crate::approve::check_content(&content, &d)?;
     let c: Value = serde_json::from_str(&content).map_err(|_| no("bad_request", "An approval is JSON."))?;
-    if c.pointer("/subject/applet").and_then(Value::as_str) != Some(SECURITY_SUBJECT) || c.get("approved").and_then(Value::as_bool) != Some(true) {
+    if c.pointer("/subject/applet").and_then(Value::as_str) != Some(SECURITY_SUBJECT)
+        || !c.pointer("/subject/record").and_then(Value::as_str).is_some_and(|r| r.starts_with(SECURITY_RECORD))
+        || c.get("approved").and_then(Value::as_bool) != Some(true)
+    {
         return Err(no("bad_request", "That isn't a change of security levels."));
     }
     let next = c.get("code").and_then(Value::as_str).and_then(parse_code).ok_or_else(|| no("bad_request", "That names no security levels."))?;
     let passcode = passcode.map(Zeroizing::new);
-    let level = if crate::approve::passcode_kept(&data_dir(&app)?.join(crate::approve::PASSCODE_FILE))? { Level::Passcode } else { Level::Unlock };
+    let level = lowering_level(crate::approve::passcode_kept(&data_dir(&app)?.join(crate::approve::PASSCODE_FILE))?);
     let reason = format!("Change how careful Parachute is on every device of yours: {}", plain(next));
     levels.gate(&app, level, passcode.as_ref().map(|p| p.as_str()), || ring.confirm(&app, "settings", "levels", false, "Change your security", &reason)).await?;
     let k = keys.get(&app).await.map_err(|m| no("no_key", m))?.ok_or_else(|| no("no_key", "This device has no key."))?;
@@ -488,10 +516,10 @@ pub async fn idle_touch<R: Runtime>(app: AppHandle<R>, levels: State<'_, LevelsS
 #[tauri::command]
 pub async fn idle_unlock<R: Runtime>(app: AppHandle<R>, ring: State<'_, KeyringState>, levels: State<'_, LevelsState>) -> Result<Status, Refusal> {
     ring.ask(&app, "idle", "idle", false, "Open Parachute", "Unlock to open Parachute").await?;
-    // the native gap of the quiet time before is spent here: it was what locked it
-    let _ = platform::touches(&app).await;
     {
         let mut g = levels.0.lock().await;
+        // the native gap of the quiet time before is spent here: it was what locked it
+        let _ = platform::touches(&app).await;
         let now = now_ms();
         g.idle.unlocked(now);
         LevelsState::keep_idle(&app, &mut g, now, true);
@@ -685,6 +713,20 @@ mod tests {
     }
 
     #[test]
+    fn each_action_asks_its_level_and_powerful_cards_code_and_lowering_never_drop_below_the_unlock() {
+        let none = Levels { approvals: Level::None, code: Level::Unlock, join: Level::None, idle: 0 };
+        assert_eq!(approvals_level(&none, false), Level::None);
+        assert_eq!(approvals_level(&none, true), Level::Unlock, "a powerful row asks the unlock whatever the level");
+        let strict = Levels { approvals: Level::Passcode, code: Level::Passcode, join: Level::Passcode, idle: 0 };
+        assert_eq!(approvals_level(&strict, true), Level::Passcode);
+        assert_eq!(code_level(&strict, true), Level::Passcode);
+        assert_eq!(code_level(&strict, false), Level::Unlock, "taking back only stops code");
+        assert_eq!(code_level(&Levels { code: Level::None, ..none }, true), Level::Unlock);
+        assert_eq!(lowering_level(true), Level::Passcode, "with a passcode kept, lowering never passes on the unlock alone");
+        assert_eq!(lowering_level(false), Level::Unlock);
+    }
+
+    #[test]
     fn an_unsigned_or_old_or_foreign_lowering_weakens_nothing() {
         let me = Keys::generate();
         let now = 1_800_000_000u64;
@@ -702,8 +744,13 @@ mod tests {
         // signed before this device last changed its levels (an old approval put back)
         let old = approval(&me, &code_of(off), now - 200, SECURITY_SUBJECT);
         assert!(adoptable(&old, &me.public_key(), &kept, now).is_err());
-        // an applet's code approval moved over
+        // an applet's code approval moved over, or one whose record isn't a lowering's
         assert!(adoptable(&approval(&me, &code_of(off), now - 10, "rooms"), &me.public_key(), &kept, now).is_err());
+        let other_record = {
+            let content = serde_json::json!({ "v": 1, "subject": { "hub": "https://hub.example", "vault": "home", "record": "01APPLET", "applet": SECURITY_SUBJECT }, "n": now - 10, "approved": true, "code": code_of(off), "scope": "" });
+            EventBuilder::new(Kind::from(APPROVAL_KIND), content.to_string()).tags([Tag::parse(["d", "https://hub.example|home|01APPLET"]).unwrap()]).custom_created_at(Timestamp::from(now - 10)).sign_with_keys(&me).unwrap()
+        };
+        assert!(adoptable(&other_record, &me.public_key(), &kept, now).is_err());
         assert!(adoptable(&approval(&me, "tsx:abc", now - 10, SECURITY_SUBJECT), &me.public_key(), &kept, now).is_err());
         // dated ahead of the clock, to block later changes
         assert!(adoptable(&approval(&me, &code_of(off), now + 3600, SECURITY_SUBJECT), &me.public_key(), &kept, now).is_err());
