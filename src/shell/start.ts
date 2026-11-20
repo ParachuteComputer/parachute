@@ -38,10 +38,12 @@ export function takeStart(path: string): { chosen: boolean; vault: string; noteI
 
 /** Where the app opens: the home applet, or null for the launcher. Waits for the settings note a moment. Call
  *  `go` only if the app is still where it started (a link from outside may have moved it meanwhile). */
-export async function startPlace(): Promise<{ href: string; go(): void } | null> {
+export async function startPlace(o: { firstRun?: boolean } = {}): Promise<{ href: string; go(): void } | null> {
   arrival = null;
   await Promise.race([Promise.all([readSettings(), whenGateKnown()]), new Promise((r) => setTimeout(r, START_WAIT_MS))]);
-  if (gateNow() === "closed") return null;
+  // a first sign-in goes to the home even while the self-test hasn't passed yet: its screen says applets are off until
+  // it does, and shows the card then
+  if (gateNow() === "closed" && !o.firstRun) return null;
   const s = barNow().start;
   // a home in someone else's vault (an agent can write the settings note) never opens by itself
   const rec = s ? listVaults().find((v) => v.key === s.vault) : null;

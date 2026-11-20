@@ -113,6 +113,17 @@ function useStart(): boolean {
     }, () => { if (on) setDecided(true); });
     return () => { on = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // the first sign-in on this device: the app started with no vault, so it decided nothing then. When the first one
+  // arrives and the person is on the list, it decides as a start does: their settings' home opens, and their Allow or
+  // Open on it is their choice of it as home here (otherwise the next start finds it stopped, waiting for a tap)
+  const vaults = useVaults().length;
+  const firstRun = useRef(listVaults().length === 0);
+  useEffect(() => {
+    // once the sign-in is done and has brought the person to the list (it passes through its own page first)
+    if (!firstRun.current || vaults === 0 || location.pathname !== "/") return;
+    firstRun.current = false;
+    void startPlace({ firstRun: true }).then((to) => { if (to && window.location.pathname === "/") { to.go(); navigate(to.href, { replace: true }); } }, () => {});
+  }, [vaults, location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   return decided;
 }
 
