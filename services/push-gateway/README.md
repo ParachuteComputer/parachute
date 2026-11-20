@@ -86,7 +86,7 @@ rooms whose members agree, as with any bot (the room's member list shows its key
 | Logs leak where people are reached | Endpoints are logged as host and the first characters of the path only. |
 | Someone moves another person's counts, or reads them | `POST signals` is signed by the key whose numbers it moves and answers only that key's. |
 | A fresh key keeps numbers here or uses the gateway to push | Only a key with a confirmed registration (a member list the relay signed shows it) keeps numbers: 64 at most, each gone after 30 days untouched; a change goes only to that key's own endpoints, under the same per-endpoint budget. |
-| A count leaks what it counts | The push and the stored number hold an opaque id, a signal id and a number; the app makes the id a hash, so the gateway can't tell which applet or vault. |
+| A count leaks what it counts | The push and the stored number hold an opaque id, a signal id and a number; the app makes the id a hash of the hub, vault and record, so a gateway that can't read the hub can't tell which applet or vault. One run by the hub's operator can: the hash has no secret in it and is the same for every person, so known records can be matched, and two people with the same applet show the same id. A per-person secret in the hash would end that (not built). |
 | Flooding the HTTP side | Bodies over 16 KB refused (a registration's signals name 100 rooms at most, so any it takes fits); the signature is checked first, then 20 requests then one per 3 s per key, and a ceiling for all keys together. |
 
 Left, said plainly: a signal push (about 200 bytes) and a message push (about 350) differ in size, so the push server
