@@ -20,22 +20,28 @@ whether I install the apk/dmg before or after you do the home thing".
    A record can say the oldest level it runs on with `needs`. On an applet it goes beside `applet` in the fields; on an
    bundle record it goes inside `bundle`. A record with no `needs` needs level 1: the kit and records of 11-20, the floor.
    - An applet whose `needs` is above the build's level is still listed by its name and glyph, and keeps its place on
-     the bar. Nothing of it is asked, allowed, compiled or run. Its screen says **Update Parachute to use Home**, with
-     the reason in a smaller line. The same applies to a manifest with a top-level key or a contract the build doesn't
+     the bar. Nothing of it is asked, allowed, compiled or run. Its screen says **Update Parachute to open Home.**, with
+     the reason in a quieter line under it. The same applies to a manifest with a top-level key or a contract the build doesn't
      know, because the manifest is the card and stays strict. The reason names the key, so an author can tell a typo
      from something newer.
    - A component (`needs` beside `component`, or a key or contract the build doesn't know) is listed by its id and
-     name, with no props and no access, and never runs. An applet that imports it says **Update Parachute to use**
+     name, with no props and no access, and never runs. An applet that imports it says **Update Parachute to open**
      *the applet*, and an embed of it says the same for the component.
    - A bundle record that needs more (or has a later `contract`) isn't read at all. The device opens the next app it can,
-     and the list says **Update Parachute to use Uni.**
+     and the list says **Update Parachute to open Uni.**
    - A `needs` that isn't a whole number is treated as a newer way of writing it, so it counts as more than any build
      knows.
 3. **A part that came later says so when it is missed.** Each kit part has the level it came in
    (`PART_LEVEL` in `src/applet/kits/modules.ts`). When an applet that touched a part this app doesn't have then stops,
-   the frame doesn't say "This applet stopped: …". It says "Update Parachute to use Rooms. It uses Timeline, which this
-   Parachute doesn't have." and gives the error after it, in case the applet fell back for the part and stopped for
-   another reason.
+   the frame doesn't say "This applet stopped: …". It says **Update Parachute to open Rooms.**, with "It uses Timeline,
+   which this Parachute doesn't have." in a quieter line under it. The error itself goes to the console, not the
+   screen: a React error or a stack means nothing to the person. The applet may have fallen back for the part and
+   stopped for another reason; on an updated Parachute nothing is missing, so that reason then shows.
+4. **One wording, one look.** Every screen says it with `updateLine` (`src/applet/level.ts`): the applet's screen, its
+   frame, an embed and the list. On the applet's screen, in its frame and in an embed the line is a little heavier,
+   with the reason quieter under it, as the shell's card draws it (`.card`, `.quiet`); the frame draws its line on
+   the same tokens (`FAILURE_STYLE` in `src/applet/code.ts`). The list says it in its own quiet notice line. Any other failure in the frame says "This applet stopped:" and the first line of the error,
+   never a stack.
 
 ## Adding something
 
@@ -60,7 +66,8 @@ whether I install the apk/dmg before or after you do the home thing".
 
 Tests: `src/applet/level.test.ts` (an older app opening Aaron's records made newer, components and a followed org's
 app included), `e2e/versions.spec.ts` (the same in the real build: listed, update line, no card, no frame; a missing
-part; an imported newer component), `e2e/thinshell.spec.ts` (a bundle record made for a newer Parachute), `src/kit/olderApp.test.ts` (levels and
+part: the short line in the app's look, no React error; any other failure in one line, no stack; an
+imported newer component), `e2e/thinshell.spec.ts` (a bundle record made for a newer Parachute), `src/kit/olderApp.test.ts` (levels and
 fallbacks), and the gateway's "a registration from a newer app".
 
 ## Subtract

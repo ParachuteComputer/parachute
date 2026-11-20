@@ -45,7 +45,7 @@ export type AppletEntry = {
   left?: string[];
   /** Written for a newer app than this one (`needs` above this build's level, or a manifest key or contract it doesn't
    *  know: level.ts). Listed by its name so its place on the bar stays, with nothing allowed: its screen says "Update
-   *  Parachute to use …" and nothing of it runs. */
+   *  Parachute to open …" and nothing of it runs. */
   newer?: true;
   /** Why it reads as newer, in a few words: the level it needs, or the manifest's key this app doesn't know. */
   newerWhy?: string;

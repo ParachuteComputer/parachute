@@ -69,7 +69,7 @@ export function propsFor(c: Pick<Component, "props">, given: unknown): Record<st
 // ── the components in a vault ──
 
 /** `newer`: written for a newer app (why, in a few words): listed by its id and name so an import or an embed finds it
- *  and says "Update Parachute to use …"; it takes no props and reaches nothing, and is never run. */
+ *  and says "Update Parachute to open …"; it takes no props and reaches nothing, and is never run. */
 export type ComponentEntry = { component: Component; vault: string; noteId: string; path: string; kind: "tsx" | "jsx"; newer?: string };
 
 /** Was this component record written for a newer app (`needs` past this build, or a key or contract it doesn't know)?

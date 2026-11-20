@@ -80,7 +80,7 @@ test("a record made for a newer Parachute gives the plain list and says to updat
   await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/later", content: "an app", tags: ["parachute-bundle"], metadata: { bundle: { contract: 1, needs: 99, id: "later", name: "Later", start: COOK } } });
   await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "later" } } });
   await start(page);
-  await expect(ui(page).getByText("Update Parachute to use Later.")).toBeVisible();
+  await expect(ui(page).getByText("Update Parachute to open Later.")).toBeVisible();
   await expect(ui(page).getByText("Your bundle didn't load")).toHaveCount(0);
   await expect(ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ })).toBeVisible();
   // nothing of it started: no Cook mode at the start

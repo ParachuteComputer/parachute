@@ -14,7 +14,7 @@ import { originOf, listVaults, type VaultRecord } from "../vault/store";
 import { whoseOf } from "../vault/whose";
 
 export type Imported = { id: string; name: string; vault: string; host: string; own: boolean; whose: "mine" | "theirs" | "trusted"; kind: "tsx" | "jsx"; source: string; hash: string };
-/** `newer`: what it imports was made for a newer app (level.ts): the applet says "Update Parachute to use …". */
+/** `newer`: what it imports was made for a newer app (level.ts): the applet says "Update Parachute to open …". */
 export type ImportsRead = { ok: true; imports: Imported[] } | { ok: false; error: string; newer?: true };
 const hostOf = (issuer: string) => { try { return new URL(issuer).host; } catch { return issuer; } };
 

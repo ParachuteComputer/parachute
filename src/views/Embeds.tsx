@@ -14,6 +14,7 @@ import vaultClientSource from "virtual:vault-client-kit";
 import reactKitSource from "virtual:react-kit";
 import reactNoteKitSource from "virtual:react-note-kit";
 import { codeHash, modulePage, prepare, usesNote } from "../applet/code";
+import { updateLine } from "../applet/level";
 import { componentNewer, parseComponent, propsFor, type Component } from "../applet/component";
 import { embedKey, embedSubject, embedTokens, type Embed } from "../applet/embeds";
 import { deviceGrants } from "../applet/grants";
@@ -183,7 +184,7 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
   const glyph = found?.component.glyph ?? "◇";
   const theirs = found ? found.whose !== "mine" : false;
 
-  const say = (text: string, extra?: React.ReactNode) => <div className="embed-place embed-said" data-embed={embed.name} role="status"><p>{text}</p>{extra}</div>;
+  const say = (text: React.ReactNode, extra?: React.ReactNode) => <div className="embed-place embed-said" data-embed={embed.name} role="status"><p>{text}</p>{extra}</div>;
   if (mode === "closed") return say("Embeds are off on this device until its self-test passes.");
   if (place.state === "reading") return <div className="embed-place embed-said" data-embed={embed.name} aria-busy="true"><p className="quiet">Opening «{embed.name}»…</p></div>;
   if (place.state === "no-sign-in") return say(`This comes from «${place.vault}» at «${place.host}» (as its record says), and this device doesn't read that vault yet: open it in Settings, or add its Parachute.`, <Link to="/add">Add a Parachute</Link>);
@@ -191,7 +192,7 @@ function EmbedPlace({ host, hostNote, embed, from }: { host: VaultRecord; hostNo
   if (place.state === "refused") return say(`${place.vault} no longer lets this device in. Sign in to ${place.vault} again.`, <Link to="/settings">Settings</Link>);
   if (place.state === "gone") return say(`«${place.name}» is gone from ${place.vault}.`);
   if (place.state === "invalid") return say(`«${place.name}» can't run: ${place.why}.`);
-  if (place.state === "newer") return say(`Update Parachute to use «${place.name}». It was made for a newer Parachute (${place.why}).`);
+  if (place.state === "newer") return say(<strong>{updateLine(place.name)}</strong>, <p className="quiet">It was made for a newer Parachute ({place.why}).</p>);
   if (!found || !keys) return null;
   if (broke === "refused") return say(`${found.rec.vault} no longer lets this device in. Sign in to ${found.rec.vault} again.`, <Link to="/settings">Settings</Link>);
   if (broke === "offline") return say(`${found.rec.vault} can't be reached right now.`);
