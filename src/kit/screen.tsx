@@ -1,7 +1,7 @@
 // The kit's screen parts: what every applet had built for itself (docs/INVENTORY.md), now one each, drawn on the
 // theme's tokens and type scale (parts.css), so every applet looks and behaves the same. Like parts.tsx, every export
 // is a promise to applets written against it (docs/WRITE-AN-APPLET.md): add with care, never change a prop's meaning.
-//   Page      the applet's screen: its width and margins, its title, and pull to refresh
+//   Page      the applet's screen: its width and margins, its title, a way back, two columns (wide), pull to refresh
 //   Loading   the quiet line while something is read
 //   Problem   what went wrong, said once, with Try again
 //   Button    a button in the app's look: primary, plain or quiet
@@ -192,7 +192,7 @@ export function Write({ label, labelled, value, onChange, placeholder, onSend, s
     if (can) void onSend!();
   };
   const id = useId();
-  const box = <textarea ref={setRef} id={id} className="pa-write-box" aria-label={labelled ? undefined : label} placeholder={placeholder} value={value} maxLength={maxLength} rows={line ? 1 : undefined}
+  const box = <textarea ref={setRef} id={id} className="pa-write-box" aria-label={labelled && !line ? undefined : label} placeholder={placeholder} value={value} maxLength={maxLength} rows={line ? 1 : undefined}
     onChange={(e) => onChange(e.target.value)} onKeyDown={keys} />;
   const action = onSend && <Button kind="primary" className="pa-write-send" busy={busy} disabled={!value.trim()} onClick={() => void onSend()}>{send}</Button>;
   if (line) return <div className="pa-write pa-line">{children}{box}{action}</div>;

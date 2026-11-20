@@ -201,8 +201,9 @@ An HTML applet has no parts: it has the kit's calls and the CSS variables.
 
 **Older apps.** An applet lives in the vault, and each device's app updates on its own time, so an applet meets older
 apps. A part an older app doesn't have arrives as `undefined`, and an applet that draws it stops there with one line
-saying why. The kit of 11-20 is the floor the shipped applets are written on: they need an app from 11-20 or later, so
-their records go to a vault once the person's devices have it. A part added after that is imported under another name
+saying why. The kit of 11-20 (T-476: everything in the parts table above, with every prop it lists) is the floor the
+shipped applets are written on: they need a build with all of it, the first release after 11-20, so their records go to
+a vault once the person's devices have that build. A newer prop counts as a newer part: an older app ignores it. A part added after that is imported under another name
 with a fallback (`src/kit/olderApp.test.ts` checks the shipped applets do):
 
 ```tsx

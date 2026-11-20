@@ -38,10 +38,10 @@ const placeName = (role: string) => PLACES.find((p) => p.role === role)?.name;
 /** The Inbox leaves out a Later thread unless something came in on it since (a message not flagged): opening that one
  *  marks it seen and it stays, until Later puts the whole thread off again. */
 const NOT_LATER = { operator: "OR", conditions: [{ noneInThreadHaveKeyword: "$flagged" }, { notKeyword: "$flagged" }] };
-/** Still to decide: listed, and not sent or declined here. */
-/** A gateway answer (refused, unconfirmed) is final; only a call that never got one (the network, no tap) may be tried again. */
 /** Decided here, and it didn't go as asked (refused, or no answer came). */
 const failed = (h: Held) => h.outcome?.kind === "refused" || h.outcome?.kind === "error";
+/** Still to decide: listed, and not sent or declined here. */
+/** A gateway answer (refused, unconfirmed) is final; only a call that never got one (the network, no tap) may be tried again. */
 const waiting = (h: Held) => h.listed && (!h.outcome || h.outcome.kind === "error");
 const heldTo = (p: Parked) => (p.fields ? [...p.fields.to, ...p.fields.cc, ...p.fields.bcc].map((a) => a.email) : p.recipients).join(", ") || "(nobody)";
 /** Everything it sends is on screen: plain text alone, or text plus the files the gateway listed. */
@@ -57,11 +57,11 @@ const htmlText = (html: string) => { const d = new DOMParser().parseFromString(h
 
 const CSS = `
 .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
-.bar .pa-search { flex: 1; min-width: 10em; margin: 0; }
 .quiet { color: var(--muted); }
 .mail .pa-row-meta { display: grid; }
 .mail .subj, .mail .pre { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mail .subj { color: var(--text); }
+.mail .pa-strong .subj { font-weight: 700; }
 .flag { margin-left: 6px; }
 .msg h2 { font: 400 var(--fs-head)/1.2 var(--serif); margin: 6px 0; }
 .msg .meta { color: var(--muted); font-size: var(--fs-small); margin-bottom: 10px; }
@@ -87,7 +87,8 @@ export default function Mail() {
   const [q, setQ] = useState("");
   const [searched, setSearched] = useState<string | null>(null);
   const [view, setView] = useState<View>({ at: "list" });
-  const [err, setErr] = useState<{ lead: string; e?: unknown } | null>(null);
+  // what couldn't be read, and what reads it again
+  const [err, setErr] = useState<{ lead: string; e?: unknown; retry?: () => void } | null>(null);
   const [held, setHeld] = useState<Held[]>([]);
   const [heldErr, setHeldErr] = useState<unknown>(null);
   const ops = (account && session?.operations?.[account]) || [];
@@ -125,7 +126,7 @@ export default function Mail() {
         ["Email/get", { accountId: account, "#ids": { resultOf: "q", name: "Email/query", path: "/ids" }, properties: LIST_PROPS }, "g"],
       ]);
       setList((res.find((x) => x[0] === "Email/get")?.[1].list ?? []) as Email[]);
-    } catch (e: any) { setErr({ lead: `Couldn't read ${searched ? "the search" : placeName(place) ?? place}`, e }); setList([]); }
+    } catch (e: any) { setErr({ lead: `Couldn't read ${searched ? "the search" : placeName(place) ?? place}`, e, retry: () => void load() }); setList([]); }
   };
   /** The held sends, listed again: a send decided here keeps its outcome (it stays on screen after it leaves the list). */
   const loadHeld = async () => {
@@ -141,7 +142,8 @@ export default function Mail() {
     } catch (e: any) { setHeldErr(e); }
   };
   const decided = (opId: string, outcome: Held["outcome"]) => setHeld((hs) => hs.map((h) => (h.item.opId === opId ? { ...h, outcome } : h)));
-  useEffect(() => { void loadBoxes().catch((e) => setErr({ lead: "Couldn't read your mailboxes", e })); }, [account]);
+  const readBoxes = () => { setErr(null); void loadBoxes().catch((e) => setErr({ lead: "Couldn't read your mailboxes", e, retry: readBoxes })); };
+  useEffect(readBoxes, [account]);
   useEffect(() => { if (boxes.length || searched) void load(); }, [boxes, place, searched]);
   useEffect(() => { if (place === "waiting" || !held.length) void loadHeld(); }, [session, place]);
 
@@ -163,7 +165,7 @@ export default function Mail() {
     {accountNames.length > 1 && <p className="quiet">Mailbox: {accountNames.map((a) => <Button key={a.id} small aria-pressed={a.id === account} onClick={() => { setAccount(a.id); setPlace("inbox"); }}>{a.name}</Button>)}</p>}
     {searched ? <p className="quiet">Found for “{searched}” <Button small onClick={() => { setSearched(null); setQ(""); }}>Back to {placeName(place)}</Button></p> :
       <Tabs label="Places" current={place} onChange={setPlace} tabs={shown.map((p) => ({ key: p.role, label: p.name, count: count(p.role) || 0 }))} />}
-    {err && <Problem error={err.e} onRetry={() => void load()}>{err.lead}</Problem>}
+    {err && <Problem error={err.e} onRetry={err.retry}>{err.lead}</Problem>}
     {place === "waiting" && !searched ? <>
       {heldErr ? <Problem error={heldErr} onRetry={() => void loadHeld()}>Couldn't list what is waiting</Problem> : null}
       {!held.length ? (heldErr ? null : <p className="quiet">Nothing from Uni is waiting for you.</p>) :
@@ -258,7 +260,9 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
     if (t) return t;
     return htmlText((e.htmlBody ?? []).map((p) => e.bodyValues?.[p.partId]?.value ?? "").join("\n"));
   };
-  const act = async (name: string, args: Record<string, unknown>, words: string) => { try { await op(name, account, args); toast(words); return true; } catch (e: any) { toast(`${words.split(" ")[0]} didn't happen: ${e?.message ?? e}`, { error: true }); return false; } };
+  // what an action said stays on screen until the next one (a toast says it too)
+  const [said, setSaid] = useState<string | null>(null);
+  const act = async (name: string, args: Record<string, unknown>, words: string) => { setSaid(null); try { await op(name, account, args); toast(words); return true; } catch (e: any) { const t = `${words.split(" ")[0]} didn't happen: ${e?.message ?? e}`; toast(t, { error: true }); setSaid(t); return false; } };
   // Later is the thread's: $flagged on any of its messages (another mail app may flag just one), so Not later clears them all
   const flagged = (emails ?? []).filter((e) => e.keywords?.$flagged).map((e) => e.id);
   // in Later while every message but drafts is flagged; one that came in since (unflagged) brings it back, and Later
@@ -283,6 +287,7 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
       {can("flag") && <Button onClick={() => void later(!isLater)}>{isLater ? "Not later" : "Later"}</Button>}
       {can("archive") && !last.keywords?.$draft && <Button onClick={() => act("archive", { emailIds: emails.map((e) => e.id) }, "Archived.")}>Archive</Button>}
     </div>}
+    {said && <Problem>{said}</Problem>}
   </Page>;
 }
 
@@ -301,6 +306,8 @@ function Compose({ account, can, draft, reply, done }: { account: string; can: (
   const [review, setReview] = useState<any>(null);
   const [state, setState] = useState("");
   const [busy, setBusy] = useState(false);
+  // a save or a send that failed stays said here until the next try (a toast says it too)
+  const [failed, setFailed] = useState<string | null>(null);
   const send = useRef<string>(opId());
   // what will go comes into view as soon as it is read back (below the message on a phone)
   const shownReview = useRef<HTMLElement>(null);
@@ -308,24 +315,24 @@ function Compose({ account, can, draft, reply, done }: { account: string; can: (
   const fields = (): Fields => ({ to: addrs(to), cc: addrs(cc), bcc: init.bcc, subject: subject.trim(), text, ...(init.inReplyTo ? { inReplyTo: init.inReplyTo } : {}) });
   /** Save it as a draft (a new revision of the one open), then read back exactly what would go. */
   const saveAndReview = async () => {
-    setBusy(true); setState("");
+    setBusy(true); setState(""); setFailed(null);
     try {
       const s = await op("draft.save", account, { fields: fields(), ...(saved ? { replaces: saved.draftId, base: saved.fingerprint } : {}) });
       setSaved({ draftId: s.draftId, fingerprint: s.fingerprint });
       setReview(await op("draft.review", account, { draftId: s.draftId }));
       send.current = opId();
-    } catch (e: any) { toast(`Not saved: ${e?.message ?? e}`, { error: true }); }
+    } catch (e: any) { toast(`Not saved: ${e?.message ?? e}`, { error: true }); setFailed(`Not saved: ${e?.message ?? e}`); }
     setBusy(false);
   };
   const sendIt = async () => {
     if (!review || !saved) return;
-    setBusy(true);
+    setBusy(true); setFailed(null);
     try {
       const r = await op("send", account, { opId: send.current, draftId: review.draftId, fingerprint: review.fingerprint });
       if (r.state === "cleaned" || r.state === "submitted") { setState("Sent."); toast("Sent."); keep(null); setTimeout(() => done(true), 600); }
       else if (r.state === "awaiting-approval") { setState("Held: it waits for your OK before it goes."); toast("Held: it waits for your OK before it goes."); keep(null); }
       else { setState(`Not sent: ${r.reason ?? r.state}`); toast(`Not sent: ${r.reason ?? r.state}`, { error: true }); }
-    } catch (e: any) { toast(`Not sent: ${e?.message ?? e}`, { error: true }); }
+    } catch (e: any) { toast(`Not sent: ${e?.message ?? e}`, { error: true }); setFailed(`Not sent: ${e?.message ?? e}`); }
     setBusy(false);
   };
   const discard = async () => { if (saved && can("draft.discard")) await op("draft.discard", account, { draftId: saved.draftId }).catch(() => {}); keep(null); done(false); };
@@ -343,6 +350,7 @@ function Compose({ account, can, draft, reply, done }: { account: string; can: (
         <Button onClick={discard}>{saved ? "Discard the draft" : "Cancel"}</Button>
       </div>
     </div>
+    {failed && <Problem>{failed}</Problem>}
     {review && <section className="review" aria-label="What will be sent" ref={shownReview}>
       <strong>This is what will go</strong>
       <div className="quiet">To {addrLine(review.fields.to ?? [])}{review.fields.cc?.length ? ` · cc ${addrLine(review.fields.cc)}` : ""}</div>

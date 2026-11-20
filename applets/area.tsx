@@ -20,8 +20,13 @@ const CSS = `
 .area .talk { grid-area: talk; --room-h: 78dvh; margin: 10px calc(var(--pad) * -1); border-top: 1px solid var(--text); border-bottom: 1px solid var(--line); }
 .area .list { grid-area: list; padding: 14px 0 0; }
 .area .quiet { color: var(--muted); font-style: italic; font-family: var(--serif); }
+/* on a computer the room is the right column from the top of the screen, kept in view; the title and notes the left */
 @media (min-width: 900px) {
-  .area .cols { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-areas: "note talk" "list talk"; grid-template-rows: auto 1fr; }
+  .pa-page.area { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-areas: "head talk" "note talk" "list talk";
+    grid-template-rows: auto auto 1fr; column-gap: 56px; padding-top: 0; }
+  .area > .pa-page-head { grid-area: head; padding-top: calc(var(--pad) * 1.4); }
+  .area > .pa-pull { grid-column: 1; }
+  .area .cols { display: contents; }
   .area .talk { position: sticky; top: 0; align-self: start; --room-h: 100dvh; margin: 0; border: 0; border-left: 1px solid var(--line); }
 }
 `;
@@ -50,7 +55,7 @@ export default function Area() {
   }, []);
   useEffect(() => { if (open) lede.current?.scrollIntoView({ block: "start" }); }, [open?.id]);
 
-  if (!place) return <Page>{why ? <p className="quiet">{why}</p> : <Loading>Opening…</Loading>}</Page>;
+  if (!place) return <Page className="area"><style>{CSS}</style>{why ? <p className="quiet">{why}</p> : <Loading>Opening…</Loading>}</Page>;
   const title = (r: Rec) => r.path.slice(place.folder.length).replace(/\.md$/, "");
   const own = notes?.find((r) => title(r) === place.name) ?? null;
   const rest = (notes ?? []).filter((r) => r !== own).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
@@ -62,7 +67,7 @@ export default function Area() {
     <style>{CSS}</style>
     <div className="cols">
       <section className="lede" ref={lede} aria-label={shown ? title(shown) : `About ${place.name}`}>
-        {open && <Button kind="quiet" onClick={() => setOpen(null)}>← {place.name}</Button>}
+        {open && <Button kind="quiet" className="pa-back" onClick={() => setOpen(null)}>← {place.name}</Button>}
         {shown ? <Note body={shown === own ? withoutTitle(own.body ?? "", place.name) : shown.body ?? ""} path={shown.path} tags={shown.tags} fields={shown.fields} onLink={follow} />
           : notes && <p className="quiet">Nothing written about {place.name} yet. A note at {place.folder}{place.name} shows here.</p>}
       </section>
