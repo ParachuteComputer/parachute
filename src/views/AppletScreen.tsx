@@ -255,7 +255,7 @@ export default function AppletScreen() {
   const [signing, setSigning] = useState<string | null>(null);
   const [passcode, setPasscode] = useState("");
   const [needsPasscode, setNeedsPasscode] = useState(false);
-  // asked again when the levels change (the open app's record raised them after this screen opened)
+  // asked again when the levels change (the open bundle's record raised them after this screen opened)
   useEffect(() => { const ask = () => void passcodeHere().then(setNeedsPasscode); ask(); return onLevels(ask); }, []);
   useEffect(() => {
     if (!signedFor || !entry || !rec || loaded.state !== "ok" || !keys) return;

@@ -9,7 +9,7 @@ whether I install the apk/dmg before or after you do the home thing".
 
 1. **What a reader doesn't know, it leaves out.** A field, a key or a kit part an older reader doesn't know is ignored.
    The reader uses what it does know and doesn't refuse the rest:
-   - App records (`src/shell/apps.ts`): unknown keys at the top, and in a place on the bar, the home or `hide`, are
+   - Bundle records (`src/shell/bundles.ts`): unknown keys at the top, and in a place on the bar, the home or `hide`, are
      left out. A `source` or an `opens` choice with a key it doesn't know is left out whole, because the key might
      narrow it, and that leaves a smaller app.
    - The push gateway (`services/push-gateway`): unknown fields in a registration, an unregistration or a set of counts
@@ -18,7 +18,7 @@ whether I install the apk/dmg before or after you do the home thing".
      (docs/WRITE-AN-APPLET.md "Older apps"), as #60 did for `Link`.
 2. **What can't be left out is declared.** Each build has a level (`APP_LEVEL` in `src/applet/level.ts`; this one is 2).
    A record can say the oldest level it runs on with `needs`. On an applet it goes beside `applet` in the fields; on an
-   app record it goes inside `app`. A record with no `needs` needs level 1: the kit and records of 11-20, the floor.
+   bundle record it goes inside `bundle`. A record with no `needs` needs level 1: the kit and records of 11-20, the floor.
    - An applet whose `needs` is above the build's level is still listed by its name and glyph, and keeps its place on
      the bar. Nothing of it is asked, allowed, compiled or run. Its screen says **Update Parachute to open Home.**, with
      the reason in a quieter line under it. The same applies to a manifest with a top-level key or a contract the build doesn't
@@ -27,7 +27,7 @@ whether I install the apk/dmg before or after you do the home thing".
    - A component (`needs` beside `component`, or a key or contract the build doesn't know) is listed by its id and
      name, with no props and no access, and never runs. An applet that imports it says **Update Parachute to open**
      *the applet*, and an embed of it says the same for the component.
-   - An app record that needs more (or has a later `contract`) isn't read at all. The device opens the next app it can,
+   - A bundle record that needs more (or has a later `contract`) isn't read at all. The device opens the next app it can,
      and the list says **Update Parachute to open Uni.**
    - A `needs` that isn't a whole number is treated as a newer way of writing it, so it counts as more than any build
      knows.
@@ -67,7 +67,7 @@ whether I install the apk/dmg before or after you do the home thing".
 Tests: `src/applet/level.test.ts` (an older app opening Aaron's records made newer, components and a followed org's
 app included), `e2e/versions.spec.ts` (the same in the real build: listed, update line, no card, no frame; a missing
 part: the short line in the app's look, no React error; any other failure in one line, no stack; an
-imported newer component), `e2e/thinshell.spec.ts` (an app record made for a newer Parachute), `src/kit/olderApp.test.ts` (levels and
+imported newer component), `e2e/thinshell.spec.ts` (a bundle record made for a newer Parachute), `src/kit/olderApp.test.ts` (levels and
 fallbacks), and the gateway's "a registration from a newer app".
 
 ## Subtract

@@ -16,7 +16,7 @@ const inLine = (day: string) => (day === "Today" || day === "Yesterday" ? day.to
 const updated = (n: Note) => (n as { updatedAt?: string }).updatedAt ?? null;
 
 /**
- * The list: the open app's applets (shell/apps.ts decides which), one plain list, whatever vault each is in. It is
+ * The list: the open app's applets (shell/bundles.ts decides which), one plain list, whatever vault each is in. It is
  * where Back from a first screen lands and what the bar's Applets opens; the home page itself is the app's home applet.
  * Vaults are in Settings (and in a Vault applet, when the app lists one). A long-press (or a right-click) on an applet
  * offers pinning it to the bar and opening it on start.
@@ -36,8 +36,8 @@ export default function Launcher() {
   return (
     <main className="screen launcher">
       <h1 className="launcher-title">Applets</h1>
-      {home.notice === "app-record" && <p className="launcher-notice" role="status">Your app record didn't load, so here is every applet. <Link to="/settings">Settings</Link></p>}
-      {home.notice === "app-newer" && <p className="launcher-notice" role="status">{updateLine(home.noticeName ?? "your app")} For now this is another app. <Link to="/settings">Settings</Link></p>}
+      {home.notice === "bundle-record" && <p className="launcher-notice" role="status">Your bundle didn't load, so here is every applet. <Link to="/settings">Settings</Link></p>}
+      {home.notice === "bundle-newer" && <p className="launcher-notice" role="status">{updateLine(home.noticeName ?? "your bundle")} For now this is another bundle. <Link to="/settings">Settings</Link></p>}
       <ol className="entries" aria-label="Applets">
         {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
         {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}

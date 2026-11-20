@@ -1,13 +1,13 @@
 // @vitest-environment node
 // An older app opening a record set written for a newer one (docs/design/VERSIONS.md): Aaron's own records, as
 // scripts/install-applets.ts writes them, then made newer the three ways a newer app writes: `needs` past this app's
-// level, a manifest key it doesn't know, an app record for a later level. Nothing of them is read further or allowed;
+// level, a manifest key it doesn't know, a bundle record for a later level. Nothing of them is read further or allowed;
 // each is listed by its name, so its screen can say "Update Parachute to open …".
 import { describe, expect, it } from "vitest";
 import { appletRecord } from "../../applets/record";
 import { discoverApplets, readApplet } from "./discovery";
 import { APP_LEVEL } from "./level";
-import { appOf, followed, newerApp, placeOf } from "../shell/apps";
+import { bundleOf, followed, newerBundle, placeOf } from "../shell/bundles";
 import { componentNewer, readComponent } from "./component";
 
 const vars = { relay: "wss://relay.example", mail: "https://mail.example/mail/", uni: "a".repeat(64), push: "https://push.example/" };
@@ -59,14 +59,14 @@ describe("an older app opening a newer record set", () => {
     expect(own.ok && own.entry.manifest.id).not.toBe("vault");
   });
 
-  it("an app record for a later app isn't read here; a place with a key this app doesn't know keeps its place", () => {
+  it("a bundle record for a later app isn't read here; a place with a key this app doesn't know keeps its place", () => {
     const app = { contract: 1, id: "uni", name: "Uni", look: "launcher", sources: [{ vault: "uni", applet: "*" }], bar: [{ vault: "uni", applet: "Applets/Home" }], start: { vault: "uni", applet: "Applets/Home" } };
-    expect(appOf(app, "Parachute/Apps/uni", "n1")?.bar).toEqual([{ vault: "uni", applet: "Applets/Home" }]);
-    expect(appOf({ ...app, needs: APP_LEVEL + 1 }, "Parachute/Apps/uni", "n1")).toBeNull();
-    expect(newerApp({ ...app, needs: APP_LEVEL + 1 })).toBe(true);
-    expect(newerApp({ ...app, contract: 2 })).toBe(true);
-    expect(newerApp(app)).toBe(false);
-    expect(appOf({ ...app, bar: [{ vault: "uni", applet: "Applets/Home", screen: "today" }] }, "Parachute/Apps/uni", "n1")?.bar).toEqual([{ vault: "uni", applet: "Applets/Home" }]);
+    expect(bundleOf(app, "Parachute/Bundles/uni", "n1")?.bar).toEqual([{ vault: "uni", applet: "Applets/Home" }]);
+    expect(bundleOf({ ...app, needs: APP_LEVEL + 1 }, "Parachute/Bundles/uni", "n1")).toBeNull();
+    expect(newerBundle({ ...app, needs: APP_LEVEL + 1 })).toBe(true);
+    expect(newerBundle({ ...app, contract: 2 })).toBe(true);
+    expect(newerBundle(app)).toBe(false);
+    expect(bundleOf({ ...app, bar: [{ vault: "uni", applet: "Applets/Home", screen: "today" }] }, "Parachute/Bundles/uni", "n1")?.bar).toEqual([{ vault: "uni", applet: "Applets/Home" }]);
     expect(placeOf({ vault: "uni", applet: "Applets/Rooms", later: 1 })).toEqual({ vault: "uni", applet: "Applets/Rooms" });
   });
 
@@ -89,10 +89,10 @@ describe("an older app opening a newer record set", () => {
   });
 
   it("an org's app followed live keeps its later contract, so it reads as newer here", () => {
-    const own = appOf({ contract: 1, id: "techne", name: "Techne", live: { hub: "https://org.example", vault: "techne", path: "Parachute/Apps/techne" } }, "Parachute/Apps/techne", "n2")!;
+    const own = bundleOf({ contract: 1, id: "techne", name: "Techne", live: { hub: "https://org.example", vault: "techne", path: "Parachute/Bundles/techne" } }, "Parachute/Bundles/techne", "n2")!;
     const theirs = followed(own, { contract: 1, id: "techne" }, { contract: 2, id: "techne", name: "Techne", bar: [] });
-    expect(newerApp(theirs)).toBe(true);
-    expect(appOf(theirs, "Parachute/Apps/techne", "n2")).toBeNull();
-    expect(newerApp(followed(own, { contract: 1, id: "techne" }, { contract: 1, id: "techne", name: "Techne" }))).toBe(false);
+    expect(newerBundle(theirs)).toBe(true);
+    expect(bundleOf(theirs, "Parachute/Bundles/techne", "n2")).toBeNull();
+    expect(newerBundle(followed(own, { contract: 1, id: "techne" }, { contract: 1, id: "techne", name: "Techne" }))).toBe(false);
   });
 });

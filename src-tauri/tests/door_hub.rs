@@ -126,6 +126,25 @@ async fn a_key_is_told_its_own_vaults_and_no_others() {
     assert_eq!(door::list_vaults(&origin, &member).await.unwrap().vaults, vec!["work"]);
     // a key the hub doesn't know is told so
     assert_eq!(door::list_vaults(&origin, &nostr::Keys::generate()).await.unwrap_err().code, "unknown_key");
+    // which vault holds the person's settings, so a first sign-in offers it as the home: `work`, not the first by name
+    let admin: serde_json::Value = serde_json::from_slice(&cli(&h, &["auth", "mint-token", "--scope", "vault:work:write", "--json"]).stdout).unwrap();
+    let made = reqwest::Client::new()
+        .post(format!("{}/vault/work/api/notes", h.origin))
+        .bearer_auth(admin["token"].as_str().unwrap())
+        .json(&serde_json::json!({ "path": "Parachute/Settings", "tags": ["parachute-settings"], "content": "settings" }))
+        .send()
+        .await
+        .unwrap();
+    assert!(made.status().is_success(), "{}", made.status());
+    let body = door::home_records(&origin, &owner).await.unwrap().expect("the hub answers which vaults hold them");
+    let json = body.lines().find_map(|l| l.strip_prefix("data:")).map(str::trim).unwrap_or(&body).to_string();
+    let rpc: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let inner: serde_json::Value = serde_json::from_str(rpc.pointer("/result/content/0/text").and_then(|t| t.as_str()).unwrap()).unwrap();
+    let holding: Vec<&str> = inner["results"].as_array().unwrap().iter()
+        .filter(|r| { let n = r.get("notes").map(|n| n.get("notes").unwrap_or(n)); n.and_then(|n| n.as_array()).is_some_and(|a| a.iter().any(|x| x["tags"].as_array().is_some_and(|t| t.iter().any(|t| t == "parachute-settings")))) })
+        .filter_map(|r| r["vault"].as_str())
+        .collect();
+    assert_eq!(holding, vec!["work"], "{inner}");
 }
 
 #[tokio::test(flavor = "multi_thread")]

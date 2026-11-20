@@ -1,5 +1,6 @@
 // The frame's vault module reaches the vault through these, on this app's VaultClient for the applet's own vault.
-import { VaultConflictError, type VaultClient } from "@openparachute/surface-client";
+// `types` is not in surface-client's payload types (0.3.7); the hub takes it on 0.9 (the record door).
+import { VaultConflictError, type CreateNotePayload, type UpdateNotePayload, type VaultClient } from "@openparachute/surface-client";
 import type { VaultDeps, VaultNote } from "./modules/vault";
 
 const row = (n: { id: string; path?: string | null; extension?: string | null; updatedAt?: string | null }) => ({ id: n.id, path: n.path ?? null, extension: n.extension ?? null, updatedAt: n.updatedAt ?? null });
@@ -12,9 +13,10 @@ export function vaultDeps(c: VaultClient): VaultDeps {
       .map((n) => ({ id: n.id, path: n.path ?? null, snippet: "" })),
     // surface-client's typed words (pathPrefix, not path_prefix: a mix of the two drops the folder)
     listFields: async (prefix, limit) => (await c.queryNotes({ pathPrefix: prefix, includeMetadata: true, orderBy: "updated_at", sort: "desc", limit })).map((n) => n as VaultNote),
-    create: async (path, content, tags) => (await c.createNote({ path, content, ...(tags.length ? { tags } : {}) })) as VaultNote,
-    save: async (id, content, ifUpdatedAt) => {
-      try { return (await c.updateNote(id, { content, if_updated_at: ifUpdatedAt })) as VaultNote; } catch (e) {
+    // types and fields ride the same call (T-476): on core 0.9's record door they land as `types` and `fields`
+    create: async (path, content, tags, more) => (await c.createNote({ path, content, ...(tags.length ? { tags } : {}), ...(more?.types?.length ? { types: more.types } : {}), ...(more?.metadata ? { metadata: more.metadata } : {}) } as CreateNotePayload)) as VaultNote,
+    save: async (id, content, ifUpdatedAt, more) => {
+      try { return (await c.updateNote(id, { ...(content !== undefined ? { content } : {}), ...more, if_updated_at: ifUpdatedAt } as UpdateNotePayload)) as VaultNote; } catch (e) {
         if (e instanceof VaultConflictError) throw new Error("conflict: the note changed since it was read");
         throw e;
       }

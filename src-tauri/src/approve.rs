@@ -2,7 +2,7 @@
 // code, asking exactly this" as a kind 30479 event, only here and only after the device unlock, every time (no grace).
 // When this device's level for approving code is the passcode (Settings → Security; levels.rs), approving asks it too,
 // checked here; the web side can ask for more but never for less. Taking an approval back asks only the unlock: it can only stop code. Applets can never reach this: their signing paths (services.rs) take only the kinds they
-// declared from a short list, which 30479 and 30480 are not on (a test there says so).
+// declared, never one on the shell's deny list, which 30479 and 30480 are on (a test there says so).
 //
 // The passcode is its own secret, never the phone's unlock: a salted hash, many rounds, in the app's data folder.
 // Five wrong in a row and it waits a minute.

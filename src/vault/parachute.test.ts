@@ -1,6 +1,8 @@
 import { describe as group, expect, it } from "vitest";
-import { canList, CLOUD, describe, listFrom, parseHub, reachesEvery, rpcAnswer, covers, levelIn, scopeFor, vaultUrlFrom } from "./parachute";
+import { canList, CLOUD, describe, HOME_RECORDS_BODY, homeFrom, listFrom, parseHub, reachesEvery, rpcAnswer, covers, levelIn, scopeFor, vaultUrlFrom } from "./parachute";
 import { MAX_VAULTS } from "./address";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { hubOf, settingsFrom } from "../shell/homeSettings";
 
 group("parseHub", () => {
@@ -87,5 +89,31 @@ group("the vaults a hub lists and grants", () => {
     expect(levelIn("vault:b:read", "a")).toBeNull();
     expect(levelIn("account:vaults vault:ab:read", "a")).toBeNull();
     expect([covers("write", "read"), covers("read", "read"), covers("read", "write"), covers(null, "read")]).toEqual([true, true, false, false]);
+  });
+});
+
+group("homeFrom", () => {
+  // the account MCP's query-notes across vaults: each vault's rows, or its error
+  const answer = (results: unknown[]) => ({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify({ vaults_queried: [], results }) }] } });
+  const row = (tag: string) => ({ id: "n", path: "Parachute/x", tags: [tag] });
+  it("takes the vault holding the settings over one holding an app record, and the first by name never by itself", () => {
+    const a = answer([{ vault: "aaa", notes: { notes: [row("parachute-app")] } }, { vault: "home", notes: { notes: [row("parachute-settings")] } }, { vault: "zed", notes: { notes: [] } }]);
+    expect(homeFrom(a, ["aaa", "home", "zed"])).toBe("home");
+    expect(homeFrom(answer([{ vault: "aaa", notes: { notes: [] } }, { vault: "work", notes: [row("parachute-bundle")] }]), ["aaa", "work"])).toBe("work");
+  });
+  it("says nothing when two vaults hold settings (one may be someone else's on a hub the person runs), and looks only at the person's own", () => {
+    const a = answer([{ vault: "mine", notes: { notes: [row("parachute-settings")] } }, { vault: "kim", notes: { notes: [row("parachute-settings")] } }]);
+    expect(homeFrom(a, ["mine", "kim"])).toBeNull();
+    expect(homeFrom(a, ["mine"])).toBe("mine");
+    expect(homeFrom(answer([{ vault: "a", notes: [row("parachute-app")] }, { vault: "b", notes: [row("parachute-app")] }]), ["a", "b"])).toBeNull();
+  });
+  it("passes over a vault the hub couldn't read, and says nothing for an answer it can't read", () => {
+    expect(homeFrom(answer([{ vault: "home", error: "vault down" }, { vault: "b", notes: { notes: [row("parachute-app")] } }]), ["home", "b"])).toBe("b");
+    expect(homeFrom(answer([{ vault: "home", error: "vault down" }]), ["home"])).toBeNull();
+    for (const bad of [null, {}, { error: { code: 1 } }, { result: { isError: true, content: [] } }, { result: { content: [{ type: "text", text: "not json" }] } }]) expect(homeFrom(bad, ["home"])).toBeNull();
+  });
+  it("asks in the same words the key signs (src-tauri/src/door.rs)", () => {
+    const rust = readFileSync(join(process.cwd(), "src-tauri", "src", "door.rs"), "utf8");
+    expect(rust).toContain(`pub const HOME_RECORDS_BODY: &str = r#"${HOME_RECORDS_BODY}"#;`);
   });
 });

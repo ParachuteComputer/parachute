@@ -17,7 +17,22 @@ describe("the settings note", () => {
     expect(s.start).toEqual({ vault: "kitchen", applet: "Applets/Home" });
   });
   it("no note, other metadata, or a bad start: an empty bar and no home", () => {
-    for (const m of [null, {}, { parachute: "x" }, { parachute: { bar: "x", start: "Applets/Home" } }, { parachute: { start: { vault: "k" } } }]) expect(settingsFrom(m)).toEqual({ bar: [], start: null, hubs: [], services: [], app: null });
+    for (const m of [null, {}, { parachute: "x" }, { parachute: { bar: "x", start: "Applets/Home" } }, { parachute: { start: { vault: "k" } } }]) expect(settingsFrom(m)).toEqual({ bar: [], start: null, hubs: [], services: [], bundle: null });
+  });
+  it("a followed bundle's record is found in either folder: the same id under Parachute/Apps and Parachute/Bundles", async () => {
+    const { sameRecord } = await import("./homeSettings");
+    expect(sameRecord("Parachute/Bundles/techne.md", "Parachute/Apps/techne")).toBe(true);
+    expect(sameRecord("Parachute/Apps/techne", "Parachute/Bundles/techne")).toBe(true);
+    expect(sameRecord("Parachute/Bundles/techne", "Parachute/Bundles/techne")).toBe(true);
+    expect(sameRecord("Parachute/Bundles/other", "Parachute/Apps/techne")).toBe(false);
+    expect(sameRecord("Elsewhere/techne", "Parachute/Apps/techne")).toBe(false);
+  });
+  it("the choice of bundle: `bundle`, else its older name `app` (one release), never both read as two", () => {
+    expect(settingsFrom({ parachute: { bundle: "uni" } }).bundle).toBe("uni");
+    expect(settingsFrom({ parachute: { app: "uni" } }).bundle).toBe("uni");
+    // both said and different: an older build changed `app` alone after a newer one wrote both, so `app` is the newer
+    expect(settingsFrom({ parachute: { bundle: "lab", app: "uni" } }).bundle).toBe("uni");
+    expect(settingsFrom({ parachute: { app: "Not An Id" } }).bundle).toBeNull();
   });
   it("reads every place it can (the bar shows the first ones it finds), up to a bound", () => {
     const bar = Array.from({ length: 400 }, (_, i) => ({ vault: "k", applet: `A/${i}` }));

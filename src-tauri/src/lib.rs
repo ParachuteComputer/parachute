@@ -166,6 +166,7 @@ pub fn run() {
             pairing::pair_cancel,
             door::key_sign_in,
             door::hub_vaults,
+            door::hub_home_records,
             services::svc_open,
             services::svc_close,
             services::svc_relay_auth,
