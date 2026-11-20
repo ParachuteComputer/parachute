@@ -4,10 +4,12 @@
 // adds entries in Journal/ (the Journal applet's paths), asks the app for the bar (to find Rooms) and to open Rooms at a
 // room on a tap; an entry opens as a note link, through the kit. Its install fills UNI (the key whose messages are "from Uni"). Nothing here is the shell's.
 import { useEffect, useMemo, useState } from "react";
-import { app, link, ready, services, vault } from "parachute";
+import { app, link as kitLink, ready, services, vault } from "parachute";
 import { askOf, chunk, createStore, lastText, now, openAsks, tag, useStore, type Ev } from "component:room";
 
 const UNI = "{{uni}}";
+// an app from before note links has no link (src/kit/olderApp.test.ts): there an entry's tap opens nothing
+const link: { to: (r: { id: string; path: string }) => Promise<string>; follow: (to: string) => Promise<boolean> } = kitLink ?? { to: async () => "", follow: async () => false };
 const pad = (n: number) => String(n).padStart(2, "0");
 const today = (d = new Date()) => `Journal/${d.getFullYear()}/${pad(d.getMonth() + 1)}-${pad(d.getDate())}/`;
 /** Journal/2026/11-19/09-41 First words of it (as the Journal applet names an entry). */
