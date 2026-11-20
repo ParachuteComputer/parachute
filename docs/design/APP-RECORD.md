@@ -92,7 +92,7 @@ per action, the idle lock, and the grace. The web side never says which level ho
 
 **none** is the tap alone; **unlock** the device unlock (KEYRING.md "Unlock"); **passcode** this device's passcode,
 then the unlock. The passcode is a secret of the person's own, not the phone's PIN, set in Settings → Security, kept
-only as a salted hash of many rounds in the app's data folder and checked natively (five wrong and it waits a minute).
+only as a salted hash of many rounds in the app's data folder and checked natively (five wrong and it waits a minute; the count is kept on disk, so swiping the app away doesn't reset it).
 A passcode level on a device with no passcode is refused, never passed with the unlock alone. Every leveled action
 asks it each time; no grace covers it.
 
@@ -132,7 +132,8 @@ another app's moved over).
 | Who | Tries | Result (test) |
 |---|---|---|
 | A vault writer (a token, an agent, the hub) | `security` edited looser | Nothing changes (`levels.test.ts`, `levels.spec.ts`) |
-| | With an approval of their own key, an edited one, or another app's | Refused (`levels.rs`, `levels.test.ts`) |
+| | With an approval of their own key, or an edited one | Refused (`levels.rs`, `levels.test.ts`) |
+| | With the person's approval for another app | Not taken: the web side's `decide` checks the record names this app (`levels.test.ts`); Rust checks it is a lowering's record signed by the person |
 | | An old lowering put back after a raise | Refused on a device that applied the raise: dated before its last change (`levels.rs`). A device that never saw the raise (offline, or new) takes it: the person's older choice, said below |
 | | `approval_sign` (code's gate) used to sign a lowering | Refused: an applet's approval never names a `security-` record or levels (`approve.rs`); a lowering counts only with that record (`levels.rs`) |
 | Someone holding the unlocked phone | Approves at a passcode level with the unlock | Refused (`levels.rs` `a_passcode_level_refuses_the_device_unlock_alone`, `levels.spec.ts`) |

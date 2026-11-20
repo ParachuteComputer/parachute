@@ -73,30 +73,58 @@ fn code_ok(code: &str) -> bool {
     (4..=64).contains(&code.chars().count()) && !code.chars().any(char::is_control)
 }
 
-/// Wrong tries: after TRIES in a row, nothing is checked until WAIT has passed.
+/// Wrong tries: after TRIES in a row, nothing is checked until WAIT has passed. Kept beside the passcode
+/// (`passcode.tries.json`: the count and the wait's end, unix seconds), so swiping the app away doesn't reset them; the
+/// wait also holds in memory, by this run's own clock.
 #[derive(Default)]
 pub struct PasscodeState(Mutex<(u32, Option<Instant>)>);
+
+#[derive(Serialize, Deserialize, Default)]
+struct Tries {
+    wrong: u32,
+    until: u64,
+}
+
+fn tries_path(path: &Path) -> PathBuf {
+    path.with_extension("tries.json")
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
 
 impl PasscodeState {
     /// Check `code` against what is kept at `path`. With no passcode kept, there is nothing to check.
     pub fn check(&self, path: &Path, code: Option<&str>) -> Result<(), Refusal> {
         let Some(s) = read(path)? else { return Ok(()) };
         let mut g = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(until) = g.1 {
-            if Instant::now() < until {
-                return Err(no("passcode", "Too many wrong passcodes. Try again in a minute."));
-            }
+        let tp = tries_path(path);
+        let mut kept: Tries = std::fs::read(&tp).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        // the kept count, if a run before this one left more wrong tries than this one has seen
+        g.0 = g.0.max(kept.wrong);
+        let now = unix_now();
+        let waiting = g.1.is_some_and(|until| Instant::now() < until) || (kept.until > now && kept.until <= now + WAIT.as_secs());
+        if waiting {
+            return Err(no("passcode", "Too many wrong passcodes. Try again in a minute."));
+        }
+        if g.1.is_some() || kept.until > 0 {
             *g = (0, None);
+            kept = Tries::default();
         }
         let Some(code) = code else { return Err(no("passcode", "Your passcode is needed for this.")) };
         if digest(&s.salt, code, s.rounds) == s.hash {
             *g = (0, None);
+            let _ = std::fs::remove_file(&tp);
             return Ok(());
         }
         g.0 += 1;
+        kept.wrong = g.0;
         if g.0 >= TRIES {
             g.1 = Some(Instant::now() + WAIT);
+            kept.until = now + WAIT.as_secs();
         }
+        // a count that can't be kept refuses: an unkept count would let a restart reset it
+        crate::services::write_json(&tp, &kept).map_err(|_| no("storage", "The passcode's wrong tries couldn't be kept."))?;
         Err(no("passcode", "That passcode isn't it."))
     }
 }
@@ -119,6 +147,8 @@ pub fn set(path: &Path, state: &PasscodeState, old: Option<&str>, new: Option<&s
             if let Some(dir) = path.parent() {
                 std::fs::create_dir_all(dir).map_err(|_| no("storage", "The app's data folder can't be written."))?;
             }
+            // a new passcode starts with no wrong tries
+            let _ = std::fs::remove_file(tries_path(path));
             let tmp = path.with_extension("json.tmp");
             std::fs::write(&tmp, serde_json::to_vec(&s).unwrap_or_default()).and_then(|_| std::fs::rename(&tmp, path)).map_err(|_| no("storage", "The passcode couldn't be kept."))
         }
@@ -155,6 +185,7 @@ pub fn is_security(content: &str) -> bool {
 /// Sign an approval (or a taking back) of an applet's exact code and asks: this device's level for approving code (the
 /// passcode, when it says so, then the device unlock; levels.rs), the unlock alone for a taking back.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn approval_sign<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, ring: State<'_, KeyringState>, levels: State<'_, crate::levels::LevelsState>, content: String, d: String, name: String, passcode: Option<String>) -> Result<Event, Refusal> {
     check_content(&content, &d)?;
     if is_security(&content) {
@@ -219,6 +250,20 @@ mod tests {
             assert!(s.check(&p, Some("nope")).is_err());
         }
         assert_eq!(s.check(&p, Some("garden-gate")).unwrap_err().message, "Too many wrong passcodes. Try again in a minute.");
+        // a restart (a fresh state) still waits: the count and the wait are kept beside the passcode
+        assert_eq!(PasscodeState::default().check(&p, Some("garden-gate")).unwrap_err().message, "Too many wrong passcodes. Try again in a minute.");
+    }
+
+    #[test]
+    fn wrong_tries_add_up_across_restarts() {
+        let p = tmp();
+        set(&p, &PasscodeState::default(), None, Some("garden-gate")).unwrap();
+        for _ in 0..TRIES - 1 {
+            // each try on a fresh state, as if the app were swiped away between them
+            assert_eq!(PasscodeState::default().check(&p, Some("nope")).unwrap_err().message, "That passcode isn't it.");
+        }
+        assert!(PasscodeState::default().check(&p, Some("nope")).is_err());
+        assert_eq!(PasscodeState::default().check(&p, Some("garden-gate")).unwrap_err().message, "Too many wrong passcodes. Try again in a minute.");
     }
 
     #[test]

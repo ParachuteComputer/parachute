@@ -428,9 +428,14 @@ impl LevelsState {
         self.status(app, false).await.map(|s| s.locked)
     }
 
-    async fn set<R: Runtime>(&self, app: &AppHandle<R>, levels: Levels, since: u64) -> Result<Levels, Refusal> {
+    /// Keep `levels`, changed at `since`. `after`: only if nothing changed here since then (an adopted lowering), checked
+    /// under the same lock as the write, so a raise landing meanwhile is never written over.
+    async fn set<R: Runtime>(&self, app: &AppHandle<R>, levels: Levels, since: u64, after: Option<u64>) -> Result<Levels, Refusal> {
         let mut g = self.0.lock().await;
         let was = self.kept(app, &mut g).await?;
+        if after.is_some_and(|at| at <= was.since) {
+            return Err(no("refused", "That change of security levels doesn't count here: this device changed its levels after it was signed."));
+        }
         let k = Kept { levels: floored(levels), since: since.max(was.since) };
         Self::write(&data_dir(app)?, &k)?;
         g.kept = Some(k);
@@ -463,7 +468,7 @@ pub async fn levels_raise<R: Runtime>(app: AppHandle<R>, levels: State<'_, Level
     if next == cur {
         return Ok(cur);
     }
-    levels.set(&app, next, now_s()).await
+    levels.set(&app, next, now_s(), None).await
 }
 
 /// Lower (or set) this device's levels, with the person's signed approval: `content` is the approval (src/shell/levels.ts
@@ -488,7 +493,7 @@ pub async fn levels_lower<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyStat
     levels.gate(&app, level, passcode.as_ref().map(|p| p.as_str()), || ring.confirm(&app, "settings", "levels", false, "Change your security", &reason)).await?;
     let k = keys.get(&app).await.map_err(|m| no("no_key", m))?.ok_or_else(|| no("no_key", "This device has no key."))?;
     let ev = crate::services::sign_template(&k, APPROVAL_KIND, &content, &[vec!["d".into(), d]])?;
-    levels.set(&app, next, ev.created_at.as_secs()).await?;
+    levels.set(&app, next, ev.created_at.as_secs(), None).await?;
     Ok(ev)
 }
 
@@ -503,7 +508,7 @@ pub async fn levels_adopt<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyStat
         levels.kept(&app, &mut g).await?
     };
     let next = adoptable(&ev, &own, &kept, now_s())?;
-    levels.set(&app, next, ev.created_at.as_secs()).await
+    levels.set(&app, next, ev.created_at.as_secs(), Some(ev.created_at.as_secs())).await
 }
 
 /// A real touch, as the web side saw it (its own input, or a call from an applet during the person's activation).
