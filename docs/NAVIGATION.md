@@ -114,7 +114,8 @@ A bundle is a record in your home vault, `Parachute/Bundles/<id>`, tagged `parac
 `Parachute/Apps/<id>`, `parachute-app` and `fields.app`, are read until 2026-12-20. Builds from before 11-20 read only those, so until then the app writes the names your
 vault already uses: a record under the older names stays there, a new one goes under the older names until a record
 is under the newer, and the settings note says both `bundle` and `app` (`app` is read first). `node
-scripts/migrate-bundles.ts` moves them all once no device of yours runs such a build.)
+scripts/migrate-bundles.ts` moves them all once no device of yours runs such a build. An agent making a new record does the same: under
+`Parachute/Apps/<id>`, `parachute-app` and `fields.app` while the vault holds none under the newer names.)
 
 ```json
 {

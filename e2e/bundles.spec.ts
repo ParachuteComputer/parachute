@@ -129,7 +129,7 @@ test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a
   await start(page);
   await expect(entries.getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await expect(entries.getByRole("link", { name: /Cook mode/ })).toHaveCount(0);
-  // the settings note's older `app` goes with the first choice made: one name for it
+  // the choice is written under both names: `bundle`, and `app` for builds from before 11-20
   await page.goto("/settings");
   await page.locator("section", { has: page.getByRole("heading", { name: "Your bundle" }) }).getByRole("radio", { name: /Everything/ }).check();
   await expect.poll(async () => (await tagged("parachute-settings"))[0]?.metadata.parachute.bundle).toBe("everything");
