@@ -156,7 +156,7 @@ test("journal: a voice entry, recorded on the shell's sheet, attached to its not
     await app.getByRole("button", { name: "Record a voice entry" }).click();
     await recordOnSheet(page, "Journal");
     // the entry shows, waiting for its words
-    const entry = app.getByRole("article", { name: /Entry at/ }).filter({ has: app.getByRole("status") }).first();
+    const entry = app.getByRole("article", { name: /Entry at/ }).filter({ hasText: /Transcribing…|Transcription unavailable/ }).first();
     await expect(entry).toContainText(/Transcribing…|Transcription unavailable/, { timeout: 20_000 });
     await expect(entry).toContainText("voice");
 

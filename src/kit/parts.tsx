@@ -56,25 +56,46 @@ export function Days({ counts, times, days = 28, label, inline }: { counts?: rea
   );
 }
 
-export type Row = { key?: string; title: ReactNode; meta?: ReactNode; aside?: ReactNode; glyph?: string; onPress?: () => void };
-/** Rows under a label. A row with `onPress` is a button. */
-export function List({ label, rows }: { label?: ReactNode; rows: readonly Row[] }) {
+export type Row = {
+  key?: string; title: ReactNode; meta?: ReactNode; aside?: ReactNode; glyph?: string; onPress?: () => void;
+  /** a mark after the title: a count of new things, a word */
+  badge?: ReactNode;
+  /** drawn bold: something new in it */
+  strong?: boolean;
+  /** the one open now (aria-current) */
+  current?: boolean;
+  /** a line under the rest, in the accent: what wants the person */
+  under?: ReactNode;
+  /** what a screen reader says for the row, when its text isn't enough */
+  label?: string;
+  /** data- attributes, for an applet's own tests: { room: "…" } is data-room */
+  data?: Record<string, string>;
+};
+/** Rows under a label. A row with `onPress` is a button. A long list costs little: a row off screen isn't drawn until
+ *  it scrolls near. `more` puts a button under the last row that asks for the next page (older entries, more mail). */
+export function List({ label, rows, more }: { label?: ReactNode; rows: readonly Row[]; more?: { label: string; onPress: () => void; busy?: boolean } }) {
   return (
     <section className="pa-list" aria-label={typeof label === "string" ? label : undefined}>
       {label && <h3 className="pa-list-label">{label}</h3>}
       <ul>
         {rows.map((r, i) => {
+          const data = Object.fromEntries(Object.entries(r.data ?? {}).filter(([k]) => /^[a-z][a-z0-9-]*$/.test(k)).map(([k, v]) => [`data-${k}`, v]));
+          const cls = `pa-row${r.strong ? " pa-strong" : ""}`;
           const inner = (
             <>
-              {r.glyph && <span className="pa-row-mark" aria-hidden="true">{r.glyph}{"︎"}</span>}
-              <span className="pa-row-title">{r.title}</span>
+              {r.glyph && <span className="pa-row-mark" aria-hidden="true">{r.glyph}{"\ufe0e"}</span>}
+              <span className="pa-row-title">{r.title}{r.badge != null && r.badge !== "" && <span className="pa-badge">{r.badge}</span>}</span>
               {r.meta != null && r.meta !== "" && <span className="pa-row-meta">{r.meta}</span>}
               {r.aside != null && r.aside !== "" && <span className="pa-row-aside">{r.aside}</span>}
+              {r.under != null && r.under !== "" && <span className="pa-row-under">{r.under}</span>}
             </>
           );
-          return <li key={r.key ?? i}>{r.onPress ? <button type="button" className="pa-row" onClick={r.onPress}>{inner}</button> : <div className="pa-row">{inner}</div>}</li>;
+          return <li key={r.key ?? i}>{r.onPress
+            ? <button type="button" className={cls} onClick={r.onPress} aria-label={r.label} aria-current={r.current ? "true" : undefined} {...data}>{inner}</button>
+            : <div className={cls} aria-label={r.label} aria-current={r.current ? "true" : undefined} {...data}>{inner}</div>}</li>;
         })}
       </ul>
+      {more && <button type="button" className="pa-more" disabled={more.busy} onClick={more.onPress}>{more.busy ? "Reading…" : more.label}</button>}
     </section>
   );
 }
