@@ -43,7 +43,9 @@ subscription, not a timer).
   `eq` filter work on any field); the table draws only the rows near the screen and reads the next page as its foot
   comes near. Measured: `e2e/viewer5000.spec.ts` (opt-in, `VIEWER_5000=1`).
 - **Kit parts** added for it, for every applet: `Table` and `Fields` (`src/kit/parts-data.tsx`).
-- **Core 0.8** has no types: Vault shows a tag with a schema as a type and a type's change as a tag's.
+- **Core 0.8** has no types: Vault shows a tag with a schema as a type and a type's change as a tag's. That path is
+  unit-tested against 0.8's words (`src/applet/vaults.test.ts`); Vault's e2e runs on 0.9 only (on 0.8 it skips), so it
+  is not yet exercised on a 0.8 hub.
 
 ## Where things open
 
@@ -51,7 +53,8 @@ subscription, not a timer).
   vault view) opens in Vault, when Vault is in the home vault and allowed on this device:
   `/v/<vault>/n/<id>` carries on to `/v/<home>/a/<Vault>?vault=<vault>&record=<id>`, which Vault hears as its launch.
   A record an applet opens still opens there; nothing about open-with changed.
-- **A vault's address**, `/v/<vault>`, carries on the same way, to that vault in Vault. `/v/<vault>?with=vault` (and a note's `?with=vault`) is
+- **A vault's address**, `/v/<vault>`, carries on the same way, to that vault in Vault (decided once per visit: a Vault
+  the home's read finds late doesn't take over a plain view being read). `/v/<vault>?with=vault` (and a note's `?with=vault`) is
   the plain view, asked for: the way back when Vault itself won't do.
 - **Before Vault is added, or while it waits for its card** (new, or changed since it was allowed), or where applets
   don't run on this device, the plain views stay, with one line at the top that leads to Vault. That is the way back if
@@ -96,3 +99,8 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
 4. **Counts per group**: `aggregate` groups only by an indexed field, so a grouped table counts what it has read.
 5. **Someone else's vault.** `vaults` changes records in any vault the app may change, a shared one of someone else's
    too (the card says every vault): what it reads in one vault can be written into another the person shares.
+6. **Reads a browser may keep.** The hub answers a record's read with `ETag` and `Last-Modified` and no `Cache-Control`,
+   so a browser may serve a read of a moment ago again (heuristic freshness): a record just changed then reads as it
+   was, and the next change is refused as a conflict. Vault's reads ask `cache: "no-store"`; the app's other reads
+   (the note view, the editor, the applet `vault` module) don't yet. Proposal for core: `Cache-Control: private,
+   no-cache` on `/api/*` answers.

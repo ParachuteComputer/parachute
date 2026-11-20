@@ -127,6 +127,19 @@ describe("what it never changes", () => {
   });
 });
 
+describe("watch", () => {
+  it("a frame that went while the vault's names were read gets no watch", async () => {
+    let watched = 0;
+    const m = createVaultsModule(["vaults"], { list: () => [{ key: "home", name: "home", host: "h", mine: true, home: true, level: "write" }], door: async () => "records", request: async () => [],
+      watch: () => { watched++; return () => {}; }, access: async () => { throw new Error("x"); }, revoke: async () => {}, readOnly: async () => {}, confirm: async () => "no", emit: () => {} });
+    const r = createRouter([m]);
+    await expect(r.call("vaults", "watch", { vault: "home" }, {}, { charge() {}, closed: () => true })).rejects.toMatchObject({ code: "failed" });
+    expect(watched).toBe(0);
+    await r.call("vaults", "watch", { vault: "home" }, {}, { charge() {}, closed: () => false });
+    expect(watched).toBe(1);
+  });
+});
+
 describe("sharing", () => {
   it("takes an applet's access back only after the person's yes on the app's own sheet, naming it", async () => {
     const no = setup(["sharing"], {}, { yes: false });
