@@ -210,12 +210,13 @@ does. Use them, or your own markup on the CSS variables, or both.
 | `<Card title?>…</Card>` | A raised block with a title. |
 | `<Field label placeholder? action? onAction? value? onChange? clearOnAction? />` | A line to write on, and one action (its button, or Enter). It keeps its own text unless `value` is given, and clears after the action unless `clearOnAction` is false. `onAction` should catch its own errors and show them: a failed action leaves the text as it was. |
 | `<Empty>…</Empty>` | What shows when there is nothing yet: a sprig and a line. |
-| `<Page title? kicker? aside? onRefresh? className? >…</Page>` | The applet's screen: one width and margin for every applet, its title on the type scale (a small `kicker` above, `aside` at its right), and with `onRefresh` pull down at the top to read again. |
+| `<Page title? kicker? aside? back? onRefresh? wide? className? >…</Page>` | The applet's screen: one width and margin for every applet, its title on the type scale (a small `kicker` above, `aside` at its right, `back: { label, onPress }` a way back above it), with `onRefresh` pull down at the top to read again, and `wide` for two columns on a computer. |
+| `<Tabs label tabs current onChange />` | Places to switch between in one screen (Inbox, Later, Sent): `tabs` is `[{ key, label, count? }]`, the one shown is marked. |
 | `<Loading>…</Loading>` | The quiet line while something is read ("Reading…" unless you say). |
 | `<Problem error? onRetry? >…</Problem>` | What went wrong, said once: your words, then the error's, and Try again with `onRetry`. |
 | `<Button kind? small? busy? onClick >…</Button>` | A button in the app's look: `primary` (the one main action), `plain` (the default) or `quiet`. |
 | `<Search label placeholder? value? onChange? onSearch live? />` | A search box: Enter searches (each pause in typing, with `live` ms); emptying it searches for "". |
-| `<Write label value onChange onSend? send? busy? enter? line? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone, as in a chat). Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows. |
+| `<Write label labelled? value onChange onSend? send? busy? enter? line? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone on a computer, as in a chat). `labelled` shows the label above it, as a Field's. Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows. |
 | `<Record onRecorded label? max_s? disabled? kind? small? >…</Record>` | The microphone button: the app's own recorder sheet (needs `reach: [voice]`); `onRecorded({ bytes, type, duration })` on Send. |
 | `toast(text, { error? })` | A short word after an action ("Saved"), at the foot of the screen, gone by itself. |
 | `voiceNote(recording, create)` | A recording made a note: `create(body)` makes the record (its path is yours), the recording is attached with transcription asked, and the hub writes the words in. |
@@ -228,8 +229,9 @@ An HTML applet has no parts: it has the kit's calls and the CSS variables.
 
 **Older apps.** An applet lives in the vault, and each device's app updates on its own time, so an applet meets older
 apps. A part an older app doesn't have arrives as `undefined`, and an applet that draws it stops there with one line
-saying why. The kit of 11-20 is the floor the shipped applets are written on: they need an app from 11-20 or later, so
-their records go to a vault once the person's devices have it. A part added after that is imported under another name
+saying why. The kit of 11-20 (T-476: everything in the parts table above, with every prop it lists) is the floor the
+shipped applets are written on: they need a build with all of it, the first release after 11-20, so their records go to
+a vault once the person's devices have that build. A newer prop counts as a newer part: an older app ignores it. A part added after that is imported under another name
 with a fallback (`src/kit/olderApp.test.ts` checks the shipped applets do):
 
 ```tsx

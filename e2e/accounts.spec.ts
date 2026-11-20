@@ -21,7 +21,7 @@ test("Claude accounts: each account's use, and which one new workers use, from t
     await page.getByRole("button", { name: "Allow" }).click();
     const app = page.frameLocator("iframe.applet-frame");
     await expect(app.getByText("New workers use whichever account has room.")).toBeVisible();
-    await expect(app.getByRole("list", { name: "Accounts" })).toContainText("Account Bsession 5% · week 12%");
+    await expect(app.getByRole("region", { name: "Accounts" })).toContainText("Account Bsession 5% · week 12%");
     // the launcher sets B until its reset: the applet says so
     const md = (await api(hubState(), "GET", `notes/${usage.id}`)).metadata;
     await api(hubState(), "PATCH", `notes/${usage.id}`, { metadata: { ...md, account_preference: "b", account_preference_until: reset }, force: true });

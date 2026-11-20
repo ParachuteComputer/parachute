@@ -38,12 +38,14 @@ test("matrix: the token is given to the app, never the applet; alice and bob tal
     // Settings: give the app the token, on the app's own screen
     await page.goto("/settings");
     await page.getByRole("button", { name: "Give it a token" }).click();
-    await page.getByLabel(`Token for ${new URL(HS!).host} on this device`).fill(token("alice"));
-    await page.getByRole("button", { name: "Keep it" }).click();
+    const tokenField = page.getByLabel(`Token for ${new URL(HS!).host} on this device`);
+    await tokenField.fill(token("alice"));
+    // (Settings has another Keep it since #66, the approval key's: this one is the token's own form)
+    await page.locator("form", { has: tokenField }).getByRole("button", { name: "Keep it" }).click();
     await expect(page.getByText(`A token for ${new URL(HS!).host} on this device is kept here.`)).toBeVisible();
 
     await open();
-    const list = app.getByRole("list", { name: "Your Matrix rooms" });
+    const list = app.getByRole("region", { name: "Your Matrix rooms" });
     await expect(list.getByRole("button", { name: /Garden/ })).toContainText(`The peas are up ${stamp}`, { timeout: 20_000 });
     await list.getByRole("button", { name: /Garden/ }).click();
     await app.getByLabel("Message Garden").fill(`Lovely, I'll water them ${stamp}`);

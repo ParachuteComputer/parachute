@@ -19,6 +19,7 @@ One model, everywhere.
    pinned in the open app (its record's `bar`), in that order (up to 12), and nothing else of the app's but **Applets**
    at the end, the one way to the list (and Settings from there). The home applet is on the bar when it is pinned; pin
    it first to have it there. Under a frame of your own it also ends with the app's own way to Settings.
+   An applet that declares signals shows its count beside its glyph unless it is the screen in front ([design/APP-RECORD.md](design/APP-RECORD.md), "Signals").
 2. **The list is your app.** Every applet the open app offers ([Apps](#apps)), in one plain list. In Everything, that
    is every applet in every vault. Vaults are not on it: they are in Settings (**Your Parachutes**, each with **Open**),
    and in a Vault applet when the app lists one.
