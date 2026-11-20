@@ -52,12 +52,20 @@ const hub = (s: Subject) => s.hub;
  *  its embeds), its note's path, and the subject; and what those resolve to from other notes: what it opens once the
  *  vault's role tags are taken out, and which Parachutes its page's embeds come from. The same on every device,
  *  whatever it calls the vault. */
-export function asksHash(subject: Subject, notePath: string, fields: Record<string, unknown>, resolved: { opens?: unknown; from?: readonly string[] } = {}): Promise<string> {
+export function asksHash(subject: Subject, notePath: string, fields: Record<string, unknown>, resolved: { opens?: unknown; from?: readonly string[]; left?: readonly string[] } = {}): Promise<string> {
   const pick = (k: string) => (fields[k] === undefined ? null : fields[k]);
   // signals only when declared: an approval made before them holds
+  // `left` (discovery.ts): which of these fields the approving device left out of its card and its grant (the vault is
+  // someone else's there, or a server is one of its hubs). Only when it left something out, so an approval made where
+  // nothing was holds. A device that leaves out less gets another hash, and asks for itself.
   return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds"), signals: fields.signals,
-    resolved: { opens: resolved.opens ?? null, from: resolved.from ? [...resolved.from].sort() : [] } }));
+    resolved: { opens: resolved.opens ?? null, from: resolved.from ? [...resolved.from].sort() : [], ...(resolved.left?.length ? { left: [...resolved.left].sort() } : {}) } }));
 }
+
+/** The asks' hash of an applet as this device read it (discovery.ts `readApplet`): its fields as written, what it opens
+ *  without the vault's role tags, where its embeds point, and what this device left out. */
+export const asksOf = (subject: Subject, entry: { path: string; opens: readonly { type: string; path: string; screen?: string }[]; left?: readonly string[] }, fields: Record<string, unknown>, from: readonly string[]): Promise<string> =>
+  asksHash(subject, entry.path, fields, { opens: entry.opens.map((o) => ({ type: o.type, path: o.path, screen: o.screen ?? null })), from, left: entry.left });
 
 /** The content a device signs: the next number is the time, or one more than the newest it has seen. */
 export function approvalContent(o: { subject: Subject; approved: boolean; code: string; scope: string; now: number; seen: number | null; face?: string[]; device?: string; runs?: "sealed" | "approved-code" }): Content {

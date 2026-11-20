@@ -110,6 +110,40 @@ export async function signApproval(o: { subject: Subject; name: string; approved
   return { ev, written };
 }
 
+/** Revoke, wherever the person taps it (the applet's menu, Settings): whatever happens next, this device doesn't allow
+ *  the applet again from an approval made before now; and on a device with the person's key the approval is taken back
+ *  on every device (signed after the unlock, never the passcode). `applet`: its manifest id, or null when its note is
+ *  gone or unread, and the approval in the home vault says which it was. Returns what to tell the person when the
+ *  taking back went no further than this device, else null. */
+export async function takeBack(rec: Pick<VaultRecord, "issuer" | "vault">, record: string, name: string, applet: string | null, seen: number | null = null): Promise<string | null> {
+  const at = subjectOf(rec, record, applet ?? "");
+  raiseFloor(at, Math.max(Math.floor(Date.now() / 1000), seen ?? 0) + 0.5);
+  if (!(await signsHere())) return null;
+  try {
+    const id = applet ?? await approvedApplet(at);
+    // nothing of this applet's was approved for every device: there is nothing to take back
+    if (id === null) return null;
+    const r = await signApproval({ subject: { ...at, applet: id }, name, approved: false, code: "", scope: "" });
+    return r.written ? null : "Stopped on this device. Your other devices keep running it until Parachute can change notes in your home vault.";
+  } catch (e) {
+    return `Stopped on this device only: ${e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message).replace(/\.$/, "") : "the taking back couldn't be signed"}.`;
+  }
+}
+
+/** Which applet the approvals kept for this record name (the newest that says). Throws when the home can't be read. */
+async function approvedApplet(at: Subject): Promise<string | null> {
+  const home = homeVault();
+  if (!home) return null;
+  let best: { n: number; applet: string } | null = null;
+  for (const r of await rowsFor(home, at)) {
+    try {
+      const c = JSON.parse(String((r.metadata?.approval as { content?: unknown } | undefined)?.content)) as { n?: unknown; subject?: { applet?: unknown } };
+      if (typeof c.n === "number" && typeof c.subject?.applet === "string" && c.subject.applet && (!best || c.n > best.n)) best = { n: c.n, applet: c.subject.applet };
+    } catch { /* not an approval */ }
+  }
+  return best?.applet ?? null;
+}
+
 async function writeApproval(home: VaultRecord, s: Subject, name: string, ev: SignedEvent): Promise<void> {
   const c = clientFor(home);
   const [was] = await rowsFor(home, s);

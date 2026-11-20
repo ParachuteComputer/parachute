@@ -1,8 +1,11 @@
+// @vitest-environment node
 // The approval rule played with real keys and signatures (from the design's attacks.mjs, reworked for one personal key):
 // what a vault writer, a stranger's key or an old approval put back can and can't make run.
 import { describe, expect, it } from "vitest";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
-import { APPROVAL_KIND, KEYS_KIND, approvalContent, asksHash, checkKeyList, decide, dOf, trustedKeys, type Subject } from "./approvals";
+import { APPROVAL_KIND, KEYS_KIND, approvalContent, asksHash, asksOf, checkKeyList, decide, dOf, trustedKeys, type Subject } from "./approvals";
+import { appletRecord } from "../../applets/record";
+import { readApplet } from "./discovery";
 
 const me = generateSecretKey(), stranger = generateSecretKey(), root = generateSecretKey(), next = generateSecretKey();
 const ME = getPublicKey(me), STRANGER = getPublicKey(stranger), ROOT = getPublicKey(root), NEXT = getPublicKey(next);
@@ -83,5 +86,37 @@ describe("a signed approval", () => {
     const b = await asksHash(subject, "Applets/Rooms", { app: ["open"], applet: { allow: [{ verbs: ["read"], path: "Rooms/" }], id: "rooms" } });
     expect(a).toBe(b);
     expect(await asksHash(subject, "Applets/Rooms", { applet: { id: "rooms", allow: [{ path: "Rooms/", verbs: ["read", "update"] }] }, app: ["open"] })).not.toBe(a);
+  });
+});
+
+// Found in review (T-476): the hash was of the note's fields alone, but a device leaves some of them out: an applet in
+// a vault that is someone else's there gets no server, no microphone and nothing of the app; a server at one of the
+// device's own hubs is refused. A phone that left the servers out signed an approval that a laptop, where the vault is
+// the person's own, took as covering them, with no card. Each device now hashes what it left out too.
+describe("an approval covers what the approving device's card showed, not what another device reads into the note", () => {
+  const vars = { relay: "wss://buzz.example.org", mail: "https://mail.example.org/mail/", uni: "a".repeat(64), push: "https://push.example.org/" };
+  const r = appletRecord("rooms", vars);
+  const note = { id: "01ROOMS", path: r.path, tags: r.tags, metadata: r.fields as Record<string, unknown> };
+  const read = (theirs: boolean, isHub: (o: string) => boolean = () => false) => { const a = readApplet(note, "team", theirs, isHub); if (!a.ok) throw new Error(a.error); return a.entry; };
+  const asks = (e: ReturnType<typeof read>) => asksOf({ ...subject, vault: "team" }, e, note.metadata, []);
+
+  it("someone else's vault on the phone, the person's own on the laptop: the phone's approval isn't the laptop's", async () => {
+    const phone = read(true), laptop = read(false);
+    expect(phone.services).toEqual([]);
+    expect(laptop.services.length).toBeGreaterThan(0);
+    expect(await asks(laptop)).not.toBe(await asks(phone));
+  });
+  it("a server at a hub the phone knows (refused there) and the laptop doesn't", async () => {
+    const phone = read(false, (o) => o === "https://buzz.example.org"), laptop = read(false);
+    expect(phone.services).toEqual([]);
+    expect(laptop.services.length).toBeGreaterThan(0);
+    expect(await asks(laptop)).not.toBe(await asks(phone));
+  });
+  it("two devices that read it the same get the same hash, and nothing left out leaves an approval made before as it was", async () => {
+    expect(await asks(read(false))).toBe(await asks(read(false)));
+    expect(await asks(read(true))).toBe(await asks(read(true)));
+    const e = read(false);
+    expect(e.left).toBeUndefined();
+    expect(await asks(e)).toBe(await asksHash({ ...subject, vault: "team" }, e.path, note.metadata, { opens: e.opens.map((o) => ({ type: o.type, path: o.path, screen: o.screen ?? null })), from: [] }));
   });
 });

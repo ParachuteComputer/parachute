@@ -141,3 +141,83 @@ test("Revoke on one device takes it back on the others; a cancelled unlock appro
     await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {});
   }
 });
+
+// Found in review (T-476): Settings → Applets → Revoke only forgot this device's grant. The approval stayed in the home
+// vault, so the next open found it and allowed the applet again with no card, and the other devices never stopped.
+test("Revoke in Settings takes it back on every device, as Revoke in the applet's menu does", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const me = newKey();
+  const made = await record(hubState(), "create", appletRecord("journal"));
+  only = made.id;
+  const phoneA = await device(browser, me), laptopB = await device(browser, me);
+  const revokeInSettings = (p: Page) => p.getByRole("list", { name: "Allowed applets" }).getByRole("listitem").filter({ hasText: "Journal" }).getByRole("button", { name: "Revoke" }).click();
+  const setApprove = (p: Page, v: string) => p.evaluate((x) => { (window as unknown as { __parachuteE2EApprove: string }).__parachuteE2EApprove = x; }, v);
+  try {
+    await open(phoneA);
+    await phoneA.getByRole("button", { name: "Allow" }).click();
+    await expect(journal(phoneA)).toBeVisible();
+    await open(laptopB);
+    await expect(journal(laptopB)).toBeVisible();
+
+    // the laptop revokes in Settings and cancels the unlock: stopped there, said so, and not allowed again by the
+    // approval still standing
+    await laptopB.goto("/settings");
+    await setApprove(laptopB, "cancel");
+    await revokeInSettings(laptopB);
+    await expect(laptopB.getByRole("alert")).toContainText("Stopped on this device only");
+    await open(laptopB);
+    await expect(card(laptopB)).toBeVisible();
+    await expect(journal(laptopB)).toHaveCount(0);
+
+    // the phone revokes in Settings: a taking back, signed, in the home vault
+    await phoneA.goto("/settings");
+    await revokeInSettings(phoneA);
+    await expect.poll(async () => JSON.parse((await approvals())[0].metadata.approval!.content).approved).toBe(false);
+    await open(phoneA);
+    await expect(card(phoneA)).toBeVisible();
+    await expect(journal(phoneA)).toHaveCount(0);
+  } finally {
+    await phoneA.context().close(); await laptopB.context().close();
+    for (const r of await approvals()) await api(hubState(), "DELETE", `notes/${r.id}`).catch(() => {});
+    await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {});
+  }
+});
+
+// Found in review (T-476): the passcode typed for one card stayed in the box. A screen kept running holds its state, so
+// when its code changed the new card came up with the passcode already filled in, and Allow asked the unlock alone.
+test("the passcode typed for one card isn't left filled in for the next", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const me = newKey();
+  const made = await record(hubState(), "create", appletRecord("journal"));
+  only = made.id;
+  const base = String((await api(hubState(), "GET", `notes/${made.id}`)).content);
+  const phoneA = await device(browser, me);
+  const toApplets = () => phoneA.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
+  try {
+    // this device asks a passcode before approving code (in-app moves only from here: the test signer keeps it in the page)
+    await phoneA.goto("/settings");
+    await phoneA.getByLabel("New passcode").fill("garden-gate");
+    await phoneA.getByRole("button", { name: "Set", exact: true }).click();
+    await expect(phoneA.getByText("Passcode kept.")).toBeVisible();
+    await toApplets();
+    await ui(phoneA).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
+    await phoneA.getByLabel("Your passcode").fill("garden-gate");
+    await phoneA.getByRole("button", { name: "Allow" }).click();
+    await expect(journal(phoneA)).toBeVisible();
+
+    // its code changes while it is kept running; shown again, the card asks, and asks the passcode again
+    await toApplets();
+    const n = await api(hubState(), "GET", `notes/${made.id}`);
+    await api(hubState(), "PATCH", `notes/${made.id}`, { content: `${base}\n// v2\n`, if_updated_at: n.updatedAt });
+    await phoneA.goBack();
+    await expect(card(phoneA)).toContainText("changed");
+    await expect(phoneA.getByLabel("Your passcode")).toHaveValue("");
+    await phoneA.getByRole("button", { name: "Allow this version" }).click();
+    await expect(card(phoneA)).toContainText("Not approved");
+    await expect(journal(phoneA)).toHaveCount(0);
+  } finally {
+    await phoneA.context().close();
+    for (const r of await approvals()) await api(hubState(), "DELETE", `notes/${r.id}`).catch(() => {});
+    await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {});
+  }
+});

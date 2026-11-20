@@ -38,7 +38,9 @@ event with the person's key and the app writes it to `Parachute/Approvals/<host>
 is a key that counts, it names this record and applet, its number is the highest this device has seen for it, it isn't
 dated ahead of the clock or past its year, and its two hashes are the ones this device computes now. The asks' hash is
 of the applet's fields as written, with the hub, vault name and record id, never a device's own name for the vault, so
-every device gets the same one.
+every device gets the same one; and of what that device left out of its card (an applet in a vault that is someone else's
+there gets no server; a server at one of its own hubs is refused), so a device that reads more into the note than the
+one that approved asks for itself.
 
 **Which keys count.** Without a root key (most people, and Aaron today): the person's key this device holds. With the
 root key's public half put on the device (Settings → Approving code → Root key): the keys on the newest list in
@@ -49,7 +51,8 @@ root key's public half put on the device (Settings → Approving code → Root k
 grant, which ends when the approval does), when it already holds what the applet needs at the hub; otherwise its card
 says "You approved this exact version on …", and **Continue** asks the hub, as on the first device. Changed code finds
 no approval for its hash, so its card shows on every device until one approves the new version. **Revoke** on any
-device signs a taking back (`"approved": false`), and every device that reads it stops the applet.
+device (the applet's menu, or Settings → Applets) signs a taking back (`"approved": false`), and every device that reads
+it stops the applet.
 
 **What stays as it was.** A device without the person's key (a browser tab) has no approvals: its own Allow, for
 itself, as before. The grants already on a device keep working; they are signed for every device the next time the
