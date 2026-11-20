@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { nativeNow, type Native } from "../services/native";
 import { homeVault } from "../shell/frameSource";
 import { changeSecurity, useSettings } from "../shell/homeSettings";
-import { IDLE_CHOICES, idleWords, levelWords, loosens, signLowering, type Level, type Levels, type LevelsStatus } from "../shell/levels";
+import { IDLE_CHOICES, idleWords, levelsChanged, levelWords, loosens, onLevels, signLowering, type Level, type Levels, type LevelsStatus } from "../shell/levels";
 import { signsHere } from "../applet/approvalStore";
 
 const said = (e: unknown) => (e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : String(e));
@@ -31,8 +31,8 @@ export default function SecuritySettings() {
   const [done, setDone] = useState<string | null>(null);
   const refresh = (n: Native) => n.levelsStatus().then(setStatus, (e: unknown) => setError(said(e)));
   useEffect(() => { void nativeNow().then((n) => { setNative(n); if (n) void refresh(n); }); }, []);
-  // the record may have raised it meanwhile (shell/Security.tsx)
-  useEffect(() => { if (native) void refresh(native); }, [native, JSON.stringify(app.security)]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the record may raise it meanwhile (shell/Security.tsx)
+  useEffect(() => (native ? onLevels(() => void refresh(native)) : undefined), [native]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!native || !status) return null;
   const cur = status.levels;
 
@@ -41,7 +41,7 @@ export default function SecuritySettings() {
     setPending(null);
     if (!loosens(cur, l)) {
       // stricter: kept here now; the record is for the other devices (a failed write leaves this one stricter)
-      run(async () => { await native.levelsRaise(l); await changeSecurity(l).catch(() => undefined); }, "Kept. Your other devices follow when they read your app.");
+      run(async () => { await native.levelsRaise(l); levelsChanged(); await changeSecurity(l).catch(() => undefined); }, "Kept. Your other devices follow when they read your app.");
       return;
     }
     setCode("");

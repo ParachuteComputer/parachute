@@ -13,65 +13,18 @@
 // `security-<app id>`), kept in the home vault beside the applets' approvals. Another device takes it only when it is
 // signed with its own key and newer than its own last change (Rust checks; `decide` here first). A vault edit without
 // it changes nothing but upward.
-import { plain } from "../applet/contract";
 import { approvalContent, decide, dOf, type SignedEvent, type Subject } from "../applet/approvals";
 import { floorOf, raiseFloor, readApprovals, trustedNow, writeApprovalEvent, deviceName } from "../applet/approvalStore";
 import type { Native } from "../services/native";
 import { originOf, type VaultRecord } from "../vault/store";
+import { codeOf, fullOf, loosens, same, SECURITY_SUBJECT, type Asked, type Levels } from "./levelRules";
 
-export type Level = "none" | "unlock" | "passcode";
-export type Levels = { approvals: Level; code: Level; join: Level; idle: number };
-/** What a record asks: a field left out leaves that one as it is. */
-export type Asked = Partial<Levels>;
-export type LevelsStatus = { levels: Levels; passcode: boolean; locked: boolean; left_ms: number | null };
+export * from "./levelRules";
 
-export const LEVELS: readonly Level[] = ["none", "unlock", "passcode"];
-export const DEFAULTS: Levels = { approvals: "unlock", code: "unlock", join: "passcode", idle: 0 };
-export const IDLE_MAX = 24 * 60;
-/** The idle locks Settings offers, in minutes (0: off). */
-export const IDLE_CHOICES = [0, 1, 5, 15, 60] as const;
-export const SECURITY_SUBJECT = "security";
-
-const rank = (l: Level) => LEVELS.indexOf(l);
-const max = (a: Level, b: Level): Level => (rank(a) >= rank(b) ? a : b);
-const levelOf = (x: unknown): Level | undefined => (x === "none" || x === "unlock" || x === "passcode" ? x : undefined);
-const idleOf = (x: unknown): number | undefined => (typeof x === "number" && Number.isInteger(x) && x >= 0 ? Math.min(x, IDLE_MAX) : undefined);
-
-/** An app record's `security`, read strictly: an unknown word is left out (it can't be read as "none"). The record's
- *  `approve` before levels existed meant approving code. */
-export function askedOf(raw: unknown): Asked {
-  if (!plain(raw)) return {};
-  const code = levelOf(raw.code) ?? levelOf(raw.approve);
-  const out: Asked = {};
-  const approvals = levelOf(raw.approvals), join = levelOf(raw.join), idle = idleOf(raw.idle);
-  if (approvals) out.approvals = approvals;
-  if (code) out.code = code;
-  if (join) out.join = join;
-  if (idle !== undefined) out.idle = idle;
-  return out;
-}
-
-/** The rules no level drops: approving code takes the unlock; the idle lock is at most a day. */
-export const floored = (l: Levels): Levels => ({ ...l, code: max(l.code, "unlock"), idle: Math.min(l.idle, IDLE_MAX) });
-/** The stricter idle lock: the shorter; off (0) is the loosest. */
-export const stricterIdle = (a: number, b: number) => (a === 0 ? b : b === 0 ? a : Math.min(a, b));
-/** `cur` with whatever `asked` makes stricter (src-tauri/src/levels.rs `raise`). */
-export function raise(cur: Levels, asked: Asked): Levels {
-  return floored({
-    approvals: asked.approvals ? max(cur.approvals, asked.approvals) : cur.approvals,
-    code: asked.code ? max(cur.code, asked.code) : cur.code,
-    join: asked.join ? max(cur.join, asked.join) : cur.join,
-    idle: asked.idle !== undefined ? stricterIdle(cur.idle, Math.min(asked.idle, IDLE_MAX)) : cur.idle,
-  });
-}
-/** Whether `next` is looser than `cur` anywhere. */
-export const loosens = (cur: Levels, next: Levels) =>
-  rank(next.approvals) < rank(cur.approvals) || rank(next.code) < rank(cur.code) || rank(next.join) < rank(cur.join) || stricterIdle(cur.idle, next.idle) !== next.idle;
-/** A record's levels in full: what it names, the defaults elsewhere. */
-export const fullOf = (asked: Asked): Levels => floored({ ...DEFAULTS, ...asked });
-/** The levels as an approval names them: the same text Rust reads back (`code_of`). */
-export const codeOf = (l: Levels) => `levels:v1:approvals=${l.approvals},code=${l.code},join=${l.join},idle=${l.idle}`;
-const same = (a: Levels, b: Levels) => codeOf(a) === codeOf(b);
+const listeners = new Set<() => void>();
+/** Told when this device's levels may have changed (a record read, Settings): the idle lock asks again. */
+export const onLevels = (f: () => void) => { listeners.add(f); return () => { listeners.delete(f); }; };
+export const levelsChanged = () => { for (const f of [...listeners]) f(); };
 
 /** What a lowering's approval is of: the app, in the home vault (never an applet: its record is `security-<id>`). */
 export const subjectFor = (home: Pick<VaultRecord, "issuer" | "vault">, appId: string): Subject => ({ hub: originOf(home.issuer), vault: home.vault, record: `security-${appId}`, applet: SECURITY_SUBJECT });
@@ -90,6 +43,9 @@ type SyncDeps = {
  *  take that only with the person's signed approval of exactly those levels (Rust checks it again). Returns the
  *  device's levels after. */
 export async function syncLevels(app: { id: string; security: Asked }, home: Pick<VaultRecord, "issuer" | "vault"> | null, deps: SyncDeps): Promise<Levels> {
+  try { return await follow(app, home, deps); } finally { levelsChanged(); }
+}
+async function follow(app: { id: string; security: Asked }, home: Pick<VaultRecord, "issuer" | "vault"> | null, deps: SyncDeps): Promise<Levels> {
   let now = await deps.native.levelsRaise(app.security);
   if (!home || !Object.keys(app.security).length) return now;
   const wanted = fullOf(app.security);
@@ -114,10 +70,11 @@ export async function signLowering(native: Pick<Native, "levelsLower">, home: Va
   const content = approvalContent({ subject: s, approved: true, code: codeOf(next), scope: "", now, seen: floorOf(s), device: deviceName() });
   const ev = await native.levelsLower(JSON.stringify(content), dOf(s), passcode);
   raiseFloor(s, content.n);
+  levelsChanged();
   const written = await writeApprovalEvent(home, s, "Security levels", ev).then(() => true, () => false);
   return { ev, written };
 }
 
 /** A level in plain words, for each action. */
-export const levelWords: Record<Level, string> = { none: "Tap only", unlock: "Unlock", passcode: "Passcode" };
+export const levelWords: Record<import("./levelRules").Level, string> = { none: "Tap only", unlock: "Unlock", passcode: "Passcode" };
 export const idleWords = (m: number) => (m === 0 ? "Off" : m < 60 ? `${m} min` : m === 60 ? "1 hour" : `${Math.round(m / 60)} hours`);

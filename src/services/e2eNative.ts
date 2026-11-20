@@ -9,7 +9,7 @@ import type { Native, LogLine, SignedEvent, CardView } from "./native";
 import { checkCard, deliveryWrap, forgetWrap, replyWrap, secretRequest, sealPub } from "./e2eCards";
 import { originOf, RESPONSE_HEADERS, type Service } from "../applet/services";
 import { fromB64, toB64 } from "./broker";
-import { DEFAULTS, codeOf, floored, raise, type Level, type Levels, type LevelsStatus } from "../shell/levels";
+import { DEFAULTS, codeOf, floored, raise, type Level, type Levels, type LevelsStatus } from "../shell/levelRules";
 
 export const E2E_SIGNER_MARK = "parachute-e2e-test-signer";
 

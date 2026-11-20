@@ -11,7 +11,7 @@
 // own record follows (`live`): read from their vault each time, so their changes show; their code still asks.
 // Pure, but for nothing: every reader here takes what it needs.
 import { plain, stripExt } from "../applet/contract";
-import { askedOf, type Asked } from "./levels";
+import { askedOf, type Asked } from "./levelRules";
 
 export const APP_TAG = "parachute-app";
 export const APP_FOLDER = "Parachute/Apps/";

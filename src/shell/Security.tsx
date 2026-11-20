@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import { nativeNow, type Native } from "../services/native";
 import { homeVault } from "./frameSource";
 import { useSettings } from "./homeSettings";
-import { liveSyncDeps, syncLevels, type LevelsStatus } from "./levels";
+import { liveSyncDeps, onLevels, syncLevels, type LevelsStatus } from "./levels";
 
 const TOUCH_EVERY_MS = 30_000;
 const said = (e: unknown) => (e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : String(e));
@@ -63,7 +63,9 @@ function IdleLock({ native }: { native: Native }) {
     for (const t of ["pointerdown", "keydown", "wheel", "touchstart"]) window.addEventListener(t, onInput, opts);
     window.addEventListener("message", onMessage);
     document.addEventListener("visibilitychange", onVisible);
+    const offLevels = onLevels(ask);
     return () => {
+      offLevels();
       on = false;
       if (timer.current) clearTimeout(timer.current);
       for (const t of ["pointerdown", "keydown", "wheel", "touchstart"]) window.removeEventListener(t, onInput, opts);

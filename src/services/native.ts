@@ -8,8 +8,8 @@ import type { Service, Template } from "../applet/services";
 
 export type SignedEvent = { id: string; pubkey: string; created_at: number; kind: number; tags: string[][]; content: string; sig: string };
 export type HttpReq = { method: string; path: string; headers: Record<string, string>; body?: string /* base64 */ };
-export type { LevelsStatus } from "../shell/levels";
-import type { Asked, Levels, LevelsStatus } from "../shell/levels";
+export type { LevelsStatus } from "../shell/levelRules";
+import type { Asked, Levels, LevelsStatus } from "../shell/levelRules";
 export type HttpRes = { status: number; headers: Record<string, string>; body: string /* base64 */; graced?: boolean };
 /** `at`: unix seconds. Oldest first. */
 export type LogLine = { at: number; applet: string; service: string; what: string; id?: string; count?: number };
