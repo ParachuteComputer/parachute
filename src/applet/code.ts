@@ -122,10 +122,11 @@ const FAILURE = String.raw`(function () {
     var why = String(e && e.message ? e.message : e);
     // the whole error, stack and all, is for the applet's author, in the console
     try { console.warn("This applet stopped:", e); } catch (x) { /* no console */ }
-    // did what is missing stop it? React's "element type is invalid" (#130 once minified), a TypeError about undefined,
-    // or a missing name in the message. If not, it fell back for the part and stopped for another reason, said as such.
-    var byPart = missing.length > 0 && (/#130\b|element type is invalid/i.test(why) || (e && e.name === "TypeError" && /undefined|is not a (function|constructor)/.test(why))
-      || missing.some(function (n) { return why.indexOf(n) >= 0; }));
+    // did what is missing stop it? React's "element type is invalid" (#130 once minified: a missing part drawn), or a
+    // missing name as a word in the message ("useX is not a function"). If not, it fell back for the part and stopped
+    // for another reason, said as such.
+    var byPart = missing.length > 0 && (/#130\b|element type is invalid/i.test(why)
+      || missing.some(function (n) { return new RegExp("(^|[^\\w$])" + n.replace(/\$/g, "\\$") + "([^\\w$]|$)").test(why); }));
     var box = document.createElement("div"), p = document.createElement("p");
     box.setAttribute("role", "alert"); box.appendChild(p);
     if (byPart) {
@@ -136,7 +137,7 @@ const FAILURE = String.raw`(function () {
     } else {
       // its own words, but only their first line, and never a stack
       var line = why.replace(/^\s+/, "").split("\n")[0];
-      box.className = "parachute-error"; p.textContent = "This applet stopped: " + (line.length > 300 ? line.slice(0, 299) + "…" : line);
+      box.className = "parachute-error"; p.textContent = "This applet stopped: " + (line.length > 300 ? line.slice(0, 299).replace(/[\uD800-\uDBFF]$/, "") + "…" : line);
     }
     root.appendChild(box);
   };
@@ -161,7 +162,7 @@ const LOADER_HEAD = String.raw`(function () {
     if (k === "default" && !("default" in t)) return self;
     var v = t[k];
     // only a name a part could have: not a probe that looks for something on any object ($$typeof, @@iterator, toJSON)
-    if (v === undefined && typeof k === "string" && /^[A-Za-z][A-Za-z0-9]*$/.test(k) && k !== "then" && k !== "toJSON" && !(k in t) && missing.indexOf(k) < 0) missing.push(k);
+    if (v === undefined && typeof k === "string" && /^[A-Za-z][\w$]*$/.test(k) && k !== "then" && k !== "toJSON" && !(k in t) && missing.indexOf(k) < 0) missing.push(k);
     return v;
   } }) : kit;
   var mods = { react: M.react, "react-dom": M["react-dom"], "react-dom/client": M["react-dom/client"], "react/jsx-runtime": M["react/jsx-runtime"], parachute: asked };
