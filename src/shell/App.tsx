@@ -29,6 +29,7 @@ import { relistVaults } from "../vault/newVaults";
 import { homeVault, useFrameSource } from "./frameSource";
 import { readTheme, watchTheme } from "../theme/store";
 import WriteAsk from "./WriteAsk";
+import Security from "./Security";
 
 /** The one listener for real taps on the shell's own links, and the rule that a tap's mark is gone once the person moves on. */
 function Taps() {
@@ -155,6 +156,7 @@ export function AppRoutes() {
       <LinksIn />
       <ShellRoutes />
       <WriteAsk />
+      <Security />
     </>
   );
 }

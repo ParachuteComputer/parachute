@@ -48,6 +48,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
         : s.auth === "token" ? { lead: `With a token you give it`, rest: `, sends requests to ${at}. What it reads can go there.`, risky: true }
         : { lead: `Sends requests to ${at}`, rest: ". What it reads can go there.", risky: true });
       if (s.approve) lines.push({ lead: "High risk, with your approval key:", rest: ` sends ${joinWords(s.approve.ops)} requests to ${at}${same}.`, risky: true });
+      if (s.join) lines.push({ lead: "High risk, joins a network as you:", rest: ` asks ${at} to let this device join (${joinWords(s.join.ops)}), each time after your passcode and unlock (Settings → Security).`, risky: true });
     }
   }
 

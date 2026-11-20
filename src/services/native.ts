@@ -8,6 +8,8 @@ import type { Service, Template } from "../applet/services";
 
 export type SignedEvent = { id: string; pubkey: string; created_at: number; kind: number; tags: string[][]; content: string; sig: string };
 export type HttpReq = { method: string; path: string; headers: Record<string, string>; body?: string /* base64 */ };
+export type { LevelsStatus } from "../shell/levels";
+import type { Asked, Levels, LevelsStatus } from "../shell/levels";
 export type HttpRes = { status: number; headers: Record<string, string>; body: string /* base64 */; graced?: boolean };
 /** `at`: unix seconds. Oldest first. */
 export type LogLine = { at: number; applet: string; service: string; what: string; id?: string; count?: number };
@@ -40,7 +42,9 @@ export interface Native {
   /** NIP-42: kind 22242 for the session's declared relay and this challenge. */
   relayAuth(session: string, service: string, challenge: string): Promise<SignedEvent>;
   signEvent(session: string, service: string, template: Template): Promise<SignedEvent>;
-  http(session: string, service: string, req: HttpReq): Promise<HttpRes>;
+  /** `passcode`: typed on the shell's own sheet, when this device's level for the op asks it (a join op, or an approve
+   *  op at the passcode level); refused with code `passcode` until it is given. */
+  http(session: string, service: string, req: HttpReq, passcode?: string | null): Promise<HttpRes>;
   upload(session: string, service: string, body: string, type: string): Promise<unknown>;
   media(session: string, service: string, sha256: string, ext: string): Promise<{ type: string; body: string }>;
   privateOpen(session: string, service: string, event: SignedEvent): Promise<string>;
@@ -55,7 +59,7 @@ export interface Native {
    *  on the shell's sheet, behind the device unlock. */
   cardTrust(session: string, service: string, event: SignedEvent, name: string): Promise<void>;
   /** Answer rows of a card: the device unlock first (native), the answers kept, the wraps handed back to publish. */
-  cardAnswer(session: string, service: string, event: SignedEvent, decision: "approve" | "deny", rids: string[]): Promise<Answered>;
+  cardAnswer(session: string, service: string, event: SignedEvent, decision: "approve" | "deny", rids: string[], passcode?: string | null): Promise<Answered>;
   /** The relay took this row's wrap. */
   cardSent(session: string, service: string, card: string, rid: string): Promise<void>;
   secretView(session: string, service: string, event: SignedEvent): Promise<SecretView>;
@@ -66,9 +70,22 @@ export interface Native {
   /** Sign an approval of an applet's exact code (applet/approvals.ts) with the person's key: the passcode when one is
    *  set here, then the device unlock, always. `d`: hub|vault|record; `name`: the applet's, for the prompt. */
   approvalSign(content: string, d: string, name: string, passcode: string | null): Promise<SignedEvent>;
-  /** Whether this device asks a passcode before approving code; and setting, changing or removing it. */
+  /** Whether this device keeps a passcode; and setting, changing or removing it. */
   passcodeStatus(): Promise<boolean>;
   passcodeSet(old: string | null, next: string | null): Promise<void>;
+  /** This device's security levels and the idle lock (src-tauri/src/levels.rs; docs/design/APP-RECORD.md). */
+  levelsStatus(): Promise<LevelsStatus>;
+  /** Raise to what a record (or the person) asks, where that is stricter. Never lowers; asks nothing. */
+  levelsRaise(asked: Asked): Promise<Levels>;
+  /** Lower (or set) them: the person's approval of exactly these levels, signed here after the passcode (when this
+   *  device keeps one) and the unlock. The signed approval, for the home vault. */
+  levelsLower(content: string, d: string, passcode: string | null): Promise<SignedEvent>;
+  /** Take another device's signed lowering: only one signed with this device's key, newer than its last change. */
+  levelsAdopt(event: SignedEvent): Promise<Levels>;
+  /** A real touch (the shell's own input, or an applet's call during the person's activation). */
+  idleTouch(): Promise<LevelsStatus>;
+  /** Open Parachute after the idle lock: the device unlock. */
+  idleUnlock(): Promise<LevelsStatus>;
 }
 
 import { inShell } from "../vault/oauth";

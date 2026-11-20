@@ -1,0 +1,123 @@
+// Security levels (docs/design/APP-RECORD.md "Security levels"): how careful Parachute is per action, and the idle
+// lock. The gate is native (src-tauri/src/levels.rs): it keeps this device's levels and asks the passcode and the
+// unlock. This file is the web side's half: the app record's `security` (which may only raise them), the signed
+// approval that lowering takes, and what Settings shows.
+//
+//   approvals  Uni's routine approval cards and held sends: none (the tap), unlock, passcode. Powerful ones always unlock.
+//   code       approving an applet's code: unlock or passcode (never less).
+//   join       asking to join a private network (an http service's `join` op): none, unlock, passcode.
+//   idle       minutes untouched before Parachute asks the unlock to open; 0: off.
+//
+// A record's levels raise every device that opens its app. Lowering one, or turning the idle lock off, is signed: on
+// an unlocked device, with the person's key, as an approval of exactly the new levels (kind 30479, subject
+// `security-<app id>`), kept in the home vault beside the applets' approvals. Another device takes it only when it is
+// signed with its own key and newer than its own last change (Rust checks; `decide` here first). A vault edit without
+// it changes nothing but upward.
+import { plain } from "../applet/contract";
+import { approvalContent, decide, dOf, type SignedEvent, type Subject } from "../applet/approvals";
+import { floorOf, raiseFloor, readApprovals, trustedNow, writeApprovalEvent, deviceName } from "../applet/approvalStore";
+import type { Native } from "../services/native";
+import { originOf, type VaultRecord } from "../vault/store";
+
+export type Level = "none" | "unlock" | "passcode";
+export type Levels = { approvals: Level; code: Level; join: Level; idle: number };
+/** What a record asks: a field left out leaves that one as it is. */
+export type Asked = Partial<Levels>;
+export type LevelsStatus = { levels: Levels; passcode: boolean; locked: boolean; left_ms: number | null };
+
+export const LEVELS: readonly Level[] = ["none", "unlock", "passcode"];
+export const DEFAULTS: Levels = { approvals: "unlock", code: "unlock", join: "passcode", idle: 0 };
+export const IDLE_MAX = 24 * 60;
+/** The idle locks Settings offers, in minutes (0: off). */
+export const IDLE_CHOICES = [0, 1, 5, 15, 60] as const;
+export const SECURITY_SUBJECT = "security";
+
+const rank = (l: Level) => LEVELS.indexOf(l);
+const max = (a: Level, b: Level): Level => (rank(a) >= rank(b) ? a : b);
+const levelOf = (x: unknown): Level | undefined => (x === "none" || x === "unlock" || x === "passcode" ? x : undefined);
+const idleOf = (x: unknown): number | undefined => (typeof x === "number" && Number.isInteger(x) && x >= 0 ? Math.min(x, IDLE_MAX) : undefined);
+
+/** An app record's `security`, read strictly: an unknown word is left out (it can't be read as "none"). The record's
+ *  `approve` before levels existed meant approving code. */
+export function askedOf(raw: unknown): Asked {
+  if (!plain(raw)) return {};
+  const code = levelOf(raw.code) ?? levelOf(raw.approve);
+  const out: Asked = {};
+  const approvals = levelOf(raw.approvals), join = levelOf(raw.join), idle = idleOf(raw.idle);
+  if (approvals) out.approvals = approvals;
+  if (code) out.code = code;
+  if (join) out.join = join;
+  if (idle !== undefined) out.idle = idle;
+  return out;
+}
+
+/** The rules no level drops: approving code takes the unlock; the idle lock is at most a day. */
+export const floored = (l: Levels): Levels => ({ ...l, code: max(l.code, "unlock"), idle: Math.min(l.idle, IDLE_MAX) });
+/** The stricter idle lock: the shorter; off (0) is the loosest. */
+export const stricterIdle = (a: number, b: number) => (a === 0 ? b : b === 0 ? a : Math.min(a, b));
+/** `cur` with whatever `asked` makes stricter (src-tauri/src/levels.rs `raise`). */
+export function raise(cur: Levels, asked: Asked): Levels {
+  return floored({
+    approvals: asked.approvals ? max(cur.approvals, asked.approvals) : cur.approvals,
+    code: asked.code ? max(cur.code, asked.code) : cur.code,
+    join: asked.join ? max(cur.join, asked.join) : cur.join,
+    idle: asked.idle !== undefined ? stricterIdle(cur.idle, Math.min(asked.idle, IDLE_MAX)) : cur.idle,
+  });
+}
+/** Whether `next` is looser than `cur` anywhere. */
+export const loosens = (cur: Levels, next: Levels) =>
+  rank(next.approvals) < rank(cur.approvals) || rank(next.code) < rank(cur.code) || rank(next.join) < rank(cur.join) || stricterIdle(cur.idle, next.idle) !== next.idle;
+/** A record's levels in full: what it names, the defaults elsewhere. */
+export const fullOf = (asked: Asked): Levels => floored({ ...DEFAULTS, ...asked });
+/** The levels as an approval names them: the same text Rust reads back (`code_of`). */
+export const codeOf = (l: Levels) => `levels:v1:approvals=${l.approvals},code=${l.code},join=${l.join},idle=${l.idle}`;
+const same = (a: Levels, b: Levels) => codeOf(a) === codeOf(b);
+
+/** What a lowering's approval is of: the app, in the home vault (never an applet: its record is `security-<id>`). */
+export const subjectFor = (home: Pick<VaultRecord, "issuer" | "vault">, appId: string): Subject => ({ hub: originOf(home.issuer), vault: home.vault, record: `security-${appId}`, applet: SECURITY_SUBJECT });
+
+type SyncDeps = {
+  native: Pick<Native, "levelsRaise" | "levelsAdopt">;
+  /** The approvals kept for this subject (the events), and the keys whose approvals count here. */
+  approvals: (s: Subject) => Promise<unknown[]>;
+  trusted: () => Promise<Set<string>>;
+  floor: (s: Subject) => number | null;
+  raiseFloor: (s: Subject, n: number) => void;
+  now?: number;
+};
+
+/** Follow the open app's record: raise this device to what it asks; where it asks for less than this device holds,
+ *  take that only with the person's signed approval of exactly those levels (Rust checks it again). Returns the
+ *  device's levels after. */
+export async function syncLevels(app: { id: string; security: Asked }, home: Pick<VaultRecord, "issuer" | "vault"> | null, deps: SyncDeps): Promise<Levels> {
+  let now = await deps.native.levelsRaise(app.security);
+  if (!home || !Object.keys(app.security).length) return now;
+  const wanted = fullOf(app.security);
+  if (!loosens(now, wanted) || same(now, wanted)) return now;
+  const s = subjectFor(home, app.id);
+  const events = await deps.approvals(s).catch(() => [] as unknown[]);
+  const d = decide(events, s, codeOf(wanted), "", await deps.trusted(), deps.now ?? Date.now(), deps.floor(s));
+  if (!d.run) return now;
+  const ev = events.find((e) => { try { const c = JSON.parse((e as SignedEvent).content) as { n?: unknown; code?: unknown }; return c.n === d.content.n && c.code === codeOf(wanted); } catch { return false; } });
+  if (!ev) return now;
+  try { now = await deps.native.levelsAdopt(ev as SignedEvent); deps.raiseFloor(s, d.content.n); } catch { /* not for this device: it keeps its own */ }
+  return now;
+}
+
+/** The live dependencies: the home vault's approvals, the keys that count, the floors this device keeps. */
+export const liveSyncDeps = (native: SyncDeps["native"]): SyncDeps => ({ native, approvals: readApprovals, trusted: trustedNow, floor: floorOf, raiseFloor });
+
+/** Sign a change of levels on this device (the passcode when it keeps one, then the unlock), keep it here, and write
+ *  the signed approval to the home vault. `written`: whether it reached the vault. */
+export async function signLowering(native: Pick<Native, "levelsLower">, home: VaultRecord, appId: string, next: Levels, passcode: string | null, now = Date.now()): Promise<{ ev: SignedEvent; written: boolean }> {
+  const s = subjectFor(home, appId);
+  const content = approvalContent({ subject: s, approved: true, code: codeOf(next), scope: "", now, seen: floorOf(s), device: deviceName() });
+  const ev = await native.levelsLower(JSON.stringify(content), dOf(s), passcode);
+  raiseFloor(s, content.n);
+  const written = await writeApprovalEvent(home, s, "Security levels", ev).then(() => true, () => false);
+  return { ev, written };
+}
+
+/** A level in plain words, for each action. */
+export const levelWords: Record<Level, string> = { none: "Tap only", unlock: "Unlock", passcode: "Passcode" };
+export const idleWords = (m: number) => (m === 0 ? "Off" : m < 60 ? `${m} min` : m === 60 ? "1 hour" : `${Math.round(m / 60)} hours`);

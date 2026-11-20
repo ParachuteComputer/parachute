@@ -20,6 +20,7 @@ import { grantInVault } from "../applet/embeds";
 import KeySettings from "../key/KeySettings";
 import KeyringSettings from "../key/KeyringSettings";
 import ApprovalSettings from "../key/ApprovalSettings";
+import SecuritySettings from "../key/SecuritySettings";
 import NotifySettings from "./NotifySettings";
 import { AskWhose, WhoseLine } from "./Whose";
 import { useParachutes } from "../shell/parachutes";
@@ -85,6 +86,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
       <AppChoice />
       <ServicesSettings />
       <KeySettings />
+      <SecuritySettings />
       <ApprovalSettings />
       <KeyringSettings />
       <NotifySettings />
