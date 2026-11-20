@@ -196,7 +196,7 @@ same count is the notification while Parachute is closed. Nothing of the applet 
 |---|---|---|---|
 | a relay service's `notify` | Rooms: mentions and Uni's messages | its push gateway (services/push-gateway): each message it would push adds one | always, the app closed or not |
 | notes in its own vault | Ideas: notes someone else adds to `Ideas/` | the app, from the vault's own live subscription (`others`: a note whose `createdBy` isn't this sign-in's) | while the app is open on some device |
-| an http service's feed | Mail: unread mail | the applet itself, `signal("unread", n)` while it runs | while Mail runs |
+| an http service's feed | Mail: unread mail | the applet itself, `signal("unread", n)` while it runs and is allowed (a number said in the moment before its signal is listed here, right after Allow, is kept 10 s for it) | while Mail runs |
 | none | Journal | nobody | never |
 
 **The count lives in the push gateway** when the signal names one (`via`; a relay's goes through its `notify.gateway`):
