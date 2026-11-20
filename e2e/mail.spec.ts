@@ -38,10 +38,10 @@ test("mail: alice reads what bob sent, replies after reviewing exactly what will
     await expect(card).toContainText(`With your everyday key: send requests to 127.0.0.1:19952 on this device signed as you`);
     await page.getByRole("button", { name: "Allow" }).click();
     const app = page.frameLocator("iframe.applet-frame");
-    const inbox = app.getByRole("list", { name: "Inbox" });
+    const inbox = app.getByRole("region", { name: "Inbox" });
     const row = inbox.getByRole("button", { name: new RegExp(`Tomato seedlings ${stamp}`) });
     await expect(row).toBeVisible({ timeout: 30_000 });
-    await expect(row).toHaveClass(/unseen/);
+    await expect(row).toHaveClass(/pa-strong/);
 
     // read it: the thread, marked seen
     await row.click();
@@ -55,9 +55,9 @@ test("mail: alice reads what bob sent, replies after reviewing exactly what will
     await expect(review).toContainText(`Saturday works. Thank you! ${stamp}`);
     await expect(review).toContainText(`To `);
     await app.getByRole("button", { name: "Send it" }).click();
-    await expect(app.getByRole("status")).toHaveText("Sent.");
+    await expect(app.getByRole("status").filter({ hasText: "Sent." })).toBeVisible();
     // it is in Sent, and in bob's inbox
-    await expect(app.getByRole("list", { name: "Sent" }).getByRole("button", { name: new RegExp(`Re: Tomato seedlings ${stamp}`) })).toBeVisible({ timeout: 20_000 });
+    await expect(app.getByRole("region", { name: "Sent" }).getByRole("button", { name: new RegExp(`Re: Tomato seedlings ${stamp}`) })).toBeVisible({ timeout: 20_000 });
     await expect.poll(async () => (await bob.inbox()).some((m) => m.subject === `Re: Tomato seedlings ${stamp}`), { timeout: 30_000 }).toBe(true);
     // the thread now ends with her own reply: Reply still answers bob, not herself
     await app.getByRole("navigation", { name: "Places" }).getByRole("button", { name: /Inbox/ }).click();
@@ -68,10 +68,10 @@ test("mail: alice reads what bob sent, replies after reviewing exactly what will
     await app.getByRole("button", { name: "← Mail" }).click();
     // back in the inbox, bob's message reads as seen; search finds it
     await app.getByRole("navigation", { name: "Places" }).getByRole("button", { name: /Inbox/ }).click();
-    await expect(inbox.getByRole("button", { name: new RegExp(`Tomato seedlings ${stamp}`) })).not.toHaveClass(/unseen/);
+    await expect(inbox.getByRole("button", { name: new RegExp(`Tomato seedlings ${stamp}`) })).not.toHaveClass(/pa-strong/);
     await app.getByLabel("Search mail").fill(stamp);
     await app.getByLabel("Search mail").press("Enter");
-    await expect(app.getByRole("list", { name: "Found" }).getByRole("button")).not.toHaveCount(0);
+    await expect(app.getByRole("region", { name: "Found" }).getByRole("button")).not.toHaveCount(0);
   } finally {
     await proxy.close();
     await api(hubState(), "DELETE", `notes/${note.id}`);
@@ -110,14 +110,14 @@ test("mail: Uni's held sends wait for alice; she approves one (bob gets it) and 
 
     // Waiting: the held send in full, then Approve
     await places.getByRole("button", { name: /^Waiting/ }).click();
-    const held = app.getByRole("list", { name: "Waiting" });
+    const held = app.getByRole("region", { name: "Waiting" });
     await held.getByRole("button", { name: new RegExp(`Seed order ${stamp}`) }).click();
     const sendIt = app.getByRole("article", { name: `Seed order ${stamp}` });
     await expect(sendIt).toContainText("two trays of basil for Saturday");
     await expect(sendIt).toContainText("From Uni (uni@test.test) · to bob@test.test");
     await expect(sendIt).toContainText("Why it waits: Uni's outbound rules want Aaron to approve mail to bob@test.test");
     await app.getByRole("button", { name: "Approve" }).click();
-    await expect(app.getByRole("status")).toHaveText("Sent.");
+    await expect(app.getByRole("status").filter({ hasText: "Sent." })).toBeVisible();
     await expect(app.getByRole("button", { name: "Approve" })).toHaveCount(0);
     await expect.poll(async () => (await bob.inbox()).some((m) => m.subject === `Seed order ${stamp}`), { timeout: 30_000 }).toBe(true);
 
@@ -126,7 +126,7 @@ test("mail: Uni's held sends wait for alice; she approves one (bob gets it) and 
     await expect(held.getByRole("button", { name: new RegExp(`Seed order ${stamp}`) })).toContainText("Sent");
     await held.getByRole("button", { name: new RegExp(`Invoice ${stamp}`) }).click();
     await app.getByRole("button", { name: "Decline" }).click();
-    await expect(app.getByRole("status")).toHaveText("Declined. Nothing was sent.");
+    await expect(app.getByRole("status").filter({ hasText: "Declined. Nothing was sent." })).toBeVisible();
     expect((await uni.post("op", { op: "send.check", accountId: uniAcct, opId: declined })).state).toBe("declined");
     await page.waitForTimeout(3000);
     expect((await bob.inbox()).some((m) => m.subject === `Invoice ${stamp}`)).toBe(false);
@@ -135,18 +135,18 @@ test("mail: Uni's held sends wait for alice; she approves one (bob gets it) and 
 
     // Later: put bob's message off; it leaves the Inbox for Later, and Not later brings it back
     await places.getByRole("button", { name: /^Inbox/ }).click();
-    const inbox = app.getByRole("list", { name: "Inbox" });
+    const inbox = app.getByRole("region", { name: "Inbox" });
     await inbox.getByRole("button", { name: new RegExp(`Fence repair ${stamp}`) }).click();
     await app.getByRole("button", { name: "Later", exact: true }).click();
-    await expect(app.getByRole("status")).toHaveText("Put off for later.");
+    await expect(app.getByRole("status").filter({ hasText: "Put off for later." })).toBeVisible();
     await expect(app.getByRole("button", { name: "Not later", exact: true })).toBeVisible();
     await app.getByRole("button", { name: "← Mail" }).click();
     await expect(inbox.getByRole("button", { name: new RegExp(`Fence repair ${stamp}`) })).toHaveCount(0);
     await places.getByRole("button", { name: /^Later/ }).click();
-    const later = app.getByRole("list", { name: "Later" });
+    const later = app.getByRole("region", { name: "Later" });
     await later.getByRole("button", { name: new RegExp(`Fence repair ${stamp}`) }).click();
     await app.getByRole("button", { name: "Not later", exact: true }).click();
-    await expect(app.getByRole("status")).toHaveText("Not later any more.");
+    await expect(app.getByRole("status").filter({ hasText: "Not later any more." })).toBeVisible();
     await app.getByRole("button", { name: "← Mail" }).click();
     await expect(later.getByRole("button", { name: new RegExp(`Fence repair ${stamp}`) })).toHaveCount(0);
     await places.getByRole("button", { name: /^Inbox/ }).click();

@@ -5,12 +5,7 @@
 // keyword (the Inbox leaves a Later thread out until something new comes in on it); Waiting is the sends from Uni's
 // account its outbound rules hold for the owner, each approved (signed with the approval key) or declined here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Linked as KitLinked, ready, services, signal, useSaved as KitUseSaved } from "parachute";
-// kept on this device by the kit (docs/WRITE-AN-APPLET.md "Saved state"); an app from before it keeps it for the visit only
-const useSaved: <T>(key: string, initial: T) => [T, (v: T | ((was: T) => T)) => void] = KitUseSaved ?? ((_key: string, initial: any) => useState(initial));
-
-// an app from before note links (11-18) has no Linked: there a mail's text is drawn as text
-const Linked = KitLinked ?? (({ text }: { text: string }) => <>{text}</>);
+import { Button, Field, Linked, List, Loading, Page, Problem, ready, Search, services, signal, Tabs, toast, useSaved, when, Write } from "parachute";
 
 type Addr = { name?: string | null; email: string };
 type Email = { id: string; threadId: string; mailboxIds: Record<string, boolean>; keywords: Record<string, boolean>; from?: Addr[]; to?: Addr[]; replyTo?: Addr[]; cc?: Addr[]; subject?: string; receivedAt: string; preview?: string; hasAttachment?: boolean;
@@ -43,6 +38,8 @@ const placeName = (role: string) => PLACES.find((p) => p.role === role)?.name;
 /** The Inbox leaves out a Later thread unless something came in on it since (a message not flagged): opening that one
  *  marks it seen and it stays, until Later puts the whole thread off again. */
 const NOT_LATER = { operator: "OR", conditions: [{ noneInThreadHaveKeyword: "$flagged" }, { notKeyword: "$flagged" }] };
+/** Decided here, and it didn't go as asked (refused, or no answer came). */
+const failed = (h: Held) => h.outcome?.kind === "refused" || h.outcome?.kind === "error";
 /** Still to decide: listed, and not sent or declined here. */
 /** A gateway answer (refused, unconfirmed) is final; only a call that never got one (the network, no tap) may be tried again. */
 const waiting = (h: Held) => h.listed && (!h.outcome || h.outcome.kind === "error");
@@ -55,47 +52,29 @@ const LIST_PROPS = ["threadId", "mailboxIds", "keywords", "from", "to", "replyTo
 const who = (a?: Addr[]) => (a ?? []).map((x) => x.name || x.email).join(", ") || "(nobody)";
 const addrs = (s: string): Addr[] => s.split(/[,;]/).map((x) => x.trim()).filter(Boolean).map((x) => { const m = /^(.*)<([^>]+)>$/.exec(x); return m ? { name: m[1].trim().replace(/^"|"$/g, "") || undefined, email: m[2].trim() } : { email: x }; });
 const addrLine = (a: Addr[]) => a.map((x) => (x.name ? `${x.name} <${x.email}>` : x.email)).join(", ");
-const TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
-const when = (iso: string) => { const d = new Date(iso); return d.toDateString() === new Date().toDateString() ? TIME.format(d) : DATE.format(d); };
 /** The text of an HTML body, never the HTML: drawn as words only. */
 const htmlText = (html: string) => { const d = new DOMParser().parseFromString(html, "text/html"); d.querySelectorAll("script,style").forEach((n) => n.remove()); return (d.body.innerText || d.body.textContent || "").replace(/\n{3,}/g, "\n\n").trim(); };
 
 const CSS = `
-main { max-width: 820px; margin: 0 auto; padding: 14px var(--pad, 16px) 60px; }
-h1 { font: 400 calc(var(--size, 16px) * 2)/1.1 var(--serif); margin: 4px 0 10px; }
-button { font: inherit; color: inherit; cursor: pointer; }
-.quiet { color: var(--muted); }
-.err { color: var(--danger); }
 .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
-.bar input[type=search] { flex: 1; min-width: 10em; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: inherit; font: inherit; }
-.primary { border: 0; background: var(--text); color: var(--bg); border-radius: 999px; padding: 7px 16px; }
-.plainbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 14px; }
-.places { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 6px 0 4px; flex-wrap: wrap; }
-.places button { border: 0; background: none; padding: 6px 10px; color: var(--muted); border-bottom: 2px solid transparent; }
-.places button[aria-current=page] { color: var(--text); border-bottom-color: var(--text); font-weight: 600; }
-.rows { list-style: none; margin: 0; padding: 0; }
-.row { display: grid; grid-template-columns: 1fr auto; gap: 1px 12px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 10px 2px; }
-.row .from { font-family: var(--serif); font-size: 1.05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row.unseen .from, .row.unseen .subj { font-weight: 700; }
-.row .t { color: var(--muted); font-size: .85em; }
-.row .subj, .row .pre { grid-column: 1 / 3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row .pre { color: var(--muted); font-size: .92em; }
-.back { border: 0; background: none; font-style: italic; font-family: var(--serif); color: var(--muted); padding: 6px 0; }
-.msg h2 { font: 400 1.5em/1.2 var(--serif); margin: 6px 0; }
-.msg .meta { color: var(--muted); font-size: .9em; margin-bottom: 10px; }
-.msg .body { white-space: pre-wrap; overflow-wrap: anywhere; font: 1em/1.55 var(--serif); border-top: 1px solid var(--line); padding-top: 12px; }
-.msg + .msg { margin-top: 26px; }
-.files { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; } .files span { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: .88em; }
-div.compose label { display: block; margin: 8px 0 2px; font: 600 .78em var(--sans); color: var(--muted); }
-div.compose input, div.compose textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
-div.compose textarea { min-height: 14em; font-family: var(--serif); line-height: 1.5; }
-.review { border: 1.5px solid var(--text); border-radius: var(--radius, 10px); padding: 12px 14px; margin: 12px 0; background: var(--surface); }
-.review pre { white-space: pre-wrap; font: .95em/1.5 var(--serif); margin: 8px 0 0; }
+.quiet { color: var(--muted); }
+.mail .pa-row-meta { display: grid; }
+.mail .subj, .mail .pre { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mail .subj { color: var(--text); }
+.mail .pa-strong .subj { font-weight: 700; }
 .flag { margin-left: 6px; }
+.msg h2 { font: 400 var(--fs-head)/1.2 var(--serif); margin: 6px 0; }
+.msg .meta { color: var(--muted); font-size: var(--fs-small); margin-bottom: 10px; }
+.msg .body { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-body)/1.55 var(--serif); border-top: 1px solid var(--line); padding-top: 12px; }
+.msg + .msg { margin-top: 26px; }
+.files { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; } .files span { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: var(--fs-small); }
+.compose .pa-write-box { min-height: 14em; }
+.review { border: 1.5px solid var(--text); border-radius: var(--radius); padding: 12px 14px; margin: 12px 0; background: var(--surface); }
+.review pre { white-space: pre-wrap; font: var(--fs-body)/1.5 var(--serif); margin: 8px 0 0; }
 .held .why { border-left: 3px solid var(--text); padding: 2px 10px; margin: 8px 0 12px; }
-.held .note { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; margin: 10px 0; }
+.held-note { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; margin: 10px 0; }
 .outcome { font-weight: 600; margin: 12px 0; }
+.outcome.refused { color: var(--danger); }
 `;
 
 export default function Mail() {
@@ -108,9 +87,10 @@ export default function Mail() {
   const [q, setQ] = useState("");
   const [searched, setSearched] = useState<string | null>(null);
   const [view, setView] = useState<View>({ at: "list" });
-  const [err, setErr] = useState("");
+  // what couldn't be read, and what reads it again
+  const [err, setErr] = useState<{ lead: string; e?: unknown; retry?: () => void } | null>(null);
   const [held, setHeld] = useState<Held[]>([]);
-  const [heldErr, setHeldErr] = useState("");
+  const [heldErr, setHeldErr] = useState<unknown>(null);
   const ops = (account && session?.operations?.[account]) || [];
   const can = (o: string) => ops.includes(o);
   // the accounts whose held sends are this key's to see (Uni's, for the owner); Waiting shows whichever mailbox is open
@@ -122,7 +102,7 @@ export default function Mail() {
         const s: Session = await post("session", {});
         setSession(s);
         setAccount(s.primaryAccounts["urn:ietf:params:jmap:mail"] ?? Object.keys(s.roles)[0] ?? null);
-      } catch (e: any) { setErr(e instanceof Refused ? `The mail gateway refused: ${e.message}` : `Couldn't reach your mail: ${e?.message ?? e}`); }
+      } catch (e: any) { setErr({ lead: e instanceof Refused ? "The mail gateway refused" : "Couldn't reach your mail", e }); }
     });
   }, []);
   const loadBoxes = async () => {
@@ -136,7 +116,7 @@ export default function Mail() {
   };
   const load = async () => {
     if (!account || (place === "waiting" && !searched)) return;
-    setErr("");
+    setErr(null);
     try {
       const box = boxes.find((b) => b.role === place);
       if (!box && !searched && place !== "later") { setList([]); return; }
@@ -150,68 +130,62 @@ export default function Mail() {
         ["Email/get", { accountId: account, "#ids": { resultOf: "q", name: "Email/query", path: "/ids" }, properties: LIST_PROPS }, "g"],
       ]);
       setList((res.find((x) => x[0] === "Email/get")?.[1].list ?? []) as Email[]);
-    } catch (e: any) { setErr(`Couldn't read ${searched ? "the search" : placeName(place) ?? place}: ${e?.message ?? e}`); setList([]); }
+    } catch (e: any) { setErr({ lead: `Couldn't read ${searched ? "the search" : placeName(place) ?? place}`, e, retry: () => void load() }); setList([]); }
   };
   /** The held sends, listed again: a send decided here keeps its outcome (it stays on screen after it leaves the list). */
   const loadHeld = async () => {
     if (!heldAccounts.length) return;
     try {
       const lists = await Promise.all(heldAccounts.map(async (a) => ({ a, parked: ((await op("send.parked", a, {})).parked ?? []) as Parked[] })));
-      setHeldErr("");
+      setHeldErr(null);
       setHeld((before) => {
         const now: Held[] = lists.flatMap(({ a, parked }) => parked.map((item) => ({ account: a, item, listed: true, outcome: before.find((h) => h.item.opId === item.opId)?.outcome })));
         for (const h of before) if (h.outcome && !now.some((x) => x.item.opId === h.item.opId)) now.push({ ...h, listed: false });
         return now;
       });
-    } catch (e: any) { setHeldErr(`Couldn't list what is waiting: ${e?.message ?? e}`); }
+    } catch (e: any) { setHeldErr(e); }
   };
   const decided = (opId: string, outcome: Held["outcome"]) => setHeld((hs) => hs.map((h) => (h.item.opId === opId ? { ...h, outcome } : h)));
-  useEffect(() => { void loadBoxes().catch((e) => setErr(String(e?.message ?? e))); }, [account]);
+  const readBoxes = () => { setErr(null); void loadBoxes().catch((e) => setErr({ lead: "Couldn't read your mailboxes", e, retry: readBoxes })); };
+  useEffect(readBoxes, [account]);
   useEffect(() => { if (boxes.length || searched) void load(); }, [boxes, place, searched]);
   useEffect(() => { if (place === "waiting" || !held.length) void loadHeld(); }, [session, place]);
 
   const accountNames = session ? Object.keys(session.roles).map((id) => ({ id, name: session.accounts[id]?.name ?? id, role: session.roles[id] })) : [];
   const waitingCount = held.filter(waiting).length;
   const css = <style>{CSS}</style>;
-  if (!session) return <main>{css}<h1>Mail</h1>{err ? <p className="err" role="alert">{err}</p> : <p className="quiet">Opening your mail…</p>}</main>;
-  if (view.at === "read") return <main>{css}<Thread id={view.id} account={account!} me={session.accounts[account!]?.name ?? session.account} can={can} back={() => { setView({ at: "list" }); void load(); void loadBoxes(); }} reply={(e) => setView({ at: "compose", reply: e })} edit={(d) => setView({ at: "compose", draft: d })} inDrafts={place === "drafts"} /></main>;
-  if (view.at === "compose") return <main>{css}<Compose account={account!} can={can} draft={view.draft} reply={view.reply} done={(sent) => { setView({ at: "list" }); if (sent) setPlace("sent"); void loadBoxes(); void load(); }} /></main>;
+  if (!session) return <Page title="Mail">{err ? <Problem error={err.e}>{err.lead}</Problem> : <Loading>Opening your mail…</Loading>}</Page>;
+  if (view.at === "read") return <>{css}<Thread id={view.id} account={account!} me={session.accounts[account!]?.name ?? session.account} can={can} back={() => { setView({ at: "list" }); void load(); void loadBoxes(); }} reply={(e) => setView({ at: "compose", reply: e })} edit={(d) => setView({ at: "compose", draft: d })} inDrafts={place === "drafts"} /></>;
+  if (view.at === "compose") return <>{css}<Compose account={account!} can={can} draft={view.draft} reply={view.reply} done={(sent) => { setView({ at: "list" }); if (sent) setPlace("sent"); void loadBoxes(); void load(); }} /></>;
   const openHeld = view.at === "held" ? held.find((h) => h.item.opId === view.opId) : undefined;
-  if (openHeld) return <main>{css}<HeldSend h={openHeld} name={session.accounts[openHeld.account]?.name ?? "Uni's account"} ops={session.operations[openHeld.account] ?? []} decided={decided} back={() => { setView({ at: "list" }); void loadHeld(); }} /></main>;
+  if (openHeld) return <>{css}<HeldSend h={openHeld} name={session.accounts[openHeld.account]?.name ?? "Uni's account"} ops={session.operations[openHeld.account] ?? []} decided={decided} back={() => { setView({ at: "list" }); void loadHeld(); }} /></>;
   const shown = PLACES.filter((p) => p.role === "waiting" ? heldAccounts.length > 0 : p.role === "later" ? boxes.some((b) => b.role === "inbox") : boxes.some((b) => b.role === p.role));
   const count = (role: string) => role === "inbox" ? boxes.find((b) => b.role === "inbox")?.unreadEmails : role === "waiting" ? waitingCount : 0;
-  return <main>
+  const lines = (subject: string, pre: string) => <><span className="subj">{subject}</span>{pre && <span className="pre">{pre}</span>}</>;
+  return <Page title="Mail" className="mail" onRefresh={() => Promise.all([loadBoxes(), load(), loadHeld()])}
+    aside={can("draft.save") && <Button kind="primary" onClick={() => setView({ at: "compose" })}>Write</Button>}>
     {css}
-    <h1>Mail</h1>
-    <div className="bar">
-      <input type="search" aria-label="Search mail" placeholder="Search mail" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") setSearched(q.trim() || null); }} />
-      {can("draft.save") && <button className="primary" onClick={() => setView({ at: "compose" })}>Write</button>}
-    </div>
-    {accountNames.length > 1 && <p className="quiet">Mailbox: {accountNames.map((a) => <button key={a.id} className="plainbtn" aria-pressed={a.id === account} onClick={() => { setAccount(a.id); setPlace("inbox"); }}>{a.name}</button>)}</p>}
-    {searched ? <p className="quiet">Found for “{searched}” <button className="plainbtn" onClick={() => { setSearched(null); setQ(""); }}>Back to {placeName(place)}</button></p> :
-      <nav className="places" aria-label="Places">{shown.map((p) => <button key={p.role} aria-current={place === p.role ? "page" : undefined} onClick={() => setPlace(p.role)}>{p.name}{count(p.role) ? ` · ${count(p.role)}` : ""}</button>)}</nav>}
-    {err && <p className="err" role="alert">{err}</p>}
+    <Search label="Search mail" value={q} onChange={setQ} onSearch={(t) => setSearched(t || null)} />
+    {accountNames.length > 1 && <p className="quiet">Mailbox: {accountNames.map((a) => <Button key={a.id} small aria-pressed={a.id === account} onClick={() => { setAccount(a.id); setPlace("inbox"); }}>{a.name}</Button>)}</p>}
+    {searched ? <p className="quiet">Found for “{searched}” <Button small onClick={() => { setSearched(null); setQ(""); }}>Back to {placeName(place)}</Button></p> :
+      <Tabs label="Places" current={place} onChange={setPlace} tabs={shown.map((p) => ({ key: p.role, label: p.name, count: count(p.role) || 0 }))} />}
+    {err && <Problem error={err.e} onRetry={err.retry}>{err.lead}</Problem>}
     {place === "waiting" && !searched ? <>
-      {heldErr && <p className="err" role="alert">{heldErr}</p>}
-      {!held.length ? <p className="quiet">{heldErr ? "" : "Nothing from Uni is waiting for you."}</p> :
-        <ul className="rows" aria-label="Waiting">{held.map((h) => <li key={h.item.opId}>
-          <button className={`row${waiting(h) ? " unseen" : ""}`} onClick={() => setView({ at: "held", opId: h.item.opId })}>
-            <span className="from">{h.item.sentBy === "Uni" ? "Uni" : "You, as Uni"} to {heldTo(h.item)}</span>
-            <span className="t">{h.outcome?.kind === "sent" ? "Sent" : h.outcome?.kind === "declined" ? "Declined" : h.outcome?.kind === "unconfirmed" ? "Unconfirmed" : h.outcome?.kind === "refused" ? "Not sent" : h.listed ? "Waiting" : "Not sent"}</span>
-            <span className="subj">{h.item.fields?.subject || "(no subject)"}{h.item.fields?.attachments?.length ? ` · 📎 ${h.item.fields.attachments.length}` : ""}</span>
-            <span className="pre">{h.outcome?.text ?? h.item.problem ?? h.item.reason ?? ""}</span>
-          </button>
-        </li>)}</ul>}
-    </> : list === null ? <p className="quiet">Reading…</p> : !list.length ? <p className="quiet">{searched ? "Nothing found." : place === "later" ? "Nothing put off for later." : "Nothing here."}</p> :
-      <ul className="rows" aria-label={searched ? "Found" : placeName(place)}>{list.map((e) => <li key={e.id}>
-        <button className={`row${e.keywords?.$seen ? "" : " unseen"}`} onClick={() => setView({ at: "read", id: e.id })}>
-          <span className="from">{place === "sent" || place === "drafts" ? `To ${who(e.to)}` : who(e.from)}{e.keywords?.$flagged && place !== "later" && <span className="flag" aria-label="in Later">⚑</span>}</span>
-          <span className="t">{when(e.receivedAt)}</span>
-          <span className="subj">{e.subject || "(no subject)"}{e.hasAttachment ? " · 📎" : ""}</span>
-          <span className="pre">{e.preview}</span>
-        </button>
-      </li>)}</ul>}
-  </main>;
+      {heldErr ? <Problem error={heldErr} onRetry={() => void loadHeld()}>Couldn't list what is waiting</Problem> : null}
+      {!held.length ? (heldErr ? null : <p className="quiet">Nothing from Uni is waiting for you.</p>) :
+        <List label="Waiting" rows={held.map((h) => ({
+          key: h.item.opId, strong: waiting(h), onPress: () => setView({ at: "held", opId: h.item.opId }),
+          title: `${h.item.sentBy === "Uni" ? "Uni" : "You, as Uni"} to ${heldTo(h.item)}`,
+          aside: h.outcome?.kind === "sent" ? "Sent" : h.outcome?.kind === "declined" ? "Declined" : h.outcome?.kind === "unconfirmed" ? "Unconfirmed" : h.outcome?.kind === "refused" ? "Not sent" : h.listed ? "Waiting" : "Not sent",
+          meta: lines(`${h.item.fields?.subject || "(no subject)"}${h.item.fields?.attachments?.length ? ` · 📎 ${h.item.fields.attachments.length}` : ""}`, h.outcome?.text ?? h.item.problem ?? h.item.reason ?? ""),
+        }))} />}
+    </> : list === null ? <Loading /> : !list.length ? <p className="quiet">{searched ? "Nothing found." : place === "later" ? "Nothing put off for later." : "Nothing here."}</p> :
+      <List label={searched ? "Found" : placeName(place)} rows={list.map((e) => ({
+        key: e.id, strong: !e.keywords?.$seen, onPress: () => setView({ at: "read", id: e.id }), aside: when.short(e.receivedAt),
+        title: <>{place === "sent" || place === "drafts" ? `To ${who(e.to)}` : who(e.from)}{e.keywords?.$flagged && place !== "later" && <span className="flag" aria-label="in Later">⚑</span>}</>,
+        meta: lines(`${e.subject || "(no subject)"}${e.hasAttachment ? " · 📎" : ""}`, e.preview ?? ""),
+      }))} />}
+  </Page>;
 }
 
 /** A held send in full: who sent it, to whom, what it says, why it waits; Approve sends exactly that, Decline sends nothing. */
@@ -236,36 +210,35 @@ function HeldSend({ h, name, ops, decided, back }: { h: Held; name: string; ops:
           : { kind: "refused", text: `Not sent: ${r.reason ?? r.state}.` }
         : r.state === "declined" ? { kind: "declined", text: "Declined. Nothing was sent." } : { kind: "refused", text: `Not declined: it is ${r.state}.` };
     } catch (e: any) { outcome = { kind: "error", text: `${kind === "approve" ? "Not sent" : "Not declined"}: ${e?.message ?? e}` }; }
+    toast(outcome.text, { error: outcome.kind === "refused" || outcome.kind === "error" });
     decided(p.opId, outcome);
     setBusy(false);
   };
-  return <>
-    <button className="back" onClick={back}>← Waiting</button>
+  return <Page back={{ label: "Waiting", onPress: back }}>
     <article className="msg held" aria-label={f?.subject || "a held send"}>
       <h2>{f?.subject || "(no subject)"}</h2>
-      <div className="meta">From {p.sentBy === "Uni" ? "Uni" : "you, as Uni"} ({name}) · to {f ? addrLine(f.to) || "(nobody)" : heldTo(p)}{f?.cc.length ? ` · cc ${addrLine(f.cc)}` : ""}{f?.bcc.length ? ` · bcc ${addrLine(f.bcc)}` : ""}{p.parkedAt ? ` · held ${new Date(p.parkedAt).toLocaleString()}` : ""}</div>
+      <div className="meta">From {p.sentBy === "Uni" ? "Uni" : "you, as Uni"} ({name}) · to {f ? addrLine(f.to) || "(nobody)" : heldTo(p)}{f?.cc.length ? ` · cc ${addrLine(f.cc)}` : ""}{f?.bcc.length ? ` · bcc ${addrLine(f.bcc)}` : ""}{p.parkedAt ? ` · held ${when.full(p.parkedAt)}` : ""}</div>
       <p className="why"><b>Why it waits:</b> {p.reason ?? "Uni's outbound rules want your approval."}</p>
       {f && <div className="body">{f.text ? <Linked text={f.text} /> : "(no text)"}</div>}
       {!!f?.attachments?.length && <div className="files" aria-label="Files it sends">{f.attachments.map((a, i) => <span key={i}>📎 {a.name} ({Math.max(1, Math.round(a.size / 1024))} KB)</span>)}</div>}
     </article>
-    {p.changed && <p className="note" role="note">This draft changed after it was held, so it can't be sent from here. Decline it, and ask Uni to send it again.</p>}
-    {p.problem && <p className="note" role="note">Can't show it: {p.problem}. Nothing can be sent from here.</p>}
-    {f && !p.problem && !shownWhole(p) && <p className="note" role="note">It has parts this can't show in full, so only Decline is offered.</p>}
-    {h.outcome && <p className={`outcome${["refused", "error"].includes(h.outcome.kind) ? " err" : ""}`} role="status">{h.outcome.text}</p>}
+    {p.changed && <p className="held-note" role="note">This draft changed after it was held, so it can't be sent from here. Decline it, and ask Uni to send it again.</p>}
+    {p.problem && <p className="held-note" role="note">Can't show it: {p.problem}. Nothing can be sent from here.</p>}
+    {f && !p.problem && !shownWhole(p) && <p className="held-note" role="note">It has parts this can't show in full, so only Decline is offered.</p>}
+    {h.outcome && <p className={`outcome${failed(h) ? " refused" : ""}`}>{h.outcome.text}</p>}
     {(approvable || declinable) && <>
       <div className="bar">
-        {approvable && <button className="primary" disabled={busy} onClick={() => void decide("approve")}>{busy ? "Working…" : "Approve"}</button>}
-        {declinable && <button className="plainbtn" disabled={busy} onClick={() => void decide("decline")}>Decline</button>}
+        {approvable && <Button kind="primary" busy={busy} onClick={() => void decide("approve")}>{busy ? "Working…" : "Approve"}</Button>}
+        {declinable && <Button busy={busy} onClick={() => void decide("decline")}>Decline</Button>}
       </div>
       <p className="quiet">{approvable ? `Approve sends it from ${name} to ${heldTo(p)}, exactly as shown. ` : ""}Decline sends nothing; Uni can change or drop the draft.</p>
     </>}
-  </>;
+  </Page>;
 }
 
 function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: string; account: string; me: string; can: (o: string) => boolean; back: () => void; reply: (e: Email) => void; edit: (d: Draft) => void; inDrafts: boolean }) {
   const [emails, setEmails] = useState<Email[] | null>(null);
-  const [err, setErr] = useState("");
-  const [note, setNote] = useState("");
+  const [err, setErr] = useState<unknown>(null);
   useEffect(() => {
     (async () => {
       try {
@@ -279,7 +252,7 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
         setEmails(list);
         const unseen = list.filter((e) => !e.keywords?.$seen && !e.keywords?.$draft).map((e) => e.id);
         if (unseen.length && can("mark_seen")) await op("mark_seen", account, { emailIds: unseen, seen: true }).catch(() => {});
-      } catch (e: any) { setErr(String(e?.message ?? e)); }
+      } catch (e: any) { setErr(e); }
     })();
   }, [id]);
   const last = emails?.[emails.length - 1];
@@ -291,7 +264,9 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
     if (t) return t;
     return htmlText((e.htmlBody ?? []).map((p) => e.bodyValues?.[p.partId]?.value ?? "").join("\n"));
   };
-  const act = async (name: string, args: Record<string, unknown>, words: string) => { try { await op(name, account, args); setNote(words); return true; } catch (e: any) { setErr(`${words.split(" ")[0]} didn't happen: ${e?.message ?? e}`); return false; } };
+  // what an action said stays on screen until the next one (a toast says it too)
+  const [said, setSaid] = useState<string | null>(null);
+  const act = async (name: string, args: Record<string, unknown>, words: string) => { setSaid(null); try { await op(name, account, args); toast(words); return true; } catch (e: any) { const t = `${words.split(" ")[0]} didn't happen: ${e?.message ?? e}`; toast(t, { error: true }); setSaid(t); return false; } };
   // Later is the thread's: $flagged on any of its messages (another mail app may flag just one), so Not later clears them all
   const flagged = (emails ?? []).filter((e) => e.keywords?.$flagged).map((e) => e.id);
   // in Later while every message but drafts is flagged; one that came in since (unflagged) brings it back, and Later
@@ -302,23 +277,22 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
     if (!ids.length || !(await act("flag", { emailIds: ids, flagged: on }, on ? "Put off for later." : "Not later any more."))) return;
     setEmails((es) => es && es.map((e) => (ids.includes(e.id) ? { ...e, keywords: { ...e.keywords, $flagged: on } } : e)));
   };
-  return <>
-    <button className="back" onClick={back}>← Mail</button>
-    {err && <p className="err" role="alert">{err}</p>}
-    {!emails ? <p className="quiet">Reading…</p> : emails.map((e) => <article className="msg" key={e.id} aria-label={e.subject || "a message"}>
+  return <Page back={{ label: "Mail", onPress: back }}>
+    {err ? <Problem error={err}>Couldn't read it</Problem> : null}
+    {!emails ? (err ? null : <Loading />) : emails.map((e) => <article className="msg" key={e.id} aria-label={e.subject || "a message"}>
       <h2>{e.subject || "(no subject)"}</h2>
-      <div className="meta">From {who(e.from)} · to {who(e.to)}{e.cc?.length ? ` · cc ${who(e.cc)}` : ""} · {new Date(e.receivedAt).toLocaleString()}</div>
+      <div className="meta">From {who(e.from)} · to {who(e.to)}{e.cc?.length ? ` · cc ${who(e.cc)}` : ""} · {when.full(e.receivedAt)}</div>
       <div className="body"><Linked text={bodyOf(e)} /></div>
       {!!e.attachments?.length && <div className="files">{e.attachments.map((a, i) => <span key={i}>📎 {a.name ?? "file"}</span>)}</div>}
     </article>)}
     {last && <div className="bar" style={{ marginTop: 16 }}>
-      {inDrafts && last.keywords?.$draft && can("draft.save") ? <button className="primary" onClick={async () => { const r = await op("draft.review", account, { draftId: last.id }); edit({ draftId: last.id, fingerprint: r.fingerprint, fields: { to: r.fields.to ?? [], cc: r.fields.cc ?? [], bcc: r.fields.bcc ?? [], subject: r.fields.subject ?? "", text: r.fields.text ?? "" } }); }}>Open the draft</button>
-        : can("draft.save") && answering && <button className="primary" onClick={() => reply(answering)}>Reply</button>}
-      {can("flag") && <button className="plainbtn" onClick={() => void later(!isLater)}>{isLater ? "Not later" : "Later"}</button>}
-      {can("archive") && !last.keywords?.$draft && <button className="plainbtn" onClick={() => act("archive", { emailIds: emails.map((e) => e.id) }, "Archived.")}>Archive</button>}
-      {note && <span className="quiet" role="status">{note}</span>}
+      {inDrafts && last.keywords?.$draft && can("draft.save") ? <Button kind="primary" onClick={async () => { const r = await op("draft.review", account, { draftId: last.id }); edit({ draftId: last.id, fingerprint: r.fingerprint, fields: { to: r.fields.to ?? [], cc: r.fields.cc ?? [], bcc: r.fields.bcc ?? [], subject: r.fields.subject ?? "", text: r.fields.text ?? "" } }); }}>Open the draft</Button>
+        : can("draft.save") && answering && <Button kind="primary" onClick={() => reply(answering)}>Reply</Button>}
+      {can("flag") && <Button onClick={() => void later(!isLater)}>{isLater ? "Not later" : "Later"}</Button>}
+      {can("archive") && !last.keywords?.$draft && <Button onClick={() => act("archive", { emailIds: emails.map((e) => e.id) }, "Archived.")}>Archive</Button>}
     </div>}
-  </>;
+    {said && <Problem>{said}</Problem>}
+  </Page>;
 }
 
 function Compose({ account, can, draft, reply, done }: { account: string; can: (o: string) => boolean; draft?: Draft; reply?: Email; done: (sent: boolean) => void }) {
@@ -336,7 +310,8 @@ function Compose({ account, can, draft, reply, done }: { account: string; can: (
   const [review, setReview] = useState<any>(null);
   const [state, setState] = useState("");
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  // a save or a send that failed stays said here until the next try (a toast says it too)
+  const [failed, setFailed] = useState<string | null>(null);
   const send = useRef<string>(opId());
   // what will go comes into view as soon as it is read back (below the message on a phone)
   const shownReview = useRef<HTMLElement>(null);
@@ -344,52 +319,51 @@ function Compose({ account, can, draft, reply, done }: { account: string; can: (
   const fields = (): Fields => ({ to: addrs(to), cc: addrs(cc), bcc: init.bcc, subject: subject.trim(), text, ...(init.inReplyTo ? { inReplyTo: init.inReplyTo } : {}) });
   /** Save it as a draft (a new revision of the one open), then read back exactly what would go. */
   const saveAndReview = async () => {
-    setBusy(true); setErr(""); setState("");
+    setBusy(true); setState(""); setFailed(null);
     try {
       const s = await op("draft.save", account, { fields: fields(), ...(saved ? { replaces: saved.draftId, base: saved.fingerprint } : {}) });
       setSaved({ draftId: s.draftId, fingerprint: s.fingerprint });
       setReview(await op("draft.review", account, { draftId: s.draftId }));
       send.current = opId();
-    } catch (e: any) { setErr(`Not saved: ${e?.message ?? e}`); }
+    } catch (e: any) { toast(`Not saved: ${e?.message ?? e}`, { error: true }); setFailed(`Not saved: ${e?.message ?? e}`); }
     setBusy(false);
   };
   const sendIt = async () => {
     if (!review || !saved) return;
-    setBusy(true); setErr("");
+    setBusy(true); setFailed(null);
     try {
       const r = await op("send", account, { opId: send.current, draftId: review.draftId, fingerprint: review.fingerprint });
-      if (r.state === "cleaned" || r.state === "submitted") { setState("Sent."); keep(null); setTimeout(() => done(true), 600); }
-      else if (r.state === "awaiting-approval") { setState("Held: it waits for your OK before it goes."); keep(null); }
-      else setState(`Not sent: ${r.reason ?? r.state}`);
-    } catch (e: any) { setErr(`Not sent: ${e?.message ?? e}`); }
+      if (r.state === "cleaned" || r.state === "submitted") { setState("Sent."); toast("Sent."); keep(null); setTimeout(() => done(true), 600); }
+      else if (r.state === "awaiting-approval") { setState("Held: it waits for your OK before it goes."); toast("Held: it waits for your OK before it goes."); keep(null); }
+      else { setState(`Not sent: ${r.reason ?? r.state}`); toast(`Not sent: ${r.reason ?? r.state}`, { error: true }); }
+    } catch (e: any) { toast(`Not sent: ${e?.message ?? e}`, { error: true }); setFailed(`Not sent: ${e?.message ?? e}`); }
     setBusy(false);
   };
   const discard = async () => { if (saved && can("draft.discard")) await op("draft.discard", account, { draftId: saved.draftId }).catch(() => {}); keep(null); done(false); };
   const valid = addrs(to).length > 0 && addrs(to).every((a) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a.email));
-  return <>
-    <button className="back" onClick={() => done(false)}>← Mail</button>
-    <h1>{reply ? "Reply" : draft ? "Draft" : "New message"}</h1>
+  const edited = (set: (v: string) => void) => (v: string) => { set(v); setReview(null); };
+  return <Page title={reply ? "Reply" : draft ? "Draft" : "New message"} back={{ label: "Mail", onPress: () => done(false) }}>
     {/* not a <form>: a sealed frame can't submit one (its sandbox has no allow-forms) */}
     <div className="compose">
-      <label htmlFor="to">To</label><input id="to" value={to} onChange={(e) => { setTo(e.target.value); setReview(null); }} placeholder="name@example.org" autoComplete="off" />
-      <label htmlFor="cc">Cc</label><input id="cc" value={cc} onChange={(e) => { setCc(e.target.value); setReview(null); }} autoComplete="off" />
-      <label htmlFor="subject">Subject</label><input id="subject" value={subject} onChange={(e) => { setSubject(e.target.value); setReview(null); }} />
-      <label htmlFor="text">Message</label><textarea id="text" value={text} onChange={(e) => { setText(e.target.value); setReview(null); }} />
+      <Field label="To" value={to} onChange={edited(setTo)} placeholder="name@example.org" />
+      <Field label="Cc" value={cc} onChange={edited(setCc)} />
+      <Field label="Subject" value={subject} onChange={edited(setSubject)} />
+      <Write label="Message" labelled value={text} onChange={edited(setText)} />
       <div className="bar" style={{ marginTop: 10 }}>
-        <button type="button" className="primary" onClick={() => void saveAndReview()} disabled={busy || !valid}>{busy && !review ? "Saving…" : "Save and review"}</button>
-        <button type="button" className="plainbtn" onClick={discard}>{saved ? "Discard the draft" : "Cancel"}</button>
+        <Button kind="primary" onClick={() => void saveAndReview()} disabled={!valid} busy={busy}>{busy && !review ? "Saving…" : "Save and review"}</Button>
+        <Button onClick={discard}>{saved ? "Discard the draft" : "Cancel"}</Button>
       </div>
     </div>
-    {err && <p className="err" role="alert">{err}</p>}
+    {failed && <Problem>{failed}</Problem>}
     {review && <section className="review" aria-label="What will be sent" ref={shownReview}>
       <strong>This is what will go</strong>
       <div className="quiet">To {addrLine(review.fields.to ?? [])}{review.fields.cc?.length ? ` · cc ${addrLine(review.fields.cc)}` : ""}</div>
       <div><b>{review.fields.subject || "(no subject)"}</b></div>
       <pre>{review.fields.text}</pre>
       <div className="bar" style={{ marginTop: 10 }}>
-        {can("send") ? <button className="primary" disabled={busy || !!state} onClick={sendIt}>{busy ? "Sending…" : "Send it"}</button> : <span className="quiet">This mailbox can't send from here; the draft is saved.</span>}
-        {state && <span role="status">{state}</span>}
+        {can("send") ? <Button kind="primary" busy={busy} disabled={!!state} onClick={sendIt}>{busy ? "Sending…" : "Send it"}</Button> : <span className="quiet">This mailbox can't send from here; the draft is saved.</span>}
+        {state && <span className="quiet">{state}</span>}
       </div>
     </section>}
-  </>;
+  </Page>;
 }

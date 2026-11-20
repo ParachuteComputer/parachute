@@ -6,7 +6,7 @@ import * as JSXRuntime from "react/jsx-runtime";
 
 /** The parts an applet can import from "parachute", beside the kit's calls (docs/WRITE-AN-APPLET.md). */
 export const PART_NAMES = [
-  "Button", "Card", "Days", "Empty", "Field", "Link", "Linked", "List", "Loading", "Note", "Page", "Problem", "Record", "Search", "Write",
+  "Button", "Card", "Days", "Empty", "Field", "Link", "Linked", "List", "Loading", "Note", "Page", "Problem", "Record", "Search", "Tabs", "Write",
   "link", "toast", "useSaved", "useTheme", "useTranscripts", "voiceNote", "when",
 ] as const;
 
