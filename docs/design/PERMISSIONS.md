@@ -62,6 +62,14 @@ The card says why before anything else:
 | The device moved to approved code only | Allow «Rooms»? | You allowed it when applets here were sealed… (also said beside changed code or a year run out) |
 | Changed since it was brought in from another vault | «Rooms» changed | techne changed «Rooms» since you brought it in. |
 
+Under that line, a card for changed code says who changed it, when, and which version of the day it is, from what the
+hub records with every note (`lastUpdatedBy`, `lastUpdatedVia`, and its kept versions): *Changed 12 minutes ago by Uni.
+The 4th version today.* A key the person named on their trusted list is called by that name, their own key "you", their
+own account "your account"; anything else reads as what it is ("someone else on your hub", "a hub token", "a key you
+haven't named"), so a change nobody expected stands out without reading code. Where this device read an approval of
+other code made on another device, the card says so first: *You approved another version on Android, 3 days ago.*
+(`src/applet/changedBy.ts`; it is what the hub says, and the code still runs only after a tap.)
+
 To mark what is new, a grant now keeps what its card said (`face`: the face's lines and every detail line) and its imports from someone else's vault
 (`others`). A grant made before has neither: its card says plainly that it changed, and marks nothing.
 

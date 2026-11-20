@@ -54,7 +54,10 @@ import { createStorageModule } from "../applet/modules/storage";
 import { storageFor } from "../shell/device";
 import { deviceSaved, forgetSaved } from "../shell/saved";
 import { asksOf } from "../applet/approvals";
-import { approvalFor, floorOf, passcodeHere, signApproval, signsHere, subjectOf as approvalSubject, takeBack } from "../applet/approvalStore";
+import { approvalFor, floorOf, ownKey, passcodeHere, signApproval, signsHere, subjectOf as approvalSubject, takeBack } from "../applet/approvalStore";
+import { approvedOtherLine, changedLine, versionToday, type Changed } from "../applet/changedBy";
+import { replacedAt } from "../vault/client";
+import { userOf } from "../services/signals";
 import type { Decision } from "../applet/approvals";
 import { createSavedModule } from "../applet/modules/saved";
 import { createSignalsModule } from "../applet/modules/signals";
@@ -102,6 +105,8 @@ export function grow(was: { h: number; steps: number[] }, reported: number): { h
   if (steps.length === 3 && steps.every((d) => d === steps[0])) return { h: was.h, steps };
   return { h, steps };
 }
+/** How long an applet this device allowed waits for the home vault's approvals before it starts anyway. */
+export const APPROVALS_WAIT_MS = 1500;
 /** Whether this history entry was reached by a marked tap: decided once per entry (StrictMode renders twice). */
 const startedByTap = new Map<string, boolean>();
 /** The entries a start led to (start.ts), and whether the person chose that applet as home on this device. */
@@ -111,7 +116,9 @@ const startedAtStart = new Map<string, { chosen: boolean; vault: string; noteId:
 type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string }
   | { state: "ok"; entry: AppletEntry; page: string | null; source: { kind: CodeKind; text: string }; imports: Imported[]; note: Note | null; from: string[];
       /** the hash of what it asks as written, the same on every device (approvals.ts `asksHash`) */
-      asks: string };
+      asks: string;
+      /** who wrote its note last, when, and when it was made, as the hub says (applet/changedBy.ts) */
+      changed: Changed & { created: string | null } };
 
 /** The pointer in the home is repinned only while the app may change notes there (a home read only waits: no ask is
  *  raised for something the person didn't do). */
@@ -127,6 +134,7 @@ export default function AppletScreen() {
   navRef.current = navigate;
   const rec = useVault(key);
   const mode = useGate();
+  const keyring = useKeyring();
   const askedNote = params.get("note");
   const askedScreen = params.get("screen");
   if (!startedByTap.has(location.key)) {
@@ -216,7 +224,10 @@ export default function AppletScreen() {
         else if (!late) { const built = await buildPage(kind, source, imports); if (!on) return; if (!built.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${built.error}` }); return; } page = built.page; }
         const asks = await asksOf(approvalSubject(rec, n.id, a.entry.manifest.id), a.entry, (n.metadata ?? {}) as Record<string, unknown>, await embedTargets(a.entry.embeds).catch(() => ["unread"]));
         if (!on) return;
-        setLoaded({ state: "ok", entry: a.entry, page, source: { kind, text: source }, imports, note, from, asks });
+        const said = n as { createdAt?: unknown; updatedAt?: unknown; lastUpdatedBy?: unknown; lastUpdatedVia?: unknown };
+        const str = (x: unknown) => (typeof x === "string" ? x : null);
+        const changed = { at: str(said.updatedAt), by: str(said.lastUpdatedBy), via: str(said.lastUpdatedVia), created: str(said.createdAt) };
+        setLoaded({ state: "ok", entry: a.entry, page, source: { kind, text: source }, imports, note, from, asks, changed });
         setKeys({ scope, html: hash });
         setBrought(pointer);
       } catch (e) {
@@ -246,6 +257,16 @@ export default function AppletScreen() {
     return () => { on = false; };
   }, [signedFor, recheck]); // eslint-disable-line react-hooks/exhaustive-deps
   const signedNow = signed && signed.for === signedFor ? signed.d : undefined;
+  // a device that allowed it waits for that read before starting it, up to APPROVALS_WAIT_MS: a taking back on another
+  // device stops it before it runs. Slower than that (or offline), it starts on what this device allowed, and the answer
+  // stops it when it comes (below). Review finding 16 (T-476); docs/design/APP-RECORD.md.
+  const [waitedFor, setWaitedFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!signedFor) return;
+    const t = setTimeout(() => setWaitedFor(signedFor), APPROVALS_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [signedFor]);
+  const approvalsRead = signedNow !== undefined || (!!signedFor && waitedFor === signedFor);
   // taken back on another device after it was allowed here, or a newer approval for other code (this code was put back
   // over it): it stops here too
   useEffect(() => {
@@ -268,7 +289,27 @@ export default function AppletScreen() {
     bump();
   }, [approvedElsewhere, hubCovers]); // eslint-disable-line react-hooks/exhaustive-deps
   const decision = runDecision(mode, status, subject ? grants.grantedUnder(subject) : null);
-  const granted = decision === "run";
+  // taken back since this device allowed it (the effect above forgets the grant): not drawn running in between
+  const takenBack = !!subject && !!signedNow && !signedNow.run && (signedNow.why === "withdrawn" || signedNow.why === "other") && !!signedNow.newest
+    && Date.parse(grants.record(subject)?.grantedAt ?? "") < Date.parse(signedNow.newest.at);
+  const granted = decision === "run" && !takenBack;
+  // on the card: who changed it, when, which version of the day it is (the note's earlier versions, read once per code
+  // shown), and an approval of other code this device read (approval fatigue: six changes used to give six cards alike)
+  const [history, setHistory] = useState<{ for: string; changed: string | null; own: string | null } | null>(null);
+  useEffect(() => {
+    if (granted || !rec || !keys || loaded.state !== "ok") return;
+    let on = true;
+    const c = loaded.changed, at = keys.html;
+    void Promise.all([replacedAt(rec, loaded.entry.noteId), ownKey()]).then(([replaced, key]) => {
+      if (!on) return;
+      const now = Date.now();
+      const line = changedLine(c, { now, version: versionToday({ createdAt: c.created, updatedAt: c.at, replaced, now }), own: { key, account: userOf(rec.accessToken) }, named: lineOptions(keyring).approverName });
+      setHistory({ for: at, changed: line, own: key });
+    });
+    return () => { on = false; };
+  }, [granted, keys?.html, loaded.state, keyring]); // eslint-disable-line react-hooks/exhaustive-deps
+  const historyNow = history && keys && history.for === keys.html ? history : null;
+  const otherApproved = signedNow && !signedNow.run && signedNow.why === "other" ? approvedOtherLine(signedNow.newest, Date.now()) : null;
   // the passcode is typed for one card: gone once that card is answered, and when another takes its place (changed code
   // on a screen kept running would otherwise find it still filled in, and Allow would ask the unlock alone)
   useEffect(() => { setPasscode(""); }, [signedFor, granted]);
@@ -310,7 +351,6 @@ export default function AppletScreen() {
   const sheets = useShellSheets(() => frameEl.current);
   // the recorder and the file picker (docs/design/KEYRING.md "Voice, files, links, storage"): stable, as the router keeps them
   const device = useDeviceSheets(entry?.manifest.name ?? "This applet");
-  const keyring = useKeyring();
   const servicesWhy = useRef<string | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const onSession = (s: Session | null) => {
@@ -412,7 +452,7 @@ export default function AppletScreen() {
         broughtChanged={pinMoved} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         hubAsk={covers(heldLevel(rec), appletLevel(entry.manifest)) ? null : { host: hostOf(rec.issuer), level: appletLevel(entry.manifest) }}
         approvedElsewhere={approvedElsewhere ? signedNow && signedNow.run ? signedNow.content.device ?? "another device" : null : null}
-        signing={signing}
+        signing={signing} history={{ changed: historyNow?.changed ?? null, other: otherApproved }}
         onAllow={(asked) => void (async () => {
           // on a device with the person's key, Allow is an approval for every device: signed here, after the device
           // unlock (and the passcode, when one is set), and kept in the home vault. Approved elsewhere already: no new one
@@ -450,6 +490,7 @@ export default function AppletScreen() {
       void giveBack(rec.key, `${location.pathname}${location.search}`);
     })();
   };
+  if (!approvalsRead) return shell(<p className="quiet" role="status">Opening…</p>);
   // code imported from another vault runs inside it: a start after it hung the app holds it, until a tap
   if (heldForHang) return shell(<div className="card" role="status">
     <p>The app stopped while {name} was running. It imports code from another vault, which may have held it up.</p>

@@ -59,6 +59,9 @@ test("one approval covers every device; changed code stops until approved again;
     await open(laptopB);
     await expect(card(laptopB)).toContainText("changed");
     await expect(journal(laptopB)).toHaveCount(0);
+    // and says who changed it, when, which version of the day, and where the other version was approved (the hub's
+    // record of the write: the test's token is the person's own account, through the API)
+    await expect(card(laptopB)).toContainText("You approved another version on Android, just now. Changed just now by your account (through the hub's API). The 2nd version today.");
     // approved once, on the phone: the laptop runs the new version
     await open(phoneA);
     await phoneA.getByRole("button", { name: "Allow this version" }).click();
@@ -225,6 +228,69 @@ test("a taking back read from another device removes what the applet saved here;
     await open(laptopB);
     await expect(card(laptopB)).toBeVisible();
     await expect.poll(onLaptop).toBe(false);
+  } finally {
+    await phoneA.context().close(); await laptopB.context().close();
+    for (const r of await approvals()) await api(hubState(), "DELETE", `notes/${r.id}`).catch(() => {});
+    await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {});
+  }
+});
+
+// Found in review (T-476, finding 16): a device that had allowed an applet started it at once and read the approvals
+// afterwards, so an applet revoked on another device ran here until the home vault answered. Now it waits for that
+// answer (up to 1.5 s) before starting; when the vault is slower or can't be reached, it starts on what this device
+// allowed and stops when the answer says so.
+test("a device that allowed it waits for the home vault's approvals before starting it; slower or offline, it starts and stops on the answer", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const me = newKey();
+  const made = await record(hubState(), "create", appletRecord("journal"));
+  only = made.id;
+  const phoneA = await device(browser, me), laptopB = await device(browser, me);
+  // counts every time an applet's frame is put on the laptop's screen, from the page's start
+  await laptopB.context().addInitScript(() => {
+    if (window !== window.top) return;
+    const w = window as unknown as { __frames: number };
+    w.__frames = 0;
+    let had = false;
+    new MutationObserver(() => { const has = !!document.querySelector("iframe.applet-frame"); if (has && !had) w.__frames++; had = has; }).observe(document, { subtree: true, childList: true });
+  });
+  const frames = () => laptopB.evaluate(() => (window as unknown as { __frames: number }).__frames);
+  const approve = (p: Page) => p.evaluate(() => { (window as unknown as { __parachuteE2EApprove: string }).__parachuteE2EApprove = "pass"; });
+  const approvalsRead = (url: string) => /Parachute\/Approvals\//.test(decodeURIComponent(url));
+  const revokeOnPhone = async () => {
+    await open(phoneA); await expect(journal(phoneA)).toBeVisible();
+    await fromAppletMenu(phoneA, "Revoke");
+    await expect.poll(async () => JSON.parse((await approvals())[0].metadata.approval!.content).approved).toBe(false);
+  };
+  try {
+    await open(phoneA); await approve(phoneA);
+    await phoneA.getByRole("button", { name: "Allow" }).click();
+    await expect(journal(phoneA)).toBeVisible();
+    await open(laptopB);
+    await expect(journal(laptopB)).toBeVisible();
+    // offline: the approvals can't be read, and it starts on what this device allowed
+    await laptopB.route((u) => approvalsRead(u.toString()), (r) => r.abort());
+    await open(laptopB);
+    await expect(journal(laptopB)).toBeVisible();
+    await laptopB.unrouteAll({ behavior: "ignoreErrors" });
+    // the vault answers at once: taken back on the phone, so the laptop shows the card and never started it
+    await revokeOnPhone();
+    await open(laptopB);
+    await expect(card(laptopB)).toBeVisible();
+    await laptopB.waitForTimeout(500);
+    expect(await frames()).toBe(0);
+    await expect(journal(laptopB)).toHaveCount(0);
+    // allowed again, then taken back while the laptop's vault answers slowly: it starts, and stops on the answer
+    await open(phoneA); await approve(phoneA);
+    await phoneA.getByRole("button", { name: "Allow" }).click();
+    await expect(journal(phoneA)).toBeVisible();
+    await open(laptopB);
+    await expect(journal(laptopB)).toBeVisible();
+    await revokeOnPhone();
+    await laptopB.route((u) => approvalsRead(u.toString()), async (r) => { await new Promise((ok) => setTimeout(ok, 4000)); await r.continue().catch(() => {}); });
+    await open(laptopB);
+    await expect(journal(laptopB)).toBeVisible({ timeout: 3500 });
+    await expect(card(laptopB)).toBeVisible({ timeout: 15_000 });
+    await expect(journal(laptopB)).toHaveCount(0);
   } finally {
     await phoneA.context().close(); await laptopB.context().close();
     for (const r of await approvals()) await api(hubState(), "DELETE", `notes/${r.id}`).catch(() => {});
