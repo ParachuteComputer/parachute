@@ -29,13 +29,6 @@ async function make(path: string, body: string, at = new Date(), timed = false):
 // (a capture made before it was named by its words starts with the time: shown without it)
 const nameOf = (r: Rec) => r.path.replace(/^Inbox\//, "").replace(/^\d{4}-\d{2}-\d{2} \d{2}-\d{2}(-\d{2})? ?/, "") || "Note";
 
-const CSS = `
-.capture .pa-write-box { min-height: 7em; border: 2px solid var(--text); }
-.capture .pa-write-box:focus { border-color: var(--accent); }
-.capture .pa-write-row .pa-button { padding-block: 12px; font-size: var(--fs-lead); }
-.capture .pa-write-send { flex: 1; }
-.capture .pa-record { border-color: var(--accent); background: var(--accent); color: var(--bg); font-weight: 600; }
-`;
 
 export default function Capture() {
   const [items, setItems] = useState<Rec[] | null>(null);
@@ -76,8 +69,7 @@ export default function Capture() {
     setBusy(false);
   };
 
-  return <Page title="Capture" onRefresh={load} className="capture">
-    <style>{CSS}</style>
+  return <Page title="Capture" onRefresh={load}>
     <Write label="Write it down" placeholder="What's on your mind?" value={text} onChange={setText} onSend={save} send={busy ? "Saving…" : "Save"} busy={busy}>
       <Record onRecorded={recorded} disabled={busy} label="Say it: record a voice note">Say it</Record>
     </Write>

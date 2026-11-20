@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../../ui/Bar";
 import { useApplets, useVault, useVaultQuery } from "../data";
 import { folderOf, noteHref, titleOf } from "../../vault/notes";
 import NoVault from "./NoVault";
+import NoteRows from "./NoteRows";
+import { Loading, Problem, Search } from "../../kit/screen";
 import { appletPath } from "../../open/paths";
 
 const LIMIT = 60;
@@ -13,9 +15,7 @@ const LIMIT = 60;
 export default function VaultView() {
   const { vault: key } = useParams();
   const rec = useVault(key);
-  const [q, setQ] = useState("");
   const [term, setTerm] = useState("");
-  useEffect(() => { const t = window.setTimeout(() => setTerm(q.trim()), 250); return () => window.clearTimeout(t); }, [q]);
   const load = useVaultQuery<Note[]>(rec, (c) => (term
     ? c.queryNotes({ search: term, limit: LIMIT })
     : c.queryNotes({ orderBy: "updated_at", sort: "desc", limit: LIMIT })), [term]);
@@ -32,19 +32,14 @@ export default function VaultView() {
         </ul>
       )}
       <p className="row-buttons"><Link className="secondary" to={`/v/${encodeURIComponent(rec.key)}/new`}>New note</Link></p>
-      <input className="search" type="search" placeholder="Search this vault" aria-label="Search this vault" value={q} onChange={(e) => setQ(e.target.value)} />
-      {load.state === "loading" && <p className="quiet" role="status">Loading…</p>}
-      {load.state === "error" && <p className="error" role="alert">{load.error}</p>}
-      {load.state === "ok" && (load.data.length ? (
-        <ul className="rows" aria-label={term ? "Search results" : "Notes"}>
-          {load.data.map((n) => (
-            <li key={n.id}><Link className="row" to={noteHref(rec.key, n.id)}>
-              <span className="row-title">{titleOf(n)}</span>
-              <span className="row-sub">{[folderOf(n), ...(n.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · ")}</span>
-            </Link></li>
-          ))}
-        </ul>
-      ) : <p className="quiet">{term ? "Nothing matches." : "This vault is empty."}</p>)}
+      <Search label="Search this vault" onSearch={setTerm} live={250} />
+      {load.state === "loading" && <Loading />}
+      {load.state === "error" && <Problem error={load.error}>Couldn't read {rec.vault}</Problem>}
+      {load.state === "ok" && (load.data.length
+        ? <NoteRows label={term ? "Search results" : "Notes"} rows={load.data.map((n) => ({
+          key: n.id, to: noteHref(rec.key, n.id), title: titleOf(n), meta: [folderOf(n), ...(n.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · "),
+        }))} />
+        : <p className="quiet">{term ? "Nothing matches." : "This vault is empty."}</p>)}
     </main>
   );
 }

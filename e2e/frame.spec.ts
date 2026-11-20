@@ -224,6 +224,9 @@ test("Use the built-in frame on a changed version holds offline too: the older a
 });
 
 test("by keyboard: Enter too early on Open does nothing, a later Enter opens; Enter or Space held from too early doesn't", async ({ page }) => {
+  // its own waits add up to about 26 s (three rounds of 6.2 s for a tap to wear off): found at 28.7 s of the default
+  // 30 in the T-476 review, and over it on a slower run, which also keeps the sign-in tests after it from running
+  test.setTimeout(60_000);
   await write(`import { call } from "@parachute/frame";
 export default function L() { return <button onClick={() => { void call("link.out", { url: "https://kbd.example/" }); }}>Go out</button>; }`);
   const hits: string[] = [];

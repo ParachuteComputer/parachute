@@ -456,12 +456,12 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   // the room's own read has landed (a room drawn from the list's messages is placed again then, below)
   const [read, setRead] = useState(false);
   const [older, setOlder] = useState<"more" | "loading" | "start">("more");
-  // what couldn't be read is said in the room; what couldn't be sent, as a toast
+  // what couldn't be read is said above the composer, with Try again
   const [readErr, setReadErr] = useState<unknown>(null);
   const [readTry, setReadTry] = useState(0);
-  // what couldn't be sent: a toast, and said in the composer until the next send
+  // what couldn't be sent: said in the composer's line, in view and read out, until the next send
   const [sendErr, setSendErr] = useState("");
-  const setErr = (t: string) => { if (t) toast(t, { error: true }); setSendErr(t); };
+  const setErr = (t: string) => setSendErr(t);
   const [posting, setPosting] = useState(false);
   const firstUnread = useRef<number>(readAt ?? 0);
   const scroller = useRef<HTMLDivElement>(null);
@@ -1003,7 +1003,7 @@ function Composer({ st, relay, room, thread, members, send, typing, setErr, send
         }}
         onSend={go} send={busy ? "Sending…" : "Send"} sendLabel="Send message" canSend={!!text.trim() || files.length > 0} busy={busy}>
         <Button small className="attach" aria-label="Choose files to attach" onClick={attach}>＋</Button>
-        <Record small kind="plain" label="Record a voice note" disabled={busy} onRecorded={voiceMessage}>🎙</Record>
+        <Record small kind="plain" label="Record a voice note" disabled={busy} onRecorded={voiceMessage}>●</Record>
       </Write>
     </div>
   </div>;
