@@ -186,13 +186,6 @@ there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below ar
 | `vault.getRecord(idOrPath)` | One record it may read, with its body. |
 | `vault.createRecord({ path, body, types?, tags?, fields? })` | A new record, in a folder it may `create` in, with its types, tags and fields: `{ id, path, types, tags, fields, updatedAt }` (`getRecord` for its body). |
 | `vault.updateRecord(id, { if_updated_at, body?, fields?, types?, tags? })` | A change to a record it may `update`, in one call: a new body, fields merged (`null` removes one), and `types` / `tags` as `{ add, remove }`. |
-
-**Keep state in fields.** A box the person ticks is a field on the record (`fields: { book_status: "read" }`), not a
-`- [x]` in its body: the vault, the note view and any AI connected to the vault then read the same value. The type and
-its fields are the AI's to define (`manage-types` over MCP; write access may make a new type). Field values are plain:
-text, numbers, yes/no, or a list of those. The app's own names (`applet`, `component`, `parachute-*`) are never an
-applet's to give, take away, or change on a note that carries them. An app from before this (T-476) refuses a write
-with fields, types or tags (`bad_params`), and its note view doesn't list fields.
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
 | `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above; an applet at a room with `?room=<id>[&event=<id>]`, which it hears as its launch), while they tap inside the applet. Resolves to whether it went. |
@@ -263,6 +256,14 @@ does. Each takes plain props; a newer prop is only ever added, never changed.
 | `when (.time, .day, .date, .short, .full, .ago, .stamp, .path, .parse)` | Dates and times, one way in every applet, in the person's language: `when.short(t)` is "9:41 AM" today, "Yesterday", "Mon", "Nov 17". `t` is a Date, an ISO string, milliseconds or seconds. |
 | `useTheme()` | The look as values (`accent`, `bg`, …, `scheme`, `density`), or null until the app has sent it. Most applets need only the CSS variables. |
 | `useSaved(key, initial)` | `useState` that the app keeps on this device: a draft, the box it was on, the item open. See [Saved state](#saved-state). |
+
+**Keep state in fields.** A box the person ticks is a field on the record (`fields: { book_status: "read" }`), not a
+`- [x]` in its body: the vault, the note view and any AI connected to the vault then read the same value. The type and
+its fields are the AI's to define (`manage-types` over MCP; write access may make a new type). Field values are plain:
+text, numbers, yes/no, or a list of those (never `published`). The only types an applet gives or takes away are the
+ones its card names for that folder, what it opens there (`fields.opens`): a tag can put a note on the web, so no other.
+It never changes a note of the app's own (`applet`, `component`, `parachute-*`). An app from before this (T-476) refuses a write
+with fields, types or tags (`bad_params`), and its note view doesn't list fields.
 
 An HTML applet has no parts: it has the kit's calls and the CSS variables.
 

@@ -132,15 +132,30 @@ describe("typed writes: fields, types and tags, in the folders its card names (T
     expect(saved).toEqual([{ id: "r1", metadata: { book_status: "read" } }]);
     expect(r.body.metadata).toEqual({ book_status: "read", rating: 3 });
   });
-  it("adds and removes types and tags, with or without new text", async () => {
-    const r = await frame().fetch("PATCH", "/api/notes/r1", { content: "toast!", types: { add: ["dish"] }, tags: { add: ["favourite"], remove: ["old"] }, if_updated_at: "2026-11-02" });
+  it("gives and takes away the type its card names for that folder, with or without new text", async () => {
+    const r = await frame().fetch("PATCH", "/api/notes/r1", { content: "toast!", types: { add: ["recipe"] }, tags: { remove: ["recipe"] }, if_updated_at: "2026-11-02" });
     expect(r.status).toBe(200);
-    expect(saved).toEqual([{ id: "r1", content: "toast!", types: { add: ["dish"] }, tags: { add: ["favourite"], remove: ["old"] } }]);
+    expect(saved).toEqual([{ id: "r1", content: "toast!", types: { add: ["recipe"] }, tags: { remove: ["recipe"] } }]);
   });
-  it("creates a record with its types, tags and fields; the type it opens is still added", async () => {
-    const r = await frame().fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "# Soup", types: ["dish"], tags: ["winter"], metadata: { serves: 4 } });
+  it("creates a record with its type and fields; the type it opens is added anyway", async () => {
+    const r = await frame().fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "# Soup", types: ["recipe"], metadata: { serves: 4 } });
     expect(r.status).toBe(201);
-    expect(created).toEqual([{ path: "Recipes/Soup", tags: ["recipe", "winter"], types: ["dish"], metadata: { serves: 4 } }]);
+    expect(created).toEqual([{ path: "Recipes/Soup", tags: ["recipe"], types: ["recipe"], metadata: { serves: 4 } }]);
+  });
+  it("gives no other name: not one its card doesn't name, not publish (the open web), not `published`", async () => {
+    const f = frame();
+    for (const name of ["dish", "favourite", "publish", "Recipe", "recipe/sub"]) {
+      expect((await f.fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "x", types: [name] })).status).toBe(403);
+      expect((await f.fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "x", tags: [name] })).status).toBe(403);
+      expect((await f.fetch("PATCH", "/api/notes/r1", { tags: { add: [name] }, if_updated_at: "x" })).status).toBe(403);
+      expect((await f.fetch("PATCH", "/api/notes/r1", { types: { remove: [name] }, if_updated_at: "x" })).status).toBe(403);
+    }
+    for (const key of ["published", "Published"]) {
+      expect((await f.fetch("PATCH", "/api/notes/r1", { metadata: { [key]: true }, if_updated_at: "x" })).status).toBe(400);
+      expect((await f.fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "x", metadata: { [key]: true } })).status).toBe(400);
+    }
+    expect(created).toEqual([]);
+    expect(saved).toEqual([]);
   });
   it("only inside the folders its card names, and never on an applet's code", async () => {
     const f = frame();

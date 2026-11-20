@@ -27,7 +27,9 @@ async function world() {
     made.push((await record(hubState(), "create", { path: `Books/${title}`, body: `Imported from [[Books I want to read]].`, types: ["book"], fields: { book_status: "to-read", book_author: author } })).id as string);
   }
   made.push((await record(hubState(), "create", { path: "Applets/Reading tracker", extension: "tsx", body: TRACKER, tags: ["applet"],
-    fields: { applet: { contract: 2, id: "reading-tracker", name: "Reading tracker", glyph: "📚", access: [{ vault: "here", allow: [{ path: "Books/", verbs: ["read", "create", "update"] }] }] } } })).id as string);
+    fields: { applet: { contract: 2, id: "reading-tracker", name: "Reading tracker", glyph: "📚", access: [{ vault: "here", allow: [{ path: "Books/", verbs: ["read", "create", "update"] }] }] },
+    // its card names the type it gives the books it adds: "Open book notes in Books/ when you tap one"
+    opens: [{ type: "book", path: "Books/" }] } })).id as string);
   return made;
 }
 async function tearDown(made: string[]) {
@@ -41,6 +43,7 @@ test("the audit's reading tracker ticks book_status for real, and adds a typed b
   try {
     await page.goto(`/v/${VAULT}`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Reading tracker/ }).click();
+    await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Open book notes in Books/");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
     await expect(app.getByText("The Overstory")).toBeVisible();

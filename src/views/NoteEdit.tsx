@@ -71,6 +71,8 @@ export default function NoteEdit() {
   // the record's fields: the inputs (from its types' definitions and what it holds) and what the person typed
   const [fields, setFields] = useState<FieldInput[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
+  // the types' field definitions, kept to rebuild the inputs from their version on "Use theirs"
+  const declaredRef = useRef<Record<string, FieldSpec>>({});
 
   useEffect(() => {
     if (isNew || !rec || !id) return;
@@ -89,6 +91,7 @@ export default function NoteEdit() {
         if (!live) return;
         const declared: Record<string, FieldSpec> = {};
         for (const d of defs) for (const [k, v] of Object.entries((d as { fields?: Record<string, FieldSpec> } | null)?.fields ?? {})) declared[k] ??= v;
+        declaredRef.current = declared;
         setFields(fieldInputs(n.metadata, declared));
       });
     }, (e: unknown) => { if (live) { setState("error"); setError(e instanceof Error ? e.message : "The note couldn't be read."); } });
@@ -157,7 +160,7 @@ export default function NoteEdit() {
             <p className="small">Keep mine saves your words over theirs. Use theirs drops your changes.</p>
             <div className="row-buttons">
               <button type="button" className="secondary" onClick={() => void save(true)}>Keep mine</button>
-              {theirs && <button type="button" className="secondary" onClick={() => { base.current = updatedOf(theirs); setNote(theirs); setText(theirs.content ?? ""); setTheirs(null); setConflictAt(null); setError(""); }}>Use theirs</button>}
+              {theirs && <button type="button" className="secondary" onClick={() => { base.current = updatedOf(theirs); setNote(theirs); setText(theirs.content ?? ""); setFields(fieldInputs(theirs.metadata, declaredRef.current)); setValues({}); setTheirs(null); setConflictAt(null); setError(""); }}>Use theirs</button>}
             </div>
           </>}
         </div>}

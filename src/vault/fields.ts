@@ -28,14 +28,14 @@ export function fieldRows(metadata: unknown): { name: string; label: string; val
 }
 
 /** The editor's inputs: each field its types declare (in their order), then any other field the record holds. A field
- *  holding a nested object is left out: it isn't one a person types. */
+ *  holding a nested object, or a list of them, is left out: it isn't one a person types (and is never sent back). */
 export function fieldInputs(metadata: unknown, declared: Record<string, FieldSpec>): FieldInput[] {
   const held = plain(metadata) ? metadata : {};
   const names = [...new Set([...Object.keys(declared), ...Object.keys(held)])];
   const out: FieldInput[] = [];
   for (const name of names) {
     const v = held[name];
-    if (plain(v)) continue;
+    if (plain(v) || (Array.isArray(v) && v.some((x) => plain(x) || Array.isArray(x)))) continue;
     const spec = declared[name] ?? {};
     const choices = Array.isArray(spec.enum) ? spec.enum.filter((c): c is string => typeof c === "string") : [];
     const type = spec.type ?? (typeof v === "number" ? "number" : typeof v === "boolean" ? "boolean" : Array.isArray(v) ? "array" : "string");

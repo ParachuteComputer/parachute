@@ -18,7 +18,8 @@ const RouterLink = ({ href, className, children }: { href: string; className?: s
     : <a href={href} className={className} rel="noreferrer noopener" onClick={(e) => { e.preventDefault(); void call("link.out", { url: href }); }}>{children}</a>;
 
 /** A note, read: its title, where it sits, its tags, its fields (a typed record's name: value, any type), and its
- *  content drawn by surface-render. An applet's own note is shown as text, and the app's own notes show no fields. */
+ *  content drawn by surface-render. An applet's own note is shown as text, and the app's own notes (code, `applet`,
+ *  any `parachute-*` record) show no fields. */
 export default function NoteView({ above, note: given }: { above?: ReactNode; /** the note, when the route already read it */ note?: Note | null }) {
   const { vault: key, id } = useParams();
   const rec = useVault(key);
@@ -45,7 +46,7 @@ export default function NoteView({ above, note: given }: { above?: ReactNode; /*
                 never an app's own note or code */}
             {!isCodeNote(note) && !isAppOwn(note) && <Link className="link-button note-edit" to={`${noteHref(rec.key, note.id)}/edit`}>Edit</Link>}
             <CopyLink link={linkFor(rec.url ?? `${rec.issuer}/vault/${encodeURIComponent(rec.vault)}`, note.id)} /></p>
-          {!isCodeNote(note) && !isAppOwn(note) && <Fields metadata={note.metadata} />}
+          {!isCodeNote(note) && !isAppOwn(note) && !(note.tags ?? []).some((t) => /^parachute/i.test(t)) && <Fields metadata={note.metadata} />}
           {isCodeNote(note)
             ? <pre className="note-code" aria-label="The note's text">{note.content ?? ""}</pre>
             : <div className="rn-theme-uni"><NoteRenderer className="prose-note" rich calm note={drawn!} resolve={resolve} linkComponent={RouterLink}

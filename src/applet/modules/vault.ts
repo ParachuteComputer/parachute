@@ -10,8 +10,10 @@
 //   PATCH /api/notes/:idOrPath  {if_updated_at, content?, metadata?, types?: {add?, remove?}, tags?: {add?, remove?}}
 //                                                          a change to a record inside a `vault.update` folder, in one call
 // Typed records end to end (T-476): a write may set a record's fields (`metadata`, merged; null removes a key: plain
-// values only), its types and its tags, so what an applet changes is what an AI reads back. No links, move or force.
-// A new note also gets the tag of the type the applet opens there (opens.ts `tagsFor`). A write never touches a
+// values only, never `published`), and give or take away the types its card names for that folder (what it opens
+// there, `fields.opens`: "Open book notes in Books/"), so what an applet changes is what an AI reads back. No other
+// type or tag (a tag can publish a note to the web: the vault's `publish`, or one its owner named), no links, move or
+// force. A new note also gets the tag of the type the applet opens there (opens.ts `tagsFor`). A write never touches a
 // code note (HTML, TSX, JSX) or a note tagged `applet`, `component` or `parachute-pointer` (an applet can't rewrite itself, another, a component or a pointer),
 // never gives or takes away one of those names or any `parachute-*` one, never changes the fields or tags of a note
 // carrying a `parachute-*` name (the app's own: its settings), and is judged on the note as it is read now. A session
@@ -85,8 +87,10 @@ const bodyOf = (raw: string | null, keys: readonly string[], required: readonly 
   if (!plain(b) || !hasOnly(b, keys) || !required.every((k) => k in b)) return null;
   return b;
 };
-/** A name the app keeps for itself: no applet gives it, takes it away, or changes a note that carries it. */
+/** A name the app keeps for itself: no applet changes a note that carries it. */
 const appsOwnName = (t: string) => /^parachute/i.test(t) || GUARDED_TAGS.some((g) => t === g || t.startsWith(`${g}/`));
+/** The names an applet may give or take away on a note at `path`: the types its card says it opens there. */
+const namesFor = (opens: readonly Opens[], path: string | null | undefined) => new Set(opens.filter((o) => inScope([o.path], path)).map((o) => o.type));
 const MAX_NAMES = 20;
 /** A list of type or tag names: 1 to 100 plain characters each, no `#`, at most 20. Null when it isn't one. */
 const namesOf = (v: unknown): string[] | null => Array.isArray(v) && v.length <= MAX_NAMES && v.every((t) => typeof t === "string" && t.length > 0 && t.length <= 100 && !hasHidden(t) && !t.includes("#") && t.trim() === t) ? v as string[] : null;
@@ -97,10 +101,12 @@ const changeOf = (v: unknown): NameChange | null => {
   return add && remove ? { ...(add.length ? { add } : {}), ...(remove.length ? { remove } : {}) } : null;
 };
 const FIELD_KEY = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+/** Fields no applet sets: `published` puts a note on the open web (the hub's /view). */
+const KEPT_FIELDS = /^published$/i;
 const fieldValue = (v: unknown): boolean => v === null || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && v.length <= 10_000);
 /** Fields an applet may set: a plain object of at most 50 keys, each a plain value or a list of them (null removes the key). */
 const fieldsOf = (v: unknown): Record<string, unknown> | null => plain(v) && Object.keys(v).length <= 50
-  && Object.entries(v).every(([k, x]) => FIELD_KEY.test(k) && (fieldValue(x) || (Array.isArray(x) && x.length <= 100 && x.every((y) => y !== null && fieldValue(y))))) ? v : null;
+  && Object.entries(v).every(([k, x]) => FIELD_KEY.test(k) && !KEPT_FIELDS.test(k) && (fieldValue(x) || (Array.isArray(x) && x.length <= 100 && x.every((y) => y !== null && fieldValue(y))))) ? v : null;
 const namesIn = (c: NameChange | undefined) => [...(c?.add ?? []), ...(c?.remove ?? [])];
 
 const publicNote = (n: VaultNote, content: boolean) => {
@@ -218,8 +224,9 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     const types = b.types === undefined ? [] : namesOf(b.types), tags = b.tags === undefined ? [] : namesOf(b.tags);
     const metadata = b.metadata === undefined ? undefined : fieldsOf(b.metadata);
     if (!types || !tags || metadata === null) return fail(400, "bad_params");
-    if ([...types, ...tags].some(appsOwnName)) return fail(403, "not_granted");
     if (!inScope(folders, b.path)) return fail(403, "out_of_scope");
+    const named = namesFor(opens, b.path);
+    if ([...types, ...tags].some((t) => !named.has(t) || appsOwnName(t))) return fail(403, "not_granted");
     if (ctx.closed()) return fail(502, "failed");
     ctx.charge(1);
     try {
@@ -246,7 +253,6 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     const more: RecordChange = { ...(metadata && Object.keys(metadata).length ? { metadata } : {}), ...(types && namesIn(types).length ? { types } : {}), ...(tags && namesIn(tags).length ? { tags } : {}) };
     const typed = Object.keys(more).length > 0;
     if (b.content === undefined && !typed) return fail(400, "bad_params");
-    if ([...namesIn(more.types), ...namesIn(more.tags)].some(appsOwnName)) return fail(403, "not_granted");
     if (!safeRef(ref)) return notFound();
     ctx.charge(1);
     let note: VaultNote;
@@ -255,6 +261,8 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     if (!inScope(folders, note.path) || isAppletCode(note)) return inScope(scopes["vault.read"] ?? [], note.path) ? fail(403, "out_of_scope") : notFound();
     // the app's own notes (its settings) keep their fields and names
     if (typed && [...(note.tags ?? []), ...(note.types ?? [])].some(appsOwnName)) return fail(403, "out_of_scope");
+    const named = namesFor(opens, note.path);
+    if ([...namesIn(more.types), ...namesIn(more.tags)].some((t) => !named.has(t) || appsOwnName(t))) return fail(403, "not_granted");
     if (ctx.closed()) return fail(502, "failed");
     try {
       const saved = await deps.save(note.id, b.content as string | undefined, b.if_updated_at, typed ? more : undefined);
