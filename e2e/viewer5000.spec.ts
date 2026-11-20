@@ -123,6 +123,24 @@ test("5,000 records: a type of 2,000 as a table, the next page, a sort, a record
     await t.getByRole("columnheader", { name: "priority" }).getByRole("button").click();
     await expect(t.getByRole("row").nth(1).getByRole("cell").nth(2)).toHaveText("5");
     await shot(m, "mac-03-sorted");
+    // filter by a field's value, then group by another
+    await v(m).getByRole("button", { name: /^Filter/ }).click();
+    await v(m).getByRole("definition").filter({ has: v(m).locator("select") }).first().locator("select").selectOption("open");
+    await expect(t.getByRole("row").nth(1)).toContainText("open");
+    await shot(m, "mac-03b-filtered");
+    await v(m).getByRole("button", { name: /^Filter/ }).click();
+    await v(m).getByRole("button", { name: /^Group/ }).click();
+    await v(m).locator(".chips.group").getByRole("button", { name: "urgent" }).click();
+    await expect(t.getByRole("row").filter({ hasText: /^no/ }).first()).toBeVisible();
+    await shot(m, "mac-03c-grouped");
+    await v(m).locator(".chips.group").getByRole("button", { name: "No groups" }).click();
+    await v(m).getByRole("button", { name: /^Group/ }).click();
+    await v(m).getByRole("button", { name: /^Filter/ }).click();
+    await v(m).getByRole("definition").filter({ has: v(m).locator("select") }).first().locator("select").selectOption("");
+    await v(m).getByRole("button", { name: /^Filter/ }).click();
+    await t.getByRole("columnheader", { name: "priority" }).getByRole("button").click();
+    await t.getByRole("columnheader", { name: "priority" }).getByRole("button").click();
+    await expect(t.getByRole("row").nth(1).getByRole("cell").nth(2)).toHaveText("5");
     await t.getByRole("rowheader").nth(1).getByRole("button").click();
     const rec = v(m).getByRole("article");
     await expect(rec.getByText("Fields")).toBeVisible();

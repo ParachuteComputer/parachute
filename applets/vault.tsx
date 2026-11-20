@@ -250,7 +250,7 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
             : view.layout === "list"
               ? <List label={label(name)} hideLabel rows={rows.map((r) => ({ key: r.id, title: r.title, current: r.id === record, meta: cols.slice(0, 3).map((c) => shown(r.fields[c])).filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))}
                   more={more ? { label: "More", onPress: next, busy } : undefined} />
-              : <Table label={label(name)} columns={columns} sort={view.sort ?? undefined} onSort={(k) => sortBy(k === "updated" ? "updated" : k)}
+              : <Table label={label(name)} columns={columns} sort={view.group ? undefined : view.sort ?? undefined} onSort={(k) => sortBy(k === "updated" ? "updated" : k)}
                   {...(groups ? { groups: groups.map((g) => ({ key: g.key, label: g.label, count: g.rows.length, rows: g.rows.map(tableRow) })) } : { rows: rows.map(tableRow) })}
                   more={more ? { label: "More", onPress: next, busy } : undefined} />}
           {canWrite && <Field label={`New ${isTag ? `#${name}` : label(name)}`} placeholder="Its name" action="Add" onAction={add} />}
