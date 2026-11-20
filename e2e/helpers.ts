@@ -163,3 +163,30 @@ export async function barOf(applet: string): Promise<() => Promise<void>> {
     await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: before.metadata ?? {}, if_updated_at: now.updatedAt }).catch(() => {});
   };
 }
+
+type Rec = { id: string; path: string; updatedAt: string; metadata: Record<string, any> };
+const tagged = async (tag: string) => { const r = await api(hubState(), "GET", `notes?tag=${tag}&include_metadata=true`); return (Array.isArray(r) ? r : r.notes ?? []) as Rec[]; };
+const at = (n: Rec) => n.path.replace(/\.md$/, "");
+
+/** The open bundle's record as the app keeps it (docs/design/APP-RECORD.md): Parachute/Apps/everything (parachute-app,
+ *  `metadata.app`) or Parachute/Bundles/everything (parachute-bundle, `metadata.bundle`). The bar and the home live here
+ *  and nowhere else; the settings note's are only read, as an alias until 2026-12-20, while there is no record. */
+export async function bundleOf(): Promise<{ id: string; body: Record<string, any> } | undefined> {
+  const app = (await tagged("parachute-app")).find((n) => at(n) === "Parachute/Apps/everything");
+  if (app) return { id: app.id, body: app.metadata.app };
+  const b = (await tagged("parachute-bundle")).find((n) => at(n) === "Parachute/Bundles/everything");
+  return b && { id: b.id, body: b.metadata.bundle };
+}
+
+/** What a chat AI with the Parachute MCP would write to change the bar or the home: the open bundle's record, made or replaced. */
+export async function writeBundle(parts: { bar?: unknown[]; start?: unknown }) {
+  const app = { contract: 1, id: "everything", name: "Everything", ...parts };
+  const n = (await tagged("parachute-app")).find((r) => at(r) === "Parachute/Apps/everything");
+  if (n) await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: { app }, if_updated_at: (await api(hubState(), "GET", `notes/${n.id}`)).updatedAt });
+  else await api(hubState(), "POST", "notes", { path: "Parachute/Apps/everything", content: "an app", tags: ["parachute-app"], metadata: { app } });
+}
+
+/** Everything a test may have left of the bar and home: the bundle's record (both tags) and the settings note. */
+export async function clearBarAndHome() {
+  for (const t of ["parachute-settings", "parachute-app", "parachute-bundle"]) for (const n of await tagged(t)) await api(hubState(), "DELETE", `notes/${n.id}`).catch(() => {});
+}
