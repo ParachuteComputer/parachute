@@ -205,6 +205,7 @@ test("a second device that signs in to the home Parachute finds Techne on the li
   await expect(b.getByRole("radio", { name: "Mine" })).not.toBeChecked();
   await expect(b.getByRole("radio", { name: /Someone else's/ })).not.toBeChecked();
   await signInWithKey(b, techneState(), ORG_VAULT);
-  await expect(parachute(b, techneState().origin).getByRole("region", { name: ORG_VAULT, exact: true })).toBeVisible();
+  await b.goto("/settings");
+  await expect(parachute(b, techneState().origin).getByRole("link", { name: `Open ${ORG_VAULT}`, exact: true })).toBeVisible();
   await second.close();
 });

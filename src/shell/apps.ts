@@ -106,7 +106,7 @@ export function appOf(raw: unknown, path: string | null, noteId: string | null):
 export function builtInApp(id: "everything" | "simple"): App {
   return id === "simple"
     ? { id, name: "Simple", glyph: "¶", note: "your notes, Capture, and Connect an AI", look: "notes", sources: [], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: { approve: "unlock" }, noteId: null }
-    : { id, name: "Everything", glyph: "⁂", note: "the launcher, with every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: { approve: "unlock" }, noteId: null };
+    : { id, name: "Everything", glyph: "⁂", note: "every applet in every vault", look: "launcher", sources: [{ hub: ANY_HUB, vault: "*", applet: "*" }], hide: [], bar: null, start: undefined, opens: [], keep: "auto", security: { approve: "unlock" }, noteId: null };
 }
 /** Stands for every hub in the built-in Everything only: no record can say it (`hubOk` refuses it). */
 export const ANY_HUB = "*";
