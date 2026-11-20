@@ -56,7 +56,11 @@ function Taps() {
   // is in front of the person is seen)
   useEffect(() => { let off = () => {}; void import("../services/signals").then((s) => { off = s.startSignals(); }); return () => off(); }, []);
   const inApplet = /^\/v\/([^/]+)\/a\/([^/]+)$/.exec(location.pathname);
-  const appletAt = inApplet ? [decodeURIComponent(inApplet[1]), decodeURIComponent(inApplet[2])] as const : null;
+  // an address that doesn't decode is no applet's (a link from outside can say anything): never a throw here, which
+  // would take every screen down with it, Settings too
+  const decoded = (x: string) => { try { return decodeURIComponent(x); } catch { return null; } };
+  const at = inApplet ? [decoded(inApplet[1]), decoded(inApplet[2])] as const : null;
+  const appletAt = at && at[0] !== null && at[1] !== null ? at : null;
   useEffect(() => { void import("../services/signals").then((s) => s.setFront(appletAt?.[0] ?? null, appletAt?.[1] ?? null)); }, [appletAt?.[0], appletAt?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
   // a vault made on a Parachute since this device signed in: asked when the app opens and each time the list or
   // Settings shows, at most once a minute per hub (vault/newVaults.ts)

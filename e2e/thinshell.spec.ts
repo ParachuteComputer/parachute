@@ -111,3 +111,17 @@ test("trust: an unsigned record grants nothing and runs nothing; only home, pins
   await expect(ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await expect(applet(page).locator("body")).toHaveCount(0);
 });
+
+test("a way back: an address that doesn't decode leaves the app working, Settings too", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "Your app" })).toBeVisible();
+  // in the app (a link, a deep link): the server never sees it
+  const go = (to: string) => page.evaluate((u) => { history.pushState({}, "", u); dispatchEvent(new PopStateEvent("popstate")); }, to);
+  await go("/v/%/a/x");
+  await page.waitForTimeout(500);
+  await go("/settings");
+  await expect(page.getByRole("heading", { name: "Your app" })).toBeVisible();
+  expect(errors.filter((m) => /URI/.test(m))).toEqual([]);
+});
