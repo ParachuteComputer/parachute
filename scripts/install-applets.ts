@@ -14,8 +14,6 @@
 // device opens. A bundle the app ships (src/shell/default-bundles.json) is written with only what changes (and its
 // name); the rest stays the app's. As the app does, a new record takes the names the vault already uses (the older
 // ones, which builds from before 11-20 read, until one is under the newer). (--app and --app-name are their older names, read until 2026-12-20.)
-// A record still under the older names (Parachute/Apps/<id>) is updated there, as the app does, so builds from before
-// 11-20 still read it; scripts/migrate-bundles.ts moves it once no device runs one.
 // An area's applet (applets/area.json) is one per area: --applet area --set area=Garden --set area_id=garden
 // --set area_room=<the room's id> (with relay and uni), again with other values for the next area.
 //
