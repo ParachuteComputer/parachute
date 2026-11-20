@@ -55,7 +55,8 @@ export default function NotesHome() {
     if (term) next.set("q", term); else next.delete("q");
     if (next.toString() !== params.toString()) setParams(next, { replace: true });
   }, [term]); // eslint-disable-line react-hooks/exhaustive-deps
-  const parachutes = useHome().parachutes ?? [];
+  const homeNow = useHome();
+  const parachutes = homeNow.parachutes ?? [];
   const shown = chosen ? [chosen] : all;
   const read = useNotes(shown, term);
   const rows = read?.rows ?? null;
@@ -72,6 +73,7 @@ export default function NotesHome() {
         <h1>Notes</h1>
         {into && <Link className="primary notes-new" to={`/v/${encodeURIComponent(into.key)}/new`}>New note</Link>}
       </header>
+      {homeNow.notice === "app-record" && <p className="launcher-notice" role="status">Your app record didn't load, so this is the simple app. <Link to="/settings">Settings</Link></p>}
       <input className="search notes-search" type="search" placeholder={chosen ? `Search ${chosen.vault}` : "Search every vault"} aria-label={chosen ? `Search ${chosen.vault}` : "Search every vault"}
         value={q} onChange={(e) => setQ(e.target.value)} />
       {all.length > 1 && (

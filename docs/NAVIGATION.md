@@ -6,7 +6,7 @@ One model, everywhere.
 
 | Address | What it is |
 |---|---|
-| `/` | **The launcher**: every applet and every vault this device holds, with what changed lately in each. Always there. |
+| `/` | **The list**: the open app's applets, one plain list (not by vault). Always there: the bar's **Applets** opens it. |
 | `/v/<vault>` | A vault: its newest notes, and search. |
 | `/v/<vault>/n/<note>` | A note. It opens in the applet that opens its kind (open-with), else as plain text. |
 | `/v/<vault>/a/<applet>` | An applet. |
@@ -15,20 +15,22 @@ One model, everywhere.
 
 ## The four rules
 
-1. **The bar is for your pinned places.** It sits at the bottom of the launcher, a vault, a note and an applet. On it:
-   the launcher (always), your home applet if you have one, then the applets you pinned, in your order (up to 12).
-   Under a frame of your own it also ends with the app's own way to Settings (not one of the twelve; always on screen).
+1. **The bar is your pins.** It sits at the bottom of the list, a vault, a note and an applet. On it: the applets
+   pinned in the open app (its record's `bar`), in that order (up to 12), and nothing else of the app's but **Applets**
+   at the end, the one way to the list (and Settings from there). The home applet is on the bar when it is pinned; pin
+   it first to have it there. Under a frame of your own it also ends with the app's own way to Settings.
    An applet that declares signals shows its count beside its glyph unless it is the screen in front ([design/APP-RECORD.md](design/APP-RECORD.md), "Signals").
-2. **The launcher is your app.** Every applet the open app offers ([Apps](#apps)), and the vaults themselves. In
-   Everything, that is every applet in every vault.
+2. **The list is your app.** Every applet the open app offers ([Apps](#apps)), in one plain list. In Everything, that
+   is every applet in every vault. Vaults are not on it: they are in Settings (**Your Parachutes**, each with **Open**),
+   and in a Vault applet when the app lists one.
 3. **Back returns where you came from.** The app's Back and the phone's Back both go one step back in what you did. On
-   the first screen of a start, the app's Back goes to the launcher, and the phone's Back leaves the app.
+   the first screen of a start, the app's Back goes to the list, and the phone's Back leaves the app.
 4. **A note opens in its applet.** Tap a note and it opens in the applet that opens its kind; long-press it for "Open
    with…". Nothing about this changed.
 
 ## Pinning
 
-Long-press (or right-click) an applet in the launcher: **Pin to the bar** or **Unpin**, and **Open on start**.
+Long-press (or right-click) an applet in the list: **Pin to the bar** or **Unpin**, and **Open on start**.
 Long-press a place on the bar: **Move left**, **Move right**, **Unpin**, **Open on start**.
 
 ## A running applet's menu
@@ -40,30 +42,38 @@ Stopped or still asking, ⋯ goes to Settings as on every other screen.
 ## Home
 
 Any applet in a vault of yours can be your **home** (an applet in someone else's vault never opens by itself:
-[OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)): it opens when the app starts, and it sits first on the bar. With no home, the app opens
-on the launcher. An applet opens on start by itself only when two things hold on this device: you allowed its code
+[OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)): it opens when the app starts. With no home, the app opens on the list. An applet opens on start by itself only when two things hold on this device: you allowed its code
 (its card), and you chose it as home here (the long-press, or the Open button the app shows the first time). If the
 choice came from somewhere else (your agent wrote it, or a frame of your own set it), the first start shows the
 applet's card or its Open button, and your tap is the choice. Once chosen here, your home runs whenever you come back
 to it (Back, or its place on the bar).
 
 A home applet is an ordinary applet that asks the app for a little more: the newest notes across your vaults, what is
-on your bar, and a way to take you somewhere on a tap. The starter one is in
-[WRITE-AN-APPLET.md](WRITE-AN-APPLET.md#a-home-applet). Components can sit under its own content, each in its own
-frame: **Add to home** on a component in the launcher ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)).
+on your bar, and a way to take you somewhere on a tap (an applet at a room too: `?room=…&event=…`, the launch a
+notification's tap carries). The app's own screens hold no home content: what the first screen shows is the home
+applet's. Two ship with the app: `applets/home` (Parachute Simplified's starter: a line into Inbox, your newest notes,
+your pins) and `applets/today` (for a person with rooms and a journal: what wants you, the latest from Uni, today's
+journal, a line for it). Guide: [WRITE-AN-APPLET.md](WRITE-AN-APPLET.md#a-home-applet). Components can sit under its
+own content, each in its own frame: **Add to home** on a component in the list ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)).
+
+## A way back
+
+A broken record never locks you out. When the app this device chose doesn't load (its record is malformed or gone),
+the app opens the next it can (the settings note's, else Everything) and the list says so: *Your app record didn't
+load*, with **Settings**. A home applet that throws is only a blank applet: the bar's **Applets** and Settings work.
 
 ## Other Parachutes
 
-The launcher shows each vault as a chapter. One that is someone else's (you say so when you add it) is marked under
-its name: *someone else's · at techne.example*. Its applets can be brought into your own chapter (long-press, **Bring
-into my Parachute**), and its components put on your home ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)).
+An applet in someone else's vault (you say so when you add it) says so in the list: *techne · someone else's · at
+techne.example*. It can be brought into your own Parachute (long-press, **Bring into my Parachute**), and its
+components put on your home ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)).
 
 ## Where the choices live
 
 The bar, the home and the list of your Parachutes are one note in your home vault, `Parachute/Settings`, tagged
 `parachute-settings`. You change it
 by long-pressing; your agent can change it by writing that note. The app reads it at each start and each time it shows
-the launcher, a vault or a note, and keeps the last copy (with the names on the bar) for when the vault can't be
+the list, a vault or a note, and keeps the last copy (with the names on the bar) for when the vault can't be
 reached. Entries it doesn't read are kept as they are when you change the bar.
 
 ```json
@@ -86,13 +96,13 @@ That is the record as `create-record` takes it (on a hub before 0.9, `create-not
 applet note's path or id. A place that names an applet this device can't find is left off the bar, not an error.
 
 `app` says which app a new device opens: `"simple"` (Notes, Capture, Connect: [SIMPLE.md](SIMPLE.md)),
-`"everything"` (the launcher and the bar above), or the id of one of your app records (below). Left out, everything.
+`"everything"` (every applet, and the bar above), or the id of one of your app records (below). Left out, everything.
 A person new to the app on Parachute Cloud gets `"simple"` at their first sign-in; Settings → **Your app** changes it.
 
 ## Apps
 
 An app is a record in your home vault, `Parachute/Apps/<id>`, tagged `parachute-app`, everything under `fields.app`
-(`metadata.app` on a hub before 0.9). It says which applets the launcher offers, and its own bar and home:
+(`metadata.app` on a hub before 0.9). It says which applets the list offers, and its own bar and home:
 
 ```json
 {
@@ -132,21 +142,21 @@ An app is a record in your home vault, `Parachute/Apps/<id>`, tagged `parachute-
 
 Which app is open is this device's choice (Settings → **Your app**), else the settings note's `app`, else
 Everything. Choosing one also makes it the one a new device opens. Your agent can write app records; nothing in them
-lets code start.
+lets code start ([design/APP-RECORD.md](design/APP-RECORD.md#what-an-unsigned-record-can-change)).
 
 `hubs` lists your Parachutes ([design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md)): each an address (`https://…`, the
-hub's origin) and, if you like, a `name` the launcher shows. The app adds one each time you sign in to a Parachute; an
-agent can add one by writing an entry. A Parachute on the list that a device isn't signed in to shows in its launcher
+hub's origin) and, if you like, a `name` Settings shows. The app adds one each time you sign in to a Parachute; an
+agent can add one by writing an entry. A Parachute on the list that a device isn't signed in to shows in Settings
 as one line with **Sign in**; nothing is signed in to, or fetched from it, until you tap that and say whose it is.
 
 Signing in reads your home vault only. Each other vault on that Parachute, and any made there later, shows up under it
-as one quiet line, **Open playground**. A tap asks your hub to let Parachute read that one vault; **Not now** keeps it
-off this device's launcher ([design/SCOPES.md](design/SCOPES.md), [design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md),
+in Settings as one quiet line, **Open playground**. A tap asks your hub to let Parachute read that one vault; **Not
+now** stops offering it on this device ([design/SCOPES.md](design/SCOPES.md), [design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md),
 step 7).
 
 ## What is whose
 
 The bar is drawn by the app itself, under the frame and under applets, so it is there on every screen, even under a
-frame of your own. What is on it is yours: the settings note. The launcher, a vault and a note are the frame
+frame of your own. What is on it is yours: the open app's record (or the settings note). The list, a vault and a note are the frame
 ([CHANGE-YOUR-FRAME.md](CHANGE-YOUR-FRAME.md)), which you can make your own. A home applet is an ordinary applet
 ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)).

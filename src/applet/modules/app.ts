@@ -4,7 +4,8 @@
 // links, storage" (storage is its own module, storage.ts).
 //   app.recent({limit?})   the newest notes across the vaults this device holds: titles, where, when (never content)
 //   app.pins()             what is on the bar: the home applet and the pins, by name, glyph and address
-//   app.open({href})       go to a note or an applet in the app, during a tap only (and a tap there starts it as any tap does)
+//   app.open({href})       go to a note or an applet in the app (an applet at a room: ?room=&event=, its launch), during
+//                          a tap only (and a tap there starts it as any tap does)
 //   app.links({links, from?})        (open) what each note link leads to: "note", "away" or null (links/resolve.ts)
 //   app.follow({link, from?, choose?}) (open) open what a note link leads to, during a tap (`choose`: Open with…)
 //   app.address({note})    (open) a note's address in the applet's own vault: the one form a link to a note is written in
@@ -55,12 +56,19 @@ export const LINKS_WAIT = "links: ask again in a few seconds";
 const linkStr = (v: unknown) => typeof v === "string" && v.length > 0 && v.length <= MAX_LINK;
 const fromOk = (v: unknown) => v === undefined || (typeof v === "string" && v.length <= 1000);
 const SHAPE = /^\/(?:v\/[^/?#\\]+(?:\/[na]\/[^/?#\\]+)?)?$/;
-/** The app's addresses an applet may send the person to: the launcher, a vault, a note, an applet; and only an address
- *  the browser reads back exactly as written (no backslash, dot segment, encoded dot or stripped character that it
- *  would turn into another address, such as the shell's own screens). */
+const APPLET = /^\/v\/[^/?#\\]+\/a\/[^/?#\\]+$/;
+/** Where in an applet to open it: a room, and a message in it, the same words a notification's tap carries
+ *  (services/notifyLink.ts `launchOf`); the applet hears them as its launch (`onLaunch`). */
+const LAUNCH = /^\?room=[A-Za-z0-9_-]{1,64}(?:&event=[0-9a-f]{64})?$/;
+/** The app's addresses an applet may send the person to: the list, a vault, a note, an applet (and an applet at a room:
+ *  `?room=<id>[&event=<id>]`); and only an address the browser reads back exactly as written (no backslash, dot segment,
+ *  encoded dot or stripped character that it would turn into another address, such as the shell's own screens). */
 export function appHref(href: string): boolean {
-  if (!SHAPE.test(href) || /[\u0000-\u0020\u007f]/.test(href)) return false;
-  try { return new URL(href, "http://app.invalid").pathname === href; } catch { return false; }
+  const q = href.indexOf("?");
+  const path = q < 0 ? href : href.slice(0, q), query = q < 0 ? "" : href.slice(q);
+  if (query && (!APPLET.test(path) || !LAUNCH.test(query))) return false;
+  if (!SHAPE.test(path) || /[\u0000-\u0020\u007f]/.test(path)) return false;
+  try { return new URL(path, "http://app.invalid").pathname === path; } catch { return false; }
 }
 
 export function createAppModule(allowed: readonly AppWord[], deps: AppDeps, now: () => number = Date.now): UniModule {

@@ -1,5 +1,5 @@
 // docs/OTHER-PARACHUTES.md's worked example, followed through every layer on two real hubs: Techne's Events component,
-// written with the doc's own create-record call, put on Aaron's home by Add to home in the launcher (and, the second
+// written with the doc's own create-record call, put on Aaron's home by Add to home in the list (and, the second
 // time, by an agent's MCP calls as the doc gives them); then importing instead, refused until Techne is trusted.
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -42,12 +42,14 @@ async function tearDown(made: Made) {
   for (const id of made.home.reverse()) await home("DELETE", `notes/${id}`).catch(() => {});
   for (const id of made.org.reverse()) await org("DELETE", `notes/${id}`).catch(() => {});
 }
-/** The launcher: the app opens on the home applet (the settings name it), and the bar leads there. */
+/** The list: the app opens on the home applet (the settings name it), and the bar's Applets leads there. */
 async function launcher(page: Page) {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Launcher" }).click();
-  await expect(ui(page).getByRole("region", { name: ORG_VAULT })).toBeVisible();
+  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
+  await expect(components(page).getByRole("button", { name: /Events/ })).toBeVisible();
 }
+/** The components on offer, below the list of applets (one list, whatever vault each is in). */
+const components = (page: Page) => ui(page).getByRole("list", { name: "Components" });
 /** Allow the home, then Events on its sheet; Techne's events show under the home's own content. */
 async function allowBoth(page: Page, id: string) {
   await page.goto(`/v/${VAULT}/a/${id}`);
@@ -63,14 +65,13 @@ async function allowBoth(page: Page, id: string) {
   await expect(page.locator('.embed-place[data-embed="events"] .embed-line')).toContainText("Events · techne's");
 }
 
-test("the worked example: Techne's Events, written as the doc says, put on the home by Add to home in the launcher", async ({ page }) => {
+test("the worked example: Techne's Events, written as the doc says, put on the home by Add to home in the list", async ({ page }) => {
   await signInWithKey(page, techneState(), ORG_VAULT);
   const made: Made = { org: [], home: [] };
   try {
     const ids = await world(made);
     await launcher(page);
-    const techne = ui(page).getByRole("region", { name: ORG_VAULT });
-    await techne.getByRole("list", { name: `Components in ${ORG_VAULT}` }).getByRole("button", { name: /Events/ }).click();
+    await components(page).getByRole("button", { name: /Events/ }).click();
     const sheet = ui(page).getByRole("dialog", { name: "Events" });
     await sheet.getByRole("button", { name: "Add to home" }).click();
     await expect(sheet.getByRole("status")).toContainText("Added to your home.");
@@ -110,7 +111,7 @@ test("importing instead: refused from Techne until it is trusted on its card, th
     const ids = await world(made);
     // bring Events in (a pointer), then an applet of Aaron's that imports it
     await launcher(page);
-    await ui(page).getByRole("region", { name: ORG_VAULT }).getByRole("list", { name: `Components in ${ORG_VAULT}` }).getByRole("button", { name: /Events/ }).click();
+    await components(page).getByRole("button", { name: /Events/ }).click();
     await ui(page).getByRole("dialog", { name: "Events" }).getByRole("button", { name: "Bring into my Parachute" }).click();
     await expect.poll(async () => (await home("GET", "notes?tag=parachute-pointer")).length).toBe(1);
     const agenda = await home("POST", "notes", { path: "Applets/Agenda", extension: "tsx", tags: ["applet"],

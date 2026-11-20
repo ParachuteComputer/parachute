@@ -18,7 +18,7 @@ test("an app record offers only its sources; its bar is its own; a pin in it goe
     contract: 1, id: "kitchen-table", name: "Kitchen table", sources: [{ vault: VAULT, applet: "Applets/Recipes" }], bar: [{ vault: VAULT, applet: "Applets/Recipes" }] } } });
   await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "kitchen-table", bar: [] } } });
   await start(page);
-  const entries = ui(page).getByRole("list", { name: `Applets in ${VAULT}` });
+  const entries = ui(page).getByRole("list", { name: "Applets" });
   await expect(entries.getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await expect(entries.getByRole("link", { name: /Cook mode/ })).toHaveCount(0);
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
@@ -69,7 +69,7 @@ test("Settings → Your app: choose between Simple, Everything and an app record
   await choice.getByRole("radio", { name: /Kitchen table/ }).check();
   await expect.poll(async () => (await tagged("parachute-settings"))[0]?.metadata.parachute.app).toBe("kitchen-table");
   await page.goto("/");
-  const entries = ui(page).getByRole("list", { name: `Applets in ${VAULT}` });
+  const entries = ui(page).getByRole("list", { name: "Applets" });
   await expect(entries.getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await expect(entries.getByRole("link", { name: /Cook mode/ })).toHaveCount(0);
   await page.goto("/settings");

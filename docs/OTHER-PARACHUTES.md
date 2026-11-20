@@ -1,7 +1,7 @@
 # Other Parachutes in yours
 
 For people, and for a chat AI with the Parachute MCP. Your Parachute can hold more than your own vaults: an org's
-(Techne's), a friend's. You can walk around in theirs, bring their applets into your own launcher and bar, and drop
+(Techne's), a friend's. You can walk around in theirs, bring their applets into your own Parachute and bar, and drop
 their components onto your home page, each running in its own sealed frame and seeing only what its card allows. The
 trust model, with every threat it answers, is [design/EMBED.md](design/EMBED.md).
 
@@ -34,7 +34,7 @@ vault may do:
 | Its components may be imported into your applets | yes | yes | no: embed them |
 | It can be your home | yes | no | no |
 
-The launcher shows Techne as its own chapter, marked under its name: *someone else's · at techne.example*. Settings
+Techne's applets show in the list of applets, each marked *techne · someone else's · at techne.example*. Settings
 shows each vault's value and lets Aaron change it; making a vault count for more (mine, or trusted) is a card he
 reads first.
 
@@ -116,7 +116,7 @@ grows to fit what it draws: size follows content, between 40 and 2000 px.
 
 ## 3. Add to home
 
-In the launcher, under Techne's chapter, **Components in techne** lists it. Aaron taps **Events**, then **Add to
+In the list of applets, **Components** lists it. Aaron taps **Events**, then **Add to
 home**. The app writes two things, both in his own vault:
 
 The **pointer**: a record in his home vault that names Techne's record and the code he brought in (its hash):
@@ -208,9 +208,9 @@ that asks for more than its card shows is refused, call by call.
 
 ## Bringing an applet in
 
-An applet in someone else's vault can be brought into your launcher the same way: long-press it in their chapter,
+An applet in someone else's vault can be brought into your own Parachute the same way: long-press it in the list,
 **Bring into my Parachute**. That writes a pointer (`"kind": "applet"`) in your home vault. It then sits among your
-home's applets, marked *from techne · at techne.example*, and you can pin it to your bar. It runs where it lives, in
+applets, marked *from techne · at techne.example*, and you can pin it to your bar. It runs where it lives, in
 Techne's vault, through your sign-in there, and asks nothing of the app. Its screen says whose it is (*Notice board ·
 techne's*), and when Techne changes it, its card is headed *techne changed «Notice board» since you brought it in.*
 It can never open by itself on start: only an applet in a vault of yours can.

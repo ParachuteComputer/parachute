@@ -43,6 +43,7 @@ import { appletLevel, canWrite, giveBack, heldLevel } from "../vault/reach";
 import { homeVault } from "../shell/frameSource";
 import { askVault } from "../vault/signInFlow";
 import { screenOf } from "../applet/manifest";
+import { approveLevel } from "../shell/appFloor";
 import { createRouter } from "../applet/router";
 import { createVaultModule } from "../applet/modules/vault";
 import { createThemeModule } from "../applet/modules/theme";
@@ -412,7 +413,7 @@ export default function AppletScreen() {
           // on a device with the person's key, Allow is an approval for every device: signed here, after the device
           // unlock (and the passcode, when one is set), and kept in the home vault. Approved elsewhere already: no new one
           if (!approvedElsewhere && await signsHere()) {
-            if (openAppNow().security.approve === "passcode" && !needsPasscode) { setSigning("Your app asks for a passcode before approving code. Set one in Settings → Approvals."); return; }
+            if (approveLevel(openAppNow(), homeVault()?.key ?? "") === "passcode" && !needsPasscode) { setSigning("Your app asks for a passcode before approving code. Set one in Settings → Approvals."); return; }
             setSigning(null);
             try {
               await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" });

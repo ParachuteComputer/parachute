@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { Bar, backOrLauncher } from "../ui/Bar";
 import { Link } from "react-router";
 import { useVaults } from "../vault/hooks";
@@ -25,6 +25,7 @@ import { AskWhose, WhoseLine } from "./Whose";
 import { useParachutes } from "../shell/parachutes";
 import { listHub } from "../shell/homeSettings";
 import { askVault, signOutOf } from "../vault/signInFlow";
+import { dismissVault, newVaultsOn, newVaultsRev, startAddVault, subscribeNewVaults } from "../vault/newVaults";
 import AppChoice from "./AppChoice";
 import { appletsNeedingWrite, forgetOwnWrite, giveBack, heldLevel } from "../vault/reach";
 
@@ -51,6 +52,33 @@ function Holds({ v }: { v: VaultRecord }) {
   return <span className="quiet holds">· {level === "write" ? "reads and changes notes" : "reads"}{own && <> <button type="button" className="quiet-button" onClick={() => { forgetOwnWrite(v); void giveBack(v.key, "/settings"); }}>Read only</button></>}</span>;
 }
 
+/** The person's vaults on a Parachute that this device doesn't read yet (docs/design/SCOPES.md): one quiet line each. A
+ *  tap asks the hub to read that one vault (vault/newVaults.ts); Not now stops offering it here. */
+function VaultsToAdd({ hub, name }: { hub: string; name: string }) {
+  useSyncExternalStore(subscribeNewVaults, newVaultsRev);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const fresh = newVaultsOn(hub);
+  if (!fresh.length) return null;
+  const add = (v: string) => {
+    if (busy) return;
+    setBusy(true); setError("");
+    // the app leaves for the hub; it stays busy until then
+    startAddVault(hub, v).then((u) => window.location.assign(u), (e: unknown) => { setError(e instanceof Error ? e.message : "Your hub didn't answer."); setBusy(false); });
+  };
+  return (
+    <ul className="parachute-new plain" aria-label={`Vaults to open on ${name}`}>
+      {fresh.map((v) => (
+        <li key={v}>
+          <button type="button" className="parachute-new-add" disabled={busy} onClick={() => add(v)}>Open <b>{v}</b></button>
+          <button type="button" className="quiet-button" disabled={busy} aria-label={`Not now: ${v}`} onClick={() => dismissVault(hub, v)}>Not now</button>
+        </li>
+      ))}
+      {error && <li className="error" role="alert">{error}</li>}
+    </ul>
+  );
+}
+
 /** The one place for what this device holds. Later sections (applets, the self-test) join here. */
 export default function Settings({ children }: { children?: ReactNode }) {
   const vaults = useVaults();
@@ -69,14 +97,16 @@ export default function Settings({ children }: { children?: ReactNode }) {
                 {p.vaults.map((v) => (
                   <li key={v.key} className="line">
                     <span><strong>{v.vault}</strong> <WhoseLine v={v} /> <Holds v={v} /></span>
+                    <Link className="quiet-button" to={`/v/${encodeURIComponent(v.key)}`} aria-label={`Open ${v.vault}`}>Open</Link>
                     <button type="button" className="quiet-button" aria-label={`Sign out of ${v.vault}`} onClick={() => signOutVault(v)}>Sign out</button>
                     <button type="button" className="quiet-button" aria-label={`Sign in again to ${v.vault}`} onClick={() => void askVault(v, heldLevel(v) ?? "read", "open", "/settings").then((u) => window.location.assign(u), () => undefined)}>Sign in again</button>
                   </li>
                 ))}
               </ul>
+              <VaultsToAdd hub={p.hub} name={p.name} />
               <p className="small"><Link to={`/add?hub=${encodeURIComponent(p.hub)}`}>Sign in again</Link> <span className="quiet">(sees which vaults you have there now)</span>{" · "}
                 <button type="button" className="quiet-button" onClick={() => signOutOf(p.hub, signOutVault)}>Sign out of {p.name}</button></p>
-            </> : <p className="small">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`}>Sign in</Link>{" · "}
+            </> : <p className="small">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`} aria-label={`Sign in to ${p.name}`}>Sign in</Link>{" · "}
               <button type="button" className="quiet-button" onClick={() => void listHub(p.hub, false).catch(() => undefined)}>Take off the list</button></p>}
           </section>
         )) : <p className="quiet">None yet.</p>}

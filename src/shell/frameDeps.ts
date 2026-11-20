@@ -19,7 +19,7 @@ import { originOf, listVaults, hostOf, type VaultRecord } from "../vault/store";
 import { dismissVault, newVaultsOn, startAddVault } from "../vault/newVaults";
 import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
-import { barNow, openAppNow, pinApplet, startApplet } from "./homeSettings";
+import { appMissing, barNow, openAppNow, pinApplet, startApplet } from "./homeSettings";
 import { offered, namesApplet, type App } from "./apps";
 import { chooseStart, forgetStart } from "./start";
 import { parachutesNow } from "./parachutes";
@@ -34,7 +34,7 @@ export const homeNow = () => {
     parachutes: parachutesNow().map((p) => {
       const fresh = newVaultsOn(p.hub);
       return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}) };
-    }), ...(openAppNow().look === "notes" ? { app: "simple" as const } : {}) };
+    }), ...(openAppNow().look === "notes" ? { app: "simple" as const } : {}), ...(appMissing() ? { notice: "app-record" as const } : {}) };
 };
 /** For a frame of the person's own, a write into their vault is asked about once more on the shell's own sheet. */
 const confirmed = (from: "built-in" | "vault", q: WriteAsk) => (from === "vault" ? confirmWrite(q) : Promise.resolve(true)).then((yes) => { if (!yes) throw new Error("not_allowed"); });

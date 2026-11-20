@@ -17,7 +17,7 @@ different applets; without having to enter a bunch of different URLs."*
 1. **First run asks for one address**: *Where is your Parachute?* The hub's address (`uni.example`, or any address on
    it, a vault's included), or **Parachute Cloud**. Then *Whose Parachute is this?* and **Sign in with your key**.
 2. **One sign-in, every vault in reach.** The hub's key door, then its consent page once, for the home vault. Approve,
-   and the launcher shows the home with its applets, and every other vault the person can reach there as an **Open**
+   and the app shows the home's applets, and Settings every other vault the person can reach there as an **Open**
    line ([SCOPES.md](SCOPES.md)). No vault address is typed, ever.
 3. **Your Parachutes.** The hubs the person uses (their own, Cloud, Techne's) are a list in their home vault. A new
    device that signs in to the home Parachute finds the others listed, each a tap from signed in. An agent can add one
@@ -25,8 +25,8 @@ different applets; without having to enter a bunch of different URLs."*
 4. **The home**: this device's, else their only vault, else they pick it before the consent (*Which one is your
    home?*, the first by name to begin with; since 2026-11-18 the app reads no other vault to look for their settings,
    [SCOPES.md](SCOPES.md)). Settings changes it.
-5. **The launcher is grouped by Parachute**: the home Parachute first, then the rest, each marked whose it is; a
-   Parachute on the list that this device isn't signed in to is one line with **Sign in**.
+5. **Settings is grouped by Parachute** (the list of applets is one list, since 2026-11-20): the home Parachute first,
+   then the rest, each marked whose it is; a Parachute on the list that this device isn't signed in to is one line with **Sign in**.
 
 ## What the hub answers today (0.8.0 and 0.9.0-pre.1, the same)
 
@@ -92,7 +92,7 @@ real test.
 6. **Signing in again** to a Parachute lists any vault given since (as an **Open** line), and replaces this device's older sign-in of each
    vault it brings (the old one is revoked at the hub).
 7. **A vault made later** shows up without signing in again (2026-11-18). When the app opens, and each time the
-   launcher shows (at most once a minute per hub; no timer), the app asks each hub it is signed in to which vaults the
+   list or Settings shows (at most once a minute per hub; no timer), the app asks each hub it is signed in to which vaults the
    person reaches, as the sign-in asks it: with the key, the hub's `list-vaults`, signed by the shell; without a key,
    the hub's public list (`/.well-known/parachute.json`), but only on a hub where the sign-in found the person reaches
    every vault (they run it: `covered: "all"` by key; without one, they said Mine, had more than one vault there, and
@@ -101,7 +101,7 @@ real test.
    vault the sign-in didn't read). The tap is the consent step for that vault alone (`vault:<name>:read`): the hub asks
    once, unless the person's grant already covers it; a vault made since the sign-in comes in as someone else's (the hub
    doesn't say whose; another account may have made it), and Settings makes it the person's. **Not now** keeps it off
-   the launcher on this device until the next sign-in there; signing out of a vault in Settings makes it an Open line again
+   Settings on this device until the next sign-in there; signing out of a vault in Settings makes it an Open line again
    (`parachute.newvaults.v1`, which also keeps the hubs the person reaches every vault of). Code:
    `src/vault/newVaults.ts`.
 
@@ -144,7 +144,7 @@ parachute:
   hubs:
     - hub: https://uni.example            # the address a person would type (an origin)
     - hub: https://techne.example
-      name: Techne                        # optional: what the launcher calls it
+      name: Techne                        # optional: what Settings calls it
     - hub: https://cloud.parachute.computer
       name: Parachute Cloud
 ```
@@ -190,7 +190,7 @@ note there (the list of Parachutes), a second device finds the same home.
    page load, because a re-aimed refresh retires the token before it on 0.9. Document the rotation rules too: the
    grace minute, and the whole chain revoked on a late reuse.
 4. **A key door and NIP-98 on Cloud.** Cloud signs in by emailed link only, so its people approve twice.
-5. **A Parachute's name** in `/.well-known/parachute-account` (`name`), so the launcher can say *Techne*, not
+5. **A Parachute's name** in `/.well-known/parachute-account` (`name`), so the app can say *Techne*, not
    `techne.example` (EMBED.md proposal 4).
 
 ## What this replaces (subtract)
