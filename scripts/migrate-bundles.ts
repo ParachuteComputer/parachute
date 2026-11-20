@@ -74,10 +74,11 @@ async function main() {
     if (!p || p.app === undefined) continue;
     const { app, ...rest } = p;
     changes++;
-    say(`${n.path}: app ${JSON.stringify(app)} → bundle${p.bundle !== undefined ? ` (it already says bundle ${JSON.stringify(p.bundle)}, which stays)` : ""}`);
+    // `app` is the newer when both are said (only a build from before 11-20 changes it alone)
+    say(`${n.path}: app ${JSON.stringify(app)} → bundle${p.bundle !== undefined && p.bundle !== app ? ` (over bundle ${JSON.stringify(p.bundle)}, which an older build's change left behind)` : ""}`);
     if (a.apply) {
       backup(n);
-      await patch(n, { metadata: { parachute: { ...rest, bundle: p.bundle ?? app } } });
+      await patch(n, { metadata: { parachute: { ...rest, bundle: app } } });
     }
   }
   if (!changes) console.log("Nothing to move.");

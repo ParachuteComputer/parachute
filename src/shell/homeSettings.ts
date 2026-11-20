@@ -10,7 +10,8 @@
 //                   bundle: "simple" | "everything" | <id>   which bundle this person's devices open (shell/bundles.ts,
 //                          docs/SIMPLE.md): the simple one (Notes, Capture, Connect), everything (the launcher, every
 //                          applet), or a bundle record's. Absent: everything. A new person's first sign-in writes "simple".
-//                          Its older name `app` is read for one release (until 2026-12-20); a change writes `bundle`
+//                          Until 2026-12-20 it is written under its older name `app` too, which builds from before
+//                          11-20 read, and `app` is read first: only such a build changes one name alone
 //                   services: [{name, kind, url}]   the servers the person's applets reach (docs/design/SERVICES.md):
 //                          their relay, their mail gateway. Shown in Settings with the applets that reach each; an
 //                          applet's own record still names what it reaches, and its card is what allows it
@@ -83,7 +84,7 @@ export function settingsFrom(metadata: unknown): Settings {
   const bar = Array.isArray(p.bar) ? p.bar.slice(0, 200).map(placeOf).filter((x): x is Place => !!x) : [];
   const hubs = (Array.isArray(p.hubs) ? p.hubs.slice(0, 50).map(hubOf).filter((x): x is HubEntry => !!x) : []).filter((h, i, all) => all.findIndex((y) => y.hub === h.hub) === i);
   const services = Array.isArray(p.services) ? p.services.slice(0, 20).map(serviceOf).filter((x): x is ServiceEntry => !!x) : [];
-  return { bar: dedupe(bar), start: placeOf(p.start), hubs, services, bundle: choiceOf(p.bundle) ?? choiceOf(p.app) };
+  return { bar: dedupe(bar), start: placeOf(p.start), hubs, services, bundle: choiceOf(p.app) ?? choiceOf(p.bundle) };
 }
 const same = (a: Place, b: Place) => a.vault === b.vault && a.applet === b.applet && (a.hub ?? "") === (b.hub ?? "");
 const dedupe = (xs: Place[]) => xs.filter((x, i) => xs.findIndex((y) => same(x, y)) === i);
@@ -434,13 +435,15 @@ export function effective(s: Settings, apps: readonly Bundle[]): Settings {
 /** Change the open bundle's record: read it now, change only what `change` touches, and write it back with
  *  if_updated_at; made from the built-in the first time. An older record (`Parachute/Apps/<id>`, `parachute-app`,
  *  `fields.app`) is written as it is, under its older names: the builds before 11-20 read only those, and one of the
- *  person's devices may still run one. scripts/migrate-bundles.ts moves it once none does. */
+ *  person's devices may still run one. A new record takes the names the vault already uses: the older ones until a
+ *  record under the newer is there (scripts/migrate-bundles.ts moves them all once no device runs such a build). */
 async function changeBundle(change: (was: Record<string, unknown>, app: Bundle) => Record<string, unknown>, from: (app: Bundle) => Record<string, unknown>): Promise<void> {
   const home = homeVault();
   if (!home) throw new Error("There's no home vault yet.");
   const app = openBundleNow();
   const c = clientFor(home);
-  const found = (await bundleRows(c)).find((r) => (app.noteId ? r.row.id === app.noteId : atFolder(r.row.path, app.id))) ?? null;
+  const rows = await bundleRows(c);
+  const found = rows.find((r) => (app.noteId ? r.row.id === app.noteId : atFolder(r.row.path, app.id))) ?? null;
   if (app.noteId && !found) throw new Error("The bundle's record is gone; read it again.");
   const body = change(found && plain(found.body) ? found.body : from(app), app);
   const content = `The ${app.name} bundle: where its applets come from, its bar and its home. See docs/NAVIGATION.md.`;
@@ -448,7 +451,8 @@ async function changeBundle(change: (was: Record<string, unknown>, app: Bundle) 
     const n = found.row, updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), [found.old ? "app" : "bundle"]: body }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
   } else {
-    await c.createNote({ path: `${BUNDLE_FOLDER}${app.id}`, content, tags: [BUNDLE_TAG], metadata: { bundle: body } } as Parameters<typeof c.createNote>[0]);
+    const newer = rows.some((r) => !r.old);
+    await c.createNote({ path: `${newer ? BUNDLE_FOLDER : OLD_BUNDLE_FOLDER}${app.id}`, content, tags: [newer ? BUNDLE_TAG : OLD_BUNDLE_TAG], metadata: { [newer ? "bundle" : "app"]: body } } as Parameters<typeof c.createNote>[0]);
   }
 }
 

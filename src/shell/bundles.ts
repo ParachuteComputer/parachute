@@ -21,7 +21,8 @@ import { askedOf, stricterAsked, type Asked } from "./levelRules";
 
 export const BUNDLE_TAG = "parachute-bundle";
 export const BUNDLE_FOLDER = "Parachute/Bundles/";
-/** The older names, read for one release (until 2026-12-20), never written. */
+/** The older names, read until 2026-12-20, and written while the vault holds no record under the newer ones (builds
+ *  from before 11-20 read only these). */
 export const OLD_BUNDLE_TAG = "parachute-app";
 export const OLD_BUNDLE_FOLDER = "Parachute/Apps/";
 export const BUILT_IN_BUNDLES = ["everything", "simple"] as const;

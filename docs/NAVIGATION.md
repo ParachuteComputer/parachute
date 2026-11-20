@@ -6,7 +6,7 @@ One model, everywhere.
 
 | Address | What it is |
 |---|---|
-| `/` | **The list**: the open app's applets, one plain list (not by vault). Always there: the bar's **Applets** opens it. |
+| `/` | **The list**: the open bundle's applets, one plain list (not by vault). Always there: the bar's **Applets** opens it. |
 | `/v/<vault>` | A vault: its newest notes, and search. |
 | `/v/<vault>/n/<note>` | A note. It opens in the applet that opens its kind (open-with), else as plain text. |
 | `/v/<vault>/a/<applet>` | An applet. |
@@ -16,7 +16,7 @@ One model, everywhere.
 ## The four rules
 
 1. **The bar is your pins.** It sits at the bottom of the list, a vault, a note and an applet. On it: the applets
-   pinned in the open app (its record's `bar`), in that order (up to 12), and nothing else of the app's but **Applets**
+   pinned in the open bundle (its record's `bar`), in that order (up to 12), and nothing else of the app's but **Applets**
    at the end, the one way to the list (and Settings from there). The home applet is on the bar when it is pinned; pin
    it first to have it there. Under a frame of your own it also ends with the app's own way to Settings.
    An applet that declares signals shows its count beside its glyph unless it is the screen in front ([design/APP-RECORD.md](design/APP-RECORD.md), "Signals").
@@ -107,8 +107,10 @@ bundle** changes it. Its older name `app` is read until 2026-12-20.
 A bundle is a record in your home vault, `Parachute/Bundles/<id>`, tagged `parachute-bundle`, everything under
 `fields.bundle` (`metadata.bundle` on a hub before 0.9). It says which applets the list offers, and its own bar and home.
 (It was called an app record until 11-20; the Parachute app is the app. Records under the older names,
-`Parachute/Apps/<id>`, `parachute-app` and `fields.app`, are read until 2026-12-20; a change to one is written under its older names, which builds from before 11-20 read.
-`node scripts/migrate-bundles.ts` moves them all, once no device of yours runs such a build.)
+`Parachute/Apps/<id>`, `parachute-app` and `fields.app`, are read until 2026-12-20. Builds from before 11-20 read only those, so until then the app writes the names your
+vault already uses: a record under the older names stays there, a new one goes under the older names until a record
+is under the newer, and the settings note says both `bundle` and `app` (`app` is read first). `node
+scripts/migrate-bundles.ts` moves them all once no device of yours runs such a build.)
 
 ```json
 {

@@ -30,7 +30,8 @@ describe("the settings note", () => {
   it("the choice of bundle: `bundle`, else its older name `app` (one release), never both read as two", () => {
     expect(settingsFrom({ parachute: { bundle: "uni" } }).bundle).toBe("uni");
     expect(settingsFrom({ parachute: { app: "uni" } }).bundle).toBe("uni");
-    expect(settingsFrom({ parachute: { bundle: "lab", app: "uni" } }).bundle).toBe("lab");
+    // both said and different: an older build changed `app` alone after a newer one wrote both, so `app` is the newer
+    expect(settingsFrom({ parachute: { bundle: "lab", app: "uni" } }).bundle).toBe("uni");
     expect(settingsFrom({ parachute: { app: "Not An Id" } }).bundle).toBeNull();
   });
   it("reads every place it can (the bar shows the first ones it finds), up to a bound", () => {
