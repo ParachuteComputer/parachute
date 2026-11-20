@@ -126,7 +126,7 @@ this device for itself (drafts, what it last showed)".
 
 ## Approving inside an applet
 
-Every approve, and every secret sheet, needs **a tap in that applet** (the shell's `tappingIn` check, as `app.open`:
+Every approve, and every secret sheet, needs **a tap in that applet** (the shell's `useTapOnce` check, as `app.open`:
 live user activation with the focus in its own frame, while its screen is in front), and **a tap pays for one call**: a
 second `answer` or `secret` within the activation's few seconds is refused (one call may answer several rows of one
 morning card). This check is the web side's, as SERVICES.md accepts. So an applet can't approve on its

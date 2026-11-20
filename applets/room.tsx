@@ -756,6 +756,9 @@ function AskCard({ e, ask, answeredBy, mine, answer }: { e: Ev; ask: Ask; answer
 // unlock when it must, seals the answer with the approval key and sends it. This draws the card and takes the tap. ──
 const SPAN = (s: number) => (s >= 86400 ? `${Math.round(s / 86400)} d` : s >= 3600 ? `${Math.round(s / 3600)} h` : `${Math.max(1, Math.round(s / 60))} min`);
 const said = (x: any) => String(x?.message ?? x ?? "it failed").slice(0, 200);
+/** A refused tap in the room's own words, except the shell's "Tap again in a moment" (the tap was there, but it paid
+ *  for a call a moment ago, as after a cancelled unlock): that one is said as the shell says it. */
+const tapSaid = (x: any, words: string) => (x?.code === "not_granted" && !/^Tap again in a moment/.test(String(x?.message ?? "")) ? words : said(x));
 
 /** Approve on release after holding a second (the tap the shell needs comes with letting go); a plain tap does nothing. */
 function HoldButton({ label, onDone }: { label: string; onDone: () => void }) {
@@ -799,7 +802,7 @@ function SealedCard({ e }: { e: Ev }) {
   const answer = async (decision: "approve" | "deny", rids: string[]) => {
     setBusy(true); setErr(null);
     try { const r: any = await services.answer(svc, e, decision, rids); setView(r.view); if (r.failed) setErr(`Not sent: ${r.failed}. Try again.`); }
-    catch (x: any) { setErr(x?.code === "not_granted" ? "Tap the button itself to answer." : said(x)); }
+    catch (x: any) { setErr(tapSaid(x, "Tap the button itself to answer.")); }
     finally { setBusy(false); }
   };
   if (!view) return <div className="card ended" role="group" aria-label="Uni's card"><p>◇ Uni's card · checking…</p></div>;
@@ -810,7 +813,7 @@ function SealedCard({ e }: { e: Ev }) {
     catch (x: any) {
       // trusted meanwhile (from another card): the card as it reads now
       const v: any = await services.card(svc, e).catch(() => null);
-      if (v && !v.trust) setView(v); else setErr(x?.code === "not_granted" ? "Tap the button itself." : said(x));
+      if (v && !v.trust) setView(v); else setErr(tapSaid(x, "Tap the button itself."));
     }
     finally { setBusy(false); }
   };
@@ -854,7 +857,7 @@ function SecretCard({ e }: { e: Ev }) {
   const [err, setErr] = useState<string | null>(null);
   if (!req) return null;
   const over = typeof req.expires === "number" && req.expires < now();
-  const go = async (f: () => Promise<any>, next: "sent" | "forgot") => { setErr(null); try { const r = await f(); if (r?.sent) setState(next); else if (r?.failed) setErr(`Not sent: ${r.failed}`); } catch (x: any) { setErr(x?.code === "not_granted" ? "Tap the button itself, or this applet isn't allowed to answer secret requests." : said(x)); } };
+  const go = async (f: () => Promise<any>, next: "sent" | "forgot") => { setErr(null); try { const r = await f(); if (r?.sent) setState(next); else if (r?.failed) setErr(`Not sent: ${r.failed}`); } catch (x: any) { setErr(tapSaid(x, "Tap the button itself, or this applet isn't allowed to answer secret requests.")); } };
   return <div className={`card${over || state !== "ask" ? " ended" : ""}`} role="group" aria-label="Uni asks for a secret">
     <div className="head">{over || state !== "ask" ? "◇" : "◆"} Uni asks for a secret</div>
     <p className="what">{String(req.label ?? "")}</p>
