@@ -52,12 +52,12 @@ test("first run: four applets, four short cards; changed code says whether it as
     for (const n of ["rooms", "mail", "journal", "accounts"]) made.push(await installApplet(n, vars));
     const relayHost = new URL(relay.url.replace(/^ws/, "http")).host;
 
-    // Rooms: what it does as you, the approval key and the push gateway each on a line of their own, in bold words
+    // Rooms: what it does as you, the approvals and the push gateway each on a line of their own, in bold words
     await open(page, /Rooms/);
     await expect(card(page).getByRole("heading")).toHaveText("Allow Rooms?");
     await expect(face(page).getByText(`As you on ${relayHost} on this device`)).toBeVisible();
-    await expect(face(page).locator("strong", { hasText: "High risk, with your approval key:" })).toBeVisible();
-    await expect(face(page)).toContainText("from Uni there (your approval key is your everyday key for now). Powerful ones ask for your device unlock.");
+    await expect(face(page).locator("strong", { hasText: "High risk, with your key:" })).toBeVisible();
+    await expect(face(page)).toContainText("from Uni there. Powerful ones ask for your device unlock.");
     await expect(face(page)).toContainText("which gets your public key and where to reach this phone");
     await expect(face(page).locator("strong", { hasText: "Opens web addresses" })).toBeVisible();
     await expect(card(page).getByText("Also: the microphone when you press record, files you pick, saving to Downloads, 256 KB for drafts")).toBeVisible();
@@ -74,7 +74,7 @@ test("first run: four applets, four short cards; changed code says whether it as
     await expect(page.locator("iframe.applet-frame")).toHaveCount(1);
 
     await open(page, /Mail/);
-    await expect(face(page).locator("strong", { hasText: "High risk, with your approval key:" })).toBeVisible();
+    await expect(face(page).locator("strong", { hasText: "High risk, with your key:" })).toBeVisible();
     await expect(face(page)).toContainText("sends send.approve requests to");
     await measure(page, "mail");
     await (await allowOnFirstScreen(page)).click();

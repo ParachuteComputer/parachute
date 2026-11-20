@@ -1,7 +1,8 @@
-// Settings → Frame: which frame runs (the home vault is chosen under Your bundle), and the person's ways to change that: "Make this mine"
-// (copy the built-in frame into the home vault), looking at their frame again, going back to the built-in one, and a
-// newer built-in frame when one is on offer (never written over theirs without their tap).
-import { useEffect, useState } from "react";
+// Settings → Frame (shown when the person has a frame of their own: settingsShown.ts; Settings reads the frame record
+// when it shows; the home vault is chosen under Your bundle): which frame runs, and the person's ways to change that:
+// "Make this mine" (copy the built-in frame into the home vault), looking at their frame again, going back to the
+// built-in one, and a newer built-in frame when one is on offer (never written over theirs without their tap).
+import { useState } from "react";
 import { useVaults } from "../vault/hooks";
 import { askAgain, useBuiltIn, homeVault, keepMine, makeThisMine, readFrameRecord, takeNewDefault, useFrameSource } from "../shell/frameSource";
 
@@ -22,8 +23,6 @@ export default function FrameSettings() {
   const fs = useFrameSource();
   const home = homeVault(vaults);
   const [busy, setBusy] = useState(false);
-  // read when shown, as the frame area does: what an agent changed is seen here too
-  useEffect(() => { void readFrameRecord(); }, [home?.key]);
   const [error, setError] = useState<string | null>(null);
   const act = (f: () => Promise<void> | void) => async () => { setBusy(true); setError(null); try { await f(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const found = fs.read?.state === "found" ? fs.read : null;

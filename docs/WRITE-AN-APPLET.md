@@ -279,7 +279,7 @@ older apps ([docs/design/VERSIONS.md](design/VERSIONS.md)). Each part has the le
 parts above are level 1, the floor: the kit of 11-20, with every prop it lists. A newer prop counts as a newer part,
 and an older app ignores it. If an applet uses a part above the floor, either fall back for it, or put
 `"needs": <its level>` beside `applet` in the fields. With `needs`, an older app lists the applet and says "Update
-Parachute to use …" instead of running it (`src/kit/olderApp.test.ts` checks the shipped applets do one or the other).
+Parachute to open …" instead of running it (`src/kit/olderApp.test.ts` checks the shipped applets do one or the other).
 If an applet touches a part this app doesn't have and then stops, the frame says to update rather than that it broke.
 A fallback:
 

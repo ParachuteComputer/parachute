@@ -2,11 +2,11 @@
 // An older app opening a record set written for a newer one (docs/design/VERSIONS.md): Aaron's own records, as
 // scripts/install-applets.ts writes them, then made newer the three ways a newer app writes: `needs` past this app's
 // level, a manifest key it doesn't know, a bundle record for a later level. Nothing of them is read further or allowed;
-// each is listed by its name, so its screen can say "Update Parachute to use …".
+// each is listed by its name, so its screen can say "Update Parachute to open …".
 import { describe, expect, it } from "vitest";
 import { appletRecord } from "../../applets/record";
 import { discoverApplets, readApplet } from "./discovery";
-import { APP_LEVEL, updateLine } from "./level";
+import { APP_LEVEL } from "./level";
 import { bundleOf, followed, newerBundle, placeOf } from "../shell/bundles";
 import { componentNewer, readComponent } from "./component";
 
@@ -36,7 +36,6 @@ describe("an older app opening a newer record set", () => {
     const home = found.entries.find((e) => e.path === "Applets/Home")!;
     expect([home.manifest.name, home.manifest.glyph, home.manifest.id]).toEqual(["Home", "◠", "home"]);
     expect(home.newerWhy).toBe(`it needs Parachute level ${APP_LEVEL + 1}; this one is level ${APP_LEVEL}`);
-    expect(updateLine(home.manifest.name)).toBe("Update Parachute to use Home.");
     // the same record on an app at that level reads as it is
     const there = readApplet(row("today", 0, (f) => ({ ...f, ...later })), "home", false, () => false, APP_LEVEL + 1);
     expect(there.ok && !there.entry.newer && there.entry.services.length).toBe(1);

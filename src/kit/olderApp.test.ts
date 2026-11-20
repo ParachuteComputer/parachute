@@ -2,7 +2,7 @@
 // (docs/design/VERSIONS.md). Each kit part has the level of the app it came in (kits/modules.ts PART_LEVEL); a record
 // says the oldest level it runs on (`needs`, the floor when it says none). A part above that is undefined on an older
 // app, so the applet falls back for it (`const Part = KitPart ?? …`), or it raises its `needs` and an older app says
-// "Update Parachute to use …" instead of running it. Found 11-18: Rooms' room view stopped on build 2934228 ("Cannot
+// "Update Parachute to open …" instead of running it. Found 11-18: Rooms' room view stopped on build 2934228 ("Cannot
 // read properties of undefined (reading 'find')") once its record used `link`.
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";

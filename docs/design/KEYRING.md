@@ -19,8 +19,8 @@ unlock. The root key is recovery only. The table below is how the roles are kept
 | **approval key** | this device, its own secure-storage slot; every use is behind the grant and, for powerful answers, the device unlock | answers to Uni's sealed cards (seal of rumor 46042), secret deliveries and forgets (seals of 46040/46041), NIP-98 for the approval ops an http service names; later the second signature #systems uses for root actions and mesh device-adds |
 | **root key** | offline. Never in the app | nothing here |
 
-**Until the person makes a separate approval key, the approval key is the everyday key.** Settings and every card that
-mentions it say so ("your approval key is your everyday key for now"). The roles stay separate in Rust even then:
+**Without a separate approval key, the approval key is the everyday key**, and cards say "with your key". The roles stay
+separate in Rust even then:
 `Role::Everyday` signs only what SERVICES.md lists (never a kind 13 seal); `Role::Approval` signs only the seals and
 approval requests below. So a missing approval grant means no approval signature, whatever the bytes of the key.
 
@@ -110,8 +110,8 @@ enforced; the name is the applet's word and marked so, because before Allow the 
 to read the room's own name (signing in there is part of what the card asks).
 `approvals` is its own line, in bold words, not colour alone:
 
-> **High risk. With your approval key:** answer approval cards and secret requests there from Uni (your approval key
-> is your everyday key for now). Powerful ones ask for your device unlock.
+> **High risk. With your key:** answer approval cards and secret requests there from Uni. Powerful ones ask for your
+> device unlock.
 
 ("Uni" is the trusted list's name for the key; a key not on the list reads "a key you haven't trusted on this device
 (npub1…)".)
