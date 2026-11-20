@@ -71,10 +71,11 @@ applet signs only the kinds the shell names (9, 7, 40003, 5, 20002), and a Rust 
 | An applet | Asks the shell to sign kind 30479 or 30480 | Refused (`services.rs` test) |
 
 **Gaps, said plainly.** A device can't know of a taking back the vault hides from it (it keeps running what was
-approved until its year ends). A device that already allowed an applet starts it at once and reads the approvals
-behind it: a taking back made elsewhere stops it when that read lands (the next open, or the next time a screen kept
-running is shown), not before, and not while the home vault can't be reached. Waiting for the read before every start
-would close that, at the price of a vault read on every open (found in review, T-476; not built). A brand-new device served last month's code with last month's approval runs it: code
+approved until its year ends). A device that already allowed an applet starts it at once and reads the signed
+approvals in the background. A taking back made on another device stops it only when that read lands: the next open,
+or when a kept screen is shown again. It does not stop it while the home vault can't be reached. Reading before every
+start would close this, at the price of a vault read on every open (found in review, T-476; not built).
+A brand-new device served last month's code with last month's approval runs it: code
 the person approved, never new code. And the person's key has copies in other software (Uni's tools): anything that
 holds it can sign an approval. Making the key on the phone with no export, and other devices signing through it, is
 the rotation step (#systems, T-487).
@@ -210,7 +211,7 @@ lists); the gateway then adds one per event. A mail server reporting its own cou
 
 | Who | Learns | Never |
 |---|---|---|
-| The gateway | Which of its registered keys have signals, an opaque id per applet, the signal ids, the counts and when they move | Any note, message or mail; which applet, vault or hub, unless whoever runs it can also read the hub (the id is an unsalted hash of hub, vault and record, the same for everyone, so someone who knows the records can match it: found in review, T-476) |
+| The gateway | Which of its registered keys have signals, an opaque id per applet, the signal ids, the counts and when they move | Any note, message or mail. Which applet, vault or hub, unless the gateway's operator also reads the hub (the id is an unsalted hash of hub, vault and record, so known records match it; T-476) |
 | The push server | That ~200 sealed bytes arrived | Anything in them |
 | The hub | Nothing new: the app's subscription is the person's own sign-in reading a folder it may read | |
 
