@@ -2,7 +2,7 @@
 // tested in e2e/services.spec.ts and src-tauri/tests). What is held here: a subscription made before the sign-in goes
 // out once; a live subscription stays open however many events pass through it; nothing connects after close.
 import { describe, expect, it, vi } from "vitest";
-import { createBroker } from "./broker";
+import { createBroker, TAP_AGAIN } from "./broker";
 import type { Native, SignedEvent } from "./native";
 import type { Service } from "../applet/services";
 
@@ -208,36 +208,23 @@ describe("the broker's relay connection", () => {
   });
 });
 
-describe("a tap the device's gate refused", () => {
-  // the shell's tap (views/ShellSheets.tsx useTapOnce): one call per tap; `untap` gives it back
-  const oneTap = () => { let left = 1; return { tap: () => (left > 0 ? (left--, true) : false), untap: () => { left = 1; }, secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null as string | null }; };
+describe("a tap that already paid", () => {
+  // the shell's tap (views/ShellSheets.tsx useTapOnce): true once, then "again" for its few seconds
+  const oneTap = () => { let left = 1; return { tap: () => (left-- > 0 ? true : "again" as const), secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null }; };
   const mail: Service = { id: "mail", kind: "http", url: "https://mail.example/mail/", auth: "nip98", approve: { field: "op", ops: ["send.approve"] } };
   const approve = { service: "mail", path: "op", method: "POST", body: JSON.stringify({ op: "send.approve", opId: "x" }) };
-  const broker = (http: Native["http"], shell: ReturnType<typeof oneTap>) =>
-    createBroker({ native: { ...native(), http }, session: "s", applet: { name: "Mail", subject: "v\u0000m" }, services: [mail], hubs: [], emit: () => {}, shell });
 
-  it("paid for nothing: after a cancelled unlock the person's next tap counts", async () => {
-    const shell = oneTap();
+  it("pays for one approve: a retry at once after a cancelled unlock says to tap again in a moment, and asks nothing", async () => {
     let calls = 0;
-    const b = broker(async () => { if (++calls === 1) throw { code: "unlock", message: "The device unlock was cancelled or failed." }; return { status: 200, headers: {}, body: "" }; }, shell);
+    const http: Native["http"] = async () => { calls++; throw { code: "unlock", message: "The device unlock was cancelled or failed." }; };
+    const b = createBroker({ native: { ...native(), http }, session: "s", applet: { name: "Mail", subject: "v\u0000m" }, services: [mail], hubs: [], emit: () => {}, shell: oneTap() });
     await expect(b.fetch(approve)).rejects.toMatchObject({ code: "unlock" });
-    await expect(b.fetch(approve)).resolves.toMatchObject({ status: 200 });
-    expect(calls).toBe(2);
+    await expect(b.fetch(approve)).rejects.toThrow(TAP_AGAIN);
+    expect(calls).toBe(1);
   });
 
-  it("paid for nothing: a passcode sheet the person cancelled", async () => {
-    const shell = oneTap();
-    let calls = 0;
-    const b = broker(async (_s, _v, _r, code) => { calls++; if (!code) throw { code: "passcode", message: "Your passcode is needed for this." }; return { status: 200, headers: {}, body: "" }; }, shell);
-    await expect(b.fetch(approve)).rejects.toThrow("Cancelled: nothing was sent.");
-    shell.passcode = async () => "1234";
-    await expect(b.fetch(approve)).resolves.toMatchObject({ status: 200 });
-  });
-
-  it("a request that went out keeps its tap spent, even when it failed", async () => {
-    const shell = oneTap();
-    const b = broker(async () => { throw { code: "failed", message: "the gateway didn't answer" }; }, shell);
-    await expect(b.fetch(approve)).rejects.toMatchObject({ code: "failed" });
+  it("no tap at all still says it needs one", async () => {
+    const b = createBroker({ native: native(), session: "s", applet: { name: "Mail", subject: "v\u0000m" }, services: [mail], hubs: [], emit: () => {}, shell: { ...oneTap(), tap: () => false } });
     await expect(b.fetch(approve)).rejects.toThrow("an approval needs your tap in the applet");
   });
 });

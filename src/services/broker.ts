@@ -21,40 +21,28 @@ type Pending = { events: SignedEvent[]; eose: boolean };
 const BATCH_MS = 50, BATCH_MAX = 200, IN_FLIGHT_MAX = 50 * 1024 * 1024;
 
 /** What the shell around the frame gives the broker for approvals (docs/design/KEYRING.md): a tap in this applet's
- *  frame, used up by the call that takes it (`untap`: that call paid for nothing, so the person's next tap counts); its
+ *  frame, used up by the call that takes it ("again": there is one, but the last tap paid for a call a moment ago); its
  *  own sheet for a secret (null: the person cancelled); its own line over the applet. */
-export type Shell = { tap: () => boolean; untap: () => void; secret: (v: SecretView) => Promise<string | null>; say: (text: string) => void;
+export type Shell = { tap: () => boolean | "again"; secret: (v: SecretView) => Promise<string | null>; say: (text: string) => void;
   /** The shell's own sheet: whether to trust `key` (npub) for approvals, and the name the person gives it; null for no. */
   trust: (v: { applet: string; key: string }) => Promise<string | null>;
   /** The shell's own sheet for this device's passcode, when the level of what is asked says so (src-tauri/src/levels.rs):
    *  `what` in the shell's words, `wrong` the last try's refusal. null: cancelled. The applet never sees it. */
   passcode: (v: { what: string; wrong: string | null }) => Promise<string | null> };
-const NO_SHELL: Shell = { tap: () => false, untap: () => {}, secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null };
-
-/** Refusals of this device's gate (src-tauri/src/levels.rs `gate`, keyring.rs `confirm`), all before anything is signed:
- *  the unlock cancelled or failed, the passcode not given, none set, Parachute locked, or refused (just cancelled, an
- *  unlock already showing). */
-const GATE_SAID_NO = ["unlock", "passcode", "passcode_unset", "locked", "refused"];
-const codeOf = (e: unknown) => (e && typeof e === "object" && "code" in e ? (e as { code: unknown }).code : null);
-
-/** A native call a tap paid for, behind this device's gate: refused there, nothing was signed or sent, so the tap is
- *  given back and the person's next one counts (a retry isn't "needs your tap"; Rust's cooldown still keeps the same
- *  request from asking the unlock again at once). */
-export async function behindGate<T>(shell: Pick<Shell, "untap">, call: () => Promise<T>): Promise<T> {
-  try { return await call(); } catch (e) {
-    if (GATE_SAID_NO.includes(codeOf(e) as string)) shell.untap();
-    throw e;
-  }
-}
+/** A second tap within an activation's few seconds: also after a cancelled unlock (nothing was approved, but the tap
+ *  was used, and the same request waits out Rust's cooldown anyway). Said plainly, not "needs your tap". */
+export const TAP_AGAIN = "Tap again in a moment: one tap pays for one approval.";
+const NO_SHELL: Shell = { tap: () => false, secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null };
 
 /** A native call that may ask this device's passcode: tried without, then with what the person types on the shell's
- *  sheet, until it passes, they cancel, or five tries (Rust then makes them wait). Behind the gate (`behindGate`). */
-export async function withPasscode<T>(shell: Pick<Shell, "passcode" | "untap">, what: string, call: (passcode: string | null) => Promise<T>): Promise<T> {
+ *  sheet, until it passes, they cancel, or five tries (Rust then makes them wait). */
+export async function withPasscode<T>(shell: Pick<Shell, "passcode">, what: string, call: (passcode: string | null) => Promise<T>): Promise<T> {
   let typed: string | null = null;
   let wrong: string | null = null;
   for (let i = 0; ; i++) {
-    try { return await behindGate(shell, () => call(typed)); } catch (e) {
-      if (codeOf(e) !== "passcode" || i >= 5) throw e;
+    try { return await call(typed); } catch (e) {
+      const code = e && typeof e === "object" && "code" in e ? (e as { code: unknown }).code : null;
+      if (code !== "passcode" || i >= 5) throw e;
       if (typed !== null) wrong = String((e as { message?: unknown }).message ?? "That passcode isn't it.");
       typed = await shell.passcode({ what, wrong });
       if (typed === null) throw new BrokerError("failed", "Cancelled: nothing was sent.");
@@ -64,6 +52,9 @@ export async function withPasscode<T>(shell: Pick<Shell, "passcode" | "untap">, 
 
 export function createBroker(opts: { native: Native; session: string; applet: { name: string; subject: string }; services: Service[]; hubs: string[]; emit: Emit; socket?: (url: string) => WebSocket; shell?: Shell }) {
   const shell = opts.shell ?? NO_SHELL;
+  /** A tap in the applet pays for this call, or it is refused: `words` when there is no tap, TAP_AGAIN when the last one
+   *  paid for a call a moment ago. */
+  const paid = (words: string) => { const tapped = shell.tap(); if (tapped !== true) throw new BrokerError("not_granted", tapped === "again" ? TAP_AGAIN : words); };
   const { native, session, emit } = opts;
   const byId = new Map(opts.services.map((s) => [s.id, s]));
   const conns = new Map<string, RelayConn>();
@@ -161,7 +152,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
         try { const j = JSON.parse(new TextDecoder().decode(bytes)); op = j && typeof j === "object" && !Array.isArray(j) ? (j as Record<string, unknown>)[line.field] : undefined; } catch { op = undefined; }
         if (typeof op === "string" && line.ops.includes(op)) held = op;
       }
-      if (held !== null && !shell.tap()) throw new BrokerError("not_granted", held && s.join?.ops.includes(held) ? "joining a network needs your tap in the applet" : "an approval needs your tap in the applet");
+      if (held !== null) paid(s.join?.ops.includes(held) ? "joining a network needs your tap in the applet" : "an approval needs your tap in the applet");
       const release = bytesIn(bytes?.length ?? 0);
       try {
         await opened;
@@ -226,7 +217,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       if (t.value.kind === 9 && isCommandApproval(t.value.content)) {
         // a bot's approval (Hermes's /approve) is an approval: the grant, and a tap
         if (!s.approvals) throw new BrokerError("not_granted", "answering a bot's approval needs the approvals grant");
-        if (!shell.tap()) throw new BrokerError("not_granted", "an approval needs your tap in the applet");
+        paid("an approval needs your tap in the applet");
       }
       const me = (await opened).pubkey;
       if (s.rooms?.length && [7, 40003, 5].includes(t.value.kind)) {
@@ -312,12 +303,12 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
     async trust(p: { service: string; event: unknown }) {
       const s = approverOf(p.service);
       const ev = cardEvent(s, p.event);
-      if (!shell.tap()) throw new BrokerError("not_granted", "this needs your tap in the applet");
+      paid("this needs your tap in the applet");
       await opened;
       const before = await native.cardView(session, s.id, ev);
       if (before.trust !== ev.pubkey) return before;
       const name = await shell.trust({ applet: opts.applet.name, key: nip19.npubEncode(ev.pubkey) });
-      if (name !== null) await behindGate(shell, () => native.cardTrust(session, s.id, ev, name));
+      if (name !== null) await native.cardTrust(session, s.id, ev, name);
       return native.cardView(session, s.id, ev);
     },
 
@@ -328,7 +319,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       const ev = cardEvent(s, p.event);
       if (p.decision !== "approve" && p.decision !== "deny") throw new BrokerError("bad_params", "a decision is approve or deny");
       if (!Array.isArray(p.rids) || !p.rids.length || p.rids.length > 20 || !p.rids.every((r) => typeof r === "string" && /^[0-9a-f]{32}$/.test(r))) throw new BrokerError("bad_params", "rids are the card's request ids");
-      if (!shell.tap()) throw new BrokerError("not_granted", "an answer needs your tap in the applet");
+      paid("an answer needs your tap in the applet");
       await opened;
       const decision = p.decision, rids = p.rids as string[];
       const r = decision === "deny" ? await native.cardAnswer(session, s.id, ev, decision, rids)
@@ -348,7 +339,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
     async secret(p: { service: string; event: unknown }) {
       const s = approverOf(p.service);
       const ev = cardEvent(s, p.event);
-      if (!shell.tap()) throw new BrokerError("not_granted", "a secret needs your tap in the applet");
+      paid("a secret needs your tap in the applet");
       await opened;
       const v = await native.secretView(session, s.id, ev);
       const value = await shell.secret(v);
@@ -362,7 +353,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
     async forgetSecret(p: { service: string; event: unknown }) {
       const s = approverOf(p.service);
       const ev = cardEvent(s, p.event);
-      if (!shell.tap()) throw new BrokerError("not_granted", "this needs your tap in the applet");
+      paid("this needs your tap in the applet");
       await opened;
       const wrap = await native.secretForget(session, s.id, ev);
       const res = await conn(s).publish(wrap);

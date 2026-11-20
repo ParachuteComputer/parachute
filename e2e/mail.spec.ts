@@ -125,12 +125,13 @@ test("mail: Uni's held sends wait for alice; she approves one (bob gets it) and 
     await app.getByRole("button", { name: "Approve" }).click();
     await expect(app.getByRole("status").filter({ hasText: "Not sent: The device unlock was cancelled or failed." })).toBeVisible();
     expect(await unlocks()).toEqual(["approve send.approve"]);
-    // tapped again at once: the tap counts (nothing was signed), and the same request waits out the cancel's few seconds
+    // tapped again at once: one tap pays for one approval, so it says to tap again in a moment (not "needs your tap")
     await unlockPasses(true);
     await app.getByRole("button", { name: "Approve" }).click();
-    await expect(app.getByRole("status").filter({ hasText: "Not sent: That was just cancelled. Try again in a moment." })).toBeVisible();
-    // then, with the unlock, it goes
-    await page.waitForTimeout(5_000);
+    await expect(app.getByRole("status").filter({ hasText: "Not sent: Tap again in a moment: one tap pays for one approval." })).toBeVisible();
+    expect(await unlocks()).toEqual(["approve send.approve"]);
+    // a moment later (past the tap and the cancel's cooldown), with the unlock, it goes
+    await page.waitForTimeout(5_100);
     await app.getByRole("button", { name: "Approve" }).click();
     await expect(app.getByRole("status").filter({ hasText: "Sent." })).toBeVisible();
     await expect(app.getByRole("button", { name: "Approve" })).toHaveCount(0);

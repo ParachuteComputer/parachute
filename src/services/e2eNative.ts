@@ -32,20 +32,22 @@ export function e2eNative(secretHex: string): Native {
   const keep = (k: KeptLevels) => { try { sessionStorage.setItem(LEVELS_KEPT, JSON.stringify(k)); } catch { /* this page */ } };
   let passcode: string | null = kept().passcode;
   const unlockHook = () => (window as unknown as { __parachuteE2EUnlock?: string }).__parachuteE2EUnlock;
-  // after a cancelled unlock the same request can't ask again for 5 seconds (keyring.rs `cooling`)
+  // after a cancelled unlock the same thing can't ask again for 5 seconds (keyring.rs `cooling`), keyed as Rust keys it:
+  // `service:op` for an approve or join op, the card's id, "levels". (Trusting a key and the idle lock's own unlock
+  // aren't kept here: levels.spec runs a paused clock.)
   const cancelled = new Map<string, number>();
   /** The gate (levels.rs `gate`): locked refuses; the passcode when the level asks it; then the unlock (the test's
-   *  hook, `window.__parachuteE2EUnlock = "pass"`, else cancelled). */
-  const gate = (level: Level, typed: string | null | undefined, unlocks: string[] | null, what: string) => {
+   *  hook, `window.__parachuteE2EUnlock = "pass"`, else cancelled). `what` goes on the test's list; `key` is Rust's. */
+  const gate = (level: Level, typed: string | null | undefined, unlocks: string[] | null, what: string, key: string) => {
     if (idle(false).locked) throw { code: "locked", message: "Parachute is locked. Unlock it first." };
     if (level === "none") return;
     if (level === "passcode") {
       if (passcode === null) throw { code: "passcode_unset", message: "This asks your passcode, and this device has none yet: set one in Settings → Security." };
       if (typed !== passcode) throw { code: "passcode", message: typed == null ? "Your passcode is needed for this." : "That passcode isn't it." };
     }
-    if (Date.now() - (cancelled.get(what) ?? -Infinity) < 5000) throw { code: "refused", message: "That was just cancelled. Try again in a moment." };
+    if (Date.now() - (cancelled.get(key) ?? -Infinity) < 5000) throw { code: "refused", message: "That was just cancelled. Try again in a moment." };
     unlocks?.push(what);
-    if (unlockHook() !== "pass") { cancelled.set(what, Date.now()); throw { code: "unlock", message: "The device unlock was cancelled or failed." }; }
+    if (unlockHook() !== "pass") { cancelled.set(key, Date.now()); throw { code: "unlock", message: "The device unlock was cancelled or failed." }; }
   };
   const idle = (touched: boolean): LevelsStatus => {
     const k = kept(), t = Date.now(), min = k.levels.idle;
@@ -87,8 +89,8 @@ export function e2eNative(secretHex: string): Native {
         try { j = JSON.parse(new TextDecoder().decode(body)) as Record<string, unknown>; } catch { /* not JSON */ }
         const op = (f?: { field: string; ops: string[] }) => (f && j && typeof j[f.field] === "string" && f.ops.includes(j[f.field] as string) ? j[f.field] as string : null);
         const hook = window as unknown as { __parachuteE2EUnlocks?: string[] };
-        if (op(s.approve)) gate(kept().levels.approvals, typed, (hook.__parachuteE2EUnlocks ??= []), `approve ${op(s.approve)}`);
-        else if (op(s.join)) gate(kept().levels.join, typed, (hook.__parachuteE2EUnlocks ??= []), `join ${op(s.join)}`);
+        if (op(s.approve)) gate(kept().levels.approvals, typed, (hook.__parachuteE2EUnlocks ??= []), `approve ${op(s.approve)}`, `${service}:${op(s.approve)}`);
+        else if (op(s.join)) gate(kept().levels.join, typed, (hook.__parachuteE2EUnlocks ??= []), `join ${op(s.join)}`, `${service}:${op(s.join)}`);
       }
       const headers: Record<string, string> = { ...req.headers };
       if (s.kind === "http" && s.auth === "nip98") {
@@ -176,7 +178,7 @@ export function e2eNative(secretHex: string): Native {
         // this device's level for approvals; a powerful row at least the unlock (cards.rs)
         const powerful = rows.some((r) => r.f.class === "powerful");
         const level = kept().levels.approvals;
-        gate(powerful && level === "none" ? "unlock" : level, typed, (hook.__parachuteE2EUnlocks ??= []), rows.map((r) => `${r.f.class} ${r.f.credential}`).join(", "));
+        gate(powerful && level === "none" ? "unlock" : level, typed, (hook.__parachuteE2EUnlocks ??= []), rows.map((r) => `${r.f.class} ${r.f.credential}`).join(", "), ev.id);
       }
       answered.set(ev.id, rows.map((r) => ({ rid: r.f.rid as string, decision, at: now(), until: decision === "approve" ? now() + (r.f.ttl_s as number) : null, sent: false })));
       const wraps = rows.map((r) => ({ rid: r.f.rid as string, wrap: replyWrap(sk, ev, r, decision) }));
@@ -215,7 +217,7 @@ export function e2eNative(secretHex: string): Native {
       const m = /^levels:v1:approvals=(none|unlock|passcode),code=(unlock|passcode),join=(none|unlock|passcode),idle=(\d{1,4})$/.exec(c.code ?? "");
       if (c.subject?.applet !== "security" || !m) throw { code: "bad_request", message: "That isn't a change of security levels." };
       const hook = window as unknown as { __parachuteE2EUnlocks?: string[] };
-      gate(passcode !== null ? "passcode" : "unlock", code, (hook.__parachuteE2EUnlocks ??= []), "change your security");
+      gate(passcode !== null ? "passcode" : "unlock", code, (hook.__parachuteE2EUnlocks ??= []), "change your security", "levels");
       const ev = finalizeEvent({ kind: 30479, created_at: now(), tags: [["d", d]], content }, sk) as SignedEvent;
       setLevels({ approvals: m[1] as Level, code: m[2] as Level, join: m[3] as Level, idle: Number(m[4]) }, ev.created_at);
       return ev;
