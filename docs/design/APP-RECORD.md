@@ -59,7 +59,8 @@ it stops the applet.
 **What stays as it was.** A device without the person's key (a browser tab) has no approvals: its own Allow, for
 itself, as before. The grants already on a device keep working; they are signed for every device the next time the
 applet asks (changed code, its year, Revoke and Allow). Kinds 30479 and 30480 are on no applet's signing path: an
-applet signs only the kinds the shell names (9, 7, 40003, 5, 20002), and a Rust test says the two can't be among them.
+applet signs only the kinds its service declares, never one on the shell's deny list (SERVICES.md "Kinds the shell
+never signs"), and a Rust test says the two are on it and refused even when declared.
 
 ### What it holds against
 
