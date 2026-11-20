@@ -6,18 +6,12 @@ import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVa
 import { addEmbed, addVault, bringIn, dismissVault, pinApplet, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
 import { titleOf } from "../../vault/notes";
 import { Days } from "../../kit/parts";
+import { when } from "../../kit/when";
 import { appletPath } from "../../open/paths";
 
-/** "2 days ago", from an ISO time. */
-export function ago(iso: string | null | undefined, now = Date.now()): string {
-  const t = iso ? Date.parse(iso) : NaN;
-  if (Number.isNaN(t)) return "";
-  const days = Math.floor((new Date(now).setHours(0, 0, 0, 0) - new Date(t).setHours(0, 0, 0, 0)) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 14) return `${days} days ago`;
-  return new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "long" });
-}
+/** A day inside a line of words: "today", "yesterday", "Monday, November 17". */
+const inLine = (day: string) => (day === "Today" || day === "Yesterday" ? day.toLowerCase() : day);
+
 
 const updated = (n: Note) => (n as { updatedAt?: string }).updatedAt ?? null;
 
@@ -137,7 +131,7 @@ function Entry({ v, a, where, home, pinned, onHold }: { v: FrameVault; a: FrameA
   let life = home ? "opens on start" : a.manifest.note ?? "";
   if (o && load.state === "ok") {
     const newest = load.data[0];
-    life = newest ? `${titleOf(newest)}, ${ago(updated(newest))}` : "nothing in it yet";
+    life = newest ? `${titleOf(newest)}, ${inLine(when.day(updated(newest)))}` : "nothing in it yet";
   }
   return (
     <li>
