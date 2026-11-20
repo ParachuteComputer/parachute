@@ -117,7 +117,8 @@ export function Field({ label, value, onChange, placeholder, action, onAction, c
   const [busy, setBusy] = useState(false);
   const text = value ?? own;
   const set = (v: string) => { if (value === undefined) setOwn(v); onChange?.(v); };
-  // no <form>: a sealed frame (no allow-forms) blocks a form's submit before any handler sees it
+  // no <form> here (the kit's own part): a sealed frame (no allow-forms) drops a form's submit, which the kit then sends
+  // itself (frameKit.ts); this part needs none of that
   const submit = async () => {
     if (!onAction || busy || !text.trim()) return;
     setBusy(true);
