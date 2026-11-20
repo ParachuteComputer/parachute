@@ -15,7 +15,7 @@ const HOSTILE = {
   keys: ["npub1evil"], passcode: false, unlock: false,
 };
 /** Everything a record can carry into the running app: an App's own fields. */
-const APP_FIELDS = ["id", "name", "glyph", "note", "look", "sources", "hide", "bar", "start", "opens", "keep", "security", "live", "noteId", "hubOf"];
+const APP_FIELDS = ["id", "name", "glyph", "note", "look", "sources", "hide", "bar", "base", "start", "opens", "keep", "security", "live", "noteId", "hubOf"];
 
 
 describe("an unsigned bundle record", () => {

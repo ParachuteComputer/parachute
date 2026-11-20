@@ -1,12 +1,9 @@
-// Settings → Frame: which vault is home, which frame runs, and the person's ways to change that: "Make this mine"
+// Settings → Frame: which frame runs (the home vault is chosen under Your bundle), and the person's ways to change that: "Make this mine"
 // (copy the built-in frame into the home vault), looking at their frame again, going back to the built-in one, and a
 // newer built-in frame when one is on offer (never written over theirs without their tap).
-import { useWhose } from "../vault/whose";
 import { useEffect, useState } from "react";
-import { readSettings } from "../shell/homeSettings";
 import { useVaults } from "../vault/hooks";
-import { hostOf } from "../vault/store";
-import { askAgain, useBuiltIn, homeVault, keepMine, makeThisMine, readFrameRecord, setHome, takeNewDefault, useFrameSource } from "../shell/frameSource";
+import { askAgain, useBuiltIn, homeVault, keepMine, makeThisMine, readFrameRecord, takeNewDefault, useFrameSource } from "../shell/frameSource";
 
 const WHY: Record<string, string> = {
   "no-home": "The built-in frame runs.",
@@ -23,9 +20,6 @@ const WHY: Record<string, string> = {
 export default function FrameSettings() {
   const vaults = useVaults();
   const fs = useFrameSource();
-  const isMine = useWhose();
-  // only a vault that is the person's own can be the home (vault/whose.ts)
-  const mine = vaults.filter((v) => isMine(v) === "mine");
   const home = homeVault(vaults);
   const [busy, setBusy] = useState(false);
   // read when shown, as the frame area does: what an agent changed is seen here too
@@ -38,15 +32,6 @@ export default function FrameSettings() {
   return (
     <section className="card" aria-labelledby="s-frame">
       <h2 id="s-frame">Frame</h2>
-      {mine.length > 1 && (
-        <fieldset className="plain">
-          <legend className="settings-sub">Home vault</legend>
-          {mine.map((v) => (
-            <label key={v.key} className="line"><span><input type="radio" name="home" checked={home?.key === v.key} onChange={() => { setHome(v.key); void readSettings(); }} /> <strong>{v.vault}</strong> <span className="quiet">on {hostOf(v.issuer)}</span></span></label>
-          ))}
-        </fieldset>
-      )}
-      {mine.length === 1 && home && <p className="quiet">Home vault: <strong>{home.vault}</strong>.</p>}
       {!home && vaults.length > 0 && <p className="quiet">No home vault: none of your vaults is marked as yours.</p>}
       <p role="status" className="frame-status">{status}</p>
       {fs.choice.run === "built-in" && fs.choice.why === "failed" && fs.failedWhy && <p className="quiet">It said: <q data-untrusted="true">{fs.failedWhy}</q></p>}

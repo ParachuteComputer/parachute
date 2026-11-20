@@ -19,6 +19,7 @@
 import { plain, stripExt } from "../applet/contract";
 import { APP_LEVEL, tooNew } from "../applet/level";
 import { askedOf, stricterAsked, type Asked } from "./levelRules";
+import defaults from "./default-bundles.json";
 
 export const BUNDLE_TAG = "parachute-bundle";
 export const BUNDLE_FOLDER = "Parachute/Bundles/";
@@ -141,14 +142,10 @@ export function bundleOf(raw: unknown, path: string | null, noteId: string | nul
 /** Stands for every hub, from `everywhere` only: no source can say it (`hubOk` refuses it). */
 export const ANY_HUB = "*";
 
-/** The bundles the app ships, as records, in the order Settings lists them. Their bar is the start of the bar while the
+/** The bundles the app ships, as records (default-bundles.json), in the order Settings lists them. Their bar is the start of the bar while the
  *  person's own record says none (the settings note's pins follow it, read until 2026-12-20). A person new to the app on
  *  Parachute Cloud starts on NEWCOMER_BUNDLE; a device whose chosen bundle doesn't load opens FALLBACK_BUNDLE. */
-export const DEFAULT_BUNDLES: readonly Record<string, unknown>[] = [
-  { contract: 1, id: "simple", name: "Simple", glyph: "¶", note: "your notes, Capture, and Connect an AI", look: "notes", everywhere: true,
-    bar: [{ screen: "home" }, { shipped: "capture" }, { screen: "connect" }] },
-  { contract: 1, id: "everything", name: "Everything", glyph: "⁂", note: "every applet in every vault", look: "launcher", everywhere: true, bar: [] },
-];
+export const DEFAULT_BUNDLES: readonly Record<string, unknown>[] = defaults;
 export const NEWCOMER_BUNDLE = "simple";
 export const FALLBACK_BUNDLE = "everything";
 /** A default as it is read: its bar is the base the person's pins go after, not a bar of its own. */

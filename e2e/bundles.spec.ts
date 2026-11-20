@@ -147,3 +147,17 @@ test("scripts/migrate-bundles.ts: shows first, then moves each older record and 
   expect(readdirSync(join(dir, "backup")).sort()).toEqual(["Parachute_Apps_kitchen-table.json", "Parachute_Settings.json"]);
   expect(run()).toContain("Nothing to move.");
 });
+
+test("scripts/install-applets.ts: --bar and --start go in the bundle record (only what changes, for one the app ships), never in the settings note", async () => {
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "simple" } } });
+  const hadCapture = (await tagged("applet")).some((n) => n.path.startsWith("Applets/Capture"));
+  const dir = mkdtempSync(join(tmpdir(), "install-applets-"));
+  writeFileSync(join(dir, "token"), hubState().token);
+  const out = execFileSync("node", ["scripts/install-applets.ts", "--hub", hubState().origin, "--vault", VAULT, "--token-file", join(dir, "token"), "--applet", "capture", "--bar", "capture", "--start", "capture", "--apply"]).toString();
+  expect(out).toContain("add the bundle simple at Parachute/Bundles/simple");
+  const [rec] = await tagged("parachute-bundle");
+  expect(rec.metadata.bundle).toEqual({ contract: 1, id: "simple", bar: [{ vault: VAULT, applet: "Applets/Capture" }], start: { vault: VAULT, applet: "Applets/Capture" } });
+  const settings = (await tagged("parachute-settings"))[0].metadata.parachute;
+  expect([settings.bar, settings.start]).toEqual([undefined, undefined]);
+  if (!hadCapture) for (const n of await tagged("applet")) if (n.path.startsWith("Applets/Capture")) await api(hubState(), "DELETE", `notes/${n.id}`);
+});

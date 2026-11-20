@@ -1,0 +1,5 @@
+[
+  { "contract": 1, "id": "simple", "name": "Parachute Simplified", "glyph": "¶", "note": "your notes, Journal, Capture, and Connect an AI", "look": "notes", "everywhere": true,
+    "bar": [{ "screen": "home" }, { "shipped": "journal" }, { "shipped": "capture" }, { "screen": "connect" }] },
+  { "contract": 1, "id": "everything", "name": "Everything", "glyph": "⁂", "note": "every applet in every vault", "look": "launcher", "everywhere": true, "bar": [] }
+]
