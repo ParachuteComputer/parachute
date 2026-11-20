@@ -8,7 +8,7 @@
 //                   hubs:  [{hub, name?}]   the person's Parachutes (docs/design/ONE-SIGN-IN.md): shown, never signed
 //                          in to by themselves
 //                   bundle: "simple" | "everything" | <id>   which bundle this person's devices open (shell/bundles.ts,
-//                          docs/SIMPLE.md): the simple one (Notes, Capture, Connect), everything (the launcher, every
+//                          docs/SIMPLE.md): Parachute Simplified (Notes, Journal, Capture, Connect), everything (the launcher, every
 //                          applet), or a bundle record's. Absent: everything. A new person's first sign-in writes "simple".
 //                          Until 2026-12-20 it is written under its older name `app` too, which builds from before
 //                          11-20 read, and `app` is read first: only such a build changes one name alone

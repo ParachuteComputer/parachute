@@ -18,8 +18,8 @@ without the applet ever holding the person's key or a secret.
 4. **The key and the secrets never leave the native side.** Signing, sealing and signed HTTP run in Rust
    (`src-tauri/src/services.rs`). The web side of the shell decides (which applet, which service, which call) and
    registers each allowed applet's declaration with Rust for its session; Rust checks every call against that
-   registration again, builds every auth event itself from what it is actually sending, and refuses anything outside
-   the kinds it can name.
+   registration again, builds every auth event itself from what it is actually sending, and refuses any kind the
+   service didn't declare, and any kind on its own deny list (below) whatever was declared.
 5. **What was signed is written down** by Rust, as it signs, in a log the person reads on the applet's settings page.
 
 ## The declaration (`fields.services`)
@@ -29,7 +29,7 @@ services:
   - id: rooms                    # what the code calls it: short kebab-case, unique in the list
     kind: nostr-relay            # nostr-relay | http
     url: wss://relay.example     # relay: a ws(s) URL; its origin (https) is also its media server
-    publish: [9, 7, 40003, 5, 20002]   # relay: event kinds it may ask the shell to sign and publish, as you
+    publish: [9, 7, 40003, 5, 20002]   # relay: event kinds it may ask the shell to sign and publish, as you (not on the deny list)
     media: true                  # relay: upload and read files on the relay's media server (Blossom)
     private:                     # relay: its own private notes there, sealed to your key (NIP-44 to self)
       - { kind: 30078, d: "read-state:", t: read-state }
@@ -48,21 +48,55 @@ applet still opens, and reaches no service; its settings page says why):
   password, query or fragment; no raw `.`/`..` or encoded `.`, `/`, `\`, `%` in the path. Normalised (lower-case host,
   trailing dot dropped, default port dropped, IDN as punycode) before it is shown, keyed or used.
 - **Never a Parachute hub** (see "Hubs are not services" below).
-- `publish`: kinds from the list the shell can name, each once:
+- `publish`: the kinds the applet may have signed there, at most 16, each once. The manifest is the declaration: the
+  shell signs any kind its service lists and no other, and the card names each one. Six have words, and some rules of
+  their own:
 
   | Kind | The card says | Extra rule |
   |---|---|---|
   | 9 | messages | |
-  | 7 | reactions | |
-  | 40003 | edits of your messages there | |
-  | 5 | deleting your messages and reactions there | only `e` (and `h`) tags; each target must be an event of the person's, of a kind this applet may publish, read from this relay before the shell signs |
+  | 7 | reactions | with `rooms`: the event it reacts to is in one of them |
+  | 40003 | edits of your messages there | with `rooms`: the event it edits is in one of them |
+  | 5 | deleting your own events of the kinds it posts there | only `e` (and `h`) tags; each target must be an event of the person's, of a kind this applet may publish, read from this relay before the shell signs |
   | 20002 | typing | |
+  | 30023 | articles (it can replace yours) | the one addressable kind an applet may declare (below); a new one with the `d` of an article the person wrote elsewhere replaces it |
 
-  Any other kind is refused in this version (a later one adds named kinds as applets need them). That keeps out, among
-  others: profile, contacts and relay lists (0, 3, 10002), mute lists and wallets (10000–19999), seals and gift wraps
-  (13, 1059), sign-ins, pairing, remote signing and wallet connect (22242, 24133, 24134, 23194, 28934–28936), media
-  and HTTP auth (24242, 27235), room and relay administration (9000–9022, 9030–9033), and every addressable kind
-  (30000–39999) except through `private`.
+  Any other kind is said by its number: "kind 1 and 1111 events".
+
+  **Where posts go.** Only the room kinds (9, 7, 40003, 5, 20002) stay in rooms: a room relay files them by their `h`
+  tag, so with `rooms` the card says "only in «Garden»" for them. Any other kind goes anywhere on the relay, whatever its
+  tags: Buzz keeps a note (1), an article (30023), a git patch (1617–1621) and other global kinds outside every room
+  (`is_global_only_kind`), and a relay without rooms scopes nothing. The card says those on a line of their own,
+  "post as you anywhere there". The shell still asks every event of an applet with `rooms` to carry one of them.
+
+  **Kinds the shell never signs** for an applet, declared or not (`DENIED_KINDS`, `DENIED_RANGES` and the ranges'
+  exceptions in `src-tauri/src/services.rs`, mirrored in `src/applet/denied-kinds.json`; a Rust test holds the two
+  together, and a web test that every exception has words on the card). A declaration that names one is refused whole,
+  and Rust refuses the kind again at each call. Each would hand over the person's identity, their money, an authority
+  they hold, or one of the shell's own protocols, or say something in their name the card can't put in words:
+
+  | Kinds | What they are |
+  |---|---|
+  | 0, 3, 8 | the profile, the contact list, a badge award |
+  | 4 | a direct message (NIP-04): the applet can't encrypt it, so it would go out as plain text under their name |
+  | 41, 1985 | a channel's metadata, a label: the person's say over a channel, and their judgement of others |
+  | 443, 1776, 1777 | an MLS key package (a key others' encrypted groups would invite as the person) and key migration |
+  | 3063 | a software release: a download others install because the person signed it |
+  | 13, 1059 | seals and gift wraps: the shell's sealed approval answers travel in these |
+  | 62 | a request to vanish: asks relays to delete everything the person posted |
+  | 2022, 7374–7376, 9321, 9734, 9735 | coinjoins, Cashu wallets, nutzaps and zaps: money |
+  | 1021, 1022, 5000–7000 | bids and paid jobs (NIP-90): money owed |
+  | 1630–1633 | a git maintainer's status on a patch or issue |
+  | 4550 | a community moderator's approval |
+  | 9000–9099 | running a room or a relay: NIP-29 members, admin deletions and rooms; Buzz's relay membership, archiving and moderation |
+  | 10000–19999 | replaceable settings every Nostr app reads, replaced whole: relays (10002), mutes, DM relays, file servers, wallet connect (13194), Buzz agent profiles |
+  | 20000–29999, except typing (20002) | sign-ins and acting for the person: relay AUTH (22242), NIP-98 HTTP auth (27235), Blossom auth (24242), remote signing (24133), wallet connect (23194–23197), Buzz pairing (24134) and identity binding (24243), NIP-43 joins (28934–28936) |
+  | 30000–39999, except articles (30023) | addressable events: each replaces the person's own of that kind and `d`, whichever app made it, and other apps read many as settings or authority: follow and bookmark sets (Buzz's shared compute reads 30003 as where a member serves its model), private notes (30078, signed only sealed through `private`), Buzz's agents, workflows and push leases, markets and listings, git repositories (30617, 30618), MLS key packages (30443), sites, communities, wallets, trade orders. Opened one kind at a time, with words for the card |
+  | 30479, 30480 | an approval of a security change and the person's key list (APP-RECORD.md, KEYRING.md): named, inside the range as well |
+  | 40000–49999, except edits (40003) | Buzz's commands, signed as an order: DMs opened and members added, agent jobs, workflows and their approvals (46030, 46031), admin (48000s), and the shell's approval desk (46040–46042) |
+
+  When it wasn't clear whether a kind was dangerous, it is on the list. A later version takes one off when an applet
+  needs it, with words for the card.
 - An event an applet publishes may not carry auth-shaped tags (`u`, `method`, `payload`, `challenge`, `relay`, `server`,
   `expiration`), so a post can't be lifted and sent as a sign-in elsewhere. At most 100 tags, 64 KiB of content. The
   shell sets `pubkey` and `created_at`.
@@ -88,7 +122,9 @@ The face says each server in one line, with what it does there as you and that w
 as the person or opens a way out:
 
 - relay: **"Sign in to relay.example as you"**; **"Post as you in your rooms there: messages, reactions, edits,
-  typing"**; **"Delete your messages and reactions there"**; **"Send and open files there as you"** (media); **"Keep private notes
+  typing"**; **"Post as you anywhere there: articles (it can replace yours) and kind 1 events"** (kinds that aren't a room's, whatever its
+  `rooms`);
+  **"Delete your messages, reactions and edits there"**; **"Send and open files there as you"** (media); **"Keep private notes
   there (read-state:…), sealed to your key: other apps of yours may share them"** (private: the Uni app keeps its read
   markers under the same prefix, which is the point; two applets declaring one prefix read each other's).
 - http: **"Send requests to mail.example signed as you"** (nip98), **"Use a token you give it for matrix.example"**
@@ -193,19 +229,21 @@ record), a server an applet talks to, a page an applet shows, other applets.
 | An applet sends what it reads to a server it did declare | It can: that is what a service is. The card says so, per service ("What it reads here could reach …"). |
 | An applet gets the person's signature for something else: a sign-in to another relay, a NIP-98 for the hub, a request it doesn't send | The shell builds 22242, 27235 and 24242 from the connection or request it is making; the applet supplies no auth event, URL or challenge. Rust signs NIP-98 only for the request it then sends, with a nonce. |
 | An applet takes over the account through a hub | Hubs are never services: refused at parse and checked by Rust at each signed request (known hubs, the person's list, a probe of the origin). |
-| A post the applet publishes is reused as an auth event elsewhere | Auth-shaped tags are refused on applet events; auth kinds are never applet kinds. |
-| An applet changes the profile, contacts, relay list, wallet, membership or rooms, or deletes what isn't its own | Only the named kinds; deletion only of the person's events of this applet's kinds, read and checked first. |
+| A post the applet publishes is reused as an auth event elsewhere | Auth-shaped tags are refused on applet events; auth kinds are on the deny list. |
+| An applet changes the profile, contacts, relay list, wallet, membership or rooms, or deletes what isn't its own | Those kinds are on the deny list, refused even when declared; deletion only of the person's events of this applet's kinds, read and checked first. |
 | An applet opens something sealed to the person (a private list, a wallet secret) | It can't hand the shell ciphertext: private notes are read by the shell from the relay, and opened only if the person wrote them, of the declared kind, `t` and `d` prefix. Tokens use their own derived key. |
 | Code changes after the person allowed it | The code's hash is in the grant: changed code shows the card again before it runs. A changed declaration changes the grant's key. |
-| An applet posts in the person's name things they didn't write | Bounded by the card: only the kinds listed, only to that relay. The log shows each one. |
-| An applet approves a credential request or answers a sealed card | Gift wraps and seals are never applet kinds to publish. Answering Uni's cards is its own grant line, with the approval key, keys the device trusts and the device unlock: [KEYRING.md](KEYRING.md). |
+| An applet posts in the person's name things they didn't write | Bounded by the card: only the kinds it declared, each named on the card, and where each goes (its rooms, or anywhere on that relay). The log shows each one. The applet gets each signed event back, so it can send it on through another service it declared: the card's "What it reads here could reach …" covers that, and a signed event says only what the card already allowed. |
+| An applet approves a credential request or answers a sealed card | Gift wraps, seals and the approval desk's kinds are on the deny list; the `t` tag of the approval key's enrollment with Uni (`uni-sealed-enroll`) is refused on any applet event. Answering Uni's cards is its own grant line, with the approval key, keys the device trusts and the device unlock: [KEYRING.md](KEYRING.md). |
 | A server redirects, sets a cookie, or floods | No redirects followed; no cookies; plain headers only; bodies capped at 25 MB; relay batches capped, a subscription that overflows is closed. |
 | An applet floods the shell | The frame's request and pending limits; bytes capped per call and in flight. |
 | Replay of a signed request | NIP-98 carries URL, method, body hash, nonce and time; the server checks the window (the mail gateway keeps a replay cache). |
-| The shell's own web side has a bug | Rust's checks per session still hold: named kinds, tags, prefix, declared relay, hubs. A compromised web side is out of scope: it already holds vault tokens. |
+| The shell's own web side has a bug | Rust's checks per session still hold: declared kinds and the deny list, tags, prefix, declared relay, hubs. A compromised web side is out of scope: it already holds vault tokens. |
 
 Left, said plainly: an allowed applet can post its granted kinds to any room the person is in on that relay, unless its
-service names `rooms` (KEYRING.md); it can read whatever the relay lets the person read there and send it to its
+service names `rooms` (KEYRING.md), and a kind that isn't a room's (a note, an article) anywhere on that relay,
+`rooms` or not; it can delete the
+person's own events there of the kinds it posts, whichever app wrote them; it can read whatever the relay lets the person read there and send it to its
 declared servers. Each is a line on the card. Hermes still takes a plain "/approve" message as the owner's OK for a
 command it flagged; until it takes sealed answers, the shell signs such a message only for an applet with the approvals
 grant, during a tap (KEYRING.md). While Hermes waits it also takes bare "yes" or "ok" as an approval, which any applet

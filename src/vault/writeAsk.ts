@@ -7,6 +7,12 @@ import { findVault, originOf, type VaultRecord } from "./store";
 export class NeedsWriteError extends Error {
   constructor(public vault: string, public key: string) { super(`Parachute can only read ${vault}. Changing notes there needs your OK on your hub.`); this.name = "NeedsWriteError"; }
 }
+/** Is this failure the refusal of a change in `vault` (as thrown, or as the vault client wraps it: "POST … failed: …")? */
+export function isWriteRefusal(e: unknown, vault: string): boolean {
+  if (e instanceof NeedsWriteError) return e.vault === vault;
+  const said = new NeedsWriteError(vault, "").message;
+  return e instanceof Error && (e.message === said || e.message.endsWith(`failed: ${said}`));
+}
 const asks = new Set<(key: string) => void>();
 let lastAsk: string | null = null;
 /** A screen that shows the ask (shell/WriteAsk.tsx) listens here. */
