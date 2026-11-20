@@ -120,13 +120,18 @@ pub fn validate_signals(signals: &[SignalEntry], me: Option<&str>) -> Result<(),
 
 /// The registration's `signals`: what a message for the person on this relay counts toward, by room.
 pub fn relay_signals(signals: &[SignalEntry], gateway: &str, relay: &str) -> Vec<Value> {
-    let mut out: Vec<Value> = signals
-        .iter()
-        .filter(|s| s.gateway == gateway && s.relay.as_deref() == Some(relay))
-        .map(|s| json!({ "subject": s.gid, "signal": s.signal, "rooms": s.rooms }))
-        .collect();
-    out.dedup();
-    out.truncate(8);
+    let mut out: Vec<Value> = Vec::new();
+    // as the gateway takes them: 8 at most, naming 100 rooms at most in all (a signal past that isn't counted there)
+    let mut rooms = 0;
+    for s in signals.iter().filter(|s| s.gateway == gateway && s.relay.as_deref() == Some(relay)) {
+        let v = json!({ "subject": s.gid, "signal": s.signal, "rooms": s.rooms });
+        let n = s.rooms.as_ref().map_or(0, Vec::len);
+        if out.contains(&v) || out.len() == 8 || rooms + n > 100 {
+            continue;
+        }
+        rooms += n;
+        out.push(v);
+    }
     out
 }
 
@@ -851,6 +856,9 @@ mod tests {
         let body: Value = serde_json::from_slice(&register_body(&e, &ep, &regs)).unwrap();
         assert_eq!(body["signals"], json!(regs));
         assert!(serde_json::from_slice::<Value>(&register_body(&e, &ep, &[])).unwrap().get("signals").is_none());
+        // never more rooms than the gateway takes: 50 + 50, and a third signal of 50 is left out
+        let wide = |gid: &str| SignalEntry { gid: gid.into(), signal: "for-you".into(), relay: Some("wss://relay.example".into()), rooms: Some((0..50).map(|i| format!("room{i}")).collect()), ..list[0].clone() };
+        assert_eq!(relay_signals(&[wide("YWFhYWFhYWFh"), wide("YmJiYmJiYmJi"), wide("Y2NjY2NjY2Nj")], "https://push.example/", "wss://relay.example").len(), 2);
     }
 
     #[test]

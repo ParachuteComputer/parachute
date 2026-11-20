@@ -61,13 +61,15 @@ object MessageNotices {
    *  badge), replaced as the count changes. No words from the applet's data: its name, the count, the signal's name. */
   fun signal(ctx: Context, tag: String, title: String, text: String, count: Int, link: String) {
     channel(ctx)
+    // it sounds only when the count rises (something new); a count going down (read elsewhere) changes it quietly
+    val shown = ctx.getSystemService(NotificationManager::class.java).activeNotifications.firstOrNull { it.id == SIGNAL_ID && it.tag == tag }?.notification?.number ?: 0
     try {
       NotificationManagerCompat.from(ctx).notify(tag, SIGNAL_ID, NotificationCompat.Builder(ctx, CHANNEL)
         .setSmallIcon(R.drawable.ic_notify)
         .setContentTitle(title)
         .setContentText(text)
         .setNumber(count)
-        .setOnlyAlertOnce(false)
+        .setSilent(count <= shown)
         .setCategory(NotificationCompat.CATEGORY_STATUS)
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
