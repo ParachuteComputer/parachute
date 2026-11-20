@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useHold } from "../../ui/hold";
 import { Link } from "react-router";
+import { updateLine } from "../../applet/level";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVault } from "../../bridge/protocol";
 import { addEmbed, addVault, bringIn, dismissVault, pinApplet, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
@@ -36,7 +37,7 @@ export default function Launcher() {
     <main className="screen launcher">
       <h1 className="launcher-title">Applets</h1>
       {home.notice === "app-record" && <p className="launcher-notice" role="status">Your app record didn't load, so here is every applet. <Link to="/settings">Settings</Link></p>}
-      {home.notice === "app-newer" && <p className="launcher-notice" role="status">Update Parachute to use {home.noticeName ?? "your app"}. It was made for a newer Parachute, so for now this is another app. <Link to="/settings">Settings</Link></p>}
+      {home.notice === "app-newer" && <p className="launcher-notice" role="status">{updateLine(home.noticeName ?? "your app")} For now this is another app. <Link to="/settings">Settings</Link></p>}
       <ol className="entries" aria-label="Applets">
         {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
         {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}

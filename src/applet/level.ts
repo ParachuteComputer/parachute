@@ -1,7 +1,7 @@
 // Older and newer (docs/design/VERSIONS.md). Records live in a vault and the app on each device updates on its own
 // time, so any build meets records written for an older or a newer one. Each build has a level; a record may say the
 // oldest level it works on (`needs`, beside `applet` in an applet's fields, or in an app record). A build that is too
-// old for a record says "Update Parachute to use …" and runs nothing of it, instead of breaking. Pure.
+// old for a record says "Update Parachute to open …" and runs nothing of it, instead of breaking. Pure.
 
 /** This build's level. Raise it by one when the kit gains a part (kits/modules.ts PART_LEVEL) or a record gains a field
  *  older builds can't do without, and give that part or field this number. */
@@ -25,5 +25,6 @@ export const neededWhy = (needs: unknown, level = APP_LEVEL) => {
   return Number.isFinite(n) ? `it needs Parachute level ${n}; this one is level ${level}` : `it says what it needs in a way this Parachute (level ${level}) doesn't read`;
 };
 
-/** What an app too old for something says, in one line. */
-export const updateLine = (name: string) => `Update Parachute to use ${name}.`;
+/** What an app too old for something says, in one line: the same words on every screen (the applet's, its frame, an
+ *  embed, the list). What is missing, or why, goes in a quieter line under it. */
+export const updateLine = (name: string) => `Update Parachute to open ${name}.`;

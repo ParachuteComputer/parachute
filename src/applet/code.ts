@@ -7,6 +7,7 @@
 // kind too, so the same bytes run another way (an extension changed, nothing else) ask again (`codeHash`).
 
 import { sha256Hex } from "./needs.ts";
+import { updateLine } from "./level.ts";
 import { inlineScript } from "./srcdoc.ts";
 
 export const CODE_KINDS = ["html", "tsx", "jsx"] as const;
@@ -108,24 +109,40 @@ export async function prepare(source: string, kind: CodeKind, cache: CompileCach
 // ── what runs in the frame ──
 
 /**
- * Two scripts before the module, kept free of backticks and `${`. The first only sets up how a failure shows (one line
- * in the frame), so even a module the browser can't parse says why. The second is the loader: a `require` that serves
- * only the provided imports, then the module (an async function, so it may `await` at its top), then its default
+ * Two scripts before the module, kept free of backticks and `${`. The first only sets up how a failure shows (a short
+ * line in the frame), so even a module the browser can't parse says why. The second is the loader: a `require` that
+ * serves only the provided imports, then the module (an async function, so it may `await` at its top), then its default
  * export rendered into #root.
  */
 const FAILURE = String.raw`(function () {
   // what it asked of the kit that this app doesn't have (the loader notes it): a failure then says to update the app
   var missing = window.__parachuteMissing = [];
   window.__parachuteFail = function (e) {
-    var root = document.getElementById("root"); if (!root) return; root.textContent = ""; var p = document.createElement("p");
-    var why = e && e.message ? e.message : String(e);
-    // it may have fallen back for what was missing and stopped for another reason: the reason is said too
-    if (missing.length) { p.className = "parachute-update"; p.textContent = "Update Parachute to use " + (window.__parachuteName || "this applet") + ". It uses " + missing.join(", ") + ", which this Parachute doesn't have. (It stopped: " + why + ")"; }
-    else { p.className = "parachute-error"; p.textContent = "This applet stopped: " + why; }
-    root.appendChild(p);
+    var root = document.getElementById("root"); if (!root) return; root.textContent = "";
+    var why = String(e && e.message ? e.message : e);
+    // the whole error, stack and all, is for the applet's author, in the console
+    try { console.warn("This applet stopped:", e); } catch (x) { /* no console */ }
+    var p = document.createElement("p");
+    if (missing.length) {
+      // it may have fallen back for what was missing and stopped for another reason; updating is the fix either way,
+      // so the line says only that, and what is missing goes in a quieter line under it
+      var box = document.createElement("div"), b = document.createElement("strong"), q = document.createElement("p");
+      box.className = "parachute-update"; box.setAttribute("role", "status");
+      b.textContent = window.__parachuteUpdate || "Update Parachute."; p.appendChild(b);
+      q.className = "quiet"; q.textContent = "It uses " + missing.join(", ") + ", which this Parachute doesn't have.";
+      box.appendChild(p); box.appendChild(q); root.appendChild(box);
+    } else {
+      // its own words, but only the first line of them, and never a stack
+      p.className = "parachute-error"; p.setAttribute("role", "alert");
+      p.textContent = "This applet stopped: " + why.split("\n")[0].slice(0, 300); root.appendChild(p);
+    }
   };
   addEventListener("error", function (e) { var root = document.getElementById("root"); if (root && !root.firstChild) window.__parachuteFail(e.error || e.message); });
 })();`;
+/** The failure line's look: the shell's own for the same thing (styles.css `.card`, `.quiet`, `.error`), on the theme's
+ *  tokens, which the frame has (frame.tsx frameSrcDoc). The fallbacks are the built-in theme's. */
+const FAILURE_STYLE = "<style>:root:has(#root>.parachute-update,#root>.parachute-error) body{margin:0}.parachute-update,.parachute-error{margin:0;padding:12px var(--pad,14px);font:var(--size,16px)/var(--leading,1.45) var(--sans,system-ui,sans-serif);color:var(--text,#1d1a16)}"
+  + ".parachute-update p{margin:0 0 6px}.parachute-update .quiet{color:var(--muted,#6d665a)}.parachute-error{color:var(--danger,#9a3324);overflow-wrap:anywhere}</style>";
 const LOADER_HEAD = String.raw`(function () {
   var root = document.getElementById("root"), fail = window.__parachuteFail;
   var M = window.__ParachuteModules || {};
@@ -187,10 +204,10 @@ export const usesNote = (code: string) => {
 };
 
 /** The page a TSX/JSX applet runs as: a root, React, the components it imports, then its module. `reactSource` sets
- *  `window.__ParachuteModules`. `name`: the applet's, for the line a failure shows. */
+ *  `window.__ParachuteModules`. `name`: the applet's, for the update line a failure shows (level.ts updateLine). */
 export function modulePage(js: string, reactSource: string, imports: readonly { id: string; js: string }[] = [], name?: string): string {
   // each import in its own script, so a mistake in one fails that one, by name
   const table = imports.map((i) => inlineScript(`(window.__ParachuteImports = window.__ParachuteImports || {})[${JSON.stringify(`component:${i.id}`)}] = function (require, module, exports) {\n${i.js}\n};`)).join("");
-  const named = name ? inlineScript(`window.__parachuteName = ${JSON.stringify(name)};`) : "";
-  return `<div id="root"></div>${named}${inlineScript(FAILURE)}${inlineScript(reactSource)}${table}${inlineScript(`${LOADER_HEAD}${js}${LOADER_TAIL}`)}`;
+  const update = `window.__parachuteUpdate = ${JSON.stringify(updateLine(name || "this applet"))};\n`;
+  return `${FAILURE_STYLE}<div id="root"></div>${inlineScript(update + FAILURE)}${inlineScript(reactSource)}${table}${inlineScript(`${LOADER_HEAD}${js}${LOADER_TAIL}`)}`;
 }
