@@ -25,8 +25,10 @@ function Addresses({ list }: { list: VaultRecord[] }) {
     timers.current.set(k, setTimeout(() => was(k, null), 2500));
   };
   const copy = (r: VaultRecord) => {
-    if (!navigator.clipboard) { was(r.key, "failed"); return; }
-    navigator.clipboard.writeText(connectorAddress(r)).then(() => copied_(r.key), () => was(r.key, "failed"));
+    // a failure stays until the next copy: an earlier "Copied" timer mustn't take it away
+    const failed = () => { clearTimeout(timers.current.get(r.key)); was(r.key, "failed"); };
+    if (!navigator.clipboard) { failed(); return; }
+    navigator.clipboard.writeText(connectorAddress(r)).then(() => copied_(r.key), failed);
   };
   return <List label="Your vaults' addresses" hideLabel rows={list.map((r): Row => ({
     key: r.key, title: r.vault,
