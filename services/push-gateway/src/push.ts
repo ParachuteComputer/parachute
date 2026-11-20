@@ -78,6 +78,8 @@ function post(url: string, body: Uint8Array, headers: Record<string, string>, al
  *  here, optional server config, carrying the same sealed bytes (docs/design/SERVICES.md, "Order"). */
 export type Sender = (reg: Reg, sealed: Uint8Array) => Promise<number>;
 
+const heldKey = (reg: Reg, push: SignalPush) => `${reg.endpoint} ${push.subject} ${push.signal}`;
+
 export class Pusher {
   private budget = new Budget(10, 6_000);
   // counts have their own budget, so a run of them (someone reading mail on another device) never holds back a message;
@@ -92,7 +94,7 @@ export class Pusher {
   /** A count held back: kept (the newest replaces an older one for the same endpoint and signal) and sent when the
    *  budget allows. */
   private hold(reg: Reg, push: SignalPush) {
-    this.heldCounts.set(`${reg.endpoint} ${push.subject} ${push.signal}`, { reg, push });
+    this.heldCounts.set(heldKey(reg, push), { reg, push });
     if (this.heldCounts.size > 10_000) this.heldCounts.delete(this.heldCounts.keys().next().value!);
     if (this.retry) return;
     this.retry = setTimeout(() => {
@@ -114,6 +116,8 @@ export class Pusher {
   async send(reg: Reg, push: Push | SignalPush, now = Date.now()): Promise<"sent" | "gone" | "limited" | "failed"> {
     const where = redact(reg.endpoint);
     const count = "kind" in push && push.kind === "signal";
+    // counts leave in order: while one for this endpoint and signal waits, a newer one takes its place
+    if (count && this.heldCounts.has(heldKey(reg, push as SignalPush))) { this.hold(reg, push as SignalPush); return "limited"; }
     if ((this.quietUntil.get(reg.endpoint) ?? 0) > now || !(count ? this.signalBudget : this.budget).take(reg.endpoint, now)) {
       this.opts.log(`push to ${where} held back (rate)`);
       if (count) this.hold(reg, push as SignalPush);

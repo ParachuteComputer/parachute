@@ -362,5 +362,34 @@ test("counts never hold back a message: their own budget, and the newest held co
     await new Promise((res) => setTimeout(res, 3_400));
     const opened = got.map((b) => JSON.parse(new TextDecoder().decode(decrypt(new Uint8Array(b), d.priv, d.auth))));
     assert.equal(opened.filter((o) => o.kind === "signal").at(-1).count, 0, "the newest count held back is sent when there is room");
+    // counts leave in order: one held back isn't overtaken by a newer one when the budget refills
+    got.length = 0;
+    const order = new Pusher({ allowLoopback: true, log: () => {}, gone: () => {} });
+    try {
+      for (const n of [1, 2, 3, 4]) await order.send(r, count(n));
+      await new Promise((res) => setTimeout(res, 2_000));
+      await order.send(r, count(5));
+      await new Promise((res) => setTimeout(res, 1_200));
+      await order.send(r, count(0));
+      await new Promise((res) => setTimeout(res, 7_000));
+      const seen = got.map((b) => JSON.parse(new TextDecoder().decode(decrypt(new Uint8Array(b), d.priv, d.auth)))).filter((o) => o.kind === "signal").map((o) => o.count);
+      assert.equal(seen.at(-1), 0, `the last count the phone gets is the newest (got ${seen.join(",")})`);
+    } finally { order.close(); }
   } finally { pusher.close(); srv.close(); }
+});
+
+test("a set of counts that would pass the key's 64 changes none of them", async () => {
+  const g = createGateway({ url: "http://push.test/", relays: [relay], secret: generateSecretKey(), file: null, allowLoopback: true, log: () => {} });
+  const at = `http://127.0.0.1:${await listenFree(g.server)}`;
+  const sk = generateSecretKey(), me = getPublicKey(sk);
+  try {
+    g.registry.put(reg({ pubkey: me }), now());
+    g.registry.judge(relay, new Set([me]), new Set([me]));
+    for (let i = 0; i < 63; i++) g.counts.move(me, `c3ViamVjdC0${String(i).padStart(3, "0")}`, "new", 1, now());
+    const b = JSON.stringify({ set: [{ subject: "c3ViamVjdC0xxx", signal: "new", count: 5 }, { subject: "c3ViamVjdC0yyy", signal: "new", count: 5 }] });
+    const ev = finalizeEvent({ kind: 27235, created_at: now(), content: "", tags: [["u", "http://push.test/signals"], ["method", "POST"], ["payload", sha256Hex(enc(b))]] }, sk);
+    const res = await fetch(`${at}/signals`, { method: "POST", headers: { authorization: `Nostr ${Buffer.from(JSON.stringify(ev)).toString("base64")}`, "content-type": "application/json" }, body: b });
+    assert.equal(res.status, 409);
+    assert.equal(g.counts.of(me, now()).length, 63, "nothing of it was kept");
+  } finally { g.close(); }
 });
