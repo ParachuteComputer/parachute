@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { PART_NAMES } from "../applet/kits/modules";
 
 const KIT_FLOOR = [
-  "Button", "Card", "Days", "Empty", "Field", "Link", "Linked", "List", "Loading", "Note", "Page", "Problem", "Record", "Search", "Write",
+  "Button", "Card", "Days", "Empty", "Field", "Link", "Linked", "List", "Loading", "Note", "Page", "Problem", "Record", "Search", "Tabs", "Write",
   "link", "toast", "useSaved", "useTheme", "useTranscripts", "voiceNote", "when",
 ];
 const dir = join(process.cwd(), "applets");

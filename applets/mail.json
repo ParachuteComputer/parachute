@@ -12,6 +12,7 @@
       "access": []
     },
     "app": ["open"],
-    "services": [{ "id": "mail", "kind": "http", "url": "{{mail}}", "auth": "nip98", "approve": { "field": "op", "ops": ["send.approve"] } }]
+    "services": [{ "id": "mail", "kind": "http", "url": "{{mail}}", "auth": "nip98", "approve": { "field": "op", "ops": ["send.approve"] } }],
+    "signals": [{ "id": "unread", "name": "unread mail", "from": { "service": "mail", "feed": "unread" }, "via": "{{push?}}" }]
   }
 }

@@ -119,6 +119,33 @@ component, or in `style={…}`. Write plain, working code: types are stripped, n
 
 For `html`: a page, run as written, with the same kit on `window.parachute`.
 
+### Something for the person (`fields.signals`)
+
+What counts as something for the person: the count is the badge on the bar while the applet is closed, and on a phone
+the same count is the notification while Parachute is closed ([design/APP-RECORD.md](design/APP-RECORD.md), "Signals").
+Up to four, each a line on the card:
+
+```yaml
+signals:
+  - id: for-you                     # lower-case words joined by -
+    name: mentions and messages from Uni   # the notification's words: "Rooms · 3 new"
+    from: { service: rooms }        # a relay service with notify: its gateway counts what it would tell you about
+  - id: unread
+    name: unread mail
+    from: { service: mail, feed: unread }   # an http service's number: the applet sets it while it runs
+    via: https://push.example/      # the gateway the count goes to, for your other devices and your closed phone
+  - id: new
+    name: new ideas from others
+    from: { vault: here, path: Ideas/, others: true }   # notes in a folder it may read, made since you last opened it
+    via: https://push.example/
+```
+
+Nothing of the applet runs to count. Notes in its vault are counted by the app, live, from the vault (`others`: only
+notes someone else made); a relay's by its push gateway; a feed by the applet itself, with `signal(id, count)` while
+it runs (its own number wins: Mail knows what is unread). Opening the applet makes its counts 0. A gateway gets your
+public key, the applet as a number it can't read back, the signal's id and the count: never what was counted. An
+applet in someone else's vault may count only its notes, and the count goes nowhere.
+
 ### The kit (`import { … } from "parachute"`)
 
 | Call | What it does |
@@ -150,6 +177,7 @@ For `html`: a page, run as written, with the same kit on `window.parachute`.
 | `services.card(id, event)` | With `approvals`: Uni's card in that signed message, as the app checked it: `{ kind, refused, rows: [{ rid, credential, action, class, scope, ttl_s, uses, expires, always_unlock, answer, … }] }`. Never a key. |
 | `services.answer(id, event, "approve" \| "deny", rids)` | On a tap: the app asks for the unlock when it must, seals the answer with the approval key and sends it. Resolves `{ view, sent, failed? }`. A tap answers once. |
 | `services.secret(id, event)`, `services.forgetSecret(id, event)` | On a tap: the app's own sheet takes the secret (`{ sent }`); or asks the requester to forget it. |
+| `signal(id, count)` | Its own number for a signal its record declares (0 to 9999): the bar's count, and through the signal's gateway, the person's other devices'. Fails with `out_of_scope` for a signal it doesn't declare. |
 | `theme.get()`, `theme.now()`, `theme.on(cb)` | The app's look, which the person can change ([THEME.md](THEME.md)): `get` asks for it, `now` gives the last one sent (or null), `on` calls back now and at each change and returns a function that stops it. Beside the values below, it says `scheme` (`light` or `dark`) and `density`. Every value is also a CSS variable: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. |
 
 A call outside what it was allowed fails with `out_of_scope` or `not_granted`. It never reaches anything else.
@@ -186,12 +214,13 @@ does. Use them, or your own markup on the CSS variables, or both.
 | `<Card title?>…</Card>` | A raised block with a title. |
 | `<Field label placeholder? action? onAction? value? onChange? clearOnAction? />` | A line to write on, and one action (its button, or Enter). It keeps its own text unless `value` is given, and clears after the action unless `clearOnAction` is false. `onAction` should catch its own errors and show them: a failed action leaves the text as it was. |
 | `<Empty>…</Empty>` | What shows when there is nothing yet: a sprig and a line. |
-| `<Page title? kicker? aside? onRefresh? className? >…</Page>` | The applet's screen: one width and margin for every applet, its title on the type scale (a small `kicker` above, `aside` at its right), and with `onRefresh` pull down at the top to read again. |
+| `<Page title? kicker? aside? back? onRefresh? wide? className? >…</Page>` | The applet's screen: one width and margin for every applet, its title on the type scale (a small `kicker` above, `aside` at its right, `back: { label, onPress }` a way back above it), with `onRefresh` pull down at the top to read again, and `wide` for two columns on a computer. |
+| `<Tabs label tabs current onChange />` | Places to switch between in one screen (Inbox, Later, Sent): `tabs` is `[{ key, label, count? }]`, the one shown is marked. |
 | `<Loading>…</Loading>` | The quiet line while something is read ("Reading…" unless you say). |
 | `<Problem error? onRetry? >…</Problem>` | What went wrong, said once: your words, then the error's, and Try again with `onRetry`. |
 | `<Button kind? small? busy? onClick >…</Button>` | A button in the app's look: `primary` (the one main action), `plain` (the default) or `quiet`. |
 | `<Search label placeholder? value? onChange? onSearch live? />` | A search box: Enter searches (each pause in typing, with `live` ms); emptying it searches for "". |
-| `<Write label value onChange onSend? send? busy? enter? line? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone, as in a chat). Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows. |
+| `<Write label labelled? value onChange onSend? send? busy? enter? line? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone on a computer, as in a chat). `labelled` shows the label above it, as a Field's. Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows. |
 | `<Record onRecorded label? max_s? disabled? kind? small? >…</Record>` | The microphone button: the app's own recorder sheet (needs `reach: [voice]`); `onRecorded({ bytes, type, duration })` on Send. |
 | `toast(text, { error? })` | A short word after an action ("Saved"), at the foot of the screen, gone by itself. |
 | `voiceNote(recording, create)` | A recording made a note: `create(body)` makes the record (its path is yours), the recording is attached with transcription asked, and the hub writes the words in. |
@@ -204,8 +233,9 @@ An HTML applet has no parts: it has the kit's calls and the CSS variables.
 
 **Older apps.** An applet lives in the vault, and each device's app updates on its own time, so an applet meets older
 apps. A part an older app doesn't have arrives as `undefined`, and an applet that draws it stops there with one line
-saying why. The kit of 11-20 is the floor the shipped applets are written on: they need an app from 11-20 or later, so
-their records go to a vault once the person's devices have it. A part added after that is imported under another name
+saying why. The kit of 11-20 (T-476: everything in the parts table above, with every prop it lists) is the floor the
+shipped applets are written on: they need a build with all of it, the first release after 11-20, so their records go to
+a vault once the person's devices have that build. A newer prop counts as a newer part: an older app ignores it. A part added after that is imported under another name
 with a fallback (`src/kit/olderApp.test.ts` checks the shipped applets do):
 
 ```tsx

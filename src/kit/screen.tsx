@@ -1,16 +1,17 @@
 // The kit's screen parts: what every applet had built for itself (docs/INVENTORY.md), now one each, drawn on the
 // theme's tokens and type scale (parts.css), so every applet looks and behaves the same. Like parts.tsx, every export
 // is a promise to applets written against it (docs/WRITE-AN-APPLET.md): add with care, never change a prop's meaning.
-//   Page      the applet's screen: its width and margins, its title, and pull to refresh
+//   Page      the applet's screen: its width and margins, its title, a way back, two columns (wide), pull to refresh
 //   Loading   the quiet line while something is read
 //   Problem   what went wrong, said once, with Try again
 //   Button    a button in the app's look: primary, plain or quiet
+//   Tabs      places to switch between in one screen, the one shown marked
 //   Search    a search box: Enter (or typing, with `live`) searches; emptying it ends the search
 //   Write     a box to write in, and its action: Save, Send (Ctrl or ⌘ Enter; Enter alone in a chat)
 //   Record    the microphone button: the app's own recorder sheet, never the applet's
 //   toast     a short word after an action ("Saved"), gone by itself
 //   voiceNote a recording made a note whose words the hub writes in; useTranscripts waits for them
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import "./parts.css";
 
 type Recording = { bytes: ArrayBuffer; type: string; duration: number };
@@ -31,8 +32,10 @@ export const said = (e: unknown) => String((e as { message?: unknown })?.message
 const PULL = 64;
 /** The applet's screen: one width and margin for every applet, its title in the type scale (with a small `kicker`
  *  above it and `aside` at its right, a button or two), and, with `onRefresh`, pull down at the top to read again.
- *  `className` is for the applet's own CSS on what is inside. */
-export function Page({ title, kicker, aside, onRefresh, className, children }: { title?: ReactNode; kicker?: ReactNode; aside?: ReactNode; onRefresh?: () => unknown; className?: string; children?: ReactNode }) {
+ *  `back` puts a way back above the title (from a room to the list: `{ label: "Matrix", onPress }`).
+ *  `wide` for a page of two columns on a computer (an area: its notes beside its room); `className` is for the
+ *  applet's own CSS on what is inside. */
+export function Page({ title, kicker, aside, back, onRefresh, wide, className, children }: { title?: ReactNode; kicker?: ReactNode; aside?: ReactNode; back?: { label: string; onPress: () => void }; onRefresh?: () => unknown; wide?: boolean; className?: string; children?: ReactNode }) {
   const [pull, setPull] = useState(0);
   const [busy, setBusy] = useState(false);
   const refresh = useRef(onRefresh);
@@ -76,11 +79,14 @@ export function Page({ title, kicker, aside, onRefresh, className, children }: {
     return () => { removeEventListener("touchstart", down); removeEventListener("touchmove", move); removeEventListener("touchend", up); removeEventListener("touchcancel", up); };
   }, [on]);
   return (
-    <main className={className ? `pa-page ${className}` : "pa-page"}>
+    <main className={`pa-page${wide ? " pa-wide" : ""}${className ? ` ${className}` : ""}`}>
       {on && (pull > 0 || busy) && <div className="pa-pull" style={{ height: busy ? PULL * 0.6 : pull * 0.6 }} role="status">{busy ? "Reading again…" : pull >= PULL ? "Let go to read again" : "Pull to read again"}</div>}
-      {(title || kicker || aside) && (
+      {(title || kicker || aside || back) && (
         <header className="pa-page-head">
-          <div>{kicker && <p className="pa-kicker">{kicker}</p>}{title && <h1 className="pa-title">{title}</h1>}</div>
+          <div>
+            {back && <Button kind="quiet" className="pa-back" onClick={back.onPress}>← {back.label}</Button>}
+            {kicker && <p className="pa-kicker">{kicker}</p>}{title && <h1 className="pa-title">{title}</h1>}
+          </div>
           {aside && <div className="pa-page-aside">{aside}</div>}
         </header>
       )}
@@ -121,6 +127,19 @@ export function Button({ kind = "plain", small, busy, className, disabled, child
   return <button type="button" {...rest} className={`pa-button pa-${kind}${small ? " pa-small" : ""}${className ? ` ${className}` : ""}`} disabled={disabled || busy} aria-busy={busy || undefined}>{children}</button>;
 }
 
+// ── Tabs ──
+
+export type Tab = { key: string; label: ReactNode; count?: number };
+/** Places to switch between in one screen (a mailbox's Inbox, Later, Sent; a vault of several): the one shown is marked,
+ *  a count follows a label ("Inbox · 3"). */
+export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: readonly Tab[]; current: string; onChange: (key: string) => void }) {
+  return (
+    <nav className="pa-tabs" aria-label={label}>
+      {tabs.map((t) => <button key={t.key} type="button" className="pa-tab" aria-current={t.key === current ? "page" : undefined} onClick={() => onChange(t.key)}>{t.label}{t.count ? ` · ${t.count}` : ""}</button>)}
+    </nav>
+  );
+}
+
 // ── Search ──
 
 /** A search box. Enter searches (or each pause in typing, with `live` ms); emptying it searches for "" (the search
@@ -147,11 +166,11 @@ export function Search({ label, placeholder, value, onChange, onSearch, live }: 
 // ── Write ──
 
 /** A box to write in. `onSend` is its action (the button `send` names, or Ctrl/⌘ Enter; with `enter="send"`, as in a
- *  chat, Enter alone and Shift Enter a new line). Buttons of your own (`children`) sit beside the action. `line` lays
+ *  chat, Enter alone on a computer, Shift Enter a new line). Buttons of your own (`children`) sit beside the action. `line` lays
  *  it out as one line that grows as it is written in (a chat's composer). The text is yours (`value`, `onChange`):
  *  keep a draft with useSaved. No form submits (a sealed frame has none). */
-export function Write({ label, value, onChange, placeholder, onSend, send = "Save", busy, enter = "newline", line, maxLength, inputRef, onKeyDown, children }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+export function Write({ label, labelled, value, onChange, placeholder, onSend, send = "Save", busy, enter = "newline", line, maxLength, inputRef, onKeyDown, children }: {
+  label: string; /** the label shown above the box, as a Field's (else it is only said to a screen reader) */ labelled?: boolean; value: string; onChange: (v: string) => void; placeholder?: string;
   onSend?: () => void | Promise<unknown>; send?: ReactNode; busy?: boolean; enter?: "newline" | "send"; line?: boolean;
   maxLength?: number; inputRef?: Ref<HTMLTextAreaElement>; onKeyDown?: (e: KeyboardEvent<HTMLTextAreaElement>) => void; children?: ReactNode;
 }) {
@@ -166,16 +185,18 @@ export function Write({ label, value, onChange, placeholder, onSend, send = "Sav
   const keys = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     onKeyDown?.(e);
     if (e.defaultPrevented || e.key !== "Enter" || e.nativeEvent.isComposing || e.keyCode === 229) return;
-    const sends = enter === "send" ? !e.shiftKey : e.metaKey || e.ctrlKey;
+    // a chat's Enter sends on a computer; on a touch screen it is a new line, and the button sends
+    const sends = (enter === "send" && !e.shiftKey && !matchMedia("(pointer: coarse)").matches) || e.metaKey || e.ctrlKey;
     if (!sends) return;
     e.preventDefault();
     if (can) void onSend!();
   };
-  const box = <textarea ref={setRef} className="pa-write-box" aria-label={label} placeholder={placeholder} value={value} maxLength={maxLength} rows={line ? 1 : undefined}
+  const id = useId();
+  const box = <textarea ref={setRef} id={id} className="pa-write-box" aria-label={labelled && !line ? undefined : label} placeholder={placeholder} value={value} maxLength={maxLength} rows={line ? 1 : undefined}
     onChange={(e) => onChange(e.target.value)} onKeyDown={keys} />;
   const action = onSend && <Button kind="primary" className="pa-write-send" busy={busy} disabled={!value.trim()} onClick={() => void onSend()}>{send}</Button>;
   if (line) return <div className="pa-write pa-line">{children}{box}{action}</div>;
-  return <div className="pa-write">{box}{(action || children) && <div className="pa-write-row">{action}{children}</div>}</div>;
+  return <div className="pa-write">{labelled && <label className="pa-field-label" htmlFor={id}>{label}</label>}{box}{(action || children) && <div className="pa-write-row">{action}{children}</div>}</div>;
 }
 
 // ── Record ──

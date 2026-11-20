@@ -71,6 +71,11 @@ class NotifyService : Service() {
 
     fun save(ctx: Context, entries: String): Boolean = prefs(ctx).edit().putString("entries", entries).commit()
 
+    /** The allowed applets' signals that have a gateway (notify.rs `SignalEntry`): what a signal push may be shown for. */
+    fun savedSignals(ctx: Context): String = prefs(ctx).getString("signals", "[]") ?: "[]"
+
+    fun saveSignals(ctx: Context, signals: String): Boolean = prefs(ctx).edit().putString("signals", signals).commit()
+
     /** Parachute's own connection, for what no push service delivers (a phone without a distributor: GrapheneOS with
      *  nothing installed yet). On unless the person turns it off in Settings: what push serves it leaves alone
      *  (`listening`), so with a push service working it isn't running at all. */

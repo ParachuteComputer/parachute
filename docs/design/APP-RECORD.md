@@ -154,6 +154,43 @@ written to a file of its own on the device (synced, then renamed); it comes back
 after a hide, an unload, the app closing or a reboot. Keep-alive is then speed only: 6 on a phone, 12 on a computer, or
 the app's `keep`.
 
+## Signals: badges and notifications (docs/WRITE-AN-APPLET.md "Something for the person")
+
+Aaron, 11-18: "are there ways that things can change on the backend and it leads to little badges in the app to show
+there's something from that applet?" An applet declares in `fields.signals` what counts as something for the person
+(on its card, and in its key and the asks' hash only when declared). The count is the badge on the bar; on a phone the
+same count is the notification while Parachute is closed. Nothing of the applet runs to count it.
+
+| Signal | Example | Who counts it | When |
+|---|---|---|---|
+| a relay service's `notify` | Rooms: mentions and Uni's messages | its push gateway (services/push-gateway): each message it would push adds one | always, the app closed or not |
+| notes in its own vault | Ideas: notes someone else adds to `Ideas/` | the app, from the vault's own live subscription (`others`: a note whose `createdBy` isn't this sign-in's) | while the app is open on some device |
+| an http service's feed | Mail: unread mail | the applet itself, `signal("unread", n)` while it runs | while Mail runs |
+| none | Journal | nobody | never |
+
+**The count lives in the push gateway** when the signal names one (`via`; a relay's goes through its `notify.gateway`):
+one number per person, applet and signal. Devices tell it the counts they move (`POST <gateway>signals`, signed NIP-98
+by the shell: the applet as an opaque id, a hash of its hub, vault and record; the signal's id; the number) and read
+back what it holds, at start, on every change and when the app comes to the front. A change is pushed to the person's
+phones, sealed: `{v, kind: "signal", subject, signal, count, to}`. The phone shows "Ideas · 2 new" over the signal's
+name; a 0 (opened on another device) takes it away. Opening the applet makes its counts 0 everywhere.
+
+Why the gateway and not somewhere simpler: it already holds the person's push endpoints and watches the relay, so the
+relay signal is counted where the messages are already matched, and one place holds the number every device and the
+closed phone read. The hub would be the simpler home for a vault signal (it has the notes and the matcher), but today
+it can only tell another server about a note by sending the note itself (core's webhook triggers, admin only) or its
+preview (the live subscription): either would put words in the gateway. So a vault signal is counted by the open
+app and only the number reaches the gateway. **Gap, said plainly:** while every device is closed, a new idea is
+counted when one opens, not before; Rooms is counted all the time. The fix is a count-only hub hook (core: a trigger
+that sends `{trigger, event}` and nothing of the note, registrable with read scope to a gateway the hub's operator
+lists); the gateway then adds one per event. A mail server reporting its own count would close the same gap for Mail.
+
+| Who | Learns | Never |
+|---|---|---|
+| The gateway | Which of its registered keys have signals, an opaque id per applet, the signal ids, the counts and when they move | Which applet, vault or hub; any note, message or mail |
+| The push server | That ~200 sealed bytes arrived | Anything in them |
+| The hub | Nothing new: the app's subscription is the person's own sign-in reading a folder it may read | |
+
 ## Subtract
 
 | Old | Replaced by | Goes |
@@ -167,3 +204,4 @@ the app's `keep`.
 | `security.approve` in a record, and "a passcode set here means approving code asks it" | `security.code` and the levels (a device that kept a passcode before keeps `code: passcode`) | now: `approve` is still read as `code` until no record says it (Uni to check Aaron's, then drop the alias) |
 | The passcode under Settings → Approving code | Settings → Security | now |
 | The grace ending when the app leaves the screen | ending when the screen goes off (Aaron, 11-18) | now |
+| Rooms' message notifications as the only thing heard while closed | signals (the message push stays: it opens the room) | nothing removed; `notify` stays the relay's declaration a signal points at |
