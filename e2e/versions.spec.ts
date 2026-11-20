@@ -15,7 +15,7 @@ const card = (page: Page) => page.getByRole("region", { name: /asking for access
 /** The frame of an applet that used a part this app doesn't have: one short line in the app's look, what is missing in a
  *  quieter line under it, and none of the error (React's own, minified, with a link) that stopped it. */
 const expectUpdateLine = async (page: Page, name: string) => {
-  const box = frame(page).getByRole("alert");
+  const box = frame(page).getByRole("status");
   await expect(box.locator("strong")).toHaveText(`Update Parachute to open ${name}.`);
   await expect(box.locator(".quiet")).toHaveText("It uses Timeline, which this Parachute doesn't have.");
   await expect(frame(page).locator("#root")).not.toContainText(/stopped|React|error|https?:/i);
@@ -67,11 +67,11 @@ test("code that uses a part of the kit this app doesn't have says to update in o
   } finally { await api(hubState(), "DELETE", `notes/${two.id}`); }
 });
 
-test("an applet that fell back for a missing part and stopped for another reason says that reason, not to update", async ({ page }) => {
-  const body = `import * as P from "parachute";\nconst Timeline = P.Timeline ?? (() => <p>no timeline</p>);\nexport default function App() {\n  throw new Error("the shelf is empty\\n    at App (applet.tsx:3:9)");\n}\n`;
-  const note = await record(hubState(), "create", { path: "Applets/Falls back", extension: "tsx", tags: ["applet"], body, fields: { applet: { contract: 2, id: "falls-back", name: "Falls back" } } });
+test("any other failure says the first line of its error, never a stack", async ({ page }) => {
+  const body = `export default function App() {\n  throw new Error("the shelf is empty\\n    at App (applet.tsx:3:9)");\n}\n`;
+  const note = await record(hubState(), "create", { path: "Applets/Empty shelf", extension: "tsx", tags: ["applet"], body, fields: { applet: { contract: 2, id: "empty-shelf", name: "Empty shelf" } } });
   try {
-    await openChip(page, /Falls back/);
+    await openChip(page, /Empty shelf/);
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(frame(page).getByRole("alert")).toHaveText("This applet stopped: the shelf is empty");
     await expect(frame(page).locator("#root")).not.toContainText(/Update Parachute|applet\.tsx/);

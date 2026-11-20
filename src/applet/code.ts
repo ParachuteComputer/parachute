@@ -122,29 +122,25 @@ const FAILURE = String.raw`(function () {
     var why = String(e && e.message ? e.message : e);
     // the whole error, stack and all, is for the applet's author, in the console
     try { console.warn("This applet stopped:", e); } catch (x) { /* no console */ }
-    // did what is missing stop it? React's "element type is invalid" (#130 once minified: a missing part drawn), or a
-    // missing name as a word in the message ("useX is not a function"). If not, it fell back for the part and stopped
-    // for another reason, said as such.
-    var byPart = missing.length > 0 && (/#130\b|element type is invalid/i.test(why)
-      || missing.some(function (n) { return new RegExp("(^|[^\\w$])" + n.replace(/\$/g, "\\$") + "([^\\w$]|$)").test(why); }));
     var box = document.createElement("div"), p = document.createElement("p");
-    box.setAttribute("role", "alert"); box.appendChild(p);
-    if (byPart) {
-      // one short line, what is missing in a quieter line under it, and none of the error
+    box.appendChild(p);
+    if (missing.length) {
+      // one short line, what is missing in a quieter line under it, and none of the error. It may have fallen back for
+      // the part and stopped for another reason: on an updated Parachute nothing is missing, and that reason shows.
       var b = document.createElement("strong"), q = document.createElement("p");
-      box.className = "parachute-update"; b.textContent = window.__parachuteUpdate || "Update Parachute."; p.appendChild(b);
+      box.className = "parachute-update"; box.setAttribute("role", "status"); b.textContent = window.__parachuteUpdate; p.appendChild(b);
       q.className = "quiet"; q.textContent = "It uses " + missing.join(", ") + ", which this Parachute doesn't have."; box.appendChild(q);
     } else {
       // its own words, but only their first line, and never a stack
       var line = why.replace(/^\s+/, "").split("\n")[0];
-      box.className = "parachute-error"; p.textContent = "This applet stopped: " + (line.length > 300 ? line.slice(0, 299).replace(/[\uD800-\uDBFF]$/, "") + "…" : line);
+      box.className = "parachute-error"; box.setAttribute("role", "alert"); p.textContent = "This applet stopped: " + (line.length > 300 ? line.slice(0, 299).replace(/[\uD800-\uDBFF]$/, "") + "…" : line);
     }
     root.appendChild(box);
   };
   addEventListener("error", function (e) { var root = document.getElementById("root"); if (root && !root.firstChild) window.__parachuteFail(e.error || e.message); });
 })();`;
-/** The failure line's look: the shell's own for the same thing (styles.css `.card`, `.quiet`, `.error`), on the theme's
- *  tokens, which the frame has (frame.tsx frameSrcDoc, Embeds). */
+/** The failure line's look: the text of the shell's card for the same thing (styles.css `.card`, `.quiet`, `.error`;
+ *  the frame itself is the card around it), on the theme's tokens, which the frame has (frame.tsx frameSrcDoc, Embeds). */
 const FAILURE_STYLE = "<style>:root:has(#root>.parachute-update,#root>.parachute-error) body{margin:0}"
   + ".parachute-update,.parachute-error{padding:12px var(--pad);font:var(--size)/var(--leading) var(--sans);color:var(--text);overflow-wrap:anywhere}"
   + ".parachute-update p,.parachute-error p{margin:0 0 6px}.parachute-update .quiet{color:var(--muted)}.parachute-error{color:var(--danger)}</style>";
