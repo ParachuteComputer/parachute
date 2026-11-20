@@ -13,7 +13,10 @@ const shipped = readdirSync(dir).filter((f) => /\.(tsx|jsx)$/.test(f));
 const EXCEPTIONS: Record<string, Partial<Record<string, string>>> = {
   "room.tsx": {
     lists: "the @-name picker under the composer is a listbox, chosen with the arrow keys, not rows",
-    status: "Uni's turn line (what Uni is doing, and Stop) is a live line a screen reader follows while Uni works",
+    status: "Uni's turn line (what Uni is doing, and Stop) and the composer's line (who is typing, what wasn't sent) are live lines a screen reader follows",
+  },
+  "rooms.tsx": {
+    status: "a word about what the list shows (\"This is what you last saw…\") is said when it changes, not as a toast that goes",
   },
 };
 /** Applets not moved onto the kit yet (T-476, a PR at a time): each must still go around it, so the list only shrinks. */

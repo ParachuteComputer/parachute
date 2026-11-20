@@ -400,6 +400,8 @@ const CSS = `
 .room .turn time { font-style: normal; font-variant-numeric: tabular-nums; }
 .room .turn .pa-button { margin-left: auto; font-style: normal; }
 .room .typing { color: var(--muted); font: italic var(--fs-small) var(--serif); min-height: 1.4em; }
+.room .read-err { max-width: 760px; margin: 0 auto; padding: 0 var(--pad); box-sizing: border-box; width: 100%; }
+.room .composer .note .pa-problem { margin: 0; }
 .room .composer { background: var(--bg); border-top: 1px solid var(--line); }
 .room .composer .in { max-width: 760px; margin: 0 auto; padding: 8px var(--pad) 12px; box-sizing: border-box; }
 .room .composer .attach, .room .composer .pa-record { width: 2.4em; height: 2.4em; padding: 0; }
@@ -456,7 +458,10 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   const [older, setOlder] = useState<"more" | "loading" | "start">("more");
   // what couldn't be read is said in the room; what couldn't be sent, as a toast
   const [readErr, setReadErr] = useState<unknown>(null);
-  const setErr = (t: string) => { if (t) toast(t, { error: true }); };
+  const [readTry, setReadTry] = useState(0);
+  // what couldn't be sent: a toast, and said in the composer until the next send
+  const [sendErr, setSendErr] = useState("");
+  const setErr = (t: string) => { if (t) toast(t, { error: true }); setSendErr(t); };
   const [posting, setPosting] = useState(false);
   const firstUnread = useRef<number>(readAt ?? 0);
   const scroller = useRef<HTMLDivElement>(null);
@@ -482,6 +487,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
 
   useEffect(() => {
     let on = true, stop: (() => void) | null = null;
+    setReadErr(null);
     (async () => {
       // which key is Uni's: the one this applet's grant answers cards from (or is told about), as its card said
       const ctx: any = await ready();
@@ -531,7 +537,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     })();
     const sweep = setInterval(() => { let changed = false; const m = s.typing.get(room); for (const [k, t] of m ?? []) if (Date.now() - t > 8000) { m!.delete(k); changed = true; } if (changed) st.bump(); }, 1000);
     return () => { on = false; stop?.(); clearInterval(sweep); };
-  }, [service, room]);
+  }, [service, room, readTry]);
 
   const all = [...(s.msgs.get(room)?.values() ?? [])].filter((e) => visible(s, e)).sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));
   const newest = all[all.length - 1];
@@ -652,7 +658,6 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     <div className="scroll" ref={scroller} onScroll={(e) => { const x = e.currentTarget, d = x.scrollHeight - x.scrollTop - x.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }}
       onWheel={() => { touched.current = true; }} onTouchStart={() => { touched.current = true; }} onPointerDown={() => { touched.current = true; }} onKeyDown={() => { touched.current = true; }}>
       <div className="page">
-        {readErr ? <Problem error={readErr}>Couldn't read the room</Problem> : null}
         {!thread && (older === "start" ? <p className="day">Start of {title}</p> : <div className="older"><Button small busy={older === "loading"} onClick={loadOlder}>Load older messages</Button></div>)}
         <div className="log" role="log" aria-label={`Messages in ${name || "the room"}`}>
           {shown.map((e, i) => {
@@ -685,7 +690,9 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
         {chips && <div className="quick" role="group" aria-label="Quick replies">{chips.map((a) => <Button key={a} small onClick={() => void postAs(a)} disabled={posting}>{a}</Button>)}</div>}
       </div>
     </div>
-    <Composer key={`${room}|${thread ?? ""}`} st={st} relay={relay} room={room} thread={thread} members={authors} send={send} typing={typing} setErr={setErr} name={name || "the room"}
+    {/* at the foot, in view: what shows above may be the list's copy, and this says the room isn't live */}
+    {readErr ? <div className="read-err"><Problem error={readErr} onRetry={() => setReadTry((n) => n + 1)}>Couldn't read the room</Problem></div> : null}
+    <Composer key={`${room}|${thread ?? ""}`} st={st} relay={relay} room={room} thread={thread} members={authors} send={send} typing={typing} setErr={setErr} sendErr={sendErr} name={name || "the room"}
       listen={uniHere ? { on: listening, toggle: toggleUni } : null} />
   </section></Svc.Provider>;
 }
@@ -887,7 +894,7 @@ async function plainImage(f: File): Promise<{ bytes: ArrayBuffer; type: string }
 /** What one message may hold here: the app takes a call of at most 8 KB from an applet. */
 const MAX_TEXT = 7000;
 
-function Composer({ st, relay, room, thread, members, send, typing, setErr, name, listen }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; send: (c: string, extra?: string[][], mentions?: string[]) => Promise<boolean>; typing: string[]; setErr: (e: string) => void; name: string; listen: { on: boolean; toggle: () => void } | null }) {
+function Composer({ st, relay, room, thread, members, send, typing, setErr, sendErr, name, listen }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; send: (c: string, extra?: string[][], mentions?: string[]) => Promise<boolean>; typing: string[]; setErr: (e: string) => void; sendErr: string; name: string; listen: { on: boolean; toggle: () => void } | null }) {
   const s = st.s;
   const svc = useContext(Svc);
   const [text, setText] = useState("");
@@ -977,7 +984,8 @@ function Composer({ st, relay, room, thread, members, send, typing, setErr, name
   };
   return <div className="composer">
     <div className="in">
-      <div className="note">
+      <div className="note" aria-live="polite">
+        {sendErr && <Problem>{sendErr}</Problem>}
         <span className="typing">{typing.length === 1 ? `${typing[0]} is typing…` : typing.length === 2 ? `${typing[0]} and ${typing[1]} are typing…` : typing.length > 2 ? "Several people are typing…" : ""}</span>
         {text.length > MAX_TEXT - 500 && <span className="quiet">{MAX_TEXT - text.length} characters left in this message</span>}
         {listen && <Button small className="listen" aria-pressed={listen.on} onClick={listen.toggle} aria-label={listen.on ? "Uni is listening. Mute Uni for your messages" : "Uni is muted. Let Uni listen again"}

@@ -12,7 +12,7 @@
 // it read in place of the snapshot: a room you left, or a message deleted meanwhile, goes.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button, Empty, List, Loading, onLaunch, Page, Problem, ready, Search, services, storage, when } from "parachute";
-import Room, { chunk, createStore, glyph, lastText, nameOf, now, openAsks, rootOf, tag, tags, textOf, useStore, visible, withoutFences, type Ev, type RoomMeta, type Store } from "component:room";
+import Room, { chunk, createStore, glyph, lastText, nameOf, now, openAsks, rootOf, tag, tags, textOf, useStore, visible, type Ev, type RoomMeta, type Store } from "component:room";
 
 type View = { at: "list" } | { at: "room"; id: string; event?: string };
 
@@ -87,11 +87,13 @@ async function loadRead(relay: any): Promise<Record<string, number>> {
 const CSS = `
 .pa-page.in-room { max-width: none; padding: 0; }
 .quiet { color: var(--muted); }
-.note { color: var(--muted); font-style: italic; font-family: var(--serif); margin: 8px 0; }
+.rooms .note { color: var(--muted); font-style: italic; font-family: var(--serif); margin: 8px 0; }
 .rooms .pa-row-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rooms .pa-badge:has(.at) { background: var(--text); color: var(--bg); }
 `;
 
+/** A room id safe inside a selector (the page's CSS.escape: `CSS` here is this applet's own style text). */
+const CSS_ESCAPE = (s: string): string => (globalThis as any).CSS?.escape?.(s) ?? s.replace(/["\\]/g, "\\$&");
 type Status = { k: "" | "reading" | "empty" } | { k: "problem" | "note"; t: string; e?: unknown };
 
 export default function Rooms() {
@@ -103,6 +105,7 @@ export default function Rooms() {
   const [view, setView] = useState<View>({ at: "list" });
   // where the list was scrolled to, and where each room was left (distance from its foot; null: at the foot)
   const listY = useRef(0);
+  const lastRow = useRef<{ id: string; top: number } | null>(null);
   const places = useRef(new Map<string, number | null>());
   const saveTimer = useRef<any>(null);
 
@@ -229,8 +232,14 @@ export default function Rooms() {
   }, []);
 
   // opening a room: drawn at once from what the list holds, and where you left it (each room's place, and the list's)
-  const open = (id: string, event?: string) => { listY.current = window.scrollY; setView({ at: "room", id, ...(event ? { event } : {}) }); };
-  if (view.at === "list") return <Page title="Rooms" className="rooms"><style>{CSS}</style><RoomList st={st} status={status} open={open} y={listY.current} /></Page>;
+  const open = (id: string, event?: string) => {
+    listY.current = window.scrollY;
+    // and where its row was on the screen: back from the room, that row is put there again (rows not drawn yet are
+    // only placeholders, so the page's offset alone can land elsewhere)
+    const row = document.querySelector(`[data-room="${CSS_ESCAPE(id)}"]`);
+    lastRow.current = row ? { id, top: row.getBoundingClientRect().top } : null;
+    setView({ at: "room", id, ...(event ? { event } : {}) }); };
+  if (view.at === "list") return <Page title="Rooms" className="rooms"><style>{CSS}</style><RoomList st={st} status={status} open={open} y={listY.current} row={lastRow.current} /></Page>;
   const id = view.id;
   // only messages as the relay sent them (signed, unchanged): a card in one is checked by its signature; the snapshot's
   // shortened copies (no signature) wait for the room's own read; edits go along as their own events
@@ -250,10 +259,14 @@ function unreadOf(s: Store["s"], room: string) {
   return { n: r ? list.length : 0, mention: r ? list.some((e) => tags(e, "p").includes(s.me)) : false };
 }
 
-function RoomList({ st, status, open, y }: { st: Store; status: Status; open: (id: string, event?: string) => void; y: number }) {
+function RoomList({ st, status, open, y, row }: { st: Store; status: Status; open: (id: string, event?: string) => void; y: number; row: { id: string; top: number } | null }) {
   const s = st.s;
   // back from a room: the list where you left it
-  useLayoutEffect(() => { if (y) window.scrollTo(0, y); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    if (y) window.scrollTo(0, y);
+    const el = row && document.querySelector(`[data-room="${CSS_ESCAPE(row.id)}"]`);
+    if (el) window.scrollBy(0, el.getBoundingClientRect().top - row!.top);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Ev[] | null>(null);
   const rows = [...s.rooms.values()].map((room) => {
@@ -274,10 +287,10 @@ function RoomList({ st, status, open, y }: { st: Store; status: Status; open: (i
   return <>
     <Search label="Search your rooms" value={q} onChange={setQ} onSearch={(t) => void search(t)} />
     {found && <section aria-label="Found"><p className="quiet">{found.length ? `${found.length} found` : "Nothing found."} <Button kind="quiet" small onClick={() => { setFound(null); setQ(""); }}>Clear</Button></p>
-      <List rows={found.map((e) => ({ key: e.id, glyph: glyph(roomOf(e)?.name ?? ""), title: roomOf(e)?.name ?? "a room", aside: when.ago(e.created_at), meta: lastText(s, e), onPress: () => open(tag(e, "h")!, e.id) }))} />
+      <List rows={found.map((e) => ({ key: e.id, glyph: glyph(roomOf(e)?.name ?? ""), title: roomOf(e)?.name ?? "a room", aside: when.ago(e.created_at), meta: <><b>{e.pubkey === s.me ? "You" : nameOf(s, e.pubkey)}:</b> {lastText(s, e)}</>, onPress: () => open(tag(e, "h")!, e.id) }))} />
     </section>}
     {status.k === "reading" ? <Loading>Reading your rooms…</Loading> : status.k === "problem" ? <Problem error={status.e}>{status.t}</Problem>
-      : status.k === "note" ? <p className="note">{status.t}</p> : status.k === "empty" ? <Empty>No rooms yet. When someone writes to you, the room shows here.</Empty> : null}
+      : status.k === "note" ? <p className="note" role="status">{status.t}</p> : status.k === "empty" ? <Empty>No rooms yet. When someone writes to you, the room shows here.</Empty> : null}
     <List label="Your rooms" hideLabel rows={rows.map(({ room, last, at, n, mention, asks }) => ({
       key: room.id, data: { room: room.id }, glyph: glyph(room.name), title: room.name, strong: n > 0, onPress: () => open(room.id),
       badge: n > 0 ? <span className={mention ? "at" : undefined} aria-label={`${n} new${mention ? ", mentions you" : ""}`}>{mention ? "@ " : ""}{n > 99 ? "99+" : n}</span> : undefined,
