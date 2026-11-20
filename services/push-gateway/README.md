@@ -28,7 +28,8 @@ notify: { mentions: true, from: [<hex key>], gateway: https://push.example/ }
    if no list has the key it is dropped at that read. The answer to a register says `pending: true` for such a key, and
    the app registers it again a day later instead of a week (a room may add the gateway or the person meanwhile).
 3. **A new message (kind 9) is matched.** Pushed when it names the person (`p` tag; a message naming more than 20 is
-   not a mention) or comes from a key in `from`; never for their own message, only in a room whose member list has
+   not a mention, nor is one from an author the room's member list doesn't have: a relay may take a post in an open
+   room from anyone it admits) or comes from a key in `from`; never for their own message, only in a room whose member list has
    them, only in the rooms they named (when they named any), only for messages from after they registered.
 4. **The push.** `{"v":1,"relay":…,"room":…,"event":…,"kind":9,"why":"mention"|"from","to":<hex key>}`, sealed with Web Push
    encryption (RFC 8291, aes128gcm) to the phone's push keys, POSTed to the endpoint with `TTL: 86400` and
@@ -130,7 +131,9 @@ topics opened for writing (`ntfy access everyone 'up*' write-only`: topics are r
 readable by the phone's account (`ntfy access <user> 'up*' read-only`).
 
 Behind your TLS proxy, set `PUSH_GATEWAY_TRUST_PROXY=1` when the proxy appends the client's address to
-`X-Forwarded-For`; otherwise every phone has the proxy's address and the per-address limit is one for everyone.
+`X-Forwarded-For`; otherwise every phone has the proxy's address and the per-address limit is one for everyone who is
+new (a key the gateway already serves keeps its own budget, so a flood of fresh keys can't lock those people out; it
+can still keep new phones from registering until it stops).
 
 It prints its public key: the relay's owner lets it in (kind 9030), room admins add it (kind 9000). It listens on
 127.0.0.1:8790; put TLS in front (`tailscale serve`, a Cloudflare Tunnel, Caddy) at the address in `PUSH_GATEWAY_URL`.
