@@ -1,8 +1,9 @@
-// Settings → Frame: which vault is home, which frame runs, and the person's ways to change that: "Make this mine"
+// Settings → Frame (shown when the person has a frame of their own, or more than one vault to pick home from:
+// settingsShown.ts; Settings reads the frame record when it shows): which vault is home, which frame runs, and the person's ways to change that: "Make this mine"
 // (copy the built-in frame into the home vault), looking at their frame again, going back to the built-in one, and a
 // newer built-in frame when one is on offer (never written over theirs without their tap).
 import { useWhose } from "../vault/whose";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { readSettings } from "../shell/homeSettings";
 import { useVaults } from "../vault/hooks";
 import { hostOf } from "../vault/store";
@@ -28,8 +29,6 @@ export default function FrameSettings() {
   const mine = vaults.filter((v) => isMine(v) === "mine");
   const home = homeVault(vaults);
   const [busy, setBusy] = useState(false);
-  // read when shown, as the frame area does: what an agent changed is seen here too
-  useEffect(() => { void readFrameRecord(); }, [home?.key]);
   const [error, setError] = useState<string | null>(null);
   const act = (f: () => Promise<void> | void) => async () => { setBusy(true); setError(null); try { await f(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
   const found = fs.read?.state === "found" ? fs.read : null;
