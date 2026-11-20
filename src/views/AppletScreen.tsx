@@ -359,6 +359,8 @@ export default function AppletScreen() {
   // and closed with it; its calls wait for it
   const brokerRef = useRef<{ session: Session; broker: Promise<Broker | null> } | null>(null);
   const sheets = useShellSheets(() => frameEl.current);
+  const sheetsRef = useRef(sheets);
+  sheetsRef.current = sheets;
   // the recorder and the file picker (docs/design/KEYRING.md "Voice, files, links, storage"): stable, as the router keeps them
   const device = useDeviceSheets(entry?.manifest.name ?? "This applet");
   const servicesWhy = useRef<string | null>(null);
@@ -379,7 +381,7 @@ export default function AppletScreen() {
   };
   useEffect(() => () => { void brokerRef.current?.broker.then((b) => b?.close()); brokerRef.current = null; }, []);
   const vaultsModule = useMemo(() => (rec && entry && (entry.app.includes("vaults") || entry.app.includes("sharing"))
-    ? createVaultsModule(entry.app, vaultsDeps({ tapped: () => tappingIn(() => frameEl.current), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search }))
+    ? createVaultsModule(entry.app, vaultsDeps({ confirm: (q) => sheetsRef.current.confirm(q), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search }))
     : null), [rec?.key, entry]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => vaultsModule?.stop(), [vaultsModule]);
   const router = useMemo(() => (rec && entry ? createRouter([

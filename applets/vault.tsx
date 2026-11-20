@@ -169,18 +169,20 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   const [term, setTerm] = useState("");
   const [panel, setPanel] = useState<"" | "filter" | "group">("");
   const asked = useRef(0);
+  // how far into the hub's list the pages have read (what lands live isn't part of it)
+  const read = useRef(0);
   const q = (offset: number) => ({ ...(isTag ? { tag: name } : { type: name }), ...(term ? { search: term } : {}), where: view.where,
     ...(view.group ? { sort: { by: view.group, dir: "asc" } } : view.sort ? { sort: view.sort } : {}), limit: PAGE, offset });
   const load = () => {
     const n = ++asked.current;
     setRows(null); setFailed(null);
-    return vaults.query(v.key, q(0)).then((x: { records: Rec[]; more: boolean }) => { if (n === asked.current) { setRows(x.records); setMore(x.more); } }, (e: unknown) => { if (n === asked.current) setFailed(e); });
+    return vaults.query(v.key, q(0)).then((x: { records: Rec[]; more: boolean; read?: number }) => { if (n === asked.current) { read.current = x.read ?? x.records.length; setRows(x.records); setMore(x.more); } }, (e: unknown) => { if (n === asked.current) setFailed(e); });
   };
   const next = () => {
     if (busy || !rows) return;
     setBusy(true);
     const n = asked.current;
-    vaults.query(v.key, q(rows.length)).then((x: { records: Rec[]; more: boolean }) => { if (n === asked.current) { setRows((r) => [...(r ?? []), ...x.records.filter((y) => !(r ?? []).some((z) => z.id === y.id))]); setMore(x.more); } },
+    vaults.query(v.key, q(read.current)).then((x: { records: Rec[]; more: boolean; read?: number }) => { if (n === asked.current) { read.current += x.read ?? x.records.length; setRows((r) => [...(r ?? []), ...x.records.filter((y) => !(r ?? []).some((z) => z.id === y.id))]); setMore(x.more); } },
       (e: unknown) => toast(`More couldn't be read: ${said(e)}`, { error: true })).finally(() => setBusy(false));
   };
   const readViews = () => vaults.query(v.key, { tag: "parachute-view", path: `${VIEWS}${clean(type) || "_"}/`, limit: 20 })
@@ -188,11 +190,15 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   useEffect(() => { vaults.types(v.key).then((t: TypeRow[]) => setSpec(t.find((x) => x.name === name) ?? null), () => setSpec(null)); void readViews(); }, [v.key, type]);
   useEffect(() => { void load(); }, [v.key, type, term, JSON.stringify(view.where), JSON.stringify(view.sort), view.group]);
   // what an AI (or another device) writes lands here as it happens
+  const narrowed = useRef(false);
+  narrowed.current = !!term || view.where.length > 0;
   useEffect(() => vaults.watch(v.key, name, (e: { upsert?: Rec; remove?: string }) => {
     if (e.remove) { setRows((r) => r && r.filter((x) => x.id !== e.remove)); return; }
     const u = e.upsert!;
     if (!(isTag ? u.tags.includes(name) : u.types.includes(name))) { setRows((r) => r && r.filter((x) => x.id !== u.id)); return; }
-    setRows((r) => (r ? (r.some((x) => x.id === u.id) ? r.map((x) => (x.id === u.id ? u : x)) : [u, ...r]) : r));
+    // a row shown changes in place; a new one comes in at the top only when nothing narrows what shows (a filter or a
+    // search would have to judge it: the next read does)
+    setRows((r) => (r ? (r.some((x) => x.id === u.id) ? r.map((x) => (x.id === u.id ? u : x)) : narrowed.current ? r : [u, ...r]) : r));
   }), [v.key, type]);
   // columns: the type's own fields, then any other a record holds (the first page's), at most ten
   const cols = useMemo(() => {
@@ -222,12 +228,12 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   const columns = [{ key: "title", label: "Name", width: 22, sortable: false }, ...cols.map((c) => ({ key: c, label: label(c), align: ["number"].includes(kindOf(spec?.fields?.[c])) ? "end" as const : "start" as const })), { key: "updated", label: "Updated", width: 9 }];
   const tableRow = (r: Rec) => ({ key: r.id, current: r.id === record, label: `Open ${r.title}`, onPress: () => open(r.id),
     cells: { title: r.title, updated: when.short(r.updatedAt), ...Object.fromEntries(cols.map((c) => [c, shown(r.fields[c])])) } });
-  const groups = view.group && rows ? rows.reduce((g: { key: string; label: string; rows: Rec[] }[], r) => {
+  // each value once, in the order it first comes (a search's order isn't the group's)
+  const groups = view.group && rows ? [...rows.reduce((g: Map<string, Rec[]>, r) => {
     const k = shown(r.fields[view.group!]) || "–";
-    if (g.at(-1)?.key !== k) g.push({ key: k, label: k, rows: [] });
-    g.at(-1)!.rows.push(r);
+    g.set(k, [...(g.get(k) ?? []), r]);
     return g;
-  }, []) : null;
+  }, new Map<string, Rec[]>())].map(([k, rs]) => ({ key: k, label: k, rows: rs })) : null;
   const viewTabs = [{ key: "All", label: "All" }, ...views.map((w) => ({ key: w.id!, label: w.name }))];
   return (
     <Page title={isTag ? `#${name}` : label(name)} kicker={`${v.name}${spec ? ` · ${spec.count} ${spec.count === 1 ? "record" : "records"}` : ""}`} back={back} wide className="vlt" onRefresh={load}>
@@ -304,7 +310,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       <p className="note-meta">{folderOf(r.path) || "/"} · changed {when.ago(r.updatedAt)}{r.updatedVia ? ` · ${r.updatedVia}` : ""}</p>
       <div className="chips">
         {r.types.map((t) => <span key={t} className="chip type">{label(t)}{canWrite && <Button small kind="quiet" onClick={() => void change({ types: { remove: [t] } }, `No longer a ${t}.`)}>×</Button>}</span>)}
-        {r.tags.map((t) => <span key={t} className="chip">#{t}{canWrite && <Button small kind="quiet" onClick={() => void change({ tags: { remove: [t] } })}>×</Button>}</span>)}
+        {r.tags.map((t) => <span key={t} className="chip">#{t}{canWrite && t !== "published" && <Button small kind="quiet" onClick={() => void change({ tags: { remove: [t] } })}>×</Button>}</span>)}
       </div>
       {canWrite && <Field label="Add a tag or type" placeholder="#tag, or a type's name" action="Add" onAction={async (x) => {
         const t = x.trim().replace(/^#/, "").toLowerCase().replace(/\s+/g, "-");
@@ -348,7 +354,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       {canWrite && <>
         <p className="sect">Sharing</p>
         <p className="note-meta">{published ? "Published: anyone with its link can read it." : "Only you, and what you let in, can read it."}</p>
-        <Button small onClick={() => void change({ tags: published ? { remove: ["published"] } : { add: ["published"] } }, published ? "No longer published." : "Published.")}>{published ? "Unpublish" : "Publish"}</Button>
+        <Button small onClick={() => vaults.publish(v.key, r.id, !published).then(() => { toast(published ? "No longer published." : "Published."); return load(); }, (e: unknown) => { if (!/not_confirmed/.test(said(e))) toast(`Not changed: ${said(e)}`, { error: true }); })}>{published ? "Unpublish" : "Publish"}</Button>
       </>}
     </article>
   );
@@ -368,9 +374,9 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
       <style>{CSS}</style>
       {failed ? <Problem error={failed} onRetry={load}>What reaches {v.name} couldn't be read</Problem> : !a ? <Loading /> : <>
         <List label="This app" rows={[{ key: "app", title: a.level === "write" ? "Reads and changes records" : "Reads records", meta: `on this device, at ${a.hub.replace(/^https?:\/\//, "")}`,
-          aside: a.level === "write" ? <Button small kind="quiet" onClick={() => vaults.readOnly(v.key).then(load, (e: unknown) => toast(said(e), { error: true }))}>Read only</Button> : undefined }]} />
+          aside: a.level === "write" ? <Button small kind="quiet" onClick={() => vaults.readOnly(v.key).then(load, (e: unknown) => { if (!/not_confirmed/.test(said(e))) toast(said(e), { error: true }); })}>Read only</Button> : undefined }]} />
         {a.applets.length ? <List label="Applets you allowed here" rows={a.applets.map((x) => ({ key: x.noteId, glyph: x.glyph, title: x.name, meta: `${x.changes ? "reads and changes" : "reads"}${x.since ? ` · since ${when.date(x.since)}` : ""}`,
-          aside: <Button small kind="quiet" onClick={() => vaults.revoke(v.key, x.noteId).then(() => { toast(`${x.name} revoked.`); return load(); }, (e: unknown) => toast(said(e), { error: true }))}>Revoke</Button> }))} />
+          aside: <Button small kind="quiet" onClick={() => vaults.revoke(v.key, x.noteId).then(() => { toast(`${x.name} revoked.`); return load(); }, (e: unknown) => { if (!/not_confirmed/.test(said(e))) toast(said(e), { error: true }); })}>Revoke</Button> }))} />
           : <Empty>No applet is allowed in {v.name} on this device.</Empty>}
         <List label="Published" rows={(pub ?? []).map((r) => ({ key: r.id, title: r.title, meta: "anyone with its link can read it" }))} />
         {pub && !pub.length && <p className="note-meta">Nothing in {v.name} is published.</p>}

@@ -7,9 +7,10 @@ import { createRouter } from "./router";
 const enc = (x: unknown) => new TextEncoder().encode(JSON.stringify(x)).buffer;
 type Call = { method: string; path: string; body?: unknown };
 
-function setup(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], records: Record<string, unknown> = {}, opts: { tapped?: boolean; door?: "records" | "notes" } = {}) {
+function setup(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], records: Record<string, unknown> = {}, opts: { yes?: boolean; door?: "records" | "notes" } = {}) {
   const calls: Call[] = [];
   const revoked: string[] = [];
+  const asked: string[] = [];
   const deps: VaultsDeps = {
     list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write" }],
     door: async () => opts.door ?? "records",
@@ -22,16 +23,16 @@ function setup(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], records:
       return { id: "a", path: "Books/A", types: ["book"], tags: [], fields: {} };
     },
     watch: () => () => {},
-    access: async () => ({ level: "write", mine: true, home: true, hub: "https://hub.example", connector: "https://hub.example/vault/home/mcp", applets: [] }),
+    access: async () => ({ level: "write", mine: true, home: true, hub: "https://hub.example", connector: "https://hub.example/vault/home/mcp", applets: [{ noteId: "app1", name: "Recipe box", glyph: "❀", since: null, changes: false }] }),
     revoke: async (_v, id) => { revoked.push(id); },
     readOnly: async () => {},
-    tapped: () => opts.tapped ?? true,
+    confirm: async (q) => { asked.push(q.title); return opts.yes ?? true; },
     emit: () => {},
   };
   const m = createVaultsModule(words, deps);
   const router = createRouter([m]);
   const call = (method: string, params: unknown) => router.call("vaults", method, params, {}, { charge() {}, closed: () => false });
-  return { call, calls, revoked };
+  return { call, calls, revoked, asked };
 }
 const book = { id: "a", path: "Books/A", body: "words", types: ["book"], tags: [], fields: { status: "to-read" }, updatedAt: "2026-11-20T00:00:00.000Z" };
 
@@ -113,12 +114,33 @@ describe("what it never changes", () => {
 });
 
 describe("sharing", () => {
-  it("takes an applet's access back only on a tap", async () => {
-    const off = setup(["sharing"], {}, { tapped: false });
-    await expect(off.call("revoke", { vault: "home", noteId: "app1" })).rejects.toMatchObject({ code: "failed" });
-    expect(off.revoked).toEqual([]);
-    const on = setup(["sharing"]);
-    await on.call("revoke", { vault: "home", noteId: "app1" });
-    expect(on.revoked).toEqual(["app1"]);
+  it("takes an applet's access back only after the person's yes on the app's own sheet, naming it", async () => {
+    const no = setup(["sharing"], {}, { yes: false });
+    await expect(no.call("revoke", { vault: "home", noteId: "app1" })).rejects.toMatchObject({ code: "failed" });
+    expect(no.revoked).toEqual([]);
+    const yes = setup(["sharing"]);
+    await yes.call("revoke", { vault: "home", noteId: "app1" });
+    expect(yes.asked).toEqual(["Revoke Recipe box?"]);
+    expect(yes.revoked).toEqual(["app1"]);
+  });
+  it("publishing is never a tag a change gives: only sharing's publish, after a yes", async () => {
+    const { call, calls } = setup(["vaults"], { a: book });
+    for (const bytes of [enc({ if_updated_at: book.updatedAt, tags: { add: ["published"] } }), enc({ if_updated_at: book.updatedAt, tags: { add: ["Published"] } })])
+      await expect(call("update", { vault: "home", id: "a", bytes })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(call("create", { vault: "home", bytes: enc({ path: "Books/B", body: "x", tags: ["published"] }) })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(call("publish", { vault: "home", id: "a", on: true })).rejects.toMatchObject({ code: "not_granted" });
+    expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
+    const no = setup(["sharing"], { a: book }, { yes: false });
+    await expect(no.call("publish", { vault: "home", id: "a", on: true })).rejects.toMatchObject({ code: "failed" });
+    expect(no.calls.filter((c) => c.method !== "GET")).toEqual([]);
+    const yes = setup(["sharing"], { a: book });
+    await yes.call("publish", { vault: "home", id: "a", on: true });
+    expect(yes.asked).toEqual(["Publish A?"]);
+    expect(yes.calls.at(-1)).toMatchObject({ method: "PATCH", body: { tags: { add: ["published"] }, if_updated_at: book.updatedAt } });
+  });
+  it("a change is to the version it was judged on", async () => {
+    const { call, calls } = setup(["vaults"], { a: book });
+    await expect(call("update", { vault: "home", id: "a", bytes: enc({ if_updated_at: "2020-01-01T00:00:00.000Z", body: "x" }) })).rejects.toMatchObject({ code: "failed" });
+    expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
   });
 });

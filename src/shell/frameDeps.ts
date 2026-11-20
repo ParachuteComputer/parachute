@@ -49,14 +49,16 @@ function viewerNow(): { viewer?: FrameViewer } {
   const e = a?.state === "ok" ? a.found.entries.find((x) => x.noteId === id) : undefined;
   if (!home || !e) return {};
   const status = statusOf(home.key, gateNow())(e);
-  return status === "off" ? {} : { viewer: { vault: home.key, noteId: e.noteId, status } };
+  return { viewer: { vault: home.key, noteId: e.noteId, status } };
 }
 /** For a frame of the person's own, a write into their vault is asked about once more on the shell's own sheet. */
 const confirmed = (from: "built-in" | "vault", q: WriteAsk) => (from === "vault" ? confirmWrite(q) : Promise.resolve(true)).then((yes) => { if (!yes) throw new Error("not_allowed"); });
 /** The same, once the home vault's applets have been read this session (so Vault, when it is there, is known). */
 const homeRead = async () => {
   const home = homeVault();
-  if (home && appletsNow(home.key)?.state !== "ok") await refreshApplets(home).catch(() => false);
+  // read once if never read this session: a read that failed isn't asked again here (each frame's reload of the home
+  // would ask it again, and each failure would set off another)
+  if (home && !appletsNow(home.key)) await refreshApplets(home).catch(() => false);
   await whenGateKnown();
   return homeNow();
 };

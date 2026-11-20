@@ -483,6 +483,7 @@ export const FRAME_KIT = String.raw`(function () {
       },
       // with app: [sharing]
       access: function (vault) { return call("vaults", "access", { vault: vault }); },
+      publish: function (vault, id, on) { return call("vaults", "publish", { vault: vault, id: id, on: on !== false }); },
       revoke: function (vault, noteId) { return call("vaults", "revoke", { vault: vault, noteId: noteId }); },
       readOnly: function (vault) { return call("vaults", "readOnly", { vault: vault }); }
     }),

@@ -51,8 +51,8 @@ export type FrameParachute = { hub: string; host: string; name: string; home: bo
  *  `"app-newer"`: it was made for a newer Parachute (`noticeName` is its name); the list says to update. A frame that
  *  doesn't know a notice shows none. */
 /** Vault (applet/shipped.ts) in the home vault: where it is, and whether it runs as allowed ("ok"), changed since
- *  ("updated") or not yet allowed ("none"); absent when it isn't there (or applets don't run on this device). */
-export type FrameViewer = { vault: string; noteId: string; status: "ok" | "updated" | "none" };
+ *  ("updated"), not yet allowed ("none"), or applets don't run on this device ("off"); absent when it isn't there. */
+export type FrameViewer = { vault: string; noteId: string; status: "ok" | "updated" | "none" | "off" };
 export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; app?: "simple"; notice?: "app-record" | "app-newer"; noticeName?: string; viewer?: FrameViewer };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
 export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; includeContent?: boolean; includeMetadata?: boolean };

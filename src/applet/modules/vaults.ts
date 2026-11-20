@@ -13,14 +13,17 @@
 //                                              {if_updated_at, body?, fields?, types?: {add?, remove?}, tags?: {add?, remove?}}
 //     create({vault, bytes})                   a new record: {path, body, types?, fields?, tags?}
 //     watch({vault, type?}) / unwatch({id})    changes as they land: events `vaults.events` {id, upsert?: record, remove?: id}
-//   sharing       (what reaches a vault, and taking it back on a tap)
+//   sharing       (what reaches a vault; and, each after the person says yes on the app's own sheet over a tap of theirs,
+//                 what changes who reaches it)
 //     access({vault})                          this app's level there, its applets allowed here, the connector address
-//     revoke({vault, noteId})                  take an applet's access back (a tap)
-//     readOnly({vault})                        let Parachute only read the vault again (a tap)
+//     publish({vault, id, on})                 anyone with its link may read the record (on), or no longer (off: no sheet)
+//     revoke({vault, noteId})                  take an applet's access back
+//     readOnly({vault})                        let Parachute only read the vault again
 //
 // What it never does, whatever the card says: change a code record (HTML, TSX, JSX) or one carrying an applet's,
 // component's or the app's own name (`applet`, `component`, `parachute-*`: its settings, apps, approvals, keys), give or
-// take away such a name, or write into `Applets/`, `Parachute/` or `.parachute/`, except saved views
+// take away such a name, or `published` (that is `sharing`'s, behind its sheet), or write into `Applets/`, `Parachute/` or
+// `.parachute/`, except saved views
 // (`Parachute/Views/…`, `parachute-view`), which are the Vault applet's own records. Every call costs the frame's read
 // budget; a change to a vault held only for reading is refused and the person is asked (vault/writeAsk.ts).
 import { CODE_PATH, isCodeExtension } from "../code.ts";
@@ -53,8 +56,8 @@ export type VaultsDeps = {
   access(vault: string): Promise<AccessRow>;
   revoke(vault: string, noteId: string): Promise<void>;
   readOnly(vault: string): Promise<void>;
-  /** Is the person tapping in this applet now? */
-  tapped(): boolean;
+  /** The app's own yes-or-no sheet over the applet, after a tap of the person's in it; false without one, or for no. */
+  confirm(q: { title: string; body: string; act: string }): Promise<boolean>;
   emit(event: string, data: unknown): void;
 };
 
@@ -66,6 +69,8 @@ const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const VIEWS = "Parachute/Views/";
 const VIEW_TAG = "parachute-view";
 const GUARDED = ["applet", "component", "parachute-pointer"];
+/** The tag that makes a record readable by anyone with its link (the hub's `published_tag`, by default). */
+export const PUBLISHED = "published";
 /** A name the app keeps for itself (an applet's, a component's, the app's own), but a saved view's. */
 export const appsOwn = (t: string) => t !== VIEW_TAG && (/^parachute/i.test(t) || GUARDED.some((g) => t === g || t.startsWith(`${g}/`)));
 const str = (x: unknown, max = 300): x is string => typeof x === "string" && x.length > 0 && x.length <= max && !hasHidden(x);
@@ -219,6 +224,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
   const typeNames = new Map<string, Set<string>>();
   const watches = new Map<string, () => void>();
   let watchN = 0;
+  // ids of this module's own: a module made again (the applet's record re-read) never answers to an old id
+  const prefix = Math.random().toString(36).slice(2, 8);
   const one = <T>(validate: (p: Record<string, unknown>) => T | null, word: AppWord = "vaults") => (p: unknown) => {
     need(word);
     if (!plain(p)) return { ok: false as const };
@@ -280,10 +287,12 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
             const door = await deps.door(q.vault);
             const names = await namesFor(q.vault);
             const raw = await deps.request(q.vault, "GET", queryPath(q, door));
-            const rows = (Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.records) ? raw.records : plain(raw) && Array.isArray(raw.notes) ? raw.notes : [])
-              .map((x: unknown) => recOf(x, names)).filter((x: Rec | null): x is Rec => !!x)
-              .filter((r: Rec) => !isCodeExtension({ path: r.path, extension: null }));
-            return { records: rows.slice(0, q.limit), more: rows.length > q.limit };
+            const all: unknown[] = Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.records) ? raw.records : plain(raw) && Array.isArray(raw.notes) ? raw.notes : [];
+            // `more` and `read` count the hub's rows (code is left out of what shows, not out of the paging)
+            const page = all.slice(0, q.limit);
+            const rows = page.filter((x) => !(plain(x) && isCodeExtension({ path: typeof x.path === "string" ? x.path : "", extension: typeof x.extension === "string" ? x.extension : null })))
+              .map((x) => recOf(x, names)).filter((x): x is Rec => !!x);
+            return { records: rows, more: all.length > q.limit, read: page.length };
           } catch (e) { throw failed(e); }
         },
       },
@@ -328,12 +337,16 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         }),
         async run({ vault, id, change }: { vault: string; id: string; change: Change }, _s, ctx) {
           held(vault); ctx.charge(2);
-          if ([...(change.types?.add ?? []), ...(change.types?.remove ?? []), ...(change.tags?.add ?? []), ...(change.tags?.remove ?? [])].some(appsOwn)) throw refuse("an applet can't give or take away the app's own names");
+          const named = [...(change.types?.add ?? []), ...(change.types?.remove ?? []), ...(change.tags?.add ?? []), ...(change.tags?.remove ?? [])];
+          if (named.some(appsOwn)) throw refuse("an applet can't give or take away the app's own names");
+          if (named.some((t) => t.toLowerCase() === PUBLISHED)) throw refuse("publishing is sharing's, and the person says yes to it");
           let now: Rec & { extension?: unknown };
           try { now = await getRec(vault, id, false); } catch (e) { throw failed(e); }
           // judged on the record as it is now: never code, an applet, a component or the app's own (but a saved view)
           if (guarded(now) || (!now.path.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(now.path))) throw refuse("this record is the app's own: no applet changes it");
           if (now.path.startsWith(VIEWS) && change.types?.remove?.length) throw refuse("a saved view keeps its names");
+          // the change is to the version judged above, or none
+          if (change.if_updated_at !== now.updatedAt) throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read");
           const door = await deps.door(vault);
           try {
             const raw = await deps.request(vault, "PATCH", `/${door}/${encodeURIComponent(now.id)}`, bodyFor(door, change));
@@ -353,6 +366,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           held(vault); ctx.charge(2);
           const view = rec.path.startsWith(VIEWS);
           if ([...rec.types, ...rec.tags].some((t) => appsOwn(t))) throw refuse("an applet can't give the app's own names");
+          if ([...rec.types, ...rec.tags].some((t) => t.toLowerCase() === PUBLISHED)) throw refuse("publishing is sharing's, and the person says yes to it");
           // a saved view is a record of its own kind, in its own folder, and nothing else goes there
           if (view !== rec.tags.includes(VIEW_TAG)) throw refuse("saved views live in Parachute/Views/, tagged parachute-view");
           const door = await deps.door(vault);
@@ -367,14 +381,15 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         async run({ vault, type }: { vault: string; type?: string }, _s, ctx) {
           held(vault); ctx.charge(1);
           if (watches.size >= 8) throw new ContractError(ERROR_CODES.tooManyPending, "eight watches at most");
-          const id = `w${++watchN}`;
+          const id = `w${prefix}${++watchN}`;
           const names = await namesFor(vault).catch(() => new Set<string>());
           const stop = deps.watch(vault, type ?? null, (e) => {
             // the frame that asked is gone: nothing more goes to it
             if (ctx.closed()) { watches.get(id)?.(); watches.delete(id); return; }
             if ("upsert" in e && e.upsert) {
               const r = recOf(e.upsert, names);
-              if (r && !isCodeExtension({ path: r.path, extension: null })) deps.emit("vaults.events", { id, upsert: r });
+              const raw = e.upsert as unknown as Record<string, unknown>;
+              if (r && !isCodeExtension({ path: r.path, extension: typeof raw.extension === "string" ? raw.extension : null })) deps.emit("vaults.events", { id, upsert: r });
             } else if ("remove" in e && e.remove) deps.emit("vaults.events", { id, remove: e.remove });
           });
           watches.set(id, stop);
@@ -382,18 +397,39 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         },
       },
       unwatch: {
-        cap: null, validate: one((p) => (hasOnly(p, ["id"]) && typeof p.id === "string" && /^w\d{1,9}$/.test(p.id) ? p as { id: string } : null)),
+        cap: null, validate: one((p) => (hasOnly(p, ["id"]) && typeof p.id === "string" && /^w[a-z0-9]{1,6}\d{1,9}$/.test(p.id) ? p as { id: string } : null)),
         run: async ({ id }: { id: string }) => { watches.get(id)?.(); watches.delete(id); return null; },
       },
       access: {
         cap: null, validate: one(vaultOnly(), "sharing"),
         run: async ({ vault }: { vault: string }, _s, ctx) => { held(vault); ctx.charge(1); return deps.access(vault); },
       },
+      publish: {
+        cap: null, validate: one((p) => (vaultOnly(["id", "on"])(p) && typeof p.id === "string" && ID.test(p.id) && typeof p.on === "boolean" ? p as { vault: string; id: string; on: boolean } : null), "sharing"),
+        async run({ vault, id, on }: { vault: string; id: string; on: boolean }, _s, ctx) {
+          const v = held(vault); ctx.charge(2);
+          let now: Rec & { extension?: unknown };
+          try { now = await getRec(vault, id, false); } catch (e) { throw failed(e); }
+          if (guarded(now)) throw refuse("this record is the app's own: no applet changes it");
+          if (now.tags.includes(PUBLISHED) === on) return recOf({ ...now }, undefined);
+          // making it readable by anyone is the person's to say, on the app's own sheet; taking that back isn't asked
+          if (on && !(await deps.confirm({ title: `Publish ${now.title}?`, body: `Anyone with its link can read ${now.title}, from ${v.name}, without signing in. You can unpublish it later.`, act: "Publish" })))
+            throw new ContractError(ERROR_CODES.failed, "not_confirmed: the person said no");
+          const door = await deps.door(vault);
+          try {
+            const raw = await deps.request(vault, "PATCH", `/${door}/${encodeURIComponent(now.id)}`, { tags: on ? { add: [PUBLISHED] } : { remove: [PUBLISHED] }, if_updated_at: now.updatedAt });
+            return recOf(raw, await namesFor(vault));
+          } catch (e) { throw failed(e); }
+        },
+      },
       revoke: {
         cap: null, validate: one((p) => (vaultOnly(["noteId"])(p) && typeof p.noteId === "string" && ID.test(p.noteId) ? p as { vault: string; noteId: string } : null), "sharing"),
         async run({ vault, noteId }: { vault: string; noteId: string }) {
-          held(vault);
-          if (!deps.tapped()) throw new ContractError(ERROR_CODES.failed, "it asks only while you tap in it");
+          const v = held(vault);
+          const a = (await deps.access(vault)).applets.find((x) => x.noteId === noteId);
+          if (!a) throw refuse("no applet allowed there by that note");
+          if (!(await deps.confirm({ title: `Revoke ${a.name}?`, body: `${a.name} stops in ${v.name}, and asks again before it runs. With your key, your other devices take it back too.`, act: "Revoke" })))
+            throw new ContractError(ERROR_CODES.failed, "not_confirmed: the person said no");
           await deps.revoke(vault, noteId);
           return null;
         },
@@ -401,8 +437,9 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
       readOnly: {
         cap: null, validate: one(vaultOnly(), "sharing"),
         async run({ vault }: { vault: string }) {
-          held(vault);
-          if (!deps.tapped()) throw new ContractError(ERROR_CODES.failed, "it asks only while you tap in it");
+          const v = held(vault);
+          if (!(await deps.confirm({ title: `Let Parachute only read ${v.name}?`, body: `A change there (yours, or an applet's) asks you again, on your hub.`, act: "Read only" })))
+            throw new ContractError(ERROR_CODES.failed, "not_confirmed: the person said no");
           await deps.readOnly(vault);
           return null;
         },

@@ -5,6 +5,31 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { SecretView } from "../services/native";
 import type { Shell } from "../services/broker";
 import { onScreen } from "../shell/appDeps";
+import { useSettledPress } from "../ui/press";
+
+/** A question the shell asks over an applet, in its own words, before something the applet can't take back for the
+ *  person (Vault's publish, revoke, read only: applet/modules/vaults.ts). The applet can't draw it or answer it. */
+export type Confirm = { title: string; body: string; act: string };
+type Confirming = Confirm & { done: (yes: boolean | null) => void };
+
+function ConfirmSheet({ c }: { c: Confirming }) {
+  const cancel = useRef<HTMLButtonElement>(null);
+  // a tap that was on its way when the sheet came up doesn't answer it
+  const press = useSettledPress(700);
+  useEffect(() => { cancel.current?.focus(); const esc = (e: KeyboardEvent) => { if (e.key === "Escape") c.done(false); }; addEventListener("keydown", esc); return () => removeEventListener("keydown", esc); }, [c]);
+  return (
+    <div className="sheet-scrim sheet-over-frames" role="presentation">
+      <section className="sheet" role="dialog" aria-modal="true" aria-label={c.title}>
+        <h2>{c.title}</h2>
+        <p>{c.body}</p>
+        <div className="grant-actions">
+          <button ref={cancel} type="button" className="quiet-button" onClick={() => c.done(false)}>Cancel</button>
+          <button type="button" className="primary" {...press.bind} onClick={(e) => { if (press.counts(e)) c.done(true); }}>{c.act}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
 
 type Asking = { view: SecretView; done: (value: string | null) => void };
 type Trusting = { applet: string; key: string; done: (name: string | null) => void };
@@ -113,10 +138,11 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
   const [asking, setAsking] = useState<Asking | null>(null);
   const [trusting, setTrusting] = useState<Trusting | null>(null);
   const [coding, setCoding] = useState<Coding | null>(null);
+  const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [line, setLine] = useState<string | null>(null);
   useEffect(() => { if (!line) return; const t = setTimeout(() => setLine(null), 6000); return () => clearTimeout(t); }, [line]);
   // an open sheet answers "cancelled" when the screen goes
-  const open = useRef<Asking | Trusting | Coding | null>(null);
+  const open = useRef<Asking | Trusting | Coding | Confirming | null>(null);
   useEffect(() => () => { open.current?.done(null); }, []);
   const shell: Shell = {
     tap,
@@ -144,7 +170,17 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
       setCoding(c);
     }),
   };
+  /** The shell's own yes or no, over a screen the person is looking at, after their tap in it (one tap, one question). */
+  const confirm = (q: Confirm): Promise<boolean> => new Promise((done) => {
+    const f = frame();
+    // a live tap is enough: the sheet itself is the one answer (a tap spent on an earlier one doesn't make it wait)
+    if (open.current || !f || !onScreen(f) || tap() === false) { done(false); return; }
+    const c: Confirming = { ...q, done: (x) => { open.current = null; setConfirming(null); done(x === true); } };
+    open.current = c;
+    setConfirming(c);
+  });
   const ui = <>
+    {confirming && <ConfirmSheet c={confirming} />}
     {asking && <SecretSheet asking={asking} onDone={asking.done} />}
     {trusting && <TrustSheet t={trusting} />}
     {coding && <PasscodeSheet key={`${coding.wrong ?? ""}`} c={coding} />}
@@ -152,5 +188,5 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
   </>;
   // the screen hid (kept running, shell/kept.tsx): an open sheet answers "cancelled", as when the screen goes
   const cancel = () => { open.current?.done(null); };
-  return { shell, ui, cancel };
+  return { shell, ui, cancel, confirm };
 }

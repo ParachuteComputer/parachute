@@ -92,6 +92,19 @@ test.describe("Vault", () => {
     // links both ways: Book 00 links to Book 01, so Book 01 says it is linked from Book 00
     await table.getByRole("button", { name: "Open Book 01" }).click();
     await expect(v.getByRole("region", { name: "Linked from" }).getByRole("button", { name: /Book 00/ })).toBeVisible();
+
+    // publishing asks on the app's own sheet (the applet can't answer it); No leaves it private, Publish publishes
+    await v.getByRole("button", { name: "Publish" }).click();
+    const sheet = page.getByRole("dialog", { name: "Publish Book 01?" });
+    await expect(sheet).toContainText("Anyone with its link can read Book 01");
+    await sheet.getByRole("button", { name: "Cancel" }).click();
+    await expect(sheet).toHaveCount(0);
+    expect((await api(hub(), "GET", `records/${made[1]}`)).tags ?? []).not.toContain("published");
+    await v.getByRole("button", { name: "Publish" }).click();
+    await page.waitForTimeout(800);
+    await page.getByRole("dialog", { name: "Publish Book 01?" }).getByRole("button", { name: "Publish" }).click();
+    await expect.poll(async () => (await api(hub(), "GET", `records/${made[1]}`)).tags ?? []).toContain("published");
+    await expect(v.getByRole("button", { name: "Unpublish" })).toBeVisible();
   });
 
   test("a record no other applet opens opens in Vault; one an applet opens still goes there", async ({ page }) => {

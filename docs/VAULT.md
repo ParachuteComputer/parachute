@@ -17,7 +17,7 @@ Bases, Anytype, Capacities).
 | A vault | its types, each with how many records it has and its fields; its tags; the newest records; a search; **New type**; **Sharing** |
 | A type | its records as a table: the type's fields are the columns, a header's tap sorts by it, the first column stays in view as the rest scroll across. **Filter** (a field's value), **Group** (by a field), **List** or **Table**, a search. Saved views as tabs. **New …** adds a record of the type. A record opens beside the table on a computer, in its place on a phone |
 | A record | its fields, changed where they stand (a choice from the type's list, a box for yes or no, a number, a date), its types and tags, its words (rendered; **Edit words**), what it links to and what links to it, its history (each kept version, by whom; tap one to read it), and **Publish** |
-| Sharing | what reaches the vault: this app (reads, or reads and changes; **Read only**), the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at |
+| Sharing | what reaches the vault: this app (reads, or reads and changes; **Read only**), the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at. **Publish**, **Revoke** and **Read only** each ask on the app's own sheet first |
 
 What an AI writes shows as it lands: the type's table and an open record follow the vault's live changes (the hub's
 subscription, not a timer).
@@ -25,14 +25,16 @@ subscription, not a timer).
 ## How it is built
 
 - **Two words in `fields.app`** ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)): `vaults` (see every record in every vault on
-  this device, and change records where the person lets Parachute change them) and `sharing` (what reaches each vault,
-  and taking an applet's access back or making a vault read only on a tap). Each is a stressed line on the card and part
+  this device, and change records where the person lets Parachute change them) and `sharing` (what reaches each vault;
+  and, each after the person's yes on the app's own sheet, which the applet can't draw or answer: publishing a record,
+  taking an applet's access back, making a vault read only). Each is a stressed line on the card and part
   of the asks' hash, so adding one asks again. An applet in someone else's vault asks the app for nothing, as before.
   Code: `src/applet/modules/vaults.ts` (what is allowed, checked on every call), `src/shell/vaultsDeps.ts` (the shell's
   answers), the kit's `vaults.*` calls.
 - **What it never changes**, whatever its card says: code (HTML, TSX, JSX), a record carrying an applet's, a
   component's or the app's own name (`applet`, `component`, `parachute-*`), or anything in `Applets/`, `Parachute/` or
-  `.parachute/`; it never gives or takes away such a name. Saved views are the one exception it keeps for itself:
+  `.parachute/`; it never gives or takes away such a name, nor `published` (only `sharing`'s publish, after the sheet).
+  A change is to the version it was judged on (`if_updated_at` must be the record's as read). Saved views are the one exception it keeps for itself:
   records in `Parachute/Views/<type>/`, tagged `parachute-view`, their settings in one field, `view`.
 - **Changing a vault Parachute only reads** is refused before it is sent, and the person is asked (the hub's page), as a
   note's Edit is ([design/SCOPES.md](design/SCOPES.md)).

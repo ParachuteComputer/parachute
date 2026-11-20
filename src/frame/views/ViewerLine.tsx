@@ -14,7 +14,8 @@ export function viewerHref(v: FrameViewer, vault: string, record?: string): stri
 
 export default function ViewerLine({ vault, id }: { vault: string; id?: string }) {
   const viewer = useHome().viewer;
-  if (viewer?.status === "ok") return null;
+  // running there already, or applets don't run on this device (nothing to offer)
+  if (viewer?.status === "ok" || viewer?.status === "off") return null;
   const q = new URLSearchParams({ vault });
   if (id) q.set("record", id);
   const to = viewer ? viewerHref(viewer, vault, id) : `/vault?${q}`;

@@ -94,7 +94,7 @@ export function valueFrom(kind: FieldKind, text: string): unknown {
 const textOf = (kind: FieldKind, v: unknown) => (v === null || v === undefined ? "" : kind === "list" && Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v));
 
 /** A record's fields, name and value; with `onSave`, each is changed where it stands (a choice from its list, a box
- *  for yes or no, a number, a date), saved on Enter, on leaving it, or on the pick. `onSave` should say what went
+ *  for yes or no, a number, a date), saved on Enter or on leaving it (a choice and yes or no: on the pick). `onSave` should say what went
  *  wrong itself (a toast): a rejection puts the value back. */
 export function Fields({ label, fields, onSave }: { label?: string; fields: readonly FieldItem[]; onSave?: (name: string, value: unknown) => Promise<unknown> | void }) {
   return (
@@ -130,8 +130,8 @@ function FieldLine({ f, onSave }: { f: FieldItem; onSave?: (name: string, value:
   else if (kind === "long") input = <textarea {...common} rows={3} value={text} onChange={(e) => setText(e.target.value)} onBlur={() => void save(text)} />;
   else input = (
     <input {...common} type={kind === "number" ? "number" : kind === "date" ? "date" : "text"} value={text} placeholder="–"
-      onChange={(e) => { setText(e.target.value); if (kind === "date") void save(e.target.value); }}
-      onBlur={() => { if (kind !== "date") void save(text); }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => void save(text)}
       onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); (e.target as HTMLInputElement).blur(); } if (e.key === "Escape") { setText(was); } }} />
   );
   return <>{name}<dd className="pa-fvalue">{input}</dd></>;
