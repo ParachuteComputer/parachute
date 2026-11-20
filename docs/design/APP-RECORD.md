@@ -87,7 +87,8 @@ keeps only those fields), and none of the three runs code:
   device (`start.ts`); a pin or an applet in the list asks on its card the first time, and again when its code changes;
 - a record can't grant: a word like `grants`, `approved` or `code` in it is not read;
 - a record can raise the approve level, never lower it: `security.approve` other than `passcode` reads as `unlock`, and
-  once a device has read `passcode` for an app it keeps asking it for that app whatever a later record says
+  once a device has read `passcode` in any app record of a home vault it keeps asking it for every approval in that
+  home, whatever any record says later, or if the record breaks, goes, or another app that says less is named
   (`src/shell/appFloor.ts`); an app someone else offers, followed live, can't lower what the person's own record asks.
   Lowering it again is the person's on the device (the signed way comes with the levels work).
 

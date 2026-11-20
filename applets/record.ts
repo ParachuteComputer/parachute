@@ -20,8 +20,8 @@ export function appletRecord(name: string, vars: Record<string, string> = {}): A
     return fields;
   };
   // in the code, only a whole quoted "{{name}}" is filled (as a string literal): JSX's {{ }} is left alone. The value is
-  // then part of the code, so its card asks again when it changes
-  const fillCode = (s: string) => s.replace(/"\{\{(\w+)\}\}"/g, (_m, k: string) => { if (!(k in vars)) throw new Error(`${name} needs ${k}`); return JSON.stringify(vars[k]); });
+  // then part of the code, so its card asks again when it changes; `<` is escaped, so a value can't end an html applet's <script>
+  const fillCode = (s: string) => s.replace(/"\{\{(\w+)\}\}"/g, (_m, k: string) => { if (!(k in vars)) throw new Error(`${name} needs ${k}`); return JSON.stringify(vars[k]).replace(/</g, "\\u003c"); });
   return { path: fill(meta.path), extension: meta.extension, tags: meta.tags, fields: dropEmpty(JSON.parse(fill(JSON.stringify(meta.fields)))), body: fillCode(readFileSync(file, "utf8")) };
 }
 

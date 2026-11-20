@@ -102,6 +102,7 @@ export default function Home() {
         : read === "away" ? <Problem>Your rooms couldn't be read just now</Problem>
         : <p className="sum">{wants.length ? `${wants.length} ${wants.length === 1 ? "thing wants" : "things want"} you.` : "Nothing waits for you."}</p>}
       <Write line enter="send" label="A line for your journal" placeholder="A line for today's journal" value={line} onChange={setLine} onSend={save} send={busy ? "Saving…" : "Save"} busy={busy} />
+      {!rooms && read === "ok" && (wants.length > 0 || fromUni.length > 0) && <Empty>Pin Rooms to open these from here.</Empty>}
       {wants.length > 0 && <List label="Wants you" rows={roomRows(wants, true)} />}
       <List label="From Uni" rows={roomRows(fromUni, false)} />
       {read === "ok" && !fromUni.length && <Empty>Nothing from Uni in the last {DAYS} days.</Empty>}

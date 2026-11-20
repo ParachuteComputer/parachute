@@ -50,10 +50,23 @@ describe("an unsigned app record", () => {
     expect(approveLevel(loose, "home", s)).toBe("passcode");
     expect(approveLevel(gone, "home", s)).toBe("passcode");
     // a record can't write the floor down either: it is the device's, and only ever raised
-    s.setItem(FLOOR_KEY, JSON.stringify({ "home|uni": "unlock" }));
+    s.setItem(FLOOR_KEY, JSON.stringify({ home: "unlock" }));
     expect(approveLevel(strict, "home", s)).toBe("passcode");
-    // another home's app of the same id is its own
+    // another home is its own
     expect(approveLevel(loose, "other", s)).toBe("unlock");
+  });
+
+  it("can't lower it by breaking the record, deleting it, or naming another app that says less", () => {
+    const s = memory();
+    const strict = appOf({ ...HOSTILE, security: { approve: "passcode" } }, "Parachute/Apps/uni", "n")!;
+    expect(approveLevel(strict, "home", s)).toBe("passcode");
+    // the record broken or gone: the device opens the next app it can (Everything, or what the settings note names)
+    const fallback = openApp(appsFrom([]), "uni", null);
+    expect(fallback.id).toBe("everything");
+    expect(approveLevel(fallback, "home", s)).toBe("passcode");
+    // a new record of the agent's, saying less, named in the settings note
+    const other = appOf({ contract: 1, id: "uni2", name: "Uni 2", sources: [{ vault: "home", applet: "*" }], security: { approve: "unlock" } }, "Parachute/Apps/uni2", "m")!;
+    expect(approveLevel(openApp(appsFrom([other]), null, "uni2"), "home", s)).toBe("passcode");
   });
 
   it("an app someone else offers, followed live, can't lower what the person's own record asks", () => {

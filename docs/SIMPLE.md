@@ -48,7 +48,7 @@ note.
   in it (a capture opens in the app, where it can be edited). It uses the kit only
   (`vault`, `voice.record`, `vault.attach` with `transcribe`, `Link`).
 - **Home** (`applets/home.json`, `.tsx`) is Parachute Simplified's starter home applet, shipped with the app's other
-  records: today's date, a line that lands in `Inbox/` (as Capture names it), your newest notes across your vaults, and
+  records: a greeting, a line that lands in `Inbox/` (as Capture names it), your newest notes across your vaults, and
   your pins. It goes in as any applet does (`scripts/install-applets.ts --applet home --start home`), its card asks
   (add notes in `Inbox/`, the newest notes' titles, the bar, going somewhere on a tap), and the settings note's `start`
   makes it open first. It is an ordinary applet: the person or their AI can change it.

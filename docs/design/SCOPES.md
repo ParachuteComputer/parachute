@@ -14,7 +14,7 @@ The app holds, at each hub, no more of a vault than the most that something the 
 | What the person allowed | What the app holds at the hub |
 |---|---|
 | Signing in to a Parachute | the list of their vault names (asked and dropped at once), and **read** of one vault: the home |
-| Opening another vault (the launcher's **Open letters**) | read of that vault |
+| Opening another vault (**Open letters** in Settings) | read of that vault |
 | An applet, on its card | its vault, at **write** if its manifest adds or changes notes (`create`, `update`), else read |
 | A change of their own (a note, their settings, adding Capture) | write of that vault, asked when the change is tried |
 
@@ -36,7 +36,7 @@ Code: `src/vault/reach.ts` (what each vault needs and why), `src/vault/signInFlo
    do you want to open?*
 3. **Read the home.** One page: `vault:<home>:read`. That's the sign-in.
 
-So a person with a key approves once; without a key, twice. Every other vault the hub listed is a line on the launcher
+So a person with a key approves once; without a key, twice. Every other vault the hub listed is a line in Settings
 (and on Notes, in the simple app): **Open letters** · *Not now*. A tap is one page: `vault:letters:read`.
 
 The hub's own pages, as they read on core 0.9 (`spike/`, the throwaway hubs):
@@ -115,9 +115,9 @@ box, ticked to begin with). That was true before this change; per-vault asks mak
 The app record lists where applets come from and the approvals say which code may run, signed once for every device.
 Two fits:
 
-- **Discovery without reading.** Today the launcher learns a vault's applets by reading it, so an applet in a vault the
+- **Discovery without reading.** Today the app learns a vault's applets by reading it, so an applet in a vault the
   device hasn't opened shows as that vault's **Open** line first. With the app record, the home vault names the applets
-  ("applets from letters"), so the launcher can show Journal before letters is read, and its Allow asks for letters in
+  ("applets from letters"), so the list can show Journal before letters is read, and its Allow asks for letters in
   one page (read and write together), not two.
 - **Permissions follow the person.** An approval names the hash of exactly what an applet asks; its vault and level
   are part of that (`appletLevel(manifest)`). A new device reads the approvals and asks each hub once for the sum of
