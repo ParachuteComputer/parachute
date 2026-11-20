@@ -241,6 +241,7 @@ export function useTranscripts(bodies: readonly (string | null | undefined)[], r
 // ── toast ──
 
 let host: HTMLElement | null = null;
+let latest: HTMLElement | null = null;
 /** A short word after an action, at the foot of the screen, gone by itself (an error stays longer, in the danger
  *  colour). A screen reader says it. One at a time: a new one takes the place of the last. */
 export function toast(text: string, { error = false }: { error?: boolean } = {}) {
@@ -256,7 +257,9 @@ export function toast(text: string, { error = false }: { error?: boolean } = {})
   p.className = error ? "pa-toast pa-toast-error" : "pa-toast";
   p.textContent = String(text).slice(0, 300);
   const into = host!;
-  // a live region a screen reader has only just met says nothing: the words go in a moment after it is there
-  const show = () => { into.replaceChildren(p); setTimeout(() => p.remove(), error ? 7000 : 3500); };
+  latest = p;
+  // a live region a screen reader has only just met says nothing: the words go in a moment after it is there (and a
+  // newer toast meanwhile goes instead)
+  const show = () => { if (latest !== p) return; into.replaceChildren(p); setTimeout(() => p.remove(), error ? 7000 : 3500); };
   if (fresh) setTimeout(show, 50); else show();
 }

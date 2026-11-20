@@ -57,6 +57,10 @@ const SLIPPED: [string, string][] = [
   ["lists", `const s = "a // b"; const x = <ol>{items}</ol>;`],
   ["colors", `.x { color: white; }`],
   ["colors", `style={{ background: "#fff" }}`],
+  ["colors", `.card { border: 1px solid #ccc; }`],
+  ["colors", `.card { box-shadow: 0 2px 4px #0003; }`],
+  ["colors", `.card { border: 1px solid red; }`],
+  ["problems", `<p className={err ? "said err" : "said"}>{err || said}</p>`],
   ["buttons", `.pill { border-radius: 999px; }`],
   ["loading", `<p>Loading...</p>`],
   ["problems", `<p className="quiet err">{err}</p>`],
@@ -74,6 +78,8 @@ type T = { font: string; fontSize: string };
 const n = (1234).toLocaleString();
 const said = "Issue #123 is fixed; see #add";
 const go = (href: string) => app.open(href);
+const el = document.querySelector("#add");
+const CARD = \`.card { border: 1px solid var(--line); box-shadow: 3px 3px 0 var(--line); color: var(--text); }\`;
 const S = { fontSize: "var(--fs-small)" };
 const CSS = \`.when { font: 600 var(--fs-label) var(--sans); color: var(--muted); } .x { font: inherit; font-weight: 600; }\`;
 export default function A() { return <Page title="A"><List rows={[{ title: "B", aside: when.short(Date.now()) }]} /></Page>; }

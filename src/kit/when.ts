@@ -21,7 +21,7 @@ function parse(t: Moment): Date | null {
   if (typeof t === "string" && t.trim()) {
     // a date alone ("2026-11-17", as a note's fields hold one) is that day here, not midnight in London
     const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t.trim());
-    if (day) { const d = new Date(+day[1], +day[2] - 1, +day[3]); return Number.isNaN(d.getTime()) ? null : d; }
+    if (day) { const d = new Date(+day[1], +day[2] - 1, +day[3]); return d.getMonth() === +day[2] - 1 && d.getDate() === +day[3] ? d : null; }
     const ms = Date.parse(t);
     return Number.isNaN(ms) ? null : new Date(ms);
   }

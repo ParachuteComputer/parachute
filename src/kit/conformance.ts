@@ -20,9 +20,9 @@ export const RULES: readonly Rule[] = [
   // the look: the theme's tokens and the type scale, never a value of its own
   { id: "colors", what: "a colour of its own", use: "the theme's colours: var(--bg), var(--surface), var(--text), var(--muted), var(--line), var(--accent), var(--danger)",
     test: new RegExp([
-      String.raw`[:(,]\s*["'\x60]?#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?![-\w])`,
+      // a hex or a named colour anywhere in a declaration's value (border: 1px solid #ccc), or a colour's function
+      String.raw`\b[a-zA-Z-]+\s*:[^;{}\n]*?(?:#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b(?![-\w])|["'\s:](?:${NAMED_COLOR})\b(?![-\w]))`,
       String.raw`\b(?:rgba?|hsla?|oklch|oklab|hwb|lab|lch)\s*\(`,
-      String.raw`\b(?:color|background(?:-color)?|border(?:-[a-z]+)?-color|fill|stroke|outline-color)\s*:\s*["']?(?:${NAMED_COLOR})\b`,
     ].join("|"), "i") },
   { id: "type", what: "a text size of its own", use: "the type scale: var(--fs-title), var(--fs-head), var(--fs-lead), var(--fs-body), var(--fs-small), var(--fs-label)",
     test: new RegExp([
@@ -34,16 +34,16 @@ export const RULES: readonly Rule[] = [
   { id: "fonts", what: "a font of its own", use: "var(--serif), var(--sans), var(--mono)",
     test: /\bfont-family\s*:(?!\s*(?:var\(--(?:serif|sans|mono)\)|inherit\b))|\bfontFamily\s*:(?!\s*(?:string\b|["']var\(--(?:serif|sans|mono)\)["']))/ },
   // the screen and its states
-  { id: "page", what: "its own <main> or page title", use: "Page (its title, kicker, aside, back and pull to refresh)", test: /<(?:main|h1)[\s>]/ },
+  { id: "page", what: "its own <main> or page title", use: "Page (its title, kicker, aside and pull to refresh)", test: /<(?:main|h1)[\s>]/ },
   { id: "lists", what: "a list of its own", use: "List (rows, a long list drawn only where it shows, More)", test: /<(?:ul|ol)[\s>]/ },
   { id: "loading", what: "its own reading line", use: "Loading", test: /(?<!<Loading[^<>]*>[^<]*)\b(?:Reading|Loading)\b[^"'`<>{}\n]{0,40}(?:…|\.\.\.)/ },
   { id: "problems", what: "its own error line", use: "Problem (a screen's failure, with Try again) or toast(text, { error: true }) after an action",
-    test: /\brole\s*=\s*\{?\s*["']alert["']|className\s*=\s*\{?\s*["'`](?:[\w-]+\s+)*(?:err|error)\b/ },
+    test: /\brole\s*=\s*\{?\s*["']alert["']|className\s*=\s*\{?[^}>]*["'`](?:[\w-]+\s+)*(?:err|error)\b/ },
   { id: "status", what: "its own status line", use: "toast (after an action), Loading (while reading)", test: /\brole\s*=\s*\{?\s*["']status["']|\baria-live\b/ },
   // forms, search, buttons
   { id: "forms", what: "an input of its own", use: "Field (a line), Write (a box to write in, and its action), Search", test: /<(?:input|textarea|select)[\s>/]/ },
   { id: "search", what: "its own search box", use: "Search", test: /type\s*=\s*["']search["']/ },
-  { id: "buttons", what: "a button of its own", use: "Button (primary, plain, quiet; small), a List row's onPress, Tabs", test: /<button[\s>]|border-radius\s*:\s*999px/ },
+  { id: "buttons", what: "a button of its own", use: "Button (primary, plain, quiet; small), a List row's onPress", test: /<button[\s>]|border-radius\s*:\s*999px/ },
   // voice
   { id: "voice", what: "the recorder called itself", use: "Record (the app's own recorder sheet)", test: /\bvoice\s*\.\s*record\s*\(|\bgetUserMedia\b|\bMediaRecorder\b/ },
   { id: "transcripts", what: "the hub's transcript marker handled itself", use: "voiceNote and useTranscripts", test: /_Transcript pending\._/ },
