@@ -72,8 +72,8 @@ export type Pending = {
   reserved?: true;
 };
 
-/** Hubs that refused the app their reserved id: they get a registration again, as before (until the next sign-in to them
- *  that works with one). */
+/** Hubs that refused the app their reserved id at the token address: they get a registration again, as before (kept
+ *  for this device; a new install asks the reserved id again). */
 const RESERVED_REFUSED_KEY = "parachute.oauth.reserved-refused.v1";
 const reservedRefused = (issuer: string) => { try { return (JSON.parse(localStorage.getItem(RESERVED_REFUSED_KEY) ?? "[]") as string[]).includes(issuer); } catch { return false; } };
 function refuseReserved(issuer: string) {
@@ -209,8 +209,11 @@ export async function completeSignIn(code: string, state: string, fetchImpl?: ty
   const pending = takePending(state);
   if (!pending) throw new Error("This sign-in has expired or was already used. Start again.");
   if (pending === "mismatch") throw new Error("This sign-in doesn't match the one this app started. Start again.");
-  // a hub that says who sent each return (RFC 9207): a code from anyone else is never sent on to its token address
-  if (pending.iss && (typeof iss !== "string" || iss.replace(/\/$/, "") !== pending.issuer)) throw new Error("This sign-in came back from somewhere other than the hub it went to. Nothing was added. Start again.");
+  // who sent this return (RFC 9207 `iss`): a return that names any other issuer is refused whatever the hub said of
+  // itself (a stranger's hub that sent the person on to another), and one that names none is refused where the hub said
+  // it always names itself. Never sent on to a token address
+  const named = typeof iss === "string" ? iss : null;
+  if ((named !== null && named !== pending.issuer && named !== `${pending.issuer}/`) || (pending.iss && named === null)) throw new Error("This sign-in came back from somewhere other than the hub it went to. Nothing was added. Start again.");
   // someone else's hub is read up to a limit (limited.ts); the person's own (or one they didn't say) as before
   const f = fetchImpl ?? (pending.whose === "theirs" ? limitedFetch() : fetch.bind(globalThis));
   const res = await f(pending.tokenEndpoint, {

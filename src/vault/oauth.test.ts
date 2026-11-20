@@ -33,6 +33,17 @@ describe("completeSignIn", () => {
     await completeSignIn("code", "s1", counting, "https://hub.example");
     expect(called).toBe(1);
   });
+  it("a return that names another issuer is refused even where the hub never said it names one (a stranger's hub that sent the person on)", async () => {
+    let called = 0;
+    const counting = (async () => { called++; return new Response(JSON.stringify({ access_token: "t", scope: "vault:recipes:read" })); }) as unknown as typeof fetch;
+    localStorage.setItem(PENDING, JSON.stringify(pending()));
+    await expect(completeSignIn("code", "s1", counting, "https://cloud.parachute.computer")).rejects.toThrow(/came back from somewhere other than the hub/);
+    expect(called).toBe(0);
+    // none named, from a hub that never said it would: as before
+    localStorage.setItem(PENDING, JSON.stringify(pending()));
+    await completeSignIn("code", "s1", counting, null);
+    expect(called).toBe(1);
+  });
   it("refuses a second use of the same flow", async () => {
     localStorage.setItem(PENDING, JSON.stringify(pending()));
     await completeSignIn("code", "s1", hub(200, { access_token: "t", vault: "recipes", scope: "vault:recipes:read" }));
