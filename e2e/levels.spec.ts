@@ -37,7 +37,7 @@ test("the idle lock engages after its minutes, only the unlock opens it, turning
   try {
     await page.goto("/settings");
     await expect(group(page, "Lock after").getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "true");
-    await expect(group(page, "Approving Uni's cards").getByRole("button", { name: "Unlock" })).toHaveAttribute("aria-pressed", "true");
+    await expect(group(page, "Approval cards").getByRole("button", { name: "Unlock" })).toHaveAttribute("aria-pressed", "true");
     await expect(group(page, "Joining a network").getByRole("button", { name: "Passcode" })).toHaveAttribute("aria-pressed", "true");
 
     // stricter is a tap: kept here, and in the app's record for the other devices
@@ -73,7 +73,7 @@ test("the idle lock engages after its minutes, only the unlock opens it, turning
     await api(hubState(), "PATCH", `notes/${r.id}`, { metadata: { app: { ...r.metadata.app, security: { approvals: "none", code: "unlock", join: "none", idle: 0 } } }, if_updated_at: r.updatedAt });
     await page.goto("about:blank");
     await page.goto("/settings");
-    await expect(group(page, "Approving Uni's cards").getByRole("button", { name: "Unlock" })).toHaveAttribute("aria-pressed", "true");
+    await expect(group(page, "Approval cards").getByRole("button", { name: "Unlock" })).toHaveAttribute("aria-pressed", "true");
     await expect(group(page, "Joining a network").getByRole("button", { name: "Passcode" })).toHaveAttribute("aria-pressed", "true");
     // and a stricter edit is taken at once
     const r2 = (await appRecord())!;

@@ -14,7 +14,7 @@ const said = (e: unknown) => (e && typeof e === "object" && "message" in e ? Str
 
 type Row = { key: "approvals" | "code" | "join"; label: string; note: string; choices: Level[] };
 const ROWS: Row[] = [
-  { key: "approvals", label: "Approving Uni's cards", note: "Powerful ones always ask your unlock. After an unlock, routine ones in that applet go through for 5 minutes, until the screen locks.", choices: ["none", "unlock", "passcode"] },
+  { key: "approvals", label: "Approval cards", note: "Uni's routine cards and held sends. Powerful ones always ask your unlock. After an unlock, routine ones in that applet go through for 5 minutes, until the screen locks.", choices: ["none", "unlock", "passcode"] },
   { key: "code", label: "Approving an applet's code", note: "Always at least your unlock.", choices: ["unlock", "passcode"] },
   { key: "join", label: "Joining a network", note: "Your key signs the request to join, as for your WireGuard.", choices: ["none", "unlock", "passcode"] },
 ];
