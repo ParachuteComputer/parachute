@@ -140,7 +140,7 @@ test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a
 test("scripts/migrate-bundles.ts: shows first, then moves each older record and the settings note's choice, backed up", async () => {
   const old = await api(hubState(), "POST", "notes", { path: "Parachute/Apps/kitchen-table", content: "an app", tags: ["parachute-app"], metadata: { app: {
     contract: 1, id: "kitchen-table", name: "Kitchen table", sources: [{ vault: VAULT, applet: "*" }] } } });
-  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "kitchen-table", bar: [] } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "kitchen-table", bar: [{ vault: VAULT, applet: "Applets/Recipes" }], start: { vault: VAULT, applet: "Applets/Recipes" } } } });
   const dir = mkdtempSync(join(tmpdir(), "migrate-bundles-"));
   writeFileSync(join(dir, "token"), hubState().token);
   const run = (...more: string[]) => execFileSync("node", ["scripts/migrate-bundles.ts", "--hub", hubState().origin, "--vault", VAULT, "--token-file", join(dir, "token"), "--backup", join(dir, "backup"), ...more]).toString();
@@ -149,10 +149,12 @@ test("scripts/migrate-bundles.ts: shows first, then moves each older record and 
   run("--apply");
   const [moved] = await tagged("parachute-bundle");
   expect([moved.id, moved.path.replace(/\.md$/, ""), moved.metadata.bundle.name, moved.metadata.app]).toEqual([old.id, "Parachute/Bundles/kitchen-table", "Kitchen table", undefined]);
+  // the settings note's bar and home now live in the bundle only
+  expect([moved.metadata.bundle.bar, moved.metadata.bundle.start]).toEqual([[{ vault: VAULT, applet: "Applets/Recipes" }], { vault: VAULT, applet: "Applets/Recipes" }]);
   expect(await tagged("parachute-app")).toEqual([]);
   const settings = (await tagged("parachute-settings"))[0].metadata.parachute;
-  expect([settings.bundle, settings.app]).toEqual(["kitchen-table", undefined]);
-  expect(readdirSync(join(dir, "backup")).sort()).toEqual(["Parachute_Apps_kitchen-table.json", "Parachute_Settings.json"]);
+  expect([settings.bundle, settings.app, settings.bar, settings.start]).toEqual(["kitchen-table", undefined, undefined, undefined]);
+  expect(readdirSync(join(dir, "backup")).sort()).toEqual(["Parachute_Apps_kitchen-table.json", "Parachute_Bundles_kitchen-table.json", "Parachute_Settings.json"]);
   expect(run()).toContain("Nothing to move.");
 });
 
