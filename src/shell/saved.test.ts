@@ -36,4 +36,36 @@ describe("saved state", () => {
     await s.settled();
     expect(await createSavedStore(browserBackend(d)).load("x")).toEqual({ draft: "ab" });
   });
+
+  // Found in review (T-476)
+  it("a store that couldn't be read is never written over: the save is refused until it can be read", async () => {
+    const d = disk();
+    await createSavedStore(browserBackend(d)).put("x", { draft: "a long entry" });
+    const back = browserBackend(d);
+    let broken = true;
+    const s = createSavedStore({ read: (sub) => (broken ? Promise.reject(new Error("the data folder can't be read")) : back.read(sub)), write: back.write });
+    // the applet starts with nothing, as before
+    expect(await s.load("x")).toEqual({});
+    // the kit's first save (where it was scrolled) fails; it puts it back in line (frameKit.ts)
+    await expect(s.put("x", { scroll: 40 })).rejects.toThrow();
+    expect(await createSavedStore(browserBackend(d)).load("x")).toEqual({ draft: "a long entry" });
+    broken = false;
+    expect(await s.put("x", { scroll: 40 })).toBe("ok");
+    expect(await createSavedStore(browserBackend(d)).load("x")).toEqual({ draft: "a long entry", scroll: 40 });
+  });
+  it("two tabs of one browser: what one saved isn't written over by the other's older copy", async () => {
+    const d = disk();
+    const a = createSavedStore(browserBackend(d)), b = createSavedStore(browserBackend(d));
+    await a.load("x"); await b.load("x");
+    await a.put("x", { draft: "typed in the first tab" });
+    await b.put("x", { scroll: 12 });
+    expect(await createSavedStore(browserBackend(d)).load("x")).toEqual({ draft: "typed in the first tab", scroll: 12 });
+  });
+  it("a key named __proto__ is a key like any other", async () => {
+    const d = disk();
+    const s = createSavedStore(browserBackend(d));
+    expect(await s.put("x", JSON.parse('{"__proto__": {"a": 1}, "b": 2}') as Record<string, unknown>)).toBe("ok");
+    expect(Object.keys(s.now("x")).sort()).toEqual(["__proto__", "b"]);
+    expect(Object.keys(await createSavedStore(browserBackend(d)).load("x")).sort()).toEqual(["__proto__", "b"]);
+  });
 });

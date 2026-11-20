@@ -263,6 +263,9 @@ const [tab, setTab] = useSaved("tab", "inbox");        // where it was
 - **Where the page was scrolled** is kept by itself and put back once the page is tall enough again.
 - **On this device only**, never synced and never in a vault. A draft that should follow the person to another device
   is a note, written by the applet in its own folder.
+- **Gone with Revoke.** When the person revokes the applet (its menu, Settings, or on another device with their key) or
+  signs out of its vault, what it saved here is removed: a draft isn't left on the device for whatever is allowed there
+  next. A new version the person allows keeps it.
 - **256 KB per applet**, the same store as `storage` (`storage.get/set` and `useSaved` see each other's keys). Every
   applet that runs has it, someone else's too; no word in `fields.app` is needed.
 - A plain `useState` is lost when the applet stops, as before. In an HTML applet, the calls are

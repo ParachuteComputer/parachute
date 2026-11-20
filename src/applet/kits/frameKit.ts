@@ -151,8 +151,9 @@ export const FRAME_KIT = String.raw`(function () {
     };
     go();
   }
-  // what changed goes in batches of at most 64 keys; a batch that failed to be written goes back in line (unless something
-  // newer replaced it), so a draft is never dropped by one failed write
+  // what changed goes in batches of at most 64 keys; the keys of a batch that failed to be written go back in line, each
+  // with the value it holds now (never the one the failed batch carried: a newer one may have been kept since), so a
+  // draft is never dropped by one failed write and never put back by one
   function savedFlush() {
     if (savedTimer) { clearTimeout(savedTimer); savedTimer = null; }
     savedFirst = 0;
@@ -168,7 +169,7 @@ export const FRAME_KIT = String.raw`(function () {
         var code = e && e.code;
         if (code && code !== "failed" && code !== "rate_limited" && code !== "too_many_pending") return null;
         savedDirty = savedDirty || {};
-        Object.keys(part).forEach(function (k) { if (!Object.prototype.hasOwnProperty.call(savedDirty, k)) savedDirty[k] = part[k]; });
+        Object.keys(part).forEach(function (k) { if (!Object.prototype.hasOwnProperty.call(savedDirty, k)) savedDirty[k] = Object.prototype.hasOwnProperty.call(savedVals, k) ? savedVals[k] : null; });
         if (!savedTimer) savedTimer = setTimeout(savedFlush, SAVE_MAX_MS);
         return null;
       }; })(part)));

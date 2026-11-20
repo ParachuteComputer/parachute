@@ -41,8 +41,7 @@ export function storageFor(subject: string): StorageDeps {
     read: () => store.load(subject),
     async write(all) {
       // what is gone from it is removed, the rest set: one write to the same store the kit's saved state uses
-      const entries: Record<string, unknown> = { ...all };
-      for (const k of Object.keys(store.now(subject))) if (!Object.hasOwn(all, k)) entries[k] = null;
+      const entries: Record<string, unknown> = Object.fromEntries([...Object.entries(all), ...Object.keys(store.now(subject)).filter((k) => !Object.hasOwn(all, k)).map((k) => [k, null] as const)]);
       if (Object.keys(entries).length && (await store.put(subject, entries)) === "full") throw new ContractError(ERROR_CODES.tooLarge, "its storage on this device is full (256 KB)");
     },
   };

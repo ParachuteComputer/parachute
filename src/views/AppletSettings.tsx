@@ -4,6 +4,7 @@ import { useState } from "react";
 import { runSelfTest, useGate, useSelfTestRun } from "../applet/selftest/run";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { takeBack } from "../applet/approvalStore";
+import { forgetSaved } from "../shell/saved";
 import { useApplets } from "../applet/useApplets";
 import { listVaults, type VaultRecord } from "../vault/store";
 import { embedSubjectParts } from "../applet/embeds";
@@ -35,7 +36,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
   // device, and the one left in the home vault never allows it here again
   const revoke = (subject: string, id: string, a: { manifest: { id: string; name: string } } | undefined) => void (async () => {
     const told = await takeBack(rec, id, a?.manifest.name ?? "this applet", a?.manifest.id ?? null);
-    grants.revoke(subject); setSaid(told); onChange(); void giveBack(rec.key, "/settings");
+    grants.revoke(subject); forgetSaved(subject); setSaid(told); onChange(); void giveBack(rec.key, "/settings");
   })();
   // from the grants themselves, so a grant whose applet is gone from the vault can still be revoked
   const subjects = grants.subjects().filter((s) => s.startsWith(subjectOf(rec.key, "")));

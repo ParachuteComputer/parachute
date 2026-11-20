@@ -31,14 +31,15 @@ export function createSavedModule(deps: SavedDeps): UniModule {
           if (!plain(raw)) return { ok: false };
           const keys = Object.keys(raw);
           if (!keys.length || keys.length > MAX_KEYS || !keys.every(keyOk)) return { ok: false };
-          const entries: Record<string, unknown> = {};
+          const entries: [string, unknown][] = [];
           for (const k of keys) {
             const v = raw[k] === null ? null : asJson(raw[k]);
             // nested no deeper than a value sent as parameters may be, so what is kept can always be handed back
             if (v === undefined || (v !== null && !withinBudget(v, { left: Infinity }, 2))) return { ok: false };
-            entries[k] = v;
+            entries.push([k, v]);
           }
-          return { ok: true, value: entries };
+          // from entries, so a key named __proto__ is a key like any other
+          return { ok: true, value: Object.fromEntries(entries) };
         },
         run: async (entries: Record<string, unknown>) => {
           let r: "ok" | "full";
