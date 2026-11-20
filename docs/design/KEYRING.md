@@ -240,7 +240,7 @@ message shown per room is kept, so a restarted service doesn't show it again.
 
 Both paths post through `MessageNotices.kt`: one notification per room, a group summary with the count (the launcher's
 badge). A signal push (APP-RECORD.md "Signals") is one more notification per applet's signal, "Ideas · 2 new", sounding
-only when the count rises (a relay's never: its message already did), gone when the count is 0. Tapping opens `parachute://notify?…`: the applet's screen at that message. The applet waits stopped there, with
+only when the count rises (a relay's never: its message already did), gone when the count is 0; its tap opens the applet, not a message. Tapping opens `parachute://notify?…`: the applet's screen at that message. The applet waits stopped there, with
 its Open button (one more tap): a link from outside the app never starts an applet by itself, and the shell can't yet
 tell its own notification's link from any other app's. What was shown is cleared, and the badge with it, when the app
 comes back to the front (not when that applet opens). Nothing is shown while the app is in front. "Closed" means swiped

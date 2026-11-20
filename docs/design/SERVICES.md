@@ -251,7 +251,7 @@ pairs: it never sees a signature. Registered at start, on every grant change, an
 **Signals.** A relay service's `notify` may back an applet's signal (APP-RECORD.md "Signals"): the registration then
 names it (`signals: [{subject, signal, rooms}]`, the applet as an opaque id) and the gateway adds one per message it
 pushes, so Rooms' count is kept while every device is closed. The same gateway takes the counts the person's devices
-send (`push_signals`) and pushes a change as `{v, kind: "signal", subject, signal, count, to}`.
+send (`POST <gateway>signals`, signed by the shell's `push_signals`) and pushes a change as `{v, kind: "signal", subject, signal, count, to}`.
 
 **What a push carries.** `{v, relay, room, event, kind, why, to}`: no words, no author; `to` is the key it was
 registered for. It is sealed with Web Push
