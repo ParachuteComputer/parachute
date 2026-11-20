@@ -176,7 +176,7 @@ export function settingsNow(): Settings {
 
 const SIMPLE_HERE_KEY = "parachute.app.simple-here.v1";
 const simpleHere = () => { try { return localStorage.getItem(SIMPLE_HERE_KEY) === "1"; } catch { return false; } };
-/** This device starts on the simple app (a new person on Parachute Cloud), whatever the note says until it says. */
+/** This device starts on Parachute Simplified (a new person on Parachute Cloud), whatever the note says until it says. */
 export function startSimpleHere() { try { localStorage.setItem(SIMPLE_HERE_KEY, "1"); } catch { /* this session */ } bump({}); }
 /** The note now says which app (written, or changed in Settings): the device's own start gives way. */
 export function forgetSimpleHere() { try { localStorage.removeItem(SIMPLE_HERE_KEY); } catch { /* nothing */ } }

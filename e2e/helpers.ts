@@ -4,7 +4,7 @@ import { withImports, type AppletRecord } from "../applets/record.ts";
 import { keyDoor } from "./keys";
 
 /** The app back from the hub with every vault kept: on the list of applets (once `vault`'s are read: they, or the
- *  line that there are none); or, for a person whose settings choose the simple app (docs/SIMPLE.md), on Notes. */
+ *  line that there are none); or, for a person whose settings choose Parachute Simplified (docs/SIMPLE.md), on Notes. */
 async function backOnTheLauncher(page: Page, vault: string) {
   void vault;
   const list = ui(page).getByRole("list", { name: "Applets" });

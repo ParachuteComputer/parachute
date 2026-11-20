@@ -33,7 +33,7 @@ describe("the app record", () => {
     expect(appOf({ contract: 1, id: "mine", name: "Mine", everywhere: true }, "Parachute/Apps/mine", "n")!.sources).toEqual([]);
   });
   it("the two built-ins are always there; a record changes them; the device's choice wins, then the settings note's, then everything", () => {
-    const apps = appsFrom([uni, appOf({ contract: 1, id: "simple", name: "Simple", look: "notes", sources: [{ vault: "home", applet: "Applets/Capture" }] }, "Parachute/Apps/simple", "01S")!]);
+    const apps = appsFrom([uni, appOf({ contract: 1, id: "simple", name: "Parachute Simplified", look: "notes", sources: [{ vault: "home", applet: "Applets/Capture" }] }, "Parachute/Apps/simple", "01S")!]);
     expect(apps.map((x) => x.id).sort()).toEqual(["everything", "simple", "uni"]);
     expect(apps.find((x) => x.id === "simple")!.noteId).toBe("01S");
     expect(openApp(apps, "uni", "simple").id).toBe("uni");

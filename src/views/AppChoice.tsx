@@ -1,4 +1,4 @@
-// Which app opens (docs/NAVIGATION.md "Apps"): Simple, Everything, or one of the person's app records. The choice is this
+// Which app opens (docs/NAVIGATION.md "Apps"): Parachute Simplified, Everything, or one of the person's app records. The choice is this
 // device's, and the settings note's `app` follows it, so a new device of theirs opens the same one; their agent can
 // change that note too.
 import { useState } from "react";
@@ -17,7 +17,7 @@ export default function AppChoice() {
     setBusy(true); setError("");
     chooseApp(id).then(() => setBusy(false), (e: unknown) => { setError(e instanceof Error ? e.message : "That couldn't be saved."); setBusy(false); });
   };
-  // the built-ins first (Simple, Everything), then the person's own, by name
+  // the built-ins first (Parachute Simplified, Everything), then the person's own, by name
   const order = [...apps].sort((a, b) => rank(a.id) - rank(b.id) || a.name.localeCompare(b.name));
   return (
     <section className="card" aria-labelledby="s-app">

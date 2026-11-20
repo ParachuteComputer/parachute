@@ -1,4 +1,4 @@
-// Capture: the simple app's quick way in (docs/SIMPLE.md). Write a line or say it; it lands in Inbox/ of this vault as
+// Capture: Parachute Simplified's quick way in (docs/SIMPLE.md). Write a line or say it; it lands in Inbox/ of this vault as
 // a note of its own, named by its first words (a voice note: "Voice note" and when), where Notes, the vault and your AI
 // read it. Written on the kit: a voice note is recorded on the app's own sheet (Record) and made a note the hub writes
 // the words into (voiceNote, useTranscripts). Below the box, the latest captures; a tap opens one in the app, where it

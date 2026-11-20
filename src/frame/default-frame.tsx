@@ -20,7 +20,7 @@ function NoteRouteKeyed() {
   return <NoteRoute key={location.key} />;
 }
 
-/** The home screen: Notes in the simple app (the person's settings say `app: simple`, docs/SIMPLE.md), else the list of the app's applets. */
+/** The home screen: Notes in Parachute Simplified (the person's settings say `app: simple`, docs/SIMPLE.md), else the list of the app's applets. */
 function Start() {
   return useHome().app === "simple" ? <NotesHome /> : <Launcher />;
 }

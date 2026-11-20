@@ -15,7 +15,8 @@ export default function WriteAsk() {
   const location = useLocation();
   // after Not now, the same vault doesn't ask again for a few seconds (a change retried by itself can't nag)
   const quiet = useRef(new Map<string, number>());
-  useEffect(() => onWriteAsk((k) => { if ((quiet.current.get(k) ?? 0) > Date.now()) return; setKey(k); setError(""); setBusy(false); }), []);
+  // (while quiet no sheet shows, so no ask is pending either: the screen that asked says it itself)
+  useEffect(() => onWriteAsk((k) => { if ((quiet.current.get(k) ?? 0) > Date.now()) { clearWriteAsk(); return; } setKey(k); setError(""); setBusy(false); }), []);
   const rec = key ? findVault(key) : null;
   if (!key || !rec) return null;
   const close = () => { quiet.current.set(key, Date.now() + 5_000); clearWriteAsk(); setKey(null); };

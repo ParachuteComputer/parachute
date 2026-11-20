@@ -53,7 +53,7 @@ export function useParachutes(): ParachuteLine[] {
  *  the person's settings, so nobody is taken for new). Then the Parachute goes on the person's list in the home vault, when
  *  Parachute may write there (the sign-in asks to read only: the list waits for the first time the person lets it change
  *  notes in their home, vault/reach.ts), and a person new to the app on Parachute Cloud (`cloud`: the hub said so)
- *  starts on the simple app. Best effort: the sign-in stands either way. */
+ *  starts on Parachute Simplified. Best effort: the sign-in stands either way. */
 export async function afterSignIn(hub: string, kept: readonly VaultRecord[], cloud = false, firstHome = false): Promise<void> {
   let newPerson = false;
   const home = homeVault();
@@ -68,7 +68,7 @@ export async function afterSignIn(hub: string, kept: readonly VaultRecord[], clo
   await listThisHub(hub, newPerson);
 }
 
-/** Put a Parachute on the person's list (and the simple app, for a new person) when the home may be written; else it
+/** Put a Parachute on the person's list (and Parachute Simplified, for a new person) when the home may be written; else it
  *  waits (listWaiting, after the person lets Parachute change notes in their home). */
 async function listThisHub(hub: string, newPerson: boolean) {
   if (settingsNow().hubs.some((h) => h.hub === hub) && !newPerson) return;
@@ -89,7 +89,7 @@ export async function listWaiting(): Promise<void> {
   for (const w of waiting()) await listThisHub(w.hub, w.simple).catch(() => undefined);
 }
 
-/** Who starts on the simple app (docs/SIMPLE.md): a person signing in to Parachute Cloud on a device with no home of
+/** Who starts on Parachute Simplified (docs/SIMPLE.md): a person signing in to Parachute Cloud on a device with no home of
  *  theirs, with a vault of their own there, when every vault the sign-in brought was read and none holds a settings
  *  note. */
 export const startsSimple = (cloud: boolean, holding: boolean, unread: number) => cloud && !holding && unread === 0;

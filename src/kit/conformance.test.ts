@@ -97,7 +97,7 @@ const CSS = \`.when { font: 600 var(--fs-label) var(--sans); color: var(--muted)
 export default function A() { return <Page title="A"><Loading>Reading your rooms…</Loading><List rows={[{ title: "B", aside: when.short(Date.now()) }]} /></Page>; }
 const tags = { "#h": [room], "#e": [id] };`;
 
-// The simple app's own screens (Notes, a vault's notes, Connect) are drawn with the same parts: the same rules, less
+// Parachute Simplified's own screens (Notes, a vault's notes, Connect) are drawn with the same parts: the same rules, less
 // the page (a screen of the app has the app's bar and its router, not an applet's Page) and what each names here.
 const SCREENS: Record<string, string[]> = {
   "src/frame/views/NotesHome.tsx": ["status"], // the app record's notice is the app's own line, said when it shows
@@ -105,7 +105,7 @@ const SCREENS: Record<string, string[]> = {
   "src/frame/views/NoteRows.tsx": ["lists"], // List's rows as router links: the frame moves by its router, an applet can't
   "src/views/Connect.tsx": [],
 };
-describe("the simple app's screens are drawn with the kit", () => {
+describe("Parachute Simplified's screens are drawn with the kit", () => {
   it.each(Object.entries(SCREENS))("%s", (f, allowed) => {
     const found = check(readFileSync(join(process.cwd(), f), "utf8")).filter((x) => x.rule !== "page" && !allowed.includes(x.rule));
     expect(found.map((x) => `${f}:${x.line} ${x.what} (use ${x.use}): ${x.text}`)).toEqual([]);

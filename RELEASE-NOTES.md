@@ -30,8 +30,9 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   A record that doesn't load leaves you the list and Settings ([docs/NAVIGATION.md](docs/NAVIGATION.md)).
 - **Your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, or in
   the plain view. Write a new note and edit a note's words in the app.
-- **The simple app** for a Parachute Cloud person: Notes across the vaults you've opened, Capture (text or voice into Inbox/) and
-  Connect an AI ([docs/SIMPLE.md](docs/SIMPLE.md)).
+- **Parachute Simplified** for a Parachute Cloud person: Notes across the vaults you've opened, Journal, Capture (text or
+  voice into Inbox/) and Connect an AI ([docs/SIMPLE.md](docs/SIMPLE.md)). *Changed:* it was called Simple, and Journal
+  is new on its bar.
 - **Applets.** An applet is one note in your vault (TSX, JSX or HTML) that a chat AI with the Parachute MCP can write
   ([docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md)). It runs sealed, only after you allow it, and asks again when its
   code changes. A small kit (`parachute`) gives it record calls and parts to build a screen from.

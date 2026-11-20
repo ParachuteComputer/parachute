@@ -11,7 +11,7 @@ One model, everywhere.
 | `/v/<vault>/n/<note>` | A note. It opens in the applet that opens its kind (open-with), else as plain text. |
 | `/v/<vault>/a/<applet>` | An applet. |
 | `/settings` | Settings. |
-| `/connect`, `/capture`, `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | The simple app's screens ([SIMPLE.md](SIMPLE.md)): Connect an AI, Capture (before it is added), a new note, a note's words. |
+| `/connect`, `/capture`, `/journal`, `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | Parachute Simplified's screens ([SIMPLE.md](SIMPLE.md)): Connect an AI, Capture and Journal (before each is added), a new note, a note's words. |
 
 ## The four rules
 
@@ -97,7 +97,7 @@ That is the record as `create-record` takes it (on a hub before 0.9, `create-not
 `vault` is the vault's name (add `"hub": "https://…"` when two hubs hold vaults of the same name). `applet` is the
 applet note's path or id. A place that names an applet this device can't find is left off the bar, not an error.
 
-`app` says which app a new device opens: `"simple"` (Notes, Capture, Connect: [SIMPLE.md](SIMPLE.md)),
+`app` says which app a new device opens: `"simple"` (Parachute Simplified: Notes, Journal, Capture, Connect: [SIMPLE.md](SIMPLE.md)),
 `"everything"` (every applet, and the bar above), or the id of one of your app records (below). Left out, everything.
 A person new to the app on Parachute Cloud gets `"simple"` at their first sign-in; Settings → **Your app** changes it.
 
@@ -140,7 +140,7 @@ An app is a record in your home vault, `Parachute/Apps/<id>`, tagged `parachute-
 - **Someone else's app** is followed live: your record says `"live": { "hub": …, "vault": …, "path": … }` and the app
   reads theirs from that vault each time, so their changes show. Its applets still ask you, and ask again when their
   code changes.
-- **Simple and Everything** are always there. A record with the id `simple` or `everything` changes them.
+- **Parachute Simplified** (id `simple`) **and Everything** are always there. A record with the id `simple` or `everything` changes them.
 
 Which app is open is this device's choice (Settings → **Your app**), else the settings note's `app`, else
 Everything. Choosing one also makes it the one a new device opens. Your agent can write app records; nothing in them

@@ -37,7 +37,7 @@ Code: `src/vault/reach.ts` (what each vault needs and why), `src/vault/signInFlo
 3. **Read the home.** One page: `vault:<home>:read`. That's the sign-in.
 
 So a person with a key approves once; without a key, twice. Every other vault the hub listed is a line in Settings
-(and on Notes, in the simple app): **Open letters** · *Not now*. A tap is one page: `vault:letters:read`.
+(and on Notes, in Parachute Simplified): **Open letters** · *Not now*. A tap is one page: `vault:letters:read`.
 
 The hub's own pages, as they read on core 0.9 (`spike/`, the throwaway hubs):
 
