@@ -31,6 +31,11 @@ group("describe", () => {
     expect(p).toEqual({ hub: CLOUD, issuer: CLOUD, accountMcp: "https://my.parachute.computer/account/mcp", vaultTemplate: "https://my.parachute.computer/vault/{name}", door: "cloud" });
     expect(vaultUrlFrom(p.vaultTemplate, "notes")).toBe("https://my.parachute.computer/vault/notes");
   });
+  it("reads the id the hub reserves for the app (app_client_id), and nothing that isn't an id", async () => {
+    const d = { issuer: CLOUD, door: "cloud", account_mcp_endpoint: "https://my.parachute.computer/account/mcp", vault_url_template: "https://my.parachute.computer/vault/{name}" };
+    expect((await describe(CLOUD, answering(200, { ...d, app_client_id: "parachute-app" }))).appClientId).toBe("parachute-app");
+    for (const bad of ["", "a b", "x".repeat(101), 7, "parachute-app&redirect_uri=https://evil"]) expect((await describe(CLOUD, answering(200, { ...d, app_client_id: bad }))).appClientId).toBeUndefined();
+  });
   it("never sends a hub's tokens to another host: an address off the hub is read as the hub's own", async () => {
     const p = await describe("https://hub.example", answering(200, { issuer: "https://hub.example", account_mcp_endpoint: "https://evil.example/account/mcp", vault_url_template: "https://evil.example/{name}" }));
     expect(p.accountMcp).toBe("https://hub.example/account/mcp");
