@@ -1,6 +1,6 @@
-// An app is a record (docs/design/APP-RECORD.md): Parachute/Bundles/<id> in the home vault says which applets the launcher
+// A bundle is a record (docs/design/APP-RECORD.md): Parachute/Bundles/<id> in the home vault says which applets the launcher
 // offers (one applet, a whole vault, a whole hub), and its bar. Listing runs nothing: an offered applet still asks.
-// The settings note's `app` names the one a device opens; a pin made in it goes to the record, not the settings note.
+// The settings note's `bundle` (and `app`, its older name) names the one a device opens; a pin made in it goes to the record.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

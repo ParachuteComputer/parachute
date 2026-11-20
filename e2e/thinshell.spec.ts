@@ -1,4 +1,4 @@
-// The thin shell (docs/NAVIGATION.md, docs/design/APP-RECORD.md): the app does what the open app's record says and
+// The thin shell (docs/NAVIGATION.md, docs/design/APP-RECORD.md): the app does what the open bundle's record says and
 // little else. It opens on the record's home, the bar is the record's pins (then Applets, the app's one way to the
 // rest), and the list at `/` is the app's applets, not the vaults. A record that doesn't load, or a home that throws,
 // never locks the person out: the plain list, a calm line, and Settings.

@@ -87,7 +87,8 @@ reached. Entries it doesn't read are kept as they are when you change the bar.
       "bar": [{ "vault": "kitchen", "applet": "Applets/Recipes" }],
       "start": { "vault": "kitchen", "applet": "Applets/Home" },
       "hubs": [{ "hub": "https://uni.example" }, { "hub": "https://techne.example", "name": "Techne" }],
-      "bundle": "everything"
+      "bundle": "everything",
+      "app": "everything"
     }
   }
 }
@@ -100,7 +101,8 @@ applet note's path or id. A place that names an applet this device can't find is
 `bundle` says which bundle a new device opens: `"simple"` (Parachute Simplified: Notes, Journal, Capture, Connect: [SIMPLE.md](SIMPLE.md)),
 `"everything"` (every applet, and the bar above), or the id of one of your bundle records (below). Left out,
 everything. A person new to the app on Parachute Cloud gets `"simple"` at their first sign-in; Settings → **Your
-bundle** changes it. Its older name `app` is read until 2026-12-20.
+bundle** changes it. Until 2026-12-20 write it under its older name `app` too, with the same id: builds from before
+11-20 read only `app`, and `app` is read first (a build of those changes it alone).
 
 ## Bundles
 

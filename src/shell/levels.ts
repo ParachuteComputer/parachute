@@ -39,7 +39,7 @@ type SyncDeps = {
   now?: number;
 };
 
-/** Follow the open app's record: raise this device to what it asks; where it asks for less than this device holds,
+/** Follow the open bundle's record: raise this device to what it asks; where it asks for less than this device holds,
  *  take that only with the person's signed approval of exactly those levels (Rust checks it again). Returns the
  *  device's levels after. */
 export async function syncLevels(app: { id: string; security: Asked }, home: Pick<VaultRecord, "issuer" | "vault"> | null, deps: SyncDeps): Promise<Levels> {

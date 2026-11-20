@@ -89,7 +89,7 @@ const list = <T>(x: unknown, max: number, f: (y: unknown) => T | null): T[] => (
  *  Then it isn't read here at all: the device opens the next app it can and says to update (homeSettings bundleNewer). */
 export const newerBundle = (raw: unknown, level = APP_LEVEL): boolean => plain(raw) && (tooNew(raw.needs, level) || (typeof raw.contract === "number" && raw.contract > 1));
 
-/** A bundle record's `app` field, read strictly where a mistake would widen what is offered, kindly elsewhere: a
+/** A bundle record's body (`fields.bundle`, or `fields.app` on an older one), read strictly where a mistake would widen what is offered, kindly elsewhere: a
  *  source or place that doesn't parse is left out, never the rest. null when it isn't an app at all, or is newer. */
 export function bundleOf(raw: unknown, path: string | null, noteId: string | null, level = APP_LEVEL): Bundle | null {
   if (!plain(raw) || raw.contract !== 1 || newerBundle(raw, level) || typeof raw.id !== "string" || !ID.test(raw.id) || raw.id.length > 40) return null;

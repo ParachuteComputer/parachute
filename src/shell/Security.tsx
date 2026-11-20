@@ -1,4 +1,4 @@
-// The shell's half of the security levels (shell/levels.ts; the gate is src-tauri/src/levels.rs): the open app's record
+// The shell's half of the security levels (shell/levels.ts; the gate is src-tauri/src/levels.rs): the open bundle's record
 // raises this device's levels as soon as it is read, and the idle lock covers everything until the device unlock.
 //
 // The idle clock is native. The web side tells it of real touches only: the shell's own input (trusted events), and an
@@ -16,7 +16,7 @@ import { liveSyncDeps, onLevels, syncLevels, type LevelsStatus } from "./levels"
 const TOUCH_EVERY_MS = 30_000;
 const said = (e: unknown) => (e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : String(e));
 
-/** Raise this device to what the open app's record asks (and take a lowering only with the person's signed approval). */
+/** Raise this device to what the open bundle's record asks (and take a lowering only with the person's signed approval). */
 function LevelsSync({ native }: { native: Native }) {
   const { bundle: app, read } = useSettings();
   const key = `${app.id}|${JSON.stringify(app.security)}|${read}`;

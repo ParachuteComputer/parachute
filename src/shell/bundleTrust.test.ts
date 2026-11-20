@@ -40,7 +40,7 @@ describe("an unsigned bundle record", () => {
     expect(bundleOf({ ...HOSTILE, security: { approve: "passcode" } }, "Parachute/Bundles/uni", "n")!.security).toEqual({ code: "passcode" });
   });
 
-  // a device's levels are raised by the open app's record and never lowered by one (src-tauri/src/levels.rs `raise`;
+  // a device's levels are raised by the open bundle's record and never lowered by one (src-tauri/src/levels.rs `raise`;
   // the lowering it takes is the person's signature, levels.test.ts)
   it("can't lower the levels once this device has read them: they stay when a later record drops them", () => {
     const rec = (security: unknown) => bundleOf({ ...HOSTILE, security }, "Parachute/Bundles/uni", "n")!.security;

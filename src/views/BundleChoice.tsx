@@ -1,6 +1,6 @@
 // Which bundle opens (docs/NAVIGATION.md "Bundles"): Parachute Simplified, Everything, or one of the person's bundle records. The
 // choice is this device's, and the settings note's `bundle` follows it, so a new device of theirs opens the same one;
-// their agent can change that note too.
+// their agent can change that note too (`bundle` and `app` alike until 2026-12-20).
 import { useState } from "react";
 import { chooseBundle, useSettings } from "../shell/homeSettings";
 import { homeVault } from "../shell/frameSource";

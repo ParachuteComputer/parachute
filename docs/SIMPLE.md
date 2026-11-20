@@ -28,7 +28,7 @@ after it.
 
 ## Who gets it
 
-`parachute.bundle` in the settings note (`app` before 11-20, still written beside it) (`Parachute/Settings` in the home vault, [NAVIGATION.md](NAVIGATION.md)) says
+`parachute.bundle` in the settings note (and `app`, its older name, with the same id until 2026-12-20: write both) (`Parachute/Settings` in the home vault, [NAVIGATION.md](NAVIGATION.md)) says
 which bundle the person's devices open: `"simple"` or `"everything"`. Absent means everything, as before.
 
 A person new to the app on Parachute Cloud gets `"simple"`. That is a first sign-in, on a device that had no home, to a
