@@ -9,7 +9,7 @@ whether I install the apk/dmg before or after you do the home thing".
 
 1. **What a reader doesn't know, it leaves out.** A field, a key or a kit part an older reader doesn't know is ignored.
    The reader uses what it does know and doesn't refuse the rest:
-   - App records (`src/shell/apps.ts`): unknown keys at the top, and in a place on the bar, the home or `hide`, are
+   - Bundle records (`src/shell/bundles.ts`): unknown keys at the top, and in a place on the bar, the home or `hide`, are
      left out. A `source` or an `opens` choice with a key it doesn't know is left out whole, because the key might
      narrow it, and that leaves a smaller app.
    - The push gateway (`services/push-gateway`): unknown fields in a registration, an unregistration or a set of counts

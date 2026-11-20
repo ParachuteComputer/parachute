@@ -66,7 +66,7 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   const e = appletsNow(rec.key);
   if (!ok || e?.state !== "ok") return { ok: false, error: e?.state === "error" ? e.error : "the applets couldn't be read" };
   const status = statusOf(rec.key, gateNow());
-  // only what the open app offers (shell/apps.ts): listing is all it decides; what runs is still each applet's card
+  // only what the open bundle offers (shell/bundles.ts): listing is all it decides; what runs is still each applet's card
   const app = openBundleNow(), home = homeVault();
   const held = { hub: originOf(rec.issuer), vault: rec.vault };
   const inApp = (a: { noteId: string; path: string }) => app.look === "notes" || !home || offered(app, held, a, originOf(home.issuer));
@@ -133,7 +133,7 @@ function setChoice(vault: string, type: string, choice: string | null) {
   setDefault(vault, type, choice);
 }
 
-/** What the open app's record says opens each kind of note in this vault (its `opens`), as the device's choices are
+/** What the open bundle's record says opens each kind of note in this vault (its `opens`), as the device's choices are
  *  kept: an applet's note id here, or "vault" for the plain view. The device's own "Always" wins over it. A choice
  *  naming an applet this device hasn't read, or one that doesn't open that kind, is left out. */
 export function appDefaults(vault: string, app: Bundle = openBundleNow()): Record<string, string> {

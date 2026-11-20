@@ -12,7 +12,8 @@
 // person's own record follows (`live`): read from their vault each time, so their changes show; their code still asks.
 //
 // Older records (`Parachute/Apps/<id>`, tagged `parachute-app`, under `fields.app`) are read the same, for one release
-// (until 2026-12-20): a bundle of the same id wins, and the app's first change to an old one moves it (homeSettings.ts).
+// (until 2026-12-20): a bundle of the same id wins. A change to an older record is written under its older names, which builds from
+// before 11-20 read; scripts/migrate-bundles.ts moves it once none runs (homeSettings.ts).
 // Pure, but for nothing: every reader here takes what it needs.
 import { plain, stripExt } from "../applet/contract";
 import { APP_LEVEL, tooNew } from "../applet/level";
@@ -170,7 +171,7 @@ export function recordOf(app: Bundle): Record<string, unknown> {
 
 /** An app someone else offers, as the person follows it: their record, under the person's own id and name for it, and
  *  never less careful than the person's own record asks: each level the stricter of the two (shell/levelRules.ts). A
- *  device's levels are raised by the open app's record and never lowered by one (src-tauri/src/levels.rs). */
+ *  device's levels are raised by the open bundle's record and never lowered by one (src-tauri/src/levels.rs). */
 export function followed(own: Bundle, raw: unknown, theirs: Record<string, unknown>): Record<string, unknown> {
   // a later contract of theirs stays as it is, so this app sees it as made for a newer Parachute (newerBundle), not as 1
   return { ...theirs, contract: typeof theirs.contract === "number" && theirs.contract > 1 ? theirs.contract : 1, id: own.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: own.live,

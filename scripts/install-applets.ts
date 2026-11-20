@@ -11,7 +11,8 @@
 // --bundle uni [--bundle-name Uni] also writes the bundle record Parachute/Bundles/uni (docs/design/APP-RECORD.md): every
 // applet in the vault (and each --source: "*" for every vault on the hub, a vault, or vault/applet path), with the same
 // bar and home, and makes it the bundle a device opens. (--app and --app-name are its older names, read until 2026-12-20.)
-// A record under the older names (Parachute/Apps/<id>) is left as it is: the bundle wins; scripts/migrate-bundles.ts moves it.
+// A record still under the older names (Parachute/Apps/<id>) is updated there, as the app does, so builds from before
+// 11-20 still read it; scripts/migrate-bundles.ts moves it once no device runs one.
 // An area's applet (applets/area.json) is one per area: --applet area --set area=Garden --set area_id=garden
 // --set area_room=<the room's id> (with relay and uni), again with other values for the next area.
 //
@@ -115,20 +116,20 @@ async function main() {
     const kept = Array.isArray(p.services) ? (p.services as { url?: string }[]).filter((s) => !a.services.some((n) => n.url === s.url)) : [];
     next.services = [...kept, ...a.services];
   }
-  if (a.bundle) { next.bundle = a.bundle; delete next.app; }
+  // under its older name too, which builds from before 11-20 read (until 2026-12-20)
+  if (a.bundle) { next.bundle = a.bundle; next.app = a.bundle; }
   // the bundle record: its own bar and home, the same as the settings note's (which older apps read)
   if (a.bundle) {
     // --source "*": every vault on this hub; "garden": every applet in garden; "garden/Applets/SeedLog": one applet
     const sources = [{ vault: a.vault, applet: "*" }, ...a.sources.map((x) => { if (x === "*") return { hub: new URL(a.hub).origin, vault: "*", applet: "*" }; const i = x.indexOf("/"); return i < 0 ? { vault: x, applet: "*" } : { vault: x.slice(0, i), applet: x.slice(i + 1) }; })];
     const bundle = { contract: 1, id: a.bundle, name: a.bundleName ?? a.bundle[0].toUpperCase() + a.bundle.slice(1), look: "launcher", sources, ...(next.bar ? { bar: next.bar } : {}), ...(next.start ? { start: next.start } : {}) };
-    const path = `Parachute/Bundles/${a.bundle}`;
-    const had = await api.find(path);
-    if (await api.find(`Parachute/Apps/${a.bundle}`)) console.log(`an older record is at Parachute/Apps/${a.bundle}: the bundle wins; node scripts/migrate-bundles.ts moves it`);
-    if (had && same(had.metadata?.bundle, bundle)) console.log(`bundle ${a.bundle}: unchanged`);
+    const fresh = await api.find(`Parachute/Bundles/${a.bundle}`), old = fresh ? null : await api.find(`Parachute/Apps/${a.bundle}`);
+    const had = fresh ?? old, path = had?.path ?? `Parachute/Bundles/${a.bundle}`, key = old ? "app" : "bundle";
+    if (had && same(had.metadata?.[key], bundle)) console.log(`bundle ${a.bundle}: unchanged`);
     else {
-      say(`${had ? "update" : "add"} the bundle ${a.bundle} at ${path}: ${JSON.stringify(bundle)}`);
+      say(`${had ? "update" : "add"} the bundle ${a.bundle} at ${path}${old ? " (under its older names until it is moved)" : ""}: ${JSON.stringify(bundle)}`);
       if (a.apply) {
-        if (had) await api.write("update", { id: had.id, fields: { ...(had.metadata ?? {}), bundle }, ...(had.updatedAt ? { if_updated_at: had.updatedAt } : {}) });
+        if (had) await api.write("update", { id: had.id, fields: { ...(had.metadata ?? {}), [key]: bundle }, ...(had.updatedAt ? { if_updated_at: had.updatedAt } : {}) });
         else await api.write("create", { path, body: `The ${bundle.name} bundle: where its applets come from, its bar and its home. See docs/design/APP-RECORD.md.`, tags: ["parachute-bundle"], fields: { bundle } });
       }
     }

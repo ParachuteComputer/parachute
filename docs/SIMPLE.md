@@ -20,13 +20,13 @@ after it.
 
 ## Who gets it
 
-`parachute.app` in the settings note (`Parachute/Settings` in the home vault, [NAVIGATION.md](NAVIGATION.md)) says
+`parachute.bundle` in the settings note (`app` before 11-20, still written beside it) (`Parachute/Settings` in the home vault, [NAVIGATION.md](NAVIGATION.md)) says
 which app the person's devices open: `"simple"` or `"everything"`. Absent means everything, as before.
 
 A person new to the app on Parachute Cloud gets `"simple"`. That is a first sign-in, on a device that had no home, to a
 hub whose descriptor says `door: "cloud"`, whose home (the one vault the sign-in reads, [design/SCOPES.md](design/SCOPES.md))
 was read and holds no settings note. The sign-in reads the home and doesn't write it, so this device opens the simple
-app at once, and the settings note with `app: "simple"` (and their list of Parachutes) is written the first time the
+app at once, and the settings note with `bundle: "simple"` (and their list of Parachutes) is written the first time the
 person lets Parachute change notes in their home: their first edit, or adding Capture. A settings note already there
 is never changed this way. Anyone else starts as before. Settings changes it, and so can their agent, by writing the
 note.

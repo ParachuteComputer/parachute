@@ -17,8 +17,8 @@ down, it signs the key list and nothing else. Made-up names in examples.
 ## Bundles (docs/NAVIGATION.md "Bundles")
 
 A bundle is `Parachute/Bundles/<id>` (tagged `parachute-bundle`, under `fields.bundle`; an "app record" at
-`Parachute/Apps/<id>` until 11-20, read until 2026-12-20, moved by the app's first change to it or by
-`scripts/migrate-bundles.ts`): where applets come from (one applet, a vault, every vault on a hub), the bar, the
+`Parachute/Apps/<id>` until 11-20, read until 2026-12-20 and written under its older names (builds from before 11-20 read only those), moved
+by `scripts/migrate-bundles.ts` once no device runs such a build): where applets come from (one applet, a vault, every vault on a hub), the bar, the
 home, what opens which kind of note, how many applets stay running, how careful it is (`security`). Simple and
 Everything are always there. Each device opens one (Settings → **Your bundle**); a new device opens the one the settings
 note names. An org's bundle is followed live (`live`): read from their vault each time. A record made for a newer
@@ -93,19 +93,19 @@ the rotation step (#systems, T-487).
 
 Anyone who can write the home vault (the person's agent, a token, the hub) can change a bundle record without a
 signature. So the app reads it for three things only: **the home** (`start`), **the pins** (`bar`) and **the list**
-(`sources`, `hide`, `opens`, `keep`, `look`). Everything else in it is read as nothing (`src/shell/apps.ts` `appOf`
+(`sources`, `hide`, `opens`, `keep`, `look`). Everything else in it is read as nothing (`src/shell/bundles.ts` `bundleOf`
 keeps only those fields), and none of the three runs code:
 
 - the home opens on its card, or waits for Open, until the person allowed that exact code and chose it as home on this
   device (`start.ts`); a pin or an applet in the list asks on its card the first time, and again when its code changes;
 - a record can't grant: a word like `grants`, `approved` or `code` in it is not read;
 - a record can raise the security levels, never lower them ("Security levels" below): each device keeps its own
-  natively and takes from the open app's record only what is stricter, so a record that later says less, breaks, goes,
+  natively and takes from the open bundle's record only what is stricter, so a record that later says less, breaks, goes,
   or is replaced by another app that says less (named in the settings note) leaves them as they are; an app someone
   else offers, followed live, asks each level as the stricter of theirs and the person's own record for it. Lowering is
   the person's signed approval from an unlocked device.
 
-Tests: `src/shell/appTrust.test.ts` (each field, raised never lowered, the live merge) and `e2e/thinshell.spec.ts` (a hostile
+Tests: `src/shell/bundleTrust.test.ts` (each field, raised never lowered, the live merge) and `e2e/thinshell.spec.ts` (a hostile
 record opens the home on its card, its pin asks, nothing is granted). A record that doesn't load leaves the plain list
 with *Your bundle didn't load* and Settings ([NAVIGATION.md](../NAVIGATION.md#a-way-back)).
 
@@ -240,5 +240,5 @@ lists); the gateway then adds one per event. A mail server reporting its own cou
 | The passcode under Settings → Approving code | Settings → Security | now |
 | The grace ending when the app leaves the screen | ending when the screen goes off (Aaron, 11-18) | now |
 | `src/shell/appFloor.ts` (#73: a web-side, per-home floor for `security.approve`, raised by every bundle record in the home) | the native levels (device-wide, raise-only, lowered only by a signed approval), raised by the app a device opens: a record of an app this device doesn't open raises nothing here | now (its `parachute.app.floor.v2` key is no longer read; #73 was in no release) |
-| The app record (`Parachute/Apps/<id>`, `parachute-app`, `fields.app`) and the settings note's `app` | the bundle record (`Parachute/Bundles/<id>`, `parachute-bundle`, `fields.bundle`) and `bundle` (Aaron, 11-20: the Parachute app is the app) | read until 2026-12-20; the app's first change to an older record moves it; `scripts/migrate-bundles.ts` moves them all |
+| The app record (`Parachute/Apps/<id>`, `parachute-app`, `fields.app`) and the settings note's `app` | the bundle record (`Parachute/Bundles/<id>`, `parachute-bundle`, `fields.bundle`) and `bundle` (Aaron, 11-20: the Parachute app is the app) | read until 2026-12-20; a change to an older record is written under its older names, and the settings note says both `bundle` and `app`, so builds from before 11-20 keep working; `scripts/migrate-bundles.ts` moves them all once none runs |
 | Rooms' message notifications as the only thing heard while closed | signals (the message push stays: it opens the room) | nothing removed; `notify` stays the relay's declaration a signal points at |

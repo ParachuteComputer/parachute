@@ -2,8 +2,8 @@
 //   an app record   Parachute/Apps/<id>, tagged parachute-app, under fields.app
 //              →    Parachute/Bundles/<id>, tagged parachute-bundle, under fields.bundle (the same note, moved)
 //   the settings note's `app` (which bundle a device opens) → `bundle`
-// The app reads the older names until 2026-12-20 and moves a record itself the first time the person changes it; this
-// does all of them at once. It shows what it would do and writes nothing unless asked (--apply); with --apply it first
+// The app reads the older names until 2026-12-20 and keeps writing an older record under them, because builds from
+// before 11-20 read only those. Run this once no device of the person's runs such a build. It shows what it would do and writes nothing unless asked (--apply); with --apply it first
 // writes each note it changes, as read, to --backup (a folder, made if missing). Run with Node (it strips the types):
 //
 //   node scripts/migrate-bundles.ts --hub https://hub.example --vault home --token-file ~/token [--backup ./backups] [--apply]

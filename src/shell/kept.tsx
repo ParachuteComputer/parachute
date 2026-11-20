@@ -53,7 +53,7 @@ const KeptContext = createContext<Kept>({ shown: true, keepable: () => {} });
 export const useKept = () => useContext(KeptContext);
 
 /** Which entries stay: the one shown, and up to KEEP others that may be kept, the most recently shown first. */
-/** How many stay here: the open app's `keep` (shell/apps.ts), else this device's default. */
+/** How many stay here: the open bundle's `keep` (shell/bundles.ts), else this device's default. */
 const keepHere = () => keepOf(openBundleNow(), KEEP);
 export function stays(entries: readonly Entry[], current: string | null, keep = keepHere()): Entry[] {
   const hidden = entries.filter((e) => e.id !== current && e.keepable).sort((a, b) => b.at - a.at).slice(0, keep);

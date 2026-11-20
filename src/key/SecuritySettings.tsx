@@ -41,7 +41,7 @@ export default function SecuritySettings() {
     setPending(null);
     if (!loosens(cur, l)) {
       // stricter: kept here now; the record is for the other devices (a failed write leaves this one stricter)
-      run(async () => { await native.levelsRaise(l); levelsChanged(); await changeSecurity(l).catch(() => undefined); }, "Kept. Your other devices follow when they read your app.");
+      run(async () => { await native.levelsRaise(l); levelsChanged(); await changeSecurity(l).catch(() => undefined); }, "Kept. Your other devices follow when they read your bundle.");
       return;
     }
     setCode("");

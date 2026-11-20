@@ -92,7 +92,7 @@ test("with no bundle record, a pin still lands in the settings note, as before",
   expect(await tagged("parachute-bundle")).toEqual([]);
 });
 
-test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a bundle of its id wins, and a change moves it", async ({ page }) => {
+test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a change keeps it readable by older builds, and a bundle of its id wins", async ({ page }) => {
   // the older names, read for one release (until 2026-12-20)
   await api(hubState(), "POST", "notes", { path: "Parachute/Apps/kitchen-table", content: "an app", tags: ["parachute-app"], metadata: { app: {
     contract: 1, id: "kitchen-table", name: "Kitchen table", sources: [{ vault: VAULT, applet: "Applets/Recipes" }], bar: [{ vault: VAULT, applet: "Applets/Recipes" }] } } });
@@ -103,19 +103,21 @@ test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a
   await expect(entries.getByRole("link", { name: /Cook mode/ })).toHaveCount(0);
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
 
-  // a change moves it: its path, tag and field take the new names; still one record
+  // a change is written as the record is, under its older names, which the builds before 11-20 read (a device of the
+  // person's may run one); scripts/migrate-bundles.ts moves it later
   await entries.getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
   await ui(page).getByRole("button", { name: "Unpin" }).click();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toHaveCount(0);
-  await expect.poll(async () => (await tagged("parachute-bundle")).map((n) => [n.path.replace(/\.md$/, ""), n.metadata.bundle?.bar])).toEqual([["Parachute/Bundles/kitchen-table", []]]);
-  expect(await tagged("parachute-app")).toEqual([]);
-  expect((await tagged("parachute-bundle"))[0].metadata).not.toHaveProperty("app");
+  await expect.poll(async () => (await tagged("parachute-app")).map((n) => [n.path.replace(/\.md$/, ""), n.metadata.app?.bar])).toEqual([["Parachute/Apps/kitchen-table", []]]);
+  expect(await tagged("parachute-bundle")).toEqual([]);
   await start(page);
   await expect(entries.getByRole("link", { name: /Cook mode/ })).toHaveCount(0);
 
   // an older record beside a bundle of the same id: the bundle is the one read
-  await api(hubState(), "POST", "notes", { path: "Parachute/Apps/kitchen-table", content: "an app", tags: ["parachute-app"], metadata: { app: {
-    contract: 1, id: "kitchen-table", name: "Kitchen table (old)", sources: [{ vault: VAULT, applet: "*" }] } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/kitchen-table", content: "a bundle", tags: ["parachute-bundle"], metadata: { bundle: {
+    contract: 1, id: "kitchen-table", name: "Kitchen table", sources: [{ vault: VAULT, applet: "Applets/Recipes" }] } } });
+  const [was] = await tagged("parachute-app");
+  await api(hubState(), "PATCH", `notes/${was.id}`, { metadata: { app: { ...was.metadata.app, sources: [{ vault: VAULT, applet: "*" }] } }, if_updated_at: (await api(hubState(), "GET", `notes/${was.id}`)).updatedAt });
   await start(page);
   await expect(entries.getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await expect(entries.getByRole("link", { name: /Cook mode/ })).toHaveCount(0);
@@ -123,7 +125,8 @@ test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a
   await page.goto("/settings");
   await page.locator("section", { has: page.getByRole("heading", { name: "Your bundle" }) }).getByRole("radio", { name: /Everything/ }).check();
   await expect.poll(async () => (await tagged("parachute-settings"))[0]?.metadata.parachute.bundle).toBe("everything");
-  expect((await tagged("parachute-settings"))[0].metadata.parachute).not.toHaveProperty("app");
+  // and under its older name, for the builds before 11-20
+  expect((await tagged("parachute-settings"))[0].metadata.parachute.app).toBe("everything");
 });
 
 test("scripts/migrate-bundles.ts: shows first, then moves each older record and the settings note's choice, backed up", async () => {

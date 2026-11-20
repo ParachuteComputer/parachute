@@ -107,8 +107,8 @@ bundle** changes it. Its older name `app` is read until 2026-12-20.
 A bundle is a record in your home vault, `Parachute/Bundles/<id>`, tagged `parachute-bundle`, everything under
 `fields.bundle` (`metadata.bundle` on a hub before 0.9). It says which applets the list offers, and its own bar and home.
 (It was called an app record until 11-20; the Parachute app is the app. Records under the older names,
-`Parachute/Apps/<id>`, `parachute-app` and `fields.app`, are read until 2026-12-20, and the first change the app makes
-to one moves it; `node scripts/migrate-bundles.ts` moves them all at once.)
+`Parachute/Apps/<id>`, `parachute-app` and `fields.app`, are read until 2026-12-20; a change to one is written under its older names, which builds from before 11-20 read.
+`node scripts/migrate-bundles.ts` moves them all, once no device of yours runs such a build.)
 
 ```json
 {
@@ -163,6 +163,6 @@ step 7).
 ## What is whose
 
 The bar is drawn by the app itself, under the frame and under applets, so it is there on every screen, even under a
-frame of your own. What is on it is yours: the open app's record (or the settings note). The list, a vault and a note are the frame
+frame of your own. What is on it is yours: the open bundle's record (or the settings note). The list, a vault and a note are the frame
 ([CHANGE-YOUR-FRAME.md](CHANGE-YOUR-FRAME.md)), which you can make your own. A home applet is an ordinary applet
 ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)).

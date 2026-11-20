@@ -243,9 +243,9 @@ async function changeSettings(change: (raw: Raw, creating: boolean) => Raw): Pro
   if (!n && rows.length > 1) throw new Error(`Your home vault has ${rows.length} settings notes; keep one, at ${SETTINGS_PATH}.`);
   const was = plain(n?.metadata) && plain(n!.metadata!.parachute) ? n!.metadata!.parachute as Record<string, unknown> : {};
   const next = change({ bar: Array.isArray(was.bar) ? was.bar : [], start: was.start ?? null, hubs: Array.isArray(was.hubs) ? was.hubs : [] }, !n);
-  // the choice of bundle is written under its new name; the older `app` goes with the first change that says one
-  const kept = next.bundle ? Object.fromEntries(Object.entries(was).filter(([k]) => k !== "app")) : was;
-  const parachute = { ...kept, bar: next.bar, start: next.start, ...(next.hubs.length || Array.isArray(was.hubs) ? { hubs: next.hubs } : {}), ...(next.bundle ? { bundle: next.bundle } : {}) };
+  // the choice of bundle is written under its new name and, until 2026-12-20, its older one, which the builds before
+  // 11-20 read (a new device of the person's may run one)
+  const parachute = { ...was, bar: next.bar, start: next.start, ...(next.hubs.length || Array.isArray(was.hubs) ? { hubs: next.hubs } : {}), ...(next.bundle ? { bundle: next.bundle, app: next.bundle } : {}) };
   if (n) {
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), parachute }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
@@ -349,6 +349,11 @@ async function bundleRows(c: Client): Promise<{ row: Row; body: unknown; old: bo
     ...olds.filter((r) => !seen.has(r.id)).map((row) => ({ row, body: plain(row.metadata) ? row.metadata.app : undefined, old: true }))];
 }
 const atFolder = (path: string | null | undefined, id: unknown) => [BUNDLE_FOLDER, OLD_BUNDLE_FOLDER].some((f) => stripExt(path ?? "") === `${f}${String(id)}`);
+/** Two paths of one bundle record: the same, or the same id under the newer and the older folder. */
+export const sameRecord = (a: string | null | undefined, b: string) => {
+  const tail = (x: string) => { const y = stripExt(x); const f = [BUNDLE_FOLDER, OLD_BUNDLE_FOLDER].find((g) => y.startsWith(g)); return f ? `${BUNDLE_FOLDER}${y.slice(f.length)}` : y; };
+  return tail(a ?? "") === tail(b);
+};
 
 /** The bundle records in the home vault, and for each that follows someone else's bundle (`live`), that one as it is in
  *  their vault now, when this device holds it. */
@@ -365,7 +370,8 @@ async function readBundleRecords(home: VaultRecord): Promise<RawBundle[]> {
       // a slow Parachute of theirs never holds up the start: past a few seconds, the copy kept from before
       let timer: ReturnType<typeof setTimeout> | undefined;
       const listed = await Promise.race([bundleRows(clientFor(there)), new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error("slow")), 3000); })]).finally(() => clearTimeout(timer));
-      const theirs = listed.find((x) => stripExt(x.row.path ?? "") === stripExt(a.live!.path));
+      // their record may have moved to the newer folder (or not yet): the same id in either is the same record
+      const theirs = listed.find((x) => sameRecord(x.row.path, a.live!.path));
       // its places mean their hub when they name none
       // their record, under the person's own id and name, and never less careful than the person's own (bundles.ts followed)
       out.push(theirs && plain(theirs.body) ? { app: followed(a, raw, theirs.body), path: r.path ?? null, noteId: r.id, hubOf: a.live.hub } : { app: raw, path: r.path ?? null, noteId: r.id });
@@ -427,7 +433,8 @@ export function effective(s: Settings, apps: readonly Bundle[]): Settings {
 
 /** Change the open bundle's record: read it now, change only what `change` touches, and write it back with
  *  if_updated_at; made from the built-in the first time. An older record (`Parachute/Apps/<id>`, `parachute-app`,
- *  `fields.app`) is moved by this write: its path, tag and field take their new names, so the next read finds one. */
+ *  `fields.app`) is written as it is, under its older names: the builds before 11-20 read only those, and one of the
+ *  person's devices may still run one. scripts/migrate-bundles.ts moves it once none does. */
 async function changeBundle(change: (was: Record<string, unknown>, app: Bundle) => Record<string, unknown>, from: (app: Bundle) => Record<string, unknown>): Promise<void> {
   const home = homeVault();
   if (!home) throw new Error("There's no home vault yet.");
@@ -439,9 +446,7 @@ async function changeBundle(change: (was: Record<string, unknown>, app: Bundle) 
   const content = `The ${app.name} bundle: where its applets come from, its bar and its home. See docs/NAVIGATION.md.`;
   if (found) {
     const n = found.row, updatedAt = (n as { updatedAt?: string }).updatedAt;
-    // the hub merges fields: the older one goes with null
-    await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), bundle: body, ...(found.old ? { app: null } : {}) }, ...(updatedAt ? { if_updated_at: updatedAt } : {}),
-      ...(found.old ? { path: `${BUNDLE_FOLDER}${app.id}`, tags: { add: [BUNDLE_TAG], remove: [OLD_BUNDLE_TAG] } } : {}) } as Parameters<typeof c.updateNote>[1]);
+    await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), [found.old ? "app" : "bundle"]: body }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
   } else {
     await c.createNote({ path: `${BUNDLE_FOLDER}${app.id}`, content, tags: [BUNDLE_TAG], metadata: { bundle: body } } as Parameters<typeof c.createNote>[0]);
   }
