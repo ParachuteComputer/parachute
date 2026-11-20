@@ -136,7 +136,11 @@ export default function Rooms() {
   };
 
   // opened from a notification: that room, at that message
-  useEffect(() => onLaunch((l: { room: string; event?: string }) => setView({ at: "room", id: l.room, ...(l.event ? { event: l.event } : {}) })), []);
+  // (back from it, the list from its top: where the person was before isn't where they came from)
+  useEffect(() => onLaunch((l: { room: string; event?: string }) => {
+    listY.current = 0; lastRow.current = null;
+    setView({ at: "room", id: l.room, ...(l.event ? { event: l.event } : {}) });
+  }), []);
 
   // the snapshot is written right after the first read, then a little after the list changed, at most once in two
   // seconds and only when it changed (a frame that closes gets no last word)
