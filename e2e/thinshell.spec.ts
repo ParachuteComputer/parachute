@@ -13,10 +13,13 @@ const applet = (page: Page) => page.frameLocator("iframe.applet-frame");
 type Row = { id: string; path: string; metadata: Record<string, any> };
 const tagged = async (tag: string) => { const r = await api(hubState(), "GET", `notes?tag=${tag}&include_metadata=true`); return (Array.isArray(r) ? r : r.notes ?? []) as Row[]; };
 const made: string[] = [];
-test.afterEach(async () => {
+const tidy = async () => {
   for (const t of ["parachute-settings", "parachute-app"]) for (const n of await tagged(t)) await api(hubState(), "DELETE", `notes/${n.id}`);
   for (const id of made.splice(0)) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
-});
+};
+// before too: a spec before this one may have left a settings note (each test writes its own)
+test.beforeEach(tidy);
+test.afterEach(tidy);
 async function start(page: Page) { await page.goto("about:blank"); await page.goto("/"); }
 async function app(fields: Record<string, unknown>, id = "table") {
   await api(hubState(), "POST", "notes", { path: `Parachute/Apps/${id}`, content: "an app", tags: ["parachute-app"], metadata: { app: { contract: 1, id, name: "Table", ...fields } } });

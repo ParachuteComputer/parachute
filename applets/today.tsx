@@ -29,7 +29,7 @@ main { max-width: 720px; margin: 0 auto; padding: 18px var(--pad, 16px) 40px; co
 .kick { margin: 0; font: 600 calc(var(--size, 16px) * .72) var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
 h1 { margin: 2px 0 4px; font: 400 calc(var(--size, 16px) * 2.4)/1.05 var(--serif); }
 .sum { margin: 0 0 12px; font: italic 1.05em/1.4 var(--serif); color: var(--muted); }
-form { display: flex; gap: 8px; margin: 0 0 6px; }
+.line { display: flex; gap: 8px; margin: 0 0 6px; }
 input { flex: 1; min-width: 0; box-sizing: border-box; padding: 10px 14px; font: 1.02em var(--serif); color: var(--text); background: var(--surface); border: 1.5px solid var(--text); border-radius: 999px; }
 .save { border: 0; background: var(--text); color: var(--bg); border-radius: 999px; padding: 0 18px; font: inherit; cursor: pointer; }
 .save:disabled { opacity: .5; }
@@ -84,11 +84,13 @@ export default function Home() {
     for (const [id, msgs] of s.msgs) {
       const room = s.rooms.get(id); if (!room) continue;
       const all = [...msgs.values()].sort((a, b) => b.created_at - a.created_at);
+      const waiting = new Set<string>();
       if (openAsks(s, id) > 0) {
         const answered = new Set(all.flatMap((e) => e.tags.filter((t) => t[0] === "q").map((t) => t[1])));
-        for (const e of all) { const a = askOf(e); if (a && a.until > now() && !answered.has(e.id) && e.pubkey !== s.me) wants.push({ key: e.id, room: id, roomName: room.name, text: a.what, at: e.created_at, event: e.id }); }
+        for (const e of all) { const a = askOf(e); if (a && a.until > now() && !answered.has(e.id) && e.pubkey !== s.me) { waiting.add(e.id); wants.push({ key: e.id, room: id, roomName: room.name, text: a.what, at: e.created_at, event: e.id }); } }
       }
-      const last = all.find((e) => e.pubkey === UNI);
+      // Uni's newest line in the room, other than an ask already under Wants you
+      const last = all.find((e) => e.pubkey === UNI && !waiting.has(e.id));
       if (last) fromUni.push({ key: last.id, room: id, roomName: room.name, text: lastText(s, last), at: last.created_at, event: last.id });
     }
     return { wants: wants.sort((a, b) => b.at - a.at).slice(0, 6), fromUni: fromUni.sort((a, b) => b.at - a.at).slice(0, 5) };
@@ -97,8 +99,8 @@ export default function Home() {
   const openRoom = (r: Row) => { if (rooms) void app.open(`${rooms}?room=${encodeURIComponent(r.room)}${r.event ? `&event=${r.event}` : ""}`); };
   // an entry opens as any note link does: through the kit (in the applet that opens journal notes)
   const openEntry = (e: Entry) => link.to(e).then((to: string) => link.follow(to), () => false);
-  const save = async (ev: { preventDefault(): void }) => {
-    ev.preventDefault();
+  // a button and Enter, not a form: an applet's frame is sandboxed without forms, so a form's submit never fires
+  const save = async () => {
     const body = line.trim();
     if (!body || busy) return;
     setBusy(true); setErr("");
@@ -115,10 +117,10 @@ export default function Home() {
       <p className="kick">{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</p>
       <h1>{hello()}</h1>
       <p className="sum">{sum}</p>
-      <form onSubmit={save}>
-        <input aria-label="A line for your journal" placeholder="A line for today's journal" value={line} onChange={(e) => setLine(e.target.value)} />
-        <button className="save" type="submit" disabled={busy || !line.trim()}>{busy ? "Saving…" : "Save"}</button>
-      </form>
+      <div className="line">
+        <input aria-label="A line for your journal" placeholder="A line for today's journal" value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void save(); } }} />
+        <button className="save" type="button" onClick={() => void save()} disabled={busy || !line.trim()}>{busy ? "Saving…" : "Save"}</button>
+      </div>
       {err && <p className="err" role="alert">{err}</p>}
       {wants.length > 0 && <section className="wants" aria-label="Wants you"><h2>Wants you</h2><ul>{wants.map(row)}</ul></section>}
       <section aria-label="From Uni"><h2>From Uni</h2>

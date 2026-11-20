@@ -24,7 +24,7 @@ const CSS = `
 main { max-width: 720px; margin: 0 auto; padding: 18px var(--pad, 16px) 40px; color: var(--text); }
 .kick { margin: 0; font: 600 calc(var(--size, 16px) * .72) var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
 h1 { margin: 2px 0 12px; font: 400 calc(var(--size, 16px) * 2.4)/1.05 var(--serif); }
-form { display: flex; gap: 8px; margin: 0 0 4px; }
+.line { display: flex; gap: 8px; margin: 0 0 4px; }
 input { flex: 1; min-width: 0; box-sizing: border-box; padding: 10px 14px; font: 1.02em var(--serif); color: var(--text); background: var(--surface); border: 1.5px solid var(--text); border-radius: 999px; }
 .save { border: 0; background: var(--text); color: var(--bg); border-radius: 999px; padding: 0 18px; font: inherit; cursor: pointer; }
 .save:disabled { opacity: .5; }
@@ -47,8 +47,8 @@ export default function Home() {
   const [said, setSaid] = useState("");
   const load = () => Promise.all([app.recent({ limit: 12 }), app.pins()]).then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); }, () => setRecent([]));
   useEffect(() => { ready().then(load, () => setRecent([])); }, []);
-  const save = async (ev: { preventDefault(): void }) => {
-    ev.preventDefault();
+  // a button and Enter, not a form: an applet's frame is sandboxed without forms, so a form's submit never fires
+  const save = async () => {
     const body = line.trim();
     if (!body || busy) return;
     setBusy(true); setSaid("");
@@ -64,10 +64,10 @@ export default function Home() {
       <style>{CSS}</style>
       <p className="kick">{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}</p>
       <h1>{hello()}</h1>
-      <form onSubmit={save}>
-        <input aria-label="Write something down" placeholder="Write something down" value={line} onChange={(e) => setLine(e.target.value)} />
-        <button className="save" type="submit" disabled={busy || !line.trim()}>{busy ? "Saving…" : "Save"}</button>
-      </form>
+      <div className="line">
+        <input aria-label="Write something down" placeholder="Write something down" value={line} onChange={(e) => setLine(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void save(); } }} />
+        <button className="save" type="button" onClick={() => void save()} disabled={busy || !line.trim()}>{busy ? "Saving…" : "Save"}</button>
+      </div>
       {said && <p className="said" role="status">{said}</p>}
       <section aria-label="Lately"><h2>Lately</h2>
         {recent?.length ? <ul>{recent.map((n) => <li key={n.href}><button type="button" onClick={() => void app.open(n.href)}><span className="what">{n.title}</span><span className="where">{when(n.updatedAt)} · {n.vaultName}</span></button></li>)}</ul>

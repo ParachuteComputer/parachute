@@ -41,6 +41,8 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
   const rooms = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   const home = await installApplet("today", { relay: RELAY!, uni: bob.pubkey });
   const made: string[] = [];
+  // one settings note and app record: a spec before this one may have left them
+  for (const t of ["parachute-settings", "parachute-app"]) for (const n of await rows(`notes?tag=${t}`)) await api(hubState(), "DELETE", `notes/${n.id}`);
   try {
     made.push((await api(hubState(), "POST", "notes", { path: "Parachute/Apps/uni", content: "an app", tags: ["parachute-app"], metadata: { app: {
       contract: 1, id: "uni", name: "Uni", sources: [{ vault: VAULT, applet: "*" }], start: { vault: VAULT, applet: "Applets/Home" },

@@ -171,7 +171,8 @@ test("a new device asks which vault is home; the one chosen is read, and the set
     });
     expect(Object.keys(await held(page))).toEqual(["pantry"]);
     // the home is the one vault read: the settings there name Techne
-    await expect(parachute(page, hubState().origin).getByRole("region", { name: "pantry", exact: true })).toBeVisible();
+    await page.goto("/settings");
+    await expect(parachute(page, hubState().origin).getByRole("link", { name: "Open pantry", exact: true })).toBeVisible();
     await expect(parachute(page, techneState().origin)).toContainText("not signed in on this device");
   } finally {
     await api(pantry, "DELETE", `notes/${note.id}`, undefined, "pantry");
@@ -194,9 +195,10 @@ test("a second device that signs in to the home Parachute finds Techne on the li
   await signInWithKey(b, hubState(), VAULT, "Mine");
   // the same home, and Techne listed but not signed in here
   expect(Object.keys(await held(b))).toEqual([VAULT]);
+  await b.goto("/settings");
   const org = parachute(b, techneState().origin);
   await expect(org).toContainText("not signed in on this device");
-  await expect(org.getByRole("region", { name: ORG_VAULT, exact: true })).toHaveCount(0);
+  await expect(org.getByRole("link", { name: `Open ${ORG_VAULT}`, exact: true })).toHaveCount(0);
   // its Sign in fills in the address and still asks whose it is
   await org.getByRole("link", { name: `Sign in to ${hostOf(techneState().origin)}` }).click();
   await expect(b.getByLabel("Your Parachute's address")).toHaveValue(techneState().origin);
