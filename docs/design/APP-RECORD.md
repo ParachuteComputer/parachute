@@ -74,10 +74,12 @@ applet signs only the kinds the shell names (9, 7, 40003, 5, 20002), and a Rust 
 | An applet | Asks the shell to sign kind 30479 or 30480 | Refused (`services.rs` test) |
 
 **Gaps, said plainly.** A device can't know of a taking back the vault hides from it (it keeps running what was
-approved until its year ends). A device that already allowed an applet starts it at once and reads the signed
-approvals in the background. A taking back made on another device stops it only when that read lands: the next open,
-or when a kept screen is shown again. It does not stop it while the home vault can't be reached. Reading before every
-start would close this, at the price of a vault read on every open (found in review, T-476; not built).
+approved until its year ends). A device that already allowed an applet reads the signed
+approvals before it starts it, and waits up to 1.5 s for them (`APPROVALS_WAIT_MS`, `src/views/AppletScreen.tsx`): a
+taking back made on another device stops it before it runs. When the home vault is slower than that or can't be reached,
+it starts on what this device allowed and stops when the answer lands (and on the next open, or when a kept screen is
+shown again). The cost is a vault read on every open, and at most 1.5 s on a slow one (review finding 16, T-476; Aaron
+may choose otherwise).
 A brand-new device served last month's code with last month's approval runs it: code
 the person approved, never new code. And the person's key has copies in other software (Uni's tools): anything that
 holds it can sign an approval. Making the key on the phone with no export, and other devices signing through it, is

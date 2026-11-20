@@ -105,3 +105,23 @@ describe("asking again says why", () => {
     expect(c.querySelector(".grant-details .grant-new")).not.toBeNull();
   });
 });
+
+describe("changed code says who, when and how many (approval fatigue)", () => {
+  const changed = (history?: { changed?: string | null; other?: string | null }, was: Was = { scope: "s1", code: "c1", grantedUnder: "sealed", asked: null }) =>
+    render(<GrantCard name="Recipes" glyph="❀" vault="kitchen" runs="sealed" grant={RECIPES} ownFolder="Applets/" scope="s1" code="c2" status={was ? "updated" : "none"} was={was}
+      fingerprint="9b13 b2ae" expires={new Date(2027, 0, 1)} onAllow={() => {}} onNotNow={() => {}} history={history} />).container;
+  it("the changed-code card carries the line, on its face", () => {
+    const t = face(changed({ changed: "Changed 12 minutes ago by Uni. The 4th version today." }));
+    expect(t).toContain(CODE_CHANGED_SEALED_LINE);
+    expect(t).toContain("Changed 12 minutes ago by Uni. The 4th version today.");
+  });
+  it("a device that never allowed it says so when another device approved other code", () => {
+    const t = face(changed({ changed: "Changed 2 hours ago by your account (through MCP).", other: "You approved another version on Android, 3 days ago." }, null));
+    expect(t).toContain("You approved another version on Android, 3 days ago.");
+    expect(t).toContain("Changed 2 hours ago by your account (through MCP).");
+  });
+  it("a first card with nothing approved before says neither", () => {
+    const t = face(changed({ changed: "Changed 2 hours ago by Uni." }, null));
+    expect(t).not.toContain("Changed 2 hours ago");
+  });
+});
