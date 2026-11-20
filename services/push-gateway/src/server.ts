@@ -7,6 +7,9 @@ import { LIMITS, parseRegister, parseUnregister, Registry, type Opts } from "./r
 import { AliveFile, RelayWatch } from "./watch.ts";
 import { Budget, Pusher, type Log } from "./push.ts";
 import { relayKey } from "./urls.ts";
+import { countedIn, Counts, parseSignals, type SignalPush } from "./signals.ts";
+import type { Push } from "./match.ts";
+import type { Reg } from "./registry.ts";
 
 export type Config = {
   /** The gateway's public address, ending in `/`: what a signed request's `u` must name (`<url>register`). */
@@ -26,7 +29,8 @@ export type Config = {
   log?: Log;
 };
 
-const MAX_BODY = 8 * 1024;
+// a registration naming its signals' rooms is the largest body (registry.ts, signals.ts)
+const MAX_BODY = 16 * 1024;
 
 function readBody(req: IncomingMessage): Promise<Uint8Array | null> {
   return new Promise((resolve) => {
@@ -80,7 +84,30 @@ export function createGateway(cfg: Config) {
   const pusher = new Pusher({ allowLoopback: cfg.allowLoopback, privateHosts: cfg.privateHosts, log, gone: (e) => registry.dropEndpoint(e) });
   const now = () => Math.floor(Date.now() / 1000);
   const alive = new AliveFile(cfg.file ? `${cfg.file}.alive` : null);
-  const watchers = relays.map((r) => new RelayWatch(r, cfg.secret, () => registry.all(now()), (reg, push) => { void pusher.send(reg, push); }, log, alive,
+  const counts = new Counts(cfg.file ? cfg.file.replace(/[^/]*$/, "counts.json") : null);
+  // a message counts once per signal, however many of the person's phones it is pushed to
+  const counted = new Set<string>();
+  const relayPush = (reg: Reg, push: Push) => {
+    void pusher.send(reg, push);
+    for (const s of countedIn(reg.signals, push.room)) {
+      const once = `${reg.pubkey} ${push.event} ${s.subject} ${s.signal}`;
+      if (counted.has(once)) continue;
+      if (counted.size > 5_000) counted.clear();
+      counted.add(once);
+      counts.move(reg.pubkey, s.subject, s.signal, null, now());
+    }
+  };
+  /** A number changed: every phone of the person's this gateway confirmed hears it (one push per endpoint). */
+  const tell = (pubkey: string, c: { subject: string; signal: string; count: number }) => {
+    const push: SignalPush = { v: 1, kind: "signal", subject: c.subject, signal: c.signal, count: c.count, to: pubkey };
+    const seen = new Set<string>();
+    for (const reg of registry.all(now())) {
+      if (reg.pubkey !== pubkey || reg.pending || seen.has(reg.endpoint)) continue;
+      seen.add(reg.endpoint);
+      void pusher.send(reg, push);
+    }
+  };
+  const watchers = relays.map((r) => new RelayWatch(r, cfg.secret, () => registry.all(now()), relayPush, log, alive,
     (asked, members) => {
       const j = registry.judge(r, asked, members);
       if (j.confirmed || j.dropped) log(`relay ${r}: ${j.confirmed} new registration(s) confirmed, ${j.dropped} dropped (in no room's member list)`);
@@ -91,7 +118,7 @@ export function createGateway(cfg: Config) {
     const path = (req.url ?? "/").split("?")[0];
     const route = path.startsWith(base.pathname) ? path.slice(base.pathname.length) : null;
     if (req.method === "GET" && route === "health") return answer(res, 200, { ok: true, relays: watchers.map((w) => ({ relay: w.relay, rooms: w.rooms().length })), registrations: registry.all(now()).length });
-    const known = route === "register" || route === "unregister";
+    const known = route === "register" || route === "unregister" || route === "signals";
     if (!known) return answer(res, 404, { error: "not here" });
     if (req.method !== "POST" && !(route === "unregister" && req.method === "DELETE")) return answer(res, 405, { error: "POST" });
     const body = await readBody(req);
@@ -104,6 +131,18 @@ export function createGateway(cfg: Config) {
     if (!burned.use(signed.id, now())) return answer(res, 401, { error: "that signature was used already" });
     let x: unknown;
     try { x = JSON.parse(new TextDecoder().decode(body)); } catch { return answer(res, 400, { error: "the body is JSON" }); }
+    if (route === "signals") {
+      // only for a key this gateway serves (a confirmed registration): a fresh key keeps no numbers here
+      if (!registry.all(now()).some((r) => r.pubkey === signed.pubkey && !r.pending)) return answer(res, 403, { error: "register with this gateway first" });
+      const s = parseSignals(x);
+      if (!s.ok) return answer(res, 400, { error: s.error });
+      for (const c of s.value) {
+        const moved = counts.move(signed.pubkey, c.subject, c.signal, c.count, now());
+        if (!moved) return answer(res, 409, { error: "this key holds as many numbers as it may" });
+        if (moved.before !== moved.after) tell(signed.pubkey, c);
+      }
+      return answer(res, 200, { ok: true, counts: counts.of(signed.pubkey, now()) });
+    }
     if (route === "register") {
       const r = parseRegister(x, signed.pubkey, opts, now());
       if (!r.ok) return answer(res, 400, { error: r.error });
@@ -127,6 +166,9 @@ export function createGateway(cfg: Config) {
   return {
     server,
     registry,
+    counts,
+    /** What the relay watch does with a message for someone (tests reach it here). */
+    relayPush,
     watchers,
     pusher,
     start() { watchers.forEach((w) => w.start()); },

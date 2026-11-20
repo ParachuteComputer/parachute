@@ -9,6 +9,7 @@ import { isIP, type LookupFunction } from "node:net";
 import { encrypt } from "./webpush.ts";
 import { besideTrustedHost, onTrustedHost, privateAddress, redact, trustedHosts } from "./urls.ts";
 import type { Push } from "./match.ts";
+import type { SignalPush } from "./signals.ts";
 import type { Reg } from "./registry.ts";
 
 export type Log = (line: string) => void;
@@ -87,7 +88,7 @@ export class Pusher {
   private unifiedpush: Sender = (reg, body) => post(reg.endpoint, body, { "content-encoding": "aes128gcm", "content-type": "application/octet-stream", ttl: "86400", urgency: "high" }, this.opts.allowLoopback, this.opts.privateHosts ?? []);
 
   /** Seal and send one push. Answers what happened, for the log and the tests. */
-  async send(reg: Reg, push: Push, now = Date.now()): Promise<"sent" | "gone" | "limited" | "failed"> {
+  async send(reg: Reg, push: Push | SignalPush, now = Date.now()): Promise<"sent" | "gone" | "limited" | "failed"> {
     const where = redact(reg.endpoint);
     if ((this.quietUntil.get(reg.endpoint) ?? 0) > now || !this.budget.take(reg.endpoint, now)) {
       this.opts.log(`push to ${where} held back (rate)`);
@@ -102,7 +103,7 @@ export class Pusher {
     }
     if (status === 429) this.quietUntil.set(reg.endpoint, now + 60_000);
     if (status >= 200 && status < 300) {
-      this.opts.log(`pushed ${push.why} in ${push.room.slice(0, 8)} to ${where}`);
+      this.opts.log("why" in push ? `pushed ${push.why} in ${push.room.slice(0, 8)} to ${where}` : `pushed a signal (${push.count}) to ${where}`);
       return "sent";
     }
     this.opts.log(`push to ${where} failed (${status || "no answer"})`);
