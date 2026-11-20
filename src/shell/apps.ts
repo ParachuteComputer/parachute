@@ -152,3 +152,10 @@ export function recordOf(app: App): Record<string, unknown> {
     ...(app.security.approve !== "unlock" ? { security: app.security } : {}),
   };
 }
+
+/** An app someone else offers, as the person follows it: their record, under the person's own id and name for it, and
+ *  never less careful than the person's own record asks (a level is raised by a record, never lowered: appFloor.ts). */
+export function followed(own: App, raw: unknown, theirs: Record<string, unknown>): Record<string, unknown> {
+  return { ...theirs, contract: 1, id: own.id, ...(plain(raw) && typeof raw.name === "string" ? { name: raw.name } : {}), live: own.live,
+    ...(own.security.approve === "passcode" ? { security: own.security } : {}) };
+}

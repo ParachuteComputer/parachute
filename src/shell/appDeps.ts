@@ -98,7 +98,7 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
     },
     pins() {
       const b = barNow();
-      return [...(b.start ? [{ name: b.start.name, glyph: b.start.glyph, href: b.start.href, home: true }] : []), ...b.pins.map((p) => ({ name: p.name, glyph: p.glyph, href: p.href, home: false }))];
+      return b.pins.map((p) => ({ name: p.name, glyph: p.glyph, href: p.href, home: !!b.start && b.start.href === p.href }));
     },
     open(href) {
       if (!tappingInApplet()) return false;

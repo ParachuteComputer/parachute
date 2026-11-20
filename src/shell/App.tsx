@@ -52,11 +52,11 @@ function Taps() {
     return () => { gone = true; off(); };
   }, []);
   useEffect(() => { arrived(location.pathname); }, [location.pathname]);
-  // a vault made on a Parachute since this device signed in: asked when the app opens and each time the launcher
-  // shows, at most once a minute per hub (vault/newVaults.ts)
+  // a vault made on a Parachute since this device signed in: asked when the app opens and each time the list or
+  // Settings shows, at most once a minute per hub (vault/newVaults.ts)
   const opened = useRef(false);
   useEffect(() => {
-    if (opened.current && location.pathname !== "/") return;
+    if (opened.current && location.pathname !== "/" && location.pathname !== "/settings") return;
     opened.current = true;
     void relistVaults();
   }, [location.pathname]);

@@ -181,33 +181,12 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .sheet-line { margin: -6px 0 6px; font-size: 14px; }
 .start-line { margin: 0 0 8px; font: italic 15px var(--serif); }
 
-/* The launcher (src/frame/views/Launcher.tsx): a page of an almanac (design/kit/WHY.md). A masthead with hills drawn in
-   ink over a pale wash, the week in a line and its days as a tally; a chapter per vault, its applets in ink medallions
-   with their last seven days, and its newest notes. Hierarchy by type, rules and ink, so it holds in grey. */
+/* The list (src/frame/views/Launcher.tsx): the open app's applets, one plain list. The home page is the home applet's. */
 .launcher { max-width: 880px; padding-top: 14px; }
-.launcher-wide { max-width: 1320px; }
-.launcher-head { position: relative; display: grid; grid-template-columns: 1fr; gap: 8px 32px; align-items: end; margin: 0 0 6px; padding-bottom: 74px; border-bottom: 1px solid var(--text); }
-.launcher-words, .launcher-head .pa-days { position: relative; z-index: 1; }
-.launcher-head h1 { margin: 0; font: 400 46px/1 var(--serif); letter-spacing: -.01em; }
-.launcher-when { margin: 4px 0 0; font: italic 16px var(--serif); color: var(--muted); }
-.launcher-week { margin: 8px 0 0; font: 18px/1.4 var(--serif); }
-.launcher-hills { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 66px; }
-.launcher-hills path { stroke: var(--text); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-opacity: .5; }
-.launcher-hills .h1 { fill: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
-.launcher-hills .h2 { fill: color-mix(in srgb, var(--accent) 22%, var(--bg)); stroke-opacity: .35; }
-.launcher-hills .h3 { fill: var(--bg); stroke: var(--accent); stroke-opacity: .7; }
-.launcher-spread { display: grid; gap: 8px; }
-.launcher-head .pa-days { margin: 0; }
-.launcher-head .pa-days svg { height: 64px; }
+.launcher-title { margin: 6px 0 4px; padding-bottom: 8px; border-bottom: 1px solid var(--text); font: 400 34px/1.05 var(--serif); }
+.launcher-notice { margin: 10px 0 4px; font: italic 16px/1.4 var(--serif); color: var(--muted); }
+.launcher-notice a { margin-left: 6px; font: 15px var(--sans); font-style: normal; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 .entry-glyph { font-variant-emoji: text; }
-.chapter { padding-top: 10px; }
-.chapter-head { display: grid; grid-template-columns: 2em 1fr auto; align-items: baseline; margin: 0 0 2px; font-weight: 400; }
-.chapter-n { font: 600 13px var(--serif); letter-spacing: .2em; color: var(--accent); }
-.chapter-name { font: 500 25px/1.2 var(--serif); overflow-wrap: anywhere; }
-.chapter-head a { font: 14px var(--sans); color: var(--muted); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
-/* whose a chapter is (vault/whose.ts): someone else's says so under its name, set in from the margin like a running head */
-.chapter-whose { margin: 0 0 2px 2em; font: italic 15px/1.3 var(--serif); color: var(--muted); }
-.chapter-theirs .chapter-whose::before { content: "❧ "; font-style: normal; color: var(--accent); }
 .entries { list-style: none; margin: 4px 0 0; padding: 0; }
 .entries > li { border-bottom: 1px dotted var(--muted); }
 .entry { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 14px; padding: 10px 0; color: var(--text); text-decoration: none; -webkit-touch-callout: none; user-select: none; }
@@ -216,25 +195,16 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
   box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 4px var(--line); background: var(--surface); font: 21px var(--serif); }
 .entry-name { grid-column: 2; font: 500 22px/1.25 var(--serif); overflow-wrap: anywhere; }
 .entry-life { grid-column: 2; font: italic 15px/1.35 var(--serif); color: var(--muted); overflow-wrap: anywhere; }
+.entry-where { font-style: normal; }
 .entry-days { grid-row: 1 / 3; grid-column: 3; width: 64px; }
 .entry-days .pa-days { margin: 0; } .entry-days .pa-days svg { height: 24px; max-width: 64px; }
 .entry-home { margin-left: 8px; font: 600 11px var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); vertical-align: 3px; }
 .entry-pinned { margin-left: 8px; font: 12px var(--sans); color: var(--accent); vertical-align: 2px; }
 .entry-quiet { padding: 10px 0; font: italic 15px var(--serif); color: var(--muted); }
-.lately-label { margin: 14px 0 2px; font: 600 11px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
-.lately { list-style: none; margin: 0; padding: 0; }
+.lately-label { margin: 18px 0 6px; font: 600 11px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .parts-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
 .part-chip { border: 1px solid var(--line); border-radius: 999px; background: var(--surface); padding: 4px 12px; font: 16px var(--serif); color: var(--text); cursor: pointer; }
-.lately a { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; color: var(--text); text-decoration: none; font: 17px var(--serif); }
-.lately a::before { content: "·"; color: var(--accent); }
-.lately span { overflow-wrap: anywhere; } .lately i { margin-left: auto; font-size: 14px; color: var(--muted); white-space: nowrap; }
-/* a Parachute (docs/design/ONE-SIGN-IN.md): its name as a running head over its chapters, ruled like a part title */
-.parachute { margin-top: 18px; }
-.parachute-name { margin: 0 0 4px; padding-bottom: 4px; border-bottom: 1px solid var(--text); font: 600 12px var(--sans); letter-spacing: .16em; text-transform: uppercase; overflow-wrap: anywhere; }
-.parachute-host { font-weight: 400; letter-spacing: .06em; text-transform: none; color: var(--muted); }
-.parachute-out { margin: 8px 0 0; font: italic 17px/1.4 var(--serif); color: var(--muted); }
-.parachute-out a { margin-left: 6px; font: 15px var(--sans); font-style: normal; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
-/* a vault made there since this device signed in (vault/newVaults.ts): one quiet line, a tap adds it */
+/* a vault made there since this device signed in (vault/newVaults.ts): one quiet line, a tap adds it (Notes, Settings) */
 .parachute-new { margin: 8px 0 4px; }
 .parachute-new li { display: flex; align-items: baseline; gap: 10px; padding: 2px 0; }
 .parachute-new-add { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: italic 17px/1.4 var(--serif); color: var(--muted); }
@@ -242,24 +212,10 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .parachute-new .quiet-button { margin-left: auto; font-size: 13px; padding: 2px 8px; color: var(--muted); }
 .launcher-foot { display: flex; gap: 18px; margin: 22px 0 0; font-size: 14px; }
 .launcher-foot a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
-@media (min-width: 700px) {
-  .launcher-head { grid-template-columns: 1fr minmax(240px, 420px); padding-bottom: 92px; }
-  .launcher-hills { height: 84px; }
-}
 @media (min-width: 1000px) {
   .launcher { padding: 28px 64px 32px; }
-  .launcher-head h1 { font-size: 64px; }
-  .launcher-pages { display: grid; grid-template-columns: 1fr 1fr; column-gap: 96px; }
   .entry-name { font-size: 25px; }
   .entry-glyph { width: 50px; height: 50px; font-size: 24px; }
-  /* one vault on a wide screen: its applets and its newest notes side by side */
-  .launcher:not(.launcher-wide) { max-width: 1320px; }
-  .launcher:not(.launcher-wide) .chapter { display: grid; grid-template-columns: 3fr 2fr; column-gap: 72px; align-content: start; }
-  .launcher:not(.launcher-wide) .chapter > .chapter-head, .launcher:not(.launcher-wide) .chapter > .chapter-whose { grid-column: 1 / -1; }
-  .launcher:not(.launcher-wide) .chapter > .entries { grid-column: 1; grid-row: 2 / span 3; }
-  .launcher:not(.launcher-wide) .chapter > .chapter-whose + .entries { grid-row: 3 / span 3; }
-  .launcher:not(.launcher-wide) .chapter > :not(.chapter-head):not(.entries):not(.chapter-whose) { grid-column: 2; }
-  .launcher:not(.launcher-wide) .lately-label { margin-top: 8px; }
   .home-bar-place { min-width: 96px; font-size: 15px; }
 }
 
