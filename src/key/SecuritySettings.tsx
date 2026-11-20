@@ -78,7 +78,7 @@ export default function SecuritySettings() {
         </div>
       ))}
       {pending && <form className="row-buttons levels-confirm" onSubmit={(e) => { e.preventDefault(); lower(pending); }}>
-        <span className="small"><strong>Less careful.</strong> {status.passcode ? "Your passcode, then your unlock." : "Your unlock."}</span>
+        <span className="small"><strong>Less careful: {[pending.idle !== cur.idle ? `Lock after ${idleWords(pending.idle).toLowerCase()}` : null, ...ROWS.filter((r) => pending[r.key] !== cur[r.key]).map((r) => `${r.label}, ${levelWords[pending[r.key]].toLowerCase()}`)].filter(Boolean).join("; ")}.</strong> {status.passcode ? "Your passcode, then your unlock." : "Your unlock."}</span>
         {status.passcode && <input type="password" aria-label="Your passcode, to make it less careful" placeholder="Passcode" value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" />}
         <button type="submit" className="primary" disabled={status.passcode && !code}>Change</button>
         <button type="button" className="quiet-button" onClick={() => { setPending(null); setCode(""); }}>Cancel</button>

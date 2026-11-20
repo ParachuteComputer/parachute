@@ -410,9 +410,9 @@ export default function AppletScreen() {
           if (!approvedElsewhere && await signsHere()) {
             setSigning(null);
             try {
-              await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" });
+              await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode && passcode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" });
             } catch (e) {
-              setSigning(`Not approved: ${e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "it couldn't be signed"}.`);
+              setSigning(`Not approved: ${(e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "it couldn't be signed").replace(/\.$/, "")}.`);
               return;
             }
           }

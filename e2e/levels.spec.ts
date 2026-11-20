@@ -104,7 +104,8 @@ test("approving code at the passcode level refuses the unlock alone", async ({ b
     await expect(card).toBeVisible();
     // the unlock would pass; without the passcode it isn't signed
     await page.getByRole("button", { name: "Allow" }).click();
-    await expect(page.getByRole("alert").or(page.getByText(/Not approved/))).toContainText("passcode");
+    // an empty box is no passcode (not a wrong one, which would count toward the minute's wait)
+    await expect(page.getByText(/Not approved/)).toHaveText("Not approved: Your passcode is needed for this.");
     expect((await tagged("parachute-approval")).filter((n) => n.path.endsWith(`/${made.id}`))).toEqual([]);
     await page.getByRole("textbox", { name: "Your passcode" }).fill("garden-gate");
     await page.getByRole("button", { name: "Allow" }).click();
