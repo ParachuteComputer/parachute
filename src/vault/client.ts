@@ -1,6 +1,6 @@
 // One VaultClient per vault record, with the token refreshed when the vault says it expired.
 import { VaultClient } from "@openparachute/surface-client";
-import { refresh } from "./oauth";
+import { refresh, revoke } from "./oauth";
 import { recordsFetch } from "./records";
 import { findVault, updateVault, vaultUrlOf, type VaultRecord } from "./store";
 import { limitedFetch } from "./limited";
@@ -33,10 +33,23 @@ export function refreshOnce(key: string, fetchImpl?: typeof fetch): Promise<stri
     if (!cur?.refreshToken) { refreshFailed.set(key, "unreachable"); return null; }
     try {
       const t = await refresh(cur.tokenEndpoint, cur.clientId, cur.refreshToken, fetchImpl ?? fetchFor(cur));
+      // the sign-in was replaced while the hub answered (the person gave write back, or was given it: signInFlow.ts
+      // keep): what came back belongs to the one that is gone. It is ended at the hub, never laid over the record:
+      // a record that says "reads" must not hold a token that writes.
+      const now = findVault(key);
+      if (now?.refreshToken !== cur.refreshToken) {
+        if (t.refresh_token) void revoke({ ...cur, refreshToken: t.refresh_token }, fetchImpl ?? fetchFor(cur));
+        refreshFailed.delete(key);
+        return now?.accessToken ?? null;
+      }
       updateVault(cur.key, { accessToken: t.access_token, refreshToken: t.refresh_token ?? cur.refreshToken, expiresAt: t.expires_in ? Date.now() + t.expires_in * 1000 : undefined });
       refreshFailed.delete(key);
       return t.access_token;
     } catch (e) {
+      // the same, the other way round: the old sign-in was ended at the hub before this refresh of it got there. The
+      // hub's no is for the one that is gone, not for the sign-in the record holds now.
+      const now = findVault(key);
+      if (now && now.refreshToken !== cur.refreshToken) { refreshFailed.delete(key); return now.accessToken; }
       // the hub answering no (a 4xx to the refresh) is a refusal; anything else (no answer, its own trouble) is not
       refreshFailed.set(key, refusedRefresh(e) ? "refused" : "unreachable");
       return null;
