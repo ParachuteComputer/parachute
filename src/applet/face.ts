@@ -22,7 +22,6 @@ export const alsoLine = (also: readonly string[]) => `Also: ${also.join(", ")}`;
 export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {}, imports: readonly Imported[] = []): Face {
   const lines: FaceLine[] = [];
   const also: string[] = [];
-  const same = opts.approvalSame ? " (your approval key is your everyday key for now)" : "";
   const who = (hex: string) => opts.approverName?.(hex) ?? `a key you haven't trusted on this device (${npubOf(hex)})`;
 
   // notes: as the details say them (they are short already), each its own line
@@ -38,7 +37,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
       const posts = [9, 7, 40003, 20002].filter((k) => s.publish.includes(k)).map((k) => (k === 40003 ? "edits" : NAMED_KINDS[k]));
       const does = [...(posts.length ? [`posts ${joinWords(posts)} ${roomsWords(s)}`] : ["signs in"]), ...(s.publish.includes(5) ? [`deletes what you posted${s.rooms?.length && !posts.length ? ` ${roomsWords(s)}` : ""}`] : []), ...(s.media ? ["uploads and opens files"] : [])];
       lines.push({ lead: `As you on ${at}`, rest: ` (your everyday key): ${does.length > 1 ? `${does.slice(0, -1).join(", ")}, and ${does[does.length - 1]}` : does[0]}. What it reads can go there.`, risky: true });
-      if (s.approvals) lines.push({ lead: "High risk, with your approval key:", rest: ` answers approval cards and secret requests from ${joinWords(s.approvals.from.map(who))} ${there}${same}. Powerful ones ask for your device unlock.`, risky: true });
+      if (s.approvals) lines.push({ lead: "High risk, with your key:", rest: ` answers approval cards and secret requests from ${joinWords(s.approvals.from.map(who))} ${there}. Powerful ones ask for your device unlock.`, risky: true });
       if (s.notify) {
         const what = [s.notify.mentions ? "messages that name you" : "", s.notify.from.length ? `every message from ${joinWords(s.notify.from.map(who))}` : ""].filter(Boolean).join(" and ");
         const gw = s.notify.gateway ? hostWords({ kind: "http", url: s.notify.gateway }) : null;
@@ -48,7 +47,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
       lines.push(s.auth === "nip98" ? { lead: `As you on ${at}`, rest: " (your everyday key): sends requests signed as you. What it reads can go there.", risky: true }
         : s.auth === "token" ? { lead: `With a token you give it`, rest: `, sends requests to ${at}. What it reads can go there.`, risky: true }
         : { lead: `Sends requests to ${at}`, rest: ". What it reads can go there.", risky: true });
-      if (s.approve) lines.push({ lead: "High risk, with your approval key:", rest: ` sends ${joinWords(s.approve.ops)} requests to ${at}${same}.`, risky: true });
+      if (s.approve) lines.push({ lead: "High risk, with your key:", rest: ` sends ${joinWords(s.approve.ops)} requests to ${at}.`, risky: true });
       if (s.join) lines.push({ lead: "High risk, joins a network as you:", rest: ` asks ${at} to let this device join (${joinWords(s.join.ops)}), each time after your passcode and unlock (Settings → Security).`, risky: true });
     }
   }

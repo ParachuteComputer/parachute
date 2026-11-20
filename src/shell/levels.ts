@@ -3,7 +3,7 @@
 // unlock. This file is the web side's half: the app record's `security` (which may only raise them), the signed
 // approval that lowering takes, and what Settings shows.
 //
-//   approvals  Uni's routine approval cards and held sends: none (the tap), unlock, passcode. Powerful ones always unlock.
+//   approvals  the person's agent's routine approval cards and held sends: none (the tap), unlock, passcode. Powerful ones always unlock.
 //   code       approving an applet's code: unlock or passcode (never less).
 //   join       asking to join a private network (an http service's `join` op): none, unlock, passcode.
 //   idle       minutes untouched before Parachute asks the unlock to open; 0: off.

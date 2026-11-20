@@ -208,18 +208,14 @@ export const roomsWords = (s: RelayService) => (s.rooms?.length
   : "in your rooms");
 
 export type LineOptions = {
-  /** The approval key is the everyday key for now (no separate one on this device). */
-  approvalSame?: boolean;
   /** The trusted list's name for a key ("Uni"), or null when it isn't on the list (docs/design/KEYRING.md). */
   approverName?: (hex: string) => string | null;
 };
 export const EVERYDAY = "With your everyday key: ";
-export const APPROVAL = "High risk. With your approval key: ";
-export const JOIN = "High risk. With your key: ";
+export const HIGH_RISK = "High risk. With your key: ";
 
 export function serviceLines(services: readonly Service[], opts: LineOptions = {}): { text: string; stress: boolean }[] {
   const out: { text: string; stress: boolean }[] = [];
-  const same = opts.approvalSame ? " (your approval key is your everyday key for now)" : "";
   const who = (hex: string) => opts.approverName?.(hex) ?? `a key you haven't trusted on this device (${npubOf(hex)})`;
   for (const s of services) {
     const at = hostWords(s);
@@ -232,7 +228,7 @@ export function serviceLines(services: readonly Service[], opts: LineOptions = {
       if (s.media) out.push({ text: `${EVERYDAY}send and open files there as you`, stress: true });
       for (const p of s.private) out.push({ text: `Keep private notes there (${p.d}…), sealed to your key: other apps of yours may share them`, stress: false });
       if (s.approvals) {
-        out.push({ text: `${APPROVAL}answer approval cards and secret requests there from ${joinWords(s.approvals.from.map(who))}${same}. Powerful ones ask for your device unlock`, stress: true });
+        out.push({ text: `${HIGH_RISK}answer approval cards and secret requests there from ${joinWords(s.approvals.from.map(who))}. Powerful ones ask for your device unlock`, stress: true });
         out.push({ text: "It sees what each card asks (the job, never a key), and that could reach the servers it uses", stress: false });
       }
       if (s.notify) {
@@ -245,8 +241,8 @@ export function serviceLines(services: readonly Service[], opts: LineOptions = {
       out.push(s.auth === "nip98" ? { text: `${EVERYDAY}send requests to ${at} signed as you`, stress: true }
         : s.auth === "token" ? { text: `Use a token you give it for ${at}`, stress: true }
         : { text: `Send requests to ${at}`, stress: false });
-      if (s.approve) out.push({ text: `${APPROVAL}send ${joinWords(s.approve.ops)} requests to ${at}${same}`, stress: true });
-      if (s.join) out.push({ text: `${JOIN}ask ${at} to let this device join a private network (${joinWords(s.join.ops)}), each time after what Settings → Security asks for joining (your passcode and unlock, unless you changed it)`, stress: true });
+      if (s.approve) out.push({ text: `${HIGH_RISK}send ${joinWords(s.approve.ops)} requests to ${at}`, stress: true });
+      if (s.join) out.push({ text: `${HIGH_RISK}ask ${at} to let this device join a private network (${joinWords(s.join.ops)}), each time after what Settings → Security asks for joining (your passcode and unlock, unless you changed it)`, stress: true });
     }
     out.push({ text: `What it reads here could reach ${at}`, stress: true });
   }

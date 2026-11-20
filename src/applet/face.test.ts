@@ -10,7 +10,7 @@ import type { LineOptions } from "./services";
 
 const UNI = "a".repeat(64);
 const vars = { relay: "wss://buzz.example.org", mail: "https://mail.example.org/mail/", uni: UNI, push: "https://push.example.org/" };
-const trusted: LineOptions = { approvalSame: true, approverName: (h) => (h === UNI ? "Uni" : null) };
+const trusted: LineOptions = { approverName: (h) => (h === UNI ? "Uni" : null) };
 
 function grantFor(name: string, change: (f: Record<string, unknown>) => Record<string, unknown> = (f) => f): { g: Grant; folder: string | null } {
   const r = appletRecord(name, vars);
@@ -26,7 +26,7 @@ const facts = (line: string): string[] => [
   ...(line.match(/«[^»]+»(?: \([^)]+\))?/g) ?? []),
   ...(line.match(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?: on this device)?/gi) ?? []).filter((h) => !/^e\.g$/.test(h)),
   ...(line.match(/\b[A-Z][\w ]*\//g) ?? []),
-  ...["everyday key", "approval key", "High risk", "device unlock", "public key", "where to reach this phone", "web addresses", "every vault", "named by the applet", "only in", "delete", "files", "signed as you", "token", "your approval key is your everyday key for now"].filter((w) => line.toLowerCase().includes(w.toLowerCase())).map((w) => w.toLowerCase()),
+  ...["everyday key", "approval key", "High risk", "device unlock", "public key", "where to reach this phone", "web addresses", "every vault", "named by the applet", "only in", "delete", "files", "signed as you", "token"].filter((w) => line.toLowerCase().includes(w.toLowerCase())).map((w) => w.toLowerCase()),
 ];
 
 /** Every line the details stress has its facts on the face. */
@@ -47,7 +47,7 @@ describe("the face keeps every stressed line's facts", () => {
   });
   it("an approver this device doesn't trust is named by its whole key", () => {
     const { g, folder } = grantFor("rooms");
-    const face = holds(g, folder, { approvalSame: false });
+    const face = holds(g, folder, {});
     expect(faceTexts(face).join(" ")).toContain("a key you haven't trusted on this device (npub1");
   });
   it("rooms the applet names, a token, a plain server, every vault, links, someone else's page and code", () => {

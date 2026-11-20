@@ -159,7 +159,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
         const req = { method, path: p.path, headers, ...(bytes ? { body: toB64(bytes) } : {}) };
         const res = held === null ? await native.http(session, s.id, req)
           : await withPasscode(shell, s.join?.ops.includes(held) ? `Join a network: ${held} at ${new URL(s.url).host}` : `Approve ${held} at ${new URL(s.url).host}`, (code) => native.http(session, s.id, req, code));
-        if (res.graced) shell.say("Approved with your approval key: your unlock a moment ago covered it.");
+        if (res.graced) shell.say("Approved with your key: your unlock a moment ago covered it.");
         const body = fromB64(res.body);
         const as = p.as ?? "text";
         const out = as === "bytes" ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) : new TextDecoder().decode(body);
@@ -323,7 +323,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       await opened;
       const decision = p.decision, rids = p.rids as string[];
       const r = decision === "deny" ? await native.cardAnswer(session, s.id, ev, decision, rids)
-        : await withPasscode(shell, "Approve Uni's card", (code) => native.cardAnswer(session, s.id, ev, decision, rids, code));
+        : await withPasscode(shell, "Approve your agent's card", (code) => native.cardAnswer(session, s.id, ev, decision, rids, code));
       const sent: string[] = [];
       let failed: string | null = null;
       for (const w of r.wraps) {

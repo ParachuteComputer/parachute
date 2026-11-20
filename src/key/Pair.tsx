@@ -68,7 +68,7 @@ export default function Pair() {
       <section className="card stack">
         {(step === "link" || step === "connecting" || step === "scanning") && <>
           <ol className="steps">
-            <li>On the device that has your key, open the Uni app → Settings → <strong>Pair a device</strong> (or Buzz desktop → Settings → Pair mobile device).</li>
+            <li>On the device that has your key, open the app that holds it and choose <strong>Pair a device</strong> (in Buzz desktop: Settings → Pair mobile device).</li>
             <li>Scan the QR code it shows, or copy its link and paste it here.</li>
             <li>Check that both devices show the same 6-digit code.</li>
           </ol>

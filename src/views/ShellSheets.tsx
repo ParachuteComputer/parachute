@@ -1,6 +1,6 @@
 // What the shell draws over a running applet, outside its frame (docs/design/KEYRING.md): the sheet a secret is typed
 // on (the value never enters the frame), and the shell's own line when an approval went through on an earlier unlock.
-// Every word is the app's; what comes from Uni's request is shown as Uni's.
+// Every word is the app's; what comes from the agent's request is shown as the agent's.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SecretView } from "../services/native";
 import type { Shell } from "../services/broker";
@@ -45,11 +45,11 @@ function TrustSheet({ t }: { t: Trusting }) {
         <h2>Trust a key for approvals?</h2>
         <p>{t.applet} shows a card signed by this key, which it names for approvals. Trusted, it can ask this device for approvals and secrets.</p>
         <p className="trust-key"><code>{t.key}</code></p>
-        <p className="quiet">Trust it only if you know whose key this is. Uni's key is in your Parachute notes.</p>
+        <p className="quiet">Trust it only if you know whose key this is, such as your agent's.</p>
         <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) t.done(name.trim()); }}>
           <label className="secret-field">
             <span className="quiet">Whose key is it?</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} autoComplete="off" placeholder="A name, as Uni" />
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} autoComplete="off" placeholder="A name for it" />
           </label>
           <div className="grant-actions">
             <button type="button" className="quiet-button" onClick={() => t.done(null)}>Cancel</button>
@@ -90,7 +90,7 @@ function SecretSheet({ asking, onDone }: { asking: Asking; onDone: (v: string | 
         <h2>{v.requester} asks for a secret</h2>
         <p><strong>{v.label}</strong></p>
         {v.purpose && <p className="quiet">{v.purpose}</p>}
-        <p className="quiet">{v.requester} says it keeps it in {v.store} for {v.keep_days} {v.keep_days === 1 ? "day" : "days"}. Sealed with your approval key, only {v.requester} can open it. The applet never sees it. Asked until {until(v.expires)}.</p>
+        <p className="quiet">{v.requester} says it keeps it in {v.store} for {v.keep_days} {v.keep_days === 1 ? "day" : "days"}. Sealed with your key, only {v.requester} can open it. The applet never sees it. Asked until {until(v.expires)}.</p>
         <form onSubmit={(e) => { e.preventDefault(); if (value) send(); }}>
           <label className="secret-field">
             <span className="quiet">The secret</span>
