@@ -260,6 +260,14 @@ test("Uni's turn in a room: a quick reply, working and Stop, muted, a draft with
     await expect(found.getByRole("button", { name: new RegExp(`Beds ${stamp}`) })).toBeVisible({ timeout: 15_000 });
     await found.getByRole("button", { name: new RegExp(`Beds ${stamp}`) }).first().click();
     await expect(log.locator("article.at")).toContainText(`The beds are dug ${stamp}`, { timeout: 15_000 });
+    // back from a hit, the finds are still there (they take the list's place); Back to your rooms gives the list again
+    await app.getByRole("button", { name: "← Rooms" }).click();
+    await expect(found.getByRole("button", { name: new RegExp(`Beds ${stamp}`) }).first()).toBeVisible();
+    await expect(app.getByLabel("Search your rooms")).toHaveValue("seed potatoes");
+    await expect(app.getByRole("region", { name: "Your rooms" })).toHaveCount(0);
+    await app.getByRole("button", { name: "Back to your rooms" }).click();
+    await expect(found).toHaveCount(0);
+    await expect(list.getByRole("button", { name: new RegExp(`Shed ${stamp}`) })).toBeVisible();
 
     // a notification's tap: the app opens the applet at that room and message
     const roof = await bob.publish({ kind: 9, content: `Look at the shed roof ${stamp}`, tags: [["h", rooms.Shed], ["p", alice]] });
