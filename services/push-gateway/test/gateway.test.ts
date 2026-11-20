@@ -138,8 +138,35 @@ test("endpoints: https to a public host; http only to this machine when allowed"
   const opts = { relays: [relay], allowLoopback: false };
   const body = { endpoint: "https://ntfy.example/upX?up=1", keys: device().keys, relay, rooms: null, mentions: true, from: [] };
   assert.ok(parseRegister(body, "a".repeat(64), opts, now()).ok);
-  for (const bad of [{ relay: "wss://other.example" }, { keys: { p256dh: "AAAA", auth: "BBBB" } }, { mentions: false }, { rooms: [] }, { rooms: ["a b"] }, { from: ["B".repeat(64)] }, { extra: 1 }])
+  for (const bad of [{ relay: "wss://other.example" }, { keys: { p256dh: "AAAA", auth: "BBBB" } }, { mentions: false }, { rooms: [] }, { rooms: ["a b"] }, { from: ["B".repeat(64)] }])
     assert.equal(parseRegister({ ...body, ...bad }, "a".repeat(64), opts, now()).ok, false, JSON.stringify(bad));
+});
+
+test("a registration from a newer app: what this gateway doesn't know is left out, never refused", async () => {
+  // Apps update before or after their gateway (README.md, "Older and newer apps"): a field added later must not stop pushes here.
+  const g = createGateway({ url: "http://push.test/", relays: [relay], secret: generateSecretKey(), file: null, allowLoopback: false, log: () => {} });
+  const at = `http://127.0.0.1:${await listenFree(g.server)}`;
+  const sk = generateSecretKey(), me = getPublicKey(sk);
+  const post = (path: string, b: unknown) => { const raw = JSON.stringify(b); return fetch(`${at}/${path}`, { method: "POST", headers: { authorization: nip98(sk, `http://push.test/${path}`, "POST", raw), "content-type": "application/json" }, body: raw }); };
+  const endpoint = "https://ntfy.example/upN?up=1";
+  try {
+    const r = await post("register", { endpoint, keys: { ...device().keys, later: "x" }, relay, rooms: null, mentions: true, from: [], quiet: { from: "22:00" },
+      signals: [{ subject: "cm9vbXMtYXBwbGV0", signal: "for-you", rooms: null, weight: 2 }] });
+    assert.equal(r.status, 200, await r.clone().text());
+    const kept = g.registry.all(now())[0];
+    assert.deepEqual(Object.keys(kept).sort(), ["created", "endpoint", "expires", "from", "keys", "mentions", "pending", "pubkey", "relay", "rooms", "signals"]);
+    assert.deepEqual(Object.keys(kept.keys).sort(), ["auth", "p256dh"]);
+    assert.deepEqual(kept.signals, [{ subject: "cm9vbXMtYXBwbGV0", signal: "for-you", rooms: null }]);
+    // what it does know is still checked as before
+    assert.equal((await post("register", { endpoint, keys: device().keys, relay, rooms: null, mentions: "yes", from: [], quiet: 1 })).status, 400);
+    g.registry.judge(relay, new Set([me]), new Set([me]));
+    const s = await post("signals", { set: [{ subject: "cm9vbXMtYXBwbGV0", signal: "for-you", count: 0, as_of: 1 }], since: 1 });
+    assert.equal(s.status, 200, await s.clone().text());
+    const un = await post("unregister", { endpoint, relay, reason: "moved" });
+    assert.equal(un.status, 200);
+    assert.equal((await un.json()).removed, true);
+    assert.equal(g.registry.all(now()).length, 0);
+  } finally { g.close(); }
 });
 
 test("a push is sealed, carries no words, and a gone endpoint is unregistered", async () => {
@@ -362,7 +389,11 @@ test("signals: the person's own signature moves their numbers; a change reaches 
   await settle();
   assert.equal(got.length, 1, "the same number again pushes nothing");
 
-  for (const bad of [{ set: [{ subject, signal: "new", count: -1 }] }, { set: [{ subject: "x", signal: "new", count: 1 }] }, { set: [{ subject, signal: "New", count: 1 }] }, { set: [{ subject, signal: "new", count: 1, words: "hi" }] }, { push: 1 }]) {
+  // a field it doesn't know is left out (an app newer than the gateway); the words never reach the push
+  assert.equal((await send(sk, { set: [{ subject, signal: "new", count: 2, words: "hi" }] })).status, 200);
+  await settle();
+  assert.equal(got.length, 1, "nothing changed, nothing pushed, nothing kept but the number");
+  for (const bad of [{ set: [{ subject, signal: "new", count: -1 }] }, { set: [{ subject: "x", signal: "new", count: 1 }] }, { set: [{ subject, signal: "New", count: 1 }] }, { push: 1 }]) {
     assert.equal((await send(sk, bad)).status, 400, JSON.stringify(bad));
   }
   const other = generateSecretKey();

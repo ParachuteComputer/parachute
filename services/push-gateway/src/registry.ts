@@ -32,18 +32,19 @@ export type Reg = {
   signals?: RegSignal[];
 };
 
-const only = (o: Record<string, unknown>, keys: string[]) => Object.keys(o).every((k) => keys.includes(k));
 const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
 
 export type Opts = { relays: string[]; allowLoopback: boolean; privateHosts?: string[] };
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
-/** The body of POST /register: {endpoint, keys: {p256dh, auth}, relay, rooms, mentions, from, signals?}, nothing else. */
+/** The body of POST /register: {endpoint, keys: {p256dh, auth}, relay, rooms, mentions, from, signals?}. A field this
+ *  gateway doesn't know (an app newer than it) is left out, never refused: what is kept is only what is read here
+ *  (README.md, "Older and newer apps"). */
 export function parseRegister(x: unknown, pubkey: string, opts: Opts, now: number): Parsed<Reg> {
-  if (!plain(x) || !only(x, ["endpoint", "keys", "relay", "rooms", "mentions", "from", "signals"])) return { ok: false, error: "a registration is {endpoint, keys, relay, rooms, mentions, from, signals?}" };
+  if (!plain(x)) return { ok: false, error: "a registration is {endpoint, keys, relay, rooms, mentions, from, signals?}" };
   const ep = endpointOk(x.endpoint, opts.allowLoopback, opts.privateHosts);
   if (!ep.ok) return ep;
-  if (!keysOk(x.keys) || !only(x.keys as Record<string, unknown>, ["p256dh", "auth"])) return { ok: false, error: "keys is {p256dh, auth}: the push keys the app's connector made" };
+  if (!keysOk(x.keys)) return { ok: false, error: "keys is {p256dh, auth}: the push keys the app's connector made" };
   const relay = typeof x.relay === "string" ? relayKey(x.relay) : null;
   if (!relay || !opts.relays.includes(relay)) return { ok: false, error: "this gateway doesn't watch that relay" };
   let rooms: string[] | null = null;
@@ -65,9 +66,9 @@ export function parseRegister(x: unknown, pubkey: string, opts: Opts, now: numbe
     ...(signals.value.length ? { signals: signals.value } : {}) } };
 }
 
-/** The body of POST /unregister: {endpoint, relay}. */
+/** The body of POST /unregister: {endpoint, relay} (anything else is left out). */
 export function parseUnregister(x: unknown): Parsed<{ endpoint: string; relay: string }> {
-  if (!plain(x) || !only(x, ["endpoint", "relay"]) || typeof x.endpoint !== "string" || typeof x.relay !== "string") return { ok: false, error: "an unregistration is {endpoint, relay}" };
+  if (!plain(x) || typeof x.endpoint !== "string" || typeof x.relay !== "string") return { ok: false, error: "an unregistration is {endpoint, relay}" };
   const relay = relayKey(x.relay);
   let endpoint: string;
   try { endpoint = new URL(x.endpoint).href; } catch { return { ok: false, error: "an unregistration is {endpoint, relay}" }; }

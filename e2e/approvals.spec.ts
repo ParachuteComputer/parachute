@@ -87,8 +87,12 @@ test("the rooms applet approves Uni's powerful card behind the unlock, gives a s
     await holdIt();
     await expect(sealed.getByRole("alert")).toContainText(/unlock was cancelled or failed/);
     expect(await page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks: string[] }).__parachuteE2EUnlocks)).toEqual(["powerful cloudflare-dns"]);
+    // held again at once: that tap paid a moment ago, and the card says so in the shell's words (asking nothing)
+    await holdIt();
+    await expect(sealed.getByRole("alert")).toContainText("Tap again in a moment: one tap pays for one approval.");
+    expect(await page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks: string[] }).__parachuteE2EUnlocks)).toEqual(["powerful cloudflare-dns"]);
     await page.evaluate(() => { (window as unknown as { __parachuteE2EUnlock: string }).__parachuteE2EUnlock = "pass"; });
-    await page.waitForTimeout(5100); // a tap pays for one answer
+    await page.waitForTimeout(5100); // a tap pays for one answer, and the same card waits out the cancel's cooldown
     await holdIt();
     await expect(sealed).toContainText(/Approved · open until/, { timeout: 20_000 });
     await expect(sealed).not.toContainText("not sent yet");

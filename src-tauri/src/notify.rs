@@ -336,6 +336,14 @@ const RENEW_PENDING_S: u64 = 24 * 3600;
 
 /// What a gateway said when it refused (its answer's `error`), for Settings: one short line of plain characters (no
 /// control, direction or zero-width characters).
+/// Did a gateway from before signals (it refused any field it didn't know) refuse this registration for naming them?
+/// Only that answer, word for word: any other refusal is a real one.
+pub fn refused_for_signals(status: u16, answer: &[u8]) -> bool {
+    status == 400
+        && serde_json::from_slice::<Value>(answer).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_string)).as_deref()
+            == Some("a registration is {endpoint, keys, relay, rooms, mentions, from}")
+}
+
 pub fn gateway_said(answer: &[u8]) -> String {
     let why = serde_json::from_slice::<Value>(answer).ok().and_then(|v| v.get("error").and_then(Value::as_str).map(str::to_string)).unwrap_or_default();
     let plain = |c: &char| !c.is_control() && !matches!(*c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}' | '\u{00AD}');
@@ -622,7 +630,15 @@ pub async fn push_register<R: Runtime>(
                     let _ = send(PushOp::Unregister, unregister_body(&kept[i].endpoint, &relay), e.subject.clone(), e.name.clone()).await;
                 }
             }
-            let (status, answer) = send(PushOp::Register, body, e.subject.clone(), e.name.clone()).await?;
+            let (mut status, mut answer) = send(PushOp::Register, body, e.subject.clone(), e.name.clone()).await?;
+            // a gateway from before signals refuses any field it doesn't know (docs/design/VERSIONS.md): asked again
+            // without them, messages still arrive and only its counts are missing; the next renewal tries them again.
+            // Any other refusal stands, and is shown.
+            let mut without = false;
+            if !relay_signals.is_empty() && refused_for_signals(status, &answer) {
+                (status, answer) = send(PushOp::Register, register_body(&e, &ep, &[]), e.subject.clone(), e.name.clone()).await?;
+                without = true;
+            }
             if !(200..300).contains(&status) {
                 return Err(format!("The gateway refused the registration ({status}{}).", gateway_said(&answer)));
             }
@@ -630,7 +646,7 @@ pub async fn push_register<R: Runtime>(
             kept.push(Kept { me: e.me.clone(), gateway: gateway.clone(), relay: relay.clone(), endpoint: ep.endpoint, hash, at: kept_at(now, &answer) });
             crate::services::write_json(&path, &kept).map_err(|_| "The registration couldn't be kept.".to_string())?;
             tell_native(&app, &kept).await;
-            Ok(json!({ "status": "registered" }))
+            Ok(if without { json!({ "status": "registered", "signals": false }) } else { json!({ "status": "registered" }) })
         }
         PushOp::Unregister => {
             let i = had.ok_or("This device didn't register with that gateway.")?;
@@ -646,6 +662,25 @@ pub async fn push_register<R: Runtime>(
             Ok(json!({ "status": "unregistered" }))
         }
     }
+}
+
+/// The mark that Android's notification permission was asked for once (app data).
+pub const ASKED_FILE: &str = "notify-asked";
+
+/// Whether to ask for Android's notification permission now: the first time an applet asks to tell the person
+/// something (`wants`), and never again by itself. A sync runs on every return to the front, and asking each time means a
+/// denial reopens the question at once, round and round, until Android removes the app. Afterwards Settings says
+/// notifications are off and opens the phone's own switch. The mark is kept before asking; one that can't be kept, or
+/// read, asks nothing.
+pub fn take_ask(dir: &std::path::Path, wants: bool) -> bool {
+    if !wants {
+        return false;
+    }
+    let mark = dir.join(ASKED_FILE);
+    if !matches!(mark.try_exists(), Ok(false)) {
+        return false;
+    }
+    std::fs::create_dir_all(dir).is_ok() && std::fs::write(&mark, b"asked\n").is_ok()
 }
 
 /// Keep what granted applets asked to be told about, and start or stop the service to match (an empty list stops it).
@@ -670,10 +705,12 @@ pub async fn notify_set<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState
     #[cfg(target_os = "android")]
     {
         let plugin = app.try_state::<NotifyPluginHandle<R>>().map(|h| h.0.clone()).ok_or("Notifications aren't ready.")?;
+        // no data folder: no mark can be kept, so nothing is asked (the list still goes to the service)
+        let ask = app.path().app_data_dir().map(|d| take_ask(&d, !entries.is_empty())).unwrap_or(false);
         let entries = serde_json::to_string(&entries).map_err(|e| e.to_string())?;
         let signals = serde_json::to_string(&signals).map_err(|e| e.to_string())?;
         plugin
-            .run_mobile_plugin_async::<serde_json::Value>("configure", serde_json::json!({ "entries": entries, "signals": signals }))
+            .run_mobile_plugin_async::<serde_json::Value>("configure", serde_json::json!({ "entries": entries, "signals": signals, "ask": ask }))
             .await
             .map_err(|e| format!("Notifications couldn't be set up ({e})."))
     }
@@ -681,6 +718,22 @@ pub async fn notify_set<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState
     {
         let _ = (app, entries, signals);
         Ok(serde_json::json!({ "android_only": true, "note": "Notifications while the app is closed are Android only for now." }))
+    }
+}
+
+/// Open the phone's own notification settings for Parachute (Settings → Notifications while closed, when they are off):
+/// the one way back after the person said no, since Parachute never asks again by itself.
+#[tauri::command]
+pub async fn notify_open_settings<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        let plugin = app.try_state::<NotifyPluginHandle<R>>().map(|h| h.0.clone()).ok_or("Notifications aren't ready.")?;
+        plugin.run_mobile_plugin_async::<serde_json::Value>("openSettings", serde_json::json!({})).await.map(|_| ()).map_err(|e| format!("The phone's settings couldn't be opened ({e})."))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("Notifications while the app is closed are Android only for now.".into())
     }
 }
 
@@ -857,6 +910,12 @@ mod tests {
         let body: Value = serde_json::from_slice(&register_body(&e, &ep, &regs)).unwrap();
         assert_eq!(body["signals"], json!(regs));
         assert!(serde_json::from_slice::<Value>(&register_body(&e, &ep, &[])).unwrap().get("signals").is_none());
+        // an older gateway's refusal of a field it didn't know is asked again without signals; a real refusal stands
+        assert!(refused_for_signals(400, br#"{"error":"a registration is {endpoint, keys, relay, rooms, mentions, from}"}"#));
+        assert!(!refused_for_signals(400, br#"{"error":"signals is up to 8 {subject, signal, rooms}"}"#));
+        assert!(!refused_for_signals(400, br#"{"error":"a registration is {endpoint, keys, relay, rooms, mentions, from, signals?}"}"#));
+        assert!(!refused_for_signals(429, br#"{"error":"a registration is {endpoint, keys, relay, rooms, mentions, from}"}"#));
+        assert!(!refused_for_signals(400, b"not json"));
         // never more rooms than the gateway takes: 50 + 50, and a third signal of 50 is left out
         let wide = |gid: &str| SignalEntry { gid: gid.into(), signal: "for-you".into(), relay: Some("wss://relay.example".into()), rooms: Some((0..50).map(|i| format!("room{i}")).collect()), ..list[0].clone() };
         assert_eq!(relay_signals(&[wide("YWFhYWFhYWFh"), wide("YmJiYmJiYmJi"), wide("Y2NjY2NjY2Nj")], "https://push.example/", "wss://relay.example").len(), 2);
@@ -883,5 +942,38 @@ mod tests {
         assert!(sign_auth(b"nsec1notakey", "wss://relay.example", "c").is_none());
         assert!(sign_auth(k.public_key().to_bech32().unwrap().as_bytes(), "wss://relay.example", "c").is_none());
         assert!(sign_auth(&[0xff, 0xfe], "wss://relay.example", "c").is_none());
+    }
+
+    #[test]
+    fn asks_for_the_permission_once_and_never_again_by_itself() {
+        let d = std::env::temp_dir().join(format!("parachute-notify-ask-{}-{}", std::process::id(), nostr::secp256k1::rand::random::<u64>()));
+        // nothing asks to tell the person anything yet: no question, and none used up
+        assert!(!take_ask(&d, false));
+        assert!(!d.join(ASKED_FILE).exists());
+        // the first applet that does: asked once
+        assert!(take_ask(&d, true));
+        // every sync after (each return to the front) asks nothing, granted or denied
+        assert!(!take_ask(&d, true));
+        assert!(!take_ask(&d, true));
+        let _ = std::fs::remove_dir_all(&d);
+        // a mark that can't be read, or can't be written, asks nothing (asking each time is the loop Android ends by
+        // removing the app)
+        let f = std::env::temp_dir().join(format!("parachute-notify-ask-file-{}", std::process::id()));
+        std::fs::write(&f, b"x").unwrap();
+        assert!(!take_ask(&f.join("app"), true));
+        let _ = std::fs::remove_file(&f);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let ro = std::env::temp_dir().join(format!("parachute-notify-ask-ro-{}", std::process::id()));
+            std::fs::create_dir_all(&ro).unwrap();
+            std::fs::set_permissions(&ro, std::fs::Permissions::from_mode(0o555)).unwrap();
+            // (root writes anyway: then there is nothing to check)
+            if std::fs::write(ro.join("probe"), b"x").is_err() {
+                assert!(!take_ask(&ro, true));
+            }
+            std::fs::set_permissions(&ro, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let _ = std::fs::remove_dir_all(&ro);
+        }
     }
 }

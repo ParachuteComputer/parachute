@@ -41,7 +41,7 @@ function useNotes(vaults: FrameVault[], term: string): { rows: Row[]; unread: st
 }
 
 /**
- * Notes: the simple app's home (docs/SIMPLE.md). Every vault's newest notes in one list, a search across them, the
+ * Notes: Parachute Simplified's home (docs/SIMPLE.md). Every vault's newest notes in one list, a search across them, the
  * vaults as tabs, and a new note. A tap opens the note (where Edit is); the bar below has Journal, Capture and Connect.
  */
 export default function NotesHome() {
@@ -76,6 +76,7 @@ export default function NotesHome() {
         {into && <Link className="primary notes-new" to={`/v/${encodeURIComponent(into.key)}/new`}>New note</Link>}
       </header>
       {homeNow.notice === "app-record" && <p className="launcher-notice" role="status">Your app record didn't load, so this is Parachute Simplified. <Link to="/settings">Settings</Link></p>}
+      {homeNow.notice === "app-newer" && <p className="launcher-notice" role="status">Update Parachute to use {homeNow.noticeName ?? "your app"}. It was made for a newer Parachute, so for now this is Parachute Simplified. <Link to="/settings">Settings</Link></p>}
       <Search label={chosen ? `Search ${chosen.vault}` : "Search every vault"} value={q} onChange={setQ} onSearch={setTerm} live={250} />
       {all.length > 1 && <Tabs label="Vaults" current={chosen?.key ?? ""} onChange={tab} tabs={[{ key: "", label: "All" }, ...all.map((v) => ({ key: v.key, label: v.vault }))]} />}
       {parachutes.map((p) => <VaultsToOpen key={p.hub} p={p} />)}

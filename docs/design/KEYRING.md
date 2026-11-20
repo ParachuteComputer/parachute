@@ -126,12 +126,14 @@ this device for itself (drafts, what it last showed)".
 
 ## Approving inside an applet
 
-Every approve, and every secret sheet, needs **a tap in that applet** (the shell's `tappingIn` check, as `app.open`:
+Every approve, and every secret sheet, needs **a tap in that applet** (the shell's `useTapOnce` check, as `app.open`:
 live user activation with the focus in its own frame, while its screen is in front), and **a tap pays for one call**: a
 second `answer` or `secret` within the activation's few seconds is refused (one call may answer several rows of one
 morning card). This check is the web side's, as SERVICES.md accepts. So an applet can't approve on its
 own, and can't raise unlock prompts out of nowhere; after a cancelled unlock the same card can't ask again for 5
-seconds.
+seconds. A second tap within the activation's few seconds reads "Tap again in a moment: one tap pays for one approval."
+(also right after a cancelled unlock: nothing was approved, but the tap was used), not "needs your tap"; a retry after
+that but still inside the cancel's cooldown reads Rust's "That was just cancelled. Try again in a moment."
 
 1. The applet finds a card in a room (a kind 9 with a `uni-sealed-approval`, `uni-sealed-morning` or
    `uni-secret-request` block) and hands the **signed event** to the shell: `services.card(id, event)`.
@@ -290,8 +292,10 @@ its Open button (one more tap): a link from outside the app never starts an appl
 tell its own notification's link from any other app's. What was shown is cleared, and the badge with it, when the app
 comes back to the front (not when that applet opens). Nothing is shown while the app is in front. "Closed" means swiped
 away from recents; Force stop kills any service and stops a distributor's deliveries, as Android means it to. Nothing
-is shown when no grant asks or the key is removed. Android asks for the notification permission when the first such
-grant is allowed. Desktop: not in this step (the app notifies only while running there); said in PARITY.md.
+is shown when no grant asks or the key is removed. Android asks for the notification permission once, when the first
+such grant is allowed, and never again by itself (notify.rs `take_ask`; asking on each return to the front looped a
+denial until Android removed the app). While they are off, Settings → Notifications while closed says so, and
+**Turn them on** opens the phone's notification settings for Parachute. Desktop: not in this step (the app notifies only while running there); said in PARITY.md.
 
 ## Threat model, additions
 

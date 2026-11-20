@@ -259,12 +259,14 @@ does. Each takes plain props; a newer prop is only ever added, never changed.
 
 An HTML applet has no parts: it has the kit's calls and the CSS variables.
 
-**Older apps.** An applet lives in the vault, and each device's app updates on its own time, so an applet meets older
-apps. A part an older app doesn't have arrives as `undefined`, and an applet that draws it stops there with one line
-saying why. The kit of 11-20 (T-476: everything in the parts table above, with every prop it lists) is the floor the
-shipped applets are written on: they need a build with all of it, the first release after 11-20, so their records go to
-a vault once the person's devices have that build. A newer prop counts as a newer part: an older app ignores it. A part added after that is imported under another name
-with a fallback (`src/kit/olderApp.test.ts` checks the shipped applets do):
+**Older apps.** An applet lives in the vault, and each device's app updates on its own time, so an applet meets
+older apps ([docs/design/VERSIONS.md](design/VERSIONS.md)). Each part has the level of the app it came in. All the
+parts above are level 1, the floor: the kit of 11-20, with every prop it lists. A newer prop counts as a newer part,
+and an older app ignores it. If an applet uses a part above the floor, either fall back for it, or put
+`"needs": <its level>` beside `applet` in the fields. With `needs`, an older app lists the applet and says "Update
+Parachute to use …" instead of running it (`src/kit/olderApp.test.ts` checks the shipped applets do one or the other).
+If an applet touches a part this app doesn't have and then stops, the frame says to update rather than that it broke.
+A fallback:
 
 ```tsx
 import { Newer as KitNewer } from "parachute";

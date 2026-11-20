@@ -19,7 +19,9 @@ down, it signs the key list and nothing else. Made-up names in examples.
 An app is `Parachute/Apps/<id>`: where applets come from (one applet, a vault, every vault on a hub), the bar, the
 home, what opens which kind of note, how many applets stay running, how careful it is (`security`). Parachute
 Simplified (id `simple`) and Everything are always there. Each device opens one (Settings → **Your app**); a new device opens the one the settings
-note names. An org's app is followed live (`live`): read from their vault each time.
+note names. An org's app is followed live (`live`): read from their vault each time. A record made for a newer
+Parachute says so with `needs`, and an older one then opens the next app it can and says to update; a key it doesn't
+know in a place is left out (docs/design/VERSIONS.md).
 
 ## Running needs a signed approval
 
@@ -194,7 +196,7 @@ same count is the notification while Parachute is closed. Nothing of the applet 
 |---|---|---|---|
 | a relay service's `notify` | Rooms: mentions and Uni's messages | its push gateway (services/push-gateway): each message it would push adds one | always, the app closed or not |
 | notes in its own vault | Ideas: notes someone else adds to `Ideas/` | the app, from the vault's own live subscription (`others`: a note whose `createdBy` isn't this sign-in's) | while the app is open on some device |
-| an http service's feed | Mail: unread mail | the applet itself, `signal("unread", n)` while it runs | while Mail runs |
+| an http service's feed | Mail: unread mail | the applet itself, `signal("unread", n)` while it runs and is allowed (a number said in the moment before its signal is listed here, right after Allow, is kept 10 s for it) | while Mail runs |
 | none | Journal | nobody | never |
 
 **The count lives in the push gateway** when the signal names one (`via`; a relay's goes through its `notify.gateway`):

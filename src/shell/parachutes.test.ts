@@ -1,4 +1,4 @@
-// Who starts on the simple app (docs/SIMPLE.md): a person new to the app signing in to Parachute Cloud, and no one
+// Who starts on Parachute Simplified (docs/SIMPLE.md): a person new to the app signing in to Parachute Cloud, and no one
 // else; and the list of Parachutes, written only where Parachute may write (docs/design/SCOPES.md: the sign-in reads the
 // home only). The hub is faked at the network (its notes API); the app's own modules run as they are.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,8 +55,8 @@ afterEach(() => { vi.unstubAllGlobals(); for (const k of ["garden", "work"]) dro
 
 const settingsWritten = () => writes.find((w) => (w.body.metadata as { parachute?: unknown } | undefined)?.parachute)?.body.metadata as { parachute: Record<string, unknown> } | undefined;
 
-describe("who starts on the simple app", () => {
-  it("a person new to the app on Parachute Cloud, with their home read only: nothing is written, this device opens the simple app, and the note follows once they let Parachute change notes there", async () => {
+describe("who starts on Parachute Simplified", () => {
+  it("a person new to the app on Parachute Cloud, with their home read only: nothing is written, this device opens Parachute Simplified, and the note follows once they let Parachute change notes there", async () => {
     const home = hold("garden");
     await afterSignIn(HUB, [home], true, true);
     expect(writes).toEqual([]);

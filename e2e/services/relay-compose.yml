@@ -22,7 +22,8 @@ services:
     command: server /data
     environment: { MINIO_ROOT_USER: buzz_test, MINIO_ROOT_PASSWORD: buzz_test_secret }
   minio-init:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # the client image: the server image has no `mc`
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: parachute-e2e-relay-minio-init
     labels: *labels
     depends_on: [minio]
@@ -36,7 +37,7 @@ services:
       postgres: { condition: service_healthy }
       minio-init: { condition: service_completed_successfully }
     ports: ["127.0.0.1:3871:3000"]
-    env_file: [${BUZZ_ENV_FILE:?a file with RELAY_OWNER_PUBKEY and BUZZ_RELAY_PRIVATE_KEY}]
+    env_file: ["${BUZZ_ENV_FILE:?a file with RELAY_OWNER_PUBKEY and BUZZ_RELAY_PRIVATE_KEY}"]
     environment:
       DATABASE_URL: postgres://buzz:buzz_test@postgres:5432/buzz
       REDIS_URL: redis://redis:6379

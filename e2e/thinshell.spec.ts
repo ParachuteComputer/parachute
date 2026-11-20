@@ -64,8 +64,8 @@ test("the list is the app's applets, not the vaults: no chapters, no vault links
 });
 
 test("a way back: a record that doesn't load gives the plain list, a calm line and Settings", async ({ page }) => {
-  // the settings note names an app whose record is malformed (a contract this app doesn't read)
-  await api(hubState(), "POST", "notes", { path: "Parachute/Apps/broken", content: "an app", tags: ["parachute-app"], metadata: { app: { contract: 9, id: "broken", name: "Broken", start: COOK } } });
+  // the settings note names an app whose record is malformed (a contract that isn't a number)
+  await api(hubState(), "POST", "notes", { path: "Parachute/Apps/broken", content: "an app", tags: ["parachute-app"], metadata: { app: { contract: "one", id: "broken", name: "Broken", start: COOK } } });
   await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "broken" } } });
   await start(page);
   await expect(ui(page).getByText("Your app record didn't load")).toBeVisible();
@@ -74,6 +74,17 @@ test("a way back: a record that doesn't load gives the plain list, a calm line a
   await expect(list.getByRole("link", { name: /Cook mode/ })).toBeVisible();
   await ui(page).getByRole("link", { name: "Settings" }).first().click();
   await expect(page.getByRole("heading", { name: "Your app" })).toBeVisible();
+});
+
+test("a record made for a newer Parachute gives the plain list and says to update (docs/design/VERSIONS.md)", async ({ page }) => {
+  await api(hubState(), "POST", "notes", { path: "Parachute/Apps/later", content: "an app", tags: ["parachute-app"], metadata: { app: { contract: 1, needs: 99, id: "later", name: "Later", start: COOK } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "later" } } });
+  await start(page);
+  await expect(ui(page).getByText("Update Parachute to use Later.")).toBeVisible();
+  await expect(ui(page).getByText("Your app record didn't load")).toHaveCount(0);
+  await expect(ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ })).toBeVisible();
+  // nothing of it started: no Cook mode at the start
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });
 
 test("a way back: a home applet that throws still leaves the bar, the list and Settings", async ({ page }) => {
