@@ -3,7 +3,7 @@
 // and opened again); the draft is in the box before anything is typed, and saving the entry clears it.
 import { expect, test } from "@playwright/test";
 import { api, hubState, record, VAULT } from "./hub";
-import { ui } from "./helpers";
+import { fromAppletMenu, ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";
 
 test.use({ storageState: "e2e/.signed-in.json" });
@@ -55,4 +55,36 @@ test("saved state: a journal draft and the entry it had open survive closing the
     const rows = await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=50`) as { id: string; content?: string }[];
     for (const r of rows) if (r.content?.includes(`orchard ${stamp}`)) made.push(r.id);
   } finally { for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {}); }
+});
+
+// Found in review (T-476): nothing ever cleared what an applet saved. A draft stayed on the device after Revoke, and
+// whatever was allowed next under that note (other code too) got it back before its first paint.
+test("Revoke clears what the applet saved: a draft isn't on the device for whatever is allowed next", async ({ page }) => {
+  const stamp = Date.now().toString(36);
+  const note = await record(hubState(), "create", appletRecord("journal"));
+  const draft = `A private line about the orchard ${stamp}`;
+  const onDevice = () => page.evaluate((d) => Object.keys(localStorage).some((k) => (localStorage.getItem(k) ?? "").includes(d)), draft);
+  try {
+    await page.goto(`/v/${VAULT}`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = page.frameLocator("iframe.applet-frame");
+    await app.getByLabel("Write in your journal").fill(draft);
+    await expect.poll(onDevice).toBe(true);
+
+    await fromAppletMenu(page, "Revoke");
+    await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible();
+    await expect.poll(onDevice).toBe(false);
+    // allowed again: the box is empty
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Journal" })).toBeVisible();
+    await expect(page.frameLocator("iframe.applet-frame").getByLabel("Write in your journal")).toHaveValue("");
+
+    // and Revoke in Settings does the same
+    await page.frameLocator("iframe.applet-frame").getByLabel("Write in your journal").fill(draft);
+    await expect.poll(onDevice).toBe(true);
+    await page.goto("/settings");
+    await page.getByRole("list", { name: "Allowed applets" }).getByRole("listitem").filter({ hasText: "Journal" }).getByRole("button", { name: "Revoke" }).click();
+    await expect.poll(onDevice).toBe(false);
+  } finally { await api(hubState(), "DELETE", `notes/${note.id}`).catch(() => {}); }
 });

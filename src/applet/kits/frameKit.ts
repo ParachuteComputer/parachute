@@ -171,8 +171,9 @@ export const FRAME_KIT = String.raw`(function () {
     };
     go();
   }
-  // what changed goes in batches of at most 64 keys; a batch that failed to be written goes back in line (unless something
-  // newer replaced it), so a draft is never dropped by one failed write
+  // what changed goes in batches of at most 64 keys; the keys of a batch that failed to be written go back in line, each
+  // with the value it holds now (never the one the failed batch carried: a newer one may have been kept since), so a
+  // draft is never dropped by one failed write and never put back by one
   // leaving: the frame is going (pagehide): what changed is sent now, not behind a save still out, since a frame
   // that is gone sends nothing later
   function savedFlush(leaving) {
@@ -190,7 +191,7 @@ export const FRAME_KIT = String.raw`(function () {
         var code = e && e.code;
         if (code && code !== "failed" && code !== "rate_limited" && code !== "too_many_pending") return null;
         savedDirty = savedDirty || {};
-        Object.keys(part).forEach(function (k) { if (!Object.prototype.hasOwnProperty.call(savedDirty, k)) savedDirty[k] = part[k]; });
+        Object.keys(part).forEach(function (k) { if (!Object.prototype.hasOwnProperty.call(savedDirty, k)) savedDirty[k] = Object.prototype.hasOwnProperty.call(savedVals, k) ? savedVals[k] : null; });
         if (!savedTimer) savedTimer = setTimeout(savedFlush, SAVE_MAX_MS);
         return null;
       }; })(part)));
@@ -199,6 +200,8 @@ export const FRAME_KIT = String.raw`(function () {
   }
   function savedSet(key, value) {
     if (typeof key !== "string" || !key || key.length > 100 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(key)) throw new TypeError("saved needs a key of 1 to 100 plain characters");
+    // the kit holds what is saved in plain objects, where this one name would be the object's own workings, not a key
+    if (key === "__proto__") throw new TypeError("saved can't keep a key named __proto__");
     var v = value === undefined ? null : value;
     if (v !== null) { var text = JSON.stringify(v); if (text === undefined) throw new TypeError("saved keeps JSON"); v = JSON.parse(text); }
     if (v === null) delete savedVals[key]; else savedVals[key] = v;

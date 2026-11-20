@@ -178,7 +178,7 @@ lock without a tap or a key can lock it on a computer (Android counts scrolling)
 
 What an applet gives the kit (`useSaved`, `parachute.saved`) reaches the shell 250 ms after the last change and is
 written to a file of its own on the device (synced, then renamed); it comes back in `ready` before the first paint,
-after a hide, an unload, the app closing or a reboot. Keep-alive is then speed only: 6 on a phone, 12 on a computer, or
+after a hide, an unload, the app closing or a reboot. Revoke, and signing out of its vault, remove it. Keep-alive is then speed only: 6 on a phone, 12 on a computer, or
 the app's `keep`.
 
 ## Signals: badges and notifications (docs/WRITE-AN-APPLET.md "Something for the person")

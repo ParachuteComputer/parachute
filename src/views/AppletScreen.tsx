@@ -52,7 +52,7 @@ import { createAppModule, notTapped } from "../applet/modules/app";
 import { createVoiceModule } from "../applet/modules/voice";
 import { createStorageModule } from "../applet/modules/storage";
 import { storageFor } from "../shell/device";
-import { deviceSaved } from "../shell/saved";
+import { deviceSaved, forgetSaved } from "../shell/saved";
 import { asksOf } from "../applet/approvals";
 import { approvalFor, floorOf, passcodeHere, signApproval, signsHere, subjectOf as approvalSubject, takeBack } from "../applet/approvalStore";
 import type { Decision } from "../applet/approvals";
@@ -251,7 +251,8 @@ export default function AppletScreen() {
   useEffect(() => {
     if (!subject || !signedNow || signedNow.run || (signedNow.why !== "withdrawn" && signedNow.why !== "other") || !signedNow.newest) return;
     const r = grants.record(subject);
-    if (r && Date.parse(r.grantedAt) < Date.parse(signedNow.newest.at)) { grants.revoke(subject); setStarted(false); bump(); }
+    // taken back by the person on another device: what it saved here goes too, as with Revoke here
+    if (r && Date.parse(r.grantedAt) < Date.parse(signedNow.newest.at)) { grants.revoke(subject); if (signedNow.why === "withdrawn") forgetSaved(subject); setStarted(false); bump(); }
   }, [signedNow, subject]); // eslint-disable-line react-hooks/exhaustive-deps
   // approved on another device, for this exact code and asks: allowed here too, when this device already holds what
   // its vault needs at the hub (else the card says so, and one tap asks the hub)
@@ -335,7 +336,8 @@ export default function AppletScreen() {
     createVoiceModule(!!entry.manifest.reach?.includes("voice"), { record: (max) => (tappingIn(() => frameEl.current) ? device.record(max) : Promise.reject(notTapped())) }),
     createStorageModule(entry.app.includes("storage"), storageFor(subjectOf(rec.key, entry.noteId))),
     // what the kit saves as the person goes (drafts, where it was): every applet's, the same store as `storage`
-    createSavedModule({ all: () => deviceSaved().load(subjectOf(rec.key, entry.noteId)), put: (entries) => deviceSaved().put(subjectOf(rec.key, entry.noteId), entries) }),
+    // only while it is allowed: a frame still going for a moment after Revoke leaves nothing behind
+    createSavedModule({ all: () => deviceSaved().load(subjectOf(rec.key, entry.noteId)), put: (entries) => (grants.record(subjectOf(rec.key, entry.noteId)) ? deviceSaved().put(subjectOf(rec.key, entry.noteId), entries) : Promise.reject(new Error("not allowed"))) }),
     createSignalsModule({ set: (id, count) => entry.signals.some((s) => s.id === id) && setOwn(rec.key, entry.noteId, id, count) }),
     ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
@@ -444,7 +446,7 @@ export default function AppletScreen() {
       // (applet/approvalStore.ts `takeBack`, as Revoke in Settings does).
       const seen = signedNow && (signedNow.run ? signedNow.content : signedNow.newest);
       const said = await takeBack(rec, entry.noteId, name, entry.manifest.id, seen?.n ?? null);
-      grants.revoke(subject); setSigned(null); setStarted(false); setHubError(said); bump(); setRecheck((n) => n + 1);
+      grants.revoke(subject); forgetSaved(subject); setSigned(null); setStarted(false); setHubError(said); bump(); setRecheck((n) => n + 1);
       void giveBack(rec.key, `${location.pathname}${location.search}`);
     })();
   };

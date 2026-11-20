@@ -182,3 +182,52 @@ test("Revoke in Settings takes it back on every device, as Revoke in the applet'
     await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {});
   }
 });
+
+// Found in review (T-476): what an applet saved (a draft) stayed on a device after the person revoked the applet. A
+// taking back read from another device removes it here too; a change of code alone never does.
+test("a taking back read from another device removes what the applet saved here; changed code keeps it", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const me = newKey();
+  const made = await record(hubState(), "create", appletRecord("journal"));
+  only = made.id;
+  const base = String((await api(hubState(), "GET", `notes/${made.id}`)).content);
+  const setCode = async (src: string) => { const n = await api(hubState(), "GET", `notes/${made.id}`); await api(hubState(), "PATCH", `notes/${made.id}`, { content: src, if_updated_at: n.updatedAt }); };
+  const phoneA = await device(browser, me), laptopB = await device(browser, me);
+  const draft = `Half a line on the laptop ${Date.now().toString(36)}`;
+  const box = (p: Page) => p.frameLocator("iframe.applet-frame").getByLabel("Write in your journal");
+  const onLaptop = () => laptopB.evaluate((d) => Object.keys(localStorage).some((k) => (localStorage.getItem(k) ?? "").includes(d)), draft);
+  try {
+    await open(phoneA);
+    await phoneA.getByRole("button", { name: "Allow" }).click();
+    await expect(journal(phoneA)).toBeVisible();
+    await open(laptopB);
+    await box(laptopB).fill(draft);
+    await expect.poll(onLaptop).toBe(true);
+
+    // the phone approves a newer version, then the first is put back in the vault: the laptop asks again (the newest
+    // approval is of other code), and the draft is still there after its Allow
+    await setCode(`${base}\n// v2\n`);
+    await open(phoneA);
+    await phoneA.getByRole("button", { name: "Allow this version" }).click();
+    await expect(journal(phoneA)).toBeVisible();
+    await setCode(base);
+    await open(laptopB);
+    await expect(card(laptopB)).toBeVisible();
+    expect(await onLaptop()).toBe(true);
+    await laptopB.getByRole("button", { name: /^Allow/ }).click();
+    await expect(box(laptopB)).toHaveValue(draft);
+
+    // the phone revokes it: read on the laptop, it stops there and what it saved there is gone
+    await open(phoneA);
+    await expect(journal(phoneA)).toBeVisible();
+    await fromAppletMenu(phoneA, "Revoke");
+    await expect.poll(async () => JSON.parse((await approvals())[0].metadata.approval!.content).approved).toBe(false);
+    await open(laptopB);
+    await expect(card(laptopB)).toBeVisible();
+    await expect.poll(onLaptop).toBe(false);
+  } finally {
+    await phoneA.context().close(); await laptopB.context().close();
+    for (const r of await approvals()) await api(hubState(), "DELETE", `notes/${r.id}`).catch(() => {});
+    await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {});
+  }
+});
