@@ -7,7 +7,8 @@ import { api, hubState, mintToken, MORE_VAULTS, NOT_GIVEN, ORG_VAULT, techneStat
 import { approveUntilBack, held, letWrite, openVault, signInWithKey, ui } from "./helpers";
 
 const hostOf = (origin: string) => new URL(origin).host;
-const parachute = (page: Page, origin: string) => ui(page).getByRole("region", { name: `Parachute: ${hostOf(origin)}` });
+/** A Parachute in Settings: its vaults, and a line for each vault there this device doesn't read yet. */
+const parachute = (page: Page, origin: string) => page.getByRole("region", { name: `Parachute: ${hostOf(origin)}` });
 const home = (method: string, path: string, body?: unknown) => api(hubState(), method, path, body, VAULT);
 
 /** Sign out of everything this test signed in to on the hubs' side: the settings note's list goes too. */
@@ -34,29 +35,28 @@ test("sign in once per hub with the key: the home read, every other vault of you
   // without a key in the page (the web build), the hub asks twice: to list the vaults, then to read the home
   expect(asked).toBe(2);
   expect(Object.keys(await held(page))).toEqual([VAULT]);
-  // one Parachute: the home's chapter, and a line for each other vault
-  await expect(ui(page).getByRole("region", { name: VAULT, exact: true })).toBeVisible();
+  // one Parachute, in Settings: the home, and a line for each other vault
+  await page.goto("/settings");
+  await expect(parachute(page, hubState().origin).getByRole("link", { name: `Open ${VAULT}`, exact: true })).toBeVisible();
   for (const m of MORE_VAULTS) {
-    await expect(ui(page).getByRole("region", { name: m.vault, exact: true })).toHaveCount(0);
-    await expect(ui(page).getByRole("button", { name: `Open ${m.vault}`, exact: true })).toBeVisible();
+    await expect(parachute(page, hubState().origin).getByRole("link", { name: `Open ${m.vault}`, exact: true })).toHaveCount(0);
+    await expect(parachute(page, hubState().origin).getByRole("button", { name: `Open ${m.vault}`, exact: true })).toBeVisible();
   }
 
   // Techne's, as someone else's: only the vault the person was given
   expect(await signInWithKey(page, techneState(), ORG_VAULT)).toBe(2);
-  // two Parachutes: each its own part, the home's first
-  const mine = parachute(page, hubState().origin);
-  await expect(mine.getByRole("region", { name: VAULT, exact: true })).toBeVisible();
+  // two Parachutes: each its own part in Settings, the home's first
+  await page.goto("/settings");
   const org = parachute(page, techneState().origin);
-  await expect(org.getByRole("region", { name: ORG_VAULT, exact: true })).toContainText(`someone else's · at ${hostOf(techneState().origin)}`);
-  await expect(ui(page).getByRole("region", { name: NOT_GIVEN, exact: true })).toHaveCount(0);
-  await expect(ui(page).getByRole("button", { name: `Open ${NOT_GIVEN}`, exact: true })).toHaveCount(0);
-  // the home Parachute first, with the home vault
-  await expect(ui(page).getByRole("region", { name: /^Parachute: / }).first()).toHaveAccessibleName(`Parachute: ${hostOf(hubState().origin)}`);
-  await expect(mine.getByRole("region", { name: VAULT, exact: true })).toContainText("your home");
+  await expect(org.getByRole("link", { name: `Open ${ORG_VAULT}`, exact: true })).toBeVisible();
+  await expect(org.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
+  await expect(page.getByRole("link", { name: `Open ${NOT_GIVEN}`, exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: `Open ${NOT_GIVEN}`, exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: /^Parachute: / }).first()).toHaveAccessibleName(`Parachute: ${hostOf(hubState().origin)}`);
 
   // another vault, opened: the hub asks to read that one, and its applet runs through that vault's own token
   expect(await openVault(page, "letters")).toBe(1);
-  await parachute(page, hubState().origin).getByRole("region", { name: "letters", exact: true }).getByRole("link", { name: /Post/ }).click();
+  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Post/ }).filter({ hasText: "letters" }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(page.frameLocator("iframe.applet-frame").getByText("In letters.")).toBeVisible();
 
@@ -108,12 +108,14 @@ test("a no on the hub's page for one vault keeps what the app held, and says so"
     const u = new URL(r.request().url());
     await r.fulfill({ status: 302, headers: { location: `${u.searchParams.get("redirect_uri")}?error=access_denied&state=${u.searchParams.get("state")}` } });
   });
-  await ui(page).getByRole("button", { name: "Open pantry", exact: true }).click();
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Open pantry", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("You said no on the hub. Nothing changed.");
-  await page.getByRole("link", { name: "Open your launcher" }).click();
-  await expect(ui(page).getByRole("region", { name: VAULT, exact: true })).toBeVisible();
-  await expect(ui(page).getByRole("region", { name: "pantry", exact: true })).toHaveCount(0);
-  await expect(ui(page).getByRole("button", { name: "Open pantry", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Open your applets" }).click();
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
+  await page.goto("/settings");
+  await expect(page.getByRole("link", { name: "Open pantry", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open pantry", exact: true })).toBeVisible();
   expect(Object.keys(await held(page))).toEqual([VAULT]);
 });
 
@@ -127,7 +129,6 @@ test("on a hub the person runs, they say which of its vaults are theirs; the oth
     await expect(p.getByRole("radio", { name: "pantry" })).toHaveCount(0);
   });
   await openVault(page, "pantry");
-  await expect(ui(page).getByRole("region", { name: "pantry", exact: true })).toContainText("someone else's");
   await page.goto("/settings");
   await expect(page.getByRole("combobox", { name: "Whose pantry is" })).toHaveValue("theirs");
   await expect(page.getByRole("combobox", { name: `Whose ${VAULT} is` })).toHaveValue("mine");
@@ -135,7 +136,6 @@ test("on a hub the person runs, they say which of its vaults are theirs; the oth
 
 test("a new device that signs in to someone else's Parachute first takes none of it for its own", async ({ page }) => {
   await signInWithKey(page, techneState(), ORG_VAULT);
-  await expect(ui(page).getByRole("region", { name: ORG_VAULT, exact: true })).toContainText("someone else's");
   await page.goto("/settings");
   await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
   await expect(page.getByText("No home vault: none of your vaults is marked as yours.")).toBeVisible();

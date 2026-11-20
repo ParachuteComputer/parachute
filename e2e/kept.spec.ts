@@ -40,7 +40,7 @@ test("an applet left for another screen keeps running hidden, and is the same fr
     expect(booted).toMatch(/^Booted \w+$/);
 
     // elsewhere in the app (the bar's Launcher): its frame stays, hidden; it is told, and a tap-only call is refused
-    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Launcher" }).click();
+    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
     await expect(page).toHaveURL(/\/$/);
     await expect(page.locator("iframe.applet-frame")).toHaveCount(1);
     await expect(page.locator("iframe.applet-frame")).toBeHidden();
@@ -52,7 +52,7 @@ test("an applet left for another screen keeps running hidden, and is the same fr
     await expect(page).toHaveURL(own); // still the applet's own address: what it tried to open while hidden didn't
 
     // its code changes while it is kept: shown again, the card asks before the new code runs
-    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Launcher" }).click();
+    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
     const cur = await api(hubState(), "GET", `notes?id=${note.id}`);
     await record(hubState(), "update", { id: note.id, body: CODE.replace("<h1>Kept</h1>", "<h1>Kept, changed</h1>"), if_updated_at: cur.updatedAt });
     await page.goBack();
@@ -71,7 +71,7 @@ test("an applet that is stopped or asking is not kept: back to it is as before",
     await page.goto(`/v/${VAULT}`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Kept/ }).click();
     await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible();
-    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Launcher" }).click();
+    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await expect(page.locator(".kept-applet")).toHaveCount(0);
     // allowed and then stopped: it goes when the person leaves, and back is the stopped screen
@@ -79,7 +79,7 @@ test("an applet that is stopped or asking is not kept: back to it is as before",
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(frame(page).locator("#booted")).toBeVisible();
     await fromAppletMenu(page, "Stop");
-    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Launcher" }).click();
+    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await page.goBack();
     await expect(page.getByText("Kept is stopped.")).toBeVisible();

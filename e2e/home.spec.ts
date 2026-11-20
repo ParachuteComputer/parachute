@@ -1,4 +1,4 @@
-// The launcher, the bar and open on start (docs/NAVIGATION.md), against the real hub. The bar's pins and the home are
+// The list, the bar and open on start (docs/NAVIGATION.md), against the real hub. The bar's pins and the home are
 // one settings note in the home vault: the person changes them by long-press, their agent by writing that note. A home
 // applet set only by a write opens on start after the person's own tap, never by itself.
 import { expect, test, type Page } from "@playwright/test";
@@ -22,20 +22,20 @@ async function writeSettings(parachute: Record<string, unknown>) {
 }
 test.afterEach(async () => { for (const n of await settingsNotes()) await api(hubState(), "DELETE", `notes/${n.id}`); });
 
-/** A start of the app: a new tab's first entry, on the launcher's address. */
+/** A start of the app: a new tab's first entry, on the list's address. */
 async function start(page: Page) {
   await page.goto("about:blank");
   await page.goto("/");
 }
 
-test("with no home set, the app opens on the launcher: every applet, with what changed lately", async ({ page }) => {
+test("with no home set, the app opens on the list: every applet, with what changed lately", async ({ page }) => {
   await start(page);
   await expect(page).toHaveURL(/\/$/);
-  const entries = ui(page).getByRole("list", { name: `Applets in ${VAULT}` });
+  const entries = ui(page).getByRole("list", { name: "Applets" });
   await expect(entries.getByRole("link", { name: /Recipe box/ })).toBeVisible();
   // the newest recipe it opens, and when
   await expect(entries.getByRole("link", { name: /Recipe box/ })).toContainText(/(Rice and beans|Tomato toast), today/);
-  await expect(bar(page).getByRole("link", { name: /Launcher/ })).toHaveAttribute("aria-current", "page");
+  await expect(bar(page).getByRole("link", { name: /Applets/ })).toHaveAttribute("aria-current", "page");
 });
 
 test("a long-press pins an applet to the bar; the pin is the settings note's, survives a restart, and taps start it", async ({ page }) => {
@@ -56,9 +56,9 @@ test("a long-press pins an applet to the bar; the pin is the settings note's, su
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(appletFrame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toHaveAttribute("aria-current", "page");
-  // Back returns where the person came from: the launcher
+  // Back returns where the person came from: the list
   await page.getByRole("button", { name: "Back" }).click();
-  await expect(ui(page).getByRole("list", { name: `Applets in ${VAULT}` })).toBeVisible();
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
 });
 
 test("the agent changes the bar by writing the settings note; the bar's long-press moves and unpins", async ({ page }) => {
@@ -66,22 +66,23 @@ test("the agent changes the bar by writing the settings note; the bar's long-pre
   await writeSettings({ bar: [{ vault: VAULT, applet: "Applets/Cook mode" }, { vault: VAULT, applet: await idOf("Applets/Recipes") }, { vault: VAULT, applet: "Applets/Gone" }, theirs] });
   await start(page);
   // in the note's order; a place this device can't find is left out
-  await expect(bar(page).getByRole("link")).toHaveText([/Launcher/, /Cook mode/, /Recipe box/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Cook mode/, /Recipe box/, /Applets/]);
   await bar(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
   await page.getByRole("button", { name: "Move left" }).click();
-  await expect(bar(page).getByRole("link")).toHaveText([/Launcher/, /Recipe box/, /Cook mode/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Recipe box/, /Cook mode/, /Applets/]);
   await bar(page).getByRole("link", { name: /Cook mode/ }).click({ button: "right" });
   await page.getByRole("button", { name: "Unpin" }).click();
-  await expect(bar(page).getByRole("link")).toHaveText([/Launcher/, /Recipe box/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Recipe box/, /Applets/]);
   const [n] = await settingsNotes();
   // what the app doesn't read is kept as written
   expect(n.metadata.parachute?.bar).toEqual([{ vault: VAULT, applet: await idOf("Applets/Recipes") }, { vault: VAULT, applet: "Applets/Gone" }, theirs]);
 });
 
 test("a home written only into the note opens on start after the person's tap, and by itself from then on", async ({ page }) => {
-  await writeSettings({ start: { vault: VAULT, applet: "Applets/Recipes" } });
+  // the home is on the bar when it is pinned
+  await writeSettings({ start: { vault: VAULT, applet: "Applets/Recipes" }, bar: [{ vault: VAULT, applet: "Applets/Recipes" }] });
   await start(page);
-  // the applet's screen, not the launcher: never allowed here, so its card; nothing runs
+  // the applet's screen, not the list: never allowed here, so its card; nothing runs
   await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/a/`));
   await expect(page.getByText("Your settings open Recipe box when the app starts.")).toBeVisible();
   await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible();
@@ -93,9 +94,9 @@ test("a home written only into the note opens on start after the person's tap, a
   await start(page);
   await expect(appletFrame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
   await expect(page.getByText("Your settings open")).toHaveCount(0);
-  // the first screen of a start: Back goes to the launcher, not out of the app
+  // the first screen of a start: Back goes to the list, not out of the app
   await page.getByRole("button", { name: "Back" }).click();
-  await expect(ui(page).getByRole("list", { name: `Applets in ${VAULT}` })).toBeVisible();
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
 });
 
 test("hostile: a home the note retargets to another allowed applet waits for a tap; changed code asks again", async ({ page }) => {
@@ -131,7 +132,7 @@ test("hostile: a home the note retargets to another allowed applet waits for a t
 
 test("hostile: a frame can't pin or set a home without a tap", async ({ page }) => {
   await start(page);
-  await expect(ui(page).getByRole("list", { name: `Applets in ${VAULT}` })).toBeVisible();
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
   const id = await idOf("Applets/Recipes");
   // the built-in frame's bridge, called from its own window with no tap
   const said = await page.frameLocator("iframe.app-frame").locator("body").evaluate(async (_, id) => {
@@ -170,7 +171,7 @@ test("hostile: a frame of the person's can set a home only in the note; this dev
   }
 });
 
-test("a full bar: the launcher stays in reach on a phone, and a thirteenth pin is refused with a reason", async ({ page }) => {
+test("a full bar: its first place and Applets stay in reach on a phone, and a thirteenth pin is refused with a reason", async ({ page }) => {
   const made: string[] = [];
   const html = "<!doctype html><p>extra</p>";
   try {
@@ -181,10 +182,11 @@ test("a full bar: the launcher stays in reach on a phone, and a thirteenth pin i
     }
     await writeSettings({ bar: [{ vault: VAULT, applet: "Applets/Recipes" }, ...Array.from({ length: 11 }, (_, i) => ({ vault: VAULT, applet: `Applets/Extra ${i + 1}` }))] });
     await start(page);
-    const launcher = bar(page).getByRole("link", { name: /Launcher/ });
     await expect(bar(page).getByRole("link")).toHaveCount(13);
-    // the first place can be reached: it starts at the bar's left edge, not off screen
-    expect((await launcher.boundingBox())!.x).toBeGreaterThanOrEqual(0);
+    // the first place can be reached: it starts at the bar's left edge, not off screen; Applets, last, scrolls into reach
+    expect((await bar(page).getByRole("link").first().boundingBox())!.x).toBeGreaterThanOrEqual(0);
+    await bar(page).getByRole("link", { name: /Applets/ }).scrollIntoViewIfNeeded();
+    await expect(bar(page).getByRole("link", { name: /Applets/ })).toBeInViewport();
     await ui(page).getByRole("link", { name: /Cook mode/ }).click({ button: "right" });
     await ui(page).getByRole("button", { name: "Pin to the bar" }).click();
     await expect(ui(page).getByRole("alert")).toHaveText("The bar holds 12 places: unpin one first.");
@@ -213,18 +215,18 @@ test("a long-press with a finger on the bar opens its sheet, and the press opens
   await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/a/`));
 });
 
-test("an applet the note names twice: one place on the bar; Move skips the hidden name, Unpin takes both", async ({ page }) => {
+test("an applet the note names twice: one place on the bar, the home among the pins; Unpin takes both names", async ({ page }) => {
   const recipes = await idOf("Applets/Recipes");
   await writeSettings({ start: { vault: VAULT, applet: "Applets/Cook mode" }, bar: [{ vault: VAULT, applet: recipes }, { vault: VAULT, applet: "Applets/Cook mode" }, { vault: VAULT, applet: "Applets/Recipes" }] });
   await start(page);
   await page.goto(`/v/${VAULT}`);
-  // the home first, then Recipe box once (Cook mode on the bar is the home itself)
-  await expect(bar(page).getByRole("link")).toHaveText([/Launcher/, /Cook mode/, /Recipe box/]);
+  // the pins in the note's order, Recipe box once; the home (Cook mode) where it is pinned
+  await expect(bar(page).getByRole("link")).toHaveText([/Recipe box/, /Cook mode/, /Applets/]);
   await bar(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
-  // the only pin: nothing to move to
-  await expect(page.getByRole("button", { name: "Move right" })).toHaveCount(0);
+  // the first place: nothing to its left
+  await expect(page.getByRole("button", { name: "Move left" })).toHaveCount(0);
   await page.getByRole("button", { name: "Unpin" }).click();
-  await expect(bar(page).getByRole("link")).toHaveText([/Launcher/, /Cook mode/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Cook mode/, /Applets/]);
   const [n] = await settingsNotes();
   expect(n.metadata.parachute?.bar).toEqual([{ vault: VAULT, applet: "Applets/Cook mode" }]);
 });
@@ -239,7 +241,7 @@ test("a pin whose vault's applets can't be read stays on the bar, and Unpin stil
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await bar(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
   await page.getByRole("button", { name: "Unpin" }).click();
-  await expect(bar(page).getByRole("link")).toHaveText([/Launcher/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Applets/]);
   const [n] = await settingsNotes();
   expect(n.metadata.parachute?.bar).toEqual([]);
 });

@@ -59,7 +59,7 @@ export default function OAuthCallback() {
           <a className="primary" href={approve}>Approve on your hub</a>
         </> : error ? <>
           <p className="error" role="alert">{error}</p>
-          {back ? <Link to={back}>Go back</Link> : listVaults().length ? <Link to="/">Open your launcher</Link> : <Link to="/add">Try again</Link>}
+          {back ? <Link to={back}>Go back</Link> : listVaults().length ? <Link to="/">Open your applets</Link> : <Link to="/add">Try again</Link>}
         </> : <p>{saying}</p>}
       </div>}
     </main>

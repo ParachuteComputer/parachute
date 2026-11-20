@@ -46,7 +46,7 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
     // the person runs this hub: which vaults are theirs, and which is home (the first by name, kitchen, to begin with)
     await expect(p.getByRole("radio", { name: VAULT })).toBeChecked();
   }, "/", onConsent);
-  await expect(ui(page).getByRole("region", { name: VAULT, exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible({ timeout: 20_000 });
 
   expect(asks).toEqual(["account:vaults", `vault:${VAULT}:read`]);
   // the home's consent names the home, read only, and no other vault
@@ -55,10 +55,10 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
   expect(home).not.toContain(`vault:${VAULT}:write`);
   for (const v of MORE_VAULTS) expect(home).not.toContain(v.vault);
   expect(await held(page)).toEqual({ [VAULT]: `vault:${VAULT}:read` });
-  // the other vaults are one line each, not read
-  for (const v of MORE_VAULTS) await expect(ui(page).getByRole("button", { name: `Open ${v.vault}`, exact: true })).toBeVisible();
-  // a new device: applets run once the self-test has passed
+  // the other vaults are one line each in Settings, not read
   await page.goto("/settings");
+  for (const v of MORE_VAULTS) await expect(page.getByRole("button", { name: `Open ${v.vault}`, exact: true })).toBeVisible();
+  // a new device: applets run once the self-test has passed
   await expect(page.getByRole("status").filter({ hasText: /approved code only|run sealed/ })).toBeVisible({ timeout: 45_000 });
 
   // ── Journal, in another vault ──

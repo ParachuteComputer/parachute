@@ -1,0 +1,24 @@
+{
+  "path": "Applets/Home",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "home",
+      "name": "Home",
+      "glyph": "◠",
+      "note": "today: what wants you, the latest from Uni, your journal",
+      "access": [{ "vault": "here", "allow": [{ "path": "Journal/", "verbs": ["read", "create"] }] }]
+    },
+    "app": ["open", "pins"],
+    "services": [
+      {
+        "id": "rooms",
+        "kind": "nostr-relay",
+        "url": "{{relay}}",
+        "publish": []
+      }
+    ]
+  }
+}
