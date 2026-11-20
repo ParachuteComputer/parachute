@@ -21,25 +21,40 @@ type Pending = { events: SignedEvent[]; eose: boolean };
 const BATCH_MS = 50, BATCH_MAX = 200, IN_FLIGHT_MAX = 50 * 1024 * 1024;
 
 /** What the shell around the frame gives the broker for approvals (docs/design/KEYRING.md): a tap in this applet's
- *  frame, used up by the call that takes it; its own sheet for a secret (null: the person cancelled); its own line
- *  over the applet. */
-export type Shell = { tap: () => boolean; secret: (v: SecretView) => Promise<string | null>; say: (text: string) => void;
+ *  frame, used up by the call that takes it (`untap`: that call paid for nothing, so the person's next tap counts); its
+ *  own sheet for a secret (null: the person cancelled); its own line over the applet. */
+export type Shell = { tap: () => boolean; untap: () => void; secret: (v: SecretView) => Promise<string | null>; say: (text: string) => void;
   /** The shell's own sheet: whether to trust `key` (npub) for approvals, and the name the person gives it; null for no. */
   trust: (v: { applet: string; key: string }) => Promise<string | null>;
   /** The shell's own sheet for this device's passcode, when the level of what is asked says so (src-tauri/src/levels.rs):
    *  `what` in the shell's words, `wrong` the last try's refusal. null: cancelled. The applet never sees it. */
   passcode: (v: { what: string; wrong: string | null }) => Promise<string | null> };
-const NO_SHELL: Shell = { tap: () => false, secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null };
+const NO_SHELL: Shell = { tap: () => false, untap: () => {}, secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null };
+
+/** Refusals of this device's gate (src-tauri/src/levels.rs `gate`, keyring.rs `confirm`), all before anything is signed:
+ *  the unlock cancelled or failed, the passcode not given, none set, Parachute locked, or refused (just cancelled, an
+ *  unlock already showing). */
+const GATE_SAID_NO = ["unlock", "passcode", "passcode_unset", "locked", "refused"];
+const codeOf = (e: unknown) => (e && typeof e === "object" && "code" in e ? (e as { code: unknown }).code : null);
+
+/** A native call a tap paid for, behind this device's gate: refused there, nothing was signed or sent, so the tap is
+ *  given back and the person's next one counts (a retry isn't "needs your tap"; Rust's cooldown still keeps the same
+ *  request from asking the unlock again at once). */
+export async function behindGate<T>(shell: Pick<Shell, "untap">, call: () => Promise<T>): Promise<T> {
+  try { return await call(); } catch (e) {
+    if (GATE_SAID_NO.includes(codeOf(e) as string)) shell.untap();
+    throw e;
+  }
+}
 
 /** A native call that may ask this device's passcode: tried without, then with what the person types on the shell's
- *  sheet, until it passes, they cancel, or five tries (Rust then makes them wait). */
-export async function withPasscode<T>(shell: Pick<Shell, "passcode">, what: string, call: (passcode: string | null) => Promise<T>): Promise<T> {
+ *  sheet, until it passes, they cancel, or five tries (Rust then makes them wait). Behind the gate (`behindGate`). */
+export async function withPasscode<T>(shell: Pick<Shell, "passcode" | "untap">, what: string, call: (passcode: string | null) => Promise<T>): Promise<T> {
   let typed: string | null = null;
   let wrong: string | null = null;
   for (let i = 0; ; i++) {
-    try { return await call(typed); } catch (e) {
-      const code = e && typeof e === "object" && "code" in e ? (e as { code: unknown }).code : null;
-      if (code !== "passcode" || i >= 5) throw e;
+    try { return await behindGate(shell, () => call(typed)); } catch (e) {
+      if (codeOf(e) !== "passcode" || i >= 5) throw e;
       if (typed !== null) wrong = String((e as { message?: unknown }).message ?? "That passcode isn't it.");
       typed = await shell.passcode({ what, wrong });
       if (typed === null) throw new BrokerError("failed", "Cancelled: nothing was sent.");
@@ -302,7 +317,7 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       const before = await native.cardView(session, s.id, ev);
       if (before.trust !== ev.pubkey) return before;
       const name = await shell.trust({ applet: opts.applet.name, key: nip19.npubEncode(ev.pubkey) });
-      if (name !== null) await native.cardTrust(session, s.id, ev, name);
+      if (name !== null) await behindGate(shell, () => native.cardTrust(session, s.id, ev, name));
       return native.cardView(session, s.id, ev);
     },
 

@@ -207,3 +207,37 @@ describe("the broker's relay connection", () => {
     } finally { vi.useRealTimers(); }
   });
 });
+
+describe("a tap the device's gate refused", () => {
+  // the shell's tap (views/ShellSheets.tsx useTapOnce): one call per tap; `untap` gives it back
+  const oneTap = () => { let left = 1; return { tap: () => (left > 0 ? (left--, true) : false), untap: () => { left = 1; }, secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null as string | null }; };
+  const mail: Service = { id: "mail", kind: "http", url: "https://mail.example/mail/", auth: "nip98", approve: { field: "op", ops: ["send.approve"] } };
+  const approve = { service: "mail", path: "op", method: "POST", body: JSON.stringify({ op: "send.approve", opId: "x" }) };
+  const broker = (http: Native["http"], shell: ReturnType<typeof oneTap>) =>
+    createBroker({ native: { ...native(), http }, session: "s", applet: { name: "Mail", subject: "v\u0000m" }, services: [mail], hubs: [], emit: () => {}, shell });
+
+  it("paid for nothing: after a cancelled unlock the person's next tap counts", async () => {
+    const shell = oneTap();
+    let calls = 0;
+    const b = broker(async () => { if (++calls === 1) throw { code: "unlock", message: "The device unlock was cancelled or failed." }; return { status: 200, headers: {}, body: "" }; }, shell);
+    await expect(b.fetch(approve)).rejects.toMatchObject({ code: "unlock" });
+    await expect(b.fetch(approve)).resolves.toMatchObject({ status: 200 });
+    expect(calls).toBe(2);
+  });
+
+  it("paid for nothing: a passcode sheet the person cancelled", async () => {
+    const shell = oneTap();
+    let calls = 0;
+    const b = broker(async (_s, _v, _r, code) => { calls++; if (!code) throw { code: "passcode", message: "Your passcode is needed for this." }; return { status: 200, headers: {}, body: "" }; }, shell);
+    await expect(b.fetch(approve)).rejects.toThrow("Cancelled: nothing was sent.");
+    shell.passcode = async () => "1234";
+    await expect(b.fetch(approve)).resolves.toMatchObject({ status: 200 });
+  });
+
+  it("a request that went out keeps its tap spent, even when it failed", async () => {
+    const shell = oneTap();
+    const b = broker(async () => { throw { code: "failed", message: "the gateway didn't answer" }; }, shell);
+    await expect(b.fetch(approve)).rejects.toMatchObject({ code: "failed" });
+    await expect(b.fetch(approve)).rejects.toThrow("an approval needs your tap in the applet");
+  });
+});

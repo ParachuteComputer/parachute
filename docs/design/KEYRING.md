@@ -131,7 +131,9 @@ live user activation with the focus in its own frame, while its screen is in fro
 second `answer` or `secret` within the activation's few seconds is refused (one call may answer several rows of one
 morning card). This check is the web side's, as SERVICES.md accepts. So an applet can't approve on its
 own, and can't raise unlock prompts out of nowhere; after a cancelled unlock the same card can't ask again for 5
-seconds.
+seconds. A call the device's gate refused (the unlock cancelled or failed, the passcode not given, Parachute locked)
+signed nothing, so it gives its tap back (broker.ts `behindGate`): the person's next tap counts, and a retry reads
+"That was just cancelled. Try again in a moment.", not "needs your tap". A tap still pays for at most one approval.
 
 1. The applet finds a card in a room (a kind 9 with a `uni-sealed-approval`, `uni-sealed-morning` or
    `uni-secret-request` block) and hands the **signed event** to the shell: `services.card(id, event)`.

@@ -32,6 +32,8 @@ export function e2eNative(secretHex: string): Native {
   const keep = (k: KeptLevels) => { try { sessionStorage.setItem(LEVELS_KEPT, JSON.stringify(k)); } catch { /* this page */ } };
   let passcode: string | null = kept().passcode;
   const unlockHook = () => (window as unknown as { __parachuteE2EUnlock?: string }).__parachuteE2EUnlock;
+  // after a cancelled unlock the same request can't ask again for 5 seconds (keyring.rs `cooling`)
+  const cancelled = new Map<string, number>();
   /** The gate (levels.rs `gate`): locked refuses; the passcode when the level asks it; then the unlock (the test's
    *  hook, `window.__parachuteE2EUnlock = "pass"`, else cancelled). */
   const gate = (level: Level, typed: string | null | undefined, unlocks: string[] | null, what: string) => {
@@ -41,8 +43,9 @@ export function e2eNative(secretHex: string): Native {
       if (passcode === null) throw { code: "passcode_unset", message: "This asks your passcode, and this device has none yet: set one in Settings → Security." };
       if (typed !== passcode) throw { code: "passcode", message: typed == null ? "Your passcode is needed for this." : "That passcode isn't it." };
     }
+    if (Date.now() - (cancelled.get(what) ?? -Infinity) < 5000) throw { code: "refused", message: "That was just cancelled. Try again in a moment." };
     unlocks?.push(what);
-    if (unlockHook() !== "pass") throw { code: "unlock", message: "The device unlock was cancelled or failed." };
+    if (unlockHook() !== "pass") { cancelled.set(what, Date.now()); throw { code: "unlock", message: "The device unlock was cancelled or failed." }; }
   };
   const idle = (touched: boolean): LevelsStatus => {
     const k = kept(), t = Date.now(), min = k.levels.idle;
