@@ -31,7 +31,12 @@ Code: `src/vault/reach.ts` (what each vault needs and why), `src/vault/signInFlo
    itself: no page. Without one (a browser; Parachute Cloud, which has no key door), the hub's page for
    `account:vaults`; its token lists the vaults and is revoked at once.
 2. **Which one is home**, only when the app can't tell: this device's home if it is on that hub, else the only vault
-   of the person's own, else they pick (*Which one is your home?*, the first by name chosen to begin with). On a hub
+   of the person's own, else they pick (*Which one is your home?*). Chosen to begin with: the one vault that holds
+   their settings (`parachute-settings`), else the one that holds an app record (`parachute-app`, `parachute-bundle`),
+   else the first by name. The app learns that beside the listing, with the same key or token: one `query-notes` on
+   the account MCP for those tags, answered with the hub's lean rows (path, tags, a short preview; no content, no
+   fields; src/vault/parachute.ts `homeFrom`); a vault the hub can't read is passed over. Two vaults with settings (on
+   a hub the person runs, one may be a member's), or no answer in 4 s: the first by name, as before. On a hub
    the person runs, the same screen asks which vaults are theirs, as before. On someone else's Parachute: *Which vault
    do you want to open?*
 3. **Read the home.** One page: `vault:<home>:read`. That's the sign-in.
@@ -45,7 +50,9 @@ The hub's own pages, as they read on core 0.9 (`spike/`, the throwaway hubs):
   its settings.* Below it, the hub offers *Grant additional access (optional)* (write, admin), unticked.
 - The listing, without a key: *account:vaults · write · Let this app see which vaults you have and manage access to
   them … Account-wide*, with each vault at Read to begin with. **This is wider than the app needs**, and the app can't
-  ask for less: there is no names-only scope (proposal 1). The app uses the token once, to list, and revokes it.
+  ask for less: there is no names-only scope (proposal 1). The app uses the token to list, and to ask which vault
+  holds the person's settings (lean rows, no content), then revokes it. With a names-only scope that second call is
+  refused, and the pick offers the first by name.
 
 Parachute Cloud's pages, as they read on 2026-11-18 (the test account, `walk/cloud-web` in the worktree):
 

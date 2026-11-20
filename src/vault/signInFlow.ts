@@ -1,15 +1,16 @@
 // Signing in to a Parachute, and asking it for one vault more (docs/design/ONE-SIGN-IN.md, docs/design/SCOPES.md).
-// The sign-in learns which vaults the person has (with the key, from the shell; without, by a first step that only lists
-// them and is ended at once) and reads one: the home (or, on someone else's Parachute, the vault the person opens first).
+// The sign-in learns which vaults the person has, and which of them holds their settings or app record (with the key,
+// from the shell; without, by a first step that only lists them and is ended at once), and reads one: the home (or, on
+// someone else's Parachute, the vault the person opens first).
 // Every other vault is asked for alone, when something the person allows needs it (vault/reach.ts). The screens (Add a
 // Parachute, the sign-in's return, the launcher's Open, an applet's Allow, a change that needs write) call these.
 import { beginSignIn, completeSignIn, dropPending, revoke, type AllowAfter, type Pending, type Why } from "./oauth";
-import { describe, levelIn, listWithToken, reachesEvery, vaultUrlFrom, type Level, type Listed, type Parachute } from "./parachute";
+import { describe, homeFrom, homeWithToken, levelIn, listWithToken, reachesEvery, vaultUrlFrom, type Level, type Listed, type Parachute } from "./parachute";
 import { limitedFetch } from "./limited";
 import { MAX_VAULTS } from "./address";
 import { listVaults, originOf, saveVault, vaultUrlOf, type VaultRecord } from "./store";
 import { setWhose, whoseOf, whoseSaid } from "./whose";
-import { keySignIn, keysHere, listWithKey, type Refusal } from "../key/key";
+import { homeRecordsWithKey, keySignIn, keysHere, listWithKey, type Refusal } from "../key/key";
 import { noteEvery, noteListed, undismissOn } from "./newVaults";
 import { holdHome, homeVault, setHome } from "../shell/frameSource";
 import { deviceGrants } from "../applet/grants";
@@ -60,6 +61,10 @@ function levelAt(parachute: Parachute, vault: string): Level {
   return held && levelIn(held.scope, held.vault) === "write" ? "write" : "read";
 }
 
+/** Whether a sign-in asks which listed vault holds the person's settings or app record (parachute.ts homeFrom): on a
+ *  Parachute of theirs with more than one vault, when this device has no home yet. A home already chosen never moves. */
+const asksHome = (whose: "mine" | "theirs", listed: Listed) => whose === "mine" && listed.vaults.length > 1 && !homeVault();
+
 /** After the listing: keep what it found, then the vault to read first (the home on a Parachute of the person's own),
  *  asked of the person only when it isn't clear. */
 function readFirst(parachute: Parachute, listed: Listed, whose: "mine" | "theirs", open: (first: string, home: boolean, marks: Marks) => Promise<string>): { go: Promise<string> } | { pick: VaultPick } {
@@ -73,7 +78,9 @@ function readFirst(parachute: Parachute, listed: Listed, whose: "mine" | "theirs
   // the vault read first is the home when the Parachute is the person's and this device has no home elsewhere
   const home = whose === "mine" && (!homeVault() || !!known);
   const candidates = whose === "mine" ? mine : listed.vaults;
-  const first = known ?? [...candidates].sort()[0] ?? listed.vaults[0];
+  // offered first: the home this device has there, else the vault that holds the person's settings or app record, else
+  // the first by name
+  const first = known ?? (listed.home && candidates.includes(listed.home) ? listed.home : null) ?? [...candidates].sort()[0] ?? listed.vaults[0];
   const marks = (m: string[] | null): Marks => ({ listed: listed.vaults, whose, mine: m, solo: (m ?? candidates).length === 1 && listed.vaults.length === 1 });
   if (!askMine && (known || candidates.length <= 1)) return { go: open(first, home, marks(null)) };
   return { pick: { hub: parachute.hub, vaults: listed.vaults, askMine, mine, first, home,
@@ -86,6 +93,8 @@ export async function startSignIn(hub: string, whose: "mine" | "theirs", withKey
   const f = fetchFor(whose);
   const parachute = await describe(hub, f);
   if (!withKey) return { go: await beginSignIn({ parachute, step: "list", whose, how: "page", fresh: true }, f) };
+  // which vault holds the person's settings is asked beside the listing, not after it (asksHome decides once the list is in)
+  const records = whose === "mine" && !homeVault() ? homeRecordsWithKey(parachute) : null;
   // the shell signs one `list-vaults` request with the key, to the hub's own account MCP; a hub that can't answer it
   // (an older one, or one whose account MCP is elsewhere) gets the listing sign-in instead, through the same key door
   const listed: Listed | null = await listWithKey(parachute);
@@ -101,6 +110,7 @@ export async function startSignIn(hub: string, whose: "mine" | "theirs", withKey
     }
   };
   if (!listed) return { go: await door({ parachute, step: "list", whose, how: "key", fresh: true }) };
+  if (records && asksHome(whose, listed)) listed.home = homeFrom(await records, listed.vaults);
   const next = readFirst(parachute, listed, whose, (first, home, marks) => door({ parachute, step: "open", vault: first, level: levelAt(parachute, first), why: "signin", whose, how: "key", fresh: true, home, marks }));
   return "pick" in next ? next : { go: await next.go };
 }
@@ -132,7 +142,9 @@ export async function finishStep(code: string, state: string): Promise<Next> {
       const theirs = await listWithToken(p.accountMcp, token.access_token, f);
       // asked only when there could be a pick (Mine, and more than one vault)
       const ask = pending.whose === "mine" && theirs.vaults.length > 1;
-      listed = { vaults: theirs.vaults, all: ask && await reachesEvery(p.hub, theirs.vaults, f) };
+      const [all, home] = await Promise.all([ask && reachesEvery(p.hub, theirs.vaults, f),
+        asksHome(pending.whose ?? "theirs", theirs) ? homeWithToken(p.accountMcp, token.access_token, theirs.vaults, f) : null]);
+      listed = { vaults: theirs.vaults, all, home };
     } finally {
       // the listing token has done its one job: ended before the page moves on (it could do more than list on some
       // hubs: docs/design/SCOPES.md)

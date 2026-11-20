@@ -23,8 +23,9 @@ different applets; without having to enter a bunch of different URLs."*
    device that signs in to the home Parachute finds the others listed, each a tap from signed in. An agent can add one
    by writing the list.
 4. **The home**: this device's, else their only vault, else they pick it before the consent (*Which one is your
-   home?*, the first by name to begin with; since 2026-11-18 the app reads no other vault to look for their settings,
-   [SCOPES.md](SCOPES.md)). Settings changes it.
+   home?*). Offered first: the vault that holds their settings or app record, else the first by name. Since 2026-11-18
+   the sign-in reads only the home ([SCOPES.md](SCOPES.md)); since 2026-11-20 the listing also asks which vaults hold
+   those records (lean rows: path, tags, a short preview). Settings changes it.
 5. **Settings is grouped by Parachute** (the list of applets is one list, since 2026-11-20): the home Parachute first,
    then the rest, each marked whose it is; a Parachute on the list that this device isn't signed in to is one line with **Sign in**.
 
@@ -75,9 +76,13 @@ real test.
 2. **Learn the person's vaults.**
    - **With the device's key** (the app on a phone or a Mac): the shell signs one `list-vaults` request itself
      (`hub_vaults`, src-tauri/src/door.rs) and hands the web side the names. The key never leaves the shell, and the
-     command signs nothing else: the URL is the hub's own `/account/mcp`, the body is the one fixed call.
+     command signs nothing else: the URL is the hub's own `/account/mcp`, the body is the one fixed call. On a first
+     sign-in with more than one vault, `hub_home_records` signs one more fixed call there: `query-notes` for the
+     settings and app-record tags across the person's vaults, without content or fields, so the pick offers the vault
+     that holds them as home.
    - **Without a key** (a browser, a password, Cloud's emailed link): an OAuth sign-in for `account:vaults` (one
-     Approve on the hub's page), `list-vaults` with that token, then the token is revoked.
+     Approve on the hub's page), `list-vaults` with that token (and, as above, the same `query-notes`), then the token
+     is revoked.
 3. *(Replaced 2026-11-18 by [SCOPES.md](SCOPES.md): one consent for the home, `vault:<home>:read`.)* **One consent for all of them.** An authorize naming `vault:<name>:read vault:<name>:write` for each listed vault.
    The hub's page lists them; one Approve. Only names from the hub's own list are asked for (an unlisted one strands the
    person on the mismatch page).
@@ -169,7 +174,7 @@ note there (the list of Parachutes), a second device finds the same home.
 |---|---|---|
 | 1 | An agent (or anyone who can write the home vault) lists a hostile hub | It is a line with **Sign in**; nothing is fetched or opened until the person taps it, and Add a Parachute asks whose it is. |
 | 2 | A hub's descriptor sends tokens elsewhere | The issuer must be the address typed; the token and authorize endpoints must be on the issuer; the vault and account addresses must be on the hub's own origin (only Parachute Cloud may use another host of its own domain, `*.parachute.computer`), else the hub's own are used. |
-| 3 | The key signs something it shouldn't | `hub_vaults` signs one fixed body for one URL on the hub's origin; NIP-98 binds the URL, method, body hash and a 60 s window; the hub refuses a replay. |
+| 3 | The key signs something it shouldn't | `hub_vaults` and `hub_home_records` each sign one fixed body for one URL on the hub's origin; NIP-98 binds the URL, method, body hash and a 60 s window; the hub refuses a replay. |
 | 4 | A stray or replayed code lands on the app's return page | Each step's `state` and PKCE verifier are kept for that one step and used once (`oauth.ts`), as before; a token for a vault not asked for at that step is refused, not kept. |
 | 5 | Someone else's vault becomes home | The home is only ever one of the person's own vaults (whose stays device-held). On a hub the person runs, they tick which vaults are theirs before anything is kept, so a member's vault (and its settings note) isn't taken for theirs. |
 | 7 | An agent relabels a Parachute (the list's `name`) | A name from the list is shown only for a Parachute this device isn't signed in to; one it is signed in to is called by its address. |
