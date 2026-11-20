@@ -82,7 +82,9 @@ export async function notifyEntries(): Promise<{ entries: NotifyEntry[] | null; 
 
 /** How the last bringing-up-to-date went, for Settings: vaults it couldn't read (then nothing was handed on), how many
  *  applets ask to tell the person something, and each gateway that didn't take this phone, with why. */
-export type NotifyOutcome = { unread: string[]; noKey: boolean; asking: number; failed: { gateway: string; why: string }[]; error?: string };
+/** `off`: applets ask, and the phone's notifications for Parachute are off (the person said no to the one question, or
+ *  turned them off since): Settings says so and opens the phone's switch, since Parachute never asks again by itself. */
+export type NotifyOutcome = { unread: string[]; noKey: boolean; asking: number; failed: { gateway: string; why: string }[]; error?: string; off?: boolean };
 let outcome: NotifyOutcome | null = null;
 const outcomeListeners = new Set<() => void>();
 export const notifyOutcome = () => outcome;
@@ -144,8 +146,9 @@ export function syncNotify(): Promise<void> {
   const go = async () => {
     const failed: NotifyOutcome["failed"] = [];
     let read: Awaited<ReturnType<typeof notifyEntries>> | null = null;
+    let off = false;
     const told = (error?: string) => {
-      outcome = { unread: read?.unread ?? [], noKey: read?.noKey ?? false, asking: read?.entries?.length ?? 0, failed, ...(error ? { error } : {}) };
+      outcome = { unread: read?.unread ?? [], noKey: read?.noKey ?? false, asking: read?.entries?.length ?? 0, failed, ...(error ? { error } : {}), ...(off ? { off } : {}) };
       outcomeListeners.forEach((f) => f());
     };
     try {
@@ -153,7 +156,10 @@ export function syncNotify(): Promise<void> {
       const entries = read.entries;
       if (!entries) { told(); return; } // something couldn't be read: the native side keeps the last list
       const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("notify_set", { entries, signals: read.signals });
+      // Android asks for the permission once, the first time an applet asks (notify.rs `take_ask`); after that its answer
+      // only shows here
+      const set = await invoke<{ permission?: boolean } | null>("notify_set", { entries, signals: read.signals });
+      off = entries.length > 0 && set?.permission === false;
       // the shell sends counts only for signals on the list just set: now they can go
       void import("./signals").then((s) => s.exchange());
       const status = await invoke<PushStatus>("push_status");

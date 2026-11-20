@@ -51,6 +51,10 @@ export default function NotifySettings() {
       {ds.length > 1 || (ds.length === 1 && !using) ? <div className="row-buttons">
         {ds.map((d) => <button key={d.id} type="button" className="quiet-button" aria-pressed={d.id === s.distributor} onClick={() => run(() => invoke("push_setup", { distributor: d.id }))}>{d.name}</button>)}
       </div> : null}
+      {outcome?.off ? <>
+        <p className="small quiet">Notifications for Parachute are off on this phone, so nothing reaches you while it's closed.</p>
+        <div className="row-buttons"><button type="button" className="quiet-button" onClick={() => void invoke("notify_open_settings").catch((e: unknown) => setError(said(e)))}>Turn them on</button></div>
+      </> : null}
       {s.registered?.length ? <p className="small quiet">Registered with {[...new Set(s.registered.map((r) => host(r.gateway)))].join(", ")}.</p> : null}
       {outcomeLines(outcome, host).map((l) => <p key={l} className="small" role="status">{l}</p>)}
       <label className="line"><span><input type="checkbox" checked={!!s.fallback} onChange={(e) => run(() => invoke("push_setup", { fallback: e.target.checked }))} /> Parachute's own connection, for what no push service delivers (uses more battery)</span></label>

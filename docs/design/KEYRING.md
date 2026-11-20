@@ -290,8 +290,10 @@ its Open button (one more tap): a link from outside the app never starts an appl
 tell its own notification's link from any other app's. What was shown is cleared, and the badge with it, when the app
 comes back to the front (not when that applet opens). Nothing is shown while the app is in front. "Closed" means swiped
 away from recents; Force stop kills any service and stops a distributor's deliveries, as Android means it to. Nothing
-is shown when no grant asks or the key is removed. Android asks for the notification permission when the first such
-grant is allowed. Desktop: not in this step (the app notifies only while running there); said in PARITY.md.
+is shown when no grant asks or the key is removed. Android asks for the notification permission once, when the first
+such grant is allowed, and never again by itself (notify.rs `take_ask`; asking on each return to the front looped a
+denial until Android removed the app). While they are off, Settings → Notifications while closed says so, and **Turn them
+on** opens the phone's notification settings for Parachute. Desktop: not in this step (the app notifies only while running there); said in PARITY.md.
 
 ## Threat model, additions
 

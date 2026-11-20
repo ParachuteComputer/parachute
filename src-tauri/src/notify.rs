@@ -648,6 +648,25 @@ pub async fn push_register<R: Runtime>(
     }
 }
 
+/// The mark that Android's notification permission was asked for once (app data).
+pub const ASKED_FILE: &str = "notify-asked";
+
+/// Whether to ask for Android's notification permission now: the first time an applet asks to tell the person
+/// something (`wants`), and never again by itself. A sync runs on every return to the front, and asking each time means a
+/// denial reopens the question at once, round and round, until Android removes the app. Afterwards Settings says
+/// notifications are off and opens the phone's own switch. The mark is kept before asking; one that can't be kept, or
+/// read, asks nothing.
+pub fn take_ask(dir: &std::path::Path, wants: bool) -> bool {
+    if !wants {
+        return false;
+    }
+    let mark = dir.join(ASKED_FILE);
+    if !matches!(mark.try_exists(), Ok(false)) {
+        return false;
+    }
+    std::fs::create_dir_all(dir).is_ok() && std::fs::write(&mark, b"asked\n").is_ok()
+}
+
 /// Keep what granted applets asked to be told about, and start or stop the service to match (an empty list stops it).
 /// Answers the service's state: `{ running, permission, entries }`, or on desktop `{ android_only: true }`.
 #[tauri::command]
@@ -670,10 +689,11 @@ pub async fn notify_set<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState
     #[cfg(target_os = "android")]
     {
         let plugin = app.try_state::<NotifyPluginHandle<R>>().map(|h| h.0.clone()).ok_or("Notifications aren't ready.")?;
+        let ask = take_ask(&app.path().app_data_dir().map_err(|_| "The app's data folder isn't available.")?, !entries.is_empty());
         let entries = serde_json::to_string(&entries).map_err(|e| e.to_string())?;
         let signals = serde_json::to_string(&signals).map_err(|e| e.to_string())?;
         plugin
-            .run_mobile_plugin_async::<serde_json::Value>("configure", serde_json::json!({ "entries": entries, "signals": signals }))
+            .run_mobile_plugin_async::<serde_json::Value>("configure", serde_json::json!({ "entries": entries, "signals": signals, "ask": ask }))
             .await
             .map_err(|e| format!("Notifications couldn't be set up ({e})."))
     }
@@ -681,6 +701,22 @@ pub async fn notify_set<R: Runtime>(app: AppHandle<R>, state: State<'_, KeyState
     {
         let _ = (app, entries, signals);
         Ok(serde_json::json!({ "android_only": true, "note": "Notifications while the app is closed are Android only for now." }))
+    }
+}
+
+/// Open the phone's own notification settings for Parachute (Settings → Notifications while closed, when they are off):
+/// the one way back after the person said no, since Parachute never asks again by itself.
+#[tauri::command]
+pub async fn notify_open_settings<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        let plugin = app.try_state::<NotifyPluginHandle<R>>().map(|h| h.0.clone()).ok_or("Notifications aren't ready.")?;
+        plugin.run_mobile_plugin_async::<serde_json::Value>("openSettings", serde_json::json!({})).await.map(|_| ()).map_err(|e| format!("The phone's settings couldn't be opened ({e})."))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("Notifications while the app is closed are Android only for now.".into())
     }
 }
 
@@ -883,5 +919,24 @@ mod tests {
         assert!(sign_auth(b"nsec1notakey", "wss://relay.example", "c").is_none());
         assert!(sign_auth(k.public_key().to_bech32().unwrap().as_bytes(), "wss://relay.example", "c").is_none());
         assert!(sign_auth(&[0xff, 0xfe], "wss://relay.example", "c").is_none());
+    }
+
+    #[test]
+    fn asks_for_the_permission_once_and_never_again_by_itself() {
+        let d = std::env::temp_dir().join(format!("parachute-notify-ask-{}-{}", std::process::id(), nostr::secp256k1::rand::random::<u64>()));
+        // nothing asks to tell the person anything yet: no question, and none used up
+        assert!(!take_ask(&d, false));
+        assert!(!d.join(ASKED_FILE).exists());
+        // the first applet that does: asked once
+        assert!(take_ask(&d, true));
+        // every sync after (each return to the front) asks nothing, granted or denied
+        assert!(!take_ask(&d, true));
+        assert!(!take_ask(&d, true));
+        let _ = std::fs::remove_dir_all(&d);
+        // a mark that can't be kept asks nothing (asking each time is the loop Android ends by removing the app)
+        let f = std::env::temp_dir().join(format!("parachute-notify-ask-file-{}", std::process::id()));
+        std::fs::write(&f, b"x").unwrap();
+        assert!(!take_ask(&f.join("app"), true));
+        let _ = std::fs::remove_file(&f);
     }
 }
