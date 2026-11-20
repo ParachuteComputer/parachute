@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import vectors from "./command-approval.json";
 import fuzz from "./command-approval-fuzz.json";
-import { checkFilters, checkPublish, isCommandApproval, parseServices, requestUrl, serviceLines, servicesKeyPart, type HttpService, type RelayService } from "./services";
+import { DENIED, NAMED_KINDS, checkFilters, checkPublish, deniedKind, isCommandApproval, parseServices, requestUrl, serviceLines, servicesKeyPart, type HttpService, type RelayService } from "./services";
 import { grantKey, grantLines, grantOf } from "./grant";
 import { parseManifest } from "./manifest";
 import { readApplet } from "./discovery";
@@ -33,10 +33,17 @@ describe("the declaration", () => {
     ["a dot segment", http({ url: "https://mail.example/a/../mail/" })],
     ["an encoded dot", http({ url: "https://mail.example/%2e%2e/mail/" })],
     ["a prefix without its slash", http({ url: "https://mail.example/mail" })],
-    ["a kind it can't name", relay({ publish: [9, 1] })],
     ["the profile", relay({ publish: [0] })],
     ["a gift wrap", relay({ publish: [1059] })],
     ["a sign-in", relay({ publish: [22242] })],
+    ["an HTTP sign-in (NIP-98)", relay({ publish: [9, 27235] })],
+    ["the relay list", relay({ publish: [10002] })],
+    ["a room admin's deletion", relay({ publish: [9005] })],
+    ["an approval", relay({ publish: [30479] })],
+    ["remote signing", relay({ publish: [24133] })],
+    ["a kind no event has", relay({ publish: [65536] })],
+    ["a kind that isn't a number", relay({ publish: ["9"] })],
+    ["too many kinds", relay({ publish: [1, 2, 5, 6, 7, 9, 16, 1063, 1068, 1111, 1311, 1617, 1618, 1619, 1621, 1984, 30023] })],
     ["a kind twice", relay({ publish: [9, 9] })],
     ["auth on a relay", relay({ auth: "nip98" })],
     ["publish on http", http({ publish: [9] })],
@@ -45,6 +52,15 @@ describe("the declaration", () => {
     ["overlapping private prefixes", relay({ private: [{ kind: 30078, d: "a:", t: "a" }, { kind: 30078, d: "a:b:", t: "b" }] })],
     ["a hidden character", relay({ url: "wss://relay.example​" })],
   ])("refuses %s", (_why, x) => { expect(parse([x]).ok).toBe(false); });
+  it("takes any kind its service declares, but none on the shell's deny list", () => {
+    expect(one<RelayService>(relay({ publish: [30023, 1, 9] })).publish).toEqual([1, 9, 30023]);
+    expect(parse([relay({ publish: [20002, 9100, 8999, 50000] })]).ok).toBe(true);
+    expect(parse([relay({ publish: [1, 27235] })])).toEqual({ ok: false, error: "rooms: no applet may publish kind 27235: it would sign as you in a way the shell keeps for itself" });
+    for (const k of [4, 41, 1985, 3063, 30000, 30001, 30003, 30024, 39999, 443, 30443, 2022, 34128, 0, 3, 62, 9734, 9735, 13194, 23194, 23195, 30078, 30480, 30617, 46042, 1630, 1633, 5000, 7000, 9000, 9099, 10000, 19999, 20000, 29999, 30174, 30179, 30620, 30622, 40000, 49999]) expect(deniedKind(k), `kind ${k}`).toBe(true);
+    for (const k of [1, 1629, 1634, 4999, 7001, 8999, 9100, 20002, 30023, 40003, 50000]) expect(deniedKind(k), `kind ${k}`).toBe(false);
+    // what a denied range lets through is said in words on the card
+    for (const k of DENIED.except) expect(NAMED_KINDS[k], `kind ${k}`).toBeTruthy();
+  });
   it("takes plain http and ws to this device", () => {
     expect(parse([relay({ url: "ws://localhost:3871" }), http({ url: "http://127.0.0.1:8452/mail/" })]).ok).toBe(true);
   });
@@ -80,6 +96,21 @@ describe("the card and the key", () => {
       "What it reads here could reach mail.example",
     ]);
   });
+  it("says every kind it posts: the named ones in words, any other as its number", () => {
+    const lines = serviceLines([one<RelayService>(relay({ publish: [30023, 9, 1, 5, 20002] }))]).map((l) => l.text);
+    expect(serviceLines([one<RelayService>(relay({ publish: [9, 40003, 5] }))]).map((l) => l.text)).toContain("With your everyday key: delete your messages and edits there");
+    expect(lines).toContain("With your everyday key: post as you in your rooms there: messages and typing");
+    expect(lines).toContain("With your everyday key: post as you anywhere there: articles (it can replace yours) and kind 1 events");
+    expect(lines).toContain("With your everyday key: delete your messages, articles and kind 1 events there");
+    expect(serviceLines([one<RelayService>(relay({ publish: [1, 5] }))]).map((l) => l.text)).toEqual(expect.arrayContaining([
+      "With your everyday key: post as you anywhere there: kind 1 events", "With your everyday key: delete your kind 1 events there"]));
+  });
+  it("says only room kinds stay in its rooms: a note or an article goes anywhere on the relay, whatever its h tag", () => {
+    const lines = serviceLines([one<RelayService>(relay({ publish: [9, 1, 30023], rooms: [{ id: "garden", name: "Garden" }] }))]).map((l) => l.text);
+    expect(lines).toContain("With your everyday key: post as you only in «Garden» (garden), named by the applet there: messages");
+    expect(lines).toContain("With your everyday key: post as you anywhere there: articles (it can replace yours) and kind 1 events");
+    expect(lines.some((l) => /only in «Garden».*(articles|kind 1)/.test(l))).toBe(false);
+  });
   it("shows a look-alike host as written and as punycode, and a loopback one as on this device", () => {
     expect(serviceLines([one<HttpService>(http({ url: "https://аpple.example/x/", auth: "none" }))])[0].text).toBe("Send requests to аpple.example (xn--pple-43d.example)");
     expect(serviceLines([one<HttpService>(http({ url: "http://localhost:8452/mail/" }))])[0].text).toBe("With your everyday key: send requests to localhost:8452 on this device signed as you");
@@ -92,6 +123,7 @@ describe("the card and the key", () => {
     expect(await grantKey(grantOf(m, "v", [], [], [one(relay({ publish: [7, 9] }))]), "Applets/Rooms")).toBe(a);
     expect(await grantKey(grantOf(m, "v", [], [], [one(relay({ url: "wss://other.example" }))]), "Applets/Rooms")).not.toBe(a);
     expect(await grantKey(grantOf(m, "v", [], [], [one(relay({ publish: [9, 7, 5] }))]), "Applets/Rooms")).not.toBe(a);
+    expect(await grantKey(grantOf(m, "v", [], [], [one(relay({ publish: [9, 7, 1] }))]), "Applets/Rooms")).not.toBe(a);
     expect(await grantKey(grantOf(m, "v", [], [], [one(relay({ media: false }))]), "Applets/Rooms")).not.toBe(a);
     expect(grantLines(grantOf(m, "v", [], [], [one(relay())]), "Applets/").some((l) => l.text === "With your everyday key: sign in to relay.example as you")).toBe(true);
   });
@@ -116,6 +148,15 @@ describe("the checks on each call", () => {
     for (const t of ["u", "method", "payload", "challenge", "relay", "server", "expiration"]) expect(checkPublish(r, { kind: 9, content: "", tags: [[t, "x"]] }).ok).toBe(false);
     expect(checkPublish(r, { kind: 9, content: "x".repeat(64 * 1024 + 1), tags: [] }).ok).toBe(false);
     expect(checkPublish(r, { kind: 9, content: "", tags: [], pubkey: id }).ok).toBe(false);
+    expect(checkPublish(r, { kind: 9, content: "{}", tags: [["t", "uni-sealed-enroll"]] }).ok).toBe(false);
+  });
+  it("signs an ordinary kind it declared, and never a denied one", () => {
+    const blog = one<RelayService>(relay({ publish: [1, 30023] }));
+    expect(checkPublish(blog, { kind: 30023, content: "# Beds", tags: [["d", "beds"]] }).ok).toBe(true);
+    expect(checkPublish(blog, { kind: 1, content: "hi", tags: [] }).ok).toBe(true);
+    expect(checkPublish(blog, { kind: 9, content: "hi", tags: [] }).ok).toBe(false);
+    // a declaration that slipped past the parse is still refused at the call
+    expect(checkPublish({ ...blog, publish: [27235] }, { kind: 27235, content: "", tags: [] }).ok).toBe(false);
   });
   it("deletes only by event id", () => {
     expect(checkPublish(r, { kind: 5, content: "", tags: [["e", id], ["h", "room"]] }).ok).toBe(true);

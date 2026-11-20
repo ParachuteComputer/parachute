@@ -159,16 +159,16 @@ test("signing in again never changes what the person said of a vault", async ({ 
   await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("mine");
 });
 
-test("a new device asks which vault is home; the one chosen is read, and the settings there are the person's", async ({ page }) => {
+test("a new device asks which vault is home, offering the one holding the settings; it is read, and its settings are the person's", async ({ page }) => {
   // another device made pantry the home: its settings note is there (and lists Techne); none in the kitchen
   for (const n of await home("GET", "notes?tag=parachute-settings")) await home("DELETE", `notes/${n.id}`);
   const pantry = { ...hubState(), token: mintToken("vault:pantry:write") };
   const note = await api(pantry, "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar: [], start: null, hubs: [{ hub: techneState().origin }] } } }, "pantry");
   try {
     await signInWithKey(page, hubState(), "pantry", "Mine", async (p) => {
-      // the first by name to begin with; the person picks theirs
-      await expect(p.getByRole("radio", { name: VAULT })).toBeChecked();
-      await p.getByRole("radio", { name: "pantry" }).check();
+      // the vault holding the settings to begin with, not the first by name: the person only says Continue
+      await expect(p.getByRole("radio", { name: "pantry" })).toBeChecked();
+      await expect(p.getByRole("radio", { name: VAULT })).not.toBeChecked();
     });
     expect(Object.keys(await held(page))).toEqual(["pantry"]);
     // the home is the one vault read: the settings there name Techne

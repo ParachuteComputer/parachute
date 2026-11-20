@@ -8,7 +8,7 @@
 //!   (0: off).
 //! - **Levels.** `none` (the tap alone), `unlock` (the device unlock), `passcode` (this device's passcode, then the
 //!   unlock). A grace (keyring.rs) may cover a routine unlock; it never covers the passcode.
-//! - **Kept** in the app's data folder (`levels.json`). The app record's `security` only raises them (`raise`).
+//! - **Kept** in the app's data folder (`levels.json`). The bundle record's `security` only raises them (`raise`).
 //!   Lowering anything takes the person's signed approval from an unlocked device: signed here (`levels_lower`: the
 //!   passcode when this device has one, then the unlock, then the key signs it), or another device's, signed with the
 //!   key this device holds and dated after the last change here (`levels_adopt`). A vault edit alone changes nothing

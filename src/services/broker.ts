@@ -214,7 +214,8 @@ export function createBroker(opts: { native: Native; session: string; applet: { 
       const s = relayOf(p.service);
       const t = checkPublish(s, p.event);
       if (!t.ok) throw new BrokerError("out_of_scope", t.error);
-      if (t.value.kind === 9 && isCommandApproval(t.value.content)) {
+      // any kind: a bot may read whatever it is shown in a room (services.rs checks the same)
+      if (isCommandApproval(t.value.content)) {
         // a bot's approval (Hermes's /approve) is an approval: the grant, and a tap
         if (!s.approvals) throw new BrokerError("not_granted", "answering a bot's approval needs the approvals grant");
         paid("an approval needs your tap in the applet");

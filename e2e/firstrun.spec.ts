@@ -3,13 +3,16 @@
 // the sign-in landed on the list, Home was allowed from the bar, and the next start found it stopped ("Home is
 // stopped. Open Home"). Now the first vault's arrival decides it as a start does: the card on the home's screen, and
 // Allow there is the person's choice of it as home on this device.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { api, hubState, VAULT } from "./hub";
+import { api, hubState, mintToken, MORE_VAULTS, VAULT } from "./hub";
 
 type Row = { id: string };
 
-/** Sign in on this new device with a password and the hub's consent, until the app is back: on the home's screen. */
-async function signInToHome(page: Page) {
+/** Sign in on this new device with a password and the hub's consent, until the app is back: on the home's screen. At
+ *  the pick, `home` is chosen; or, with `offered`, the test only checks the app offers it and takes what is offered. */
+async function signInToHome(page: Page, home = VAULT, offered = false) {
   const hub = hubState();
   await page.goto("/");
   const app = new URL(page.url()).origin;
@@ -26,7 +29,7 @@ async function signInToHome(page: Page) {
   const approve = page.getByRole("button", { name: "Approve" }), pick = page.getByRole("button", { name: "Continue" });
   const where = async () => {
     const u = new URL(page.url());
-    if (u.origin === app && u.pathname.startsWith(`/v/${VAULT}/a/`)) return "home";
+    if (u.origin === app && u.pathname.startsWith(`/v/${home}/a/`)) return "home";
     if (u.origin === app && u.pathname === "/" && !(await pick.isVisible().catch(() => false))) return "list";
     if (u.origin === app && await pick.isVisible().catch(() => false)) return "pick";
     return u.origin === hub.origin && await approve.isVisible().catch(() => false) ? "asked" : "wait";
@@ -35,7 +38,12 @@ async function signInToHome(page: Page) {
     await expect.poll(where, { timeout: 30_000 }).not.toBe("wait");
     const at = await where();
     if (at === "home" || at === "list") break;
-    if (at === "pick") { const home = page.getByRole("radio", { name: VAULT, exact: true }); if (await home.count()) await home.check(); await pick.click(); }
+    if (at === "pick") {
+      const radio = page.getByRole("radio", { name: home, exact: true });
+      if (offered) await expect(radio).toBeChecked();
+      else if (await radio.count()) await radio.check();
+      await pick.click();
+    }
     else await approve.click();
     await page.waitForTimeout(500);
   }
@@ -87,5 +95,43 @@ test("a Deny on the hub after Allow on the first start's home records no choice 
     expect(await page.evaluate(() => localStorage.getItem("parachute.start.v1"))).toBeNull();
   } finally {
     await api(hub, "DELETE", `notes/${settings.id}`).catch(() => {});
+  }
+});
+
+// Aaron's case on every new device (wknd audit, walk 1 rows 3 and 7): more than one vault of his own, and the one holding
+// his settings isn't the first by name. Here `kitchen` is first by name and holds no settings; `pantry` holds them and
+// the home applet. The pick offers pantry as home without a tap; the sign-in opens its home applet; Allow there (with
+// the hub's page in between, as Home needs write) is the choice of it, so the next start opens it running.
+test("several vaults: the one holding the settings is offered as home, and Allow on its home applet is the choice", async ({ page }) => {
+  test.setTimeout(150_000);
+  const hub = hubState();
+  const home = MORE_VAULTS.find((m) => m.vault === "pantry")!.vault;
+  const at = { origin: hub.origin, token: mintToken(`vault:${home}:write`) };
+  for (const v of [VAULT, ...MORE_VAULTS.map((m) => m.vault)]) {
+    const t = v === VAULT ? hub : { origin: hub.origin, token: mintToken(`vault:${v}:write`) };
+    for (const n of await api(t, "GET", "notes?tag=parachute-settings", undefined, v) as Row[]) await api(t, "DELETE", `notes/${n.id}`, undefined, v);
+  }
+  const fixture = join(import.meta.dirname, "fixtures/vault/Applets/Recipes");
+  const made: Row[] = [];
+  try {
+    made.push(await api(at, "POST", "notes", { path: "Applets/Recipes", extension: "html", tags: ["applet"], content: readFileSync(`${fixture}.html`, "utf8"), metadata: JSON.parse(readFileSync(`${fixture}.json`, "utf8")) }, home) as Row);
+    made.push(await api(at, "POST", "notes", { path: "Parachute/Settings", tags: ["parachute-settings"], content: "settings",
+      metadata: { parachute: { start: { vault: home, applet: "Applets/Recipes" }, bar: [{ vault: home, applet: "Applets/Recipes" }] } } }, home) as Row);
+    await signInToHome(page, home, true);
+    expect(await page.evaluate(() => (JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]") as { vault: string }[]).map((v) => v.vault))).toEqual([home]);
+    await expect(page).toHaveURL(new RegExp(`/v/${home}/a/`));
+    await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible({ timeout: 45_000 });
+    await page.getByRole("button", { name: "Allow" }).click();
+    await page.waitForURL((u) => u.origin === hub.origin);
+    await page.getByRole("button", { name: "Approve" }).click();
+    await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Recipe box" })).toBeVisible();
+    // the second open: running, no "Recipe box is stopped. Open Recipe box"
+    await page.goto("about:blank");
+    await page.goto("/");
+    await expect(page).toHaveURL(new RegExp(`/v/${home}/a/`));
+    await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Recipe box" })).toBeVisible();
+    await expect(page.getByText(/is stopped/)).toHaveCount(0);
+  } finally {
+    for (const n of made) await api(at, "DELETE", `notes/${n.id}`, undefined, home).catch(() => {});
   }
 });

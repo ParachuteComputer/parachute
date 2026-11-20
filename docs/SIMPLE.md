@@ -21,20 +21,20 @@ areas), Matrix, and the key and pairing screens. A person who has another applet
 | **Connect** | the bar | Each vault's connector address (`https://…/vault/<name>/mcp`) with **Copy**, and how to add it to Claude and ChatGPT. |
 
 The bar says **Notes · Journal · Capture · Connect**. Settings (the foot of Notes, or ⋯ on the other screens) has
-**Your app: Parachute Simplified / Everything**.
+**Your bundle: Parachute Simplified / Everything**.
 
 On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key); the key's ways come
 after it.
 
 ## Who gets it
 
-`parachute.app` in the settings note (`Parachute/Settings` in the home vault, [NAVIGATION.md](NAVIGATION.md)) says
-which app the person's devices open: `"simple"` or `"everything"`. Absent means everything, as before.
+`parachute.bundle` in the settings note (and `app`, its older name, with the same id until 2026-12-20: write both) (`Parachute/Settings` in the home vault, [NAVIGATION.md](NAVIGATION.md)) says
+which bundle the person's devices open: `"simple"` or `"everything"`. Absent means everything, as before.
 
 A person new to the app on Parachute Cloud gets `"simple"`. That is a first sign-in, on a device that had no home, to a
 hub whose descriptor says `door: "cloud"`, whose home (the one vault the sign-in reads, [design/SCOPES.md](design/SCOPES.md))
 was read and holds no settings note. The sign-in reads the home and doesn't write it, so this device opens Parachute
-Simplified at once, and the settings note with `app: "simple"` (and their list of Parachutes) is written the first time the
+Simplified at once, and the settings note with `bundle: "simple"` (and their list of Parachutes) is written the first time the
 person lets Parachute change notes in their home: their first edit, or adding Journal or Capture. A settings note already there
 is never changed this way. Anyone else starts as before. Settings changes it, and so can their agent, by writing the
 note.
@@ -72,10 +72,10 @@ never tells it which vaults the person has. A Cloud person's notes sit at the ro
 applet couldn't see them. Notes needs every vault, and Connect needs every vault's address, so both are the app's own
 screens. Capture and Journal each write into one folder of one vault, so they can be applets.
 
-## As an app record
+## As a bundle record
 
-Parachute Simplified is one of the two apps the app always has ([NAVIGATION.md](NAVIGATION.md#apps)): `Settings.app: "simple"`
-names it, the same field with the same value as before. A record `Parachute/Apps/simple` (`"look": "notes"`) changes
+Parachute Simplified is one of the two bundles the app always has ([NAVIGATION.md](NAVIGATION.md#bundles)): the settings note's
+`bundle: "simple"` names it (`app: "simple"` before 11-20, still read). A record `Parachute/Bundles/simple` (`"look": "notes"`) changes
 it, for instance to put more on its bar; the Notes home, Journal, Capture and Connect stay its places. Its
 `sources` don't narrow Notes, which shows every vault this device holds. Journal's and Capture's code come with the
 app and are written into the vault on a tap; each card then asks as any applet's does.

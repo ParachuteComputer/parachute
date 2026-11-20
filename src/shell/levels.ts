@@ -1,6 +1,6 @@
 // Security levels (docs/design/APP-RECORD.md "Security levels"): how careful Parachute is per action, and the idle
 // lock. The gate is native (src-tauri/src/levels.rs): it keeps this device's levels and asks the passcode and the
-// unlock. This file is the web side's half: the app record's `security` (which may only raise them), the signed
+// unlock. This file is the web side's half: the bundle record's `security` (which may only raise them), the signed
 // approval that lowering takes, and what Settings shows.
 //
 //   approvals  the person's agent's routine approval cards and held sends: none (the tap), unlock, passcode. Powerful ones always unlock.
@@ -39,7 +39,7 @@ type SyncDeps = {
   now?: number;
 };
 
-/** Follow the open app's record: raise this device to what it asks; where it asks for less than this device holds,
+/** Follow the open bundle's record: raise this device to what it asks; where it asks for less than this device holds,
  *  take that only with the person's signed approval of exactly those levels (Rust checks it again). Returns the
  *  device's levels after. */
 export async function syncLevels(app: { id: string; security: Asked }, home: Pick<VaultRecord, "issuer" | "vault"> | null, deps: SyncDeps): Promise<Levels> {

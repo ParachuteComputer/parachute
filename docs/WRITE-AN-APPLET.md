@@ -72,7 +72,7 @@ services:
   - id: rooms                       # what the code calls it
     kind: nostr-relay
     url: wss://relay.example
-    publish: [9, 7, 40003, 5, 20002]   # messages, reactions, edits, deletions of your own, typing: nothing else
+    publish: [9, 7, 40003, 5, 20002]   # the kinds the app may sign for it there: messages, reactions, edits, deletions of your own, typing
     media: true                     # files on the relay's media server
     private: [{ kind: 30078, d: "read-state:", t: read-state }]   # notes sealed to your key, under that prefix
   - id: mail
@@ -81,8 +81,15 @@ services:
     auth: nip98                     # none | nip98 (each request signed as you) | token (one you give the app)
 ```
 
+`publish` names any kind the applet needs (a note is 1, a comment 1111); the card says each, the five above and
+articles (30023) in words, any other by its number. Only those five stay in its rooms; any other kind goes anywhere on
+the relay, and the card says so. Of the addressable kinds (30000–39999) only articles may be declared. A few the app never signs, declared or not, because they would hand over the
+person's identity, money or an authority they hold: the profile, contacts and relay lists, plain-text DMs, labels,
+sign-ins, wallets, zaps, bids and paid jobs, room, relay and community admin, git maintainers' status, settings sets,
+Buzz's commands, and the app's own approvals. A declaration that names one is refused.
+
 A Parachute hub is never a server here (the app refuses it), and an applet in someone else's vault reaches none. The
-rules, and why, are in [design/SERVICES.md](design/SERVICES.md). Applets that do it: `applets/rooms.tsx`,
+rules, the deny list, and why, are in [design/SERVICES.md](design/SERVICES.md). Applets that do it: `applets/rooms.tsx`,
 `applets/area.tsx` and `applets/mail.tsx` in this repository.
 
 A relay service may also name (all optional, each a line on the card; [design/KEYRING.md](design/KEYRING.md)):
@@ -184,8 +191,8 @@ there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below ar
 | `onOpen(cb)` | `cb({ note: { id, path }, screen })` when the person opened a note in it (now, and each time after). |
 | `vault.queryRecords({ pathPrefix, tag, search, limit, includeBody, includeFields })` | Records in folders it may read: `{ id, path, updatedAt }`, and with `tag`, `includeBody` or `includeFields` also `tags` and `fields` (and with `includeBody` the `body`). |
 | `vault.getRecord(idOrPath)` | One record it may read, with its body. |
-| `vault.createRecord({ path, body })` | A new record, in a folder it may `create` in: `{ id, path, tags, fields, updatedAt }` (`getRecord` for its body). |
-| `vault.updateRecord(id, { body, if_updated_at })` | A new body for a record it may `update`. |
+| `vault.createRecord({ path, body, types?, tags?, fields? })` | A new record, in a folder it may `create` in, with its types, tags and fields: `{ id, path, types, tags, fields, updatedAt }` (`getRecord` for its body). |
+| `vault.updateRecord(id, { if_updated_at, body?, fields?, types?, tags? })` | A change to a record it may `update`, in one call: a new body, fields merged (`null` removes one), and `types` / `tags` as `{ add, remove }`. |
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
 | `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above; an applet at a room with `?room=<id>[&event=<id>]`, which it hears as its launch), while they tap inside the applet. Resolves to whether it went. |
@@ -256,6 +263,14 @@ does. Each takes plain props; a newer prop is only ever added, never changed.
 | `when (.time, .day, .date, .short, .full, .ago, .stamp, .path, .parse)` | Dates and times, one way in every applet, in the person's language: `when.short(t)` is "9:41 AM" today, "Yesterday", "Mon", "Nov 17". `t` is a Date, an ISO string, milliseconds or seconds. |
 | `useTheme()` | The look as values (`accent`, `bg`, …, `scheme`, `density`), or null until the app has sent it. Most applets need only the CSS variables. |
 | `useSaved(key, initial)` | `useState` that the app keeps on this device: a draft, the box it was on, the item open. See [Saved state](#saved-state). |
+
+**Keep state in fields.** A box the person ticks is a field on the record (`fields: { book_status: "read" }`), not a
+`- [x]` in its body: the vault, the note view and any AI connected to the vault then read the same value. The type and
+its fields are the AI's to define (`manage-types` over MCP; write access may make a new type). Field values are plain:
+text, numbers, yes/no, or a list of those (never `published`). The only types an applet gives or takes away are the
+ones its card names for that folder, what it opens there (`fields.opens`): a tag can put a note on the web, so no other.
+It never changes a note of the app's own (`applet`, `component`, `parachute-*`). An app from before this (T-476) refuses a write
+with fields, types or tags (`bad_params`), and its note view doesn't list fields.
 
 An HTML applet has no parts: it has the kit's calls and the CSS variables.
 
