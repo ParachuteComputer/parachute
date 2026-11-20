@@ -59,28 +59,44 @@ export const FRAME_KIT = String.raw`(function () {
   // rest. So the kit sends at most 8 and keeps the others in line; a refusal for being busy (too many waiting, too many
   // in ten seconds) goes back in line after a short wait, within the call's own time. An applet never sees one.
   var MAX_OUT = 8, line = [], out = 0, seq = 0, paused = false, pauseTimer = null;
-  // what the person is waiting on goes ahead of the line: a tap's call (it needs the tap still fresh), a post, the
-  // frame's height
-  var FIRST = { "app.openLink": 1, "app.follow": 1, "app.save": 1, "app.pick": 1, "app.open": 1, "voice.record": 1, "services.publish": 1, "page.layout": 1 };
+  // what the person is waiting on goes ahead of the line: a tap's call (it needs the tap still fresh: a link, a file,
+  // an answer to Uni's card, trusting its key, a secret), a post, the frame's height. One of the 8 places is kept for
+  // these, so a tap is sent at once however many pictures and card checks are out.
+  var FIRST = { "app.openLink": 1, "app.follow": 1, "app.save": 1, "app.pick": 1, "app.open": 1, "voice.record": 1, "services.publish": 1, "page.layout": 1,
+    "services.answer": 1, "services.trust": 1, "services.secret": 1, "services.forgetSecret": 1 };
+  // writes that must land in the order they were asked go one at a time, each kind in a lane of its own: what the
+  // applet keeps on the device (one store), and its posts. A later one is never out while an earlier one may still be
+  // refused for being busy and sent again.
+  var LANE = { "storage.set": "kept", "saved.put": "kept", "services.publish": "post" }, lanes = {};
+  function free(j) { if (j.lane && lanes[j.lane] === j) delete lanes[j.lane]; }
   function pump() {
-    while (!paused && out < MAX_OUT && line.length) {
-      var j = line.shift(); if (j.table[j.id] !== j) continue;
+    for (var i = 0; i < line.length;) {
+      var j = line[i];
+      if (j.table[j.id] !== j) { line.splice(i, 1); continue; }
+      // a tap's call goes whenever a place is free; the rest leave one place free and wait out a pause (a tap's call the
+      // shell already refused for being busy waits it out too)
+      var tap = j.first && !j.tries;
+      if (tap ? out >= MAX_OUT : paused || out >= MAX_OUT - 1) { if (!j.first) break; i++; continue; }
+      if (j.lane && lanes[j.lane] && lanes[j.lane] !== j) { i++; continue; }
+      line.splice(i, 1);
+      if (j.lane) lanes[j.lane] = j;
       j.out = true; out++;
       if (!j.timed) { j.timed = true; timeout(j.table, j.id, j.rej, j.ms); }
       // what can't be sent (a parameter that can't be copied to the shell) fails at once, and frees its place
-      try { post(j.msg); } catch (err) { j.out = false; out--; delete j.table[j.id]; j.rej(err); }
+      try { post(j.msg); } catch (err) { j.out = false; out--; free(j); delete j.table[j.id]; j.rej(err); }
     }
   }
   // the line in the order things were asked, what the person waits on first (its own order kept too)
   function place(j) { var k = line.length; while (k > 0 && line[k - 1].seq > j.seq) k--; line.splice(k, 0, j); }
-  function send(table, id, msg, ms, res, rej, first) {
-    var j = { table: table, id: id, msg: msg, ms: ms, res: res, rej: rej, tries: 0, out: false, timed: false, seq: (first ? -1e12 : 0) + (++seq) };
+  function send(table, id, msg, ms, res, rej, first, lane) {
+    var j = { table: table, id: id, msg: msg, ms: ms, res: res, rej: rej, tries: 0, out: false, timed: false, first: !!first, lane: lane || null, seq: (first ? -1e12 : 0) + (++seq) };
     table[id] = j;
     place(j);
     pump();
   }
-  // its answer came: its place is free. A busy refusal goes back in line where it was (in the order it was asked, so a
-  // later write never passes it) and the whole line waits a little, growing with its tries; else the call is settled.
+  // its answer came: its place is free. A busy refusal goes back in line where it was (in the order it was asked; a
+  // write keeps its lane, so no later write of its kind goes before it) and the whole line waits a little, growing
+  // with its tries; else the call is settled.
   function answered(j, busy) {
     if (j.out) { j.out = false; out--; }
     if (busy) {
@@ -90,17 +106,18 @@ export const FRAME_KIT = String.raw`(function () {
       pauseTimer = setTimeout(function () { paused = false; pump(); }, Math.min(2000, 100 * Math.pow(2, j.tries)));
       return true;
     }
+    free(j);
     delete j.table[j.id];
     return false;
   }
   function timeout(table, id, rej, ms) {
     setTimeout(function () {
       var j = table[id]; if (!j) return;
-      delete table[id];
+      delete table[id]; free(j);
       var was = j.out;
       if (was) { j.out = false; out--; }
       rej(new Error("timeout"));
-      if (was) pump();
+      pump();
     }, ms || 20000);
   }
   function call(ns, method, params) {
@@ -108,7 +125,7 @@ export const FRAME_KIT = String.raw`(function () {
       var id = "k" + (++n);
       // a server can take a while (an upload, a relay's history): services calls wait longer; so do the person (a
       // recording of up to 10 minutes, a file being chosen) and a file going out
-      send(pending, id, { uni: 1, id: id, ns: ns, method: method, params: params || {} }, ns === "services" ? 120000 : WAITS[ns + "." + method] || 20000, res, rej, FIRST[ns + "." + method] === 1);
+      send(pending, id, { uni: 1, id: id, ns: ns, method: method, params: params || {} }, ns === "services" ? 120000 : WAITS[ns + "." + method] || 20000, res, rej, FIRST[ns + "." + method] === 1, LANE[ns + "." + method]);
     });
   }
   function applyTheme(t) {
