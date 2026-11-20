@@ -34,10 +34,10 @@ const native = (): Native => ({
 const relay: Service = { id: "rooms", kind: "nostr-relay", url: "wss://relay.example", publish: [9], media: false, private: [] };
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
-function setup(n: Native = native()) {
+function setup(n: Native = native(), services: Service[] = [relay]) {
   FakeSocket.all = [];
   const emitted: { event: string; data: any }[] = [];
-  const b = createBroker({ native: n, session: "s", applet: { name: "Rooms", subject: "v\u0000n" }, services: [relay], hubs: [], emit: (event, data) => emitted.push({ event, data }), socket: (u) => new FakeSocket(u) as unknown as WebSocket });
+  const b = createBroker({ native: n, session: "s", applet: { name: "Rooms", subject: "v\u0000n" }, services, hubs: [], emit: (event, data) => emitted.push({ event, data }), socket: (u) => new FakeSocket(u) as unknown as WebSocket });
   return { b, emitted };
 }
 async function signIn(sock: FakeSocket, wait: () => Promise<unknown> = () => tick()) {
@@ -45,6 +45,19 @@ async function signIn(sock: FakeSocket, wait: () => Promise<unknown> = () => tic
   await wait();
   sock.from(["OK", "auth", true, ""]);
 }
+
+describe("what the broker asks the shell to sign", () => {
+  it("refuses a bot's /approve in any kind it declared, without the approvals grant, before anything is signed", async () => {
+    const n = native();
+    const signEvent = vi.spyOn(n, "signEvent");
+    const { b } = setup(n, [{ ...relay, publish: [1, 9, 40003] } as Service]);
+    for (const kind of [9, 40003, 1]) {
+      await expect(b.publish({ service: "rooms", event: { kind, content: "/approve", tags: [["h", "r"]] } }), `kind ${kind}`).rejects.toMatchObject({ code: "not_granted" });
+    }
+    await expect(b.publish({ service: "rooms", event: { kind: 27235, content: "", tags: [] } })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(signEvent).not.toHaveBeenCalled();
+  });
+});
 
 describe("the broker's relay connection", () => {
   it("sends a subscription made before the sign-in once, after it", async () => {

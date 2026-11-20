@@ -25,7 +25,7 @@ test.afterAll(async () => { await relay?.close(); await http?.close(); });
 
 const withKey = (page: Page) => page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, hex(sk));
 const services = (relayUrl: string, httpOrigin: string) => [
-  { id: "rooms", kind: "nostr-relay", url: relayUrl, publish: [9, 5], media: true, private: [{ kind: 30078, d: "read-state:", t: "read-state" }] },
+  { id: "rooms", kind: "nostr-relay", url: relayUrl, publish: [9, 5, 30023], media: true, private: [{ kind: 30078, d: "read-state:", t: "read-state" }] },
   { id: "mail", kind: "http", url: `${httpOrigin}/mail/`, auth: "nip98" },
 ];
 
@@ -43,6 +43,8 @@ const code = (otherId: string, httpOrigin: string) => `<pre id="out">running</pr
   await new Promise(function (res) { setTimeout(res, 800); });
   r.got = got;
   await step("profile", function () { return relay.publish({ kind: 0, content: "{}", tags: [] }); });
+  await step("article", function () { return relay.publish({ kind: 30023, content: "# Beds", tags: [["d", "beds"], ["title", "Beds"]] }); });
+  await step("note", function () { return relay.publish({ kind: 1, content: "not declared", tags: [] }); });
   await step("authTag", function () { return relay.publish({ kind: 9, content: "x", tags: [["h", "room-1"], ["u", "http://x.example/"]] }); });
   await step("deleteOther", function () { return relay.publish({ kind: 5, content: "", tags: [["e", "${otherId}"]] }); });
   await step("deleteMine", function () { return relay.publish({ kind: 5, content: "", tags: [["e", r.publish.v.id]] }); });
@@ -92,8 +94,9 @@ test("an applet reaches only the servers it declared, the shell signing for it; 
     const card = page.getByRole("region", { name: /asking for access/ });
     const host = new URL(relay.origin).host;
     await expect(card).toContainText(`With your everyday key: sign in to ${host} on this device as you`);
-    await expect(card).toContainText("With your everyday key: post as you in your rooms there: messages");
-    await expect(card).toContainText("With your everyday key: delete your messages there");
+    // a kind the shell has no word for, said by its number; it isn't a room's, so it posts anywhere there
+    await expect(card).toContainText("With your everyday key: post as you anywhere there: messages and kind 30023 events");
+    await expect(card).toContainText("With your everyday key: delete your messages and kind 30023 events there");
     await expect(card).toContainText("With your everyday key: send and open files there as you");
     await expect(card).toContainText(`With your everyday key: send requests to ${new URL(http.origin).host} on this device signed as you`);
     await expect(card).toContainText(`What it reads here could reach ${new URL(http.origin).host}`);
@@ -116,6 +119,11 @@ test("an applet reaches only the servers it declared, the shell signing for it; 
     expect(r.profile).toMatchObject({ ok: false, code: "out_of_scope" });
     expect(r.authTag).toMatchObject({ ok: false, code: "out_of_scope" });
     expect(relay.events.some((e) => e.kind === 0)).toBe(false);
+    // a kind it declared is signed as the person, whatever the kind; one it didn't declare is not
+    expect(r.article.ok && r.article.v.ok).toBe(true);
+    expect(relay.events.some((e) => e.pubkey === me && e.kind === 30023 && e.content === "# Beds")).toBe(true);
+    expect(r.note).toMatchObject({ ok: false, code: "out_of_scope" });
+    expect(relay.events.some((e) => e.kind === 1)).toBe(false);
     // deleting: its own post, yes; someone else's, no
     expect(r.deleteOther).toMatchObject({ ok: false, code: "out_of_scope" });
     expect(r.deleteMine.ok && r.deleteMine.v.ok).toBe(true);

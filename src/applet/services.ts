@@ -9,6 +9,7 @@
 //     - { id: mail, kind: http, url: https://mail.example/mail/, auth: nip98 }
 import { npubEncode } from "nostr-tools/nip19";
 import { hasHidden, hasOnly, plain } from "./contract.ts";
+import denied from "./denied-kinds.json";
 
 export const SERVICE_KINDS = ["nostr-relay", "http"] as const;
 export const HTTP_AUTHS = ["none", "nip98", "token"] as const;
@@ -32,8 +33,24 @@ export type Approve = { field: string; ops: string[] };
 export type HttpService = { id: string; kind: "http"; url: string; auth: HttpAuth; approve?: Approve; join?: Approve };
 export type Service = RelayService | HttpService;
 
-/** The kinds an applet may ask the shell to sign, each with the words its card uses. Any other is refused. */
+/** The words a card uses for the kinds it knows. Any other kind a service declares is "kind N events". */
 export const NAMED_KINDS: Record<number, string> = { 9: "messages", 7: "reactions", 40003: "edits of your messages", 5: "deletions", 20002: "typing" };
+/** Kinds no applet may have signed, declared or not: they would hand over the person's identity, their money or the
+ *  shell's own protocols. The list and why each is on it: services.rs `DENIED_KINDS` (a test there holds this file to it). */
+export const DENIED = denied as { kinds: number[]; ranges: [number, number][]; except: number[] };
+export const deniedKind = (k: number) =>
+  DENIED.kinds.includes(k) || (!DENIED.except.includes(k) && DENIED.ranges.some(([a, b]) => k >= a && k <= b));
+/** A kind an applet may declare: a whole number a Nostr kind can be, not on the shell's deny list. */
+const declarable = (k: unknown): k is number => Number.isInteger(k) && (k as number) >= 0 && (k as number) <= 65535 && !deniedKind(k as number);
+/** The card's words for the kinds it posts: those `words` names (of 9, 7, 40003, 20002, in that order), then every kind
+ *  without a name as "kind 1 and 30023 events". Deletions (5) have a line of their own. */
+export function kindWords(publish: readonly number[], words: Record<number, string>): string[] {
+  const named = [9, 7, 40003, 20002].filter((k) => publish.includes(k) && words[k]).map((k) => words[k]);
+  const others = publish.filter((k) => !(k in NAMED_KINDS)).sort((a, b) => a - b);
+  return [...named, ...(others.length ? [`kind ${joinWords(others.map(String))} events`] : [])];
+}
+/** The `t` tag of the approval key's enrollment with Uni (src-tauri approvals/seal.rs): no applet's event carries it. */
+export const ENROLL_TAG = "uni-sealed-enroll";
 /** Tags an applet's event may not carry: they are what sign-ins and signed requests are made of. */
 export const AUTH_TAGS = ["u", "method", "payload", "challenge", "relay", "server", "expiration"];
 export const LIMITS = { rooms: 12, roomName: 40, trusted: 4, ops: 4, services: 6, id: 40, url: 300, publish: 16, private: 2, prefix: 40, word: 40, filters: 10, subs: 100, filterValues: 100, history: 500, tags: 100, content: 64 * 1024, bytes: 25 * 1024 * 1024 };
@@ -102,7 +119,7 @@ function parseOne(x: unknown, isHub: (origin: string) => boolean): Parsed<Servic
     if (!u.ok) return fail(`${id}: ${u.error}`);
     const publish = x.publish === undefined ? [] : x.publish;
     if (!Array.isArray(publish) || publish.length > LIMITS.publish || new Set(publish).size !== publish.length) return fail(`${id}: publish is a short list of kinds, each once`);
-    for (const k of publish) if (!Number.isInteger(k) || !(k in NAMED_KINDS)) return fail(`${id}: it can't publish kind ${String(k)}; an applet may publish ${Object.keys(NAMED_KINDS).join(", ")}`);
+    for (const k of publish) if (!declarable(k)) return fail(Number.isInteger(k) && deniedKind(k) ? `${id}: no applet may publish kind ${k}: it would sign as you in a way the shell keeps for itself` : `${id}: publish is a list of kinds`);
     if (x.media !== undefined && typeof x.media !== "boolean") return fail(`${id}: media is true or false`);
     const priv = x.private === undefined ? [] : x.private;
     if (!Array.isArray(priv) || priv.length > LIMITS.private) return fail(`${id}: private is a short list`);
@@ -206,6 +223,9 @@ const shortId = (id: string) => (id.length > 12 ? `${id.slice(0, 8)}…` : id);
 export const roomsWords = (s: RelayService) => (s.rooms?.length
   ? `only in ${joinWords(s.rooms.map((r) => `«${r.name}» (${shortId(r.id)})`))}, named by the applet`
   : "in your rooms");
+/** Where its posts go: its rooms; or, when it may post a kind that isn't a room's (a note, an article) and names no
+ *  rooms, anywhere on that relay. */
+export const postsWhere = (s: RelayService) => (!s.rooms?.length && s.publish.some((k) => !(k in NAMED_KINDS)) ? "anywhere" : roomsWords(s));
 
 export type LineOptions = {
   /** The approval key is the everyday key for now (no separate one on this device). */
@@ -225,9 +245,11 @@ export function serviceLines(services: readonly Service[], opts: LineOptions = {
     const at = hostWords(s);
     if (s.kind === "nostr-relay") {
       out.push({ text: `${EVERYDAY}sign in to ${at} as you`, stress: true });
-      const posts = [9, 7, 40003, 20002].filter((k) => s.publish.includes(k)).map((k) => NAMED_KINDS[k]);
-      if (posts.length) out.push({ text: `${EVERYDAY}post as you ${roomsWords(s)} there: ${joinWords(posts)}`, stress: true });
-      if (s.publish.includes(5)) out.push({ text: `${EVERYDAY}delete your messages${s.publish.includes(7) ? " and reactions" : ""} there${s.rooms?.length ? `, ${roomsWords(s)}` : ""}`, stress: true });
+      const posts = kindWords(s.publish, NAMED_KINDS);
+      if (posts.length) out.push({ text: `${EVERYDAY}post as you ${postsWhere(s)} there: ${joinWords(posts)}`, stress: true });
+      // a deletion is of the person's own events of a kind it posts (broker.ts reads each first)
+      const deletes = kindWords(s.publish, { 9: "messages", 7: "reactions", 40003: "edits" });
+      if (s.publish.includes(5)) out.push({ text: `${EVERYDAY}delete your ${joinWords(deletes.length ? deletes : ["messages"])} there${s.rooms?.length ? `, ${roomsWords(s)}` : ""}`, stress: true });
       if (s.rooms?.length) out.push({ text: `It reads only those rooms there${s.media || s.private.length ? "; files and private notes there aren't limited to them" : ""}`, stress: false });
       if (s.media) out.push({ text: `${EVERYDAY}send and open files there as you`, stress: true });
       for (const p of s.private) out.push({ text: `Keep private notes there (${p.d}…), sealed to your key: other apps of yours may share them`, stress: false });
@@ -337,7 +359,7 @@ export type Template = { kind: number; content: string; tags: string[][] };
 export function checkPublish(s: RelayService, raw: unknown): Parsed<Template> {
   if (!plain(raw) || !hasOnly(raw, ["kind", "content", "tags"])) return fail("an event is {kind, content, tags}");
   const kind = raw.kind;
-  if (!Number.isInteger(kind) || !(kind as number in NAMED_KINDS) || !s.publish.includes(kind as number)) return fail(`it may not publish kind ${String(kind)} there`);
+  if (!declarable(kind) || !s.publish.includes(kind)) return fail(`it may not publish kind ${String(kind)} there`);
   const content = raw.content === undefined ? "" : raw.content;
   if (typeof content !== "string" || new TextEncoder().encode(content).length > LIMITS.content) return fail("content is text, at most 64 KiB");
   const tags = raw.tags === undefined ? [] : raw.tags;
@@ -345,6 +367,8 @@ export function checkPublish(s: RelayService, raw: unknown): Parsed<Template> {
   for (const t of tags) {
     if (!Array.isArray(t) || !t.length || t.length > 12 || !t.every((v) => typeof v === "string" && v.length <= 1024)) return fail("a tag is a short list of words");
     if (AUTH_TAGS.includes(t[0])) return fail(`a ${t[0]} tag is for sign-ins, not posts`);
+    // the approval key's enrollment with Uni (services.rs refuses the same)
+    if (t[0] === "t" && t[1] === ENROLL_TAG) return fail("that t tag is the shell's own");
     if (kind === 5 && t[0] !== "e" && t[0] !== "h") return fail("a deletion names its events by e tags only");
     if (t[0] === "e" && !/^[0-9a-f]{64}$/.test(t[1] ?? "")) return fail("an e tag names an event id");
   }

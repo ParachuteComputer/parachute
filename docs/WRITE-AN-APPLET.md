@@ -72,7 +72,7 @@ services:
   - id: rooms                       # what the code calls it
     kind: nostr-relay
     url: wss://relay.example
-    publish: [9, 7, 40003, 5, 20002]   # messages, reactions, edits, deletions of your own, typing: nothing else
+    publish: [9, 7, 40003, 5, 20002]   # the kinds the app may sign for it there: messages, reactions, edits, deletions of your own, typing
     media: true                     # files on the relay's media server
     private: [{ kind: 30078, d: "read-state:", t: read-state }]   # notes sealed to your key, under that prefix
   - id: mail
@@ -81,8 +81,14 @@ services:
     auth: nip98                     # none | nip98 (each request signed as you) | token (one you give the app)
 ```
 
+`publish` names any kind the applet needs (a note is 1, an article 30023); the card says each, the five above in
+words and any other by its number. A few the app never signs, declared or not, because they would hand over the
+person's identity, money or an authority they hold: the profile, contacts and relay lists, sign-ins, wallets, zaps,
+bids and paid jobs, room, relay and community admin, git maintainers' status, Buzz's commands, and the app's own
+approvals. A declaration that names one is refused.
+
 A Parachute hub is never a server here (the app refuses it), and an applet in someone else's vault reaches none. The
-rules, and why, are in [design/SERVICES.md](design/SERVICES.md). Applets that do it: `applets/rooms.tsx`,
+rules, the deny list, and why, are in [design/SERVICES.md](design/SERVICES.md). Applets that do it: `applets/rooms.tsx`,
 `applets/area.tsx` and `applets/mail.tsx` in this repository.
 
 A relay service may also name (all optional, each a line on the card; [design/KEYRING.md](design/KEYRING.md)):

@@ -35,8 +35,89 @@ use zeroize::Zeroizing;
 
 use crate::key::KeyState;
 
-/// The kinds an applet may ask the shell to sign: messages, reactions, edits, deletions, typing.
-pub const NAMED_KINDS: [u16; 5] = [9, 7, 40003, 5, 20002];
+/// Kinds no applet may have signed, whatever its service declares (docs/design/SERVICES.md "Kinds the shell never signs").
+/// Every other kind an applet's relay service lists in `publish` is signed, and only there: the manifest is the
+/// declaration, its card names each kind, and widening `publish` changes the grant's key, so the person is asked again.
+/// These are refused because signing one would hand over the person's identity, their money, an authority they hold
+/// (admin, owner, approver) or one of the shell's own protocols. When it wasn't clear whether a kind was dangerous, it
+/// is here: a later version can take one off when an applet needs it.
+pub const DENIED_KINDS: [u16; 31] = [
+    0,     // the profile: who the person is, everywhere
+    3,     // the contact list: the people they follow, overwritten whole
+    8,     // a badge award (NIP-58): the person vouching for others as an issuer
+    13,    // a seal (NIP-59): the shell seals its approval answers with the person's key (approvals/wrap.rs)
+    62,    // a request to vanish (NIP-62): asks relays to delete everything the person ever posted
+    443,   // an MLS key package (Marmot, NIP-EE) and its addressable twin: a key of the applet's choosing that others'
+    30443, // encrypted groups would invite as the person
+    1776,  // a key migration (NIP-41, draft): the person's identity moving to another key
+    1777,
+    2022,  // a coinjoin (Joinstr): money
+    1021,  // an auction bid and its confirmation (NIP-15): money owed
+    1022,
+    1059,  // a gift wrap (NIP-59): the shell's sealed messages travel in these (approvals/wrap.rs)
+    4550,  // a community moderator's approval of a post (NIP-72)
+    7374,  // a Cashu wallet's quote, token and history (NIP-60): money
+    7375,
+    7376,
+    9321,  // a nutzap (NIP-61): money
+    9734,  // a zap request (NIP-57): money
+    9735,  // a zap receipt (NIP-57)
+    30078, // the person's private notes: the shell signs these only sealed, through `private`
+    30350, // a push lease (Buzz NIP-PL): where the person's notifications go
+    30402, // a classified listing and its draft (NIP-99): an offer to sell
+    30403,
+    34128, // a site's file and its manifest (NIP-5A, nsite): the person's website
+    35128,
+    34550, // a community's definition (NIP-72): who moderates it
+    37375, // a Cashu wallet (NIP-60, the first draft): money
+    38383, // a peer-to-peer trade order (NIP-69): money
+    // 30479 (an approval of a security change) and 30480 (the person's list of keys, approve.rs) are here by name,
+    // so no change to the ranges below could let them through
+    crate::approve::APPROVAL_KIND,
+    crate::approve::KEYS_KIND,
+];
+/// Ranges no applet may have signed, ends included.
+/// - 1630 to 1633, a git maintainer's status on a patch or issue (NIP-34): open, merged, closed, draft.
+/// - 5000 to 7000, data vending (NIP-90): job requests carry a bid the person then owes; results and feedback ask for
+///   payment.
+/// - 9000 to 9099, running a room or a relay: NIP-29 (9000 and 9001 add and remove members, 9005 deletes other
+///   people's posts, which kind 5 may not, 9008 deletes a room), Buzz's relay membership (9030 to 9033), its archiving
+///   of an identity (9035, 9036) and its moderation (9040 to 9044: ban, timeout).
+/// - 10000 to 19999, replaceable events (NIP-01): the one copy of a setting every Nostr app of the person's reads, and
+///   a new one replaces it whole: their relays (10002), mutes (10000), DM relays (10050), file servers (10063), nutzap
+///   details (10019), wallet connect (13194), Cashu wallet (17375) and Buzz agent profile (10100).
+/// - 20000 to 29999, ephemeral events, except typing (20002): where Nostr signs people in and lets other programs act
+///   for them: a relay's AUTH (22242), NIP-98 HTTP auth (27235, which would sign the applet in to the person's hub or
+///   gateway as them), Blossom auth (24242), remote signing (NIP-46, 24133), wallet connect (23194 to 23197), Buzz
+///   pairing (24134) and identity binding (24243), and NIP-43 joins (28934 to 28936).
+/// - 30017 to 30020, a market's stalls, products and auctions (NIP-15): offers to sell.
+/// - 30174 to 30179, Buzz's agents, personas and teams the person owns (an agent's definition and memory).
+/// - 30617 and 30618, a git repository's announcement and state (NIP-34): Buzz creates repositories from the first and
+///   reads branch protection from it; the second says where each branch points.
+/// - 30620 to 30622, Buzz's workflow definitions, projects and DM visibility.
+/// - 40000 to 49999, except edits (40003): Buzz's commands, signed by the person as an order: DMs opened and members
+///   added (41010 to 41012), agent jobs (43001 to 43006), workflows triggered and their approvals granted or denied
+///   (46001 to 46031), the shell's own approval desk (46040 to 46042: a secret delivered, a secret forgotten, an
+///   approval card's answer, approvals/) and admin (48000 to 48999).
+pub const DENIED_RANGES: [(u16, u16); 10] = [
+    (1630, 1633),
+    (5000, 7000),
+    (9000, 9099),
+    (10000, 19999),
+    (20000, 29999),
+    (30017, 30020),
+    (30174, 30179),
+    (30617, 30618),
+    (30620, 30622),
+    (40000, 49999),
+];
+/// Kinds a denied range keeps for applets: typing and edits.
+pub const RANGE_EXCEPTIONS: [u16; 2] = [TYPING_KIND, 40003];
+
+/// Is this kind one no applet may have signed, declared or not.
+pub fn denied_kind(kind: u16) -> bool {
+    DENIED_KINDS.contains(&kind) || (!RANGE_EXCEPTIONS.contains(&kind) && DENIED_RANGES.iter().any(|(a, b)| (*a..=*b).contains(&kind)))
+}
 /// Tags an applet's event may not carry: they are what sign-ins and signed requests are made of.
 pub const AUTH_TAGS: [&str; 7] = ["u", "method", "payload", "challenge", "relay", "server", "expiration"];
 pub const METHODS: [&str; 6] = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"];
@@ -275,10 +356,11 @@ pub fn parse_service(x: &Value) -> Result<Service, Refusal> {
                 None => {}
                 Some(Value::Array(ks)) if ks.len() <= 16 => {
                     for k in ks {
-                        let k = k.as_u64().filter(|k| *k <= u16::MAX as u64).map(|k| k as u16).filter(|k| NAMED_KINDS.contains(k));
+                        let k = k.as_u64().filter(|k| *k <= u16::MAX as u64).map(|k| k as u16);
                         match k {
+                            Some(k) if denied_kind(k) => return Err(bad(format!("{id}: no applet may publish kind {k}: it would sign as you in a way the shell keeps for itself"))),
                             Some(k) if !publish.contains(&k) => publish.push(k),
-                            _ => return Err(bad(format!("{id}: publish is a list of kinds from 9, 7, 40003, 5, 20002, each once"))),
+                            _ => return Err(bad(format!("{id}: publish is a list of kinds, each once"))),
                         }
                     }
                 }
@@ -388,14 +470,15 @@ pub fn parse_service(x: &Value) -> Result<Service, Refusal> {
 
 // ── what the applet asks to have signed ──
 
-/// An event the applet asks to publish: a kind it may publish there (and one the shell can name), plain tags none of
-/// which is shaped like auth, and for a deletion only `e` (and `h`) tags. Returns (kind, content, tags).
-/// With `rooms`, the event carries exactly one `h` tag, one of them. A kind 9 that reads as a command approval for a bot
+/// An event the applet asks to publish: a kind its service declared there and not one the shell keeps
+/// ([`denied_kind`]), plain tags none of which is shaped like auth or the shell's enrollment, and for a deletion only
+/// `e` (and `h`) tags. Returns (kind, content, tags).
+/// With `rooms`, the event carries exactly one `h` tag, one of them. Text that reads as a command approval for a bot
 /// (Hermes's `/approve`, `/deny`) is signed only when `may_approve` (the applet holds the approvals grant there).
 pub fn check_template(publish: &[u16], rooms: &[String], may_approve: bool, raw: &Value) -> Result<(u16, String, Vec<Vec<String>>), Refusal> {
     let o = raw.as_object().filter(|o| only_keys(o, &["kind", "content", "tags"])).ok_or_else(|| scope("an event is {kind, content, tags}"))?;
     let kind = o.get("kind").and_then(Value::as_u64).filter(|k| *k <= u16::MAX as u64).map(|k| k as u16);
-    let kind = kind.filter(|k| NAMED_KINDS.contains(k) && publish.contains(k)).ok_or_else(|| scope(format!("it may not publish kind {} there", o.get("kind").unwrap_or(&Value::Null))))?;
+    let kind = kind.filter(|k| !denied_kind(*k) && publish.contains(k)).ok_or_else(|| scope(format!("it may not publish kind {} there", o.get("kind").unwrap_or(&Value::Null))))?;
     let content = match o.get("content") {
         None => String::new(),
         Some(Value::String(s)) if s.len() <= MAX_CONTENT => s.clone(),
@@ -416,6 +499,11 @@ pub fn check_template(publish: &[u16], rooms: &[String], may_approve: bool, raw:
         if AUTH_TAGS.contains(&t[0].as_str()) {
             return Err(scope(format!("a {} tag is for sign-ins, not posts", t[0])));
         }
+        // the approval key's enrollment with Uni is a kind 9 with this tag (approvals/seal.rs); while the approval key
+        // is the everyday key, an applet's would enroll a sealing key of its own choosing
+        if t[0] == "t" && t.get(1).is_some_and(|v| v == crate::approvals::ENROLL_TAG) {
+            return Err(scope("that t tag is the shell's own"));
+        }
         if kind == 5 && t[0] != "e" && t[0] != "h" {
             return Err(scope("a deletion names its events by e tags only"));
         }
@@ -433,7 +521,8 @@ pub fn check_template(publish: &[u16], rooms: &[String], may_approve: bool, raw:
             return Err(scope("it may post only in its rooms there"));
         }
     }
-    if kind == 9 && !may_approve && is_command_approval(&content) {
+    // any kind: a bot may read whatever it is shown in a room, edits and new kinds as well as messages
+    if !may_approve && is_command_approval(&content) {
         return Err(no("not_granted", "Answering a bot's approval needs the approvals grant."));
     }
     Ok((kind, content, tags))
@@ -1465,13 +1554,47 @@ pub async fn svc_log<R: Runtime>(app: AppHandle<R>, state: State<'_, ServicesSta
 mod tests {
     #[test]
     fn no_applet_can_have_an_approval_or_a_key_list_signed() {
-        // even a declaration that names them: an applet signs only the short list of kinds the shell can name
+        // even a declaration that names them: they are on the shell's deny list
         for kind in [crate::approve::APPROVAL_KIND, crate::approve::KEYS_KIND] {
             let t = serde_json::json!({ "kind": kind, "content": "{}", "tags": [["d", "x"]] });
             assert!(check_template(&[9, 7, kind], &[], true, &t).is_err(), "kind {kind}");
-            assert!(!NAMED_KINDS.contains(&kind));
+            assert!(denied_kind(kind));
         }
         assert_ne!(PRIVATE_KIND, crate::approve::APPROVAL_KIND);
+    }
+
+    #[test]
+    fn a_denied_kind_is_refused_even_when_declared() {
+        let denied = [
+            443, 30443, 1776, 1777, 2022, 34128, 35128,
+            0, 3, 8, 13, 62, 1021, 1022, 1059, 4550, 7374, 7375, 7376, 9321, 9734, 9735, 30078, 30350, 30402, 30403, 30479,
+            30480, 34550, 37375, 38383, 1630, 1631, 1633, 5000, 5999, 6000, 7000, 30017, 30020, 30617, 30618,
+            9000, 9001, 9005, 9008, 9021, 9030, 9035, 9040, 9044, 9099, 10000, 10002, 10019, 10050, 10063, 10100, 13194, 17375, 19999,
+            20000, 22242, 23194, 23195, 23196, 24133, 24134, 24242, 24243, 27235, 28934, 29999, 30174, 30177, 30179, 30620, 30622,
+            40000, 40004, 41010, 43001, 46011, 46020, 46030, 46031, 46040, 46041, 46042, 48001, 49999,
+        ];
+        for kind in denied {
+            assert!(denied_kind(kind), "kind {kind}");
+            let declared = json!({ "id": "x", "kind": "nostr-relay", "url": "wss://relay.example", "publish": [9, kind] });
+            assert_eq!(code(parse_service(&declared)), "bad_service", "kind {kind}: the declaration is refused");
+            // and if one got past the parse, the template check still refuses it
+            assert_eq!(code(check_template(&[9, kind], &[], true, &json!({ "kind": kind, "content": "" }))), "out_of_scope", "kind {kind}");
+        }
+        // the web side reads the same list (applet/services.ts): one list in Rust and TS
+        let web: Value = serde_json::from_str(include_str!("../../src/applet/denied-kinds.json")).unwrap();
+        let mut kinds = DENIED_KINDS.to_vec();
+        kinds.sort_unstable();
+        assert_eq!(web["kinds"], json!(kinds));
+        assert_eq!(web["ranges"], json!(DENIED_RANGES.iter().map(|(a, b)| [*a, *b]).collect::<Vec<_>>()));
+        assert_eq!(web["except"], json!(RANGE_EXCEPTIONS));
+        // the kinds around the ranges, and typing inside one, are an applet's to declare
+        for kind in [1, 5, 6, 7, 9, 16, 1111, 1617, 1621, 1629, 1634, 1984, 4999, 7001, 8999, 9100, 20002, 30000, 30016, 30021, 30023, 30173,
+            30180, 30300, 30616, 30619, 30623, 39999, 40003, 50000, 65535]
+        {
+            assert!(!denied_kind(kind), "kind {kind}");
+            let declared = json!({ "id": "x", "kind": "nostr-relay", "url": "wss://relay.example", "publish": [kind] });
+            assert!(parse_service(&declared).is_ok(), "kind {kind}");
+        }
     }
 
     use super::*;
@@ -1544,8 +1667,12 @@ mod tests {
             with(mail(), "auth", json!("basic")),
             with(mail(), "publish", json!([9])),
             with(relay(), "auth", json!("nip98")),
-            with(relay(), "publish", json!([1])),
+            with(relay(), "publish", json!([27235])),
             with(relay(), "publish", json!([22242])),
+            with(relay(), "publish", json!([65536])),
+            with(relay(), "publish", json!([-1])),
+            with(relay(), "publish", json!(["9"])),
+            with(relay(), "publish", json!((30000..=30016).collect::<Vec<u16>>())),
             with(relay(), "publish", json!([0])),
             with(relay(), "publish", json!([30078])),
             with(relay(), "publish", json!([9, 9])),
@@ -1586,7 +1713,7 @@ mod tests {
     }
 
     #[test]
-    fn only_the_named_kinds_and_plain_tags_are_signed() {
+    fn only_the_declared_kinds_and_plain_tags_are_signed() {
         let publish = [5u16, 7, 9, 20002];
         let ok = |t: Value| check_template(&publish, &[], false, &t);
         let e = "ab".repeat(32);
@@ -1905,6 +2032,17 @@ mod tests {
             assert_eq!(is_command_approval(text), *want, "{text:?}");
         }
         assert!(check_template(&[9], &[], false, &ev("I approve of this", json!([["h", "x"]]))).is_ok());
+        // any kind it declared, not only messages: a bot may read an edit or a note as well
+        for kind in [40003, 1, 1111] {
+            let t = json!({ "kind": kind, "content": "/approve", "tags": [["h", "x"]] });
+            assert_eq!(code(check_template(&[9, kind], &[], false, &t)), "not_granted", "kind {kind}");
+            assert!(check_template(&[9, kind], &[], true, &t).is_ok(), "kind {kind}");
+        }
+        // the approval key's enrollment with Uni is the shell's own, whatever the kind
+        for kind in [9, 1] {
+            let t = json!({ "kind": kind, "content": "{}", "tags": [["h", "x"], ["t", crate::approvals::ENROLL_TAG]] });
+            assert_eq!(code(check_template(&[9, 1], &[], true, &t)), "out_of_scope", "kind {kind}");
+        }
     }
 
     #[test]

@@ -26,7 +26,8 @@ const facts = (line: string): string[] => [
   ...(line.match(/«[^»]+»(?: \([^)]+\))?/g) ?? []),
   ...(line.match(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)+(?::\d+)?(?: on this device)?/gi) ?? []).filter((h) => !/^e\.g$/.test(h)),
   ...(line.match(/\b[A-Z][\w ]*\//g) ?? []),
-  ...["everyday key", "approval key", "High risk", "device unlock", "public key", "where to reach this phone", "web addresses", "every vault", "named by the applet", "only in", "delete", "files", "signed as you", "token", "your approval key is your everyday key for now"].filter((w) => line.toLowerCase().includes(w.toLowerCase())).map((w) => w.toLowerCase()),
+  ...(line.match(/\bkind \d+(?:(?:, | and )\d+)* events/g) ?? []),
+  ...["everyday key", "approval key", "High risk", "device unlock", "public key", "where to reach this phone", "web addresses", "every vault", "named by the applet", "only in", "anywhere", "delete", "files", "signed as you", "token", "your approval key is your everyday key for now"].filter((w) => line.toLowerCase().includes(w.toLowerCase())).map((w) => w.toLowerCase()),
 ];
 
 /** Every line the details stress has its facts on the face. */
@@ -58,6 +59,13 @@ describe("the face keeps every stressed line's facts", () => {
     const t = faceTexts(face).join("\n");
     expect(t).toContain("bücher.example (xn--bcher-kva.example)");
     expect(t).toContain("only in «Garden» (abcdef01…), named by the applet");
+  });
+  it("names every kind it posts: messages and reactions in words, any other by its number", () => {
+    const { g, folder } = grantFor("rooms", (f) => ({ ...f, services: [{ id: "r", kind: "nostr-relay", url: "wss://buzz.example.org", publish: [9, 7, 40003, 5, 20002, 1, 30023] }] }));
+    const t = faceTexts(holds(g, folder, trusted));
+    expect(t).toContain("As you on buzz.example.org (your everyday key): posts messages, reactions, edits, typing and kind 1 and 30023 events anywhere, and deletes what you posted. What it reads can go there.");
+    const one = grantFor("rooms", (f) => ({ ...f, services: [{ id: "r", kind: "nostr-relay", url: "wss://buzz.example.org", publish: [1] }] }));
+    expect(faceTexts(holds(one.g, one.folder, trusted))[0]).toBe("As you on buzz.example.org (your everyday key): posts kind 1 events anywhere. What it reads can go there.");
   });
   it("two relays: each approval line names its own server, so a second one reads apart from the first", () => {
     const { g, folder } = grantFor("rooms");
