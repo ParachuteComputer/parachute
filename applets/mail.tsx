@@ -5,7 +5,7 @@
 // keyword (the Inbox leaves a Later thread out until something new comes in on it); Waiting is the sends from Uni's
 // account its outbound rules hold for the owner, each approved (signed with the approval key) or declined here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Field, Linked, List, Loading, Page, Problem, ready, Search, services, Tabs, toast, useSaved, when, Write } from "parachute";
+import { Button, Field, Linked, List, Loading, Page, Problem, ready, Search, services, signal, Tabs, toast, useSaved, when, Write } from "parachute";
 
 type Addr = { name?: string | null; email: string };
 type Email = { id: string; threadId: string; mailboxIds: Record<string, boolean>; keywords: Record<string, boolean>; from?: Addr[]; to?: Addr[]; replyTo?: Addr[]; cc?: Addr[]; subject?: string; receivedAt: string; preview?: string; hasAttachment?: boolean;
@@ -109,6 +109,10 @@ export default function Mail() {
     if (!account) return;
     const [[, r]] = await jmap([["Mailbox/get", { accountId: account, properties: ["name", "role", "unreadEmails", "totalEmails"] }, "b"]]);
     setBoxes(r.list);
+    // the bar's count (its record's signal "unread"): what is unread in the inbox, as Mail knows it; an older record
+    // without the signal refuses, and nothing else changes
+    const inbox = (r.list as Box[]).find((b) => b.role === "inbox");
+    if (inbox && typeof signal === "function") Promise.resolve(signal("unread", Math.min(9999, inbox.unreadEmails ?? 0))).catch(() => {});
   };
   const load = async () => {
     if (!account || (place === "waiting" && !searched)) return;

@@ -16,7 +16,13 @@ export function appletRecord(name: string, vars: Record<string, string> = {}): A
   // {{name}} must be given; {{name?}} may be left out (an empty value), and a notify gateway left empty is dropped
   const fill = (s: string) => s.replace(/\{\{(\w+)(\??)\}\}/g, (_m, k: string, opt: string) => { if (!(k in vars)) { if (opt) return ""; throw new Error(`${name} needs ${k}`); } return vars[k]; });
   const dropEmpty = (fields: Record<string, unknown>) => {
-    for (const s of (fields.services as { notify?: { gateway?: string } }[] | undefined) ?? []) if (s.notify && s.notify.gateway === "") delete s.notify.gateway;
+    const silent = new Set<string>();
+    for (const s of (fields.services as { id: string; notify?: { gateway?: string } }[] | undefined) ?? []) if (s.notify && s.notify.gateway === "") { delete s.notify.gateway; silent.add(s.id); }
+    // a signal's gateway left empty: counted on the device only; a relay's signal whose notify has no gateway: none
+    type Sig = { via?: string; from?: { service?: string; feed?: string } };
+    const signals = ((fields.signals as Sig[] | undefined) ?? []).filter((x) => !(x.from?.service && !x.from.feed && silent.has(x.from.service)));
+    for (const x of signals) if (x.via === "") delete x.via;
+    if (fields.signals !== undefined) { if (signals.length) fields.signals = signals; else delete fields.signals; }
     return fields;
   };
   return { path: fill(meta.path), extension: meta.extension, tags: meta.tags, fields: dropEmpty(JSON.parse(fill(JSON.stringify(meta.fields)))), body: readFileSync(file, "utf8") };

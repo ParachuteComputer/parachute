@@ -54,7 +54,8 @@ const hub = (s: Subject) => s.hub;
  *  whatever it calls the vault. */
 export function asksHash(subject: Subject, notePath: string, fields: Record<string, unknown>, resolved: { opens?: unknown; from?: readonly string[] } = {}): Promise<string> {
   const pick = (k: string) => (fields[k] === undefined ? null : fields[k]);
-  return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds"),
+  // signals only when declared: an approval made before them holds
+  return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds"), signals: fields.signals,
     resolved: { opens: resolved.opens ?? null, from: resolved.from ? [...resolved.from].sort() : [] } }));
 }
 

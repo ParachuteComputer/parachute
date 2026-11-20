@@ -22,6 +22,7 @@ import org.json.JSONArray
 @InvokeArg
 class ConfigureArgs {
   lateinit var entries: String
+  var signals: String? = null
 }
 
 @TauriPlugin
@@ -39,7 +40,7 @@ class NotifyPlugin(private val activity: Activity) : Plugin(activity) {
     try {
       val args = invoke.parseArgs(ConfigureArgs::class.java)
       val n = JSONArray(args.entries).length()
-      if (!NotifyService.save(activity, args.entries)) {
+      if (!NotifyService.save(activity, args.entries) || !NotifyService.saveSignals(activity, args.signals ?: "[]")) {
         invoke.reject("could not keep the list")
         return
       }

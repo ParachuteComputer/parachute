@@ -6,6 +6,7 @@
 // tagging, its own components) are left to the details; the small everyday asks are one "Also" line. Pure.
 import type { Grant } from "./grant";
 import { grantLines } from "./grant";
+import { signalLines } from "./signals";
 import { NAMED_KINDS, hostWords, npubOf, roomsWords, type LineOptions } from "./services";
 import type { Imported } from "./resolveImports";
 import { importLines } from "./resolveImports";
@@ -25,7 +26,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
   const who = (hex: string) => opts.approverName?.(hex) ?? `a key you haven't trusted on this device (${npubOf(hex)})`;
 
   // notes: as the details say them (they are short already), each its own line
-  for (const l of grantLines({ ...g, opens: [], app: [], services: [], reach: [], embedsFrom: [] }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
+  for (const l of grantLines({ ...g, opens: [], app: [], services: [], reach: [], embedsFrom: [], signals: [] }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
   for (const o of g.opens) also.push(`opens ${o.type} notes you tap`);
 
   // with one server, its approval and notification lines say "there"; with several, each names its own
@@ -54,7 +55,9 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
   // notes and applets (open) ride on the web addresses' line when there is one, so a card that has both is no longer for it
   if (g.app.includes("links")) lines.push({ lead: g.app.includes("open") ? "Opens web addresses, notes and applets" : "Opens web addresses", rest: ": what it reads could leave that way.", risky: true });
   if (g.app.includes("recent")) lines.push({ lead: "Sees the titles of the newest notes", rest: " in every vault on this device.", risky: true });
-  for (const l of grantLines({ ...g, allow: [], opens: [], app: [], services: [], reach: [] }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
+  for (const l of grantLines({ ...g, allow: [], opens: [], app: [], services: [], reach: [], signals: [] }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
+  // its signals (signals.ts), as the details say them
+  for (const l of signalLines(g.signals ?? [])) lines.push({ lead: l.text, rest: "", risky: l.stress });
   for (const l of importLines(imports)) if (l.stress) lines.push({ lead: l.text, rest: "", risky: true });
 
   if (g.reach?.includes("voice")) also.push("the microphone when you press record");
