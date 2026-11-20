@@ -11,8 +11,8 @@
 // where you had read to, for this relay and key) and then reads the relay again, its queries side by side, and puts what
 // it read in place of the snapshot: a room you left, or a message deleted meanwhile, goes.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { onLaunch, ready, services, storage } from "parachute";
-import Room, { ago, chunk, createStore, glyph, lastText, nameOf, now, openAsks, rootOf, tag, tags, textOf, useStore, visible, withoutFences, type Ev, type RoomMeta, type Store } from "component:room";
+import { Button, Empty, List, Loading, onLaunch, Page, Problem, ready, Search, services, storage, when } from "parachute";
+import Room, { chunk, createStore, glyph, lastText, nameOf, now, openAsks, rootOf, tag, tags, textOf, useStore, visible, withoutFences, type Ev, type RoomMeta, type Store } from "component:room";
 
 type View = { at: "list" } | { at: "room"; id: string; event?: string };
 
@@ -85,33 +85,21 @@ async function loadRead(relay: any): Promise<Record<string, number>> {
 }
 
 const CSS = `
-:root { color-scheme: light dark; }
-body { margin: 0; background: var(--bg); color: var(--text); font: var(--size, 16px)/var(--leading, 1.5) var(--sans); }
-main { max-width: 760px; margin: 0 auto; padding: 14px var(--pad, 16px) 40px; }
-main.in-room { max-width: none; padding: 0; }
-h1 { font: 400 calc(var(--size, 16px) * 2)/1.1 var(--serif); margin: 6px 0 14px; }
-button { font: inherit; color: inherit; }
+.pa-page.in-room { max-width: none; padding: 0; }
 .quiet { color: var(--muted); }
-.status { color: var(--muted); font-style: italic; font-family: var(--serif); margin: 8px 0; }
-.rows { list-style: none; margin: 0; padding: 0; }
-.row { display: grid; grid-template-columns: 2.2em 1fr auto; gap: 2px 10px; align-items: baseline; padding: 12px 4px; border-bottom: 1px solid var(--line); cursor: pointer; background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; text-align: left; }
-.row .g { grid-row: span 2; font-size: 1.3em; color: var(--muted); text-align: center; }
-.row .n { font-family: var(--serif); font-size: 1.15em; }
-.row.unread .n { font-weight: 700; }
-.row .t { color: var(--muted); font-size: .85em; }
-.row .last { grid-column: 2 / 4; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pill { margin-left: 8px; font: 600 .78em var(--sans); border: 1.5px solid var(--text); border-radius: 999px; padding: 0 7px; }
-.pill.at { background: var(--text); color: var(--bg); }
-.wants { grid-column: 2 / 4; font-size: .88em; }
-.thread-link { border: 0; background: none; padding: 2px 0; color: var(--muted); cursor: pointer; font-size: .88em; text-decoration: underline; }
-.search { width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: inherit; font: inherit; margin-bottom: 8px; }
+.note { color: var(--muted); font-style: italic; font-family: var(--serif); margin: 8px 0; }
+.rooms .pa-row-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rooms .pa-badge:has(.at) { background: var(--text); color: var(--bg); }
 `;
+
+type Status = { k: "" | "reading" | "empty" } | { k: "problem" | "note"; t: string; e?: unknown };
 
 export default function Rooms() {
   const st = useMemo(createStore, []);
   const s = useStore(st);
   const relay = useMemo(() => services.relay("rooms"), []);
-  const [status, setStatus] = useState("Reading your rooms…");
+  // where the list stands: being read, a problem, a word about what shows, nothing yet, or nothing to say
+  const [status, setStatus] = useState<Status>({ k: "reading" });
   const [view, setView] = useState<View>({ at: "list" });
   // where the list was scrolled to, and where each room was left (distance from its foot; null: at the foot)
   const listY = useRef(0);
@@ -160,7 +148,7 @@ export default function Rooms() {
     // the relay away: its queries then answer empty or short (a timeout, a dropped connection), so a read made while it
     // is away replaces nothing; the list read goes again when it is back
     let down = false, synced = false, syncing = false, again = false;
-    const away = (why: string) => setStatus(`The relay is away (${why}). Trying again…`);
+    const away = (why: string) => setStatus({ k: "problem", t: `The relay is away (${why}). Trying again…` });
     const forget = () => { s.rooms.clear(); s.msgs.clear(); s.names.clear(); s.read = {}; st.bump(); };
     const sync = async () => {
       if (!on) return;
@@ -179,7 +167,7 @@ export default function Rooms() {
         // no rooms at all, over a list it painted: more likely a read cut short than every room left at once (so the
         // rare person who did leave every room keeps seeing the old list, with no live updates, until they are in a room
         // again)
-        if (painted && !synced && !ids.length) { setStatus("This is what you last saw: the relay didn't list your rooms just now."); return; }
+        if (painted && !synced && !ids.length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't list your rooms just now." }); return; }
         // what comes after starts now: anything posted while the history below is read still arrives
         const since = now() - 5;
         // side by side, but at most a few calls at a time: the shell holds 8 of an applet's calls waiting at once
@@ -190,7 +178,7 @@ export default function Rooms() {
         ]);
         if (!on || down) return;
         // rooms listed but none of them described: a read cut short, not every room gone (what is painted stays)
-        if (painted && !synced && ids.length && !(metas as Ev[]).length) { setStatus("This is what you last saw: the relay didn't describe your rooms just now."); return; }
+        if (painted && !synced && ids.length && !(metas as Ev[]).length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't describe your rooms just now." }); return; }
         // what was read now takes the snapshot's place: rooms left and messages gone since go with it
         s.rooms.clear();
         for (const m of metas as Ev[]) {
@@ -203,7 +191,7 @@ export default function Rooms() {
         synced = true;
         st.bump();
         const rooms = [...s.rooms.keys()];
-        setStatus(rooms.length ? "" : "No rooms yet. When someone writes to you, the room shows here.");
+        setStatus(rooms.length ? { k: "" } : { k: "empty" });
         await names([...new Set([...s.msgs.values()].flatMap((m) => [...m.values()].map((e) => e.pubkey)))]);
         if (!on) return;
         // the first read, with its names, is kept at once: a Rooms closed a moment later still opens painted
@@ -213,7 +201,7 @@ export default function Rooms() {
         // to a subscription for one room)
         const onEvents = (evs: Ev[]) => { evs.forEach(st.add); st.bump(); keepSoon(); void names(evs.map((e) => e.pubkey)); };
         stop = relay.subscribeMany(rooms.slice(0, 90).map((id) => [{ kinds: [9, 5, 40003, 9005], "#h": [id], since }]), onEvents);
-      } catch (e: any) { if (on) setStatus(`Couldn't read your rooms: ${e?.message ?? e}`); } finally {
+      } catch (e: any) { if (on) setStatus({ k: "problem", t: "Couldn't read your rooms", e }); } finally {
         syncing = false;
         if (again && !synced && !down) { again = false; void sync(); }
       }
@@ -222,7 +210,7 @@ export default function Rooms() {
       if (x.sub) return;
       if (x.status === "closed") { down = true; away(x.why ?? "closed"); }
       // ready: a read that never completed goes again (it says why the list may be old until then)
-      if (x.status === "ready") { down = false; if (mine && !synced) void sync(); else setStatus(""); }
+      if (x.status === "ready") { down = false; if (mine && !synced) void sync(); else setStatus({ k: "" }); }
     });
     (async () => {
       const ctx: any = await ready();
@@ -230,11 +218,11 @@ export default function Rooms() {
       // the list as it was last shown, at once (a snapshot it can't read is dropped)
       try { painted = paint(st, await storage.get(SNAP).catch(() => null), url); }
       catch { painted = null; forget(); storage.set(SNAP, null).catch(() => {}); }
-      if (painted && on) { s.me = painted; st.bump(); if (!down) setStatus(""); }
+      if (painted && on) { s.me = painted; st.bump(); if (!down) setStatus({ k: "" }); }
       // then whose key this is: another key's list goes at once
       try { s.me = (await services.me()).pubkey; mine = true; }
-      catch (e: any) { if (painted) forget(); if (on) setStatus(`Couldn't read your rooms: ${e?.message ?? e}`); return; }
-      if (painted && painted !== s.me) { painted = null; forget(); setStatus("Reading your rooms…"); }
+      catch (e: any) { if (painted) forget(); if (on) setStatus({ k: "problem", t: "Couldn't read your rooms", e }); return; }
+      if (painted && painted !== s.me) { painted = null; forget(); setStatus({ k: "reading" }); }
       await sync();
     })();
     return () => { on = false; stop?.(); off(); const k = keep.current; if (k?.timer) { clearTimeout(k.timer); k.timer = null; } };
@@ -242,7 +230,7 @@ export default function Rooms() {
 
   // opening a room: drawn at once from what the list holds, and where you left it (each room's place, and the list's)
   const open = (id: string, event?: string) => { listY.current = window.scrollY; setView({ at: "room", id, ...(event ? { event } : {}) }); };
-  if (view.at === "list") return <main><style>{CSS}</style><RoomList st={st} status={status} open={open} y={listY.current} /></main>;
+  if (view.at === "list") return <Page title="Rooms" className="rooms"><style>{CSS}</style><RoomList st={st} status={status} open={open} y={listY.current} /></Page>;
   const id = view.id;
   // only messages as the relay sent them (signed, unchanged): a card in one is checked by its signature; the snapshot's
   // shortened copies (no signature) wait for the room's own read; edits go along as their own events
@@ -250,10 +238,10 @@ export default function Rooms() {
   const heldIds = new Set(held.map((e) => e.id));
   const seed = { msgs: [...held, ...[...s.edits.entries()].filter(([t]) => heldIds.has(t)).map(([, ed]) => ed)], names: s.names, me: s.me };
   const place = { get: () => places.current.get(id) ?? null, set: (d: number | null) => { places.current.set(id, d); } };
-  return <main className="in-room"><style>{CSS}</style>
+  return <Page className="in-room"><style>{CSS}</style>
     <Room key={id + (view.event ?? "")} service="rooms" room={id} name={s.rooms.get(id)?.name} at={view.event} readAt={s.read[id] ?? 0} seed={seed} place={place}
       onRead={(latest: number) => markRead(id, latest)} onBack={() => setView({ at: "list" })} />
-  </main>;
+  </Page>;
 }
 
 function unreadOf(s: Store["s"], room: string) {
@@ -262,7 +250,7 @@ function unreadOf(s: Store["s"], room: string) {
   return { n: r ? list.length : 0, mention: r ? list.some((e) => tags(e, "p").includes(s.me)) : false };
 }
 
-function RoomList({ st, status, open, y }: { st: Store; status: string; open: (id: string, event?: string) => void; y: number }) {
+function RoomList({ st, status, open, y }: { st: Store; status: Status; open: (id: string, event?: string) => void; y: number }) {
   const s = st.s;
   // back from a room: the list where you left it
   useLayoutEffect(() => { if (y) window.scrollTo(0, y); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -274,30 +262,28 @@ function RoomList({ st, status, open, y }: { st: Store; status: string; open: (i
     return { room, last, at: last?.created_at ?? 0, ...unreadOf(s, room.id), asks: openAsks(s, room.id) };
   }).sort((a, b) => b.at - a.at || a.room.name.localeCompare(b.room.name));
   // across every room, by the relay's own search (NIP-50); a hit opens its room at that message
-  const search = async () => {
-    if (!q.trim()) { setFound(null); return; }
+  const search = async (term: string) => {
+    if (!term) { setFound(null); return; }
     const ids = [...s.rooms.keys()];
     const relay = services.relay("rooms");
     // a call for each hundred rooms, as the list's read
-    const out = (await pooled(chunk(ids, 100), 3, (c) => relay.query([{ kinds: [9], "#h": c, search: q.trim(), limit: 30 }]).catch(() => []))).flat();
+    const out = (await pooled(chunk(ids, 100), 3, (c) => relay.query([{ kinds: [9], "#h": c, search: term, limit: 30 }]).catch(() => []))).flat();
     setFound((out as Ev[]).sort((a, b) => b.created_at - a.created_at));
   };
+  const roomOf = (e: Ev) => s.rooms.get(tag(e, "h")!);
   return <>
-    <h1>Rooms</h1>
-    <input className="search" type="search" placeholder="Search your rooms" aria-label="Search your rooms" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void search(); }} />
-    {found && <section aria-label="Found"><p className="quiet">{found.length ? `${found.length} found` : "Nothing found."} <button className="thread-link" onClick={() => { setFound(null); setQ(""); }}>Clear</button></p>
-      <ul className="rows">{found.map((e) => <li key={e.id}><button className="row" onClick={() => open(tag(e, "h")!, e.id)}><span className="g">{glyph(s.rooms.get(tag(e, "h")!)?.name ?? "")}</span><span className="n">{s.rooms.get(tag(e, "h")!)?.name ?? "a room"}</span><span className="t">{ago(e.created_at)}</span><span className="last">{nameOf(s, e.pubkey)}: {withoutFences(textOf(s, e)).slice(0, 160)}</span></button></li>)}</ul></section>}
-    {status && <p className="status" role="status">{status}</p>}
-    <ul className="rows" aria-label="Your rooms">
-      {rows.map(({ room, last, at, n, mention, asks }) => <li key={room.id}>
-        <button className={`row${n ? " unread" : ""}`} onClick={() => open(room.id)} data-room={room.id}>
-          <span className="g" aria-hidden="true">{glyph(room.name)}</span>
-          <span className="n">{room.name}{n > 0 && <span className={`pill${mention ? " at" : ""}`} aria-label={`${n} new${mention ? ", mentions you" : ""}`}>{mention ? "@ " : ""}{n > 99 ? "99+" : n}</span>}</span>
-          <span className="t">{at ? ago(at) : ""}</span>
-          <span className="last">{last ? <><b>{last.pubkey === s.me ? "You" : nameOf(s, last.pubkey)}:</b> {lastText(s, last)}</> : room.about}</span>
-          {asks > 0 && <span className="wants">◆ {asks === 1 ? "Something wants you" : `${asks} things want you`}</span>}
-        </button>
-      </li>)}
-    </ul>
+    <Search label="Search your rooms" value={q} onChange={setQ} onSearch={(t) => void search(t)} />
+    {found && <section aria-label="Found"><p className="quiet">{found.length ? `${found.length} found` : "Nothing found."} <Button kind="quiet" small onClick={() => { setFound(null); setQ(""); }}>Clear</Button></p>
+      <List rows={found.map((e) => ({ key: e.id, glyph: glyph(roomOf(e)?.name ?? ""), title: roomOf(e)?.name ?? "a room", aside: when.ago(e.created_at), meta: lastText(s, e), onPress: () => open(tag(e, "h")!, e.id) }))} />
+    </section>}
+    {status.k === "reading" ? <Loading>Reading your rooms…</Loading> : status.k === "problem" ? <Problem error={status.e}>{status.t}</Problem>
+      : status.k === "note" ? <p className="note">{status.t}</p> : status.k === "empty" ? <Empty>No rooms yet. When someone writes to you, the room shows here.</Empty> : null}
+    <List label="Your rooms" hideLabel rows={rows.map(({ room, last, at, n, mention, asks }) => ({
+      key: room.id, data: { room: room.id }, glyph: glyph(room.name), title: room.name, strong: n > 0, onPress: () => open(room.id),
+      badge: n > 0 ? <span className={mention ? "at" : undefined} aria-label={`${n} new${mention ? ", mentions you" : ""}`}>{mention ? "@ " : ""}{n > 99 ? "99+" : n}</span> : undefined,
+      aside: at ? when.ago(at) : "",
+      meta: last ? <><b>{last.pubkey === s.me ? "You" : nameOf(s, last.pubkey)}:</b> {lastText(s, last)}</> : room.about,
+      under: asks > 0 ? `◆ ${asks === 1 ? "Something wants you" : `${asks} things want you`}` : undefined,
+    }))} />
   </>;
 }

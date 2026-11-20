@@ -72,7 +72,7 @@ test("rooms on a real relay: a voice note, a link, a saved file, an attached fil
     await expect(card).toContainText("Keep up to 256 KB on this device for itself (drafts, what it last showed)");
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
-    const list = app.getByRole("list", { name: "Your rooms" });
+    const list = app.getByRole("region", { name: "Your rooms" });
     await list.getByRole("button", { name: new RegExp(`Shed ${stamp}`) }).click({ timeout: 30_000 });
     const log = app.getByRole("log");
 
@@ -88,7 +88,7 @@ test("rooms on a real relay: a voice note, a link, a saved file, an attached fil
     const dl = await download;
     expect(dl.suggestedFilename()).toBe("seeds.pdf");
     expect(readFileSync(await dl.path()).toString()).toContain(`seed list ${stamp}`);
-    await expect(log.getByRole("status").filter({ hasText: "Saved to Downloads as seeds.pdf" })).toBeVisible();
+    await expect(app.getByRole("status").filter({ hasText: "Saved to Downloads as seeds.pdf" })).toBeVisible();
 
     // a picture attached through the shell's own picker, then sent
     await app.getByRole("button", { name: "Choose files to attach" }).click();
@@ -129,7 +129,7 @@ test("rooms on a real relay: a voice note, a link, a saved file, an attached fil
     await page.waitForTimeout(900); // kept half a second after the last key
     await page.goto(`/v/${VAULT}`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
-    await frame(page).getByRole("list", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Shed ${stamp}`) }).click({ timeout: 30_000 });
+    await frame(page).getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Shed ${stamp}`) }).click({ timeout: 30_000 });
     await expect(frame(page).getByLabel(`Message Shed ${stamp}`)).toHaveValue(`half a thought ${stamp}`);
     const kept = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("parachute.applet-storage.v1:")));
     expect(kept).toHaveLength(1);

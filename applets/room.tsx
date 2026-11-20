@@ -16,16 +16,10 @@
 //   place    optional: where it was left, kept by the importer across opens: `get()` the distance from the foot it was
 //            left at (null: at the foot), `set(d)` when it goes
 // Which key is Uni's is the service's own declaration (ready().services: approvals.from, else notify.from): without
-// one there is no turn line, no Stop and no listening switch. Its named exports (the store, the cards' readers, the
-// time words) are for the importer's own list.
+// one there is no turn line, no Stop and no listening switch. Its named exports (the store, the cards' readers) are for
+// the importer's own list; times are the kit's (when), a relay's seconds as they come.
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { app, Link as KitLink, Linked as KitLinked, link as kitLink, onShown, ready, services, shown as onScreen, storage, voice } from "parachute";
-
-// An app from before note links (11-18) has no Link, Linked or link: there a message's links stay text and the room
-// still works. A record applied to a vault is newer than the app on each device until that device updates.
-const link: { find: (text: string) => unknown[]; parse: (raw: string) => { kind: string } | null } = kitLink ?? { find: () => [], parse: () => null };
-const Linked = KitLinked ?? (({ text }: { text: string }) => <>{text}</>);
-const Link = KitLink ?? (({ children }: { to: string; children: any }) => <>{children}</>);
+import { app, Button, Link, Linked, link, Loading, onShown, Problem, ready, Record, services, shown as onScreen, storage, toast, when, Write } from "parachute";
 
 /** Whether a person can be looking: the applet on screen (the app keeps it running while hidden, kit `shown`/`onShown`,
  *  imported as onScreen: `shown` below is the media cache's) and the app in front. What is new is read only then. An
@@ -212,21 +206,6 @@ export function promptOf(e: Ev): Prompt | null {
 }
 const OUTCOME = /^(✅ Command|❌ Command|⌛ Approval timed out|⚠️ Approval expired|No pending command to approve)/;
 
-// ── time words ──
-const TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const DAY = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" });
-export function ago(ts: number) {
-  const m = Math.floor((now() - ts) / 60);
-  if (m < 1) return "now"; if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60); if (h < 24) return `${h}h`; if (h < 48) return "Yesterday";
-  return new Intl.DateTimeFormat(undefined, h < 168 ? { weekday: "short" } : { month: "short", day: "numeric" }).format(new Date(ts * 1000));
-}
-function dayWord(ts: number) {
-  const d = new Date(ts * 1000), t = new Date(); const y = new Date(); y.setDate(t.getDate() - 1);
-  if (d.toDateString() === t.toDateString()) return "Today";
-  if (d.toDateString() === y.toDateString()) return "Yesterday";
-  return DAY.format(d);
-}
 const GLYPHS = ["◇", "❦", "▢", "△", "✎", "⌂"];
 export function glyph(name: string) {
   const n = name.trim().replace(/^#/, "");
@@ -278,23 +257,22 @@ const size = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n
  *  fetched, so a slow file that outlasts the tap saves at once on the next. */
 function FileRow({ m }: { m: Media }) {
   const svc = useContext(Svc);
-  const [said, setSaid] = useState("");
   const bytes = useRef<ArrayBuffer | null>(null);
   const save = async () => {
     try {
-      if (!bytes.current) { setSaid("Fetching…"); bytes.current = ((await services.media(svc, m.sha, m.ext)) as any).bytes; }
+      if (!bytes.current) { toast("Fetching…"); bytes.current = ((await services.media(svc, m.sha, m.ext)) as any).bytes; }
       const r: any = await app.save(m.name, bytes.current, m.type || "application/octet-stream");
-      setSaid(`Saved to Downloads as ${r.saved}`);
-    } catch (e: any) { setSaid(bytes.current && /tap/.test(String(e?.message)) ? "Ready: tap Save again" : `Not saved: ${e?.message ?? e}`); }
+      toast(`Saved to Downloads as ${r.saved}`);
+    } catch (e: any) { if (bytes.current && /tap/.test(String(e?.message))) toast("Ready: tap Save again"); else toast(`Not saved: ${e?.message ?? e}`, { error: true }); }
   };
-  return <div className="file">📎 {m.name}{m.size ? ` · ${size(m.size)}` : ""} <button className="thread-link" onClick={save} aria-label={`Save ${m.name}`}>Save</button>{said && <span className="quiet" role="status"> {said}</span>}</div>;
+  return <div className="file">📎 {m.name}{m.size ? ` · ${size(m.size)}` : ""} <Button kind="quiet" small onClick={save} aria-label={`Save ${m.name}`}>Save</Button></div>;
 }
 function Attachment({ m }: { m: Media }) {
   const k = kindOf(m);
   const { url, err } = useBlob(k === "file" ? null : m);
   if (k === "file") return <FileRow m={m} />;
   if (err) return <div className="file">⚠ {k === "image" ? "Image" : "File"} unavailable</div>;
-  if (!url) return <div className="file quiet">Loading {k === "image" ? "image" : k === "audio" ? "voice note" : "video"}…</div>;
+  if (!url) return <Loading>Loading {k === "image" ? "image" : k === "audio" ? "voice note" : "video"}…</Loading>;
   if (k === "image") return <img className="pic" src={url} alt={m.name} />;
   if (k === "video") return <video className="vid" src={url} controls playsInline />;
   return <audio className="aud" src={url} controls aria-label={`Voice note ${m.name}`} />;
@@ -375,71 +353,62 @@ function useClock(on: boolean) {
 
 // ── how it looks: everything under .room, so the page it sits in keeps its own look ──
 const CSS = `
-.room { display: flex; flex-direction: column; height: var(--room-h, 100dvh); min-height: 0; color: var(--text); font: var(--size, 16px)/var(--leading, 1.5) var(--sans); }
-.room button { font: inherit; color: inherit; }
+.room { display: flex; flex-direction: column; height: var(--room-h, 100dvh); min-height: 0; color: var(--text); font: var(--fs-body)/var(--leading) var(--sans); }
 .room .quiet { color: var(--muted); }
-.room .err { color: var(--danger, #a33); }
 .room .top { display: flex; align-items: center; gap: 10px; padding: 8px var(--pad, 16px); border-bottom: 1px solid var(--line); }
-.room .top h2 { flex: 1; margin: 0; font: 400 1.4em var(--serif); }
-.room .back { border: 0; background: none; font-style: italic; font-family: var(--serif); color: var(--muted); cursor: pointer; padding: 6px 0; }
+.room .top h2 { flex: 1; margin: 0; font: 400 var(--fs-head) var(--serif); }
+.room .back { padding-left: 0; font-family: var(--serif); font-style: italic; text-decoration: none; }
 .room .scroll { flex: 1; min-height: 0; overflow-y: auto; position: relative; overscroll-behavior: contain; }
 .room .page { max-width: 760px; margin: 0 auto; padding: 0 var(--pad, 16px) 12px; }
 .room .log { margin-top: 6px; }
-.room .day { text-align: center; font: italic .9em var(--serif); color: var(--muted); margin: 18px 0 6px; }
-.room .new { border-top: 1.5px solid var(--text); margin: 12px 0 4px; font: 600 .78em var(--sans); }
+.room .day { text-align: center; font: italic var(--fs-small) var(--serif); color: var(--muted); margin: 18px 0 6px; }
+.room .new { border-top: 1.5px solid var(--text); margin: 12px 0 4px; font: 600 var(--fs-label) var(--sans); }
 .room .msg { padding: 8px 0 4px; }
 .room .msg.grouped { padding-top: 0; }
 .room .msg.at { border-left: 3px double var(--text); padding-left: 10px; margin-left: -13px; }
 .room .msg .who { font-weight: 600; margin-right: 8px; }
-.room .msg .when { color: var(--muted); font-size: .8em; }
+.room .msg .when { color: var(--muted); font-size: var(--fs-label); }
 .room .msg.mine .body { background: var(--surface); border: 1px solid var(--line); border-radius: 4px 14px 14px 14px; padding: 6px 12px; display: inline-block; max-width: 100%; }
 .room .msg.me-named .body { border-left: 3px solid var(--text); padding-left: 10px; }
-.room .ping { margin: 6px 0; color: var(--muted); font: italic .9em var(--serif); }
+.room .ping { margin: 6px 0; color: var(--muted); font: italic var(--fs-small) var(--serif); }
 .room .ping summary { cursor: pointer; }
 .room .md p { margin: 2px 0; overflow-wrap: anywhere; }
-.room .md pre { background: var(--surface); border: 1px solid var(--line); padding: 8px; overflow-x: auto; font: .9em var(--mono); }
-.room .md code { font-family: var(--mono); font-size: .92em; }
+.room .md pre { background: var(--surface); border: 1px solid var(--line); padding: 8px; overflow-x: auto; font: var(--fs-small) var(--mono); }
+.room .md code { font-family: var(--mono); font-size: var(--fs-small); }
 .room .md blockquote { margin: 4px 0; padding-left: 10px; border-left: 2px solid var(--line); color: var(--muted); }
 .room .md .pa-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .room .md .mention { font-weight: 600; }
 .room .md .table { overflow-x: auto; } .room .md table { border-collapse: collapse; } .room .md td, .room .md th { border: 1px solid var(--line); padding: 2px 8px; }
-.room .edited { color: var(--muted); font-size: .8em; margin-left: 6px; }
-.room .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-.room .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 1px 9px; cursor: pointer; font-size: .88em; }
-.room .chip.quiet { color: var(--muted); }
+.room .edited { color: var(--muted); font-size: var(--fs-label); margin-left: 6px; }
+.room .acts { display: flex; gap: 4px 16px; flex-wrap: wrap; margin-top: 2px; }
+.room .file-chip { border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 1px 4px 1px 9px; font-size: var(--fs-small); }
 .room .pic { max-width: min(100%, 420px); max-height: 420px; border-radius: 6px; display: block; margin: 6px 0; }
 .room .vid { max-width: 100%; max-height: 420px; display: block; margin: 6px 0; }
 .room .aud { display: block; margin: 6px 0; width: min(100%, 360px); }
 .room .file { border: 1px solid var(--line); padding: 6px 10px; border-radius: 6px; margin: 6px 0; display: inline-block; }
 .room .card { border: 1.5px solid var(--text); border-radius: var(--radius, 10px); padding: 10px 14px; margin: 6px 0; background: var(--surface); }
-.room .card .head { font: 600 .8em var(--sans); letter-spacing: .02em; text-transform: uppercase; }
-.room .card .what { font: 1.1em/1.35 var(--serif); margin: 4px 0; }
+.room .card .head { font: 600 var(--fs-label) var(--sans); letter-spacing: .02em; text-transform: uppercase; }
+.room .card .what { font: var(--fs-lead)/1.35 var(--serif); margin: 4px 0; }
 .room .card .why { color: var(--muted); }
 .room .card .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.room .card .btns button { border: 1.5px solid var(--text); background: var(--bg); border-radius: 999px; padding: 4px 14px; cursor: pointer; }
-.room .card .btns button.primary { background: var(--text); color: var(--bg); }
 .room .card.ended { border-style: dashed; border-width: 1px; color: var(--muted); }
-.room .card pre { white-space: pre-wrap; font: .9em var(--mono); margin: 6px 0; }
-.room .thread-link { border: 0; background: none; padding: 2px 0; color: var(--muted); cursor: pointer; font-size: .88em; text-decoration: underline; }
+.room .card pre { white-space: pre-wrap; font: var(--fs-small) var(--mono); margin: 6px 0; }
 .room .root { border-left: 3px solid var(--text); padding-left: 10px; margin-bottom: 8px; }
-.room .older { display: block; margin: 8px auto; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 14px; cursor: pointer; }
+.room .older { display: flex; justify-content: center; margin: 8px 0; }
 .room .quick { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
-.room .quick button { border: 1px solid var(--text); background: none; border-radius: 999px; padding: 2px 14px; cursor: pointer; font-family: var(--serif); }
-.room .turn { display: flex; gap: 10px; align-items: baseline; margin: 10px 0 2px; font: italic .95em var(--serif); color: var(--muted); }
+.room .turn { display: flex; gap: 10px; align-items: baseline; margin: 10px 0 2px; font: italic var(--fs-small) var(--serif); color: var(--muted); }
 .room .turn time { font-style: normal; font-variant-numeric: tabular-nums; }
-.room .turn button { margin-left: auto; border: 1.5px solid var(--text); background: none; color: var(--text); border-radius: 999px; padding: 1px 12px; font: .85em var(--sans); cursor: pointer; }
-.room .typing { color: var(--muted); font: italic .9em var(--serif); min-height: 1.4em; }
+.room .turn .pa-button { margin-left: auto; font-style: normal; }
+.room .typing { color: var(--muted); font: italic var(--fs-small) var(--serif); min-height: 1.4em; }
 .room .composer { background: var(--bg); border-top: 1px solid var(--line); }
-.room .composer .in { max-width: 760px; margin: 0 auto; padding: 8px var(--pad, 16px) 12px; display: grid; grid-template-columns: auto auto 1fr auto; gap: 8px; align-items: end; box-sizing: border-box; }
-.room .composer textarea { resize: none; min-height: 2.4em; max-height: 9em; padding: 8px 10px; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
-.room .composer .send { border: 0; background: var(--text); color: var(--bg); border-radius: 999px; padding: 8px 16px; cursor: pointer; }
-.room .composer .attach { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; width: 2.4em; height: 2.4em; cursor: pointer; }
-.room .composer .note { grid-column: 1 / -1; font-size: .85em; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.room .composer .listen { order: 10; margin-left: auto; border: 1px solid var(--line); background: none; border-radius: 999px; padding: 0 10px; cursor: pointer; font-size: .95em; color: var(--muted); }
+.room .composer .in { max-width: 760px; margin: 0 auto; padding: 8px var(--pad) 12px; box-sizing: border-box; }
+.room .composer .attach, .room .composer .pa-record { width: 2.4em; height: 2.4em; padding: 0; }
+.room .composer .note { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: var(--fs-small); color: var(--muted); }
+.room .composer .listen { order: 10; margin-left: auto; color: var(--muted); }
 .room .composer .listen[aria-pressed="true"] { border-color: var(--text); color: var(--text); }
-.room .pick { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); background: var(--surface); grid-column: 1 / -1; }
-.room .pick li button { width: 100%; text-align: left; background: none; border: 0; padding: 6px 10px; cursor: pointer; }
-.room .pick li[aria-selected="true"] button { background: var(--line); }
+.room .pick { list-style: none; margin: 0 0 6px; padding: 0; border: 1px solid var(--line); background: var(--surface); }
+.room .pick li .pa-button { display: block; width: 100%; text-align: left; padding: 6px 10px; color: var(--text); text-decoration: none; border-radius: 0; }
+.room .pick li[aria-selected="true"] .pa-button { background: var(--line); }
 @media (prefers-reduced-motion: no-preference) { .room .msg.fresh { animation: in .4s cubic-bezier(.22,.8,.2,1); } @keyframes in { from { opacity: 0; transform: translateY(4px); } } }
 `;
 
@@ -485,7 +454,9 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   // the room's own read has landed (a room drawn from the list's messages is placed again then, below)
   const [read, setRead] = useState(false);
   const [older, setOlder] = useState<"more" | "loading" | "start">("more");
-  const [err, setErr] = useState("");
+  // what couldn't be read is said in the room; what couldn't be sent, as a toast
+  const [readErr, setReadErr] = useState<unknown>(null);
+  const setErr = (t: string) => { if (t) toast(t, { error: true }); };
   const [posting, setPosting] = useState(false);
   const firstUnread = useRef<number>(readAt ?? 0);
   const scroller = useRef<HTMLDivElement>(null);
@@ -556,7 +527,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
         // new posts, edits, deletions, reactions and typing (one room a subscription, as a Buzz relay sends them)
         stop = relay.subscribe([{ kinds: [9, 5, 7, 40003, 9005], "#h": [room], since }, { kinds: [20002], "#h": [room], since }],
           (evs: Ev[]) => { evs.forEach(st.add); st.bump(); void names(evs.map((e) => e.pubkey)); });
-      } catch (e: any) { if (on) setErr(`Couldn't read the room: ${e?.message ?? e}`); }
+      } catch (e: any) { if (on) setReadErr(e); }
     })();
     const sweep = setInterval(() => { let changed = false; const m = s.typing.get(room); for (const [k, t] of m ?? []) if (Date.now() - t > 8000) { m!.delete(k); changed = true; } if (changed) st.bump(); }, 1000);
     return () => { on = false; stop?.(); clearInterval(sweep); };
@@ -675,13 +646,14 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     <style>{CSS}</style>
     {/* without a list to go back to, the page it sits on names the room */}
     {(thread || onBack) && <div className="top">
-      <button className="back" onClick={() => (thread ? setThread(null) : onBack?.())}>{thread ? `← ${title}` : "← Rooms"}</button>
+      <Button kind="quiet" className="back" onClick={() => (thread ? setThread(null) : onBack?.())}>{thread ? `← ${title}` : "← Rooms"}</Button>
       <h2>{thread ? "Thread" : title}</h2>
     </div>}
     <div className="scroll" ref={scroller} onScroll={(e) => { const x = e.currentTarget, d = x.scrollHeight - x.scrollTop - x.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }}
       onWheel={() => { touched.current = true; }} onTouchStart={() => { touched.current = true; }} onPointerDown={() => { touched.current = true; }} onKeyDown={() => { touched.current = true; }}>
       <div className="page">
-        {!thread && (older === "start" ? <p className="day">Start of {title}</p> : <button className="older" onClick={loadOlder} disabled={older === "loading"}>{older === "loading" ? "Loading older messages…" : "Load older messages"}</button>)}
+        {readErr ? <Problem error={readErr}>Couldn't read the room</Problem> : null}
+        {!thread && (older === "start" ? <p className="day">Start of {title}</p> : <div className="older"><Button small busy={older === "loading"} onClick={loadOlder}>Load older messages</Button></div>)}
         <div className="log" role="log" aria-label={`Messages in ${name || "the room"}`}>
           {shown.map((e, i) => {
             const text = textOf(s, e);
@@ -692,11 +664,11 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
               if (next && next.pubkey === e.pubkey && isPing(textOf(s, next))) return null;
               if (since !== null && e === last) return null; // the turn's line below says it
               return staleStatus(e.created_at, s.edits.get(e.id)?.pubkey === e.pubkey, t, i === shown.length - 1)
-                ? <details className="ping" key={e.id} data-id={e.id}><summary>Earlier progress update · {TIME.format(new Date(e.created_at * 1000))}</summary>{text}</details>
+                ? <details className="ping" key={e.id} data-id={e.id}><summary>Earlier progress update · {when.time(e.created_at)}</summary>{text}</details>
                 : <p className="ping" key={e.id} data-id={e.id} title={text}>{text.replace(/^\s*⏳\s*/, "")}</p>;
             }
-            if (e.pubkey === s.me && text.trim().toLowerCase() === STOP) return <p className="ping" key={e.id} data-id={e.id}>You stopped Uni · {TIME.format(new Date(e.created_at * 1000))}</p>;
-            const day = dayWord(e.created_at);
+            if (e.pubkey === s.me && text.trim().toLowerCase() === STOP) return <p className="ping" key={e.id} data-id={e.id}>You stopped Uni · {when.time(e.created_at)}</p>;
+            const day = when.day(e.created_at);
             const sep = day !== lastDay ? <p className="day" key={`d${e.id}`}>{day}</p> : null;
             const grouped = !sep && prev && prev.pubkey === e.pubkey && e.created_at - prev.created_at < 300 && !thread;
             lastDay = day; prev = e;
@@ -708,12 +680,12 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
         </div>
         {since !== null && <div className="turn" role="status" aria-label="Uni is working">
           <span>{statusWords(since, t, livePing)}</span><time>{shortElapsed(t - since)}</time>
-          <button onClick={() => void postAs(STOP)} disabled={posting}>Stop Uni</button>
+          <Button small onClick={() => void postAs(STOP)} disabled={posting}>Stop Uni</Button>
         </div>}
-        {chips && <div className="quick" role="group" aria-label="Quick replies">{chips.map((a) => <button key={a} onClick={() => void postAs(a)} disabled={posting}>{a}</button>)}</div>}
+        {chips && <div className="quick" role="group" aria-label="Quick replies">{chips.map((a) => <Button key={a} small onClick={() => void postAs(a)} disabled={posting}>{a}</Button>)}</div>}
       </div>
     </div>
-    <Composer key={`${room}|${thread ?? ""}`} st={st} relay={relay} room={room} thread={thread} members={authors} send={send} typing={typing} err={err} setErr={setErr} name={name || "the room"}
+    <Composer key={`${room}|${thread ?? ""}`} st={st} relay={relay} room={room} thread={thread} members={authors} send={send} typing={typing} setErr={setErr} name={name || "the room"}
       listen={uniHere ? { on: listening, toggle: toggleUni } : null} />
   </section></Svc.Provider>;
 }
@@ -730,11 +702,12 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
   const body = withoutFences(text).replace(/^!?\[[^\]]*\]\(https?:\/\/\S+\/media\/[0-9a-f]{64}\.[a-z0-9]+\)\s*$/gm, "").trim();
   const named = tags(e, "p").includes(s.me) && !mine;
   const names = [...s.names.values()];
-  return <article className={`msg${grouped ? " grouped" : ""}${mine ? " mine" : ""}${named ? " me-named" : ""}${root ? " root" : ""}${marked ? " at" : ""}`} data-id={e.id} aria-label={`${mine ? "You" : nameOf(s, e.pubkey)}, ${TIME.format(new Date(e.created_at * 1000))}`}>
-    {!grouped && <div><span className="who">{mine ? "You" : nameOf(s, e.pubkey)}</span><span className="when">{TIME.format(new Date(e.created_at * 1000))}</span></div>}
+  return <article className={`msg${grouped ? " grouped" : ""}${mine ? " mine" : ""}${named ? " me-named" : ""}${root ? " root" : ""}${marked ? " at" : ""}`} data-id={e.id} aria-label={`${mine ? "You" : nameOf(s, e.pubkey)}, ${when.time(e.created_at)}`}>
+    {!grouped && <div><span className="who">{mine ? "You" : nameOf(s, e.pubkey)}</span><span className="when">{when.time(e.created_at)}</span></div>}
     {editing !== null ? <div className="body editing">
-      <textarea aria-label="Edit your message" value={editing} onChange={(x) => setEditing(x.target.value)} rows={3} style={{ width: "100%", font: "inherit" }} />
-      <div className="acts"><button className="chip" onClick={async () => { if (editing.trim() && await change(e, editing)) setEditing(null); }}>Save</button><button className="chip quiet" onClick={() => setEditing(null)}>Cancel</button></div>
+      <Write label="Edit your message" value={editing} onChange={setEditing} send="Save" onSend={async () => { if (editing.trim() && await change(e, editing)) setEditing(null); }}>
+        <Button kind="quiet" small onClick={() => setEditing(null)}>Cancel</Button>
+      </Write>
     </div>
       : body && !ask && !prompt && <div className="body"><Markdown text={body} names={names} />{s.edits.get(e.id)?.pubkey === e.pubkey && <span className="edited" title="Edited by the author">(edited)</span>}</div>}
     {ask && <AskCard e={e} ask={ask} answeredBy={answeredBy} mine={mine} answer={answer} />}
@@ -743,9 +716,9 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
     {secret && <SecretCard e={e} />}
     {media.map((m) => <Attachment key={m.sha} m={m} />)}
     <div className="acts">
-      {!root && <button className="thread-link" onClick={openThread}>{replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : "Reply"}</button>}
-      {mine && !ask && editing === null && <button className="thread-link" onClick={() => setEditing(body)}>Edit</button>}
-      {mine && <button className="thread-link" onClick={async () => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } await change(e, null); }}>{sure ? "Tap again to delete" : "Delete"}</button>}
+      {!root && <Button kind="quiet" small onClick={openThread}>{replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : "Reply"}</Button>}
+      {mine && !ask && editing === null && <Button kind="quiet" small onClick={() => setEditing(body)}>Edit</Button>}
+      {mine && <Button kind="quiet" small onClick={async () => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } await change(e, null); }}>{sure ? "Tap again to delete" : "Delete"}</Button>}
     </div>
   </article>;
 }
@@ -758,16 +731,16 @@ function AskCard({ e, ask, answeredBy, mine, answer }: { e: Ev; ask: Ask; answer
   }
   const signed = ask.kind === "approve" || ask.kind === "give";
   return <div className="card" role="group" aria-label={`Wants you: ${ask.what}`}>
-    <div className="head">◆ wants you · {KIND_WORD[ask.kind]} · until {ago(ask.until).replace(/^now$/, "soon")}</div>
+    <div className="head">◆ wants you · {KIND_WORD[ask.kind]} · until {when.short(ask.until)}</div>
     <p className="what">{ask.what}</p>
     <p className="why">{ask.why}</p>
     {ask.context && <Markdown text={ask.context} />}
     <div className="btns">
-      {ask.kind === "choose" && ask.options.map((o) => <button key={o.id} className="primary" onClick={() => answer(e, "pick", o)}>{o.label}</button>)}
-      {ask.kind === "do" && <button className="primary" onClick={() => answer(e, "did")}>I did it</button>}
+      {ask.kind === "choose" && ask.options.map((o) => <Button key={o.id} kind="primary" small onClick={() => answer(e, "pick", o)}>{o.label}</Button>)}
+      {ask.kind === "do" && <Button kind="primary" small onClick={() => answer(e, "did")}>I did it</Button>}
       {signed && <p className="quiet">This one is answered on Uni's card in this room.</p>}
-      <button onClick={() => answer(e, "seen")}>Seen</button>
-      {ask.kind !== "tell" && <button onClick={() => answer(e, "later")}>Later</button>}
+      <Button small onClick={() => answer(e, "seen")}>Seen</Button>
+      {ask.kind !== "tell" && <Button small onClick={() => answer(e, "later")}>Later</Button>}
     </div>
   </div>;
 }
@@ -786,7 +759,7 @@ function HoldButton({ label, onDone }: { label: string; onDone: () => void }) {
   const start = () => { set("holding"); t.current = setTimeout(() => set("ready"), 1000); };
   const stop = (fire: boolean) => { if (t.current) clearTimeout(t.current); t.current = null; const was = now.current; set("no"); if (fire && was === "ready") onDone(); };
   // a finger held still on a phone is the browser's long-press: no scrolling, selecting or callout here, so it is ours
-  return <button className="primary" style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" } as React.CSSProperties}
+  return <Button kind="primary" small style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" } as React.CSSProperties}
     onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); start(); }}
     // sliding off the button lets go without approving (capture keeps the events coming here, so check where it is)
     onPointerMove={(e) => { if (now.current === "no") return; const r = e.currentTarget.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) stop(false); }}
@@ -794,7 +767,7 @@ function HoldButton({ label, onDone }: { label: string; onDone: () => void }) {
     onBlur={() => stop(false)}
     onKeyDown={(e) => { if ((e.key === " " || e.key === "Enter") && now.current === "no") start(); if (e.key === "Escape") stop(false); }} onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") stop(true); }}>
     {held === "holding" ? "Keep holding…" : held === "ready" ? "Let go to approve" : label}
-  </button>;
+  </Button>;
 }
 
 /** A key trusted from one card: every other card waiting on a key reads itself again, so the room needn't be left. */
@@ -837,8 +810,8 @@ function SealedCard({ e }: { e: Ev }) {
   if (view.refused && view.trust) return <div className="card" role="group" aria-label="Uni's card">
     <p>◆ Uni's card · {view.refused}</p>
     <p className="why">Uni's key ({view.trust.slice(0, 8)}…{view.trust.slice(-4)}) is the one this applet names for approvals. Trust it once on this device, and its cards here can be answered.</p>
-    <div className="btns"><button className="primary" disabled={busy} onClick={trust}>Trust Uni's key…</button></div>
-    {err && <p className="error" role="alert">{err}</p>}
+    <div className="btns"><Button kind="primary" small busy={busy} onClick={trust}>Trust Uni's key…</Button></div>
+    {err && <Problem>{err}</Problem>}
   </div>;
   if (view.refused) return <div className="card ended" role="group" aria-label="Uni's card"><p>◇ Uni's card · {view.refused}</p></div>;
   const morning = view.kind === "morning";
@@ -851,19 +824,19 @@ function SealedCard({ e }: { e: Ev }) {
       <p>{r.credential} · {r.action} · {SPAN(r.ttl_s)}, {r.uses === 1 ? "once" : `${r.uses} uses`}</p>
       <p className="why">{r.scope}</p>
       {r.read_key && <p className="why">{r.read_key}</p>}
-      <p className="quiet">Asked {ago(r.asked)} · job {r.request_digest.slice(0, 4)} {r.request_digest.slice(4, 8)}</p>
-      {r.answer && <p className="quiet">{r.answer.decision === "approve" ? `Approved${r.answer.until ? ` · open until ${TIME.format(new Date(r.answer.until * 1000))}` : ""}` : "Denied"}{r.answer.sent ? "" : " · not sent yet"}</p>}
-      {r.answer && !r.answer.sent && <div className="btns"><button disabled={busy} onClick={() => answer(r.answer.decision, [r.rid])}>Try again</button></div>}
+      <p className="quiet">Asked {when.ago(r.asked)} · job {r.request_digest.slice(0, 4)} {r.request_digest.slice(4, 8)}</p>
+      {r.answer && <p className="quiet">{r.answer.decision === "approve" ? `Approved${r.answer.until ? ` · open until ${when.time(r.answer.until)}` : ""}` : "Denied"}{r.answer.sent ? "" : " · not sent yet"}</p>}
+      {r.answer && !r.answer.sent && <div className="btns"><Button small busy={busy} onClick={() => answer(r.answer.decision, [r.rid])}>Try again</Button></div>}
       {!r.answer && !morning && <div className="btns">
-        {r.class === "powerful" && r.always_unlock ? <HoldButton label="Hold to approve" onDone={() => answer("approve", [r.rid])} /> : <button className="primary" disabled={busy} onClick={() => answer("approve", [r.rid])}>Approve</button>}
-        <button disabled={busy} onClick={() => answer("deny", [r.rid])}>Deny</button>
+        {r.class === "powerful" && r.always_unlock ? <HoldButton label="Hold to approve" onDone={() => answer("approve", [r.rid])} /> : <Button kind="primary" small busy={busy} onClick={() => answer("approve", [r.rid])}>Approve</Button>}
+        <Button small busy={busy} onClick={() => answer("deny", [r.rid])}>Deny</Button>
       </div>}
     </div>)}
     {morning && open.length > 0 && <div className="btns">
-      <button className="primary" disabled={busy} onClick={() => answer("approve", open.map((r: any) => r.rid))}>Approve {open.length === view.rows.length ? "all" : `the ${open.length} left`}</button>
-      <button disabled={busy} onClick={() => answer("deny", open.map((r: any) => r.rid))}>Deny all</button>
+      <Button kind="primary" small busy={busy} onClick={() => answer("approve", open.map((r: any) => r.rid))}>Approve {open.length === view.rows.length ? "all" : `the ${open.length} left`}</Button>
+      <Button small busy={busy} onClick={() => answer("deny", open.map((r: any) => r.rid))}>Deny all</Button>
     </div>}
-    {err && <p className="err" role="alert">{err}</p>}
+    {err && <Problem>{err}</Problem>}
   </div>;
 }
 
@@ -880,9 +853,9 @@ function SecretCard({ e }: { e: Ev }) {
     <p className="what">{String(req.label ?? "")}</p>
     {req.purpose && <p className="why">{String(req.purpose)}</p>}
     {state === "sent" ? <p className="quiet">Sent sealed. Only Uni can open it.</p> : state === "forgot" ? <p className="quiet">You asked Uni to forget it.</p> : over ? <p className="quiet">No longer waiting.</p> :
-      <div className="btns"><button className="primary" onClick={() => go(() => services.secret(svc, e), "sent")}>Give it…</button></div>}
-    {state === "sent" && <div className="btns"><button onClick={() => go(() => services.forgetSecret(svc, e), "forgot")}>Ask Uni to forget it</button></div>}
-    {err && <p className="err" role="alert">{err}</p>}
+      <div className="btns"><Button kind="primary" small onClick={() => go(() => services.secret(svc, e), "sent")}>Give it…</Button></div>}
+    {state === "sent" && <div className="btns"><Button small onClick={() => go(() => services.forgetSecret(svc, e), "forgot")}>Ask Uni to forget it</Button></div>}
+    {err && <Problem>{err}</Problem>}
   </div>;
 }
 
@@ -894,7 +867,7 @@ function PromptCard({ p, settled, send }: { p: Prompt; settled: boolean; send: (
     <pre>{p.command}</pre>
     {p.why && <p className="why">Why it was flagged: {p.why}</p>}
     {over ? <p className="quiet">{settled ? "Answered" : "No longer waiting"}</p> : sent ? <p className="quiet">You said {sent}</p> :
-      <div className="btns"><button className="primary" onClick={async () => { if (await send("/approve")) setSent("/approve"); }}>Approve once</button><button onClick={async () => { if (await send("/deny")) setSent("/deny"); }}>Deny</button></div>}
+      <div className="btns"><Button kind="primary" small onClick={async () => { if (await send("/approve")) setSent("/approve"); }}>Approve once</Button><Button small onClick={async () => { if (await send("/deny")) setSent("/deny"); }}>Deny</Button></div>}
   </div>;
 }
 
@@ -914,7 +887,7 @@ async function plainImage(f: File): Promise<{ bytes: ArrayBuffer; type: string }
 /** What one message may hold here: the app takes a call of at most 8 KB from an applet. */
 const MAX_TEXT = 7000;
 
-function Composer({ st, relay, room, thread, members, send, typing, err, setErr, name, listen }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; send: (c: string, extra?: string[][], mentions?: string[]) => Promise<boolean>; typing: string[]; err: string; setErr: (e: string) => void; name: string; listen: { on: boolean; toggle: () => void } | null }) {
+function Composer({ st, relay, room, thread, members, send, typing, setErr, name, listen }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; send: (c: string, extra?: string[][], mentions?: string[]) => Promise<boolean>; typing: string[]; setErr: (e: string) => void; name: string; listen: { on: boolean; toggle: () => void } | null }) {
   const s = st.s;
   const svc = useContext(Svc);
   const [text, setText] = useState("");
@@ -964,7 +937,7 @@ function Composer({ st, relay, room, thread, members, send, typing, err, setErr,
   const go = async () => {
     const body = text.trim();
     if ((!body && !files.length) || busy) return;
-    setBusy(true); setErr("");
+    setBusy(true);
     const began = edits.current;
     try {
       const extra: string[][] = [];
@@ -993,12 +966,7 @@ function Composer({ st, relay, room, thread, members, send, typing, err, setErr,
   };
   // a voice note, recorded on the shell's own sheet: sent as the Uni app sends one, an empty message with an audio imeta
   // (no `duration`: Buzz takes one on video/mp4 only, and refuses the message otherwise)
-  const voiceNote = async () => {
-    if (busy) return;
-    setErr("");
-    let r: { bytes: ArrayBuffer; type: string; duration: number } | null;
-    try { r = await voice.record(); } catch (e: any) { setErr(`No voice note: ${e?.message ?? e}`); return; }
-    if (!r) return;
+  const voiceMessage = async (r: { bytes: ArrayBuffer; type: string; duration: number }) => {
     setBusy(true);
     try {
       const d: any = await services.upload(svc, r.bytes, r.type);
@@ -1009,28 +977,26 @@ function Composer({ st, relay, room, thread, members, send, typing, err, setErr,
   };
   return <div className="composer">
     <div className="in">
-      <div className="note" aria-live="polite">
+      <div className="note">
         <span className="typing">{typing.length === 1 ? `${typing[0]} is typing…` : typing.length === 2 ? `${typing[0]} and ${typing[1]} are typing…` : typing.length > 2 ? "Several people are typing…" : ""}</span>
-        {err && <span className="err" role="alert">{err}</span>}
         {text.length > MAX_TEXT - 500 && <span className="quiet">{MAX_TEXT - text.length} characters left in this message</span>}
-        {listen && <button className="listen" aria-pressed={listen.on} onClick={listen.toggle} aria-label={listen.on ? "Uni is listening. Mute Uni for your messages" : "Uni is muted. Let Uni listen again"}
-          title={listen.on ? "Uni hears what you send here. Tap to mute." : "Uni is muted: your messages don't notify Uni. Tap to let Uni listen."}>{listen.on ? "Uni listening" : "Uni muted"}</button>}
-        {files.map((f, i) => <span key={i} className="chip">{f.name} <button className="thread-link" aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((_, j) => j !== i))}>×</button></span>)}
+        {listen && <Button small className="listen" aria-pressed={listen.on} onClick={listen.toggle} aria-label={listen.on ? "Uni is listening. Mute Uni for your messages" : "Uni is muted. Let Uni listen again"}
+          title={listen.on ? "Uni hears what you send here. Tap to mute." : "Uni is muted: your messages don't notify Uni. Tap to let Uni listen."}>{listen.on ? "Uni listening" : "Uni muted"}</Button>}
+        {files.map((f, i) => <span key={i} className="file-chip">{f.name} <Button kind="quiet" small aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((_, j) => j !== i))}>×</Button></span>)}
       </div>
-      {pick && options.length > 0 && <ul className="pick" role="listbox" aria-label="People in this room">{options.map((o, i) => <li key={o.p} role="option" aria-selected={i === pick.sel}><button onMouseDown={(e) => { e.preventDefault(); choose(o); }}>{o.n}</button></li>)}</ul>}
-      <button className="attach" aria-label="Choose files to attach" onClick={attach}>＋</button>
-      <button className="attach" aria-label="Record a voice note" onClick={voiceNote} disabled={busy}>🎙</button>
-      <textarea ref={field} rows={1} aria-label={`Message ${name}`} placeholder={thread ? "Reply in thread…" : `Message ${name}…`} value={text} maxLength={MAX_TEXT}
-        onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
+      {pick && options.length > 0 && <ul className="pick" role="listbox" aria-label="People in this room">{options.map((o, i) => <li key={o.p} role="option" aria-selected={i === pick.sel}><Button kind="quiet" onMouseDown={(e) => { e.preventDefault(); choose(o); }}>{o.n}</Button></li>)}</ul>}
+      <Write line enter="send" label={`Message ${name}`} placeholder={thread ? "Reply in thread…" : `Message ${name}…`} value={text} maxLength={MAX_TEXT} inputRef={field}
+        onChange={(v) => onChange(v, field.current?.selectionStart ?? v.length)}
         onKeyDown={(e) => {
-          if (pick && options.length) {
-            if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setPick({ ...pick, sel: (pick.sel + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length }); return; }
-            if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); choose(options[pick.sel]); return; }
-            if (e.key === "Escape") { setPick(null); return; }
-          }
-          if (e.key === "Enter" && !e.shiftKey && !matchMedia("(pointer: coarse)").matches) { e.preventDefault(); void go(); }
-        }} />
-      <button className="send" onClick={go} disabled={busy} aria-label="Send message">{busy ? "Sending…" : "Send"}</button>
+          if (!pick || !options.length) return;
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setPick({ ...pick, sel: (pick.sel + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length }); return; }
+          if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); choose(options[pick.sel]); return; }
+          if (e.key === "Escape") setPick(null);
+        }}
+        onSend={go} send={busy ? "Sending…" : "Send"} sendLabel="Send message" canSend={!!text.trim() || files.length > 0} busy={busy}>
+        <Button small className="attach" aria-label="Choose files to attach" onClick={attach}>＋</Button>
+        <Record small kind="plain" label="Record a voice note" disabled={busy} onRecorded={voiceMessage}>🎙</Record>
+      </Write>
     </div>
   </div>;
 }

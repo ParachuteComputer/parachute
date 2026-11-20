@@ -22,10 +22,10 @@ const CSS = `
 .area .quiet { color: var(--muted); font-style: italic; font-family: var(--serif); }
 /* on a computer the room is the right column from the top of the screen, kept in view; the title and notes the left */
 @media (min-width: 900px) {
-  .pa-page.area { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-areas: "head talk" "note talk" "list talk";
-    grid-template-rows: auto auto 1fr; column-gap: 56px; padding-top: 0; }
+  .pa-page.area.open { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-areas: "pull pull" "head talk" "note talk" "list talk";
+    grid-template-rows: auto auto auto 1fr; column-gap: 56px; padding-top: 0; }
   .area > .pa-page-head { grid-area: head; padding-top: calc(var(--pad) * 1.4); }
-  .area > .pa-pull { grid-column: 1; }
+  .area > .pa-pull { grid-area: pull; }
   .area .cols { display: contents; }
   .area .talk { position: sticky; top: 0; align-self: start; --room-h: 100dvh; margin: 0; border: 0; border-left: 1px solid var(--line); }
 }
@@ -63,7 +63,7 @@ export default function Area() {
   // a note of the area's opens here; any other link (another note, a note link, a web address) through the kit
   const follow = (target: string) => { const r = notes?.find((x) => title(x) === target || x.path === target); if (r) setOpen(r); else void link.follow(link.parse(target) || /^(https?:|mailto:)/i.test(target) ? target : `[[${target}]]`, { from: shown?.path }); };
 
-  return <Page kicker="Area" title={place.name} wide className="area" onRefresh={() => read(place.folder)}>
+  return <Page kicker="Area" title={place.name} wide className="area open" onRefresh={() => read(place.folder)}>
     <style>{CSS}</style>
     <div className="cols">
       <section className="lede" ref={lede} aria-label={shown ? title(shown) : `About ${place.name}`}>
