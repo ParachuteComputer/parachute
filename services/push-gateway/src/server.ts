@@ -72,7 +72,7 @@ export function createGateway(cfg: Config) {
   const registry = new Registry(cfg.file);
   const burned = new Burned();
   // limits count signed requests (behind a proxy every phone has one address): per key, and one for everyone; a body
-  // is at most 8 KB and its signature one check, so unsigned junk is refused before it can spend anyone's budget
+  // is at most 16 KB and its signature one check, so unsigned junk is refused before it can spend anyone's budget
   const anyone = new Budget(600, 100);
   const perKey = new Budget(20, 3_000);
   // new keys' registrations per address (renewals and confirmed people's don't count): the pending pool turns over
@@ -136,10 +136,11 @@ export function createGateway(cfg: Config) {
       if (!registry.all(now()).some((r) => r.pubkey === signed.pubkey && !r.pending)) return answer(res, 403, { error: "register with this gateway first" });
       const s = parseSignals(x);
       if (!s.ok) return answer(res, 400, { error: s.error });
+      // all or nothing: a set that would pass the key's 64 changes none of them
+      if (!counts.fits(signed.pubkey, s.value, now())) return answer(res, 409, { error: "this key holds as many numbers as it may" });
       for (const c of s.value) {
         const moved = counts.move(signed.pubkey, c.subject, c.signal, c.count, now());
-        if (!moved) return answer(res, 409, { error: "this key holds as many numbers as it may" });
-        if (moved.before !== moved.after) tell(signed.pubkey, c);
+        if (moved && moved.before !== moved.after) tell(signed.pubkey, c);
       }
       return answer(res, 200, { ok: true, counts: counts.of(signed.pubkey, now()) });
     }
@@ -172,6 +173,6 @@ export function createGateway(cfg: Config) {
     watchers,
     pusher,
     start() { watchers.forEach((w) => w.start()); },
-    close() { watchers.forEach((w) => w.stop()); server.closeAllConnections(); server.close(); },
+    close() { watchers.forEach((w) => w.stop()); pusher.close(); counts.flush(); server.closeAllConnections(); server.close(); },
   };
 }

@@ -80,9 +80,32 @@ export type Sender = (reg: Reg, sealed: Uint8Array) => Promise<number>;
 
 export class Pusher {
   private budget = new Budget(10, 6_000);
+  // counts have their own budget, so a run of them (someone reading mail on another device) never holds back a message;
+  // one held back waits, and only the newest number for each endpoint and signal is sent when there is room
+  private signalBudget = new Budget(4, 3_000);
+  private heldCounts = new Map<string, { reg: Reg; push: SignalPush }>();
+  private retry: ReturnType<typeof setTimeout> | null = null;
   private quietUntil = new Map<string, number>();
   private opts: { allowLoopback: boolean; privateHosts?: string[]; log: Log; gone: (endpoint: string) => void };
   constructor(opts: { allowLoopback: boolean; privateHosts?: string[]; log: Log; gone: (endpoint: string) => void }) { this.opts = opts; }
+
+  /** A count held back: kept (the newest replaces an older one for the same endpoint and signal) and sent when the
+   *  budget allows. */
+  private hold(reg: Reg, push: SignalPush) {
+    this.heldCounts.set(`${reg.endpoint} ${push.subject} ${push.signal}`, { reg, push });
+    if (this.heldCounts.size > 10_000) this.heldCounts.delete(this.heldCounts.keys().next().value!);
+    if (this.retry) return;
+    this.retry = setTimeout(() => {
+      this.retry = null;
+      const held = [...this.heldCounts.values()];
+      this.heldCounts.clear();
+      for (const h of held) void this.send(h.reg, h.push);
+    }, 3_000);
+    this.retry.unref?.();
+  }
+
+  /** Stop the timer for held counts (the gateway closing). */
+  close() { if (this.retry) clearTimeout(this.retry); this.retry = null; this.heldCounts.clear(); }
 
   /** UnifiedPush: RFC 8030 to the endpoint. TTL: a phone off for a day still hears; Urgency high: worth waking for. */
   private unifiedpush: Sender = (reg, body) => post(reg.endpoint, body, { "content-encoding": "aes128gcm", "content-type": "application/octet-stream", ttl: "86400", urgency: "high" }, this.opts.allowLoopback, this.opts.privateHosts ?? []);
@@ -90,8 +113,10 @@ export class Pusher {
   /** Seal and send one push. Answers what happened, for the log and the tests. */
   async send(reg: Reg, push: Push | SignalPush, now = Date.now()): Promise<"sent" | "gone" | "limited" | "failed"> {
     const where = redact(reg.endpoint);
-    if ((this.quietUntil.get(reg.endpoint) ?? 0) > now || !this.budget.take(reg.endpoint, now)) {
+    const count = "kind" in push && push.kind === "signal";
+    if ((this.quietUntil.get(reg.endpoint) ?? 0) > now || !(count ? this.signalBudget : this.budget).take(reg.endpoint, now)) {
       this.opts.log(`push to ${where} held back (rate)`);
+      if (count) this.hold(reg, push as SignalPush);
       return "limited";
     }
     const body = encrypt(new TextEncoder().encode(JSON.stringify(push)), reg.keys);

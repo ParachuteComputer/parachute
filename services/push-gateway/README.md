@@ -50,8 +50,12 @@ applet, or all of Parachute, is closed.
   count 0 to 9999; none, to only read). Only for a key with a confirmed registration here. The answer is
   `{ok, counts: [{subject, signal, count, at}]}`: every number this key holds (64 at most; one untouched for 30 days
   goes). The app sends what it counted (a vault's new notes, an applet's own number, 0 when the person opens it).
-- **A number that changes is pushed** to each of the key's confirmed endpoints, sealed as any push:
-  `{"v":1,"kind":"signal","subject":…,"signal":…,"count":3,"to":<hex key>}`. No room, no event, no words.
+- **A number a device changes is pushed** to each of the key's confirmed endpoints, sealed as any push:
+  `{"v":1,"kind":"signal","subject":…,"signal":…,"count":3,"to":<hex key>}`. No room, no event, no words. (A number
+  a message moved isn't pushed: the message's own push went to the phone; other devices read it at their next ask.)
+  Counts have a budget of their own per endpoint (4, then one every 3 s), so a run of them never holds back a message;
+  one held back is sent when there is room, the newest number only. A set that would pass the key's 64 changes
+  nothing.
 
 ## What each party learns
 
@@ -83,9 +87,11 @@ rooms whose members agree, as with any bot (the room's member list shows its key
 | Someone moves another person's counts, or reads them | `POST signals` is signed by the key whose numbers it moves and answers only that key's. |
 | A fresh key keeps numbers here or uses the gateway to push | Only a key with a confirmed registration (a member list the relay signed shows it) keeps numbers: 64 at most, each gone after 30 days untouched; a change goes only to that key's own endpoints, under the same per-endpoint budget. |
 | A count leaks what it counts | The push and the stored number hold an opaque id, a signal id and a number; the app makes the id a hash, so the gateway can't tell which applet or vault. |
-| Flooding the HTTP side | Bodies over 8 KB refused; the signature is checked first, then 20 requests then one per 3 s per key, and a ceiling for all keys together. |
+| Flooding the HTTP side | Bodies over 16 KB refused (a registration's signals name 100 rooms at most, so any it takes fits); the signature is checked first, then 20 requests then one per 3 s per key, and a ceiling for all keys together. |
 
-Left, said plainly: after a restart the gateway reads back from shortly before it went down, so a push may go twice
+Left, said plainly: a signal push (about 200 bytes) and a message push (about 350) differ in size, so the push server
+can tell which kind arrived, and roughly how long the count is; after a restart the gateway reads back from shortly
+before it went down, so a message counted toward a signal may count twice (the phone can't tell), and a push may go twice
 (the phone shows it once: it keeps the last 200 event ids); replays of a signed request within its 60 s are refused only
 while the gateway runs (a replay after a restart repeats the same registration, harmlessly); a phone whose key changes
 can't unregister the old key's registration, which ends on its own within 30 days (its pushes still open only on that

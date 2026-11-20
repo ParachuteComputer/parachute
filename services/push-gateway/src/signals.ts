@@ -8,7 +8,7 @@
 // `{v, kind: "signal", subject, signal, count, to}`: no words, no note, no room.
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 
-export const SIGNAL_LIMITS = { perKey: 64, set: 16, max: 9999, perReg: 8, ttlS: 30 * 24 * 3600 };
+export const SIGNAL_LIMITS = { perKey: 64, set: 16, max: 9999, perReg: 8, rooms: 100, ttlS: 30 * 24 * 3600 };
 export const SUBJECT = /^[A-Za-z0-9_-]{8,64}$/;
 export const SIGNAL_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const signalOk = (s: unknown): s is string => typeof s === "string" && s.length <= 40 && SIGNAL_ID.test(s);
@@ -48,6 +48,8 @@ export function parseRegSignals(x: unknown, roomOk: (r: unknown) => boolean): Pa
     if (s.rooms !== null && (!Array.isArray(s.rooms) || !s.rooms.length || s.rooms.length > 50 || !s.rooms.every(roomOk))) return bad;
     out.push({ subject: s.subject, signal: s.signal, rooms: s.rooms === null ? null : [...new Set(s.rooms as string[])].sort() });
   }
+  // so that any registration this accepts fits the body limit (server.ts)
+  if (out.reduce((n, s) => n + (s.rooms?.length ?? 0), 0) > SIGNAL_LIMITS.rooms) return { ok: false, error: `signals name at most ${SIGNAL_LIMITS.rooms} rooms in all` };
   return { ok: true, value: out };
 }
 
@@ -59,20 +61,41 @@ export const countedIn = (signals: readonly RegSignal[] | undefined, room: strin
 export class Counts {
   private by = new Map<string, Count[]>();
   private readonly file: string | null;
-  constructor(file: string | null) {
+  private saving: ReturnType<typeof setTimeout> | null = null;
+  constructor(file: string | null, now = Math.floor(Date.now() / 1000)) {
     this.file = file;
     if (file) {
       try {
         const read = JSON.parse(readFileSync(file, "utf8"));
-        if (plain(read)) for (const [k, v] of Object.entries(read)) if (Array.isArray(v)) this.by.set(k, v as Count[]);
+        // what nobody touched in 30 days goes as it is read, for every key
+        if (plain(read)) for (const [k, v] of Object.entries(read)) if (Array.isArray(v)) { const live = (v as Count[]).filter((c) => c.at > now - SIGNAL_LIMITS.ttlS); if (live.length) this.by.set(k, live); }
       } catch { /* none yet */ }
     }
   }
 
+  /** Written a moment after the last change (a busy room moves many numbers at once), whole and renamed into place. */
   private save() {
+    if (!this.file || this.saving) return;
+    this.saving = setTimeout(() => this.flush(), 1_000);
+    this.saving.unref?.();
+  }
+
+  /** Write now (the gateway closing; tests). */
+  flush() {
+    if (this.saving) clearTimeout(this.saving);
+    this.saving = null;
     if (!this.file) return;
+    const now = Math.floor(Date.now() / 1000);
+    for (const [k, v] of this.by) { const live = v.filter((c) => c.at > now - SIGNAL_LIMITS.ttlS); if (live.length !== v.length) { if (live.length) this.by.set(k, live); else this.by.delete(k); } }
     writeFileSync(`${this.file}.tmp`, JSON.stringify(Object.fromEntries(this.by)), { mode: 0o600 });
     renameSync(`${this.file}.tmp`, this.file);
+  }
+
+  /** Whether these numbers fit under the key's 64, counting the ones it holds already. */
+  fits(pubkey: string, subjects: readonly { subject: string; signal: string }[], now: number): boolean {
+    const list = this.of(pubkey, now);
+    const fresh = new Set(subjects.filter((s) => !list.some((c) => c.subject === s.subject && c.signal === s.signal)).map((s) => `${s.subject} ${s.signal}`));
+    return list.length + fresh.size <= SIGNAL_LIMITS.perKey;
   }
 
   /** A key's live numbers. */

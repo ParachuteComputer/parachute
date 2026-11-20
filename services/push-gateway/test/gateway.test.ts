@@ -304,9 +304,11 @@ test("signals: the person's own signature moves their numbers; a change reaches 
   const opened = () => got.map((b) => JSON.parse(new TextDecoder().decode(decrypt(new Uint8Array(b), d.priv, d.auth))));
   const settle = () => new Promise((r) => setTimeout(r, 150));
 
+  try {
   assert.equal((await send(sk, { set: [] })).status, 403, "a key with no registration here keeps no numbers");
   const r = reg({ pubkey: me, endpoint, keys: d.keys, signals: [{ subject: "cm9vbXMtYXBwbGV0", signal: "for-you", rooms: null }] });
   g.registry.put(r, now());
+  assert.equal((await send(sk, { set: [] })).status, 403, "nor one whose registration no member list has shown yet");
   g.registry.judge(relay, new Set([me]), new Set([me]));
   assert.equal((await send(sk, { set: [] })).status, 200, "once a member list shows the key");
 
@@ -340,6 +342,25 @@ test("signals: the person's own signature moves their numbers; a change reaches 
   const roomOnly = reg({ pubkey: me, endpoint: endpoint.replace("upS", "upU"), signals: [{ subject: "YXJlYS1hcHBsZXQ", signal: "for-you", rooms: ["other"] }] });
   g.relayPush(roomOnly, { ...push, event: "1".repeat(64) });
   assert.equal(g.counts.of(me, now()).find((c) => c.subject === "YXJlYS1hcHBsZXQ"), undefined, "a signal named for other rooms doesn't count this one");
-  g.close();
-  srv.close();
+  } finally { g.close(); srv.close(); }
+});
+
+test("counts never hold back a message: their own budget, and the newest held count still arrives", async () => {
+  const got: Buffer[] = [];
+  const srv = createServer((req, res) => { const parts: Buffer[] = []; req.on("data", (c) => parts.push(c)); req.on("end", () => { got.push(Buffer.concat(parts)); res.writeHead(201).end(); }); });
+  const endpoint = `http://localhost:${await listenFree(srv)}/upB?up=1`;
+  const d = device();
+  const r = reg({ endpoint, keys: d.keys });
+  const pusher = new Pusher({ allowLoopback: true, log: () => {}, gone: () => {} });
+  try {
+    const count = (n: number) => ({ v: 1 as const, kind: "signal" as const, subject: "bWFpbC1hcHBsZXQ", signal: "unread", count: n, to: r.pubkey });
+    const results = [];
+    for (let n = 12; n >= 0; n--) results.push(await pusher.send(r, count(n)));
+    assert.ok(results.includes("limited"), "a run of counts is held back past its budget");
+    const [m] = matches(msg(), relay, [r], members);
+    assert.equal(await pusher.send(r, m.push), "sent", "a message still goes at once");
+    await new Promise((res) => setTimeout(res, 3_400));
+    const opened = got.map((b) => JSON.parse(new TextDecoder().decode(decrypt(new Uint8Array(b), d.priv, d.auth))));
+    assert.equal(opened.filter((o) => o.kind === "signal").at(-1).count, 0, "the newest count held back is sent when there is room");
+  } finally { pusher.close(); srv.close(); }
 });
