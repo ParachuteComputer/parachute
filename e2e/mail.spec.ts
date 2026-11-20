@@ -4,7 +4,9 @@
 // (keys the gateway maps to the two mailboxes). The browser reaches the gateway through a pass-through that adds CORS on
 // port 19952 (which the gateway must accept as an alias); the app itself sends from its native side. The second test
 // needs Uni's account on that stack (infra/mail: uni@test.test, its key BUZZ_KEYS/unibot.hex, outbound rules that hold
-// mail to bob for the owner, and alice's key given send.parked, send.approve, send.decline and flag there).
+// mail to bob for the owner, and alice's key given send.parked, send.approve, send.decline and flag there). Approve is
+// an approve op: it passes this device's approvals level (the device unlock, by default) before the approval key signs
+// it; the test's unlock is window.__parachuteE2EUnlock (src/services/e2eNative.ts), cancelled unless it says "pass".
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
@@ -116,10 +118,25 @@ test("mail: Uni's held sends wait for alice; she approves one (bob gets it) and 
     await expect(sendIt).toContainText("two trays of basil for Saturday");
     await expect(sendIt).toContainText("From Uni (uni@test.test) · to bob@test.test");
     await expect(sendIt).toContainText("Why it waits: Uni's outbound rules want Aaron to approve mail to bob@test.test");
+    // Approve asks the device unlock first (this device's approvals level); cancelled, nothing goes and it still waits
+    const unlocks = () => page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks?: string[] }).__parachuteE2EUnlocks ?? []);
+    const unlockPasses = (yes: boolean) => page.evaluate((y) => { (window as unknown as { __parachuteE2EUnlock?: string }).__parachuteE2EUnlock = y ? "pass" : "cancel"; }, yes);
+    await unlockPasses(false);
+    await app.getByRole("button", { name: "Approve" }).click();
+    await expect(app.getByRole("status").filter({ hasText: "Not sent: The device unlock was cancelled or failed." })).toBeVisible();
+    expect(await unlocks()).toEqual(["approve send.approve"]);
+    // tapped again at once: one tap pays for one approval, so it says to tap again in a moment (not "needs your tap")
+    await unlockPasses(true);
+    await app.getByRole("button", { name: "Approve" }).click();
+    await expect(app.getByRole("status").filter({ hasText: "Not sent: Tap again in a moment: one tap pays for one approval." })).toBeVisible();
+    expect(await unlocks()).toEqual(["approve send.approve"]);
+    // a moment later (past the tap and the cancel's cooldown), with the unlock, it goes
+    await page.waitForTimeout(5_100);
     await app.getByRole("button", { name: "Approve" }).click();
     await expect(app.getByRole("status").filter({ hasText: "Sent." })).toBeVisible();
     await expect(app.getByRole("button", { name: "Approve" })).toHaveCount(0);
-    await expect.poll(async () => (await bob.inbox()).some((m) => m.subject === `Seed order ${stamp}`), { timeout: 30_000 }).toBe(true);
+    expect(await unlocks()).toEqual(["approve send.approve", "approve send.approve"]);
+    await expect.poll(async () => (await bob.inbox()).filter((m) => m.subject === `Seed order ${stamp}`).length, { timeout: 30_000 }).toBe(1);
 
     // the second one: Decline, and nothing goes
     await app.getByRole("button", { name: "← Waiting" }).click();
@@ -130,8 +147,12 @@ test("mail: Uni's held sends wait for alice; she approves one (bob gets it) and 
     expect((await uni.post("op", { op: "send.check", accountId: uniAcct, opId: declined })).state).toBe("declined");
     await page.waitForTimeout(3000);
     expect((await bob.inbox()).some((m) => m.subject === `Invoice ${stamp}`)).toBe(false);
+    // and the approved one went once (the cancelled try sent nothing)
+    expect((await bob.inbox()).filter((m) => m.subject === `Seed order ${stamp}`)).toHaveLength(1);
     await app.getByRole("button", { name: "← Waiting" }).click();
     await expect(held.getByRole("button", { name: new RegExp(`Invoice ${stamp}`) })).toContainText("Declined");
+    // declining sends nothing, so it asks no unlock
+    expect(await unlocks()).toEqual(["approve send.approve", "approve send.approve"]);
 
     // Later: put bob's message off; it leaves the Inbox for Later, and Not later brings it back
     await places.getByRole("button", { name: /^Inbox/ }).click();

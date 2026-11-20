@@ -62,15 +62,16 @@ function TrustSheet({ t }: { t: Trusting }) {
 }
 
 /** A tap in this applet now, each tap good for one call: live user activation with the focus in its own frame, and none
- *  spent in the last few seconds (an activation lasts that long, and one tap must not pay for several approvals). */
+ *  spent in the last few seconds (an activation lasts that long, and one tap must not pay for several approvals): "again"
+ *  when that is all that's missing, so the person reads "tap again in a moment", not "needs your tap". */
 export function useTapOnce(frame: () => HTMLIFrameElement | null) {
   const spent = useRef(-Infinity);
-  return useCallback(() => {
+  return useCallback((): boolean | "again" => {
     const active = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true;
     const f = frame();
     if (!active || !f || !onScreen(f) || document.activeElement !== f) return false;
     const t = performance.now();
-    if (t - spent.current < 5000) return false;
+    if (t - spent.current < 5000) return "again";
     spent.current = t;
     return true;
   }, [frame]);

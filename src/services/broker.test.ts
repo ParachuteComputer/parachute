@@ -2,7 +2,7 @@
 // tested in e2e/services.spec.ts and src-tauri/tests). What is held here: a subscription made before the sign-in goes
 // out once; a live subscription stays open however many events pass through it; nothing connects after close.
 import { describe, expect, it, vi } from "vitest";
-import { createBroker } from "./broker";
+import { createBroker, TAP_AGAIN } from "./broker";
 import type { Native, SignedEvent } from "./native";
 import type { Service } from "../applet/services";
 
@@ -205,5 +205,26 @@ describe("the broker's relay connection", () => {
       const reqs = sock.reqs();
       expect(reqs.findIndex((r) => JSON.stringify(r).includes("opened-room"))).toBe(10);
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe("a tap that already paid", () => {
+  // the shell's tap (views/ShellSheets.tsx useTapOnce): true once, then "again" for its few seconds
+  const oneTap = () => { let left = 1; return { tap: () => (left-- > 0 ? true : "again" as const), secret: async () => null, say: () => {}, trust: async () => null, passcode: async () => null }; };
+  const mail: Service = { id: "mail", kind: "http", url: "https://mail.example/mail/", auth: "nip98", approve: { field: "op", ops: ["send.approve"] } };
+  const approve = { service: "mail", path: "op", method: "POST", body: JSON.stringify({ op: "send.approve", opId: "x" }) };
+
+  it("pays for one approve: a retry at once after a cancelled unlock says to tap again in a moment, and asks nothing", async () => {
+    let calls = 0;
+    const http: Native["http"] = async () => { calls++; throw { code: "unlock", message: "The device unlock was cancelled or failed." }; };
+    const b = createBroker({ native: { ...native(), http }, session: "s", applet: { name: "Mail", subject: "v\u0000m" }, services: [mail], hubs: [], emit: () => {}, shell: oneTap() });
+    await expect(b.fetch(approve)).rejects.toMatchObject({ code: "unlock" });
+    await expect(b.fetch(approve)).rejects.toThrow(TAP_AGAIN);
+    expect(calls).toBe(1);
+  });
+
+  it("no tap at all still says it needs one", async () => {
+    const b = createBroker({ native: native(), session: "s", applet: { name: "Mail", subject: "v\u0000m" }, services: [mail], hubs: [], emit: () => {}, shell: { ...oneTap(), tap: () => false } });
+    await expect(b.fetch(approve)).rejects.toThrow("an approval needs your tap in the applet");
   });
 });
