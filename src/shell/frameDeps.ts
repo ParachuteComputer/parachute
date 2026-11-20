@@ -37,7 +37,7 @@ export const homeNow = () => {
     parachutes: parachutesNow().map((p) => {
       const fresh = newVaultsOn(p.hub);
       return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}) };
-    }), ...(openBundleNow().look === "notes" ? { app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
+    }), ...(openBundleNow().look === "notes" ? { look: "notes" as const, app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
     ...viewerNow() };
 };
 /** Vault in the home vault, as this device last read its applets, when applets run here: where a record no other
@@ -93,7 +93,7 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   // only what the open bundle offers (shell/bundles.ts): listing is all it decides; what runs is still each applet's card
   const app = openBundleNow(), home = homeVault();
   const held = { hub: originOf(rec.issuer), vault: rec.vault };
-  const inApp = (a: { noteId: string; path: string }) => app.look === "notes" || !home || offered(app, held, a, originOf(home.issuer));
+  const inApp = (a: { noteId: string; path: string }) => !home || offered(app, held, a, originOf(home.issuer));
   return {
     ok: true, skipped: e.found.skipped,
     entries: e.found.entries.filter(inApp).map((a) => ({ noteId: a.noteId, path: a.path, vault: a.vault, opens: a.opens, status: status(a),
@@ -169,7 +169,7 @@ export function appDefaults(vault: string, app: Bundle = openBundleNow()): Recor
     if ((o.hub ?? app.hubOf ?? originOf(home.issuer)) !== originOf(rec.issuer) || o.vault !== rec.vault || o.type in out) continue;
     if (o.applet === null) { out[o.type] = VAULT; continue; }
     const held = { hub: originOf(rec.issuer), vault: rec.vault };
-    const e = a?.state === "ok" ? a.found.entries.find((x) => namesApplet(o.applet!, x) && x.opens.some((y) => y.type === o.type) && (app.look === "notes" || offered(app, held, x, originOf(home.issuer)))) : undefined;
+    const e = a?.state === "ok" ? a.found.entries.find((x) => namesApplet(o.applet!, x) && x.opens.some((y) => y.type === o.type) && offered(app, held, x, originOf(home.issuer))) : undefined;
     if (e) out[o.type] = e.noteId;
   }
   return out;

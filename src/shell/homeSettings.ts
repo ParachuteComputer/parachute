@@ -31,7 +31,7 @@ import { homeVault } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
 import type { Levels } from "./levels";
-import { BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, followed, newerBundle, openBundle, recordOf, BUNDLE_FOLDER, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
+import { BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, followed, isAppPlace, newerBundle, NEWCOMER_BUNDLE, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -47,7 +47,10 @@ export type ServiceEntry = { name: string; kind: "nostr-relay" | "http"; url: st
 /** Which bundle the person's devices open: "simple" (docs/SIMPLE.md), "everything", or the id of a bundle record
  *  (shell/bundles.ts); null: the note says nothing. Older apps read any other id as everything. */
 export type BundleChoice = string;
-export type Settings = { bar: Place[]; start: Place | null; hubs: HubEntry[]; services: ServiceEntry[]; bundle: BundleChoice | null };
+/** `bar`: the settings note's is applets only (read until 2026-12-20); the bar a bundle gives (`effective`) may hold the
+ *  app's own places too. */
+export type Settings = { bar: BarEntry[]; start: Place | null; hubs: HubEntry[]; services: ServiceEntry[]; bundle: BundleChoice | null };
+export const applets = (bar: readonly BarEntry[]): Place[] => bar.filter((e): e is Place => !isAppPlace(e));
 /** A place this device can open: its vault (this device's key) and the applet's note. */
 export type Found = { vault: string; noteId: string; name: string; glyph: string; href: string };
 
@@ -113,7 +116,7 @@ function findLive(p: Place): Found | null {
 /** Read the applets of every vault the choices name (once each), so `find` can answer. */
 export async function readPlaces(s: Settings): Promise<void> {
   const recs = new Map<string, VaultRecord>();
-  for (const p of [...s.bar, ...(s.start ? [s.start] : [])]) { const r = vaultFor(p); if (r && appletsNow(r.key)?.state !== "ok") recs.set(r.key, r); }
+  for (const p of [...applets(s.bar), ...(s.start ? [s.start] : [])]) { const r = vaultFor(p); if (r && appletsNow(r.key)?.state !== "ok") recs.set(r.key, r); }
   await Promise.all([...recs.values()].map((r) => refreshApplets(r)));
 }
 
@@ -174,7 +177,7 @@ export function settingsNow(): Settings {
   // a new person's simple app, chosen at their first sign-in, until the note can say so (docs/SIMPLE.md): the sign-in
   // reads the home only, so the note is written the first time they let Parachute change notes there. Only while the
   // home has no settings note: one there says what it says
-  return simpleHere() && home ? { ...EMPTY, bundle: "simple" } : { ...EMPTY };
+  return simpleHere() && home ? { ...EMPTY, bundle: NEWCOMER_BUNDLE } : { ...EMPTY };
 }
 
 const SIMPLE_HERE_KEY = "parachute.app.simple-here.v1";
@@ -214,7 +217,7 @@ export async function readSettings(): Promise<void> {
     const before = was?.vault === home.key ? was.found : {};
     const found: Record<string, Found> = {};
     const eff = effective(settings, parseBundles(apps));
-    for (const p of [...settings.bar, ...(settings.start ? [settings.start] : []), ...eff.bar, ...(eff.start ? [eff.start] : [])]) {
+    for (const p of [...applets(settings.bar), ...(settings.start ? [settings.start] : []), ...applets(eff.bar), ...(eff.start ? [eff.start] : [])]) {
       const rec = vaultFor(p);
       const f = rec && appletsNow(rec.key)?.state === "ok" ? findLive(p) : before[keyOf(p)];
       if (f) found[keyOf(p)] = f;
@@ -229,13 +232,15 @@ export async function readSettings(): Promise<void> {
   }
 }
 
-/** The note's choices as written, entries this app doesn't read included: a change keeps them. */
-type Raw = { bar: unknown[]; start: unknown; hubs: unknown[]; bundle?: BundleChoice };
+/** The bar and home as written (the open bundle's record's), entries this app doesn't read included: a change keeps them. */
+type Raw = { bar: unknown[]; start: unknown };
+/** What the settings note says that the app changes: the person's Parachutes and the bundle a new device opens. */
+type SettingsRaw = { hubs: unknown[]; bundle?: BundleChoice };
 const parsedAs = (x: unknown, f: (p: Place) => boolean) => { const p = placeOf(x); return !!p && f(p); };
 
-/** Change the choices (a tap's): read the note as it is now, change only what was asked, and write it back.
- *  `creating`: there is no settings note yet, and this write makes it. */
-async function changeSettings(change: (raw: Raw, creating: boolean) => Raw): Promise<void> {
+/** Change the settings note (a tap's): read it as it is now, change only what was asked, and write it back. Its `bar`
+ *  and `start` (from before bundles held them) are left as they are. `creating`: there is no settings note yet. */
+async function changeSettings(change: (raw: SettingsRaw, creating: boolean) => SettingsRaw): Promise<void> {
   const home = homeVault();
   if (!home) throw new Error("There's no home vault yet.");
   const c = clientFor(home);
@@ -243,15 +248,15 @@ async function changeSettings(change: (raw: Raw, creating: boolean) => Raw): Pro
   const n = pick(rows) as (typeof rows)[number] | null;
   if (!n && rows.length > 1) throw new Error(`Your home vault has ${rows.length} settings notes; keep one, at ${SETTINGS_PATH}.`);
   const was = plain(n?.metadata) && plain(n!.metadata!.parachute) ? n!.metadata!.parachute as Record<string, unknown> : {};
-  const next = change({ bar: Array.isArray(was.bar) ? was.bar : [], start: was.start ?? null, hubs: Array.isArray(was.hubs) ? was.hubs : [] }, !n);
+  const next = change({ hubs: Array.isArray(was.hubs) ? was.hubs : [] }, !n);
   // the choice of bundle is written under its new name and, until 2026-12-20, its older one, which the builds before
   // 11-20 read (a new device of the person's may run one)
-  const parachute = { ...was, bar: next.bar, start: next.start, ...(next.hubs.length || Array.isArray(was.hubs) ? { hubs: next.hubs } : {}), ...(next.bundle ? { bundle: next.bundle, app: next.bundle } : {}) };
+  const parachute = { ...was, ...(next.hubs.length || Array.isArray(was.hubs) ? { hubs: next.hubs } : {}), ...(next.bundle ? { bundle: next.bundle, app: next.bundle } : {}) };
   if (n) {
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), parachute }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
   } else {
-    await c.createNote({ path: SETTINGS_PATH, content: "The bar, the home applet and the Parachutes of the Parachute app. See docs/NAVIGATION.md.", tags: [SETTINGS_TAG], metadata: { parachute } } as Parameters<typeof c.createNote>[0]);
+    await c.createNote({ path: SETTINGS_PATH, content: "The Parachutes of the Parachute app and the bundle a new device opens. See docs/NAVIGATION.md.", tags: [SETTINGS_TAG], metadata: { parachute } } as Parameters<typeof c.createNote>[0]);
   }
   await readSettings();
 }
@@ -323,17 +328,20 @@ export async function startApplet(vault: string, noteId: string | null): Promise
   return changeChoices((r) => ({ ...r, start: p }));
 }
 
-/** The bar as this device can show it: the pins it can find, in their order, each once; and the home applet, which is on
- *  the bar only when it is pinned (the record's bar is the bar: the shell adds nothing of its own to it). */
-export function barNow(s: Settings = effective(settingsNow(), bundlesNow())): { start: (Found & { place: Place }) | null; pins: (Found & { place: Place })[] } {
+export type Pin = Found & { place: Place };
+/** The bar as this device can show it, in the bundle's order: the app's own places as written, and the pins it can find,
+ *  each once; and the home applet, which is on the bar only when it is pinned (the bundle's bar is the bar). `pins`: the
+ *  applets alone. */
+export function barNow(s: Settings = effective(settingsNow(), bundlesNow())): { start: Pin | null; pins: Pin[]; entries: (Pin | AppPlace)[] } {
   const start = s.start ? find(s.start) : null;
-  const pins: (Found & { place: Place })[] = [];
+  const pins: Pin[] = [], entries: (Pin | AppPlace)[] = [];
   for (const p of s.bar) {
+    if (isAppPlace(p)) { if (!entries.some((e) => JSON.stringify(e) === JSON.stringify(p))) entries.push(p); continue; }
+    if (pins.length === MAX_PLACES) continue;
     const f = find(p);
-    if (f && !pins.some((x) => x.vault === f.vault && x.noteId === f.noteId)) pins.push({ ...f, place: p });
-    if (pins.length === MAX_PLACES) break;
+    if (f && !pins.some((x) => x.vault === f.vault && x.noteId === f.noteId)) { pins.push({ ...f, place: p }); entries.push(pins[pins.length - 1]); }
   }
-  return { start: start && s.start ? { ...start, place: s.start } : null, pins };
+  return { start: start && s.start ? { ...start, place: s.start } : null, pins, entries };
 }
 
 // ── bundles (shell/bundles.ts): the records, which one is open here, and the bar and home it gives ──
@@ -424,20 +432,23 @@ export function bundleNewer(chosen: string | null = bundleMissing()): string | n
   return typeof raw.name === "string" && raw.name.length > 0 && raw.name.length <= 60 && !/[\u0000-\u001f]/.test(raw.name) ? raw.name : chosen;
 }
 
-/** The bar and home as the open bundle gives them: its own, or the settings note's when it has none. */
+/** The bar and home as the open bundle gives them: its own; when its record says none, a default's start of a bar and
+ *  then the settings note's pins and home (read until 2026-12-20, when every record holds its own). */
 export function effective(s: Settings, apps: readonly Bundle[]): Settings {
   const app = openBundle(apps, deviceBundle(), s.bundle);
   // a bundle someone else offers: a place that names no hub is on theirs
   const at = (p: Place): Place => (app.hubOf && !p.hub ? { ...p, hub: app.hubOf } : p);
-  return { ...s, bar: app.bar ? app.bar.map(at) : s.bar, start: app.start === undefined ? s.start : app.start && at(app.start) };
+  // the bundle's own places mean its hub; the settings note's pins are the person's, as written
+  const own = (app.bar ?? app.base).map((e) => (isAppPlace(e) ? e : at(e)));
+  return { ...s, bar: app.bar ? own : [...own, ...s.bar], start: app.start === undefined ? s.start : app.start && at(app.start) };
 }
 
 /** Change the open bundle's record: read it now, change only what `change` touches, and write it back with
- *  if_updated_at; made from the built-in the first time. An older record (`Parachute/Apps/<id>`, `parachute-app`,
+ *  if_updated_at; made from a default the first time. An older record (`Parachute/Apps/<id>`, `parachute-app`,
  *  `fields.app`) is written as it is, under its older names: the builds before 11-20 read only those, and one of the
  *  person's devices may still run one. A new record takes the names the vault already uses: the older ones until a
  *  record under the newer is there (scripts/migrate-bundles.ts moves them all once no device runs such a build). */
-async function changeBundle(change: (was: Record<string, unknown>, app: Bundle) => Record<string, unknown>, from: (app: Bundle) => Record<string, unknown>): Promise<void> {
+async function changeBundle(change: (was: Record<string, unknown>) => Record<string, unknown>): Promise<void> {
   const home = homeVault();
   if (!home) throw new Error("There's no home vault yet.");
   const app = openBundleNow();
@@ -445,7 +456,9 @@ async function changeBundle(change: (was: Record<string, unknown>, app: Bundle) 
   const rows = await bundleRows(c);
   const found = rows.find((r) => (app.noteId ? r.row.id === app.noteId : atFolder(r.row.path, app.id))) ?? null;
   if (app.noteId && !found) throw new Error("The bundle's record is gone; read it again.");
-  const body = change(found && plain(found.body) ? found.body : from(app), app);
+  // a default's record says only what changes, and its name (a build from before 11-20 reads no record without one):
+  // the rest stays the default's (shell/bundles.ts)
+  const body = change(found && plain(found.body) ? found.body : { contract: 1, id: app.id, name: app.name });
   const content = `The ${app.name} bundle: where its applets come from, its bar and its home. See docs/NAVIGATION.md.`;
   if (found) {
     const n = found.row, updatedAt = (n as { updatedAt?: string }).updatedAt;
@@ -456,21 +469,16 @@ async function changeBundle(change: (was: Record<string, unknown>, app: Bundle) 
   }
 }
 
-/** A change to the bar or the home: to the open bundle's record, or the settings note. Simple's and Everything's are
- *  kept in the settings note too, which older apps read. */
-async function changeChoices(f: (raw: Raw, creating: boolean) => Raw): Promise<void> {
-  if (!toRecord()) return changeSettings(f);
+/** A change to the bar or the home: to the open bundle's record, made the first time from what the person has now (a
+ *  default's start of a bar, then the settings note's pins and home). The settings note's own are left as they were. */
+async function changeChoices(f: (raw: Raw) => Raw): Promise<void> {
   if (openBundleNow().live) throw new Error(`${openBundleNow().name} is offered by someone else: its bar is theirs.`);
-  const s = settingsNow();
+  const e = effective(settingsNow(), bundlesNow());
   await changeBundle((was) => {
-    const before: Raw = { bar: Array.isArray(was.bar) ? was.bar : s.bar, start: was.start === undefined ? s.start : was.start, hubs: [] };
-    const r = f(before, false);
-    // only what the change touched, or what the record already said, is written: the rest stays the settings note's
-    return { ...was, ...(Array.isArray(was.bar) || JSON.stringify(r.bar) !== JSON.stringify(before.bar) ? { bar: r.bar } : {}),
-      ...(was.start !== undefined || JSON.stringify(r.start ?? null) !== JSON.stringify(before.start ?? null) ? { start: r.start ?? null } : {}) };
-  }, (app) => recordOf({ ...app, bar: s.bar, start: s.start }));
-  const app = openBundleNow();
-  if (app.id === "everything" || app.id === "simple") await changeSettings(f); else await readSettings();
+    const r = f({ bar: Array.isArray(was.bar) ? was.bar : e.bar, start: was.start === undefined ? e.start : was.start });
+    return { ...was, bar: r.bar, start: r.start ?? null };
+  });
+  await readSettings();
 }
 /** The open bundle's security levels, written to its record (made from the built-in the first time) so every device
  *  that opens it follows (shell/levels.ts): only `security` changes. A lowering is signed first (`signLowering`);
@@ -478,13 +486,10 @@ async function changeChoices(f: (raw: Raw, creating: boolean) => Raw): Promise<v
 export async function changeSecurity(levels: Levels): Promise<void> {
   const app = openBundleNow();
   if (app.live) throw new Error(`${app.name} is offered by someone else: its levels are theirs, and yours can only be stricter.`);
-  await changeBundle((was) => ({ ...was, security: { approvals: levels.approvals, code: levels.code, join: levels.join, idle: levels.idle } }), recordOf);
+  await changeBundle((was) => ({ ...was, security: { approvals: levels.approvals, code: levels.code, join: levels.join, idle: levels.idle } }));
   await readSettings();
 }
 
-/** Whether a change to the bar or home goes to the open bundle's record (a bundle other than the two built-ins, or one
- *  of them whose record has a bar or a home of its own); else to the settings note, as before. */
-const toRecord = () => { const a = openBundleNow(); return a.id !== "everything" && a.id !== "simple" ? true : a.noteId !== null && (a.bar !== null || a.start !== undefined); };
 
 // what `find` answers changes with the applets read and the vaults held: followed from the first subscriber on (not at
 // load: the applet list imports this module's readers back)

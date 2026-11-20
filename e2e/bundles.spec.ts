@@ -61,7 +61,7 @@ test("Settings → Your bundle: choose between Parachute Simplified, Everything 
     contract: 1, id: "kitchen-table", name: "Kitchen table", note: "just the recipes", sources: [{ vault: VAULT, applet: "Applets/Recipes" }] } } });
   await start(page);
   await page.goto("/settings");
-  const choice = page.getByRole("region", { name: "Your bundle" }).or(page.locator("section", { has: page.getByRole("heading", { name: "Your bundle" }) }));
+  const choice = page.getByRole("group", { name: "Which bundle opens" });
   await expect(choice.getByRole("radio")).toHaveCount(3);
   await expect(choice.getByRole("radio", { name: /Everything/ })).toBeChecked();
   await choice.getByRole("radio", { name: /Parachute Simplified/ }).check();
@@ -83,13 +83,21 @@ test("Settings → Your bundle: choose between Parachute Simplified, Everything 
   await expect(entries.getByRole("link", { name: /Cook mode/ })).toBeVisible();
 });
 
-test("with no bundle record, a pin still lands in the settings note, as before", async ({ page }) => {
+test("bar and home live in the bundle only: with no record, a pin makes the open bundle's, starting from the settings note's pins; that note is left as it was", async ({ page }) => {
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar: [{ vault: VAULT, applet: "Applets/Cook mode" }] } } });
   await start(page);
+  // the settings note's pins are read until 2026-12-20, after the bundle's own places
+  await expect(bar(page).getByRole("link", { name: /Cook mode/ })).toBeVisible();
   await ui(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
   await ui(page).getByRole("button", { name: "Pin to the bar" }).click();
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
-  expect((await tagged("parachute-settings"))[0].metadata.parachute.bar).toEqual([{ vault: VAULT, applet: "Applets/Recipes" }]);
-  expect(await tagged("parachute-bundle")).toEqual([]);
+  // Everything's record, under the older names while the vault has none under the newer; only what changed and its name
+  await expect.poll(async () => (await tagged("parachute-app")).map((n) => [n.path.replace(/\.md$/, ""), n.metadata.app])).toEqual([["Parachute/Apps/everything",
+    { contract: 1, id: "everything", name: "Everything", bar: [{ vault: VAULT, applet: "Applets/Cook mode" }, { vault: VAULT, applet: "Applets/Recipes" }], start: null }]]);
+  expect((await tagged("parachute-settings"))[0].metadata.parachute.bar).toEqual([{ vault: VAULT, applet: "Applets/Cook mode" }]);
+  await start(page);
+  await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
+  await expect(bar(page).getByRole("link", { name: /Applets/ })).toBeVisible();
 });
 
 test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a change keeps it readable by older builds, and a bundle of its id wins", async ({ page }) => {
@@ -121,7 +129,7 @@ test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a
   await start(page);
   await expect(entries.getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await expect(entries.getByRole("link", { name: /Cook mode/ })).toHaveCount(0);
-  // the settings note's older `app` goes with the first choice made: one name for it
+  // the choice is written under both names: `bundle`, and `app` for builds from before 11-20
   await page.goto("/settings");
   await page.locator("section", { has: page.getByRole("heading", { name: "Your bundle" }) }).getByRole("radio", { name: /Everything/ }).check();
   await expect.poll(async () => (await tagged("parachute-settings"))[0]?.metadata.parachute.bundle).toBe("everything");
@@ -132,7 +140,7 @@ test("an older record (Parachute/Apps, parachute-app, fields.app) still opens, a
 test("scripts/migrate-bundles.ts: shows first, then moves each older record and the settings note's choice, backed up", async () => {
   const old = await api(hubState(), "POST", "notes", { path: "Parachute/Apps/kitchen-table", content: "an app", tags: ["parachute-app"], metadata: { app: {
     contract: 1, id: "kitchen-table", name: "Kitchen table", sources: [{ vault: VAULT, applet: "*" }] } } });
-  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "kitchen-table", bar: [] } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "kitchen-table", bar: [{ vault: VAULT, applet: "Applets/Recipes" }], start: { vault: VAULT, applet: "Applets/Recipes" } } } });
   const dir = mkdtempSync(join(tmpdir(), "migrate-bundles-"));
   writeFileSync(join(dir, "token"), hubState().token);
   const run = (...more: string[]) => execFileSync("node", ["scripts/migrate-bundles.ts", "--hub", hubState().origin, "--vault", VAULT, "--token-file", join(dir, "token"), "--backup", join(dir, "backup"), ...more]).toString();
@@ -141,9 +149,30 @@ test("scripts/migrate-bundles.ts: shows first, then moves each older record and 
   run("--apply");
   const [moved] = await tagged("parachute-bundle");
   expect([moved.id, moved.path.replace(/\.md$/, ""), moved.metadata.bundle.name, moved.metadata.app]).toEqual([old.id, "Parachute/Bundles/kitchen-table", "Kitchen table", undefined]);
+  // the settings note's bar and home now live in the bundle only
+  expect([moved.metadata.bundle.bar, moved.metadata.bundle.start]).toEqual([[{ vault: VAULT, applet: "Applets/Recipes" }], { vault: VAULT, applet: "Applets/Recipes" }]);
   expect(await tagged("parachute-app")).toEqual([]);
   const settings = (await tagged("parachute-settings"))[0].metadata.parachute;
-  expect([settings.bundle, settings.app]).toEqual(["kitchen-table", undefined]);
-  expect(readdirSync(join(dir, "backup")).sort()).toEqual(["Parachute_Apps_kitchen-table.json", "Parachute_Settings.json"]);
+  // the note keeps them until 2026-12-20, for a device on another bundle with no bar of its own
+  expect([settings.bundle, settings.app, settings.bar, settings.start]).toEqual(["kitchen-table", undefined, [{ vault: VAULT, applet: "Applets/Recipes" }], { vault: VAULT, applet: "Applets/Recipes" }]);
+  expect(readdirSync(join(dir, "backup")).sort()).toEqual(["Parachute_Apps_kitchen-table.json", "Parachute_Bundles_kitchen-table.json", "Parachute_Settings.json"]);
   expect(run()).toContain("Nothing to move.");
+});
+
+test("scripts/install-applets.ts: --bar and --start go in the bundle record (only what changes, for one the app ships), never in the settings note", async () => {
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "simple" } } });
+  const hadCapture = (await tagged("applet")).some((n) => n.path.startsWith("Applets/Capture"));
+  const dir = mkdtempSync(join(tmpdir(), "install-applets-"));
+  writeFileSync(join(dir, "token"), hubState().token);
+  const install = () => execFileSync("node", ["scripts/install-applets.ts", "--hub", hubState().origin, "--vault", VAULT, "--token-file", join(dir, "token"), "--applet", "capture", "--bar", "capture", "--start", "capture", "--apply"]).toString();
+  const out = install();
+  // the vault holds no record under the newer names: the new one goes under the older, which builds from before 11-20 read
+  expect(out).toContain("add the bundle simple at Parachute/Apps/simple");
+  const [rec] = await tagged("parachute-app");
+  expect(rec.metadata.app).toEqual({ contract: 1, id: "simple", name: "Parachute Simplified", bar: [{ screen: "home" }, { shipped: "journal" }, { shipped: "capture" }, { shipped: "vault" }, { screen: "connect" }, { vault: VAULT, applet: "Applets/Capture" }], start: { vault: VAULT, applet: "Applets/Capture" } });
+  const settings = (await tagged("parachute-settings"))[0].metadata.parachute;
+  expect([settings.bar, settings.start]).toEqual([undefined, undefined]);
+  // again: nothing changes (Simplified's own places stay first)
+  expect(install()).toContain("bundle simple: unchanged");
+  if (!hadCapture) for (const n of await tagged("applet")) if (n.path.startsWith("Applets/Capture")) await api(hubState(), "DELETE", `notes/${n.id}`);
 });

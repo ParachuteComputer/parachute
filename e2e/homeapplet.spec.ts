@@ -1,9 +1,9 @@
 // The starter home applet, written the way a chat AI with the Parachute MCP writes it: one `create-note` call with the
-// arguments in docs/WRITE-AN-APPLET.md, and the settings note's `start`. The app opens on it after the person's Allow.
+// arguments in docs/WRITE-AN-APPLET.md, and the open bundle's record, which names it as the home (`start`). The app opens on it after the person's Allow.
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mintToken, record, VAULT } from "./hub";
-import { ui } from "./helpers";
+import { clearBarAndHome, ui, writeBundle } from "./helpers";
 
 const guide = readFileSync(new URL("../docs/WRITE-AN-APPLET.md", import.meta.url), "utf8");
 const section = guide.slice(guide.indexOf("## A home applet"), guide.indexOf("## What the person sees"));
@@ -13,11 +13,7 @@ const applet = (page: Page) => page.frameLocator("iframe.applet-frame");
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
-async function settings(parachute: Record<string, unknown>) {
-  // one settings note: a sign-in in an earlier test may have left one (it lists the person's Parachutes)
-  for (const n of await api(hubState(), "GET", "notes?tag=parachute-settings")) await api(hubState(), "DELETE", `notes/${n.id}`);
-  return api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute } });
-}
+test.afterEach(clearBarAndHome);
 async function start(page: Page) { await page.goto("about:blank"); await page.goto("/"); }
 
 test("the guide's home applet is the code it lays out", () => {
@@ -28,7 +24,7 @@ test("a home applet written only by create-note opens on start after Allow: the 
   const home = await record(hubState(), "create", ARGS);
   // the newest notes, one in each of two vaults
   const fresh = [await api(hubState(), "POST", "notes", { path: "Fresh in the kitchen", content: "x" }), await api({ ...hubState(), token: mintToken("vault:letters:write") }, "POST", "notes", { path: "Fresh in letters", content: "x" }, "letters")];
-  const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" }, bar: [{ vault: VAULT, applet: "Applets/Recipes" }] });
+  await writeBundle({ start: { vault: VAULT, applet: "Applets/Home" }, bar: [{ vault: VAULT, applet: "Applets/Recipes" }] });
   try {
     await start(page);
     const card = page.getByRole("region", { name: /asking for access/ });
@@ -59,14 +55,13 @@ test("a home applet written only by create-note opens on start after Allow: the 
     await expect(page.getByRole("heading", { level: 1, name: /Recipe box/ })).toBeVisible();
   } finally {
     await api(hubState(), "DELETE", `notes/${home.id}`);
-    await api(hubState(), "DELETE", `notes/${s.id}`);
     for (const [n, v] of [[fresh[0], VAULT], [fresh[1], "letters"]] as const) await api({ ...hubState(), token: v === VAULT ? hubState().token : mintToken(`vault:${v}:write`) }, "DELETE", `notes/${n.id}`, undefined, v).catch(() => {});
   }
 });
 
 test("hostile: app.open goes nowhere without a tap, and an applet that didn't ask for app gets nothing", async ({ page }) => {
   const home = await record(hubState(), "create", ARGS);
-  const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" } });
+  await writeBundle({ start: { vault: VAULT, applet: "Applets/Home" } });
   try {
     await start(page);
     await page.getByRole("button", { name: "Allow" }).click();
@@ -83,13 +78,12 @@ test("hostile: app.open goes nowhere without a tap, and an applet that didn't as
     expect(said).toBe("not_granted");
   } finally {
     await api(hubState(), "DELETE", `notes/${home.id}`);
-    await api(hubState(), "DELETE", `notes/${s.id}`);
   }
 });
 
-test("hostile: a tap that has worn off moves nothing, and a home the note no longer names waits for a tap", async ({ page }) => {
+test("hostile: a tap that has worn off moves nothing, and a home the record no longer names waits for a tap", async ({ page }) => {
   const home = await record(hubState(), "create", ARGS);
-  const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" } });
+  await writeBundle({ start: { vault: VAULT, applet: "Applets/Home" } });
   try {
     await start(page);
     await page.getByRole("button", { name: "Allow" }).click();
@@ -107,29 +101,27 @@ test("hostile: a tap that has worn off moves nothing, and a home the note no lon
     await page.waitForTimeout(8_000);
     expect(await applet(page).locator("body").getAttribute("data-went")).toBe("false");
     expect(page.url()).toBe(here);
-    // the agent clears the home in the note; the home's address, reached again, waits for a tap
-    const now = await api(hubState(), "GET", `notes/${s.id}`);
-    await api(hubState(), "PATCH", `notes/${s.id}`, { metadata: { parachute: { start: null } }, if_updated_at: now.updatedAt });
+    // the agent clears the home in the record; the home's address, reached again, waits for a tap
+    await writeBundle({ start: null });
     await page.goto(here);
     await expect(page.getByRole("button", { name: /^Open Home$/ })).toBeVisible();
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
   } finally {
     await api(hubState(), "DELETE", `notes/${home.id}`);
-    await api(hubState(), "DELETE", `notes/${s.id}`);
   }
 });
 
-test("Back to the home while the settings are read again still finds it running", async ({ page }) => {
+test("Back to the home while the bundle is read again still finds it running", async ({ page }) => {
   const home = await record(hubState(), "create", ARGS);
   // the newest note of all, so Lately shows it
   const fresh = await api(hubState(), "POST", "notes", { path: "A note to come back from", content: "x" });
-  const s = await settings({ start: { vault: VAULT, applet: "Applets/Home" } });
+  await writeBundle({ start: { vault: VAULT, applet: "Applets/Home" } });
   try {
     await start(page);
     await page.getByRole("button", { name: "Allow" }).click();
     const lately = applet(page).getByRole("region", { name: "Lately" });
-    // a slow hub: the settings note's read, made again as the note's screen shows, is still on its way at the Back
-    await page.route((u) => u.searchParams.get("tag") === "parachute-settings", async (r) => { await new Promise((res) => setTimeout(res, 4000)); await r.continue().catch(() => {}); });
+    // a slow hub: the bundle record's read, made again as the note's screen shows, is still on its way at the Back
+    await page.route((u) => ["parachute-app", "parachute-bundle"].includes(u.searchParams.get("tag") ?? ""), async (r) => { await new Promise((res) => setTimeout(res, 4000)); await r.continue().catch(() => {}); });
     await lately.getByRole("button", { name: /^A note to come back from kitchen/ }).click();
     await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/n/`));
     await ui(page).getByRole("button", { name: "Back" }).click();
@@ -138,6 +130,5 @@ test("Back to the home while the settings are read again still finds it running"
   } finally {
     await api(hubState(), "DELETE", `notes/${fresh.id}`);
     await api(hubState(), "DELETE", `notes/${home.id}`);
-    await api(hubState(), "DELETE", `notes/${s.id}`);
   }
 });

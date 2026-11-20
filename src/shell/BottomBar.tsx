@@ -1,6 +1,7 @@
-// The bar (docs/NAVIGATION.md): at the foot of the list, a vault, a note, an applet and Settings. The open app's pins,
-// in its order, the ones this device can find; then Applets, the app's one way to the rest (the list, and Settings from
-// there). The home applet is on it when it is pinned: the shell adds nothing of its own to the record's bar. The shell
+// The bar (docs/NAVIGATION.md): at the foot of the list, a vault, a note, an applet and Settings. The open bundle's bar,
+// in its order: the app's own places it names (its home screen, Connect, Capture) and the pins this device can find.
+// When nothing on it leads to the home screen, the shell adds that one place at the end (the list, or Notes), the one
+// way to the rest and to Settings: a record can't take the way back away. The home applet is on it when it is pinned. The shell
 // draws it, under the frame and under applets, so it is there on every screen, under a frame of the person's own too
 // (which also gets the app's own Settings). A tap on a place is a real tap on a link inside the app: it marks that
 // address, so an allowed applet starts. A long-press (or a right-click) on a place offers moving it, unpinning it, and
@@ -8,11 +9,12 @@
 import { useEffect, useState } from "react";
 import { useHold } from "../ui/hold";
 import { Link, useLocation } from "react-router";
-import { move, pinApplet, setStart, useSettings, type Found, type Place } from "./homeSettings";
+import { move, pinApplet, setStart, useSettings, type Found, type Pin, type Place } from "./homeSettings";
+import type { AppPlace } from "./bundles";
 import { chooseStart, forgetStart } from "./start";
 import { clearMark } from "../open/mark";
 import { homeVault, useFrameSource } from "./frameSource";
-import { shippedIn } from "../applet/shipped";
+import { SHIPPED, shippedIn, type ShippedName } from "../applet/shipped";
 import { useApplets } from "../applet/useApplets";
 import { useVaults } from "../vault/hooks";
 import { appletPath } from "../open/paths";
@@ -21,21 +23,23 @@ import { useBadge } from "../services/signals";
 type Item = Found & { place: Place; home: boolean };
 
 export default function BottomBar() {
-  const { bar, bundle: app } = useSettings();
-  const simple = app.look === "notes";
+  const { bar, bundle } = useSettings();
+  const notes = bundle.look === "notes";
   const ownFrame = useFrameSource().choice.run === "vault";
   const { pathname } = useLocation();
   const [asked, setAsked] = useState<Item | null>(null);
-  const items: Item[] = bar.pins.map((p) => ({ ...p, home: !!bar.start && bar.start.href === p.href }));
+  const item = (p: Pin): Item => ({ ...p, home: !!bar.start && bar.start.href === p.href });
+  const items = bar.pins.map(item);
   const here = (href: string) => pathname === href;
   useEffect(() => { setAsked(null); }, [pathname]);
+  const wayHome = bar.entries.some((e) => "screen" in e && e.screen === "home");
   return (
     <>
       <nav className="home-bar" aria-label="Bar">
-        {simple && <SimplePlaces pathname={pathname} />}
-        {simple && items.length > 0 && <span className="home-bar-sep" aria-hidden="true" />}
-        {items.map((it) => <Place key={it.href} item={it} current={here(it.href)} onHold={() => setAsked(it)} />)}
-        {!simple && <Link className="home-bar-place" to="/" aria-current={pathname === "/" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">⁂</span>Applets</Link>}
+        {bar.entries.map((e) => ("href" in e
+          ? <Place key={e.href} item={item(e)} current={here(e.href)} onHold={() => setAsked(item(e))} />
+          : <AppPlaceLink key={JSON.stringify(e)} place={e} notes={notes} pathname={pathname} />))}
+        {!wayHome && <AppPlaceLink place={{ screen: "home" }} notes={notes} pathname={pathname} />}
         {/* under a frame of the person's own, the app keeps its own way to Settings, whatever that frame draws */}
         {ownFrame && (
           <Link className="home-bar-place home-bar-own" to="/settings" aria-label="Settings (the app's own)" aria-current={pathname === "/settings" ? "page" : undefined}>
@@ -48,21 +52,19 @@ export default function BottomBar() {
   );
 }
 
-/** Parachute Simplified's places (docs/SIMPLE.md): Notes (the home), Journal, Capture and Vault (each the applet in the
- *  home vault, or the screen that adds it), and Connect an AI. */
-function SimplePlaces({ pathname }: { pathname: string }) {
+/** One of the app's own places a bundle's bar names (docs/SIMPLE.md): its home screen (Notes, or the list), Connect an
+ *  AI, or an applet the app ships, Journal, Capture or Vault (the one in the home vault, or the screen that adds it). */
+function AppPlaceLink({ place, notes, pathname }: { place: AppPlace; notes: boolean; pathname: string }) {
+  if ("shipped" in place) return <ShippedPlace which={place.shipped} pathname={pathname} />;
+  const [href, glyph, name] = place.screen === "connect" ? ["/connect", "⌁", "Connect"] : notes ? ["/", "¶", "Notes"] : ["/", "⁂", "Applets"];
+  return <Link className="home-bar-place" to={href} aria-current={pathname === href ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{glyph}</span>{name}</Link>;
+}
+function ShippedPlace({ which, pathname }: { which: ShippedName; pathname: string }) {
   const home = homeVault(useVaults());
   useApplets(home, false);
-  const hrefOf = (which: "capture" | "journal" | "vault") => { const id = shippedIn(home, which); return home && id ? appletPath(home.key, id) : `/${which}`; };
-  const journalHref = hrefOf("journal"), captureHref = hrefOf("capture"), vaultHref = hrefOf("vault");
-  const at = (href: string) => (pathname === href ? "page" : undefined);
-  return <>
-    <Link className="home-bar-place" to="/" aria-current={at("/")}><span className="home-bar-glyph" aria-hidden="true">¶</span>Notes</Link>
-    <Link className="home-bar-place" to={journalHref} aria-current={pathname === journalHref || pathname === "/journal" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">✎{"\uFE0E"}</span>Journal</Link>
-    <Link className="home-bar-place" to={captureHref} aria-current={pathname === captureHref || pathname === "/capture" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">◉{"\uFE0E"}</span>Capture</Link>
-    <Link className="home-bar-place" to={vaultHref} aria-current={pathname === vaultHref || pathname === "/vault" ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">▦{"\uFE0E"}</span>Vault</Link>
-    <Link className="home-bar-place" to="/connect" aria-current={at("/connect")}><span className="home-bar-glyph" aria-hidden="true">⌁</span>Connect</Link>
-  </>;
+  const id = shippedIn(home, which);
+  const href = home && id ? appletPath(home.key, id) : `/${which}`;
+  return <Link className="home-bar-place" to={href} aria-current={pathname === href || pathname === `/${which}` ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{which === "journal" ? "✎" : which === "vault" ? "▦" : "◉"}{"\uFE0E"}</span>{SHIPPED[which].name}</Link>;
 }
 
 function Place({ item, current, onHold }: { item: Item; current: boolean; onHold: () => void }) {

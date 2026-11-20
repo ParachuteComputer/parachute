@@ -25,7 +25,7 @@ describe("which key sections Settings shows", () => {
     expect(settingsShown({ ...newcomer, key: true, anchor: true }).approving).toBe(true);
     expect(settingsShown({ ...newcomer, anchor: true }).approving).toBe(false);
   });
-  it("Frame: a frame of their own, or more than one vault of theirs to pick home from", () => {
+  it("Frame: a frame of their own, or more than one vault of theirs (where Make this mine is reached)", () => {
     expect(settingsShown({ ...newcomer, frame: true }).frame).toBe(true);
     expect(settingsShown({ ...newcomer, ownVaults: 2 }).frame).toBe(true);
     expect(settingsShown({ ...newcomer, ownVaults: 0 }).frame).toBe(false);
@@ -48,7 +48,8 @@ describe("the parts they're decided from", () => {
     expect(ownFrame({ state: "found" }, "built-in")).toBe(true);
     expect(ownFrame({ state: "many" }, "built-in")).toBe(true);
     expect(ownFrame(null, "vault")).toBe(true);
-    for (const state of ["none", "bad", "unreachable"]) expect(ownFrame({ state }, "built-in")).toBe(false);
+    expect(ownFrame({ state: "bad" }, "built-in")).toBe(true); // its status says why it can't run
+    for (const state of ["none", "unreachable"]) expect(ownFrame({ state }, "built-in")).toBe(false);
     expect(ownFrame(null, "built-in")).toBe(false);
   });
 });

@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { hostOf, type VaultRecord } from "../vault/store";
 import { askedAbout, setWhose, useWhose, type Whose } from "../vault/whose";
-import { settingsNow } from "../shell/homeSettings";
+import { applets, bundlesNow, effective, settingsNow } from "../shell/homeSettings";
 
 const LABEL: Record<Whose, string> = { mine: "Mine", trusted: "Someone else's, trusted", theirs: "Someone else's" };
 
@@ -60,7 +60,8 @@ export function AskWhose({ vaults }: { vaults: VaultRecord[] }) {
   useWhose();
   const [mine, setMine] = useState<VaultRecord | null>(null);
   // a vault that holds the home applet or a place on the bar first: those are what stop working until it is answered
-  const named = new Set([...settingsNow().bar, ...(settingsNow().start ? [settingsNow().start!] : [])].map((p) => p.vault));
+  const e = effective(settingsNow(), bundlesNow());
+  const named = new Set([...applets(e.bar), ...(e.start ? [e.start] : [])].map((p) => p.vault));
   const asked = askedAbout(vaults).sort((a, b) => Number(named.has(b.vault)) - Number(named.has(a.vault)));
   if (!asked.length) return null;
   return (

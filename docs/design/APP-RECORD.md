@@ -20,7 +20,7 @@ A bundle is `Parachute/Bundles/<id>` (tagged `parachute-bundle`, under `fields.b
 `Parachute/Apps/<id>` until 11-20, read until 2026-12-20; builds from before 11-20 read only those names, so until then the app writes the names the
 vault already uses, and `scripts/migrate-bundles.ts` moves them once no device runs such a build): where applets come from (one applet, a vault, every vault on a hub), the bar, the
 home, what opens which kind of note, how many applets stay running, how careful it is (`security`). Parachute
-Simplified (id `simple`) and Everything are always there. Each device opens one (Settings → **Your bundle**); a new device opens the one the settings
+Simplified (id `simple`) and Everything are records the app ships, read like any other. Each device opens one (Settings → **Your bundle**); a new device opens the one the settings
 note names. An org's bundle is followed live (`live`): read from their vault each time. A record made for a newer
 Parachute says so with `needs`, and an older one then opens the next bundle it can and says to update; a key it doesn't
 know in a place is left out (docs/design/VERSIONS.md).
@@ -235,7 +235,8 @@ lists); the gateway then adds one per event. A mail server reporting its own cou
 | "The launcher is for everything" | the open app | now |
 | The launcher's vault chapters, masthead (the week's line, its tally, the hills) and "Lately in" | the list of the app's applets; the home applet for the first page; Settings for vaults | now (11-19, T-476 thin shell) |
 | The launcher and the home placed on the bar by the app | the record's pins, then Applets | now (11-19) |
-| `bar` and `start` in `Parachute/Settings` | the bundle record | when no device runs a build from before 11-19 (date for Uni to set) |
+| `bar` and `start` in `Parachute/Settings` | the bundle record only: never written to the note (11-20); the note's are read while the open bundle has no record | read until 2026-12-20; `scripts/migrate-bundles.ts` copies them into the chosen bundle (the note keeps them for a device on another bundle) |
+| Simple and Everything as shell code (`BUILT_IN_APPS`, `builtInApp`, the bar's `SimplePlaces`, the `everything`-only `everywhere`, `look: notes` offering every applet) | two records the app ships (`src/shell/default-bundles.json`), read like any other | now (11-20) |
 | Draft PR #50 | this note | closed 11-19, when #66 merged |
 | `security.approve` in a record, and "a passcode set here means approving code asks it" | `security.code` and the levels (a device that kept a passcode before keeps `code: passcode`) | now: `approve` is still read as `code` until no record says it (Uni to check Aaron's, then drop the alias) |
 | The passcode under Settings → Approving code | Settings → Security | now |

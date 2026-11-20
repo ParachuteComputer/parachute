@@ -2,6 +2,8 @@
 //   an app record   Parachute/Apps/<id>, tagged parachute-app, under fields.app
 //              →    Parachute/Bundles/<id>, tagged parachute-bundle, under fields.bundle (the same note, moved)
 //   the settings note's `app` (which bundle a device opens) → `bundle`
+//   the settings note's `bar` and `start` → also into the chosen bundle's record (unless it says its own); the note keeps
+//   them until 2026-12-20 for a device on another bundle with no bar of its own
 // The app reads the older names until 2026-12-20 and keeps writing an older record under them, because builds from
 // before 11-20 read only those. Run this once no device of the person's runs such a build. It shows what it would do and writes nothing unless asked (--apply); with --apply it first
 // writes each note it changes, as read, to --backup (a folder, made if missing). Run with Node (it strips the types):
@@ -37,16 +39,16 @@ const bare = (p: string) => p.replace(/\.md$/, "");
 
 async function main() {
   const a = args(process.argv.slice(2));
-  const base = `${a.hub}/vault/${a.vault}/api`;
+  const api = `${a.hub}/vault/${a.vault}/api`;
   const headers = { authorization: `Bearer ${a.token}`, "content-type": "application/json" };
   const tagged = async (tag: string): Promise<Row[]> => {
-    const r = await fetch(`${base}/notes?tag=${encodeURIComponent(tag)}&include_metadata=true&limit=100`, { headers });
+    const r = await fetch(`${api}/notes?tag=${encodeURIComponent(tag)}&include_metadata=true&limit=100`, { headers });
     if (!r.ok) throw new Error(`reading #${tag}: ${r.status}`);
     const b = await r.json() as Row[] | { notes: Row[] };
     return Array.isArray(b) ? b : b.notes;
   };
   const patch = async (n: Row, body: Record<string, unknown>) => {
-    const r = await fetch(`${base}/notes/${encodeURIComponent(n.id)}`, { method: "PATCH", headers, body: JSON.stringify({ ...body, ...(n.updatedAt ? { if_updated_at: n.updatedAt } : { force: true }) }) });
+    const r = await fetch(`${api}/notes/${encodeURIComponent(n.id)}`, { method: "PATCH", headers, body: JSON.stringify({ ...body, ...(n.updatedAt ? { if_updated_at: n.updatedAt } : { force: true }) }) });
     if (!r.ok) throw new Error(`writing ${n.path}: ${r.status} ${(await r.text()).slice(0, 200)}`);
   };
   const say = (s: string) => console.log(a.apply ? s : `(would) ${s}`);
@@ -68,17 +70,40 @@ async function main() {
       await patch(n, { path: to, tags: { add: ["parachute-bundle"], remove: ["parachute-app"] }, metadata: { bundle: body, app: null } });
     }
   }
-  const settings = await tagged("parachute-settings");
-  for (const n of settings) {
+  // the settings note: its choice under `bundle` alone, and its bar and home also into the chosen bundle's record (a
+  // record that already says its own keeps them)
+  const shipped = JSON.parse(readFileSync(new URL("../src/shell/default-bundles.json", import.meta.url), "utf8")) as Record<string, unknown>[];
+  for (const n of await tagged("parachute-settings")) {
     const p = plain(n.metadata) && plain(n.metadata.parachute) ? n.metadata.parachute : null;
-    if (!p || p.app === undefined) continue;
-    const { app, ...rest } = p;
-    changes++;
+    if (!p || (p.app === undefined && p.bar === undefined && p.start === undefined)) continue;
+    const { app, bar, start, ...rest } = p;
     // `app` is the newer when both are said (only a build from before 11-20 changes it alone)
-    say(`${n.path}: app ${JSON.stringify(app)} → bundle${p.bundle !== undefined && p.bundle !== app ? ` (over bundle ${JSON.stringify(p.bundle)}, which an older build's change left behind)` : ""}`);
-    if (a.apply) {
+    const choice = typeof app === "string" ? app : typeof p.bundle === "string" ? p.bundle : "everything";
+    if (app !== undefined) { changes++; say(`${n.path}: app ${JSON.stringify(app)} → bundle${p.bundle !== undefined && p.bundle !== app ? ` (over bundle ${JSON.stringify(p.bundle)}, which an older build's change left behind)` : ""}`); }
+    if (bar !== undefined || start !== undefined) {
+      // the record as it is after the moves above
+      const rec = (await tagged("parachute-bundle")).find((r) => bare(r.path) === `Parachute/Bundles/${choice}`)
+        ?? (await tagged("parachute-app")).find((r) => bare(r.path) === `Parachute/Apps/${choice}`) ?? null;
+      const key = rec && (rec.tags ?? []).includes("parachute-bundle") ? "bundle" : rec ? "app" : "bundle";
+      const body = rec && plain(rec.metadata) && plain(rec.metadata[key]) ? rec.metadata[key] as Record<string, unknown> : null;
+      // a bundle the app ships starts its bar with its own places; the note's pins follow them, as the app shows it
+      const base = (shipped.find((d) => d.id === choice)?.bar as unknown[] | undefined) ?? [];
+      const more = { ...(body?.bar === undefined && Array.isArray(bar) ? { bar: [...base, ...bar] } : {}), ...(body?.start === undefined && start !== undefined ? { start } : {}) };
+      if (Object.keys(more).length) { changes++; say(`${n.path}: bar and home → the bundle ${choice}: ${JSON.stringify(more)}`); }
+      if (a.apply && Object.keys(more).length) {
+        if (rec) { backup(rec); await patch(rec, { metadata: { [key]: { ...body, ...more } } }); }
+        else {
+          const name = shipped.find((d) => d.id === choice)?.name ?? choice;
+          const r = await fetch(`${api}/notes`, { method: "POST", headers, body: JSON.stringify({ path: `Parachute/Bundles/${choice}`, content: `The ${String(name)} bundle: where its applets come from, its bar and its home.`, tags: ["parachute-bundle"], metadata: { bundle: { contract: 1, id: choice, name, ...more } } }) });
+          if (!r.ok) throw new Error(`making Parachute/Bundles/${choice}: ${r.status}`);
+        }
+      }
+    }
+    if (a.apply && app !== undefined) {
       backup(n);
-      await patch(n, { metadata: { parachute: { ...rest, bundle: app } } });
+      // the note keeps its bar and home until 2026-12-20: a device that opens another bundle with no bar of its own
+      // still reads them there
+      await patch(n, { metadata: { parachute: { ...rest, bundle: choice, ...(bar !== undefined ? { bar } : {}), ...(start !== undefined ? { start } : {}) } } });
     }
   }
   if (!changes) console.log("Nothing to move.");

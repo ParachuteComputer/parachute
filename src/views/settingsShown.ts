@@ -35,7 +35,7 @@ export function settingsShown(f: SettingsFacts): Shown {
     // Approving code and its Root key: the key signs each Allow and keeps it in the home vault. Kept while a root key is
     // held here, so it can be removed.
     approving: f.key && f.home && (applets || f.anchor),
-    // the home picker is in Frame while it has more to choose from than one vault
+    // Make this mine (the way to a frame of one's own) is reached here by someone with more than one vault of theirs
     frame: f.frame || f.ownVaults > 1,
   };
 }
@@ -46,5 +46,6 @@ export function settingsShown(f: SettingsFacts): Shown {
 export const approvalsShown = (cards: boolean, k: { same: boolean; approvers: readonly unknown[] } | null) =>
   !!k && (cards || k.approvers.length > 0 || !k.same);
 
-/** The person has a frame: one in the home vault (or several, or a copy of theirs runs here while it can't be read). */
-export const ownFrame = (read: { state: string } | null, run: "built-in" | "vault") => run === "vault" || read?.state === "found" || read?.state === "many";
+/** The person has a frame: one in the home vault (or several, or one that can't be run, so its status shows; or a copy
+ *  of theirs runs here while it can't be read). */
+export const ownFrame = (read: { state: string } | null, run: "built-in" | "vault") => run === "vault" || read?.state === "found" || read?.state === "many" || read?.state === "bad";
