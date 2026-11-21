@@ -56,6 +56,8 @@ test("an AI changes three records and deletes one; Changes shows them under its 
   const line = home.locator("p.changed").filter({ hasText: /changed \d+\+? things? today/ });
   await expect(line).toBeVisible({ timeout: 30_000 });
   await expect(line).toContainText(ai);
+  // a name with a comma closes it before the verb
+  await expect(line).toContainText(/You, in another app, changed \d+/);
   await home.getByRole("button", { name: "See what changed" }).click();
   await expect(page).toHaveURL(/\/a\/parachute%3Avault\?vault=kitchen&show=changes/);
   const vault: FrameLocator = page.frameLocator('iframe.applet-frame[title="Vault"]');
@@ -71,7 +73,7 @@ test("an AI changes three records and deletes one; Changes shows them under its 
   // the person's own hub token reads as them, in plain words: not "A key with no name (REST)"
   const you = vault.getByRole("region", { name: "You, in another app, Today" });
   await expect(you).toBeVisible();
-  await expect(vault.getByText(/with no name|\bREST\b|\bMCP\b/)).toHaveCount(0);
+  await expect(vault.getByText(/with no name|\bREST\b|\bMCP\b/i)).toHaveCount(0);
   // and its counts agree: the group says how many changes it has, "Put all N back" says how many records that puts back,
   // and the line between them says what the rest are (the cake's two later changes go back with the cake, so they aren't counted again)
   const header = you.locator("xpath=ancestor::div[contains(@class,'chg')][1]/preceding-sibling::div[contains(@class,'run')][1]");

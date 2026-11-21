@@ -133,6 +133,8 @@ describe("reading what changed", () => {
     expect(writerName("mcp", false, { by: me, account: me })).toBe("You, in another app");
     // another account on the hub is a person, not an app
     expect(writerName("api", false, { by: "u-other", account: me })).toBe("Someone else on your hub");
+    // the hub's own operator label is the operator, not another person
+    expect(writerName("api", false, { by: "operator", account: me })).toBe("Your hub's operator");
     // a hub token's own label, nothing recorded, or an account this device can't tell: an app without a name
     for (const who of [{ by: "token:9f2", account: me }, { by: null, account: me }, { by: me, account: null }, undefined])
       for (const via of ["api", "mcp"]) expect(writerName(via, false, who)).toBe("An app without a name");

@@ -159,8 +159,8 @@ export const isSelf = (clientId: string | null, via: string | null) =>
 /** Who a write by a channel (`api`, `mcp`) was, for the person: the hub stamps the channel and the person it was for,
  *  not which key. For their own account: theirs. For another account: another person on the hub. For none they can
  *  tell (a hub token's `token:<id>`, nothing recorded, or their account not known here): an app without a name. */
-const channelWriter = (via: string | null, by: string | null, account: string | null): "you" | "other" | "unnamed" | null =>
-  via !== "api" && via !== "mcp" ? null : account && by === account ? "you" : account && by && !by.includes(":") ? "other" : "unnamed";
+const channelWriter = (via: string | null, by: string | null, account: string | null): "you" | "operator" | "other" | "unnamed" | null =>
+  via !== "api" && via !== "mcp" ? null : account && by === account ? "you" : by === "operator" ? "operator" : account && by && !by.includes(":") ? "other" : "unnamed";
 /** Is this write one by an app the hub gave no name (the hub can't say which one it was)? */
 export const isUnnamed = (via: string | null, mine: boolean, by: string | null, account: string | null) => !mine && channelWriter(via, by, account) === "unnamed";
 
@@ -180,7 +180,7 @@ export function writerName(via: string | null, mine: boolean, who?: { by: string
   if (via.startsWith("nostr:")) return `A key (${via.slice(6, 14)}…)`;
   if (via === "operator") return "Your hub's operator";
   const c = channelWriter(via, who?.by ?? null, who?.account ?? null);
-  if (c) return c === "you" ? "You, in another app" : c === "other" ? "Someone else on your hub" : "An app without a name";
+  if (c) return c === "you" ? "You, in another app" : c === "operator" ? "Your hub's operator" : c === "other" ? "Someone else on your hub" : "An app without a name";
   if (via === "git-import") return "An import";
   return via;
 }
