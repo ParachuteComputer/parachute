@@ -58,9 +58,21 @@ class MainActivity : TauriActivity() {
     paintGround(findViewById(android.R.id.content))
   }
 
-  private fun paintGround(v: View) {
+  private fun ground(): Int {
     val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-    v.setBackgroundColor(if (night) 0xFF171613.toInt() else 0xFFF2EDE2.toInt())
+    return if (night) 0xFF171613.toInt() else 0xFFF2EDE2.toInt()
+  }
+
+  private fun paintGround(v: View) {
+    v.setBackgroundColor(ground())
+    webView(v)?.setBackgroundColor(ground())
+  }
+
+  // The webview is white until the page draws its first frame (a white flash at every start): it starts on the app's
+  // ground instead, as the strips around it do.
+  override fun onWebViewCreate(webView: WebView) {
+    super.onWebViewCreate(webView)
+    webView.setBackgroundColor(ground())
   }
 
   // While the app is in front, NotifyService shows nothing, and what it showed is cleared: the person is looking. (It is

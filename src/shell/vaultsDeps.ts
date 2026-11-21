@@ -12,6 +12,7 @@ import { isMine } from "../vault/whose";
 import { heldLevel, giveBack, appletLevel } from "../vault/reach";
 import { forgetOwnWrite } from "../vault/writeAsk";
 import { homeVault } from "./frameSource";
+import { userOf } from "../services/signals";
 import { reachOf, viewBase } from "../vault/published";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
@@ -79,6 +80,8 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
     hubs: heldHubs,
     // this device's Parachute signed in as an app: its writes are its key's, named for this client id (core keys.ts)
     self: (key) => findVault(key)?.clientId ?? null,
+    // the person's own account on that hub: the sign-in's subject (a write for it, by no named key, is theirs)
+    account: (key) => { const v = findVault(key); return v ? userOf(v.accessToken) : null; },
     // never from the browser's cache: the hub sends ETag and Last-Modified with no Cache-Control, so a browser may reuse a
     // read of a moment ago (heuristic freshness), and a record just changed would read as it was
     // a read as the hub has it now, kept for the screens that may show it from the copy (vault/readCache.ts); a change
