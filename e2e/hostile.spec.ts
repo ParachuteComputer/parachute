@@ -42,7 +42,7 @@ Promise.all(calls.map(function (c) { return ask(c[0], c[1]).then(function (a) { 
 </script>`.replaceAll("VAULT", VAULT).replaceAll("GO", go);
 
 async function hostile(page: Page, go?: string) {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
   await page.evaluate((doc) => { (document.querySelector("iframe.app-frame") as HTMLIFrameElement).srcdoc = doc; }, hostileDoc(go));
   // no polling while it acts: Playwright's reads of the frame count as taps too
@@ -81,7 +81,7 @@ test("a hostile frame reads no token and reaches nothing of the shell's", async 
 });
 
 test("a hostile frame can't approve an applet, or start one the person allowed", async ({ page }) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   const chip = ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ });
   const href = (await chip.getAttribute("href"))!;
   const grantsBefore = (await stored(page)).grants;
@@ -99,7 +99,7 @@ test("a hostile frame can't approve an applet, or start one the person allowed",
 });
 
 test("the frame is there only while it is shown: never beside a shell screen, never at a sign-in's return", async ({ page }) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Your Parachutes" })).toBeVisible();
@@ -112,13 +112,13 @@ test("the frame is there only while it is shown: never beside a shell screen, ne
 
 for (const focus of [false, true]) {
   test(`a tap on the shell doesn't count for the frame${focus ? ", even one that focuses itself" : ""}: its move to an allowed applet leaves it stopped`, async ({ page }) => {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     const chip = ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ });
     const href = (await chip.getAttribute("href"))!;
     await chip.click();
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Recipe box" })).toBeVisible();
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
     // the evaluate is the shell's own activation (as a tap on a shell screen is); the frame then moves at once
     const doc = `<!doctype html><input id=i><script>${focus ? "document.getElementById('i').focus();" : ""}parent.postMessage({pf:1,id:"x",method:"nav.go",params:{to:${JSON.stringify(href)}}},"*");</script>`;

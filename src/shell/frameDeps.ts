@@ -1,6 +1,6 @@
 // The shell's real answers to the frame (frameBridge.ts `HostDeps`), from what the shell holds.
-import type { Decided, FrameApplets, FrameViewer } from "../bridge/protocol";
-import { vaultAppletIn } from "../applet/shipped";
+import type { Decided, FrameApplet, FrameApplets, FrameViewer } from "../bridge/protocol";
+import { OFFICIAL_NAMES, officialCopyOf, officialFace, officialId } from "../applet/parachuteSource";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
 import { gateNow, whenGateKnown } from "../applet/selftest/run";
 import { statusOf } from "../open/status";
@@ -38,18 +38,32 @@ export const homeNow = () => {
       const fresh = newVaultsOn(p.hub);
       return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}) };
     }), ...(openBundleNow().look === "notes" ? { look: "notes" as const, app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
-    ...viewerNow() };
+    ...viewerNow(), ...officialNow() };
 };
-/** Vault in the home vault, as this device last read its applets, when applets run here: where a record no other
- *  applet opens goes (docs/VAULT.md). */
+/** A home's copy of one of Parachute's own (the old Add Capture wrote these), listed beside Parachute's own: said so. */
+function copyNote(rec: VaultRecord, manifestId: string): { note: string } | null {
+  const home = homeVault(), of = officialCopyOf(manifestId);
+  return of && home?.key === rec.key && openBundleNow().parachute ? { note: `your copy of Parachute's ${of}` } : null;
+}
+/** Parachute's own applets, listed in the home (docs/design/PARACHUTE-SOURCE.md): from the app, never read from a vault. */
+function officialNow(): { official?: FrameApplet[] } {
+  const home = homeVault();
+  if (!home || !openBundleNow().parachute) return {};
+  const status = "ok" as const;
+  return { official: OFFICIAL_NAMES.map((n) => { const f = officialFace(n); return { noteId: officialId(n), path: f.name, vault: home.key, opens: [], status,
+    manifest: { id: `parachute-${n}`, name: f.name, glyph: f.glyph, ...(f.note ? { note: f.note } : {}), screens: f.screens } }; }) };
+}
+/** Vault, Parachute's own (docs/design/PARACHUTE-SOURCE.md): where a record no other applet opens goes (docs/VAULT.md),
+ *  whenever applets run here. */
 function viewerNow(): { viewer?: FrameViewer } {
   const home = homeVault();
-  const id = vaultAppletIn(home);
-  const a = home ? appletsNow(home.key) : null;
-  const e = a?.state === "ok" ? a.found.entries.find((x) => x.noteId === id) : undefined;
-  if (!home || !e) return {};
-  const status = statusOf(home.key, gateNow())(e);
-  return { viewer: { vault: home.key, noteId: e.noteId, status } };
+  if (!home) return {};
+  // Parachute's own runs before the self-test is known (AppletScreen): always "ok"
+  if (openBundleNow().parachute) return { viewer: { vault: home.key, noteId: officialId("vault"), status: "ok" } };
+  // a bundle that leaves Parachute's own out: a copy of Vault the person keeps in their home, as before (its card asks)
+  const a = appletsNow(home.key);
+  const e = a?.state === "ok" ? a.found.entries.find((x) => x.manifest.id === "vault-view") : undefined;
+  return e ? { viewer: { vault: home.key, noteId: e.noteId, status: statusOf(home.key, gateNow())(e) } } : {};
 }
 /** For a frame of the person's own, a write into their vault is asked about once more on the shell's own sheet. */
 const confirmed = (from: "built-in" | "vault", q: WriteAsk) => (from === "vault" ? confirmWrite(q) : Promise.resolve(true)).then((yes) => { if (!yes) throw new Error("not_allowed"); });
@@ -98,7 +112,7 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   return {
     ok: true, skipped: e.found.skipped,
     entries: e.found.entries.filter(inApp).map((a) => ({ noteId: a.noteId, path: a.path, vault: a.vault, opens: a.opens, status: status(a),
-      manifest: { id: a.manifest.id, name: a.manifest.name, glyph: a.manifest.glyph, ...(a.manifest.note ? { note: a.manifest.note } : {}), screens: a.manifest.screens } })),
+      manifest: { id: a.manifest.id, name: a.manifest.name, glyph: a.manifest.glyph, ...(copyNote(rec, a.manifest.id) ?? (a.manifest.note ? { note: a.manifest.note } : {})), screens: a.manifest.screens } })),
   };
 }
 

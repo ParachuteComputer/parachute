@@ -32,7 +32,7 @@ export default function PickVaults({ pick, onError, onCancel }: { pick: VaultPic
           <label key={v} className="line"><span><input type="radio" name="first" checked={chosen === v} onChange={() => setFirst(v)} /> {v}</span></label>
         ))}
       </fieldset>}
-      <p className="small quiet">{pick.home ? "Parachute reads your home now. Your other vaults are asked for one at a time, when you open one or allow an applet in it." : "Parachute reads this one now. The others are asked for one at a time, when you open them."}</p>
+      <p className="small quiet">{pick.home ? "Parachute reads and writes your home now. Your other vaults are asked for one at a time, when you open one or allow an applet in it." : "Parachute reads this one now. The others are asked for one at a time, when you open them."}</p>
       <button className="primary" type="button" disabled={busy || !chosen} onClick={() => void go()}>{busy ? "Signing in…" : "Continue"}</button>
       <button className="quiet-button" type="button" disabled={busy} onClick={onCancel}>Back</button>
     </div>

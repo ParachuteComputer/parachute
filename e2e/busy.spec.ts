@@ -36,7 +36,7 @@ test("ninety calls at once are all answered, in order: the kit keeps them in lin
   test.setTimeout(60_000);
   const note = await record(hubState(), "create", ARGS);
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Busy/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     // the last thirty wait for the ten-second window to move on

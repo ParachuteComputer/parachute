@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { updateLine } from "../../applet/level";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVault } from "../../bridge/protocol";
-import { addEmbed, addVault, bringIn, dismissVault, pinApplet, startApplet, useApplets, useComponents, useHome, useHomeLoaded, usePointers, useVaultQuery, useVaults } from "../data";
+import { addEmbed, addVault, bringIn, dismissVault, pinApplet, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
 import { titleOf } from "../../vault/notes";
 import { Days } from "../../kit/parts";
 import { when } from "../../kit/when";
@@ -24,7 +24,6 @@ const updated = (n: Note) => (n as { updatedAt?: string }).updatedAt ?? null;
 export default function Launcher() {
   const vaults = useVaults();
   const home = useHome();
-  const homeRead = useHomeLoaded();
   const [asked, setAsked] = useState<{ v: FrameVault; a: FrameApplet } | null>(null);
   const [part, setPart] = useState<{ v: FrameVault; c: FrameComponent } | null>(null);
   // how many each vault lists, once read: the list says when there is nothing in it at all
@@ -32,7 +31,7 @@ export default function Launcher() {
   const count = useCallback((key: string, n: number) => setCounts((c) => (c[key] === n ? c : { ...c, [key]: n })), []);
   // only the vaults held now count (one signed out of while the list shows leaves with its count)
   const read = vaults.every((v) => counts[v.key] !== undefined);
-  const anyApplets = vaults.some((v) => (counts[v.key] ?? 0) > 0);
+  const anyApplets = !!home.official?.length || vaults.some((v) => (counts[v.key] ?? 0) > 0);
   const many = vaults.length > 1;
   return (
     <main className="screen launcher">
@@ -40,10 +39,11 @@ export default function Launcher() {
       {home.notice === "bundle-record" && <p className="launcher-notice" role="status">Your bundle didn't load, so here is every applet. <Link to="/settings">Settings</Link></p>}
       {home.notice === "bundle-newer" && <p className="launcher-notice" role="status">{updateLine(home.noticeName ?? "your bundle")} For now this is another bundle. <Link to="/settings">Settings</Link></p>}
       <ol className="entries" aria-label="Applets">
+        {/* Parachute's own (docs/design/PARACHUTE-SOURCE.md), in the home: first, from the app */}
+        {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
         {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
         {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
-      {homeRead && !home.viewer && vaults.some((v) => v.home) && <p className="launcher-notice"><Link to="/vault"><span aria-hidden="true">▦{"\uFE0E"}</span> Add Vault: your vaults' types, records and fields, where a record opens</Link></p>}
       <Components vaults={vaults} onPart={(v, c) => setPart({ v, c })} />
       <p className="launcher-foot"><Link to="/settings">Settings</Link></p>
       {asked && <AppletSheet v={asked.v} a={asked.a} onClose={() => setAsked(null)} />}

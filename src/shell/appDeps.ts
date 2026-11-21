@@ -107,6 +107,10 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       go(href);
       return true;
     },
+    async copy(text) {
+      if (!tappingInApplet() || !navigator.clipboard) return false;
+      return navigator.clipboard.writeText(text).then(() => true, () => false);
+    },
     async openLink(url) {
       if (!tappingInApplet()) return false;
       await openLinkOut(url);

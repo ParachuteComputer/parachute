@@ -54,7 +54,8 @@ function sayWhose(issuer: string, m: Marks) {
   }
 }
 
-/** What a sign-in asks of the vault it reads: read, or write when this device already holds write there (signing in
+/** What a sign-in asks of a vault it reads that isn't the home (the home is asked at write: Parachute's own applets
+ *  write there, docs/design/PARACHUTE-SOURCE.md): read, or write when this device already holds write there (signing in
  *  again never takes away what something allowed needs). */
 function levelAt(parachute: Parachute, vault: string): Level {
   const held = listVaults().find((v) => originOf(v.issuer) === originOf(parachute.issuer) && v.vault === vault);
@@ -111,7 +112,7 @@ export async function startSignIn(hub: string, whose: "mine" | "theirs", withKey
   };
   if (!listed) return { go: await door({ parachute, step: "list", whose, how: "key", fresh: true }) };
   if (records && asksHome(whose, listed)) listed.home = homeFrom(await records, listed.vaults);
-  const next = readFirst(parachute, listed, whose, (first, home, marks) => door({ parachute, step: "open", vault: first, level: levelAt(parachute, first), why: "signin", whose, how: "key", fresh: true, home, marks }));
+  const next = readFirst(parachute, listed, whose, (first, home, marks) => door({ parachute, step: "open", vault: first, level: home ? "write" : levelAt(parachute, first), why: "signin", whose, how: "key", fresh: true, home, marks }));
   return "pick" in next ? next : { go: await next.go };
 }
 
@@ -156,7 +157,7 @@ export async function finishStep(code: string, state: string, iss?: string | nul
     if (!listed.vaults.length) throw new Error("You're signed in there, but no vault is yours yet. Ask the hub's owner to give you one.");
     // the hub's session is still in place: its consent for the one vault comes next
     const whose = pending.whose ?? "theirs";
-    const next = readFirst(p, listed, whose, (first, home, marks) => beginSignIn({ parachute: p, step: "open", vault: first, level: levelAt(p, first), why: "signin", whose, how: pending.how, home, marks }, f));
+    const next = readFirst(p, listed, whose, (first, home, marks) => beginSignIn({ parachute: p, step: "open", vault: first, level: home ? "write" : levelAt(p, first), why: "signin", whose, how: pending.how, home, marks }, f));
     return "pick" in next ? next : { go: await next.go };
   }
 

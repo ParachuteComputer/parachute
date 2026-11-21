@@ -8,7 +8,7 @@ import { installApplet, ui } from "./helpers";
 test.use({ storageState: "e2e/.signed-in.json" });
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
 const openChip = async (page: Page, name: RegExp) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name }).click();
 };
 const card = (page: Page) => page.getByRole("region", { name: /asking for access/ });

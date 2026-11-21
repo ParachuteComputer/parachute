@@ -79,7 +79,7 @@ const applet = (svc: unknown, body: string) => ({
   fields: { applet: { contract: 2, id: "broker-check", name: "Broker check", access: [{ vault: "here", allow: [{ path: "Notes/", verbs: ["read"] }] }] }, services: svc },
 });
 const open = async (page: Page) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Broker check/ }).click();
 };
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");

@@ -26,7 +26,7 @@ test("in 260 rooms the list reads, and a search reaches every room", async ({ pa
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, Buffer.from(sk).toString("hex"));
   const made = await installApplet("rooms", { relay: relay.url, uni: getPublicKey(generateSecretKey()) });
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const app = page.frameLocator("iframe.applet-frame");

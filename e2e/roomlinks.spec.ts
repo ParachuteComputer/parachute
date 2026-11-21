@@ -18,7 +18,7 @@ const secret = (n: string) => readFileSync(join(KEYS, `${n}.hex`), "utf8").trim(
 // the applet on screen (the app keeps one it left running, hidden)
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame:visible");
 const chip = async (page: Page, name: RegExp) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name }).click();
 };
 

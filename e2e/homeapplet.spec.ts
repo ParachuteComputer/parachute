@@ -9,7 +9,7 @@ const guide = readFileSync(new URL("../docs/WRITE-AN-APPLET.md", import.meta.url
 const section = guide.slice(guide.indexOf("## A home applet"), guide.indexOf("## What the person sees"));
 const ARGS = JSON.parse(section.match(/```json\n([\s\S]*?)\n```/)![1]) as { path: string; body: string } & Record<string, unknown>;
 const LAID_OUT = section.match(/```tsx\n([\s\S]*?)```/)![1];
-const applet = (page: Page) => page.frameLocator("iframe.applet-frame");
+const applet = (page: Page) => page.frameLocator("iframe.applet-frame:not([title=\"Vault\"])");
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
@@ -41,10 +41,11 @@ test("a home applet written only by create-note opens on start after Allow: the 
     await expect(applet(page).getByRole("region", { name: "Pinned" }).getByRole("button", { name: /Recipe box/ })).toBeVisible();
     // a tap on a note takes the person there
     await lately.getByRole("button", { name: /^Fresh in the kitchen kitchen/ }).click();
-    await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/n/`));
-    await expect(ui(page).locator("header").getByRole("heading", { name: "Fresh in the kitchen" })).toBeVisible();
+    // a note no applet opens opens in Vault, Parachute's own (docs/design/PARACHUTE-SOURCE.md)
+    await expect(page).toHaveURL(new RegExp(`/a/parachute%3Avault\\?vault=${VAULT}&record=`));
+    await expect(page.frameLocator('iframe.applet-frame[title="Vault"]').getByRole("article", { name: "Fresh in the kitchen" })).toBeVisible();
     // Back returns to Home, running: it is the home chosen on this device (Allow at its start)
-    await ui(page).getByRole("button", { name: "Back" }).click();
+    await page.getByRole("button", { name: "Back" }).first().click();
     await expect(applet(page).getByRole("region", { name: "Lately" }).getByRole("button", { name: /^Fresh in the kitchen kitchen/ })).toBeVisible();
     // and a restart opens it by itself
     await start(page);
@@ -71,7 +72,7 @@ test("hostile: app.open goes nowhere without a tap, and an applet that didn't as
     expect(went).toBe(false);
     expect(page.url()).toBe(here);
     // Recipe box asks nothing of the app
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const said = await applet(page).locator("body").evaluate(() => (window as unknown as { parachute: { app: { recent(): Promise<unknown> } } }).parachute.app.recent().then(() => "answered", (e: { code?: string }) => e.code));
@@ -123,8 +124,9 @@ test("Back to the home while the bundle is read again still finds it running", a
     // a slow hub: the bundle record's read, made again as the note's screen shows, is still on its way at the Back
     await page.route((u) => ["parachute-app", "parachute-bundle"].includes(u.searchParams.get("tag") ?? ""), async (r) => { await new Promise((res) => setTimeout(res, 4000)); await r.continue().catch(() => {}); });
     await lately.getByRole("button", { name: /^A note to come back from kitchen/ }).click();
-    await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/n/`));
-    await ui(page).getByRole("button", { name: "Back" }).click();
+    await expect(page).toHaveURL(/\/a\/parachute%3Avault\?/);
+    await expect(page.frameLocator('iframe.applet-frame[title="Vault"]').getByRole("article", { name: "A note to come back from" })).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).first().click();
     await expect(applet(page).getByRole("region", { name: "Lately" })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Open Home$/ })).toHaveCount(0);
   } finally {

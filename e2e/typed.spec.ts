@@ -41,7 +41,7 @@ test("the audit's reading tracker ticks book_status for real, and adds a typed b
   test.skip(!(await hasDoor()), "types and fields need the record door (core 0.9)");
   const made = await world();
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Reading tracker/ }).click();
     await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Open book notes in Books/");
     await page.getByRole("button", { name: "Allow" }).click();
@@ -70,7 +70,7 @@ test("the note view shows a typed record's fields, and the editor changes one by
   test.skip(!(await hasDoor()), "types and fields need the record door (core 0.9)");
   const made = await world();
   try {
-    await page.goto(`/v/${VAULT}/n/${made[0]}`);
+    await page.goto(`/v/${VAULT}/n/${made[0]}?with=vault`);
     const fields = ui(page).getByRole("definition").first();
     await expect(fields).toBeVisible();
     const list = ui(page).locator("dl.note-fields");

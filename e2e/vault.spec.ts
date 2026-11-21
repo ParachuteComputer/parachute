@@ -2,15 +2,28 @@ import { expect, test, type Page } from "@playwright/test";
 import { openVault as openAnother, signIn, ui } from "./helpers";
 import { hubState, MORE_VAULTS, VAULT } from "./hub";
 
-/** Into a vault, as a person does: Settings, its Open. */
-const openVault = async (page: Page, vault = VAULT) => { await ui(page).getByRole("link", { name: "Settings" }).click(); await page.getByRole("link", { name: `Open ${vault}`, exact: true }).click(); };
+/** Into a vault, as a person does: Settings, its Open (which carries on to Vault, Parachute's own applet); then its plain view, which these tests read. */
+const openVault = async (page: Page, vault = VAULT) => {
+  await ui(page).getByRole("link", { name: "Settings" }).click();
+  // Vault runs once this new device's self-test has passed
+  await expect(page.getByRole("status").filter({ hasText: /approved code only|run sealed/ })).toBeVisible({ timeout: 45_000 });
+  await page.getByRole("link", { name: `Open ${vault}`, exact: true }).click();
+  await expect(page).toHaveURL(/\/a\/parachute%3Avault\?vault=/);
+  await page.goto(`/v/${vault}?with=vault`);
+};
 
 test("sign in to the Parachute on the hub, open a vault, and read a note", async ({ page }) => {
   await signIn(page);
   await openVault(page);
   const notes = ui(page).getByRole("list", { name: "Notes" });
   await expect(notes.getByRole("link", { name: /Tomato toast/ })).toBeVisible();
+  // a note no applet claims opens in Vault, with no card
   await notes.getByRole("link", { name: "Welcome", exact: true }).click();
+  await expect(page).toHaveURL(/\/a\/parachute%3Avault\?vault=kitchen&record=/);
+  await expect(page.frameLocator('iframe.applet-frame[title="Vault"]').getByRole("article", { name: "Welcome" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Allow" })).toHaveCount(0);
+  // the plain note view, where its text is links
+  await page.goto(`/v/${VAULT}/n/${new URL(page.url()).searchParams.get("record")}?with=vault`);
   await expect(ui(page).getByRole("heading", { level: 1, name: "Welcome" }).last()).toBeVisible();
   // a wikilink goes to the note it names
   await ui(page).getByRole("link", { name: "Recipes/Tomato toast" }).click();

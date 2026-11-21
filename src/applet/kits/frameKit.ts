@@ -422,6 +422,7 @@ export const FRAME_KIT = String.raw`(function () {
       recent: function (o) { return call("app", "recent", o || {}); },
       pins: function () { return call("app", "pins", {}); },
       open: function (href) { return call("app", "open", { href: href }); },
+      copy: function (text) { return call("app", "copy", { text: text }); },
       links: function (links, from) { var p = { links: links }; if (typeof from === "string") p.from = from; return call("app", "links", p); },
       follow: function (link, o) {
         var p = { link: link };
@@ -537,6 +538,7 @@ export const FRAME_KIT = String.raw`(function () {
         }, function () {});
         return function () { stopped = true; if (id) { delete vaultWatches[id]; call("vaults", "unwatch", { id: id }).catch(function () {}); } };
       },
+      applets: function (vault) { return call("vaults", "applets", { vault: vault }); },
       // with app: [sharing]
       access: function (vault) { return call("vaults", "access", { vault: vault }); },
       publish: function (vault, id, on) { return call("vaults", "publish", { vault: vault, id: id, on: on !== false }); },

@@ -3,7 +3,7 @@
 // ask, and its card says so, stressed. An applet in someone else's vault asks the app for nothing (discovery.ts).
 //
 //   vaults        (read every vault this device holds; change records where the person lets Parachute change them)
-//     list()                                   the vaults: {key, name, host, mine, home, level}
+//     list()                                   the vaults: {key, name, host, mine, home, level, connector}
 //     types({vault})                           its types and tags, with counts and declared fields
 //     query({vault, type?, tag?, search?, path?, where?, sort?, limit?, offset?})
 //                                              a page of records (no body): {records, more}
@@ -13,6 +13,8 @@
 //                                              {if_updated_at, body?, fields?, types?: {add?, remove?}, tags?: {add?, remove?}}
 //     create({vault, bytes})                   a new record: {path, body, types?, fields?, tags?}
 //     watch({vault, type?}) / unwatch({id})    changes as they land: events `vaults.events` {id, upsert?: record, remove?: id}
+//     applets({vault})                         the applets in it, as the app lists them: {id, name, glyph, href, allowed}
+//                                              (their code is never handed over; a tap on one goes through `app.open`)
 //   sharing       (what reaches a vault; and, each after the person says yes on the app's own sheet over a tap of theirs,
 //                 what changes who reaches it)
 //     access({vault})                          this app's level there, its applets allowed here, the connector address
@@ -32,7 +34,9 @@ import { ContractError, ERROR_CODES, hasHidden, hasOnly, plain } from "../contra
 import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 
-export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null };
+export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
+  /** where an AI connects to it (`<vault>/mcp`): the vault's own address, nothing secret */
+  connector: string };
 /** A record as the module hands it on: record words, types apart from tags. */
 export type Rec = {
   id: string; path: string; title: string; createdAt: string | null; updatedAt: string | null;
@@ -43,6 +47,9 @@ export type Rec = {
 export type TypeRow = { name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, { type?: string; enum?: unknown[]; description?: string }> };
 export type Version = { ix: number; at: string; actor: string | null; via: string | null };
 export type AccessRow = { level: "read" | "write" | null; mine: boolean; home: boolean; hub: string; connector: string; applets: { noteId: string; name: string; glyph: string; since: string | null; changes: boolean }[] };
+export type AppletRow = { id: string; name: string; glyph: string; href: string; allowed: boolean;
+  /** a copy of one of Parachute's own kept in the vault (the old Add Capture wrote these): its name, to tell the two apart */
+  copyOf?: string };
 export type WatchEvent = { upsert?: Rec } | { remove?: string };
 
 /** The shell's side: requests on the vault's own API with the app's sign-in (a change to a vault held for reading
@@ -59,6 +66,8 @@ export type VaultsDeps = {
   door(vault: string): Promise<"records" | "notes">;
   watch(vault: string, type: string | null, on: (e: WatchEvent) => void): () => void;
   access(vault: string): Promise<AccessRow>;
+  /** The applets in a vault, as the app lists them (names only, never their code). */
+  applets(vault: string): Promise<AppletRow[]>;
   revoke(vault: string, noteId: string): Promise<void>;
   readOnly(vault: string): Promise<void>;
   /** The app's own yes-or-no sheet over the applet, after a tap of the person's in it: "yes", "no", or "untapped" (no
@@ -444,6 +453,10 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
       unwatch: {
         cap: null, validate: one((p) => (hasOnly(p, ["id"]) && typeof p.id === "string" && /^w[a-z0-9]{1,6}\d{1,9}$/.test(p.id) ? p as { id: string } : null)),
         run: async ({ id }: { id: string }) => { watches.get(id)?.(); watches.delete(id); return null; },
+      },
+      applets: {
+        cap: null, validate: one(vaultOnly()),
+        run: async ({ vault }: { vault: string }, _s, ctx) => { held(vault); ctx.charge(1); return deps.applets(vault); },
       },
       access: {
         cap: null, validate: one(vaultOnly(), "sharing"),

@@ -12,8 +12,9 @@ function setup(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], records:
   const revoked: string[] = [];
   const asked: string[] = [];
   const deps: VaultsDeps = {
-    list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write" }],
+    list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp" }],
     door: async () => opts.door ?? "records",
+    applets: async () => [{ id: "01APP", name: "Reading", glyph: "📚", href: "/v/home/a/01APP", allowed: false }],
     async request(_v, method, path, body) {
       calls.push({ method, path, body });
       if (path.startsWith("/types") || path.startsWith("/tags")) return [{ name: "book", kind: "type", count: 2, fields: { status: { type: "string", enum: ["to-read", "read"] } } }, ...(opts.types ?? [])];
@@ -45,6 +46,11 @@ describe("the vaults word", () => {
   it("sharing's calls need sharing, and vaults' need vaults", async () => {
     await expect(setup(["vaults"]).call("access", { vault: "home" })).rejects.toMatchObject({ code: "not_granted" });
     await expect(setup(["sharing"]).call("list", {})).rejects.toMatchObject({ code: "not_granted" });
+  });
+  it("applets: a vault's applets by name, glyph and address, never their code; vaults' word, a vault held", async () => {
+    await expect(setup([]).call("applets", { vault: "home" })).rejects.toMatchObject({ code: "not_granted" });
+    expect(await setup(["vaults"]).call("applets", { vault: "home" })).toEqual([{ id: "01APP", name: "Reading", glyph: "📚", href: "/v/home/a/01APP", allowed: false }]);
+    await expect(setup(["vaults"]).call("applets", { vault: "elsewhere" })).rejects.toMatchObject({ code: "out_of_scope" });
   });
   it("a vault the device doesn't hold is refused", async () => {
     await expect(setup().call("query", { vault: "elsewhere" })).rejects.toMatchObject({ code: "out_of_scope" });
@@ -130,7 +136,7 @@ describe("what it never changes", () => {
 describe("watch", () => {
   it("a frame that went while the vault's names were read gets no watch", async () => {
     let watched = 0;
-    const m = createVaultsModule(["vaults"], { list: () => [{ key: "home", name: "home", host: "h", mine: true, home: true, level: "write" }], door: async () => "records", request: async () => [],
+    const m = createVaultsModule(["vaults"], { list: () => [{ key: "home", name: "home", host: "h", mine: true, home: true, level: "write", connector: "https://h/vault/home/mcp" }], applets: async () => [], door: async () => "records", request: async () => [],
       watch: () => { watched++; return () => {}; }, access: async () => { throw new Error("x"); }, revoke: async () => {}, readOnly: async () => {}, confirm: async () => "no", emit: () => {} });
     const r = createRouter([m]);
     await expect(r.call("vaults", "watch", { vault: "home" }, {}, { charge() {}, closed: () => true })).rejects.toMatchObject({ code: "failed" });

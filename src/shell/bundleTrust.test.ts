@@ -13,12 +13,24 @@ const HOSTILE = {
   approvals: [{ record: "01ROOMS", approved: true, code: "tsx:abc" }], code: "<script>alert(1)</script>", body: "export default 1",
   frame: "vault:Frames/Mine", access: [{ path: "/", can: "write" }], services: [{ kind: "nostr-relay", url: "wss://evil.example" }],
   keys: ["npub1evil"], passcode: false, unlock: false,
+  // a publisher of the writer's, with a key of theirs: the record can only name Parachute's or leave it out
+  publishers: [{ url: "https://evil.example/applets/", keys: ["3ea0evil"] }],
 };
 /** Everything a record can carry into the running app: an App's own fields. */
-const APP_FIELDS = ["id", "name", "glyph", "note", "look", "sources", "hide", "bar", "base", "start", "opens", "keep", "security", "live", "noteId", "hubOf"];
+const APP_FIELDS = ["id", "name", "glyph", "note", "look", "sources", "hide", "bar", "base", "start", "opens", "keep", "security", "parachute", "live", "noteId", "hubOf"];
 
 
 describe("an unsigned bundle record", () => {
+  it("can leave Parachute's own applets out, never give a publisher a key (docs/design/PARACHUTE-SOURCE.md)", () => {
+    expect(bundleOf(HOSTILE, "Parachute/Bundles/uni", "01UNI")!.parachute).toBe(false);
+    const named = bundleOf({ ...HOSTILE, publishers: [{ url: "https://parachute.computer/applets/", keys: ["3ea0evil"] }] }, "Parachute/Bundles/uni", "01UNI")!;
+    expect(named.parachute).toBe(true);
+    expect(JSON.stringify(named)).not.toContain("3ea0evil");
+    // none said: a default of the same id fills it in (on); a bundle of the person's own offers them once it names them
+    expect(bundleOf({ contract: 1, id: "uni", name: "Uni" }, "Parachute/Bundles/uni", "01UNI")!.parachute).toBe(false);
+    expect(bundleOf({ contract: 1, id: "simple", publishers: [] }, "Parachute/Bundles/simple", "01S")!.parachute).toBe(false);
+    expect(bundleOf({ contract: 1, id: "simple" }, "Parachute/Bundles/simple", "01S")!.parachute).toBe(true);
+  });
   it("changes only the home, the pins and the list: every other word it says is read as nothing", () => {
     const app = bundleOf(HOSTILE, "Parachute/Bundles/uni", "01UNI")!;
     expect(Object.keys(app).every((k) => APP_FIELDS.includes(k))).toBe(true);
@@ -28,7 +40,8 @@ describe("an unsigned bundle record", () => {
     // no grant, approval, code, access, service or key comes through it
     for (const k of ["grants", "approved", "approvals", "code", "body", "frame", "access", "services", "keys", "passcode", "unlock"]) expect(app).not.toHaveProperty(k);
     // and what the app writes back for it (a pin made here) carries none of them as its own
-    expect(Object.keys(recordOf(app)).sort()).toEqual(["bar", "contract", "glyph", "id", "look", "name", "sources", "start"]);
+    expect(Object.keys(recordOf(app)).sort()).toEqual(["bar", "contract", "glyph", "id", "look", "name", "publishers", "sources", "start"]);
+    expect(recordOf(app).publishers).toEqual([]);
   });
 
   it("never asks less than the device unlock: any word for approving code but passcode leaves it at the unlock", () => {

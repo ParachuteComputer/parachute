@@ -63,7 +63,7 @@ test("the rooms applet approves Uni's powerful card behind the unlock, gives a s
   }, [secret("alice"), getPublicKey(uniSk)] as const);
   const made = await installApplet("rooms", { relay: RELAY!, uni: getPublicKey(uniSk) });
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     const grant = page.getByRole("region", { name: /asking for access/ });
     await expect(grant).toContainText("High risk. With your key: answer approval cards and secret requests there from Uni. Powerful ones ask for your device unlock");
@@ -152,7 +152,7 @@ test("an applet without the approvals grant answers no card and can't post a bot
     return { ...r, path: `Applets/Plain rooms ${stamp}` };
   });
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).last().click();
     const grant = page.getByRole("region", { name: /asking for access/ });
     await expect(grant).not.toContainText("approval key");
@@ -200,7 +200,7 @@ test("on a device that doesn't trust Uni's key yet, Uni's card says so and offer
   await page.addInitScript((k) => { if (window === window.top) Object.assign(window, { __parachuteE2EKey: k, __parachuteE2EApprovers: [], __parachuteE2EUnlock: "pass" }); }, secret("alice"));
   const made = await installApplet("rooms", { relay: RELAY!, uni: getPublicKey(uniSk) });
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
