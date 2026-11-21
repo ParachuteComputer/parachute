@@ -30,7 +30,11 @@ on:
       - applets/**
       - src/**
       - src-tauri/src/**
+      - package.json
       - package-lock.json
+      - vite.config.ts
+      - index.html
+      - tsconfig*.json
       - src-tauri/Cargo.lock
       - e2e/hub.ts
       - e2e/helpers.ts
@@ -38,9 +42,9 @@ on:
       - .github/workflows/services.yml
       - .github/actions/core/**
 
-# one run per branch or PR at a time: a newer push replaces a run still going
+# one run per branch or PR (and core) at a time: a newer push replaces a run still going
 concurrency:
-  group: services-${{ github.event_name }}-${{ github.ref }}
+  group: services-${{ github.event_name }}-${{ github.ref }}-${{ inputs.core }}
   cancel-in-progress: true
 
 jobs:
@@ -132,7 +136,7 @@ jobs:
         run: |
           mkdir -p dist && [ -f dist/index.html ] || echo '<!doctype html>' > dist/index.html
           cargo test --locked --manifest-path src-tauri/Cargo.toml --test services_real -- --nocapture 2>&1 | tee native.log
-          ! grep -q "skipped:" native.log
+          if grep -q "skipped:" native.log; then echo "a native test skipped" >&2; exit 1; fi
           grep -Eq "test result: ok\. [1-9][0-9]* passed; 0 failed; 0 ignored" native.log
 
       - name: The servers' logs
