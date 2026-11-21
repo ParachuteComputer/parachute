@@ -7,7 +7,7 @@
 import type { Grant } from "./grant";
 import { grantLines } from "./grant";
 import { signalLines } from "./signals";
-import { NAMED_KINDS, hostWords, npubOf, postsSplit, roomsWords, type LineOptions } from "./services";
+import { NAMED_KINDS, approveWords, hostWords, npubOf, postsSplit, roomsWords, type LineOptions } from "./services";
 import type { Imported } from "./resolveImports";
 import { importLines } from "./resolveImports";
 
@@ -49,7 +49,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
       lines.push(s.auth === "nip98" ? { lead: `As you on ${at}`, rest: " (your everyday key): sends requests signed as you. What it reads can go there.", risky: true }
         : s.auth === "token" ? { lead: `With a token you give it`, rest: `, sends requests to ${at}. What it reads can go there.`, risky: true }
         : { lead: `Sends requests to ${at}`, rest: ". What it reads can go there.", risky: true });
-      if (s.approve) lines.push({ lead: "High risk, with your key:", rest: ` sends ${joinWords(s.approve.ops)} requests to ${at}.`, risky: true });
+      if (s.approve) lines.push({ lead: "High risk, with your key:", rest: ` ${approveWords(s.approve.ops, at, true)}.`, risky: true });
       if (s.join) lines.push({ lead: "High risk, joins a network as you:", rest: ` asks ${at} to let this device join (${joinWords(s.join.ops)}), each time after your passcode and unlock (Settings → Security).`, risky: true });
     }
   }

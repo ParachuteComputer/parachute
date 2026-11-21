@@ -237,6 +237,12 @@ export type LineOptions = {
   /** The trusted list's name for a key ("Uni"), or null when it isn't on the list (docs/design/KEYRING.md). */
   approverName?: (hex: string) => string | null;
 };
+/** An approval-op line: what the shell knows of these ops (requests to `at`, signed with the approval key, the ops as
+ *  the applet named them); the unlock prompt says it of each request (src-tauri services.rs `approve_reason`). No
+ *  meaning is claimed for an op. `third`: as the card says it ("signs …"), not as a grant's list does ("sign …"). */
+export function approveWords(ops: readonly string[], at: string, third = false): string {
+  return `${third ? "signs" : "sign"} its ${joinWords([...ops])} requests to ${at} with your approval key`;
+}
 export const EVERYDAY = "With your everyday key: ";
 export const HIGH_RISK = "High risk. With your key: ";
 
@@ -270,7 +276,7 @@ export function serviceLines(services: readonly Service[], opts: LineOptions = {
       out.push(s.auth === "nip98" ? { text: `${EVERYDAY}send requests to ${at} signed as you`, stress: true }
         : s.auth === "token" ? { text: `Use a token you give it for ${at}`, stress: true }
         : { text: `Send requests to ${at}`, stress: false });
-      if (s.approve) out.push({ text: `${HIGH_RISK}send ${joinWords(s.approve.ops)} requests to ${at}`, stress: true });
+      if (s.approve) out.push({ text: `${HIGH_RISK}${approveWords(s.approve.ops, at)}`, stress: true });
       if (s.join) out.push({ text: `${HIGH_RISK}ask ${at} to let this device join a private network (${joinWords(s.join.ops)}), each time after what Settings → Security asks for joining (your passcode and unlock, unless you changed it)`, stress: true });
     }
     out.push({ text: `What it reads here could reach ${at}`, stress: true });
