@@ -310,6 +310,46 @@ export const FRAME_KIT = String.raw`(function () {
     var t = id ? document.getElementById(id) || document.getElementsByName(id)[0] : null;
     if (t) t.scrollIntoView(); else if (!id) window.scrollTo(0, 0);
   }, true);
+  // A sealed frame has no allow-forms, so the browser drops a form's submit before any handler hears it. A form written
+  // the plain way (a submit button, Enter in a field) still reaches its onSubmit: the kit sends the submit event itself,
+  // as a browser would: after the applet's own handlers (bubbling, on window, so their preventDefault still stops it),
+  // and only when the form's fields are valid (required, pattern, type=email, unless noValidate).
+  // (Found on the cold walk, T-476: an AI's reading tracker added nothing on its Add button.)
+  function submitForm(form, by) {
+    if (!form.noValidate && !(by && by.formNoValidate) && typeof form.reportValidity === "function" && !form.reportValidity()) return;
+    var ev;
+    try { ev = new SubmitEvent("submit", { bubbles: true, cancelable: true, submitter: by || null }); } catch (err) { ev = new Event("submit", { bubbles: true, cancelable: true }); }
+    form.dispatchEvent(ev);
+  }
+  /** A submit button (or input), disabled or not; null for anything else. */
+  function submitControl(el) {
+    if (!el || !el.form || (el.tagName !== "BUTTON" && el.tagName !== "INPUT")) return null;
+    var kind = (el.getAttribute("type") || (el.tagName === "BUTTON" ? "submit" : "")).toLowerCase();
+    return kind === "submit" || kind === "image" ? el : null;
+  }
+  var TEXTLIKE = /^(|text|search|email|url|tel|password|number|date|time|datetime-local|month|week)$/i;
+  addEventListener("click", function (e) {
+    if (e.defaultPrevented) return;
+    var b = submitControl(e.target && e.target.closest ? e.target.closest("button, input") : null);
+    if (!b || b.disabled) return;
+    e.preventDefault();
+    submitForm(b.form, b);
+  });
+  addEventListener("keydown", function (e) {
+    var f = e.target;
+    if (e.key !== "Enter" || e.isComposing || e.defaultPrevented || !f || f.tagName !== "INPUT" || !f.form || !TEXTLIKE.test(f.getAttribute("type") || "")) return;
+    var form = f.form, by = null, fields = 0, i, el;
+    for (i = 0; i < form.elements.length; i++) {
+      el = form.elements[i];
+      if (!by && submitControl(el)) by = el;
+      if (el.tagName === "INPUT" && TEXTLIKE.test(el.getAttribute("type") || "")) fields++;
+    }
+    // as a browser does: Enter submits through the form's first submit control (nothing when that one is disabled), or
+    // a form with one text field and none
+    if (by ? by.disabled : fields !== 1) return;
+    e.preventDefault();
+    submitForm(form, by);
+  });
   // subscriptions, sent a few dozen to a request (a rooms applet holds one a room), each made again after a timeout or
   // a relay's CLOSED with a growing wait while its handler is still there
   function sendSubs(service, list) {

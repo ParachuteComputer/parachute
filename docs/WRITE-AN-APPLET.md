@@ -233,7 +233,9 @@ Its own frame, its own card, its own vault; or, from a vault you trust, imported
 - **Check who a message is from.** The kit only reads messages from the app. An HTML applet that listens for
   `message` events itself must check `event.source === parent`: on a page with embeds, other frames can post to it.
 - **Never ask for a key or a password.** Parachute never does inside a page, and the person is told so.
-- **No `<form>` submits.** The sealed frame has no `allow-forms`, so a submit does nothing: use a button's `onClick`.
+- **A `<form>` works as you'd write it.** The sealed frame has no `allow-forms`, so the browser drops a submit; the kit
+  sends it to your `onSubmit` itself, from a submit button or Enter in a field (call `e.preventDefault()` as usual). A
+  button's `onClick` works too.
 
 ### The parts (`import { … } from "parachute"`, TSX and JSX only)
 
