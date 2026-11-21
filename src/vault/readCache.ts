@@ -15,6 +15,8 @@
 //   answer (a screen drawn three times asks once; the readers told of a new answer don't ask for it again). A screen
 //   shown again asks again at once (`askAgain`). Before this, every read went to the hub; the copies change what shows
 //   first, and the hub is never asked more than it was.
+// - A read asked with `cache: "reload"` (what a change is judged on) is the hub's: waited for, never the copy, and
+//   kept as the copy (the readers told when it differs).
 
 type Entry = { vault: string; who: string; body: string; status: number; type: string; at: number };
 
@@ -188,7 +190,7 @@ export function keptFetch(vault: string, who: string, f: typeof fetch, signIn: (
     const key = keyOf(vault, input);
     // a read that must be the hub's now (`cache: "reload"`: what a change is judged on): waited for, and kept for the
     // reads after it that may show the copy
-    if (init?.cache === "reload") { asked.set(key, Date.now()); return (await fromHub(vault, who, key, f, input, init)).res; }
+    if (init?.cache === "reload") { asked.set(key, Date.now()); const r = await fromHub(vault, who, key, f, input, init); if (r.changed) tell(vault, key); return r.res; }
     const e = mem.get(key) ?? await diskGet(key);
     if (e && e.vault === vault && e.who === who && e.at >= (writtenAt.get(vault) ?? 0)) {
       if (!mem.has(key)) remember(key, e);
