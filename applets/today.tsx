@@ -24,10 +24,11 @@ function entryWords(text: string): string {
   const end = all.findIndex((w) => {
     const bare = w.replace(/[.!?…。]+$/, "");
     return /[.!?…。]$/.test(w) && /[^\p{P}\s]/u.test(w) && !/\.\p{L}/u.test(bare)
-      && !/^(\d+|\p{L}|dr|mr|mrs|ms|st|mt|vs|etc|no|jr|sr|prof|sen|rep|gov|gen|approx|fig|inc|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)$/iu.test(bare);
+      && !/^(\d+|\p{L}|dr|mr|mrs|ms|st|mt|vs|etc|no|jr|sr|prof|sen|rep|gov|gen|approx|fig|inc|mon|tue|tues|thu|thur|thurs|fri|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)$/iu.test(bare);
   });
   const words = (end >= 0 ? all.slice(0, end + 1) : all).join(" ").replace(/\?/g, "").replace(/[.!…。]+$/, "").replace(/\s+/g, " ").trim();
-  return Array.from(words).slice(0, 48).join("").trim() || "Entry";
+  // never a code note's name (the vault keeps .html, .tsx, .jsx for code): "index.html" is filed "index html"
+  return Array.from(words).slice(0, 48).join("").trim().replace(/\.(html?|tsx|jsx)$/i, " $1") || "Entry";
 }
 /** Journal/2026/11-19/09-41 First words of it (as the Journal applet names an entry). */
 function pathFor(text: string) {

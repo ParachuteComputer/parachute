@@ -12,7 +12,10 @@ const copy = (file: string) => {
 const entryWords = new Function(`${transform(copy("journal.tsx"), { transforms: ["typescript"] }).code}; return entryWords;`)() as (t: string) => string;
 
 describe("an entry's name", () => {
-  it("is the same rule in Journal and Home", () => expect(copy("today.tsx")).toBe(copy("journal.tsx")));
+  it("is the same rule in Journal and Home, and both name entries by it", () => {
+    expect(copy("today.tsx")).toBe(copy("journal.tsx"));
+    for (const f of ["journal.tsx", "today.tsx"]) expect(readFileSync(`${process.cwd()}/applets/${f}`, "utf8")).toMatch(/const words = entryWords\(text\);/);
+  });
   it.each([
     ["Walked to the bakery. The new rye is good.", "Walked to the bakery"],
     ["How was today? Good. Walked a lot", "How was today"],
@@ -30,6 +33,9 @@ describe("an entry's name", () => {
     ["***\nWalked", "Walked"],
     ["Groceries\nmilk eggs bread", "Groceries"],
     ["Hmm… not sure about this", "Hmm"],
+    ["Edited index.html.", "Edited index html"],
+    ["Rewrote journal.tsx", "Rewrote journal tsx"],
+    ["Fri. night was quiet", "Fri. night was quiet"],
     ["!!!", "Entry"],
     ["", "Entry"],
   ])("%j → %j", (text, name) => expect(entryWords(text)).toBe(name));
@@ -38,4 +44,8 @@ describe("an entry's name", () => {
     expect(Array.from(n).length).toBeLessThanOrEqual(48);
     expect(n).not.toMatch(/[\ud800-\udbff]$/);
   });
+});
+
+describe("an entry's name is never a code note's", () => {
+  it.each(["Edited index.html.", "Shipped index.html!", "Fixed it in app.tsx.", "Rewrote journal.tsx"])("%j", (t) => expect(entryWords(t)).not.toMatch(/\.(html?|tsx|jsx)$/i));
 });
