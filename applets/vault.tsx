@@ -808,6 +808,9 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
           {!openC.gone && <Button small kind="quiet" onClick={() => open(openC.id)}>Open the record</Button>}
         </aside>}
       </div>
+    </Page>
+  );
+}
 
 // ── Templates and packs (T-476, docs/PACKS.md) ──
 // A template is a record of type `template` at Templates/<type>/<name>: `for` the type it starts, `default` for the one
