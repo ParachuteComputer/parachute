@@ -143,5 +143,14 @@ export const MOTION_CSS = `:root{${Object.entries(MOTION).map(([k, v]) => `--${k
 export const cssOf = (t: Tokens): string => `:root{${TOKEN_KEYS.map((k) => `--${k}:${t[k]};`).join("")}${TYPE_SCALE_CSS}color-scheme:${t.scheme};}`
   + `${MOTION_CSS}${t.motion === "still" ? `:root:not([data-motion="flowing"]){${STILL}}` : ""}`;
 
+/** A theme record as written back on a change: a font stack an earlier app wrote (EARLIER_FONTS) becomes today's, so the
+ *  note says what the app shows, and the rest is as it was. */
+export function withTodaysFonts(raw: Record<string, unknown>): Record<string, unknown> {
+  if (!plain(raw.fonts)) return raw;
+  const fonts: Record<string, unknown> = { ...raw.fonts };
+  for (const k of FONT_KEYS) if (typeof fonts[k] === "string" && EARLIER_FONTS[k]?.includes((fonts[k] as string).trim())) fonts[k] = DEFAULT_THEME.fonts[k];
+  return { ...raw, fonts };
+}
+
 /** The record a person starts from ("Make this mine"): the built-in theme, written out in full so every value is there to change. */
 export const recordOf = (theme: Theme) => ({ colors: { ...theme.colors }, dark: { ...theme.dark }, fonts: { ...theme.fonts }, density: theme.density, scheme: theme.scheme, motion: theme.motion });

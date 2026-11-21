@@ -13,7 +13,7 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
 {
   "colors": { "bg": "#f2ede2", "surface": "#fbf8f1", "text": "#1d1a16", "muted": "#6d665a", "line": "#d9d1c1", "accent": "#4f6b3a", "danger": "#9a3324" },
   "dark": { "bg": "#171613", "surface": "#201e1a", "text": "#ece7dc", "muted": "#a59d8e", "line": "#3a362f", "accent": "#a3bf8a", "danger": "#f08f7f" },
-  "fonts": { "serif": "Literata, \"Iowan Old Style\", Georgia, serif", "sans": "\"Instrument Sans\", system-ui, sans-serif", "mono": "ui-monospace, monospace" },
+  "fonts": { "serif": "Literata, \"Literata fallback\", Georgia, serif", "sans": "\"Instrument Sans\", \"Instrument Sans fallback\", system-ui, sans-serif", "mono": "ui-monospace, monospace" },
   "density": "regular",
   "scheme": "system",
   "motion": "flowing"
@@ -24,7 +24,7 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
 |---|---|
 | `colors` | The light palette: the page (`bg`), raised parts (`surface`), text, quieter text (`muted`), rules (`line`), the one accent, and `danger`. |
 | `dark` | The same seven, for dark mode. |
-| `fonts` | `serif` (names, titles and reading: notes, the journal, a record's body), `sans` (labels, buttons, the bar) and `mono`: lists of font names. The app carries two faces, Literata and Instrument Sans (SIL OFL, `src/theme/fonts/`), in every screen and applet with no download; any other font must be one the device has, since a theme loads nothing. They hold Latin letters only; any other letter comes from the next font in the list. End with `serif`, `sans-serif` or `monospace`. A theme that holds the earlier built-in stacks word for word (written by "Make this look mine" before the app carried these faces) gets them too; to keep system fonts, write the list another way. |
+| `fonts` | `serif` (names, titles and reading: notes, the journal, a record's body), `sans` (labels, buttons, the bar) and `mono`: lists of font names. The app carries two faces, Literata and Instrument Sans (SIL OFL, `src/theme/fonts/`), in every screen and applet with no download; any other font must be one the device has, since a theme loads nothing. They hold Latin letters only; any other letter comes from the next font in the list. End with `serif`, `sans-serif` or `monospace`. A theme that holds the earlier built-in stacks word for word (written by "Make this look mine" before the app carried these faces) gets them too, and the next change in Settings writes them in; to keep system fonts, write the list another way. `… fallback` is a local font sized to the face, for the moment before it is drawn. |
 | `density` | `compact`, `regular` or `roomy`: the padding, gaps, corners and text size. |
 | `scheme` | `system` (follow the device), `light` or `dark`. |
 | `motion` | `flowing` (pages, sheets and toasts arrive and go, a press gives) or `still` (nothing moves). A device set to reduce motion, or a screen slow to redraw (e-ink), is still whatever this says. |

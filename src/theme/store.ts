@@ -15,7 +15,7 @@ import { plain, stripExt } from "../applet/contract";
 import { clientFor, keptClientFor } from "../vault/client";
 import { onFresh } from "../vault/readCache";
 import { homeVault } from "../shell/frameSource";
-import { DEFAULT_THEME, MOTION_CSS, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, type Theme, type Tokens } from "./theme";
+import { DEFAULT_THEME, MOTION_CSS, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, withTodaysFonts, type Theme, type Tokens } from "./theme";
 import { FONTS_CSS } from "./fonts";
 
 export const THEME_TAG = "parachute-theme";
@@ -164,7 +164,7 @@ async function changeTheme(change: (raw: Record<string, unknown>) => Record<stri
   if (!n && rows.length > 1) throw new Error(`Your home vault has ${rows.length} theme notes; keep one, at ${THEME_PATH}.`);
   if (n) {
     const was = themeOf(n);
-    const theme = change(plain(was) ? { ...was } : recordOf(DEFAULT_THEME));
+    const theme = change(plain(was) ? withTodaysFonts({ ...was }) : recordOf(DEFAULT_THEME));
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), theme }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
   } else {

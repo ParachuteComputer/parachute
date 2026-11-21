@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cssOf, DEFAULT_THEME, isColor, isFontStack, MOTION, recordOf, themeFrom, TOKEN_KEYS, tokensOf } from "./theme";
+import { cssOf, DEFAULT_THEME, isColor, isFontStack, MOTION, recordOf, themeFrom, TOKEN_KEYS, tokensOf, withTodaysFonts } from "./theme";
 
 describe("the theme record", () => {
   it("absent, or not a record, is the built-in theme", () => {
@@ -35,6 +35,9 @@ describe("the theme record", () => {
     expect(t.fonts.serif.startsWith(`"Literata"`)).toBe(true);
     expect(t.fonts.mono).toBe("ui-monospace, monospace");
     expect(themeFrom({ theme: { fonts: { serif: `"Iowan Old Style", Georgia, serif` } } }).fonts.serif).toBe(`"Iowan Old Style", Georgia, serif`);
+    // and a change writes today's stacks back, leaving a chosen one and everything else as it was
+    const back = withTodaysFonts({ density: "roomy", fonts: { ...earlier, sans: "Inter, sans-serif" } });
+    expect(back).toEqual({ density: "roomy", fonts: { serif: DEFAULT_THEME.fonts.serif, sans: "Inter, sans-serif", mono: "ui-monospace, monospace" } });
   });
 });
 
