@@ -12,7 +12,7 @@ function setup(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], records:
   const revoked: string[] = [];
   const asked: string[] = [];
   const deps: VaultsDeps = {
-    list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp" }],
+    list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp", view: null, reach: "anyone" }],
     door: async () => opts.door ?? "records",
     applets: async () => [{ id: "01APP", name: "Reading", glyph: "📚", href: "/v/home/a/01APP", allowed: false }],
     async request(_v, method, path, body) {
@@ -152,7 +152,7 @@ describe("what it never changes", () => {
 describe("watch", () => {
   it("a frame that went while the vault's names were read gets no watch", async () => {
     let watched = 0;
-    const m = createVaultsModule(["vaults"], { list: () => [{ key: "home", name: "home", host: "h", mine: true, home: true, level: "write", connector: "https://h/vault/home/mcp" }], applets: async () => [], door: async () => "records", request: async () => [],
+    const m = createVaultsModule(["vaults"], { list: () => [{ key: "home", name: "home", host: "h", mine: true, home: true, level: "write", connector: "https://h/vault/home/mcp", view: null, reach: "anyone" }], applets: async () => [], door: async () => "records", request: async () => [],
       watch: () => { watched++; return () => {}; }, access: async () => { throw new Error("x"); }, revoke: async () => {}, readOnly: async () => {}, confirm: async () => "no", emit: () => {} });
     const r = createRouter([m]);
     await expect(r.call("vaults", "watch", { vault: "home" }, {}, { charge() {}, closed: () => true })).rejects.toMatchObject({ code: "failed" });
@@ -252,7 +252,7 @@ describe("what shows, from what was read before (T-476)", () => {
   function kept() {
     const reads: string[] = [], calls: Call[] = [];
     const deps: VaultsDeps = {
-      list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp" }],
+      list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp", view: null, reach: "anyone" }],
       door: async () => "records",
       async request(_v, method, path, body) {
         calls.push({ method, path, body });

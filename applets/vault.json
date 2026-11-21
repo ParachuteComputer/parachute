@@ -12,6 +12,6 @@
       "note": "your vaults: their types, records, fields, links and history"
     },
     "needs": 3,
-    "app": ["vaults", "sharing"]
+    "app": ["vaults", "sharing", "copy"]
   }
 }

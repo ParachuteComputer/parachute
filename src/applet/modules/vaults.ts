@@ -3,7 +3,7 @@
 // ask, and its card says so, stressed. An applet in someone else's vault asks the app for nothing (discovery.ts).
 //
 //   vaults        (read every vault this device holds; change records where the person lets Parachute change them)
-//     list()                                   the vaults: {key, name, host, mine, home, level, connector}
+//     list()                                   the vaults: {key, name, host, mine, home, level, connector, view, reach}
 //     hubs()                                   each hub those vaults are on: {host, address, vaults}, `address` the one
 //                                              address an AI gets there for every vault (null: a vault's own only)
 //     types({vault})                           its types and tags, with counts and declared fields
@@ -38,7 +38,12 @@ import type { AppWord } from "../app.ts";
 
 export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where an AI connects to this vault only (`<vault>/mcp`): the vault's own address, nothing secret */
-  connector: string };
+  connector: string;
+  /** where anyone with the link reads a published record: this plus its id (`<vault>/view/`); null where the hub has no
+   *  such page (Parachute Cloud, for now) */
+  view: string | null;
+  /** who can open the vault's address: only this device, devices on the person's network, or anyone */
+  reach: "this-device" | "network" | "anyone" };
 /** A hub the device holds vaults on, and the one address an AI gets there (T-476: `<hub>/mcp`, every vault the person
  *  lets it reach), or null where each vault keeps its own address. `vaults`: the keys of the vaults held on it. */
 export type HubRow = { host: string; address: string | null; vaults: string[] };
