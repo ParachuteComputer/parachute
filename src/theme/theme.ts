@@ -90,13 +90,13 @@ const ALMANAC_COLORS: Palette = { bg: "#f2ede2", surface: "#fbf8f1", text: "#1d1
 const ALMANAC_DARK: Palette = { bg: "#171613", surface: "#201e1a", text: "#ece7dc", muted: "#a59d8e", line: "#3a362f", accent: "#a3bf8a", danger: "#f08f7f" };
 
 export const LOOKS: Record<LookName, Look> = {
-  // Paper: the app's paper and ink with Cloud's finish. Hairlines, not ink; soft corners in three sizes; a card lifted a
+  // Paper (the default): the app's paper and ink (the docs site's palette) with Cloud's finish. Hairlines, not ink; soft corners in three sizes; a card lifted a
   // little off the page; boxed fields; labels in plain sentence case; the one accent on the main action.
   paper: {
-    colors: { bg: "#f3eee5", surface: "#fdfbf7", text: "#211e1a", muted: "#6b6459", line: "#e0d7c7", accent: "#4f6b3a", danger: "#9a3324" },
-    dark: { bg: "#171613", surface: "#211f1b", text: "#ece7dc", muted: "#a59d8e", line: "#37332c", accent: "#a3bf8a", danger: "#f08f7f" },
+    colors: ALMANAC_COLORS,
+    dark: ALMANAC_DARK,
     style: {
-      "primary": "var(--accent)", "on-primary": "#fdfbf7", "tint": "color-mix(in srgb, var(--text) 5%, transparent)",
+      "primary": "var(--accent)", "on-primary": "var(--surface)", "tint": "color-mix(in srgb, var(--text) 5%, transparent)",
       "card-fill": "var(--surface)", "field-fill": "var(--surface)", "button-fill": "var(--surface)", "label-ink": "var(--muted)",
       "line-head": "1px solid var(--line)", "line-row": "1px solid color-mix(in srgb, var(--line) 75%, transparent)", "line-card": "1px solid var(--line)",
       "line-quote": "2px solid var(--line)", "field-line": "1px solid var(--line)", "button-line": "1px solid var(--line)",
@@ -107,7 +107,7 @@ export const LOOKS: Record<LookName, Look> = {
       "shadow-sheet": "0 -1px 0 var(--line), 0 -16px 40px -24px rgb(40 30 20 / .35)",
       "label-transform": "none", "label-caps": "normal", "label-track": "0em", "title-weight": "400", "measure": "760px",
     },
-    darkStyle: { "on-primary": "#171613", "shadow-card": "0 1px 0 rgb(0 0 0 / .3), 0 12px 28px -18px rgb(0 0 0 / .6)", "shadow-sheet": "0 -1px 0 var(--line), 0 -16px 40px -24px rgb(0 0 0 / .7)" },
+    darkStyle: { "on-primary": "var(--bg)", "shadow-card": "0 1px 0 rgb(0 0 0 / .3), 0 12px 28px -18px rgb(0 0 0 / .6)", "shadow-sheet": "0 -1px 0 var(--line), 0 -16px 40px -24px rgb(0 0 0 / .7)" },
   },
   // Almanac: the look of an old almanac (design/kit/WHY.md): ink rules and type rather than boxes, dotted rows, a card
   // printed with a hard edge, a line to write on, small capital labels in the accent.
@@ -163,7 +163,7 @@ export const LOOKS: Record<LookName, Look> = {
   },
 };
 /** The look the app starts in. */
-export const DEFAULT_LOOK: LookName = "almanac";
+export const DEFAULT_LOOK: LookName = "paper";
 
 // The grammar of a style token in a record (the built-in looks are code, and may name or mix palette colours): a colour
 // is one isColor reads, `transparent`, or one of the seven palette colours by name (`var(--line)`); nothing else can

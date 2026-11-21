@@ -5,7 +5,7 @@ applet. Until you change it, the app uses the built-in Parachute theme: paper, i
 (Literata) for reading and a quiet sans (Instrument Sans) for the app's own words.
 
 A theme starts from one of four built-in **looks**, which set the palettes and how the parts are drawn (rules, corners,
-depth, labels): `paper` (hairlines, soft corners, a card lifted a little, boxed fields), `almanac` (ink rules, dotted
+depth, labels): `paper`, the default (hairlines, soft corners, a card lifted a little, boxed fields), `almanac` (ink rules, dotted
 rows, a printed card, a line to write on), `book` (a printed page: no raised parts, a double rule, small capitals) and
 `daylight` (black on white for an e-paper screen: heavier rules, no tints or shadows, nothing moves). Every value a
 look sets is a token, and the note can change any of them one by one.
@@ -27,7 +27,7 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
   "density": "regular",
   "scheme": "system",
   "motion": "flowing",
-  "look": "almanac",
+  "look": "paper",
   "tokens": { "radius-card": "14px" }
 }
 ```
