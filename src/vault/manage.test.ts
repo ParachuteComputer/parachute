@@ -58,3 +58,21 @@ describe("the admin held for managing a vault", () => {
     await expect(listReach(rec, "home:vault")).rejects.toBeInstanceOf(ManageEndedError);
   });
 });
+
+describe("whether a hub lists who reaches a vault", () => {
+  it("a readable 401 says yes; a refusal or an unreadable answer says no; too slow is an error, asked again", async () => {
+    const { hubLists } = await import("./manage");
+    answer = new Response("{}", { status: 401 });
+    expect(await hubLists({ issuer: "https://new.example", vault: "v" })).toBe(true);
+    answer = new Response("{}", { status: 405 });
+    expect(await hubLists({ issuer: "https://old.example", vault: "v" })).toBe(false);
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
+    expect(await hubLists({ issuer: "https://cloud.example", vault: "v" })).toBe(false);
+    vi.stubGlobal("fetch", vi.fn(async () => { throw Object.assign(new Error("timed out"), { name: "TimeoutError" }); }));
+    await expect(hubLists({ issuer: "https://slow.example", vault: "v" })).rejects.toThrow(/in time/);
+    // asked again at once, not kept as "no"
+    answer = new Response("{}", { status: 401 });
+    vi.stubGlobal("fetch", vi.fn(async () => answer));
+    expect(await hubLists({ issuer: "https://slow.example", vault: "v" })).toBe(true);
+  });
+});

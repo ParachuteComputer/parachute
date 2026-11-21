@@ -166,6 +166,8 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       }
     },
     async manage(key) {
+      // never ask the hub for a vault's admin where nothing could be read with it
+      if (!(await hubLists(rec(key)))) throw new Error("This vault's hub has no list of who reaches it.");
       // back to this vault's Sharing (Vault reads `show`), where the person asked
       const back = new URL(opts.back(), window.location.origin);
       back.searchParams.set("vault", key);
