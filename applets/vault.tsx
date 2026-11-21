@@ -540,8 +540,8 @@ function Packs({ v, back, openType }: { v: Held; back: { label: string; onPress:
           <div className="chips">{done.types.filter((t) => t !== "template").map((t) => <Button key={t} small kind="quiet" onClick={() => openType(t)}>{label(t)}</Button>)}</div>
         </section>}
         {p.installed.length > 0
-          ? <List label="Installed packs" rows={p.installed.map((i) => ({ key: i.id, title: i.name, meta: [`version ${i.version}`, i.appliedAt ? `added ${when.date(i.appliedAt)}` : "", byWhom(i.appliedBy)].filter(Boolean).join(" · "),
-            aside: i.newer && canWrite ? <Button small onClick={() => { const s = p.starters.find((x) => x.id === i.id); if (s) void add(s); }} busy={busy === i.id}>{`Update to ${i.newer}`}</Button> : "up to date" }))} />
+          ? <List label="Installed packs" rows={p.installed.map((i) => ({ key: i.id, title: i.name, meta: [i.version ? `version ${i.version}` : "not finished: adding it stopped partway", i.appliedAt ? `added ${when.date(i.appliedAt)}` : "", byWhom(i.appliedBy)].filter(Boolean).join(" · "),
+            aside: i.newer && canWrite ? <Button small onClick={() => { const s = p.starters.find((x) => x.id === i.id); if (s) void add(s); }} busy={busy === i.id}>{i.version ? `Update to ${i.newer}` : "Finish adding"}</Button> : "up to date" }))} />
           : !p.older && <p className="note-meta">No packs in {v.name} yet.</p>}
         {!p.older && p.starters.some((s) => !has.has(s.id)) && <p className="sect">Add a pack</p>}
         {!p.older && p.starters.filter((s) => !has.has(s.id)).map((s) => (

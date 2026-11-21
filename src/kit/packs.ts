@@ -132,7 +132,8 @@ export async function applyPack(pack: Pack, target: PackTarget): Promise<Applied
   const ours = new Set(before?.receipt.made.records.map((r) => r.path) ?? []);
   const made: Receipt["made"] = { types: { ...(before?.receipt.made.types ?? {}) }, records: [...(before?.receipt.made.records ?? [])] };
   let wrote = false;
-  const receipt = (): Receipt => ({ contract: 1, id: pack.id, name: pack.name, version: Math.max(pack.version, before?.receipt.version ?? 0), source: pack.source, made,
+  /** `done`: every step ran, so the vault has this version; else it keeps the version it had (0: never finished). */
+  const receipt = (done = true): Receipt => ({ contract: 1, id: pack.id, name: pack.name, version: done ? Math.max(pack.version, before?.receipt.version ?? 0) : before?.receipt.version ?? 0, source: pack.source, made,
     skipped: wrote || !before ? notes : before.receipt.skipped });
   const was = before ? { id: before.id, updatedAt: before.updatedAt } : null;
 
@@ -194,7 +195,8 @@ export async function applyPack(pack: Pack, target: PackTarget): Promise<Applied
     }
   } catch (e) {
     // what landed before the error is the pack's: say so in the receipt, so the next apply doesn't call it the person's
-    if (wrote) await target.writeReceipt(receipt(), was).catch(() => {});
+    // at the version the vault had before, so the app still offers to finish (Update, or Finish adding at 0)
+    if (wrote) await target.writeReceipt(receipt(false), was).catch(() => {});
     throw e;
   }
 

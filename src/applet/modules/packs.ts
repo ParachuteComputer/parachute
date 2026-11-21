@@ -52,7 +52,7 @@ export function packTarget(deps: VaultsDeps, vault: string): PackTarget {
         // core's rule for write (#139) says what write may do; any other 403 is the route itself: admin only
         if (status(e) === 403) return /With write access you can/.test(m) ? { refused: refusalWords(m) } : "unsupported";
         // a field another type declares otherwise, or a name core won't take: said, and the rest goes on
-        if (/\((400|409|422)\)|failed \((400|409|422)\)/.test(m)) return { refused: "the server refused it, because a field of it is set up differently in another type" };
+        if ([400, 409, 422].includes(status(e) ?? 0) || (e as { name?: string })?.name === "VaultConflictError" || /failed \((400|409|422)\)/.test(m)) return { refused: "the server refused it, because a field of it is set up differently in another type" };
         throw e;
       }
     },

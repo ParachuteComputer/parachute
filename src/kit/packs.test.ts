@@ -83,11 +83,14 @@ describe("applyPack", () => {
     const h = hub(2);
     await expect(applyPack(checkPack(core), h.target)).rejects.toThrow(/line dropped/);
     const half = (await h.target.receipt("core-types"))!.receipt;
+    // not the pack's version: the app still offers to finish it
+    expect(half.version).toBe(0);
     expect(Object.keys(half.made.types).length).toBe(5);
     expect(half.made.records.map((r) => r.path)).toEqual(["Templates/meeting/Meeting", "Templates/project/Project"]);
     const again = await applyPack(checkPack(core), h.target);
     expect(again.notes).toEqual([]);
     expect((await h.target.receipt("core-types"))!.receipt.made.records.map((r) => r.path)).toEqual(core.records.map((r: { path: string }) => r.path));
+    expect((await h.target.receipt("core-types"))!.receipt.version).toBe(1);
   });
   test("a field another type declares otherwise (here: indexed) is left out and said; the rest lands", async () => {
     const h = hub();
