@@ -15,7 +15,8 @@ const pathFor = (text: string) => `Inbox/${text.replace(/[#*_`>\[\]\\/:?"<>|^]/g
 const clash = (e: any) => e?.status === 409 || /conflict|elsewhere/i.test(String(e?.message ?? e));
 /** "claude changed 3 things today", "claude and Notes changed …", "claude and 2 others changed …". */
 const changedLine = (c: Changed) => {
-  const n = c.names;
+  // a name with a comma ("You, in another app") closes its comma before the verb
+  const n = c.names.map((x) => (x.includes(",") ? `${x},` : x));
   const who = n.length <= 1 ? (n[0] ?? "Something") : n.length === 2 ? `${n[0]} and ${n[1]}` : `${n[0]} and ${n.length - 1} others`;
   return `${who} changed ${c.count}${c.more ? "+" : ""} ${c.count === 1 ? "thing" : "things"} today.`;
 };

@@ -26,16 +26,27 @@ test("journal: a line becomes a dated journal note; the days show, voice entries
     await expect(app.getByText(`Walked by the river ${stamp}. The herons were out.`)).toBeVisible();
     await expect(app.getByRole("article", { name: /Entry at/ }).filter({ hasText: "herons" })).toContainText("voice");
 
-    await app.getByLabel("Write in your journal").fill(`Planted garlic in the north bed ${stamp}`);
+    await app.getByLabel("Write in your journal").fill(`Planted garlic ${stamp}. The north bed is full.`);
     await app.getByRole("button", { name: "Save" }).click();
     await expect(app.getByRole("heading", { name: "Today" })).toBeVisible();
-    await expect(app.getByText(`Planted garlic in the north bed ${stamp}`)).toBeVisible();
+    await expect(app.getByText(`Planted garlic ${stamp}. The north bed is full.`)).toBeVisible();
     // in the vault: where the Uni app keeps its journal, tagged journal
     const rows = await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=50`) as { id: string; path: string; tags?: string[]; content?: string }[];
-    const mine = rows.find((r) => r.content?.includes(`north bed ${stamp}`));
-    expect(mine?.path).toMatch(new RegExp(`^Journal/\\d{4}/\\d{2}-\\d{2}/\\d{2}-\\d{2} Planted garlic in the north bed`));
-    expect(mine?.tags).toContain("journal");
+    const mine = rows.find((r) => r.content?.includes(`Planted garlic ${stamp}. The north`));
+    // named by its first sentence when that is shorter than six words, so a title never stops mid-phrase
     if (mine) made.push(mine.id);
+    expect(mine?.path).toMatch(new RegExp(`^Journal/\\d{4}/\\d{2}-\\d{2}/\\d{2}-\\d{2}(-\\d{2})? Planted garlic ${stamp}$`));
+    // a question ends a sentence too; an initial or a title doesn't
+    for (const [line, name] of [[`How was the walk ${stamp}? Long.`, `How was the walk ${stamp}`], [`Dr. Lee called ${stamp} about it.`, `Dr. Lee called ${stamp} about it`]]) {
+      await app.getByLabel("Write in your journal").fill(line);
+      await app.getByRole("button", { name: "Save" }).click();
+      await expect(app.getByText(line)).toBeVisible();
+      const all = await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=50`) as { id: string; path: string; content?: string }[];
+      const it = all.find((r) => r.content === line);
+      if (it) made.push(it.id);
+      expect(it?.path.replace(/^Journal\/\d{4}\/\d{2}-\d{2}\/\d{2}-\d{2}(-\d{2})? /, "")).toBe(name);
+    }
+    expect(mine?.tags).toContain("journal");
 
     // an entry opened from elsewhere (a note link, the vault's list) is shown, not just the list it is somewhere in
     await page.goto(`/v/${VAULT}?with=vault`);

@@ -137,8 +137,38 @@ export type Tab = { key: string; label: ReactNode; count?: number };
 /** Places to switch between in one screen (a mailbox's Inbox, Later, Sent; a vault of several): the one shown is marked,
  *  a count follows a label ("Inbox · 3"). */
 export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: readonly Tab[]; current: string; onChange: (key: string) => void }) {
+  const nav = useRef<HTMLElement>(null);
+  // which ends have more past them (a fade says so; no bar is drawn): `start` and `end` as the row reads, either way
+  const edges = () => {
+    const n = nav.current;
+    if (!n) return;
+    const from = Math.abs(n.scrollLeft);
+    const more = [from > 1 ? "start" : "", from + n.clientWidth < n.scrollWidth - 1 ? "end" : ""].filter(Boolean).join(" ");
+    if (more) n.dataset.more = more; else delete n.dataset.more;
+  };
+  // the one shown stays in view on the one line, clear of the fades (scrolled sideways, never the page): when it
+  // changes, and when the places arrive or change (a list read after the first draw, a count that widens a tab)
+  const shape = tabs.map((t) => `${t.key}:${t.label}:${t.count ?? ""}`).join("|");
+  /** Scroll the row (never the page) so this tab is clear of the fades. */
+  const keepClear = (on: HTMLElement | null | undefined) => {
+    const n = nav.current;
+    if (!n || !on) return;
+    const r = on.getBoundingClientRect(), box = n.getBoundingClientRect(), FADE = 32;
+    if (r.left < box.left + FADE || r.right > box.right - FADE) n.scrollLeft += r.left + r.width / 2 - (box.left + box.width / 2);
+  };
+  const shown = () => nav.current?.querySelector<HTMLElement>('[aria-current="page"]');
+  useLayoutEffect(() => { keepClear(shown()); edges(); }, [current, shape]);
+  // the row's own width changing (a phone turned, a font, the density, a column): the one shown kept clear again
+  useEffect(() => {
+    const n = nav.current;
+    if (!n || typeof ResizeObserver !== "function") return;
+    const o = new ResizeObserver(() => { keepClear(shown()); edges(); });
+    o.observe(n);
+    return () => o.disconnect();
+  }, []);
   return (
-    <nav className="pa-tabs" aria-label={label}>
+    // a tab reached from the keyboard is kept clear of the fades too (a tap needs nothing: it chooses, and the row follows)
+    <nav className="pa-tabs" aria-label={label} ref={nav} onScroll={edges} onFocus={(e) => { if ((e.target as HTMLElement).matches?.(":focus-visible")) keepClear(e.target as HTMLElement); }}>
       {tabs.map((t) => <button key={t.key} type="button" className="pa-tab" aria-current={t.key === current ? "page" : undefined} onClick={() => onChange(t.key)}>{t.label}{t.count ? ` · ${t.count}` : ""}</button>)}
     </nav>
   );

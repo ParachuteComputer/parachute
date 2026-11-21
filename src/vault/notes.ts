@@ -3,11 +3,23 @@ import { POINTER_TAG } from "../applet/pointer";
 import type { Note } from "@openparachute/surface-client";
 import { isCodeExtension } from "../applet/code";
 
-/** The last segment of the note's path, without an extension; else its id. */
+/** A journal entry's path, as Journal (and the Uni app) files it: Journal/2026/11-21/07-15 Walked to the bakery (or
+ *  under Notes/, as the Uni app once did); the seconds when the minute was taken (07-15-42). */
+const JOURNAL_ENTRY = /^(?:Journal|Notes)\/\d{4}\/\d{2}-\d{2}\/(\d{2})-(\d{2})(?:-\d{2})? ([^/]+)$/;
+/** The last segment of the note's path, without an extension (a journal entry's without its time: the folder and the
+ *  list say when); else its id. */
 export function titleOf(n: Pick<Note, "id" | "path">): string {
   const p = n.path?.replace(/\.(md|html?|tsx|jsx)$/i, "") ?? "";
+  const entry = JOURNAL_ENTRY.exec(p)?.[3]?.trim();
+  if (entry) return entry;
   const last = p.split("/").filter(Boolean).pop();
   return last || n.id;
+}
+/** When a journal entry was written, from its path ("07:15"); null for any other note. A list beside titleOf says it,
+ *  so two entries of a day with the same words stay apart. */
+export function entryTime(n: Pick<Note, "path">): string | null {
+  const m = JOURNAL_ENTRY.exec(n.path?.replace(/\.md$/i, "") ?? "");
+  return m ? `${m[1]}:${m[2]}` : null;
 }
 /** The folder a note sits in, "" at the top. */
 export function folderOf(n: Pick<Note, "path">): string {

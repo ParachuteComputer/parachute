@@ -23,7 +23,7 @@ type Where = { field: string; op: string; value: unknown };
 type View = { name: string; layout: "table" | "list"; sort: { by: string; dir: "asc" | "desc" } | null; where: Where[]; group: string | null; id?: string };
 type At = { vault: string | null; type: string | null; record: string | null; sharing?: boolean; changes?: boolean; packs?: boolean };
 type Change = { key: string; id: string; path: string; title: string; op: "created" | "changed" | "deleted" | "restored"; at: string; via: string | null; kind: string | null;
-  by: string | null; mine: boolean; who: string; before: number | null; after: number | null; gone: boolean; own: boolean; made?: string | null; recreated?: boolean; seen?: string | null };
+  by: string | null; mine: boolean; who: string; unnamed?: boolean; before: number | null; after: number | null; gone: boolean; own: boolean; made?: string | null; recreated?: boolean; seen?: string | null };
 type Side = { path: string; body: string; fields: Record<string, unknown>; types?: string[]; tags?: string[] };
 type Sides = { before: Side | null; after: Side | null };
 
@@ -68,7 +68,7 @@ const CSS = `
 .vlt .run { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: calc(var(--gap) * 1.25) 0 2px; }
 .vlt .run .who { font: 600 var(--fs-lead) var(--serif); }
 .vlt .run .done { font: italic var(--fs-small) var(--serif); color: var(--muted); }
-.vlt .run .when { flex: 1; font: var(--fs-small) var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
+.vlt .run .when { flex: 1 1 11rem; font: var(--fs-small) var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
 .vlt .lede { margin: 0 0 var(--gap); font: var(--fs-small) var(--sans); color: var(--muted); }
 .vlt .warn { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--danger); font: var(--fs-small) var(--sans); }
 .vlt .fdiff { display: grid; grid-template-columns: minmax(6em, max-content) 1fr 1fr; gap: 2px 12px; margin: 0 0 var(--gap); font: var(--fs-small) var(--sans); font-variant-numeric: tabular-nums; }
@@ -602,7 +602,7 @@ function ChangeView({ v, c, all, canWrite, done, sides, puts, put }: { v: Held; 
   const nb = names(b), na = names(a);
   return (
     <article aria-label={`${opWord(c)} ${c.title}`}>
-      <p className="note-meta">{opWord(c)} by {c.who}{c.kind && !c.mine && c.kind !== "person" ? ` (${c.kind === "agent" ? "an agent" : c.kind === "app" ? "an app" : "a service"})` : ""} · {when.full(c.at)}{c.via && c.who !== c.via.replace(/^key:/, "") && !c.mine ? ` · its key: ${c.via.replace(/^key:/, "")}` : ""}</p>
+      <p className="note-meta">{opWord(c)} by {c.who}{c.kind && !c.mine && c.kind !== "person" ? ` (${c.kind === "agent" ? "an agent" : c.kind === "app" ? "an app" : "a service"})` : ""} · {when.full(c.at)}{c.via && c.via !== "api" && c.via !== "mcp" && c.who !== c.via.replace(/^key:/, "") && !c.mine ? ` · its key: ${c.via.replace(/^key:/, "")}` : ""}</p>
       {failed ? <Problem error={failed} onRetry={() => vaults.compare(v.key, c.id, c.before, c.after).then((x: Sides) => { setD(x); setFailed(null); }, setFailed)}>This change couldn't be read</Problem>
         : !d ? <Loading />
         : <>
@@ -646,6 +646,26 @@ function putBackOf(c: Change, all: Change[], puts: string[]): { who?: string; at
   const next = all.filter((x) => x.id === c.id && x.at > c.at).sort((a, b) => (a.at < b.at ? -1 : 1))[0];
   if (next && (next.op === "restored" ? !c.recreated : c.op === "created" || c.recreated ? next.op === "deleted" : false)) return { who: next.who, at: next.at };
   return puts.includes(c.key) ? {} : null;
+}
+
+/** What "Put all" does for a run: the records it puts back (each to how it was before the run's first change to it), so
+ *  its button's number is that many; and for every other change in the run, why it isn't counted (so the run's
+ *  "9 changes" and the button's "6" say what they are). */
+function planOf(run: Change[], all: Change[], puts: string[]): { plan: Change[]; notes: string[] } {
+  const first = new Map<string, Change>();
+  let already = 0, own = 0, kept = 0, more = 0;
+  // newest first: a later change of the same record replaces the earlier one, the run's first to it
+  for (const c of run) {
+    if (c.own) own++;
+    else if (putBackOf(c, all, puts)) already++;
+    else if (c.before === null && !(c.op === "created" && !c.mine)) kept++;
+    else { if (first.has(c.id)) more++; first.set(c.id, c); }
+  }
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+  return { plan: [...first.values()], notes: [
+    already ? `${already} already put back` : "", own ? `${own} ${own === 1 ? "is" : "are"} the app's own` : "", kept ? `${n(kept, "new record", "new records")} of yours, kept` : "",
+    more ? `${n(more, "more change", "more changes")} to a record already counted` : "",
+  ].filter(Boolean) };
 }
 
 /** Put one change back: the record as it was before it (a made one, or one a put back re-made, is deleted; a deleted
@@ -752,9 +772,7 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
   }
   /** A run put back: each record to how it was before the run's first change to it. */
   const putRun = async (run: (typeof runs)[number]) => {
-    const first = new Map<string, Change>();
-    for (const c of run.changes) if (!c.own && !putBackOf(c, all, puts) && (c.before !== null || (c.op === "created" && !c.mine))) first.set(c.id, c);
-    const plan = [...first.values()];
+    const { plan } = planOf(run.changes, all, puts);
     const outside = plan.flatMap((c) => all.filter((x) => x.id === c.id && x.at > c.at && !run.changes.includes(x)));
     if (outside.length && sure !== run.key) { setSure(run.key); return; }
     setBusy(run.key); setSure(null);
@@ -781,8 +799,11 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
             : !page ? <Loading />
             : !all.length ? <Empty>Nothing changed in {v.name} in the last {days} days.</Empty>
             : runs.map((run, i) => {
-                const left = run.changes.filter((c) => !c.own && !putBackOf(c, all, puts) && (c.before !== null || (c.op === "created" && !c.mine)));
+                const { plan: left, notes } = planOf(run.changes, all, puts);
                 const outside = sure === run.key;
+                // why the button's number is less than the run's changes (not while it asks "Put back anyway")
+                const covers = canWrite && left.length > 0 && notes.length > 0 && !outside
+                  ? `${left.length === 1 ? "Put it back covers 1" : `Put all ${left.length} back covers ${left.length}`} of these ${run.changes.length} changes. Not counted: ${notes.join(", ")}.` : "";
                 return <div key={run.key}>
                   {(i === 0 || runs[i - 1].day !== run.day) && <p className="sect">{run.day}</p>}
                   <div className="run">
@@ -791,6 +812,9 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
                     {canWrite && left.length > 0 && <Button small busy={busy === run.key} aria-label={`${outside ? "Put back anyway" : left.length === 1 ? "Put it back" : `Put all ${left.length} back`}, by ${run.who}`} onClick={() => void putRun(run)}>{outside ? "Put back anyway" : left.length === 1 ? "Put it back" : `Put all ${left.length} back`}</Button>}
                     {canWrite && !left.length && run.changes.some((c) => putBackOf(c, all, puts)) && <span className="done">put back</span>}
                   </div>
+                  {(covers || run.changes[0].unnamed) && <p className="lede">
+                    {covers}{covers && run.changes[0].unnamed ? " " : ""}
+                    {run.changes[0].unnamed ? "The hub doesn't say which app this was. Name an app's key when you make it, and its changes show here under that name." : ""}</p>}
                   {outside && <p className="warn">Some of these records changed again after. Putting them back undoes that too.</p>}
                   <div className="chg"><List label={`${run.who}, ${run.day}`} hideLabel rows={run.changes.map((c) => {
                     const b = putBackOf(c, all, puts);

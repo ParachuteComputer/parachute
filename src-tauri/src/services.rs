@@ -1473,7 +1473,7 @@ pub async fn svc_http<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, 
             let subject = broker.subject_of(&session)?;
             let host = broker.host_of(&session, &service)?;
             let level = crate::levels::approvals_level(&levels.levels(&app).await?, false);
-            let (what, reason) = (format!("{service}:{op}"), format!("Send {op} to {host}, signed with your approval key."));
+            let (what, reason) = (format!("{service}:{op}"), approve_reason(op, &host));
             let graced = levels.gate(&app, level, passcode.as_ref().map(|p| p.as_str()), || ring.confirm(&app, &subject, &what, true, "Approve with your approval key", &reason)).await?;
             let mut res = broker.http(crate::approvals::for_approve_op(&approval), &role, &session, &service, &req).await?;
             if graced {
@@ -1537,8 +1537,21 @@ pub async fn svc_log<R: Runtime>(app: AppHandle<R>, state: State<'_, ServicesSta
     Ok(state.broker(&app)?.log_lines(&subject))
 }
 
+/// The unlock prompt's line for an approval op: what the shell knows of it (this request, its host, the op as the
+/// applet named it, the key that signs it). An applet's own words never reach the prompt, and the shell claims no
+/// meaning for an op.
+pub fn approve_reason(op: &str, host: &str) -> String {
+    format!("Approve this request to {host} ({op}), signed with your approval key.")
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_approval_op_is_said_as_this_request_its_host_and_op() {
+        assert_eq!(super::approve_reason("send.approve", "mail.example"), "Approve this request to mail.example (send.approve), signed with your approval key.");
+        assert_eq!(super::approve_reason("job.run", "x.example"), "Approve this request to x.example (job.run), signed with your approval key.");
+    }
+
     #[test]
     fn no_applet_can_have_an_approval_or_a_key_list_signed() {
         // even a declaration that names them: they are on the shell's deny list

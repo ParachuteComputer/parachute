@@ -46,6 +46,7 @@ import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 import { packMethods } from "./packs.ts";
 import { isSelf, readChanges, writerName } from "../changes.ts";
+import { titleOf } from "../../vault/notes.ts";
 
 export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where an AI connects to this vault only (`<vault>/mcp`): the vault's own address, nothing secret */
@@ -86,6 +87,8 @@ export type VaultsDeps = {
   /** This device's Parachute in that vault: the client id its key is named for (its writes are `key:<id>`, or
    *  `key:<id>-2` … for another sign-in), when it signed in as an app. */
   self?(vault: string): string | null;
+  /** The person's own account on that vault's hub (their sign-in's subject), when known: a write for it by no named key is theirs. */
+  account?(vault: string): string | null;
   /** A record's GET for what a screen shows (the `get` call), answered at once from what was read before while the hub
    *  is asked behind it (vault/readCache.ts; the frame is told when the answer differs). Given only for an applet that
    *  draws itself again when told (Parachute's own Vault); absent: `request`. A change, and every check one is judged
@@ -146,7 +149,8 @@ export function writablePath(p: unknown): p is string {
   if (p.startsWith(VIEWS)) return segs.length >= 3;
   return !/^(?:applets|parachute|\.parachute)$/i.test(segs[0]) && !segs[0].startsWith(".");
 }
-const title = (path: string) => path.split("/").pop() ?? path;
+// a record's title as the vault's lists say it (a journal entry by its words)
+const title = (path: string) => titleOf({ id: path, path });
 /** In the app's own folders (`Applets/`, `Parachute/`, `.parachute/`), but saved views. */
 const appsPath = (p: string) => !p.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(p);
 /** Whose a record is, for Changes: an applet's or a component's code ("code": shown, never put back here), a record the
@@ -400,8 +404,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           try {
             const { extension: _e, ...r } = await getRec(vault, id, true, true);
             // who made it and who changed it last, by name (an AI by its key's name; this device's Parachute as you)
-            const cid = deps.self?.(vault) ?? null;
-            return { ...r, ...(r.createdVia !== undefined ? { madeBy: writerName(r.createdVia ?? null, isSelf(cid, r.createdVia ?? null)), changedBy: writerName(r.updatedVia ?? null, isSelf(cid, r.updatedVia ?? null)) } : {}) };
+            const cid = deps.self?.(vault) ?? null, account = deps.account?.(vault) ?? null;
+            return { ...r, ...(r.createdVia !== undefined ? { madeBy: writerName(r.createdVia ?? null, isSelf(cid, r.createdVia ?? null), { by: r.createdBy ?? null, account }), changedBy: writerName(r.updatedVia ?? null, isSelf(cid, r.updatedVia ?? null), { by: r.updatedBy ?? null, account }) } : {}) };
           } catch (e) { throw failed(e); }
         },
       },
@@ -416,10 +420,10 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
             throw failed(e);
           });
           const list = plain(raw) && Array.isArray(raw.versions) ? raw.versions : [];
-          const cid = deps.self?.(vault) ?? null;
+          const cid = deps.self?.(vault) ?? null, account = deps.account?.(vault) ?? null;
           return list.flatMap((v: unknown): Version[] => (plain(v) && typeof v.superseded_at === "string" && typeof v.version_ix === "number"
             ? [{ ix: v.version_ix, at: v.superseded_at, actor: strOr(v.actor), via: strOr(v.via), op: typeof v.op === "string" ? v.op : "update", kind: strOr(v.via_kind),
-              mine: isSelf(cid, strOr(v.via)), who: writerName(strOr(v.via), isSelf(cid, strOr(v.via))) }] : []));
+              mine: isSelf(cid, strOr(v.via)), who: writerName(strOr(v.via), isSelf(cid, strOr(v.via)), { by: strOr(v.actor), account }) }] : []));
         },
       },
       version: {
@@ -446,7 +450,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
             const cid = deps.self?.(vault) ?? null;
             return await readChanges({
               get: (path) => deps.request(vault, "GET", path), door, since, offset, charge: (n) => ctx.charge(n),
-              self: (via) => isSelf(cid, via),
+              self: (via) => isSelf(cid, via), account: deps.account?.(vault) ?? null,
               own: ownKind,
             });
           } catch (e) { throw failed(e); }

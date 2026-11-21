@@ -34,7 +34,7 @@ describe("an older app opening a newer record set", () => {
         .toEqual({ allow: [], services: [], signals: [], app: [], opens: [], search: [], reach: undefined });
     }
     const home = found.entries.find((e) => e.path === "Applets/Home")!;
-    expect([home.manifest.name, home.manifest.glyph, home.manifest.id]).toEqual(["Home", "◠", "home"]);
+    expect([home.manifest.name, home.manifest.glyph, home.manifest.id]).toEqual(["Home", "⌂", "home"]);
     expect(home.newerWhy).toBe(`it needs Parachute level ${APP_LEVEL + 1}; this one is level ${APP_LEVEL}`);
     // the same record on an app at that level reads as it is
     const there = readApplet(row("today", 0, (f) => ({ ...f, ...later })), "home", false, () => false, APP_LEVEL + 1);
