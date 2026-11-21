@@ -1,4 +1,4 @@
-// The line over the plain vault and record views while Vault (applet/shipped.ts) can't open them: not added yet (a
+// The line over the plain vault and record views while Vault (applet/parachuteSource.ts) can't open them: not added yet (a
 // tap adds it, and its card asks), changed since it was allowed, or not allowed yet. When it runs, they open there.
 import { Link } from "react-router";
 import type { FrameViewer } from "../../bridge/protocol";

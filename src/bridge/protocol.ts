@@ -51,10 +51,12 @@ export type FrameParachute = { hub: string; host: string; name: string; home: bo
 /** `notice: "bundle-record"`: the bundle this device chose didn't load (its record is malformed or gone); the list says
  *  so. `"bundle-newer"`: it was made for a newer Parachute (`noticeName` is its name); the list says to update. A frame that
  *  doesn't know a notice shows none. */
-/** Vault (applet/shipped.ts) in the home vault: where it is, and whether it runs as allowed ("ok"), changed since
+/** Vault (applet/parachuteSource.ts) in the home vault: where it is, and whether it runs as allowed ("ok"), changed since
  *  ("updated"), not yet allowed ("none"), or applets don't run on this device ("off"); absent when it isn't there. */
 export type FrameViewer = { vault: string; noteId: string; status: "ok" | "updated" | "none" | "off" };
-export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; look?: "notes"; app?: "simple"; notice?: "bundle-record" | "bundle-newer"; noticeName?: string; viewer?: FrameViewer };
+export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachutes?: FrameParachute[]; look?: "notes"; app?: "simple"; notice?: "bundle-record" | "bundle-newer"; noticeName?: string; viewer?: FrameViewer;
+  /** Parachute's own applets (docs/design/PARACHUTE-SOURCE.md), in the home: from the app, not from any vault's list */
+  official?: FrameApplet[] };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
 export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; includeContent?: boolean; includeMetadata?: boolean };
 /** `decided`: what the note's route already decided for this history entry (kept by the shell, which outlives the frame). */

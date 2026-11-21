@@ -13,7 +13,7 @@ The app holds, at each hub, no more of a vault than the most that something the 
 
 | What the person allowed | What the app holds at the hub |
 |---|---|
-| Signing in to a Parachute | the list of their vault names (asked and dropped at once), and **read** of one vault: the home |
+| Signing in to a Parachute | the list of their vault names (asked and dropped at once), and **read and write** of one vault: the home (Parachute's own applets write there; since 11-20, [PARACHUTE-SOURCE.md](PARACHUTE-SOURCE.md)) |
 | Opening another vault (**Open letters** in Settings) | read of that vault |
 | An applet, on its card | its vault, at **write** if its manifest adds or changes notes (`create`, `update`), else read |
 | A change of their own (a note, their settings, adding Capture) | write of that vault, asked when the change is tried |
@@ -39,7 +39,9 @@ Code: `src/vault/reach.ts` (what each vault needs and why), `src/vault/signInFlo
    a hub the person runs, one may be a member's), or no answer in 4 s: the first by name, as before. On a hub
    the person runs, the same screen asks which vaults are theirs, as before. On someone else's Parachute: *Which vault
    do you want to open?*
-3. **Read the home.** One page: `vault:<home>:read`. That's the sign-in.
+3. **Read and write the home.** One page: `vault:<home>:read vault:<home>:write` (read alone before 11-20). That's the
+   sign-in. Parachute's own applets (Notes, Journal, Capture) write there, so the person's first Save saves; the home is
+   never narrowed back to read (`reach.ts` `neededLevel`), and Vault offers no **Read only** for it.
 
 So a person with a key approves once; without a key, twice. Every other vault the hub listed is a line in Settings
 (and on Notes, in Parachute Simplified): **Open letters** · *Not now*. A tap is one page: `vault:letters:read`.

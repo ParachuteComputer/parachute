@@ -21,6 +21,7 @@
 //   written       by the shell only, on a tap (the bar's sheet, or the frame's tap-gated bridge call), with
 //                 if_updated_at; applets can't (their writes are content-only, and they can't tag a note parachute-*).
 //   open on start the shell's rule, in start.ts: never on the record alone.
+import { officialFace, officialId, officialOf, officialPath } from "../applet/parachuteSource";
 import { useSyncExternalStore } from "react";
 import { appletsNow, refreshApplets, subscribeApplets } from "../applet/useApplets";
 import { plain, stripExt } from "../applet/contract";
@@ -107,6 +108,9 @@ export function placeFor(rec: VaultRecord, appletPath: string, list: readonly Va
 /** The applet a place names, as this device last read that vault's applets; null when it isn't there (or not read yet). */
 function findLive(p: Place): Found | null {
   const rec = vaultFor(p);
+  const which = officialOf(p.applet);
+  // one of Parachute's own (parachuteSource.ts): in the home vault only, named as this app names it
+  if (which) { const home = homeVault(); return rec && home && rec.key === home.key && openBundleNow().parachute ? { vault: rec.key, noteId: officialId(which), name: officialFace(which).name, glyph: officialFace(which).glyph, href: officialPath(rec.key, which) } : null; }
   if (!rec) return null;
   const a = appletsNow(rec.key);
   if (a?.state !== "ok") return null;
@@ -156,7 +160,7 @@ export function forgetVaultSettings(vault: string) { if (keptNow()?.vault === va
  *  (so the bar stays while the vault can't be reached). */
 export function find(p: Place): Found | null {
   const rec = vaultFor(p);
-  if (rec && appletsNow(rec.key)?.state === "ok") return findLive(p);
+  if (officialOf(p.applet) || (rec && appletsNow(rec.key)?.state === "ok")) return findLive(p);
   const k = keptNow();
   const f = k?.found[keyOf(p)];
   return f && rec && f.vault === rec.key ? f : null;
@@ -306,6 +310,7 @@ const names = (p: Place, vault: string, noteId: string) => { const f = find(p); 
 /** How the note will name one of this device's applets (its vault's applets read first, if this session hasn't yet). */
 async function appletPlace(vault: string, noteId: string): Promise<Place> {
   const rec = listVaults().find((v) => v.key === vault);
+  if (rec && officialOf(noteId)) return placeFor(rec, noteId);
   if (rec && appletsNow(vault)?.state !== "ok") await refreshApplets(rec);
   const a = appletsNow(vault);
   const e = a?.state === "ok" ? a.found.entries.find((x) => x.noteId === noteId) : undefined;

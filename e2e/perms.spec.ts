@@ -18,7 +18,7 @@ const card = (page: Page) => page.getByRole("region", { name: /is asking for acc
 const face = (page: Page) => card(page).getByRole("list", { name: "What it would do" });
 
 async function open(page: Page, label: RegExp) {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: label }).click();
   await expect(card(page)).toBeVisible();
 }

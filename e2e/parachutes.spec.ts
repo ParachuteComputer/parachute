@@ -4,7 +4,7 @@
 // a tap away. A second device that signs in to the home Parachute finds Techne on the person's list.
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mintToken, MORE_VAULTS, NOT_GIVEN, ORG_VAULT, techneState, VAULT } from "./hub";
-import { approveUntilBack, held, letWrite, openVault, signInWithKey, ui } from "./helpers";
+import { approveUntilBack, held, openVault, signInWithKey, ui } from "./helpers";
 
 const hostOf = (origin: string) => new URL(origin).host;
 /** A Parachute in Settings: its vaults, and a line for each vault there this device doesn't read yet. */
@@ -60,10 +60,9 @@ test("sign in once per hub with the key: the home read, every other vault of you
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(page.frameLocator("iframe.applet-frame").getByText("In letters.")).toBeVisible();
 
-  // the person's list of Parachutes waits for a home Parachute may write; once they let it, both are listed there
+  // the person's list of Parachutes: the home is written at sign-in (Parachute's own applets write there), so both are
+  // listed there
   const listed = async () => ((await home("GET", "notes?tag=parachute-settings&include_metadata=true"))[0]?.metadata?.parachute?.hubs ?? []).map((h: { hub: string }) => h.hub).sort();
-  expect(await listed()).toEqual([]);
-  await letWrite(page, VAULT);
   await expect.poll(listed).toEqual([hubState().origin, techneState().origin].sort());
 
   // Settings: one place per Parachute; whose came from the one answer for all its vaults
@@ -90,14 +89,14 @@ test("each vault keeps a sign-in of its own: one refreshed, the others untouched
     for (const v of vaults) if (v.vault === "pantry") v.accessToken = "spoiled";
     localStorage.setItem("parachute.vaults.v1", JSON.stringify(vaults));
   });
-  await page.goto("/v/pantry");
+  await page.goto("/v/pantry?with=vault");
   await expect(ui(page).getByRole("list", { name: "Notes" })).toContainText("Shelves");
   const after = await held();
   const was = (v: string) => before.find((x) => x.vault === v)!, now = (v: string) => after.find((x) => x.vault === v)!;
   expect(now("pantry").refreshToken).not.toBe(was("pantry").refreshToken);
   for (const v of [VAULT, "letters"]) expect(now(v)).toEqual(was(v));
   // and the others still read with theirs
-  await page.goto("/v/letters");
+  await page.goto("/v/letters?with=vault");
   await expect(ui(page).getByRole("list", { name: "Notes" })).toContainText("Post");
 });
 
@@ -187,8 +186,9 @@ test("a second device that signs in to the home Parachute finds Techne on the li
   const a = await first.newPage();
   await signInWithKey(a, hubState(), VAULT, "Mine");
   await signInWithKey(a, techneState(), ORG_VAULT);
-  // the list is written once the person lets Parachute change notes in their home
-  await letWrite(a, VAULT);
+  // the list is written at once: the sign-in holds the home at write
+  const listed = async () => ((await home("GET", "notes?tag=parachute-settings&include_metadata=true"))[0]?.metadata?.parachute?.hubs ?? []).length;
+  await expect.poll(listed).toBe(2);
   await first.close();
 
   const second = await fresh();

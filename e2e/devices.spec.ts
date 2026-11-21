@@ -62,7 +62,7 @@ test("rooms on a real relay: a voice note, a link, a saved file, an attached fil
     const up = await bob.upload(pdf, "application/pdf");
     expect((await bob.publish({ kind: 9, content: `[seeds.pdf](${up.url})`, tags: [["h", g], ["imeta", `url ${up.url}`, "m application/pdf", `x ${up.sha256}`, `size ${up.size}`, "filename seeds.pdf"]] })).ok).toBe(true);
 
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText("Record from your microphone when you press record (the app shows its own recorder)");
@@ -127,7 +127,7 @@ test("rooms on a real relay: a voice note, a link, a saved file, an attached fil
     // a draft, kept on this device: away to the vault and back, it is still in the field
     await field.fill(`half a thought ${stamp}`);
     await page.waitForTimeout(900); // kept half a second after the last key
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await frame(page).getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Shed ${stamp}`) }).click({ timeout: 30_000 });
     await expect(frame(page).getByLabel(`Message Shed ${stamp}`)).toHaveValue(`half a thought ${stamp}`);
@@ -145,7 +145,7 @@ test("journal: a voice entry, recorded on the shell's sheet, attached to its not
   const note = await record(hubState(), "create", appletRecord("journal"));
   made.push(note.id);
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText("Read, add and change notes in Journal/");

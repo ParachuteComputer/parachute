@@ -20,6 +20,7 @@ import { plain, stripExt } from "../applet/contract";
 import { APP_LEVEL, tooNew } from "../applet/level";
 import { askedOf, stricterAsked, type Asked } from "./levelRules";
 import defaults from "./default-bundles.json";
+import { PARACHUTE_PUBLISHER } from "../applet/parachuteSource";
 
 export const BUNDLE_TAG = "parachute-bundle";
 export const BUNDLE_FOLDER = "Parachute/Bundles/";
@@ -33,7 +34,7 @@ export type Look = "launcher" | "notes";
 export type Place = { hub?: string; vault: string; applet: string };
 /** A place on the bar that is the app's own: `home` (the bundle's home screen: Notes or the list, by its `look`),
  *  `connect` (Connect an AI), or an applet the app ships (`capture`, `journal`, `vault`: the home vault's copy, or the screen that adds it). */
-export type AppPlace = { screen: "home" | "connect" } | { shipped: "capture" | "journal" | "vault" };
+export type AppPlace = { screen: "home" | "connect" } | { shipped: "capture" | "journal" | "vault" | "notes" | "connect" | "home" };
 export type BarEntry = Place | AppPlace;
 export const isAppPlace = (e: BarEntry): e is AppPlace => "screen" in e || "shipped" in e;
 /** Where applets come from: one applet, `applet: "*"` for every applet in a vault, `vault: "*"` (with a hub) for every vault there. */
@@ -54,6 +55,11 @@ export type Bundle = {
    *  code, join) none, unlock or passcode, and the idle lock's minutes. It only raises a device's levels: lowering one
    *  takes the person's signed approval. */
   security: Asked;
+  /** Whether it offers Parachute's own applets (docs/design/PARACHUTE-SOURCE.md): its `publishers` name Parachute's
+   *  (https://parachute.computer/applets/), or it says none and its default does (a bundle of the person's own with no
+   *  default offers them only once it names them). A record can leave the source out; it can never give a publisher a
+   *  key: Parachute's keys are the app's own. */
+  parachute: boolean;
   /** An app someone else offers, followed live: where its record is. */
   live?: { hub: string; vault: string; path: string };
   /** Where this bundle's record is: the home vault's note id, or none for a default no record changes. */
@@ -72,7 +78,7 @@ const only = (o: Record<string, unknown>, keys: string[]) => Object.keys(o).ever
 function appPlaceOf(x: unknown): AppPlace | null {
   if (!plain(x)) return null;
   if (only(x, ["screen"]) && (x.screen === "home" || x.screen === "connect")) return { screen: x.screen };
-  if (only(x, ["shipped"]) && (x.shipped === "capture" || x.shipped === "journal" || x.shipped === "vault")) return { shipped: x.shipped };
+  if (only(x, ["shipped"]) && (["capture", "journal", "vault", "notes", "connect", "home"] as unknown[]).includes(x.shipped)) return { shipped: x.shipped as "capture" };
   return null;
 }
 const barEntryOf = (x: unknown): BarEntry | null => appPlaceOf(x) ?? placeOf(x);
@@ -136,6 +142,7 @@ export function bundleOf(raw: unknown, path: string | null, noteId: string | nul
     opens: list(raw.opens, 200, opensOf),
     keep,
     security: askedOf(raw.security),
+    parachute: Array.isArray(raw.publishers) ? raw.publishers.slice(0, 20).some((p) => plain(p) && p.url === PARACHUTE_PUBLISHER) : d?.parachute ?? false,
     ...(live ? { live } : {}),
     noteId,
   };
@@ -197,6 +204,7 @@ export function recordOf(app: Bundle): Record<string, unknown> {
     ...(app.hide.length ? { hide: app.hide } : {}), ...(app.bar ? { bar: app.bar } : {}), ...(app.start !== undefined ? { start: app.start } : {}),
     ...(app.opens.length ? { opens: app.opens } : {}), ...(app.keep !== "auto" ? { keep: app.keep } : {}),
     ...(Object.keys(app.security).length ? { security: app.security } : {}),
+    publishers: app.parachute ? [{ url: PARACHUTE_PUBLISHER }] : [],
   };
 }
 

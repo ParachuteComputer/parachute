@@ -30,7 +30,7 @@ test("Make this mine copies the built-in frame into the home vault as one record
   expect(rec).toMatchObject({ path: "Parachute/Frame", extension: "tsx", tags: ["parachute-frame"] });
   expect(rec.content).toBe(DEFAULT);
   expect(rec.metadata.frame?.based_on).toMatch(/^tsx:[0-9a-f]{64}$/);
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await expect(frameEl(page)).toHaveAttribute("data-frame", "vault");
   await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
 });
@@ -60,7 +60,7 @@ test("a change to the frame (one MCP update) shows the card again; the version a
 
 test("a frame an agent writes into the home vault asks first; the built-in one runs until the person allows it", async ({ page }) => {
   await write('export default function Tiny() { return <main><h1>A tiny frame</h1></main>; }');
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await expect(page.getByRole("heading", { name: "Your home vault has its own frame" })).toBeVisible();
   await expect(frameEl(page)).toHaveCount(0);
   await page.getByRole("button", { name: "Use the built-in frame" }).click();

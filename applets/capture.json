@@ -1,4 +1,5 @@
 {
+  "version": 1,
   "path": "Applets/Capture",
   "extension": "tsx",
   "tags": ["applet"],

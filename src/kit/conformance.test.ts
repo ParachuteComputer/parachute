@@ -103,7 +103,6 @@ const SCREENS: Record<string, string[]> = {
   "src/frame/views/NotesHome.tsx": ["status"], // the bundle record's notice is the app's own line, said when it shows
   "src/frame/views/VaultView.tsx": ["lists"], // the vault's applets as chips, the app's own
   "src/frame/views/NoteRows.tsx": ["lists"], // List's rows as router links: the frame moves by its router, an applet can't
-  "src/views/Connect.tsx": [],
 };
 describe("Parachute Simplified's screens are drawn with the kit", () => {
   it.each(Object.entries(SCREENS))("%s", (f, allowed) => {

@@ -27,7 +27,7 @@ test.beforeEach(dropTheme);
 test.afterEach(dropTheme);
 
 test("writing the theme note restyles the shell and the frame while the app runs, and deleting it brings the default back", async ({ page }) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
   expect(await shellBg(page)).toBe(PAPER);
   expect(await frameBg(page)).toBe(PAPER);
@@ -51,7 +51,7 @@ test("writing the theme note restyles the shell and the frame while the app runs
 });
 
 test("a running applet restyles too", async ({ page }) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(applet(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
@@ -84,7 +84,7 @@ test("the first change in Settings copies the built-in theme into the home vault
 
 test("a theme written while the app was closed is the look of the shell and the frame at the next start", async ({ page }) => {
   await api(hubState(), "POST", "notes", { path: "Parachute/Theme", tags: ["parachute-theme"], metadata: { theme: THEME } });
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
   await expect.poll(() => shellBg(page)).toBe(SAGE);
   await expect.poll(() => frameBg(page), { timeout: 3000 }).toBe(SAGE);

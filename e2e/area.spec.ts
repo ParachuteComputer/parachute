@@ -44,7 +44,7 @@ test("an area's applet: Garden's room beside Garden's notes, its grant one room 
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
   const made = await installApplet("area", { relay: RELAY!, uni: bob.pubkey, area: "Garden", area_id: "garden", area_room: rooms.Garden });
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Garden/ }).click();
     // the card: that folder, that room, and nothing wider
     const card = page.getByRole("region", { name: /asking for access/ });
