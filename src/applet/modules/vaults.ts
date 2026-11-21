@@ -36,7 +36,12 @@ import type { AppWord } from "../app.ts";
 
 export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where an AI connects to it (`<vault>/mcp`): the vault's own address, nothing secret */
-  connector: string };
+  connector: string;
+  /** where anyone with the link reads a published record: this plus its id (`<vault>/view/`); null where the hub has no
+   *  such page (Parachute Cloud, for now) */
+  view: string | null;
+  /** who can open the vault's address: only this device, devices on the person's network, or anyone */
+  reach: "this-device" | "network" | "anyone" };
 /** A record as the module hands it on: record words, types apart from tags. */
 export type Rec = {
   id: string; path: string; title: string; createdAt: string | null; updatedAt: string | null;
