@@ -31,7 +31,7 @@ export function appLines(app: readonly AppWord[]): { text: string; stress: boole
   if (app.includes("links")) out.push({ text: "Open web addresses in your browser: what it reads could leave in an address it opens", stress: true });
   if (app.includes("save")) out.push({ text: "Save files to your device's Downloads", stress: false });
   if (app.includes("attach")) out.push({ text: "Ask you to pick a file or picture to give it", stress: false });
-  if (app.includes("vaults")) out.push({ text: "See every record in every vault on this device (its words, fields, types, tags, links and history), and change records where you let Parachute change them; a published record (anyone with its link reads it) only after you say yes on the app's own sheet", stress: true });
+  if (app.includes("vaults")) out.push({ text: "See every record in every vault on this device (its words, fields, types, tags, links and history), and change records where you let Parachute change them (and put one back as it was, which can take away a record an AI made); a published record (anyone with its link reads it) only after you say yes on the app's own sheet", stress: true });
   if (app.includes("sharing")) out.push({ text: "See what reaches each vault (this app, its applets), and, each after you say yes on the app's own sheet: publish a record (anyone with its link can read it), take an applet's access back, or make a vault read only", stress: true });
   if (app.includes("changes")) out.push({ text: "See how many changes your AIs and other apps made today in the vaults on this device, and their names (not what they changed)", stress: false });
   if (app.includes("copy")) out.push({ text: "Put text of its own on your clipboard when you tap in it", stress: false });

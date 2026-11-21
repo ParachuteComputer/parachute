@@ -17,7 +17,7 @@ their AI writes into their home shows on Notes under **Your applets**, where its
 | **Notes** | the home (`/`) | Every vault's newest notes in one list, a search across all of them, the vaults as tabs, **New note** (its first line names it), and the applets in the home. A note opens where notes open: in Vault (Parachute's own applets claim no notes), or an applet of the person's that claims it. Each vault the sign-in didn't read is a line in Settings, not here. |
 | **Journal** | the bar | The Uni app's Journal: a line a day or many, written or said, kept by day in the home vault's `Journal/`. |
 | **Capture** | the bar | Write a line, or **Say it** (the app's own recorder): it lands in the home vault's `Inbox/` as a note of its own, and a voice note gets its words from the hub's transcription. |
-| **Vault** | the bar | Parachute's own viewer ([VAULT.md](VAULT.md)): each vault's types and counts, a type's records as a table, a record's fields (changed where they stand), words (**Edit words**), links and history. |
+| **Vault** | the bar | Parachute's own viewer ([VAULT.md](VAULT.md)): each vault's types and counts, a type's records as a table, a record's fields (changed where they stand), words (**Edit words**), links and history, and Changes: what your AI changed, with **Put it back**. |
 | **Connect** | the bar | Each vault's connector address (`https://…/vault/<name>/mcp`) with **Copy**, and how to add it to Claude and ChatGPT. |
 
 Each is one of Parachute's own applets (`applets/notes`, `journal`, `capture`, `vault`, `connect`), at
