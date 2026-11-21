@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "path": "Applets/Calendar",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "calendar",
+      "name": "Calendar",
+      "glyph": "▦",
+      "note": "your calendar, through your calendar door",
+      "access": []
+    },
+    "services": [{ "id": "cal", "kind": "http", "url": "{{calendar}}", "auth": "nip98" }]
+  }
+}
