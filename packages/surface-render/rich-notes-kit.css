@@ -1,5 +1,5 @@
-/* Parachute: in the parts' cascade layer (src/kit/base.css says the order), and first in it, so the kit's own note rules
-   (.pa-note, .prose-note) and the renderer's settle by specificity and order as they always have. */
+/* Parachute: in the parts' cascade layer (src/kit/base.css says the order), beside the kit's own note rules (.pa-note,
+   .prose-note), so the two settle by specificity and by order as they did before there were layers. */
 @layer parachute.base, parachute.parts, parachute.app;
 @layer parachute.parts {
 /* rich-notes-kit: the look. A page of small serif text on a paper ground; live parts are quiet; one earthy accent;
@@ -32,6 +32,8 @@
   --rn-sunk: color-mix(in srgb, var(--line, #d8d2c4) 45%, var(--surface, #fbf8f1));
   --rn-serif: var(--serif, "Cormorant Garamond", Georgia, serif); --rn-display: var(--serif, "Cormorant Garamond", Georgia, serif);
   --rn-ui: var(--sans, Inter, system-ui, sans-serif); --rn-mono: var(--mono, ui-monospace, monospace);
+  /* Parachute: the one focus ring, in the accent */
+  --rn-focus: var(--accent, #4f6b3a);
 }
 .rn-ink .rn, .rn.rn-ink, [data-screen="ink"] .rn {
   --rn-ground: #fff; --rn-paper: #fff; --rn-sunk: #eee; --rn-ink: #000; --rn-ink-2: #222; --rn-ink-3: #444;

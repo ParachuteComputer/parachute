@@ -8,8 +8,9 @@
    The sheet is in cascade layers (src/kit/base.css): the elements below sit in the base, the app's own classes in
    `parachute.app`, above the parts (an applet's own CSS, in no layer, is only ever in its own frame). */
 @layer parachute.base, parachute.parts, parachute.app;
-:root { --bar-h: 58px; }
 @layer parachute.base {
+/* the bar's height (the phone's keyboard, up, sets it to 0 in the app layer: so this sits in a layer too) */
+:root { --bar-h: 58px; }
 * { box-sizing: border-box; }
 /* the fallbacks are the built-in theme's, for a paint before the shell sets the tokens */
 /* checkboxes, radios and ranges in the theme's accent, never the browser's blue */

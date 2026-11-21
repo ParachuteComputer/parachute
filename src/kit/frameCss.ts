@@ -16,6 +16,9 @@ export const LAYERS = "@layer parachute.base, parachute.parts, parachute.app;";
 const FRAME_PAGE = "@layer parachute.base{:where(body){padding:calc(var(--pad) * 1.2) max(var(--pad), calc((100% - 760px) / 2)) calc(var(--pad) * 3);}}"
   + "@layer parachute.parts{:root:has(.pa-page) body{padding:0;}}";
 
+/** An embed's body shows the page it sits in through it, as it always did. */
+const EMBED_PAGE = "@layer parachute.base{:where(body){background:transparent;}}";
+
 /** The kit's sheets as one string (ours: never holds `<`). */
 export const KIT_CSS = `${LAYERS}${BASE_CSS}${PARTS_CSS}`;
 
@@ -23,4 +26,4 @@ export const KIT_CSS = `${LAYERS}${BASE_CSS}${PARTS_CSS}`;
  *  are now (`tokensCss`, theme.ts cssOf: its values are held to the theme's grammar; a `<` is dropped all the same),
  *  then the kit's sheets. */
 export const frameHead = (tokensCss: string, { page = true }: { page?: boolean } = {}) =>
-  `<style>${LAYERS}${FONTS_CSS}${tokensCss.replace(/</g, "")}</style><style>${KIT_CSS}${page ? FRAME_PAGE : ""}</style>`;
+  `<style>${LAYERS}${FONTS_CSS}${tokensCss.replace(/</g, "")}</style><style>${KIT_CSS}${page ? FRAME_PAGE : EMBED_PAGE}</style>`;

@@ -49,10 +49,11 @@ function iifeKit(id: string, entry: string, name: string): Plugin {
       const result = Array.isArray(out) ? out[0] : out;
       const files = "output" in result ? result.output : [];
       const code = files.flatMap((f) => (f.type === "chunk" ? [f.code] : []))[0] ?? "";
-      // the note renderer's styles go in with the script (the frame's CSP allows inline styles, and loads nothing), first in
-      // the head: they share the parts' layer with the kit's sheet, and come before it there, as they always have
+      // the note renderer's styles go in with the script (the frame's CSP allows inline styles, and loads nothing), at the
+      // end of the head: they share the parts' layer with the kit's sheet and come after it there, as they did when the
+      // parts' sheet was bundled with them (ahead of them)
       const css = files.filter((f) => f.type === "asset" && f.fileName.endsWith(".css")).map((f) => (f.type === "asset" ? String(f.source) : "")).join("\n");
-      const withCss = css ? `(function(){var s=document.createElement("style");s.setAttribute("data-parachute-parts","");s.textContent=${JSON.stringify(css)};document.head.insertBefore(s,document.head.firstChild)})();\n${code}` : code;
+      const withCss = css ? `(function(){var s=document.createElement("style");s.setAttribute("data-parachute-parts","");s.textContent=${JSON.stringify(css)};document.head.appendChild(s)})();\n${code}` : code;
       return `export default ${JSON.stringify(withCss)};`;
     },
   };

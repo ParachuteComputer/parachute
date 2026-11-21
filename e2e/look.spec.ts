@@ -89,3 +89,21 @@ test("the base leaves the kit's parts alone: a pressable row wraps and stays squ
     expect(await frame(page).locator(".pa-finput").first().evaluate((el) => el.getBoundingClientRect().height)).toBeLessThan(34);
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });
+
+const NOTE_TSX = `import { Note } from "parachute";
+export default function Read() {
+  return <Note path="Notes/Bread" tags={["recipe"]} body={"# Bread\\n\\n## Ingredients\\n\\n- 500 g rye\\n\\n## Method\\n\\n1. Mix the \\\`rye\\\` and water.\\n\\n> Rest it overnight.\\n"} />;
+}
+`;
+
+test("a note the kit draws keeps the note renderer's own look: the base stays out of it, and the renderer's rules still win their ties", async ({ page }) => {
+  const id = await opened(page, "Applets/Note here", "tsx", NOTE_TSX, "note-here", "Note here", "Rest it overnight");
+  try {
+    // a recipe is drawn rich, by the renderer (.rn)
+    await expect(frame(page).locator(".pa-note .rn blockquote")).toBeVisible();
+    // the base's inline-code ring never reaches inside a note
+    expect(await style(page, ".pa-note .rn code", "box-shadow")).toBe("none");
+    // the renderer's blockquote (2px solid), not the part's double rule: its sheet comes after the parts' in their layer
+    expect(await style(page, ".pa-note .rn blockquote", "border-left-style")).toBe("solid");
+  } finally { await api(hubState(), "DELETE", `notes/${id}`); }
+});

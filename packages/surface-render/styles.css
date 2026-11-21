@@ -1,5 +1,5 @@
-/* Parachute: in the parts' cascade layer (src/kit/base.css says the order), and first in it, so the kit's own note rules
-   (.pa-note, .prose-note) and the renderer's settle by specificity and order as they always have. */
+/* Parachute: in the parts' cascade layer (src/kit/base.css says the order), beside the kit's own note rules (.pa-note,
+   .prose-note), so the two settle by specificity and by order as they did before there were layers. */
 @layer parachute.base, parachute.parts, parachute.app;
 @layer parachute.parts {
 /*
