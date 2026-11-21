@@ -27,7 +27,8 @@ e2e/services/down.sh                    # removes the containers, their volumes 
 `up.sh` runs `compose.yml` as its own compose project (`SERVICES_PROJECT`, default `parachute-e2e`) on loopback ports
 (`RELAY_PORT` 3871, `STALWART_PORT` 18443, `STALWART_SETUP_PORT` 18080, `MAIL_PORT` 19951, `MATRIX_PORT` 18008); set
 them to keep two sets on one machine apart. Every key and password is made up per run (`seed.mjs`) and kept in
-`SERVICES_DIR` (default `e2e/.services`, mode 700). Run again on a running set, it seeds only what's missing.
+`SERVICES_DIR` (default `e2e/.services`, mode 700). Run again on a running set, it starts what stopped; after
+a setup that failed part way, or volumes removed by hand, run `down.sh` first.
 
 ## The Buzz relay
 

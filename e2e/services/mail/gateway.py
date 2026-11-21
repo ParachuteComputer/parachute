@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # A COPY of the Uni app's mail gateway, for the services specs only (e2e/mail.spec.ts, e2e/services/README.md). The
-# original runs on Uni's box; this copy differs only in: example hosts and addresses in the docs below, UNI_MAIL_HOST
-# (the address it listens on, so it can run in a container) and a loopback default for "public_url". Keep it in step
-# with the original when the app starts using a new gateway operation.
+# original runs on Uni's box; this copy differs only in: example hosts and addresses and the owner's name in the docs
+# below, UNI_MAIL_HOST (the address it listens on, so it can run in a container) and a loopback default for "public_url".
+# Its outbound rules' outcome ("needs-aaron") and refusal ("want Aaron to approve") are the original's, as the app sees
+# them. Keep it in step with the original when the app starts using a new gateway operation.
 """Mail bridge for the Uni app (T-45, writes T-210): Stalwart JMAP.
 
 The app never holds a mail password. It signs each request with a Nostr key
@@ -45,7 +46,7 @@ account's identity, and Sender/Reply-To (if any) the same. Stalwart doesn't chec
 needs-aaron, default refuse. A needs-aaron send waits in Drafts, reserved, until the owner's key approves it (the same
 draft, unchanged, submitted with every other check run again) or declines it (released; nothing is sent). Parking and
 deciding each leave a JSON file in the config's "needs_aaron_spool" (no body), from which a user-uni timer makes and
-closes Aaron's task (needs_aaron_tasks.py). The ledger also records each draft Uni's key adds to the owner's Drafts: "drafted by Uni"
+closes the owner's task (needs_aaron_tasks.py). The ledger also records each draft Uni's key adds to the owner's Drafts: "drafted by Uni"
 comes from there, and the bridge rewrites the $uni-drafted keyword in every Email/get answer to match it.
 
 Listens on 127.0.0.1 only; Tailscale Serve exposes it tailnet-only.
@@ -506,7 +507,7 @@ def ledger(c: dict) -> Ledger:
 
 
 # ── The owner's task for a parked send: spool files ─────────────────────────────────────────────────────────────────
-# The bridge (uni-mail) can't write Aaron's vault. It leaves one file per parked send, <opId>.json (what is waiting
+# The bridge (uni-mail) can't write the owner's vault. It leaves one file per parked send, <opId>.json (what is waiting
 # and why; never the body), and one more, <opId>.done.json, when the owner decides it. needs_aaron_tasks.py (user uni,
 # a timer) makes the task from the first and closes it on the second. The dir is uni-mail:uni 2750, files 0640.
 

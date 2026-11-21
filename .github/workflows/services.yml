@@ -26,6 +26,17 @@ on:
       - e2e/rooms.spec.ts
       - e2e/today.spec.ts
       - src-tauri/tests/services_real.rs
+      # what those specs drive: the applets on real servers, the shell's broker and signer, the harness
+      - applets/rooms.tsx
+      - applets/room.tsx
+      - applets/mail.tsx
+      - applets/matrix.tsx
+      - applets/today.tsx
+      - src/services/**
+      - src-tauri/src/services.rs
+      - e2e/hub.ts
+      - e2e/helpers.ts
+      - playwright.config.ts
       - .github/workflows/services.yml
       - .github/actions/core/**
 

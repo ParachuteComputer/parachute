@@ -41,7 +41,7 @@ function stalwart(path, user, pw, body) {
   return new Promise((res, rej) => {
     const r = request(`${STALWART}${path}`, { method: body ? "POST" : "GET", rejectUnauthorized: false,
       headers: { authorization: `Basic ${Buffer.from(`${user}:${pw}`).toString("base64")}`, "content-type": "application/json" } }, (resp) => {
-      let t = ""; resp.on("data", (c) => (t += c)); resp.on("end", () => resp.statusCode < 300 ? res(JSON.parse(t)) : rej(new Error(`${path} ${resp.statusCode}`)));
+      let t = ""; resp.on("data", (c) => (t += c)); resp.on("end", () => { try { if (resp.statusCode >= 300) throw new Error(`${path} ${resp.statusCode}`); res(JSON.parse(t)); } catch (e) { rej(e); } });
     });
     r.on("error", rej); r.end(body ? JSON.stringify(body) : undefined);
   });
@@ -126,7 +126,7 @@ if (step === "keys") {
 } else if (step === "relay") {
   // NIP-42 sign-in as the owner, then one 9030 (let in) per person; each must be accepted
   const sk = Uint8Array.from(Buffer.from(read(join(keysDir, "owner.hex")), "hex"));
-  setTimeout(() => { console.error("relay: no sign-in within 30 s"); process.exit(1); }, 30_000).unref();
+  setTimeout(() => { console.error("relay: letting people in took over 30 s"); process.exit(1); }, 30_000).unref();
   const ws = new WebSocket(RELAY);
   const waiting = new Map();
   // sends an event and waits for the relay's OK for it (registered before it can arrive)
