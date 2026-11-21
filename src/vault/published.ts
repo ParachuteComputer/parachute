@@ -4,9 +4,10 @@ import { CLOUD } from "./parachute";
 import { vaultUrlOf, type VaultRecord } from "./store";
 
 /** Where anyone with the link reads a vault's published records: the hub's page for one, `<vault>/view/<id>` (core
- *  serves it to a reader with no sign-in). Parachute Cloud has no such page yet: null, and the app says so. */
-export function viewBase(r: Pick<VaultRecord, "issuer" | "vault" | "url">): string | null {
-  if (r.issuer === CLOUD) return null;
+ *  serves it to a reader with no sign-in). A Parachute Cloud door has no such page yet (Cloud, and your own Parachute
+ *  on your own Cloudflare, which runs Cloud's workers: T-476 walk, the link was a 404): null, and the app says so. */
+export function viewBase(r: Pick<VaultRecord, "issuer" | "vault" | "url" | "door">): string | null {
+  if (r.issuer === CLOUD || r.door === "cloud") return null;
   return `${vaultUrlOf(r).replace(/\/$/, "")}/view/`;
 }
 

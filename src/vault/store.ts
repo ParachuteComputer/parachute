@@ -17,6 +17,9 @@ export type VaultRecord = {
   addedAt: string;
   /** the vault's API root, when it isn't `<issuer>/vault/<name>` (Parachute Cloud's vaults live on another host) */
   url?: string;
+  /** "cloud": the hub is a Parachute Cloud door (its descriptor's `door`): Cloud itself, or your own Parachute on your
+   *  own Cloudflare (parachute-cloud deploy/personal), which runs the same workers */
+  door?: "cloud";
 };
 
 export const VAULTS_KEY = "parachute.vaults.v1";

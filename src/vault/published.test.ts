@@ -10,6 +10,10 @@ describe("a published record's link", () => {
   it("is none on Parachute Cloud, which has no page for it yet (a link there would be a 404)", () => {
     expect(viewBase({ issuer: CLOUD, vault: "home", url: "https://my.parachute.computer/vault/home" })).toBeNull();
   });
+  it("is none on your own Parachute on your own Cloudflare, which runs Cloud's workers (its descriptor says door cloud)", () => {
+    // T-476 walk: the app gave out <door>/vault/home/view/<id>, and the door answered 404
+    expect(viewBase({ issuer: "https://me-identity.example.workers.dev", vault: "home", door: "cloud" })).toBeNull();
+  });
 });
 
 describe("who can open an address", () => {
