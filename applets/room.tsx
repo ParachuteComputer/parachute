@@ -757,7 +757,7 @@ function AskCard({ e, ask, answeredBy, mine, answer }: { e: Ev; ask: Ask; answer
   }
   const signed = ask.kind === "approve" || ask.kind === "give";
   return <div className="card" role="group" aria-label={`Wants you: ${ask.what}`}>
-    <div className="head">◆ wants you · {KIND_WORD[ask.kind]} · until {when.short(ask.until)}</div>
+    <div className="head">◆ Wants you · {KIND_WORD[ask.kind]} · until {when.short(ask.until)}</div>
     <p className="what">{ask.what}</p>
     <p className="why">{ask.why}</p>
     {ask.context && <Markdown text={ask.context} />}

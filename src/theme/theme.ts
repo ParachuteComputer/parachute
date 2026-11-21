@@ -13,7 +13,7 @@
 //                                                             how the parts are drawn (rules, corners, depth, labels)
 //                   tokens:  { "radius-card": "14px", … }      any of the look's style tokens (STYLE_TOKENS), one by one
 //                 Every key is optional: what it leaves out (or gives in a form this reads not) is the built-in value.
-//   absent        the built-in theme (DEFAULT_THEME): the same look the app has always had.
+//   absent        the built-in theme (DEFAULT_THEME): the default look (paper) in its own palettes.
 //
 // Values are held to a strict grammar, because they end up in CSS that the shell, the frame and applets all apply: a
 // colour is hex, rgb(), hsl(), oklch() or oklab() with numbers only; a font is a list of family names. Nothing that

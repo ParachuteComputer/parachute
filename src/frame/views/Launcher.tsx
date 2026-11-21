@@ -140,7 +140,7 @@ function Entry({ v, a, where, home, pinned, onHold }: { v: FrameVault; a: FrameA
     <li>
       <Link className="entry" to={appletPath(v.key, a.noteId)} {...hold}>
         <span className="entry-glyph" aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span>
-        <span className="entry-name">{a.manifest.name}{home && <span className="entry-home">home</span>}{pinned && !home && <span className="entry-pinned"><span aria-hidden="true">●</span> pinned</span>}</span>
+        <span className="entry-name">{a.manifest.name}{home && <span className="entry-home">Home</span>}{pinned && !home && <span className="entry-pinned"><span aria-hidden="true">●</span> pinned</span>}</span>
         <span className="entry-life">{where && <span className="entry-where">{where} · </span>}{life}</span>
         {o && load.state === "ok" && <span className="entry-days" aria-hidden="true"><Days times={load.data.map(updated)} days={7} inline /></span>}
       </Link>

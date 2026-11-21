@@ -73,7 +73,7 @@ The style tokens, what each draws, and its value in `paper` and in `almanac` (`s
 | Token | What it draws | `paper` | `almanac` |
 |---|---|---|---|
 | `--primary` | The main action's fill (a primary button, a field's action). | `var(--accent)` | `var(--text)` |
-| `--on-primary` | Text on the main action. | `#fdfbf7` | `var(--bg)` |
+| `--on-primary` | Text on the main action. | `var(--surface)` | `var(--bg)` |
 | `--tint` | A row under the pointer, the row open now: a light wash. | `color-mix(in srgb, var(--text) 5%, transparent)` | `color-mix(in srgb, var(--line) 30%, transparent)` |
 | `--card-fill` | A card's ground. | `var(--surface)` | `var(--surface)` |
 | `--field-fill` | The ground of a box to write in (search, a text box, a bare input). | `var(--surface)` | `var(--surface)` |

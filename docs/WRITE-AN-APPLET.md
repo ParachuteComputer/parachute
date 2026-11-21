@@ -377,6 +377,37 @@ A long-press (a right-click on a computer) on a note link asks with **Open withâ
 the kit (`src/kit/links.test.ts` checks it): no `<a>` of their own, no `app.openLink` of their own, and no `app.open` but in a home applet (one that asks for `pins` or `recent`), for the app's own places.
 
 
+## Make it look like Parachute
+
+An applet looks like the rest of Parachute without any CSS of its own. Three steps, in this order:
+
+1. **Draw it with the parts.** `Page` is the screen (its title, width and margins). `List` holds rows, `Card` a block
+   that stands apart, `Field`, `Search` and `Write` take words, `Button` acts (one `primary` on a screen), `Tabs`
+   switch places, `Table` and `Fields` show records, `Empty`, `Loading` and `Problem` say what state it is in,
+   `Drawer` holds a detail or a short form, and `toast` says what an action did. Each part follows the person's
+   theme and their look (paper, almanac, book, daylight), light and dark, on a phone and a computer. Every part,
+   drawn live with the code that draws it: [COMPONENTS.md](COMPONENTS.md).
+2. **Plain HTML is drawn too.** `<h1>`, `<p>`, `<ul>`, `<table>`, `<blockquote>`, `<button>`, `<input>` and
+   `<select>` come out in the theme. In an HTML applet, the parts' classes give the same look as the parts:
+   `<button class="pa-button pa-primary">`, `<div class="pa-card">`.
+3. **Your own CSS only for what is yours** (a board, a chart, a grid of days), written on the tokens, never on fixed
+   values: colours `var(--text)`, `var(--muted)`, `var(--line)`, `var(--accent)`, `var(--surface)`; space
+   `var(--pad)` and `var(--gap)`; rules `var(--line-row)` and `var(--line-head)`; corners `var(--radius-card)`,
+   `var(--radius-field)`; type `var(--fs-title)` â€¦ `var(--fs-label)` in `var(--serif)` or `var(--sans)`. A fixed
+   colour or size breaks in dark mode and on an e-paper screen. The tokens: [THEME.md](THEME.md#in-an-applet).
+   What you write wins over the kit's own rules ([THEME.md](THEME.md#the-order-of-styles)).
+
+Before you hand it over, check it the way a person sees it:
+
+- One title (the `Page`'s), and the content starts at the top of the screen: no empty hero, no big gaps.
+- One main action, as `kind="primary"`; the rest plain or quiet.
+- Rows, not boxes: a `List` for things of a kind; a `Card` only for a block that stands apart.
+- Every state has words: `Loading` while reading, `Empty` with what to do next, `Problem` with Try again, a `toast`
+  after an action.
+- It works at 390 px (a phone) and 1600 px (a computer): `Page` holds the width; `wide` gives two columns on a
+  computer.
+- No fixed colour, size or font anywhere: it reads in light, in dark and on the Daylight's black and white.
+
 ## A worked example
 
 These are the exact arguments for the MCP tool `create-record` (the same body works for `POST /api/records`). A hub
