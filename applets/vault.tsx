@@ -472,7 +472,7 @@ const roleWords = (role: string) => (role === "member" ? "reads and changes ever
 const shortKey = (k: string) => `${k.slice(0, 8)}…`;
 /** A name as the hub takes one: 1 to 40 characters, not "You"; said in a toast otherwise. */
 const nameOk = (x: string) => {
-  const ok = [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !/^you$/i.test(x.trim()) && !/(?![‌‍])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(x);
+  const ok = [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !/^you$/i.test(x.trim()) && !/(?![\u200c\u200d])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(x);
   if (!ok) toast("A name is 1 to 40 characters you can see, and not “You”.", { error: true });
   return ok;
 };
@@ -500,7 +500,9 @@ function usePeople(v: Held) {
 type ReachRow = { id: string; name: string; who: "person" | "agent" | "app" | "service"; app: string | null; can: "read" | "change" | "manage" | "backup";
   types: string[] | null; until: string | null; lastUsed: string | null; self: boolean;
   /** a person the vault is shared with (one row for them and all their sign-ins): their key, and their role there */
-  member?: { key: string | null; role: string } };
+  member?: { key: string | null; role: string };
+  /** whose key this is, when someone else's than yours (a key a person you share with made) */
+  of?: string };
 /** A key just made: its secret was shown once on the app's own sheet and never reaches this applet. */
 type Given = { name: string; until: string; types: string[] | null; address: string };
 type Sharing = { reach?(vault: string): Promise<{ managing: boolean; rows: ReachRow[] | null; lists?: boolean }>; manage?(vault: string): Promise<null>;
@@ -542,6 +544,9 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const [one, setOne] = useState<string | null>(null);
   const people = usePeople(v);
   const reach = useReach(v);
+  // an End that answers after another vault is shown marks nothing there
+  const shownKey = useRef(v.key);
+  shownKey.current = v.key;
   const [open, setOpen] = useState<"ai" | "invite" | null>(null);
   const [giving, setGiving] = useState(false);
   const [ended, setEnded] = useState<Ended[]>([]);
@@ -572,14 +577,14 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const groupOf = (r: ReachRow): Group => (r.member ? "people" : r.who === "agent" ? "ai" : "apps");
   const gone = (key: string) => ended.some((e) => e.key === key);
   const endedRows = (g: Group) => ended.filter((e) => e.group === g).map((e) => ({ key: `ended:${e.key}`, title: e.title, meta: "ended · its next request is refused" }));
-  const didEnd = (e: Ended) => setEnded((x: Ended[]) => [...x.filter((y) => y.key !== e.key), e]);
-  const end = (r: ReachRow) => sh.endReach!(v.key, r.id).then(() => {
-    didEnd({ key: r.member?.key ?? r.id, group: groupOf(r), title: title(r) });
+  const didEnd = (e: Ended, vault: string) => { if (shownKey.current === vault) setEnded((x: Ended[]) => [...x.filter((y) => y.key !== e.key), e]); };
+  const end = (r: ReachRow) => { const vault = v.key; return sh.endReach!(vault, r.id).then(() => {
+    didEnd({ key: r.member?.key ?? r.id, group: groupOf(r), title: title(r) }, vault);
     toast(`${title(r)} can no longer reach ${v.name}.`);
     return refresh();
-  }, (e: unknown) => { quiet(e, "Not ended"); void reach.load(); });
+  }, (e: unknown) => { quiet(e, "Not ended"); void reach.load(); }); };
   const endButton = (who: string, go: () => void) => <Button small kind="quiet" aria-label={`End ${who}`} onClick={go}>End</Button>;
-  const keyRow = (r: ReachRow) => ({ key: r.id, title: title(r), meta: `${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`, aside: endButton(title(r), () => void end(r)) });
+  const keyRow = (r: ReachRow) => ({ key: r.id, title: title(r), meta: `${r.of ? `${r.of}'s · ` : ""}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`, aside: endButton(title(r), () => void end(r)) });
 
   // AIs and agents: a key made for one, or one connected to your account
   const ais = others.filter((r) => groupOf(r) === "ai" && !gone(r.id)).map(keyRow);
@@ -587,17 +592,20 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   // name you gave them; an invite nobody took yet
   const np = people.now?.people ? people.now : null;
   const hubPeople = others.filter((r) => r.member);
-  const byKey = new Map(hubPeople.filter((r) => r.member!.key).map((r) => [r.member!.key!, r]));
+  // the hub's list, when it names people, is the one source of who is in (a person with two keys is one row there);
+  // your key's list then gives only the invites nobody took yet
+  const fromHub = hubPeople.length > 0;
   const personRows = [
     ...hubPeople.filter((r) => !gone(r.member!.key ?? r.id)).map((r) => {
       const mine = np?.people.find((p) => p.key === r.member!.key);
       const name = mine?.name ?? r.name;
       return { key: r.id, title: name, meta: `${roleWords(r.member!.role)}${r.member!.key ? ` · key ${shortKey(r.member!.key)}` : ""}${used(r)}`, aside: endButton(name, () => void end(r)) };
     }),
-    ...(np?.people ?? []).filter((p) => !byKey.has(p.key) && !gone(p.key)).map((p) => {
+    ...(fromHub ? [] : np?.people ?? []).filter((p) => !gone(p.key)).map((p) => {
       const name = p.name ?? `A key (${shortKey(p.key)})`;
-      return { key: p.key, title: name, meta: `${roleWords(p.role)} · key ${shortKey(p.key)}`, aside: endButton(name, () => void (vaults as any).end(v.key, p.key).then((r: { ended?: boolean }) => {
-        didEnd({ key: p.key, group: "people", title: name });
+      const vault = v.key;
+      return { key: p.key, title: name, meta: `${roleWords(p.role)} · key ${shortKey(p.key)}`, aside: endButton(name, () => void (vaults as any).end(vault, p.key).then((r: { ended?: boolean }) => {
+        didEnd({ key: p.key, group: "people", title: name }, vault);
         toast(r?.ended === false ? "Already ended." : `${p.name ? `${p.name}'s` : "Their"} access is ended.`);
         return refresh();
       }, (e: unknown) => quiet(e, "Not ended"))) };
@@ -627,7 +635,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
         <h2 className="sect">Who reaches {v.name}</h2>
         <div className="acts">
           <Button small kind={open === "ai" ? "primary" : "plain"} aria-expanded={open === "ai"} onClick={() => { setOpen(open === "ai" ? null : "ai"); setGiving(false); }}>Connect an AI</Button>
-          {people.on && <Button small kind={open === "invite" ? "primary" : "plain"} aria-expanded={open === "invite"} onClick={() => setOpen(open === "invite" ? null : "invite")}>Invite someone</Button>}
+          {people.on && !(people.now && !people.now.people && people.now.why === "not_owner") && <Button small kind={open === "invite" ? "primary" : "plain"} aria-expanded={open === "invite"} onClick={() => setOpen(open === "invite" ? null : "invite")}>Invite someone</Button>}
         </div>
         {open === "ai" && <div className="give">
           {giving && managing ? <GiveKey v={v} taken={(rows ?? []).map((r) => r.name)} cancel={() => { setGiving(false); void reach.load(); }} made={(g) => { setGiving(false); setOpen(null); toast(`${g.name} can reach ${typesWord(g.types)} in ${v.name}.`); void reach.load(); }} /> : <>
@@ -657,7 +665,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
         {(managing || ended.some((e) => e.group === "ai")) && <List label="AIs and agents" rows={[...ais, ...endedRows("ai")]} />}
         {managing && !ais.length && !ended.some((e) => e.group === "ai") && <p className="note-meta">No AI has a key to {v.name}. Connect one above.</p>}
         {people.failed ? <Problem error={people.failed} onRetry={people.load}>Who is in {v.name} couldn't be read</Problem>
-          : <List label="People" rows={[...(v.mine ? [{ key: "you", title: "You", meta: "owner" }] : []), ...personRows, ...endedRows("people")]} />}
+          : (v.mine || personRows.length > 0) && <List label="People" rows={[...(v.mine ? [{ key: "you", title: "You", meta: "owner" }] : []), ...personRows, ...endedRows("people")]} />}
         <List label="Apps and devices" rows={[
           { key: "app", title: "Parachute, on this device", meta: `${a.level === "write" ? "reads and changes" : "reads"} every type, at ${a.hub.replace(/^https?:\/\//, "")}`,
             // the home stays writable: Parachute's own applets write there (docs/design/PARACHUTE-SOURCE.md)

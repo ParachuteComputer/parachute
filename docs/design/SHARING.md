@@ -19,7 +19,7 @@ member on today's hub, not yet a signed grant); the open questions are the right
    (Someone else's, Sign in with your key, the hub's Approve) and opens `recipes`.
 3. **Bo edits.** In Changes and in a record's History, Aaron reads "Bo" for Bo's edits and Bo reads "Aaron" for
    Aaron's. Each reads "You, in Parachute here" for their own from this device.
-4. **Aaron sees who is in.** Sharing's People lists the people on the vault: Aaron (owner, no End), Bo (can read and change
+4. **Aaron sees who is in.** Sharing's People lists the people on the vault: Aaron (owner, no End), Bo (reads and changes
    everything, with a short form of his key), and an invite nobody has taken yet. **End** on a person, **Take back**
    on an invite.
 5. **Aaron ends it.** **End** on Bo's row. Bo's next request to `recipes` is refused, on every device he signed in

@@ -155,7 +155,9 @@ async function call<T>(rec: Where, applet: string, method: string, path: string,
  *  with (`by: "self"`, `grantee` their key, their sign-ins in their row; core T-476 one list). */
 export type HubGrantRow = { id: string; state: string; types: Record<string, string[]>; expires_at: string | null; name: string; kind: string;
   app: string | null; client: string | null; admin?: boolean; export?: boolean; created_at: string; last_used_at: string | null;
-  by?: string; grantee?: string | null; member?: { role?: string } };
+  by?: string; grantee?: string | null; member?: { role?: string };
+  /** whose key it is, when a person's other than the hub's owner (a key a member made): their row's id, their name */
+  person?: { id: string | null; name: string } };
 
 export const listReach = (rec: Where, applet: string) =>
   call<{ grants: HubGrantRow[] }>(rec, applet, "GET", `/account/vaults/${encodeURIComponent(rec.vault)}/statements`).then((r) => r.grants ?? []);

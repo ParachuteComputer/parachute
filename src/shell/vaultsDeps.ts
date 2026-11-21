@@ -81,7 +81,7 @@ function reachRow(r: HubGrantRow, self: string | null): ReachRow {
   const member = r.kind === "person" && r.by === "self" ? { key: typeof r.grantee === "string" ? r.grantee : null, role: r.member?.role ?? (r.admin ? "write" : writes ? "member" : "read") } : null;
   return { id: r.id, name: r.name, who, app: r.app, can: r.admin ? "manage" : r.export ? "backup" : writes ? "change" : "read",
     types: types.length === 0 || types.includes("*") ? null : types.sort(), until: r.expires_at, lastUsed: r.last_used_at, self: !!self && r.client === self,
-    ...(member ? { member } : {}) };
+    ...(member ? { member } : {}), ...(!member && r.person?.name ? { of: r.person.name } : {}) };
 }
 
 export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string;

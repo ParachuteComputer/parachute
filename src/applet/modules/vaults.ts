@@ -103,7 +103,9 @@ export type PeopleRow = { people: PersonRow[]; invites: InviteRow[];
 export type ReachRow = { id: string; name: string; who: "person" | "agent" | "app" | "service"; app: string | null; can: "read" | "change" | "manage" | "backup";
   types: string[] | null; until: string | null; lastUsed: string | null; self: boolean;
   /** a person the vault is shared with (one row for them and all their sign-ins): their key, their role there */
-  member?: { key: string | null; role: string } };
+  member?: { key: string | null; role: string };
+  /** whose key this is, when a person's you share with (a key they made) */
+  of?: string };
 /** A key just made for an AI, as the shell has it (its secret shown once on the shell's own sheet), and where it connects. */
 export type GivenKey = { name: string; token: string; until: string; types: string[] | null; address: string };
 
