@@ -195,12 +195,12 @@ if (E.CANARY_CAL && E.CANARY_KEYS) checks.push({ name: "calendar", run: () => re
 
 if (E.CANARY_REPO) checks.push({ name: "services", run: async () => {
   const gh = (...a: string[]) => execFileSync("gh", ["-R", E.CANARY_REPO!, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 });
+  // today's run first, so a failed read below can't keep tomorrow's from having one (the list holds finished runs only)
+  gh("workflow", "run", "services.yml", "--ref", "next");
   // the newest run this account started that finished (one cancelled by a newer start says nothing either way; a
   // dispatch by hand with another core is someone's experiment). When next is promoted to main, the schedule runs it.
   const runs = (JSON.parse(gh("run", "list", "--workflow", "services.yml", "--branch", "next", "--event", "workflow_dispatch", "--user", execFileSync("gh", ["api", "user", "--jq", ".login"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 }).trim(), "--status", "completed", "--limit", "10", "--json", "conclusion,createdAt,url")) as { conclusion: string; createdAt: string; url: string }[])
     .filter((r) => r.conclusion !== "cancelled" && r.conclusion !== "skipped");
-  // today's run, started after the check: tomorrow's canary reads it
-  gh("workflow", "run", "services.yml", "--ref", "next");
   const last = runs[0];
   if (!last) throw new Error("no completed Services run on next yet");
   log(`  services: last run ${last.url}`);
