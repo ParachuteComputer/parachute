@@ -147,28 +147,56 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
     if (more) n.dataset.more = more; else delete n.dataset.more;
   };
   // the one shown stays in view on the one line, clear of the fades (scrolled sideways, never the page): when it
-  // changes, and when the places arrive or change (a list read after the first draw, a count that widens a tab)
-  const shape = tabs.map((t) => `${t.key}:${t.label}:${t.count ?? ""}`).join("|");
-  /** Scroll the row (never the page) so this tab is clear of the fades. */
+  // changes and when the places arrive or change; a count or a font that widens a tab, or the row's width changing,
+  // re-places it only while the row is where the kit put it (a scroll the person made is theirs)
+  const places = tabs.map((t) => t.key).join("|");
+  const counts = tabs.map((t) => `${t.key}:${t.count ?? ""}`).join("|");
+  // placed: the row is where keepClear put it, at placedAt, when the row could scroll placedSpan
+  const placed = useRef(true), placedAt = useRef(0), placedSpan = useRef(0);
+  /** The row's scroll range, as the row reads (scrollLeft runs negative right to left). */
+  const range = (n: HTMLElement): [number, number] => { const span = n.scrollWidth - n.clientWidth; return getComputedStyle(n).direction === "rtl" ? [-span, 0] : [0, span]; };
+  /** Scroll the row (never the page) so this tab is clear of the fades, at the ends that have one. */
   const keepClear = (on: HTMLElement | null | undefined) => {
     const n = nav.current;
     if (!n || !on) return;
-    const r = on.getBoundingClientRect(), box = n.getBoundingClientRect(), FADE = 32;
-    if (r.left < box.left + FADE || r.right > box.right - FADE) n.scrollLeft += r.left + r.width / 2 - (box.left + box.width / 2);
+    const [lo, hi] = range(n);
+    const FADE = 32, left = n.scrollLeft > lo + 1 ? FADE : 0, right = n.scrollLeft < hi - 1 ? FADE : 0;
+    const r = on.getBoundingClientRect(), box = n.getBoundingClientRect();
+    if (r.left < box.left + left || r.right > box.right - right) n.scrollLeft += r.left + r.width / 2 - (box.left + box.width / 2);
+    placed.current = true;
+    placedAt.current = n.scrollLeft;
+    placedSpan.current = n.scrollWidth - n.clientWidth;
   };
   const shown = () => nav.current?.querySelector<HTMLElement>('[aria-current="page"]');
-  useLayoutEffect(() => { keepClear(shown()); edges(); }, [current, shape]);
-  // the row's own width changing (a phone turned, a font, the density, a column): the one shown kept clear again
+  useLayoutEffect(() => { keepClear(shown()); edges(); }, [current, places]);
+  // a count that widens a tab (read here too, where a webview has no ResizeObserver)
+  useLayoutEffect(() => { if (placed.current) keepClear(shown()); edges(); }, [counts]);
+  // the row's width or a tab's changing (a phone turned, a column, the faces loading)
   useEffect(() => {
     const n = nav.current;
     if (!n || typeof ResizeObserver !== "function") return;
-    const o = new ResizeObserver(() => { keepClear(shown()); edges(); });
+    const o = new ResizeObserver(() => { if (placed.current) keepClear(shown()); edges(); });
     o.observe(n);
+    n.querySelectorAll(".pa-tab").forEach((t) => o.observe(t));
     return () => o.disconnect();
-  }, []);
+  }, [places]);
+  // a scroll is the person's (a finger, a wheel, a key, a screen reader) unless it is where the kit put the row, or the
+  // browser clamping a row whose scroll extent changed (a resize): theirs, the row stays where they put it
+  const scrolled = () => {
+    const n = nav.current;
+    if (n && placed.current) {
+      const span = n.scrollWidth - n.clientWidth, [lo, hi] = range(n);
+      // a clamp: the extent changed and the row sits pinned at an end of it
+      const pinned = Math.abs(n.scrollLeft - lo) <= 1 || Math.abs(n.scrollLeft - hi) <= 1;
+      if (Math.abs(span - placedSpan.current) > 0.5 && pinned) { placedAt.current = n.scrollLeft; placedSpan.current = span; }
+      else if (Math.abs(n.scrollLeft - placedAt.current) > 1) placed.current = false;
+    }
+    edges();
+  };
+  const focused = (el: HTMLElement) => { try { return el.matches(":focus-visible"); } catch { return false; } };
   return (
     // a tab reached from the keyboard is kept clear of the fades too (a tap needs nothing: it chooses, and the row follows)
-    <nav className="pa-tabs" aria-label={label} ref={nav} onScroll={edges} onFocus={(e) => { if ((e.target as HTMLElement).matches?.(":focus-visible")) keepClear(e.target as HTMLElement); }}>
+    <nav className="pa-tabs" aria-label={label} ref={nav} onScroll={scrolled} onFocus={(e) => { if (focused(e.target as HTMLElement)) keepClear(e.target as HTMLElement); }}>
       {tabs.map((t) => <button key={t.key} type="button" className="pa-tab" aria-current={t.key === current ? "page" : undefined} onClick={() => onChange(t.key)}>{t.label}{t.count ? ` · ${t.count}` : ""}</button>)}
     </nav>
   );
