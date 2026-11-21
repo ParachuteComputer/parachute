@@ -4,6 +4,8 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
@@ -31,8 +33,23 @@ class MainActivity : TauriActivity() {
       val bars = insets.getInsets(sides)
       val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
       v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+      // the keyboard up or down: the page's root says so (`keyboard-up`), and the app's bar steps aside while one types
+      // (styles.css). Android knows; the page would only guess from its size.
+      val up = ime.bottom > 0
+      if (up != keyboardUp) {
+        keyboardUp = up
+        webView(v)?.evaluateJavascript("document.documentElement.classList.toggle('keyboard-up', $up)", null)
+      }
       WindowInsetsCompat.Builder(insets).setInsets(sides, Insets.NONE).setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE).build()
     }
+  }
+
+  private var keyboardUp = false
+
+  private fun webView(v: View): WebView? = when (v) {
+    is WebView -> v
+    is ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { webView(v.getChildAt(it)) }
+    else -> null
   }
 
   // The strips follow the page's light or dark ground (the activity isn't recreated when the mode changes).

@@ -8,7 +8,7 @@
       "contract": 2,
       "id": "home",
       "name": "Home",
-      "glyph": "◠",
+      "glyph": "⌂",
       "note": "today: a line into Inbox, your newest notes, what your AIs changed, your pins",
       "access": [{ "vault": "here", "allow": [{ "path": "Inbox/", "verbs": ["create"] }] }]
     },

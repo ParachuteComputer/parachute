@@ -493,7 +493,7 @@ pinned applets. It reads no folder of its own vault, so it has no `access`; it a
       "contract": 2,
       "id": "home",
       "name": "Home",
-      "glyph": "◠",
+      "glyph": "⌂",
       "note": "what changed lately, and your pins"
     },
     "app": [
@@ -516,8 +516,9 @@ The next time the app starts, it opens on Home and shows its card; once the pers
 They can also long-press it in the list and tap **Open on start**, and pin it first on the bar.
 
 Two home applets ship with the app, in `applets/`: `home` (Parachute Simplified's starter: a line into `Inbox/`, the
-newest notes, the pins) and `today` (for a person with rooms and a journal: what wants you in your rooms, the latest
-from one key, today's journal and a line for it; `--set relay=… --set uni=<hex key>`). `app.open` also takes an applet
+newest notes, the pins) and `today` (for a person with rooms and a journal: what wants you in your rooms (an open ask, or
+a line that names you since you last read or wrote there, by the read state Rooms keeps), the latest from one key,
+today's journal and a line for it; it reads again each time it is shown; `--set relay=… --set uni=<hex key>`). `app.open` also takes an applet
 at a room, `/v/<vault>/a/<applet>?room=<id>[&event=<id>]`: the applet hears it as its launch (`onLaunch`), as from a
 notification's tap. The installer fills a quoted `"{{name}}"` in an applet's code from `--set` (`applets/record.ts`), so
 such a value is part of the code the person approves.

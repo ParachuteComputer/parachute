@@ -46,6 +46,12 @@ describe("the face keeps every stressed line's facts", () => {
   it("Aaron's four applets, Uni trusted", () => {
     for (const n of ["rooms", "mail", "journal", "accounts"]) { const { g, folder } = grantFor(n); holds(g, folder, trusted); }
   });
+  it("Mail's approval op says which key signs its requests, never doubling the verb", () => {
+    const { g, folder } = grantFor("mail");
+    const t = faceTexts(holds(g, folder, trusted)).join(" ");
+    expect(t).toMatch(/High risk, with your key: signs its send\.approve requests to .+ with your approval key\./);
+    expect(t).not.toContain("sends send.approve");
+  });
   it("an approver this device doesn't trust is named by its whole key", () => {
     const { g, folder } = grantFor("rooms");
     const face = holds(g, folder, {});
