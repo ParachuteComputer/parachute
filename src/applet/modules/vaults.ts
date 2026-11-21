@@ -11,6 +11,14 @@
 //                                              a page of records (no body): {records, more}
 //     get({vault, id})                         one record: body, fields, types, tags, links both ways, who and when
 //     history({vault, id})                     its kept versions, newest first; version({vault, id, ix}): one of them
+//     changes({vault, since, offset?})         what changed since, newest first, by whom (applet/changes.ts):
+//                                              {changes, deletes: "shown" | "hidden", more}
+//     compare({vault, id, before, after})      a change's two sides: {before, after}, each {path, body, fields, types?,
+//                                              tags?} or null (made by it; deleted by it)
+//     restore({vault, id, ix, if_updated_at?}) put a record back as version ix holds it (a deleted one comes back):
+//                                              a change of its own, kept in history; never rewrites it
+//     remove({vault, id, if_updated_at})       take away a record another app or AI made, or one a put back re-made
+//                                              (putting it back): a plain delete, its tombstone kept; nothing else
 //     update({vault, id, bytes})               a change, as JSON text in bytes (past the 8 KB a call carries):
 //                                              {if_updated_at, body?, fields?, types?: {add?, remove?}, tags?: {add?, remove?}}
 //     create({vault, bytes})                   a new record: {path, body, types?, fields?, tags?}
@@ -37,6 +45,7 @@ import { ContractError, ERROR_CODES, hasHidden, hasOnly, plain } from "../contra
 import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 import { packMethods } from "./packs.ts";
+import { isSelf, readChanges, writerName } from "../changes.ts";
 
 export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where an AI connects to this vault only (`<vault>/mcp`): the vault's own address, nothing secret */
@@ -57,7 +66,9 @@ export type Rec = {
   links?: { dir: "out" | "in"; id: string; path: string; relationship: string }[];
 };
 export type TypeRow = { name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, { type?: string; enum?: unknown[]; description?: string }> };
-export type Version = { ix: number; at: string; actor: string | null; via: string | null };
+export type Version = { ix: number; at: string; actor: string | null; via: string | null;
+  /** level 5: what the write was (`update`, `restore`, `delete`, …), the key's kind, the writer as a person reads it */
+  op?: string; kind?: string | null; who?: string; mine?: boolean };
 export type AccessRow = { level: "read" | "write" | null; mine: boolean; home: boolean; hub: string; connector: string; applets: { noteId: string; name: string; glyph: string; since: string | null; changes: boolean }[] };
 export type AppletRow = { id: string; name: string; glyph: string; href: string; allowed: boolean;
   /** a copy of one of Parachute's own kept in the vault (the old Add Capture wrote these): its name, to tell the two apart */
@@ -70,8 +81,11 @@ export type VaultsDeps = {
   list(): HeldVault[];
   /** The hubs of `list()`, each with its one address (what its description says; null when it can't be read). */
   hubs?(): Promise<HubRow[]>;
-  /** GET/POST/PATCH/PUT under the vault's API (`/records…`, `/types…`; PUT only for a pack's types, packs.ts), its JSON; a 404 rejects with `not_found`. */
-  request(vault: string, method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown): Promise<unknown>;
+  /** GET/POST/PATCH/DELETE/PUT under the vault's API (`/records…`, `/types…`; PUT only for a pack's types, packs.ts), its JSON; a 404 rejects with `not_found`. */
+  request(vault: string, method: "GET" | "POST" | "PATCH" | "DELETE" | "PUT", path: string, body?: unknown): Promise<unknown>;
+  /** This device's Parachute in that vault: the client id its key is named for (its writes are `key:<id>`, or
+   *  `key:<id>-2` … for another sign-in), when it signed in as an app. */
+  self?(vault: string): string | null;
   /** A record's GET for what a screen shows (the `get` call), answered at once from what was read before while the hub
    *  is asked behind it (vault/readCache.ts; the frame is told when the answer differs). Given only for an applet that
    *  draws itself again when told (Parachute's own Vault); absent: `request`. A change, and every check one is judged
@@ -133,6 +147,21 @@ export function writablePath(p: unknown): p is string {
   return !/^(?:applets|parachute|\.parachute)$/i.test(segs[0]) && !segs[0].startsWith(".");
 }
 const title = (path: string) => path.split("/").pop() ?? path;
+/** In the app's own folders (`Applets/`, `Parachute/`, `.parachute/`), but saved views. */
+const appsPath = (p: string) => !p.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(p);
+/** Whose a record is, for Changes: an applet's or a component's code ("code": shown, never put back here), a record the
+ *  app keeps for itself ("app": settings, approvals, saved views; not shown), or the person's (null). */
+export const ownKind = (r: { path: string; extension: string | null; names: string[] }): "code" | "app" | null =>
+  isCodeExtension({ path: r.path, extension: r.extension }) ? "code" : r.names.some(appsOwn) || appsPath(r.path) || r.path.startsWith(VIEWS) ? "app" : null;
+/** A read that found no such record (deleted, or never there). */
+const gone = (e: unknown) => (e as { status?: number })?.status === 404 || (e as { name?: string })?.name === "VaultNotFoundError" || /not.?found|404/i.test(String((e as Error)?.message ?? e));
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+/** How far back `changes` reads: what history keeps by default is 180 days at most above its floor. */
+export const CHANGES_DAYS = 400;
+/** A side of a change as `compare` hands it on; a long body is cut (a diff of a book isn't read on a phone). */
+type Side = { path: string; body: string; fields: Record<string, unknown>; types?: string[]; tags?: string[]; cut?: true };
+const BODY_SHOWN = 200_000;
+const clip = (b: string) => (b.length > BODY_SHOWN ? b.slice(0, BODY_SHOWN) : b);
 
 /** A record from either door's answer: record words (body, fields, types) or note words (content, metadata, tags). */
 export function recOf(raw: unknown, typeNames?: ReadonlySet<string>): Rec | null {
@@ -264,6 +293,8 @@ const failed = (e: unknown) => {
   const m = e instanceof Error ? e.message : String(e);
   // the person is asked to let Parachute change that vault: the applet hears it as refused, in the app's words
   if ((e as { name?: string })?.name === "NeedsWriteError") return new ContractError(ERROR_CODES.notGranted, m.slice(0, 300));
+  // a record put back where another now is (core's 409 path_conflict): not a change meanwhile, and not tried again
+  if (/path_conflict/i.test(m)) return new ContractError(ERROR_CODES.failed, "path_taken: another record is at its place now");
   if (/conflict/i.test(m)) return new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read");
   if (/not.?found|404/i.test(m)) return new ContractError(ERROR_CODES.failed, "not_found");
   return new ContractError(ERROR_CODES.failed, m.slice(0, 300));
@@ -366,7 +397,12 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         cap: null, validate: one((p) => (vaultOnly(["id"])(p) && typeof p.id === "string" && ID.test(p.id) ? p as { vault: string; id: string } : null)),
         async run({ vault, id }: { vault: string; id: string }, _s, ctx) {
           held(vault); ctx.charge(1);
-          try { const { extension: _e, ...r } = await getRec(vault, id, true, true); return r; } catch (e) { throw failed(e); }
+          try {
+            const { extension: _e, ...r } = await getRec(vault, id, true, true);
+            // who made it and who changed it last, by name (an AI by its key's name; this device's Parachute as you)
+            const cid = deps.self?.(vault) ?? null;
+            return { ...r, ...(r.createdVia !== undefined ? { madeBy: writerName(r.createdVia ?? null, isSelf(cid, r.createdVia ?? null)), changedBy: writerName(r.updatedVia ?? null, isSelf(cid, r.updatedVia ?? null)) } : {}) };
+          } catch (e) { throw failed(e); }
         },
       },
       history: {
@@ -380,8 +416,10 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
             throw failed(e);
           });
           const list = plain(raw) && Array.isArray(raw.versions) ? raw.versions : [];
+          const cid = deps.self?.(vault) ?? null;
           return list.flatMap((v: unknown): Version[] => (plain(v) && typeof v.superseded_at === "string" && typeof v.version_ix === "number"
-            ? [{ ix: v.version_ix, at: v.superseded_at, actor: strOr(v.actor), via: strOr(v.via) }] : []));
+            ? [{ ix: v.version_ix, at: v.superseded_at, actor: strOr(v.actor), via: strOr(v.via), op: typeof v.op === "string" ? v.op : "update", kind: strOr(v.via_kind),
+              mine: isSelf(cid, strOr(v.via)), who: writerName(strOr(v.via), isSelf(cid, strOr(v.via))) }] : []));
         },
       },
       version: {
@@ -395,6 +433,123 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           const body = typeof v.body === "string" ? v.body : typeof v.content === "string" ? v.content : "";
           const fields = plain(v.fields) ? v.fields : plain(v.metadata) ? v.metadata : null;
           return { ix, body, fields, at: strOr(v.superseded_at) };
+        },
+      },
+      changes: {
+        cap: null,
+        validate: one((p) => (vaultOnly(["since", "offset"])(p) && typeof p.since === "string" && ISO.test(p.since) && Date.now() - Date.parse(p.since) <= CHANGES_DAYS * 864e5
+          && (p.offset === undefined || (Number.isInteger(p.offset) && (p.offset as number) >= 0 && (p.offset as number) <= 10_000)) ? p as { vault: string; since: string; offset?: number } : null)),
+        async run({ vault, since, offset }: { vault: string; since: string; offset?: number }, _s, ctx) {
+          held(vault);
+          try {
+            const door = await deps.door(vault);
+            const cid = deps.self?.(vault) ?? null;
+            return await readChanges({
+              get: (path) => deps.request(vault, "GET", path), door, since, offset, charge: (n) => ctx.charge(n),
+              self: (via) => isSelf(cid, via),
+              own: ownKind,
+            });
+          } catch (e) { throw failed(e); }
+        },
+      },
+      compare: {
+        cap: null,
+        validate: one((p) => (vaultOnly(["id", "before", "after"])(p) && typeof p.id === "string" && ID.test(p.id) && [p.before, p.after].every((x) => x === null || (Number.isInteger(x) && (x as number) >= 0))
+          ? p as { vault: string; id: string; before: number | null; after: number | null } : null)),
+        async run({ vault, id, before, after }: { vault: string; id: string; before: number | null; after: number | null }, _s, ctx) {
+          held(vault); ctx.charge(2);
+          try {
+            const door = await deps.door(vault);
+            const side = async (ix: number | null): Promise<Side | null> => {
+              if (ix === null) {
+                // as it is now; none when it is gone
+                const now = await getRec(vault, id, true).catch((e: unknown) => { if (gone(e)) return null; throw e; });
+                if (!now) return null;
+                if (isCodeExtension({ path: now.path, extension: typeof now.extension === "string" ? now.extension : null })) throw refuse("an applet's code isn't handed over");
+                return { path: now.path, body: clip(now.body ?? ""), fields: now.fields, types: now.types, tags: now.tags };
+              }
+              const raw = await deps.request(vault, "GET", `/${door}/${encodeURIComponent(id)}/versions/${ix}`);
+              const v = plain(raw) && plain(raw.version) ? raw.version : raw;
+              if (!plain(v)) throw new ContractError(ERROR_CODES.failed, "not_found");
+              const path = typeof v.path === "string" ? v.path : id;
+              if (isCodeExtension({ path, extension: typeof v.extension === "string" ? v.extension : null })) throw refuse("an applet's code isn't handed over");
+              const names = (k: string) => (Array.isArray(v[k]) ? (v[k] as unknown[]).filter((t): t is string => typeof t === "string") : undefined);
+              return { path, body: clip(typeof v.body === "string" ? v.body : typeof v.content === "string" ? v.content : ""), fields: plain(v.fields) ? v.fields : plain(v.metadata) ? v.metadata : {},
+                // kept on a version only by a hub that keeps them (core 0.9.4's revisions); else not known
+                ...(names("types") ? { types: names("types") } : {}), ...(names("tags") ? { tags: names("tags") } : {}) };
+            };
+            // a change with no before was the record's making; one whose after is gone was its deletion
+            const [b, a] = await Promise.all([before === null ? null : side(before), side(after)]);
+            return { before: b, after: a };
+          } catch (e) { throw failed(e); }
+        },
+      },
+      restore: {
+        cap: null,
+        validate: one((p) => (vaultOnly(["id", "ix", "if_updated_at"])(p) && typeof p.id === "string" && ID.test(p.id) && Number.isInteger(p.ix) && (p.ix as number) >= 0
+          && (p.if_updated_at === undefined || str(p.if_updated_at, 64)) ? p as { vault: string; id: string; ix: number; if_updated_at?: string } : null)),
+        async run({ vault, id, ix, if_updated_at }: { vault: string; id: string; ix: number; if_updated_at?: string }, _s, ctx) {
+          const v = held(vault); ctx.charge(4);
+          const door = await deps.door(vault);
+          let now: (Rec & { extension?: unknown }) | null;
+          try { now = await getRec(vault, id, false); } catch (e) { if (gone(e)) now = null; else throw failed(e); }
+          let was: Record<string, unknown>;
+          try {
+            const raw = await deps.request(vault, "GET", `/${door}/${encodeURIComponent(id)}/versions/${ix}`);
+            const x = plain(raw) && plain(raw.version) ? raw.version : raw;
+            if (!plain(x)) throw new ContractError(ERROR_CODES.failed, "not_found");
+            was = x;
+          } catch (e) { throw failed(e); }
+          const wasPath = typeof was.path === "string" ? was.path : "";
+          const wasFields = plain(was.fields) ? was.fields : plain(was.metadata) ? was.metadata : {};
+          // judged on the record as it is now, and on what comes back: never code, an applet's, a component's or the
+          // app's own (its records come back where they were: their folder)
+          if (now) {
+            if (guarded(now) || appsPath(now.path)) throw refuse("this record is the app's own: no applet changes it");
+            if (if_updated_at !== now.updatedAt) { changedMeanwhile.add(`${vault} ${id}`); throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read"); }
+          } else if (if_updated_at !== undefined) { changedMeanwhile.add(`${vault} ${id}`); throw new ContractError(ERROR_CODES.failed, "conflict: it was deleted since it was read"); }
+          if (isCodeExtension({ path: wasPath, extension: typeof was.extension === "string" ? was.extension : null }) || appsPath(wasPath) || wasPath.startsWith(VIEWS)) throw refuse("this record is the app's own: no applet changes it");
+          // a deleted record comes back at its tombstone's place (core), which may not be where version ix was: judge that too
+          if (!now) {
+            let tomb: Record<string, unknown> | null = null;
+            try { const raw = await deps.request(vault, "GET", `/${door}/${encodeURIComponent(id)}/versions?limit=1`); const l = plain(raw) && Array.isArray(raw.versions) ? raw.versions : []; tomb = plain(l[0]) ? l[0] : null; } catch (e) { throw failed(e); }
+            const tp = tomb && typeof tomb.path === "string" ? tomb.path : "";
+            if (!tomb || isCodeExtension({ path: tp, extension: typeof tomb.extension === "string" ? tomb.extension : null }) || appsPath(tp) || tp.startsWith(VIEWS)) throw refuse("this record is the app's own: no applet changes it");
+          }
+          // what comes back published, or a change to one that is: the person says yes first
+          const wasPublic = wasFields[PUBLISH_FIELD] === true;
+          if ((now && isPublic(now)) || wasPublic) await askFirst(deps, {
+            title: `Put back “${sheetText(now?.path ?? wasPath)}”?`,
+            body: wasPublic && !(now && isPublic(now)) ? `It comes back published in ${sheetText(v.name)} (${sheetText(v.host)}): anyone with its link can read it.` : `It is published from ${sheetText(v.name)} (${sheetText(v.host)}): anyone with its link reads what is written there.`,
+            act: "Put it back" });
+          try {
+            const raw = await deps.request(vault, "POST", `/${door}/${encodeURIComponent(id)}/restore`, { version_ix: ix, ...(now ? { if_updated_at: now.updatedAt } : {}) });
+            return recOf(raw, await namesFor(vault));
+          } catch (e) { throw failed(e); }
+        },
+      },
+      remove: {
+        cap: null,
+        validate: one((p) => (vaultOnly(["id", "if_updated_at"])(p) && typeof p.id === "string" && ID.test(p.id) && str(p.if_updated_at, 64) ? p as { vault: string; id: string; if_updated_at: string } : null)),
+        async run({ vault, id, if_updated_at }: { vault: string; id: string; if_updated_at: string }, _s, ctx) {
+          held(vault); ctx.charge(4);
+          let now: Rec & { extension?: unknown };
+          try { now = await getRec(vault, id, false); } catch (e) { throw failed(e); }
+          if (guarded(now) || appsPath(now.path) || now.path.startsWith(VIEWS)) throw refuse("this record is the app's own: no applet changes it");
+          if (if_updated_at !== now.updatedAt) { changedMeanwhile.add(`${vault} ${id}`); throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read"); }
+          const door = await deps.door(vault);
+          // only what putting back takes away: a record another app or AI made (not this device's Parachute, not one with no
+          // maker recorded), or one a put back re-made from deletion (its newest version a restore right after a delete).
+          // A vault that answers no history at all (404) deletes nothing here. One with history turned off still answers (no
+          // versions), so there a delete is for good: docs/VAULT.md gap 12.
+          let rows: Record<string, unknown>[];
+          try { const raw = await deps.request(vault, "GET", `/${door}/${encodeURIComponent(now.id)}/versions?limit=2`); rows = (plain(raw) && Array.isArray(raw.versions) ? raw.versions : []).filter(plain); }
+          catch { throw refuse("this vault keeps no history: a record deleted here couldn't be put back"); }
+          const recreated = rows[0]?.op === "restore" && rows[1]?.op === "delete";
+          const maker = now.createdVia ?? null;
+          if (!recreated && (!maker || isSelf(deps.self?.(vault) ?? null, maker))) throw refuse("only a record another app or AI made, or one a put back brought back, is taken away here");
+          // a plain delete: the vault keeps its tombstone, so it can be put back in turn
+          try { await deps.request(vault, "DELETE", `/${door}/${encodeURIComponent(now.id)}`); return { removed: true }; } catch (e) { throw failed(e); }
         },
       },
       update: {

@@ -201,10 +201,11 @@ test.describe("Vault", () => {
     await rec.getByLabel("Add a field").fill("isbn");
     await rec.getByRole("button", { name: "Add" }).last().click();
     await expect.poll(async () => Object.keys((await book2()).metadata ?? {})).toContain("isbn");
-    await rec.getByRole("button", { name: "Show history" }).click();
-    // the oldest kept version has the words it was made with
-    await rec.getByRole("region", { name: "Versions" }).getByRole("button").last().click();
-    await expect(rec.getByText(/As it was before/)).toBeVisible();
+    // its history shows at once, each change by whom; the oldest is its making, with the words it was made with
+    const versions = rec.getByRole("region", { name: "Versions" });
+    await expect(versions.getByRole("button").last()).toHaveAccessibleName(/^Made by /);
+    await versions.getByRole("button").last().click();
+    await expect(rec.getByText(/^Made as /)).toBeVisible();
     await expect(rec.getByText("A made-up book.")).toBeVisible();
     // a new type, made with its first record
     await rec.getByRole("button", { name: "← Close" }).click();

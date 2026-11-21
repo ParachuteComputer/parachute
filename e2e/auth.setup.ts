@@ -9,16 +9,20 @@ import { MORE_VAULTS, VAULT } from "./hub";
 export const HUB_SESSION = "e2e/.hub-session.json";
 export const SIGNED_IN = "e2e/.signed-in.json";
 
-setup("sign in on the hub with a password, then add the vault in the app", async ({ page }) => {
+setup("sign in on the hub with a password, then add the vault in the app", async ({ page: onHub }) => {
   setup.setTimeout(180_000);
   const hub = hubState();
-  await page.goto(`${hub.origin}/login`);
-  await page.locator('input[name="username"]').fill("owner");
-  await page.locator('input[type="password"]').fill(hub.password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.waitForURL((u) => u.origin === hub.origin && u.pathname !== "/login");
-  await page.waitForLoadState("networkidle");
-  await page.context().storageState({ path: HUB_SESSION });
+  await onHub.goto(`${hub.origin}/login`);
+  await onHub.locator('input[name="username"]').fill("owner");
+  await onHub.locator('input[type="password"]').fill(hub.password);
+  await onHub.getByRole("button", { name: "Sign in", exact: true }).click();
+  await onHub.waitForURL((u) => u.origin === hub.origin && u.pathname !== "/login");
+  await onHub.waitForLoadState("networkidle");
+  await onHub.context().storageState({ path: HUB_SESSION });
+  // the app in a page of its own: the hub's page may still move itself on (to its vault admin) after it looked idle,
+  // and on a busy machine that move lands on the app's first load and aborts it
+  const page = await onHub.context().newPage();
+  await onHub.close();
   await signIn(page);
   // the sign-in reads and writes the home only (docs/design/SCOPES.md; e2e/scopes.spec.ts checks that): the tests that
   // share this start were written for a person who has opened every vault and let the app change notes in each, so it

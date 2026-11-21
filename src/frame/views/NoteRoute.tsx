@@ -1,14 +1,15 @@
-// A note's route, /v/<vault>/n/<id>: the one place open-with is decided (open/resolve.ts). Links, wikilinks, search
-// hits, Back and links from outside all arrive here. `?with=vault` always shows the plain vault view; `?with=choose` (a
+// A note's route, /v/<vault>/n/<id>: where open-with is decided (open/resolve.ts). Links, wikilinks, search hits, Back
+// and links from outside all arrive here; a tap in an applet on a note no applet claims goes straight to Vault instead
+// (shell/frameDeps.ts `vaultAtTap`). `?with=vault` always shows the plain vault view; `?with=choose` (a
 // long-press on a note link in an applet) asks with the Open with… sheet, whatever the defaults say.
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { useHome, useHomeLoaded, useVault } from "../data";
-import ViewerLine, { viewerHref } from "./ViewerLine";
+import ViewerLine from "./ViewerLine";
 import { titleOf } from "../../vault/notes";
 import { openSheet } from "../open/sheetState";
 import { useOpenWith } from "../open/useOpenWith";
-import { appletHref } from "../../open/paths";
+import { appletHref, viewerHref } from "../../open/paths";
 import { carryOn } from "../FrameRouter";
 import { call } from "../bridge";
 import type { Decided } from "../../bridge/protocol";
@@ -27,10 +28,11 @@ export default function NoteRoute() {
   const location = useLocation();
   const rec = useVault(key);
   const plain = params.get("with") === "vault";
-  const ow = useOpenWith(plain ? null : rec, id);
+  const choose = params.get("with") === "choose";
+  // a long-press asks on the applets as the hub has them now: the sheet it opens lists them, and a pick runs one
+  const ow = useOpenWith(plain ? null : rec, id, choose ? true : "copy-first");
   const kept = (location.state as { decided?: Decided } | null)?.decided;
   if (kept && !decided.has(location.key)) decided.set(location.key, kept);
-  const choose = params.get("with") === "choose";
   const decision = ow.state === "ok" ? (choose ? { kind: "ask" as const, candidates: ow.cands } : ow.decision) : null;
 
   // a record no applet opens (or one whose "Always" is the vault view) opens in Vault, when it is there and allowed

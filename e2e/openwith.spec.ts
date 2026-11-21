@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, VAULT } from "./hub";
-import { expectInVault, ui } from "./helpers";
+import { clearBarAndHome, expectInVault, ui, writeBundle } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
@@ -207,5 +207,156 @@ test("Back from an applet the note's line led to lands on the note, and decides 
   } finally {
     await api(st, "DELETE", `notes/${note.id}`);
     await api(st, "DELETE", `notes/${applet.id}`);
+  }
+});
+
+// T-476: a tap in an applet on a note no applet claims opens Parachute's own Vault at once, decided from what this device
+// read before (shell/frameDeps.ts `vaultAtTap`): never through the note's route (its own sealed frame), and no read of
+// the applets at the tap. A note an applet claims still goes through the note's route and the applets as read now.
+test("a tap in an applet: a note no applet claims opens in Vault without the note's route; a claimed one is judged on the applets as read now", async ({ page }) => {
+  test.setTimeout(90_000);
+  const st = hubState();
+  const [welcome, toast] = await Promise.all(["Welcome", "Recipes/Tomato toast"].map(noteId));
+  const code = `import { Linked } from "parachute";
+export default function Taps() { return <main><h1 id="taps">Taps</h1><p id="said"><Linked text={${JSON.stringify(`${VAULT}:${welcome} and ${VAULT}:${toast}`)}} /></p></main>; }
+`;
+  const applet = await api(st, "POST", "notes", { path: "Applets/Taps", extension: "tsx", tags: ["applet"], content: code,
+    metadata: { applet: { contract: 2, id: "taps", name: "Taps", glyph: "⌁", access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }] }] }, app: ["open"] } });
+  const recipes = await api(st, "GET", `notes?id=${encodeURIComponent("Applets/Recipes")}`);
+  // every address the app goes to, in order (the note's route shows as /n/ before Vault replaces it)
+  await page.addInitScript(() => {
+    const w = window as unknown as { __went: string[] };
+    w.__went = [];
+    for (const k of ["pushState", "replaceState"] as const) { const f = history[k].bind(history); history[k] = (s, u, url) => { if (url) w.__went.push(String(url)); return f(s, u, url); }; }
+  });
+  const taps = page.frameLocator('iframe.applet-frame[title="Taps"]');
+  const went = () => page.evaluate(() => (window as unknown as { __went: string[] }).__went.splice(0));
+  const appletReads: string[] = [];
+  page.on("request", (r) => { if (new URL(r.url()).searchParams.get("tag") === "applet") appletReads.push(r.url()); });
+  let first = true;
+  const open = async () => {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Taps/ }).click();
+    // asked once, then it runs
+    if (first) { await page.getByRole("button", { name: "Allow" }).click(); first = false; }
+    await expect(taps.getByRole("link", { name: `${VAULT}:${welcome}` })).toBeVisible();
+    await page.waitForTimeout(500);
+    await went(); appletReads.length = 0;
+  };
+  try {
+    await allowApplet(page, "Recipe box");
+    await open();
+    await taps.getByRole("link", { name: `${VAULT}:${welcome}` }).click();
+    await expectInVault(page, VAULT, welcome, "Welcome");
+    expect((await went()).filter((u) => u.includes("/n/")), "the note's route").toEqual([]);
+    expect(appletReads, "a read of the applets at the tap").toEqual([]);
+
+    // the Recipe box's code changes and the vault won't list its applets: the copy still says it may open the recipe,
+    // so the note's route decides, on the applets as read now, and that read fails: Vault, never the Recipe box
+    await open();
+    await api(st, "PATCH", `notes/${recipes.id}`, { content: `${recipes.content}\n<!-- changed -->`, if_updated_at: recipes.updatedAt });
+    await page.route((u) => u.searchParams.get("tag") === "applet", (r) => r.abort());
+    await taps.getByRole("link", { name: `${VAULT}:${toast}` }).click();
+    await expectInVault(page, VAULT, toast, "Tomato toast");
+    expect((await went()).some((u) => u.includes("/n/")), "the note's route").toBe(true);
+    await expect(page.locator('iframe.applet-frame[title="Recipe box"]')).toHaveCount(0);
+  } finally {
+    await page.unrouteAll();
+    const now = await api(st, "GET", `notes?id=${recipes.id}`);
+    if (now.content !== recipes.content) await api(st, "PATCH", `notes/${recipes.id}`, { content: recipes.content, if_updated_at: now.updatedAt });
+    await api(st, "DELETE", `notes/${applet.id}`);
+  }
+});
+
+// T-476: the note's route decides first from what this device read before (frame/open/useOpenWith.ts "copy-first"): a note
+// no applet claims shows at once, without waiting for the hub's list of applets; one an applet claims waits for it, and
+// never opens in the applet on the copy alone.
+test("the note's route: an unclaimed note opens without waiting for the hub's applets; a claimed one waits for them", async ({ page }) => {
+  await allowApplet(page, "Recipe box");
+  await page.goto(`/v/${VAULT}?with=vault`);
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
+  // the hub's list of applets answers only when let through (below)
+  let through = () => {};
+  const held = new Promise<void>((r) => { through = r; });
+  await page.route((u) => u.searchParams.get("tag") === "applet", async (r) => { await held; await r.continue().catch(() => {}); });
+  try {
+    await tapNote(page, "Welcome");
+    await expectInVault(page, VAULT, await noteId("Welcome"), "Welcome");
+    await tapNote(page, "Tomato toast");
+    await expect(ui(page).getByRole("status").filter({ hasText: "Opening…" })).toBeVisible();
+    await page.waitForTimeout(2000);
+    await expect(page.locator('iframe.applet-frame[title="Recipe box"]:visible')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/n\//);
+    // the hub answers: the recipe opens in the applet the person allowed
+    through();
+    await expect(frame(page).locator("#opened")).toHaveText("Opened: Recipes/Tomato toast");
+  } finally { through(); await page.unrouteAll({ behavior: "ignoreErrors" }); }
+});
+
+// T-476: where the open bundle leaves Parachute's own out (as a bundle of the person's own that names no publisher), a
+// note opens in the plain view, the note's route itself, drawn from the copy when that is all it does; when the hub's
+// answer for it differs, it is drawn again (vault.note `kept`, the `changed` note event).
+test("no Vault in the bundle: a note shown plain from its copy is drawn again when the hub's answer differs", async ({ page }) => {
+  const st = hubState();
+  const stamp = Date.now().toString(36);
+  const made = await api(st, "POST", "notes", { path: `Redraw ${stamp}`, content: `# Redraw ${stamp}\n\nfirst words` });
+  await writeBundle({ publishers: [] });
+  try {
+    // the bundle as the vault has it now (the app reads it again behind the copy it starts from)
+    for (let i = 0; i < 2; i++) { await page.goto(`/v/${VAULT}?with=vault`); await page.waitForTimeout(1500); }
+    await tapNote(page, `Redraw ${stamp}`);
+    await expect(ui(page).locator(".prose-note")).toContainText("first words");
+    await expect(page).toHaveURL(/\/n\//);
+    const cur = await api(st, "GET", `notes?id=${made.id}`);
+    await api(st, "PATCH", `notes/${made.id}`, { content: `# Redraw ${stamp}\n\nsecond words`, if_updated_at: cur.updatedAt });
+    await tapNote(page, `Redraw ${stamp}`);
+    await expect(ui(page).locator(".prose-note")).toContainText("second words");
+    await expect(page).toHaveURL(/\/n\//);
+  } finally {
+    await clearBarAndHome();
+    await api(st, "DELETE", `notes/${made.id}`).catch(() => {});
+  }
+});
+
+// T-476: a long-press on a note link in an applet asks with Open with… on the applets as the hub has them now, never on
+// the copies, even when the person's Always for the type is Vault (which, from the copies, only shows the note)
+test("a long-press in an applet asks on the applets as the hub has them now, even with Always: Vault", async ({ page }) => {
+  test.setTimeout(90_000);
+  const st = hubState();
+  const toast = await noteId("Recipes/Tomato toast");
+  const code = `import { Linked } from "parachute";
+export default function Asks() { return <main><h1 id="asks">Asks</h1><p id="said"><Linked text={${JSON.stringify(`${VAULT}:${toast}`)}} /></p></main>; }
+`;
+  const applet = await api(st, "POST", "notes", { path: "Applets/Asks", extension: "tsx", tags: ["applet"], content: code,
+    metadata: { applet: { contract: 2, id: "asks", name: "Asks", glyph: "⌁", access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }] }] }, app: ["open"] } });
+  const asks = page.frameLocator('iframe.applet-frame[title="Asks"]');
+  const sheet = ui(page).getByRole("dialog", { name: "Open with" });
+  let through = () => {};
+  try {
+    await allowApplet(page, "Recipe box");
+    // Always: Vault for recipes
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await notes(page).getByRole("link", { name: /^Tomato toast/ }).click({ button: "right" });
+    await expect(sheet.getByRole("checkbox")).toBeChecked();
+    await sheet.getByRole("button", { name: /Vault/ }).click();
+    await expect(ui(page).locator(".prose-note h1")).toHaveText("Tomato toast");
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Asks/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(asks.getByRole("link", { name: `${VAULT}:${toast}` })).toBeVisible();
+    await page.waitForTimeout(500);
+    // the hub's list of applets answers only when let through
+    const held = new Promise<void>((r) => { through = r; });
+    await page.route((u) => u.searchParams.get("tag") === "applet", async (r) => { await held; await r.continue().catch(() => {}); });
+    await asks.getByRole("link", { name: `${VAULT}:${toast}` }).click({ button: "right" });
+    await expect(page).toHaveURL(/\/n\/.*with=choose/);
+    await page.waitForTimeout(2000);
+    await expect(sheet.getByRole("button", { name: /Recipe box/ }), "a choice drawn from the copies").toHaveCount(0);
+    through();
+    await expect(sheet.getByRole("button", { name: /Recipe box/ })).toBeVisible();
+  } finally {
+    through();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await api(st, "DELETE", `notes/${applet.id}`).catch(() => {});
   }
 });

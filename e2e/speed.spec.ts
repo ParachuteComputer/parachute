@@ -262,6 +262,18 @@ test("speed: Aaron-shaped app over a slow line", async ({ browser, page, context
   const bob = await relay();
   console.log(install(bob.pubkey));
   bob.close();
+  // SPEED_PARACHUTE=1: the bundle names Parachute's publisher, as the bundles the app ships do, so Parachute's own
+  // applets (Vault among them) are offered; without it, as apply.sh installs Aaron's: a record opens in the plain view
+  if (process.env.SPEED_PARACHUTE) {
+    const w = { ...hubState(), token: mintToken(`vault:${VAULT}:write`) };
+    // (the install writes the older form, Parachute/Apps/<id> under `app`, while the vault has no newer one)
+    for (const [tag, key] of [["parachute-bundle", "bundle"], ["parachute-app", "app"]] as const) for (const b of await api(w, "GET", `notes?tag=${tag}`, undefined, VAULT)) {
+      const full = await api(w, "GET", `notes?id=${b.id}`, undefined, VAULT);
+      const bundle = { ...(full.metadata?.[key] ?? {}), publishers: [{ url: "https://parachute.computer/applets/" }] };
+      await api(w, "PATCH", `notes/${b.id}`, { metadata: { ...(full.metadata ?? {}), [key]: bundle }, if_updated_at: full.updatedAt }, VAULT);
+      console.log(`bundle ${b.path}: publishers`, JSON.stringify(bundle.publishers));
+    }
+  }
   await prepare(page);
   // the first start reads the settings the install wrote; the next start opens Home
   await page.goto("/"); await page.waitForTimeout(4000); await page.goto("about:blank"); await page.goto("/");

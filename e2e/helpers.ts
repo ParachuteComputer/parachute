@@ -186,7 +186,7 @@ export async function bundleOf(): Promise<{ id: string; body: Record<string, any
 }
 
 /** What a chat AI with the Parachute MCP would write to change the bar or the home: the open bundle's record, made or replaced. */
-export async function writeBundle(parts: { bar?: unknown[]; start?: unknown }) {
+export async function writeBundle(parts: { bar?: unknown[]; start?: unknown; publishers?: unknown[] }) {
   const app = { contract: 1, id: "everything", name: "Everything", ...parts };
   const n = (await tagged("parachute-app")).find((r) => at(r) === "Parachute/Apps/everything");
   if (n) await api(hubState(), "PATCH", `notes/${n.id}`, { metadata: { app }, if_updated_at: (await api(hubState(), "GET", `notes/${n.id}`)).updatedAt });

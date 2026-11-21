@@ -16,8 +16,9 @@ whether I install the apk/dmg before or after you do the home thing".
      are left out. Only the fields it read are kept.
    - The kit: a part or call the app doesn't have reads as `undefined`. An applet can fall back for it
      (docs/WRITE-AN-APPLET.md "Older apps"), as #60 did for `Link`.
-2. **What can't be left out is declared.** Each build has a level (`APP_LEVEL` in `src/applet/level.ts`; this one is 4: level 3 brought the kit's `Table` and `Fields` and the
-   `vaults` and `sharing` words, [VAULT.md](../VAULT.md); level 4 its `Drawer`, [DESIGN-RULES.md](../DESIGN-RULES.md)).
+2. **What can't be left out is declared.** Each build has a level (`APP_LEVEL` in `src/applet/level.ts`; this one is 5: level 3 brought the kit's `Table` and `Fields` and the
+   `vaults` and `sharing` words, [VAULT.md](../VAULT.md); level 4 its `Drawer`, [DESIGN-RULES.md](../DESIGN-RULES.md); level 5
+   `vaults.changes`, `compare`, `restore` and `remove`, and the `changes` word, [VAULT.md](../VAULT.md) "Changes").
    A record can say the oldest level it runs on with `needs`. On an applet it goes beside `applet` in the fields; on an
    bundle record it goes inside `bundle`. A record with no `needs` needs level 1: the kit and records of 11-20, the floor.
    - An applet whose `needs` is above the build's level is still listed by its name and glyph, and keeps its place on

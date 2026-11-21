@@ -14,14 +14,56 @@ Bases, Anytype, Capacities).
 | Screen | What is on it |
 |---|---|
 | Your vaults | every vault on this device (where it is, whether Parachute reads or also changes it), and a search across all of them |
-| A vault | its types, each with how many records it has and its fields; its tags; the newest records; a search; **New type**; **Add a pack** (**Packs** once it has types); **Sharing** |
+| A vault | its types, each with how many records it has and its fields; its tags; the newest records; a search; **New type**; **Add a pack** (**Packs** once it has types); **Changes**; **Sharing** |
 | Packs | **Installed packs** (version, when, **Update** when the app ships a newer one), and Parachute's own to add with one tap: what each adds, then **Add**. What it added, and what it left as the person had it, said in plain words ([PACKS.md](PACKS.md)) |
 | A type | its records as a table: the type's fields are the columns, a header's tap sorts by it, the first column stays in view as the rest scroll across. **Filter** (a field's value), **Group** (by a field), **List** or **Table**, a search. Saved views as tabs. **New …** adds a record of the type, starting from its default template when it has one ([PACKS.md](PACKS.md)). A record opens beside the table on a computer, in its place on a phone |
-| A record | its fields, changed where they stand (a choice from the type's list, a box for yes or no, a number, a date), its types and tags, its words (rendered; **Edit words**), what it links to and what links to it, its history (each kept version, by whom; tap one to read it), **Make this a template**, and **Publish** |
+| A record | its fields, changed where they stand (a choice from the type's list, a box for yes or no, a number, a date), its types and tags, its words (rendered; **Edit words**), what it links to and what links to it, its history (each change, by whom: an AI by its key's name; tap one for its before and after, and **Put it back**), **Make this a template**, and **Publish** |
+| Changes | what changed in the vault in the last 7 days (**Older changes** reaches back further), newest first, each writer's run of changes together under its name (`claude`, or "You, in Parachute here"). Each change says what it did ("serves 2 → 4, the words") and opens to its before and after: fields, the words line by line, a move, links added or gone. **Put it back** for one change, or **Put all 4 back** for a writer's run: each record goes back to how it was before the run's first change to it, a record the run made is taken away, and one it deleted comes back. When a record changed again after, it says so first. Home says it in a line: "claude changed 4 things today", with **See what changed** |
 | Sharing | what reaches the vault: this app (reads, or reads and changes; **Read only**), the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at. **Publish**, **Revoke** and **Read only** each ask on the app's own sheet first, naming the record's path or the applet, and the vault's host |
 
-What an AI writes shows as it lands: the type's table and an open record follow the vault's live changes (the hub's
-subscription, not a timer).
+What an AI writes shows as it lands: the type's table, an open record and Changes follow the vault's live changes (the
+hub's subscription, not a timer).
+
+## Changes
+
+Notion names the gate to letting agents write: "no good way to preview or audit changes". Changes is one view over the
+history the vault already keeps, not a second record of it (`src/applet/changes.ts`):
+
+- **A change** is a kept version: version *k* holds the record as it was before write *k*, stamped with that write's key
+  (`via`: `key:claude`) and person, so its after is version *k+1*, or the record as it is now. A burst of writes by one
+  key within 15 minutes is one version (core's burst rule), so it shows as one change. A record made since is a change
+  of its own (no version before it); a deleted one is its tombstone, found through `GET /history/deleted` (write
+  access may list it since core T-476).
+- **Putting back is a change too.** One change: `POST …/restore` to the version before it (`vaults.restore`), to the
+  record as the hub has it now; a record the AI made is deleted (`vaults.remove`; its tombstone is kept). The vault
+  records it as a restore by this app's key, so the record's history shows "Put back by You, in Parachute here" beside
+  the AI's change. Nothing in history is rewritten.
+- **Names.** A writer is shown by its key's name. `key:claude` is `claude`; this device's Parachute (its key is named
+  for its client id) is "You, in Parachute here"; an app approved over OAuth is named by the hub for its client id, so
+  it shows as "An app (0f8a6c2e)" until the hub can say its name (gap 8).
+- **What it reads:** the 20 records changed most lately, each with its versions, and the 12 deleted most lately,
+  six reads at a time; **Older changes** reads the next of each (one read costs at most 34 of a frame's 60 reads in ten
+  seconds, charged before the first read). A change's two sides as it shows them (`vaults.compare`), the first ten behind
+  the list, kept until the record changes. While an AI writes, the list is read again at most every eight seconds. Home's
+  line is lighter: per vault, one read of what changed today, one of what was deleted, and six deletions' tombstones at
+  most (six vaults fit a frame's reads); it waits four seconds at most, then shows no line rather than hold the notes
+  back, and a vault it couldn't read makes its count "4+".
+- **What it shows of the app's own records.** An applet's code, settings, approvals or saved views changed by another
+  writer (an AI with a write key) show, marked the app's own, and aren't put back here. This device's Parachute keeping
+  them isn't shown; another device's Parachute keeping them is (it signs in as another app: gap 8). Home's count leaves
+  out the app's own keeping, on any device; an applet's code an AI changed counts.
+- **What putting back can't do.** It never overwrites a write made after the list was read: the record's `updatedAt`
+  must still be what the list saw, else it says "It changed again since you looked" and reads the list again. Putting a
+  record back restores its words, fields and extension, not its place (core keeps a later move); it says so. A deleted
+  record comes back at its tombstone's place, or not at all when another record is there now ("another record is at its
+  place now"). Taking away a record is a plain delete, and `vaults.remove` does only that: a record another app or AI made
+  (its `createdVia` is a writer other than this device's Parachute), or one a put back re-made from deletion, in a vault
+  that keeps history; never the person's own records made here. Core's DELETE takes no `if_updated_at`, so a write in
+  the moment between the check and the delete goes with it (its tombstone keeps it). Which change a later put back
+  undid isn't kept by the vault, so a change shows "put back since" when the record's very next change undid it, or this
+  device put it back.
+- **Refused as in a change** (`vaults.update`): code, an applet's, a component's or the app's own records are never put
+  back here; what comes back published, or a change to a published record, asks on the app's own sheet first.
 
 ## How it is built
 
@@ -54,6 +96,12 @@ subscription, not a timer).
   vault view) opens in Vault, when Vault is in the home vault and allowed on this device:
   `/v/<vault>/n/<id>` carries on to `/v/<home>/a/<Vault>?vault=<vault>&record=<id>`, which Vault hears as its launch.
   A record an applet opens still opens there; nothing about open-with changed.
+- **A tap in an applet on such a record** (a row's `link.open`, a note link) goes straight to Vault's address: the shell
+  decides it at the tap as the note's route would (`open/resolve.ts`), from what this device read before (the copies,
+  `vault/readCache.ts`), so the record shows without the note's route starting first. Only for Parachute's own Vault
+  (its code is the app's), and only when no applet claims the record as the copies have it: a stale copy can then only
+  show the record in Vault, never run an applet. A record an applet claims, a choice to ask, or a line to show goes
+  through the note's route, which reads the applets as the hub has them now (`e2e/openwith.spec.ts`, "a tap in an applet").
 - **A vault's address**, `/v/<vault>`, carries on the same way, to that vault in Vault (decided once per visit: a Vault
   the home's read finds late doesn't take over a plain view being read). `/v/<vault>?with=vault` (and a note's `?with=vault`) is
   the plain view, asked for: the way back when Vault itself won't do.
@@ -70,6 +118,7 @@ subscription, not a timer).
 | The plain vault view (`src/frame/views/VaultView.tsx`) as where `/v/<vault>` lands | Vault; the plain view stays only as the fallback above | now |
 | The plain note view (`src/frame/views/NoteView.tsx`) as where a record no applet opens lands | Vault, which shows its fields, types, links and history; the plain view stays only as the fallback | now |
 | A typed record's fields in the note view (the typed worker's, T-476) | Vault's record view | once Vault is the default everywhere; the note view keeps them as the fallback |
+| A record's history as a list of versions, each read as it was ("As it was before …") | the same versions as changes, each with its before and after and **Put it back** (one view: Changes and a record's History are the same rows) | now |
 
 The two plain views are not deleted: a person whose devices haven't allowed Vault yet, or whose Vault won't start, still
 reads their notes. They go when Parachute's own applets load from a trusted source and need no card (a later step).
@@ -108,3 +157,23 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
 7. **What shows first.** Vault shows a record from what this device read before, at once, and asks the hub behind it
    (lists and the types are read from the hub); when the hub's answer differs, the record view reads again (never while you are writing in it).
    A change is judged on the record as the hub has it now, never on the copy.
+8. **An app's name beside its key.** A key minted with a name (`parachute keys new claude`) writes as `key:claude`, which
+   is a name. An app approved over OAuth is a key the hub names for its client id (core `keys.ts` `baseName`), a random
+   id, and the vault can't read the client's name (`client_name` is the hub's). Changes shows it as "An app (0f8a6c2e)".
+   Proposal for core: gap 1's access list, giving each key its client's name and keeping it after a revoke, so old
+   writes still read; the v1 attribution contract (`app:<client id>`) is the stamp, and the list is where its name is.
+9. **Types and tags aren't in history.** A kept version holds the words, fields, path and extension, not the record's
+   types or tags. So Changes can't say a type was added, and a deleted record comes back without its types and tags
+   (core: "re-creates it … untagged"); Changes says so before it is put back. Core 0.9.4's revisions (core #114) keep
+   types, tags and links on each version and its undo by write set (#115) puts them back; Changes reads them from a
+   version when they are there.
+10. **Cloud.** Parachute Cloud runs an older engine: it lists deleted records only once it pins core T-412, and to write
+   access only once it pins T-476, so Changes on Cloud shows edits and new records, and says deleted records aren't
+   listed. A record put back from deletion reads as changed then only from core T-476 (before, it kept its old
+   `updatedAt`, and Changes would lose sight of it).
+11. **Who made a deleted record** isn't kept (its row is gone; versions keep when, not who). So a record an AI made and
+   then deleted comes back with "Put all back" of that run, with nothing said on the run; opened alone, the deletion says
+   when the record was made, if that was the same day. Core 0.9.4's write sets
+   (#114/#115) know what a set made, and undo leaves it deleted.
+12. **A hub with history off** keeps no versions: Changes shows only records made since, and taking one away can't be
+   undone. History is on by default.

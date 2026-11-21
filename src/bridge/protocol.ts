@@ -67,7 +67,9 @@ export type FrameLocation = { pathname: string; search: string; hash: string; ke
 export type Calls = {
   "vaults.list": [Record<string, never>, FrameVault[]];
   "vault.query": [{ vault: string; query: Query }, Note[]];
-  "vault.note": [{ vault: string; id: string }, Note | null];
+  /** `kept`: answered at once from the copy this device kept of that read (vault/readCache.ts), the hub asked behind
+   *  it; the frame is told (`changed`, what: "note") when the hub's answer differs. */
+  "vault.note": [{ vault: string; id: string; kept?: boolean }, Note | null];
   /** The vault's role tags; null when they couldn't be read (open-with then opens nothing in an applet). */
   "vault.roles": [{ vault: string }, string[] | null];
   /** `fresh`: read the vault's applets again before answering. */
@@ -110,7 +112,9 @@ export type Params<M extends Method> = Calls[M][0];
 export type Result<M extends Method> = Calls[M][1];
 export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles", "applets.list", "defaults.get", "defaults.set", "home.get", "home.pin", "home.start", "pointers.list", "home.bringIn", "components.list", "home.addEmbed", "home.addVault", "home.dismissVault", "nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out"] as const satisfies readonly Method[];
 
-export type Events = { location: FrameLocation; changed: { what: "vaults" | "applets" | "defaults" | "home" | "pointers" }; /** the look's tokens (src/theme), each a CSS variable --<key> */ theme: Record<string, string> };
+export type Events = { location: FrameLocation;
+  /** what: "note": the hub's answer for a note the frame read from the copy (`vault.note` with `kept`) differs from it */
+  changed: { what: "vaults" | "applets" | "defaults" | "home" | "pointers" } | { what: "note"; vault: string; id: string }; /** the look's tokens (src/theme), each a CSS variable --<key> */ theme: Record<string, string> };
 
 export type Request = { pf: 1; id: string; method: Method; params: unknown };
 export type Reply = { pf: 1; id: string; result: unknown } | { pf: 1; id: string; error: string };
@@ -143,7 +147,7 @@ function paramsOk(m: Method, p: Record<string, unknown>): boolean {
     case "home.addVault": case "home.dismissVault": return only(p, ["hub", "vault"]) && str(p.hub, 500) && str(p.vault, 120);
     case "home.pin": return only(p, ["vault", "noteId", "on"]) && str(p.vault, 120) && str(p.noteId) && typeof p.on === "boolean";
     case "home.start": return only(p, ["vault", "noteId"]) && str(p.vault, 120) && (p.noteId === null || str(p.noteId));
-    case "vault.note": return only(p, ["vault", "id"]) && str(p.vault, 120) && str(p.id);
+    case "vault.note": return only(p, ["vault", "id", "kept"]) && str(p.vault, 120) && str(p.id) && optBool(p.kept);
     case "vault.roles": case "defaults.get": return only(p, ["vault"]) && str(p.vault, 120);
     case "applets.list": return only(p, ["vault", "fresh"]) && str(p.vault, 120) && typeof p.fresh === "boolean";
     case "defaults.set": return only(p, ["vault", "type", "choice"]) && str(p.vault, 120) && str(p.type, 120) && (p.choice === null || str(p.choice, 120));

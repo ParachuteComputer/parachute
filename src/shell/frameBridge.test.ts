@@ -1,5 +1,6 @@
 // The shell's side of the bridge, played against as a hostile frame would: every call, every shape, and nothing it
 // answers carries a token, a client id or a grant; a move it asks for starts nothing without a tap.
+import type { Note } from "@openparachute/surface-client";
 import { describe, expect, it, vi } from "vitest";
 import { createFrameHost, FRAME_LIMITS, type HostDeps } from "./frameBridge";
 import { METHODS, PF } from "../bridge/protocol";
@@ -15,6 +16,8 @@ function setup(tap = false) {
     vaults: () => [REC],
     // a client that would leak its record if anything handed it on
     client: () => ({ queryNotes: async () => [{ id: "n1", path: "Recipes/Soup", tags: [] }], getNote: async (id: string) => (id === "gone" ? Promise.reject(Object.assign(new Error("x"), { status: 404 })) : { id, path: id, tags: [] }) }) as unknown as ReturnType<HostDeps["client"]>,
+    // as vault/client.ts keptReaderFor: each read through it noted, as onFresh names it
+    kept: () => { const reads = new Set<string>(); return { reads, client: { getNote: async (id: string) => { reads.add(`/vault/kitchen/api/records?id=${id}&include_body=true`); return { id, path: id, tags: [], kept: true } as unknown as Note; } } }; },
     roles: async () => ["pinned"],
     applets: async () => ({ ok: true as const, skipped: 0, entries: [] }),
     defaults: { get: vi.fn(() => ({ recipe: "vault" })), set: vi.fn() },
@@ -163,5 +166,21 @@ describe("the bar and the home", () => {
     expect(on.deps.home.pin).toHaveBeenCalledWith("kitchen", "a1", false);
     expect((await on.ask("home.start", { vault: "kitchen", noteId: null }))?.error).toBeUndefined();
     expect(on.deps.home.start).toHaveBeenCalledWith("kitchen", null);
+  });
+});
+
+describe("a note read from the copy", () => {
+  it("is answered from the copy, and the frame is told when the hub's answer differs: only for a note it read that way", async () => {
+    const { ask, host, posts } = setup(false);
+    expect((await ask("vault.note", { vault: "kitchen", id: "n1", kept: true }))?.result).toMatchObject({ id: "n1", kept: true });
+    expect((await ask("vault.note", { vault: "kitchen", id: "n2" }))?.result).not.toHaveProperty("kept");
+    expect((await ask("vault.note", { vault: "kitchen", id: "n1", kept: "yes" }))?.error).toBe("bad_params");
+    const told = () => posts.filter((p) => (p as { event?: string }).event === "changed").map((p) => (p as { data: unknown }).data);
+    host.fresh("kitchen", "/vault/kitchen/api/records?id=n2&include_body=true");
+    host.fresh("pantry", "/vault/pantry/api/records?id=n1&include_body=true");
+    host.fresh("kitchen", "/vault/kitchen/api/records?tag=applet");
+    expect(told()).toEqual([]);
+    host.fresh("kitchen", "/vault/kitchen/api/records?id=n1&include_body=true");
+    expect(told()).toEqual([{ what: "note", vault: "kitchen", id: "n1" }]);
   });
 });
