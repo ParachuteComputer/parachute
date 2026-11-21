@@ -2,6 +2,7 @@
 // the self-test and the screens that use them (adding a vault, an applet's screen, Settings, a link from outside).
 // Everything else (the vault list, a vault, a note, open-with) is the frame (src/frame), which runs sealed in
 // FrameHost and reaches the shell only through the bridge (src/bridge/protocol.ts).
+import UpdateLine from "./UpdateLine";
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import AddParachute from "../views/AddParachute";
@@ -208,6 +209,7 @@ function ShellRoutes() {
       {!shell && <FrameArea />}
       {/* applets at their own address, and the ones kept running while hidden (kept.tsx), whatever is shown */}
       {vaults.length > 0 && <KeptApplets active={own} />}
+      {bar && <UpdateLine />}
       {bar && <BottomBar />}
     </div>
   );
