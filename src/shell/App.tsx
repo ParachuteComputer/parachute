@@ -209,7 +209,7 @@ function ShellRoutes() {
       {!shell && <FrameArea />}
       {/* applets at their own address, and the ones kept running while hidden (kept.tsx), whatever is shown */}
       {vaults.length > 0 && <KeptApplets active={own} />}
-      {bar && <UpdateLine />}
+      <UpdateLine />
       {bar && <BottomBar />}
     </div>
   );

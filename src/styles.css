@@ -196,8 +196,9 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .home-bar-place[aria-current="page"] { font-weight: 700; }
 .home-bar-place[aria-current="page"]::after { content: ""; width: 26px; height: 2px; margin-top: 2px; background: var(--text); border-radius: 2px; }
 .home-bar-place:active { background: var(--line); }
-/* a newer build (shell/UpdateLine.tsx): one line resting on the bar until Download or Later */
-.update-line { position: fixed; left: 0; right: 0; bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); z-index: 5; display: flex; align-items: center; gap: 8px; padding: 6px calc(env(safe-area-inset-right) + 12px) 6px calc(env(safe-area-inset-left) + 12px); background: var(--surface); border-top: 1px solid var(--line); font-size: 14px; }
+/* a newer build (shell/UpdateLine.tsx): one line at the foot (resting on the bar when there is one) until Download or Later */
+.update-line { position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom); z-index: 5; display: flex; align-items: center; gap: 8px; padding: 6px calc(env(safe-area-inset-right) + 12px) 6px calc(env(safe-area-inset-left) + 12px); background: var(--surface); border-top: 1px solid var(--line); font-size: 14px; }
+.with-bar .update-line { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
 .update-line > span:first-child { flex: 1 1 auto; min-width: 0; }
 :root.keyboard-up .update-line { display: none; }
 /* an applet's signals (services/signals.ts): its count, beside its glyph */
