@@ -56,8 +56,9 @@ export function refreshComponents(rec: VaultRecord, fresh = false): Promise<Entr
   const p = readComponents(fresh ? clientFor(rec) : keptClientFor(rec), rec.key, whoseOf(rec) !== "mine")
     .then((r): Entry => ({ state: "ok", ...r, at: Date.now() }), (e: unknown): Entry => ({ state: "error", error: e instanceof Error ? e.message : String(e) }))
     .then((e) => {
-      if (fresh) freshSet.set(rec.key, (freshSet.get(rec.key) ?? 0) + 1);
-      else if ((freshSet.get(rec.key) ?? 0) !== set) return cache.get(rec.key) ?? e;
+      // only the hub's answer counts as fresh (a failed fresh read leaves an answer from the copy on its way to land)
+      if (fresh && e.state === "ok") freshSet.set(rec.key, (freshSet.get(rec.key) ?? 0) + 1);
+      else if (!fresh && (freshSet.get(rec.key) ?? 0) !== set) return cache.get(rec.key) ?? e;
       cache.set(rec.key, e); return e;
     })
     .finally(() => inflight.delete(at));
