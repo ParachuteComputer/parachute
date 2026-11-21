@@ -66,6 +66,15 @@ test.describe("Vault", () => {
 
     // the type's records as a table: its fields are the columns; a header sorts
     const table = v.getByRole("table", { name: "shelfbook" });
+    // on a phone the page never grows wider than the screen: the table scrolls across inside itself, and the new
+    // record's name and its Add stay in view (T-476 stranger walk: Add was off the right edge)
+    await expect(table).toBeVisible();
+    const widths = await v.locator("body").evaluate((b) => ({ page: b.ownerDocument.documentElement.scrollWidth, screen: b.ownerDocument.documentElement.clientWidth }));
+    expect(widths.page).toBeLessThanOrEqual(widths.screen);
+    expect(await v.getByRole("button", { name: "Add", exact: true }).evaluate((b) => b.getBoundingClientRect().right <= b.ownerDocument.documentElement.clientWidth)).toBe(true);
+    // the table scrolls across inside itself (not squashed, not clipped)
+    expect(await table.evaluate((t) => t.scrollWidth > t.clientWidth)).toBe(true);
+    await expect(v.getByText(`${VAULT} · 30 records`)).toBeVisible();
     for (const col of ["Name", "author", "shelf status", "pages", "Updated"]) await expect(table.getByRole("columnheader", { name: col })).toBeVisible();
     await table.getByRole("columnheader", { name: "pages" }).getByRole("button").click();
     await expect(table.getByRole("row").nth(1)).toContainText("Book 00");
@@ -85,6 +94,8 @@ test.describe("Vault", () => {
     const [ai] = await api(hub(), "GET", `notes?path=${encodeURIComponent("Shelf/Written by the AI")}`);
     made.push(ai.id);
     await expect(table.getByRole("button", { name: "Open Written by the AI" })).toBeVisible({ timeout: 15_000 });
+    // and counts at once (it said 30 until the type was opened again)
+    await expect(v.getByText(`${VAULT} · 31 records`)).toBeVisible();
 
     // links both ways: Book 00 links to Book 01, so Book 01 says it is linked from Book 00
     await table.getByRole("button", { name: "Open Book 01" }).click();
