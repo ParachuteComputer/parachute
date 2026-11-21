@@ -25,14 +25,17 @@ async function door(path: string, body?: unknown): Promise<any> {
   return r.body;
 }
 const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-/** The ops of one form or button: the same change sent again keeps its id (the door answers the same once it landed,
- *  and frees the id when it refused), a different one gets a new id. */
+/** The ops of one form or button: a change tried again after it failed keeps its id (the door answers the same if it
+ *  landed after all, and frees the id when it refused); once answered, the next change gets a new id, even the same
+ *  one again (an event added, cancelled and added back). */
 function useOps() {
   const last = useRef<{ body: string; id: string } | null>(null);
-  return (body: Record<string, unknown>) => {
+  return async (body: Record<string, unknown>) => {
     const key = JSON.stringify(body);
     if (last.current?.body !== key) last.current = { body: key, id: newId() };
-    return door("op", { ...body, opId: last.current.id });
+    const answer = await door("op", { ...body, opId: last.current.id });
+    last.current = null;
+    return answer;
   };
 }
 /** Changed elsewhere since it was read (the door's stale base_rev). */
