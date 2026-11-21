@@ -75,7 +75,7 @@ test("first run: four applets, four short cards; changed code says whether it as
 
     await open(page, /Mail/);
     await expect(face(page).locator("strong", { hasText: "High risk, with your key:" })).toBeVisible();
-    await expect(face(page)).toContainText("sends send.approve requests to");
+    await expect(face(page)).toContainText("signs its send.approve requests to");
     await measure(page, "mail");
     await (await allowOnFirstScreen(page)).click();
     await expect(page.locator("iframe.applet-frame")).toHaveCount(1);

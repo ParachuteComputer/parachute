@@ -13,7 +13,7 @@ the Parachute app reads the record, shows the person what it asks for, and runs 
 | `tags` | `["applet"]`. That tag is what makes it an applet. |
 | `fields.applet` | The manifest: what it is and what it may do (below). |
 | `fields.opens` | Optional: which kind of note opens in it when the person taps one. |
-| `fields.app` | Optional: what it asks of the app beyond its vault: any of `recent`, `pins`, `open`, `links`, `save`, `attach`, `storage`, `vaults`, `sharing` (below). Anything else is ignored, and the applet then asks nothing of the app. |
+| `fields.app` | Optional: what it asks of the app beyond its vault: any of `recent`, `pins`, `open`, `links`, `save`, `attach`, `storage`, `vaults`, `sharing`, `copy`, `changes` (below). Anything else is ignored, and the applet then asks nothing of the app. |
 | `fields.services` | Optional: the servers it talks to, through the app (below). |
 | `body` | The code: one self-contained file. |
 
@@ -199,7 +199,9 @@ there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below ar
 | `vault.updateRecord(id, { if_updated_at, body?, fields?, types?, tags? })` | A change to a record it may `update`, in one call: a new body, fields merged (`null` removes one), and `types` / `tags` as `{ add, remove }`. |
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
-| `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the two calls above; an applet at a room with `?room=<id>[&event=<id>]`, which it hears as its launch), while they tap inside the applet. Resolves to whether it went. |
+| `app.copy(text)` | With `copy`: puts text on the clipboard while the person taps in the applet (up to 2,000 characters). Resolves to whether it went. |
+| `app.changes()` | With `changes` (level 5, Home's line, [VAULT.md](VAULT.md) "Changes"): what others (an AI, another app) changed since midnight in the first six vaults on this device: `{ count, names, more, href }`. `names` are the writers, the one who wrote last first, never what changed; `more` says there may be more than `count` (a vault couldn't be read, or a read hit its cap); `href` opens Vault's Changes for the vault with the most (`app.open(href)`), null when nothing changed or the device has no home vault. |
+| `app.open(href)` | With `open`: take the person to a note or an applet (an `href` from the calls above; an applet at a room with `?room=<id>[&event=<id>]`, which it hears as its launch, or `app.changes()`'s `href`, Vault at a vault's Changes), while they tap inside the applet. Resolves to whether it went. |
 | `app.links(links, from)`, `app.follow(link, { from, choose })`, `app.address(noteId)` | With `open`: the calls under the kit's note links. Use `Link`, `Linked`, `Note` and `link` (see [Links](#links)) rather than these. |
 | `app.openLink(url)` | With `links`: an `http`, `https` or `mailto` address in the person's browser, while they tap, at most one a second. Resolves to whether it went. |
 | `app.save(name, bytes, type)` | With `save`: a file (an `ArrayBuffer`, 25 MB at most) into the person's Downloads, while they tap. The name is made bare (no folder, no leading dot, 100 characters at most) and the app picks a free one. Resolves `{ saved: name }`. |
@@ -491,7 +493,7 @@ pinned applets. It reads no folder of its own vault, so it has no `access`; it a
       "contract": 2,
       "id": "home",
       "name": "Home",
-      "glyph": "◠",
+      "glyph": "⌂",
       "note": "what changed lately, and your pins"
     },
     "app": [
@@ -514,8 +516,9 @@ The next time the app starts, it opens on Home and shows its card; once the pers
 They can also long-press it in the list and tap **Open on start**, and pin it first on the bar.
 
 Two home applets ship with the app, in `applets/`: `home` (Parachute Simplified's starter: a line into `Inbox/`, the
-newest notes, the pins) and `today` (for a person with rooms and a journal: what wants you in your rooms, the latest
-from one key, today's journal and a line for it; `--set relay=… --set uni=<hex key>`). `app.open` also takes an applet
+newest notes, the pins) and `today` (for a person with rooms and a journal: what wants you in your rooms (an open ask, or
+a line that names you since you last read or wrote there, by the read state Rooms keeps), the latest from one key,
+today's journal and a line for it; it reads again each time it is shown; `--set relay=… --set uni=<hex key>`). `app.open` also takes an applet
 at a room, `/v/<vault>/a/<applet>?room=<id>[&event=<id>]`: the applet hears it as its launch (`onLaunch`), as from a
 notification's tap. The installer fills a quoted `"{{name}}"` in an applet's code from `--set` (`applets/record.ts`), so
 such a value is part of the code the person approves.
