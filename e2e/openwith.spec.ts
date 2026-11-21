@@ -278,10 +278,9 @@ test("the note's route: an unclaimed note opens without waiting for the hub's ap
   // the hub's list of applets never answers from here on
   await page.route((u) => u.searchParams.get("tag") === "applet", () => {});
   try {
-    await notes(page).getByRole("link", { name: /^Welcome(?: |$)/ }).click();
+    await tapNote(page, "Welcome");
     await expectInVault(page, VAULT, await noteId("Welcome"), "Welcome");
-    await page.goto(`/v/${VAULT}?with=vault`);
-    await notes(page).getByRole("link", { name: /^Tomato toast(?: (?:Recipes|Applets) ·|$)/ }).click();
+    await tapNote(page, "Tomato toast");
     await expect(ui(page).getByRole("status").filter({ hasText: "Opening…" })).toBeVisible();
     await page.waitForTimeout(2000);
     await expect(page.locator('iframe.applet-frame[title="Recipe box"]:visible')).toHaveCount(0);
