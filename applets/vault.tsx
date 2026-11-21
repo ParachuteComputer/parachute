@@ -565,6 +565,8 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
     vaults.query(v.key, { tag: "publish", limit: 50 })])
     .then(([x, ...ps]: [any, ...{ records: Rec[] }[]]) => { setA(x); setPub([...new Map(ps.flatMap((p) => p.records).map((r) => [r.id, r])).values()]); setFailed(null); }, setFailed);
   useEffect(() => { void load(); }, [v.key]);
+  // back from the background: who is in may have changed (the hub's list reads itself again, useReach)
+  useEffect(() => (typeof onShown === "function" ? onShown((on: boolean) => { if (on) void people.load(); }) : undefined), [v.key]);
   const refresh = () => Promise.all([load(), people.load(), reach.load()]);
 
   const { sh, rows, managing } = reach;
@@ -574,9 +576,11 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const used = (r: ReachRow) => (r.lastUsed ? ` · used ${when.ago(r.lastUsed)}` : "");
   // an app connected by OAuth is named by the name it registered (Parachute on another device, Claude…), never its id
   const title = (r: ReachRow) => (r.app ? (r.app === "Parachute" ? "Parachute, on another device" : r.app) : r.name);
-  const groupOf = (r: ReachRow): Group => (r.member ? "people" : r.who === "agent" ? "ai" : "apps");
+  // an AI: a key made for one, or what connected at its address by OAuth (Claude, ChatGPT…: any app but Parachute
+  // itself); apps: this Parachute elsewhere, app keys, a script's token
+  const groupOf = (r: ReachRow): Group => (r.member ? "people" : r.who === "agent" || (r.app !== null && r.app !== "Parachute") ? "ai" : "apps");
   const gone = (key: string) => ended.some((e) => e.key === key);
-  const endedRows = (g: Group) => ended.filter((e) => e.group === g).map((e) => ({ key: `ended:${e.key}`, title: e.title, meta: "ended · its next request is refused" }));
+  const endedRows = (g: Group) => ended.filter((e) => e.group === g).map((e) => ({ key: `ended:${e.key}`, title: e.title, meta: `ended · ${g === "people" ? "their" : "its"} next request is refused` }));
   const didEnd = (e: Ended, vault: string) => { if (shownKey.current === vault) setEnded((x: Ended[]) => [...x.filter((y) => y.key !== e.key), e]); };
   const end = (r: ReachRow) => { const vault = v.key; return sh.endReach!(vault, r.id).then(() => {
     didEnd({ key: r.member?.key ?? r.id, group: groupOf(r), title: title(r) }, vault);
@@ -586,7 +590,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const endButton = (who: string, go: () => void) => <Button small kind="quiet" aria-label={`End ${who}`} onClick={go}>End</Button>;
   const keyRow = (r: ReachRow) => ({ key: r.id, title: title(r), meta: `${r.of ? `${r.of}'s · ` : ""}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`, aside: endButton(title(r), () => void end(r)) });
 
-  // AIs and agents: a key made for one, or one connected to your account
+  // AIs and agents
   const ais = others.filter((r) => groupOf(r) === "ai" && !gone(r.id)).map(keyRow);
   // people: you; each person the vault is shared with, once (the hub's list while managing, else your key's), by the
   // name you gave them; an invite nobody took yet
@@ -598,7 +602,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const personRows = [
     ...hubPeople.filter((r) => !gone(r.member!.key ?? r.id)).map((r) => {
       const mine = np?.people.find((p) => p.key === r.member!.key);
-      const name = mine?.name ?? r.name;
+      const name = mine ? (mine.name ?? `A key (${shortKey(mine.key)})`) : r.name;
       return { key: r.id, title: name, meta: `${roleWords(r.member!.role)}${r.member!.key ? ` · key ${shortKey(r.member!.key)}` : ""}${used(r)}`, aside: endButton(name, () => void end(r)) };
     }),
     ...(fromHub ? [] : np?.people ?? []).filter((p) => !gone(p.key)).map((p) => {
@@ -663,11 +667,11 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
           : managing === null ? <Loading />
           : !managing && <div className="acts"><p className="note-meta">Your hub keeps every key, AI and app it lets into {v.name}.</p><Button small onClick={() => void manage()}>Show them all</Button></div>)}
         {(managing || ended.some((e) => e.group === "ai")) && <List label="AIs and agents" rows={[...ais, ...endedRows("ai")]} />}
-        {managing && !ais.length && !ended.some((e) => e.group === "ai") && <p className="note-meta">No AI has a key to {v.name}. Connect one above.</p>}
-        {people.failed ? <Problem error={people.failed} onRetry={people.load}>Who is in {v.name} couldn't be read</Problem>
-          : (v.mine || personRows.length > 0) && <List label="People" rows={[...(v.mine ? [{ key: "you", title: "You", meta: "owner" }] : []), ...personRows, ...endedRows("people")]} />}
+        {managing && !ais.length && !ended.some((e) => e.group === "ai") && <p className="note-meta">No AI reaches {v.name}. Connect one above.</p>}
+        {(v.mine || personRows.length > 0) && <List label="People" rows={[...(v.mine ? [{ key: "you", title: "You", meta: "owner" }] : []), ...personRows, ...endedRows("people")]} />}
+        {people.failed && <Problem error={people.failed} onRetry={people.load}>{fromHub ? `The invites to ${v.name} couldn't be read` : `Who is in ${v.name} couldn't be read`}</Problem>}
         <List label="Apps and devices" rows={[
-          { key: "app", title: "Parachute, on this device", meta: `${a.level === "write" ? "reads and changes" : "reads"} every type, at ${a.hub.replace(/^https?:\/\//, "")}`,
+          { key: "self:app", title: "Parachute, on this device", meta: `${a.level === "write" ? "reads and changes" : "reads"} every type, at ${a.hub.replace(/^https?:\/\//, "")}`,
             // the home stays writable: Parachute's own applets write there (docs/design/PARACHUTE-SOURCE.md)
             aside: a.level === "write" && !a.home ? <Button small kind="quiet" onClick={() => vaults.readOnly(v.key).then(load, (e: unknown) => quiet(e, "Not changed"))}>Read only</Button> : undefined },
           ...a.applets.map((x) => ({ key: `applet:${x.noteId}`, glyph: x.glyph, title: x.name, meta: `an applet on this device · ${x.changes ? "reads and changes" : "reads"}${x.since ? ` · since ${when.date(x.since)}` : ""}`,

@@ -39,7 +39,9 @@ you and your AIs and agents, each with its own key, so they come first; then peo
   row, by name: a key made here, an AI or app connected by OAuth (with the name it registered), this app on another
   device, a key that reaches several vaults. Each says what it may do (reads; reads and changes; manages; downloads a
   backup), to which types (every type, or the ones named) and until when, and when it was last used. The hub says who
-  each is for (`kind`): a key made with **Give an AI a key** is an agent's, so it is listed under AIs and agents.
+  each is for (`kind`): a key made with **Give an AI a key** is an agent's, so it is listed under AIs and agents, as
+  is anything that connected at the AI address by OAuth (Claude, ChatGPT: any app but Parachute itself). A key or
+  token someone you share with made says whose it is ("Wes's · …").
 - **A person is one row.** Someone you shared the vault with is one row (`by: "self"`, their key), by the name you
   invited them by, with every sign-in of theirs in it: their Parachute on each device is never a row of its own. The
   vault's owner sees people at once (read with their key, `vaults.people`); the hub's list adds when each last used it.

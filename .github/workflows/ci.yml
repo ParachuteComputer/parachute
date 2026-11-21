@@ -19,7 +19,7 @@ jobs:
         include:
           - core: "0.8.0"
           - core: "0.9.0-pre.1"
-          - core: "e4dc4c038e235df50ca2844963df53f8571478b4"
+          - core: "a14ac97a63abff7f393684fc45fb7dd64bd52db1"
             next: "1"
     name: web (core ${{ matrix.core }})
     runs-on: ubuntu-latest
@@ -76,7 +76,7 @@ jobs:
       # tests do: core's next at the web job's pinned commit, where sharing must run (E2E_CORE_NEXT), not skip.
       - uses: ./.github/actions/core
         with:
-          core: e4dc4c038e235df50ca2844963df53f8571478b4
+          core: a14ac97a63abff7f393684fc45fb7dd64bd52db1
       - name: Shell tests
         env:
           E2E_CORE_NEXT: "1"
