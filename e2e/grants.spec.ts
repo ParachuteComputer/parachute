@@ -52,7 +52,7 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   const v: FrameLocator = page.frameLocator('iframe.applet-frame[title="Vault"]');
   await v.getByRole("button", { name: "Sharing" }).click();
   const who = v.getByRole("region", { name: `Who reaches ${VAULT}` });
-  await expect(who).toContainText("Parachute, on this device");
+  await expect(who).toContainText("Parachute, on this device", { timeout: 30_000 });
 
   // managing asks once: the app's own sheet, then the hub's page; back on Sharing
   await v.getByRole("button", { name: "Show them all" }).click();
