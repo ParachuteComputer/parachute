@@ -236,11 +236,11 @@ describe("what shows, from what was read before (T-476)", () => {
     const reads: string[] = [], calls: Call[] = [];
     // a shell with `read`: each read says where it went
     const deps2: VaultsDeps = {
-      list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write" }],
+      list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp" }],
       door: async () => "records",
       async request(_v, method, path, body) { calls.push({ method, path, body }); if (path.startsWith("/types")) return []; return method === "GET" ? (path.startsWith("/records/") ? book : [book]) : { ...book, body: "new" }; },
       async read(_v, path) { reads.push(path); if (path.startsWith("/types")) return []; return path.startsWith("/records/") ? { ...book, updatedAt: "2026-11-01T00:00:00.000Z" } : [book]; },
-      watch: () => () => {}, access: async () => { throw new Error("no"); }, revoke: async () => {}, readOnly: async () => {}, confirm: async () => "yes", emit: () => {},
+      applets: async () => [], watch: () => () => {}, access: async () => { throw new Error("no"); }, revoke: async () => {}, readOnly: async () => {}, confirm: async () => "yes", emit: () => {},
     };
     const router = createRouter([createVaultsModule(["vaults"], deps2)]);
     const c = (method: string, params: unknown) => router.call("vaults", method, params, {}, { charge() {}, closed: () => false });
