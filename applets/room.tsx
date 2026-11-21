@@ -401,6 +401,8 @@ const CSS = `
 .room .card .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .room .card.ended { border-style: dashed; border-width: 1px; color: var(--muted); }
 .room .card pre { white-space: pre-wrap; font: var(--fs-small) var(--mono); margin: 6px 0; }
+.room .sealed-row .what, .room .sealed-row .why { overflow-wrap: anywhere; }
+.room .sealed-row .scope { white-space: pre-line; }
 .room .card .ids { color: var(--muted); font-size: var(--fs-small); margin: 2px 0; }
 .room .card .ids summary { cursor: pointer; width: max-content; }
 .room .card .ids p { margin: 2px 0 0; font-variant-numeric: tabular-nums; }
@@ -765,6 +767,9 @@ function AskCard({ e, ask, answeredBy, mine, answer }: { e: Ev; ask: Ask; answer
 
 // ── Uni's sealed cards and secret requests (docs/design/KEYRING.md): the shell checks the card, asks for the device
 // unlock when it must, seals the answer with the approval key and sends it. This draws the card and takes the tap. ──
+/** A broker-worded scope without the lines the card shows on their own (its reach, its read key). */
+const rest = (r: { scope: string; reach: string | null; read_key: string | null }) =>
+  r.scope.split("\n").filter((l, i) => !(i === 0 && r.reach && l.trim() === r.reach) && l !== r.read_key).join("\n").trim();
 const SPAN = (s: number) => (s >= 86400 ? `${Math.round(s / 86400)} d` : s >= 3600 ? `${Math.round(s / 3600)} h` : `${Math.max(1, Math.round(s / 60))} min`);
 const said = (x: any) => String(x?.message ?? x ?? "it failed").slice(0, 200);
 /** A refused tap in the room's own words, except the shell's "Tap again in a moment" (the tap was there, but it paid
@@ -840,14 +845,15 @@ function SealedCard({ e }: { e: Ev }) {
   const open = view.rows.some((r: any) => r.answer) && view.kind === "morning" ? [] : view.rows.filter((r: any) => !r.answer);
   return <div className={`card${open.length ? "" : " ended"}`} role="group" aria-label={morning ? "Uni's morning card" : "Uni asks to use a credential"}>
     <div className="head">{open.length ? "◆" : "◇"} {morning ? "Uni's morning card" : "Uni's card"}{view.rows.some((r: any) => r.class === "powerful") ? " · powerful" : ""}</div>
-    {/* each request leads with what it is for (the words Uni signed on the card), then the credential once, for how
-        long and how often; the action and job ids, for checking against Uni's log, under Details */}
+    {/* each request leads with what it is for: the key's true reach when the native side found that line (a
+        broker-worded card: the rest of the scope, Uni's words among it, under it), else the scope; then the credential
+        and action once, for how long and how often; the job id, for checking against Uni's log, under Details */}
     {view.rows.map((r: any) => <div key={r.rid} className="sealed-row">
-      {r.reach && <p className="what">{r.reach}</p>}
-      <p className="what">{r.scope}</p>
-      <p className="why">{r.credential}, {SPAN(r.ttl_s)}, {r.uses === 1 ? "once" : `${r.uses} uses`} · asked {when.ago(r.asked)}</p>
+      <p className="what">{r.reach ?? r.scope}</p>
+      {r.reach && rest(r) && <p className="why scope">{rest(r)}</p>}
+      <p className="why">{r.credential} · {r.action}, {SPAN(r.ttl_s)}, {r.uses === 1 ? "once" : `${r.uses} uses`} · asked {when.ago(r.asked)}</p>
       {r.read_key && <p className="why">{r.read_key}</p>}
-      <details className="ids"><summary>Details</summary><p>Action {r.action} · job {r.request_digest.slice(0, 4)} {r.request_digest.slice(4, 8)}</p></details>
+      <details className="ids"><summary aria-label={`Details: ${r.credential}`}>Details</summary><p>Job {r.request_digest.slice(0, 4)} {r.request_digest.slice(4, 8)}</p></details>
       {r.answer && <p className="quiet">{r.answer.decision === "approve" ? `Approved${r.answer.until ? ` · open until ${when.time(r.answer.until)}` : ""}` : "Denied"}{r.answer.sent ? "" : " · not sent yet"}</p>}
       {r.answer && !r.answer.sent && <div className="btns"><Button small busy={busy} onClick={() => answer(r.answer.decision, [r.rid])}>Try again</Button></div>}
       {!r.answer && !morning && <div className="btns">

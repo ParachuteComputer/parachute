@@ -42,7 +42,8 @@ test("the rooms applet approves Uni's powerful card behind the unlock, gives a s
   const uni = await person(RELAY!, hex(uniSk));
 
   // Uni's powerful card, sealed to alice's sealing key (her approval key is her everyday key here), and a secret request
-  const card = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "cloudflare-dns", action: "job.cloudflare", scope: `Change one DNS record ${stamp}`, payload: { v: 1, zone: "example.org" }, class: "powerful", ttl_s: 600 });
+  // a broker-worded scope (as uni-ops words a Cloudflare card): the key's true reach first, then a read key, then Uni's words
+  const card = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "cloudflare-dns", action: "job.cloudflare", scope: `🔴 All of example.org · 10 min\nCan: change DNS records.\nRead key: the zone's names.\nUni says: Change one DNS record ${stamp}`, payload: { v: 1, zone: "example.org" }, class: "powerful", ttl_s: 600 });
   expect((await uni.send(card.event)).ok).toBe(true);
   // the same card's fields, but posted by bob: not from a key this device trusts
   const forged = makeCard({ uni: bytes(bobKey), sealPubHex: sealPub(aliceSk), room, credential: "forged-cred", action: "job.x", scope: "Not from Uni", payload: {}, class: "routine", ttl_s: 60 });
@@ -79,10 +80,14 @@ test("the rooms applet approves Uni's powerful card behind the unlock, gives a s
     // the powerful card: a plain tap does nothing; a hold asks for the unlock; a failed unlock sends nothing
     const sealed = log.getByRole("group", { name: "Uni asks to use a credential" });
     await expect(sealed).toContainText(`Change one DNS record ${stamp}`);
-    // it leads with what it is for, names the credential once, and keeps the action and job ids under Details
-    await expect(sealed.locator(".what").first()).toHaveText(`Change one DNS record ${stamp}`);
-    expect((await sealed.innerText()).split("cloudflare-dns").length - 1).toBe(1);
-    const ids = sealed.getByText(/^Action job\.cloudflare · job [0-9a-f]{4} [0-9a-f]{4}$/);
+    // it leads with the key's true reach (once), Uni's words under it (never as the lead), the read key once, the
+    // credential once (counted in the text as written, whatever the styles), and the job id under Details
+    await expect(sealed.locator(".what").first()).toHaveText("🔴 All of example.org · 10 min");
+    await expect(sealed.locator(".what")).not.toContainText("Uni says:");
+    const text = (await sealed.evaluate((n) => n.textContent)) ?? "";
+    for (const once of ["All of example.org", "Read key: the zone's names.", "cloudflare-dns"]) expect(text.split(once).length - 1, once).toBe(1);
+    await expect(sealed).toContainText(`Uni says: Change one DNS record ${stamp}`);
+    const ids = sealed.getByText(/^Job [0-9a-f]{4} [0-9a-f]{4}$/);
     await expect(ids).toBeHidden();
     await sealed.getByText("Details", { exact: true }).click();
     await expect(ids).toBeVisible();
