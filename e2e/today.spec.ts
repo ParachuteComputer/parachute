@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { getPublicKey } from "nostr-tools/pure";
+import * as nip44 from "nostr-tools/nip44";
 import { api, hubState, VAULT } from "./hub";
 import { installApplet } from "./helpers";
 import { person } from "./services/client";
@@ -36,6 +37,8 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
   expect(ask.ok).toBe(true);
   await new Promise((r) => setTimeout(r, 1100));
   expect((await bob.publish({ kind: 9, content: `The beans are up ${stamp}.`, tags: [["h", room]] })).ok).toBe(true);
+  // a line that names alice (not an ask): it wants her until she reads or writes in the room
+  expect((await bob.publish({ kind: 9, content: `Could you water the beans ${stamp}?`, tags: [["h", room], ["p", alice]] })).ok).toBe(true);
 
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
   const rooms = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
@@ -57,6 +60,8 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
     await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Where should the garlic go ${stamp}?`, { timeout: 30_000 });
+    await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Could you water the beans ${stamp}?`);
+    await expect(app.getByText(/^\d+ things want you\.$/)).toBeVisible();
     await expect(app.getByRole("region", { name: "From Uni" })).toContainText(`The beans are up ${stamp}.`);
     await expect(app.getByRole("region", { name: "Today's journal" })).toBeVisible();
 
@@ -69,8 +74,34 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
     expect(written).toHaveLength(1);
     made.push(written[0].id);
 
+    // away and back (the app keeps Home running meanwhile): what happened meanwhile is there. Alice answered in the room
+    // (so bob's earlier line no longer wants her) and bob named her again.
+    const bar = page.getByRole("navigation", { name: "Bar" });
+    await bar.getByRole("link", { name: /Rooms/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/a/${rooms.id}`));
+    const her = await person(RELAY!, secret("alice"));
+    expect((await her.publish({ kind: 9, content: `On it ${stamp}.`, tags: [["h", room]] })).ok).toBe(true);
+    her.close();
+    await new Promise((r) => setTimeout(r, 1100));
+    expect((await bob.publish({ kind: 9, content: `Bring the trowel ${stamp}?`, tags: [["h", room], ["p", alice]] })).ok).toBe(true);
+    await bar.getByRole("link", { name: /Home/ }).click();
+    await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Bring the trowel ${stamp}?`, { timeout: 30_000 });
+    await expect(app.getByRole("region", { name: "Wants you" })).not.toContainText(`Could you water the beans ${stamp}?`);
+    await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Where should the garlic go ${stamp}?`);
+    // read on another device (the read state Rooms keeps, sealed to her own key): that line no longer wants her either
+    const sk = Uint8Array.from(Buffer.from(secret("alice"), "hex"));
+    const marks = JSON.stringify({ v: 1, client_id: "e2e-other-device", contexts: { [room]: Math.floor(Date.now() / 1000) + 1 } });
+    const reader = await person(RELAY!, secret("alice"));
+    expect((await reader.publish({ kind: 30078, content: nip44.encrypt(marks, nip44.getConversationKey(sk, alice)), tags: [["d", `read-state:e2e${stamp}`], ["t", "read-state"]] })).ok).toBe(true);
+    reader.close();
+    await bar.getByRole("link", { name: /Rooms/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/a/${rooms.id}`));
+    await bar.getByRole("link", { name: /Home/ }).click();
+    await expect(app.getByRole("region", { name: "Wants you" })).not.toContainText(`Bring the trowel ${stamp}?`, { timeout: 30_000 });
+    await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Where should the garlic go ${stamp}?`);
+
     // the bar is the record's pins; a tap on the ask opens Rooms at that room and message
-    await expect(page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: /Rooms/ })).toBeVisible();
+    await expect(bar.getByRole("link", { name: /Rooms/ })).toBeVisible();
     await app.getByRole("region", { name: "Wants you" }).getByRole("button", { name: new RegExp(`garlic go ${stamp}`) }).click();
     await expect(page).toHaveURL(new RegExp(`/a/${rooms.id}\\?room=${room}&event=${ask.ev.id}$`));
   } finally {
