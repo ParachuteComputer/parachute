@@ -85,6 +85,14 @@ test("Parachute Simplified: sign in → Notes → find, edit and write a note �
     await connect.getByRole("button", { name: `Copy the address of ${VAULT}` }).click();
     await expect(connect.getByRole("button", { name: `Copied the address of ${VAULT}` })).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(address);
+    // then what to ask it: a cold AI connected by the address finds no word of applets in the vault (T-476 stranger
+    // walk), so the person hands it the ask and the guide
+    await expect(connect.getByRole("heading", { name: "Then ask it for an applet" })).toBeVisible();
+    await connect.getByRole("button", { name: "Copy what to ask" }).click();
+    await expect(connect.getByRole("button", { name: "Copied what to ask" })).toBeVisible();
+    const ask = await page.evaluate(() => navigator.clipboard.readText());
+    expect(ask).toContain("Make me an applet in my Parachute app");
+    expect(ask).toContain("https://github.com/ParachuteComputer/parachute/blob/main/docs/WRITE-AN-APPLET.md");
 
     // Capture: Parachute's own (docs/design/PARACHUTE-SOURCE.md), no card, nothing written to add it; a line lands in
     // Inbox/ (applets run on a new device once its self-test has passed, as auth.setup waits for it)
