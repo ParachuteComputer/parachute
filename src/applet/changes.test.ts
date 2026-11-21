@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { createVaultsModule, type VaultsDeps } from "./modules/vaults";
 import { createRouter } from "./router";
-import { readChanges, writerName } from "./changes";
+import { readChanges, writer, writerName, type PeopleNames } from "./changes";
 
 type Call = { method: string; path: string; body?: unknown };
 
@@ -148,6 +148,37 @@ describe("reading what changed", () => {
     const h = hub({ records: { A: rec("A", "token:9f2"), B: rec("B", "u-aaron") }, versions: { A: [ver("token:9f2")], B: [ver("u-aaron")] }, deleted: [] });
     const page = await readChanges({ get: (p) => h.deps.request("home", "GET", p), door: "records", since: "2026-11-20T00:00:00.000Z", charge: () => {}, self: () => false, account: "u-aaron", own: () => null });
     expect(page.changes.map((c) => [c.id, c.who, c.unnamed]).sort()).toEqual([["A", "An app without a name", true], ["B", "You, in another app", false]]);
+  });
+});
+
+describe("a vault's people by name (sharing, docs/design/SHARING.md)", () => {
+  const APP = "key:0f8a6c2e-1111-4222-8333-944455556666-3";
+  const names: PeopleNames = { "u-aaron": { name: "Aaron", you: false }, "u-bo": { name: "Bo", you: true }, "u-cy": { name: null, you: false } };
+  it("someone else, through their app, reads as their name; their AI key as theirs", () => {
+    expect(writer("u-aaron", APP, false, names)).toBe("Aaron");
+    expect(writer("u-aaron", "key:claude", false, names)).toBe("Aaron's claude");
+    expect(writer("u-aaron", "mcp", false, names)).toBe("Aaron");
+    expect(writer("u-aaron", "nostr:" + "ab".repeat(32), false, names)).toBe("Aaron");
+  });
+  it("your own writes: this device's as you; your AI by its key's name; your other sign-ins stay an app", () => {
+    expect(writer("u-bo", APP, true, names)).toBe("You, in Parachute here");
+    expect(writer("u-bo", "key:claude", false, names)).toBe("claude");
+    expect(writer("u-bo", APP, false, names)).toBe("An app (0f8a6c2e)");
+  });
+  it("no name known (an older hub, someone with no name, a stamp not of this vault): as the key reads", () => {
+    expect(writer("u-aaron", APP, false, {})).toBe("An app (0f8a6c2e)");
+    expect(writer("u-cy", "key:claude", false, names)).toBe("claude");
+    expect(writer(null, "key:claude", false, names)).toBe("claude");
+    expect(writer("u-zed", APP, false, names)).toBe("An app (0f8a6c2e)");
+  });
+  it("Changes asks the names once for the page and groups by them", async () => {
+    const asked: string[][] = [];
+    const h = hub({ records: { S: { id: "S", path: "Soup", createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-20T10:00:00.000Z" } },
+      versions: { S: [{ version_ix: 1, superseded_at: "2026-11-20T10:00:00.000Z", op: "update", via: APP, actor: "u-aaron" }, { version_ix: 0, superseded_at: "2026-11-20T09:00:00.000Z", op: "update", via: APP, actor: "u-aaron" }] } });
+    const page = await readChanges({ get: (p) => h.deps.request("home", "GET", p), door: "records", since: "2026-11-20T00:00:00.000Z", charge: () => {}, self: () => false, own: () => null,
+      people: async (bys) => { asked.push(bys); return names; } });
+    expect(asked).toEqual([["u-aaron"]]);
+    expect(page.changes.map((c) => c.who)).toEqual(["Aaron", "Aaron"]);
   });
 });
 

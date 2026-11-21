@@ -167,6 +167,8 @@ pub fn run() {
             door::key_sign_in,
             door::hub_vaults,
             door::hub_home_records,
+            door::hub_sharing_tool,
+            door::hub_accept_invite,
             services::svc_open,
             services::svc_close,
             services::svc_relay_auth,

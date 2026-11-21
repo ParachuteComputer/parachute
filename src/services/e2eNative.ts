@@ -8,6 +8,7 @@ import * as nip44 from "nostr-tools/nip44";
 import type { Native, LogLine, SignedEvent, CardView } from "./native";
 import { checkCard, deliveryWrap, forgetWrap, replyWrap, secretRequest, sealPub } from "./e2eCards";
 import { originOf, RESPONSE_HEADERS, type Service } from "../applet/services";
+import { personName } from "../applet/modules/vaults";
 import { fromB64, toB64 } from "./broker";
 import { DEFAULTS, codeOf, floored, raise, type Level, type Levels, type LevelsStatus } from "../shell/levelRules";
 
@@ -248,5 +249,39 @@ export function e2eNative(secretHex: string): Native {
       keep({ ...kept(), locked: false, last: Date.now() });
       return idle(false);
     },
+    // sharing a vault (src-tauri/src/door.rs `hub_sharing_tool`, `hub_accept_invite`): the same four tools and fields,
+    // signed NIP-98 here
+    async sharingTool(hub, tool, args) {
+      const fields: Record<string, string[]> = { "list-access": ["vault"], "invite-to-vault": ["vault", "name", "from"], "take-back-invite": ["vault", "id"], "revoke-access": ["vault", "pubkey"] };
+      // the same checks as door.rs `sharing_tool_body`: the fields each tool takes, and each value's shape
+      const ok = (k: string, v: unknown) => typeof v === "string" && (k === "vault" ? /^[a-z0-9][a-z0-9_-]{0,63}$/.test(v)
+        : k === "name" || k === "from" ? personName(v)
+        : /^[0-9a-f]{64}$/.test(v));
+      if (!fields[tool] || !Object.entries(args).every(([k, v]) => fields[tool].includes(k) && ok(k, v)) || !args.vault) throw { code: "refused", message: "Parachute doesn't sign that request." };
+      const origin = new URL(hub).origin;
+      const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: args } });
+      const res = await signedPost(`${origin}/account/mcp`, body, { accept: "application/json, text/event-stream" });
+      const text = await res.text();
+      if (res.status === 401) throw { code: "unknown_key", message: "This hub doesn't take your key for that." };
+      if (res.status !== 200) throw { code: "unreachable", message: `The hub didn't answer (${res.status}). Try again in a moment.` };
+      const j = JSON.parse(text.trim().startsWith("{") ? text : (text.split("\n").find((l) => l.startsWith("data:")) ?? "data:{}").slice(5)) as { error?: { message?: string; data?: { error_type?: string } }; result?: { isError?: boolean; content?: { text?: string }[] } };
+      const t = j.result?.content?.[0]?.text ?? "";
+      if (j.error) { const ty = j.error.data?.error_type; throw { code: ty === "grant_not_permitted" || ty === "key_required" ? "not_owner" : ty === "invalid_name" ? "invalid_name" : "refused", message: j.error.message ?? "" }; }
+      if (j.result?.isError) throw { code: t.startsWith("Unknown tool") ? "not_owner" : "refused", message: t };
+      return JSON.parse(t) as unknown;
+    },
+    async acceptInvite(hub, code) {
+      if (!/^[A-Za-z0-9_-]{16,128}$/.test(code)) throw { code: "no_invite", message: "That isn't an invite link." };
+      const res = await signedPost(`${new URL(hub).origin}/account/invites/accept`, JSON.stringify({ code }), {});
+      if (res.status === 404) throw { code: "no_invite", message: "That invite isn't open: it may be used, taken back or past its date." };
+      if (res.status !== 200) throw { code: "unreachable", message: `The hub didn't take it (${res.status}). Try again in a moment.` };
+      return await res.json() as never;
+    },
   };
+  /** One POST signed NIP-98 with the test's key. */
+  async function signedPost(url: string, body: string, headers: Record<string, string>): Promise<Response> {
+    const bytes = new TextEncoder().encode(body);
+    const ev = sign(27235, "", [["u", url], ["method", "POST"], ["nonce", crypto.randomUUID()], ["payload", await sha256(bytes)]]);
+    return fetch(url, { method: "POST", headers: { ...headers, "content-type": "application/json", authorization: authHeader(ev) }, body, credentials: "omit" });
+  }
 }

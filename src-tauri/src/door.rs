@@ -87,8 +87,13 @@ pub fn list_vaults_event(origin: &url::Url, nonce: &str) -> Result<EventBuilder,
 /// The NIP-98 event for one of those requests to this hub: kind 27235, `u` its account MCP on the hub's own origin,
 /// `method` POST, a fresh `nonce` (two asks in the same second are two events), and `payload` the body's hash.
 fn account_event(origin: &url::Url, nonce: &str, body: &str) -> Result<EventBuilder, Refusal> {
+    signed_post_event(origin, ACCOUNT_MCP_PATH, nonce, body)
+}
+
+/// The NIP-98 event for one POST of `body` to `path` on the hub's own origin.
+fn signed_post_event(origin: &url::Url, path: &str, nonce: &str, body: &str) -> Result<EventBuilder, Refusal> {
     let bad = || refusal("refused", "The request to your hub couldn't be made.");
-    let u = format!("{}{ACCOUNT_MCP_PATH}", origin.origin().ascii_serialization());
+    let u = format!("{}{path}", origin.origin().ascii_serialization());
     let payload = nostr::hashes::sha256::Hash::hash(body.as_bytes()).to_string();
     let tag = |k: &str, v: &str| Tag::parse([k, v]).map_err(|_| bad());
     Ok(EventBuilder::new(Kind::from(SIGN_IN_KIND), "").tags([tag("u", &u)?, tag("method", "POST")?, tag("nonce", nonce)?, tag("payload", &payload)?]))
@@ -141,15 +146,20 @@ fn nonce() -> String {
 }
 
 /// One signed request to the hub's account MCP, with one of the fixed bodies: its status and answer.
-async fn post_account(origin: &url::Url, keys: &nostr::Keys, body: &'static str, http: reqwest::Client) -> Result<(u16, String), Refusal> {
-    let event = account_event(origin, &nonce(), body)?.sign_with_keys(keys).map_err(|_| refusal("refused", "The key couldn't sign."))?;
+async fn post_account(origin: &url::Url, keys: &nostr::Keys, body: &str, http: reqwest::Client) -> Result<(u16, String), Refusal> {
+    post_signed(origin, ACCOUNT_MCP_PATH, keys, body, http).await
+}
+
+/// One POST the key signs (NIP-98) to `path` on the hub: its status and answer.
+async fn post_signed(origin: &url::Url, path: &str, keys: &nostr::Keys, body: &str, http: reqwest::Client) -> Result<(u16, String), Refusal> {
+    let event = signed_post_event(origin, path, &nonce(), body)?.sign_with_keys(keys).map_err(|_| refusal("refused", "The key couldn't sign."))?;
     let auth = crate::services::authorization(&event);
     let res = http
-        .post(origin.join(ACCOUNT_MCP_PATH).expect("fixed path"))
+        .post(origin.join(path).map_err(|_| refusal("bad_hub", "That isn't a hub address."))?)
         .header("Authorization", auth)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json, text/event-stream")
-        .body(body)
+        .body(body.to_string())
         .send()
         .await
         .map_err(|_| refusal("unreachable", "The hub didn't answer."))?;
@@ -266,6 +276,134 @@ pub(crate) fn http_client(timeout: Duration) -> Result<reqwest::Client, ()> {
     let provider = rustls::crypto::CryptoProvider::get_default().cloned().unwrap_or_else(|| std::sync::Arc::new(rustls::crypto::ring::default_provider()));
     let tls = rustls::ClientConfig::builder_with_provider(provider).with_safe_default_protocol_versions().map_err(|_| ())?.with_root_certificates(roots).with_no_client_auth();
     reqwest::Client::builder().tls_backend_preconfigured(tls).redirect(reqwest::redirect::Policy::none()).timeout(timeout).build().map_err(|_| ())
+}
+
+// ── Sharing a vault with a friend (docs/design/SHARING.md) ──
+// The owner's side is four tools of the hub's account MCP, the friend's is one accept; each a request the key signs
+// here. The body is built here from checked fields, never handed over as text: only these tools, only their fields.
+
+/// The account tools the key signs for sharing, and the fields each takes.
+const SHARING_TOOLS: &[(&str, &[&str])] = &[
+    ("list-access", &["vault"]),
+    ("invite-to-vault", &["vault", "name", "from"]),
+    ("take-back-invite", &["vault", "id"]),
+    ("revoke-access", &["vault", "pubkey"]),
+];
+pub const ACCEPT_PATH: &str = "/account/invites/accept";
+
+fn hex64(v: &str) -> bool {
+    v.len() == 64 && v.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// A character a name may not hold, as the hub refuses it (core share-invites.ts): a control, or invisible formatting that
+/// makes one name look like another (bidi, zero-width, line and paragraph separators). The joiners U+200C and U+200D
+/// stay: Persian names and emoji sequences need them.
+fn unseen(c: char) -> bool {
+    c.is_control()
+        || matches!(c, '\u{00ad}' | '\u{061c}' | '\u{180e}' | '\u{200b}' | '\u{200e}' | '\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{206f}' | '\u{feff}' | '\u{fff9}'..='\u{fffb}')
+}
+
+/// The JSON-RPC body for one sharing tool, from checked fields; refused for any other tool, field or value.
+pub fn sharing_tool_body(tool: &str, args: &serde_json::Map<String, Value>) -> Result<String, Refusal> {
+    let bad = |m: &str| refusal("refused", m.to_string());
+    let (_, fields) = SHARING_TOOLS.iter().find(|(t, _)| *t == tool).ok_or_else(|| bad("Parachute doesn't sign that request."))?;
+    let mut out = serde_json::Map::new();
+    for (k, v) in args {
+        if !fields.contains(&k.as_str()) {
+            return Err(bad("Parachute doesn't sign that request."));
+        }
+        let v = v.as_str().ok_or_else(|| bad("Parachute doesn't sign that request."))?;
+        let ok = match k.as_str() {
+            "vault" => vault_name_ok(v),
+            // as the hub takes a name (core share-invites.ts parseName): 1 to 40 characters, no control, not "You"
+            "name" | "from" => !v.trim().is_empty() && v.trim().chars().count() <= 40 && !v.chars().any(unseen) && !v.trim().eq_ignore_ascii_case("you"),
+            "id" | "pubkey" => hex64(v),
+            _ => false,
+        };
+        if !ok {
+            return Err(bad("Parachute doesn't sign that request."));
+        }
+        out.insert(k.clone(), Value::String(v.to_string()));
+    }
+    if !out.contains_key("vault") {
+        return Err(bad("Parachute doesn't sign that request."));
+    }
+    Ok(json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": tool, "arguments": out } }).to_string())
+}
+
+/// The tool's answer from the account MCP's reply (JSON, or one server-sent event carrying it): its JSON, or the
+/// hub's words for a refusal.
+pub fn tool_answer(status: u16, body: &str) -> Result<Value, Refusal> {
+    match status {
+        200 => {}
+        401 => return Err(refusal("unknown_key", "This hub doesn't take your key for that.")),
+        429 => return Err(refusal("refused", "The hub asks to wait a moment before trying again.")),
+        _ => return Err(refusal("unreachable", format!("The hub didn't answer ({status}). Try again in a moment."))),
+    }
+    let json = if body.trim_start().starts_with('{') { body.to_string() } else { body.lines().find_map(|l| l.strip_prefix("data:")).map(|d| d.trim().to_string()).unwrap_or_default() };
+    let v: Value = serde_json::from_str(&json).map_err(|_| refusal("refused", "The hub's answer couldn't be read."))?;
+    if let Some(m) = v.pointer("/error/message").and_then(Value::as_str) {
+        // the hub's own reason (core account-mcp.ts `error_type`): not this person's to do, or a name or vault it refuses
+        let code = match v.pointer("/error/data/error_type").and_then(Value::as_str) {
+            Some("grant_not_permitted" | "key_required") => "not_owner",
+            Some("invalid_name") => "invalid_name",
+            _ => "refused",
+        };
+        return Err(refusal(code, m.chars().take(300).collect::<String>()));
+    }
+    let text = v.pointer("/result/content/0/text").and_then(Value::as_str).unwrap_or("");
+    if v.pointer("/result/isError").and_then(Value::as_bool) == Some(true) {
+        // "Unknown tool": the tool isn't listed for this connection (it can't run any vault), or the hub has no sharing
+        return Err(refusal(if text.starts_with("Unknown tool") { "not_owner" } else { "refused" }, text.chars().take(300).collect::<String>()));
+    }
+    serde_json::from_str(text).map_err(|_| refusal("refused", "The hub's answer couldn't be read."))
+}
+
+/// One sharing tool on `hub`'s account MCP, signed by this device's key: its answer.
+#[tauri::command]
+pub async fn hub_sharing_tool<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, hub: String, tool: String, args: serde_json::Map<String, Value>) -> Result<Value, Refusal> {
+    let origin = hub_origin(&hub)?;
+    sharing_tool_body(&tool, &args)?;
+    let held = keys.get(&app).await.map_err(|m| refusal("no_key", m))?.ok_or_else(|| refusal("no_key", "This device has no key."))?;
+    sharing_tool(&origin, &held, &tool, &args).await
+}
+
+/// One sharing tool at `origin`'s account MCP, signed with `keys`: its answer, or why not.
+pub async fn sharing_tool(origin: &url::Url, keys: &nostr::Keys, tool: &str, args: &serde_json::Map<String, Value>) -> Result<Value, Refusal> {
+    let body = sharing_tool_body(tool, args)?;
+    let (status, text) = post_account(origin, keys, &body, client()?).await?;
+    tool_answer(status, &text)
+}
+
+/// An invite's code, as a link carries it: 16 to 128 of `A-Z a-z 0-9 - _`.
+pub fn invite_code_ok(code: &str) -> bool {
+    (16..=128).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// Accept an invite on `hub` with this device's key: what it lets you into (`{vault, from, name}`), or why not.
+#[tauri::command]
+pub async fn hub_accept_invite<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, hub: String, code: String) -> Result<Value, Refusal> {
+    let origin = hub_origin(&hub)?;
+    if !invite_code_ok(&code) {
+        return Err(refusal("no_invite", "That isn't an invite link."));
+    }
+    let held = keys.get(&app).await.map_err(|m| refusal("no_key", m))?.ok_or_else(|| refusal("no_key", "This device has no key."))?;
+    accept_invite(&origin, &held, &code).await
+}
+
+/// Accept the invite `code` at `origin`, signed with `keys`: what it lets into, or why not.
+pub async fn accept_invite(origin: &url::Url, keys: &nostr::Keys, code: &str) -> Result<Value, Refusal> {
+    if !invite_code_ok(code) {
+        return Err(refusal("no_invite", "That isn't an invite link."));
+    }
+    let body = json!({ "code": code }).to_string();
+    let (status, text) = post_signed(origin, ACCEPT_PATH, keys, &body, client()?).await?;
+    match status {
+        200 => serde_json::from_str(&text).map_err(|_| refusal("refused", "The hub's answer couldn't be read.")),
+        404 => Err(refusal("no_invite", "That invite isn't open: it may be used, taken back or past its date.")),
+        429 => Err(refusal("refused", "The hub asks to wait a moment before trying again.")),
+        _ => Err(refusal("unreachable", format!("The hub didn't take it ({status}). Try again in a moment."))),
+    }
 }
 
 /// The hubs this device has signed in to with the key, kept in the app's data folder: the service broker never signs
@@ -642,6 +780,51 @@ mod tests {
             assert_eq!(r.code, "refused", "{bad}");
             assert_eq!(seen.lock().unwrap().len(), 3, "{bad}: the link isn't opened");
         }
+    }
+
+    #[test]
+    fn only_the_sharing_tools_are_signed_and_only_with_checked_fields() {
+        let args = |pairs: &[(&str, &str)]| pairs.iter().map(|(k, v)| (k.to_string(), Value::String(v.to_string()))).collect::<serde_json::Map<_, _>>();
+        let body = sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "Bo"), ("from", "Aaron")])).unwrap();
+        let v: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(v["params"]["name"], "invite-to-vault");
+        assert_eq!(v["params"]["arguments"]["name"], "Bo");
+        let key = "ab".repeat(32);
+        assert!(sharing_tool_body("revoke-access", &args(&[("vault", "recipes"), ("pubkey", &key)])).is_ok());
+        // another tool, a field the tool doesn't take, a bad value, or no vault: refused
+        assert!(sharing_tool_body("grant-access", &args(&[("vault", "recipes"), ("pubkey", &key), ("role", "write")])).is_err());
+        assert!(sharing_tool_body("create-vault", &args(&[("vault", "x")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "Bo"), ("role", "write")])).is_err());
+        assert!(sharing_tool_body("revoke-access", &args(&[("vault", "recipes"), ("pubkey", "npub1zzz")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "Recipes!"), ("name", "Bo")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "Bo\u{0}")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", &"x".repeat(41))])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "You")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "Bo\u{202e}")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "Bo\u{200b}")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "می\u{200c}خواهم")])).is_ok());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", &"é".repeat(40))])).is_ok());
+        assert!(sharing_tool_body("list-access", &args(&[])).is_err());
+        let mut n = args(&[("vault", "recipes")]);
+        n.insert("name".into(), Value::from(3));
+        assert!(sharing_tool_body("invite-to-vault", &n).is_err());
+    }
+
+    #[test]
+    fn a_tools_answer_or_the_hubs_words() {
+        let ok = r#"{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\"access\":[]}"}]}}"#;
+        assert_eq!(tool_answer(200, ok).unwrap(), json!({ "access": [] }));
+        assert_eq!(tool_answer(200, &format!("event: message\ndata: {ok}\n")).unwrap(), json!({ "access": [] }));
+        let refused = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"You cannot invite people to vault \"recipes\".","data":{"error_type":"grant_not_permitted"}}}"#;
+        assert_eq!(tool_answer(200, refused).unwrap_err().code, "not_owner");
+        let named = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"name must be 1 to 40 characters","data":{"error_type":"invalid_name"}}}"#;
+        assert_eq!(tool_answer(200, named).unwrap_err().code, "invalid_name");
+        let gone = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Vault \"x\" is not installed","data":{"error_type":"vault_not_installed"}}}"#;
+        assert_eq!(tool_answer(200, gone).unwrap_err().code, "refused");
+        let unknown = r#"{"jsonrpc":"2.0","id":1,"result":{"isError":true,"content":[{"type":"text","text":"Unknown tool: invite-to-vault"}]}}"#;
+        assert_eq!(tool_answer(200, unknown).unwrap_err().code, "not_owner");
+        assert_eq!(tool_answer(401, "").unwrap_err().code, "unknown_key");
+        assert!(invite_code_ok(&"a".repeat(43)) && !invite_code_ok("short") && !invite_code_ok(&format!("{}/x", "a".repeat(40))));
     }
 
     #[test]

@@ -555,6 +555,10 @@ export const FRAME_KIT = String.raw`(function () {
       publish: function (vault, id, on) { return call("vaults", "publish", { vault: vault, id: id, on: on !== false }); },
       revoke: function (vault, noteId) { return call("vaults", "revoke", { vault: vault, noteId: noteId }); },
       readOnly: function (vault) { return call("vaults", "readOnly", { vault: vault }); },
+      people: function (vault) { return call("vaults", "people", { vault: vault }); },
+      invite: function (vault, name, from) { return call("vaults", "invite", { vault: vault, name: name, from: from || null }); },
+      takeBack: function (vault, id) { return call("vaults", "takeBack", { vault: vault, id: id }); },
+      end: function (vault, key, name) { return call("vaults", "end", { vault: vault, key: key, name: name || "" }); },
       // who reaches a vault, a key for an AI, ending one (level 6, T-476)
       reach: function (vault) { return call("vaults", "reach", { vault: vault }); },
       manage: function (vault) { return call("vaults", "manage", { vault: vault }); },

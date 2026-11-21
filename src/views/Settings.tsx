@@ -156,7 +156,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
               <button type="button" className="quiet-button" onClick={() => void listHub(p.hub, false).catch(() => undefined)}>Take off the list</button></p>}
           </section>
         )) : <p className="quiet">None yet.</p>}
-        <p className="small"><Link to="/add">Add a Parachute</Link></p>
+        <p className="small"><Link to="/add">Add a Parachute</Link>{" · "}<Link to="/accept">Accept an invite</Link></p>
       </section>
       <BundleChoice />
       <ServicesSettings />
