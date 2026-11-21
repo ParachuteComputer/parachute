@@ -151,14 +151,15 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
   // re-places it only while the row is where the kit put it (a scroll the person made is theirs)
   const places = tabs.map((t) => t.key).join("|");
   const counts = tabs.map((t) => `${t.key}:${t.count ?? ""}`).join("|");
-  // placed: the row is where keepClear put it, at placedAt; input: when the person last touched, wheeled or keyed it
-  const placed = useRef(true), placedAt = useRef(0), input = useRef(-Infinity);
+  // placed: the row is where keepClear put it, at placedAt
+  const placed = useRef(true), placedAt = useRef(0);
+  /** The row's scroll range, as the row reads (scrollLeft runs negative right to left). */
+  const range = (n: HTMLElement): [number, number] => { const span = n.scrollWidth - n.clientWidth; return getComputedStyle(n).direction === "rtl" ? [-span, 0] : [0, span]; };
   /** Scroll the row (never the page) so this tab is clear of the fades, at the ends that have one. */
   const keepClear = (on: HTMLElement | null | undefined) => {
     const n = nav.current;
     if (!n || !on) return;
-    const span = n.scrollWidth - n.clientWidth, rtl = getComputedStyle(n).direction === "rtl";
-    const [lo, hi] = rtl ? [-span, 0] : [0, span];
+    const [lo, hi] = range(n);
     const FADE = 32, left = n.scrollLeft > lo + 1 ? FADE : 0, right = n.scrollLeft < hi - 1 ? FADE : 0;
     const r = on.getBoundingClientRect(), box = n.getBoundingClientRect();
     if (r.left < box.left + left || r.right > box.right - right) n.scrollLeft += r.left + r.width / 2 - (box.left + box.width / 2);
@@ -178,22 +179,21 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
     n.querySelectorAll(".pa-tab").forEach((t) => o.observe(t));
     return () => o.disconnect();
   }, [places]);
-  // a scroll is the person's when it follows their touch, wheel or key (within a second) and isn't where the kit put
-  // the row; one the kit made, or the browser clamping a resized row, leaves it placed
+  // a scroll is the person's (a finger, a wheel, a key, a screen reader) unless it is where the kit put the row, or the
+  // browser clamping a resized row (the kit's mark no longer in range): theirs, the row stays where they put it
   const scrolled = () => {
     const n = nav.current;
-    if (!n) return;
-    const span = n.scrollWidth - n.clientWidth, [lo, hi] = getComputedStyle(n).direction === "rtl" ? [-span, 0] : [0, span];
-    // where the kit put it is no longer in the row's range: the browser clamped a resized row (not the person)
-    if (placed.current && (placedAt.current < lo - 1 || placedAt.current > hi + 1)) placedAt.current = n.scrollLeft;
-    else if (performance.now() - input.current < 1000 && Math.abs(n.scrollLeft - placedAt.current) > 1) placed.current = false;
+    if (n && placed.current) {
+      const [lo, hi] = range(n);
+      if (placedAt.current < lo - 2 || placedAt.current > hi + 2) placedAt.current = n.scrollLeft;
+      else if (Math.abs(n.scrollLeft - placedAt.current) > 1) placed.current = false;
+    }
     edges();
   };
-  const touch = () => { input.current = performance.now(); };
   const focused = (el: HTMLElement) => { try { return el.matches(":focus-visible"); } catch { return false; } };
   return (
     // a tab reached from the keyboard is kept clear of the fades too (a tap needs nothing: it chooses, and the row follows)
-    <nav className="pa-tabs" aria-label={label} ref={nav} onScroll={scrolled} onPointerDown={touch} onPointerMove={touch} onTouchStart={touch} onTouchMove={touch} onWheel={touch} onKeyDown={touch} onFocus={(e) => { if (focused(e.target as HTMLElement)) keepClear(e.target as HTMLElement); }}>
+    <nav className="pa-tabs" aria-label={label} ref={nav} onScroll={scrolled} onFocus={(e) => { if (focused(e.target as HTMLElement)) keepClear(e.target as HTMLElement); }}>
       {tabs.map((t) => <button key={t.key} type="button" className="pa-tab" aria-current={t.key === current ? "page" : undefined} onClick={() => onChange(t.key)}>{t.label}{t.count ? ` · ${t.count}` : ""}</button>)}
     </nav>
   );
