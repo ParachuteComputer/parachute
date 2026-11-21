@@ -153,6 +153,9 @@ test("on a hub without the list (an older core, Parachute Cloud for now), Sharin
   const admin = cli(hub, ["auth", "mint-token", "--scope", `vault:${VAULT}:admin`, "--json"]).token as string;
   const list = await fetch(`${hub.origin}/account/vaults/${VAULT}/statements`, { headers: { authorization: `Bearer ${admin}` } });
   test.skip(list.status !== 404 && list.status !== 405, "this hub has the list (the test above runs)");
+  // Vault's own e2e runs on 0.9, as changes.spec's: a hub before the record door (core 0.8) is skipped
+  const door = await fetch(`${hub.origin}/vault/${VAULT}/api/records?limit=1`, { headers: { authorization: `Bearer ${hub.token}` } });
+  test.skip(door.status === 404, "a hub before the record door (core 0.8): Vault's e2e runs on 0.9");
   await signIn(page);
   await page.goto(`/vault?vault=${VAULT}`);
   const v: FrameLocator = page.frameLocator('iframe.applet-frame[title="Vault"]');
