@@ -5,6 +5,7 @@
 // Every other vault is asked for alone, when something the person allows needs it (vault/reach.ts). The screens (Add a
 // Parachute, the sign-in's return, the launcher's Open, an applet's Allow, a change that needs write) call these.
 import { beginSignIn, completeSignIn, dropPending, revoke, type AllowAfter, type Pending, type Why } from "./oauth";
+import { holdManage } from "./manage";
 import { describe, homeFrom, homeWithToken, levelIn, listWithToken, reachesEvery, vaultUrlFrom, type Level, type Listed, type Parachute } from "./parachute";
 import { limitedFetch } from "./limited";
 import { MAX_VAULTS } from "./address";
@@ -129,6 +130,19 @@ export async function askVault(rec: Pick<VaultRecord, "issuer" | "vault">, level
   return beginSignIn({ ...b, how: "page" });
 }
 
+/** Ask a Parachute for one vault's admin, to manage who reaches it (vault/manage.ts): through the key door when this
+ *  device has a key the hub takes, else the hub's own page. Resolves to the address to open. */
+export async function askManage(rec: Pick<VaultRecord, "issuer" | "vault">, back: string): Promise<string> {
+  const hub = originOf(rec.issuer);
+  const whose: "mine" | "theirs" = whoseOf(rec) === "mine" ? "mine" : "theirs";
+  const parachute = await describe(hub, fetchFor(whose));
+  const b = { parachute, step: "manage" as const, vault: rec.vault, why: "manage" as const, whose, back };
+  if (keysHere()) {
+    try { return await keySignIn(hub, await beginSignIn({ ...b, how: "key" })); } catch { dropPending(); }
+  }
+  return beginSignIn({ ...b, how: "page" });
+}
+
 /** The hub sent the person back with a code: finish that step, keep what it brought, and say where to go next. */
 export async function finishStep(code: string, state: string, iss?: string | null): Promise<Next> {
   const { pending, token, vault, level } = await completeSignIn(code, state, undefined, iss);
@@ -159,6 +173,17 @@ export async function finishStep(code: string, state: string, iss?: string | nul
     const whose = pending.whose ?? "theirs";
     const next = readFirst(p, listed, whose, (first, home, marks) => beginSignIn({ parachute: p, step: "open", vault: first, level: home ? "write" : levelAt(p, first), why: "signin", whose, how: pending.how, home, marks }, f));
     return "pick" in next ? next : { go: await next.go };
+  }
+
+  // managing who reaches a vault: its admin is held for this visit only, never as the vault's own token
+  if (pending.step === "manage") {
+    const rec = listVaults().find((v) => v.issuer === pending.issuer && v.vault === vault);
+    if (!rec) {
+      await revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint });
+      throw new Error("That vault isn't on this device any more. Nothing changed.");
+    }
+    holdManage(pending, token, vault!);
+    return { done: rec, parachute: p, ...(pending.back ? { back: pending.back } : {}), signIn: false, firstHome: false, solo: false, why: "manage" };
   }
 
   // a sign-in's first vault: the device's home stays where it is until this sign-in says otherwise (a new record of a

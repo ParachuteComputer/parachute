@@ -2,7 +2,9 @@
 // with this device's sign-in (a change to a vault held only for reading is refused before it is sent, and the person
 // is asked: vault/writeAsk.ts), the vault's live changes, and what the app knows of who reaches a vault.
 import type { VaultClient } from "@openparachute/surface-client";
-import type { AccessRow, HeldVault, HubRow, VaultsDeps, WatchEvent } from "../applet/modules/vaults";
+import type { AccessRow, HeldVault, HubRow, ReachRow, VaultsDeps, WatchEvent } from "../applet/modules/vaults";
+import { askManage } from "../vault/signInFlow";
+import { endManage, endReach, listReach, makeKey, ManageEndedError, manageHeld, type HubGrantRow } from "../vault/manage";
 import { describe, oneAddress } from "../vault/parachute";
 import { clientFor, keptClientFor } from "../vault/client";
 import { connectorAddress, findVault, hostOf, listVaults, originOf, vaultUrlOf, type VaultRecord } from "../vault/store";
@@ -55,6 +57,15 @@ export async function heldHubs(): Promise<HubRow[]> {
     by.set(hub, row);
   }
   return Promise.all([...by.values()].map(async ({ hub, ...row }) => ({ ...row, address: await addressOf(hub) })));
+}
+
+/** A row of the hub's list as Vault shows it: in force only, what it may do in a word, its types (null: all). */
+function reachRow(r: HubGrantRow, self: string | null): ReachRow {
+  const types = Object.keys(r.types ?? {});
+  const writes = types.some((t) => (r.types[t] ?? []).some((v) => v !== "read"));
+  const who = (["person", "agent", "app", "service"] as const).find((k) => k === r.kind) ?? "app";
+  return { id: r.id, name: r.name, who, app: r.app, can: r.admin ? "manage" : r.export ? "backup" : writes ? "change" : "read",
+    types: types.length === 0 || types.includes("*") ? null : types.sort(), until: r.expires_at, lastUsed: r.last_used_at, self: !!self && r.client === self };
 }
 
 export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string;
@@ -138,6 +149,35 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       deviceGrants().revoke(subject);
       forgetSaved(subject);
       await giveBack(v.key, opts.back());
+    },
+    async reach(key) {
+      const v = rec(key);
+      if (!manageHeld(v)) return null;
+      try {
+        return (await listReach(v)).filter((r) => r.state === "in_force").map((r) => reachRow(r, v.clientId ?? null));
+      } catch (e) {
+        if (e instanceof ManageEndedError) return null;
+        throw e;
+      }
+    },
+    async manage(key) {
+      // back to this vault's Sharing (Vault reads `show`), where the person asked
+      const back = new URL(opts.back(), window.location.origin);
+      back.searchParams.set("vault", key);
+      back.searchParams.set("show", "sharing");
+      window.location.assign(await askManage(rec(key), `${back.pathname}${back.search}`));
+    },
+    async giveKey(key, k) {
+      const v = rec(key);
+      const made = await makeKey(v, k);
+      return { name: made.name, token: made.token, until: made.expires_at, types: made.types ?? null, address: connectorAddress(v) };
+    },
+    async endReach(key, id) {
+      await endReach(rec(key), id);
+    },
+    stopManaging(key) {
+      const v = findVault(key);
+      if (v) endManage(v);
     },
     async readOnly(key) {
       const v = rec(key);

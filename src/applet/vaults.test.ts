@@ -297,3 +297,51 @@ describe("what shows, from what was read before (T-476)", () => {
     expect(reads.filter((p) => p.startsWith("/records/a"))).toHaveLength(1);
   });
 });
+
+describe("sharing: who reaches a vault, a key for an AI, ending one (level 6, T-476)", () => {
+  const rows = [{ id: "claude", name: "claude", who: "app" as const, app: null, can: "change" as const, types: ["recipe"], until: "2027-11-21T00:00:00.000Z", lastUsed: null, self: false }];
+  function make(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], answer: "yes" | "no" | "untapped" = "yes") {
+    const done: string[] = [];
+    const asked: { title: string; body: string }[] = [];
+    const deps = {
+      list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp", view: null, reach: "anyone" }],
+      reach: async () => rows,
+      manage: async () => { done.push("manage"); },
+      giveKey: async (_v: string, k: { name: string; can: string; types: string[] | null }) => { done.push(`give ${k.name} ${k.can} ${k.types?.join(",") ?? "all"}`); return { name: k.name, token: "t.o.k", until: "2027", types: k.types, address: "https://hub.example/vault/home/mcp" }; },
+      endReach: async (_v: string, id: string) => { done.push(`end ${id}`); },
+      stopManaging: () => { done.push("stop"); },
+      confirm: async (q: { title: string; body: string }) => { asked.push(q); return answer; },
+    } as unknown as VaultsDeps;
+    const router = createRouter([createVaultsModule(words, deps)]);
+    const call = (method: string, params: unknown) => router.call("vaults", method, params, {}, { charge() {}, closed: () => false });
+    return { call, done, asked };
+  }
+  it("needs the sharing word", async () => {
+    const { call, done } = make(["vaults"]);
+    for (const [m, p] of [["reach", { vault: "home" }], ["giveKey", { vault: "home", name: "claude", can: "write", types: ["recipe"] }], ["endReach", { vault: "home", id: "claude" }]] as const) await expect(call(m, p)).rejects.toMatchObject({ code: "not_granted" });
+    expect(done).toEqual([]);
+  });
+  it("makes a key, ends one and asks to manage only after the person's yes on the app's own sheet, which says what it grants", async () => {
+    const { call, done, asked } = make();
+    expect(await call("giveKey", { vault: "home", name: "claude", can: "write", types: ["recipe"] })).toMatchObject({ token: "t.o.k" });
+    expect(asked[0].title).toBe("Give claude a key to home?");
+    expect(asked[0].body).toContain("read, add, change and delete recipe records");
+    await call("endReach", { vault: "home", id: "claude" });
+    await call("manage", { vault: "home" });
+    expect(done).toEqual(["give claude write recipe", "end claude", "manage"]);
+    for (const answer of ["no", "untapped"] as const) {
+      const n = make(["vaults", "sharing"], answer);
+      await expect(n.call("giveKey", { vault: "home", name: "claude", can: "read", types: null })).rejects.toMatchObject({ code: "failed" });
+      await expect(n.call("endReach", { vault: "home", id: "claude" })).rejects.toMatchObject({ code: "failed" });
+      await expect(n.call("manage", { vault: "home" })).rejects.toMatchObject({ code: "failed" });
+      expect(n.done).toEqual([]);
+    }
+  });
+  it("refuses what the hub couldn't hold, and ending something that doesn't reach the vault", async () => {
+    const { call, done } = make();
+    for (const p of [{ name: "has space", can: "write", types: null }, { name: "claude", can: "admin", types: null }, { name: "claude", can: "write", types: [] }, { name: "claude", can: "write", types: ["a b"] }, { name: "claude", can: "write", types: ["x", "x"] }, { name: "claude", can: "write" }])
+      await expect(call("giveKey", { vault: "home", ...p })).rejects.toThrow();
+    await expect(call("endReach", { vault: "home", id: "someone-else" })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(done).toEqual([]);
+  });
+});
