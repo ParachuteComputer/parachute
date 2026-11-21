@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, VAULT } from "./hub";
-import { expectInVault, ui } from "./helpers";
+import { clearBarAndHome, expectInVault, ui, writeBundle } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
@@ -286,4 +286,29 @@ test("the note's route: an unclaimed note opens without waiting for the hub's ap
     await expect(page.locator('iframe.applet-frame[title="Recipe box"]:visible')).toHaveCount(0);
     await expect(page).toHaveURL(/\/n\//);
   } finally { await page.unrouteAll({ behavior: "ignoreErrors" }); }
+});
+
+// T-476: where the open bundle leaves Parachute's own out (as a bundle of the person's own that names no publisher), a
+// note opens in the plain view, the note's route itself, drawn from the copy when that is all it does; when the hub's
+// answer for it differs, it is drawn again (vault.note `kept`, the `changed` note event).
+test("no Vault in the bundle: a note shown plain from its copy is drawn again when the hub's answer differs", async ({ page }) => {
+  const st = hubState();
+  const stamp = Date.now().toString(36);
+  const made = await api(st, "POST", "notes", { path: `Redraw ${stamp}`, content: `# Redraw ${stamp}\n\nfirst words` });
+  await writeBundle({ publishers: [] });
+  try {
+    // the bundle as the vault has it now (the app reads it again behind the copy it starts from)
+    for (let i = 0; i < 2; i++) { await page.goto(`/v/${VAULT}?with=vault`); await page.waitForTimeout(1500); }
+    await tapNote(page, `Redraw ${stamp}`);
+    await expect(ui(page).locator(".prose-note")).toContainText("first words");
+    await expect(page).toHaveURL(/\/n\//);
+    const cur = await api(st, "GET", `notes?id=${made.id}`);
+    await api(st, "PATCH", `notes/${made.id}`, { content: `# Redraw ${stamp}\n\nsecond words`, if_updated_at: cur.updatedAt });
+    await tapNote(page, `Redraw ${stamp}`);
+    await expect(ui(page).locator(".prose-note")).toContainText("second words");
+    await expect(page).toHaveURL(/\/n\//);
+  } finally {
+    await clearBarAndHome();
+    await api(st, "DELETE", `notes/${made.id}`).catch(() => {});
+  }
 });

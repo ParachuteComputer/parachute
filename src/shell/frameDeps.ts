@@ -118,6 +118,8 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   };
 }
 
+/** How long the shell waits at a tap for what it decides on (vaultAtTap) before leaving it to the note's route. */
+export const AT_TAP_MS = 300;
 /** The person's choices for a vault: the open bundle's, and this device's "Always" over them. */
 const defaultsNow = (vault: string): Record<string, string> => ({ ...appDefaults(vault), ...defaultsFor(vault) });
 
@@ -137,7 +139,11 @@ export async function vaultAtTap(href: string): Promise<string | null> {
   const viewer = viewerNow().viewer;
   if (!rec || !viewer || viewer.status !== "ok" || viewer.noteId !== officialId("vault") || !gateKnown() || selfTestRunning()) return null;
   try {
-    const [note, roles, list] = await Promise.all([keptClientFor(rec).getNote(id), readRoleTags(keptClientFor(rec)), applets(rec, false)]);
+    // never long: a read the copies can't answer (a note never read here) leaves it to the note's route, before the tap
+    // wears off
+    const got = await Promise.race([Promise.all([keptClientFor(rec).getNote(id), readRoleTags(keptClientFor(rec)), applets(rec, false)]), new Promise<null>((r) => setTimeout(() => r(null), AT_TAP_MS))]);
+    if (!got) return null;
+    const [note, roles, list] = got;
     if (!note || typeof note.id !== "string" || !list.ok) return null;
     const decision = resolve(candidates(note, list.entries, (e) => e.status, roles), defaultsNow(rec.key));
     return decision.kind === "vault" && !decision.line ? viewerHref(viewer, rec.key, note.id) : null;
