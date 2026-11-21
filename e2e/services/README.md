@@ -10,7 +10,9 @@
 | `e2e/matrix.spec.ts` | `MATRIX_HS` (a Matrix homeserver), `MATRIX_TOKENS` (a folder with `alice.token`, `bob.token`), `BUZZ_KEYS` |
 | `src-tauri/tests/services_real.rs` | `BUZZ_RELAY`, `MAIL_BRIDGE`, `BUZZ_KEYS` (the native side, not the browser) |
 
-The **Services** workflow (`.github/workflows/services.yml`) runs all of them with the servers in the runner: daily (on next), on
+The **Services** workflow (`.github/workflows/services.yml`) runs all of them with the servers in the runner: daily on next
+(GitHub fires a schedule only from the default branch, main, so until next is promoted the daily run is the one
+`scripts/canary.ts` starts; below), on
 demand (`gh workflow run services.yml --ref <branch> -f core=<npm version, or a branch or commit of parachute-core>`),
 and on every pull request that changes more than docs. A skip there fails the run.
 
@@ -64,3 +66,14 @@ spec starts a pass-through on `127.0.0.1:19952`, which the gateway accepts as an
 
 tuwunel, registration by a throwaway token, federation off; alice and bob, in rooms named Garden and Kitchen. Matrix
 servers send CORS headers, so the browser reaches it directly.
+
+## The canary: the real services, daily
+
+`scripts/canary.ts` checks the services a person's Parachute stands on, for real, with a test identity of its own: a
+test key and a made-up "Uni" in a private room of their own on the person's relay (a line posted and read back; a
+sealed approval card made, checked as the app checks it, approved, and the answer opened as Uni opens it), a note
+written, read and deleted in a test vault on the hub, and the push gateway, mail gateway and calendar door each
+answering (the last two refuse the test key, by their own signature check). It also reads the last Services run on next
+and starts today's. It prints only the counts (`parachute-canary: 7 passed, 0 failed`); what failed and why goes to a
+log (mode 600), and it exits 1, so a timer's failure alert fires. Its header names the settings; a service left unset
+isn't checked.
