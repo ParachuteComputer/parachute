@@ -11,7 +11,7 @@
       "glyph": "▦",
       "note": "your vaults: their types, records, fields, links, history and what changed"
     },
-    "needs": 5,
+    "needs": 6,
     "app": ["vaults", "sharing", "copy"]
   }
 }

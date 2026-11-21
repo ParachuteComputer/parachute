@@ -9,6 +9,7 @@
 //     "hidden"` says so.
 // Pure: it asks `get` (a GET under the vault's API, its JSON) and counts each read with `charge`.
 import { plain } from "./contract.ts";
+import { titleOf as noteTitle } from "../vault/notes.ts";
 
 export type ChangeOp = "created" | "changed" | "deleted" | "restored";
 export type Change = {
@@ -27,6 +28,8 @@ export type Change = {
   mine: boolean;
   /** the writer's name, as a person reads it (`writerName`) */
   who: string;
+  /** the writer is a key the hub gave no name (`An app without a name`): the hub can't say which one it was */
+  unnamed: boolean;
   /** the version holding the record before the change (null: it was made by it) */
   before: number | null;
   /** the version holding it after (null: as it is now, or, for a delete, nothing) */
@@ -53,7 +56,8 @@ export const CHANGES_RECORDS = 20;
 export const CHANGES_DELETED = 12;
 const VERSIONS = 50;
 const strOr = (x: unknown) => (typeof x === "string" ? x : null);
-const titleOf = (path: string) => path.split("/").pop() || path;
+// a change's title as the vault's lists say it (a journal entry by its words)
+const titleOf = (path: string) => noteTitle({ id: path, path });
 
 type Get = (path: string) => Promise<unknown>;
 /** Each item through `f`, a few at a time (a vault's hub is asked for at most `n` reads at once). */
@@ -81,10 +85,13 @@ const refused = (e: unknown) => [403, 404].includes((e as { status?: number })?.
 export async function readChanges(opts: {
   get: Get; door: "records" | "notes"; since: string; offset?: number; charge: (n: number) => void;
   self: (via: string | null) => boolean; own: (r: { path: string; extension: string | null; names: string[] }) => "code" | "app" | null;
+  /** the person's own account on this hub (their sign-in's `sub`), when known: a write for it by no named key is theirs */
+  account?: string | null;
   /** The names of the people behind these writers, asked once for the page (`writer`); absent or failing: by key only. */
   people?: People;
 }): Promise<ChangesPage> {
   const { get, door, since, charge, self, own } = opts;
+  const account = opts.account ?? null;
   const offset = opts.offset ?? 0;
   const out: Change[] = [];
   // the most it can read, charged before the first read: refused now, nothing has been asked of the hub
@@ -94,11 +101,11 @@ export async function readChanges(opts: {
   const raw = await get(`/${door}?${u.toString()}`);
   const all: unknown[] = Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.records) ? raw.records : plain(raw) && Array.isArray(raw.notes) ? raw.notes : [];
   const page = all.slice(0, CHANGES_RECORDS).filter(plain) as Record<string, unknown>[];
-  const add = (c: Omit<Change, "key" | "mine" | "title" | "who" | "own">, kind: "code" | "app" | null) => {
+  const add = (c: Omit<Change, "key" | "mine" | "title" | "who" | "own" | "unnamed">, kind: "code" | "app" | null) => {
     const mine = self(c.via);
     // this device's Parachute keeping its own records (settings, approvals, saved views) isn't a change to show
     if (kind === "app" && mine) return;
-    out.push({ ...c, own: kind !== null, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: "" });
+    out.push({ ...c, own: kind !== null, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: writerName(c.via, mine, { by: c.by, account }), unnamed: isUnnamed(c.via, mine, c.by, account) });
   };
   /** A record's kept versions, newest first, as changes since then. */
   const fromRows = (id: string, path: string, rows: Row[], kind: "code" | "app" | null, gone: boolean, seen: string | null) => rows.forEach((v, i) => {
@@ -143,8 +150,12 @@ export async function readChanges(opts: {
     });
   }
   // a record deleted between the two reads is in both: once
+  // a vault's people by name (docs/design/SHARING.md), asked once for the page
   const named = await namesOf(opts.people, out.map((c) => c.by));
-  for (const c of out) c.who = writer(c.by, c.via, c.mine, named);
+  for (const c of out) {
+    c.who = writer(c.by, c.via, c.mine, named, account);
+    if (c.unnamed && personOf(c.by, named)) c.unnamed = false;
+  }
   const once = [...new Map(out.map((c) => [c.key, c])).values()];
   once.sort((a, b) => (b.at < a.at ? -1 : b.at > a.at ? 1 : a.key.localeCompare(b.key)));
   return { changes: once, deletes, more: all.length > CHANGES_RECORDS || moreGone };
@@ -154,6 +165,14 @@ export async function readChanges(opts: {
  *  or `key:<id>-2` … for another sign-in). */
 export const isSelf = (clientId: string | null, via: string | null) =>
   !!clientId && !!via && (via === `key:${clientId}` || (via.startsWith(`key:${clientId}-`) && /^\d+$/.test(via.slice(clientId.length + 5))));
+
+/** Who a write by a channel (`api`, `mcp`) was, for the person: the hub stamps the channel and the person it was for,
+ *  not which key. For their own account: theirs. For another account: another person on the hub. For none they can
+ *  tell (a hub token's `token:<id>`, nothing recorded, or their account not known here): an app without a name. */
+const channelWriter = (via: string | null, by: string | null, account: string | null): "you" | "operator" | "other" | "unnamed" | null =>
+  via !== "api" && via !== "mcp" ? null : account && by === account ? "you" : by === "operator" ? "operator" : account && by && !by.includes(":") ? "other" : "unnamed";
+/** Is this write one by an app the hub gave no name (the hub can't say which one it was)? */
+export const isUnnamed = (via: string | null, mine: boolean, by: string | null, account: string | null) => !mine && channelWriter(via, by, account) === "unnamed";
 
 /** The people of a vault by the `by` stamp their writes carry (the hub's `names`, docs/design/SHARING.md): each one's
  *  name there, and whether it is the person reading. */
@@ -168,28 +187,33 @@ export async function namesOf(people: People | undefined, bys: (string | null)[]
 }
 
 const APP_CLIENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-\d+)?$/i;
+/** Someone else of the vault the hub named, behind this stamp. */
+const personOf = (by: string | null, names: PeopleNames | null | undefined) => {
+  const p = by ? names?.[by] : undefined;
+  return p && !p.you && p.name ? p.name : null;
+};
 
 /**
  * Who wrote, by one rule at every place a writer is named (Changes, a record's History, its made and changed by, Home's
  * line; docs/design/SHARING.md):
  *   this device's Parachute wrote it: "You, in Parachute here";
- *   a named key (an AI): its name, and on someone else's behalf "Aaron's claude";
- *   someone else, through an app (a sign-in, named for its client id): their name, "Bo";
- *   otherwise as the key reads (`writerName`): your own other sign-ins stay "An app (…)", since the hub can't yet say
- *   which app a sign-in is (yours on another device, or a connector).
+ *   a named key (an AI): its name, and when it wrote for someone else, "Bo's claude";
+ *   someone else of the vault, through an app or a channel: their name, "Bo";
+ *   otherwise as the key reads (`writerName`, with the person's own account when known).
  */
-export function writer(by: string | null, via: string | null, mine: boolean, names: PeopleNames | null | undefined): string {
+export function writer(by: string | null, via: string | null, mine: boolean, names: PeopleNames | null | undefined, account: string | null = null): string {
   if (mine) return writerName(via, true);
-  const person = by ? names?.[by] : undefined;
-  const other = person && !person.you && person.name ? person.name : null;
+  const other = personOf(by, names);
   if (other && via?.startsWith("key:")) return APP_CLIENT.test(via.slice(4)) ? other : `${other}'s ${via.slice(4)}`;
   if (other && (via === null || via === "api" || via === "mcp" || via.startsWith("nostr:"))) return other;
-  return writerName(via, false);
+  return writerName(via, false, { by, account });
 }
 
 /** A writer's name, as a person reads it. `key:<name>` is its name; an app approved over OAuth is named for its client
- *  id (a long random id) until the hub can name it (docs/VAULT.md, gaps). */
-export function writerName(via: string | null, mine: boolean): string {
+ *  id (a long random id) until the hub can name it (docs/VAULT.md, gaps). A write by no named key is the person's own
+ *  when it was for their account (`who.account`, from their sign-in); else another person's on the hub, or "An app
+ *  without a name": the hub stamps no more than that (not which key, so not when it was made). No jargon in a title. */
+export function writerName(via: string | null, mine: boolean, who?: { by: string | null; account: string | null }): string {
   if (mine) return "You, in Parachute here";
   if (!via) return "Not recorded";
   if (via.startsWith("key:")) {
@@ -200,7 +224,8 @@ export function writerName(via: string | null, mine: boolean): string {
   }
   if (via.startsWith("nostr:")) return `A key (${via.slice(6, 14)}…)`;
   if (via === "operator") return "Your hub's operator";
-  if (via === "api" || via === "mcp") return `A key with no name (${via === "api" ? "REST" : "MCP"})`;
+  const c = channelWriter(via, who?.by ?? null, who?.account ?? null);
+  if (c) return c === "you" ? "You, in another app" : c === "operator" ? "Your hub's operator" : c === "other" ? "Someone else on your hub" : "An app without a name";
   if (via === "git-import") return "An import";
   return via;
 }
@@ -211,12 +236,13 @@ export function writerName(via: string | null, mine: boolean): string {
  * `HOME_DELETED`). Counts records, not every version: Vault's Changes has the rest. `names`: each writer, with when it
  * last wrote.
  */
-export async function countChanged(opts: { get: Get; door: "records" | "notes"; since: string; charge: (n: number) => void; self: (via: string | null) => boolean;
+export async function countChanged(opts: { get: Get; door: "records" | "notes"; since: string; charge: (n: number) => void; self: (via: string | null) => boolean; account?: string | null;
   own: (r: { path: string; extension: string | null; names: string[] }) => "code" | "app" | null; people?: People }): Promise<{ count: number; names: Map<string, string>; more: boolean }> {
   const { get, door, since, charge, self, own } = opts;
+  const account = opts.account ?? null;
   /** each write's stamps and when, named once all are read */
   const seen: { by: string | null; via: string | null; at: string }[] = [];
-  const note = (by: string | null, via: string | null, at: string) => { seen.push({ by, via, at }); };
+  const note = (via: string | null, at: string, by: string | null) => { seen.push({ by, via, at }); };
   const u = new URLSearchParams({ "meta[updated_at][gte]": since, order_by: "updated_at", sort: "desc", limit: "201" });
   u.set(door === "records" ? "include_body" : "include_content", "false");
   // the most it reads, charged first (six vaults fit a frame's 60 reads)
@@ -231,7 +257,7 @@ export async function countChanged(opts: { get: Get; door: "records" | "notes"; 
     // the app keeping its own records, on another device, isn't a change to count
     const names = [...(Array.isArray(r.types) ? r.types : []), ...(Array.isArray(r.tags) ? r.tags : [])].filter((t): t is string => typeof t === "string");
     if (own({ path: typeof r.path === "string" ? r.path : "", extension: strOr(r.extension), names }) === "app") continue;
-    count++; note(strOr(r.lastUpdatedBy), via, strOr(r.updatedAt) ?? since);
+    count++; note(via, strOr(r.updatedAt) ?? since, strOr(r.lastUpdatedBy));
   }
   const gone = await get("/history/deleted?limit=50").catch(() => null);
   const listed = (plain(gone) && Array.isArray(gone.notes) ? gone.notes : []).filter((n: unknown): n is Record<string, unknown> => plain(n) && typeof n.id === "string" && typeof n.deleted_at === "string" && n.deleted_at >= since);
@@ -239,11 +265,11 @@ export async function countChanged(opts: { get: Get; door: "records" | "notes"; 
   for (const v of await Promise.all(rows.map((n) => get(`/${door}/${encodeURIComponent(n.id as string)}/versions?limit=1`).then(rowsOf, () => [] as Row[])))) {
     const t = v[0];
     if (!t || t.op !== "delete" || t.via === null || self(t.via) || own({ path: t.path ?? "", extension: null, names: [] }) === "app") continue;
-    count++; note(t.by, t.via, t.at);
+    count++; note(t.via, t.at, t.by);
   }
   /** each writer's name, and when it last wrote */
   const names = new Map<string, string>();
   const people = await namesOf(opts.people, seen.map((w) => w.by));
-  for (const w of seen) { const n = writer(w.by, w.via, false, people); if ((names.get(n) ?? "") < w.at) names.set(n, w.at); }
+  for (const w of seen) { const n = writer(w.by, w.via, false, people, account); if ((names.get(n) ?? "") < w.at) names.set(n, w.at); }
   return { count, names, more: all.length > 200 || listed.length > HOME_DELETED };
 }

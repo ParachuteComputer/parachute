@@ -1,15 +1,17 @@
 // Vault: Parachute's own way to see what is in your vaults (T-476). Your vaults, each one's types with how many records
 // each has, a type's records as a table (its fields as columns: sort, filter, group, saved views), and a record: its
 // fields (changed where they stand), types and tags, its words, what links to it and from it, and its history. A record
-// no other applet opens opens here. Sharing says what reaches a vault and takes access back. Changes says what changed
+// no other applet opens opens here. Sharing says who reaches a vault (this app, its applets, and every key, AI and app
+// the hub lets in), gives an AI a key to some of its types, and takes access back. Changes says what changed
 // in a vault, by whom (your AI by its key's name), each before and after, and puts a change, or a writer's run of them,
 // back: putting back is a change of its own, kept in history (docs/VAULT.md "Changes").
 // It asks the app for every vault on this device (`vaults`) and what reaches them (`sharing`): its card says so.
 // An ordinary applet otherwise: a note in your vault (Applets/Vault); change it, or ask your AI to.
-import { useEffect, useMemo, useRef, useState } from "react";
-// Table, Fields and the vaults calls are level 3, and Changes' calls (vaults.changes, compare, restore, remove) level 5:
-// its record says `needs: 5`, so an older app says to update
-import { app, Button, Empty, Field, Fields, List, Loading, Note, onFresh, onLaunch, Page, Problem, ready, Search, Table, Tabs, toast, useSaved, vaults, when, Write } from "parachute";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+// Table, Fields and the vaults calls are level 3, Changes' calls (vaults.changes, compare, restore, remove) level 5, and
+// who reaches a vault (vaults.reach, manage, giveKey, endReach, stopManaging) level 6: its record says `needs: 6`, so an
+// older app says to update
+import { app, Button, Empty, Field, Fields, List, Loading, Note, onFresh, onLaunch, onShown, Page, Problem, ready, Search, Table, Tabs, toast, useSaved, vaults, when, Write } from "parachute";
 
 type Held = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where a published record is read (this plus its id): null where the hub has none; absent from an older app */
@@ -23,7 +25,7 @@ type Where = { field: string; op: string; value: unknown };
 type View = { name: string; layout: "table" | "list"; sort: { by: string; dir: "asc" | "desc" } | null; where: Where[]; group: string | null; id?: string };
 type At = { vault: string | null; type: string | null; record: string | null; sharing?: boolean; changes?: boolean; packs?: boolean };
 type Change = { key: string; id: string; path: string; title: string; op: "created" | "changed" | "deleted" | "restored"; at: string; via: string | null; kind: string | null;
-  by: string | null; mine: boolean; who: string; before: number | null; after: number | null; gone: boolean; own: boolean; made?: string | null; recreated?: boolean; seen?: string | null };
+  by: string | null; mine: boolean; who: string; unnamed?: boolean; before: number | null; after: number | null; gone: boolean; own: boolean; made?: string | null; recreated?: boolean; seen?: string | null };
 type Side = { path: string; body: string; fields: Record<string, unknown>; types?: string[]; tags?: string[] };
 type Sides = { before: Side | null; after: Side | null };
 
@@ -73,11 +75,12 @@ const CSS = `
 .vlt .sect { margin: calc(var(--gap) * 1.5) 0 6px; font: 600 var(--fs-label) var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .vlt .old { padding: 8px 12px; border-left: 3px solid var(--line); }
 .vlt .addr { font: var(--fs-small) var(--mono); overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
+.vlt .give { margin: 0 0 var(--gap); padding: 8px 12px; border-left: 3px solid var(--accent); }
 .vlt .acts { display: flex; flex-wrap: wrap; gap: var(--gap); }
 .vlt .run { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: calc(var(--gap) * 1.25) 0 2px; }
 .vlt .run .who { font: 600 var(--fs-lead) var(--serif); }
 .vlt .run .done { font: italic var(--fs-small) var(--serif); color: var(--muted); }
-.vlt .run .when { flex: 1; font: var(--fs-small) var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
+.vlt .run .when { flex: 1 1 11rem; font: var(--fs-small) var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
 .vlt .lede { margin: 0 0 var(--gap); font: var(--fs-small) var(--sans); color: var(--muted); }
 .vlt .warn { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--danger); font: var(--fs-small) var(--sans); }
 .vlt .fdiff { display: grid; grid-template-columns: minmax(6em, max-content) 1fr 1fr; gap: 2px 12px; margin: 0 0 var(--gap); font: var(--fs-small) var(--sans); font-variant-numeric: tabular-nums; }
@@ -104,7 +107,8 @@ export default function Vault() {
   useEffect(() => {
     // the app sends a vault, and a record in it, when it opens one here (a tap on a record no other applet opens)
     // (Home's line sends `show: "changes"`: the vault's Changes)
-    const take = (l: { vault?: string; record?: string; show?: string } | null) => { if (l?.vault) setAt({ vault: l.vault, type: null, record: l.record ?? null, changes: l.show === "changes" && !l.record }); };
+    // (and the way back from the hub's yes to manage who reaches a vault: `show: "sharing"`)
+    const take = (l: { vault?: string; record?: string; show?: string } | null) => { if (l?.vault) setAt({ vault: l.vault, type: null, record: l.record ?? null, changes: l.show === "changes" && !l.record, sharing: l.show === "sharing" && !l.record }); };
     ready().then((r: { launch?: { vault?: string; record?: string; show?: string } }) => { take(r.launch ?? null); return load(); }, setFailed);
     return onLaunch(take);
   }, []);
@@ -445,7 +449,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       {canWrite && r.types.some((t) => t !== "template") && !r.types.includes("template") && <div className="acts"><Button small onClick={() => void makeTemplate(v, r).then((x) => x && open(x.id))}>Make this a template</Button></div>}
       {canWrite && <>
         <p className="sect">Sharing</p>
-        <p className="note-meta">{!published ? "Only you, and what you let in, can read it." : v.view === null ? "Marked published. Parachute Cloud doesn't show published records to others yet, so there is no link to send." : "Published: anyone with its link can read it."}</p>
+        <p className="note-meta">{!published ? "Only you, and what you let in, can read it." : v.view === null ? "Marked published. This Parachute doesn't show published records to others yet, so there is no link to send." : "Published: anyone with its link can read it."}</p>
         {published && link && <p className="addr">{link}</p>}
         {published && link && (v.reach === "this-device"
           ? <p className="note-meta">Only this computer can open it: your Parachute is on this computer's own address. To send it on, your Parachute needs an address others can reach (its setup's Expose step).</p>
@@ -545,9 +549,9 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
       <style>{CSS}</style>
       <People v={v} />
       {failed ? <Problem error={failed} onRetry={load}>What reaches {v.name} couldn't be read</Problem> : !a ? <Loading /> : <>
-        <List label="This app" rows={[{ key: "app", title: a.level === "write" ? "Reads and changes records" : "Reads records", meta: `on this device, at ${a.hub.replace(/^https?:\/\//, "")}`,
+        <Reach v={v} self={{ key: "app", title: "Parachute, on this device", meta: `${a.level === "write" ? "reads and changes" : "reads"} every type, at ${a.hub.replace(/^https?:\/\//, "")}`,
           // the home stays writable: Parachute's own applets write there (docs/design/PARACHUTE-SOURCE.md)
-          aside: a.level === "write" && !a.home ? <Button small kind="quiet" onClick={() => vaults.readOnly(v.key).then(load, (e: unknown) => quiet(e, "Not changed"))}>Read only</Button> : undefined }]} />
+          aside: a.level === "write" && !a.home ? <Button small kind="quiet" onClick={() => vaults.readOnly(v.key).then(load, (e: unknown) => quiet(e, "Not changed"))}>Read only</Button> : undefined }} />
         {a.applets.length ? <List label="Applets you allowed here" rows={a.applets.map((x) => ({ key: x.noteId, glyph: x.glyph, title: x.name, meta: `${x.changes ? "reads and changes" : "reads"}${x.since ? ` · since ${when.date(x.since)}` : ""}`,
           aside: <Button small kind="quiet" onClick={() => vaults.revoke(v.key, x.noteId).then(() => { toast(`${x.name} revoked.`); return load(); }, (e: unknown) => quiet(e, "Not revoked"))}>Revoke</Button> }))} />
           : <Empty>No applet is allowed in {v.name} on this device.</Empty>}
@@ -563,9 +567,93 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
           <p className="note-meta">An AI you connect (Claude, ChatGPT…) reaches {v.name} at this address, with what you allowed when you connected it:</p>
           <p className="addr">{a.connector}</p>
         </>}
-        <p className="note-meta">The keys and AIs your hub has let in are listed on your hub, under Tokens, where you can revoke them. This app can't list them yet.</p>
       </>}
     </Page>
+  );
+}
+
+type ReachRow = { id: string; name: string; who: "person" | "agent" | "app" | "service"; app: string | null; can: "read" | "change" | "manage" | "backup";
+  types: string[] | null; until: string | null; lastUsed: string | null; self: boolean };
+/** A key just made: its secret was shown once on the app's own sheet and never reaches this applet. */
+type Given = { name: string; until: string; types: string[] | null; address: string };
+type Sharing = { reach?(vault: string): Promise<{ managing: boolean; rows: ReachRow[] | null; lists?: boolean }>; manage?(vault: string): Promise<null>;
+  giveKey?(vault: string, k: { name: string; can: "read" | "write"; types: string[] | null }): Promise<Given>; endReach?(vault: string, id: string): Promise<null>; stopManaging?(vault: string): Promise<null> };
+const canWord = { read: "reads", change: "reads and changes", manage: "manages", backup: "downloads a backup of" } as const;
+const typesWord = (t: string[] | null) => (t ? t.map(label).join(", ") : "every type");
+
+/** Who reaches a vault (T-476, level 6): this app, then, while Parachute manages the vault (one yes on the hub, until
+ *  the person leaves Sharing), every key, AI and app the hub lets in, each by name with what it may do to which types
+ *  and until when, and one tap to end it; and a key made for an AI, to all the vault's types or some. */
+function Reach({ v, self }: { v: Held; self: { key: string; title: string; meta: string; aside?: ReactNode } }) {
+  const sh = vaults as unknown as Sharing;
+  const can = typeof sh.reach === "function";
+  const [rows, setRows] = useState<ReachRow[] | null>(null);
+  const [managing, setManaging] = useState<boolean | null>(null);
+  // the hub lists who reaches a vault (core T-476); an older hub, or Parachute Cloud for now, doesn't
+  const [lists, setLists] = useState(true);
+  const [failed, setFailed] = useState<unknown>(null);
+  const [giving, setGiving] = useState(false);
+  const load = () => can ? sh.reach!(v.key).then((r) => { setManaging(r.managing); setRows(r.rows); setLists(r.lists !== false); setFailed(null); }, setFailed) : Promise.resolve();
+  useEffect(() => { void load(); }, [v.key]);
+  // shown again after being hidden: the shell ended what was managed then (vault/manage.ts), so the list is read again
+  useEffect(() => (typeof onShown === "function" ? onShown((on: boolean) => { if (on) void load(); }) : undefined), [v.key]);
+  // leaving Sharing gives the hub's yes back: Parachute holds no admin when nobody is managing
+  useEffect(() => () => { if (can) void sh.stopManaging?.(v.key).catch(() => {}); }, [v.key]);
+  const others = (rows ?? []).filter((r) => !r.self);
+  const until = (r: ReachRow) => (r.until ? ` · until ${when.date(r.until)}` : "");
+  const used = (r: ReachRow) => (r.lastUsed ? ` · used ${when.ago(r.lastUsed)}` : "");
+  // an app connected by OAuth is named by the name it registered (Parachute on another device, Claude…), never its id
+  const title = (r: ReachRow) => (r.app ? (r.app === "Parachute" ? "Parachute, on another device" : r.app) : r.name);
+  const kindWord = (r: ReachRow) => (r.who === "agent" && !r.app ? "an AI, " : "");
+  return <>
+    <List label={`Who reaches ${v.name}`} rows={[self, ...others.map((r) => ({ key: r.id, title: title(r), meta: `${kindWord(r)}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`,
+      aside: <Button small kind="quiet" aria-label={`End ${title(r)}`} onClick={() => sh.endReach!(v.key, r.id).then(() => { toast(`${title(r)} can no longer reach ${v.name}.`); return load(); }, (e: unknown) => { quiet(e, "Not ended"); void load(); })}>End</Button> }))]} />
+    {!can || !lists ? <p className="note-meta">The keys and AIs your hub has let in are listed on your hub, where you can end them. {!can ? "This Parachute can't list them yet." : "Your hub can't list them here yet."}</p>
+      : failed ? <Problem error={failed} onRetry={load}>Who reaches {v.name} couldn't be read</Problem>
+      : managing === null ? <Loading />
+      : !managing ? <div className="acts"><p className="note-meta">Every key, AI and app your hub lets into {v.name} is listed on your hub.</p>
+          <Button small onClick={() => sh.manage!(v.key).catch((e: unknown) => quiet(e, "Not opened"))}>Show them all</Button></div>
+      : giving ? <GiveKey v={v} taken={(rows ?? []).map((r) => r.name)} cancel={() => { setGiving(false); void load(); }} made={(g) => { setGiving(false); toast(`${g.name} can reach ${typesWord(g.types)} in ${v.name}.`); void load(); }} />
+      : <div className="acts">{!others.length && <p className="note-meta">Nothing else reaches {v.name} now.</p>}<Button small onClick={() => setGiving(true)}>Give an AI a key</Button></div>}
+  </>;
+}
+
+/** A key for an AI: its name, what it may do, and which types (all, or some). */
+function GiveKey({ v, taken, cancel, made }: { v: Held; taken: string[]; cancel: () => void; made: (g: Given) => void }) {
+  const sh = vaults as unknown as Sharing;
+  // a name no key here has had (a name is one key for good, at the hub)
+  const [name, setName] = useState(() => { let n = "claude"; for (let i = 2; taken.includes(n); i++) n = `claude-${i}`; return n; });
+  const [can, setCan] = useState<"read" | "write">("write");
+  const [all, setAll] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [types, setTypes] = useState<TypeRow[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { vaults.types(v.key).then((t: TypeRow[]) => setTypes(t.filter((x) => x.kind === "type")), () => setTypes([])); }, [v.key]);
+  const ok = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(name) && (all || picked.length > 0);
+  const toggle = (t: string) => setPicked((p: string[]) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]));
+  const go = () => {
+    if (!ok || busy) return;
+    setBusy(true);
+    // refused or ended meanwhile: said, and the list read again (managing may have ended while the screen was hidden)
+    sh.giveKey!(v.key, { name, can, types: all ? null : picked }).then(made, (e: unknown) => { quiet(e, "No key made"); if (/managing|ended/i.test(String((e as Error)?.message ?? e))) cancel(); }).finally(() => setBusy(false));
+  };
+  return (
+    <div className="give">
+      <Field label="Its name" value={name} onChange={setName} placeholder="claude" />
+      <p className="sect">It may</p>
+      <div className="chips" role="group" aria-label="It may">
+        <Button small kind={(can === "read") ? "primary" : "plain"} aria-pressed={can === "read"} onClick={() => setCan("read")}>Read</Button>
+        <Button small kind={(can === "write") ? "primary" : "plain"} aria-pressed={can === "write"} onClick={() => setCan("write")}>Read and change</Button>
+      </div>
+      <p className="sect">Which types</p>
+      <div className="chips" role="group" aria-label="Which types">
+        <Button small kind={(all) ? "primary" : "plain"} aria-pressed={all} onClick={() => setAll(!all)}>Every type</Button>
+        {!all && (types ?? []).map((t) => <Button small key={t.name} kind={(picked.includes(t.name)) ? "primary" : "plain"} aria-pressed={picked.includes(t.name)} onClick={() => toggle(t.name)}>{label(t.name)}</Button>)}
+      </div>
+      {types && !types.length && !all && <p className="note-meta">{v.name} has no types yet: give every type, or make a type first.</p>}
+      <p className="note-meta">{name || "It"} {can === "write" ? "reads, adds, changes and deletes" : "reads"} {all ? "every record" : picked.length ? `${picked.map(label).join(", ")} records` : "the types you pick"} in {v.name}, and nothing else, for a year or until you end it. Its key is shown once, on Parachute's own sheet.</p>
+      <div className="acts"><Button small kind="primary" disabled={!ok} busy={busy} onClick={go}>Make the key</Button> <Button small kind="quiet" onClick={cancel}>Cancel</Button></div>
+    </div>
   );
 }
 
@@ -672,7 +760,7 @@ function ChangeView({ v, c, all, canWrite, done, sides, puts, put }: { v: Held; 
   const nb = names(b), na = names(a);
   return (
     <article aria-label={`${opWord(c)} ${c.title}`}>
-      <p className="note-meta">{opWord(c)} by {c.who}{c.kind && !c.mine && c.kind !== "person" ? ` (${c.kind === "agent" ? "an agent" : c.kind === "app" ? "an app" : "a service"})` : ""} · {when.full(c.at)}{c.via && c.who !== c.via.replace(/^key:/, "") && !c.mine ? ` · its key: ${c.via.replace(/^key:/, "")}` : ""}</p>
+      <p className="note-meta">{opWord(c)} by {c.who}{c.kind && !c.mine && c.kind !== "person" ? ` (${c.kind === "agent" ? "an agent" : c.kind === "app" ? "an app" : "a service"})` : ""} · {when.full(c.at)}{c.via && c.via !== "api" && c.via !== "mcp" && c.who !== c.via.replace(/^key:/, "") && !c.mine ? ` · its key: ${c.via.replace(/^key:/, "")}` : ""}</p>
       {failed ? <Problem error={failed} onRetry={() => vaults.compare(v.key, c.id, c.before, c.after).then((x: Sides) => { setD(x); setFailed(null); }, setFailed)}>This change couldn't be read</Problem>
         : !d ? <Loading />
         : <>
@@ -716,6 +804,26 @@ function putBackOf(c: Change, all: Change[], puts: string[]): { who?: string; at
   const next = all.filter((x) => x.id === c.id && x.at > c.at).sort((a, b) => (a.at < b.at ? -1 : 1))[0];
   if (next && (next.op === "restored" ? !c.recreated : c.op === "created" || c.recreated ? next.op === "deleted" : false)) return { who: next.who, at: next.at };
   return puts.includes(c.key) ? {} : null;
+}
+
+/** What "Put all" does for a run: the records it puts back (each to how it was before the run's first change to it), so
+ *  its button's number is that many; and for every other change in the run, why it isn't counted (so the run's
+ *  "9 changes" and the button's "6" say what they are). */
+function planOf(run: Change[], all: Change[], puts: string[]): { plan: Change[]; notes: string[] } {
+  const first = new Map<string, Change>();
+  let already = 0, own = 0, kept = 0, more = 0;
+  // newest first: a later change of the same record replaces the earlier one, the run's first to it
+  for (const c of run) {
+    if (c.own) own++;
+    else if (putBackOf(c, all, puts)) already++;
+    else if (c.before === null && !(c.op === "created" && !c.mine)) kept++;
+    else { if (first.has(c.id)) more++; first.set(c.id, c); }
+  }
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+  return { plan: [...first.values()], notes: [
+    already ? `${already} already put back` : "", own ? `${own} ${own === 1 ? "is" : "are"} the app's own` : "", kept ? `${n(kept, "new record", "new records")} of yours, kept` : "",
+    more ? `${n(more, "more change", "more changes")} to a record already counted` : "",
+  ].filter(Boolean) };
 }
 
 /** Put one change back: the record as it was before it (a made one, or one a put back re-made, is deleted; a deleted
@@ -822,9 +930,7 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
   }
   /** A run put back: each record to how it was before the run's first change to it. */
   const putRun = async (run: (typeof runs)[number]) => {
-    const first = new Map<string, Change>();
-    for (const c of run.changes) if (!c.own && !putBackOf(c, all, puts) && (c.before !== null || (c.op === "created" && !c.mine))) first.set(c.id, c);
-    const plan = [...first.values()];
+    const { plan } = planOf(run.changes, all, puts);
     const outside = plan.flatMap((c) => all.filter((x) => x.id === c.id && x.at > c.at && !run.changes.includes(x)));
     if (outside.length && sure !== run.key) { setSure(run.key); return; }
     setBusy(run.key); setSure(null);
@@ -851,8 +957,11 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
             : !page ? <Loading />
             : !all.length ? <Empty>Nothing changed in {v.name} in the last {days} days.</Empty>
             : runs.map((run, i) => {
-                const left = run.changes.filter((c) => !c.own && !putBackOf(c, all, puts) && (c.before !== null || (c.op === "created" && !c.mine)));
+                const { plan: left, notes } = planOf(run.changes, all, puts);
                 const outside = sure === run.key;
+                // why the button's number is less than the run's changes (not while it asks "Put back anyway")
+                const covers = canWrite && left.length > 0 && notes.length > 0 && !outside
+                  ? `${left.length === 1 ? "Put it back covers 1" : `Put all ${left.length} back covers ${left.length}`} of these ${run.changes.length} changes. Not counted: ${notes.join(", ")}.` : "";
                 return <div key={run.key}>
                   {(i === 0 || runs[i - 1].day !== run.day) && <p className="sect">{run.day}</p>}
                   <div className="run">
@@ -861,6 +970,9 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
                     {canWrite && left.length > 0 && <Button small busy={busy === run.key} aria-label={`${outside ? "Put back anyway" : left.length === 1 ? "Put it back" : `Put all ${left.length} back`}, by ${run.who}`} onClick={() => void putRun(run)}>{outside ? "Put back anyway" : left.length === 1 ? "Put it back" : `Put all ${left.length} back`}</Button>}
                     {canWrite && !left.length && run.changes.some((c) => putBackOf(c, all, puts)) && <span className="done">put back</span>}
                   </div>
+                  {(covers || run.changes[0].unnamed) && <p className="lede">
+                    {covers}{covers && run.changes[0].unnamed ? " " : ""}
+                    {run.changes[0].unnamed ? "The hub doesn't say which app this was. Name an app's key when you make it, and its changes show here under that name." : ""}</p>}
                   {outside && <p className="warn">Some of these records changed again after. Putting them back undoes that too.</p>}
                   <div className="chg"><List label={`${run.who}, ${run.day}`} hideLabel rows={run.changes.map((c) => {
                     const b = putBackOf(c, all, puts);

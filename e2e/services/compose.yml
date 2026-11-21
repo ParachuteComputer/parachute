@@ -1,0 +1,110 @@
+# The throwaway servers the services specs run against (e2e/services/README.md): a Buzz relay with production's auth
+# settings, a Stalwart with a copy of the Uni app's mail gateway in front of it, and a Matrix homeserver. Loopback only.
+# Started and seeded by e2e/services/up.sh, which also writes the keys and passwords (all made up per run). The project
+# name (-p) keeps two runs on one machine apart; the ports come from the environment up.sh sets.
+x-labels: &labels
+  owner: parachute-e2e
+  purpose: throwaway-test
+services:
+  # ── Buzz relay ───────────────────────────────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    labels: *labels
+    environment: { POSTGRES_USER: buzz, POSTGRES_PASSWORD: buzz_test, POSTGRES_DB: buzz }
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U buzz"], interval: 3s, retries: 20 }
+  redis:
+    image: redis:7-alpine
+    labels: *labels
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 2s, retries: 20 }
+  # the relay's file store (S3). MinIO no longer publishes its images; RustFS speaks the same S3
+  s3:
+    image: rustfs/rustfs@sha256:ee717072290bec9b11abfc0365f8310b00df1cd9b3639943edae47bdef05044a
+    labels: *labels
+    environment: { RUSTFS_ACCESS_KEY: buzz_test, RUSTFS_SECRET_KEY: buzz_test_secret, RUSTFS_VOLUMES: /data }
+  s3-init:
+    # makes the bucket once the store answers
+    image: amazon/aws-cli@sha256:b0102d2269f87d8531d931c1a59e248101ace586886e6c077058d94c1c37b846
+    labels: *labels
+    depends_on: [s3]
+    environment: { AWS_ACCESS_KEY_ID: buzz_test, AWS_SECRET_ACCESS_KEY: buzz_test_secret, AWS_DEFAULT_REGION: us-east-1 }
+    entrypoint:
+      - /bin/sh
+      - -c
+      - for i in $$(seq 60); do aws --endpoint-url http://s3:9000 s3api head-bucket --bucket buzz-media 2>/dev/null && exit 0; aws --endpoint-url http://s3:9000 s3 mb s3://buzz-media && exit 0; sleep 1; done; exit 1
+    restart: "no"
+  relay:
+    # the relay production runs (relay-image.sh builds it; up.sh sets this): the specs hold its behaviour
+    image: "${BUZZ_IMAGE:?up.sh sets it (relay-image.sh)}"
+    labels: *labels
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      s3-init: { condition: service_completed_successfully }
+    ports: ["127.0.0.1:${RELAY_PORT:-3871}:3000"]
+    # not required, so down.sh can take down a set whose setup stopped early
+    env_file: [{ path: "${SERVICES_DIR:?up.sh sets it}/relay.env", required: false }]
+    environment:
+      DATABASE_URL: postgres://buzz:buzz_test@postgres:5432/buzz
+      REDIS_URL: redis://redis:6379
+      BUZZ_S3_ENDPOINT: http://s3:9000
+      BUZZ_S3_ACCESS_KEY: buzz_test
+      BUZZ_S3_SECRET_KEY: buzz_test_secret
+      BUZZ_S3_BUCKET: buzz-media
+      BUZZ_S3_REGION: us-east-1
+      BUZZ_BIND_ADDR: 0.0.0.0:3000
+      BUZZ_HEALTH_PORT: "8080"
+      BUZZ_METRICS_PORT: "9102"
+      RELAY_URL: ws://localhost:${RELAY_PORT:-3871}
+      BUZZ_MEDIA_BASE_URL: http://localhost:${RELAY_PORT:-3871}/media
+      BUZZ_AUTO_MIGRATE: "true"
+      BUZZ_REQUIRE_RELAY_MEMBERSHIP: "true"
+      BUZZ_REQUIRE_AUTH_TOKEN: "true"
+      BUZZ_REQUIRE_MEDIA_GET_AUTH: "true"
+      BUZZ_ALLOW_NIP_OA_AUTH: "true"
+      # Buzz's per-key quota (60 stored messages a minute, across connections) is a person's; the specs' keys post far
+      # more, back to back (bob's 56-message room, the owner's rooms in every spec). The per-connection rate (10 a
+      # second) stays Buzz's, so the app's pacing is still tested.
+      BUZZ_RATE_LIMIT_HUMAN_MESSAGES_PER_MIN: "600"
+      RUST_LOG: buzz_relay=info
+
+  # ── Mail: Stalwart, and the gateway the app talks to ─────────────────────────────────────────────────────────────
+  stalwart:
+    # the version production runs; its management calls (x:Domain, x:Account) are version-specific
+    image: stalwartlabs/stalwart@sha256:ec011be228596e37e65f41aab17deed573859614430472f7eeb42178c50d87b7
+    labels: *labels
+    # not required, so down.sh can take down a set whose setup stopped early
+    env_file: [{ path: "${SERVICES_DIR:?up.sh sets it}/stalwart.env", required: false }]
+    ports: ["127.0.0.1:${STALWART_PORT:-18443}:443", "127.0.0.1:${STALWART_SETUP_PORT:-18080}:8080"]
+    volumes: [stalwart-etc:/etc/stalwart, stalwart-data:/var/lib/stalwart]
+  mail-gateway:
+    image: python:3.12-slim
+    labels: *labels
+    depends_on: [stalwart]
+    ports: ["127.0.0.1:${MAIL_PORT:-19951}:19951"]
+    environment: { HOME: /gw/home, UNI_MAIL_PORT: "19951", UNI_MAIL_HOST: 0.0.0.0, PIP_DISABLE_PIP_VERSION_CHECK: "1" }
+    volumes: ["./mail:/gw/code:ro", "${SERVICES_DIR:?up.sh sets it}/mail:/gw/home"]
+    command: ["sh", "-c", "pip install -q --root-user-action=ignore coincurve==21.0.0 && exec python -I /gw/code/gateway.py"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 19951), 2)"]
+      interval: 2s
+      retries: 60
+
+  # ── Matrix ───────────────────────────────────────────────────────────────────────────────────────────────────────
+  matrix:
+    image: ghcr.io/matrix-construct/tuwunel@sha256:3dde1e9b3503c68218f95415ec3ebff522bd945065ba76019d408543540d1730
+    labels: *labels
+    ports: ["127.0.0.1:${MATRIX_PORT:-18008}:8008"]
+    environment:
+      TUWUNEL_SERVER_NAME: matrix.test
+      TUWUNEL_PORT: "8008"
+      TUWUNEL_ADDRESS: 0.0.0.0
+      TUWUNEL_DATABASE_PATH: /var/lib/tuwunel
+      TUWUNEL_ALLOW_REGISTRATION: "true"
+      TUWUNEL_REGISTRATION_TOKEN: throwaway-registration
+      TUWUNEL_ALLOW_FEDERATION: "false"
+    volumes: [matrix-data:/var/lib/tuwunel]
+
+volumes:
+  stalwart-etc:
+  stalwart-data:
+  matrix-data:

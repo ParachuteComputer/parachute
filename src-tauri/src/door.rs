@@ -7,6 +7,11 @@
 //! foreign one). The session the hub answers with is put into the webview's cookies for the hub, and the app opens the
 //! hub's authorize page with it. The signed event is NIP-98 shaped and bound by the hub to its own verify address, its
 //! method and a single-use challenge: we build it here from those, never sign what the hub hands us as-is.
+//!
+//! A single-owner Parachute Cloud door (your own Parachute on your own Cloudflare, parachute-cloud `deploy/personal`)
+//! has no key door: its owner signs in with the key at `POST /account/token` (NIP-98) and trades that 10-minute
+//! account pass for a one-time browser sign-in link to the authorize address (`POST /account/session-link`). The app
+//! opens the link in the webview, which takes the door's own session and lands on the authorize page ([`owner_door`]).
 
 use std::time::Duration;
 
@@ -21,6 +26,11 @@ use crate::key::KeyState;
 pub const CHALLENGE_PATH: &str = "/api/auth/nostr/challenge";
 pub const VERIFY_PATH: &str = "/api/auth/nostr/verify";
 const SIGN_IN_KIND: u16 = 27235;
+/// A single-owner cloud door's key sign-in, and its one-time browser link (see the module notes).
+pub const ACCOUNT_TOKEN_PATH: &str = "/account/token";
+pub const SESSION_LINK_PATH: &str = "/account/session-link";
+/// The path a session link opens on the door (the sign-in link's own verify step).
+const LINK_VERIFY_PATH: &str = "/auth/verify";
 
 /// Why a key sign-in didn't happen, for the app to word: `no_key`, `no_door` (the hub has no key door: sign in another
 /// way), `unknown_key` (the hub doesn't know this key), `refused`, `unreachable`, `bad_hub`.
@@ -475,6 +485,93 @@ pub async fn sign_in(origin: &url::Url, next: &str, keys: &nostr::Keys) -> Resul
     Ok(Session { set_cookies, redirect: redirect.to_string() })
 }
 
+/// The NIP-98 event for the owner's sign-in at a single-owner door: kind 27235, `u` its `/account/token` on the door's
+/// own origin, `method` POST, a fresh `nonce`, no body.
+pub fn owner_token_event(origin: &url::Url, nonce: &str) -> Result<EventBuilder, Refusal> {
+    let bad = || refusal("refused", "The request to your hub couldn't be made.");
+    let u = format!("{}{ACCOUNT_TOKEN_PATH}", origin.origin().ascii_serialization());
+    let tag = |k: &str, v: &str| Tag::parse([k, v]).map_err(|_| bad());
+    Ok(EventBuilder::new(Kind::from(SIGN_IN_KIND), "").tags([tag("u", &u)?, tag("method", "POST")?, tag("nonce", nonce)?]))
+}
+
+/// Sign in to a single-owner cloud door with the key: the door's session (its cookies, for the shell to plant in the
+/// webview) and where to go next on the door (`next`, the authorize address, or its second-factor step), or `None` when
+/// the hub isn't such a door, so the caller keeps its own refusal. A door is told by its session-link route answering
+/// a request with no pass `401 invalid_token` (Parachute Cloud has no such route: the router's 404). The key signs only
+/// the one `/account/token` request, built here; the one-time link the door answers with is opened here too, so the
+/// web side never holds it (it is a whole session, as the box path's cookies are).
+pub async fn owner_door(origin: &url::Url, next: &str, keys: &nostr::Keys, http: &reqwest::Client) -> Result<Option<Session>, Refusal> {
+    let unreachable = |_| refusal("unreachable", "The hub didn't answer.");
+    let error_of = |b: &Value| b.get("error").and_then(Value::as_str).unwrap_or("").to_string();
+    let link_at = origin.join(SESSION_LINK_PATH).expect("fixed path");
+    // a probe that doesn't get through leaves the hub as it was (no key door), not unreachable
+    let Ok(probe) = http.post(link_at.clone()).header("Accept", "application/json").send().await else { return Ok(None) };
+    let probed = probe.status().as_u16();
+    let body: Value = probe.json().await.unwrap_or(Value::Null);
+    if probed != 401 || error_of(&body) != "invalid_token" {
+        return Ok(None);
+    }
+    let event = owner_token_event(origin, &nonce())?.sign_with_keys(keys).map_err(|_| refusal("refused", "The key couldn't sign."))?;
+    let res = http
+        .post(origin.join(ACCOUNT_TOKEN_PATH).expect("fixed path"))
+        .header("Authorization", crate::services::authorization(&event))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(unreachable)?;
+    let status = res.status().as_u16();
+    let body: Value = res.json().await.unwrap_or(Value::Null);
+    let said = format!("{} {}", error_of(&body), body.get("error_description").and_then(Value::as_str).unwrap_or(""));
+    match status {
+        200 => {}
+        401 if said.contains("unknown_pubkey") => return Err(refusal("unknown_key", "This hub doesn't know your key yet.")),
+        // a 401 that isn't the door's key refusal: not a door that takes the key here after all
+        401 if error_of(&body) != "invalid_nostr_auth" => return Ok(None),
+        429 => return Err(refusal("refused", "The hub asks to wait a moment before trying again.")),
+        500..=599 => return Err(refusal("unreachable", format!("The hub didn't answer the key sign-in ({status}). Try again in a moment."))),
+        _ => {
+            let said = said.trim();
+            return Err(refusal("refused", format!("The hub refused the key ({status}{}).", if said.is_empty() { String::new() } else { format!(": {}", said.chars().take(120).collect::<String>()) })));
+        }
+    }
+    let pass = body.get("token").and_then(Value::as_str).filter(|t| !t.is_empty()).ok_or_else(|| refusal("refused", "The hub's answer wasn't a sign-in."))?;
+    let res = http
+        .post(link_at)
+        .bearer_auth(pass)
+        .header("Accept", "application/json")
+        .json(&json!({ "next": next }))
+        .send()
+        .await
+        .map_err(unreachable)?;
+    let status = res.status().as_u16();
+    let body: Value = res.json().await.unwrap_or(Value::Null);
+    if status == 429 {
+        return Err(refusal("refused", "The hub asks to wait a moment before trying again."));
+    }
+    if status != 200 {
+        return Err(refusal("refused", format!("The hub wouldn't open a session for the key ({status}).")));
+    }
+    // the link must be the door's own verify step, on the origin signed in to: anything else isn't followed
+    let link = body
+        .get("url")
+        .and_then(Value::as_str)
+        .and_then(|u| url::Url::parse(u).ok())
+        .filter(|u| u.origin() == origin.origin() && u.path() == LINK_VERIFY_PATH)
+        .ok_or_else(|| refusal("refused", "The hub's answer wasn't a sign-in."))?;
+    // open it here (the client follows no redirect): the door answers with its session cookie and where to go
+    let res = http.get(link).header("Accept", "text/html").send().await.map_err(unreachable)?;
+    let set_cookies: Vec<String> = res.headers().get_all("set-cookie").iter().filter_map(|v| v.to_str().ok().map(str::to_string)).collect();
+    let location = res.headers().get("location").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    let redirect = url::Url::parse(&location).ok().filter(|u| u.origin() == origin.origin()).map(|u| match u.query() {
+        Some(q) => format!("{}?{}", u.path(), q),
+        None => u.path().to_string(),
+    }).unwrap_or(location);
+    if !res.status().is_redirection() || set_cookies.is_empty() || on_hub(origin, &redirect).is_none() {
+        return Err(refusal("refused", "The hub's answer wasn't a sign-in."));
+    }
+    Ok(Some(Session { set_cookies, redirect }))
+}
+
 /// A path the hub names, as an address on the hub itself (`/\\other.example` and the like resolve elsewhere: refused).
 pub fn on_hub(origin: &url::Url, path: &str) -> Option<url::Url> {
     if !path.starts_with('/') {
@@ -497,10 +594,25 @@ pub async fn key_sign_in<R: Runtime>(app: AppHandle<R>, webview: Webview<R>, key
     let next = next_path(&origin, &next)?;
     let held = keys.get(&app).await.map_err(|m| refusal("no_key", m))?.ok_or_else(|| refusal("no_key", "This device has no key."))?;
     let signed = sign_in(&origin, &next, &held).await;
+    // no key door: a single-owner cloud door takes the key at its own sign-in instead (owner_door), else the refusal stands
+    if matches!(&signed, Err(r) if r.code == "no_door") {
+        let owner = owner_door(&origin, &next, &held, &client()?).await;
+        if matches!(&owner, Ok(Some(_))) || matches!(&owner, Err(e) if e.code == "unknown_key") {
+            note_hub(&app, &origin);
+        }
+        match owner? {
+            Some(session) => return plant_and_go(&webview, &origin, session).await,
+            None => return Err(signed.unwrap_err()),
+        }
+    }
     if answered_as_hub(&signed) {
         note_hub(&app, &origin);
     }
-    let session = signed?;
+    plant_and_go(&webview, &origin, signed?).await
+}
+
+/// Put a hub's session in the calling webview and say where on the hub to go next.
+async fn plant_and_go<R: Runtime>(webview: &Webview<R>, origin: &url::Url, session: Session) -> Result<SignedIn, Refusal> {
     for raw in &session.set_cookies {
         plant_cookie(&webview, &origin, raw).await.map_err(|_| refusal("refused", "The hub's session couldn't be kept in the app."))?;
     }
@@ -544,6 +656,131 @@ async fn plant_cookie<R: Runtime>(webview: &Webview<R>, origin: &url::Url, raw: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A hub on 127.0.0.1 that answers each request from `answer(origin, method, path, authorization, body)` with a
+    /// status, extra header lines and a body, and keeps what it was asked. Only for the shell's side of the
+    /// conversation: the door itself is parachute-cloud's (its own tests, and the T-476 rehearsal walk on a real deploy).
+    type Seen = std::sync::Arc<std::sync::Mutex<Vec<(String, String, String, String)>>>;
+    type Answer = fn(&str, &str, &str, &str, &str) -> (u16, String, String);
+    async fn hub(answer: Answer) -> (url::Url, Seen) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = url::Url::parse(&format!("http://{}", l.local_addr().unwrap())).unwrap();
+        let seen: Seen = Default::default();
+        let (keep, at) = (seen.clone(), origin.origin().ascii_serialization());
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = l.accept().await else { return };
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 4096];
+                let (head, body) = loop {
+                    let n = sock.read(&mut chunk).await.unwrap_or(0);
+                    if n == 0 { break (String::new(), String::new()); }
+                    buf.extend_from_slice(&chunk[..n]);
+                    let text = String::from_utf8_lossy(&buf).to_string();
+                    if let Some(i) = text.find("\r\n\r\n") {
+                        let head = text[..i].to_string();
+                        let len = head.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+                        if buf.len() >= i + 4 + len { break (head, String::from_utf8_lossy(&buf[i + 4..i + 4 + len]).to_string()); }
+                    }
+                };
+                let first = head.lines().next().unwrap_or("").to_string();
+                let mut parts = first.split(' ');
+                let (method, path) = (parts.next().unwrap_or("").to_string(), parts.next().unwrap_or("").to_string());
+                let auth = head.lines().find_map(|l| { let (k, v) = l.split_once(':')?; (k.eq_ignore_ascii_case("authorization")).then(|| v.trim().to_string()) }).unwrap_or_default();
+                keep.lock().unwrap().push((method.clone(), path.clone(), auth.clone(), body.clone()));
+                let (status, headers, out) = answer(&at, &method, &path, &auth, &body);
+                let resp = format!("HTTP/1.1 {status} X\r\ncontent-type: application/json\r\n{headers}content-length: {}\r\nconnection: close\r\n\r\n{out}", out.len());
+                let _ = sock.write_all(resp.as_bytes()).await;
+            }
+        });
+        (origin, seen)
+    }
+
+    fn decode_nostr(auth: &str) -> nostr::Event {
+        use nostr::base64::Engine;
+        let raw = nostr::base64::engine::general_purpose::STANDARD.decode(auth.strip_prefix("Nostr ").expect("a Nostr header")).unwrap();
+        serde_json::from_slice(&raw).unwrap()
+    }
+
+    const NO_PASS: (u16, &str, &str) = (401, "", r#"{"error":"invalid_token","error_description":"missing bearer token"}"#);
+    fn a(r: (u16, &str, &str)) -> (u16, String, String) { (r.0, r.1.to_string(), r.2.to_string()) }
+    /// The real door's three answers (account-token.ts, account-session-link.ts, auth-handlers.ts /auth/verify).
+    fn door(at: &str, m: &str, p: &str, auth: &str, body: &str) -> (u16, String, String) {
+        match (m, p) {
+            ("POST", "/account/session-link") if auth.is_empty() => a(NO_PASS),
+            ("POST", "/account/token") if auth.starts_with("Nostr ") && body.is_empty() => a((200, "", r#"{"token":"acct-pass","expires_in":600}"#)),
+            ("POST", "/account/session-link") if auth == "Bearer acct-pass" && body.contains("/oauth/authorize?state=s1") => (200, String::new(), format!(r#"{{"url":"{at}/auth/verify?token=once","expires_at":"x","next":"/oauth/authorize?state=s1"}}"#)),
+            ("GET", "/auth/verify?token=once") => (302, format!("set-cookie: parachute_id_session=sess; Path=/; HttpOnly; Secure\r\nlocation: {at}/oauth/authorize?state=s1\r\n"), String::new()),
+            _ => a((500, "", "{}")),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_single_owner_door_signs_in_with_the_key_and_the_shell_keeps_the_session() {
+        let (origin, seen) = hub(door).await;
+        let k = nostr::Keys::generate();
+        let s = owner_door(&origin, "/oauth/authorize?state=s1", &k, &http_client(Duration::from_secs(5)).unwrap()).await.unwrap().expect("a door");
+        // the session's cookie is the shell's to plant; the web side gets only where to go, with no link or token in it
+        assert_eq!(s.set_cookies, vec!["parachute_id_session=sess; Path=/; HttpOnly; Secure".to_string()]);
+        assert_eq!(s.redirect, "/oauth/authorize?state=s1");
+        assert!(!s.redirect.contains("token="));
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.iter().map(|r| r.1.as_str()).collect::<Vec<_>>(), ["/account/session-link", "/account/token", "/account/session-link", "/auth/verify?token=once"]);
+        // the key signed exactly the door's own /account/token, POST, with no body and so no payload tag
+        let ev = decode_nostr(&seen[1].2);
+        assert!(ev.verify().is_ok());
+        assert_eq!(ev.pubkey, k.public_key());
+        let tags: Vec<Vec<String>> = ev.tags.iter().map(|t| t.as_slice().to_vec()).collect();
+        assert!(tags.contains(&vec!["u".into(), format!("{}account/token", origin)]), "{tags:?}");
+        assert!(tags.contains(&vec!["method".into(), "POST".into()]));
+        assert!(!tags.iter().any(|t| t[0] == "payload"), "{tags:?}");
+        assert!(seen[1].3.is_empty());
+        // the probe carried no credential
+        assert!(seen[0].2.is_empty());
+    }
+
+    #[tokio::test]
+    async fn parachute_cloud_is_left_alone() {
+        // Cloud: no session-link route (the router's 404), so the key is never offered and the caller's refusal stands
+        let (origin, seen) = hub(|_, _, _, _, _| a((404, "", r#"{"error":"not_found"}"#))).await;
+        let go = owner_door(&origin, "/oauth/authorize", &nostr::Keys::generate(), &http_client(Duration::from_secs(5)).unwrap()).await.unwrap();
+        assert!(go.is_none());
+        assert_eq!(seen.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_hub_that_refuses_everything_is_not_offered_the_key() {
+        // behind a sign-in proxy: 401 to everything, but not the door's own `invalid_token`
+        let (origin, seen) = hub(|_, _, _, _, _| a((401, "", r#"{"error":"unauthorized"}"#))).await;
+        let go = owner_door(&origin, "/oauth/authorize", &nostr::Keys::generate(), &http_client(Duration::from_secs(5)).unwrap()).await.unwrap();
+        assert!(go.is_none());
+        assert_eq!(seen.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_key_the_door_doesnt_know_says_so() {
+        let (origin, _) = hub(|_, _, p, _, _| match p {
+            "/account/session-link" => a(NO_PASS),
+            _ => a((401, "", r#"{"error":"invalid_nostr_auth","error_description":"unknown_pubkey: Nostr pubkey is not linked to an account"}"#)),
+        }).await;
+        let r = owner_door(&origin, "/oauth/authorize", &nostr::Keys::generate(), &http_client(Duration::from_secs(5)).unwrap()).await.unwrap_err();
+        assert_eq!(r.code, "unknown_key");
+    }
+
+    #[tokio::test]
+    async fn a_link_off_the_door_or_off_its_verify_step_is_not_followed() {
+        for bad in ["https://elsewhere.example/auth/verify?token=once", "SAME/console?token=once"] {
+            let (origin, seen) = hub(if bad.starts_with("SAME") {
+                |at, m, p, auth, b| if p == "/account/session-link" && !auth.is_empty() { (200, String::new(), format!(r#"{{"url":"{at}/console?token=once"}}"#)) } else { door(at, m, p, auth, b) }
+            } else {
+                |at, m, p, auth, b| if p == "/account/session-link" && !auth.is_empty() { a((200, "", r#"{"url":"https://elsewhere.example/auth/verify?token=once"}"#)) } else { door(at, m, p, auth, b) }
+            }).await;
+            let r = owner_door(&origin, "/oauth/authorize?state=s1", &nostr::Keys::generate(), &http_client(Duration::from_secs(5)).unwrap()).await.unwrap_err();
+            assert_eq!(r.code, "refused", "{bad}");
+            assert_eq!(seen.lock().unwrap().len(), 3, "{bad}: the link isn't opened");
+        }
+    }
 
     #[test]
     fn only_the_sharing_tools_are_signed_and_only_with_checked_fields() {

@@ -36,19 +36,23 @@ export type AllowAfter = { subject: string; scope: string; html: string; mode: "
   home?: { vault: string; noteId: string } };
 
 /** Why a vault is asked for: shown on the screen between steps, and kept with the vault (vault/reach.ts). */
-export type Why = "signin" | "open" | "allow" | "write" | "narrow";
+export type Why = "signin" | "open" | "allow" | "write" | "narrow" | "manage";
 
 export type Pending = {
   /** the Parachute (its address, issuer, account MCP and where its vaults live) */
   parachute: Parachute;
-  step: "list" | "open";
-  /** step "open": the vault, and how much of it */
+  /** `manage`: one vault's admin, held only while the person manages who reaches it (vault/manage.ts), never kept as
+   *  the vault's own token */
+  step: "list" | "open" | "manage";
+  /** step "open": the vault, and how much of it; step "manage": the vault */
   vault?: string;
   level?: Level;
   why: Why;
   /** where the app goes after (the applet that asked, the screen that needed a change); the launcher when none */
   back?: string;
   allow?: AllowAfter;
+  /** step "manage": the applet that asked (its subject): only it may use what the hub gives (vault/manage.ts) */
+  applet?: string;
   /** at sign-in: the vault asked for is to be this device's home */
   home?: boolean;
   /** at sign-in: whose each listed vault is, as the person said; kept only when the hub's consent comes back */
@@ -118,7 +122,7 @@ export function forgetClient(issuer: string) {
   try { localStorage.setItem(CLIENTS_KEY, JSON.stringify(all)); } catch { /* nothing to do */ }
 }
 
-export type Begin = { parachute: Parachute; step: "list" | "open"; vault?: string; level?: Level; why?: Why; back?: string; allow?: AllowAfter; home?: boolean; marks?: Pending["marks"]; whose?: "mine" | "theirs"; how: "key" | "page";
+export type Begin = { parachute: Parachute; step: "list" | "open" | "manage"; vault?: string; level?: Level; why?: Why; back?: string; allow?: AllowAfter; home?: boolean; marks?: Pending["marks"]; whose?: "mine" | "theirs"; how: "key" | "page"; applet?: string;
   /** a new sign-in (not the next step of one): a registration a sign-in that never came back used is dropped */
   fresh?: boolean };
 
@@ -126,8 +130,8 @@ export type Begin = { parachute: Parachute; step: "list" | "open"; vault?: strin
  *  this app's storage. */
 export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<string> {
   const { parachute } = b;
-  if (b.step === "open" && !b.vault) throw new Error("No vault to sign in to.");
-  const scope = b.step === "list" ? LIST_SCOPE : scopeFor(b.vault!, b.level ?? "read");
+  if ((b.step === "open" || b.step === "manage") && !b.vault) throw new Error("No vault to sign in to.");
+  const scope = b.step === "list" ? LIST_SCOPE : b.step === "manage" ? manageScope(b.vault!) : scopeFor(b.vault!, b.level ?? "read");
   const redirect = redirectUri();
   const meta = await discoverAuthServer(parachute.issuer, fetchImpl);
   // the hub must name itself as its own issuer (RFC 8414 3.3), and keep its sign-in on that origin
@@ -155,8 +159,8 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   const codeVerifier = generateCodeVerifier();
   const state = generateState();
   const revocation = (meta as { revocation_endpoint?: unknown }).revocation_endpoint;
-  const pending: Pending = { parachute, step: b.step, ...(b.step === "open" ? { vault: b.vault, level: b.level ?? "read" } : {}), why: b.why ?? "signin",
-    ...(b.back ? { back: b.back } : {}), ...(b.allow ? { allow: b.allow } : {}), ...(b.home ? { home: true } : {}), ...(b.marks ? { marks: b.marks } : {}),
+  const pending: Pending = { parachute, step: b.step, ...(b.step === "open" ? { vault: b.vault, level: b.level ?? "read" } : b.step === "manage" ? { vault: b.vault } : {}), why: b.why ?? "signin",
+    ...(b.back ? { back: b.back } : {}), ...(b.allow ? { allow: b.allow } : {}), ...(b.step === "manage" && b.applet ? { applet: b.applet } : {}), ...(b.home ? { home: true } : {}), ...(b.marks ? { marks: b.marks } : {}),
     issuer: parachute.issuer, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, parachute.issuer) ? { revocationEndpoint: revocation } : {}),
     clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now(), how: b.how, ...(b.whose ? { whose: b.whose } : {}), ...(iss ? { iss: true as const } : {}), ...(reserved ? { reserved: true as const } : {}) };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
@@ -168,7 +172,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("state", state);
   url.searchParams.set("scope", scope);
-  if (b.step === "open") url.searchParams.set("vault", b.vault!);
+  if (b.step === "open" || b.step === "manage") url.searchParams.set("vault", b.vault!);
   return url.toString();
 }
 
@@ -240,6 +244,18 @@ export async function completeSignIn(code: string, state: string, fetchImpl?: ty
     if (!canList(token.scope)) { await endIt(); throw new Error("The hub didn't let Parachute see which vaults are yours. Nothing was added."); }
     return { pending, token, vault: null, level: null };
   }
+  if (pending.step === "manage") {
+    // one vault's admin and nothing else of the hub: anything more (or less) is ended at once, never held
+    const vault = pending.vault!;
+    const words = (token.scope ?? "").split(/\s+/).filter(Boolean);
+    const mine = new Set([`vault:${vault}:read`, `vault:${vault}:write`, `vault:${vault}:admin`]);
+    const aud = audienceVault(token.access_token) ?? token.vault ?? vault;
+    if (!words.includes(manageScope(vault)) || words.some((w) => !mine.has(w)) || aud !== vault) {
+      await endIt();
+      throw new Error(`The hub didn't let Parachute manage who reaches ${vault}. Nothing changed.`);
+    }
+    return { pending, token, vault, level: null };
+  }
   // what the token holds of the vault asked for: the hub's word (its scope); a token for something else (account-wide,
   // or another vault) is refused, not stored
   const vault = pending.vault!;
@@ -253,6 +269,10 @@ export async function completeSignIn(code: string, state: string, fetchImpl?: ty
   if (aud !== vault) { await endIt(); throw new Error("The hub's token is for a vault it wasn't asked for. Nothing was added."); }
   return { pending, token, vault, level };
 }
+
+/** The scope that lets the app manage who reaches one vault (its keys and AIs): that vault's admin, and only for as
+ *  long as the person is managing it (vault/manage.ts). */
+export const manageScope = (vault: string) => `vault:${vault}:admin`;
 
 /** A fresh access token (and the rotated refresh token) for a record. */
 export async function refresh(tokenEndpoint: string, clientId: string, refreshToken: string, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<TokenResponse> {

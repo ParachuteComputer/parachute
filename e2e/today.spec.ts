@@ -1,5 +1,5 @@
 // Home for a person with rooms and a journal (applets/today.tsx), the bundle record's home, against our real Buzz relay.
-// Local only, as rooms.spec.ts (e2e/services/README.md): BUZZ_RELAY and BUZZ_KEYS. "Uni" here is bob's key: what he
+// Services workflow only, as rooms.spec.ts (e2e/services/README.md): BUZZ_RELAY and BUZZ_KEYS. "Uni" here is bob's key: what he
 // asks shows under Wants you, his newest line under From Uni; a line written on Home lands in today's journal; a tap on
 // a room opens Rooms at that room (app.open with the launch a notification's tap carries).
 import { readFileSync } from "node:fs";

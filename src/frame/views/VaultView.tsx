@@ -5,7 +5,7 @@ import ViewerLine from "./ViewerLine";
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../../ui/Bar";
 import { useApplets, useHome, useHomeLoaded, useVault, useVaultQuery } from "../data";
-import { folderOf, noteHref, titleOf } from "../../vault/notes";
+import { entryTime, folderOf, noteHref, titleOf } from "../../vault/notes";
 import NoVault from "./NoVault";
 import NoteRows from "./NoteRows";
 import { Loading, Problem, Search } from "../../kit/screen";
@@ -60,7 +60,7 @@ function VaultVisit() {
       {load.state === "error" && <Problem error={load.error}>Couldn't read {rec.vault}</Problem>}
       {load.state === "ok" && (load.data.length
         ? <NoteRows label={term ? "Search results" : "Notes"} rows={load.data.map((n) => ({
-          key: n.id, to: noteHref(rec.key, n.id), title: titleOf(n), meta: [folderOf(n), ...(n.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · "),
+          key: n.id, to: noteHref(rec.key, n.id), title: titleOf(n), meta: [folderOf(n), entryTime(n), ...(n.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · "),
         }))} />
         : <p className="quiet">{term ? "Nothing matches." : "This vault is empty."}</p>)}
     </main>

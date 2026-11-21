@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { beginSignIn, CLOUD_CLIENT_NAME, SHELL_RETURN, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
 
 const PENDING = "parachute.oauth.pending.v1";
@@ -223,3 +223,34 @@ function cloudLike(meta: Record<string, string>, names: string[]) {
     return new Response("not found", { status: 404 });
   }) as unknown as typeof fetch;
 }
+
+describe("completeSignIn, managing who reaches a vault (T-476)", () => {
+  const manage = () => pending({ step: "manage", why: "manage", level: undefined, revocationEndpoint: "https://hub.example/oauth/revoke", applet: "home:vault" });
+  /** The hub's token endpoint, and its revoke endpoint (which counts what was ended). */
+  const hubWith = (body: unknown) => {
+    const ended: string[] = [];
+    const f = (async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith("/oauth/revoke")) { ended.push(new URLSearchParams(String(init?.body)).get("token") ?? ""); return new Response("{}"); }
+      return new Response(JSON.stringify(body));
+    }) as unknown as typeof fetch;
+    return { f, ended };
+  };
+  it("takes that vault's admin, and only that", async () => {
+    localStorage.setItem(PENDING, JSON.stringify(manage()));
+    const { f } = hubWith({ access_token: jwt("vault.recipes"), refresh_token: "r", scope: "vault:recipes:admin" });
+    const r = await completeSignIn("code", "s1", f);
+    expect([r.vault, r.level, r.pending.applet]).toEqual(["recipes", null, "home:vault"]);
+  });
+  it("refuses, and ends at the hub, a token without the admin, with anything else, or for another vault", async () => {
+    for (const [scope, aud] of [["vault:recipes:read vault:recipes:write", "vault.recipes"], ["vault:recipes:admin vault:other:read", "vault.recipes"], ["vault:recipes:admin account:self:vaults", "vault.recipes"], ["vault:recipes:admin", "vault.other"], ["vault:other:admin", "vault.other"]]) {
+      localStorage.setItem(PENDING, JSON.stringify(manage()));
+      const { f, ended } = hubWith({ access_token: jwt(aud), refresh_token: "r-ended", scope });
+      // the end goes out on the app's own fetch
+      vi.stubGlobal("fetch", f);
+      try {
+        await expect(completeSignIn("code", "s1", f)).rejects.toThrow(/didn't let Parachute manage who reaches recipes/);
+      } finally { vi.unstubAllGlobals(); }
+      expect(ended).toEqual(["r-ended"]);
+    }
+  });
+});

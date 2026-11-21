@@ -1,0 +1,1256 @@
+diff --git a/crates/buzz-media/src/audio.rs b/crates/buzz-media/src/audio.rs
+new file mode 100644
+index 0000000..7b36159
+--- /dev/null
++++ b/crates/buzz-media/src/audio.rs
+@@ -0,0 +1,580 @@
++//! Bounded, fail-closed inspection of the two supported voice containers.
++//! Unknown elements are rejected: bytes stored verbatim must not provide an
++//! uninspected metadata channel (including nested tags and extra tracks).
++//! Each validator returns the stream's length in seconds, for the caller's
++//! duration limit.
++
++use crate::error::MediaError;
++
++fn invalid() -> MediaError {
++    MediaError::DisallowedContentType("invalid audio container".into())
++}
++
++fn le32(b: &[u8]) -> Result<usize, MediaError> {
++    Ok(u32::from_le_bytes(
++        b.get(..4)
++            .ok_or_else(invalid)?
++            .try_into()
++            .map_err(|_| invalid())?,
++    ) as usize)
++}
++
++fn opus_head(b: &[u8]) -> bool {
++    b.len() == 19 && b.starts_with(b"OpusHead\x01") && (1..=2).contains(&b[9]) && b[18] == 0
++}
++
++fn encoder(b: &[u8]) -> bool {
++    let Ok(s) = std::str::from_utf8(b) else {
++        return false;
++    };
++    let version = |v: &str| {
++        !v.is_empty() && v.len() <= 24 && v.bytes().all(|c| c.is_ascii_digit() || c == b'.')
++    };
++    s == "Lavf"
++        || s == "Lavc libopus"
++        || s == "libopus"
++        || s == "Chrome"
++        || s == "WebKit"
++        || s.strip_prefix("Lavf").is_some_and(version)
++        || s.strip_prefix("Lavc")
++            .and_then(|v| v.strip_suffix(" libopus"))
++            .is_some_and(version)
++}
++
++fn opus_tags(b: &[u8]) -> Result<(), MediaError> {
++    if !b.starts_with(b"OpusTags") || b.len() > 4096 {
++        return Err(invalid());
++    }
++    let mut p = 8;
++    let vendor_len = le32(b.get(p..).ok_or_else(invalid)?)?;
++    p += 4;
++    let vendor = b
++        .get(p..p.checked_add(vendor_len).ok_or_else(invalid)?)
++        .ok_or_else(invalid)?;
++    if !encoder(vendor) {
++        return Err(MediaError::MetadataForbidden);
++    }
++    p += vendor_len;
++    let count = le32(b.get(p..).ok_or_else(invalid)?)?;
++    p += 4;
++    if count > 1 {
++        return Err(MediaError::MetadataForbidden);
++    }
++    for _ in 0..count {
++        let len = le32(b.get(p..).ok_or_else(invalid)?)?;
++        p += 4;
++        let value = b
++            .get(p..p.checked_add(len).ok_or_else(invalid)?)
++            .ok_or_else(invalid)?;
++        if !value.starts_with(b"encoder=") || !encoder(&value[8..]) {
++            return Err(MediaError::MetadataForbidden);
++        }
++        p += len;
++    }
++    // OpusTags permits a trailing binary region; forbid it here.
++    if p != b.len() {
++        return Err(MediaError::MetadataForbidden);
++    }
++    Ok(())
++}
++
++pub(crate) fn ogg_crc(b: &[u8]) -> u32 {
++    let mut crc = 0u32;
++    for (i, byte) in b.iter().enumerate() {
++        let value = if (22..26).contains(&i) { 0 } else { *byte };
++        crc ^= u32::from(value) << 24;
++        for _ in 0..8 {
++            crc = (crc << 1)
++                ^ if crc & 0x8000_0000 != 0 {
++                    0x04c1_1db7
++                } else {
++                    0
++                };
++        }
++    }
++    crc
++}
++
++/// Opus granule positions count 48 kHz samples, whatever the input rate.
++const OPUS_GRANULE_RATE: f64 = 48_000.0;
++
++pub(super) fn validate_ogg(b: &[u8]) -> Result<f64, MediaError> {
++    let mut pos = 0;
++    let mut pre_skip = 0u64;
++    let mut end_granule = 0u64;
++    let mut serial = None;
++    let mut page_no = 0u32;
++    let mut packet_no = 0;
++    let mut packet = Vec::new();
++    let mut audio_packet_bytes = 0usize;
++    let mut continued = false;
++    let mut eos = false;
++    while pos < b.len() {
++        let page = b.get(pos..).ok_or_else(invalid)?;
++        if page.len() < 27 || &page[..4] != b"OggS" || page[4] != 0 || page[5] & !0x07 != 0 || eos {
++            return Err(invalid());
++        }
++        let flags = page[5];
++        if (flags & 1 != 0) != continued || (flags & 2 != 0) != (page_no == 0) {
++            return Err(invalid());
++        }
++        let s = u32::from_le_bytes(page[14..18].try_into().map_err(|_| invalid())?);
++        if serial.is_some_and(|prev| prev != s)
++            || u32::from_le_bytes(page[18..22].try_into().map_err(|_| invalid())?) != page_no
++        {
++            return Err(invalid());
++        }
++        serial = Some(s);
++        // The end position of the last packet finished on this page; all
++        // ones means none finishes here. Take the furthest, so a page that
++        // claims to run backwards cannot hide the stream's length.
++        let granule = u64::from_le_bytes(page[6..14].try_into().map_err(|_| invalid())?);
++        if granule != u64::MAX {
++            end_granule = end_granule.max(granule);
++        }
++        let n = page[26] as usize;
++        let segments = page.get(27..27 + n).ok_or_else(invalid)?;
++        let body_len: usize = segments.iter().map(|v| *v as usize).sum();
++        let end = 27 + n + body_len;
++        let full = page.get(..end).ok_or_else(invalid)?;
++        if ogg_crc(full) != u32::from_le_bytes(page[22..26].try_into().map_err(|_| invalid())?) {
++            return Err(invalid());
++        }
++        let mut cursor = 27 + n;
++        for &len in segments {
++            let size = len as usize;
++            if packet_no < 2 {
++                if packet.len() + size > 4096 {
++                    return Err(invalid());
++                }
++                packet.extend_from_slice(&page[cursor..cursor + size]);
++            } else {
++                audio_packet_bytes += size;
++            }
++            cursor += size;
++            if len < 255 {
++                if packet_no == 0 {
++                    if !opus_head(&packet) {
++                        return Err(invalid());
++                    }
++                    pre_skip = u64::from(u16::from_le_bytes([packet[10], packet[11]]));
++                } else if packet_no == 1 {
++                    opus_tags(&packet)?;
++                } else if audio_packet_bytes == 0 {
++                    return Err(invalid());
++                }
++                packet.clear();
++                audio_packet_bytes = 0;
++                packet_no += 1;
++            }
++        }
++        continued = segments.last() == Some(&255);
++        eos = flags & 4 != 0;
++        if eos && continued {
++            return Err(invalid());
++        }
++        pos += end;
++        page_no = page_no.checked_add(1).ok_or_else(invalid)?;
++    }
++    if !eos || packet_no < 3 {
++        return Err(invalid());
++    }
++    Ok(end_granule.saturating_sub(pre_skip) as f64 / OPUS_GRANULE_RATE)
++}
++
++struct Element<'a> {
++    id: u32,
++    data: &'a [u8],
++    unknown: bool,
++}
++
++fn vint(b: &[u8], max: usize, clear: bool) -> Result<(u64, usize), MediaError> {
++    let first = *b.first().ok_or_else(invalid)?;
++    let n = (first.leading_zeros() as usize) + 1;
++    if n > max || n > b.len() {
++        return Err(invalid());
++    }
++    let mut v = u64::from(if clear {
++        first & (0xffu16 >> n) as u8
++    } else {
++        first
++    });
++    for &byte in &b[1..n] {
++        v = (v << 8) | u64::from(byte);
++    }
++    Ok((v, n))
++}
++
++fn next<'a>(b: &'a [u8], pos: &mut usize) -> Result<Element<'a>, MediaError> {
++    let (id, id_len) = vint(b.get(*pos..).ok_or_else(invalid)?, 4, false)?;
++    let (size, n) = vint(b.get(*pos + id_len..).ok_or_else(invalid)?, 8, true)?;
++    let start = pos.checked_add(id_len + n).ok_or_else(invalid)?;
++    let unknown = size == ((1u64 << (7 * n)) - 1);
++    let end = if unknown {
++        b.len()
++    } else {
++        start
++            .checked_add(usize::try_from(size).map_err(|_| invalid())?)
++            .ok_or_else(invalid)?
++    };
++    let data = b.get(start..end).ok_or_else(invalid)?;
++    *pos = end;
++    Ok(Element {
++        id: id as u32,
++        data,
++        unknown,
++    })
++}
++
++fn children<'a>(
++    b: &'a [u8],
++    mut f: impl FnMut(Element<'a>) -> Result<(), MediaError>,
++) -> Result<(), MediaError> {
++    let mut pos = 0;
++    while pos < b.len() {
++        let el = next(b, &mut pos)?;
++        if el.unknown {
++            return Err(invalid());
++        }
++        f(el)?;
++    }
++    Ok(())
++}
++
++fn number(b: &[u8]) -> Result<u64, MediaError> {
++    if b.is_empty() || b.len() > 8 {
++        return Err(invalid());
++    }
++    Ok(b.iter()
++        .fold(0u64, |acc, byte| (acc << 8) | u64::from(*byte)))
++}
++
++/// Check a (Simple)Block and return its timecode relative to its Cluster.
++fn block(b: &[u8]) -> Result<i16, MediaError> {
++    let (track, n) = vint(b, 8, true)?;
++    if track != 1 || b.len() <= n + 3 || b[n + 2] & 0x06 != 0 {
++        return Err(invalid());
++    }
++    Ok(i16::from_be_bytes([b[n], b[n + 1]]))
++}
++
++/// The latest block start in a Cluster, in Segment timecode units.
++#[derive(Default)]
++struct ClusterScan {
++    blocks: usize,
++    consumed: usize,
++    end: f64,
++}
++
++fn duration_tag(v: &[u8]) -> bool {
++    let value = v.strip_suffix(b"\0").unwrap_or(v);
++    value.len() == 18
++        && value[2] == b':'
++        && value[5] == b':'
++        && value[8] == b'.'
++        && value
++            .iter()
++            .enumerate()
++            .all(|(i, c)| matches!(i, 2 | 5 | 8) || c.is_ascii_digit())
++}
++
++fn tag(b: &[u8]) -> Result<(), MediaError> {
++    let mut name = None;
++    let mut value = None;
++    children(b, |el| match el.id {
++        0x45a3 if name.replace(el.data).is_none() => Ok(()),
++        0x4487 if value.replace(el.data).is_none() => Ok(()),
++        _ => Err(MediaError::MetadataForbidden),
++    })?;
++    match (name, value) {
++        (Some(b"ENCODER"), Some(v)) if encoder(v) => Ok(()),
++        (Some(b"DURATION"), Some(v)) if duration_tag(v) => Ok(()),
++        _ => Err(MediaError::MetadataForbidden),
++    }
++}
++
++fn tags(b: &[u8]) -> Result<(), MediaError> {
++    children(b, |el| {
++        if el.id != 0x7373 {
++            return Err(MediaError::MetadataForbidden);
++        }
++        children(el.data, |child| match child.id {
++            0x63c0 => children(child.data, |target| {
++                if target.id == 0x63c5 && number(target.data)? == 1 {
++                    Ok(())
++                } else {
++                    Err(MediaError::MetadataForbidden)
++                }
++            }),
++            0x67c8 => tag(child.data),
++            _ => Err(MediaError::MetadataForbidden),
++        })
++    })
++}
++
++fn tracks(b: &[u8]) -> Result<(), MediaError> {
++    let mut entries = 0;
++    children(b, |el| {
++        if el.id != 0xae {
++            return Err(invalid());
++        }
++        entries += 1;
++        let mut track = None;
++        let mut kind = None;
++        let mut codec = None;
++        let mut head = None;
++        children(el.data, |field| match field.id {
++            0xd7 if track.replace(number(field.data)?).is_none() => Ok(()),
++            0x83 if kind.replace(number(field.data)?).is_none() => Ok(()),
++            0x86 if codec.replace(field.data).is_none() => Ok(()),
++            0x63a2 if head.replace(field.data).is_none() => Ok(()),
++            0xe1 => children(field.data, |audio| match audio.id {
++                0xb5 | 0x9f | 0x6264 => {
++                    number(audio.data)?;
++                    Ok(())
++                }
++                _ => Err(invalid()),
++            }),
++            0x73c5 | 0x9c | 0x88 | 0x56aa | 0x56bb | 0x23e383 | 0x55ee => {
++                number(field.data)?;
++                Ok(())
++            }
++            0x22b59c if field.data == b"und" => Ok(()),
++            _ => Err(MediaError::MetadataForbidden),
++        })?;
++        if track != Some(1)
++            || kind != Some(2)
++            || codec != Some(b"A_OPUS".as_slice())
++            || !head.is_some_and(opus_head)
++        {
++            return Err(invalid());
++        }
++        Ok(())
++    })?;
++    if entries != 1 {
++        return Err(invalid());
++    }
++    Ok(())
++}
++
++fn cluster(b: &[u8], unknown: bool) -> Result<ClusterScan, MediaError> {
++    let mut pos = 0;
++    let mut blocks = 0;
++    let mut timecode = 0u64;
++    let mut latest: Option<i16> = None;
++    let mut seen = |rel: i16| latest = Some(latest.map_or(rel, |l| l.max(rel)));
++    while pos < b.len() {
++        if unknown
++            && matches!(
++                vint(&b[pos..], 4, false)?.0 as u32,
++                0x1f43b675 | 0x1c53bb6b | 0x1254c367
++            )
++        {
++            break;
++        }
++        let el = next(b, &mut pos)?;
++        if el.unknown {
++            return Err(invalid());
++        }
++        match el.id {
++            0xe7 => {
++                timecode = number(el.data)?;
++                Ok(())
++            }
++            0xa3 => {
++                seen(block(el.data)?);
++                blocks += 1;
++                Ok(())
++            }
++            0xa0 => children(el.data, |field| match field.id {
++                0xa1 => {
++                    seen(block(field.data)?);
++                    blocks += 1;
++                    Ok(())
++                }
++                0x9b | 0xfb | 0x75a2 => {
++                    number(field.data)?;
++                    Ok(())
++                }
++                _ => Err(invalid()),
++            }),
++            _ => Err(invalid()),
++        }?;
++    }
++    let end = latest.map_or(0.0, |rel| (timecode as f64 + f64::from(rel)).max(0.0));
++    Ok(ClusterScan {
++        blocks,
++        consumed: pos,
++        end,
++    })
++}
++
++fn seek_head(b: &[u8]) -> Result<(), MediaError> {
++    children(b, |entry| {
++        if entry.id != 0x4dbb {
++            return Err(invalid());
++        }
++        let mut id = false;
++        let mut position = false;
++        children(entry.data, |field| match field.id {
++            0x53ab
++                if !id
++                    && [
++                        b"\x15\x49\xa9\x66".as_slice(),
++                        b"\x16\x54\xae\x6b",
++                        b"\x12\x54\xc3\x67",
++                        b"\x1c\x53\xbb\x6b",
++                        // Chrome's MediaRecorder indexes the first Cluster.
++                        // A seek entry is only a byte offset; the Cluster
++                        // itself is validated below.
++                        b"\x1f\x43\xb6\x75",
++                    ]
++                    .contains(&field.data) =>
++            {
++                id = true;
++                Ok(())
++            }
++            0x53ac if !position => {
++                number(field.data)?;
++                position = true;
++                Ok(())
++            }
++            _ => Err(invalid()),
++        })?;
++        if !id || !position {
++            return Err(invalid());
++        }
++        Ok(())
++    })
++}
++
++fn cues(b: &[u8]) -> Result<(), MediaError> {
++    children(b, |point| {
++        if point.id != 0xbb {
++            return Err(invalid());
++        }
++        children(point.data, |field| match field.id {
++            0xb3 => {
++                number(field.data)?;
++                Ok(())
++            }
++            0xb7 => children(field.data, |position| match position.id {
++                0xf7 if number(position.data)? == 1 => Ok(()),
++                // libwebm (WebKit) adds CueBlockNumber when the cue is not
++                // on the Cluster's first block.
++                0xf1 | 0xf0 | 0x5378 => {
++                    number(position.data)?;
++                    Ok(())
++                }
++                _ => Err(invalid()),
++            }),
++            _ => Err(invalid()),
++        })
++    })
++}
++
++/// Matroska's default TimecodeScale: one timecode unit is 1 ms.
++const DEFAULT_TIMECODE_SCALE_NS: u64 = 1_000_000;
++
++fn float(b: &[u8]) -> Option<f64> {
++    match b.len() {
++        4 => Some(f64::from(f32::from_be_bytes(b.try_into().ok()?))),
++        8 => Some(f64::from_be_bytes(b.try_into().ok()?)),
++        _ => None,
++    }
++}
++
++pub(super) fn validate_webm(b: &[u8]) -> Result<f64, MediaError> {
++    let mut pos = 0;
++    let header = next(b, &mut pos)?;
++    if header.id != 0x1a45dfa3 || header.unknown {
++        return Err(invalid());
++    }
++    let mut doc = false;
++    children(header.data, |el| match el.id {
++        0x4282 if el.data == b"webm" && !doc => {
++            doc = true;
++            Ok(())
++        }
++        0x4286 | 0x42f7 | 0x42f2 | 0x42f3 | 0x4287 | 0x4285 => {
++            number(el.data)?;
++            Ok(())
++        }
++        _ => Err(invalid()),
++    })?;
++    if !doc {
++        return Err(invalid());
++    }
++    let segment = next(b, &mut pos)?;
++    if segment.id != 0x18538067 || pos != b.len() {
++        return Err(invalid());
++    }
++    let mut found_info = false;
++    let mut found_tracks = false;
++    let mut blocks = 0;
++    let mut timecode_scale = DEFAULT_TIMECODE_SCALE_NS;
++    // Segment length in timecode units: the later of the declared Info
++    // Duration (what players show) and the last block's start (what plays).
++    let mut end = 0.0f64;
++    let mut cursor = 0;
++    while cursor < segment.data.len() {
++        let start = cursor;
++        let el = next(segment.data, &mut cursor)?;
++        if el.unknown && el.id != 0x1f43b675 {
++            return Err(invalid());
++        }
++        match el.id {
++            0x114d9b74 => seek_head(el.data),
++            0xec if el.data.iter().all(|c| *c == 0) && el.data.len() <= 4096 => Ok(()),
++            0x1549a966 if !found_info => {
++                found_info = true;
++                children(el.data, |field| match field.id {
++                    0x2ad7b1 => {
++                        timecode_scale = number(field.data)?;
++                        Ok(())
++                    }
++                    0x4489 => {
++                        let declared = float(field.data).ok_or_else(invalid)?;
++                        // f64::max skips NaN; infinity is refused by the limit.
++                        end = end.max(declared);
++                        Ok(())
++                    }
++                    0x4d80 | 0x5741 if encoder(field.data) => Ok(()),
++                    _ => Err(MediaError::MetadataForbidden),
++                })
++            }
++            0x1654ae6b if !found_tracks => {
++                found_tracks = true;
++                tracks(el.data)
++            }
++            0x1254c367 => tags(el.data),
++            0x1f43b675 if found_tracks => {
++                let scan = cluster(el.data, el.unknown)?;
++                blocks += scan.blocks;
++                end = end.max(scan.end);
++                if el.unknown {
++                    cursor = start + (segment.data[start..].len() - el.data.len()) + scan.consumed;
++                }
++                Ok(())
++            }
++            0x1c53bb6b => cues(el.data),
++            _ => Err(MediaError::MetadataForbidden),
++        }?;
++    }
++    if !found_info || !found_tracks || blocks == 0 {
++        return Err(invalid());
++    }
++    Ok(end * timecode_scale as f64 / 1e9)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn duration_tag_rejects_location_disguised_as_time() {
++        let mut data = b"\x45\xa3\x88DURATION\x44\x87\x86".to_vec();
++        data.extend_from_slice(b"40:105");
++        assert!(tag(&data).is_err());
++    }
++}
+diff --git a/crates/buzz-media/src/error.rs b/crates/buzz-media/src/error.rs
+index 9a72c7f..8d6b22d 100644
+--- a/crates/buzz-media/src/error.rs
++++ b/crates/buzz-media/src/error.rs
+@@ -99,9 +99,14 @@ pub enum MediaError {
+     /// A video/audio track does not use the canonical H.264/AAC codecs.
+     #[error("unsupported media codec: only H.264 video and AAC audio are accepted")]
+     WrongCodec,
+-    /// Video duration exceeds the 600-second limit.
+-    #[error("video too long: duration exceeds 600 seconds")]
+-    DurationTooLong,
++    /// Media runs longer than its kind allows (see
++    /// [`crate::validation::MAX_VIDEO_DURATION_SECS`] and
++    /// [`crate::validation::MAX_AUDIO_DURATION_SECS`]).
++    #[error("{kind} too long: duration exceeds {max_secs} seconds")]
++    DurationTooLong {
++        kind: crate::validation::MediaKind,
++        max_secs: u64,
++    },
+     /// Video resolution exceeds the 2160 short-edge / 3840 long-edge envelope.
+     #[error(
+         "video resolution too high: maximum is 2160 on the short edge and 3840 on the long edge"
+@@ -234,7 +239,7 @@ impl IntoResponse for MediaError {
+             Self::UnknownContentType | Self::UnsupportedContainer | Self::WrongCodec => {
+                 (StatusCode::UNSUPPORTED_MEDIA_TYPE, self.to_string())
+             }
+-            Self::DurationTooLong
++            Self::DurationTooLong { .. }
+             | Self::ResolutionTooHigh
+             | Self::MoovNotAtFront
+             | Self::InvalidVideo
+@@ -420,7 +425,10 @@ mod tests {
+             MediaError::InvalidVideo,
+             MediaError::MetadataForbidden,
+             MediaError::MoovNotAtFront,
+-            MediaError::DurationTooLong,
++            MediaError::DurationTooLong {
++                kind: crate::validation::MediaKind::Video,
++                max_secs: 3600,
++            },
+             MediaError::ResolutionTooHigh,
+         ] {
+             assert_eq!(
+diff --git a/crates/buzz-media/src/lib.rs b/crates/buzz-media/src/lib.rs
+index 81d341a..b2137d9 100644
+--- a/crates/buzz-media/src/lib.rs
++++ b/crates/buzz-media/src/lib.rs
+@@ -2,6 +2,7 @@
+ //!
+ //! Library crate — no Axum dependency for handlers. Axum handlers live in `buzz-relay`.
+ 
++mod audio;
+ pub mod auth;
+ pub mod bucket_index;
+ pub mod config;
+diff --git a/crates/buzz-media/src/upload.rs b/crates/buzz-media/src/upload.rs
+index 0db9dfe..71e7579 100644
+--- a/crates/buzz-media/src/upload.rs
++++ b/crates/buzz-media/src/upload.rs
+@@ -231,11 +231,11 @@ pub async fn process_upload(
+     .await
+ }
+ 
+-/// Process a generic non-media file upload end-to-end.
++/// Process a generic file or validated Opus voice upload end-to-end.
+ ///
+-/// This is the catch-all attachment path for documents, archives, text, and
+-/// data. Recognized image, video, and audio formats fail closed instead of
+-/// entering exact-byte storage without their format-specific location policy.
++/// This catch-all path accepts documents and a bounded audio-only Opus subset.
++/// Other recognized media fails closed instead of entering exact-byte storage
++/// without format-specific metadata inspection.
+ /// The body is fully buffered in RAM (bounded by `config.max_file_bytes` at the
+ /// transport layer), validated against the deny-list + size cap, stored, and
+ /// recorded in a minimal sidecar. No thumbnail, dimensions, or duration.
+diff --git a/crates/buzz-media/src/validation.rs b/crates/buzz-media/src/validation.rs
+index 0a748ca..fa03bb1 100644
+--- a/crates/buzz-media/src/validation.rs
++++ b/crates/buzz-media/src/validation.rs
+@@ -139,6 +139,7 @@ fn file_mime_to_ext(mime: &str) -> Option<&'static str> {
+         "audio/flac" | "audio/x-flac" => "flac",
+         "audio/wav" | "audio/x-wav" => "wav",
+         "audio/ogg" => "ogg",
++        "audio/webm" => "webm",
+         "audio/aac" => "aac",
+         "audio/opus" => "opus",
+         // Other media containers (served as downloads, not transcoded)
+@@ -197,10 +198,19 @@ pub fn validate_file_content(
+     match infer::get(bytes) {
+         Some(kind) => {
+             let mime = kind.mime_type().to_string();
++            // `infer` labels every WebM as video/webm from the EBML signature.
++            // Only the inspected, single-track Opus subset is eligible here.
++            if mime == "video/webm" {
++                MediaKind::Audio.check_duration(crate::audio::validate_webm(bytes)?)?;
++                return Ok(("audio/webm".into(), "webm".into()));
++            }
++            if mime == "audio/ogg" || mime == "audio/opus" {
++                MediaKind::Audio.check_duration(crate::audio::validate_ogg(bytes)?)?;
++                return Ok(("audio/ogg".into(), "ogg".into()));
++            }
+             // Recognized media must never fall through exact-byte attachment
+-            // storage. Images and video use their canonical media validators;
+-            // audio is rejected until Buzz has an explicit sanitizer and
+-            // location-metadata validator for its container.
++            // storage. Only the inspected Opus subsets above are eligible;
++            // other image, video, and audio formats remain blocked.
+             if mime.starts_with("image/")
+                 || mime.starts_with("video/")
+                 || mime.starts_with("audio/")
+@@ -231,6 +241,54 @@ pub fn serve_inline(mime: &str) -> bool {
+     mime.starts_with("image/") || mime.starts_with("video/")
+ }
+ 
++/// Longest video the relay stores: 60 minutes.
++pub const MAX_VIDEO_DURATION_SECS: f64 = 3_600.0;
++
++/// Longest audio the relay stores: 3 hours. Applies to Opus voice in Ogg or
++/// WebM, and to MP4 whose only picture is one still frame over an AAC track
++/// (sound with a cover image, which is how clients send M4A as MP4).
++pub const MAX_AUDIO_DURATION_SECS: f64 = 10_800.0;
++
++/// What a timed upload is, for its duration limit.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub enum MediaKind {
++    /// Sound only, or sound under a single still frame.
++    Audio,
++    /// Moving pictures.
++    Video,
++}
++
++impl MediaKind {
++    /// The longest upload of this kind the relay accepts, in seconds.
++    pub fn max_duration_secs(self) -> f64 {
++        match self {
++            Self::Audio => MAX_AUDIO_DURATION_SECS,
++            Self::Video => MAX_VIDEO_DURATION_SECS,
++        }
++    }
++
++    /// Refuse `secs` when it runs past this kind's limit.
++    pub(crate) fn check_duration(self, secs: f64) -> Result<(), MediaError> {
++        let max = self.max_duration_secs();
++        if secs > max {
++            return Err(MediaError::DurationTooLong {
++                kind: self,
++                max_secs: max as u64,
++            });
++        }
++        Ok(())
++    }
++}
++
++impl std::fmt::Display for MediaKind {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.write_str(match self {
++            Self::Audio => "audio",
++            Self::Video => "video",
++        })
++    }
++}
++
+ /// Metadata extracted from a validated MP4 file.
+ #[derive(Debug, Clone)]
+ pub struct VideoMeta {
+@@ -295,7 +353,9 @@ pub fn validate_content(bytes: &[u8], config: &MediaConfig) -> Result<String, Me
+ /// - Container is MP4 (ftyp brand is not QuickTime `qt  `)
+ /// - Exactly one video track using `avc1` (H.264 only — rejects HEVC, VP9, AV1)
+ /// - At most one audio track, using `mp4a` (AAC)
+-/// - Duration ≤ 600 seconds (from mvhd timescale, not edit lists)
++/// - Duration within its kind's limit (track mdhd timescale, not edit lists):
++///   [`MAX_VIDEO_DURATION_SECS`] for moving pictures, [`MAX_AUDIO_DURATION_SECS`]
++///   when the only picture is one still frame over an AAC track
+ /// - Resolution: short edge ≤ 2160 and long edge ≤ 3840 (portrait or landscape)
+ /// - moov atom precedes mdat (fast-start / web-optimised)
+ ///
+@@ -336,7 +396,9 @@ pub fn validate_video_file(path: &Path, config: &MediaConfig) -> Result<VideoMet
+ 
+     // --- Track inspection ---
+     let mut video_meta: Option<VideoMeta> = None;
++    let mut video_samples = 0u32;
+     let mut has_audio = false;
++    let mut audio_secs = 0.0f64;
+ 
+     for track in mp4.tracks().values() {
+         match track.track_type().map_err(|_| MediaError::InvalidVideo)? {
+@@ -355,22 +417,15 @@ pub fn validate_video_file(path: &Path, config: &MediaConfig) -> Result<VideoMet
+                     return Err(MediaError::WrongCodec);
+                 }
+ 
+-                // Duration from mvhd timescale (track duration / timescale).
+-                // Reject zero/negative (malformed) and >600s (too long).
++                // Duration from the track's mdhd (duration / timescale).
++                // Reject zero/negative (malformed); the length limit depends on
++                // the kind and is checked once every track has been read.
+                 // Must match imeta validation which requires duration > 0.0.
+-                // Guard: timescale=0 causes division-by-zero in the mp4 crate's
+-                // duration() method. Fail fast before it panics.
+-                if track.timescale() == 0 {
+-                    return Err(MediaError::InvalidVideo);
+-                }
+-                let duration_ms = track.duration().as_millis();
+-                let duration_secs = duration_ms as f64 / 1000.0;
++                let duration_secs = track_secs(track)?;
+                 if duration_secs <= 0.0 {
+                     return Err(MediaError::InvalidVideo);
+                 }
+-                if duration_secs > 600.0 {
+-                    return Err(MediaError::DurationTooLong);
+-                }
++                video_samples = track.sample_count();
+ 
+                 // Resolution check. Apply the 2160×3840 envelope independent
+                 // of orientation so equivalent portrait and landscape videos
+@@ -401,6 +456,7 @@ pub fn validate_video_file(path: &Path, config: &MediaConfig) -> Result<VideoMet
+                 if media_type != mp4::MediaType::AAC {
+                     return Err(MediaError::WrongCodec);
+                 }
++                audio_secs = track_secs(track)?;
+                 has_audio = true;
+             }
+             _ => return Err(MediaError::MetadataForbidden),
+@@ -415,9 +471,38 @@ pub fn validate_video_file(path: &Path, config: &MediaConfig) -> Result<VideoMet
+         }
+     })?;
+     meta.has_audio = has_audio;
++
++    // One still frame over a sound track is audio with a cover image (the
++    // shape clients send M4A in); anything with more pictures is video. The
++    // longer track decides, so a short picture cannot carry long sound past
++    // the limit.
++    let kind = if has_audio && video_samples == 1 {
++        MediaKind::Audio
++    } else {
++        MediaKind::Video
++    };
++    let longest = meta.duration_secs.max(audio_secs);
++    kind.check_duration(longest)?;
++    // Audio's length is its sound's: a cover frame may be shorter. The stored
++    // duration is what imeta `duration` is checked against.
++    if kind == MediaKind::Audio {
++        meta.duration_secs = longest;
++    }
+     Ok(meta)
+ }
+ 
++/// A track's length in seconds, from its mdhd duration and timescale, in
++/// whole milliseconds rounded down (what the mp4 crate's `duration()` gives,
++/// without its u64 overflow on a huge version-1 duration).
++fn track_secs(track: &mp4::Mp4Track) -> Result<f64, MediaError> {
++    let mdhd = &track.trak.mdia.mdhd;
++    if mdhd.timescale == 0 {
++        return Err(MediaError::InvalidVideo);
++    }
++    let millis = u128::from(mdhd.duration) * 1000 / u128::from(mdhd.timescale);
++    Ok(millis as f64 / 1000.0)
++}
++
+ /// Scan the top-level atom sequence to verify moov appears before mdat.
+ ///
+ /// Reads only the 8-byte atom headers (size + fourcc) — never loads atom bodies.
+@@ -1624,13 +1709,125 @@ mod tests {
+             assert!(
+                 matches!(
+                     validate_file_content(bytes, &config),
+-                    Err(MediaError::DisallowedContentType(mime)) if mime.starts_with("audio/")
++                    Err(MediaError::DisallowedContentType(_))
+                 ),
+                 "generic path accepted {name}"
+             );
+         }
+     }
+ 
++    #[test]
++    fn generic_upload_accepts_only_valid_opus_audio_containers() {
++        let cfg = test_config();
++        let webm = include_bytes!("testdata/voice_clean.webm");
++        let ogg = include_bytes!("testdata/voice_encoder.ogg");
++        assert_eq!(
++            validate_file_content(webm, &cfg).unwrap(),
++            ("audio/webm".into(), "webm".into())
++        );
++        assert_eq!(
++            validate_file_content(ogg, &cfg).unwrap(),
++            ("audio/ogg".into(), "ogg".into())
++        );
++        // Real Chromium MediaRecorder output (the desktop/Android WebView
++        // voice path): its SeekHead indexes the Cluster.
++        let chrome = include_bytes!("testdata/voice_chrome_mediarecorder.webm");
++        assert_eq!(
++            validate_file_content(chrome, &cfg).unwrap(),
++            ("audio/webm".into(), "webm".into())
++        );
++        // libwebm mkvmuxer configured exactly like WebKit's MediaRecorder
++        // (Safari, WKWebView): non-seekable kFile writer, so unknown-size
++        // Segment/Clusters, no SeekHead, and Cues after the last Cluster.
++        let webkit = include_bytes!("testdata/voice_webkit_mediarecorder.webm");
++        assert_eq!(
++            validate_file_content(webkit, &cfg).unwrap(),
++            ("audio/webm".into(), "webm".into())
++        );
++        for file in [
++            include_bytes!("testdata/av.webm").as_slice(),
++            include_bytes!("testdata/voice_tagged.webm").as_slice(),
++            include_bytes!("testdata/voice_webkit_tagged.webm").as_slice(),
++            include_bytes!("testdata/voice_tagged.ogg").as_slice(),
++            &webm[..webm.len() - 1],
++            &ogg[..ogg.len() - 1],
++        ] {
++            assert!(
++                validate_file_content(file, &cfg).is_err(),
++                "accepted invalid or tagged audio"
++            );
++        }
++    }
++
++    #[test]
++    fn webm_accepts_streaming_unknown_size_clusters_without_skipping_siblings() {
++        let cfg = test_config();
++        let mut webm = include_bytes!("testdata/voice_clean.webm").to_vec();
++        let cluster = webm
++            .windows(4)
++            .position(|w| w == b"\x1f\x43\xb6\x75")
++            .unwrap();
++        assert_eq!(&webm[cluster + 4..cluster + 6], b"\x47\xde");
++        webm[cluster + 4..cluster + 6].copy_from_slice(b"\x7f\xff");
++        assert_eq!(validate_file_content(&webm, &cfg).unwrap().0, "audio/webm");
++    }
++
++    #[test]
++    fn malformed_ebml_cannot_fall_through_to_opaque_storage() {
++        let cfg = test_config();
++        let mut webm = include_bytes!("testdata/voice_clean.webm").to_vec();
++        let marker = webm.windows(4).position(|w| w == b"webm").unwrap();
++        webm[marker..marker + 4].copy_from_slice(b"XXXX");
++        assert!(validate_file_content(&webm, &cfg).is_err());
++    }
++
++    #[test]
++    fn opus_audio_rejects_spoofed_metadata_and_corrupt_pages() {
++        let cfg = test_config();
++        let mut ogg = include_bytes!("testdata/voice_encoder.ogg").to_vec();
++        let marker = ogg.windows(7).position(|w| w == b"encoder").unwrap();
++        ogg[marker..marker + 7].copy_from_slice(b"locatio");
++        assert!(validate_file_content(&ogg, &cfg).is_err());
++        let mut ogg = include_bytes!("testdata/voice_encoder.ogg").to_vec();
++        let last = ogg.len() - 1;
++        ogg[last] ^= 1;
++        assert!(validate_file_content(&ogg, &cfg).is_err());
++
++        let mut webm = include_bytes!("testdata/voice_clean.webm").to_vec();
++        let marker = webm.windows(7).position(|w| w == b"ENCODER").unwrap();
++        webm[marker..marker + 7].copy_from_slice(b"GEO_TAG");
++        assert!(validate_file_content(&webm, &cfg).is_err());
++        let mut webm = include_bytes!("testdata/voice_clean.webm").to_vec();
++        let marker = webm.windows(4).position(|w| w == b"Lavf").unwrap();
++        webm[marker..marker + 4].copy_from_slice(b"GPS!");
++        assert!(validate_file_content(&webm, &cfg).is_err());
++        let mut webm = include_bytes!("testdata/voice_clean.webm").to_vec();
++        let marker = webm
++            .windows(16)
++            .position(|w| w == b"\x15\x49\xa9\x66\xa0\x2a\xd7\xb1\x83\x0f\x42\x40\x4d\x80\x84\x4c")
++            .unwrap();
++        webm[marker + 1] = 0xff; // Malformed EBML ID, not a different upload type.
++        assert!(validate_file_content(&webm, &cfg).is_err());
++    }
++
++    #[test]
++    fn malformed_opus_containers_never_panic() {
++        let cfg = test_config();
++        for fixture in [
++            include_bytes!("testdata/voice_clean.webm").as_slice(),
++            include_bytes!("testdata/voice_encoder.ogg").as_slice(),
++        ] {
++            for offset in (0..fixture.len()).step_by(17) {
++                let mut mutated = fixture.to_vec();
++                mutated[offset] ^= 0xff;
++                let _ = validate_file_content(&mutated, &cfg);
++            }
++            for len in (0..fixture.len()).step_by(31) {
++                let _ = validate_file_content(&fixture[..len], &cfg);
++            }
++        }
++    }
++
+     #[test]
+     fn test_validate_svg_rejected() {
+         let config = test_config();
+@@ -1740,9 +1937,9 @@ mod tests {
+         build_mp4_bytes(true, b"hev1", 1_000, 320, 240, false)
+     }
+ 
+-    /// Build an MP4 with duration > 600s.
++    /// Build a video (no sound track) one second over the 60-minute limit.
+     fn build_mp4_too_long() -> Vec<u8> {
+-        build_mp4_bytes(true, b"avc1", 601_000, 320, 240, false)
++        build_mp4_bytes(true, b"avc1", 3_601_000, 320, 240, false)
+     }
+ 
+     /// Build an MP4 with resolution > 3840x2160.
+@@ -2379,7 +2576,7 @@ mod tests {
+                 assert_eq!(meta.width, 320);
+                 assert_eq!(meta.height, 240);
+                 assert!(!meta.has_audio);
+-                assert!(meta.duration_secs > 0.0 && meta.duration_secs <= 600.0);
++                assert!(meta.duration_secs > 0.0 && meta.duration_secs <= MAX_VIDEO_DURATION_SECS);
+             }
+             Err(e) => panic!("expected Ok, got {e:?}"),
+         }
+@@ -2608,11 +2805,230 @@ mod tests {
+         std::fs::write(tmp.path(), &mp4_bytes).unwrap();
+         let result = validate_video_file(tmp.path(), &config);
+         assert!(
+-            matches!(result, Err(MediaError::DurationTooLong)),
++            matches!(
++                result,
++                Err(MediaError::DurationTooLong {
++                    kind: MediaKind::Video,
++                    ..
++                })
++            ),
+             "expected DurationTooLong, got {result:?}"
+         );
+     }
+ 
++    // --- per-kind duration limits ---
++
++    /// Mark the first (video) track as holding `n` samples, so the file reads
++    /// as moving pictures rather than a single still frame.
++    fn with_video_samples(mut bytes: Vec<u8>, n: u32) -> Vec<u8> {
++        let stsz = bytes.windows(4).position(|w| w == b"stsz").unwrap();
++        // version/flags(4) | sample_size(4) | sample_count(4)
++        bytes[stsz + 8..stsz + 12].copy_from_slice(&1u32.to_be_bytes());
++        bytes[stsz + 12..stsz + 16].copy_from_slice(&n.to_be_bytes());
++        bytes
++    }
++
++    /// Set the second (audio) track's mdhd duration in milliseconds.
++    fn with_audio_duration_ms(mut bytes: Vec<u8>, ms: u32) -> Vec<u8> {
++        let mdhd = bytes
++            .windows(4)
++            .enumerate()
++            .filter(|(_, w)| *w == b"mdhd")
++            .map(|(i, _)| i)
++            .nth(1)
++            .unwrap();
++        // version/flags(4) | creation(4) | modification(4) | timescale(4) | duration(4)
++        bytes[mdhd + 20..mdhd + 24].copy_from_slice(&ms.to_be_bytes());
++        bytes
++    }
++
++    fn video_result(bytes: &[u8]) -> Result<VideoMeta, MediaError> {
++        let tmp = tempfile::NamedTempFile::new().unwrap();
++        std::fs::write(tmp.path(), bytes).unwrap();
++        validate_video_file(tmp.path(), &test_config())
++    }
++
++    fn too_long(result: &Result<VideoMeta, MediaError>, kind: MediaKind) -> bool {
++        matches!(result, Err(MediaError::DurationTooLong { kind: k, .. }) if *k == kind)
++    }
++
++    const MIN: u32 = 60_000;
++
++    #[test]
++    fn video_up_to_60_minutes_is_accepted() {
++        let mp4 = with_video_samples(build_mp4_bytes(true, b"avc1", 60 * MIN, 320, 240, true), 2);
++        let meta = video_result(&mp4).expect("60 min video");
++        assert_eq!(meta.duration_secs, 3600.0);
++    }
++
++    #[test]
++    fn video_over_60_minutes_is_refused() {
++        let mp4 = with_video_samples(build_mp4_bytes(true, b"avc1", 61 * MIN, 320, 240, true), 2);
++        assert!(too_long(&video_result(&mp4), MediaKind::Video));
++        // One second over, and a silent video (no audio track) too.
++        let mp4 = build_mp4_bytes(true, b"avc1", 60 * MIN + 1_000, 320, 240, false);
++        assert!(too_long(&video_result(&mp4), MediaKind::Video));
++    }
++
++    #[test]
++    fn still_frame_audio_of_35_minutes_is_accepted() {
++        // The Uni app sends M4A as one still frame over the AAC track.
++        let mp4 = build_mp4_bytes(true, b"avc1", 35 * MIN + 5_000, 320, 240, true);
++        let meta = video_result(&mp4).expect("35:05 audio");
++        assert!(meta.has_audio);
++        assert_eq!(meta.duration_secs, 2105.0);
++        // Exactly three hours is still in.
++        let mp4 = build_mp4_bytes(true, b"avc1", 180 * MIN, 320, 240, true);
++        assert!(video_result(&mp4).is_ok());
++    }
++
++    #[test]
++    fn still_frame_audio_over_3_hours_is_refused() {
++        let mp4 = build_mp4_bytes(true, b"avc1", 180 * MIN + 1_000, 320, 240, true);
++        assert!(too_long(&video_result(&mp4), MediaKind::Audio));
++    }
++
++    #[test]
++    fn audio_track_longer_than_its_picture_is_measured() {
++        // A short picture cannot carry a sound track past the limit.
++        let mp4 = build_mp4_bytes(true, b"avc1", 1_000, 320, 240, true);
++        let mp4 = with_audio_duration_ms(mp4, 180 * MIN + 1_000);
++        assert!(too_long(&video_result(&mp4), MediaKind::Audio));
++        let mp4 = with_video_samples(build_mp4_bytes(true, b"avc1", 1_000, 320, 240, true), 2);
++        let mp4 = with_audio_duration_ms(mp4, 60 * MIN + 1_000);
++        assert!(too_long(&video_result(&mp4), MediaKind::Video));
++    }
++
++    #[test]
++    fn audio_under_a_short_cover_frame_reports_the_sound_length() {
++        // ffmpeg muxing one cover image (no -loop) over long sound: the
++        // stored duration must be the sound's, or a client's probed imeta
++        // duration fails the sidecar cross-check.
++        let mp4 = build_mp4_bytes(true, b"avc1", 1_000, 320, 240, true);
++        let mp4 = with_audio_duration_ms(mp4, 120 * MIN);
++        assert_eq!(video_result(&mp4).unwrap().duration_secs, 7200.0);
++        // Video keeps its picture's length, as before.
++        let mp4 = with_video_samples(build_mp4_bytes(true, b"avc1", 1_000, 320, 240, true), 2);
++        let mp4 = with_audio_duration_ms(mp4, 2_000);
++        assert_eq!(video_result(&mp4).unwrap().duration_secs, 1.0);
++    }
++
++    #[test]
++    fn duration_refusal_names_kind_and_limit() {
++        let mp4 = build_mp4_bytes(true, b"avc1", 180 * MIN + 1_000, 320, 240, true);
++        assert_eq!(
++            video_result(&mp4).unwrap_err().to_string(),
++            "audio too long: duration exceeds 10800 seconds"
++        );
++        let mp4 = build_mp4_bytes(true, b"avc1", 61 * MIN, 320, 240, false);
++        assert_eq!(
++            video_result(&mp4).unwrap_err().to_string(),
++            "video too long: duration exceeds 3600 seconds"
++        );
++    }
++
++    /// Rewrite the last Ogg page's granule so the stream ends at `secs`.
++    fn ogg_ending_at(secs: u64) -> Vec<u8> {
++        let mut ogg = include_bytes!("testdata/voice_encoder.ogg").to_vec();
++        let head = ogg.windows(8).position(|w| w == b"OpusHead").unwrap();
++        let pre_skip = u64::from(u16::from_le_bytes([ogg[head + 10], ogg[head + 11]]));
++        let mut page = 0;
++        let mut last = 0;
++        while page < ogg.len() {
++            let n = ogg[page + 26] as usize;
++            let body: usize = ogg[page + 27..page + 27 + n]
++                .iter()
++                .map(|v| *v as usize)
++                .sum();
++            last = page;
++            page += 27 + n + body;
++        }
++        let end = page;
++        let granule = secs * 48_000 + pre_skip;
++        ogg[last + 6..last + 14].copy_from_slice(&granule.to_le_bytes());
++        let crc = crate::audio::ogg_crc(&ogg[last..end]);
++        ogg[last + 22..last + 26].copy_from_slice(&crc.to_le_bytes());
++        ogg
++    }
++
++    /// Give WebKit's MediaRecorder fixture (no Info Duration, unknown-size
++    /// Segment and Clusters) a first Cluster starting at `secs`.
++    fn webm_cluster_at(secs: u32) -> Vec<u8> {
++        let mut webm = include_bytes!("testdata/voice_webkit_mediarecorder.webm").to_vec();
++        let cluster = webm
++            .windows(4)
++            .position(|w| w == b"\x1f\x43\xb6\x75")
++            .unwrap();
++        let tc = cluster + 4 + 8; // unknown 8-byte size
++        assert_eq!(&webm[tc..tc + 3], b"\xe7\x81\x00");
++        let mut timecode = vec![0xe7, 0x84];
++        timecode.extend_from_slice(&(secs * 1000).to_be_bytes()); // TimecodeScale = 1 ms
++        webm.splice(tc..tc + 3, timecode);
++        webm
++    }
++
++    /// Rewrite the clean fixture's 8-byte Info Duration (in ms).
++    fn webm_info_duration(secs: f64) -> Vec<u8> {
++        let mut webm = include_bytes!("testdata/voice_clean.webm").to_vec();
++        let at = webm.windows(3).position(|w| w == b"\x44\x89\x88").unwrap() + 3;
++        webm[at..at + 8].copy_from_slice(&(secs * 1000.0).to_be_bytes());
++        webm
++    }
++
++    fn audio_too_long(result: Result<(String, String), MediaError>) -> bool {
++        matches!(
++            result,
++            Err(MediaError::DurationTooLong {
++                kind: MediaKind::Audio,
++                max_secs: 10_800
++            })
++        )
++    }
++
++    #[test]
++    fn opus_audio_up_to_3_hours_is_accepted() {
++        let cfg = test_config();
++        for secs in [35 * 60 + 5, 3 * 3600] {
++            assert_eq!(
++                validate_file_content(&ogg_ending_at(secs), &cfg).unwrap().0,
++                "audio/ogg"
++            );
++        }
++        // The fixture's first Cluster holds about a second of blocks after
++        // its start, so start it that much before the end being tested.
++        for secs in [35 * 60 + 5, 3 * 3600 - 2] {
++            assert_eq!(
++                validate_file_content(&webm_cluster_at(secs), &cfg)
++                    .unwrap()
++                    .0,
++                "audio/webm"
++            );
++        }
++        assert_eq!(
++            validate_file_content(&webm_info_duration(2105.0), &cfg)
++                .unwrap()
++                .0,
++            "audio/webm"
++        );
++    }
++
++    #[test]
++    fn opus_audio_over_3_hours_is_refused() {
++        let cfg = test_config();
++        assert!(audio_too_long(validate_file_content(
++            &ogg_ending_at(3 * 3600 + 1),
++            &cfg
++        )));
++        assert!(audio_too_long(validate_file_content(
++            &webm_cluster_at(3 * 3600 + 1),
++            &cfg
++        )));
++        assert!(audio_too_long(validate_file_content(
++            &webm_info_duration(10_801.0),
++            &cfg
++        )));
++    }
++
+     #[test]
+     fn test_validate_video_zero_duration_rejected() {
+         let config = test_config();
+diff --git a/crates/buzz-relay/src/api/media.rs b/crates/buzz-relay/src/api/media.rs
+index b1e58b0..4c0f768 100644
+--- a/crates/buzz-relay/src/api/media.rs
++++ b/crates/buzz-relay/src/api/media.rs
+@@ -521,6 +521,16 @@ async fn upload_blob_result(
+         }
+     }
+     let replay = futures_util::stream::iter(replay_chunks.into_iter().map(Ok)).chain(source);
++    // Rejections are otherwise invisible in relay logs; record why without
++    // logging content or full identities.
++    let rejected = |error: &MediaError| {
++        tracing::warn!(
++            %error,
++            sniffed = infer::get(&sniff).map_or("unknown", |kind| kind.mime_type()),
++            pubkey = &auth.auth_event.pubkey.to_hex()[..8],
++            "media upload rejected"
++        );
++    };
+ 
+     serving_write
+         .verify()
+@@ -613,6 +623,7 @@ async fn upload_blob_result(
+         // The inner Result captures failures from the async body (process_*,
+         // hash mismatches). Wrap through media_denial so post-body auth errors
+         // get the same NIP-FI shape as pre-body ones.
++        .inspect_err(rejected)
+         .map_err(|e| media_denial(e, strictness))?;
+ 
+     if state.config.media_read_mode != super::media_access::MediaReadMode::Off {

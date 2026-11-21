@@ -180,6 +180,6 @@ step 7).
 ## What is whose
 
 The bar is drawn by the app itself, under the frame and under applets, so it is there on every screen, even under a
-frame of your own (on a phone it steps aside while the keyboard is up). What is on it is yours: the open bundle's record (or the settings note). The list, a vault and a note are the frame
+frame of your own (in the Android app it steps aside while the keyboard is up). What is on it is yours: the open bundle's record (or the settings note). The list, a vault and a note are the frame
 ([CHANGE-YOUR-FRAME.md](CHANGE-YOUR-FRAME.md)), which you can make your own. A home applet is an ordinary applet
 ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)).

@@ -2,7 +2,9 @@
 // with this device's sign-in (a change to a vault held only for reading is refused before it is sent, and the person
 // is asked: vault/writeAsk.ts), the vault's live changes, and what the app knows of who reaches a vault.
 import type { VaultClient } from "@openparachute/surface-client";
-import type { AccessRow, HeldVault, HubRow, VaultsDeps, WatchEvent } from "../applet/modules/vaults";
+import type { AccessRow, HeldVault, HubRow, ReachRow, VaultsDeps, WatchEvent } from "../applet/modules/vaults";
+import { askManage } from "../vault/signInFlow";
+import { endManage, endReach, hubLists, listReach, makeKey, ManageEndedError, manageHeld, type HubGrantRow } from "../vault/manage";
 import { describe, oneAddress } from "../vault/parachute";
 import { clientFor, keptClientFor, lastRefreshFailure, signInState } from "../vault/client";
 import { connectorAddress, findVault, hostOf, listVaults, originOf, vaultUrlOf, type VaultRecord } from "../vault/store";
@@ -10,6 +12,7 @@ import { isMine } from "../vault/whose";
 import { heldLevel, giveBack, appletLevel } from "../vault/reach";
 import { forgetOwnWrite } from "../vault/writeAsk";
 import { homeVault } from "./frameSource";
+import { userOf } from "../services/signals";
 import { reachOf, viewBase } from "../vault/published";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
@@ -69,14 +72,28 @@ const noReach = (key: string) => async (e: unknown): Promise<never> => {
   throw e;
 };
 
+/** A row of the hub's list as Vault shows it: in force only, what it may do in a word, its types (null: all). */
+function reachRow(r: HubGrantRow, self: string | null): ReachRow {
+  const types = Object.keys(r.types ?? {});
+  const writes = types.some((t) => (r.types[t] ?? []).some((v) => v !== "read"));
+  const who = (["person", "agent", "app", "service"] as const).find((k) => k === r.kind) ?? "app";
+  return { id: r.id, name: r.name, who, app: r.app, can: r.admin ? "manage" : r.export ? "backup" : writes ? "change" : "read",
+    types: types.length === 0 || types.includes("*") ? null : types.sort(), until: r.expires_at, lastUsed: r.last_used_at, self: !!self && r.client === self };
+}
+
 export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string;
+  /** The applet these words serve (its subject): what it manages is held for it alone (vault/manage.ts). */ applet?: string;
+  /** The shell's own sheet that shows a key's secret once, never handing it to the applet. */ reveal?(k: { name: string; vault: string; token: string; address: string; until: string }): Promise<void>;
   /** Each read made from the kept copies (the vault, the read's path and query as readCache names it). */ read?(vault: string, read: string): void }): VaultsDeps {
   const req = (key: string) => clientFor(rec(key)) as unknown as VaultClient & Requesting;
+  const applet = opts.applet ?? "";
   return {
     list: heldVaults,
     hubs: heldHubs,
     // this device's Parachute signed in as an app: its writes are its key's, named for this client id (core keys.ts)
     self: (key) => findVault(key)?.clientId ?? null,
+    // the person's own account on that hub: the sign-in's subject (a write for it, by no named key, is theirs)
+    account: (key) => { const v = findVault(key); return v ? userOf(v.accessToken) : null; },
     // never from the browser's cache: the hub sends ETag and Last-Modified with no Cache-Control, so a browser may reuse a
     // read of a moment ago (heuristic freshness), and a record just changed would read as it was
     // a read as the hub has it now, kept for the screens that may show it from the copy (vault/readCache.ts); a change
@@ -151,6 +168,40 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       forgetSaved(subject);
       await giveBack(v.key, opts.back());
     },
+    async reach(key) {
+      const v = rec(key);
+      // a hub without the list: nothing to manage here (Sharing keeps the hub's own line)
+      if (!(await hubLists(v))) return false;
+      if (!manageHeld(v, applet)) return null;
+      try {
+        return (await listReach(v, applet)).filter((r) => r.state === "in_force").map((r) => reachRow(r, v.clientId ?? null));
+      } catch (e) {
+        if (e instanceof ManageEndedError) return null;
+        throw e;
+      }
+    },
+    async manage(key) {
+      // never ask the hub for a vault's admin where nothing could be read with it
+      if (!(await hubLists(rec(key)))) throw new Error("This vault's hub has no list of who reaches it.");
+      // back to this vault's Sharing (Vault reads `show`), where the person asked
+      const back = new URL(opts.back(), window.location.origin);
+      back.searchParams.set("vault", key);
+      back.searchParams.set("show", "sharing");
+      window.location.assign(await askManage(rec(key), `${back.pathname}${back.search}`, applet));
+    },
+    async giveKey(key, k) {
+      const v = rec(key);
+      const made = await makeKey(v, applet, k);
+      return { name: made.name, token: made.token, until: made.expires_at, types: made.types ?? null, address: connectorAddress(v) };
+    },
+    async endReach(key, id) {
+      await endReach(rec(key), applet, id);
+    },
+    stopManaging(key) {
+      const v = findVault(key);
+      if (v && manageHeld(v, applet)) endManage(v);
+    },
+    ...(opts.reveal ? { reveal: opts.reveal } : {}),
     async readOnly(key) {
       const v = rec(key);
       forgetOwnWrite(v);

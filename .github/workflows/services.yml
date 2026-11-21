@@ -1,0 +1,139 @@
+# The specs that need real servers (e2e/services/README.md): rooms, approvals, Home's today, devices, area and room links
+# on a Buzz relay; mail on Stalwart behind the mail gateway; Matrix on a homeserver; and the native side against the relay
+# and the gateway (src-tauri/tests/services_real.rs). They skip in CI's web job; here e2e/services/up.sh starts and seeds
+# those servers in the runner (loopback only, every key and password made up per run), so they run. Daily (fired from
+# main, testing next), on demand (any branch, any core), and on every pull request that changes more than docs.
+name: Services
+permissions:
+  contents: read
+on:
+  schedule:
+    - cron: "23 10 * * *"
+  workflow_dispatch:
+    inputs:
+      core:
+        description: "core: an npm version (0.9.0-pre.1) or a branch or commit of parachute-core"
+        default: next
+  # on every PR but a docs-only one: what these specs exercise reaches across the app, the shell and the build (e2e/**
+  # again: its Markdown is the test vault's notes)
+  pull_request:
+    paths:
+      - "**"
+      - "!**.md"
+      - "!docs/**"
+      - "e2e/**"
+
+# one run per branch or PR (and core) at a time: a newer push replaces a run still going
+concurrency:
+  group: services-${{ github.event_name }}-${{ github.ref }}-${{ inputs.core }}
+  cancel-in-progress: true
+
+jobs:
+  services:
+    runs-on: ubuntu-latest
+    # a cold relay build (no cached image) takes up to 25 minutes of this
+    timeout-minutes: 75
+    env:
+      SPECS: e2e/approvals.spec.ts e2e/area.spec.ts e2e/devices.spec.ts e2e/mail.spec.ts e2e/matrix.spec.ts e2e/roomlinks.spec.ts e2e/rooms.spec.ts e2e/today.spec.ts
+      SERVICES_DIR: ${{ github.workspace }}/../services
+    steps:
+      # the daily run fires from the default branch (main) but tests next, where the work lands
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'next' || '' }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: ./.github/actions/core
+        with:
+          core: ${{ inputs.core || 'next' }}
+
+      # the relay production runs: upstream Buzz plus our voice patches, built once and kept
+      - name: The relay's image name (its upstream commit and patch)
+        id: tag
+        run: echo "tag=$(e2e/services/relay-image.sh --tag)" >> "$GITHUB_OUTPUT"
+      - name: The relay's image, if built before
+        id: relay
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/relay-image.tar
+          key: relay-${{ steps.tag.outputs.tag }}
+      - name: Build or load the relay
+        run: |
+          [ -f "$RUNNER_TEMP/relay-image.tar" ] && docker load -q -i "$RUNNER_TEMP/relay-image.tar"
+          image="$(e2e/services/relay-image.sh)"
+          [ -f "$RUNNER_TEMP/relay-image.tar" ] || docker save -o "$RUNNER_TEMP/relay-image.tar" "$image"
+          echo "BUZZ_IMAGE=$image" >> "$GITHUB_ENV"
+      # kept at once, so a run whose specs fail doesn't build it again
+      - if: steps.relay.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/relay-image.tar
+          key: ${{ steps.relay.outputs.cache-primary-key }}
+      - name: Start and seed the servers
+        id: up
+        run: e2e/services/up.sh
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: The services specs (Playwright, web build)
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: services.json
+        run: npx playwright test $SPECS --project=phone --reporter=list,json,html
+      # a spec that skips here (a variable lost, a server not answering, a file renamed away) is a failure, not a pass:
+      # each file in SPECS must have tests, and every one of them ran
+      - name: Every one of them ran
+        if: ${{ !cancelled() && steps.up.outcome == 'success' }}
+        run: |
+          node -e '
+            const fs = require("fs"), r = JSON.parse(fs.readFileSync("services.json", "utf8"));
+            const tests = [], walk = (s) => { for (const x of s.specs ?? []) for (const t of x.tests) if (t.projectName === "phone") tests.push({ file: x.file, status: t.status }); (s.suites ?? []).forEach(walk); };
+            r.suites.forEach(walk);
+            const out = [];
+            for (const f of process.env.SPECS.split(/\s+/).filter(Boolean)) {
+              const mine = tests.filter((t) => `e2e/${t.file}` === f), ran = mine.filter((t) => t.status !== "skipped");
+              out.push(`${f}: ${ran.length} ran, ${mine.length - ran.length} skipped`);
+              if (!mine.length || ran.length !== mine.length) process.exitCode = 1;
+            }
+            const s = r.stats, line = `services specs: ${s.expected} passed, ${s.unexpected} failed, ${s.flaky} flaky, ${s.skipped} skipped`;
+            console.log([line, ...out].join("\n"));
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [line, "", ...out.map((l) => `- ${l}`)].join("\n") + "\n");'
+
+      # the native side against the same relay and gateway
+      - name: System libraries for the Linux webview
+        if: ${{ !cancelled() && steps.up.outcome == 'success' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+      - if: ${{ !cancelled() && steps.up.outcome == 'success' }}
+        uses: dtolnay/rust-toolchain@stable
+      - if: ${{ !cancelled() && steps.up.outcome == 'success' }}
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # the native side runs even when a spec failed: its result is its own
+      - name: The native side against the servers (services_real.rs)
+        if: ${{ !cancelled() && steps.up.outcome == 'success' }}
+        shell: bash
+        run: |
+          mkdir -p dist && [ -f dist/index.html ] || echo '<!doctype html>' > dist/index.html
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --test services_real -- --nocapture 2>&1 | tee native.log
+          if grep -q "skipped:" native.log; then echo "a native test skipped" >&2; exit 1; fi
+          grep -Eq "test result: ok\. [1-9][0-9]* passed; 0 failed; 0 ignored" native.log
+
+      - name: The servers' logs
+        if: failure()
+        run: docker compose -p parachute-e2e -f e2e/services/compose.yml logs --no-color > services.log 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: services-report
+          path: |
+            playwright-report
+            test-results
+            services.log
+            services.json
+            native.log
+          retention-days: 7

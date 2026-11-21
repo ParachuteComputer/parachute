@@ -1,6 +1,6 @@
 // Matrix (applets/matrix.tsx) against a real homeserver: the broker's `token` services. The person gives the app a token
 // for the homeserver in Settings (never the applet); the app adds it to the applet's requests. Alice reads the room bob
-// writes in, sends, and bob reads it. Local only (e2e/services/README.md): MATRIX_HS (the homeserver), MATRIX_TOKENS (a
+// writes in, sends, and bob reads it. Services workflow only (e2e/services/README.md): MATRIX_HS (the homeserver), MATRIX_TOKENS (a
 // folder with alice.token and bob.token), BUZZ_KEYS (alice.hex: the key the app signs with).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

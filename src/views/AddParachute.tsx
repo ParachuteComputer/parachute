@@ -55,7 +55,9 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
   return (
     <main className="screen">
       <Bar title={first ? "Parachute" : "Add a Parachute"} back={first ? undefined : "/"} />
-      <form className="card stack" onSubmit={submit}>
+      {/* noValidate: the app reads the address itself (parseHub takes a bare host, as the placeholder shows); a
+          browser's url check refused "your-hub.example" with "Please enter a URL." (T-476 Android walk) */}
+      <form className="card stack" onSubmit={submit} noValidate>
         {first && <p className="lead">Your notes live in vaults on your Parachute. Sign in there once: Parachute reads and writes your home vault, and asks before it reads any other.</p>}
         <label className="field">
           <span>Your Parachute's address</span>

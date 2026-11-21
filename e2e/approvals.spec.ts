@@ -3,7 +3,7 @@
 // Uni checks it (e2eCards.openAnswer: the seal is alice's, rumor 46042 naming the card, rid and digest). The web build
 // has no Rust: its test signer stands in for the native side (e2eNative.ts), with the device's trusted list and the
 // unlock set by the test. The native side's own checks are cargo's (src-tauri/src/approvals), and the emulator's.
-// Local only, as rooms.spec.ts: BUZZ_RELAY and BUZZ_KEYS (owner.hex, alice.hex, bob.hex).
+// Services workflow only, as rooms.spec.ts: BUZZ_RELAY and BUZZ_KEYS (owner.hex, alice.hex, bob.hex).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
@@ -42,7 +42,8 @@ test("the rooms applet approves Uni's powerful card behind the unlock, gives a s
   const uni = await person(RELAY!, hex(uniSk));
 
   // Uni's powerful card, sealed to alice's sealing key (her approval key is her everyday key here), and a secret request
-  const card = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "cloudflare-dns", action: "job.cloudflare", scope: `Change one DNS record ${stamp}`, payload: { v: 1, zone: "example.org" }, class: "powerful", ttl_s: 600 });
+  // a broker-worded scope (as uni-ops words a Cloudflare card): the key's true reach first, then a read key, then Uni's words
+  const card = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "cloudflare-dns", action: "job.cloudflare", scope: `🔴 All of example.org · 10 min\nCan: change DNS records.\nRead key: the zone's names.\nUni says: Change one DNS record ${stamp}`, payload: { v: 1, zone: "example.org" }, class: "powerful", ttl_s: 600 });
   expect((await uni.send(card.event)).ok).toBe(true);
   // the same card's fields, but posted by bob: not from a key this device trusts
   const forged = makeCard({ uni: bytes(bobKey), sealPubHex: sealPub(aliceSk), room, credential: "forged-cred", action: "job.x", scope: "Not from Uni", payload: {}, class: "routine", ttl_s: 60 });
@@ -79,6 +80,19 @@ test("the rooms applet approves Uni's powerful card behind the unlock, gives a s
     // the powerful card: a plain tap does nothing; a hold asks for the unlock; a failed unlock sends nothing
     const sealed = log.getByRole("group", { name: "Uni asks to use a credential" });
     await expect(sealed).toContainText(`Change one DNS record ${stamp}`);
+    // it leads with the key's true reach (once), Uni's words under it (never as the lead), the read key once, the
+    // credential once (counted in the text as written, whatever the styles), and the job id under Details
+    await expect(sealed.locator(".what").first()).toHaveText("🔴 All of example.org · 10 min");
+    await expect(sealed.locator(".what")).not.toContainText("Uni says:");
+    const text = (await sealed.evaluate((n) => n.textContent)) ?? "";
+    for (const once of ["All of example.org", "Read key: the zone's names.", "cloudflare-dns"]) expect(text.split(once).length - 1, once).toBe(1);
+    await expect(sealed).toContainText(`Uni says: Change one DNS record ${stamp}`);
+    const ids = sealed.getByText(/^Job [0-9a-f]{4} [0-9a-f]{4}$/);
+    await expect(ids).toBeHidden();
+    // the action stays on the card's face, beside the credential
+    await expect(sealed.getByText(/^cloudflare-dns · job\.cloudflare, 10 min, once · asked/)).toBeVisible();
+    await sealed.getByText("Details", { exact: true }).click();
+    await expect(ids).toBeVisible();
     const hold = sealed.getByRole("button", { name: "Hold to approve" });
     await hold.click();
     expect(await page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks?: string[] }).__parachuteE2EUnlocks ?? [])).toEqual([]);
@@ -189,7 +203,7 @@ test("on a device that doesn't trust Uni's key yet, Uni's card says so and offer
   owner.close();
   const uni = await person(RELAY!, hex(uniSk));
   // a card as Uni's sealed broker posts it (kind 9, ```uni-sealed-approval, signed by Uni's key)
-  const card = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "stripe-test", action: "job.stripe", scope: `Mint a test key ${stamp}`, payload: { v: 1 }, class: "routine", ttl_s: 600 });
+  const card = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "stripe-test", action: "job.stripe", scope: `Mint a test key ${stamp}\r\nUni says: for the checkout test`, payload: { v: 1 }, class: "routine", ttl_s: 600 });
   expect((await uni.send(card.event)).ok).toBe(true);
   // a second card from Uni: trusting the key from one card answers both, without leaving the room
   const second = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "mail-test", action: "job.mail", scope: `Read the test inbox ${stamp}`, payload: { v: 1 }, class: "routine", ttl_s: 600 });
@@ -236,6 +250,10 @@ test("on a device that doesn't trust Uni's key yet, Uni's card says so and offer
     const sealed = log.getByRole("group", { name: "Uni asks to use a credential" });
     await expect(sealed).toHaveCount(2, { timeout: 20_000 });
     await expect(sealed.filter({ hasText: `Mint a test key ${stamp}` }).getByRole("button", { name: /Approve/ })).toBeVisible();
+    // a scope of several lines with no reach line (a caller's own words): its first line leads, the rest under it
+    const mint = sealed.filter({ hasText: `Mint a test key ${stamp}` });
+    await expect(mint.locator(".what")).toHaveText(`Mint a test key ${stamp}`);
+    await expect(mint.locator(".scope")).toHaveText("Uni says: for the checkout test");
     // the other card of Uni's, in the same room, without leaving it
     await expect(sealed.filter({ hasText: `Read the test inbox ${stamp}` }).getByRole("button", { name: /Approve/ })).toBeVisible();
     await expect(offered).toHaveCount(0);

@@ -14,9 +14,25 @@ import { askOf, chunk, createStore, lastText, now, openAsks, promptOf, tag, tags
 const UNI = "{{uni}}";
 /** Journal/2026/11-19/: where today's entries are (the Journal applet's paths). */
 const today = () => `Journal/${when.path(Date.now()).split("/").slice(0, 2).join("/")}/`;
+/** An entry's name: its first line with words, up to six of them, ending at the first sentence's end when that comes
+ *  sooner ("Walked to the bakery", "How was today"). A number, an initial, a short title or a dotted abbreviation (1.
+ *  J. Dr. U.S. p.m.) doesn't end a sentence, nor does punctuation alone (... !!!). The same in Journal and Home
+ *  (src/vault/naming.test.ts checks both copies). */
+function entryWords(text: string): string {
+  const line = text.split("\n").map((l) => l.trim()).find((l) => /[\p{L}\p{N}]/u.test(l)) ?? "";
+  const all = line.replace(/[#*_`>\[\]\\/:"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6);
+  const end = all.findIndex((w) => {
+    const bare = w.replace(/[.!?…。]+$/, "");
+    return /[.!?…。]$/.test(w) && /[^\p{P}\s]/u.test(w) && !/\.\p{L}/u.test(bare)
+      && !/^(\d+|\p{L}|dr|mr|mrs|ms|st|mt|vs|etc|no|jr|sr|prof|sen|rep|gov|gen|approx|fig|inc|mon|tue|tues|thu|thur|thurs|fri|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)$/iu.test(bare);
+  });
+  const words = (end >= 0 ? all.slice(0, end + 1) : all).join(" ").replace(/\?/g, "").replace(/[.!…。]+$/, "").replace(/\s+/g, " ").trim();
+  // never a code note's name (the vault keeps .html, .tsx, .jsx for code): "index.html" is filed "index html"
+  return Array.from(words).slice(0, 48).join("").trim().replace(/\.(html?|tsx|jsx)$/i, " $1") || "Entry";
+}
 /** Journal/2026/11-19/09-41 First words of it (as the Journal applet names an entry). */
 function pathFor(text: string) {
-  const words = text.replace(/[#*_`>\[\]\\/:?"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6).join(" ").slice(0, 48).trim() || "Entry";
+  const words = entryWords(text);
   return `Journal/${when.path(Date.now())} ${words}`;
 }
 /** When an entry was written, from its path. */

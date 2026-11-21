@@ -1,9 +1,9 @@
 // Mail (applets/mail.tsx) against a real mail stack: a throwaway Stalwart behind a copy of the Uni app's mail gateway,
 // two mailboxes. Alice in the app reads what bob sent, replies (save, review exactly what will go, send), and bob gets
-// it. Local only (e2e/services/README.md): MAIL_BRIDGE is the gateway's address, BUZZ_KEYS holds alice.hex and bob.hex
+// it. Services workflow only (e2e/services/README.md): MAIL_BRIDGE is the gateway's address, BUZZ_KEYS holds alice.hex and bob.hex
 // (keys the gateway maps to the two mailboxes). The browser reaches the gateway through a pass-through that adds CORS on
 // port 19952 (which the gateway must accept as an alias); the app itself sends from its native side. The second test
-// needs Uni's account on that stack (infra/mail: uni@test.test, its key BUZZ_KEYS/unibot.hex, outbound rules that hold
+// needs Uni's account on that stack (seed.mjs makes it: uni@test.test, its key BUZZ_KEYS/unibot.hex, outbound rules that hold
 // mail to bob for the owner, and alice's key given send.parked, send.approve, send.decline and flag there). Approve is
 // an approve op: it passes this device's approvals level (the device unlock, by default) before the approval key signs
 // it; the test's unlock is window.__parachuteE2EUnlock (src/services/e2eNative.ts), cancelled unless it says "pass".
