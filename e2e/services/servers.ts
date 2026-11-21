@@ -156,3 +156,73 @@ export async function startHttp() {
   origin = `http://127.0.0.1:${port}`;
   return { origin, seen, close: () => new Promise<void>((r) => server.close(() => r())) };
 }
+
+/** A calendar door (the Uni app's T-229 door, ~/Code/uni-calendar: its /cal/v1 routes, as the Calendar applet uses
+ *  them): NIP-98 checked as the door checks it (then "pubkey not allowed" for a key it doesn't map), the owner's
+ *  session and ops, events kept in memory (single events, no series), the window's instances, an event, and the ops
+ *  create, move and cancel with their opId (the same opId and body answers the same) and base_rev (stale: 409). */
+export async function startCalendar(owner: string) {
+  type Ev = { id: string; rev: number; title: string; start: string; end: string; all_day: boolean; tz: string; status: string; show_as: string; location?: string | null; description?: string };
+  const events = new Map<string, Ev>();
+  const ops = new Map<string, { body: string; answer: unknown }>();
+  let origin = "", n = 0;
+  const bounds = (e: Ev) => e.all_day ? [Date.parse(`${e.start}T00:00:00Z`), Date.parse(`${e.end}T00:00:00Z`)] : [Date.parse(e.start), Date.parse(e.end)];
+  const inst = (e: Ev) => ({ id: e.id, uid: `${e.id}@door`, recurrence_id: null, start: e.start, end: e.end, all_day: e.all_day, tz: e.tz, title: e.title, status: e.status, show_as: e.show_as, visibility: "private", location: e.location ?? null, series: false, rev: e.rev });
+  const server = createServer(async (req, res) => {
+    if (cors(req, res)) return;
+    const body = await read(req);
+    const url = `${origin}${req.url}`;
+    const send = (status: number, x: unknown) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(x));
+    const e = decode(req.headers.authorization);
+    let error: string | null = null;
+    if (!e) error = "unauthorized: no NIP-98";
+    else if (!verifyEvent(e) || e.kind !== 27235) error = "unauthorized: bad signature";
+    else if (tag(e, "u") !== url) error = "unauthorized: signed for another URL";
+    else if (tag(e, "method") !== req.method) error = "unauthorized: signed for another method";
+    else if (body.length && tag(e, "payload") !== sha(body)) error = "unauthorized: signed another body";
+    else if (Math.abs(e.created_at - Date.now() / 1000) > 60) error = "unauthorized: too old";
+    else if (e.pubkey !== owner) error = "unauthorized: pubkey not allowed";
+    if (error) return send(401, { ok: false, error });
+    const u = new URL(url);
+    const parts = u.pathname.split("/").filter(Boolean);
+    if (parts[0] !== "cal" || parts[1] !== "v1") return send(404, { error: "not found" });
+    if (req.method === "GET" && parts[2] === "session") return send(200, { role: "owner", ops: ["cancel", "create", "delete", "move", "update"], calendar: "test", tz: "UTC" });
+    if (req.method === "GET" && parts[2] === "events") {
+      const a = Date.parse(u.searchParams.get("from") ?? ""), b = Date.parse(u.searchParams.get("to") ?? "");
+      if (!(b > a)) return send(400, { error: "`to` must be after `from`" });
+      return send(200, { complete: true, instances: [...events.values()].filter((x) => { const [s, t] = bounds(x); return s < b && t > a; }).map(inst) });
+    }
+    if (req.method === "GET" && parts[2] === "event" && parts[3]) {
+      const x = events.get(decodeURIComponent(parts[3]));
+      return x ? send(200, x) : send(404, { error: "no such event" });
+    }
+    if (req.method === "POST" && parts[2] === "op") {
+      const o = JSON.parse(body.toString("utf8") || "{}") as Record<string, any>;
+      if (typeof o.opId !== "string" || !o.opId) return send(400, { error: "opId is required" });
+      const before = ops.get(o.opId);
+      if (before) return before.body === body.toString("utf8") ? send(200, before.answer) : send(409, { error: "opId already used for a different request" });
+      let answer: unknown;
+      if (o.op === "create") {
+        const f = o.fields ?? {};
+        if (!f.title || !f.start) return send(400, { error: "title and start are required" });
+        const x: Ev = { id: `ev${++n}`, rev: 1, title: f.title, start: f.start, end: f.end ?? f.start, all_day: !!f.all_day, tz: f.tz ?? "UTC", status: "confirmed", show_as: "busy", location: f.location ?? null, description: f.description };
+        events.set(x.id, x);
+        answer = { ok: true, opId: o.opId, id: x.id, rev: x.rev, state: x.status };
+      } else if (o.op === "move" || o.op === "cancel") {
+        const x = events.get(o.id);
+        if (!x) return send(404, { error: "no such event" });
+        if (o.base_rev !== x.rev) return send(409, { error: "stale base_rev", current_rev: x.rev });
+        if (o.op === "move") { if (!o.start) return send(400, { error: "start is required" }); x.start = o.start; if (o.end) x.end = o.end; }
+        else x.status = "cancelled";
+        x.rev++;
+        answer = { ok: true, opId: o.opId, id: x.id, rev: x.rev, state: x.status };
+      } else return send(403, { error: `op ${JSON.stringify(o.op)} isn't allowed for this key` });
+      ops.set(o.opId, { body: body.toString("utf8"), answer });
+      return send(200, answer);
+    }
+    return send(404, { error: "not found" });
+  });
+  const port = await listen(server);
+  origin = `http://127.0.0.1:${port}`;
+  return { origin, events, close: () => new Promise<void>((r) => server.close(() => r())) };
+}

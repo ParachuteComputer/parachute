@@ -75,7 +75,7 @@ room reaches both.
 | Settings, the key, pairing a device | built in Parachute already (steps 3 and 7) | — |
 | Vault browser and notes | built in Parachute already (the launcher, the vault view) | — |
 | Search across the journal and vaults | part: each vault's search in the app; no one search across rooms and vaults | — |
-| Calendar | left: the calendar door speaks NIP-98, so a calendar applet can declare it as a service; not written yet | next |
+| Calendar | part: applets/calendar.tsx over the calendar door (a service, NIP-98, signed by the shell): the next two weeks by day, an event's detail (place, notes, who), Add, Move and Cancel (one day of a series), the last two weeks kept on the device for when the door can't be reached. Left in the Uni app for now: the week grid and dragging, editing a series or its words, invites, who can see it, conflicts | e2e/calendar.spec.ts (CI: a fake door with the door's own checks; locally against `uni-cal serve` on a throwaway vault); cargo services_real `the_calendar_door_takes_what_the_native_side_signs` (the real door) |
 | Decisions | left | niche |
 | Areas | part: an applet per area (applets/area.tsx: its room with Uni beside its notes, its grant one room and one folder; WRITE-AN-APPLET.md "An applet for an area"). The Uni app's area screens are not ported one by one | e2e/area.spec.ts |
 | To Post, Studio, Arcade, Usage, Route suggestions | left | niche or experimental in the Uni app |
