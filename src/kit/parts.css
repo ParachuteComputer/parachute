@@ -108,6 +108,13 @@ div.pa-row { cursor: default; }
 /* one line: more places than fit scroll sideways (the one shown is kept in view), never a second row */
 .pa-tabs { position: relative; display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 4px; margin: 6px 0 4px; border-bottom: 1px solid var(--line); }
 .pa-tabs::-webkit-scrollbar { display: none; }
+/* more past an end: that end fades (the row scrolls); with a mouse, a thin bar too */
+.pa-tabs[data-more="end"] { mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+.pa-tabs[data-more="start"] { mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); }
+.pa-tabs[data-more="start end"] { mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+@media (hover: hover) and (pointer: fine) { .pa-tabs[data-more] { scrollbar-width: thin; } .pa-tabs[data-more]::-webkit-scrollbar { display: block; height: 4px; } }
+/* the focus ring inside the tab: the row clips what is drawn outside it */
+.pa-tabs .pa-tab:focus-visible { outline-offset: -2px; }
 .pa-tab { flex: none; white-space: nowrap; padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer; }
 .pa-tab[aria-current="page"] { border-bottom-color: var(--text); color: var(--text); font-weight: 600; }
 .pa-write > .pa-field-label { display: block; margin-bottom: 2px; }

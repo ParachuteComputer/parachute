@@ -6,12 +6,15 @@ import { api, hubState, record, VAULT } from "./hub";
 test.use({ storageState: "e2e/.signed-in.json" });
 
 const stamp = Date.now().toString(36);
-const CODE = `import { useState } from "react";
+// the places arrive a moment after the first draw (as Mail's mailboxes do), the one shown already chosen: the last
+const CODE = `import { useEffect, useState } from "react";
 import { Page, Tabs } from "parachute";
 const PLACES = [["inbox", "Inbox", 5], ["waiting", "Waiting", 2], ["later", "Later"], ["drafts", "Drafts"], ["sent", "Sent"], ["junk", "Junk"], ["archive", "Archive"]];
 export default function Places() {
   const [at, setAt] = useState("archive");
-  return <Page title="Places"><Tabs label="Places" current={at} onChange={setAt} tabs={PLACES.map(([key, label, count]) => ({ key, label, count }))} /><p>At {at}</p></Page>;
+  const [places, setPlaces] = useState([]);
+  useEffect(() => { const t = setTimeout(() => setPlaces(PLACES), 400); return () => clearTimeout(t); }, []);
+  return <Page title="Places"><Tabs label="Places" current={at} onChange={setAt} tabs={places.map(([key, label, count]) => ({ key, label, count }))} /><p>At {at}</p></Page>;
 }
 `;
 
@@ -31,18 +34,22 @@ test("tabs stay on one line on a phone, scroll sideways, and keep the one shown 
   if (await allow.isVisible().catch(() => false)) await allow.click();
   const app = page.frameLocator('iframe[title="Places"]');
   const nav = app.getByRole("navigation", { name: "Places" });
-  await expect(nav).toBeVisible({ timeout: 20_000 });
+  await expect(nav.getByRole("button", { name: "Archive" })).toBeVisible({ timeout: 20_000 });
   const tops = await nav.getByRole("button").evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)));
   expect(new Set(tops).size, `tops ${tops}`).toBe(1);
-  // more than fit: it scrolls, and the one shown (the last) is in view
+  // more than fit: it scrolls, and the one shown (the last, chosen before the places arrived) is brought into view
   expect(await nav.evaluate((n) => n.scrollWidth > n.clientWidth)).toBe(true);
-  const inView = async (name: RegExp) => nav.evaluate((n, src) => {
-    const b = [...n.querySelectorAll("button")].find((x) => new RegExp(src).test(x.textContent ?? ""))!.getBoundingClientRect(), r = n.getBoundingClientRect();
+  const inView = (name: string) => nav.evaluate((n, want) => {
+    const b = [...n.querySelectorAll("button")].find((x) => (x.textContent ?? "").startsWith(want))!.getBoundingClientRect(), r = n.getBoundingClientRect();
     return b.left >= r.left - 1 && b.right <= r.right + 1;
-  }, name.source);
-  expect(await inView(/^Archive$/)).toBe(true);
-  await nav.evaluate((n) => { n.scrollLeft = 0; });
-  await app.getByRole("button", { name: "Inbox · 5" }).click();
-  await expect(app.getByText("At inbox")).toBeVisible();
-  expect(await inView(/^Inbox/)).toBe(true);
+  }, name);
+  await expect.poll(() => inView("Archive")).toBe(true);
+  // the start has more past it now: that end fades
+  await expect(nav).toHaveAttribute("data-more", /start/);
+  // the first chosen by a tap, after the row was scrolled away from it: brought back
+  await app.getByText("At archive").click();
+  await nav.evaluate((n) => { n.scrollLeft = n.scrollWidth; });
+  await app.getByRole("button", { name: "Waiting · 2" }).evaluate((b) => (b as HTMLButtonElement).click());
+  await expect(app.getByText("At waiting")).toBeVisible();
+  await expect.poll(() => inView("Waiting")).toBe(true);
 });

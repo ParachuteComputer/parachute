@@ -173,14 +173,14 @@ export default function Mail() {
     {place === "waiting" && !searched ? <>
       {heldErr ? <Problem error={heldErr} onRetry={() => void loadHeld()}>Couldn't list what is waiting</Problem> : null}
       {!held.length ? (heldErr ? null : <p className="quiet">Nothing from Uni is waiting for you.</p>) :
-        <List label="Waiting" rows={held.map((h) => ({
+        <List label="Waiting" hideLabel rows={held.map((h) => ({
           key: h.item.opId, strong: waiting(h), onPress: () => setView({ at: "held", opId: h.item.opId }),
           title: `${h.item.sentBy === "Uni" ? "Uni" : "You, as Uni"} to ${heldTo(h.item)}`,
           aside: h.outcome?.kind === "sent" ? "Sent" : h.outcome?.kind === "declined" ? "Declined" : h.outcome?.kind === "unconfirmed" ? "Unconfirmed" : h.outcome?.kind === "refused" ? "Not sent" : h.listed ? "Waiting" : "Not sent",
           meta: lines(`${h.item.fields?.subject || "(no subject)"}${h.item.fields?.attachments?.length ? ` · 📎 ${h.item.fields.attachments.length}` : ""}`, h.outcome?.text ?? h.item.problem ?? h.item.reason ?? ""),
         }))} />}
     </> : list === null ? <Loading /> : !list.length ? <p className="quiet">{searched ? "Nothing found." : place === "later" ? "Nothing put off for later." : "Nothing here."}</p> :
-      <List label={searched ? "Found" : placeName(place)} hideLabel={!searched} rows={list.map((e) => ({
+      <List label={searched ? "Found" : placeName(place)} hideLabel rows={list.map((e) => ({
         key: e.id, strong: !e.keywords?.$seen, onPress: () => setView({ at: "read", id: e.id }), aside: when.short(e.receivedAt),
         title: <>{place === "sent" || place === "drafts" ? `To ${who(e.to)}` : who(e.from)}{e.keywords?.$flagged && place !== "later" && <span className="flag" aria-label="in Later">⚑</span>}</>,
         meta: lines(`${e.subject || "(no subject)"}${e.hasAttachment ? " · 📎" : ""}`, e.preview ?? ""),
