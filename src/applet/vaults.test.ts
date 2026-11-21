@@ -299,7 +299,7 @@ describe("what shows, from what was read before (T-476)", () => {
 });
 
 describe("sharing: who reaches a vault, a key for an AI, ending one (level 6, T-476)", () => {
-  const rows = [{ id: "claude", name: "claude", who: "app" as const, app: null, can: "change" as const, types: ["recipe"], until: "2027-11-21T00:00:00.000Z", lastUsed: null, self: false }];
+  const rows: import("./modules/vaults").ReachRow[] = [{ id: "claude", name: "claude", who: "app", app: null, can: "change", types: ["recipe"], until: "2027-11-21T00:00:00.000Z", lastUsed: null, self: false }];
   function make(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], answer: "yes" | "no" | "untapped" = "yes") {
     const done: string[] = [];
     const revealed: string[] = [];
@@ -341,6 +341,20 @@ describe("sharing: who reaches a vault, a key for an AI, ending one (level 6, T-
       await expect(n.call("manage", { vault: "home" })).rejects.toMatchObject({ code: "failed" });
       expect(n.done).toEqual([]);
     }
+  });
+  it("makes no key where nothing could show its secret", async () => {
+    // a host of these words without the app's own sheet: no key made, so no secret shown to nobody
+    const router = createRouter([createVaultsModule(["vaults", "sharing"], { ...({} as VaultsDeps), list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "c", view: null, reach: "anyone" }],
+      giveKey: async () => { throw new Error("must not be called"); }, confirm: async () => "yes" } as VaultsDeps)]);
+    await expect(router.call("vaults", "giveKey", { vault: "home", name: "claude", can: "read", types: null }, {}, { charge() {}, closed: () => false })).rejects.toMatchObject({ code: "out_of_scope" });
+  });
+  it("ends a row whose id isn't a name a key could be given here (an app's, a person's)", async () => {
+    const { call, done } = make();
+    rows.push({ id: "owner@hub.example", name: "owner@hub.example", who: "person", app: null, can: "change", types: null, until: null, lastUsed: null, self: false });
+    try {
+      await call("endReach", { vault: "home", id: "owner@hub.example" });
+      expect(done).toEqual(["end owner@hub.example"]);
+    } finally { rows.pop(); }
   });
   it("refuses what the hub couldn't hold, and ending something that doesn't reach the vault", async () => {
     const { call, done } = make();

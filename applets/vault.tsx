@@ -565,7 +565,22 @@ function GiveKey({ v, taken, cancel, made }: { v: Held; taken: string[]; cancel:
     if (!ok || busy) return;
     setBusy(true);
     // refused or ended meanwhile: said, and the list read again (managing may have ended while the screen was hidden)
-    sh.giveKey!(v.key, { name, can, types: all ? null : picked }).then(made, (e: unknown) => { quiet(e, "No key made"); if (/managing|ended/i.test(String((e as Error)?.message ?? e))) cancel(); }).finally(() => setBusy(false));
+    sh.giveKey!(v.key, { name, can, types: all ? null : picked }).then(made, (e: unknown) => {
+      const why = String((e as Error)?.message ?? e);
+      // a name is one key for good at the hub, an ended key's too: the next free one is offered
+      if (/already exists|name_taken|filed before/i.test(why)) {
+        // the next name no key in the list has, and one a key can be given (80 characters at most)
+        const m = /^(.*?)(?:-(\d+))?$/.exec(name)!;
+        let n = Number(m[2] ?? 1) + 1;
+        const at = (k: number) => `${m[1].slice(0, 80 - String(k).length - 1)}-${k}`;
+        while (taken.includes(at(n))) n++;
+        setName(at(n));
+        toast(`A key was called ${name} before (a name stays with its key, even ended). Try ${at(n)}.`);
+        return;
+      }
+      quiet(e, "No key made");
+      if (/managing|ended/i.test(why)) cancel();
+    }).finally(() => setBusy(false));
   };
   return (
     <div className="give">

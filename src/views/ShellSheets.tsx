@@ -173,11 +173,11 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
   const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [line, setLine] = useState<string | null>(null);
   const [revealing, setRevealing] = useState<Revealing | null>(null);
+  // the one shown now: a second replaces it (the first's caller is answered), and a cancel ends it
+  const revealRef = useRef<Revealing | null>(null);
   useEffect(() => { if (!line) return; const t = setTimeout(() => setLine(null), 6000); return () => clearTimeout(t); }, [line]);
   // an open sheet answers "cancelled" when the screen goes
   const open = useRef<Asking | Trusting | Coding | Confirming | null>(null);
-  // a key's secret on screen: gone (not kept anywhere) when the screen goes
-  useEffect(() => () => setRevealing(null), []);
   useEffect(() => () => { open.current?.done(null); }, []);
   const shell: Shell = {
     tap,
@@ -216,16 +216,21 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
     setConfirming(c);
   });
   /** Show a key's secret once, over the screen; resolves when the person is done with it. */
-  const reveal = (r: Reveal): Promise<void> => new Promise((done) => setRevealing({ ...r, done: () => { setRevealing(null); done(); } }));
+  const reveal = (r: Reveal): Promise<void> => new Promise((done) => {
+    revealRef.current?.done();
+    const x: Revealing = { ...r, done: () => { if (revealRef.current === x) { revealRef.current = null; setRevealing(null); } done(); } };
+    revealRef.current = x;
+    setRevealing(x);
+  });
   const ui = <>
     {confirming && <ConfirmSheet c={confirming} />}
-    {revealing && <RevealSheet r={revealing} />}
+    {revealing && <RevealSheet key={revealing.token} r={revealing} />}
     {asking && <SecretSheet asking={asking} onDone={asking.done} />}
     {trusting && <TrustSheet t={trusting} />}
     {coding && <PasscodeSheet c={coding} />}
     {line && <p className="shell-line" role="status">{line}</p>}
   </>;
   // the screen hid (kept running, shell/kept.tsx): an open sheet answers "cancelled", as when the screen goes
-  const cancel = () => { open.current?.done(null); setRevealing((r) => { r?.done(); return null; }); };
+  const cancel = () => { open.current?.done(null); revealRef.current?.done(); };
   return { shell, ui, cancel, confirm, reveal };
 }

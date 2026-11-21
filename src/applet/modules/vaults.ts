@@ -745,7 +745,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         }, "sharing"),
         async run({ vault, name, can, types: only }: { vault: string; name: string; can: "read" | "write"; types: string[] | null }, _s, ctx) {
           const v = held(vault); ctx.charge(2);
-          if (!deps.giveKey) throw refuse("this Parachute can't make a key");
+          // the secret is shown only on the app's own sheet: without one, no key is made (it would be shown to nobody)
+          if (!deps.giveKey || !deps.reveal) throw refuse("this Parachute can't make a key");
           const what = can === "write" ? "read, add, change and delete" : "read";
           const which = only ? `${only.map(sheetText).join(", ")} records` : "every record";
           await askFirst(deps, { title: `Give ${sheetText(name)} a key to ${sheetText(v.name)}?`, body: `${sheetText(name)} can ${what} ${which} in ${sheetText(v.name)} (${sheetText(v.host)}) for a year, or until you end it here. Whoever holds the key can do the same, and what it reads goes to them.`, act: "Make the key" });
@@ -758,7 +759,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         },
       },
       endReach: {
-        cap: null, validate: one((p) => (vaultOnly(["id"])(p) && typeof p.id === "string" && KEY_NAME.test(p.id) ? p as { vault: string; id: string } : null), "sharing"),
+        // a row's id is the hub's name for that key (an app's, a person's: not always a name a key could be given here)
+        cap: null, validate: one((p) => (vaultOnly(["id"])(p) && str(p.id, 200) ? p as { vault: string; id: string } : null), "sharing"),
         async run({ vault, id }: { vault: string; id: string }, _s, ctx) {
           const v = held(vault); ctx.charge(1);
           if (!deps.reach || !deps.endReach) throw refuse("this Parachute can't end what reaches a vault");

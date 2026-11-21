@@ -174,6 +174,8 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       // back to this vault's Sharing (Vault reads `show`), where the person asked
       const back = new URL(opts.back(), window.location.origin);
       back.searchParams.set("vault", key);
+      // to Sharing, not to a record Vault was opened on
+      back.searchParams.delete("record");
       back.searchParams.set("show", "sharing");
       window.location.assign(await askManage(rec(key), `${back.pathname}${back.search}`, applet));
     },
