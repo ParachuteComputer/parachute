@@ -479,12 +479,13 @@ function People({ v }: { v: Held }) {
   const [now, setNow] = useState<PeopleNow | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
   const [from, setFrom] = useState<string | null>(null);
-  const [made, setMade] = useState<{ name: string; url: string; until: string } | null>(null);
+  const [made, setMade] = useState<{ id: string; name: string; url: string; until: string } | null>(null);
   const ask = (vaults as { people?: (k: string) => Promise<PeopleNow> }).people;
   const load = () => (typeof ask === "function" ? ask(v.key).then((x) => { setNow(x); setFailed(null); if (x.people && x.from) setFrom((f) => f ?? x.from ?? null); }, setFailed) : Promise.resolve());
-  useEffect(() => { setMade(null); void load(); }, [v.key]);
-  // an app from before sharing: nothing to show
-  if (typeof ask !== "function") return null;
+  // only the vault's owner lists its people: a vault of someone else's asks nothing (no signed request for a no)
+  useEffect(() => { setMade(null); if (v.mine) void load(); }, [v.key]);
+  // an app from before sharing, or someone else's vault: nothing to show
+  if (typeof ask !== "function" || !v.mine) return null;
   if (failed) return <Problem error={failed} onRetry={load}>Who is in {v.name} couldn't be read</Problem>;
   if (!now) return <Loading />;
   if (!now.people) {
@@ -497,7 +498,7 @@ function People({ v }: { v: Held }) {
   const invite = async (name: string) => {
     try {
       const r = await (vaults as any).invite(v.key, name, from);
-      setMade({ name, url: r.url, until: r.expires_at });
+      setMade({ id: r.id, name, url: r.url, until: r.expires_at });
       await load();
     } catch (e) { quiet(e, "No link made"); throw e; }
   };
@@ -508,7 +509,7 @@ function People({ v }: { v: Held }) {
       ...now.people.map((p) => ({ key: p.key, title: p.name ?? `A key (${shortKey(p.key)})`, meta: `${roleWords(p.role)} · key ${shortKey(p.key)}`,
         aside: <Button small kind="quiet" onClick={() => (vaults as any).end(v.key, p.key).then((r: { ended?: boolean }) => { toast(r?.ended === false ? "Already ended." : `${p.name ? `${p.name}'s` : "Their"} access is ended.`); return load(); }, (e: unknown) => quiet(e, "Not ended"))}>End</Button> })),
       ...now.invites.map((i) => ({ key: i.id, title: i.name, meta: `invited · the link works once, until ${when.date(i.expires_at)}`,
-        aside: <Button small kind="quiet" onClick={() => (vaults as any).takeBack(v.key, i.id).then((r: { takenBack?: boolean }) => { toast(r?.takenBack === false ? `The invite for ${i.name} was already used or taken back.` : `The invite for ${i.name} is taken back.`); if (made?.name === i.name) setMade(null); return load(); }, (e: unknown) => quiet(e, "Not taken back"))}>Take back</Button> })),
+        aside: <Button small kind="quiet" onClick={() => (vaults as any).takeBack(v.key, i.id).then((r: { takenBack?: boolean }) => { toast(r?.takenBack === false ? `The invite for ${i.name} was already used or taken back.` : `The invite for ${i.name} is taken back.`); if (made?.id === i.id) setMade(null); return load(); }, (e: unknown) => quiet(e, "Not taken back"))}>Take back</Button> })),
     ]} />
     {made && <div className="invite-made" aria-label="Invite link">
       <p className="note-meta">Send this link to {made.name} however you like. It works once, until {when.date(made.until)}.</p>

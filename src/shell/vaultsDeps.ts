@@ -4,7 +4,7 @@
 import type { VaultClient } from "@openparachute/surface-client";
 import type { AccessRow, HeldVault, HubRow, VaultsDeps, WatchEvent } from "../applet/modules/vaults";
 import { describe, oneAddress } from "../vault/parachute";
-import { clientFor, keptClientFor, signInState } from "../vault/client";
+import { clientFor, keptClientFor, lastRefreshFailure, signInState } from "../vault/client";
 import { connectorAddress, findVault, hostOf, listVaults, originOf, vaultUrlOf, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
 import { heldLevel, giveBack, appletLevel } from "../vault/reach";
@@ -62,7 +62,8 @@ export async function heldHubs(): Promise<HubRow[]> {
  *  may have ended the share: docs/design/SHARING.md); a refusal while the hub is out of reach stays what it was. */
 const noReach = (key: string) => async (e: unknown): Promise<never> => {
   const status = (e as { status?: number })?.status;
-  if ((e as { name?: string })?.name === "VaultAuthError" && status === 401 && (await signInState(key).catch(() => "unreachable")) === "refused") {
+  // the refresh the client just tried says it; only when none has failed yet is the hub asked (one refresh)
+  if ((e as { name?: string })?.name === "VaultAuthError" && status === 401 && (lastRefreshFailure(key) ?? await signInState(key).catch(() => "unreachable")) === "refused") {
     throw Object.assign(new Error(`no_reach: this device's sign-in to the vault was refused`), { name: "NoReachError" });
   }
   throw e;

@@ -169,6 +169,10 @@ export const dropClient = (key: string) => { clients.delete(key); keptClients.de
  * looks like the network is checked by refreshing the sign-in: the hub answering no is a refused sign-in; no answer at
  * all is a hub out of reach; a fresh token means it was neither (try again).
  */
+/** What the last refresh of this vault's sign-in said, if it failed: refused by the hub, or no answer; null if it didn't
+ *  fail (or none ran). Asks nothing. */
+export const lastRefreshFailure = (key: string): "refused" | "unreachable" | null => refreshFailed.get(key) ?? null;
+
 export async function signInState(key: string): Promise<"alive" | "refused" | "unreachable"> {
   const t = await refreshOnce(key);
   return t ? "alive" : refreshFailed.get(key) ?? "unreachable";

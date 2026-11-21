@@ -309,7 +309,7 @@ function newIn(v: Record<string, unknown>): New | null {
 
 const refuse = (why: string) => new ContractError(ERROR_CODES.outOfScope, why);
 /** A person's name as the hub takes one (core share-invites.ts `parseName`): 1 to 40 characters, no control, not "You". */
-const personName = (x: unknown) => typeof x === "string" && [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !UNSEEN_IN_NAME.test(x) && !/^you$/i.test(x.trim());
+export const personName = (x: unknown): boolean => typeof x === "string" && [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !UNSEEN_IN_NAME.test(x) && !/^you$/i.test(x.trim());
 /** Controls and invisible formatting (bidi, zero-width, line breaks), as the hub refuses them; the joiners stay. */
 const UNSEEN_IN_NAME = /(?![\u200c\u200d])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const failed = (e: unknown) => {
@@ -317,7 +317,7 @@ const failed = (e: unknown) => {
   // the native side fails with {code, message} (native.ts NativeError), as the hub's refusals of a signed request do
   if (e && typeof e === "object" && !(e instanceof Error) && typeof (e as { code?: unknown }).code === "string") {
     const { code, message } = e as { code: string; message?: string };
-    return new ContractError(code === "not_owner" ? ERROR_CODES.notGranted : ERROR_CODES.failed, String(message ?? code).slice(0, 300));
+    return new ContractError(code === "not_owner" ? ERROR_CODES.notGranted : code === "invalid_name" ? ERROR_CODES.badParams : ERROR_CODES.failed, String(message ?? code).slice(0, 300));
   }
   const m = e instanceof Error ? e.message : String(e);
   // the person is asked to let Parachute change that vault: the applet hears it as refused, in the app's words

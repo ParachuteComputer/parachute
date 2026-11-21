@@ -333,11 +333,18 @@ pub fn tool_answer(status: u16, body: &str) -> Result<Value, Refusal> {
     let json = if body.trim_start().starts_with('{') { body.to_string() } else { body.lines().find_map(|l| l.strip_prefix("data:")).map(|d| d.trim().to_string()).unwrap_or_default() };
     let v: Value = serde_json::from_str(&json).map_err(|_| refusal("refused", "The hub's answer couldn't be read."))?;
     if let Some(m) = v.pointer("/error/message").and_then(Value::as_str) {
-        return Err(refusal("not_owner", m.chars().take(300).collect::<String>()));
+        // the hub's own reason (core account-mcp.ts `error_type`): not this person's to do, or a name or vault it refuses
+        let code = match v.pointer("/error/data/error_type").and_then(Value::as_str) {
+            Some("grant_not_permitted" | "key_required") => "not_owner",
+            Some("invalid_name") => "invalid_name",
+            _ => "refused",
+        };
+        return Err(refusal(code, m.chars().take(300).collect::<String>()));
     }
     let text = v.pointer("/result/content/0/text").and_then(Value::as_str).unwrap_or("");
     if v.pointer("/result/isError").and_then(Value::as_bool) == Some(true) {
-        return Err(refusal("not_owner", text.chars().take(300).collect::<String>()));
+        // "Unknown tool": the tool isn't listed for this connection (it can't run any vault), or the hub has no sharing
+        return Err(refusal(if text.starts_with("Unknown tool") { "not_owner" } else { "refused" }, text.chars().take(300).collect::<String>()));
     }
     serde_json::from_str(text).map_err(|_| refusal("refused", "The hub's answer couldn't be read."))
 }
@@ -571,8 +578,12 @@ mod tests {
         let ok = r#"{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\"access\":[]}"}]}}"#;
         assert_eq!(tool_answer(200, ok).unwrap(), json!({ "access": [] }));
         assert_eq!(tool_answer(200, &format!("event: message\ndata: {ok}\n")).unwrap(), json!({ "access": [] }));
-        let refused = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"You cannot invite people to vault \"recipes\"."}}"#;
+        let refused = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"You cannot invite people to vault \"recipes\".","data":{"error_type":"grant_not_permitted"}}}"#;
         assert_eq!(tool_answer(200, refused).unwrap_err().code, "not_owner");
+        let named = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"name must be 1 to 40 characters","data":{"error_type":"invalid_name"}}}"#;
+        assert_eq!(tool_answer(200, named).unwrap_err().code, "invalid_name");
+        let gone = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"Vault \"x\" is not installed","data":{"error_type":"vault_not_installed"}}}"#;
+        assert_eq!(tool_answer(200, gone).unwrap_err().code, "refused");
         let unknown = r#"{"jsonrpc":"2.0","id":1,"result":{"isError":true,"content":[{"type":"text","text":"Unknown tool: invite-to-vault"}]}}"#;
         assert_eq!(tool_answer(200, unknown).unwrap_err().code, "not_owner");
         assert_eq!(tool_answer(401, "").unwrap_err().code, "unknown_key");

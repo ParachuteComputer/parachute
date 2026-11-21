@@ -17,6 +17,8 @@ export default function AcceptInvite() {
   const [busy, setBusy] = useState(false);
   // accepted already (the sign-in after it is what's left): Accept again would find the invite used
   const [accepted, setAccepted] = useState(false);
+  // an accept that failed without the hub's answer may have gone through: then a second one finds the invite used
+  const [unsure, setUnsure] = useState(false);
 
   async function read(e: FormEvent) {
     e.preventDefault();
@@ -46,6 +48,13 @@ export default function AcceptInvite() {
     } catch (x) {
       setBusy(false);
       const r = x as { code?: string; message?: string };
+      if (!accepted && r?.code === "no_invite" && unsure) {
+        // most likely the first try went through and only its answer was lost: go on to the sign-in, which will tell
+        setAccepted(true);
+        setError("It may already have gone through. Sign in to see.");
+        return;
+      }
+      if (!accepted && r?.code !== "no_invite") setUnsure(true);
       setError(typeof r?.code === "string" && typeof r.message === "string" ? r.message : signInWords(x));
     }
   }

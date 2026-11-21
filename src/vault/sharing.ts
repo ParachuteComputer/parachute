@@ -5,7 +5,7 @@
 import type { PeopleNames } from "../applet/changes";
 import type { PeopleRow, PersonRow } from "../applet/modules/vaults";
 import { nativeNow, type InviteView } from "../services/native";
-import { withCurrentToken } from "./client";
+import { refreshOnce, withCurrentToken } from "./client";
 import { findVault, originOf, type VaultRecord } from "./store";
 
 /** The hub a vault is on, when its account door is there (a box); null for a vault that lives on another host (Cloud). */
@@ -37,6 +37,8 @@ export async function vaultPeople(rec: VaultRecord): Promise<PeopleRow> {
     if (r?.code === "not_owner") return { people: null, invites: null, why: "not_owner" };
     if (r?.code === "unknown_key") return { people: null, invites: null, why: "unknown_key" };
     if (r?.code === "no_key") return { people: null, invites: null, why: "no_key" };
+    // any other refusal (a vault the hub doesn't have, its trouble) is a problem to show, in the hub's words
+    if (r) throw new Error(r.message ?? r.code);
     throw e;
   }
 }
@@ -73,10 +75,12 @@ export async function vaultNames(key: string, bys: string[]): Promise<PeopleName
   const ask = bys.filter((b) => !known.has(`${key}\u0000${b}`)).slice(0, 100);
   if (ask.length) {
     const q = new URLSearchParams(ask.map((b) => ["by", b]));
+    const url = `${hub}/account/vaults/${encodeURIComponent(rec.vault)}/names?${q}`;
     const f = withCurrentToken(rec.key, fetch);
-    // an older hub has no such read (404, or no answer a browser may read): nobody is named, and those stamps aren't
-    // asked again this session
-    const got = await f(`${hub}/account/vaults/${encodeURIComponent(rec.vault)}/names?${q}`, { headers: { Authorization: `Bearer ${findVault(key)?.accessToken ?? rec.accessToken}` }, cache: "no-store" })
+    const asked = (token: string | undefined) => f(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    const got = await asked(findVault(key)?.accessToken ?? rec.accessToken)
+      // an access token past its time: refreshed once and asked again (withCurrentToken only resends a newer one)
+      .then((res) => (res.status === 401 ? refreshOnce(key).then((t) => (t ? asked(t) : res)) : res))
       // an answer (or a hub without the read, 404) settles these stamps for the session; a refusal or no answer doesn't
       .then(async (res) => (res.ok ? ((await res.json()) as { names?: PeopleNames }).names ?? {} : res.status === 404 ? {} : null), () => null);
     if (got === null) return {};
