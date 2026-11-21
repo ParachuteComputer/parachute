@@ -1,0 +1,12 @@
+{
+  "contract": 2,
+  "id": "recipes",
+  "name": "Recipes",
+  "glyph": "❀",
+  "note": "a test drawer applet, as the Uni app runs them: the recipes in Recipes/",
+  "access": [
+    { "vault": "here", "allow": [{ "path": "Recipes/", "verbs": ["read", "create", "update"] }] }
+  ],
+  "search": [{ "what": "recipes", "vault": "here", "path": "Recipes/" }],
+  "screens": [{ "id": "home", "name": "Recipes" }]
+}
