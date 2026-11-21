@@ -185,6 +185,9 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: safe center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: 1px solid var(--text); overflow-x: auto; }
 .home-bar-place { flex: 0 1 auto; min-width: 64px; max-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 8px 2px; color: var(--text); text-decoration: none; font-size: 13px; line-height: 1.2; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; -webkit-touch-callout: none; user-select: none; }
 .home-bar-glyph { font: 20px/1 var(--serif); }
+/* the on-screen keyboard is up (src/shell/keyboard.ts): the bar steps aside and what it held room for reaches the foot */
+:root.keyboard-up { --bar-h: 0px; }
+:root.keyboard-up .home-bar { display: none; }
 /* a glyph is ink: one with no text form (only a colour emoji) is drawn grey, never in colour */
 .home-bar-glyph, .entry-glyph, .grant-glyph { filter: grayscale(1); }
 .home-bar-place[aria-current="page"] { font-weight: 700; }
