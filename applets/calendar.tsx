@@ -1,11 +1,12 @@
 // Calendar: the person's calendar through their calendar door (the Uni app's T-229 door: events kept as vault notes,
 // NIP-98 in front). The applet holds no key: the shell signs each request as the person (service "cal"), and the door
 // decides what that key may do (its session names the ops). The next two weeks by day, an event's detail, and the
-// everyday changes: add one, move one, cancel one. A change is one of the door's ops with its own id (sent again
-// unchanged if the answer is lost) and the event's rev (a stale one is refused, then read again). A series is shown as
+// everyday changes: add one, move one (its start; the door keeps its length), cancel one. A change is one of the door's
+// ops with its own id, kept while the form is the same, so trying again after a lost answer can't make it twice; and the
+// event's rev (changed elsewhere meanwhile: refused, and the list read again). A series is shown as
 // the door expands it; Move and Cancel on one of its days change that day only. The last two weeks read are kept on
 // this device, so the list shows at once and when the door can't be reached.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Empty, List, Loading, Page, Problem, ready, services, toast, useSaved, when } from "parachute";
 
 type Inst = { id: string; uid?: string; recurrence_id: string | null; start: string; end: string; all_day: boolean; tz?: string; title: string;
@@ -16,20 +17,26 @@ type View = { at: "list" } | { at: "event"; inst: Inst } | { at: "add" } | { at:
 
 const DAYS = 14;
 const DAY_MS = 86_400_000;
-class Refused extends Error {}
+class Refused extends Error { constructor(message: string, readonly status: number) { super(message); } }
 /** One call to the door, signed by the shell. A refusal comes back as its words. */
 async function door(path: string, body?: unknown): Promise<any> {
   const r: any = await services.fetch("cal", path, body === undefined ? { as: "json" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), as: "json" });
-  if (r.status >= 300) throw new Refused(r.body?.error ?? `the calendar door said ${r.status}`);
+  if (r.status >= 300) throw new Refused(r.body?.error ?? `the calendar door said ${r.status}`, r.status);
   return r.body;
 }
-const opId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-/** An op, sent again with the same id if no answer came (the door answers the same once it landed). */
-async function op(body: Record<string, unknown>) {
-  const withId = { ...body, opId: opId() };
-  try { return await door("op", withId); }
-  catch (e) { if (e instanceof Refused) throw e; return door("op", withId); }
+const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+/** The ops of one form or button: the same change sent again keeps its id (the door answers the same once it landed,
+ *  and frees the id when it refused), a different one gets a new id. */
+function useOps() {
+  const last = useRef<{ body: string; id: string } | null>(null);
+  return (body: Record<string, unknown>) => {
+    const key = JSON.stringify(body);
+    if (last.current?.body !== key) last.current = { body: key, id: newId() };
+    return door("op", { ...body, opId: last.current.id });
+  };
 }
+/** Changed elsewhere since it was read (the door's stale base_rev). */
+const stale = (e: unknown) => e instanceof Refused && e.status === 409;
 
 /** The day and the time of `d` on this device, as the kit writes them ("2026-11-21", "09:41"). */
 const ymd = (d: Date) => when.stamp(d).slice(0, 10);
@@ -71,34 +78,46 @@ export default function Calendar() {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View>({ at: "list" });
   const today = midnight(new Date());
+  const create = useOps(), move = useOps();
+  // the window being read: an answer for another (Earlier, Later tapped meanwhile) is dropped
+  const want = useRef(ymd(from));
 
   async function load(start = from) {
+    const mine = ymd(start);
+    want.current = mine;
     setBusy(true); setError(null);
     try {
       const s = session ?? await door("session");
       setSession({ role: String(s.role), ops: Array.isArray(s.ops) ? s.ops.map(String) : [], tz: s.tz });
       const got = await door(`events?from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(addDays(start, DAYS).toISOString())}`);
+      if (want.current !== mine) return;
       const insts = (got.instances ?? []) as Inst[];
       setList(insts);
-      setKept({ from: ymd(start), list: insts, at: new Date().toISOString() });
-    } catch (e) { setError(e); }
-    finally { setBusy(false); }
+      setKept({ from: mine, list: insts, at: new Date().toISOString() });
+    } catch (e) { if (want.current === mine) setError(e); }
+    finally { if (want.current === mine) setBusy(false); }
   }
   useEffect(() => { void load(from).finally(() => ready()); }, [from]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Another window: what this device kept of it, else nothing until it is read. */
+  const go = (d: Date) => { setList(kept && kept.from === ymd(d) ? kept.list : null); setFrom(d); };
+  /** After a refused change because the event changed elsewhere: say so, and show it as it is now. */
+  const changedElsewhere = () => { toast("It changed elsewhere since; here it is now."); setView({ at: "list" }); void load(); };
 
   const days = useMemo(() => (list ? byDay(list, from) : []), [list, from]);
   const back = { label: "Calendar", onPress: () => setView({ at: "list" }) };
 
   if (view.at === "event") return <EventView inst={view.inst} session={session} back={back} onMove={() => setView({ at: "move", inst: view.inst })}
-    onDone={() => { setView({ at: "list" }); void load(); }} />;
+    onDone={() => { setView({ at: "list" }); void load(); }} onStale={changedElsewhere} />;
   if (view.at === "add") return <EventForm title="Add an event" back={back} day={from < today ? today : from} onSave={async (f) => {
     // its zone is the door's own (the person's calendar), the times are instants
-    await op({ op: "create", fields: f });
+    await create({ op: "create", fields: f });
     toast("Added"); setView({ at: "list" }); void load();
   }} />;
   if (view.at === "move") return <EventForm title={`Move ${view.inst.title}`} back={back} inst={view.inst} onSave={async (f) => {
     const i = view.inst;
-    await op({ op: "move", id: i.id, base_rev: i.rev, start: f.start, end: f.end, ...(i.series && i.recurrence_id ? { scope: "this", recurrence_id: i.recurrence_id } : {}) });
+    // the new start alone: the door keeps the event's length (an evening that ends after midnight, a few days away)
+    try { await move({ op: "move", id: i.id, base_rev: i.rev, start: f.start, ...(i.series && i.recurrence_id ? { scope: "this", recurrence_id: i.recurrence_id } : {}) }); }
+    catch (e) { if (stale(e)) return changedElsewhere(); throw e; }
     toast("Moved"); setView({ at: "list" }); void load();
   }} />;
 
@@ -106,9 +125,9 @@ export default function Calendar() {
   return (
     <Page title="Calendar" onRefresh={() => load()} aside={
       <span className="cal-nav">
-        <Button small kind="quiet" onClick={() => setFrom(addDays(from, -7))}>‹ Earlier</Button>
-        {from.getTime() !== today.getTime() && <Button small kind="quiet" onClick={() => setFrom(today)}>Today</Button>}
-        <Button small kind="quiet" onClick={() => setFrom(addDays(from, 7))}>Later ›</Button>
+        <Button small kind="quiet" onClick={() => go(addDays(from, -7))}>‹ Earlier</Button>
+        {from.getTime() !== today.getTime() && <Button small kind="quiet" onClick={() => go(today)}>Today</Button>}
+        <Button small kind="quiet" onClick={() => go(addDays(from, 7))}>Later ›</Button>
       </span>}>
       <style>{CSS}</style>
       {can(session, "create") && <p><Button kind="primary" onClick={() => setView({ at: "add" })}>Add an event</Button></p>}
@@ -127,7 +146,8 @@ export default function Calendar() {
   );
 }
 
-function EventView({ inst, session, back, onMove, onDone }: { inst: Inst; session: Session | null; back: { label: string; onPress: () => void }; onMove: () => void; onDone: () => void }) {
+function EventView({ inst, session, back, onMove, onDone, onStale }: { inst: Inst; session: Session | null; back: { label: string; onPress: () => void }; onMove: () => void; onDone: () => void; onStale: () => void }) {
+  const op = useOps();
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [sure, setSure] = useState(false);
@@ -139,7 +159,7 @@ function EventView({ inst, session, back, onMove, onDone }: { inst: Inst; sessio
     try {
       await op({ op: "cancel", id: inst.id, base_rev: inst.rev, ...(inst.series && inst.recurrence_id ? { scope: "this", recurrence_id: inst.recurrence_id } : {}) });
       toast("Cancelled"); onDone();
-    } catch (e) { toast(e instanceof Error ? e.message : String(e), { error: true }); setBusy(false); }
+    } catch (e) { if (stale(e)) return onStale(); toast(e instanceof Error ? e.message : String(e), { error: true }); setBusy(false); }
   }
   return (
     <Page title={inst.title || "(no title)"} back={back}>
@@ -161,25 +181,24 @@ function EventView({ inst, session, back, onMove, onDone }: { inst: Inst; sessio
   );
 }
 
+/** What the form says: for Add, the whole event; for Move, its new start (end is then the old length on, for show). */
 type Fields = { title: string; start: string; end: string; all_day: boolean };
 function EventForm({ title, back, inst, day, onSave }: { title: string; back: { label: string; onPress: () => void }; inst?: Inst; day?: Date; onSave: (f: Fields) => Promise<void> }) {
-  const a = inst ? at(inst.start, inst.all_day) : null, b = inst ? at(inst.end, inst.all_day) : null;
+  const a = inst ? at(inst.start, inst.all_day) : null;
   const [name, setName] = useState(inst?.title ?? "");
   const [date, setDate] = useState(ymd(a ?? day ?? new Date()));
   const [allDay, setAllDay] = useState(inst?.all_day ?? false);
   const [from, setFrom] = useState(a && !inst?.all_day ? hhmm(a) : "10:00");
-  const [to, setTo] = useState(b && !inst?.all_day ? hhmm(b) : "11:00");
+  const [to, setTo] = useState("11:00");
   const [busy, setBusy] = useState(false);
-  const days = inst && inst.all_day && a && b ? Math.max(1, Math.round((b.getTime() - a.getTime()) / DAY_MS)) : 1;
   async function save(e?: { preventDefault(): void }) {
     e?.preventDefault();
     let f: Fields;
     if (allDay) {
-      const d = new Date(`${date}T00:00:00`);
-      f = { title: name.trim(), start: date, end: ymd(addDays(d, days)), all_day: true };
+      f = { title: name.trim(), start: date, end: ymd(addDays(new Date(`${date}T00:00:00`), 1)), all_day: true };
     } else {
       const s = new Date(`${date}T${from}:00`), t = new Date(`${date}T${to}:00`);
-      if (!(t > s)) { toast("It has to end after it starts.", { error: true }); return; }
+      if (!inst && !(t > s)) { toast("It has to end after it starts.", { error: true }); return; }
       f = { title: name.trim(), start: s.toISOString(), end: t.toISOString(), all_day: false };
     }
     if (!inst && !f.title) { toast("Give it a name.", { error: true }); return; }
@@ -193,10 +212,13 @@ function EventForm({ title, back, inst, day, onSave }: { title: string; back: { 
         {!inst && <label>What <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Lunch with Sam" /></label>}
         <label>Day <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
         {!inst && <label className="cal-check"><input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} /> All day</label>}
-        {!allDay && <div className="cal-times">
-          <label>From <input type="time" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-          <label>To <input type="time" value={to} onChange={(e) => setTo(e.target.value)} /></label>
-        </div>}
+        {!allDay && (inst
+          ? <label>Starts <input type="time" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+          : <div className="cal-times">
+            <label>From <input type="time" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+            <label>To <input type="time" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+          </div>)}
+        {inst && <p className="small quiet">It keeps its length.</p>}
         <p><Button kind="primary" busy={busy} onClick={() => void save()}>{inst ? "Move" : "Add"}</Button></p>
       </form>
     </Page>

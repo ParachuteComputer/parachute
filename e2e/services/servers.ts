@@ -159,15 +159,37 @@ export async function startHttp() {
 
 /** A calendar door (the Uni app's T-229 door, ~/Code/uni-calendar: its /cal/v1 routes, as the Calendar applet uses
  *  them): NIP-98 checked as the door checks it (then "pubkey not allowed" for a key it doesn't map), the owner's
- *  session and ops, events kept in memory (single events, no series), the window's instances, an event, and the ops
- *  create, move and cancel with their opId (the same opId and body answers the same) and base_rev (stale: 409). */
+ *  session and ops, events kept in memory, a weekly series expanded (`rrule: "FREQ=WEEKLY"`), the window's instances,
+ *  an event, and the ops create, move and cancel with their opId (the same opId and body answers the same) and base_rev
+ *  (stale: 409). A move with a start alone keeps the event's length; on one day of a series (scope "this" with its
+ *  recurrence_id) a move or a cancel changes that day only, as the door does. */
 export async function startCalendar(owner: string) {
-  type Ev = { id: string; rev: number; title: string; start: string; end: string; all_day: boolean; tz: string; status: string; show_as: string; location?: string | null; description?: string };
+  type Ev = { id: string; rev: number; title: string; start: string; end: string; all_day: boolean; tz: string; status: string; show_as: string; location?: string | null; description?: string;
+    rrule?: string; exdates: string[]; overrides: { recurrence_id: string; start: string; end: string }[] };
   const events = new Map<string, Ev>();
   const ops = new Map<string, { body: string; answer: unknown }>();
   let origin = "", n = 0;
-  const bounds = (e: Ev) => e.all_day ? [Date.parse(`${e.start}T00:00:00Z`), Date.parse(`${e.end}T00:00:00Z`)] : [Date.parse(e.start), Date.parse(e.end)];
-  const inst = (e: Ev) => ({ id: e.id, uid: `${e.id}@door`, recurrence_id: null, start: e.start, end: e.end, all_day: e.all_day, tz: e.tz, title: e.title, status: e.status, show_as: e.show_as, visibility: "private", location: e.location ?? null, series: false, rev: e.rev });
+  const WEEK = 7 * 86_400_000;
+  const ms = (s: string, allDay: boolean) => allDay ? Date.parse(`${s}T00:00:00Z`) : Date.parse(s);
+  const iso = (t: number, allDay: boolean) => allDay ? new Date(t).toISOString().slice(0, 10) : new Date(t).toISOString();
+  /** The instances of an event in [a, b): one, or a weekly series' (less its exdates, with its overrides). */
+  function expand(e: Ev, a: number, b: number) {
+    const len = ms(e.end, e.all_day) - ms(e.start, e.all_day);
+    const one = (start: number, rid: string | null) => {
+      const o = rid ? e.overrides.find((x) => x.recurrence_id === rid) : undefined;
+      const s0 = o ? ms(o.start, e.all_day) : start, e0 = o ? ms(o.end, e.all_day) : start + len;
+      return { id: e.id, uid: `${e.id}@door`, recurrence_id: rid, start: iso(s0, e.all_day), end: iso(e0, e.all_day), all_day: e.all_day, tz: e.tz, title: e.title, status: e.status, show_as: e.show_as, visibility: "private", location: e.location ?? null, series: !!e.rrule, rev: e.rev };
+    };
+    if (!e.rrule) { const s0 = ms(e.start, e.all_day); return s0 < b && s0 + len > a ? [one(s0, null)] : []; }
+    const out = [];
+    for (let t = ms(e.start, e.all_day); t < b; t += WEEK) {
+      const rid = iso(t, e.all_day);
+      if (e.exdates.includes(rid)) continue;
+      const x = one(t, rid);
+      if (ms(x.start, e.all_day) < b && ms(x.end, e.all_day) > a) out.push(x);
+    }
+    return out;
+  }
   const server = createServer(async (req, res) => {
     if (cors(req, res)) return;
     const body = await read(req);
@@ -190,7 +212,7 @@ export async function startCalendar(owner: string) {
     if (req.method === "GET" && parts[2] === "events") {
       const a = Date.parse(u.searchParams.get("from") ?? ""), b = Date.parse(u.searchParams.get("to") ?? "");
       if (!(b > a)) return send(400, { error: "`to` must be after `from`" });
-      return send(200, { complete: true, instances: [...events.values()].filter((x) => { const [s, t] = bounds(x); return s < b && t > a; }).map(inst) });
+      return send(200, { complete: true, instances: [...events.values()].flatMap((x) => expand(x, a, b)) });
     }
     if (req.method === "GET" && parts[2] === "event" && parts[3]) {
       const x = events.get(decodeURIComponent(parts[3]));
@@ -205,14 +227,23 @@ export async function startCalendar(owner: string) {
       if (o.op === "create") {
         const f = o.fields ?? {};
         if (!f.title || !f.start) return send(400, { error: "title and start are required" });
-        const x: Ev = { id: `ev${++n}`, rev: 1, title: f.title, start: f.start, end: f.end ?? f.start, all_day: !!f.all_day, tz: f.tz ?? "UTC", status: "confirmed", show_as: "busy", location: f.location ?? null, description: f.description };
+        const x: Ev = { id: `ev${++n}`, rev: 1, title: f.title, start: f.start, end: f.end ?? f.start, all_day: !!f.all_day, tz: f.tz ?? "UTC", status: "confirmed", show_as: "busy", location: f.location ?? null, description: f.description, rrule: f.rrule, exdates: [], overrides: [] };
         events.set(x.id, x);
         answer = { ok: true, opId: o.opId, id: x.id, rev: x.rev, state: x.status };
-      } else if (o.op === "move" || o.op === "cancel") {
+      } else if (o.op === "move" || o.op === "cancel" || o.op === "update") {
         const x = events.get(o.id);
         if (!x) return send(404, { error: "no such event" });
         if (o.base_rev !== x.rev) return send(409, { error: "stale base_rev", current_rev: x.rev });
-        if (o.op === "move") { if (!o.start) return send(400, { error: "start is required" }); x.start = o.start; if (o.end) x.end = o.end; }
+        const rid: string | undefined = o.scope === "this" ? o.recurrence_id : undefined;
+        if (x.rrule && o.scope === "this" && !rid) return send(400, { error: "scope this needs recurrence_id" });
+        if (o.op === "update") Object.assign(x, o.fields ?? {});
+        else if (o.op === "move") {
+          if (!o.start) return send(400, { error: "start is required" });
+          const len = ms(x.end, x.all_day) - ms(x.start, x.all_day);
+          const end = o.end ?? iso(ms(o.start, x.all_day) + len, x.all_day);
+          if (rid) x.overrides = [...x.overrides.filter((v) => v.recurrence_id !== rid), { recurrence_id: rid, start: o.start, end }];
+          else { x.start = o.start; x.end = end; }
+        } else if (rid) x.exdates.push(rid);
         else x.status = "cancelled";
         x.rev++;
         answer = { ok: true, opId: o.opId, id: x.id, rev: x.rev, state: x.status };

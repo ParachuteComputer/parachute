@@ -1,5 +1,5 @@
 // Calendar (applets/calendar.tsx) over a calendar door: the next two weeks by day, an event's detail, and the everyday
-// changes (move one, add one, cancel one), each signed by the shell as the person (NIP-98) and checked on the door.
+// changes (move one, add one, cancel one, one day of a weekly series), each signed by the shell as the person (NIP-98) and checked on the door.
 // In CI against a fake door with the door's own checks (e2e/services/servers.ts startCalendar). Against the real door
 // (~/Code/uni-calendar, `uni-cal serve` on a throwaway vault) with CAL_DOOR (its address) and CAL_KEY (a file with the
 // hex key it maps to its owner): the browser reaches it through a pass-through that adds CORS on 127.0.0.1:19953, which
@@ -64,11 +64,11 @@ test("calendar: tomorrow's event shown, moved, a new one added and cancelled, ea
     await row.click();
     await expect(app.getByRole("heading", { name: `Seed swap ${stamp}` })).toBeVisible();
     await app.getByRole("button", { name: "Move…" }).click();
-    await app.getByLabel("From", { exact: true }).fill("14:00");
-    await app.getByLabel("To", { exact: true }).fill("15:00");
+    await app.getByLabel("Starts", { exact: true }).fill("14:00");
     await app.getByRole("button", { name: "Move", exact: true }).click();
     await expect(app.getByRole("button", { name: new RegExp(`Seed swap ${stamp}`) })).toBeVisible();
-    await expect.poll(async () => { const e = await door(`event/${made.id}`); return [Date.parse(e.start), e.rev]; }).toEqual([tomorrowAt(14).getTime(), made.rev + 1]);
+    // the new start, and the same hour's length (the door keeps it)
+    await expect.poll(async () => { const e = await door(`event/${made.id}`); return [Date.parse(e.start), Date.parse(e.end), e.rev]; }).toEqual([tomorrowAt(14).getTime(), tomorrowAt(15).getTime(), made.rev + 1]);
 
     // add one tomorrow at 9:00-9:30, then cancel it: it leaves the list, and the door has it cancelled
     await app.getByRole("button", { name: "Add an event" }).click();
@@ -88,6 +88,52 @@ test("calendar: tomorrow's event shown, moved, a new one added and cancelled, ea
     await app.getByRole("button", { name: "Cancel the event" }).click();
     await expect(app.getByRole("button", { name: new RegExp(`Tea with Robin ${stamp}`) })).toHaveCount(0);
     await expect.poll(async () => (await door(`event/${added.id}`)).status).toBe("cancelled");
+  } finally {
+    await fetch(`${hubState().origin}/vault/${VAULT}/api/notes/${note.id}`, { method: "DELETE", headers: { authorization: `Bearer ${hubState().token}` } }).catch(() => {});
+    await proxy?.close();
+    await fake?.close();
+  }
+});
+
+test("calendar: one day of a weekly series cancelled, and a change made elsewhere meanwhile is said and shown", async ({ page }) => {
+  test.setTimeout(120_000);
+  const real = process.env.CAL_DOOR;
+  const key = real ? readFileSync(process.env.CAL_KEY!, "utf8").trim() : hex(generateSecretKey());
+  const fake = real ? null : await startCalendar(getPublicKey(Uint8Array.from(Buffer.from(key, "hex"))));
+  const proxy = real ? await corsProxy(real, 19953) : null;
+  const base = real ? real : fake!.origin, browserBase = proxy ? proxy.url : fake!.origin;
+  const door = doorAs(base, key);
+  const stamp = randomBytes(3).toString("hex");
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, key);
+  // a weekly walk from tomorrow (twice in the two weeks shown), and a one-off the door will change behind the app
+  const walk = await door("op", { op: "create", opId: `walk-${stamp}`, fields: { title: `Walk ${stamp}`, start: tomorrowAt(8).toISOString(), end: tomorrowAt(9).toISOString(), rrule: "FREQ=WEEKLY" } });
+  const call = await door("op", { op: "create", opId: `call-${stamp}`, fields: { title: `Call ${stamp}`, start: tomorrowAt(16).toISOString(), end: tomorrowAt(17).toISOString() } });
+  const note = await record(hubState(), "create", appletRecord("calendar", { calendar: `${browserBase}/cal/v1/` }));
+  try {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Calendar/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = page.frameLocator("iframe.applet-frame");
+    const walks = app.getByRole("button", { name: new RegExp(`Walk ${stamp}`) });
+    await expect(walks).toHaveCount(2, { timeout: 30_000 });
+    // cancel tomorrow's walk only: next week's stays, here and on the door
+    await walks.first().click();
+    await expect(app.getByText("Changes here are to this day only")).toBeVisible();
+    await app.getByRole("button", { name: "Cancel…" }).click();
+    await app.getByRole("button", { name: "Cancel this day" }).click();
+    await expect(walks).toHaveCount(1);
+    const next = await door(`events?from=${encodeURIComponent(tomorrowAt(0).toISOString())}&to=${encodeURIComponent(new Date(tomorrowAt(0).getTime() + 14 * 86_400_000).toISOString())}`);
+    expect((next.instances as { id: string; status: string }[]).filter((i) => i.id === walk.id && i.status !== "cancelled")).toHaveLength(1);
+
+    // the call is renamed elsewhere (the Uni app, a sync) after the app read it; Move then says so and shows it as it is
+    await app.getByRole("button", { name: new RegExp(`Call ${stamp}`) }).click();
+    await door("op", { op: "update", opId: `rename-${stamp}`, id: call.id, base_rev: call.rev, fields: { title: `Call with Sam ${stamp}` } });
+    await app.getByRole("button", { name: "Move…" }).click();
+    await app.getByLabel("Starts", { exact: true }).fill("18:00");
+    await app.getByRole("button", { name: "Move", exact: true }).click();
+    await expect(app.getByText("It changed elsewhere since; here it is now.")).toBeVisible();
+    await expect(app.getByRole("button", { name: new RegExp(`Call with Sam ${stamp}`) })).toBeVisible();
+    expect(Date.parse((await door(`event/${call.id}`)).start)).toBe(tomorrowAt(16).getTime());
   } finally {
     await fetch(`${hubState().origin}/vault/${VAULT}/api/notes/${note.id}`, { method: "DELETE", headers: { authorization: `Bearer ${hubState().token}` } }).catch(() => {});
     await proxy?.close();
