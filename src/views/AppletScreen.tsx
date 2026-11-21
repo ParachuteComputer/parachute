@@ -415,7 +415,9 @@ export default function AppletScreen() {
   useEffect(() => (runningImports ? marks.hold(pageId) : undefined), [runningImports, pageId]); // eslint-disable-line react-hooks/exhaustive-deps
   // what was allowed, as one key: the note, its grant and its code. The frame's session (its router, its grant) is made
   // again only when that changes; a change to the note alone (its fields, a page's embeds) leaves a running frame as it is
-  const allowedKey = entry && keys ? `${entry.noteId}|${keys.scope}|${keys.html}` : null;
+  // (and the page's embeds: a frame learns it has them only as it starts, so adding or taking away one starts it again)
+  const embedsKey = entry ? entry.embeds.map((e) => e.name).join(",") : "";
+  const allowedKey = entry && keys ? `${entry.noteId}|${keys.scope}|${keys.html}|${embedsKey}` : null;
   const grant = useMemo(() => (entry ? resolvedOf(entry.manifest) : {}), [allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // keyed on the vault, not the record object: a token refresh rewrites the record, and rebuilding the router would close
   // the frame's session with the very call that caused the refresh still waiting
@@ -627,7 +629,7 @@ export default function AppletScreen() {
       note={note ? { title: handed ? titleOf(note) : undefined, href: `${noteHref(rec.key, note.id)}?with=vault` } : null}
       onStop={tap(() => { closeMenu(); setStarted(false); })} onRevoke={official ? null : tap(() => { closeMenu(); revoke(); })} />}
     {late && "error" in late && late.hash === keys.html && <p className="error" role="alert">This applet can't run: its code doesn't compile: {late.error}.</p>}
-    {router && page && savedNow && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
+    {router && page && savedNow && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}:${embedsKey}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
     {sheets.ui}
     {device.ui}
     {router && page && sized && rec && isMine(rec) && <PageEmbeds host={rec} hostNote={entry.noteId} embeds={entry.embeds} from={loaded.state === "ok" ? loaded.from : []} />}
