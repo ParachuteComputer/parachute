@@ -13,6 +13,7 @@
 //                                              {if_updated_at, body?, fields?, types?: {add?, remove?}, tags?: {add?, remove?}}
 //     create({vault, bytes})                   a new record: {path, body, types?, fields?, tags?}
 //     watch({vault, type?}) / unwatch({id})    changes as they land: events `vaults.events` {id, upsert?: record, remove?: id}
+//     packs({vault}) / addPack({vault, id})    Parachute's starter packs and the vault's own; apply one (packs.ts)
 //     applets({vault})                         the applets in it, as the app lists them: {id, name, glyph, href, allowed}
 //                                              (their code is never handed over; a tap on one goes through `app.open`)
 //   sharing       (what reaches a vault; and, each after the person says yes on the app's own sheet over a tap of theirs,
@@ -33,6 +34,7 @@ import { CODE_PATH, isCodeExtension } from "../code.ts";
 import { ContractError, ERROR_CODES, hasHidden, hasOnly, plain } from "../contract.ts";
 import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
+import { packMethods } from "./packs.ts";
 
 export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where an AI connects to it (`<vault>/mcp`): the vault's own address, nothing secret */
@@ -61,8 +63,8 @@ export type WatchEvent = { upsert?: Rec } | { remove?: string };
  *  throws the write ask before it is sent), and what the app knows of each vault. */
 export type VaultsDeps = {
   list(): HeldVault[];
-  /** GET/POST/PATCH under the vault's API (`/records…`, `/types…`), its JSON; a 404 rejects with `not_found`. */
-  request(vault: string, method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<unknown>;
+  /** GET/POST/PATCH/PUT under the vault's API (`/records…`, `/types…`; PUT only for a pack's types, packs.ts), its JSON; a 404 rejects with `not_found`. */
+  request(vault: string, method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown): Promise<unknown>;
   /** A record's GET for what a screen shows (the `get` call), answered at once from what was read before while the hub
    *  is asked behind it (vault/readCache.ts; the frame is told when the answer differs). Given only for an applet that
    *  draws itself again when told (Parachute's own Vault); absent: `request`. A change, and every check one is judged
@@ -467,6 +469,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         cap: null, validate: one((p) => (hasOnly(p, ["id"]) && typeof p.id === "string" && /^w[a-z0-9]{1,6}\d{1,9}$/.test(p.id) ? p as { id: string } : null)),
         run: async ({ id }: { id: string }) => { watches.get(id)?.(); watches.delete(id); return null; },
       },
+      // Parachute's own starter packs, and the packs a vault has (packs.ts)
+      ...packMethods(deps, () => need("vaults"), held),
       applets: {
         cap: null, validate: one(vaultOnly()),
         run: async ({ vault }: { vault: string }, _s, ctx) => { held(vault); ctx.charge(1); return deps.applets(vault); },

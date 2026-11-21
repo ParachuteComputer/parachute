@@ -17,7 +17,7 @@ type Rec = { id: string; path: string; title: string; createdAt: string | null; 
   body?: string; createdBy?: string | null; createdVia?: string | null; updatedBy?: string | null; updatedVia?: string | null; links?: { dir: "out" | "in"; id: string; path: string; relationship: string }[] };
 type Where = { field: string; op: string; value: unknown };
 type View = { name: string; layout: "table" | "list"; sort: { by: string; dir: "asc" | "desc" } | null; where: Where[]; group: string | null; id?: string };
-type At = { vault: string | null; type: string | null; record: string | null; sharing?: boolean };
+type At = { vault: string | null; type: string | null; record: string | null; sharing?: boolean; packs?: boolean };
 
 const PAGE = 100;
 const VIEWS = "Parachute/Views/";
@@ -63,7 +63,7 @@ export default function Vault() {
   const [list, setList] = useState<Held[] | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
   const [at, setAt] = useSaved<At>("at", { vault: null, type: null, record: null });
-  const go = (next: Partial<At>) => setAt((a: At) => ({ ...a, sharing: false, ...next }));
+  const go = (next: Partial<At>) => setAt((a: At) => ({ ...a, sharing: false, packs: false, ...next }));
   const load = () => vaults.list().then((l: Held[]) => { setList(l); setFailed(null); }, setFailed);
   useEffect(() => {
     // the app sends a vault, and a record in it, when it opens one here (a tap on a record no other applet opens)
@@ -77,9 +77,10 @@ export default function Vault() {
   if (!v) return <Vaults list={list} onOpen={(key) => go({ vault: key, type: null, record: null })} onRecord={(vault, record) => go({ vault, record })} />;
   const back = list.length > 1 ? { label: "Your vaults", onPress: () => go({ vault: null, type: null, record: null }) } : undefined;
   if (at.sharing) return <Sharing v={v} back={{ label: v.name, onPress: () => go({}) }} />;
+  if (at.packs) return <Packs v={v} back={{ label: v.name, onPress: () => go({}) }} openType={(type) => go({ type, record: null })} />;
   if (at.type) return <TypeScreen key={`${v.key}|${at.type}`} v={v} type={at.type} record={at.record} open={(record) => go({ record })} back={{ label: v.name, onPress: () => go({ type: null, record: null }) }} />;
   if (at.record) return <Page className="vlt"><style>{CSS}</style><RecordView key={at.record} v={v} id={at.record} open={(record) => go({ record })} back={{ label: v.name, onPress: () => go({ record: null }) }} /></Page>;
-  return <VaultScreen v={v} back={back} openType={(type) => go({ type, record: null })} open={(record) => go({ record })} sharing={() => setAt((a: At) => ({ ...a, sharing: true }))} />;
+  return <VaultScreen v={v} back={back} openType={(type) => go({ type, record: null })} open={(record) => go({ record })} sharing={() => setAt((a: At) => ({ ...a, sharing: true }))} packs={() => setAt((a: At) => ({ ...a, packs: true }))} />;
 }
 
 /** Every vault on this device, and a search across all of them. */
@@ -106,7 +107,7 @@ function Vaults({ list, onOpen, onRecord }: { list: Held[]; onOpen: (key: string
 }
 
 /** A vault: its types with their counts, its tags, a search, and a way to make a type. */
-function VaultScreen({ v, back, openType, open, sharing }: { v: Held; back?: { label: string; onPress: () => void }; openType: (t: string) => void; open: (id: string) => void; sharing: () => void }) {
+function VaultScreen({ v, back, openType, open, sharing, packs }: { v: Held; back?: { label: string; onPress: () => void }; openType: (t: string) => void; open: (id: string) => void; sharing: () => void; packs: () => void }) {
   const [types, setTypes] = useState<TypeRow[] | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
   const [term, setTerm] = useState("");
@@ -154,8 +155,10 @@ function VaultScreen({ v, back, openType, open, sharing }: { v: Held; back?: { l
         : <div className="cols two">
             <section>
               {typed.length ? <List label="Types" rows={typed.map((t) => ({ key: t.name, title: label(t.name), meta: Object.keys(t.fields ?? {}).map(label).join(" · ") || t.description || "", aside: String(t.count), onPress: () => openType(t.name), data: { type: t.name } }))} />
-                : <Empty>No types yet. A type is a kind of record (a book, a task) with fields of its own.</Empty>}
+                : <Empty>No types yet. A type is a kind of record (a book, a task) with fields of its own. Add a pack to start with people, projects, meetings and tasks.</Empty>}
               {canWrite && <Field label="New type" placeholder="A name, like book" action="Make" onAction={makeType} />}
+              {/* packs (T-476, docs/PACKS.md): types, templates and views added with one tap */}
+              {typeof vaults.packs === "function" && <div className="chips"><Button small kind={typed.length ? "plain" : "primary"} onClick={packs}>{typed.length ? "Packs" : "Add a pack"}</Button></div>}
             </section>
             <section>
               {tags.length > 0 && <List label="Tags" rows={tags.slice(0, 30).map((t) => ({ key: t.name, title: `#${t.name}`, aside: String(t.count), onPress: () => openType(`#${t.name}`) }))} />}
@@ -227,10 +230,15 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   const where = Object.fromEntries(view.where.map((w) => [w.field, w.value]));
   const setWhere = (field: string, value: unknown) => setView((w: View) => ({ ...w, where: [...w.where.filter((x) => x.field !== field), ...(value === null || value === "" ? [] : [{ field, op: "eq", value }])] }));
   const canWrite = v.mine || v.level === "write";
+  // New starts from the type's default template (Templates/<type>/, docs/PACKS.md): its body, as it is now
+  const [template, setTemplate] = useState<Rec | null>(null);
+  useEffect(() => { if (isTag || name === "template") return; void templateFor(v.key, name).then(setTemplate); }, [v.key, name]);
   const add = async (title: string) => {
     const folder = rows?.length ? folderOf(rows[0].path) : `${name.charAt(0).toUpperCase()}${name.slice(1)}s/`;
     try {
-      const r: Rec = await vaults.create(v.key, { path: `${folder}${clean(title)}`, body: "", ...(isTag ? { tags: [name] } : { types: [name] }) });
+      const t = isTag || name === "template" ? null : await templateFor(v.key, name);
+      const body = t ? ((await vaults.get(v.key, t.id)) as Rec).body ?? "" : "";
+      const r: Rec = await vaults.create(v.key, { path: `${folder}${clean(title)}`, body, ...(isTag ? { tags: [name] } : { types: [name] }) });
       setRows((x) => (x ? [r, ...x.filter((y) => y.id !== r.id)] : [r])); open(r.id);
     } catch (e) { toast(`Not added: ${said(e)}`, { error: true }); throw e; }
   };
@@ -280,6 +288,7 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
                   {...(groups ? { groups: groups.map((g) => ({ key: g.key, label: g.label, count: g.rows.length, rows: g.rows.map(tableRow) })) } : { rows: rows.map(tableRow) })}
                   more={more ? { label: "More", onPress: next, busy } : undefined} />}
           {canWrite && <Field label={`New ${isTag ? `#${name}` : label(name)}`} placeholder="Its name" action="Add" onAction={add} />}
+          {canWrite && template && <p className="note-meta">A new {label(name)} starts from the template {template.title}.</p>}
           {canWrite && (view.where.length > 0 || view.group || view.sort || view.layout !== "table") && !view.id && <Field label="Save this view" placeholder="A name for it" action="Save" onAction={saveView} />}
         </section>
         {record && <aside className="side"><RecordView key={record} v={v} id={record} open={(id) => open(id)} back={{ label: "Close", onPress: () => open(null) }} /></aside>}
@@ -389,6 +398,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
               onPress: () => vaults.version(v.key, r.id, h.ix).then((x: { body: string; at: string | null }) => setOld({ ix: h.ix, body: x.body, at: x.at }), (e: unknown) => toast(said(e), { error: true })) }))} />
           : <p className="note-meta">No earlier versions kept.</p>}
       {old && <div className="old"><p className="note-meta">As it was before {when.full(old.at)}</p><Note body={old.body} path={r.path} /><Button small kind="quiet" onClick={() => setOld(null)}>Close</Button></div>}
+      {canWrite && r.types.some((t) => t !== "template") && !r.types.includes("template") && <div className="acts"><Button small onClick={() => void makeTemplate(v, r).then((x) => x && open(x.id))}>Make this a template</Button></div>}
       {canWrite && <>
         <p className="sect">Sharing</p>
         <p className="note-meta">{!published ? "Only you, and what you let in, can read it." : v.view === null ? "Marked published. Parachute Cloud doesn't show published records to others yet, so there is no link to send." : "Published: anyone with its link can read it."}</p>
@@ -433,6 +443,95 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
         <p className="note-meta">An AI you connect (Claude, ChatGPT…) reaches {v.name} at this address, with what you allowed when you connected it:</p>
         <p className="addr">{a.connector}</p>
         <p className="note-meta">The keys and AIs your hub has let in are listed on your hub, under Tokens, where you can revoke them. This app can't list them yet.</p>
+      </>}
+    </Page>
+  );
+}
+
+// ── Templates and packs (T-476, docs/PACKS.md) ──
+// A template is a record of type `template` at Templates/<type>/<name>: `for` the type it starts, `default` for the one
+// New uses. A pack adds types, their templates and saved views with one tap; what it made is kept in the vault, so
+// adding it again changes nothing.
+
+/** The template New uses for a type: its default, else its first; null when it has none (or no template type yet). */
+async function templateFor(vault: string, type: string): Promise<Rec | null> {
+  try {
+    const t: { records: Rec[] } = await vaults.query(vault, { type: "template", where: [{ field: "for", op: "eq", value: type }], limit: 20 });
+    return t.records.find((x) => x.fields.default === true) ?? t.records[0] ?? null;
+  } catch { return null; }
+}
+
+/** A record's headings, each with a blank line under it: what stays of it as a template. No headings: all of it. */
+const headingsOf = (body: string) => {
+  const hs = body.split("\n").filter((l) => /^#{1,6}\s+\S/.test(l));
+  return hs.length ? `${hs.join("\n\n")}\n` : body;
+};
+
+/** Make a record a template for its type: its headings, at Templates/<type>/<its name>; the default if it is the first. */
+async function makeTemplate(v: Held, r: Rec): Promise<Rec | null> {
+  const type = r.types.find((t) => t !== "template");
+  if (!type) return null;
+  try {
+    const first = !(await templateFor(v.key, type));
+    const full: Rec = r.body === undefined ? await vaults.get(v.key, r.id) : r;
+    const x: Rec = await vaults.create(v.key, { path: `Templates/${clean(type) || "_"}/${clean(r.title) || type}`, body: headingsOf(full.body ?? ""), types: ["template"], fields: { for: type, default: first } });
+    toast(first ? `Made a template. A new ${label(type)} starts from it.` : `Made a template for ${label(type)}.`);
+    return x;
+  } catch (e) { toast(`The template wasn't made: ${said(e)}`, { error: true }); return null; }
+}
+
+type Starter = { id: string; name: string; summary: string; version: number; source: string; types: Record<string, string[]>; records: string[] };
+type Installed = { id: string; name: string; version: number; source: string; appliedAt: string | null; appliedBy: string | null; skipped: string[]; newer: number | null };
+type Applied = { added: string[]; kept: string[]; notes: string[]; changed: boolean };
+/** Who added it, in a person's words where the stamp says (an AI's sign-in, the app); a key's own name otherwise. */
+const byWhom = (via: string | null) => (via === "mcp" ? "by an AI" : via === "api" ? "in Parachute" : via?.startsWith("key:") && via.length < 30 ? `with the key ${via.slice(4)}` : "");
+
+/** The packs a vault has (Installed packs), and Parachute's own to add with one tap. */
+function Packs({ v, back, openType }: { v: Held; back: { label: string; onPress: () => void }; openType: (t: string) => void }) {
+  const [p, setP] = useState<{ starters: Starter[]; installed: Installed[]; older?: boolean } | null>(null);
+  const [failed, setFailed] = useState<unknown>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [done, setDone] = useState<(Applied & { name: string; types: string[] }) | null>(null);
+  const load = () => vaults.packs(v.key).then((x: typeof p) => { setP(x); setFailed(null); }, setFailed);
+  useEffect(() => { void load(); }, [v.key]);
+  const canWrite = v.mine || v.level === "write";
+  const add = async (s: Starter) => {
+    setBusy(s.id);
+    try {
+      const x: Applied = await vaults.addPack(v.key, s.id);
+      setDone({ ...x, name: s.name, types: Object.keys(s.types) });
+      toast(x.changed ? `Added ${s.name}.` : `${s.name} is already here. Nothing changed.`);
+      await load();
+    } catch (e) { quiet(e, `${s.name} wasn't added`); } finally { setBusy(null); }
+  };
+  const has = new Set((p?.installed ?? []).map((i) => i.id));
+  return (
+    <Page title="Packs" kicker={v.name} back={back} className="vlt" onRefresh={load}>
+      <style>{CSS}</style>
+      {failed ? <Problem error={failed} onRetry={load}>The packs in {v.name} couldn't be read</Problem> : !p ? <Loading /> : <>
+        {p.older && <Empty>Packs need types, which come with a newer Parachute server (0.9). This vault's server is older.</Empty>}
+        {done && <section aria-label={`What ${done.name} did`}>
+          <p className="sect">{done.name}</p>
+          {done.added.length > 0 && <p className="note-meta">Added {done.added.length === 1 ? done.added[0] : `${done.added.slice(0, -1).join(", ")} and ${done.added[done.added.length - 1]}`}.</p>}
+          {!done.changed && <p className="note-meta">Everything in it was here already. Nothing changed.</p>}
+          {done.notes.map((n) => <p key={n} className="note-meta">{n}</p>)}
+          <div className="chips">{done.types.filter((t) => t !== "template").map((t) => <Button key={t} small kind="quiet" onClick={() => openType(t)}>{label(t)}</Button>)}</div>
+        </section>}
+        {p.installed.length > 0
+          ? <List label="Installed packs" rows={p.installed.map((i) => ({ key: i.id, title: i.name, meta: [`version ${i.version}`, i.appliedAt ? `added ${when.date(i.appliedAt)}` : "", byWhom(i.appliedBy)].filter(Boolean).join(" · "),
+            aside: i.newer && canWrite ? <Button small onClick={() => { const s = p.starters.find((x) => x.id === i.id); if (s) void add(s); }} busy={busy === i.id}>{`Update to ${i.newer}`}</Button> : "up to date" }))} />
+          : !p.older && <p className="note-meta">No packs in {v.name} yet.</p>}
+        {!p.older && p.starters.some((s) => !has.has(s.id)) && <p className="sect">Add a pack</p>}
+        {!p.older && p.starters.filter((s) => !has.has(s.id)).map((s) => (
+          <section key={s.id} aria-label={s.name}>
+            <h2 className="pa-title">{s.name}</h2>
+            <p>{s.summary}</p>
+            <p className="note-meta">Types: {Object.entries(s.types).map(([t, f]) => `${label(t)} (${f.map(label).join(", ")})`).join("; ")}.</p>
+            <p className="note-meta">Records: {s.records.join(", ")}.</p>
+            <p className="note-meta">A type you already have keeps its fields, and a record of yours stays as it is.</p>
+            {canWrite ? <Button kind="primary" busy={busy === s.id} onClick={() => void add(s)}>{busy === s.id ? "Adding…" : `Add ${s.name}`}</Button>
+              : <p className="note-meta">Parachute only reads {v.name}, so it can't add a pack here.</p>}
+          </section>))}
       </>}
     </Page>
   );
