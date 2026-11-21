@@ -15,6 +15,8 @@
 //   answer (a screen drawn three times asks once; the readers told of a new answer don't ask for it again). A screen
 //   shown again asks again at once (`askAgain`). Before this, every read went to the hub; the copies change what shows
 //   first, and the hub is never asked more than it was.
+// - A read asked with `cache: "reload"` (what a change is judged on) is the hub's: waited for, never the copy, and
+//   kept as the copy (the readers told when it differs).
 
 type Entry = { vault: string; who: string; body: string; status: number; type: string; at: number };
 
@@ -155,15 +157,18 @@ function revalidate(vault: string, who: string, key: string, f: typeof fetch, in
   if (!forced.delete(key) && (now - (asked.get(key) ?? 0) < REVALIDATE_MS || now - (answered.get(key) ?? 0) < REVALIDATE_MS)) return;
   asked.set(key, now);
   const refused = () => { void dropKept(vault); tell(vault, key); };
+  // the hub's own answer, never the browser's copy of an earlier one (the hub sends ETag and Last-Modified and no
+  // Cache-Control, so a browser may reuse a read of a moment ago): asked again with the ETag, a 304 when unchanged
+  const asks: RequestInit = { ...init, cache: init?.cache === "no-store" ? "no-store" : "no-cache" };
   const p = (async () => {
-    let r = await fromHub(vault, who, key, f, input, init);
+    let r = await fromHub(vault, who, key, f, input, asks);
     if (r.res.status === 401 || r.res.status === 403) {
       void r.res.body?.cancel().catch(() => {});
       const state = await signIn();
       if (state === "refused") { refused(); return; }
       if (state !== "alive") return;
       // the chain sends it again with the token the refresh stored (client.ts withCurrentToken)
-      r = await fromHub(vault, who, key, f, input, init);
+      r = await fromHub(vault, who, key, f, input, asks);
       if (r.res.status === 401 || r.res.status === 403) { refused(); return; }
     }
     void r.res.body?.cancel().catch(() => {});
@@ -183,6 +188,9 @@ export function keptFetch(vault: string, who: string, f: typeof fetch, signIn: (
     // a request the caller can stop: it waits for the hub, as before
     if (init?.signal) return f(input, init);
     const key = keyOf(vault, input);
+    // a read that must be the hub's now (`cache: "reload"`: what a change is judged on): waited for, and kept for the
+    // reads after it that may show the copy
+    if (init?.cache === "reload") { asked.set(key, Date.now()); const r = await fromHub(vault, who, key, f, input, init); if (r.changed) tell(vault, key); return r.res; }
     const e = mem.get(key) ?? await diskGet(key);
     if (e && e.vault === vault && e.who === who && e.at >= (writtenAt.get(vault) ?? 0)) {
       if (!mem.has(key)) remember(key, e);

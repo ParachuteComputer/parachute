@@ -101,6 +101,10 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
    too (the card says every vault): what it reads in one vault can be written into another the person shares.
 6. **Reads a browser may keep.** The hub answers a record's read with `ETag` and `Last-Modified` and no `Cache-Control`,
    so a browser may serve a read of a moment ago again (heuristic freshness): a record just changed then reads as it
-   was, and the next change is refused as a conflict. Vault's reads ask `cache: "no-store"`; the app's other reads
-   (the note view, the editor, the applet `vault` module) don't yet. Proposal for core: `Cache-Control: private,
-   no-cache` on `/api/*` answers.
+   was, and the next change is refused as a conflict. Vault's reads of the hub ask `cache: "reload"` (never a
+   copy, the browser's or the app's), and every check the app makes behind a copy it kept (src/vault/readCache.ts) asks
+   `no-cache`; the app's other first reads (the note
+   view, the editor) don't yet. Proposal for core: `Cache-Control: private, no-cache` on `/api/*` answers.
+7. **What shows first.** Vault shows a record from what this device read before, at once, and asks the hub behind it
+   (lists and the types are read from the hub); when the hub's answer differs, the record view reads again (never while you are writing in it).
+   A change is judged on the record as the hub has it now, never on the copy.

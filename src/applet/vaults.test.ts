@@ -230,3 +230,54 @@ describe("sharing", () => {
     expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
   });
 });
+
+describe("what shows, from what was read before (T-476)", () => {
+  /** A shell with `read` (the copies): each read says where it went; `publishes` is what the hub says of the type post. */
+  function kept() {
+    const reads: string[] = [], calls: Call[] = [];
+    const deps: VaultsDeps = {
+      list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp" }],
+      door: async () => "records",
+      async request(_v, method, path, body) {
+        calls.push({ method, path, body });
+        // the hub, now: the type post gives `published` a default (it would publish what it is given)
+        if (path.startsWith("/types")) return [{ name: "post", kind: "type", count: 0, fields: { published: { type: "boolean", default: true } } }];
+        return method === "GET" ? (path.startsWith("/records/") ? book : [book]) : { ...book, body: "new" };
+      },
+      // the copy, from before: post published nothing
+      async read(_v, path) { reads.push(path); if (path.startsWith("/types")) return [{ name: "post", kind: "type", count: 0, fields: {} }]; return path.startsWith("/records/") ? { ...book, updatedAt: "2026-11-01T00:00:00.000Z" } : [book]; },
+      applets: async () => [], watch: () => () => {}, access: async () => { throw new Error("no"); }, revoke: async () => {}, readOnly: async () => {}, confirm: async () => "yes", emit: () => {},
+    };
+    const router = createRouter([createVaultsModule(["vaults"], deps)]);
+    const c = (method: string, params: unknown) => router.call("vaults", method, params, {}, { charge() {}, closed: () => false });
+    return { reads, calls, c };
+  }
+  it("a record is read through `read` (the kept copy); a list and the types from the hub", async () => {
+    const { reads, calls, c } = kept();
+    await c("get", { vault: "home", id: "a" });
+    await c("query", { vault: "home", type: "book" });
+    await c("types", { vault: "home" });
+    // the record, and the names it is drawn with
+    expect([...new Set(reads.map((p) => p.split("?")[0]))].sort()).toEqual(["/records/a", "/types"]);
+    expect([...new Set(calls.filter((x) => x.method === "GET").map((x) => x.path.split("?")[0]))].sort()).toEqual(["/records", "/types"]);
+  });
+  it("a change is judged on the hub now: the record as it is, and the types that publish", async () => {
+    const { calls, c } = kept();
+    await c("update", { vault: "home", id: "a", bytes: enc({ body: "new", if_updated_at: book.updatedAt }) });
+    expect(calls.map((x) => `${x.method} ${x.path.split("?")[0]}`)).toContain("PATCH /records/a");
+    expect(calls.find((x) => x.method === "GET" && x.path.startsWith("/records/a"))).toBeTruthy();
+    // the copy says post publishes nothing; the hub says it does: adding it is refused
+    await expect(c("update", { vault: "home", id: "a", bytes: enc({ if_updated_at: book.updatedAt, types: { add: ["post"] } }) })).rejects.toThrow(/publish/);
+  });
+  it("a change refused as changed meanwhile: the record's next read for what shows is the hub's, not the copy from before", async () => {
+    const { reads, calls, c } = kept();
+    await expect(c("update", { vault: "home", id: "a", bytes: enc({ body: "mine", if_updated_at: "2026-01-01T00:00:00.000Z" }) })).rejects.toThrow(/conflict/);
+    const before = calls.filter((x) => x.method === "GET" && x.path.startsWith("/records/a")).length;
+    await c("get", { vault: "home", id: "a" });
+    expect(calls.filter((x) => x.method === "GET" && x.path.startsWith("/records/a")).length).toBe(before + 1);
+    expect(reads.filter((p) => p.startsWith("/records/a"))).toEqual([]);
+    // and the one after that, from the copy again
+    await c("get", { vault: "home", id: "a" });
+    expect(reads.filter((p) => p.startsWith("/records/a"))).toHaveLength(1);
+  });
+});

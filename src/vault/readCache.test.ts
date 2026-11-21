@@ -137,3 +137,30 @@ describe("a write still on its way", () => {
     expect(await (await read(URL_A)).text()).toBe('["after"]');
   });
 });
+
+describe("the hub's own answer", () => {
+  it("a check behind a copy never takes the browser's copy of an earlier answer", async () => {
+    dropAllKept();
+    const seen: (RequestCache | undefined)[] = [];
+    const f: typeof fetch = async (_input, init) => { seen.push(init?.cache); return new Response("[]", { status: 200, headers: { "content-type": "application/json" } }); };
+    const read = keptFetch("home", HUB, f, alive);
+    await read(URL_A);
+    later();
+    await read(URL_A); await settle();
+    expect(seen).toEqual([undefined, "no-cache"]);
+  });
+});
+
+describe("a read that must be the hub's now", () => {
+  it("cache: reload waits for the hub even with a copy, and leaves its answer as the copy", async () => {
+    dropAllKept();
+    const { h, f } = hub();
+    const read = keptFetch("home", HUB, f, alive);
+    await read(URL_A);
+    h.body = '["now"]';
+    expect(await (await read(URL_A, { cache: "reload" })).text()).toBe('["now"]');
+    expect(h.asked).toHaveLength(2);
+    // the copy is the hub's answer just read
+    expect(await (await read(URL_A)).text()).toBe('["now"]');
+  });
+});

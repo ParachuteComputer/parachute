@@ -58,6 +58,11 @@ export type VaultsDeps = {
   list(): HeldVault[];
   /** GET/POST/PATCH under the vault's API (`/records…`, `/types…`), its JSON; a 404 rejects with `not_found`. */
   request(vault: string, method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<unknown>;
+  /** A record's GET for what a screen shows (the `get` call), answered at once from what was read before while the hub
+   *  is asked behind it (vault/readCache.ts; the frame is told when the answer differs). Given only for an applet that
+   *  draws itself again when told (Parachute's own Vault); absent: `request`. A change, and every check one is judged
+   *  on (the types that publish, the record as it is), never reads it. */
+  read?(vault: string, path: string): Promise<unknown>;
   /** The vault's record door: `records` (core 0.9) or `notes` (0.8). */
   door(vault: string): Promise<"records" | "notes">;
   watch(vault: string, type: string | null, on: (e: WatchEvent) => void): () => void;
@@ -267,9 +272,12 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
   };
   const vaultOnly = (keys: string[] = []) => (p: Record<string, unknown>) => hasOnly(p, ["vault", ...keys]) && vaultOk(p.vault) ? p as { vault: string } & Record<string, unknown> : null;
 
-  async function types(vault: string): Promise<TypeRow[]> {
+  /** The vault's types and tags. `shows`: only to draw a record (which names are types), from the copy kept of the read
+   *  where the shell keeps one; never for what a change is judged on (the types that publish). */
+  async function types(vault: string, shows = false): Promise<TypeRow[]> {
     const door = await deps.door(vault);
-    const raw = await deps.request(vault, "GET", door === "records" ? "/types?include_schema=true" : "/tags?include_schema=true");
+    const path = door === "records" ? "/types?include_schema=true" : "/tags?include_schema=true";
+    const raw = await (shows && deps.read ? deps.read(vault, path) : deps.request(vault, "GET", path));
     const rows = Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.tags) ? raw.tags : [];
     const out: TypeRow[] = rows.flatMap((r: unknown) => {
       if (!plain(r) || typeof r.name !== "string") return [];
@@ -277,17 +285,24 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
       const kind = r.kind === "type" || (r.kind === undefined && Object.keys(fields).length > 0) ? "type" : "tag";
       return [{ name: r.name, kind, count: typeof r.count === "number" ? r.count : 0, description: strOr(r.description), fields }];
     });
-    typeNames.set(vault, new Set(out.filter((t) => t.kind === "type").map((t) => t.name)));
+    // only the hub's answer is kept for the checks that read the names (a copy's draws one record, no more)
+    if (!shows || !deps.read) typeNames.set(vault, new Set(out.filter((t) => t.kind === "type").map((t) => t.name)));
     return out;
   }
   /** Type names whose schema gives `published` a default: the hub fills it in on a create or when the type is added,
    *  which would publish without the sheet (core applySchemaDefaults). */
   const publishingTypes = async (vault: string) => new Set((await types(vault)).filter((t) => t.fields && Object.prototype.hasOwnProperty.call(t.fields, PUBLISH_FIELD) && (t.fields[PUBLISH_FIELD] as { default?: unknown })?.default !== undefined).map((t) => t.name));
-  const namesFor = async (vault: string) => typeNames.get(vault) ?? new Set((await types(vault)).filter((t) => t.kind === "type").map((t) => t.name));
-  async function getRec(vault: string, id: string, body: boolean): Promise<Rec & { extension?: unknown }> {
+  const namesFor = async (vault: string, shows = false) => typeNames.get(vault) ?? new Set((await types(vault, shows)).filter((t) => t.kind === "type").map((t) => t.name));
+  /** Records a change found changed meanwhile: their next read for what shows is the hub's (the copy is from before). */
+  const changedMeanwhile = new Set<string>();
+  /** A record's GET for what shows: from what was read before, where the shell keeps it. */
+  const shown = (vault: string, path: string) => (deps.read ? deps.read(vault, path) : deps.request(vault, "GET", path));
+  /** A record: as it is now (`shows`: for what shows, which may be what was read before). */
+  async function getRec(vault: string, id: string, body: boolean, shows = false): Promise<Rec & { extension?: unknown }> {
     const door = await deps.door(vault);
-    const raw = await deps.request(vault, "GET", `/${door}/${encodeURIComponent(id)}?include_links=true${body ? "" : door === "records" ? "&include_body=false" : "&include_content=false"}`);
-    const r = recOf(raw, await namesFor(vault));
+    const fresh = !shows || changedMeanwhile.delete(`${vault} ${id}`);
+    const raw = await (fresh ? (v: string, p: string) => deps.request(v, "GET", p) : shown)(vault, `/${door}/${encodeURIComponent(id)}?include_links=true${body ? "" : door === "records" ? "&include_body=false" : "&include_content=false"}`);
+    const r = recOf(raw, await namesFor(vault, shows));
     if (!r) throw new ContractError(ERROR_CODES.failed, "not_found");
     return { ...r, extension: plain(raw) ? raw.extension : undefined };
   }
@@ -336,7 +351,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         cap: null, validate: one((p) => (vaultOnly(["id"])(p) && typeof p.id === "string" && ID.test(p.id) ? p as { vault: string; id: string } : null)),
         async run({ vault, id }: { vault: string; id: string }, _s, ctx) {
           held(vault); ctx.charge(1);
-          try { const { extension: _e, ...r } = await getRec(vault, id, true); return r; } catch (e) { throw failed(e); }
+          try { const { extension: _e, ...r } = await getRec(vault, id, true, true); return r; } catch (e) { throw failed(e); }
         },
       },
       history: {
@@ -388,7 +403,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           if (guarded(now) || (!now.path.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(now.path))) throw refuse("this record is the app's own: no applet changes it");
           if (now.path.startsWith(VIEWS) && change.types?.remove?.length) throw refuse("a saved view keeps its names");
           // the change is to the version judged above, or none
-          if (change.if_updated_at !== now.updatedAt) throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read");
+          if (change.if_updated_at !== now.updatedAt) { changedMeanwhile.add(`${vault} ${id}`); throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read"); }
           // what is written into a published record anyone with its link reads: the person says yes first
           if (isPublic(now)) await askFirst(deps, { title: `Change “${sheetText(now.path)}”?`, body: `It is published from ${sheetText(v.name)} (${sheetText(v.host)}): anyone with its link reads what is written there.`, act: "Change it" });
           const door = await deps.door(vault);

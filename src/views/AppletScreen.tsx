@@ -448,8 +448,12 @@ export default function AppletScreen() {
     }) };
   };
   useEffect(() => () => { void brokerRef.current?.broker.then((b) => b?.close()); brokerRef.current = null; }, []);
+  // what the vaults words (Vault) read from the kept copies, per vault: the frame is told when one of those changes
+  const vaultsReads = useRef(new Map<string, Set<string>>());
   const vaultsModule = useMemo(() => (rec && entry && (entry.app.includes("vaults") || entry.app.includes("sharing"))
-    ? createVaultsModule(entry.app, vaultsDeps({ confirm: (q) => sheetsRef.current.confirm(q), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search }))
+    ? createVaultsModule(entry.app, vaultsDeps({ confirm: (q) => sheetsRef.current.confirm(q), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search,
+      // Parachute's own Vault draws a record again when told: it may be answered from the copies kept of its reads
+      ...(officialOf(entry.noteId) === "vault" ? { read: (vault: string, read: string) => { let m = vaultsReads.current.get(vault); if (!m) vaultsReads.current.set(vault, m = new Set()); if (m.size < 1000) m.add(read); } } : {}) }))
     : null), [rec?.key, allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => vaultsModule?.stop(), [vaultsModule]);
   // the frame's reads, from the kept copies while its page redraws on fresh data: noted, so it is told only of those
@@ -505,7 +509,7 @@ export default function AppletScreen() {
     if (!rec || !reader) return;
     let t: ReturnType<typeof setTimeout> | null = null;
     const off = onFresh((vault, read) => {
-      if (vault !== rec.key || !reader.reads.has(read) || t) return;
+      if (!((vault === rec.key && reader.reads.has(read)) || vaultsReads.current.get(vault)?.has(read)) || t) return;
       t = setTimeout(() => { t = null; sessionNow.current?.sendEvent("vault.fresh", {}); }, 60);
     });
     return () => { off(); if (t) clearTimeout(t); };
