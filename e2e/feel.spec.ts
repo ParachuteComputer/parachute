@@ -267,3 +267,60 @@ test("the app's own sheets fade in holding still, over the app's bar, and are st
     expect(await sheetMotion(still)).toEqual({ name: "shell-fade", duration: "0s" });
   } finally { await ctx.close(); }
 });
+
+/** Each face the document has, by family and style, and whether it is ready ("loaded"), still coming, or refused ("error"). */
+const faces = (doc: Page | Frame) => doc.evaluate(async () => {
+  await document.fonts.ready;
+  return [...document.fonts].map((f) => `${f.family.replace(/"/g, "")} ${f.style} ${f.status}`);
+});
+
+test("the app's own faces: Literata for reading, Instrument Sans for the rest, in the shell and in an applet, with nothing fetched", async ({ page }) => {
+  const fetched: string[] = [];
+  page.on("request", (r) => { if (r.resourceType() === "font" && !r.url().startsWith("data:")) fetched.push(r.url()); });
+  const { app, inner } = await openFeel(page);
+  // the applet's frame (font-src data: only): the title in the serif, a button in the sans, both drawn in the faces
+  expect(await app.locator(".pa-title").evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/^"?Literata"?,/);
+  expect(await app.getByRole("button", { name: "More" }).evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/^"?Instrument Sans"?,/);
+  const inFrame = await faces(inner);
+  for (const f of ["Literata normal loaded", "Instrument Sans normal loaded"]) expect(inFrame, "the applet's frame").toContain(f);
+  // (a "… fallback" face is a local font, absent on some devices; the two carried faces must never be refused)
+  expect(inFrame.filter((f) => f.endsWith("error") && !f.includes("fallback")), "a face the frame refused").toEqual([]);
+  // the shell: the bar's title in the serif, its own words in the sans
+  expect(await page.locator(".bar-title").evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/^"?Literata"?,/);
+  expect(await page.locator("body").evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/^"?Instrument Sans"?,/);
+  const inShell = await faces(page);
+  for (const f of ["Literata normal loaded", "Instrument Sans normal loaded"]) expect(inShell, "the shell").toContain(f);
+  // carried in the app: no font asked of any server
+  expect(fetched).toEqual([]);
+});
+
+test("the Allow card and a passing line are readable on their first frame, and hold still", async ({ page }) => {
+  // an applet this page has never allowed, so its card shows
+  const id = `allow-${stamp}`;
+  const note = await record(hubState(), "create", {
+    path: `Applets/Allow ${stamp}`, extension: "tsx", tags: ["applet"], body: `import { Page } from "parachute";\nexport default function A() { return <Page title="Allow" />; }\n`,
+    fields: { needs: 4, applet: { contract: 2, id, name: "Asks", glyph: "❀", access: [{ vault: "here", allow: [{ path: FOLDER, verbs: ["read"] }] }] } },
+  });
+  made.push(note.id);
+  await page.addInitScript(() => {
+    const seen: { on: string; opacity: number; at: string }[] = [];
+    (window as unknown as { __first: typeof seen }).__first = seen;
+    const sample = (el: Element, at: string) => seen.push({ on: (el as HTMLElement).className, opacity: Number(getComputedStyle(el).opacity), at });
+    new MutationObserver((records) => {
+      for (const r of records) for (const n of r.addedNodes) {
+        if (!(n instanceof Element)) continue;
+        for (const el of [n, ...n.querySelectorAll("*")]) if (el.matches(".grant-card, .shell-line")) { sample(el, "inserted"); requestAnimationFrame(() => sample(el, "frame 1")); }
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+  await page.goto(`/v/${VAULT}/a/${note.id}`);
+  const card = page.getByRole("region", { name: "Asks is asking for access" });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  const allow = card.getByRole("button", { name: "Allow" });
+  const at = (await allow.boundingBox())!;
+  await page.waitForTimeout(300);
+  expect(await allow.boundingBox(), "Allow where it was first drawn").toEqual(at);
+  const first = await page.evaluate(() => (window as unknown as { __first: { on: string; opacity: number; at: string }[] }).__first);
+  expect(first.some((f) => f.on.includes("grant-card")), "the card seen arriving").toBe(true);
+  for (const f of first) expect(f.opacity, `${f.on} at ${f.at}`).toBeGreaterThanOrEqual(0.8);
+});

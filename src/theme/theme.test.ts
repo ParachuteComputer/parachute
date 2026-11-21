@@ -26,6 +26,16 @@ describe("the theme record", () => {
   it("what the person starts from reads back as the built-in theme", () => {
     expect(themeFrom({ theme: recordOf(DEFAULT_THEME) })).toEqual(DEFAULT_THEME);
   });
+
+  it("the system stacks an earlier app wrote into a theme in full read as today's faces; a font chosen stands", () => {
+    const earlier = { serif: `"Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif`, sans: `system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`, mono: "ui-monospace, monospace" };
+    const t = themeFrom({ theme: { fonts: earlier } });
+    expect(t.fonts.serif).toBe(DEFAULT_THEME.fonts.serif);
+    expect(t.fonts.sans).toBe(DEFAULT_THEME.fonts.sans);
+    expect(t.fonts.serif.startsWith(`"Literata"`)).toBe(true);
+    expect(t.fonts.mono).toBe("ui-monospace, monospace");
+    expect(themeFrom({ theme: { fonts: { serif: `"Iowan Old Style", Georgia, serif` } } }).fonts.serif).toBe(`"Iowan Old Style", Georgia, serif`);
+  });
 });
 
 describe("the grammar (values end up in CSS the shell, the frame and applets apply)", () => {

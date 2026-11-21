@@ -18,13 +18,14 @@ import { subscribeNewVaults } from "../vault/newVaults";
 import { homeNow } from "./frameDeps";
 import { subscribeTheme, tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
+import { FONTS_CSS } from "../theme/fonts";
 
 /** How long a frame from a vault has to say it is listening before the built-in one takes its place. */
 const WATCHDOG_MS = 10_000;
 
 export default function FrameHost({ js, from, onFailed }: { js: string; from: "built-in" | "vault"; onFailed: (why: string, persist: boolean) => void }) {
   // the look as it is when the frame starts; each later change is a `theme` event
-  const doc = useMemo(() => frameDocument(frameKit.js, frameKit.css, js, cssOf(tokensNow())), [js]);
+  const doc = useMemo(() => frameDocument(frameKit.js, frameKit.css, js, FONTS_CSS + cssOf(tokensNow())), [js]);
   const failedRef = useRef(onFailed);
   failedRef.current = onFailed;
   const heard = useRef(false);

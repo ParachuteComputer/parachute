@@ -16,6 +16,7 @@ import { clientFor, keptClientFor } from "../vault/client";
 import { onFresh } from "../vault/readCache";
 import { homeVault } from "../shell/frameSource";
 import { DEFAULT_THEME, MOTION_CSS, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, type Theme, type Tokens } from "./theme";
+import { FONTS_CSS } from "./fonts";
 
 export const THEME_TAG = "parachute-theme";
 export const THEME_PATH = "Parachute/Theme";
@@ -81,6 +82,13 @@ export function applyToDocument() {
     m.id = "pa-motion";
     m.textContent = MOTION_CSS;
     document.head.appendChild(m);
+  }
+  // the faces the app carries (fonts.ts), once
+  if (!document.getElementById("pa-fonts")) {
+    const f = document.createElement("style");
+    f.id = "pa-fonts";
+    f.textContent = FONTS_CSS;
+    document.head.appendChild(f);
   }
   document.documentElement.dataset.motion = t.motion;
 }
