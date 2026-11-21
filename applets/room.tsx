@@ -404,7 +404,7 @@ const CSS = `
 .room .sealed-row .what, .room .sealed-row .why { overflow-wrap: anywhere; }
 .room .sealed-row .scope { white-space: pre-line; }
 .room .card .ids { color: var(--muted); font-size: var(--fs-small); margin: 2px 0; }
-.room .card .ids summary { cursor: pointer; width: max-content; }
+.room .card .ids summary { cursor: pointer; width: max-content; min-height: 44px; display: flex; align-items: center; }
 .room .card .ids p { margin: 2px 0 0; font-variant-numeric: tabular-nums; }
 .room .root { border-left: 3px solid var(--text); padding-left: 10px; margin-bottom: 8px; }
 .room .older { display: flex; justify-content: center; margin: 8px 0; }
@@ -767,9 +767,13 @@ function AskCard({ e, ask, answeredBy, mine, answer }: { e: Ev; ask: Ask; answer
 
 // ── Uni's sealed cards and secret requests (docs/design/KEYRING.md): the shell checks the card, asks for the device
 // unlock when it must, seals the answer with the approval key and sends it. This draws the card and takes the tap. ──
-/** A broker-worded scope without the lines the card shows on their own (its reach, its read key). */
-const rest = (r: { scope: string; reach: string | null; read_key: string | null }) =>
-  r.scope.split("\n").filter((l, i) => !(i === 0 && r.reach && l.trim() === r.reach) && l !== r.read_key).join("\n").trim();
+/** A card's scope by its lines: the first leads (the key's true reach, when the native side found that line), the rest
+ *  sits under it as written (an agent's "Uni says: …" among it, never in the lead), without the read key the card
+ *  shows on its own line. */
+type Scoped = { scope: string; reach: string | null; read_key: string | null };
+const lines = (r: Scoped) => r.scope.split(/\r?\n/);
+const lead = (r: Scoped) => r.reach ?? lines(r)[0].trim();
+const rest = (r: Scoped) => lines(r).slice(1).filter((l) => l.trim() !== r.read_key?.trim()).join("\n").trim();
 const SPAN = (s: number) => (s >= 86400 ? `${Math.round(s / 86400)} d` : s >= 3600 ? `${Math.round(s / 3600)} h` : `${Math.max(1, Math.round(s / 60))} min`);
 const said = (x: any) => String(x?.message ?? x ?? "it failed").slice(0, 200);
 /** A refused tap in the room's own words, except the shell's "Tap again in a moment" (the tap was there, but it paid
@@ -845,12 +849,12 @@ function SealedCard({ e }: { e: Ev }) {
   const open = view.rows.some((r: any) => r.answer) && view.kind === "morning" ? [] : view.rows.filter((r: any) => !r.answer);
   return <div className={`card${open.length ? "" : " ended"}`} role="group" aria-label={morning ? "Uni's morning card" : "Uni asks to use a credential"}>
     <div className="head">{open.length ? "◆" : "◇"} {morning ? "Uni's morning card" : "Uni's card"}{view.rows.some((r: any) => r.class === "powerful") ? " · powerful" : ""}</div>
-    {/* each request leads with what it is for: the key's true reach when the native side found that line (a
-        broker-worded card: the rest of the scope, Uni's words among it, under it), else the scope; then the credential
-        and action once, for how long and how often; the job id, for checking against Uni's log, under Details */}
+    {/* each request leads with what it is for: the first line of its scope (the key's true reach on a broker-worded
+        card), the rest under it; then the credential and action once, for how long and how often; the job id, for
+        checking against Uni's log, under Details */}
     {view.rows.map((r: any) => <div key={r.rid} className="sealed-row">
-      <p className="what">{r.reach ?? r.scope}</p>
-      {r.reach && rest(r) && <p className="why scope">{rest(r)}</p>}
+      <p className="what">{lead(r)}</p>
+      {rest(r) && <p className="why scope">{rest(r)}</p>}
       <p className="why">{r.credential} · {r.action}, {SPAN(r.ttl_s)}, {r.uses === 1 ? "once" : `${r.uses} uses`} · asked {when.ago(r.asked)}</p>
       {r.read_key && <p className="why">{r.read_key}</p>}
       <details className="ids"><summary aria-label={`Details: ${r.credential}`}>Details</summary><p>Job {r.request_digest.slice(0, 4)} {r.request_digest.slice(4, 8)}</p></details>

@@ -15,10 +15,10 @@ export const E2E_SIGNER_MARK = "parachute-e2e-test-signer";
 
 // the native side's two lines of a broker-worded scope (src-tauri/src/approvals/card.rs `reach_line`, `read_key_line`)
 const BROKER_WORDED = ["job.cloudflare", "mint.cloudflare", "lookup.cloudflare", "github.ruleset.apply"];
-const reachLine = (action: string, scope: string) => { const first = scope.split("\n")[0].trim(); return BROKER_WORDED.includes(action) && ["🔴 ", "🟡 ", "🟢 "].some((d) => first.startsWith(d)) ? first : null; };
+const reachLine = (action: string, scope: string) => { const first = scope.split(/\r?\n/)[0].trim(); return BROKER_WORDED.includes(action) && ["🔴 ", "🟡 ", "🟢 "].some((d) => first.startsWith(d)) ? first : null; };
 const readKeyLine = (action: string, scope: string) => {
   if (!BROKER_WORDED.includes(action)) return null;
-  const lines = scope.split("\n");
+  const lines = scope.split(/\r?\n/).map((l) => l.replace(/\r$/, ""));
   const said = lines.findIndex((l) => l.startsWith("Uni says:"));
   return (said < 0 ? lines : lines.slice(0, said)).find((l) => l.startsWith("Read key: ")) ?? null;
 };

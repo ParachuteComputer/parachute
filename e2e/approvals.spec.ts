@@ -89,6 +89,8 @@ test("the rooms applet approves Uni's powerful card behind the unlock, gives a s
     await expect(sealed).toContainText(`Uni says: Change one DNS record ${stamp}`);
     const ids = sealed.getByText(/^Job [0-9a-f]{4} [0-9a-f]{4}$/);
     await expect(ids).toBeHidden();
+    // the action stays on the card's face, beside the credential
+    await expect(sealed.getByText(/^cloudflare-dns · job\.cloudflare, 10 min, once · asked/)).toBeVisible();
     await sealed.getByText("Details", { exact: true }).click();
     await expect(ids).toBeVisible();
     const hold = sealed.getByRole("button", { name: "Hold to approve" });
@@ -201,7 +203,7 @@ test("on a device that doesn't trust Uni's key yet, Uni's card says so and offer
   owner.close();
   const uni = await person(RELAY!, hex(uniSk));
   // a card as Uni's sealed broker posts it (kind 9, ```uni-sealed-approval, signed by Uni's key)
-  const card = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "stripe-test", action: "job.stripe", scope: `Mint a test key ${stamp}`, payload: { v: 1 }, class: "routine", ttl_s: 600 });
+  const card = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "stripe-test", action: "job.stripe", scope: `Mint a test key ${stamp}\r\nUni says: for the checkout test`, payload: { v: 1 }, class: "routine", ttl_s: 600 });
   expect((await uni.send(card.event)).ok).toBe(true);
   // a second card from Uni: trusting the key from one card answers both, without leaving the room
   const second = makeCard({ uni: uniSk, sealPubHex: sealPub(aliceSk), room, credential: "mail-test", action: "job.mail", scope: `Read the test inbox ${stamp}`, payload: { v: 1 }, class: "routine", ttl_s: 600 });
@@ -248,6 +250,10 @@ test("on a device that doesn't trust Uni's key yet, Uni's card says so and offer
     const sealed = log.getByRole("group", { name: "Uni asks to use a credential" });
     await expect(sealed).toHaveCount(2, { timeout: 20_000 });
     await expect(sealed.filter({ hasText: `Mint a test key ${stamp}` }).getByRole("button", { name: /Approve/ })).toBeVisible();
+    // a scope of several lines with no reach line (a caller's own words): its first line leads, the rest under it
+    const mint = sealed.filter({ hasText: `Mint a test key ${stamp}` });
+    await expect(mint.locator(".what")).toHaveText(`Mint a test key ${stamp}`);
+    await expect(mint.locator(".scope")).toHaveText("Uni says: for the checkout test");
     // the other card of Uni's, in the same room, without leaving it
     await expect(sealed.filter({ hasText: `Read the test inbox ${stamp}` }).getByRole("button", { name: /Approve/ })).toBeVisible();
     await expect(offered).toHaveCount(0);
