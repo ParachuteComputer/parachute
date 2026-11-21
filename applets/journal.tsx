@@ -4,8 +4,10 @@
 // Written on the kit (docs/WRITE-AN-APPLET.md): a voice entry is recorded on the app's own sheet (Record), made a note
 // with the Uni app's time-only path (voiceNote: the hub puts the words in), and read again while it waits
 // (useTranscripts). Dates are the kit's (when), as is the page, the box, the list's states and the toasts.
+// Offline: a line the vault doesn't take is kept on this device (the outbox, the app's storage), listed as waiting, and
+// sent, under the time it was written, when Journal is next shown or on Try now.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Days, Empty, Loading, Note, onOpen, Page, Problem, ready, Record, toast, useSaved, useTranscripts, vault, voiceNote, when, Write } from "parachute";
+import { Button, Days, Empty, List, Loading, Note, onOpen, onShown, Page, Problem, ready, Record, shown as onScreen, toast, useSaved, useTranscripts, vault, voiceNote, when, Write } from "parachute";
 
 type Entry = { id: string; path: string; updatedAt: string | null; createdAt?: string | null; body?: string; tags?: string[]; fields?: Record<string, unknown> };
 
@@ -90,16 +92,57 @@ export default function Journal() {
     } catch (e: any) { toast(`Voice entry not saved: ${e?.message ?? e}`, { error: true }); }
     setBusy(false);
   };
+  // lines written while the vault couldn't be reached, oldest first, each with the moment it was written
+  const [outbox, setOutbox] = useSaved<{ at: string; body: string }[]>("outbox", []);
+  const box = useRef(outbox);
+  box.current = outbox;
+  const sending = useRef(false);
+  /** One line into the vault under the time it was written: the same words in the same minute get the seconds. */
+  const put = (body: string, at: Date) => {
+    const path = pathFor(body, at);
+    return vault.createRecord({ path, body }).catch((e: any) => { if (e?.status === 409 || /conflict|elsewhere/i.test(String(e?.message ?? e))) return vault.createRecord({ path: path.replace(/^(Journal\/[^ ]+)/, `Journal/${when.path(at, true)}`), body }); throw e; });
+  };
+  /** Sends what waits, oldest first, until one isn't taken; the rest wait for the next time. */
+  const flush = async () => {
+    if (sending.current || !box.current.length) return;
+    sending.current = true;
+    let sent = 0;
+    try {
+      for (const item of [...box.current]) {
+        try { await put(item.body, new Date(item.at)); } catch { break; }
+        sent++;
+        setOutbox((b) => b.filter((x) => x !== item && !(x.at === item.at && x.body === item.body)));
+      }
+    } finally { sending.current = false; }
+    if (sent) { toast(sent === 1 ? "A waiting entry is saved." : `${sent} waiting entries are saved.`); await load().catch(() => {}); }
+  };
+  useEffect(() => {
+    void ready().then(flush);
+    // when Journal is in front again: shown in the app, or the app back from the background
+    const back = () => { if ((typeof onScreen === "function" ? onScreen() : true) && document.visibilityState === "visible") void flush(); };
+    const off = typeof onShown === "function" ? onShown(back) : () => {};
+    document.addEventListener("visibilitychange", back);
+    return () => { off(); document.removeEventListener("visibilitychange", back); };
+  }, []);
   const sorted = useMemo(() => (entries ?? []).map((e) => ({ e, at: whenOf(e) })).sort((a, b) => b.at.getTime() - a.at.getTime()), [entries]);
   const save = async () => {
     const body = text.trim();
     if (!body || busy) return;
     setBusy(true);
+    const at = new Date();
     try {
-      // the same words in the same minute: the path is taken, so it gets the seconds (as Home does)
-      const path = pathFor(body);
-      await vault.createRecord({ path, body }).catch((e: any) => { if (e?.status === 409 || /conflict|elsewhere/i.test(String(e?.message ?? e))) return vault.createRecord({ path: path.replace(/^(Journal\/[^ ]+)/, `Journal/${when.path(Date.now(), true)}`), body }); throw e; });
-    } catch (e: any) { toast(`Not saved: ${e?.message ?? e}. Your words are still here.`, { error: true }); setBusy(false); return; }
+      // behind an earlier one still waiting, it waits too (the order they were written in is kept)
+      if (box.current.length) throw new Error("waiting");
+      await put(body, at);
+    } catch {
+      setOutbox((b) => [...b, { at: at.toISOString(), body }]);
+      setText("");
+      // written to the device's disk now, not in the kit's next 250 ms: the app may be closed right after
+      setTimeout(() => void (globalThis as any).parachute?.saved?.flush?.(), 0);
+      toast("Kept on this device: it goes to your journal when it can.");
+      setBusy(false);
+      return;
+    }
     setText("");
     toast("Saved to Journal.");
     // (saved: a list that can't be read just now doesn't make it unsaved)
@@ -116,6 +159,8 @@ export default function Journal() {
       <div className="when">{when.day(whenOf(opened))}, {when.time(whenOf(opened))}<Button kind="quiet" small onClick={() => setOpenId(null)}>Close</Button></div>
       <Note body={words.strip(opened.body)} path={opened.path} tags={opened.tags} />
     </section>}
+    {outbox.length > 0 && <List label="Waiting to be saved" rows={outbox.map((x) => ({ key: x.at, title: entryWords(x.body), meta: `${when.day(x.at)}, ${when.time(x.at)}` }))}
+      more={{ label: "Try now", onPress: () => void flush() }} />}
     <Days times={sorted.map((x) => x.at.toISOString())} label="entries, the last four weeks" />
     {failed ? <Problem error={failed} onRetry={() => void start()}>Couldn't read your journal</Problem>
       : entries === null ? <Loading /> : !sorted.length ? <Empty>Nothing yet. Write the first line above.</Empty> : null}

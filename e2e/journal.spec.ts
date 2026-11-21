@@ -57,3 +57,48 @@ test("journal: a line becomes a dated journal note; the days show, voice entries
     await expect(opened).toHaveCount(0);
   } finally { for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {}); }
 });
+
+test("journal offline: a line the vault doesn't take waits on the device, and goes in under its own time when Journal is back", async ({ page }) => {
+  test.setTimeout(90_000);
+  const stamp = Date.now().toString(36);
+  const note = await record(hubState(), "create", appletRecord("journal"));
+  const made: string[] = [note.id];
+  const hub = new URL(hubState().origin);
+  // the vault takes no writes (the phone is somewhere without a connection): reads still answer
+  const offline = (u: URL) => u.host === hub.host && u.pathname.includes(`/vault/${VAULT}/`);
+  await page.route(offline, (r) => (r.request().method() === "GET" ? r.continue() : r.abort("internetdisconnected")));
+  try {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = page.frameLocator("iframe.applet-frame");
+    await expect(app.getByRole("heading", { name: "Journal" })).toBeVisible();
+    const written = new Date();
+    await app.getByLabel("Write in your journal").fill(`Rain on the roof ${stamp}. Stayed in.`);
+    await app.getByRole("button", { name: "Save" }).click();
+    await expect(app.getByRole("status").filter({ hasText: "Kept on this device" })).toBeVisible();
+    const waiting = app.getByRole("region", { name: "Waiting to be saved" });
+    await expect(waiting).toContainText(`Rain on the roof ${stamp}`);
+    await expect(app.getByLabel("Write in your journal")).toHaveValue("");
+    const inVault = async () => ((await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=100`)) as { id: string; path: string; content?: string }[])
+      .find((r) => r.path.endsWith(`Rain on the roof ${stamp}`) || !!r.content?.includes(`Rain on the roof ${stamp}`));
+    expect(await inVault()).toBeUndefined();
+
+    // the connection is back; Journal opened again: the line goes in, under the minute it was written
+    await page.unroute(offline);
+    await page.reload();
+    // a start after a reload asks once to open it (an applet doesn't start by itself after the app restarts)
+    await page.getByRole("button", { name: "Open Journal" }).click();
+    await expect(app.getByRole("article", { name: /Entry at/ }).filter({ hasText: `Rain on the roof ${stamp}. Stayed in.` })).toBeVisible({ timeout: 30_000 });
+    await expect(app.getByLabel("Write in your journal")).toHaveValue("");
+    await expect(waiting).toHaveCount(0);
+    await expect.poll(async () => !!(await inVault()), { timeout: 15_000 }).toBe(true);
+    const saved = await inVault();
+    if (saved) made.push(saved.id);
+    const hhmm = `${String(written.getHours()).padStart(2, "0")}-${String(written.getMinutes()).padStart(2, "0")}`;
+    expect(saved?.path).toMatch(new RegExp(`^Journal/\\d{4}/\\d{2}-\\d{2}/${hhmm}(-\\d{2})? Rain on the roof ${stamp}$`));
+  } finally {
+    await page.unroute(offline).catch(() => {});
+    for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
+  }
+});
