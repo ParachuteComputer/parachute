@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { beginSignIn, CLOUD_CLIENT_NAME, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
+import { beginSignIn, CLOUD_CLIENT_NAME, SHELL_RETURN, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
 
 const PENDING = "parachute.oauth.pending.v1";
 const P = { hub: "https://hub.example", issuer: "https://hub.example", accountMcp: "https://hub.example/account/mcp", vaultTemplate: "https://hub.example/vault/{name}" };
@@ -20,6 +20,29 @@ describe("completeSignIn", () => {
     await expect(completeSignIn("code", "other", counting)).rejects.toThrow(/doesn't match/);
     expect(called).toBe(0);
     expect(localStorage.getItem(PENDING)).not.toBeNull();
+  });
+  it("where the hub says who sent each return (RFC 9207), a code that comes back without that hub's issuer is refused before it goes anywhere", async () => {
+    let called = 0;
+    const counting = (async () => { called++; return new Response(JSON.stringify({ access_token: "t", scope: "vault:recipes:read" })); }) as unknown as typeof fetch;
+    for (const iss of [null, "https://evil.example", "https://hub.example.evil"]) {
+      localStorage.setItem(PENDING, JSON.stringify(pending({ iss: true })));
+      await expect(completeSignIn("code", "s1", counting, iss)).rejects.toThrow(/came back from somewhere other than the hub/);
+    }
+    expect(called).toBe(0);
+    localStorage.setItem(PENDING, JSON.stringify(pending({ iss: true })));
+    await completeSignIn("code", "s1", counting, "https://hub.example");
+    expect(called).toBe(1);
+  });
+  it("a return that names another issuer is refused even where the hub never said it names one (a stranger's hub that sent the person on)", async () => {
+    let called = 0;
+    const counting = (async () => { called++; return new Response(JSON.stringify({ access_token: "t", scope: "vault:recipes:read" })); }) as unknown as typeof fetch;
+    localStorage.setItem(PENDING, JSON.stringify(pending()));
+    await expect(completeSignIn("code", "s1", counting, "https://cloud.parachute.computer")).rejects.toThrow(/came back from somewhere other than the hub/);
+    expect(called).toBe(0);
+    // none named, from a hub that never said it would: as before
+    localStorage.setItem(PENDING, JSON.stringify(pending()));
+    await completeSignIn("code", "s1", counting, null);
+    expect(called).toBe(1);
   });
   it("refuses a second use of the same flow", async () => {
     localStorage.setItem(PENDING, JSON.stringify(pending()));
@@ -141,6 +164,40 @@ describe("beginSignIn", () => {
     localStorage.clear();
     await beginSignIn(begin({ step: "list" }), cloudLike(META, names)).catch(() => null);
     expect(names.at(-1)).toBe("Parachute");
+  });
+  it("on a device, signs in under the id the hub reserves for the app (Cloud's parachute-app) where the hub says who sent each return: no registration, so its page names Parachute", async () => {
+    const names: string[] = [];
+    const cloud = { ...P, hub: "https://cloud.example", issuer: "https://cloud.example", door: "cloud" as const, appClientId: "parachute-app" };
+    const meta = { ...META, issuer: "https://cloud.example", authorization_endpoint: "https://cloud.example/oauth/authorize", token_endpoint: "https://cloud.example/oauth/token", registration_endpoint: "https://cloud.example/oauth/register" };
+    const withIss = { ...meta, authorization_response_iss_parameter_supported: true } as unknown as Record<string, string>;
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    try {
+      const url = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(withIss, names)));
+      expect(url.searchParams.get("client_id")).toBe("parachute-app");
+      expect(url.searchParams.get("redirect_uri")).toBe(SHELL_RETURN);
+      expect(names).toEqual([]);
+      // a hub that doesn't say who sent a return: the one loopback can't tell hubs apart, so the app registers
+      localStorage.clear();
+      const noIss = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
+      expect(noIss.searchParams.get("client_id")).toBe("client-1");
+    } finally { delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__; }
+    // a browser tab's return address isn't the one the id is pinned to: it registers, as before
+    localStorage.clear(); names.length = 0;
+    const tab = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(withIss, names)));
+    expect(tab.searchParams.get("client_id")).toBe("client-1");
+    expect(names).toEqual([CLOUD_CLIENT_NAME]);
+  });
+  it("a hub that refused the reserved id gets a registration on the next sign-in", async () => {
+    const cloud = { ...P, hub: "https://cloud.example", issuer: "https://cloud.example", door: "cloud" as const, appClientId: "parachute-app" };
+    const meta = { ...META, issuer: "https://cloud.example", authorization_endpoint: "https://cloud.example/oauth/authorize", token_endpoint: "https://cloud.example/oauth/token", registration_endpoint: "https://cloud.example/oauth/register", authorization_response_iss_parameter_supported: true } as unknown as Record<string, string>;
+    localStorage.setItem(PENDING, JSON.stringify(pending({ parachute: cloud, issuer: "https://cloud.example", clientId: "parachute-app", reserved: true, iss: true })));
+    await expect(completeSignIn("code", "s1", hub(401, { error: "invalid_client" }), "https://cloud.example")).rejects.toThrow(/refused/);
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+    try {
+      const names: string[] = [];
+      const url = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
+      expect(url.searchParams.get("client_id")).toBe("client-1");
+    } finally { delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__; }
   });
   it("refuses a hub that names another issuer", async () => {
     await expect(beginSignIn(begin({ vault: "notes" }, "https://a.example"), discovery({ ...META, issuer: "https://b.example" }, []))).rejects.toThrow(/calls itself/);
