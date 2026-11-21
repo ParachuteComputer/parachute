@@ -69,7 +69,8 @@ test("an AI changes three records and deletes one; Changes shows them under its 
   if (deletes) await expect(run.getByRole("button", { name: /Deleted Pie/ })).toBeVisible();
   else await expect(vault.getByText("Deleted records aren't listed: this vault's hub shows them only to its admin.")).toBeVisible();
   // the person's own hub token reads as them, in plain words: not "A key with no name (REST)"
-  const you = vault.getByRole("region", { name: "You, in another app, Today" });
+  // (other specs on the same hub write as the person too: the run that holds the cake)
+  const you = vault.getByRole("region", { name: "You, in another app, Today" }).filter({ has: vault.getByRole("button", { name: /Cake: see what changed/ }) });
   await expect(you).toBeVisible();
   await expect(vault.getByText(/with no name|\bREST\b|\bMCP\b/i)).toHaveCount(0);
   // and its counts agree: the group says how many changes it has, "Put all N back" says how many records that puts back,
@@ -79,7 +80,9 @@ test("an AI changes three records and deletes one; Changes shows them under its 
   await expect(you.getByRole("button")).toHaveCount(changes);
   const all = Number(/^Put all (\d+) back, by You/.exec(await header.getByRole("button").getAttribute("aria-label") ?? "")![1]);
   const covers = header.locator("xpath=following-sibling::p[contains(@class,'lede')][1]");
-  await expect(covers).toHaveText(new RegExp(`^Put all ${all} back covers ${all} of these ${changes} changes\\. Not counted: .*2 more changes to a record already counted\\.`));
+  await expect(covers).toHaveText(new RegExp(`^Put all ${all} back covers ${all} of these ${changes} changes\\. Not counted: .*\\d+ more changes to a record already counted\\.`));
+  // the cake's two later changes are among them; every other change in the run is a record counted, or one of the reasons
+  expect(Number(/(\d+) more changes to a record already counted/.exec(await covers.innerText())![1])).toBeGreaterThanOrEqual(2);
   expect(all).toBeLessThan(changes);
   // what one change did: the field before and after, and the words line by line
   await expect(run.getByRole("button", { name: /Changed Soup/ })).toContainText("serves 2 → 4, the words");
