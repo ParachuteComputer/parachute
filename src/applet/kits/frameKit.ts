@@ -548,6 +548,8 @@ export const FRAME_KIT = String.raw`(function () {
         return function () { stopped = true; if (id) { delete vaultWatches[id]; call("vaults", "unwatch", { id: id }).catch(function () {}); } };
       },
       applets: function (vault) { return call("vaults", "applets", { vault: vault }); },
+      packs: function (vault) { return call("vaults", "packs", { vault: vault }); },
+      addPack: function (vault, id) { return call("vaults", "addPack", { vault: vault, id: id }); },
       // with app: [sharing]
       access: function (vault) { return call("vaults", "access", { vault: vault }); },
       publish: function (vault, id, on) { return call("vaults", "publish", { vault: vault, id: id, on: on !== false }); },

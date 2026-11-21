@@ -14,9 +14,10 @@ Bases, Anytype, Capacities).
 | Screen | What is on it |
 |---|---|
 | Your vaults | every vault on this device (where it is, whether Parachute reads or also changes it), and a search across all of them |
-| A vault | its types, each with how many records it has and its fields; its tags; the newest records; a search; **New type**; **Changes**; **Sharing** |
-| A type | its records as a table: the type's fields are the columns, a header's tap sorts by it, the first column stays in view as the rest scroll across. **Filter** (a field's value), **Group** (by a field), **List** or **Table**, a search. Saved views as tabs. **New …** adds a record of the type. A record opens beside the table on a computer, in its place on a phone |
-| A record | its fields, changed where they stand (a choice from the type's list, a box for yes or no, a number, a date), its types and tags, its words (rendered; **Edit words**), what it links to and what links to it, its history (each change, by whom: an AI by its key's name; tap one for its before and after, and **Put it back**), and **Publish** |
+| A vault | its types, each with how many records it has and its fields; its tags; the newest records; a search; **New type**; **Add a pack** (**Packs** once it has types); **Changes**; **Sharing** |
+| Packs | **Installed packs** (version, when, **Update** when the app ships a newer one), and Parachute's own to add with one tap: what each adds, then **Add**. What it added, and what it left as the person had it, said in plain words ([PACKS.md](PACKS.md)) |
+| A type | its records as a table: the type's fields are the columns, a header's tap sorts by it, the first column stays in view as the rest scroll across. **Filter** (a field's value), **Group** (by a field), **List** or **Table**, a search. Saved views as tabs. **New …** adds a record of the type, starting from its default template when it has one ([PACKS.md](PACKS.md)). A record opens beside the table on a computer, in its place on a phone |
+| A record | its fields, changed where they stand (a choice from the type's list, a box for yes or no, a number, a date), its types and tags, its words (rendered; **Edit words**), what it links to and what links to it, its history (each change, by whom: an AI by its key's name; tap one for its before and after, and **Put it back**), **Make this a template**, and **Publish** |
 | Changes | what changed in the vault in the last 7 days (**Older changes** reaches back further), newest first, each writer's run of changes together under its name (`claude`, or "You, in Parachute here"). Each change says what it did ("serves 2 → 4, the words") and opens to its before and after: fields, the words line by line, a move, links added or gone. **Put it back** for one change, or **Put all 4 back** for a writer's run: each record goes back to how it was before the run's first change to it, a record the run made is taken away, and one it deleted comes back. When a record changed again after, it says so first. Home says it in a line: "claude changed 4 things today", with **See what changed** |
 | Sharing | what reaches the vault: this app (reads, or reads and changes; **Read only**), the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at. **Publish**, **Revoke** and **Read only** each ask on the app's own sheet first, naming the record's path or the applet, and the vault's host |
 
@@ -130,11 +131,10 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
    list the AIs and keys that reach a vault. Proposal: `GET /vault/<name>/api/access` with the vault's admin scope,
    listing each live token and grant that covers the vault (client name, scope, created, last used), and
    `POST …/access/<jti>/revoke`.
-2. **Defining a type's fields.** `PUT /api/types/<name>` needs the vault's admin scope; the app holds read or write.
-   Vault makes a type with its first record (write may: the hub makes the type as a record names it) and adds a field
-   to a record; declaring a field on the type (its kind, its choices) is left to an AI with `manage-types`, or the
-   person with an admin key. Proposal: the typed work's rule (write may add a new type and fields to a type it made)
-   on REST too.
+2. **Defining a type's fields.** With core #139, `PUT /api/types/<name>` takes the typed work's rule on REST too: write
+   may define a new type, and add fields to a type it made. Add a pack uses it ([PACKS.md](PACKS.md)). **New type**
+   still makes a type with its first record, and a field is added to a record; changing a field of a type someone else
+   made stays admin's.
 3. **Per-record sharing** beyond publishing: none in core (`docs/SPEC-1.0-grants.md`: not built). The hub serves a
    record to anyone at `/vault/<name>/view/<id or path>` when it carries the vault's `published_tag` (`publish` unless
    the vault's config names another) or the field `published: true`. Vault publishes with the field (which every vault
