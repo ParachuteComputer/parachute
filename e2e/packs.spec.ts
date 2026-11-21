@@ -5,13 +5,14 @@
 // after it changes nothing; a vault with its own `task` type keeps its fields and says so.
 // Needs a hub where write access may define a type over REST (core #139); on an older one it skips.
 // In its own project, `packs`, after every other: a 403 from the hub (the person's own `task` type; a server before
-// #139) makes the app refresh its sign-in, which rotates the saved session's refresh token the other specs share.
+// #139) makes the app refresh its sign-in, which rotates the saved session's refresh token the other specs share. And
+// since the `signs-in` specs retire that saved session, each test here signs in for itself.
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mcp, mintToken, VAULT } from "./hub";
+import { signIn } from "./helpers";
 import { applyPack, checkPack, RECEIPTS, receiptRecord, refusalWords, type PackTarget } from "../src/kit/packs";
 
-test.use({ storageState: "e2e/.signed-in.json" });
 
 const PACK = checkPack(JSON.parse(readFileSync(new URL("../src/kit/packs/core-types.json", import.meta.url), "utf8")));
 const TYPES = Object.keys(PACK.types);
@@ -57,11 +58,14 @@ async function addAgain(page: Page) {
   }
   throw new Error("no frame with the kit");
 }
+/** Sign in as the person (the shared saved sign-in is retired by the `signs-in` specs before this project runs), then
+ *  Vault, the vault, its Packs. */
 async function openPacks(page: Page) {
+  await signIn(page);
   await page.goto(`/v/${VAULT}`);
   await expect(page).toHaveURL(/\/a\/parachute%3Avault/);
   const app = frame(page);
-  await app.getByRole("button", { name: /^(Add a pack|Packs)$/ }).click();
+  await app.getByRole("button", { name: /^(Add a pack|Packs)$/ }).click({ timeout: 30_000 });
   await expect(app.getByRole("heading", { level: 1, name: "Packs" })).toBeVisible();
   return app;
 }
