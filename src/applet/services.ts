@@ -237,6 +237,17 @@ export type LineOptions = {
   /** The trusted list's name for a key ("Uni"), or null when it isn't on the list (docs/design/KEYRING.md). */
   approverName?: (hex: string) => string | null;
 };
+/** Approval ops the app knows, in words: the same fixed words the unlock prompt says (src-tauri services.rs
+ *  `op_words`). The mail gateway's (the Uni app's): a held send approved goes out, or is declined. */
+const OP_WORDS: Record<string, string> = { "send.approve": "send the mail held for your OK", "send.decline": "decline the mail held for your OK" };
+/** An approval-op line: the acts in words, through `at`, the ops beside them, when the app knows every op; else the ops
+ *  as they are. `third`: as the card says it ("sends …"), not as a grant's list does ("send …"). */
+export function approveWords(ops: readonly string[], at: string, third = false): string {
+  const verb = (w: string) => (third ? w.replace(/^(\w+)/, "$1s") : w);
+  return ops.length && ops.every((o) => OP_WORDS[o])
+    ? `${joinWords(ops.map((o) => verb(OP_WORDS[o])))}, through ${at} (${joinWords([...ops])})`
+    : `${verb("send")} ${joinWords([...ops])} requests to ${at}`;
+}
 export const EVERYDAY = "With your everyday key: ";
 export const HIGH_RISK = "High risk. With your key: ";
 
@@ -270,7 +281,7 @@ export function serviceLines(services: readonly Service[], opts: LineOptions = {
       out.push(s.auth === "nip98" ? { text: `${EVERYDAY}send requests to ${at} signed as you`, stress: true }
         : s.auth === "token" ? { text: `Use a token you give it for ${at}`, stress: true }
         : { text: `Send requests to ${at}`, stress: false });
-      if (s.approve) out.push({ text: `${HIGH_RISK}send ${joinWords(s.approve.ops)} requests to ${at}`, stress: true });
+      if (s.approve) out.push({ text: `${HIGH_RISK}${approveWords(s.approve.ops, at)}`, stress: true });
       if (s.join) out.push({ text: `${HIGH_RISK}ask ${at} to let this device join a private network (${joinWords(s.join.ops)}), each time after what Settings → Security asks for joining (your passcode and unlock, unless you changed it)`, stress: true });
     }
     out.push({ text: `What it reads here could reach ${at}`, stress: true });

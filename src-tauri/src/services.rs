@@ -1473,7 +1473,7 @@ pub async fn svc_http<R: Runtime>(app: AppHandle<R>, keys: State<'_, KeyState>, 
             let subject = broker.subject_of(&session)?;
             let host = broker.host_of(&session, &service)?;
             let level = crate::levels::approvals_level(&levels.levels(&app).await?, false);
-            let (what, reason) = (format!("{service}:{op}"), format!("Send {op} to {host}, signed with your approval key."));
+            let (what, reason) = (format!("{service}:{op}"), approve_reason(op, &host));
             let graced = levels.gate(&app, level, passcode.as_ref().map(|p| p.as_str()), || ring.confirm(&app, &subject, &what, true, "Approve with your approval key", &reason)).await?;
             let mut res = broker.http(crate::approvals::for_approve_op(&approval), &role, &session, &service, &req).await?;
             if graced {
@@ -1537,8 +1537,34 @@ pub async fn svc_log<R: Runtime>(app: AppHandle<R>, state: State<'_, ServicesSta
     Ok(state.broker(&app)?.log_lines(&subject))
 }
 
+/// An approval op the app knows, in words: the act, as the unlock prompt says it. Only these fixed words: an applet's
+/// own text never reaches the prompt. The mail gateway's (the Uni app's): a held send approved goes out.
+fn op_words(op: &str) -> Option<&'static str> {
+    match op {
+        "send.approve" => Some("Send the mail held for your OK"),
+        "send.decline" => Some("Decline the mail held for your OK"),
+        _ => None,
+    }
+}
+
+/// The unlock prompt's line for an approval op: the act in words when the app knows the op (the op beside it), else
+/// the op as it is.
+pub fn approve_reason(op: &str, host: &str) -> String {
+    match op_words(op) {
+        Some(w) => format!("{w}, through {host} ({op}). Signed with your approval key."),
+        None => format!("Send {op} to {host}, signed with your approval key."),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_approval_op_the_app_knows_is_said_in_words_and_any_other_as_it_is() {
+        assert_eq!(super::approve_reason("send.approve", "mail.example"), "Send the mail held for your OK, through mail.example (send.approve). Signed with your approval key.");
+        assert_eq!(super::approve_reason("send.decline", "mail.example"), "Decline the mail held for your OK, through mail.example (send.decline). Signed with your approval key.");
+        assert_eq!(super::approve_reason("job.run", "x.example"), "Send job.run to x.example, signed with your approval key.");
+    }
+
     #[test]
     fn no_applet_can_have_an_approval_or_a_key_list_signed() {
         // even a declaration that names them: they are on the shell's deny list
