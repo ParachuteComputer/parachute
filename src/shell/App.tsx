@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import AddParachute from "../views/AddParachute";
+import AcceptInvite from "../views/AcceptInvite";
 import OAuthCallback from "../views/OAuthCallback";
 import OpenLink, { LinksIn } from "../links/LinksIn";
 import AppletScreen from "../views/AppletScreen";
@@ -173,7 +174,7 @@ function ShellRoutes() {
   const vaults = useVaults();
   const decided = useStart();
   useSettings();
-  const shell = /^\/(add|oauth\/callback|settings|open-link|key|key\/pair|connect|capture|journal|vault)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname) || isEditor(location.pathname)
+  const shell = /^\/(add|accept|oauth\/callback|settings|open-link|key|key\/pair|connect|capture|journal|vault)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname) || isEditor(location.pathname)
     || (location.pathname === "/" && !vaults.length);
   if (!decided) return null;
   // Parachute Simplified's home is Parachute's own Notes (docs/design/PARACHUTE-SOURCE.md); where the bundle leaves
@@ -188,6 +189,7 @@ function ShellRoutes() {
       {shell && <Routes>
         <Route path="/" element={<FirstRun />} />
         <Route path="/add" element={<AddParachute />} />
+        <Route path="/accept" element={<AcceptInvite />} />
         <Route path="/key" element={<KeyStart />} />
         <Route path="/key/pair" element={<Pair />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />

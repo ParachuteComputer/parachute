@@ -9,8 +9,11 @@ One example runs through this whole page: **Techne's Events component on Aaron's
 
 ## 1. Techne's vault, with Aaron's key
 
-Aaron signs in to Techne's hub with the same Nostr key he uses at home. Techne's hub has to know the key first: its
-owner gives it a role on the vault with the `grant-access` tool of the hub's account MCP (`/account/mcp`):
+Aaron signs in to Techne's hub with the same Nostr key he uses at home. Techne's hub has to know the key first. The
+plain way is an invite: Techne's owner opens the vault in Vault → Sharing → **Invite someone**, sends Aaron the link,
+and Aaron pastes it in Settings → **Accept an invite**, which signs it with his key and signs him in
+([design/SHARING.md](design/SHARING.md)). That makes him a member (read and change). An operator can also give a key a
+role by hand with the `grant-access` tool of the hub's account MCP (`/account/mcp`):
 
 ```json
 { "pubkey": "npub1…aaron", "vault": "techne", "role": "read" }

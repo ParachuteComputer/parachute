@@ -16,6 +16,7 @@ import { appletsNow, refreshApplets } from "../applet/useApplets";
 import { takeBack } from "../applet/approvalStore";
 import { forgetSaved } from "./saved";
 import { officialCopyOf } from "../applet/parachuteSource";
+import { endAccess, inviteTo, knownNames, takeBackInvite, vaultNames, vaultPeople } from "../vault/sharing";
 
 type Requesting = { request<T>(path: string, init?: RequestInit): Promise<T> };
 const doors = new Map<string, Promise<"records" | "notes">>();
@@ -144,6 +145,13 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       forgetOwnWrite(v);
       await giveBack(v.key, opts.back());
     },
+    // sharing with people (docs/design/SHARING.md; vault/sharing.ts)
+    names: (key, bys) => vaultNames(key, bys),
+    knownNames: (key, bys) => knownNames(key, bys),
+    people: (key) => vaultPeople(rec(key)),
+    invite: (key, name, from) => inviteTo(rec(key), name, from),
+    takeBack: (key, id) => takeBackInvite(rec(key), id),
+    end: (key, pubkey) => endAccess(rec(key), pubkey),
     confirm: opts.confirm,
     emit: opts.emit,
   };

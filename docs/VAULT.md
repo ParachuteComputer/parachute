@@ -19,7 +19,7 @@ Bases, Anytype, Capacities).
 | A type | its records as a table: the type's fields are the columns, a header's tap sorts by it, the first column stays in view as the rest scroll across. **Filter** (a field's value), **Group** (by a field), **List** or **Table**, a search. Saved views as tabs. **New …** adds a record of the type, starting from its default template when it has one ([PACKS.md](PACKS.md)). A record opens beside the table on a computer, in its place on a phone |
 | A record | its fields, changed where they stand (a choice from the type's list, a box for yes or no, a number, a date), its types and tags, its words (rendered; **Edit words**), what it links to and what links to it, its history (each change, by whom: an AI by its key's name; tap one for its before and after, and **Put it back**), **Make this a template**, and **Publish** |
 | Changes | what changed in the vault in the last 7 days (**Older changes** reaches back further), newest first, each writer's run of changes together under its name (`claude`, or "You, in Parachute here"). Each change says what it did ("serves 2 → 4, the words") and opens to its before and after: fields, the words line by line, a move, links added or gone. **Put it back** for one change, or **Put all 4 back** for a writer's run: each record goes back to how it was before the run's first change to it, a record the run made is taken away, and one it deleted comes back. When a record changed again after, it says so first. Home says it in a line: "claude changed 4 things today", with **See what changed** |
-| Sharing | what reaches the vault: this app (reads, or reads and changes; **Read only**), the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at. **Publish**, **Revoke** and **Read only** each ask on the app's own sheet first, naming the record's path or the applet, and the vault's host |
+| Sharing | **People** first, for the vault's owner: who else is in it, by the name you gave them (**End**), invites nobody took yet (**Take back**), and **Invite someone**, which makes a link to send ([design/SHARING.md](design/SHARING.md)); then what reaches the vault: this app (reads, or reads and changes; **Read only**), the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at. **Publish**, **Revoke**, **Read only**, **Invite someone** and **End** each ask on the app's own sheet first, naming the record's path, the applet or the person, and the vault's host |
 
 What an AI writes shows as it lands: the type's table, an open record and Changes follow the vault's live changes (the
 hub's subscription, not a timer).
@@ -40,7 +40,9 @@ history the vault already keeps, not a second record of it (`src/applet/changes.
   the AI's change. Nothing in history is rewritten.
 - **Names.** A writer is shown by its key's name. `key:claude` is `claude`; this device's Parachute (its key is named
   for its client id) is "You, in Parachute here"; an app approved over OAuth is named by the hub for its client id, so
-  it shows as "An app (0f8a6c2e)" until the hub can say its name (gap 8).
+  it shows as "An app (0f8a6c2e)" until the hub can say its name (gap 8). In a vault shared with someone, their writes
+  read as their name ("Bo"), and an AI key's writes for them as "Bo's claude": the hub names a vault's people by the
+  stamp their writes carry (`/account/vaults/<v>/names`; changes.ts `writer`, [design/SHARING.md](design/SHARING.md)).
 - **What it reads:** the 20 records changed most lately, each with its versions, and the 12 deleted most lately,
   six reads at a time; **Older changes** reads the next of each (one read costs at most 34 of a frame's 60 reads in ten
   seconds, charged before the first read). A change's two sides as it shows them (`vaults.compare`), the first ten behind

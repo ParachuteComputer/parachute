@@ -237,5 +237,34 @@ export function e2eNative(secretHex: string): Native {
       keep({ ...kept(), locked: false, last: Date.now() });
       return idle(false);
     },
+    // sharing a vault (src-tauri/src/door.rs `hub_sharing_tool`, `hub_accept_invite`): the same four tools and fields,
+    // signed NIP-98 here
+    async sharingTool(hub, tool, args) {
+      const fields: Record<string, string[]> = { "list-access": ["vault"], "invite-to-vault": ["vault", "name", "from"], "take-back-invite": ["vault", "id"], "revoke-access": ["vault", "pubkey"] };
+      if (!fields[tool] || !Object.keys(args).every((k) => fields[tool].includes(k)) || !args.vault) throw { code: "refused", message: "Parachute doesn't sign that request." };
+      const origin = new URL(hub).origin;
+      const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: args } });
+      const res = await signedPost(`${origin}/account/mcp`, body, { accept: "application/json, text/event-stream" });
+      const text = await res.text();
+      if (res.status === 401) throw { code: "unknown_key", message: "This hub doesn't take your key for that." };
+      if (res.status !== 200) throw { code: "unreachable", message: `The hub didn't answer (${res.status}). Try again in a moment.` };
+      const j = JSON.parse(text.trim().startsWith("{") ? text : (text.split("\n").find((l) => l.startsWith("data:")) ?? "data:{}").slice(5)) as { error?: { message?: string }; result?: { isError?: boolean; content?: { text?: string }[] } };
+      const t = j.result?.content?.[0]?.text ?? "";
+      if (j.error || j.result?.isError) throw { code: "not_owner", message: j.error?.message ?? t };
+      return JSON.parse(t) as unknown;
+    },
+    async acceptInvite(hub, code) {
+      if (!/^[A-Za-z0-9_-]{16,128}$/.test(code)) throw { code: "no_invite", message: "That isn't an invite link." };
+      const res = await signedPost(`${new URL(hub).origin}/account/invites/accept`, JSON.stringify({ code }), {});
+      if (res.status === 404) throw { code: "no_invite", message: "That invite isn't open: it may be used, taken back or past its date." };
+      if (res.status !== 200) throw { code: "unreachable", message: `The hub didn't take it (${res.status}). Try again in a moment.` };
+      return await res.json() as never;
+    },
   };
+  /** One POST signed NIP-98 with the test's key. */
+  async function signedPost(url: string, body: string, headers: Record<string, string>): Promise<Response> {
+    const bytes = new TextEncoder().encode(body);
+    const ev = sign(27235, "", [["u", url], ["method", "POST"], ["nonce", crypto.randomUUID()], ["payload", await sha256(bytes)]]);
+    return fetch(url, { method: "POST", headers: { ...headers, "content-type": "application/json", authorization: authHeader(ev) }, body, credentials: "omit" });
+  }
 }

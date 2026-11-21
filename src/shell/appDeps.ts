@@ -117,7 +117,8 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       const per = await Promise.all(vaults.map(async (rec) => {
         const cid = d.self?.(rec.key) ?? null;
         const self = (via: string | null) => isSelf(cid, via);
-        try { return { rec, ...(await countChanged({ get: (p) => d.request(rec.key, "GET", p), door: await d.door(rec.key), since, charge, self, own: ownKind })) }; }
+        try { return { rec, ...(await countChanged({ get: (p) => d.request(rec.key, "GET", p), door: await d.door(rec.key), since, charge, self, own: ownKind,
+          people: d.names ? (bys: string[]) => d.names!(rec.key, bys) : undefined })) }; }
         // a vault that couldn't be read counts nothing, and the line says there may be more ("4+")
         catch { return { rec, count: 0, names: new Map<string, string>(), more: true }; }
       }));

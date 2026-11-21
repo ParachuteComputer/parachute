@@ -85,7 +85,16 @@ export interface Native {
   idleTouch(): Promise<LevelsStatus>;
   /** Open Parachute after the idle lock: the device unlock. */
   idleUnlock(): Promise<LevelsStatus>;
+  /** Sharing a vault with a friend (docs/design/SHARING.md): one of the hub's four sharing tools at its account MCP,
+   *  signed by the key (NIP-98); the body is built from checked fields on the native side. The tool's answer; a
+   *  refusal rejects with a NativeError (`not_owner`, `unknown_key`, `no_key`, ...). */
+  sharingTool?(hub: string, tool: SharingTool, args: Record<string, string>): Promise<unknown>;
+  /** Accept an invite on `hub` with the key (NIP-98): what it lets you into; `no_invite` when it isn't open. */
+  acceptInvite?(hub: string, code: string): Promise<InviteView>;
 }
+export type SharingTool = "list-access" | "invite-to-vault" | "take-back-invite" | "revoke-access";
+/** An invite, as the hub reads it to whoever holds it (core api-share-invites.ts). */
+export type InviteView = { vault: string; from: string | null; name: string; can: string; expires_at: string };
 
 import { inShell } from "../vault/oauth";
 import { shellNative } from "./shellNative";

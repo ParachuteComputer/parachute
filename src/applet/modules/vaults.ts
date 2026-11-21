@@ -32,6 +32,11 @@
 //     publish({vault, id, on})                 anyone with its link may read the record (on), or no longer (off: no sheet)
 //     revoke({vault, noteId})                  take an applet's access back
 //     readOnly({vault})                        let Parachute only read the vault again
+//     people({vault})                          who else is in the vault, for its owner: {people, invites}, or
+//                                              {people: null, why} where this can't be read (docs/design/SHARING.md)
+//     invite({vault, name, from?})             a link that lets one person in (read and change everything): {url, ...}
+//     takeBack({vault, id})                    an invite nobody took yet, taken back
+//     end({vault, key})                        a person's access ended: their next request is refused
 //
 // What it never does, whatever the card says: change a code record (HTML, TSX, JSX) or one carrying an applet's,
 // component's or the app's own name (`applet`, `component`, `parachute-*`: its settings, apps, approvals, keys), give or
@@ -45,7 +50,7 @@ import { ContractError, ERROR_CODES, hasHidden, hasOnly, plain } from "../contra
 import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 import { packMethods } from "./packs.ts";
-import { isSelf, readChanges, writerName } from "../changes.ts";
+import { isSelf, namesOf as peopleNamesOf, readChanges, writer, type PeopleNames } from "../changes.ts";
 
 export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where an AI connects to this vault only (`<vault>/mcp`): the vault's own address, nothing secret */
@@ -74,6 +79,12 @@ export type AppletRow = { id: string; name: string; glyph: string; href: string;
   /** a copy of one of Parachute's own kept in the vault (the old Add Capture wrote these): its name, to tell the two apart */
   copyOf?: string };
 export type WatchEvent = { upsert?: Rec } | { remove?: string };
+/** A person in a vault, as its owner sees them (the hub's `list-access`): their key, what they may do, their name. */
+export type PersonRow = { key: string; name: string | null; role: "read" | "member" | "write" | string };
+export type InviteRow = { id: string; name: string; expires_at: string };
+export type PeopleRow = { people: PersonRow[]; invites: InviteRow[];
+  /** the person's own name as the people they invite see it, kept on this device (null: not given yet) */
+  from?: string | null } | { people: null; invites: null; why: "no_key" | "not_owner" | "no_hub" };
 
 /** The shell's side: requests on the vault's own API with the app's sign-in (a change to a vault held for reading
  *  throws the write ask before it is sent), and what the app knows of each vault. */
@@ -99,6 +110,15 @@ export type VaultsDeps = {
   applets(vault: string): Promise<AppletRow[]>;
   revoke(vault: string, noteId: string): Promise<void>;
   readOnly(vault: string): Promise<void>;
+  /** The names of a vault's people by their `by` stamps (the hub's `names`); absent: writers are named by key only. */
+  names?(vault: string, bys: string[]): Promise<PeopleNames>;
+  /** The names already read this session, asked of no one: for a screen drawn at once from what was read before. */
+  knownNames?(vault: string, bys: string[]): PeopleNames;
+  /** Sharing with people (docs/design/SHARING.md): each a request the person's key signs at the vault's hub. */
+  people?(vault: string): Promise<PeopleRow>;
+  invite?(vault: string, name: string, from: string | null): Promise<{ id: string; url: string; expires_at: string }>;
+  takeBack?(vault: string, id: string): Promise<boolean>;
+  end?(vault: string, key: string): Promise<boolean>;
   /** The app's own yes-or-no sheet over the applet, after a tap of the person's in it: "yes", "no", or "untapped" (no
    *  live tap in the applet, so no sheet was shown). */
   confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">;
@@ -293,6 +313,9 @@ const failed = (e: unknown) => {
   const m = e instanceof Error ? e.message : String(e);
   // the person is asked to let Parachute change that vault: the applet hears it as refused, in the app's words
   if ((e as { name?: string })?.name === "NeedsWriteError") return new ContractError(ERROR_CODES.notGranted, m.slice(0, 300));
+  // the vault refuses this device's sign-in, and refreshing it was refused too: no longer reached (its owner may have
+  // ended the share, docs/design/SHARING.md, or the person signed out elsewhere)
+  if ((e as { name?: string; status?: number })?.name === "VaultAuthError" && (e as { status?: number }).status === 401 || /rejected the token \(401/.test(m)) return new ContractError(ERROR_CODES.failed, "no_reach");
   // a record put back where another now is (core's 409 path_conflict): not a change meanwhile, and not tried again
   if (/path_conflict/i.test(m)) return new ContractError(ERROR_CODES.failed, "path_taken: another record is at its place now");
   if (/conflict/i.test(m)) return new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read");
@@ -303,6 +326,8 @@ const failed = (e: unknown) => {
 export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps): UniModule & { stop(): void } {
   const need = (w: AppWord) => { if (!allowed.includes(w)) throw new ContractError(ERROR_CODES.notGranted); };
   const held = (vault: string) => { const v = deps.list().find((x) => x.key === vault); if (!v) throw refuse("this device holds no such vault"); return v; };
+  /** The names of a vault's people, for naming its writers (changes.ts `writer`); none where the shell can't ask. */
+  const people = (vault: string) => (deps.names ? (bys: string[]) => deps.names!(vault, bys) : undefined);
   /** Each vault's type names, as last read (a 0.8 door lists them among tags). */
   const typeNames = new Map<string, Set<string>>();
   const watches = new Map<string, () => void>();
@@ -401,7 +426,13 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
             const { extension: _e, ...r } = await getRec(vault, id, true, true);
             // who made it and who changed it last, by name (an AI by its key's name; this device's Parachute as you)
             const cid = deps.self?.(vault) ?? null;
-            return { ...r, ...(r.createdVia !== undefined ? { madeBy: writerName(r.createdVia ?? null, isSelf(cid, r.createdVia ?? null)), changedBy: writerName(r.updatedVia ?? null, isSelf(cid, r.updatedVia ?? null)) } : {}) };
+            if (r.createdVia === undefined) return r;
+            // drawn at once (a record opened again comes from the copy kept): names known already, the rest asked behind
+            const bys = [r.createdBy, r.updatedBy].filter((b): b is string => typeof b === "string");
+            const names = deps.knownNames?.(vault, bys) ?? {};
+            if (deps.names && bys.some((b) => !names[b])) void deps.names(vault, bys).catch(() => {});
+            return { ...r, madeBy: writer(r.createdBy ?? null, r.createdVia ?? null, isSelf(cid, r.createdVia ?? null), names),
+              changedBy: writer(r.updatedBy ?? null, r.updatedVia ?? null, isSelf(cid, r.updatedVia ?? null), names) };
           } catch (e) { throw failed(e); }
         },
       },
@@ -417,9 +448,10 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           });
           const list = plain(raw) && Array.isArray(raw.versions) ? raw.versions : [];
           const cid = deps.self?.(vault) ?? null;
+          const names = await peopleNamesOf(people(vault), list.map((v: unknown) => (plain(v) ? strOr(v.actor) : null)));
           return list.flatMap((v: unknown): Version[] => (plain(v) && typeof v.superseded_at === "string" && typeof v.version_ix === "number"
             ? [{ ix: v.version_ix, at: v.superseded_at, actor: strOr(v.actor), via: strOr(v.via), op: typeof v.op === "string" ? v.op : "update", kind: strOr(v.via_kind),
-              mine: isSelf(cid, strOr(v.via)), who: writerName(strOr(v.via), isSelf(cid, strOr(v.via))) }] : []));
+              mine: isSelf(cid, strOr(v.via)), who: writer(strOr(v.actor), strOr(v.via), isSelf(cid, strOr(v.via)), names) }] : []));
         },
       },
       version: {
@@ -448,6 +480,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
               get: (path) => deps.request(vault, "GET", path), door, since, offset, charge: (n) => ctx.charge(n),
               self: (via) => isSelf(cid, via),
               own: ownKind,
+              people: people(vault),
             });
           } catch (e) { throw failed(e); }
         },
@@ -686,6 +719,45 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           await askFirst(deps, { title: `Let Parachute only read ${sheetText(v.name)}?`, body: `${sheetText(v.name)} (${sheetText(v.host)}): a change there, yours or an applet's, asks you again on your hub.`, act: "Read only" });
           await deps.readOnly(vault);
           return null;
+        },
+      },
+      people: {
+        cap: null, validate: one(vaultOnly(), "sharing"),
+        async run({ vault }: { vault: string }, _s, ctx) {
+          held(vault); ctx.charge(1);
+          if (!deps.people) return { people: null, invites: null, why: "no_key" };
+          try { return await deps.people(vault); } catch (e) { throw failed(e); }
+        },
+      },
+      invite: {
+        cap: null,
+        validate: one((p) => (vaultOnly(["name", "from"])(p) && typeof p.name === "string" && p.name.trim().length >= 1 && p.name.length <= 80
+          && (p.from === undefined || p.from === null || (typeof p.from === "string" && p.from.length <= 80)) ? p as { vault: string; name: string; from?: string | null } : null), "sharing"),
+        async run({ vault, name, from }: { vault: string; name: string; from?: string | null }, _s, ctx) {
+          const v = held(vault); ctx.charge(2);
+          if (!deps.invite) throw refuse("inviting people needs your key: use Parachute on your phone or Mac");
+          // a link that lets someone in is the person's to make, on the app's own sheet: an applet never gets one unasked
+          await askFirst(deps, { title: `Invite ${sheetText(name)} to ${sheetText(v.name)}?`,
+            body: `You get a link to send ${sheetText(name)}. Whoever opens it with their own key can read and change everything in ${sheetText(v.name)} (${sheetText(v.host)}). It works once, for 7 days, and you can end it any time.`, act: "Make the link" });
+          try { return await deps.invite(vault, name.trim(), from?.trim() || null); } catch (e) { throw failed(e); }
+        },
+      },
+      takeBack: {
+        cap: null, validate: one((p) => (vaultOnly(["id"])(p) && typeof p.id === "string" && /^[0-9a-f]{64}$/.test(p.id) ? p as { vault: string; id: string } : null), "sharing"),
+        async run({ vault, id }: { vault: string; id: string }, _s, ctx) {
+          held(vault); ctx.charge(1);
+          if (!deps.takeBack) throw refuse("this needs your key");
+          try { return { takenBack: await deps.takeBack(vault, id) }; } catch (e) { throw failed(e); }
+        },
+      },
+      end: {
+        cap: null, validate: one((p) => (vaultOnly(["key", "name"])(p) && typeof p.key === "string" && /^[0-9a-f]{64}$/.test(p.key) && (p.name === undefined || typeof p.name === "string") ? p as { vault: string; key: string; name?: string } : null), "sharing"),
+        async run({ vault, key, name }: { vault: string; key: string; name?: string }, _s, ctx) {
+          const v = held(vault); ctx.charge(1);
+          if (!deps.end) throw refuse("this needs your key");
+          const who = sheetText(name || `the key ${key.slice(0, 8)}…`);
+          await askFirst(deps, { title: `End ${who}'s access to ${sheetText(v.name)}?`, body: `${who} can no longer read or change ${sheetText(v.name)} (${sheetText(v.host)}), on any device. What they wrote stays, under their name.`, act: "End" });
+          try { return { ended: await deps.end(vault, key) }; } catch (e) { throw failed(e); }
         },
       },
     },

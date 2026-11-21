@@ -40,6 +40,13 @@ const label = (name: string) => name.replace(/_/g, " ");
 const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "");
 const said = (e: any) => String(e?.message ?? e ?? "it failed").slice(0, 200);
 /** What a refused ask says: nothing for the person's own No; "tap again" when no tap was live; else the reason. */
+/** A read that failed: the vault no longer reached (its owner ended the share, or the sign-in ended) in its own words;
+ *  anything else as a problem with Try again. */
+function ReadProblem({ error, v, onRetry, children }: { error: unknown; v: { name: string }; onRetry: () => void; children: string }) {
+  if (/no_reach/.test(said(error))) return <Problem>You no longer reach {v.name}. If it is someone else's, they may have ended your access; you can remove it in Settings.</Problem>;
+  return <Problem error={error} onRetry={onRetry}>{children}</Problem>;
+}
+
 const quiet = (e: unknown, what: string) => {
   const m = said(e);
   if (/not_confirmed/.test(m)) return;
@@ -180,7 +187,7 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
       {found ? (found.length
         ? <List label="Found" rows={found.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, folderOf(r.path)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />
         : <Empty>Nothing matches.</Empty>)
-        : failed ? <Problem error={failed} onRetry={load}>{v.name} couldn't be read</Problem>
+        : failed ? <ReadProblem error={failed} v={v} onRetry={load}>{`${v.name} couldn't be read`}</ReadProblem>
         : !types ? <Loading />
         : <div className="cols two">
             <section>
@@ -453,6 +460,58 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
 
 /** What reaches a vault: this app (read, or read and change), its applets allowed on this device, your AI's address,
  *  what is published; and taking each back. */
+type PeopleNow = { people: { key: string; name: string | null; role: string }[]; invites: { id: string; name: string; expires_at: string }[]; from?: string | null }
+  | { people: null; why: "no_key" | "not_owner" | "no_hub" };
+const roleWords = (role: string) => (role === "member" ? "can read and change everything" : role === "read" ? "can read everything" : "runs this vault with you");
+const shortKey = (k: string) => `${k.slice(0, 8)}…`;
+
+/** Who else is in a vault, for its owner (docs/design/SHARING.md): each person by the name you gave them, End; an invite
+ *  nobody took yet, Take back; and Invite someone, which makes a link to send. Each is a request your key signs. */
+function People({ v }: { v: Held }) {
+  const [now, setNow] = useState<PeopleNow | null>(null);
+  const [failed, setFailed] = useState<unknown>(null);
+  const [from, setFrom] = useState<string | null>(null);
+  const [made, setMade] = useState<{ name: string; url: string; until: string } | null>(null);
+  const ask = (vaults as { people?: (k: string) => Promise<PeopleNow> }).people;
+  const load = () => (typeof ask === "function" ? ask(v.key).then((x) => { setNow(x); setFailed(null); if (x.people && x.from) setFrom((f) => f ?? x.from ?? null); }, setFailed) : Promise.resolve());
+  useEffect(() => { setMade(null); void load(); }, [v.key]);
+  // an app from before sharing: nothing to show
+  if (typeof ask !== "function") return null;
+  if (failed) return <Problem error={failed} onRetry={load}>Who is in {v.name} couldn't be read</Problem>;
+  if (!now) return <Loading />;
+  if (!now.people) {
+    // only the owner's list is shown; a friend's vault, the web build and a host without sharing each say why, once
+    return now.why === "not_owner" ? null : <><p className="sect">People</p><p className="note-meta">{now.why === "no_key"
+      ? `Inviting people to ${v.name} is signed with your key: open Parachute on your phone or Mac.`
+      : `Sharing ${v.name} with people isn't on this host yet.`}</p></>;
+  }
+  const invite = async (name: string) => {
+    try {
+      const r = await (vaults as any).invite(v.key, name, from);
+      setMade({ name, url: r.url, until: r.expires_at });
+      await load();
+    } catch (e) { quiet(e, "No link made"); throw e; }
+  };
+  const copy = (url: string) => void (app as { copy(t: string): Promise<boolean> }).copy(url).then((ok) => toast(ok ? "Link copied." : "Press and hold the link to select it."), () => toast("Press and hold the link to select it."));
+  return <>
+    <List label="People" rows={[
+      { key: "you", title: "You", meta: "owner" },
+      ...now.people.map((p) => ({ key: p.key, title: p.name ?? `A key (${shortKey(p.key)})`, meta: `${roleWords(p.role)} · key ${shortKey(p.key)}`,
+        aside: <Button small kind="quiet" onClick={() => (vaults as any).end(v.key, p.key, p.name ?? "").then(() => { toast(`${p.name ?? "Their"} access ended.`); return load(); }, (e: unknown) => quiet(e, "Not ended"))}>End</Button> })),
+      ...now.invites.map((i) => ({ key: i.id, title: i.name, meta: `invited · the link works once, until ${when.date(i.expires_at)}`,
+        aside: <Button small kind="quiet" onClick={() => (vaults as any).takeBack(v.key, i.id).then(() => { toast(`The invite for ${i.name} is taken back.`); if (made?.name === i.name) setMade(null); return load(); }, (e: unknown) => quiet(e, "Not taken back"))}>Take back</Button> })),
+    ]} />
+    {made && <div className="invite-made" aria-label="Invite link">
+      <p className="note-meta">Send this link to {made.name} however you like. It works once, until {when.date(made.until)}.</p>
+      <p className="addr">{made.url}</p>
+      {typeof (app as { copy?: unknown }).copy === "function" && <Button small onClick={() => copy(made.url)}>Copy link</Button>}
+    </div>}
+    {from === null
+      ? <Field label="Your name, as the people you invite see it" placeholder="Like Aaron" action="Keep" onAction={(x) => { setFrom(x); }} />
+      : <Field label="Invite someone" placeholder="Their name, like Bo" action="Make the link" onAction={invite} />}
+  </>;
+}
+
 function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => void } }) {
   const [a, setA] = useState<{ level: string | null; hub: string; connector: string; applets: { noteId: string; name: string; glyph: string; since: string | null; changes: boolean }[] } | null>(null);
   const [pub, setPub] = useState<Rec[] | null>(null);
@@ -474,6 +533,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   return (
     <Page title="Sharing" kicker={v.name} back={back} className="vlt" onRefresh={load}>
       <style>{CSS}</style>
+      <People v={v} />
       {failed ? <Problem error={failed} onRetry={load}>What reaches {v.name} couldn't be read</Problem> : !a ? <Loading /> : <>
         <List label="This app" rows={[{ key: "app", title: a.level === "write" ? "Reads and changes records" : "Reads records", meta: `on this device, at ${a.hub.replace(/^https?:\/\//, "")}`,
           // the home stays writable: Parachute's own applets write there (docs/design/PARACHUTE-SOURCE.md)
@@ -777,7 +837,7 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
       {page?.deletes === "hidden" && <p className="lede">Deleted records aren't listed: this vault's hub shows them only to its admin.</p>}
       <div className={`cols${openC ? " peek" : ""}`}>
         <section>
-          {failed ? <Problem error={failed} onRetry={() => load()}>What changed in {v.name} couldn't be read</Problem>
+          {failed ? <ReadProblem error={failed} v={v} onRetry={() => load()}>{`What changed in ${v.name} couldn't be read`}</ReadProblem>
             : !page ? <Loading />
             : !all.length ? <Empty>Nothing changed in {v.name} in the last {days} days.</Empty>
             : runs.map((run, i) => {

@@ -38,4 +38,6 @@ export const shellNative: Native = {
   levelsAdopt: (event) => invoke("levels_adopt", { event }),
   idleTouch: () => invoke("idle_touch"),
   idleUnlock: () => invoke("idle_unlock"),
+  sharingTool: (hub, tool, args) => invoke("hub_sharing_tool", { hub, tool, args }),
+  acceptInvite: (hub, code) => invoke("hub_accept_invite", { hub, code }),
 };

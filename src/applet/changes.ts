@@ -81,6 +81,8 @@ const refused = (e: unknown) => [403, 404].includes((e as { status?: number })?.
 export async function readChanges(opts: {
   get: Get; door: "records" | "notes"; since: string; offset?: number; charge: (n: number) => void;
   self: (via: string | null) => boolean; own: (r: { path: string; extension: string | null; names: string[] }) => "code" | "app" | null;
+  /** The names of the people behind these writers, asked once for the page (`writer`); absent or failing: by key only. */
+  people?: People;
 }): Promise<ChangesPage> {
   const { get, door, since, charge, self, own } = opts;
   const offset = opts.offset ?? 0;
@@ -96,7 +98,7 @@ export async function readChanges(opts: {
     const mine = self(c.via);
     // this device's Parachute keeping its own records (settings, approvals, saved views) isn't a change to show
     if (kind === "app" && mine) return;
-    out.push({ ...c, own: kind !== null, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: writerName(c.via, mine) });
+    out.push({ ...c, own: kind !== null, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: "" });
   };
   /** A record's kept versions, newest first, as changes since then. */
   const fromRows = (id: string, path: string, rows: Row[], kind: "code" | "app" | null, gone: boolean, seen: string | null) => rows.forEach((v, i) => {
@@ -141,6 +143,8 @@ export async function readChanges(opts: {
     });
   }
   // a record deleted between the two reads is in both: once
+  const named = await namesOf(opts.people, out.map((c) => c.by));
+  for (const c of out) c.who = writer(c.by, c.via, c.mine, named);
   const once = [...new Map(out.map((c) => [c.key, c])).values()];
   once.sort((a, b) => (b.at < a.at ? -1 : b.at > a.at ? 1 : a.key.localeCompare(b.key)));
   return { changes: once, deletes, more: all.length > CHANGES_RECORDS || moreGone };
@@ -151,6 +155,38 @@ export async function readChanges(opts: {
 export const isSelf = (clientId: string | null, via: string | null) =>
   !!clientId && !!via && (via === `key:${clientId}` || (via.startsWith(`key:${clientId}-`) && /^\d+$/.test(via.slice(clientId.length + 5))));
 
+/** The people of a vault by the `by` stamp their writes carry (the hub's `names`, docs/design/SHARING.md): each one's
+ *  name there, and whether it is the person reading. */
+export type PeopleNames = Record<string, { name: string | null; you: boolean }>;
+export type People = (bys: string[]) => Promise<PeopleNames>;
+
+/** Ask `people` once for these stamps; nothing when there is no one to ask or it fails (the names are only shown). */
+export async function namesOf(people: People | undefined, bys: (string | null)[]): Promise<PeopleNames> {
+  const asked = [...new Set(bys.filter((b): b is string => !!b))];
+  if (!people || !asked.length) return {};
+  try { return await people(asked); } catch { return {}; }
+}
+
+const APP_CLIENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-\d+)?$/i;
+
+/**
+ * Who wrote, by one rule at every place a writer is named (Changes, a record's History, its made and changed by, Home's
+ * line; docs/design/SHARING.md):
+ *   this device's Parachute wrote it: "You, in Parachute here";
+ *   a named key (an AI): its name, and on someone else's behalf "Aaron's claude";
+ *   someone else, through an app (a sign-in, named for its client id): their name, "Bo";
+ *   otherwise as the key reads (`writerName`): your own other sign-ins stay "An app (…)", since the hub can't yet say
+ *   which app a sign-in is (yours on another device, or a connector).
+ */
+export function writer(by: string | null, via: string | null, mine: boolean, names: PeopleNames | null | undefined): string {
+  if (mine) return writerName(via, true);
+  const person = by ? names?.[by] : undefined;
+  const other = person && !person.you && person.name ? person.name : null;
+  if (other && via?.startsWith("key:")) return APP_CLIENT.test(via.slice(4)) ? other : `${other}'s ${via.slice(4)}`;
+  if (other && (via === null || via === "api" || via === "mcp" || via.startsWith("nostr:"))) return other;
+  return writerName(via, false);
+}
+
 /** A writer's name, as a person reads it. `key:<name>` is its name; an app approved over OAuth is named for its client
  *  id (a long random id) until the hub can name it (docs/VAULT.md, gaps). */
 export function writerName(via: string | null, mine: boolean): string {
@@ -159,7 +195,7 @@ export function writerName(via: string | null, mine: boolean): string {
   if (via.startsWith("key:")) {
     const name = via.slice(4);
     // a client id the hub made (a UUID), and its "-2", "-3" for another sign-in
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-\d+)?$/i.test(name)) return `An app (${name.slice(0, 8)})`;
+    if (APP_CLIENT.test(name)) return `An app (${name.slice(0, 8)})`;
     return name;
   }
   if (via.startsWith("nostr:")) return `A key (${via.slice(6, 14)}…)`;
@@ -176,11 +212,11 @@ export function writerName(via: string | null, mine: boolean): string {
  * last wrote.
  */
 export async function countChanged(opts: { get: Get; door: "records" | "notes"; since: string; charge: (n: number) => void; self: (via: string | null) => boolean;
-  own: (r: { path: string; extension: string | null; names: string[] }) => "code" | "app" | null }): Promise<{ count: number; names: Map<string, string>; more: boolean }> {
+  own: (r: { path: string; extension: string | null; names: string[] }) => "code" | "app" | null; people?: People }): Promise<{ count: number; names: Map<string, string>; more: boolean }> {
   const { get, door, since, charge, self, own } = opts;
-  /** each writer's name, and when it last wrote */
-  const names = new Map<string, string>();
-  const note = (via: string | null, at: string) => { const n = writerName(via, false); if ((names.get(n) ?? "") < at) names.set(n, at); };
+  /** each write's stamps and when, named once all are read */
+  const seen: { by: string | null; via: string | null; at: string }[] = [];
+  const note = (by: string | null, via: string | null, at: string) => { seen.push({ by, via, at }); };
   const u = new URLSearchParams({ "meta[updated_at][gte]": since, order_by: "updated_at", sort: "desc", limit: "201" });
   u.set(door === "records" ? "include_body" : "include_content", "false");
   // the most it reads, charged first (six vaults fit a frame's 60 reads)
@@ -195,7 +231,7 @@ export async function countChanged(opts: { get: Get; door: "records" | "notes"; 
     // the app keeping its own records, on another device, isn't a change to count
     const names = [...(Array.isArray(r.types) ? r.types : []), ...(Array.isArray(r.tags) ? r.tags : [])].filter((t): t is string => typeof t === "string");
     if (own({ path: typeof r.path === "string" ? r.path : "", extension: strOr(r.extension), names }) === "app") continue;
-    count++; note(via, strOr(r.updatedAt) ?? since);
+    count++; note(strOr(r.lastUpdatedBy), via, strOr(r.updatedAt) ?? since);
   }
   const gone = await get("/history/deleted?limit=50").catch(() => null);
   const listed = (plain(gone) && Array.isArray(gone.notes) ? gone.notes : []).filter((n: unknown): n is Record<string, unknown> => plain(n) && typeof n.id === "string" && typeof n.deleted_at === "string" && n.deleted_at >= since);
@@ -203,7 +239,11 @@ export async function countChanged(opts: { get: Get; door: "records" | "notes"; 
   for (const v of await Promise.all(rows.map((n) => get(`/${door}/${encodeURIComponent(n.id as string)}/versions?limit=1`).then(rowsOf, () => [] as Row[])))) {
     const t = v[0];
     if (!t || t.op !== "delete" || t.via === null || self(t.via) || own({ path: t.path ?? "", extension: null, names: [] }) === "app") continue;
-    count++; note(t.via, t.at);
+    count++; note(t.by, t.via, t.at);
   }
+  /** each writer's name, and when it last wrote */
+  const names = new Map<string, string>();
+  const people = await namesOf(opts.people, seen.map((w) => w.by));
+  for (const w of seen) { const n = writer(w.by, w.via, false, people); if ((names.get(n) ?? "") < w.at) names.set(n, w.at); }
   return { count, names, more: all.length > 200 || listed.length > HOME_DELETED };
 }
