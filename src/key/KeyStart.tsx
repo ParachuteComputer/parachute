@@ -7,7 +7,8 @@ import { CLOUD, CLOUD_NAME } from "../vault/parachute";
 import { signInWords, startSignIn } from "../vault/signInFlow";
 
 /** Getting a key into the app, in the order most people need: pair it from a device that has it, make a new one, or
- *  (advanced) paste it. On first run this is the first screen; Settings comes here when the device has no key. */
+ *  (advanced) paste it. On first run this is the first screen, and the two ways in that need no key come first:
+ *  Parachute Cloud, and a hub of the person's own by its address. Settings comes here when the device has no key. */
 export default function KeyStart({ first = false }: { first?: boolean }) {
   const nav = useNavigate();
   const [made, setMade] = useState<KeyInfo | null>(null);
@@ -54,6 +55,12 @@ export default function KeyStart({ first = false }: { first?: boolean }) {
         <button type="button" className="primary" onClick={() => void cloud()} disabled={busy}>Sign in with {CLOUD_NAME}</button>
         <p className="quiet small">With your email. No key needed.</p>
       </section>}
+      {/* another Parachute (the person's own hub, an org's, a friend's): its address, then the hub's own sign-in */}
+      {first && <section className="card stack">
+        <p className="lead">Your notes on another Parachute?</p>
+        <Link className="secondary" to="/add">Sign in with its address</Link>
+        <p className="quiet small">Your own hub, an org's or a friend's: its address, then its own sign-in.</p>
+      </section>}
       <section className="card stack">
         <p className="lead">{first ? "Or sign in with your Nostr key." : "Parachute signs you in with your Nostr key."}</p>
         <Link className={first ? "secondary" : "primary"} to="/key/pair">Pair from a device that has your key</Link>
@@ -73,7 +80,6 @@ export default function KeyStart({ first = false }: { first?: boolean }) {
         </details>
         {error && <p className="error" role="alert">{error}</p>}
       </section>
-      {first && <p className="screen-foot"><Link to="/add">Other ways to sign in</Link></p>}
     </main>
   );
 }

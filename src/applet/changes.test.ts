@@ -14,7 +14,7 @@ function hub(opts: { records?: Record<string, Record<string, unknown>>; versions
   const asked: string[] = [];
   const records = opts.records ?? {}, versions = opts.versions ?? {};
   const deps: VaultsDeps = {
-    list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp" }],
+    list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp", view: null, reach: "this-device" }],
     door: async () => "records",
     applets: async () => [],
     self: () => opts.self ?? null,

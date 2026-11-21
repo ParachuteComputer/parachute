@@ -9,6 +9,7 @@ import { isMine } from "../vault/whose";
 import { heldLevel, giveBack, appletLevel } from "../vault/reach";
 import { forgetOwnWrite } from "../vault/writeAsk";
 import { homeVault } from "./frameSource";
+import { reachOf, viewBase } from "../vault/published";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
 import { takeBack } from "../applet/approvalStore";
@@ -26,7 +27,7 @@ const rec = (key: string): VaultRecord => {
 
 export function heldVaults(): HeldVault[] {
   const home = homeVault();
-  return listVaults().map((v) => ({ key: v.key, name: v.vault, host: hostOf(v.issuer), mine: isMine(v), home: home?.key === v.key, level: heldLevel(v), connector: connectorAddress(v) }));
+  return listVaults().map((v) => ({ key: v.key, name: v.vault, host: hostOf(v.issuer), mine: isMine(v), home: home?.key === v.key, level: heldLevel(v), connector: connectorAddress(v), view: viewBase(v), reach: reachOf(vaultUrlOf(v)) }));
 }
 
 export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string;
