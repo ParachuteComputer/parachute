@@ -9,7 +9,7 @@
       "id": "connect",
       "name": "Connect",
       "glyph": "⌁",
-      "note": "connect your AI: each vault's address, and how to add it to Claude or ChatGPT"
+      "note": "connect your AI: one address for your vaults (or one vault's own), and how to add it to Claude or ChatGPT"
     },
     "needs": 3,
     "app": ["vaults", "copy"]

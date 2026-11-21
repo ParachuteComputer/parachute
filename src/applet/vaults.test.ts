@@ -37,6 +37,22 @@ function setup(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], records:
 }
 const book = { id: "a", path: "Books/A", body: "words", types: ["book"], tags: [], fields: { status: "to-read" }, updatedAt: "2026-11-20T00:00:00.000Z" };
 
+describe("vaults.hubs: each hub's one address for an AI (T-476)", () => {
+  const hubs = [{ host: "hub.example", address: "https://hub.example/mcp", vaults: ["home"] }];
+  const make = (words: ("vaults" | "sharing")[], withHubs = true) => {
+    const deps = { list: () => [], ...(withHubs ? { hubs: async () => hubs } : {}) } as unknown as VaultsDeps;
+    const router = createRouter([createVaultsModule(words, deps)]);
+    return (params: unknown) => router.call("vaults", "hubs", params, {}, { charge() {}, closed: () => false });
+  };
+  it("needs the vaults word, takes nothing, and answers what the shell knows", async () => {
+    await expect(make(["sharing"])({})).rejects.toThrow();
+    await expect(make(["vaults"])({ host: "x" })).rejects.toThrow();
+    expect(await make(["vaults"])({})).toEqual(hubs);
+    // a shell that can't say (tests, an embed): none, so each vault keeps its own address
+    expect(await make(["vaults"], false)({})).toEqual([]);
+  });
+});
+
 describe("the vaults word", () => {
   it("without it, nothing: every call is not_granted", async () => {
     const { call } = setup([]);

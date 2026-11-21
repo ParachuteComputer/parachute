@@ -521,6 +521,8 @@ export const FRAME_KIT = String.raw`(function () {
     // with app: [vaults] (the Vault applet's): every vault this device holds; a change goes as JSON text in bytes
     vaults: Object.freeze({
       list: function () { return call("vaults", "list", {}); },
+      // T-476: each hub the vaults are on and its one address for an AI (an older app has no hubs: a caller checks)
+      hubs: function () { return call("vaults", "hubs", {}); },
       types: function (vault) { return call("vaults", "types", { vault: vault }); },
       query: function (vault, q) { var p = { vault: vault }; Object.keys(q || {}).forEach(function (k) { if (q[k] !== undefined) p[k] = q[k]; }); return call("vaults", "query", p); },
       get: function (vault, id) { return call("vaults", "get", { vault: vault, id: id }); },

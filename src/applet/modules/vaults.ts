@@ -4,6 +4,8 @@
 //
 //   vaults        (read every vault this device holds; change records where the person lets Parachute change them)
 //     list()                                   the vaults: {key, name, host, mine, home, level, connector}
+//     hubs()                                   each hub those vaults are on: {host, address, vaults}, `address` the one
+//                                              address an AI gets there for every vault (null: a vault's own only)
 //     types({vault})                           its types and tags, with counts and declared fields
 //     query({vault, type?, tag?, search?, path?, where?, sort?, limit?, offset?})
 //                                              a page of records (no body): {records, more}
@@ -35,8 +37,11 @@ import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 
 export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
-  /** where an AI connects to it (`<vault>/mcp`): the vault's own address, nothing secret */
+  /** where an AI connects to this vault only (`<vault>/mcp`): the vault's own address, nothing secret */
   connector: string };
+/** A hub the device holds vaults on, and the one address an AI gets there (T-476: `<hub>/mcp`, every vault the person
+ *  lets it reach), or null where each vault keeps its own address. `vaults`: the keys of the vaults held on it. */
+export type HubRow = { host: string; address: string | null; vaults: string[] };
 /** A record as the module hands it on: record words, types apart from tags. */
 export type Rec = {
   id: string; path: string; title: string; createdAt: string | null; updatedAt: string | null;
@@ -56,6 +61,8 @@ export type WatchEvent = { upsert?: Rec } | { remove?: string };
  *  throws the write ask before it is sent), and what the app knows of each vault. */
 export type VaultsDeps = {
   list(): HeldVault[];
+  /** The hubs of `list()`, each with its one address (what its description says; null when it can't be read). */
+  hubs?(): Promise<HubRow[]>;
   /** GET/POST/PATCH under the vault's API (`/records…`, `/types…`), its JSON; a 404 rejects with `not_found`. */
   request(vault: string, method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<unknown>;
   /** A record's GET for what a screen shows (the `get` call), answered at once from what was read before while the hub
@@ -326,6 +333,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
     namespace: "vaults",
     methods: {
       list: { cap: null, validate: one((p) => (hasOnly(p, []) ? {} : null)), run: async () => deps.list() },
+      hubs: { cap: null, validate: one((p) => (hasOnly(p, []) ? {} : null)), run: async () => (deps.hubs ? deps.hubs() : []) },
       types: {
         cap: null, validate: one(vaultOnly()),
         run: async ({ vault }: { vault: string }, _s, ctx) => { held(vault); ctx.charge(1); return types(vault).catch((e) => { throw failed(e); }); },
