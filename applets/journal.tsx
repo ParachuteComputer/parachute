@@ -13,7 +13,10 @@ type Entry = { id: string; path: string; updatedAt: string | null; createdAt?: s
 const voicePath = (at: Date, seconds = false) => `Journal/${when.path(at, seconds)}`;
 /** Journal/2026/11-17/09-41 First words of it */
 export function pathFor(text: string, at = new Date()) {
-  const words = text.replace(/[#*_`>\[\]\\/:?"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6).join(" ").slice(0, 48).trim() || "Entry";
+  // its first words, up to six, ending at the first sentence's end when that comes sooner ("Walked to the bakery")
+  const all = text.replace(/[#*_`>\[\]\\/:?"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6);
+  const end = all.findIndex((w) => /[.!]$/.test(w));
+  const words = (end >= 0 ? all.slice(0, end + 1) : all).join(" ").replace(/[.!]+$/, "").slice(0, 48).trim() || "Entry";
   return `Journal/${when.path(at)} ${words}`;
 }
 /** When an entry was written: from its path (the Uni app's and this one's), else when it changed. */

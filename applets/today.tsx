@@ -16,7 +16,10 @@ const UNI = "{{uni}}";
 const today = () => `Journal/${when.path(Date.now()).split("/").slice(0, 2).join("/")}/`;
 /** Journal/2026/11-19/09-41 First words of it (as the Journal applet names an entry). */
 function pathFor(text: string) {
-  const words = text.replace(/[#*_`>\[\]\\/:?"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6).join(" ").slice(0, 48).trim() || "Entry";
+  // its first words, up to six, ending at the first sentence's end when that comes sooner ("Walked to the bakery")
+  const all = text.replace(/[#*_`>\[\]\\/:?"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6);
+  const end = all.findIndex((w) => /[.!]$/.test(w));
+  const words = (end >= 0 ? all.slice(0, end + 1) : all).join(" ").replace(/[.!]+$/, "").slice(0, 48).trim() || "Entry";
   return `Journal/${when.path(Date.now())} ${words}`;
 }
 /** When an entry was written, from its path. */

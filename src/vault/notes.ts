@@ -3,9 +3,15 @@ import { POINTER_TAG } from "../applet/pointer";
 import type { Note } from "@openparachute/surface-client";
 import { isCodeExtension } from "../applet/code";
 
-/** The last segment of the note's path, without an extension; else its id. */
+/** A journal entry's path, as Journal (and the Uni app) files it: …/2026/11-21/07-15 Walked to the bakery; the
+ *  seconds when the minute was taken (07-15-42). */
+const JOURNAL_ENTRY = /(?:^|\/)\d{4}\/\d{2}-\d{2}\/\d{2}-\d{2}(?:-\d{2})? (.+)$/;
+/** The last segment of the note's path, without an extension (a journal entry's without its time: the folder and the
+ *  list say when); else its id. */
 export function titleOf(n: Pick<Note, "id" | "path">): string {
   const p = n.path?.replace(/\.(md|html?|tsx|jsx)$/i, "") ?? "";
+  const entry = JOURNAL_ENTRY.exec(p)?.[1]?.trim();
+  if (entry) return entry;
   const last = p.split("/").filter(Boolean).pop();
   return last || n.id;
 }

@@ -26,14 +26,15 @@ test("journal: a line becomes a dated journal note; the days show, voice entries
     await expect(app.getByText(`Walked by the river ${stamp}. The herons were out.`)).toBeVisible();
     await expect(app.getByRole("article", { name: /Entry at/ }).filter({ hasText: "herons" })).toContainText("voice");
 
-    await app.getByLabel("Write in your journal").fill(`Planted garlic in the north bed ${stamp}`);
+    await app.getByLabel("Write in your journal").fill(`Planted garlic. The north bed ${stamp} is full.`);
     await app.getByRole("button", { name: "Save" }).click();
     await expect(app.getByRole("heading", { name: "Today" })).toBeVisible();
-    await expect(app.getByText(`Planted garlic in the north bed ${stamp}`)).toBeVisible();
+    await expect(app.getByText(`Planted garlic. The north bed ${stamp} is full.`)).toBeVisible();
     // in the vault: where the Uni app keeps its journal, tagged journal
     const rows = await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=50`) as { id: string; path: string; tags?: string[]; content?: string }[];
-    const mine = rows.find((r) => r.content?.includes(`north bed ${stamp}`));
-    expect(mine?.path).toMatch(new RegExp(`^Journal/\\d{4}/\\d{2}-\\d{2}/\\d{2}-\\d{2} Planted garlic in the north bed`));
+    const mine = rows.find((r) => r.content?.includes(`north bed ${stamp} is full`));
+    // named by its first sentence when that is shorter than six words, so a title never stops mid-phrase
+    expect(mine?.path).toMatch(/^Journal\/\d{4}\/\d{2}-\d{2}\/\d{2}-\d{2}(-\d{2})? Planted garlic$/);
     expect(mine?.tags).toContain("journal");
     if (mine) made.push(mine.id);
 

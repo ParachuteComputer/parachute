@@ -15,3 +15,15 @@ describe("the app's own notes", () => {
     expect(isAppOwn({ path: "Parachute/From/techne.example/techne/my notes", tags: [] })).toBe(false);
   });
 });
+
+describe("a note's title", () => {
+  it("is its name; a journal entry's without its time (Journal's and the Uni app's paths)", async () => {
+    const { titleOf } = await import("./notes");
+    expect(titleOf({ id: "x", path: "Notes/Groceries.md" })).toBe("Groceries");
+    expect(titleOf({ id: "x", path: "Journal/2026/11-21/07-15 Walked to the bakery" })).toBe("Walked to the bakery");
+    expect(titleOf({ id: "x", path: "Journal/2026/11-21/07-15-42 Walked to the bakery" })).toBe("Walked to the bakery");
+    // a time-looking name elsewhere is a name
+    expect(titleOf({ id: "x", path: "Meetings/07-15 Standup" })).toBe("07-15 Standup");
+    expect(titleOf({ id: "01ABC", path: "" })).toBe("01ABC");
+  });
+});
