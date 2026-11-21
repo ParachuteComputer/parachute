@@ -3,12 +3,19 @@
 // reaches every vault the person gives it on the hub's page, names one on each call, and may make new ones. Each
 // vault's own address (`<vault>/mcp`) stays, under "Just one vault". A hub that has no one address (an older hub,
 // Parachute Cloud today) shows each vault's own, as before. The AI asks the person on their hub's page, so nothing here
-// grants anything. It reads which vaults this device holds and their hubs (`vaults`) and copies on a tap (`copy`).
+// grants anything. It reads which vaults this device holds and their hubs (`vaults`) and copies on a tap (`copy`); then
+// what to ask the AI for: an applet, with the guide's address, also to copy.
 import { useEffect, useRef, useState } from "react";
 import { app, Button, List, Loading, Page, Problem, vaults } from "parachute";
 
 type Held = { key: string; name: string; mine: boolean; home: boolean; connector?: string };
 type Hub = { host: string; address: string | null; vaults: string[] };
+
+/** The guide an AI reads to write an applet (the released app's: main). A cold AI connected by its address finds no
+ *  word of applets in the vault (T-476 stranger walk: it made a record type, not an applet), so the person hands it this.
+ *  The blank is last: after the paste, the person just keeps typing what they want. */
+const GUIDE = "https://github.com/ParachuteComputer/parachute/blob/main/docs/WRITE-AN-APPLET.md";
+const ASK = `How to write a Parachute applet: ${GUIDE}\nMake me one in my Parachute app that `;
 
 const CSS = `
 .cnx .addr { font: var(--fs-small) var(--mono); overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
@@ -17,6 +24,7 @@ const CSS = `
 .cnx .how p { margin: 0 0 var(--gap); }
 .cnx .one { margin: calc(var(--gap) * 2) 0 0; }
 .cnx .one > p { margin: 0 0 var(--gap); }
+.cnx .ask { white-space: pre-line; }
 .cnx .small { font: var(--fs-small) var(--sans); color: var(--muted); }
 `;
 
@@ -25,6 +33,9 @@ export default function Connect() {
   const [hubs, setHubs] = useState<Hub[] | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
   const [copied, setCopied] = useState<Record<string, "yes" | "failed">>({});
+  const [askCopied, setAskCopied] = useState<"yes" | "failed" | null>(null);
+  const askTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(askTimer.current), []);
   // each row's "Copied" goes back after a moment, on its own; a new copy restarts it, and leaving clears them
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -42,6 +53,12 @@ export default function Connect() {
     setCopied((c) => ({ ...c, [key]: ok ? "yes" : "failed" }));
     clearTimeout(timers.current.get(key));
     if (ok) timers.current.set(key, setTimeout(() => setCopied((c) => { const n = { ...c }; if (n[key] === "yes") delete n[key]; return n; }), 2500));
+  };
+  const copyAsk = async () => {
+    const ok = canCopy ? await (app as { copy(t: string): Promise<boolean> }).copy(ASK).catch(() => false) : false;
+    setAskCopied(ok ? "yes" : "failed");
+    clearTimeout(askTimer.current);
+    if (ok) askTimer.current = setTimeout(() => setAskCopied((c) => (c === "yes" ? null : c)), 2500);
   };
   if (failed) return <Page title="Connect an AI"><Problem error={failed}>Your vaults couldn't be read</Problem></Page>;
   if (!list || !hubs) return <Page title="Connect an AI"><Loading /></Page>;
@@ -76,6 +93,15 @@ export default function Connect() {
       </section>
     </>
   );
+  const askFor = (
+    <section className="how" aria-label="Then ask it for an applet">
+      <h2>Then ask it for an applet</h2>
+      <p>Your AI can make you an applet: a small app here that keeps what it needs in your vault. Copy this, paste it to your AI, and finish the sentence with what you want:</p>
+      <p className="addr ask">{ASK}</p>
+      {canCopy && <Button small aria-label={askCopied === "yes" ? "Copied what to ask" : "Copy what to ask"} onClick={() => void copyAsk()}>{askCopied === "yes" ? "Copied" : "Copy"}</Button>}
+      {(askCopied === "failed" || !canCopy) && <p className="small">Press and hold the line to select it.</p>}
+    </section>
+  );
 
   if (ones.length === 0) {
     return (
@@ -85,6 +111,7 @@ export default function Connect() {
         <List label="Your vaults' addresses" hideLabel rows={own.map(vaultRow)} />
         {how}
         <p className="small">Each address reaches that one vault only. Cursor, Claude Code and any other MCP app take the same address.</p>
+        {askFor}
       </Page>
     );
   }
@@ -95,6 +122,7 @@ export default function Connect() {
       <List label="Your address for AIs" hideLabel rows={[...ones.map(hubRow), ...rest.map(vaultRow)]} />
       {how}
       <p className="small">Cursor, Claude Code and any other MCP app take the same address.</p>
+      {askFor}
       {own.some((v) => covered.has(v.key)) ? (
         <section className="one" aria-label="Just one vault">
           <h2>Just one vault</h2>
