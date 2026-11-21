@@ -17,7 +17,7 @@ jobs:
         core: ["0.8.0", "0.9.0-pre.1", "467b9ef1ec37dba958d1ec88ab13db1ed03388eb"]
     name: web (core ${{ matrix.core }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

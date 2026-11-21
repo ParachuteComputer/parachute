@@ -27,18 +27,21 @@ on:
       - e2e/today.spec.ts
       - src-tauri/tests/services_real.rs
       # what those specs drive: the applets on real servers, the shell's broker and signer, the harness
-      - applets/rooms.tsx
-      - applets/room.tsx
-      - applets/mail.tsx
-      - applets/matrix.tsx
-      - applets/today.tsx
-      - src/services/**
-      - src-tauri/src/services.rs
+      - applets/**
+      - src/**
+      - src-tauri/src/**
+      - package-lock.json
+      - src-tauri/Cargo.lock
       - e2e/hub.ts
       - e2e/helpers.ts
       - playwright.config.ts
       - .github/workflows/services.yml
       - .github/actions/core/**
+
+# one run per branch or PR at a time: a newer push replaces a run still going
+concurrency:
+  group: services-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   services:
@@ -60,12 +63,15 @@ jobs:
           core: ${{ inputs.core || 'next' }}
 
       # the relay production runs: upstream Buzz plus our voice patches, built once and kept
+      - name: The relay's image name (its upstream commit and patch)
+        id: tag
+        run: echo "tag=$(e2e/services/relay-image.sh --tag)" >> "$GITHUB_OUTPUT"
       - name: The relay's image, if built before
         id: relay
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/relay-image.tar
-          key: relay-${{ hashFiles('e2e/services/relay-image.sh', 'e2e/services/relay/**') }}
+          key: relay-${{ steps.tag.outputs.tag }}
       - name: Build or load the relay
         run: |
           [ -f "$RUNNER_TEMP/relay-image.tar" ] && docker load -q -i "$RUNNER_TEMP/relay-image.tar"
@@ -127,6 +133,7 @@ jobs:
           mkdir -p dist && [ -f dist/index.html ] || echo '<!doctype html>' > dist/index.html
           cargo test --locked --manifest-path src-tauri/Cargo.toml --test services_real -- --nocapture 2>&1 | tee native.log
           ! grep -q "skipped:" native.log
+          grep -Eq "test result: ok\. [1-9][0-9]* passed; 0 failed; 0 ignored" native.log
 
       - name: The servers' logs
         if: failure()
@@ -139,4 +146,6 @@ jobs:
             playwright-report
             test-results
             services.log
+            services.json
+            native.log
           retention-days: 7
