@@ -6,9 +6,11 @@
 // An ordinary applet otherwise: a note in your vault (Applets/Vault); change it, or ask your AI to.
 import { useEffect, useMemo, useRef, useState } from "react";
 // Table, Fields and the vaults calls are level 3: its record says `needs: 3`, so an older app says to update
-import { Button, Empty, Field, Fields, List, Loading, Note, onFresh, onLaunch, Page, Problem, ready, Search, Table, Tabs, toast, useSaved, vaults, when, Write } from "parachute";
+import { app, Button, Empty, Field, Fields, List, Loading, Note, onFresh, onLaunch, Page, Problem, ready, Search, Table, Tabs, toast, useSaved, vaults, when, Write } from "parachute";
 
-type Held = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null };
+type Held = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
+  /** where a published record is read (this plus its id): null where the hub has none; absent from an older app */
+  view?: string | null; reach?: "this-device" | "network" | "anyone" };
 type Spec = { type?: string; enum?: unknown[]; description?: string };
 type TypeRow = { name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, Spec> };
 type Rec = { id: string; path: string; title: string; createdAt: string | null; updatedAt: string | null; types: string[]; tags: string[]; fields: Record<string, unknown>;
@@ -53,7 +55,8 @@ const CSS = `
 .vlt .note-meta { margin: 0 0 var(--gap); font: italic var(--fs-small) var(--serif); color: var(--muted); }
 .vlt .sect { margin: calc(var(--gap) * 1.5) 0 6px; font: 600 var(--fs-label) var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .vlt .old { padding: 8px 12px; border-left: 3px solid var(--line); }
-.vlt .addr { font: var(--fs-small) var(--mono); overflow-wrap: anywhere; }
+.vlt .addr { font: var(--fs-small) var(--mono); overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
+.vlt .acts { display: flex; flex-wrap: wrap; gap: var(--gap); }
 `;
 
 export default function Vault() {
@@ -335,6 +338,9 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   const out = links.filter((l) => l.dir === "out"), into = links.filter((l) => l.dir === "in");
   // public as the hub judges it: the field, or its default publish tag (a vault that names another tag isn't known here)
   const published = r.fields.published === true || [...r.types, ...r.tags].some((t) => t === "publish");
+  // its link: the hub's page for it, as the app names it (none where the hub has no such page)
+  const link = v.view ? `${v.view}${encodeURIComponent(r.id)}` : null;
+  const canCopy = typeof (app as { copy?: unknown }).copy === "function";
   return (
     <article aria-label={r.title} ref={top}>
       <Button kind="quiet" onClick={back.onPress}>{`← ${back.label}`}</Button>
@@ -385,8 +391,16 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       {old && <div className="old"><p className="note-meta">As it was before {when.full(old.at)}</p><Note body={old.body} path={r.path} /><Button small kind="quiet" onClick={() => setOld(null)}>Close</Button></div>}
       {canWrite && <>
         <p className="sect">Sharing</p>
-        <p className="note-meta">{published ? "Published: anyone with its link can read it." : "Only you, and what you let in, can read it."}</p>
-        <Button small onClick={() => vaults.publish(v.key, r.id, !published).then((x: { published: boolean; changed: boolean }) => { toast(x.changed ? (x.published ? "Published." : "No longer published.") : x.published ? "It was published already." : "It wasn't published."); return load(); }, (e: unknown) => quiet(e, "Not changed"))}>{published ? "Unpublish" : "Publish"}</Button>
+        <p className="note-meta">{!published ? "Only you, and what you let in, can read it." : v.view === null ? "Marked published. Parachute Cloud doesn't show published records to others yet, so there is no link to send." : "Published: anyone with its link can read it."}</p>
+        {published && link && <p className="addr">{link}</p>}
+        {published && link && (v.reach === "this-device"
+          ? <p className="note-meta">Only this computer can open it: your Parachute is on this computer's own address. To send it on, your Parachute needs an address others can reach (its setup's Expose step).</p>
+          : v.reach === "network" ? <p className="note-meta">Only devices on your own network can open it. To send it further, your Parachute needs a public address (its setup's Expose step).</p> : null)}
+        {published && link && !canCopy && <p className="note-meta">Press and hold the link to select it.</p>}
+        <div className="acts">
+          {published && link && canCopy && <Button small onClick={() => void (app as { copy(t: string): Promise<boolean> }).copy(link).then((ok) => toast(ok ? "Link copied." : "Press and hold the link to select it."), () => toast("Press and hold the link to select it."))}>Copy link</Button>}
+          <Button small onClick={() => vaults.publish(v.key, r.id, !published).then((x: { published: boolean; changed: boolean }) => { toast(x.changed ? (x.published ? "Published." : "No longer published.") : x.published ? "It was published already." : "It wasn't published."); return load(); }, (e: unknown) => quiet(e, "Not changed"))}>{published ? "Unpublish" : "Publish"}</Button>
+        </div>
       </>}
     </article>
   );
