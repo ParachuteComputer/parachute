@@ -18,7 +18,7 @@ their AI writes into their home shows on Notes under **Your applets**, where its
 | **Journal** | the bar | The Uni app's Journal: a line a day or many, written or said, kept by day in the home vault's `Journal/`. |
 | **Capture** | the bar | Write a line, or **Say it** (the app's own recorder): it lands in the home vault's `Inbox/` as a note of its own, and a voice note gets its words from the hub's transcription. |
 | **Vault** | the bar | Parachute's own viewer ([VAULT.md](VAULT.md)): each vault's types and counts, a type's records as a table, a record's fields (changed where they stand), words (**Edit words**), links and history, and Changes: what your AI changed, with **Put it back**. |
-| **Connect** | the bar | Each vault's connector address (`https://…/vault/<name>/mcp`) with **Copy**, how to add it to Claude and ChatGPT, and what to ask it for next: an applet, with the guide's address (**Copy**). |
+| **Connect** | the bar | The hub's one address for an AI (`https://…/mcp`: every vault you give it there) with **Copy**, how to add it to Claude and ChatGPT, what to ask it for next (an applet, with the guide's address, **Copy**), and each vault's own address under **Just one vault**. A hub without one (older, or Parachute Cloud today) shows each vault's own address. |
 
 Each is one of Parachute's own applets (`applets/notes`, `journal`, `capture`, `vault`, `connect`), at
 `/v/<home>/a/parachute:<name>`. Settings is ⋯ on each screen; it has **Your bundle: Parachute Simplified / Everything**,
