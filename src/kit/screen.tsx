@@ -162,7 +162,7 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
     const [lo, hi] = range(n);
     const FADE = 32, left = n.scrollLeft > lo + 1 ? FADE : 0, right = n.scrollLeft < hi - 1 ? FADE : 0;
     const r = on.getBoundingClientRect(), box = n.getBoundingClientRect();
-    if (r.left < box.left + left || r.right > box.right - right) n.scrollTo({ left: n.scrollLeft + r.left + r.width / 2 - (box.left + box.width / 2), behavior: "instant" });
+    if (r.left < box.left + left || r.right > box.right - right) n.scrollLeft += r.left + r.width / 2 - (box.left + box.width / 2);
     placed.current = true;
     placedAt.current = n.scrollLeft;
     placedSpan.current = n.scrollWidth - n.clientWidth;
@@ -185,8 +185,10 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
   const scrolled = () => {
     const n = nav.current;
     if (n && placed.current) {
-      const span = n.scrollWidth - n.clientWidth;
-      if (Math.abs(span - placedSpan.current) > 0.5) { placedAt.current = n.scrollLeft; placedSpan.current = span; }
+      const span = n.scrollWidth - n.clientWidth, [lo, hi] = range(n);
+      // a clamp: the extent changed and the row sits pinned at an end of it
+      const pinned = Math.abs(n.scrollLeft - lo) <= 1 || Math.abs(n.scrollLeft - hi) <= 1;
+      if (Math.abs(span - placedSpan.current) > 0.5 && pinned) { placedAt.current = n.scrollLeft; placedSpan.current = span; }
       else if (Math.abs(n.scrollLeft - placedAt.current) > 1) placed.current = false;
     }
     edges();
