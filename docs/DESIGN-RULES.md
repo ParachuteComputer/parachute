@@ -25,8 +25,9 @@ The kit already follows them, so most applets get them by using its parts and ad
    under the reader. **checked** (no `transition: all` either)
 7. **On the theme's curves and times only:** `--ease-out` (arriving, leaving), `--ease-in-out` (moving across the
    screen), `--ease-drawer` (a drawer); `--t-press` 160 ms, `--t-state` 200 ms, `--t-sheet` 300 ms, `--t-step` 40 ms (the kit does not delay its parts with it).
-   **checked** The docs site has one more, `--t-settle` 640 ms, for its home page's drawing settling once; the app
-   has no such time, as nothing in it is a drawing that arrives on its own, and a page arrives within 250 ms (8).
+   **checked**
+   The docs site has one more, `--t-settle` 640 ms, for its home page's drawing settling once. The app has no such
+   time: nothing in it is a drawing that arrives on its own, and a page arrives within 250 ms (8).
 8. **Quick and never in the way:** a page arrives within 250 ms; nothing waits for an animation before it answers a
    tap; leaving is quicker than arriving.
    **Readable on the first frame:** what arrives is legible on the very first frame it is drawn (opacity at least

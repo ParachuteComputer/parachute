@@ -22,6 +22,8 @@ button, input { font: inherit; color: inherit; }
 .bar-back, .bar-menu, .bar-mark { display: inline-grid; place-items: center; min-width: 36px; height: 36px; border: 0; background: none; color: var(--text); font-size: 26px; line-height: 1; text-decoration: none; border-radius: 8px; cursor: pointer; }
 .bar-mark { color: var(--accent); font-size: 22px; }
 .bar-menu { font-size: 22px; }
+/* the back mark is Instrument Sans's ‹, a small guillemet: drawn larger so it reads as the chevron it was */
+.bar-back { font-size: 34px; }
 .bar-back:active, .bar-menu:active { background: var(--line); }
 
 /* lists of notes (a vault, search, open with): rows under an ink rule, dotted between, as the launcher and the parts */
