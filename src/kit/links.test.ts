@@ -15,9 +15,10 @@ describe("the shipped applets link through the kit", () => {
     const src = code(f);
     expect(src, "an <a> of its own").not.toMatch(/<a[\s>]/);
     expect(src, "an href of its own").not.toMatch(/\bhref=/);
-    // a home applet (it asks for the bar or the newest notes) goes to the app's own places on a tap: a pin, a recent
-    // note's address, an applet at a room (app.open). A note link is still the kit's, in it as in every other
-    const home = ((JSON.parse(readFileSync(join(dir, f.replace(/\.\w+$/, ".json")), "utf8")) as { fields?: { app?: string[] } }).fields?.app ?? []).some((w) => w === "pins" || w === "recent");
+    // a home applet (it asks for the bar, the newest notes, or every vault: Parachute's own Notes) goes to the app's own
+    // places on a tap: a pin, a note's address, an applet at a room (app.open). A note link is still the kit's, in it as
+    // in every other
+    const home = ((JSON.parse(readFileSync(join(dir, f.replace(/\.\w+$/, ".json")), "utf8")) as { fields?: { app?: string[] } }).fields?.app ?? []).some((w) => w === "pins" || w === "recent" || w === "vaults");
     expect(src, "the shell's link calls, not the kit's parts").not.toMatch(home ? /\bapp\s*\.\s*(openLink|follow|links|address)\s*\(/ : /\bapp\s*\.\s*(open|openLink|follow|links|address)\s*\(/);
     expect(src, "the frame moved").not.toMatch(/\b(window\.open|location\s*\.\s*(href|assign|replace))\b/);
   });

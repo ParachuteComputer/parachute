@@ -13,7 +13,7 @@ import { appletPath } from "../../open/paths";
 
 const LIMIT = 60;
 
-/** A vault: in Vault when it is there and allowed (applet/shipped.ts, docs/VAULT.md); else the plain view, the newest
+/** A vault: in Vault when it is there and allowed (applet/parachuteSource.ts, docs/VAULT.md); else the plain view, the newest
  *  notes or what a search finds, under a line that leads to Vault. Every row is a link to the note's own address. */
 export default function VaultView() {
   // one per vault: what one vault's visit decided (Vault or the plain view) doesn't carry to the next

@@ -19,7 +19,7 @@ async function written(args: Record<string, unknown>, run: (id: string) => Promi
   try { await run(note.id as string); } finally { await api(hubState(), "DELETE", `notes/${note.id}`); }
 }
 const openChip = async (page: Page, name: RegExp) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name }).click();
 };
 

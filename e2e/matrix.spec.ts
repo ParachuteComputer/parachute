@@ -26,7 +26,7 @@ test("matrix: the token is given to the app, never the applet; alice and bob tal
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, readFileSync(join(KEYS, "alice.hex"), "utf8").trim());
   const note = await record(hubState(), "create", appletRecord("matrix", { homeserver: HS! }));
   try {
-    const open = async () => { await page.goto(`/v/${VAULT}`); await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Matrix/ }).click(); };
+    const open = async () => { await page.goto(`/v/${VAULT}?with=vault`); await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Matrix/ }).click(); };
     await open();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText(`Use a token you give it for ${new URL(HS!).host} on this device`);

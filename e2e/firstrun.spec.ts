@@ -63,10 +63,7 @@ test("first sign-in with a home in the settings: its card first, and after Allow
     await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible({ timeout: 45_000 });
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
     await page.getByRole("button", { name: "Allow" }).click();
-    const approve = page.getByRole("button", { name: "Approve" });
-    // the sign-in read the home only: the hub asks to let Parachute change notes there, then back to the home, running
-    await page.waitForURL((u) => u.origin === hub.origin);
-    await approve.click();
+    // the sign-in asked the home at read and write: the hub has nothing more to ask, and the home runs
     await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Recipe box" })).toBeVisible();
     // the next start opens it running: no card, no "stopped", no tap
     await page.goto("about:blank");
@@ -78,7 +75,7 @@ test("first sign-in with a home in the settings: its card first, and after Allow
   }
 });
 
-test("a Deny on the hub after Allow on the first start's home records no choice of it", async ({ page }) => {
+test("Allow on the first start's home asks nothing more of the hub (the sign-in asked the home at write), and records the choice of it", async ({ page }) => {
   test.setTimeout(120_000);
   const hub = hubState();
   for (const n of await api(hub, "GET", "notes?tag=parachute-settings") as Row[]) await api(hub, "DELETE", `notes/${n.id}`);
@@ -88,11 +85,9 @@ test("a Deny on the hub after Allow on the first start's home records no choice 
     await signInToHome(page);
     await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible({ timeout: 45_000 });
     await page.getByRole("button", { name: "Allow" }).click();
-    await page.waitForURL((u) => u.origin === hub.origin);
-    await page.getByRole("button", { name: "Deny" }).click();
-    await page.waitForURL((u) => u.origin !== hub.origin);
-    await expect(page.getByText("You said no on the hub. Nothing changed.")).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem("parachute.start.v1"))).toBeNull();
+    await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Recipe box" })).toBeVisible();
+    expect(new URL(page.url()).origin).not.toBe(hub.origin);
+    expect(await page.evaluate(() => localStorage.getItem("parachute.start.v1"))).not.toBeNull();
   } finally {
     await api(hub, "DELETE", `notes/${settings.id}`).catch(() => {});
   }
@@ -100,8 +95,8 @@ test("a Deny on the hub after Allow on the first start's home records no choice 
 
 // Aaron's case on every new device (wknd audit, walk 1 rows 3 and 7): more than one vault of his own, and the one holding
 // his settings isn't the first by name. Here `kitchen` is first by name and holds no settings; `pantry` holds them and
-// the home applet. The pick offers pantry as home without a tap; the sign-in opens its home applet; Allow there (with
-// the hub's page in between, as Home needs write) is the choice of it, so the next start opens it running.
+// the home applet. The pick offers pantry as home without a tap; the sign-in opens its home applet; Allow there (the sign-in
+// asked the home at write: no page of the hub's in between) is the choice of it, so the next start opens it running.
 test("several vaults: the one holding the settings is offered as home, and Allow on its home applet is the choice", async ({ page }) => {
   test.setTimeout(150_000);
   const hub = hubState();
@@ -122,8 +117,7 @@ test("several vaults: the one holding the settings is offered as home, and Allow
     await expect(page).toHaveURL(new RegExp(`/v/${home}/a/`));
     await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible({ timeout: 45_000 });
     await page.getByRole("button", { name: "Allow" }).click();
-    await page.waitForURL((u) => u.origin === hub.origin);
-    await page.getByRole("button", { name: "Approve" }).click();
+    // the sign-in asked the home at read and write: no page of the hub's in between
     await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Recipe box" })).toBeVisible();
     // the second open: running, no "Recipe box is stopped. Open Recipe box"
     await page.goto("about:blank");

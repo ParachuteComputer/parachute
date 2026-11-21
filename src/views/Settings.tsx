@@ -58,7 +58,8 @@ function Holds({ v }: { v: VaultRecord }) {
   const level = heldLevel(v);
   // write that no applet allowed here needs (the person's own, or held from before this app asked per vault): theirs to give back
   const applets = appletsNeedingWrite(v);
-  const own = level === "write" && applets !== null && !applets.length;
+  // not the home: Parachute's own applets write there, so it stays writable (docs/design/PARACHUTE-SOURCE.md)
+  const own = level === "write" && applets !== null && !applets.length && homeVault()?.key !== v.key;
   return <span className="quiet holds">· {level === "write" ? "reads and changes notes" : "reads"}{own && <> <button type="button" className="quiet-button" onClick={() => { forgetOwnWrite(v); void giveBack(v.key, "/settings"); }}>Read only</button></>}</span>;
 }
 

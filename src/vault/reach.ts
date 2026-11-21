@@ -1,7 +1,7 @@
 // What the app holds of each vault at its hub, and why (docs/design/SCOPES.md). The app never holds more of a vault than
 // the most that something the person allowed needs:
-//   read    the home, read at sign-in; a vault the person opened (the launcher's Open); every vault held at all
-//   write   an applet allowed there whose manifest adds or changes notes (manifest `allow` verbs create, update); or a
+//   read    a vault the person opened (the launcher's Open); every vault held at all
+//   write   the home, asked at sign-in (Parachute's own applets write there: docs/design/PARACHUTE-SOURCE.md); an applet allowed there whose manifest adds or changes notes (manifest `allow` verbs create, update); or a
 //           change the person made there themselves and approved on the hub (a note edited, their settings saved)
 // The hub narrows no further than a vault and a verb: the folders an applet's card names are the app's own rule.
 // Asking for more is one consent for one vault on the hub (signInFlow.ts askVault). When an applet is revoked and nothing
@@ -13,6 +13,7 @@ import { appletsNow } from "../applet/useApplets";
 import { askVault } from "./signInFlow";
 import { levelIn, type Level } from "./parachute";
 import { findVault, listVaults, type VaultRecord } from "./store";
+import { homeVault } from "../shell/frameSource";
 export { canWrite, clearWriteAsk, forgetOwnWrite, needWrite, NeedsWriteError, noteOwnWrite, onWriteAsk, ownWrite, pendingWriteAsk } from "./writeAsk";
 import { ownWrite } from "./writeAsk";
 
@@ -42,7 +43,8 @@ export function appletsNeedingWrite(rec: VaultRecord): string[] | null {
 
 /** The most anything allowed needs of a vault now: write, read, or unknown (null: don't narrow). */
 export function neededLevel(rec: VaultRecord): Level | null {
-  if (ownWrite(rec)) return "write";
+  // the home: Parachute's own applets write there (Capture, Journal, a note's Edit), so it stays at write
+  if (ownWrite(rec) || homeVault()?.key === rec.key) return "write";
   const applets = appletsNeedingWrite(rec);
   if (applets === null) return null;
   return applets.length ? "write" : "read";

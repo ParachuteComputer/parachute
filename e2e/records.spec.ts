@@ -13,7 +13,7 @@ function watch(page: Page) {
   return calls;
 }
 async function readANote(page: Page) {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: /Notes/ }).getByRole("link", { name: /^Tomato toast/ }).click();
   await expect(ui(page).locator(".prose-note h1")).toHaveText("Tomato toast");
 }
@@ -42,12 +42,12 @@ test("a tag that becomes a type (the door lists it under types, not tags) still 
     const r = await fetch(`${hubState().origin}/vault/${VAULT}/api/tags/${tag}`, { method: "PUT", headers: { authorization: `Bearer ${admin}`, "content-type": "application/json" }, body: JSON.stringify({ fields: { note: { type: "string" } } }) });
     expect((await r.json()).kind).toBe("type");
   }
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await expect(ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await readANote(page);
   await expect(ui(page).locator(".open-line")).toContainText("Cook mode or Recipe box can open this.");
   // a note an applet adds is written with its type where the door wants it (types, not tags)
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   const applet = page.frameLocator("iframe.applet-frame");

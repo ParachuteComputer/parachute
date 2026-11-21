@@ -4,7 +4,7 @@
 // device doesn't hold leads to the link's screen, which offers to add it.
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, VAULT } from "./hub";
-import { ui } from "./helpers";
+import { expectInVault, ui } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
@@ -12,7 +12,7 @@ test.use({ storageState: "e2e/.signed-in.json" });
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame:visible");
 const noteId = async (path: string) => (await api(hubState(), "GET", `notes?id=${encodeURIComponent(path)}`)).id as string;
 const chip = async (page: Page, name: RegExp) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name }).click();
 };
 
@@ -48,10 +48,9 @@ export default function LinkTest() {
     // a wikilink to nothing in the vault is drawn as missing, the other as a link
     await expect(frame(page).locator("#note a", { hasText: "Recipes/Rice and beans" })).toBeVisible();
 
-    // vault:ULID → the Welcome note, in the plain view (no applet opens it)
+    // vault:ULID → the Welcome note, in Vault (no applet opens it)
     await said.getByRole("link", { name: `${VAULT}:${welcome}` }).click();
-    await expect(page).toHaveURL(new RegExp(`/v/${VAULT}/n/${welcome}$`));
-    await expect(ui(page).locator(".prose-note h1")).toHaveText("Welcome");
+    await expectInVault(page, VAULT, welcome, "Welcome");
 
     // the note's address → the recipe, in the applet that opens recipes
     await chip(page, /Link test/);

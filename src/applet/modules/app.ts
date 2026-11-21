@@ -29,6 +29,8 @@ export type AppDeps = {
   pins(): BarPlace[];
   /** Go there if the person is tapping in this applet now (and the address is one of the app's): whether it went. */
   open(href: string): boolean;
+  /** Put text on the clipboard if the person is tapping in this applet now: whether it went. */
+  copy(text: string): Promise<boolean>;
   /** Open it in the browser if the person is tapping in this applet now: whether it went. */
   openLink(url: string): Promise<boolean>;
   /** What each note link leads to (links/resolve.ts); `charge` counts the vault reads. `from`: the path of the note the
@@ -92,6 +94,11 @@ export function createAppModule(allowed: readonly AppWord[], deps: AppDeps, now:
         cap: null,
         validate: (p) => { need("open"); return plain(p) && hasOnly(p, ["href"]) && typeof p.href === "string" && p.href.length <= 600 && appHref(p.href) ? { ok: true, value: p.href } : { ok: false }; },
         run: async (href: string) => deps.open(href),
+      },
+      copy: {
+        cap: null,
+        validate: (p) => { need("copy"); return plain(p) && hasOnly(p, ["text"]) && typeof p.text === "string" && p.text.length > 0 && p.text.length <= 2000 ? { ok: true, value: p.text } : { ok: false }; },
+        run: async (text: string) => deps.copy(text),
       },
       links: {
         cap: null,
