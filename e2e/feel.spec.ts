@@ -290,11 +290,19 @@ test("the app's own faces: Literata for reading, Instrument Sans for the rest, i
   expect(await page.locator("body").evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/^"?Instrument Sans"?,/);
   const inShell = await faces(page);
   for (const f of ["Literata normal loaded", "Instrument Sans normal loaded"]) expect(inShell, "the shell").toContain(f);
+  // the frame (the vault, a note): a note's body in the serif, drawn in the face
+  const [n] = (await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent(FOLDER)}&limit=1`)) as { id: string }[];
+  await page.goto(`/v/${VAULT}/n/${n.id}`);
+  await expect(page.frameLocator("iframe.app-frame").locator(".prose-note, .pa-note, .rn").first()).toBeVisible({ timeout: 20_000 });
+  const frame = (await (await page.locator("iframe.app-frame").elementHandle())!.contentFrame())!;
+  const inFrameDoc = await faces(frame);
+  expect(inFrameDoc, "the frame").toContain("Literata normal loaded");
+  expect(inFrameDoc.filter((f) => f.endsWith("error") && !f.includes("fallback")), "a face the frame refused").toEqual([]);
   // carried in the app: no font asked of any server
   expect(fetched).toEqual([]);
 });
 
-test("the Allow card and a passing line are readable on their first frame, and hold still", async ({ page }) => {
+test("the Allow card is readable on its first frame, and holds still", async ({ page }) => {
   // an applet this page has never allowed, so its card shows
   const id = `allow-${stamp}`;
   const note = await record(hubState(), "create", {
