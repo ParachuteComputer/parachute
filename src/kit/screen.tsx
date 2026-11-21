@@ -149,25 +149,26 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
   // the one shown stays in view on the one line, clear of the fades (scrolled sideways, never the page): when it
   // changes, and when the places arrive or change (a list read after the first draw, a count that widens a tab)
   const shape = tabs.map((t) => `${t.key}:${t.label}:${t.count ?? ""}`).join("|");
-  useLayoutEffect(() => {
+  /** Scroll the row (never the page) so this tab is clear of the fades. */
+  const keepClear = (on: HTMLElement | null | undefined) => {
     const n = nav.current;
-    const on = n?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (n && on) {
-      const r = on.getBoundingClientRect(), box = n.getBoundingClientRect(), FADE = 32;
-      if (r.left < box.left + FADE || r.right > box.right - FADE) n.scrollLeft += r.left + r.width / 2 - (box.left + box.width / 2);
-    }
-    edges();
-  }, [current, shape]);
-  // the row's own width changing (a font, the density, a column) is read too
+    if (!n || !on) return;
+    const r = on.getBoundingClientRect(), box = n.getBoundingClientRect(), FADE = 32;
+    if (r.left < box.left + FADE || r.right > box.right - FADE) n.scrollLeft += r.left + r.width / 2 - (box.left + box.width / 2);
+  };
+  const shown = () => nav.current?.querySelector<HTMLElement>('[aria-current="page"]');
+  useLayoutEffect(() => { keepClear(shown()); edges(); }, [current, shape]);
+  // the row's own width changing (a phone turned, a font, the density, a column): the one shown kept clear again
   useEffect(() => {
     const n = nav.current;
     if (!n || typeof ResizeObserver !== "function") return;
-    const o = new ResizeObserver(edges);
+    const o = new ResizeObserver(() => { keepClear(shown()); edges(); });
     o.observe(n);
     return () => o.disconnect();
   }, []);
   return (
-    <nav className="pa-tabs" aria-label={label} ref={nav} onScroll={edges}>
+    // a tab reached from the keyboard is kept clear of the fades too (a tap needs nothing: it chooses, and the row follows)
+    <nav className="pa-tabs" aria-label={label} ref={nav} onScroll={edges} onFocus={(e) => { if ((e.target as HTMLElement).matches?.(":focus-visible")) keepClear(e.target as HTMLElement); }}>
       {tabs.map((t) => <button key={t.key} type="button" className="pa-tab" aria-current={t.key === current ? "page" : undefined} onClick={() => onChange(t.key)}>{t.label}{t.count ? ` · ${t.count}` : ""}</button>)}
     </nav>
   );

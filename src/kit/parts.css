@@ -108,8 +108,7 @@ div.pa-row { cursor: default; }
 /* one line: more places than fit scroll sideways (the one shown is kept in view), never a second row */
 .pa-tabs { position: relative; display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 4px; margin: 6px 0 4px; border-bottom: 1px solid var(--line); }
 .pa-tabs::-webkit-scrollbar { display: none; }
-/* more past an end: that end fades (the row scrolls); a tab focused or shown is kept clear of the fade */
-.pa-tabs { scroll-padding-inline: 32px; }
+/* more past an end: that end fades (the row scrolls); a tab focused or shown is kept clear of the fade (screen.tsx) */
 .pa-tabs[data-more="end"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
 .pa-tabs[data-more="start"] { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent); }
 .pa-tabs[data-more="start end"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }

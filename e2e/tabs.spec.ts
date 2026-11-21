@@ -59,4 +59,9 @@ test("tabs stay on one line on a phone, scroll sideways, and keep the one shown 
   await app.getByRole("button", { name: "Sent", exact: true }).evaluate((b) => (b as HTMLButtonElement).click());
   await expect(app.getByText("At sent")).toBeVisible();
   await expect.poll(() => inView("Sent")).toBe(true);
+  // the row narrowed (a phone turned): the one shown is kept clear again
+  await app.getByRole("button", { name: "Archive", exact: true }).evaluate((b) => (b as HTMLButtonElement).click());
+  await nav.evaluate((n) => { (n as HTMLElement).style.width = "640px"; n.scrollLeft = 0; });
+  await nav.evaluate((n) => { (n as HTMLElement).style.width = ""; });
+  await expect.poll(() => inView("Archive")).toBe(true);
 });
