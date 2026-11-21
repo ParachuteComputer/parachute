@@ -11,6 +11,7 @@ import { isAppletCode, type VaultNote } from "../applet/modules/vault";
 import { barNow } from "./homeSettings";
 import { countChanged, isSelf } from "../applet/changes";
 import { vaultsDeps } from "./vaultsDeps";
+import { ownKind } from "../applet/modules/vaults";
 import { homeVault } from "./frameSource";
 import { appletPath } from "../open/paths";
 import { officialId } from "../applet/parachuteSource";
@@ -110,7 +111,7 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       const per = await Promise.all(vaults.map(async (rec) => {
         const cid = d.self?.(rec.key) ?? null;
         const self = (via: string | null) => isSelf(cid, via);
-        try { return { rec, ...(await countChanged({ get: (p) => d.request(rec.key, "GET", p), door: await d.door(rec.key), since, charge, self })) }; }
+        try { return { rec, ...(await countChanged({ get: (p) => d.request(rec.key, "GET", p), door: await d.door(rec.key), since, charge, self, own: ownKind })) }; }
         catch { return { rec, count: 0, names: new Map<string, string>(), more: false }; }
       }));
       // the writer who wrote last first: what just happened

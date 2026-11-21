@@ -159,8 +159,9 @@ export function writerName(via: string | null, mine: boolean): string {
  * `CHANGES_DELETED`). Counts records, not every version: Vault's Changes has the rest. `names`: each writer, with when it
  * last wrote.
  */
-export async function countChanged(opts: { get: Get; door: "records" | "notes"; since: string; charge: (n: number) => void; self: (via: string | null) => boolean }): Promise<{ count: number; names: Map<string, string>; more: boolean }> {
-  const { get, door, since, charge, self } = opts;
+export async function countChanged(opts: { get: Get; door: "records" | "notes"; since: string; charge: (n: number) => void; self: (via: string | null) => boolean;
+  own: (r: { path: string; extension: string | null; names: string[] }) => "code" | "app" | null }): Promise<{ count: number; names: Map<string, string>; more: boolean }> {
+  const { get, door, since, charge, self, own } = opts;
   /** each writer's name, and when it last wrote */
   const names = new Map<string, string>();
   const note = (via: string | null, at: string) => { const n = writerName(via, false); if ((names.get(n) ?? "") < at) names.set(n, at); };
@@ -174,6 +175,9 @@ export async function countChanged(opts: { get: Get; door: "records" | "notes"; 
     if (!plain(r)) continue;
     const via = strOr(r.lastUpdatedVia);
     if (via === null || self(via)) continue;
+    // the app keeping its own records, on another device, isn't a change to count
+    const names = [...(Array.isArray(r.types) ? r.types : []), ...(Array.isArray(r.tags) ? r.tags : [])].filter((t): t is string => typeof t === "string");
+    if (own({ path: typeof r.path === "string" ? r.path : "", extension: strOr(r.extension), names }) === "app") continue;
     count++; note(via, strOr(r.updatedAt) ?? since);
   }
   charge(1);
@@ -182,7 +186,7 @@ export async function countChanged(opts: { get: Get; door: "records" | "notes"; 
   charge(rows.length);
   for (const v of await Promise.all(rows.map((n) => get(`/${door}/${encodeURIComponent(n.id as string)}/versions?limit=1`).then(rowsOf, () => [] as Row[])))) {
     const t = v[0];
-    if (!t || t.op !== "delete" || t.via === null || self(t.via)) continue;
+    if (!t || t.op !== "delete" || t.via === null || self(t.via) || own({ path: t.path ?? "", extension: null, names: [] }) === "app") continue;
     count++; note(t.via, t.at);
   }
   return { count, names, more: all.length > 200 };

@@ -134,6 +134,10 @@ export function writablePath(p: unknown): p is string {
 const title = (path: string) => path.split("/").pop() ?? path;
 /** In the app's own folders (`Applets/`, `Parachute/`, `.parachute/`), but saved views. */
 const appsPath = (p: string) => !p.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(p);
+/** Whose a record is, for Changes: an applet's or a component's code ("code": shown, never put back here), a record the
+ *  app keeps for itself ("app": settings, approvals, saved views; not shown), or the person's (null). */
+export const ownKind = (r: { path: string; extension: string | null; names: string[] }): "code" | "app" | null =>
+  isCodeExtension({ path: r.path, extension: r.extension }) ? "code" : r.names.some(appsOwn) || appsPath(r.path) || r.path.startsWith(VIEWS) ? "app" : null;
 /** A read that found no such record (deleted, or never there). */
 const gone = (e: unknown) => (e as { status?: number })?.status === 404 || (e as { name?: string })?.name === "VaultNotFoundError" || /not.?found|404/i.test(String((e as Error)?.message ?? e));
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
@@ -425,7 +429,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
             return await readChanges({
               get: (path) => deps.request(vault, "GET", path), door, since, offset, charge: (n) => ctx.charge(n),
               self: (via) => isSelf(cid, via),
-              own: (r) => (isCodeExtension({ path: r.path, extension: r.extension }) ? "code" : r.names.some(appsOwn) || appsPath(r.path) || r.path.startsWith(VIEWS) ? "app" : null),
+              own: ownKind,
             });
           } catch (e) { throw failed(e); }
         },
