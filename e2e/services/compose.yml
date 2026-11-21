@@ -61,6 +61,10 @@ services:
       BUZZ_REQUIRE_AUTH_TOKEN: "true"
       BUZZ_REQUIRE_MEDIA_GET_AUTH: "true"
       BUZZ_ALLOW_NIP_OA_AUTH: "true"
+      # Buzz's per-key quota (60 stored messages a minute, across connections) is a person's; the specs' keys post far
+      # more, back to back (bob's 56-message room, the owner's rooms in every spec). The per-connection rate (10 a
+      # second) stays Buzz's, so the app's pacing is still tested.
+      BUZZ_RATE_LIMIT_HUMAN_MESSAGES_PER_MIN: "600"
       RUST_LOG: buzz_relay=info
 
   # ── Mail: Stalwart, and the gateway the app talks to ─────────────────────────────────────────────────────────────

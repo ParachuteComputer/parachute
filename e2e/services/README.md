@@ -42,7 +42,8 @@ passes tests a real one fails). Use `ws://localhost:3871` (not 127.0.0.1): the r
 its own rooms (9007) and adds people to them (9000). A key the relay hasn't let in fails at sign-in (`client.ts`).
 
 Buzz's default rate per connection (10 messages a second over 5 s; a production relay may allow more) is stricter than
-production, so the shell's pacing is tested. A rooms applet's person in many rooms is the case it holds: a burst of
+production, so the shell's pacing is tested. Its per-key quota (60 stored messages a minute) is raised to 600: the
+specs' keys post far more than a person does. A rooms applet's person in many rooms is the case it holds: a burst of
 subscriptions is paced, and a post goes ahead of them.
 
 What the relay taught the applet (and the tests hold it to): it sends live events only to a subscription for one room;
