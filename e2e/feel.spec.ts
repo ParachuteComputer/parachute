@@ -290,10 +290,10 @@ test("the app's own faces: Literata for reading, Instrument Sans for the rest, i
   expect(await page.locator("body").evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/^"?Instrument Sans"?,/);
   const inShell = await faces(page);
   for (const f of ["Literata normal loaded", "Instrument Sans normal loaded"]) expect(inShell, "the shell").toContain(f);
-  // the frame (the vault, a note): a note's body in the serif, drawn in the face
+  // the frame (the vault view of a note, not an applet): a note's body in the serif, drawn in the face
   const [n] = (await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent(FOLDER)}&limit=1`)) as { id: string }[];
-  await page.goto(`/v/${VAULT}/n/${n.id}`);
-  await expect(page.frameLocator("iframe.app-frame").locator(".prose-note, .pa-note, .rn").first()).toBeVisible({ timeout: 20_000 });
+  await page.goto(`/v/${VAULT}/n/${n.id}?with=vault`);
+  await expect(page.frameLocator("iframe.app-frame").locator(".prose-note").first()).toBeVisible({ timeout: 20_000 });
   const frame = (await (await page.locator("iframe.app-frame").elementHandle())!.contentFrame())!;
   const inFrameDoc = await faces(frame);
   expect(inFrameDoc, "the frame").toContain("Literata normal loaded");
