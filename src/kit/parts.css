@@ -3,7 +3,7 @@
    CSS can sit beside it. How the parts move is at the end ("Motion"), on the theme's curves and times only. */
 /* In the parts layer (base.css says the order): above the base and the note renderer, below the app's own screens and any
    applet's own CSS, which wins over a part whatever its specificity. */
-@layer parachute.base, parachute.render, parachute.parts, parachute.app;
+@layer parachute.base, parachute.parts, parachute.app;
 @layer parachute.parts {
 .pa-days { display: block; margin: 0 0 var(--gap); color: var(--text); }
 .pa-days svg { display: block; height: calc(var(--size) * 3.6); width: auto; max-width: 100%; }

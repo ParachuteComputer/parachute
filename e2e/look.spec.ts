@@ -19,13 +19,23 @@ const PLAIN = `<!doctype html><html><body>
 <label>Your name <input placeholder="Mira"></label>
 <button id="plain">Count me in</button>
 <button class="pa-button pa-primary" id="part">Done</button>
-<style>button.mine { border-radius: 2px; } button#part { letter-spacing: 1px; }</style>
-<button class="pa-button mine" id="mine">Mine</button>
+<style>button { gap: 3px; }</style>
 <table><thead><tr><th>Seed</th><th>Count</th></tr></thead><tbody><tr><td>Rye</td><td>40</td></tr></tbody></table>
 </body></html>`;
 
 const BARE_TSX = `export default function Bare() {
   return <div><h1>Shelf</h1><p>A list with no parts and no styles.</p><button>Add</button></div>;
+}
+`;
+
+const PARTS_TSX = `import { Fields, List, Tabs } from "parachute";
+export default function Parts() {
+  const long = "A very long title for a row that has to wrap onto a second line on a phone and never run off the screen";
+  return <div>
+    <Tabs label="Shelves" tabs={[{ key: "a", label: "Reading" }, { key: "b", label: "Read" }]} current="a" onChange={() => {}} />
+    <List label="Books" rows={[{ key: "1", title: long, onPress: () => {} }]} />
+    <Fields label="Book" fields={[{ name: "pages", kind: "number", value: 320 }]} onSave={() => {}} />
+  </div>;
 }
 `;
 
@@ -52,9 +62,9 @@ test("an HTML applet with no CSS of its own is drawn in the theme, can use the p
     expect(await style(page, "th", "font-family")).toContain("Instrument Sans");
     // a part's class works in plain HTML: Button's primary look
     expect(await style(page, "#part", "border-top-left-radius")).toBe("999px");
-    expect(await style(page, "#part", "letter-spacing")).toBe("1px");
-    // the applet's own rule, of lower specificity than the part's, still wins: the kit is in layers below it
-    expect(await style(page, "#mine", "border-top-left-radius")).toBe("2px");
+    // the applet's own rule, of lower specificity than the part's (`button` against `.pa-button`, which sets gap: 8px),
+    // still wins: the kit is in layers below it
+    expect(await style(page, "#part", "gap")).toBe("3px");
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });
 
@@ -65,5 +75,17 @@ test("a TSX applet that draws its own markup without the parts still gets the pa
     expect(await style(page, "body", "font-family")).toContain("Instrument Sans");
     expect(await style(page, "h1", "font-family")).toContain("Literata");
     expect(await style(page, "button", "background-color")).toBe(SURFACE);
+  } finally { await api(hubState(), "DELETE", `notes/${id}`); }
+});
+
+test("the base leaves the kit's parts alone: a pressable row wraps and stays square, a tab and a field keep their size", async ({ page }) => {
+  const id = await opened(page, "Applets/Parts here", "tsx", PARTS_TSX, "parts-here", "Parts here", "Books");
+  try {
+    const row = frame(page).locator("button.pa-row").first();
+    expect(await row.evaluate((el) => getComputedStyle(el).whiteSpace)).toBe("normal");
+    expect(await row.evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).toBe("0px");
+    expect(await row.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true); // nothing runs off
+    expect(await frame(page).locator(".pa-tab").first().evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).toBe("0px");
+    expect(await frame(page).locator(".pa-finput").first().evaluate((el) => el.getBoundingClientRect().height)).toBeLessThan(34);
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });

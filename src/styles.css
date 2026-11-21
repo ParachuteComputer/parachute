@@ -7,7 +7,7 @@
    person's theme record, and are set on <html> by the shell, and handed to the frame and every applet.
    The sheet is in cascade layers (src/kit/base.css): the elements below sit in the base, the app's own classes in
    `parachute.app`, above the parts (an applet's own CSS, in no layer, is only ever in its own frame). */
-@layer parachute.base, parachute.render, parachute.parts, parachute.app;
+@layer parachute.base, parachute.parts, parachute.app;
 :root { --bar-h: 58px; }
 @layer parachute.base {
 * { box-sizing: border-box; }
@@ -18,6 +18,9 @@ html, body { margin: 0; background: var(--bg, #f2ede2); color: var(--text, #1d1a
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: var(--accent); }
 button, input { font: inherit; color: inherit; }
+/* one focus ring from the keyboard, in the accent; a part's own (parts.css) wins over it */
+:is(button, a, .home-bar-place, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:is(input, textarea, select):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
 }
 
 @layer parachute.app {
@@ -85,13 +88,7 @@ fieldset.plain legend { padding: 0; }
 .note-edit-fields input:not([type="checkbox"]), .note-edit-fields select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 15px; min-width: 0; }
 .note-edit-fields input[type="checkbox"] { justify-self: start; width: 20px; height: 20px; }
 .note-code { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 var(--mono); }
-.prose-note { font-family: var(--serif); font-size: 17px; line-height: 1.55; overflow-wrap: anywhere; }
-.prose-note h1, .prose-note h2, .prose-note h3 { line-height: 1.2; margin: 1em 0 .4em; }
-.prose-note h1 { font-size: 1.5em; } .prose-note h2 { font-size: 1.2em; } .prose-note h3 { font-size: 1.05em; }
-.prose-note ul, .prose-note ol { padding-left: 1.3em; }
-.prose-note code { font: .85em var(--mono); }
-.prose-note pre { overflow-x: auto; }
-.prose-note .wikilink-unresolved { border-bottom: 0; }
+/* (the note view's prose is in the parts layer, below: beside the note renderer's rules, as it always was) */
 
 /* applets */
 .applets { display: flex; gap: 8px; overflow-x: auto; margin: 0 0 10px; padding: 0; list-style: none; }
@@ -320,12 +317,22 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
   :is(.row, .entry, .sheet-choice):hover:not(:active) { background: color-mix(in srgb, var(--line) 22%, transparent); }
   :is(.bar-back, .bar-menu):hover:not(:active) { background: color-mix(in srgb, var(--line) 50%, transparent); }
 }
-:is(button, a, .home-bar-place, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-:is(input, textarea, select):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
 /* the Allow card and a passing line arrive once, readable on their first frame as the kit's parts are (from 0.85, never
    from blank: docs/DESIGN-RULES.md 8, 9), holding their place: opacity only, so an ask's buttons never move */
 .grant-card, .shell-line { animation: shell-arrive var(--t-state, 0ms) var(--ease-out, ease) backwards; }
 @keyframes shell-arrive { from { opacity: .85; } }
 .launcher-title, .notes-head h1, .grant-head h2, .sheet h2 { text-wrap: balance; }
 .home-bar-badge, .record-time, .entry-life { font-variant-numeric: tabular-nums; }
+}
+
+/* the note view's prose (frame/views/NoteView.tsx): in the parts layer, after the note renderer's sheet (which the frame
+   loads first), so the two settle by specificity and order as they did before there were layers */
+@layer parachute.parts {
+.prose-note { font-family: var(--serif); font-size: 17px; line-height: 1.55; overflow-wrap: anywhere; }
+.prose-note h1, .prose-note h2, .prose-note h3 { line-height: 1.2; margin: 1em 0 .4em; }
+.prose-note h1 { font-size: 1.5em; } .prose-note h2 { font-size: 1.2em; } .prose-note h3 { font-size: 1.05em; }
+.prose-note ul, .prose-note ol { padding-left: 1.3em; }
+.prose-note code { font: .85em var(--mono); }
+.prose-note pre { overflow-x: auto; }
+.prose-note .wikilink-unresolved { border-bottom: 0; }
 }

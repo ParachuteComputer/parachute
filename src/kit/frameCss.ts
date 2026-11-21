@@ -5,13 +5,16 @@ import BASE_CSS from "./base.css?inline";
 import PARTS_CSS from "./parts.css?inline";
 import { FONTS_CSS } from "../theme/fonts";
 
-/** The order of the layers: the base, the note renderer, the parts, the app's own screens. An applet's CSS is in none. */
-export const LAYERS = "@layer parachute.base, parachute.render, parachute.parts, parachute.app;";
+/** The order of the layers: the base, the parts (the note renderer's sheet first in it), the app's own screens. An
+ *  applet's CSS is in none. */
+export const LAYERS = "@layer parachute.base, parachute.parts, parachute.app;";
 
 /** An applet's frame is a page: what it draws sits in the page's width and margins, as the kit's `Page` does, unless it
- *  draws a `Page` itself. An embed's frame is not (it is sized to what it draws, inside someone's page). */
-const FRAME_PAGE = "@layer parachute.base{:where(body){max-width:760px;margin:0 auto;padding:calc(var(--pad) * 1.2) var(--pad) calc(var(--pad) * 3);}}"
-  + "@layer parachute.parts{:root:has(.pa-page) body{max-width:none;padding:0;}}";
+ *  draws a `Page` itself. The column is made by the body's padding alone (none of its width or margin), so an applet's
+ *  `body { margin: 0 }` keeps it centred, and `body { padding: 0 }` makes the frame its own, edge to edge. An embed's
+ *  frame is not a page (it is sized to what it draws, inside someone's page). */
+const FRAME_PAGE = "@layer parachute.base{:where(body){padding:calc(var(--pad) * 1.2) max(var(--pad), calc((100% - 760px) / 2)) calc(var(--pad) * 3);}}"
+  + "@layer parachute.parts{:root:has(.pa-page) body{padding:0;}}";
 
 /** The kit's sheets as one string (ours: never holds `<`). */
 export const KIT_CSS = `${LAYERS}${BASE_CSS}${PARTS_CSS}`;

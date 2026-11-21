@@ -1,6 +1,7 @@
-/* Parachute: in the note renderer's cascade layer (src/kit/base.css says the order), below the parts and an applet's own CSS. */
-@layer parachute.base, parachute.render, parachute.parts, parachute.app;
-@layer parachute.render {
+/* Parachute: in the parts' cascade layer (src/kit/base.css says the order), and first in it, so the kit's own note rules
+   (.pa-note, .prose-note) and the renderer's settle by specificity and order as they always have. */
+@layer parachute.base, parachute.parts, parachute.app;
+@layer parachute.parts {
 /* rich-notes-kit: the look. A page of small serif text on a paper ground; live parts are quiet; one earthy accent;
    kinds told apart by word and shape, never by hue alone, so it holds in greyscale. One transition per tap; nothing
    loops; on a calm screen (reduced motion, a slow e-ink display, or [data-screen=ink]) nothing moves at all.

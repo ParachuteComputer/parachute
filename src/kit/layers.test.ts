@@ -17,7 +17,7 @@ describe("the kit's layers", () => {
     const block = css.search(/@layer\s+[\w.]+\s*\{/);
     expect(order).toBeGreaterThanOrEqual(0);
     expect(block).toBeGreaterThan(order);
-    // no rule outside a layer: an unlayered rule of the app's would beat an applet's layered one, and every part
+    // nothing before the order: a rule there would be outside every layer, over every part
     expect(css.slice(0, order).trim()).toBe("");
   });
   it("frameHead says the order first, and the kit's sheets carry no '<' (they go inside a <style>)", async () => {

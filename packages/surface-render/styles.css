@@ -1,6 +1,7 @@
-/* Parachute: in the note renderer's cascade layer (src/kit/base.css says the order), below the parts and an applet's own CSS. */
-@layer parachute.base, parachute.render, parachute.parts, parachute.app;
-@layer parachute.render {
+/* Parachute: in the parts' cascade layer (src/kit/base.css says the order), and first in it, so the kit's own note rules
+   (.pa-note, .prose-note) and the renderer's settle by specificity and order as they always have. */
+@layer parachute.base, parachute.parts, parachute.app;
+@layer parachute.parts {
 /*
  * @openparachute/surface-render — OPTIONAL baseline stylesheet.
  *
