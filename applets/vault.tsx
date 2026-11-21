@@ -485,9 +485,17 @@ function People({ v }: { v: Held }) {
   const [from, setFrom] = useState<string | null>(null);
   const [made, setMade] = useState<{ id: string; name: string; url: string; until: string } | null>(null);
   const ask = (vaults as { people?: (k: string) => Promise<PeopleNow> }).people;
-  const load = () => (typeof ask === "function" ? ask(v.key).then((x) => { setNow(x); setFailed(null); if (x.people && x.from) setFrom((f) => f ?? x.from ?? null); }, setFailed) : Promise.resolve());
-  // only the vault's owner lists its people: a vault of someone else's asks nothing (no signed request for a no)
-  useEffect(() => { setMade(null); if (v.mine) void load(); }, [v.key]);
+  // an answer for a vault no longer shown is dropped
+  const current = useRef(v.key);
+  const load = () => {
+    if (typeof ask !== "function") return Promise.resolve();
+    const key = v.key;
+    return ask(key).then((x) => { if (current.current !== key) return; setNow(x); setFailed(null); if (x.people && x.from) setFrom((f) => f ?? x.from ?? null); },
+      (e: unknown) => { if (current.current === key) { setNow(null); setFailed(e); } });
+  };
+  // only the vault's owner lists its people: a vault of someone else's asks nothing (no signed request for a no). Another
+  // vault starts clean: none of the last one's people, invites or link
+  useEffect(() => { current.current = v.key; setMade(null); setNow(null); setFailed(null); if (v.mine) void load(); }, [v.key]);
   // an app from before sharing, or someone else's vault: nothing to show
   if (typeof ask !== "function" || !v.mine) return null;
   if (failed) return <Problem error={failed} onRetry={load}>Who is in {v.name} couldn't be read</Problem>;
