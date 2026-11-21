@@ -10,11 +10,9 @@ export const KEYBOARD_MIN = 150;
 /** Whether this element having the focus means typing: a text field, an editable area, or a frame (an applet's field). */
 export function typing(el: Element | null): boolean {
   if (!el) return false;
-  const tag = el.tagName;
-  if (tag === "TEXTAREA" || tag === "IFRAME" || (el as HTMLElement).isContentEditable) return true;
-  if (tag !== "INPUT") return false;
-  const type = ((el as HTMLInputElement).type || "text").toLowerCase();
-  return !["button", "checkbox", "radio", "range", "color", "file", "submit", "reset", "image", "hidden"].includes(type);
+  if (el instanceof HTMLTextAreaElement || el instanceof HTMLIFrameElement || (el as HTMLElement).isContentEditable) return true;
+  if (!(el instanceof HTMLInputElement)) return false;
+  return !["button", "checkbox", "radio", "range", "color", "file", "submit", "reset", "image", "hidden"].includes((el.type || "text").toLowerCase());
 }
 
 /** The keyboard is up: the window is at least KEYBOARD_MIN shorter than the tallest it was at the same width, and the
