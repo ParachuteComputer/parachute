@@ -72,3 +72,13 @@ test("an address in the clear is refused before going anywhere, and whose it is 
   await page.getByRole("radio", { name: "Mine" }).uncheck().catch(() => {});
   await expect(page).toHaveURL(/localhost/);
 });
+
+test("a bare host is the app's to read, not the browser's: it goes on to the hub (T-476)", async ({ page }) => {
+  // The field is type=url for the phone's keyboard; the form doesn't let the browser refuse "hub.example" (the
+  // placeholder's own shape) with its own "Please enter a URL."
+  await page.goto("/");
+  await page.getByLabel("Your Parachute's address").fill("parachute-t476.invalid");
+  await page.getByRole("radio", { name: "Mine" }).check();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("alert")).toContainText("didn't answer");
+});
