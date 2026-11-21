@@ -34,7 +34,7 @@ export default function OAuthCallback() {
       return;
     }
     if (!code || !state) { setError("This page needs a sign-in from a hub."); return; }
-    finishStep(code, state).then(async (next) => {
+    finishStep(code, state, params.get("iss")).then(async (next) => {
       if ("pick" in next) { setPick(next.pick); return; }
       if ("go" in next) { setSaying("Asking your hub for your home vault…"); window.location.assign(next.go); return; }
       setSaying(next.signIn ? "Signed in." : `Parachute now ${next.done.scope.includes(`vault:${next.done.vault}:write`) ? "reads and changes" : "reads"} ${next.done.vault}.`);

@@ -129,8 +129,8 @@ export async function askVault(rec: Pick<VaultRecord, "issuer" | "vault">, level
 }
 
 /** The hub sent the person back with a code: finish that step, keep what it brought, and say where to go next. */
-export async function finishStep(code: string, state: string): Promise<Next> {
-  const { pending, token, vault, level } = await completeSignIn(code, state);
+export async function finishStep(code: string, state: string, iss?: string | null): Promise<Next> {
+  const { pending, token, vault, level } = await completeSignIn(code, state, undefined, iss);
   const f = fetchFor(pending.whose ?? "theirs");
   const p = pending.parachute;
 

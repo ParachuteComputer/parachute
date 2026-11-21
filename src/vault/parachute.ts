@@ -36,7 +36,10 @@ export function parseHub(input: string): HubParse {
 export type Parachute = { hub: string; issuer: string; accountMcp: string; vaultTemplate: string;
   /** "cloud": the hub says it is Parachute Cloud (its descriptor's `door`), which keeps the name "Parachute" for its own
    *  pages: the app registers there under another (oauth.ts CLOUD_CLIENT_NAME) */
-  door?: "cloud" };
+  door?: "cloud";
+  /** The id the hub reserves for the Parachute app (its descriptor's `app_client_id`, Parachute Cloud's `parachute-app`):
+   *  the app on a device signs in under it, named Parachute, instead of registering itself (oauth.ts). */
+  appClientId?: string };
 
 /** https, or http on this machine. */
 const safe = (raw: unknown): raw is string => {
@@ -69,7 +72,8 @@ export async function describe(hub: string, fetchImpl: typeof fetch = fetch.bind
   if (issuer !== hub) throw new Error(`That hub calls itself ${String(d.issuer).slice(0, 80)}, not ${hub}. Nothing was added.`);
   const accountMcp = safe(d.account_mcp_endpoint) && onHubOrDomain(d.account_mcp_endpoint, hub) ? d.account_mcp_endpoint : plainHub.accountMcp;
   const vaultTemplate = safe(d.vault_url_template) && (d.vault_url_template as string).includes("{name}") && onHubOrDomain(d.vault_url_template.replace("{name}", "x"), hub) ? d.vault_url_template as string : plainHub.vaultTemplate;
-  return { hub, issuer, accountMcp, vaultTemplate, ...(d.door === "cloud" ? { door: "cloud" as const } : {}) };
+  const appClientId = typeof d.app_client_id === "string" && /^[A-Za-z0-9._-]{1,100}$/.test(d.app_client_id) ? d.app_client_id : null;
+  return { hub, issuer, accountMcp, vaultTemplate, ...(d.door === "cloud" ? { door: "cloud" as const } : {}), ...(appClientId ? { appClientId } : {}) };
 }
 
 /** A vault's API root, from where the Parachute says its vaults live. */
