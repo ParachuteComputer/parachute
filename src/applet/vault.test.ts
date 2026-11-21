@@ -222,6 +222,56 @@ describe("fields on a list, in one ask", () => {
   });
 });
 
+describe("a folder's notes with their words or a tag, in one ask (T-476)", () => {
+  /** A frame on a host with `list`, and how many asks and single reads it took. */
+  function counted(more: Partial<VaultDeps> = {}) {
+    const n = { reads: 0, lists: 0 };
+    const deps: VaultDeps = { ...vault, async getNote(ref) { n.reads++; return vault.getNote(ref); },
+      // a host that ignores the folder and the tag asked for: the module must judge every note itself
+      async list() { n.lists++; return notes.map((x) => ({ ...x })); }, ...more };
+    const out: HostMessage[] = [];
+    const router = createRouter([createVaultModule(deps, {})]);
+    const s = createSession({ post: (m) => out.push(m), router, grant: resolvedOf(manifest) });
+    let k = 0;
+    const get = async (path: string, headers: Record<string, string> = {}, method = "GET", body: unknown = null) => {
+      const id = `f${++k}`;
+      s.handle({ pfr: 1, channel: "vault", id, method, path, headers, body: body === null ? null : JSON.stringify(body) });
+      for (let i = 0; i < 50 && !out.some((m) => "id" in m && m.id === id); i++) await new Promise((r) => setTimeout(r, 1));
+      return JSON.parse((out.find((m) => "id" in m && m.id === id) as { body: string }).body) as { path: string; content?: string; tags?: string[] }[];
+    };
+    return { n, get };
+  }
+  it("reads the words of a folder's notes in one ask, never one note at a time, and only its folders' notes", async () => {
+    const f = counted();
+    const rows = await f.get("/api/notes?path_prefix=Recipes/&include_content=true");
+    expect(rows.map((r) => r.path).sort()).toEqual(["Recipes/Tagged", "Recipes/Toast"]);
+    expect(rows.find((r) => r.path === "Recipes/Toast")?.content).toBe("toast");
+    expect(f.n).toEqual({ reads: 0, lists: 1 });
+  });
+  it("a tag: the host's answer is judged again on each note's tags", async () => {
+    const f = counted();
+    expect((await f.get("/api/notes?tag=recipe")).map((r) => r.path)).toEqual(["Recipes/Toast"]);
+    expect(f.n.reads).toBe(0);
+  });
+  it("a host whose one ask fails is read note by note, as before", async () => {
+    const f = counted({ async list() { throw new Error("too big"); } });
+    expect((await f.get("/api/notes?path_prefix=Recipes/&include_content=true")).map((r) => r.path).sort()).toEqual(["Recipes/Tagged", "Recipes/Toast"]);
+    expect(f.n.reads).toBe(2);
+  });
+  it("a frame that draws itself again on onFresh reads the kept copies; any other, and every write's check, the hub", async () => {
+    let kept = 0;
+    const keptReads: Pick<VaultDeps, "listPaths" | "getNote" | "search" | "listFields" | "list"> = { ...vault, async getNote(ref) { kept++; return vault.getNote(ref); }, async list() { kept++; return notes; } };
+    const f = counted({ kept: keptReads });
+    await f.get("/api/notes?path_prefix=Recipes/&include_content=true");
+    expect([kept, f.n.lists]).toEqual([0, 1]);
+    await f.get("/api/notes?path_prefix=Recipes/&include_content=true", { "x-parachute-redraws": "1" });
+    await f.get("/api/notes/r1", { "x-parachute-redraws": "1" });
+    expect([kept, f.n.lists, f.n.reads]).toEqual([2, 1, 0]);
+    // a change is judged on the note as the hub has it now, whatever the frame says of itself
+    await f.get("/api/notes/r1", { "x-parachute-redraws": "1" }, "PATCH", { content: "new toast", if_updated_at: "2026-11-02" });
+    expect([kept, f.n.reads]).toEqual([2, 1]);
+  });
+});
 
 describe("notes no applet may change", () => {
   it("a bundle record, under its name and its older one: it picks what the app shows and pins (docs/design/APP-RECORD.md)", () => {

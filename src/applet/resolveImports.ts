@@ -8,7 +8,7 @@ import { COMPONENT_TAG, componentNewer, parseComponent } from "./component";
 import { importsOf, MAX_IMPORTS, plainImportId } from "./imports";
 import { readPointers } from "./pointers";
 import { fullComponent, refreshComponents } from "./useComponents";
-import { clientFor } from "../vault/client";
+import { keptClientFor } from "../vault/client";
 import { MAX_CODE_CHARS } from "../vault/limited";
 import { originOf, listVaults, type VaultRecord } from "../vault/store";
 import { whoseOf } from "../vault/whose";
@@ -49,7 +49,7 @@ export async function readImports(rec: VaultRecord, source: string): Promise<Imp
     const whose = whoseOf(from);
     if (whose === "theirs" && from.key !== rec.key) return { ok: false, error: `it imports «${id}» from ${p.vault}, which this device doesn't trust. Embed it instead, or trust ${p.vault} in Settings` };
     let n: Note | null;
-    try { n = await clientFor(from).getNote(p.record); } catch { return { ok: false, error: `${p.vault} can't be reached right now, so «${id}» can't be checked` }; }
+    try { n = await keptClientFor(from).getNote(p.record); } catch { return { ok: false, error: `${p.vault} can't be reached right now, so «${id}» can't be checked` }; }
     if (!n) return { ok: false, error: `«${id}» is gone from ${p.vault}` };
     const ext = String((n as { extension?: string }).extension ?? "md").replace(/^\./, "").toLowerCase();
     const body = n.content ?? "";

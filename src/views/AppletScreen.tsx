@@ -17,7 +17,8 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../ui/Bar";
 import { useVault } from "../vault/hooks";
-import { clientFor } from "../vault/client";
+import { clientFor, keptClientFor, keptReaderFor } from "../vault/client";
+import { askAgain, onFresh } from "../vault/readCache";
 import { noteHref, titleOf } from "../vault/notes";
 import AppletFrame, { appletPage } from "../applet/frame";
 import GrantCard from "../applet/GrantCard";
@@ -38,7 +39,7 @@ import { PageEmbeds, PAGE_MAX } from "./Embeds";
 import { isMine, useWhose, whoseOf } from "../vault/whose";
 import { pageMarks } from "../applet/pageMark";
 import { MAX_CODE_CHARS } from "../vault/limited";
-import { findVault, hostOf } from "../vault/store";
+import { findVault, hostOf, listVaults } from "../vault/store";
 import { covers } from "../vault/parachute";
 import { appletLevel, canWrite, giveBack, heldLevel } from "../vault/reach";
 import { homeVault } from "../shell/frameSource";
@@ -81,7 +82,7 @@ import { useGate } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
 import { takeMark } from "../open/mark";
 import { chooseStart, startChosenHere, takeStart } from "../shell/start";
-import { barNow, settingsReadNow } from "../shell/homeSettings";
+import { barNow, settingsReadNow, useSettings } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
@@ -115,6 +116,10 @@ export const APPROVALS_WAIT_MS = 1500;
 const startedByTap = new Map<string, boolean>();
 /** The entries a start led to (start.ts), and whether the person chose that applet as home on this device. */
 const startedAtStart = new Map<string, { chosen: boolean; vault: string; noteId: string }>();
+/** The entries a start ran by itself (the home chosen here), with no tap: they stop if the settings stop naming it. */
+const startedAsHome = new Set<string>();
+/** A read's `id`, as the app asks for a note by it. */
+const idOf = (read: string) => { try { return new URLSearchParams(read.slice(read.indexOf("?") + 1)).get("id"); } catch { return null; } };
 
 /** `page` is null for code from someone else's vault until it is allowed: it is transpiled only then (`source` waits). */
 type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string } | { state: "newer"; entry: AppletEntry }
@@ -146,9 +151,12 @@ export default function AppletScreen() {
     if (start) startedAtStart.set(location.key, start);
     // a start runs it by itself only when the person chose it as home here (and, as always, allowed its code)
     startedByTap.set(location.key, tapped || !!start?.chosen);
+    if (!tapped && start?.chosen) startedAsHome.add(location.key);
   }
   // so does any other way to that home (Back to it, the bar), when it isn't asked to open a note: while the settings, as
-  // read from the vault this session (not the copy kept from before), still name it, and the person chose it here
+  // read this session, still name it, and the person chose it here. That read may be answered from the copy kept on
+  // this device while the hub is asked behind it (vault/readCache.ts); a home the hub's answer no longer names stops (below)
+  useSettings();
   const home = settingsReadNow() ? barNow().start : null;
   // a home applet is in a vault of the person's own: someone else's code never runs by itself
   const chosenHome = !askedNote && !!rec && !!appletId && isMine(rec) && home?.vault === rec.key && home.noteId === appletId && startChosenHere(rec.key, appletId);
@@ -156,12 +164,18 @@ export default function AppletScreen() {
   // the person's tap on Allow or Open, on the screen a start led to, is their choice of it as home on this device
   const chooseHere = () => { if (atStart && !atStart.chosen) { chooseStart(atStart.vault, atStart.noteId); startedAtStart.set(location.key, { ...atStart, chosen: true }); } };
   const [started, setStarted] = useState(() => (startedByTap.get(location.key) ?? false) || chosenHome);
+  // started as the home chosen here, by no tap: it stops when the settings, as read again, no longer name it
+  const asHomeOnly = useRef(startedAsHome.has(location.key) || (!(startedByTap.get(location.key) ?? false) && chosenHome));
+  const startByTap = () => { asHomeOnly.current = false; setStarted(true); };
+  const named = !!rec && !!appletId && home?.vault === rec.key && home.noteId === appletId;
+  useEffect(() => { if (asHomeOnly.current && settingsReadNow() && !named) { asHomeOnly.current = false; setStarted(false); } }, [named]); // eslint-disable-line react-hooks/exhaustive-deps
   // a tap counts for the first screen drawn for this entry only: Back or Forward to it later starts nothing (but the home
   // the person chose here, above)
   useEffect(() => () => { startedByTap.set(location.key, false); }, [location.key]);
   // a kept screen lives across history entries: a tap that led to a new one (the bar, a pin) starts it, as it would a
   // new screen
-  useEffect(() => { if (startedByTap.get(location.key)) setStarted(true); }, [location.key]);
+  // (a start that ran the home by itself is no tap: it still stops when the settings stop naming it)
+  useEffect(() => { if (startedByTap.get(location.key)) { if (startedAsHome.has(location.key)) setStarted(true); else startByTap(); } }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
   const [declined, setDeclined] = useState(false);
   // the hub couldn't be asked for what an Allow needs
   const [hubError, setHubError] = useState<string | null>(null);
@@ -193,7 +207,9 @@ export default function AppletScreen() {
     const quiet = recheck !== rechecked.current && was.current.loaded.state === "ok" && !!was.current.keys;
     rechecked.current = recheck;
     if (!quiet) { setLoaded({ state: "loading" }); setKeys(null); }
-    const c = clientFor(rec);
+    // answered from the copies kept of these reads at once, the hub asked behind them (vault/readCache.ts): when its
+    // answer differs, the screen reads again (below), quietly, and changed code or a changed grant shows the card
+    const c = keptClientFor(rec);
     void (async () => {
       try {
         const n = await c.getNote(appletId);
@@ -222,7 +238,11 @@ export default function AppletScreen() {
           late || imports.length ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), pointerFor(rec, n.id).catch(() => null)]);
         const hash = imports.length && kind !== "html" ? await compositeHash(kind, source, imports) : code.hash;
         if (!on) return;
-        if (quiet && was.current.keys?.scope === scope && was.current.keys?.html === hash) return;
+        // a recheck that finds what it allowed as it was keeps the screen as it is, unless its note itself changed (a page
+        // drawn from the copy kept of it, whose record now hands its embeds other props, say)
+        const prev = was.current.loaded.state === "ok" ? was.current.loaded : null;
+        const sameNote = !!prev && prev.now.updatedAt === ((x: unknown) => (typeof x === "string" ? x : null))((n as unknown as Record<string, unknown>).updatedAt) && prev.note?.id === note?.id && (prev.note as { updatedAt?: string } | null)?.updatedAt === (note as { updatedAt?: string } | null)?.updatedAt;
+        if (quiet && was.current.keys?.scope === scope && was.current.keys?.html === hash && sameNote) return;
         if (code.compiled && !code.compiled.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${code.compiled.error}` }); return; }
         let page: string | null = null;
         if (kind === "html") page = source;
@@ -246,6 +266,20 @@ export default function AppletScreen() {
     })();
     return () => { on = false; };
   }, [rec?.key, appletId, askedNote, notMine, recheck]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the hub's answer to a read this screen was drawn from differs from the copy: read again (quietly while it runs). Its
+  // note, the vault's role tags, the pointers and components, and the approvals in the home vault
+  useEffect(() => {
+    if (!rec || !appletId) return;
+    let t: ReturnType<typeof setTimeout> | null = null;
+    // the vaults what it imports comes from (a component read by its id there)
+    const from = new Set(was.current.loaded.state === "ok" ? was.current.loaded.imports.filter((i) => !i.own).map((i) => listVaults().find((v) => v.vault === i.vault && hostOf(v.issuer) === i.host)?.key).filter(Boolean) : []);
+    const mine = (vault: string, key: string) => (vault === rec.key && (idOf(key) === appletId || (!!askedNote && idOf(key) === askedNote) || /[?&]id=\.parachute%2Fnotes%2Fsettings|[?&]tag=(?:component|parachute-pointer)(?:&|$)/.test(key)))
+      || (vault === homeVault()?.key && /[?&]tag=parachute-pointer(?:&|$)|Parachute%2FApprovals%2F|[?&]tag=parachute-keys(?:&|$)/.test(key))
+      || (from.has(vault) && (idOf(key) !== null || /[?&]tag=component(?:&|$)/.test(key)));
+    const off = onFresh((vault, key) => { if (mine(vault, key) && !t) t = setTimeout(() => { t = null; setRecheck((n) => n + 1); }, 30); });
+    return () => { off(); if (t) clearTimeout(t); };
+  }, [rec?.key, appletId, askedNote, loaded.state === "ok" ? loaded.imports.map((i) => `${i.host} ${i.vault}`).join() : ""]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const entry = loaded.state === "ok" ? loaded.entry : null;
   const subject = rec && entry ? subjectOf(rec.key, entry.noteId) : null;
@@ -386,8 +420,10 @@ export default function AppletScreen() {
     ? createVaultsModule(entry.app, vaultsDeps({ confirm: (q) => sheetsRef.current.confirm(q), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search }))
     : null), [rec?.key, entry]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => vaultsModule?.stop(), [vaultsModule]);
-  const router = useMemo(() => (rec && entry ? createRouter([
-    createVaultModule(vaultDeps(clientFor(rec)), { opens: entry.opens, name: rec.vault }),
+  // the frame's reads, from the kept copies while its page redraws on fresh data: noted, so it is told only of those
+  const reader = useMemo(() => (rec ? keptReaderFor(rec) : null), [rec?.key, rec?.issuer]); // eslint-disable-line react-hooks/exhaustive-deps
+  const router = useMemo(() => (rec && entry && reader ? createRouter([
+    createVaultModule(vaultDeps(clientFor(rec), reader.client), { opens: entry.opens, name: rec.vault }),
     createThemeModule({ theme: tokensNow }),
     createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current, device, () => findVault(rec.key), entry.manifest.allow.filter((r) => r.verbs.includes("read")).map((r) => r.path))),
     // the microphone (manifest `reach: [voice]`) and a little storage on this device (`app: [storage]`): not_granted without
@@ -403,7 +439,7 @@ export default function AppletScreen() {
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
     // every vault this device holds (the Vault applet's words: modules/vaults.ts), and what reaches each
     ...(vaultsModule ? [vaultsModule] : []),
-  ]) : null), [rec?.key, rec?.issuer, rec?.vault, entry, vaultsModule]); // eslint-disable-line react-hooks/exhaustive-deps
+  ]) : null), [rec?.key, rec?.issuer, rec?.vault, entry, vaultsModule, reader]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
   const note = loaded.state === "ok" ? loaded.note : null;
@@ -431,6 +467,17 @@ export default function AppletScreen() {
     get saved() { return subject ? deviceSaved().now(subject) : {}; } }), [entry?.manifest.id, name, handed?.note.id, handed?.screen, sized, launchKey, entry, kept.shown, savedNow]); // eslint-disable-line react-hooks/exhaustive-deps
   const sessionNow = useRef<Session | null>(null);
   useEffect(() => { if (launch) sessionNow.current?.sendEvent("launch", launch); }, [launchKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the hub's answer to a read the frame made differs from the copy it was answered with: the frame is told, and the
+  // kit's Page reads again (frameKit onFresh). Only its own reads: what changed elsewhere in the vault isn't its business
+  useEffect(() => {
+    if (!rec || !reader) return;
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const off = onFresh((vault, read) => {
+      if (vault !== rec.key || !reader.reads.has(read) || t) return;
+      t = setTimeout(() => { t = null; sessionNow.current?.sendEvent("vault.fresh", {}); }, 60);
+    });
+    return () => { off(); if (t) clearTimeout(t); };
+  }, [rec?.key, reader]); // eslint-disable-line react-hooks/exhaustive-deps
   // kept running while hidden (shell/kept.tsx) only while it runs the person's own code, with nothing from another vault
   // (no imports from one, no embeds), and no note handed to it
   const keepable = granted && started && !!page && !handed && !sized && !!rec && isMine(rec) && loaded.state === "ok" && loaded.imports.every((i) => i.own && i.whose === "mine");
@@ -441,7 +488,12 @@ export default function AppletScreen() {
     if (shownBefore.current === kept.shown) return;
     shownBefore.current = kept.shown;
     sessionNow.current?.sendEvent("shown", { shown: kept.shown });
-    if (!kept.shown) { device.cancel(); sheets.cancel(); setMenu(false); } else setRecheck((n) => n + 1);
+    // shown again: its note and what it was judged on are asked of the hub again now, whenever they were last asked
+    if (!kept.shown) { device.cancel(); sheets.cancel(); setMenu(false); } else {
+      if (rec) askAgain(rec.key);
+      const h = homeVault(); if (h && h.key !== rec?.key) askAgain(h.key, (read) => /Parachute%2FApprovals%2F|[?&]tag=parachute-(?:pointer|keys)(?:&|$)/.test(read));
+      setRecheck((n) => n + 1);
+    }
   }, [kept.shown]); // eslint-disable-line react-hooks/exhaustive-deps
   // a grant changed elsewhere (revoked in Settings while this was kept): drawn again, so it stops at once
   useEffect(() => grants.onChange(bump), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -504,7 +556,7 @@ export default function AppletScreen() {
           // the approval just signed here is the newest: an older read (a taking back dated by a clock that runs ahead)
           // can't hold the card up
           if (mine && signedFor) setSigned({ for: signedFor, d: { run: true, content: mine } });
-          if (brought && pinMoved && homeWritable()) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); setStarted(true); bump(); })()}
+          if (brought && pinMoved && homeWritable()) void repin(brought, keys.html).then((pinned) => { if (pinned) setBrought({ ...brought, pointer: { ...brought.pointer, code: keys.html } }); }, () => {}); chooseHere(); startByTap(); bump(); })()}
         onNotNow={() => setDeclined(true)} onBack={() => back((to, o) => (typeof to === "number" ? navigate(to) : navigate(to, o)))} />
     </>);
   }
@@ -524,11 +576,11 @@ export default function AppletScreen() {
   // code imported from another vault runs inside it: a start after it hung the app holds it, until a tap
   if (heldForHang) return shell(<div className="card" role="status">
     <p>The app stopped while {name} was running. It imports code from another vault, which may have held it up.</p>
-    <button type="button" className="primary" onClick={tap(() => { marks.clear(pageId); setHangCleared(true); setStarted(true); })}>Open {name}</button> {plainNote}
+    <button type="button" className="primary" onClick={tap(() => { marks.clear(pageId); setHangCleared(true); startByTap(); })}>Open {name}</button> {plainNote}
   </div>);
   if (!started) return shell(<div className="card" role="status">
     <p>{name} is stopped.{note && claim ? ` It will open ${titleOf(note)}.` : ""}</p>
-    <button type="button" className="primary" onClick={tap(() => { chooseHere(); setStarted(true); })}>Open {name}</button> {plainNote}
+    <button type="button" className="primary" onClick={tap(() => { chooseHere(); startByTap(); })}>Open {name}</button> {plainNote}
   </div>);
   // how it runs, and Stop and Revoke: in the bar's menu (⋯), so the applet has the screen
   const closeMenu = () => setMenu(false);

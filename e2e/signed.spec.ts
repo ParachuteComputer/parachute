@@ -235,11 +235,10 @@ test("a taking back read from another device removes what the applet saved here;
   }
 });
 
-// Found in review (T-476, finding 16): a device that had allowed an applet started it at once and read the approvals
-// afterwards, so an applet revoked on another device ran here until the home vault answered. Now it waits for that
-// answer (up to 1.5 s) before starting; when the vault is slower or can't be reached, it starts on what this device
-// allowed and stops when the answer says so.
-test("a device that allowed it waits for the home vault's approvals before starting it; slower or offline, it starts and stops on the answer", async ({ browser }) => {
+// Review finding 16 (T-476): an applet revoked on another device must stop here. Since "Parachute feels slow" (T-476), a
+// device that already allowed it checks the signed approvals as it read them last, at once, and reads the home vault
+// behind it: a taking back stops it as soon as that read answers. Offline, it runs on what this device allowed.
+test("a device that allowed it starts on the approvals as it read them last; a taking back stops it as soon as the home vault answers", async ({ browser }) => {
   test.setTimeout(150_000);
   const me = newKey();
   const made = await record(hubState(), "create", appletRecord("journal"));
@@ -272,12 +271,13 @@ test("a device that allowed it waits for the home vault's approvals before start
     await open(laptopB);
     await expect(journal(laptopB)).toBeVisible();
     await laptopB.unrouteAll({ behavior: "ignoreErrors" });
-    // the vault answers at once: taken back on the phone, so the laptop shows the card and never started it
+    // taken back on the phone: the laptop shows the card as soon as its read of the home vault answers (it may have
+    // drawn the applet from the approvals as it read them before, for that moment)
     await revokeOnPhone();
+    const before = await frames();
     await open(laptopB);
-    await expect(card(laptopB)).toBeVisible();
-    await laptopB.waitForTimeout(500);
-    expect(await frames()).toBe(0);
+    await expect(card(laptopB)).toBeVisible({ timeout: 3_000 });
+    expect(await frames()).toBeLessThanOrEqual(before + 1);
     await expect(journal(laptopB)).toHaveCount(0);
     // allowed again, then taken back while the laptop's vault answers slowly: it starts, and stops on the answer
     await open(phoneA); await approve(phoneA);

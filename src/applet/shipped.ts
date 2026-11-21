@@ -38,14 +38,14 @@ export function shippedIn(rec: VaultRecord | null, which: ShippedName): string |
 /** Put a shipped applet into the home vault (a tap's): its note's id. One already there (by id, or at its path) is used. */
 export async function addShipped(home: VaultRecord, which: ShippedName): Promise<string> {
   const s = SHIPPED[which];
-  await refreshApplets(home);
+  await refreshApplets(home, true);
   const had = shippedIn(home, which);
   if (had) return had;
   let taken = false;
   try {
     await clientFor(home).createNote({ path: s.record.path, content: s.body, tags: s.record.tags, metadata: s.record.fields, extension: s.record.extension } as Parameters<ReturnType<typeof clientFor>["createNote"]>[0]);
   } catch (e) { if (!(e instanceof VaultConflictError)) throw e; taken = true; }
-  await refreshApplets(home);
+  await refreshApplets(home, true);
   const now = shippedIn(home, which);
   if (!now) throw new Error(taken ? `A note at ${s.path} that isn't ${s.name} is in ${home.vault} already: rename it, then add ${s.name} again.` : `${s.name} was written, but this vault doesn't list it as an applet.`);
   return now;

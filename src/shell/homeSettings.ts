@@ -24,7 +24,8 @@
 import { useSyncExternalStore } from "react";
 import { appletsNow, refreshApplets, subscribeApplets } from "../applet/useApplets";
 import { plain, stripExt } from "../applet/contract";
-import { clientFor } from "../vault/client";
+import { clientFor, keptClientFor } from "../vault/client";
+import { onFresh } from "../vault/readCache";
 import { originOf, listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
 import { homeVault } from "./frameSource";
@@ -188,7 +189,10 @@ export function startSimpleHere() { try { localStorage.setItem(SIMPLE_HERE_KEY, 
 export function forgetSimpleHere() { try { localStorage.removeItem(SIMPLE_HERE_KEY); } catch { /* nothing */ } }
 
 /** Whether the settings note was read from the home vault this session (not only the copy kept from before). Stays
- *  true while a later read runs, so a quick Back to the home doesn't find it "not read"; a read that fails clears it. */
+ *  true while a later read runs, so a quick Back to the home doesn't find it "not read"; a read that fails clears it.
+ *  The read may be answered from the copy of it kept on this device (vault/readCache.ts) while the hub is asked behind
+ *  it: when the hub's answer differs, it is read again at once (below), and a home it no longer names stops
+ *  (views/AppletScreen.tsx). */
 let readThisSession: string | null = null;
 export const settingsReadNow = () => readThisSession !== null && readThisSession === homeVault()?.key;
 
@@ -196,6 +200,14 @@ export const settingsReadNow = () => readThisSession !== null && readThisSession
 const pick = (rows: { path?: string | null }[]) => (rows.length === 1 ? rows[0] : rows.find((r) => stripExt(r.path ?? "") === SETTINGS_PATH) ?? null);
 
 let generation = 0;
+// the hub's answer to a read of the settings, the bundles or the applets they name differs from the copy shown: read again
+const SETTINGS_READS = /[?&]tag=(?:parachute-settings|parachute-bundle|parachute-app|applet)(?:&|$)/;
+let again: ReturnType<typeof setTimeout> | null = null;
+onFresh((vault, key) => {
+  // the settings and bundles are the home vault's; the applets the bar names may be in any vault
+  if (!SETTINGS_READS.test(key) || (vault !== homeVault()?.key && !/[?&]tag=applet(?:&|$)/.test(key)) || again) return;
+  again = setTimeout(() => { again = null; void readSettings(); }, 50);
+});
 /** Read the settings note again. A read a newer one (or a change of home) overtook is dropped. */
 export async function readSettings(): Promise<void> {
   const home = homeVault();
@@ -203,7 +215,7 @@ export async function readSettings(): Promise<void> {
   if (!home) { bump({ read: "read" }); return; }
   bump({ read: "reading" });
   try {
-    const rows = await clientFor(home).queryNotes({ tag: SETTINGS_TAG, includeMetadata: true, limit: 20 });
+    const rows = await keptClientFor(home).queryNotes({ tag: SETTINGS_TAG, includeMetadata: true, limit: 20 });
     // two notes: the one at the usual path, else none (the person sees the bar empty and can fix it)
     const n = pick(rows) as (typeof rows)[number] | null;
     if (mine !== generation || homeVault()?.key !== home.key) return;
@@ -368,7 +380,7 @@ export const sameRecord = (a: string | null | undefined, b: string) => {
  *  their vault now, when this device holds it. */
 async function readBundleRecords(home: VaultRecord): Promise<RawBundle[]> {
   const out: RawBundle[] = [];
-  for (const { row: r, body: raw } of await bundleRows(clientFor(home))) {
+  for (const { row: r, body: raw } of await bundleRows(keptClientFor(home))) {
     const a = bundleRecordOf(raw, r.path ?? null, r.id);
     // one made for a newer Parachute is kept as it is (never read here), so the list can say to update
     if (!a) { if (newerBundle(raw) && plain(raw) && atFolder(r.path, raw.id)) out.push({ app: raw, path: r.path ?? null, noteId: r.id }); continue; }
@@ -378,7 +390,7 @@ async function readBundleRecords(home: VaultRecord): Promise<RawBundle[]> {
     try {
       // a slow Parachute of theirs never holds up the start: past a few seconds, the copy kept from before
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const listed = await Promise.race([bundleRows(clientFor(there)), new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error("slow")), 3000); })]).finally(() => clearTimeout(timer));
+      const listed = await Promise.race([bundleRows(keptClientFor(there)), new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error("slow")), 3000); })]).finally(() => clearTimeout(timer));
       // their record may have moved to the newer folder (or not yet): the same id in either is the same record
       const theirs = listed.find((x) => sameRecord(x.row.path, a.live!.path));
       // its places mean their hub when they name none

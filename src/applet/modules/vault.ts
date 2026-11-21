@@ -43,6 +43,13 @@ export type VaultDeps = {
   search(query: string, limit: number, pathPrefix: string | null): Promise<{ id: string; path: string | null; snippet: string }[]>;
   /** The newest notes under a folder with their tags and metadata, no content, in one ask. Absent: fields are read note by note. */
   listFields?(pathPrefix: string, limit: number): Promise<VaultNote[]>;
+  /** The newest notes under a folder (with a tag, when given) with their tags, metadata and, when asked, content, in one
+   *  ask. Absent, or failing: they are read note by note, as before. */
+  list?(pathPrefix: string, o: { limit: number; tag: string | null; content: boolean }): Promise<VaultNote[]>;
+  /** The same reads, answered at once from what was read before while the hub is asked behind it (vault/readCache.ts),
+   *  for a frame that draws itself again when told the hub's answer differs (the kit's `x-parachute-redraws`). Writes,
+   *  and the reads a write is judged on, never use these. */
+  kept?: Pick<VaultDeps, "listPaths" | "getNote" | "search" | "listFields" | "list">;
   /** A new note at `path` with these tags, and these types and fields (refused when one is there). Absent: the host can't write, and every write is 405. */
   create?(path: string, content: string, tags: string[], more?: { types?: string[]; metadata?: Record<string, unknown> }): Promise<VaultNote>;
   /** A change to the note `id` (new content, when given, and `more`), only if it is still at `ifUpdatedAt`; a rejection whose message starts "conflict:" is a conflict. */
@@ -124,25 +131,28 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     cache.set(key, { at: now(), note });
     while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
   };
-  /** Notes by ref, cached 10 s. Each underlying read costs one limiter token; a cache hit is free. */
-  async function getNote(ref: string, ctx: CallCtx): Promise<VaultNote> {
+  type Reads = Pick<VaultDeps, "listPaths" | "getNote" | "search" | "listFields" | "list">;
+  /** Notes by ref, cached 10 s. Each underlying read costs one limiter token; a cache hit is free. A read from the kept
+   *  copies (`d` is deps.kept) uses this cache too, and is never put in it (its copy may be older than the hub's). */
+  async function getNote(ref: string, ctx: CallCtx, d: Reads = deps): Promise<VaultNote> {
     const hit = cache.get(ref);
     if (hit && now() - hit.at < NOTE_TTL_MS) return hit.note;
+    if (d !== deps) { ctx.charge(1); return d.getNote(ref); }
     ctx.charge(1);
     const note = await deps.getNote(ref);
     if ((note.content?.length ?? 0) <= CACHE_MAX_CONTENT) { remember(ref, note); if (note.id && note.id !== ref) remember(note.id, note); }
     return note;
   }
 
-  async function lookup(ref: string, prefixes: string[], content: boolean, ctx: CallCtx) {
+  async function lookup(ref: string, prefixes: string[], content: boolean, ctx: CallCtx, d: Reads = deps) {
     if (!safeRef(ref)) return null;
     let note: VaultNote;
-    try { note = await getNote(ref, ctx); } catch (e) { if (e instanceof ContractError) throw e; return null; }
+    try { note = await getNote(ref, ctx, d); } catch (e) { if (e instanceof ContractError) throw e; return null; }
     // Scope is judged on the note we got back, not on the key it was asked for by.
     return inScope(prefixes, note.path) ? publicNote(note, content) : null;
   }
 
-  async function notes(q: URLSearchParams, granted: string[], ctx: CallCtx): Promise<FetchResult> {
+  async function notes(q: URLSearchParams, granted: string[], ctx: CallCtx, d: Reads = deps): Promise<FetchResult> {
     for (const k of q.keys()) if (!NOTES_PARAMS.includes(k)) return fail(400, "bad_params");
     let prefixes = granted;
     const asked = q.get("path_prefix");
@@ -162,8 +172,29 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
 
     const key = q.get("id") ?? q.get("path");
     if (key !== null) {
-      const n = await lookup(key, prefixes, content, ctx);
+      const n = await lookup(key, prefixes, content, ctx, d);
       return json(200, "OK", n ? [n] : []);
+    }
+    const tagAsked = q.get("tag")?.replace(/^#/, "") || null;
+    // a tag or the notes' content, without a search: one ask per granted folder, the hub filtering by tag (each note
+    // still judged on its own path and tags, as any list is). Read note by note (below) where the host can't.
+    if ((tagAsked || content) && !q.get("search") && d.list) {
+      const got = await (async () => {
+        const seen = new Set<string>();
+        const out: (VaultNote & { path: string })[] = [];
+        for (const p of prefixes) {
+          ctx.charge(1);
+          for (const n of await d.list!(p, { limit, tag: tagAsked, content })) {
+            if (!n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null || (tagAsked && !(n.tags ?? []).includes(tagAsked))) continue;
+            seen.add(n.id); out.push(n as VaultNote & { path: string });
+          }
+        }
+        return out;
+      })().catch((e: unknown) => { if (e instanceof ContractError) throw e; return null; });
+      if (got) {
+        got.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.path.localeCompare(b.path));
+        return json(200, "OK", got.slice(0, limit).map((n) => publicNote(n, content)));
+      }
     }
 
     const tag = q.get("tag")?.replace(/^#/, "") || null;
@@ -175,17 +206,17 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       rows = [];
       for (const p of prefixes) {
         ctx.charge(1);
-        for (const h of await deps.search(search, limit, p)) {
+        for (const h of await d.search(search, limit, p)) {
           if (h.path && inScope(prefixes, h.path) && !seen.has(h.id)) { seen.add(h.id); rows.push({ id: h.id, path: h.path }); }
         }
       }
-    } else if (fields && !tag && !content && deps.listFields) {
+    } else if (fields && !tag && !content && d.listFields) {
       // one ask per granted folder, each note judged on its own path, as any list is
       const seen = new Set<string>();
       const out: (VaultNote & { path: string })[] = [];
       for (const p of prefixes) {
         ctx.charge(1);
-        for (const n of await deps.listFields(p, LIMITS.maxNotes)) {
+        for (const n of await d.listFields(p, LIMITS.maxNotes)) {
           if (!n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null) continue;
           seen.add(n.id); out.push(n as VaultNote & { path: string });
         }
@@ -193,7 +224,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       out.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.path.localeCompare(b.path));
       return json(200, "OK", out.slice(0, limit).map((n) => publicNote(n, false)));
     } else {
-      rows = (await deps.listPaths())
+      rows = (await d.listPaths())
         .filter((r): r is PathRow & { path: string } => !!r.path && inScope(prefixes, r.path) && codeKindOf(r) === null)
         .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.path.localeCompare(b.path));
     }
@@ -204,7 +235,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       for (const r of rows.slice(0, LIMITS.maxScan)) {
         if (out.length >= limit) break;
         let note: VaultNote;
-        try { note = await getNote(r.id, ctx); } catch (e) { if (e instanceof ContractError) throw e; continue; }
+        try { note = await getNote(r.id, ctx, d); } catch (e) { if (e instanceof ContractError) throw e; continue; }
         if (!inScope(prefixes, note.path) || (tag && !(note.tags ?? []).includes(tag))) continue;
         out.push(publicNote(note, content));
       }
@@ -323,14 +354,16 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
               return await update(ref, req.body, scopes, ctx);
             }
             if (pathname === "/api/vault") return only(VAULT_PARAMS) ? json(200, "OK", { name: opts.name ?? "vault", scope: granted }) : fail(400, "bad_params");
-            if (pathname === "/api/notes") return await notes(query, granted, ctx);
+            // a frame that draws itself again when told (the kit's onFresh) may be answered from the kept copies
+            const d: Reads = req.method === "GET" && req.headers?.["x-parachute-redraws"] === "1" && deps.kept ? deps.kept : deps;
+            if (pathname === "/api/notes") return await notes(query, granted, ctx, d);
             if (pathname.startsWith("/api/notes/")) {
               const rest = pathname.slice("/api/notes/".length);
               if (!rest || rest.includes("/")) return notFound();
               let ref: string;
               try { ref = decodeURIComponent(rest); } catch { return fail(400, "bad_request" as ErrorCode); }
               if (!only(NOTE_PARAMS)) return fail(400, "bad_params");
-              const n = await lookup(ref, granted, true, ctx);
+              const n = await lookup(ref, granted, true, ctx, d);
               return n ? json(200, "OK", n) : notFound();
             }
             return notFound();

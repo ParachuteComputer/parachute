@@ -21,9 +21,12 @@ async function readANote(page: Page) {
 test("the app goes through the record door where the hub has one, and asks once per vault", async ({ page }) => {
   const door = await hasDoor();
   const calls = watch(page);
+  // a vault found to have the door is remembered on the device (T-476): it is then never asked again
+  await page.goto("/");
+  const remembered = await page.evaluate((v) => Object.keys(JSON.parse(localStorage.getItem("parachute.doors.v1") ?? "{}")).some((k) => k.includes(`/vault/${v}/`)), VAULT);
   await readANote(page);
   const probes = calls.filter((c) => c === "/records?limit=1");
-  expect(probes).toHaveLength(1);
+  expect(probes).toHaveLength(remembered ? 0 : 1);
   if (door) {
     expect(calls.filter((c) => c.startsWith("/notes"))).toEqual([]);
     expect(calls.filter((c) => c.startsWith("/records") && c !== "/records?limit=1").length).toBeGreaterThan(0);

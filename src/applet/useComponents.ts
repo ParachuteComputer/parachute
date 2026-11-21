@@ -5,7 +5,8 @@
 import type { Note, VaultClient } from "@openparachute/surface-client";
 import { codeHash } from "./code";
 import { COMPONENT_TAG, discoverComponents, type ComponentEntry } from "./component";
-import { clientFor } from "../vault/client";
+import { clientFor, keptClientFor } from "../vault/client";
+import { onFresh } from "../vault/readCache";
 import { MAX_CODE_CHARS } from "../vault/limited";
 import { whoseOf } from "../vault/whose";
 import type { VaultRecord } from "../vault/store";
@@ -46,12 +47,16 @@ export function refreshComponents(rec: VaultRecord, fresh = false): Promise<Entr
   if (!fresh && hit?.state === "ok" && Date.now() - hit.at < FRESH_MS) return Promise.resolve(hit);
   const running = inflight.get(rec.key);
   if (running) return running;
-  const p = readComponents(clientFor(rec), rec.key, whoseOf(rec) !== "mine")
+  // a fresh read (a write pins a hash on it) asks the hub; any other may be answered from the copy kept of it
+  const p = readComponents(fresh ? clientFor(rec) : keptClientFor(rec), rec.key, whoseOf(rec) !== "mine")
     .then((r): Entry => ({ state: "ok", ...r, at: Date.now() }), (e: unknown): Entry => ({ state: "error", error: e instanceof Error ? e.message : String(e) }))
     .then((e) => { cache.set(rec.key, e); return e; })
     .finally(() => inflight.delete(rec.key));
   inflight.set(rec.key, p);
   return p;
 }
+// the hub's answer to a vault's list of components differs from the copy it was read from: forgotten, so the next ask
+// (the frame's, when it hears the applets changed: useApplets reads them again on the same answer) reads it again
+onFresh((vault, read) => { if (/[?&]tag=component(?:&|$)/.test(read)) cache.delete(vault); });
 export const componentsNow = (key: string): Entry | undefined => cache.get(key);
 export const forgetComponents = (key: string) => { cache.delete(key); };

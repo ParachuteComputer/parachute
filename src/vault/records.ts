@@ -20,11 +20,16 @@
 
 type Door = "records" | "notes";
 const doors = new Map<string, Door>();
+// A vault found to have the door is remembered on this device (a hub doesn't lose it), so a start asks no vault first
+// (T-476: that ask, and its preflight, came before every other read). A 404 or 405 on the door forgets it.
+const DOORS_KEY = "parachute.doors.v1";
+const remembered = (): Record<string, unknown> => { try { const v = JSON.parse(localStorage.getItem(DOORS_KEY) ?? "{}") as unknown; return v && typeof v === "object" ? v as Record<string, unknown> : {}; } catch { return {}; } };
+const remember = (vaultApi: string, door: Door | null) => { try { const m = remembered(); if (door === "records") m[vaultApi] = door; else delete m[vaultApi]; localStorage.setItem(DOORS_KEY, JSON.stringify(m)); } catch { /* this session only */ } };
 const asking = new Map<string, Promise<Door | null>>();
 
 /** What this session found out about each vault (for tests). */
 export const doorsKnown = () => new Map(doors);
-export const forgetDoors = () => { doors.clear(); asking.clear(); typeNames.clear(); };
+export const forgetDoors = () => { doors.clear(); asking.clear(); typeNames.clear(); try { localStorage.removeItem(DOORS_KEY); } catch { /* none kept */ } };
 
 /** Each vault's type names, as last read from its `/api/types`. */
 const typeNames = new Map<string, Promise<Set<string>>>();
@@ -121,8 +126,8 @@ export function urlIn(url: string): string {
 
 /** Does this vault have the record door? Asked once per vault; null when the answer said nothing either way. */
 function doorOf(vaultApi: string, headers: HeadersInit | undefined, f: typeof fetch): Promise<Door | null> {
-  const known = doors.get(vaultApi);
-  if (known) return Promise.resolve(known);
+  const known = doors.get(vaultApi) ?? (remembered()[vaultApi] === "records" ? "records" : undefined);
+  if (known) { doors.set(vaultApi, known); return Promise.resolve(known); }
   const running = asking.get(vaultApi);
   if (running) return running;
   const p = (async () => {
@@ -133,7 +138,7 @@ function doorOf(vaultApi: string, headers: HeadersInit | undefined, f: typeof fe
       // no door: a 404 or 405 for the route, or a page that isn't JSON (a proxy's answer for any address)
       const door: Door | null = r.ok && isJson ? "records" : r.status === 404 || r.status === 405 || (r.ok && !isJson) ? "notes" : null;
       // a page reached through a redirect (a sign-in portal) says nothing about this hub for good
-      if (door && !(door === "notes" && r.redirected)) doors.set(vaultApi, door);
+      if (door && !(door === "notes" && r.redirected)) { doors.set(vaultApi, door); remember(vaultApi, door); }
       return door;
     } catch { return null; }
   })().finally(() => asking.delete(vaultApi));
@@ -161,6 +166,9 @@ export function recordsFetch(base: typeof fetch = (...a) => fetch(...a)): typeof
       return base(urlIn(url), { ...init, body });
     };
     let res = await send(false);
+    // the door gone from a hub this device remembered it on (no route: a 405, or a 404 that isn't the door's own JSON "no
+    // such record"): asked again next time
+    if (res.status === 405 || (res.status === 404 && !(res.headers.get("content-type") ?? "").includes("json"))) { doors.delete(vaultApi); remember(vaultApi, null); }
     // a name became a type since the vault's types were read: read them again, once
     if (res.status >= 400 && res.status < 500 && namesTags(json)) {
       const why = (await res.clone().json().catch(() => null)) as { error_type?: string } | null;

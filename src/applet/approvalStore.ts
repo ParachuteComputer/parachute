@@ -6,7 +6,7 @@
 import { nativeNow } from "../services/native";
 import { npubDecode } from "../services/npub";
 import { homeVault } from "../shell/frameSource";
-import { clientFor } from "../vault/client";
+import { clientFor, keptClientFor } from "../vault/client";
 import { isMine } from "../vault/whose";
 import { originOf, type VaultRecord } from "../vault/store";
 import { stripExt } from "./contract";
@@ -45,8 +45,8 @@ export function ownKey(): Promise<string | null> {
 export const forgetOwnKey = () => { own = null; };
 
 /** The newest key list in the home vault the anchor signed, newer than any this device has seen. */
-async function keyList(home: VaultRecord, anchor: string): Promise<KeyList | null> {
-  const rows = await clientFor(home).queryNotes({ tag: KEYS_TAG, includeMetadata: true, limit: 5 }).catch(() => []);
+async function keyList(home: VaultRecord, anchor: string, kept = false): Promise<KeyList | null> {
+  const rows = await (kept ? keptClientFor(home) : clientFor(home)).queryNotes({ tag: KEYS_TAG, includeMetadata: true, limit: 5 }).catch(() => []);
   const seen = readMap(LIST_SEEN_KEY)[anchor];
   let best: KeyList | null = null;
   for (const r of rows) {
@@ -59,9 +59,9 @@ async function keyList(home: VaultRecord, anchor: string): Promise<KeyList | nul
 }
 
 /** The keys whose approvals count here now. */
-export async function trustedNow(): Promise<Set<string>> {
+export async function trustedNow(kept = false): Promise<Set<string>> {
   const home = homeVault(), anchor = anchorNow();
-  const list = home && anchor ? await keyList(home, anchor) : null;
+  const list = home && anchor ? await keyList(home, anchor, kept) : null;
   return trustedKeys({ own: await ownKey(), anchor, list });
 }
 
@@ -76,19 +76,21 @@ export async function approvalsHere(): Promise<boolean> {
 export const subjectOf = (rec: Pick<VaultRecord, "issuer" | "vault">, record: string, applet: string): Subject => ({ hub: originOf(rec.issuer), vault: rec.vault, record, applet });
 
 type ApprovalRow = { id: string; updatedAt?: string; metadata?: Record<string, unknown> };
-async function rowsFor(home: VaultRecord, s: Subject): Promise<ApprovalRow[]> {
+async function rowsFor(home: VaultRecord, s: Subject, kept = false): Promise<ApprovalRow[]> {
   const path = approvalPath(s);
-  const rows = await clientFor(home).queryNotes({ pathPrefix: path, includeMetadata: true, limit: 10 });
+  const rows = await (kept ? keptClientFor(home) : clientFor(home)).queryNotes({ pathPrefix: path, includeMetadata: true, limit: 10 });
   return (rows as (ApprovalRow & { path?: string })[]).filter((r) => stripExt(r.path ?? "") === path);
 }
 
 /** What the approvals in the home vault say about this exact code and asks, on this device. A newer one seen raises
- *  the floor. null: this device doesn't check approvals. */
+ *  the floor. null: this device doesn't check approvals. Read from the copy kept of the approvals at once (the signed
+ *  list as last read, vault/readCache.ts), the home vault asked behind it: the applet screen reads again when its
+ *  answer differs, so a taking back stops the applet as soon as that read answers (review finding 16). */
 export async function approvalFor(s: Subject, code: string, scope: string, now = Date.now()): Promise<Decision | null> {
   const home = homeVault();
   if (!home || !(await approvalsHere())) return null;
-  const events = (await rowsFor(home, s).catch(() => [])).map((r) => r.metadata?.approval);
-  const d = decide(events, s, code, scope, await trustedNow(), now, floorOf(s));
+  const events = (await rowsFor(home, s, true).catch(() => [])).map((r) => r.metadata?.approval);
+  const d = decide(events, s, code, scope, await trustedNow(true), now, floorOf(s));
   const newest = d.run ? d.content : d.newest;
   if (newest && (d.run || d.why !== "older")) raiseFloor(s, newest.n + (newest.approved ? 0 : 0.5));
   return d;

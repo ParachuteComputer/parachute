@@ -128,11 +128,22 @@ test("a link that isn't a tap doesn't start it, even right after a tap on the sa
   await allow(page);
   const url = new URL(page.url()).pathname;
   await page.goto(`/v/${VAULT}`);
-  // tap the applet, then come straight back: the tap's mark is made and then left behind
+  // tap the applet, then come straight back. It may already run (it opens from what was read before, T-476): then it
+  // is kept running, and a link back to it finds that same document, never a new start
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
+  await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
+  const doc = page.locator("iframe.applet-frame").contentFrame().locator("body");
+  await doc.evaluate(() => { (window as unknown as { __here: number }).__here = 1; });
   await page.goBack();
   // a navigation that is not a tap, to the same applet
-  await page.evaluate((u) => { history.pushState({}, "", u); dispatchEvent(new PopStateEvent("popstate")); }, url);
+  const link = () => page.evaluate((u) => { history.pushState({}, "", u); dispatchEvent(new PopStateEvent("popstate")); }, url);
+  await link();
+  await expect(page.locator("iframe.applet-frame")).toHaveCount(1);
+  expect(await doc.evaluate(() => (window as unknown as { __here?: number }).__here)).toBe(1);
+  // stopped, and left: the tap that started it before starts nothing now
+  await fromAppletMenu(page, "Stop");
+  await page.goBack();
+  await link();
   await expect(page.getByRole("button", { name: /^Open Recipe box$/ })).toBeVisible();
   await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });

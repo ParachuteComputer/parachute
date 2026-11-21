@@ -7,7 +7,7 @@ import { statusOf } from "../open/status";
 import { readRoleTags } from "../open/roles";
 import { clearDefault, defaultsFor, setDefault, VAULT } from "../open/defaults";
 import { carryMark, clearMark, markTap } from "../open/mark";
-import { clientFor } from "../vault/client";
+import { clientFor, keptClientFor } from "../vault/client";
 import { messageOf } from "../vault/hooks";
 import { inShell } from "../vault/oauth";
 import { confirmLinkOut, confirmWrite, homeVault, type WriteAsk } from "./frameSource";
@@ -86,7 +86,8 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   // statuses are judged once the self-test's facts are known, so a note never opens plain only because the app had
   // not finished starting
   await whenGateKnown();
-  const ok = fresh || !appletsNow(rec.key) ? await refreshApplets(rec) : true;
+  // at a tap (`fresh`), as the hub has them now: if that read fails, no applet opens the note this time
+  const ok = fresh || !appletsNow(rec.key) ? await refreshApplets(rec, fresh) : true;
   const e = appletsNow(rec.key);
   if (!ok || e?.state !== "ok") return { ok: false, error: e?.state === "error" ? e.error : "the applets couldn't be read" };
   const status = statusOf(rec.key, gateNow());
@@ -111,7 +112,7 @@ async function bringThingIn(vault: string, noteId: string): Promise<void> {
   const rec = listVaults().find((v) => v.key === vault);
   if (!rec) throw new Error("This device doesn't hold that vault.");
   if (isMine(rec)) throw new Error("It's in a vault of yours already.");
-  await refreshApplets(rec);
+  await refreshApplets(rec, true);
   const a = appletsNow(rec.key);
   const e = a?.state === "ok" ? a.found.entries.find((x) => x.noteId === noteId) : undefined;
   if (e) { await bringIn(rec, noteId, { kind: "applet", id: e.manifest.id, name: e.manifest.name, code: e.keys.html }); return; }
@@ -200,7 +201,7 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
   return {
     vaults: listVaults,
     client: clientFor,
-    roles: (rec) => readRoleTags(clientFor(rec)),
+    roles: (rec) => readRoleTags(keptClientFor(rec)),
     applets,
     defaults: { get: (vault) => ({ ...appDefaults(vault), ...defaultsFor(vault) }), set: setChoice },
     home: homeDeps(from),
