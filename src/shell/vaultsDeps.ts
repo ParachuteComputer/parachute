@@ -77,8 +77,11 @@ function reachRow(r: HubGrantRow, self: string | null): ReachRow {
   const types = Object.keys(r.types ?? {});
   const writes = types.some((t) => (r.types[t] ?? []).some((v) => v !== "read"));
   const who = (["person", "agent", "app", "service"] as const).find((k) => k === r.kind) ?? "app";
+  // a person the vault is shared with: one row for them and every sign-in of theirs (core T-476 one list)
+  const member = r.kind === "person" && r.by === "self" ? { key: typeof r.grantee === "string" ? r.grantee : null, role: r.member?.role ?? (r.admin ? "write" : writes ? "member" : "read") } : null;
   return { id: r.id, name: r.name, who, app: r.app, can: r.admin ? "manage" : r.export ? "backup" : writes ? "change" : "read",
-    types: types.length === 0 || types.includes("*") ? null : types.sort(), until: r.expires_at, lastUsed: r.last_used_at, self: !!self && r.client === self };
+    types: types.length === 0 || types.includes("*") ? null : types.sort(), until: r.expires_at, lastUsed: r.last_used_at, self: !!self && r.client === self,
+    ...(member ? { member } : {}) };
 }
 
 export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string;

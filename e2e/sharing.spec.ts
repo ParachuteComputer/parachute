@@ -3,8 +3,8 @@
 // in his own Parachute with his key and signs in; each edits a recipe; Changes and a record's History read "Bo" on
 // Aaron's screen and "Aaron" on Bo's; Aaron ends it, and Bo's next read is refused. Against the real hub: what the hub
 // holds is read back after each step.
-// Needs a hub with sharing (core T-476). CI installs core from npm, which has none yet: there the test says so and
-// skips, unless E2E_SHARING=1 says this hub must have it (the red run on a core without it).
+// Needs a hub with sharing (core T-476). On core from npm, which has none yet, the test says so and skips, unless
+// E2E_CORE_NEXT=1 says this hub is core's next and must have it (CI's pinned leg; the red run on a core without it).
 import { expect, test, type Browser, type BrowserContext, type Page, type TestInfo } from "@playwright/test";
 import { approveUntilBack, openVault, signInWithKey } from "./helpers";
 import { account, api, cli, hubState, mintToken, techneState, VAULT } from "./hub";
@@ -51,7 +51,7 @@ test("Aaron invites Bo to recipes; Bo accepts with his own key; their edits read
   const hub = hubState();
   const look = await fetch(`${hub.origin}/account/invites/look`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: "x".repeat(43) }) });
   const sharing = look.status === 404 && ((await look.json().catch(() => ({}))) as { error?: string }).error === "no_invite";
-  test.skip(!sharing && process.env.E2E_SHARING !== "1", "a hub before sharing (core T-476): this e2e runs on a core with it");
+  test.skip(!sharing && process.env.E2E_CORE_NEXT !== "1", "a hub before sharing (core T-476): this e2e runs on a core with it");
 
   // the shared vault, with two recipes
   try { cli(hub, ["vault", "create", SHARED, "--json", "--no-mirror"]); } catch { /* there from a run before */ }
@@ -71,6 +71,7 @@ test("Aaron invites Bo to recipes; Bo accepts with his own key; their edits read
   const people = v.getByRole("region", { name: "People" });
   await expect(people).toContainText("You");
   // his own name, once; then who the invite is for
+  await v.getByRole("button", { name: "Invite someone" }).click();
   await v.getByLabel("Your name, as the people you invite see it").fill("Aaron");
   await v.getByRole("button", { name: "Keep" }).click();
   await v.getByLabel("Invite someone").fill("Bo");
@@ -119,7 +120,7 @@ test("Aaron invites Bo to recipes; Bo accepts with his own key; their edits read
   v = vaultApplet(aaron.page);
   await v.getByRole("button", { name: "Sharing" }).click();
   await expect(people.getByText("Bo", { exact: true })).toBeVisible({ timeout: 20_000 });
-  await expect(people).toContainText("can read and change everything");
+  await expect(people).toContainText("reads and changes everything");
   await expect(people).not.toContainText("invited");
 
   // ── each edits a recipe in their own Parachute
@@ -155,7 +156,7 @@ test("Aaron invites Bo to recipes; Bo accepts with his own key; their edits read
   await expect(people.getByText("Bo", { exact: true })).toBeVisible({ timeout: 20_000 });
   await people.getByRole("button", { name: "End" }).click();
   await aaron.page.getByRole("dialog", { name: `End Bo's access to ${SHARED}?` }).getByRole("button", { name: "End" }).click();
-  await expect(people.getByText("Bo", { exact: true })).toHaveCount(0, { timeout: 20_000 });
+  await expect(people.getByRole("listitem").filter({ hasText: /^Bo/ })).toContainText("ended", { timeout: 20_000 });
   expect(await read()).toBe(401);
   // Bo's own screen says so, in words, not as a generic problem
   await bo.page.goto(`/v/${BO_HOME}/a/parachute%3Avault?vault=${SHARED}`);

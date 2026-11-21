@@ -1,7 +1,8 @@
 // Who reaches a vault, and changing it: Vault > Sharing (applets/vault.tsx) through the `sharing` words
 // (applet/modules/vaults.ts). The hub answers that with three calls a whole-vault admin may make for that vault
-// (core vault-grants.ts and account-keys.ts, T-476): the list of every key, AI and app that reaches the vault, a key
-// made for an AI (all the vault's types, or some), and ending one.
+// (core vault-grants.ts and account-keys.ts, T-476): the list of every key, AI, app and person that reaches the vault,
+// a key made for an AI (all the vault's types, or some; the hub lists it as an agent's), and ending one (a person's
+// row ends their membership).
 //
 // The app holds no admin anywhere (docs/design/SCOPES.md): managing asks the hub for this vault's admin, once, when the
 // person asks to (`askManage`, the hub's own page or the key door), and holds it only while they are managing, for the
@@ -150,15 +151,17 @@ async function call<T>(rec: Where, applet: string, method: string, path: string,
   return json as T;
 }
 
-/** A row of the hub's list (core vault-grants.ts): one credential that reaches the vault. */
+/** A row of the hub's list (core vault-grants.ts): one credential that reaches the vault, or one person it is shared
+ *  with (`by: "self"`, `grantee` their key, their sign-ins in their row; core T-476 one list). */
 export type HubGrantRow = { id: string; state: string; types: Record<string, string[]>; expires_at: string | null; name: string; kind: string;
-  app: string | null; client: string | null; admin?: boolean; export?: boolean; created_at: string; last_used_at: string | null };
+  app: string | null; client: string | null; admin?: boolean; export?: boolean; created_at: string; last_used_at: string | null;
+  by?: string; grantee?: string | null; member?: { role?: string } };
 
 export const listReach = (rec: Where, applet: string) =>
   call<{ grants: HubGrantRow[] }>(rec, applet, "GET", `/account/vaults/${encodeURIComponent(rec.vault)}/statements`).then((r) => r.grants ?? []);
 
 export const makeKey = (rec: Where, applet: string, k: { name: string; can: "read" | "write"; types: string[] | null }) =>
-  call<{ name: string; token: string; expires_at: string; types?: string[] }>(rec, applet, "POST", "/account/keys", { name: k.name, vault: rec.vault, can: k.can, ...(k.types ? { types: k.types } : {}) });
+  call<{ name: string; token: string; expires_at: string; types?: string[] }>(rec, applet, "POST", "/account/keys", { name: k.name, vault: rec.vault, can: k.can, ...(k.types ? { types: k.types } : {}), kind: "agent" });
 
 export const endReach = (rec: Where, applet: string, id: string) =>
   call<{ id: string; revoked_at: string }>(rec, applet, "DELETE", `/account/vaults/${encodeURIComponent(rec.vault)}/statements/${encodeURIComponent(id)}`);

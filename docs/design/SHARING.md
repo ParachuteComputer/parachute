@@ -19,7 +19,7 @@ member on today's hub, not yet a signed grant); the open questions are the right
    (Someone else's, Sign in with your key, the hub's Approve) and opens `recipes`.
 3. **Bo edits.** In Changes and in a record's History, Aaron reads "Bo" for Bo's edits and Bo reads "Aaron" for
    Aaron's. Each reads "You, in Parachute here" for their own from this device.
-4. **Aaron sees who is in.** Sharing lists the people on the vault: Aaron (owner, no End), Bo (can read and change
+4. **Aaron sees who is in.** Sharing's People lists the people on the vault: Aaron (owner, no End), Bo (can read and change
    everything, with a short form of his key), and an invite nobody has taken yet. **End** on a person, **Take back**
    on an invite.
 5. **Aaron ends it.** **End** on Bo's row. Bo's next request to `recipes` is refused, on every device he signed in
@@ -78,9 +78,11 @@ it. The slice changes no stamp; the app names `by` through `names`.
 
 ### App, one PR
 
-- **Sharing** (Vault applet): **People** on top: each person with what they can do, **End** for members, open
-  invites with **Take back**, and **Invite someone** (for whom, your name the first time, Make the link, Copy link).
-  ../grants adds "Who reaches this vault" (keys and AIs) to the same screen; one screen, people first.
+- **Sharing** (Vault applet): one list of who reaches the vault ([VAULT.md](../VAULT.md) "Who reaches a vault"): your
+  AIs and agents first, then **People** (each person with what they can do, **End** for members, open invites with
+  **Take back**), then apps and devices; **Invite someone** (for whom, your name the first time, Make the link, Copy
+  link) at the top beside **Connect an AI**. A person is one row there, never also one row per sign-in of theirs, and
+  End on that row ends their membership (core S10, T-476 one list).
 - **Settings → Accept an invite**: paste a link; the app calls `look`, shows who and what, **Accept**; then the
   existing key sign-in to that Parachute, address filled in, "Someone else's" chosen.
 - **The key signs two new requests**, each built by the shell from checked fields, never a body handed to it: the
@@ -114,7 +116,7 @@ link; there is no hub page in the slice.
 | `by` = hub user id; `via` = the app's client | `by` = `nostr:<Bo's key>`, `via` = `grant:<id>`; `names` answers both stamps for one person, since old records keep the old one; `isSelf` changes with `via` |
 | End = `revoke-access` | End = a signed revoke; the vault reads grants on every request |
 | every type | every type or some (grant rows) |
-| `list-access` + `names` | members are rows in ../grants' one list (`GET /account/vaults/<v>/grants`); `names` stays the naming read (spec §7.1 `stamps`) |
+| `list-access` + `names`; and since T-476's one list each member is already one row of the hub's list (`GET /account/vaults/<v>/statements`, `by: "self"`, their sign-ins folded in; End there ends the role) | members are signed `by self` grant rows in that same list; `names` stays the naming read (spec §7.1 `stamps`) |
 
 What carries over: the invite, `look`, `accept`, the screens and the naming rule. What changes: what accept files,
 the stamps, and the token (spec §7.2).

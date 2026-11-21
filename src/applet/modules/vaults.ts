@@ -37,16 +37,17 @@
 //     invite({vault, name, from?})             a link that lets one person in (read and change everything): {url, ...}
 //     takeBack({vault, id})                    an invite nobody took yet, taken back
 //     end({vault, key})                        a person's access ended: their next request is refused
-//     reach({vault})                           who reaches the vault, each key, AI and app by name (level 6, T-476):
-//                                              {managing, lists, rows: [{id, name, who, app, can, types, until, lastUsed,
-//                                              self}] | null}; null while Parachute isn't managing it (`manage` asks);
+//     reach({vault})                           who reaches the vault, each key, AI, app and person by name (level 6,
+//                                              T-476): {managing, lists, rows: [{id, name, who, app, can, types, until,
+//                                              lastUsed, self, member?: {key, role}}] | null}; a person is one row with
+//                                              all their sign-ins; null while Parachute isn't managing it (`manage` asks);
 //                                              `lists` false where the hub has no such list (an older hub, Cloud for now)
 //     manage({vault})                          ask the hub to let Parachute manage who reaches it, until the person
 //                                              leaves (the page goes to the hub, or its key door, and comes back)
-//     giveKey({vault, name, can, types})       a key for an AI: read, or read and change (`can`), all types (null) or
+//     giveKey({vault, name, can, types})       a key for an AI (listed as an agent's): read, or read and change (`can`), all types (null) or
 //                                              some; its secret is shown once on the app's own sheet, never to the
 //                                              applet: {name, until, types, address}
-//     endReach({vault, id})                    end one: its next request is refused
+//     endReach({vault, id})                    end one: its next request is refused; a person's row ends their membership
 //     stopManaging({vault})                    give the hub's yes back now (leaving Sharing does)
 //
 // What it never does, whatever the card says: change a code record (HTML, TSX, JSX) or one carrying an applet's,
@@ -100,7 +101,9 @@ export type PeopleRow = { people: PersonRow[]; invites: InviteRow[];
 /** One key, AI or app that reaches a vault, as the hub lists it (vault/manage.ts): what it may do, to which types (null:
  *  all of them), until when. `self`: this device's Parachute. */
 export type ReachRow = { id: string; name: string; who: "person" | "agent" | "app" | "service"; app: string | null; can: "read" | "change" | "manage" | "backup";
-  types: string[] | null; until: string | null; lastUsed: string | null; self: boolean };
+  types: string[] | null; until: string | null; lastUsed: string | null; self: boolean;
+  /** a person the vault is shared with (one row for them and all their sign-ins): their key, their role there */
+  member?: { key: string | null; role: string } };
 /** A key just made for an AI, as the shell has it (its secret shown once on the shell's own sheet), and where it connects. */
 export type GivenKey = { name: string; token: string; until: string; types: string[] | null; address: string };
 
@@ -813,6 +816,13 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           const r = rows.find((x) => x.id === id);
           if (!r) throw refuse("nothing by that name reaches the vault now");
           const who = r.app ? (r.app === "Parachute" ? "Parachute on another device" : r.app) : r.name;
+          // a person: the same sheet as ending them from their key's list (`end`), with their key shown
+          if (r.member) {
+            const short = r.member.key ? ` (key ${r.member.key.slice(0, 8)}…)` : "";
+            await askFirst(deps, { title: `End ${sheetText(who)}'s access to ${sheetText(v.name)}?`, body: `${sheetText(who)}${short} can no longer read or change ${sheetText(v.name)} (${sheetText(v.host)}), on any device. What they wrote stays, under their name.`, act: "End" });
+            try { await deps.endReach(vault, id); } catch (e) { throw failed(e); }
+            return null;
+          }
           await askFirst(deps, { title: `End ${sheetText(who)}?`, body: r.self ? `This is Parachute on a device of yours: ending it signs that device out of ${sheetText(v.name)}.` : `${sheetText(who)} can no longer reach ${sheetText(v.name)} (${sheetText(v.host)}): its next request is refused. This can't be undone; you can make a new key.`, act: "End it" });
           try { await deps.endReach(vault, id); } catch (e) { throw failed(e); }
           return null;
