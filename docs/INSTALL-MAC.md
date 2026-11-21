@@ -31,8 +31,11 @@ After that it opens like any app.
 
 ## 4. Sign in with your key
 
+No key? On the first screen, **Sign in with Parachute Cloud**, or **Sign in with its address** for a hub of your own,
+and skip to section 5.
+
 Parachute signs you in with your Nostr key and keeps it in your Mac's login Keychain (under `computer.parachute.app`).
-On the first screen:
+In the Nostr key card on the first screen:
 
 - **Pair from a device that has your key** (best). On your phone, open the Uni app → Settings → **Pair a device**. It
   shows a QR code and a link that starts with `nostrpair://`. Copy the link and get it to your Mac (send it to yourself),

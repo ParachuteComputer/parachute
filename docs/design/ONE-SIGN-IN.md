@@ -56,7 +56,8 @@ vaults; the per-vault steps after it came back with no page, as the source said.
   (`CLOUD_CLIENT_NAME`, chosen by the descriptor's `door: "cloud"`); core hubs still see "Parachute". Its consent pages say *Unverified app* above
   the ask, as for any app that registered itself.
 - **On Android** the Cloud page opens inside the app's sign-in; the 6-digit code from the mail works there as well as
-  the link. The first run now offers **Sign in with Parachute Cloud** before any key (docs/SIMPLE.md).
+  the link. The first run now offers **Sign in with Parachute Cloud** before any key, and then another Parachute by its
+  address (`KeyStart`, docs/SIMPLE.md).
 - **Its vaults answer the record API** (`/api/records`) and the older `/api/notes`, as core 0.9 does.
 
 Refresh rotates and retires the previous access token, as core 0.9 does. Its vaults live at `my.parachute.computer`.

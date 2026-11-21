@@ -55,12 +55,11 @@ export default function KeyStart({ first = false }: { first?: boolean }) {
         <button type="button" className="primary" onClick={() => void cloud()} disabled={busy}>Sign in with {CLOUD_NAME}</button>
         <p className="quiet small">With your email. No key needed.</p>
       </section>}
-      {/* a hub of the person's own (at home, at work, a friend's): its address and the hub's own sign-in. All three
-          strangers of the T-476 walk had one and found it only in a small link at the foot. */}
+      {/* another Parachute (the person's own hub, an org's, a friend's): its address, then the hub's own sign-in */}
       {first && <section className="card stack">
-        <p className="lead">Your own Parachute?</p>
+        <p className="lead">Your notes on another Parachute?</p>
         <Link className="secondary" to="/add">Sign in with its address</Link>
-        <p className="quiet small">A hub at home, at work or a friend's: its address, then its own sign-in.</p>
+        <p className="quiet small">Your own hub, an org's or a friend's: its address, then its own sign-in.</p>
       </section>}
       <section className="card stack">
         <p className="lead">{first ? "Or sign in with your Nostr key." : "Parachute signs you in with your Nostr key."}</p>
