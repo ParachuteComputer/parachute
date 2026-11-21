@@ -7,6 +7,8 @@
 //                   fonts:   { serif, sans, mono }                                font stacks, by name
 //                   density: compact | regular | roomy
 //                   scheme:  system | light | dark          which palette shows (system: the device's choice)
+//                   motion:  flowing | still                  whether the parts move (still: nothing does; the device's
+//                                                             reduce-motion setting is still too, whatever this says)
 //                 Every key is optional: what it leaves out (or gives in a form this reads not) is the built-in value.
 //   absent        the built-in theme (DEFAULT_THEME): the same look the app has always had.
 //
@@ -18,12 +20,14 @@ export const COLOR_KEYS = ["bg", "surface", "text", "muted", "line", "accent", "
 export const FONT_KEYS = ["serif", "sans", "mono"] as const;
 export const DENSITIES = ["compact", "regular", "roomy"] as const;
 export const SCHEMES = ["system", "light", "dark"] as const;
+export const MOTIONS = ["flowing", "still"] as const;
 export type ColorKey = (typeof COLOR_KEYS)[number];
 export type FontKey = (typeof FONT_KEYS)[number];
 export type Density = (typeof DENSITIES)[number];
 export type Scheme = (typeof SCHEMES)[number];
+export type Motion = (typeof MOTIONS)[number];
 export type Palette = Record<ColorKey, string>;
-export type Theme = { colors: Palette; dark: Palette; fonts: Record<FontKey, string>; density: Density; scheme: Scheme };
+export type Theme = { colors: Palette; dark: Palette; fonts: Record<FontKey, string>; density: Density; scheme: Scheme; motion: Motion };
 
 /** What density sets: padding, the gap between parts, corner radius, the body text size, and its line height. */
 export const DENSITY_KEYS = ["pad", "gap", "radius", "size", "leading"] as const;
@@ -45,13 +49,14 @@ export const DEFAULT_THEME: Theme = {
   },
   density: "regular",
   scheme: "system",
+  motion: "flowing",
 };
 
 /** Every token, as the CSS variable `--<key>` and as a key of the object applets get. One list, used everywhere. */
 export const TOKEN_KEYS = [...COLOR_KEYS, ...FONT_KEYS, ...DENSITY_KEYS] as const;
 export type TokenKey = (typeof TOKEN_KEYS)[number];
-/** The look as applied: every token's value, which palette shows, and the density by name. */
-export type Tokens = Record<TokenKey, string> & { scheme: "light" | "dark"; density: Density };
+/** The look as applied: every token's value, which palette shows, the density by name, and whether the parts move. */
+export type Tokens = Record<TokenKey, string> & { scheme: "light" | "dark"; density: Density; motion: Motion };
 
 // One way to read each number, and a separator required between two (a comma, a slash or a space): a pattern that could
 // split a run of digits many ways would take seconds on a hostile value, and this one runs at every start.
@@ -82,13 +87,14 @@ export function themeFrom(metadata: unknown): Theme {
     fonts,
     density: (DENSITIES as readonly unknown[]).includes(t.density) ? (t.density as Density) : DEFAULT_THEME.density,
     scheme: (SCHEMES as readonly unknown[]).includes(t.scheme) ? (t.scheme as Scheme) : DEFAULT_THEME.scheme,
+    motion: (MOTIONS as readonly unknown[]).includes(t.motion) ? (t.motion as Motion) : DEFAULT_THEME.motion,
   };
 }
 
 /** The theme as applied, for a device in dark mode or not. */
 export function tokensOf(theme: Theme, systemDark: boolean): Tokens {
   const dark = theme.scheme === "dark" || (theme.scheme === "system" && systemDark);
-  return { ...(dark ? theme.dark : theme.colors), ...theme.fonts, ...DENSITY[theme.density], scheme: dark ? "dark" : "light", density: theme.density };
+  return { ...(dark ? theme.dark : theme.colors), ...theme.fonts, ...DENSITY[theme.density], scheme: dark ? "dark" : "light", density: theme.density, motion: theme.motion };
 }
 
 /** The type scale: every text size the app and applets use, a step each, as a multiple of the body size (`--size`,
@@ -100,8 +106,33 @@ export type TypeStep = keyof typeof TYPE_SCALE;
 /** The scale as CSS declarations, each on `--size` so a density (or a theme) moves them all. */
 export const TYPE_SCALE_CSS = (Object.entries(TYPE_SCALE) as [TypeStep, number][]).map(([k, v]) => `--fs-${k}:calc(var(--size) * ${v});`).join("");
 
-/** The tokens as CSS declarations for `:root` (values are already held to the grammar above), and the type scale. */
-export const cssOf = (t: Tokens): string => `:root{${TOKEN_KEYS.map((k) => `--${k}:${t[k]};`).join("")}${TYPE_SCALE_CSS}color-scheme:${t.scheme};}`;
+/** How things move: three curves and four times, the CSS variables `--ease-<name>` and `--t-<name>`. The kit's parts
+ *  move only on these (src/kit/parts.css), and applets too (src/kit/conformance.ts), so everything moves alike.
+ *    ease-out     things arriving or leaving: fast at first, settling slowly
+ *    ease-in-out  something moving from one place on screen to another
+ *    ease-drawer  a sheet rising from the foot of the screen, and going back
+ *    t-press      a button giving under the finger
+ *    t-state      a part arriving, or changing state; a page's arrival (every navigation stays within 250 ms)
+ *    t-sheet      a sheet or a toast arriving (leaving takes four fifths of it)
+ *    t-step       between one part and the next of a group arriving together
+ *  With the device's reduce-motion setting, on a screen slow to redraw (e-ink), or with a theme whose `motion` is
+ *  `still`, every time is 0: nothing moves. */
+export const MOTION = {
+  "ease-out": "cubic-bezier(0.23, 1, 0.32, 1)", "ease-in-out": "cubic-bezier(0.77, 0, 0.175, 1)", "ease-drawer": "cubic-bezier(0.32, 0.72, 0, 1)",
+  "t-press": "160ms", "t-state": "200ms", "t-sheet": "300ms", "t-step": "40ms",
+} as const;
+const TIMES = (Object.keys(MOTION) as (keyof typeof MOTION)[]).filter((k) => k.startsWith("t-"));
+const STILL = TIMES.map((k) => `--${k}:0ms;`).join("");
+/** The motion as CSS, in full: the values, nothing moving under reduce-motion, on a slow screen, or with `data-motion="still"` on the root (which
+ *  the shell and the frame set from the theme). The shell's document and every frame's get it once. */
+export const MOTION_CSS = `:root{${Object.entries(MOTION).map(([k, v]) => `--${k}:${v};`).join("")}}`
+  + `@media (prefers-reduced-motion: reduce),(update: slow){:root{${STILL}}}:root[data-motion="still"]{${STILL}}`;
+
+/** The tokens as CSS declarations for `:root` (values are already held to the grammar above), and the type scale. A still
+ *  theme is still from the first paint (before the frame hears the theme and marks its root), until a theme that
+ *  flows marks it so. */
+export const cssOf = (t: Tokens): string => `:root{${TOKEN_KEYS.map((k) => `--${k}:${t[k]};`).join("")}${TYPE_SCALE_CSS}color-scheme:${t.scheme};}`
+  + `${MOTION_CSS}${t.motion === "still" ? `:root:not([data-motion="flowing"]){${STILL}}` : ""}`;
 
 /** The record a person starts from ("Make this mine"): the built-in theme, written out in full so every value is there to change. */
-export const recordOf = (theme: Theme) => ({ colors: { ...theme.colors }, dark: { ...theme.dark }, fonts: { ...theme.fonts }, density: theme.density, scheme: theme.scheme });
+export const recordOf = (theme: Theme) => ({ colors: { ...theme.colors }, dark: { ...theme.dark }, fonts: { ...theme.fonts }, density: theme.density, scheme: theme.scheme, motion: theme.motion });

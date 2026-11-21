@@ -19,6 +19,7 @@ export { Card, Days, Empty, Field, List } from "../kit/parts";
 export { Fields, Table } from "../kit/parts-data";
 export { Button, Loading, Page, Problem, Record, Search, Tabs, toast, useTranscripts, voiceNote, Write } from "../kit/screen";
 export { when } from "../kit/when";
+export { Drawer } from "../kit/drawer";
 export { Note } from "../kit/parts-note";
 export { pinApplet, readerFor, startApplet, useApplets, useDefaults, useHome, useVault, useVaultQuery, useVaults } from "./data";
 export { call } from "./bridge";

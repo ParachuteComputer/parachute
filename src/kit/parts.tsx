@@ -8,7 +8,7 @@
 //   Field   a line to write on, with one action (Enter does it too)
 //   Empty   what shows when there is nothing yet: a sprig and a line
 //   Note    in parts-note.tsx: a note's text drawn by surface-render, rich notes included (a heavier bundle)
-import { useCallback, useId, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import "./parts.css";
 
 const DAY = 86_400_000;
@@ -74,6 +74,12 @@ export type Row = {
 /** Rows under a label. A row with `onPress` is a button. A long list costs little: a row off screen isn't drawn until
  *  it scrolls near. `more` puts a button under the last row that asks for the next page (older entries, more mail). */
 export function List({ label, hideLabel, rows, more }: { label?: ReactNode; /** said to a screen reader only: the page's title says it already */ hideLabel?: boolean; rows: readonly Row[]; more?: { label: string; onPress: () => void; busy?: boolean } }) {
+  // a row that arrives after the list was first drawn comes in (parts.css .pa-fresh); the first rows come in with the list
+  const seen = useRef<Set<string> | null>(null);
+  const fresh = useRef(new Set<string>());
+  const keys = rows.map((r) => r.key).filter((k): k is string => typeof k === "string");
+  if (seen.current === null) seen.current = new Set(keys);
+  else for (const k of keys) if (!seen.current.has(k)) { seen.current.add(k); fresh.current.add(k); }
   return (
     <section className="pa-list" aria-label={typeof label === "string" ? label : undefined}>
       {label && <h3 className={hideLabel ? "pa-list-label pa-unseen" : "pa-list-label"}>{label}</h3>}
@@ -90,7 +96,7 @@ export function List({ label, hideLabel, rows, more }: { label?: ReactNode; /** 
               {r.under != null && r.under !== "" && <span className="pa-row-under">{r.under}</span>}
             </>
           );
-          return <li key={r.key ?? i}>{r.onPress
+          return <li key={r.key ?? i} className={r.key !== undefined && fresh.current.has(r.key) ? "pa-fresh" : undefined}>{r.onPress
             ? <button type="button" className={cls} onClick={r.onPress} aria-label={r.label} aria-current={r.current ? "true" : undefined} {...data}>{inner}</button>
             : <div className={cls} aria-current={r.current ? "true" : undefined} {...data}>{inner}</div>}</li>;
         })}

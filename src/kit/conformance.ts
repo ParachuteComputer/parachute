@@ -38,6 +38,20 @@ export const RULES: readonly Rule[] = [
     ].join("|")) },
   { id: "fonts", what: "a font of its own", use: "var(--serif), var(--sans), var(--mono)",
     test: /\bfont-family\s*:(?!\s*(?:var\(--(?:serif|sans|mono)\)|inherit\b))|\bfontFamily\s*:(?!\s*(?:string\b|["']var\(--(?:serif|sans|mono)\)["']))/ },
+  // how things move (docs/DESIGN-RULES.md): on the theme's curves and times, which are still under reduce-motion, and
+  // only transform and opacity, so nothing moves the page under the reader
+  { id: "motion", what: "motion of its own (a time or curve of its own, `all`, or a script moving it)",
+    use: "the parts, which already move; else transform and opacity on var(--ease-out), var(--ease-in-out), var(--ease-drawer) and var(--t-press), var(--t-state), var(--t-sheet), var(--t-step)",
+    test: new RegExp([
+      String.raw`\b(?:transition|animation)(?:-(?:duration|delay|timing-function)|Duration|Delay|TimingFunction)?\s*:[^;{}\n]*?(?:(?<![\w-])\d*\.?\d+m?s\b|cubic-bezier\(|steps\(|\bease-in\b(?!-)|\ball\b)`,
+      String.raw`\.animate\s*\(\s*[\[{]`,
+    ].join("|")) },
+  { id: "layout", what: "something that moves the page under the reader (its size or place animated, an image with no size)",
+    use: "transform and opacity to move; width and height on an <img>, so its place is kept before it loads",
+    test: new RegExp([
+      String.raw`\btransition(?:-property|Property)?\s*:[^;{}\n]*?\b(?:width|height|top|left|right|bottom|inset|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?|max-height|max-width|min-height)\b`,
+      String.raw`<img\b(?![^>]*\b(?:width|height)\s*=)[^>]*>`,
+    ].join("|")) },
   // the screen and its states
   { id: "page", what: "its own <main> or page title", use: "Page (its title, kicker, aside and pull to refresh)", test: /<(?:main|h1)[\s>]/ },
   { id: "lists", what: "a list of its own", use: "List (rows, a long list drawn only where it shows, More)", test: /<(?:ul|ol)[\s>]/ },

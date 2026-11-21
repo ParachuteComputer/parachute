@@ -133,8 +133,10 @@ export const FRAME_KIT = String.raw`(function () {
   }
   function applyTheme(t) {
     theme = t; var r = document.documentElement.style;
-    if (t && typeof t === "object") Object.keys(t).forEach(function (k) { if (/^[a-z]+$/.test(k) && k !== "scheme" && k !== "density" && typeof t[k] === "string") r.setProperty("--" + k, t[k]); });
+    if (t && typeof t === "object") Object.keys(t).forEach(function (k) { if (/^[a-z]+$/.test(k) && k !== "scheme" && k !== "density" && k !== "motion" && typeof t[k] === "string") r.setProperty("--" + k, t[k]); });
     if (t && (t.scheme === "light" || t.scheme === "dark")) r.setProperty("color-scheme", t.scheme);
+    // still: nothing in the kit moves (theme.ts MOTION_CSS reads this mark)
+    if (t && (t.motion === "flowing" || t.motion === "still")) document.documentElement.setAttribute("data-motion", t.motion);
     themeCbs.forEach(function (f) { try { f(t); } catch (e) {} });
   }
   function applyOpen(o) {

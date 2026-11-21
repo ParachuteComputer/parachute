@@ -1,13 +1,14 @@
-// Settings → Look: the theme the app shows, where it comes from, and the two choices most people want to change by hand
-// (density, light or dark). Anything else (colours, fonts) is the theme note's, changed there by the person or their
+// Settings → Look: the theme the app shows, where it comes from, and the choices most people want to change by hand
+// (density, light or dark, whether things move). Anything else (colours, fonts) is the theme note's, changed there by the person or their
 // agent (docs/THEME.md). The first change copies the built-in theme into the home vault (copy-on-write).
 import { useEffect, useState } from "react";
-import { makeThemeMine, readTheme, setDensity, setScheme, THEME_PATH, useTheme } from "../theme/store";
-import { COLOR_KEYS, DENSITIES, SCHEMES, type Density, type Scheme } from "../theme/theme";
+import { makeThemeMine, readTheme, setDensity, setMotion, setScheme, THEME_PATH, useTheme } from "../theme/store";
+import { COLOR_KEYS, DENSITIES, MOTIONS, SCHEMES, type Density, type Motion, type Scheme } from "../theme/theme";
 import { homeVault } from "../shell/frameSource";
 
 const DENSITY_NAME: Record<Density, string> = { compact: "Compact", regular: "Regular", roomy: "Roomy" };
 const SCHEME_NAME: Record<Scheme, string> = { system: "As the device", light: "Light", dark: "Dark" };
+const MOTION_NAME: Record<Motion, string> = { flowing: "Flowing", still: "Still" };
 
 export default function ThemeSettings() {
   const t = useTheme();
@@ -32,6 +33,10 @@ export default function ThemeSettings() {
           <fieldset className="plain choice" disabled={busy}>
             <legend className="settings-sub">Light or dark</legend>
             {SCHEMES.map((s) => <label key={s}><input type="radio" name="scheme" checked={t.theme.scheme === s} onChange={act(() => setScheme(s))} /> {SCHEME_NAME[s]}</label>)}
+          </fieldset>
+          <fieldset className="plain choice" disabled={busy}>
+            <legend className="settings-sub">Motion</legend>
+            {MOTIONS.map((m) => <label key={m}><input type="radio" name="motion" checked={t.theme.motion === m} onChange={act(() => setMotion(m))} /> {MOTION_NAME[m]}</label>)}
           </fieldset>
           {t.from === "built-in" && <button type="button" className="quiet-button" disabled={busy} onClick={act(makeThemeMine)}>Make this look mine</button>}
         </>

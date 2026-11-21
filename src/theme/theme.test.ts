@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cssOf, DEFAULT_THEME, isColor, isFontStack, recordOf, themeFrom, TOKEN_KEYS, tokensOf } from "./theme";
+import { cssOf, DEFAULT_THEME, isColor, isFontStack, MOTION, recordOf, themeFrom, TOKEN_KEYS, tokensOf } from "./theme";
 
 describe("the theme record", () => {
   it("absent, or not a record, is the built-in theme", () => {
@@ -71,5 +71,35 @@ describe("tokens", () => {
     const css = cssOf(t);
     for (const k of TOKEN_KEYS) expect(css).toContain(`--${k}:${t[k]};`);
     expect(css).not.toMatch(/[<>]/);
+  });
+});
+
+describe("motion (docs/DESIGN-RULES.md)", () => {
+  it("flows unless the record says still; anything else it says is the built-in", () => {
+    expect(DEFAULT_THEME.motion).toBe("flowing");
+    expect(themeFrom({ theme: { motion: "still" } }).motion).toBe("still");
+    for (const m of ["bouncy", "", 0, null, ["still"]]) expect(themeFrom({ theme: { motion: m } }).motion, String(m)).toBe("flowing");
+    expect(tokensOf(themeFrom({ theme: { motion: "still" } }), false).motion).toBe("still");
+  });
+
+  it("every frame gets the curves and times, all 0 under reduce-motion or a still mark", () => {
+    const css = cssOf(tokensOf(DEFAULT_THEME, false));
+    for (const [k, v] of Object.entries(MOTION)) expect(css).toContain(`--${k}:${v};`);
+    expect(css).toContain(`@media (prefers-reduced-motion: reduce),(update: slow){:root{--t-press:0ms;--t-state:0ms;--t-sheet:0ms;--t-step:0ms;}}`);
+    expect(css).toContain(`:root[data-motion="still"]{--t-press:0ms;`);
+    // flowing: nothing stills it but the device or the mark
+    expect(css).not.toContain(`:root:not([data-motion="flowing"])`);
+    expect(css).not.toMatch(/[<>]/);
+  });
+
+  it("a still theme is still from a frame's first paint, until the frame is told it flows", () => {
+    const css = cssOf(tokensOf(themeFrom({ theme: { motion: "still" } }), false));
+    expect(css).toContain(`:root:not([data-motion="flowing"]){--t-press:0ms;--t-state:0ms;--t-sheet:0ms;--t-step:0ms;}`);
+  });
+
+  it("no time a part arrives in, its steps included, passes 250 ms", () => {
+    const ms = (k: keyof typeof MOTION) => parseInt(MOTION[k], 10);
+    expect(ms("t-state") + ms("t-step")).toBeLessThanOrEqual(250);
+    expect(ms("t-press")).toBeLessThanOrEqual(200);
   });
 });

@@ -24,6 +24,7 @@ in this repo, so it moves when Uni rewrites it against the guide.
 | Empty | `Empty` in Journal and Capture; plain lines elsewhere: rooms.tsx:206, mail.tsx:192 and :201, area.tsx:82 | `Empty` |
 | Errors | own `.err` lines and `role="alert"`: mail.tsx:172, room.tsx:841, journal.tsx:136, capture.tsx:130; status lines in rooms.tsx:290, area.tsx:88 | `Problem` (with Try again) for a screen; `toast(…, { error: true })` after an action |
 | Toasts | each its own "said" line: capture.tsx:116 and :130, mail.tsx:315 and :387, journal.tsx:136 | `toast` |
+| Motion | room.tsx's fresh message on a curve and time of its own (0.4 s); nothing else moved | the theme's curves and times (`--ease-*`, `--t-*`), still under reduce-motion; `List` brings in a new row; `Drawer`, `toast` (docs/DESIGN-RULES.md) |
 | Forms | own `<textarea>`s and keys (journal.tsx:131, capture.tsx:124, room.tsx:736 and :1023, matrix.tsx:125, mail.tsx:370-373) | `Write` (a box and its action; `enter="send"` and `line` for a chat), `Field` |
 | Editing a note | none in an applet: the app's note screen (`src/views/NoteEdit.tsx`) edits | `link.open(record)` takes the person there |
 | Search | own `type="search"` inputs: rooms.tsx:287, mail.tsx:183; NotesHome.tsx:70 | `Search` |

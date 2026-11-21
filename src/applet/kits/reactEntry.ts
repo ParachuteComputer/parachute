@@ -7,10 +7,11 @@ import { Button, Loading, Page, Problem, Record, Search, Tabs, toast, useTranscr
 import { when } from "../../kit/when";
 import { Fields, Table } from "../../kit/parts-data";
 import { useTheme } from "../../kit/useTheme";
+import { Drawer } from "../../kit/drawer";
 import { Link, Linked, link } from "../../kit/links";
 import { setModules } from "./modules";
 
 function Note() {
   throw new Error("Note isn't loaded here: import it by name (import { Note } from \"parachute\")");
 }
-setModules({ Button, Card, Days, Empty, Field, Fields, Table, Link, Linked, List, Loading, Note, Page, Problem, Record, Search, Tabs, Write, link, toast, useSaved, useTheme, useTranscripts, voiceNote, when });
+setModules({ Button, Card, Days, Drawer, Empty, Field, Fields, Table, Link, Linked, List, Loading, Note, Page, Problem, Record, Search, Tabs, Write, link, toast, useSaved, useTheme, useTranscripts, voiceNote, when });

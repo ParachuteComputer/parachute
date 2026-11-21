@@ -15,7 +15,8 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
   "dark": { "bg": "#171613", "surface": "#201e1a", "text": "#ece7dc", "muted": "#a59d8e", "line": "#3a362f", "accent": "#a3bf8a", "danger": "#f08f7f" },
   "fonts": { "serif": "\"Iowan Old Style\", Palatino, \"Noto Serif\", Georgia, serif", "sans": "system-ui, \"Noto Sans\", sans-serif", "mono": "ui-monospace, monospace" },
   "density": "regular",
-  "scheme": "system"
+  "scheme": "system",
+  "motion": "flowing"
 }
 ```
 
@@ -26,6 +27,7 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
 | `fonts` | `serif`, `sans` and `mono`: lists of font names. The app loads no fonts, so name fonts the device has, and end with `serif`, `sans-serif` or `monospace`. |
 | `density` | `compact`, `regular` or `roomy`: the padding, gaps, corners and text size. |
 | `scheme` | `system` (follow the device), `light` or `dark`. |
+| `motion` | `flowing` (pages, sheets and toasts arrive and go, a press gives) or `still` (nothing moves). A device set to reduce motion, or a screen slow to redraw (e-ink), is still whatever this says. |
 
 Every key is optional. Anything you leave out, or write in a form the app doesn't read, stays the built-in value, and
 the rest still apply. A colour is hex (`#4f6b3a`) or `rgb()`, `hsl()`, `oklch()` or `oklab()` with plain numbers.
@@ -49,6 +51,12 @@ The kit's parts (`Page`, `List`, `Button`, `Write`, `Note` and the rest, [WRITE-
 drawn on these values, so they follow the theme with no work. Each value is also a CSS variable in the applet's frame:
 `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`,
 `--gap`, `--radius`, `--size`, `--leading`. Write your CSS on these, and the applet changes with the theme.
+
+Motion comes from three curves and four times: `--ease-out` (arriving or leaving), `--ease-in-out` (moving across
+the screen), `--ease-drawer` (a sheet rising), and `--t-press` (160 ms, a press), `--t-state` (200 ms, a part arriving
+or changing), `--t-sheet` (300 ms, a sheet or a toast) and `--t-step` (40 ms, between parts arriving together). Move
+only `transform` and `opacity`, on these: with reduce-motion on the device or a still theme every time is 0, and your
+applet is still with the rest ([DESIGN-RULES.md](DESIGN-RULES.md)).
 
 Text sizes come from one scale, a step each on `--size` (so density moves them all): `--fs-title` (a page's title, 2×),
 `--fs-head` (a heading, 1.35×), `--fs-lead` (a row's or a note's text, 1.12×), `--fs-body` (1×), `--fs-small` (a line
