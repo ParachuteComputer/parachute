@@ -91,7 +91,7 @@ test("Parachute Simplified: sign in → Notes → find, edit and write a note �
     await connect.getByRole("button", { name: "Copy what to ask" }).click();
     await expect(connect.getByRole("button", { name: "Copied what to ask" })).toBeVisible();
     const ask = await page.evaluate(() => navigator.clipboard.readText());
-    expect(ask).toContain("Make me an applet in my Parachute app");
+    expect(ask).toContain("Make me one in my Parachute app that");
     expect(ask).toContain("https://github.com/ParachuteComputer/parachute/blob/main/docs/WRITE-AN-APPLET.md");
 
     // Capture: Parachute's own (docs/design/PARACHUTE-SOURCE.md), no card, nothing written to add it; a line lands in

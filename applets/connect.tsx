@@ -1,22 +1,25 @@
 // Connect an AI: one of Parachute's own applets (docs/design/PARACHUTE-SOURCE.md). Each vault's connector address, to
 // paste into Claude, ChatGPT or any app that speaks MCP, and how. The address is the vault's own (`<vault>/mcp`, as
 // Parachute Cloud's Connect page gives it); the AI then asks the person on their hub's page, so nothing here grants
-// anything. It reads which vaults this device holds (`vaults`) and copies an address on a tap (`copy`).
+// anything. It reads which vaults this device holds (`vaults`) and copies an address on a tap (`copy`); then what to ask
+// the AI for: an applet, with the guide's address, also to copy.
 import { useEffect, useRef, useState } from "react";
 import { app, Button, List, Loading, Page, Problem, vaults } from "parachute";
 
 type Held = { key: string; name: string; mine: boolean; home: boolean; connector?: string };
 
 /** The guide an AI reads to write an applet (the released app's: main). A cold AI connected by its address finds no
- *  word of applets in the vault (T-476 stranger walk: it offered a chat log instead), so the person hands it this. */
+ *  word of applets in the vault (T-476 stranger walk: it made a record type, not an applet), so the person hands it this.
+ *  The blank is last: after the paste, the person just keeps typing what they want. */
 const GUIDE = "https://github.com/ParachuteComputer/parachute/blob/main/docs/WRITE-AN-APPLET.md";
-const ASK = `Make me an applet in my Parachute app that … (say what you want). How to write one: ${GUIDE}`;
+const ASK = `How to write a Parachute applet: ${GUIDE}\nMake me one in my Parachute app that `;
 
 const CSS = `
 .cnx .addr { font: var(--fs-small) var(--mono); overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
 .cnx .how { margin: calc(var(--gap) * 1.5) 0 0; }
 .cnx .how h2 { margin: 0 0 4px; font: 600 var(--fs-body) var(--sans); }
 .cnx .how p { margin: 0 0 var(--gap); }
+.cnx .ask { white-space: pre-line; }
 .cnx .small { font: var(--fs-small) var(--sans); color: var(--muted); }
 `;
 
@@ -25,6 +28,8 @@ export default function Connect() {
   const [failed, setFailed] = useState<unknown>(null);
   const [copied, setCopied] = useState<Record<string, "yes" | "failed">>({});
   const [askCopied, setAskCopied] = useState<"yes" | "failed" | null>(null);
+  const askTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(askTimer.current), []);
   // each row's "Copied" goes back after a moment, on its own; a new copy restarts it, and leaving clears them
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -40,8 +45,8 @@ export default function Connect() {
   const copyAsk = async () => {
     const ok = canCopy ? await (app as { copy(t: string): Promise<boolean> }).copy(ASK).catch(() => false) : false;
     setAskCopied(ok ? "yes" : "failed");
-    clearTimeout(timers.current.get("ask"));
-    if (ok) timers.current.set("ask", setTimeout(() => setAskCopied((c) => (c === "yes" ? null : c)), 2500));
+    clearTimeout(askTimer.current);
+    if (ok) askTimer.current = setTimeout(() => setAskCopied((c) => (c === "yes" ? null : c)), 2500);
   };
   if (failed) return <Page title="Connect an AI"><Problem error={failed}>Your vaults couldn't be read</Problem></Page>;
   if (!list) return <Page title="Connect an AI"><Loading /></Page>;
@@ -64,10 +69,10 @@ export default function Connect() {
         <p>In Settings, <b>Apps &amp; Connectors</b>: create a custom connector (an MCP server) and paste the same address. It needs a paid plan, and may need Developer mode.</p>
       </section>
       <p className="small">Each address reaches that one vault only. Cursor, Claude Code and any other MCP app take the same address.</p>
-      <section className="how" aria-label="Then ask for an applet">
+      <section className="how" aria-label="Then ask it for an applet">
         <h2>Then ask it for an applet</h2>
-        <p>Your AI can make you an applet: a small app here that keeps what it needs in your vault. Tell it what you want, and where it learns how:</p>
-        <p className="addr">{ASK}</p>
+        <p>Your AI can make you an applet: a small app here that keeps what it needs in your vault. Copy this, paste it to your AI, and finish the sentence with what you want:</p>
+        <p className="addr ask">{ASK}</p>
         {canCopy && <Button small aria-label={askCopied === "yes" ? "Copied what to ask" : "Copy what to ask"} onClick={() => void copyAsk()}>{askCopied === "yes" ? "Copied" : "Copy"}</Button>}
         {(askCopied === "failed" || !canCopy) && <p className="small">Press and hold the line to select it.</p>}
       </section>
