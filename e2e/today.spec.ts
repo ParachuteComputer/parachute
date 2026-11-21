@@ -35,6 +35,10 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
   const until = Math.floor(Date.now() / 1000) + 3600;
   const ask = await bob.publish({ kind: 9, content: `Which bed?\n\n\`\`\`uni-ask\n${JSON.stringify({ v: 1, kind: "choose", what: `Where should the garlic go ${stamp}?`, why: "This week.", until, options: [{ id: "n", label: "North" }, { id: "s", label: "South" }] })}\n\`\`\``, tags: [["h", room], ["p", alice]] });
   expect(ask.ok).toBe(true);
+  // an ask that names her and has lapsed: it follows the asks' rule (gone), never back as a mention
+  const soon = Math.floor(Date.now() / 1000) + 3;
+  expect((await bob.publish({ kind: 9, content: `Quick one\n\n\`\`\`uni-ask\n${JSON.stringify({ v: 1, kind: "look", what: `Lapsed already ${stamp}?`, why: "A moment ago.", until: soon })}\n\`\`\``, tags: [["h", room], ["p", alice]] })).ok).toBe(true);
+  await new Promise((r) => setTimeout(r, 4000));
   await new Promise((r) => setTimeout(r, 1100));
   expect((await bob.publish({ kind: 9, content: `The beans are up ${stamp}.`, tags: [["h", room]] })).ok).toBe(true);
   // a line that names alice (not an ask): it wants her until she reads or writes in the room
@@ -62,6 +66,8 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
     await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Where should the garlic go ${stamp}?`, { timeout: 30_000 });
     await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Could you water the beans ${stamp}?`);
     await expect(app.getByText(/^\d+ things want you\.$/)).toBeVisible();
+    await expect(app.getByRole("region", { name: "Wants you" }).getByRole("button", { name: new RegExp(`garlic go ${stamp}`) })).toHaveCount(1);
+    await expect(app.getByRole("region", { name: "Wants you" })).not.toContainText(`Lapsed already ${stamp}?`);
     await expect(app.getByRole("region", { name: "From Uni" })).toContainText(`The beans are up ${stamp}.`);
     await expect(app.getByRole("region", { name: "Today's journal" })).toBeVisible();
 
@@ -92,7 +98,7 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
     const sk = Uint8Array.from(Buffer.from(secret("alice"), "hex"));
     const marks = JSON.stringify({ v: 1, client_id: "e2e-other-device", contexts: { [room]: Math.floor(Date.now() / 1000) + 1 } });
     const reader = await person(RELAY!, secret("alice"));
-    expect((await reader.publish({ kind: 30078, content: nip44.encrypt(marks, nip44.getConversationKey(sk, alice)), tags: [["d", `read-state:e2e${stamp}`], ["t", "read-state"]] })).ok).toBe(true);
+    expect((await reader.publish({ kind: 30078, content: nip44.encrypt(marks, nip44.getConversationKey(sk, alice)), tags: [["d", "read-state:e2e-other-device"], ["t", "read-state"]] })).ok).toBe(true);
     reader.close();
     await bar.getByRole("link", { name: /Rooms/ }).click();
     await expect(page).toHaveURL(new RegExp(`/a/${rooms.id}`));

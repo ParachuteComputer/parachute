@@ -206,7 +206,7 @@ export function promptOf(e: Ev): Prompt | null {
 }
 const OUTCOME = /^(✅ Command|❌ Command|⌛ Approval timed out|⚠️ Approval expired|No pending command to approve)/;
 
-const GLYPHS = ["◇", "❦", "▢", "△", "✎", "⌂"];
+const GLYPHS = ["◇", "❦", "▢", "△", "✎", "✦"]; // not ⌂: that is Home's
 export function glyph(name: string) {
   const n = name.trim().replace(/^#/, "");
   if (n.toLowerCase() === "uni") return "◎";
