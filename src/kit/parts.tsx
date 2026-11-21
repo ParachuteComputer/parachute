@@ -82,9 +82,13 @@ export function List({ label, hideLabel, rows, more }: { label?: ReactNode; /** 
   const keys = rows.map((r) => r.key).filter((k): k is string => typeof k === "string");
   if (seen.current === null) seen.current = new Set(keys);
   else {
+    // added: some of the rows that were there still are, and no more went than came (the next page, a book added, a
+    // chat that lets its oldest go as a new one comes); else the rows were swapped (a search, a filter)
     const now = new Set(keys);
-    const added = last.current.every((k) => now.has(k));
-    for (const k of keys) if (!seen.current.has(k)) { seen.current.add(k); if (added) fresh.current.add(k); }
+    const kept = last.current.filter((k) => now.has(k)).length;
+    const novel = keys.filter((k) => !seen.current!.has(k));
+    const added = kept > 0 && last.current.length - kept <= novel.length;
+    for (const k of novel) { seen.current.add(k); if (added) fresh.current.add(k); }
   }
   last.current = keys;
   return (

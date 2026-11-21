@@ -50,7 +50,7 @@ export const RULES: readonly Rule[] = [
     use: "transform and opacity to move; width and height on an <img>, so its place is kept before it loads",
     test: new RegExp([
       String.raw`\btransition(?:-property|Property)?\s*:[^;{}\n]*?(?<![\w-])(?:width|height|top|left|right|bottom|inset|margin(?:-[a-z]+)?|padding(?:-[a-z]+)?|max-height|max-width|min-height)(?![\w-])`,
-      String.raw`<img\b(?![^<]*?\b(?:width|height)\s*=)`,
+      String.raw`<img\b(?![^>]*?(?:=>[^>]*?)*\b(?:width|height)\s*=)`,
     ].join("|")) },
   // the screen and its states
   { id: "page", what: "its own <main> or page title", use: "Page (its title, kicker, aside and pull to refresh)", test: /<(?:main|h1)[\s>]/ },

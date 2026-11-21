@@ -89,6 +89,7 @@ const SLIPPED: [string, string][] = [
   ["layout", `.x { transition: height var(--t-state) var(--ease-out); }`],
   ["layout", `.x { transition: opacity var(--t-state) var(--ease-out), margin-top var(--t-state) var(--ease-out); }`],
   ["layout", `<img src={url} onError={() => setBad(true)} alt="" />`],
+  ["layout", `<img src={u} alt="" />; const width = 400;`],
 ];
 const CLEAN = `import { List, Page, when } from "parachute";
 // a comment may say <ul>, #a33, font: 12px, role="alert" or localStorage

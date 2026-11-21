@@ -38,7 +38,8 @@ The kit already follows them, so most applets get them by using its parts and ad
     pointer: `@media (hover: hover) and (pointer: fine)`.
 12. **A drag follows the finger 1:1** and can be let go of any time: far or fast enough and it goes, else it settles
     back (`Drawer` by its grip, or anywhere while its content fits; `toast` swiped down). Tap targets are at least
-    44 px on a phone (the parts' buttons are, without looking bigger).
+    44 px on a phone (the parts' buttons are, without looking bigger; buttons stacked with no gap between go in a
+    `pa-tight` box, so none takes its neighbour's tap).
 13. **Focus is always visible** from the keyboard (`:focus-visible`, the accent ring the parts draw); a drawer takes
     focus and gives it back; Escape closes it.
 

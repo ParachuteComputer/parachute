@@ -161,6 +161,8 @@ export const FRAME_KIT = String.raw`(function () {
   function queue() { if (!queued) { queued = true; requestAnimationFrame(measure); } }
   function startMeasuring() {
     if (measuring) return; measuring = true;
+    // the page is drawn at its content's height: the kit's parts read this (a Drawer opens in place)
+    document.documentElement.setAttribute("data-sized", "");
     var st = document.createElement("style");
     st.textContent = "html,body{height:auto!important;min-height:0!important;overflow:hidden!important}";
     document.head.appendChild(st);

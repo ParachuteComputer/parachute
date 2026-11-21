@@ -11,14 +11,14 @@
 // where it is in the page.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { arrive, settled } from "./screen";
+import { arrive, Button, settled } from "./screen";
 
 const FLICK = 0.4, SHARE = 0.25, SLOP_TOUCH = 10, SLOP_MOUSE = 2;
 /** Past the edge, a drag goes less and less far (Vaul's dampenValue). */
 const damp = (v: number) => Math.max(0, 8 * (Math.log(v + 1) - 2));
 const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
-/** A frame drawn at its content's height never scrolls itself (Page's pull to refresh asks the same). */
-const sized = () => typeof document !== "undefined" && (getComputedStyle(document.documentElement).overflowY === "hidden" || getComputedStyle(document.body).overflowY === "hidden");
+/** A frame drawn at its content's height (the frame kit marks it when it starts measuring the page). */
+const sized = () => typeof document !== "undefined" && document.documentElement.hasAttribute("data-sized");
 
 /** A panel over the page, from the foot of the screen. `open` shows it; `onClose` is asked to put it away (a drag down,
  *  a tap outside, Escape, or your own button), and it goes once `open` is false. `title` heads it (else give `label`,
@@ -57,7 +57,11 @@ export function Drawer({ open, onClose, title, label, children }: { open: boolea
     const el = sheet.current;
     // a field that took focus as it was drawn (autoFocus) keeps it; else the drawer itself
     if (el && !el.contains(document.activeElement)) (el.querySelector<HTMLElement>("[autofocus]") ?? el).focus({ preventScroll: true });
-    if (el) { if (el.scrollHeight > el.clientHeight) el.dataset.scrolls = ""; else delete el.dataset.scrolls; }
+    // whether its content scrolls (then a finger drags only by the grip), kept true as the content or the screen changes
+    const fits = () => { if (!el) return; if (el.scrollHeight > el.clientHeight + 1) el.dataset.scrolls = ""; else delete el.dataset.scrolls; };
+    fits();
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(fits) : null;
+    if (el && ro) { ro.observe(el); const body = el.querySelector(".pa-drawer-body"); if (body) ro.observe(body); }
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); close.current(); return; }
       if (inline || e.key !== "Tab" || !el) return;
@@ -68,7 +72,7 @@ export function Drawer({ open, onClose, title, label, children }: { open: boolea
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     };
     document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("keydown", key); root.style.overflow = was; if (before?.isConnected) before.focus({ preventScroll: true }); };
+    return () => { ro?.disconnect(); document.removeEventListener("keydown", key); root.style.overflow = was; if (before?.isConnected) before.focus({ preventScroll: true }); };
   }, [open, shown, inline]);
 
   // the drag
@@ -77,6 +81,8 @@ export function Drawer({ open, onClose, title, label, children }: { open: boolea
     if (!open || !el || !sc) return;
     let y0: number | null = null, t0 = 0, dy = 0, dragging = false, id = -1, slop = SLOP_TOUCH;
     const set = (v: number) => {
+      // at rest it holds nothing of its own, so the states' values (arriving, leaving) apply
+      if (v === 0) { el.style.removeProperty("--pa-drag"); sc.style.removeProperty("--pa-scrim"); return; }
       const h = el.offsetHeight || 1;
       el.style.setProperty("--pa-drag", `${v}px`);
       sc.style.setProperty("--pa-scrim", String(Math.max(0, Math.min(1, 1 - v / h))));
@@ -125,20 +131,23 @@ export function Drawer({ open, onClose, title, label, children }: { open: boolea
   }, [open, shown]);
 
   if (!shown || typeof document === "undefined") return null;
-  const head = title && <header className="pa-drawer-head"><h2 className="pa-drawer-title" id={titleId}>{title}</h2></header>;
+  const body = <div className="pa-drawer-body">{children}</div>;
   if (inline) {
     if (!open) return null;
+    // in place: no grip and no shade, so a way to put it away of its own
     return (
       <section ref={sheet} className="pa-drawer pa-drawer-inline" role="dialog" tabIndex={-1} aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : label}>
-        {head}{children}
+        <header className="pa-drawer-head">{title ? <h2 className="pa-drawer-title" id={titleId}>{title}</h2> : <span />}<Button kind="quiet" small onClick={() => close.current()}>Close</Button></header>
+        {body}
       </section>
     );
   }
+  const head = title && <header className="pa-drawer-head"><h2 className="pa-drawer-title" id={titleId}>{title}</h2></header>;
   return createPortal(
     <div ref={scrim} className="pa-drawer-scrim" data-state="before" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) close.current(); }}>
       <section ref={sheet} className="pa-drawer" role="dialog" aria-modal="true" tabIndex={-1} aria-labelledby={title ? titleId : undefined} aria-label={title ? undefined : label}>
         <button type="button" className="pa-drawer-grip" aria-label="Close" onClick={() => close.current()} />
-        {head}{children}
+        {head}{body}
       </section>
     </div>,
     document.body,

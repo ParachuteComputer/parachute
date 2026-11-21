@@ -146,6 +146,8 @@ test("a drawer follows the finger: let go near, it settles back; far, it goes", 
   await page.mouse.up();
   await page.waitForTimeout(400);
   await expect(drawer).toBeVisible();
+  // settled back, it holds nothing of the drag, so a later close fades the shade as it should
+  expect(await app.locator(".pa-drawer-scrim").evaluate((s) => (s as HTMLElement).style.getPropertyValue("--pa-scrim"))).toBe("");
   // a little, slowly: back where it was
   await drag(page, (await grip.boundingBox())!, 20, 20);
   await page.waitForTimeout(400);

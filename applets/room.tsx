@@ -728,7 +728,7 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
     {sealed && <SealedCard e={e} />}
     {secret && <SecretCard e={e} />}
     {media.map((m) => <Attachment key={m.sha} m={m} />)}
-    <div className="acts">
+    <div className="acts pa-tight">
       {!root && <Button kind="quiet" small onClick={openThread}>{replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : "Reply"}</Button>}
       {mine && !ask && editing === null && <Button kind="quiet" small onClick={() => setEditing(body)}>Edit</Button>}
       {mine && <Button kind="quiet" small onClick={async () => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } await change(e, null); }}>{sure ? "Tap again to delete" : "Delete"}</Button>}
@@ -1001,7 +1001,7 @@ function Composer({ st, relay, room, thread, members, send, typing, setErr, send
           title={listen.on ? "Uni hears what you send here. Tap to mute." : "Uni is muted: your messages don't notify Uni. Tap to let Uni listen."}>{listen.on ? "Uni listening" : "Uni muted"}</Button>}
         {files.map((f, i) => <span key={i} className="file-chip">{f.name} <Button kind="quiet" small aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((_, j) => j !== i))}>×</Button></span>)}
       </div>
-      {pick && options.length > 0 && <ul className="pick" role="listbox" aria-label="People in this room">{options.map((o, i) => <li key={o.p} role="option" aria-selected={i === pick.sel}><Button kind="quiet" onMouseDown={(e) => { e.preventDefault(); choose(o); }}>{o.n}</Button></li>)}</ul>}
+      {pick && options.length > 0 && <ul className="pick pa-tight" role="listbox" aria-label="People in this room">{options.map((o, i) => <li key={o.p} role="option" aria-selected={i === pick.sel}><Button kind="quiet" onMouseDown={(e) => { e.preventDefault(); choose(o); }}>{o.n}</Button></li>)}</ul>}
       <Write line enter="send" label={`Message ${name}`} placeholder={thread ? "Reply in thread…" : `Message ${name}…`} value={text} maxLength={MAX_TEXT} inputRef={field}
         onChange={(v) => onChange(v, field.current?.selectionStart ?? v.length)}
         onKeyDown={(e) => {
