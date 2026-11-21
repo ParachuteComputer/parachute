@@ -51,6 +51,8 @@ export type Pending = {
   /** where the app goes after (the applet that asked, the screen that needed a change); the launcher when none */
   back?: string;
   allow?: AllowAfter;
+  /** step "manage": the applet that asked (its subject): only it may use what the hub gives (vault/manage.ts) */
+  applet?: string;
   /** at sign-in: the vault asked for is to be this device's home */
   home?: boolean;
   /** at sign-in: whose each listed vault is, as the person said; kept only when the hub's consent comes back */
@@ -120,7 +122,7 @@ export function forgetClient(issuer: string) {
   try { localStorage.setItem(CLIENTS_KEY, JSON.stringify(all)); } catch { /* nothing to do */ }
 }
 
-export type Begin = { parachute: Parachute; step: "list" | "open" | "manage"; vault?: string; level?: Level; why?: Why; back?: string; allow?: AllowAfter; home?: boolean; marks?: Pending["marks"]; whose?: "mine" | "theirs"; how: "key" | "page";
+export type Begin = { parachute: Parachute; step: "list" | "open" | "manage"; vault?: string; level?: Level; why?: Why; back?: string; allow?: AllowAfter; home?: boolean; marks?: Pending["marks"]; whose?: "mine" | "theirs"; how: "key" | "page"; applet?: string;
   /** a new sign-in (not the next step of one): a registration a sign-in that never came back used is dropped */
   fresh?: boolean };
 
@@ -158,7 +160,7 @@ export async function beginSignIn(b: Begin, fetchImpl: typeof fetch = fetch.bind
   const state = generateState();
   const revocation = (meta as { revocation_endpoint?: unknown }).revocation_endpoint;
   const pending: Pending = { parachute, step: b.step, ...(b.step === "open" ? { vault: b.vault, level: b.level ?? "read" } : b.step === "manage" ? { vault: b.vault } : {}), why: b.why ?? "signin",
-    ...(b.back ? { back: b.back } : {}), ...(b.allow ? { allow: b.allow } : {}), ...(b.home ? { home: true } : {}), ...(b.marks ? { marks: b.marks } : {}),
+    ...(b.back ? { back: b.back } : {}), ...(b.allow ? { allow: b.allow } : {}), ...(b.step === "manage" && b.applet ? { applet: b.applet } : {}), ...(b.home ? { home: true } : {}), ...(b.marks ? { marks: b.marks } : {}),
     issuer: parachute.issuer, tokenEndpoint: meta.token_endpoint, ...(onOrigin(revocation, parachute.issuer) ? { revocationEndpoint: revocation } : {}),
     clientId, codeVerifier, state, redirectUri: redirect, startedAt: Date.now(), how: b.how, ...(b.whose ? { whose: b.whose } : {}), ...(iss ? { iss: true as const } : {}), ...(reserved ? { reserved: true as const } : {}) };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));

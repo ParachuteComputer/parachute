@@ -31,6 +31,36 @@ function ConfirmSheet({ c }: { c: Confirming }) {
   );
 }
 
+/** A key just made, shown once on the shell's own sheet (vaults.giveKey): the applet never sees its secret. */
+export type Reveal = { name: string; vault: string; token: string; address: string; until: string };
+type Revealing = Reveal & { done: () => void };
+
+function RevealSheet({ r }: { r: Revealing }) {
+  const done = useRef<HTMLButtonElement>(null);
+  const [said, setSaid] = useState<string | null>(null);
+  useEffect(() => { done.current?.focus(); }, [r]);
+  const copy = (text: string, what: string) => void (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error("no clipboard")))
+    .then(() => setSaid(`${what} copied.`), () => setSaid(`Press and hold the ${what.toLowerCase()} to select it.`));
+  const until = (() => { try { return new Date(r.until).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }); } catch { return r.until; } })();
+  return (
+    <div className="sheet-scrim sheet-over-frames" role="presentation">
+      <section className="sheet" role="dialog" aria-modal="true" aria-label={`${r.name}'s key`}>
+        <h2>{r.name}'s key</h2>
+        <p>Give it to {r.name} now: Parachute doesn't keep it and won't show it again. It reaches {r.vault} until {until}, or until you end it in Sharing.</p>
+        <p className="reveal-secret" data-secret>{r.token}</p>
+        <p>Its address, with the key sent as a Bearer token:</p>
+        <p className="reveal-secret">{r.address}</p>
+        {said && <p role="status">{said}</p>}
+        <div className="grant-actions">
+          <button type="button" className="quiet-button" onClick={() => copy(r.token, "Key")}>Copy key</button>
+          <button type="button" className="quiet-button" onClick={() => copy(r.address, "Address")}>Copy address</button>
+          <button ref={done} type="button" className="primary" onClick={() => r.done()}>Done</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 type Asking = { view: SecretView; done: (value: string | null) => void };
 type Trusting = { applet: string; key: string; done: (name: string | null) => void };
 type Coding = { what: string; wrong: string | null; done: (code: string | null) => void };
@@ -141,9 +171,12 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
   const [coding, setCoding] = useState<Coding | null>(null);
   const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [line, setLine] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState<Revealing | null>(null);
   useEffect(() => { if (!line) return; const t = setTimeout(() => setLine(null), 6000); return () => clearTimeout(t); }, [line]);
   // an open sheet answers "cancelled" when the screen goes
   const open = useRef<Asking | Trusting | Coding | Confirming | null>(null);
+  // a key's secret on screen: gone (not kept anywhere) when the screen goes
+  useEffect(() => () => setRevealing(null), []);
   useEffect(() => () => { open.current?.done(null); }, []);
   const shell: Shell = {
     tap,
@@ -181,14 +214,17 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
     open.current = c;
     setConfirming(c);
   });
+  /** Show a key's secret once, over the screen; resolves when the person is done with it. */
+  const reveal = (r: Reveal): Promise<void> => new Promise((done) => setRevealing({ ...r, done: () => { setRevealing(null); done(); } }));
   const ui = <>
     {confirming && <ConfirmSheet c={confirming} />}
+    {revealing && <RevealSheet r={revealing} />}
     {asking && <SecretSheet asking={asking} onDone={asking.done} />}
     {trusting && <TrustSheet t={trusting} />}
     {coding && <PasscodeSheet c={coding} />}
     {line && <p className="shell-line" role="status">{line}</p>}
   </>;
   // the screen hid (kept running, shell/kept.tsx): an open sheet answers "cancelled", as when the screen goes
-  const cancel = () => { open.current?.done(null); };
-  return { shell, ui, cancel, confirm };
+  const cancel = () => { open.current?.done(null); setRevealing((r) => { r?.done(); return null; }); };
+  return { shell, ui, cancel, confirm, reveal };
 }

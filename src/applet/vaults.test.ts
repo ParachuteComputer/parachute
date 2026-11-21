@@ -302,6 +302,7 @@ describe("sharing: who reaches a vault, a key for an AI, ending one (level 6, T-
   const rows = [{ id: "claude", name: "claude", who: "app" as const, app: null, can: "change" as const, types: ["recipe"], until: "2027-11-21T00:00:00.000Z", lastUsed: null, self: false }];
   function make(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], answer: "yes" | "no" | "untapped" = "yes") {
     const done: string[] = [];
+    const revealed: string[] = [];
     const asked: { title: string; body: string }[] = [];
     const deps = {
       list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp", view: null, reach: "anyone" }],
@@ -310,11 +311,12 @@ describe("sharing: who reaches a vault, a key for an AI, ending one (level 6, T-
       giveKey: async (_v: string, k: { name: string; can: string; types: string[] | null }) => { done.push(`give ${k.name} ${k.can} ${k.types?.join(",") ?? "all"}`); return { name: k.name, token: "t.o.k", until: "2027", types: k.types, address: "https://hub.example/vault/home/mcp" }; },
       endReach: async (_v: string, id: string) => { done.push(`end ${id}`); },
       stopManaging: () => { done.push("stop"); },
+      reveal: async (k: { token: string }) => { revealed.push(k.token); },
       confirm: async (q: { title: string; body: string }) => { asked.push(q); return answer; },
     } as unknown as VaultsDeps;
     const router = createRouter([createVaultsModule(words, deps)]);
     const call = (method: string, params: unknown) => router.call("vaults", method, params, {}, { charge() {}, closed: () => false });
-    return { call, done, asked };
+    return { call, done, asked, revealed };
   }
   it("needs the sharing word", async () => {
     const { call, done } = make(["vaults"]);
@@ -322,8 +324,11 @@ describe("sharing: who reaches a vault, a key for an AI, ending one (level 6, T-
     expect(done).toEqual([]);
   });
   it("makes a key, ends one and asks to manage only after the person's yes on the app's own sheet, which says what it grants", async () => {
-    const { call, done, asked } = make();
-    expect(await call("giveKey", { vault: "home", name: "claude", can: "write", types: ["recipe"] })).toMatchObject({ token: "t.o.k" });
+    const { call, done, asked, revealed } = make();
+    // the secret goes to the app's own sheet; the applet gets the key's name, date, types and address, never its secret
+    const given = await call("giveKey", { vault: "home", name: "claude", can: "write", types: ["recipe"] });
+    expect(given).toEqual({ name: "claude", until: "2027", types: ["recipe"], address: "https://hub.example/vault/home/mcp" });
+    expect(revealed).toEqual(["t.o.k"]);
     expect(asked[0].title).toBe("Give claude a key to home?");
     expect(asked[0].body).toContain("read, add, change and delete recipe records");
     await call("endReach", { vault: "home", id: "claude" });

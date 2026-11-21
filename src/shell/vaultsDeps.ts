@@ -69,8 +69,11 @@ function reachRow(r: HubGrantRow, self: string | null): ReachRow {
 }
 
 export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string;
+  /** The applet these words serve (its subject): what it manages is held for it alone (vault/manage.ts). */ applet?: string;
+  /** The shell's own sheet that shows a key's secret once, never handing it to the applet. */ reveal?(k: { name: string; vault: string; token: string; address: string; until: string }): Promise<void>;
   /** Each read made from the kept copies (the vault, the read's path and query as readCache names it). */ read?(vault: string, read: string): void }): VaultsDeps {
   const req = (key: string) => clientFor(rec(key)) as unknown as VaultClient & Requesting;
+  const applet = opts.applet ?? "";
   return {
     list: heldVaults,
     hubs: heldHubs,
@@ -152,9 +155,9 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
     },
     async reach(key) {
       const v = rec(key);
-      if (!manageHeld(v)) return null;
+      if (!manageHeld(v, applet)) return null;
       try {
-        return (await listReach(v)).filter((r) => r.state === "in_force").map((r) => reachRow(r, v.clientId ?? null));
+        return (await listReach(v, applet)).filter((r) => r.state === "in_force").map((r) => reachRow(r, v.clientId ?? null));
       } catch (e) {
         if (e instanceof ManageEndedError) return null;
         throw e;
@@ -165,20 +168,21 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       const back = new URL(opts.back(), window.location.origin);
       back.searchParams.set("vault", key);
       back.searchParams.set("show", "sharing");
-      window.location.assign(await askManage(rec(key), `${back.pathname}${back.search}`));
+      window.location.assign(await askManage(rec(key), `${back.pathname}${back.search}`, applet));
     },
     async giveKey(key, k) {
       const v = rec(key);
-      const made = await makeKey(v, k);
+      const made = await makeKey(v, applet, k);
       return { name: made.name, token: made.token, until: made.expires_at, types: made.types ?? null, address: connectorAddress(v) };
     },
     async endReach(key, id) {
-      await endReach(rec(key), id);
+      await endReach(rec(key), applet, id);
     },
     stopManaging(key) {
       const v = findVault(key);
-      if (v) endManage(v);
+      if (v && manageHeld(v, applet)) endManage(v);
     },
+    ...(opts.reveal ? { reveal: opts.reveal } : {}),
     async readOnly(key) {
       const v = rec(key);
       forgetOwnWrite(v);

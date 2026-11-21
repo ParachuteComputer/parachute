@@ -76,14 +76,16 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   await expect(give).toContainText(`${name} can read, add, change and delete ${recipe} records`);
   await page.waitForTimeout(800);
   await give.getByRole("button", { name: "Make the key" }).click();
-  const secretKey = v.locator("p.addr[data-secret]");
-  await expect(secretKey).toBeVisible({ timeout: 20_000 });
-  const token = (await secretKey.textContent())!.trim();
+  // the secret is shown once on the app's own sheet, outside the applet's frame
+  const shown = page.getByRole("dialog", { name: `${name}'s key` });
+  await expect(shown).toBeVisible({ timeout: 20_000 });
+  const token = (await shown.locator("p[data-secret]").textContent())!.trim();
   expect(token.split(".")).toHaveLength(3);
-  await expect(v.getByText("it isn't shown again")).toBeVisible();
+  await expect(shown).toContainText("won't show it again");
+  expect(await v.locator("body").innerText()).not.toContain(token);
+  await shown.getByRole("button", { name: "Done" }).click();
 
   // the list names it: what it may do, to which type, until when
-  await v.getByRole("button", { name: "Done" }).click();
   const row = who.getByRole("listitem").filter({ hasText: name });
   await expect(row).toContainText(new RegExp(`reads and changes ${recipe}`, "i"));
   await expect(row).toContainText("until");
@@ -98,8 +100,12 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   expect((await vaultApi(token, "GET", `records/${entry.id}/versions`)).status).toBe(404);
   expect(await (await vaultApi(token, "GET", "types")).text()).not.toContain(journal);
   expect((await vaultApi(token, "POST", "records", { path: `Journal ${stamp}/Not mine`, body: "no", types: [journal] })).status).toBe(403);
-  // and at the MCP door
+  // and at the MCP door: a recipe is there, the journal isn't
+  const recipeById = await mcp(token, "query-notes", { id: soup.id });
+  expect(recipeById.status).toBe(200);
+  expect(recipeById.text).toContain("Leeks and stock");
   const byId = await mcp(token, "query-notes", { id: entry.id });
+  expect(byId.status).toBe(200);
   expect(byId.text).not.toContain(secret);
   const found = await mcp(token, "query-notes", { search: secret });
   expect(found.text).not.toContain(entry.id);
@@ -114,7 +120,27 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   expect((await vaultApi(token, "GET", `records/${soup.id}`)).status).toBe(401);
   expect((await mcp(token, "query-notes", { id: soup.id })).status).toBe(401);
 
-  // leaving Sharing gives the hub's yes back: the app holds no admin of the vault
+  // leaving Sharing gives the hub's yes back: ended at the hub, not only forgotten here
+  const statements = `${hub.origin}/account/vaults/${VAULT}/statements`;
+  const held = async () => page.evaluate(() => (JSON.parse(sessionStorage.getItem("parachute.manage") ?? "[]") as { access: string }[])[0]?.access ?? null);
+  const first = await held();
+  expect(first).not.toBeNull();
+  expect((await fetch(statements, { headers: { authorization: `Bearer ${first}` } })).status).toBe(200);
   await v.getByRole("button", { name: new RegExp(`${VAULT}$`) }).first().click();
-  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("parachute.manage") ?? "[]")).toBe("[]");
+  await expect.poll(held).toBeNull();
+  await expect.poll(async () => (await fetch(statements, { headers: { authorization: `Bearer ${first}` } })).status).toBe(401);
+
+  // and when the shell leaves the applet (its own Back), not the applet
+  await v.getByRole("button", { name: "Sharing" }).click();
+  await v.getByRole("button", { name: "Show them all" }).click();
+  await page.waitForTimeout(800);
+  await page.getByRole("dialog", { name: `Manage who reaches ${VAULT}?` }).getByRole("button", { name: "Continue" }).click();
+  await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
+  await approveBack(page, app);
+  await expect(v.getByRole("button", { name: "Give an AI a key" })).toBeVisible({ timeout: 30_000 });
+  const second = await held();
+  expect(second).not.toBeNull();
+  await page.getByRole("button", { name: "Back" }).first().click();
+  await expect.poll(held).toBeNull();
+  await expect.poll(async () => (await fetch(statements, { headers: { authorization: `Bearer ${second}` } })).status).toBe(401);
 });

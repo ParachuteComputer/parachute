@@ -132,11 +132,11 @@ export async function askVault(rec: Pick<VaultRecord, "issuer" | "vault">, level
 
 /** Ask a Parachute for one vault's admin, to manage who reaches it (vault/manage.ts): through the key door when this
  *  device has a key the hub takes, else the hub's own page. Resolves to the address to open. */
-export async function askManage(rec: Pick<VaultRecord, "issuer" | "vault">, back: string): Promise<string> {
+export async function askManage(rec: Pick<VaultRecord, "issuer" | "vault">, back: string, applet: string): Promise<string> {
   const hub = originOf(rec.issuer);
   const whose: "mine" | "theirs" = whoseOf(rec) === "mine" ? "mine" : "theirs";
   const parachute = await describe(hub, fetchFor(whose));
-  const b = { parachute, step: "manage" as const, vault: rec.vault, why: "manage" as const, whose, back };
+  const b = { parachute, step: "manage" as const, vault: rec.vault, why: "manage" as const, whose, back, applet };
   if (keysHere()) {
     try { return await keySignIn(hub, await beginSignIn({ ...b, how: "key" })); } catch { dropPending(); }
   }

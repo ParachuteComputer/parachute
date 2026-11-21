@@ -504,7 +504,8 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
 
 type ReachRow = { id: string; name: string; who: "person" | "agent" | "app" | "service"; app: string | null; can: "read" | "change" | "manage" | "backup";
   types: string[] | null; until: string | null; lastUsed: string | null; self: boolean };
-type Given = { name: string; token: string; until: string; types: string[] | null; address: string };
+/** A key just made: its secret was shown once on the app's own sheet and never reaches this applet. */
+type Given = { name: string; until: string; types: string[] | null; address: string };
 type Sharing = { reach?(vault: string): Promise<{ managing: boolean; rows: ReachRow[] | null }>; manage?(vault: string): Promise<null>;
   giveKey?(vault: string, k: { name: string; can: "read" | "write"; types: string[] | null }): Promise<Given>; endReach?(vault: string, id: string): Promise<null>; stopManaging?(vault: string): Promise<null> };
 const canWord = { read: "reads", change: "reads and changes", manage: "manages", backup: "downloads a backup of" } as const;
@@ -520,7 +521,6 @@ function Reach({ v, self }: { v: Held; self: { key: string; title: string; meta:
   const [managing, setManaging] = useState<boolean | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
   const [giving, setGiving] = useState(false);
-  const [given, setGiven] = useState<Given | null>(null);
   const load = () => can ? sh.reach!(v.key).then((r) => { setManaging(r.managing); setRows(r.rows); setFailed(null); }, setFailed) : Promise.resolve();
   useEffect(() => { void load(); }, [v.key]);
   // leaving Sharing gives the hub's yes back: Parachute holds no admin when nobody is managing
@@ -528,25 +528,27 @@ function Reach({ v, self }: { v: Held; self: { key: string; title: string; meta:
   const others = (rows ?? []).filter((r) => !r.self);
   const until = (r: ReachRow) => (r.until ? ` · until ${when.date(r.until)}` : "");
   const used = (r: ReachRow) => (r.lastUsed ? ` · used ${when.ago(r.lastUsed)}` : "");
-  const kindWord = (r: ReachRow) => (r.app && r.app !== r.name ? `${r.app}, ` : r.who === "agent" ? "an AI, " : "");
+  // an app connected by OAuth is named by the name it registered (Parachute on another device, Claude…), never its id
+  const title = (r: ReachRow) => (r.app ? (r.app === "Parachute" ? "Parachute, on another device" : r.app) : r.name);
+  const kindWord = (r: ReachRow) => (r.who === "agent" && !r.app ? "an AI, " : "");
   return <>
-    <List label={`Who reaches ${v.name}`} rows={[self, ...others.map((r) => ({ key: r.id, title: r.name, meta: `${kindWord(r)}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`,
-      aside: <Button small kind="quiet" aria-label={`End ${r.name}`} onClick={() => sh.endReach!(v.key, r.id).then(() => { toast(`${r.name} can no longer reach ${v.name}.`); return load(); }, (e: unknown) => quiet(e, "Not ended"))}>End</Button> }))]} />
+    <List label={`Who reaches ${v.name}`} rows={[self, ...others.map((r) => ({ key: r.id, title: title(r), meta: `${kindWord(r)}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`,
+      aside: <Button small kind="quiet" aria-label={`End ${title(r)}`} onClick={() => sh.endReach!(v.key, r.id).then(() => { toast(`${title(r)} can no longer reach ${v.name}.`); return load(); }, (e: unknown) => quiet(e, "Not ended"))}>End</Button> }))]} />
     {!can ? <p className="note-meta">The keys and AIs your hub has let in are listed on your hub, where you can end them. This Parachute can't list them yet.</p>
       : failed ? <Problem error={failed} onRetry={load}>Who reaches {v.name} couldn't be read</Problem>
       : managing === null ? <Loading />
       : !managing ? <div className="acts"><p className="note-meta">Every key, AI and app your hub lets into {v.name} is listed on your hub.</p>
           <Button small onClick={() => sh.manage!(v.key).catch((e: unknown) => quiet(e, "Not opened"))}>Show them all</Button></div>
-      : given ? <Made g={given} v={v} done={() => { setGiven(null); void load(); }} />
-      : giving ? <GiveKey v={v} cancel={() => setGiving(false)} made={(g) => { setGiving(false); setGiven(g); void load(); }} />
+      : giving ? <GiveKey v={v} taken={(rows ?? []).map((r) => r.name)} cancel={() => setGiving(false)} made={(g) => { setGiving(false); toast(`${g.name} can reach ${typesWord(g.types)} in ${v.name}.`); void load(); }} />
       : <div className="acts">{!others.length && <p className="note-meta">Nothing else reaches {v.name} now.</p>}<Button small onClick={() => setGiving(true)}>Give an AI a key</Button></div>}
   </>;
 }
 
 /** A key for an AI: its name, what it may do, and which types (all, or some). */
-function GiveKey({ v, cancel, made }: { v: Held; cancel: () => void; made: (g: Given) => void }) {
+function GiveKey({ v, taken, cancel, made }: { v: Held; taken: string[]; cancel: () => void; made: (g: Given) => void }) {
   const sh = vaults as unknown as Sharing;
-  const [name, setName] = useState("claude");
+  // a name no key here has had (a name is one key for good, at the hub)
+  const [name, setName] = useState(() => { let n = "claude"; for (let i = 2; taken.includes(n); i++) n = `claude-${i}`; return n; });
   const [can, setCan] = useState<"read" | "write">("write");
   const [all, setAll] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
@@ -566,7 +568,7 @@ function GiveKey({ v, cancel, made }: { v: Held; cancel: () => void; made: (g: G
       <p className="sect">It may</p>
       <div className="chips" role="group" aria-label="It may">
         <Button small kind={(can === "read") ? "primary" : "plain"} aria-pressed={can === "read"} onClick={() => setCan("read")}>Read</Button>
-        <Button small kind={(can === "write") ? "primary" : "plain"} aria-pressed={can === "write"} onClick={() => setCan("write")}>Read and add</Button>
+        <Button small kind={(can === "write") ? "primary" : "plain"} aria-pressed={can === "write"} onClick={() => setCan("write")}>Read and change</Button>
       </div>
       <p className="sect">Which types</p>
       <div className="chips" role="group" aria-label="Which types">
@@ -574,23 +576,8 @@ function GiveKey({ v, cancel, made }: { v: Held; cancel: () => void; made: (g: G
         {!all && (types ?? []).map((t) => <Button small key={t.name} kind={(picked.includes(t.name)) ? "primary" : "plain"} aria-pressed={picked.includes(t.name)} onClick={() => toggle(t.name)}>{label(t.name)}</Button>)}
       </div>
       {types && !types.length && !all && <p className="note-meta">{v.name} has no types yet: give every type, or make a type first.</p>}
-      <p className="note-meta">{name || "It"} {can === "write" ? "reads, adds, changes and deletes" : "reads"} {all ? "every record" : picked.length ? `${picked.map(label).join(", ")} records` : "the types you pick"} in {v.name}, and nothing else, for a year or until you end it.</p>
+      <p className="note-meta">{name || "It"} {can === "write" ? "reads, adds, changes and deletes" : "reads"} {all ? "every record" : picked.length ? `${picked.map(label).join(", ")} records` : "the types you pick"} in {v.name}, and nothing else, for a year or until you end it. Its key is shown once, on Parachute's own sheet.</p>
       <div className="acts"><Button small kind="primary" disabled={!ok} busy={busy} onClick={go}>Make the key</Button> <Button small kind="quiet" onClick={cancel}>Cancel</Button></div>
-    </div>
-  );
-}
-
-/** The key just made: its secret, shown this once, and where it connects. */
-function Made({ g, v, done }: { g: Given; v: Held; done: () => void }) {
-  const copy = (t: string, what: string) => void (app as { copy(t: string): Promise<boolean> }).copy(t).then((ok) => toast(ok ? `${what} copied.` : `Press and hold the ${what.toLowerCase()} to select it.`), () => toast(`Press and hold the ${what.toLowerCase()} to select it.`));
-  return (
-    <div className="give">
-      <p className="lede">{g.name} can reach {typesWord(g.types)} in {v.name} until {when.date(g.until)}. Give it this key now: it isn't shown again.</p>
-      <p className="addr" data-secret>{g.token}</p>
-      <div className="acts"><Button small onClick={() => copy(g.token, "Key")}>Copy key</Button></div>
-      <p className="note-meta">Its address (send the key as a Bearer token):</p>
-      <p className="addr">{g.address}</p>
-      <div className="acts"><Button small onClick={() => copy(g.address, "Address")}>Copy address</Button> <Button small kind="quiet" onClick={done}>Done</Button></div>
     </div>
   );
 }

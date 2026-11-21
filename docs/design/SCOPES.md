@@ -17,7 +17,7 @@ The app holds, at each hub, no more of a vault than the most that something the 
 | Opening another vault (**Open letters** in Settings) | read of that vault |
 | An applet, on its card | its vault, at **write** if its manifest adds or changes notes (`create`, `update`), else read |
 | A change of their own (a note, their settings, adding Capture) | write of that vault, asked when the change is tried |
-| Managing who reaches a vault (Vault > Sharing > **Show them all**) | that vault's admin, for this visit only: held in the tab's session, never as the vault's token, never refreshed, ended when they leave Sharing ([VAULT.md](../VAULT.md) "Who reaches a vault") |
+| Managing who reaches a vault (Vault > Sharing > **Show them all**) | that vault's admin, for this visit and for Vault only: held in the tab's session, never as the vault's token, never refreshed, ended at the hub when they leave Sharing, when the shell leaves or hides Vault, or when the page goes ([VAULT.md](../VAULT.md) "Who reaches a vault") |
 
 The hub narrows to a vault and a verb (`vault:<name>:read`, `vault:<name>:write`) and no further. The folders on an
 applet's card are the app's own rule, as before (`src/applet/modules/vault.ts`). Folders at the hub are the next step
