@@ -1,0 +1,100 @@
+# The throwaway servers the services specs run against (e2e/services/README.md): a Buzz relay with production's auth
+# settings, a Stalwart with a copy of the Uni app's mail gateway in front of it, and a Matrix homeserver. Loopback only.
+# Started and seeded by e2e/services/up.sh, which also writes the keys and passwords (all made up per run). The project
+# name (-p) keeps two runs on one machine apart; the ports come from the environment up.sh sets.
+x-labels: &labels
+  owner: parachute-e2e
+  purpose: throwaway-test
+services:
+  # ── Buzz relay ───────────────────────────────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    labels: *labels
+    environment: { POSTGRES_USER: buzz, POSTGRES_PASSWORD: buzz_test, POSTGRES_DB: buzz }
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U buzz"], interval: 3s, retries: 20 }
+  redis:
+    image: redis:7-alpine
+    labels: *labels
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 2s, retries: 20 }
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    labels: *labels
+    command: server /data
+    environment: { MINIO_ROOT_USER: buzz_test, MINIO_ROOT_PASSWORD: buzz_test_secret }
+  minio-init:
+    # the client image: the server image has no `mc`
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    labels: *labels
+    depends_on: [minio]
+    entrypoint: ["/bin/sh", "-c", "until mc alias set l http://minio:9000 buzz_test buzz_test_secret >/dev/null 2>&1; do sleep 1; done; mc mb --ignore-existing l/buzz-media"]
+    restart: "no"
+  relay:
+    # pinned: the specs hold the relay's behaviour (its rate, what media it takes); move it on purpose
+    image: ${BUZZ_IMAGE:-ghcr.io/block/buzz@sha256:ae80b5e428345e60b914e89ae2f92ff06168c2b1753c9236811a05bf4bb297cd}
+    labels: *labels
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    ports: ["127.0.0.1:${RELAY_PORT:-3871}:3000"]
+    env_file: ["${SERVICES_DIR:?up.sh sets it}/relay.env"]
+    environment:
+      DATABASE_URL: postgres://buzz:buzz_test@postgres:5432/buzz
+      REDIS_URL: redis://redis:6379
+      BUZZ_S3_ENDPOINT: http://minio:9000
+      BUZZ_S3_ACCESS_KEY: buzz_test
+      BUZZ_S3_SECRET_KEY: buzz_test_secret
+      BUZZ_S3_BUCKET: buzz-media
+      BUZZ_S3_REGION: us-east-1
+      BUZZ_BIND_ADDR: 0.0.0.0:3000
+      BUZZ_HEALTH_PORT: "8080"
+      BUZZ_METRICS_PORT: "9102"
+      RELAY_URL: ws://localhost:${RELAY_PORT:-3871}
+      BUZZ_MEDIA_BASE_URL: http://localhost:${RELAY_PORT:-3871}/media
+      BUZZ_AUTO_MIGRATE: "true"
+      BUZZ_REQUIRE_RELAY_MEMBERSHIP: "true"
+      BUZZ_REQUIRE_AUTH_TOKEN: "true"
+      BUZZ_REQUIRE_MEDIA_GET_AUTH: "true"
+      BUZZ_ALLOW_NIP_OA_AUTH: "true"
+      RUST_LOG: buzz_relay=info
+
+  # ── Mail: Stalwart, and the gateway the app talks to ─────────────────────────────────────────────────────────────
+  stalwart:
+    # the version production runs; its management calls (x:Domain, x:Account) are version-specific
+    image: stalwartlabs/stalwart@sha256:ec011be228596e37e65f41aab17deed573859614430472f7eeb42178c50d87b7
+    labels: *labels
+    env_file: ["${SERVICES_DIR:?up.sh sets it}/stalwart.env"]
+    ports: ["127.0.0.1:${STALWART_PORT:-18443}:443", "127.0.0.1:${STALWART_SETUP_PORT:-18080}:8080"]
+    volumes: [stalwart-etc:/etc/stalwart, stalwart-data:/var/lib/stalwart]
+  mail-gateway:
+    image: python:3.12-slim
+    labels: *labels
+    depends_on: [stalwart]
+    ports: ["127.0.0.1:${MAIL_PORT:-19951}:19951"]
+    environment: { HOME: /gw/home, UNI_MAIL_PORT: "19951", UNI_MAIL_HOST: 0.0.0.0, PIP_DISABLE_PIP_VERSION_CHECK: "1" }
+    volumes: ["./mail:/gw/code:ro", "${SERVICES_DIR:?up.sh sets it}/mail:/gw/home"]
+    command: ["sh", "-c", "pip install -q --root-user-action=ignore coincurve==21.0.0 && exec python -I /gw/code/gateway.py"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 19951), 2)"]
+      interval: 2s
+      retries: 60
+
+  # ── Matrix ───────────────────────────────────────────────────────────────────────────────────────────────────────
+  matrix:
+    image: ghcr.io/matrix-construct/tuwunel@sha256:3dde1e9b3503c68218f95415ec3ebff522bd945065ba76019d408543540d1730
+    labels: *labels
+    ports: ["127.0.0.1:${MATRIX_PORT:-18008}:8008"]
+    environment:
+      TUWUNEL_SERVER_NAME: matrix.test
+      TUWUNEL_PORT: "8008"
+      TUWUNEL_ADDRESS: 0.0.0.0
+      TUWUNEL_DATABASE_PATH: /var/lib/tuwunel
+      TUWUNEL_ALLOW_REGISTRATION: "true"
+      TUWUNEL_REGISTRATION_TOKEN: throwaway-registration
+      TUWUNEL_ALLOW_FEDERATION: "false"
+    volumes: [matrix-data:/var/lib/tuwunel]
+
+volumes:
+  stalwart-etc:
+  stalwart-data:
+  matrix-data:
