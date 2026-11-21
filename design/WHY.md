@@ -35,7 +35,7 @@ Checked against the taste notes (paraphrased here) on the screenshots, grayscale
 | Choice (as built) | Taste note (paraphrased) |
 |---|---|
 | Paper ground `#f2ede2`, ink `#1d1a16`, one moss accent `#4f6b3a` for the pinned mark only | Light paper grounds; one or two earthy tones |
-| Book serif for names, italic serif for what changed, a quiet sans for actions and the bar | Small, quiet old-book serifs beside a quiet grotesk |
+| Book serif (Literata) for names and reading, its italic for what changed, a quiet sans (Instrument Sans) for actions and the bar; both carried by the app, as on the docs site | Small, quiet old-book serifs beside a quiet grotesk |
 | Rows and hairline rules, no cards or tiles; two pages on the Daylight | Calm order with room; nothing boxy |
 | Dotted leaders, the ensō-like ◠ mark, glyphs as text (never colour emoji) | A handmade, analog feel |
 | No motion on the bar or the launcher; what arrives (a page, a sheet, a toast) comes in once, in 200–300 ms, on one curve, and nothing moves on a slow screen or with reduce motion ([DESIGN-RULES.md](../docs/DESIGN-RULES.md)) | One transition per tap, nothing looping (e-ink ghosts); never bouncy |

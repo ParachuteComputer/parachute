@@ -9,8 +9,9 @@ The kit already follows them, so most applets get them by using its parts and ad
 
 1. **Colour from the theme only:** `var(--bg)`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`.
    One accent; meaning never by colour alone (say it in words too). **checked**
-2. **Type from the scale only:** `--fs-title` … `--fs-label`, in `--serif` (names, titles, reading) and `--sans` (the
-   rest). Labels in sentence case. **checked**
+2. **Type from the scale only:** `--fs-title` … `--fs-label`, in `--serif` (names, titles, reading: Literata) and
+   `--sans` (labels, buttons, the bar: Instrument Sans). Both faces come with the app, in every applet's frame; load
+   no others. Labels in sentence case. **checked**
 3. **Space from the theme:** `--pad` around, `--gap` between. Content starts at the top of the screen: no empty hero,
    no big gaps. Group with space and a rule (`--line`), not boxes inside boxes.
 4. **Figures that change** (counts, times) use `font-variant-numeric: tabular-nums`, so they don't jitter.
@@ -25,6 +26,8 @@ The kit already follows them, so most applets get them by using its parts and ad
 7. **On the theme's curves and times only:** `--ease-out` (arriving, leaving), `--ease-in-out` (moving across the
    screen), `--ease-drawer` (a drawer); `--t-press` 160 ms, `--t-state` 200 ms, `--t-sheet` 300 ms, `--t-step` 40 ms (the kit does not delay its parts with it).
    **checked**
+   The docs site has one more, `--t-settle` 640 ms, for its home page's drawing settling once. The app has no such
+   time: nothing in it is a drawing that arrives on its own, and a page arrives within 250 ms (8).
 8. **Quick and never in the way:** a page arrives within 250 ms; nothing waits for an animation before it answers a
    tap; leaving is quicker than arriving.
    **Readable on the first frame:** what arrives is legible on the very first frame it is drawn (opacity at least

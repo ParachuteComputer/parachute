@@ -1,5 +1,5 @@
-// The sealed frame (copied from the Uni app's src/interface/frame.tsx). The app uses system fonts, so the frame needs
-// no font files: the theme event names the same stacks.
+// The sealed frame (copied from the Uni app's src/interface/frame.tsx). The app's faces go in with the look, as data:
+// URLs (theme/fonts.ts: the frame's content policy allows fonts only so), and the theme event names the same stacks.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import vaultClientSource from "virtual:vault-client-kit";
 import reactKitSource from "virtual:react-kit";
@@ -10,6 +10,7 @@ import { buildKitSource } from "./kits";
 import { createSession, type Session } from "./session";
 import { subscribeTheme, tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
+import { FONTS_CSS } from "../theme/fonts";
 import type { Router } from "./router";
 import type { Resolved } from "./needs";
 import { judge, loadedAgain } from "./violations";
@@ -28,7 +29,7 @@ export const appletPage = (kind: CodeKind, content: string, js: string | null, n
 
 /** The sealed srcdoc for an applet: CSP first, WebRTC removed, the kits, the look as it is now (so the parts are drawn
  *  in it from the first paint; later changes come as theme events), then the applet. */
-export const frameSrcDoc = (html: string) => buildSrcdoc(html, { kitSource: KIT_SOURCE, headExtra: `<style>${cssOf(tokensNow()).replace(/</g, "")}</style>` });
+export const frameSrcDoc = (html: string) => buildSrcdoc(html, { kitSource: KIT_SOURCE, headExtra: `<style>${FONTS_CSS}${cssOf(tokensNow()).replace(/</g, "")}</style>` });
 
 /**
  * The sealed-frame host, shared by the real frame and the self-test's frame.

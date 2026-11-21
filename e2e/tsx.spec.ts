@@ -60,7 +60,7 @@ test("the guide's example on the parts: a recipe drawn richly by Note, its links
     // the parts, in the app's look: the tally, the field, the list
     await expect(app.getByRole("img", { name: /changed, the last four weeks/ })).toBeVisible();
     await expect(app.locator(".pa-row-title")).toHaveCount(3);
-    expect(await app.locator(".pa-row-title").first().evaluate((e) => getComputedStyle(e).fontFamily)).toContain("Iowan Old Style");
+    expect(await app.locator(".pa-row-title").first().evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/^"?Literata"?,/);
     // Note draws a recipe as the note view does: rich, with its servings
     await app.getByRole("button", { name: /^Tomato toast/ }).click();
     await expect(app.getByRole("region", { name: "Recipe" }).getByRole("heading", { name: "Tomato toast" })).toBeVisible();

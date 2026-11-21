@@ -41,7 +41,7 @@ notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, you
   the platform's secure storage.
 - **Parachute Simplified.** For a person whose notes are on Parachute Cloud: their notes across the vaults they've opened
   (find, read, edit, write), Journal (a line a day, written or said), Capture (a line or a voice note into Inbox/), Vault
-  (each vault's types, a type's records as a table, a record's fields, links and history) and Connect an AI (each vault's connector address): Parachute's own applets, which come with the app and ask nothing ([docs/design/PARACHUTE-SOURCE.md](docs/design/PARACHUTE-SOURCE.md)). A new Cloud person starts there; Settings → Your bundle switches to
+  (each vault's types, a type's records as a table, a record's fields, links and history) and Connect an AI (each vault's connector address, and what to ask it for: an applet): Parachute's own applets, which come with the app and ask nothing ([docs/design/PARACHUTE-SOURCE.md](docs/design/PARACHUTE-SOURCE.md)). A new Cloud person starts there; Settings → Your bundle switches to
   everything ([docs/SIMPLE.md](docs/SIMPLE.md)).
 - **Your Parachutes.** Sign in once per hub, with your key or another way the hub offers (a password, or Cloud's own
   sign-in). The sign-in reads and writes your home vault only; each other vault you can reach there is one tap away in
