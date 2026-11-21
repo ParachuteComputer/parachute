@@ -33,7 +33,7 @@ import { stripExt } from "../applet/contract";
 import { pageMarks } from "../applet/pageMark";
 import { tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
-import { FONTS_CSS } from "../theme/fonts";
+import { frameHead } from "../kit/frameCss";
 import { clientFor, signInState } from "../vault/client";
 import { MAX_CODE_CHARS, TooLargeError } from "../vault/limited";
 import { originOf, listVaults, hostOf, type VaultRecord } from "../vault/store";
@@ -316,7 +316,7 @@ function EmbedFrame({ found, name, props, onBroke, onPageStopped }: { found: Fou
 
 function EmbedIframe({ html, name, router, grant, ready, height, props, onPageStopped }: { html: string; name: string; router: ReturnType<typeof createRouter>; grant: ReturnType<typeof resolvedOf>; ready: unknown; height: number; props: Record<string, unknown>; onPageStopped: () => void }) {
   const tokens = () => embedTokens(tokensNow() as unknown as Record<string, string>);
-  const srcDoc = useMemo(() => buildSrcdoc(html, { kitSource: KIT, headExtra: `<style>${FONTS_CSS}${cssOf(tokens() as never).replace(/</g, "")}</style>` }), [html]); // eslint-disable-line react-hooks/exhaustive-deps
+  const srcDoc = useMemo(() => buildSrcdoc(html, { kitSource: KIT, headExtra: frameHead(cssOf(tokens() as never), { page: false }) }), [html]); // eslint-disable-line react-hooks/exhaustive-deps
   const { frame, stopped, onLoad, srcDoc: live } = useSealedFrame({ srcDoc, router, grant, ready, stopOnViolation: true, tokens, onSession: (s) => { session.current = s; } });
   const session = useRef<{ sendEvent(e: string, d: unknown): void } | null>(null);
   const first = useRef(true);

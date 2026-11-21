@@ -1,6 +1,10 @@
 /* The parts (src/kit/parts.tsx), built only on the theme's tokens (src/theme/theme.ts): the look of an old almanac,
    ink rules and type rather than boxes, one accent (design/kit/WHY.md). Every class starts `pa-`, so an applet's own
    CSS can sit beside it. How the parts move is at the end ("Motion"), on the theme's curves and times only. */
+/* In the parts layer (base.css says the order): above the base and the note renderer, below the app's own screens and any
+   applet's own CSS, which wins over a part whatever its specificity. */
+@layer parachute.base, parachute.render, parachute.parts, parachute.app;
+@layer parachute.parts {
 .pa-days { display: block; margin: 0 0 var(--gap); color: var(--text); }
 .pa-days svg { display: block; height: calc(var(--size) * 3.6); width: auto; max-width: 100%; }
 .pa-days .pa-mark { fill: var(--text); }
@@ -249,3 +253,4 @@ select.pa-finput { appearance: auto; }
 /* in a page drawn at its content's height (one with embeds) there is no screen's foot to rise from: it opens in place */
 .pa-drawer.pa-drawer-inline { position: relative; width: 100%; max-height: none; overflow: visible; margin: 0 0 var(--gap); padding-top: var(--pad);
   border: 1px solid var(--text); border-radius: var(--radius); transform: none; transition: none; animation: pa-in var(--t-state) var(--ease-out) both; }
+}

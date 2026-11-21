@@ -10,7 +10,7 @@ import { buildKitSource } from "./kits";
 import { createSession, type Session } from "./session";
 import { subscribeTheme, tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
-import { FONTS_CSS } from "../theme/fonts";
+import { frameHead } from "../kit/frameCss";
 import type { Router } from "./router";
 import type { Resolved } from "./needs";
 import { judge, loadedAgain } from "./violations";
@@ -27,9 +27,9 @@ const KIT_SOURCE = buildKitSource({ vaultClientSource });
 /** What runs in the frame for an applet's code: an HTML note as written; a TSX/JSX note as its transpiled module, with React. */
 export const appletPage = (kind: CodeKind, content: string, js: string | null, name?: string): string => (kind === "html" ? content : modulePage(js ?? "", usesNote(content) ? reactNoteKitSource : reactKitSource, [], name));
 
-/** The sealed srcdoc for an applet: CSP first, WebRTC removed, the kits, the look as it is now (so the parts are drawn
- *  in it from the first paint; later changes come as theme events), then the applet. */
-export const frameSrcDoc = (html: string) => buildSrcdoc(html, { kitSource: KIT_SOURCE, headExtra: `<style>${FONTS_CSS}${cssOf(tokensNow()).replace(/</g, "")}</style>` });
+/** The sealed srcdoc for an applet: CSP first, WebRTC removed, the kits, the look as it is now and the kit's sheets (so
+ *  plain HTML and the parts are drawn in it from the first paint; later changes come as theme events), then the applet. */
+export const frameSrcDoc = (html: string) => buildSrcdoc(html, { kitSource: KIT_SOURCE, headExtra: frameHead(cssOf(tokensNow())) });
 
 /**
  * The sealed-frame host, shared by the real frame and the self-test's frame.

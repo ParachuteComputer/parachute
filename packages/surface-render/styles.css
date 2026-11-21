@@ -1,3 +1,6 @@
+/* Parachute: in the note renderer's cascade layer (src/kit/base.css says the order), below the parts and an applet's own CSS. */
+@layer parachute.base, parachute.render, parachute.parts, parachute.app;
+@layer parachute.render {
 /*
  * @openparachute/surface-render — OPTIONAL baseline stylesheet.
  *
@@ -117,4 +120,5 @@ span.wikilink-unresolved {
 .hljs {
   display: block;
   overflow-x: auto;
+}
 }

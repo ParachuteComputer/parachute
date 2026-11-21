@@ -1,3 +1,6 @@
+/* Parachute: in the note renderer's cascade layer (src/kit/base.css says the order), below the parts and an applet's own CSS. */
+@layer parachute.base, parachute.render, parachute.parts, parachute.app;
+@layer parachute.render {
 /* rich-notes-kit: the look. A page of small serif text on a paper ground; live parts are quiet; one earthy accent;
    kinds told apart by word and shape, never by hue alone, so it holds in greyscale. One transition per tap; nothing
    loops; on a calm screen (reduced motion, a slow e-ink display, or [data-screen=ink]) nothing moves at all.
@@ -271,3 +274,4 @@
 /* calm: still */
 @media (prefers-reduced-motion: reduce), (update: slow) { .rn *, .rn *::before, .rn *::after { transition: none !important; animation: none !important; } }
 .rn-ink .rn *, .rn.rn-ink * { transition: none !important; }
+}

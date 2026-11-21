@@ -64,6 +64,26 @@ under a row, 0.875×) and `--fs-label` (a small capital label, 0.75×). The ship
 and a check fails one that doesn't (`src/kit/conformance.ts`), so the same thing is the same size in every applet. `theme.get()` and `theme.on(cb)` give the same values as an object
 ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)).
 
+## The order of styles
+
+Every applet's frame, and every embed's, gets the look in four steps, each over the one before:
+
+1. **The tokens:** the theme's values as CSS variables on the root (`--bg`, `--accent`, `--fs-title`, …, above).
+2. **The base** (`@layer parachute.base`, `src/kit/base.css`): plain HTML drawn in the theme. The page on paper, in
+   the sans, inside the kit's margins; titles in the serif on the type scale; links in the accent; a bare `<button>`,
+   `<input>`, `<select>`, `<textarea>`, `<table>`, `<blockquote>` or `<pre>` drawn as the kit draws them. An applet with
+   no CSS of its own looks like the rest of Parachute.
+3. **The parts** (`@layer parachute.parts`, `src/kit/parts.css`; the note renderer's sheet, `parachute.render`, sits
+   just below them): the `pa-` classes the kit's parts are drawn with. An HTML applet can use them too, for example
+   `<button class="pa-button pa-primary">Save</button>`.
+4. **The applet's own CSS**, in no layer: it wins over all of the above, whatever its specificity. `button { border-radius: 4px }`
+   changes every button in the applet, the kit's included. Write it on the variables and it still follows the theme.
+
+To change a token for your applet only, set it on `body` or on your own wrapper (`body { --accent: #8a5a2b; }`), not
+on `:root`: the app sets the theme's values on the root itself, and sets them again when the theme changes. To add
+styles that a later sheet of yours can still override at low weight, put them in a layer of your own
+(`@layer mine { … }`): any layer of yours declared after the kit's sits above it.
+
 A component embedded in a page ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)) gets the same look, with two differences:
 each colour comes as `#rrggbb` (one written another way comes as the built-in colour), and its fonts are always the
 built-in ones. The theme note is text anyone you let write your vault can change, so only these few values reach code

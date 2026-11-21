@@ -4,8 +4,12 @@
    and space, never colour alone: the Daylight shows grey.
    The tokens (--bg, --surface, --text, --muted, --line, --accent, --danger, --serif, --sans, --mono, --pad, --gap,
    --radius, --size, --leading) are not set here: they come from the theme (src/theme/theme.ts), the built-in one or the
-   person's theme record, and are set on <html> by the shell, and handed to the frame and every applet. */
+   person's theme record, and are set on <html> by the shell, and handed to the frame and every applet.
+   The sheet is in cascade layers (src/kit/base.css): the elements below sit in the base, the app's own classes in
+   `parachute.app`, above the parts (an applet's own CSS, in no layer, is only ever in its own frame). */
+@layer parachute.base, parachute.render, parachute.parts, parachute.app;
 :root { --bar-h: 58px; }
+@layer parachute.base {
 * { box-sizing: border-box; }
 /* the fallbacks are the built-in theme's, for a paint before the shell sets the tokens */
 /* checkboxes, radios and ranges in the theme's accent, never the browser's blue */
@@ -14,6 +18,9 @@ html, body { margin: 0; background: var(--bg, #f2ede2); color: var(--text, #1d1a
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: var(--accent); }
 button, input { font: inherit; color: inherit; }
+}
+
+@layer parachute.app {
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .screen { max-width: 720px; margin: 0 auto; padding: 0 var(--pad) 24px; }
@@ -321,3 +328,4 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 @keyframes shell-arrive { from { opacity: .85; } }
 .launcher-title, .notes-head h1, .grant-head h2, .sheet h2 { text-wrap: balance; }
 .home-bar-badge, .record-time, .entry-life { font-variant-numeric: tabular-nums; }
+}
