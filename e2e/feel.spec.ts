@@ -213,3 +213,24 @@ test("a toast goes when swiped down, before its time", async ({ page }) => {
   // the row it added came in (a row that arrives after the list was drawn)
   await expect(app.locator("li.pa-fresh", { hasText: `Hazel ${stamp}` })).toHaveCount(1);
 });
+
+test("the app's own sheets arrive as a drawer does, and are still under reduce-motion", async ({ browser, page }) => {
+  // the applet's menu (⋯ on the bar): one of the shell's sheets
+  const sheetMotion = async (p: Page) => {
+    await p.locator("header.bar").getByRole("button", { name: "Menu" }).click();
+    const sheet = p.getByRole("dialog", { name: "Feel menu" });
+    await expect(sheet).toBeVisible();
+    const anims = await sheet.evaluate((el) => el.getAnimations().map((a) => ({ name: (a as CSSAnimation).animationName, duration: Number(a.effect!.getTiming().duration) })));
+    await p.keyboard.press("Escape").catch(() => {});
+    return anims;
+  };
+  await openFeel(page);
+  const flowing = await sheetMotion(page);
+  expect(flowing).toContainEqual({ name: "shell-rise", duration: 300 });
+  const ctx = await browser.newContext({ storageState: "e2e/.signed-in.json", reducedMotion: "reduce", ...devices["Pixel 7"] });
+  try {
+    const still = await ctx.newPage();
+    await openFeel(still);
+    for (const a of await sheetMotion(still)) expect(a.duration, a.name).toBe(0);
+  } finally { await ctx.close(); }
+});

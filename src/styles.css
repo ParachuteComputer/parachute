@@ -7,6 +7,8 @@
 :root { --bar-h: 58px; }
 * { box-sizing: border-box; }
 /* the fallbacks are the built-in theme's, for a paint before the shell sets the tokens */
+/* checkboxes, radios and ranges in the theme's accent, never the browser's blue */
+html { accent-color: var(--accent, #4f6b3a); }
 html, body { margin: 0; background: var(--bg, #f2ede2); color: var(--text, #1d1a16); font: var(--size, 16px)/var(--leading, 1.45) var(--sans, system-ui, sans-serif); -webkit-tap-highlight-color: transparent; font-variant-emoji: text; }
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: var(--accent); }
@@ -85,7 +87,9 @@ fieldset.plain legend { padding: 0; }
 .applet-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); text-decoration: none; white-space: nowrap; font-size: 15px; }
 .applet-chip span[aria-hidden] { color: var(--accent); }
 .applet-screen { display: flex; flex-direction: column; min-height: calc(100dvh - 64px); }
-.applet-frame { flex: 1; width: 100%; min-height: 70dvh; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+/* an applet's frame is the page under the bar, edge to edge, on the page's own paper: no box around it (the bar's rule
+   above it is where the app ends and the applet begins) */
+.applet-frame { flex: 1; width: calc(100% + 2 * var(--pad)); margin: -10px calc(-1 * var(--pad)) 0; min-height: 70dvh; border: 0; background: var(--bg); }
 /* a page with embeds (docs/design/EMBED.md): the host as tall as its content, then each embed, the page scrolling whole */
 .applet-frame.applet-frame-sized { flex: none; min-height: 0; }
 .embeds { display: grid; gap: 14px; margin-top: 14px; }
@@ -139,7 +143,7 @@ fieldset.plain legend { padding: 0; }
 .with-bar .applet-screen .grant-card > .grant-actions { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
 .passcode-line { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
 .grant-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
-/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, nothing that moves but the figures */
+/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the sheet rises once; in it nothing moves but the figures */
 .record-time { margin: 6px 0; font-size: 20px; font-variant-numeric: tabular-nums; }
 .notice { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: 0 0 8px; font-size: 14px; }
 .check-list { list-style: none; padding: 0; margin: 6px 0 0; font-size: 13px; columns: 2; }
@@ -149,8 +153,17 @@ fieldset.plain legend { padding: 0; }
 .open-line, .viewer-line { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 15px; }
 .open-line a, .viewer-line a { text-decoration: none; }
 .link-button { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
-.sheet-scrim { position: fixed; inset: 0; z-index: 10; background: rgb(0 0 0 / .35); display: flex; align-items: flex-end; justify-content: center; }
-.sheet { width: min(560px, 100%); max-height: 80dvh; overflow: auto; background: var(--bg); border-radius: 16px 16px 0 0; padding: 14px var(--pad) calc(14px + env(safe-area-inset-bottom)); }
+/* the shell's sheets look and arrive as the kit's Drawer does (src/kit/parts.css): the theme's ink over the page, a
+   grip, rising on the drawer curve; still under reduce-motion (theme.ts MOTION) */
+.sheet-scrim { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--text) 32%, transparent); display: flex; align-items: flex-end; justify-content: center;
+  animation: shell-fade var(--t-sheet, 0ms) var(--ease-drawer, ease) both; overscroll-behavior: contain; }
+.sheet { width: min(560px, 100%); max-height: 80dvh; overflow: auto; overscroll-behavior: contain; background: var(--bg); border-radius: calc(var(--radius) * 1.6) calc(var(--radius) * 1.6) 0 0;
+  padding: 6px var(--pad) calc(14px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px color-mix(in srgb, var(--text) 14%, transparent);
+  animation: shell-rise var(--t-sheet, 0ms) var(--ease-drawer, ease) both; }
+.sheet::before { content: ""; display: block; width: 36px; height: 4px; margin: 3px auto 12px; border-radius: 2px; background: var(--line); }
+@keyframes shell-fade { from { opacity: 0; } }
+@keyframes shell-rise { from { transform: translateY(100%); } }
+@keyframes shell-in { from { opacity: 0; transform: translateY(6px); } }
 .sheet h2 { margin: 0 0 10px; font: 600 17px/1.3 var(--serif); }
 .sheet-choice { width: 100%; text-align: left; border: 0; background: none; font: inherit; cursor: pointer; }
 .sheet-choice:disabled { opacity: .5; }
@@ -278,3 +291,22 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .levels-choices button:first-child { border-left: 0; }
 .levels-choices button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
 .levels-choices button:disabled { opacity: .45; }
+
+/* Feel (docs/DESIGN-RULES.md): the shell's own controls answer a press as the kit's do, hover only with a pointer, one
+   focus ring; the bar and rows change at once (used all day), what arrives (the card, a passing line) comes in once */
+:is(.primary, .secondary, .quiet-button, .notes-new, .part-chip, .link-button, .levels-choices button, .grant-more) {
+  transition: transform var(--t-press, 0ms) var(--ease-out, ease), background-color var(--t-press, 0ms) ease, border-color var(--t-press, 0ms) ease, color var(--t-press, 0ms) ease; }
+:is(.primary, .secondary, .quiet-button, .notes-new, .part-chip):active:not(:disabled, [aria-disabled="true"]) { transform: scale(.97); }
+:is(.bar-back, .bar-menu, .home-bar-place, .row, .entry, .sheet-choice) { transition: background-color var(--t-press, 0ms) ease; }
+@media (hover: hover) and (pointer: fine) {
+  :is(.secondary, .quiet-button, .part-chip):hover:not(:disabled) { border-color: var(--muted); }
+  .primary:hover:not(:disabled, [aria-disabled="true"]) { background: color-mix(in srgb, var(--accent) 86%, var(--text)); }
+  :is(.row, .entry, .sheet-choice):hover { background: color-mix(in srgb, var(--line) 22%, transparent); }
+  :is(.bar-back, .bar-menu):hover { background: color-mix(in srgb, var(--line) 50%, transparent); }
+}
+:is(button, a, .home-bar-place, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:is(input, textarea, select):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+.grant-card, .shell-line { animation: shell-in var(--t-state, 0ms) var(--ease-out, ease) both; }
+.shell-line { animation-name: shell-fade; }
+.bar-title, .launcher-title, .notes-head h1, .grant-head h2, .sheet h2 { text-wrap: balance; }
+.home-bar-badge, .record-time, .entry-life { font-variant-numeric: tabular-nums; }

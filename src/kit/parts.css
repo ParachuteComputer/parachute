@@ -195,6 +195,7 @@ select.pa-finput { appearance: auto; }
   /* buttons stacked with no gap between (a picker's choices): each only its own height, so none takes its neighbour's tap */
   .pa-tight :is(.pa-button, .pa-field-action, .pa-more)::after { inset: 0; }
   .pa-drawer-grip { height: 40px; }
+  .pa-drawer-grip::before { margin: 18px auto; }
 }
 /* focus from the keyboard: one ring, in the accent, on every part */
 :is(.pa-button, .pa-field-action, .pa-more, .pa-tab, .pa-link, .pa-tsort, .pa-drawer-grip):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
