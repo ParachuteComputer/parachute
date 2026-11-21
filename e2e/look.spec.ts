@@ -107,3 +107,23 @@ test("a note the kit draws keeps the note renderer's own look: the base stays ou
     expect(await style(page, ".pa-note .rn blockquote", "border-left-style")).toBe("solid");
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });
+
+test("a theme note's look and its own tokens restyle an applet while it runs; deleting the note brings the default back", async ({ page }) => {
+  const id = await opened(page, "Applets/Seed swap two", "html", PLAIN, "seed-swap-two", "Seed swap two", "Seed swap");
+  const themeRows = async () => { const r = await api(hubState(), "GET", "notes?tag=parachute-theme"); return (Array.isArray(r) ? r : r.notes) as { id: string }[]; };
+  for (const n of await themeRows()) await api(hubState(), "DELETE", `notes/${n.id}`);
+  try {
+    expect(await style(page, "#part", "border-top-left-radius")).toBe("999px");
+    // as an agent writes it: the book look, and one token of the person's own
+    await api(hubState(), "POST", "notes", { path: "Parachute/Theme", tags: ["parachute-theme"], metadata: { theme: { look: "book", tokens: { "radius-button": "4px" } } } });
+    await expect.poll(() => style(page, "body", "background-color")).toBe("rgb(246, 241, 231)"); // book's paper, #f6f1e7
+    expect(await style(page, "#part", "border-top-left-radius")).toBe("4px");
+    expect(await style(page, "th", "border-bottom-style")).toBe("double"); // book's rule over a table
+    for (const n of await themeRows()) await api(hubState(), "DELETE", `notes/${n.id}`);
+    await expect.poll(() => style(page, "body", "background-color")).toBe(PAPER);
+    expect(await style(page, "#part", "border-top-left-radius")).toBe("999px");
+  } finally {
+    for (const n of await themeRows()) await api(hubState(), "DELETE", `notes/${n.id}`);
+    await api(hubState(), "DELETE", `notes/${id}`);
+  }
+});

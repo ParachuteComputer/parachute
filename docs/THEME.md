@@ -4,6 +4,12 @@ The look of the whole app comes from one note: the app's own screens, the frame 
 applet. Until you change it, the app uses the built-in Parachute theme: paper, ink, a moss accent, a book serif
 (Literata) for reading and a quiet sans (Instrument Sans) for the app's own words.
 
+A theme starts from one of four built-in **looks**, which set the palettes and how the parts are drawn (rules, corners,
+depth, labels): `paper` (hairlines, soft corners, a card lifted a little, boxed fields), `almanac` (ink rules, dotted
+rows, a printed card, a line to write on), `book` (a printed page: no raised parts, a double rule, small capitals) and
+`daylight` (black on white for an e-paper screen: heavier rules, no tints or shadows, nothing moves). Every value a
+look sets is a token, and the note can change any of them one by one.
+
 ## The note
 
 `Parachute/Theme` in your home vault, tagged `parachute-theme`. The theme sits in its `fields.theme` (on a hub
@@ -16,7 +22,9 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
   "fonts": { "serif": "Literata, \"Literata fallback\", Georgia, serif", "sans": "\"Instrument Sans\", \"Instrument Sans fallback\", system-ui, sans-serif", "mono": "ui-monospace, monospace" },
   "density": "regular",
   "scheme": "system",
-  "motion": "flowing"
+  "motion": "flowing",
+  "look": "almanac",
+  "tokens": { "radius-card": "14px" }
 }
 ```
 
@@ -28,6 +36,8 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
 | `density` | `compact`, `regular` or `roomy`: the padding, gaps, corners and text size. |
 | `scheme` | `system` (follow the device), `light` or `dark`. |
 | `motion` | `flowing` (pages, sheets and toasts arrive and go, a press gives) or `still` (nothing moves). A device set to reduce motion, or a screen slow to redraw (e-ink), is still whatever this says. |
+| `look` | The built-in look the theme starts from: `paper`, `almanac`, `book` or `daylight`. It sets the two palettes (any colour the note gives stands over them), every style token below, and for `daylight` motion `still` unless the note says otherwise. |
+| `tokens` | Any style token, by name without the `--` (`"radius-card": "14px"`, `"line-row": "1px dotted var(--muted)"`), over the look's value. Each is held to the grammar of its kind: a colour as above, `transparent`, or a palette colour by name (`var(--line)`); a rule (`1px solid <colour>`, the style one of `none`, `solid`, `dotted`, `dashed`, `double`); a length in `px`, `em` or `rem`; a shadow (`none`, or up to three of `<x> <y> <blur> <spread> <colour>`); a case, capitals or weight from the lists below. |
 
 Every key is optional. Anything you leave out, or write in a form the app doesn't read, stays the built-in value, and
 the rest still apply. A colour is hex (`#4f6b3a`) or `rgb()`, `hsl()`, `oklch()` or `oklab()` with plain numbers.
@@ -35,7 +45,7 @@ Nothing else is read, so a theme can't load anything from the network.
 
 ## Changing it
 
-- **In the app:** Settings → Look. Choosing a density or light or dark writes the note. The first change copies the
+- **In the app:** Settings → Look. Choosing a style (the look), a density, light or dark, or motion writes the note; a new style keeps any colour you set yourself. The first change copies the
   built-in theme into your vault in full, and from then on that note is your theme. "Make this look mine" copies it without
   changing anything.
 - **By your agent:** with the Parachute MCP, `create-record` or `update-record` on that record (`create-note`, `update-note` on older hubs). For example, "make the
@@ -50,7 +60,43 @@ it uses the built-in theme. Delete the note to go back to it.
 The kit's parts (`Page`, `List`, `Button`, `Write`, `Note` and the rest, [WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)) are
 drawn on these values, so they follow the theme with no work. Each value is also a CSS variable in the applet's frame:
 `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`,
-`--gap`, `--radius`, `--size`, `--leading`. Write your CSS on these, and the applet changes with the theme.
+`--gap`, `--radius`, `--size`, `--leading`, and the style tokens in the table below. Write your CSS on these, and the
+applet changes with the theme.
+
+The style tokens, what each draws, and its value in `paper` and in `almanac` (`src/theme/theme.ts`, `STYLE_TOKENS` and
+`LOOKS`, has all four looks):
+
+| Token | What it draws | `paper` | `almanac` |
+|---|---|---|---|
+| `--primary` | The main action's fill (a primary button, a field's action). | `var(--accent)` | `var(--text)` |
+| `--on-primary` | Text on the main action. | `#fdfbf7` | `var(--bg)` |
+| `--tint` | A row under the pointer, the row open now: a light wash. | `color-mix(in srgb, var(--text) 5%, transparent)` | `color-mix(in srgb, var(--line) 30%, transparent)` |
+| `--card-fill` | A card's ground. | `var(--surface)` | `var(--surface)` |
+| `--field-fill` | The ground of a box to write in (a field, search, a text box). | `var(--surface)` | `var(--surface)` |
+| `--button-fill` | A plain button's ground. | `var(--surface)` | `var(--surface)` |
+| `--label-ink` | A small label's colour (a kicker over a title, a note's section head). | `var(--muted)` | `var(--accent)` |
+| `--line-head` | The rule over a list, a table or a record's fields. | `1px solid var(--line)` | `1px solid var(--text)` |
+| `--line-row` | The rule between two rows. | `1px solid color-mix(in srgb, var(--line) 75%, transparent)` | `1px dotted var(--muted)` |
+| `--line-card` | A card's edge, a toast's, a sheet's top. | `1px solid var(--line)` | `1px solid var(--text)` |
+| `--line-quote` | The rule beside a quotation. | `2px solid var(--line)` | `3px double var(--text)` |
+| `--field-line` | A box to write in: its edge. | `1px solid var(--line)` | `1px solid var(--line)` |
+| `--button-line` | A plain button's edge. | `1px solid var(--line)` | `1px solid var(--line)` |
+| `--card-edges` | Which edges of a card are drawn (`1px`, or `1px 0 0` for a rule above only). | `1px` | `1px` |
+| `--field-edges` | Which edges of a one-line field are drawn (`1px` boxed, `0 0 1px` a line to write on). | `1px` | `0 0 1px` |
+| `--field-pad` | The space inside a one-line field. | `9px 12px` | `6px 0` |
+| `--radius-card` | A card's corners, a sheet's, a toast's. | `calc(var(--radius) * 1.4)` | `0px` |
+| `--radius-field` | A box to write in: its corners. | `var(--radius)` | `var(--radius)` |
+| `--radius-button` | A button's corners (`999px`: a pill). | `999px` | `999px` |
+| `--shadow-card` | A card's depth (`none`: flat on the page). | `0 1px 2px rgb(60 45 30 / .05), 0 12px 28px -18px rgb(60 45 30 / .28)` | `3px 3px 0 var(--line)` |
+| `--shadow-sheet` | The depth of what rises over the page: a sheet, a toast. | `0 -1px 0 var(--line), 0 -16px 40px -24px rgb(40 30 20 / .35)` | `3px 3px 0 var(--line)` |
+| `--label-transform` | A small label's case: `none` or `uppercase`. | `none` | `uppercase` |
+| `--label-caps` | A small label in small capitals: `normal` or `all-small-caps`. | `normal` | `normal` |
+| `--label-track` | A small label's letter spacing, in em. | `0em` | `.14em` |
+| `--title-weight` | The weight of a page's title and the serif headings. | `400` | `400` |
+| `--measure` | A page's width at most. | `760px` | `760px` |
+
+A case is `none`, `uppercase`, `lowercase` or `capitalize`; capitals `normal`, `small-caps` or `all-small-caps`; a
+letter spacing between `-0.3em` and `0.3em`; a weight `100` to `900`.
 
 Motion comes from three curves and four times: `--ease-out` (arriving or leaving), `--ease-in-out` (moving across
 the screen), `--ease-drawer` (a sheet rising), and `--t-press` (160 ms, a press), `--t-state` (200 ms, a part arriving

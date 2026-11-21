@@ -15,7 +15,7 @@ import { plain, stripExt } from "../applet/contract";
 import { clientFor, keptClientFor } from "../vault/client";
 import { onFresh } from "../vault/readCache";
 import { homeVault } from "../shell/frameSource";
-import { DEFAULT_THEME, MOTION_CSS, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, withTodaysFonts, type Theme, type Tokens } from "./theme";
+import { DEFAULT_THEME, MOTION_CSS, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, withLook, withTodaysFonts, type Theme, type Tokens } from "./theme";
 import { FONTS_CSS } from "./fonts";
 
 export const THEME_TAG = "parachute-theme";
@@ -169,7 +169,7 @@ async function changeTheme(change: (raw: Record<string, unknown>) => Record<stri
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), theme }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
   } else {
     const theme = change(recordOf(DEFAULT_THEME));
-    await c.createNote({ path: THEME_PATH, content: "The look of the Parachute app: colours, fonts and density. See docs/THEME.md.", tags: [THEME_TAG], metadata: { theme } } as Parameters<typeof c.createNote>[0]);
+    await c.createNote({ path: THEME_PATH, content: "The look of the Parachute app: its look, colours, fonts and density. See docs/THEME.md.", tags: [THEME_TAG], metadata: { theme } } as Parameters<typeof c.createNote>[0]);
   }
   await readTheme();
 }
@@ -179,6 +179,8 @@ export const makeThemeMine = () => changeTheme((r) => r);
 export const setDensity = (density: Theme["density"]) => changeTheme((r) => ({ ...r, density }));
 export const setScheme = (scheme: Theme["scheme"]) => changeTheme((r) => ({ ...r, scheme }));
 export const setMotion = (motion: Theme["motion"]) => changeTheme((r) => ({ ...r, motion }));
+/** Another built-in look: its palettes and style, over which the colours the person chose stay (theme.ts withLook). */
+export const setLook = (look: Theme["look"]) => changeTheme((r) => withLook(r, look));
 
 /** Signing out of a vault: the copy kept from it goes. */
 export function forgetVaultTheme(vault: string) {

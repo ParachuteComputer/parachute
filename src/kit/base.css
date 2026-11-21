@@ -16,7 +16,7 @@
   :where(body) { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-body)/var(--leading) var(--sans); -webkit-tap-highlight-color: transparent; }
 
   /* type: titles in the serif, on the scale; reading text that breaks well */
-  :where(h1, h2, h3, h4):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { margin: 0 0 calc(var(--gap) * .5); font-family: var(--serif); font-weight: 400; line-height: 1.2; text-wrap: balance; }
+  :where(h1, h2, h3, h4):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { margin: 0 0 calc(var(--gap) * .5); font-family: var(--serif); font-weight: var(--title-weight); line-height: 1.2; text-wrap: balance; }
   :where(h1):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { font-size: var(--fs-title); line-height: 1.1; letter-spacing: -.01em; }
   :where(h2):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { margin-top: calc(var(--gap) * 1.4); font-size: var(--fs-head); }
   :where(h3):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { margin-top: var(--gap); font-size: var(--fs-lead); font-weight: 600; }
@@ -31,10 +31,10 @@
   :where(strong, b):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { font-weight: 600; }
   :where(a):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; overflow-wrap: anywhere; }
   :where(hr):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { margin: calc(var(--gap) * 1.4) 0; border: 0; border-top: 1px solid var(--line); }
-  :where(blockquote):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { padding: 0 0 0 14px; border-left: 2px solid var(--line); font: italic var(--fs-lead)/1.5 var(--serif); color: var(--muted); }
+  :where(blockquote):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { padding: 0 0 0 14px; border-left: var(--line-quote); font: italic var(--fs-lead)/1.5 var(--serif); color: var(--muted); }
   :where(code, kbd, samp, pre):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { font-family: var(--mono); font-size: .9em; }
   :where(:not(pre) > code):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { padding: 1px 5px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
-  :where(pre):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { overflow-x: auto; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); line-height: 1.5; }
+  :where(pre):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { overflow-x: auto; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-field); background: var(--surface); line-height: 1.5; }
   :where(mark):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; }
   :where(img, video, canvas, svg) { max-width: 100%; }
   :where(img, video) { height: auto; }
@@ -44,20 +44,20 @@
 
   /* tables: rows under rules, figures that don't jitter */
   :where(table):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  :where(th, td):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { padding: calc(var(--gap) * .45) 12px calc(var(--gap) * .45) 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-  :where(th):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { font: 600 var(--fs-small) var(--sans); color: var(--muted); border-bottom-color: var(--text); }
+  :where(th, td):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { padding: calc(var(--gap) * .45) 12px calc(var(--gap) * .45) 0; border-bottom: var(--line-row); text-align: left; vertical-align: top; }
+  :where(th):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { font: 600 var(--fs-small) var(--sans); color: var(--muted); border-bottom: var(--line-head); }
 
   /* controls: the kit's button and field, drawn on bare elements */
   :where(button, input, select, textarea):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { font: inherit; color: inherit; }
   :where(button, input[type="button"], input[type="submit"], input[type="reset"]):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 6px 16px;
-    border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text);
+    border: var(--button-line); border-radius: var(--radius-button); background: var(--button-fill); color: var(--text);
     font: 500 var(--fs-body) var(--sans); white-space: nowrap; cursor: pointer; }
-  :where(button[type="submit"], input[type="submit"]):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { border-color: var(--text); background: var(--text); color: var(--bg); font-weight: 600; }
+  :where(button[type="submit"], input[type="submit"]):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { border-color: var(--primary); background: var(--primary); color: var(--on-primary); font-weight: 600; }
   :where(button:disabled, input:disabled, select:disabled, textarea:disabled):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { opacity: .55; cursor: default; }
   :where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="button"], [type="submit"], [type="reset"]), select, textarea):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) {
-    max-width: 100%; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius);
-    background: var(--surface); color: var(--text); font-size: max(16px, var(--fs-body)); }
+    max-width: 100%; min-height: 40px; padding: 8px 12px; border: var(--field-line); border-radius: var(--radius-field);
+    background: var(--field-fill); color: var(--text); font-size: max(16px, var(--fs-body)); }
   :where(textarea):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { display: block; width: 100%; min-height: 6em; font: var(--fs-lead)/1.5 var(--serif); resize: vertical; }
   :where(input, select, textarea):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)):focus { outline: none; border-color: var(--text); }
   :where(input[type="checkbox"], input[type="radio"]):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { width: 18px; height: 18px; margin: 0 6px 0 0; vertical-align: -3px; }

@@ -9,6 +9,9 @@
 //                   scheme:  system | light | dark          which palette shows (system: the device's choice)
 //                   motion:  flowing | still                  whether the parts move (still: nothing does; the device's
 //                                                             reduce-motion setting is still too, whatever this says)
+//                   look:    paper | almanac | book | daylight     the built-in look it starts from (LOOKS): the palettes and
+//                                                             how the parts are drawn (rules, corners, depth, labels)
+//                   tokens:  { "radius-card": "14px", … }      any of the look's style tokens (STYLE_TOKENS), one by one
 //                 Every key is optional: what it leaves out (or gives in a form this reads not) is the built-in value.
 //   absent        the built-in theme (DEFAULT_THEME): the same look the app has always had.
 //
@@ -27,7 +30,7 @@ export type Density = (typeof DENSITIES)[number];
 export type Scheme = (typeof SCHEMES)[number];
 export type Motion = (typeof MOTIONS)[number];
 export type Palette = Record<ColorKey, string>;
-export type Theme = { colors: Palette; dark: Palette; fonts: Record<FontKey, string>; density: Density; scheme: Scheme; motion: Motion };
+export type Theme = { colors: Palette; dark: Palette; fonts: Record<FontKey, string>; density: Density; scheme: Scheme; motion: Motion; look: LookName; tokens: Partial<Record<StyleKey, string>> };
 
 /** What density sets: padding, the gap between parts, corner radius, the body text size, and its line height. */
 export const DENSITY_KEYS = ["pad", "gap", "radius", "size", "leading"] as const;
@@ -38,12 +41,162 @@ export const DENSITY: Record<Density, Record<DensityKey, string>> = {
   roomy: { pad: "20px", gap: "18px", radius: "12px", size: "17px", leading: "1.55" },
 };
 
+// ── The style tokens: how the parts are drawn, beside the palette and the faces. One table, read by everything: the CSS
+// variables `--<name>` the shell, the frame and every applet get (cssOf, the theme event), what a theme record's
+// `tokens` may set and the grammar each value is held to, and the token reference in docs/THEME.md. A look (LOOKS) gives
+// every one a value; a record's `tokens` changes them one by one.
+export type StyleKind = "color" | "line" | "edges" | "length" | "pad" | "shadow" | "transform" | "caps" | "track" | "weight";
+export const STYLE_TOKENS = {
+  "primary":         { kind: "color", what: "the main action's fill (a primary button, a field's action)" },
+  "on-primary":      { kind: "color", what: "text on the main action" },
+  "tint":            { kind: "color", what: "a row under the pointer, the row open now: a light wash" },
+  "card-fill":       { kind: "color", what: "a card's ground" },
+  "field-fill":      { kind: "color", what: "the ground of a box to write in (a field, search, a text box)" },
+  "button-fill":     { kind: "color", what: "a plain button's ground" },
+  "label-ink":       { kind: "color", what: "a small label's colour (a kicker over a title, a note's section head)" },
+  "line-head":       { kind: "line", what: "the rule over a list, a table or a record's fields" },
+  "line-row":        { kind: "line", what: "the rule between two rows" },
+  "line-card":       { kind: "line", what: "a card's edge, a toast's, a sheet's top" },
+  "line-quote":      { kind: "line", what: "the rule beside a quotation" },
+  "field-line":      { kind: "line", what: "a box to write in: its edge" },
+  "button-line":     { kind: "line", what: "a plain button's edge" },
+  "card-edges":      { kind: "edges", what: "which edges of a card are drawn (`1px`, or `1px 0 0` for a rule above only)" },
+  "field-edges":     { kind: "edges", what: "which edges of a one-line field are drawn (`1px` boxed, `0 0 1px` a line to write on)" },
+  "field-pad":       { kind: "pad", what: "the space inside a one-line field" },
+  "radius-card":     { kind: "length", what: "a card's corners, a sheet's, a toast's" },
+  "radius-field":    { kind: "length", what: "a box to write in: its corners" },
+  "radius-button":   { kind: "length", what: "a button's corners (`999px`: a pill)" },
+  "shadow-card":     { kind: "shadow", what: "a card's depth (`none`: flat on the page)" },
+  "shadow-sheet":    { kind: "shadow", what: "the depth of what rises over the page: a sheet, a toast" },
+  "label-transform": { kind: "transform", what: "a small label's case: `none` or `uppercase`" },
+  "label-caps":      { kind: "caps", what: "a small label in small capitals: `normal` or `all-small-caps`" },
+  "label-track":     { kind: "track", what: "a small label's letter spacing, in em" },
+  "title-weight":    { kind: "weight", what: "the weight of a page's title and the serif headings" },
+  "measure":         { kind: "length", what: "a page's width at most" },
+} as const satisfies Record<string, { kind: StyleKind; what: string }>;
+export type StyleKey = keyof typeof STYLE_TOKENS;
+export const STYLE_KEYS = Object.keys(STYLE_TOKENS) as StyleKey[];
+
+/** A built-in look: the two palettes and every style token (a value may name a palette colour, `var(--line)`, or mix
+ *  them; a record's own values are held to the grammar instead), with what changes in the dark. */
+export type Look = { colors: Palette; dark: Palette; style: Record<StyleKey, string>; darkStyle?: Partial<Record<StyleKey, string>>; motion?: Motion };
+export const LOOK_NAMES = ["paper", "almanac", "book", "daylight"] as const;
+export type LookName = (typeof LOOK_NAMES)[number];
+
+const ALMANAC_COLORS: Palette = { bg: "#f2ede2", surface: "#fbf8f1", text: "#1d1a16", muted: "#6d665a", line: "#d9d1c1", accent: "#4f6b3a", danger: "#9a3324" };
+const ALMANAC_DARK: Palette = { bg: "#171613", surface: "#201e1a", text: "#ece7dc", muted: "#a59d8e", line: "#3a362f", accent: "#a3bf8a", danger: "#f08f7f" };
+
+export const LOOKS: Record<LookName, Look> = {
+  // Paper: the app's paper and ink with Cloud's finish. Hairlines, not ink; soft corners in three sizes; a card lifted a
+  // little off the page; boxed fields; labels in plain sentence case; the one accent on the main action.
+  paper: {
+    colors: { bg: "#f3eee5", surface: "#fdfbf7", text: "#211e1a", muted: "#6b6459", line: "#e0d7c7", accent: "#4f6b3a", danger: "#9a3324" },
+    dark: { bg: "#171613", surface: "#211f1b", text: "#ece7dc", muted: "#a59d8e", line: "#37332c", accent: "#a3bf8a", danger: "#f08f7f" },
+    style: {
+      "primary": "var(--accent)", "on-primary": "#fdfbf7", "tint": "color-mix(in srgb, var(--text) 5%, transparent)",
+      "card-fill": "var(--surface)", "field-fill": "var(--surface)", "button-fill": "var(--surface)", "label-ink": "var(--muted)",
+      "line-head": "1px solid var(--line)", "line-row": "1px solid color-mix(in srgb, var(--line) 75%, transparent)", "line-card": "1px solid var(--line)",
+      "line-quote": "2px solid var(--line)", "field-line": "1px solid var(--line)", "button-line": "1px solid var(--line)",
+      "card-edges": "1px", "field-edges": "1px", "field-pad": "9px 12px",
+      "radius-card": "calc(var(--radius) * 1.4)", "radius-field": "var(--radius)", "radius-button": "999px",
+      "shadow-card": "0 1px 2px rgb(60 45 30 / .05), 0 12px 28px -18px rgb(60 45 30 / .28)",
+      "shadow-sheet": "0 -1px 0 var(--line), 0 -16px 40px -24px rgb(40 30 20 / .35)",
+      "label-transform": "none", "label-caps": "normal", "label-track": "0em", "title-weight": "400", "measure": "760px",
+    },
+    darkStyle: { "on-primary": "#171613", "shadow-card": "0 1px 0 rgb(0 0 0 / .3), 0 12px 28px -18px rgb(0 0 0 / .6)", "shadow-sheet": "0 -1px 0 var(--line), 0 -16px 40px -24px rgb(0 0 0 / .7)" },
+  },
+  // Almanac: the look of an old almanac (design/kit/WHY.md): ink rules and type rather than boxes, dotted rows, a card
+  // printed with a hard edge, a line to write on, small capital labels in the accent.
+  almanac: {
+    colors: ALMANAC_COLORS,
+    dark: ALMANAC_DARK,
+    style: {
+      "primary": "var(--text)", "on-primary": "var(--bg)", "tint": "color-mix(in srgb, var(--line) 30%, transparent)",
+      "card-fill": "var(--surface)", "field-fill": "var(--surface)", "button-fill": "var(--surface)", "label-ink": "var(--accent)",
+      "line-head": "1px solid var(--text)", "line-row": "1px dotted var(--muted)", "line-card": "1px solid var(--text)",
+      "line-quote": "3px double var(--text)", "field-line": "1px solid var(--line)", "button-line": "1px solid var(--line)",
+      "card-edges": "1px", "field-edges": "0 0 1px", "field-pad": "6px 0",
+      "radius-card": "0px", "radius-field": "var(--radius)", "radius-button": "999px",
+      "shadow-card": "3px 3px 0 var(--line)", "shadow-sheet": "3px 3px 0 var(--line)",
+      "label-transform": "uppercase", "label-caps": "normal", "label-track": ".14em", "title-weight": "400", "measure": "760px",
+    },
+  },
+  // Book: a printed page. No raised surfaces (a card is a section under a rule), a double rule over a list, rows set
+  // apart by space and a faint line, small capitals for labels, letterpress buttons, an oxblood accent.
+  book: {
+    colors: { bg: "#f6f1e7", surface: "#f6f1e7", text: "#23201b", muted: "#686155", line: "#d3c9b7", accent: "#7d3326", danger: "#7d3326" },
+    dark: { bg: "#1a1815", surface: "#1a1815", text: "#e9e2d4", muted: "#a39a8a", line: "#3d382f", accent: "#d99a86", danger: "#f08f7f" },
+    style: {
+      "primary": "var(--text)", "on-primary": "var(--bg)", "tint": "color-mix(in srgb, var(--accent) 7%, transparent)",
+      "card-fill": "transparent", "field-fill": "transparent", "button-fill": "transparent", "label-ink": "var(--accent)",
+      "line-head": "3px double var(--text)", "line-row": "1px solid color-mix(in srgb, var(--line) 55%, transparent)", "line-card": "1px solid var(--text)",
+      "line-quote": "1px solid var(--accent)", "field-line": "1px solid var(--muted)", "button-line": "1px solid var(--text)",
+      "card-edges": "1px 0 0", "field-edges": "0 0 1px", "field-pad": "5px 0",
+      "radius-card": "0px", "radius-field": "2px", "radius-button": "3px",
+      "shadow-card": "none", "shadow-sheet": "0 -1px 0 var(--text)",
+      "label-transform": "none", "label-caps": "all-small-caps", "label-track": ".08em", "title-weight": "400", "measure": "700px",
+    },
+  },
+  // Daylight: black on white for an e-paper screen, which shows grey badly and redraws slowly: no tints or shadows,
+  // heavier rules, the state of a thing by inversion and by words, nothing that moves.
+  daylight: {
+    colors: { bg: "#ffffff", surface: "#ffffff", text: "#000000", muted: "#333333", line: "#555555", accent: "#000000", danger: "#000000" },
+    dark: { bg: "#000000", surface: "#000000", text: "#ffffff", muted: "#d0d0d0", line: "#aaaaaa", accent: "#ffffff", danger: "#ffffff" },
+    style: {
+      "primary": "var(--text)", "on-primary": "var(--bg)", "tint": "transparent",
+      "card-fill": "var(--bg)", "field-fill": "var(--bg)", "button-fill": "var(--bg)", "label-ink": "var(--text)",
+      "line-head": "2px solid var(--text)", "line-row": "1px solid var(--line)", "line-card": "2px solid var(--text)",
+      "line-quote": "3px solid var(--text)", "field-line": "2px solid var(--text)", "button-line": "2px solid var(--text)",
+      "card-edges": "2px", "field-edges": "2px", "field-pad": "8px 12px",
+      "radius-card": "var(--radius)", "radius-field": "var(--radius)", "radius-button": "999px",
+      "shadow-card": "none", "shadow-sheet": "none",
+      "label-transform": "uppercase", "label-caps": "normal", "label-track": ".08em", "title-weight": "500", "measure": "760px",
+    },
+    motion: "still",
+  },
+};
+/** The look the app starts in. */
+export const DEFAULT_LOOK: LookName = "almanac";
+
+// The grammar of a style token in a record (the built-in looks are code, and may name or mix palette colours): a colour
+// is one isColor reads, `transparent`, or one of the seven palette colours by name (`var(--line)`); nothing else can
+// reach another value or load anything.
+const PALETTE_REF = new RegExp(`^var\\(--(?:${COLOR_KEYS.join("|")})\\)$`);
+const tokenColor = (v: string) => isColor(v) || v === "transparent" || PALETTE_REF.test(v);
+const LEN = String.raw`(?:0|\d{1,3}(?:\.\d{1,2})?(?:px|em|rem))`;
+const LINE = new RegExp(String.raw`^(?:0|\d{1,2}(?:\.\d)?px)\s+(none|solid|dotted|dashed|double)\s+(.+)$`);
+const EDGES = new RegExp(String.raw`^(?:0|\d(?:\.\d)?px)(?:\s+(?:0|\d(?:\.\d)?px)){0,3}$`);
+const PAD = new RegExp(String.raw`^${LEN}(?:\s+${LEN}){0,3}$`);
+const ONE_SHADOW = new RegExp(String.raw`^(?:inset\s+)?(-?${LEN})\s+(-?${LEN})(?:\s+${LEN}(?:\s+-?${LEN})?)?\s+(.+)$`);
+/** A list's items split at its commas outside parentheses (a shadow's colour may be `rgba(1, 2, 3, .2)`). */
+const topLevel = (v: string) => { const out: string[] = []; let depth = 0, from = 0; for (let i = 0; i < v.length; i++) { const c = v[i]; if (c === "(") depth++; else if (c === ")") depth--; else if (c === "," && depth === 0) { out.push(v.slice(from, i)); from = i + 1; } } out.push(v.slice(from)); return out; };
+/** A style token's value as a record gives it: kept if its kind's grammar reads it, else null (the look's value stands). */
+export function styleValue(key: StyleKey, v: unknown): string | null {
+  if (typeof v !== "string" || v.length > 200) return null;
+  const s = v.trim();
+  const ok = (() => {
+    switch (STYLE_TOKENS[key].kind) {
+      case "color": return tokenColor(s);
+      case "line": { const m = LINE.exec(s); return !!m && tokenColor(m[2].trim()); }
+      case "edges": return EDGES.test(s);
+      case "pad": return PAD.test(s);
+      case "length": return new RegExp(`^${LEN}$`).test(s);
+      case "shadow": { const all = topLevel(s); return s === "none" || (all.length <= 3 && all.every((one) => { const m = ONE_SHADOW.exec(one.trim()); return !!m && tokenColor(m[3].trim()); })); }
+      case "transform": return ["none", "uppercase", "lowercase", "capitalize"].includes(s);
+      case "caps": return ["normal", "small-caps", "all-small-caps"].includes(s);
+      case "track": return /^-?(?:0|0?\.\d{1,3})em$/.test(s) && Math.abs(parseFloat(s)) <= 0.3;
+      case "weight": return /^[1-9]00$/.test(s);
+    }
+  })();
+  return ok ? s : null;
+}
+
 /** The built-in theme: paper, ink and one moss accent; a book serif (Literata) for reading and a quiet sans (Instrument
  *  Sans) for the rest, both carried by the app (fonts.ts), each with a local font sized to it and the old system stacks
  *  behind (design/WHY.md, design/kit/WHY.md). */
 export const DEFAULT_THEME: Theme = {
-  colors: { bg: "#f2ede2", surface: "#fbf8f1", text: "#1d1a16", muted: "#6d665a", line: "#d9d1c1", accent: "#4f6b3a", danger: "#9a3324" },
-  dark: { bg: "#171613", surface: "#201e1a", text: "#ece7dc", muted: "#a59d8e", line: "#3a362f", accent: "#a3bf8a", danger: "#f08f7f" },
+  colors: { ...LOOKS[DEFAULT_LOOK].colors },
+  dark: { ...LOOKS[DEFAULT_LOOK].dark },
   fonts: {
     serif: `"Literata", "Literata fallback", "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif`,
     sans: `"Instrument Sans", "Instrument Sans fallback", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`,
@@ -52,13 +205,15 @@ export const DEFAULT_THEME: Theme = {
   density: "regular",
   scheme: "system",
   motion: "flowing",
+  look: DEFAULT_LOOK,
+  tokens: {},
 };
 
 /** Every token, as the CSS variable `--<key>` and as a key of the object applets get. One list, used everywhere. */
-export const TOKEN_KEYS = [...COLOR_KEYS, ...FONT_KEYS, ...DENSITY_KEYS] as const;
+export const TOKEN_KEYS = [...COLOR_KEYS, ...FONT_KEYS, ...DENSITY_KEYS, ...STYLE_KEYS] as const;
 export type TokenKey = (typeof TOKEN_KEYS)[number];
 /** The look as applied: every token's value, which palette shows, the density by name, and whether the parts move. */
-export type Tokens = Record<TokenKey, string> & { scheme: "light" | "dark"; density: Density; motion: Motion };
+export type Tokens = Record<TokenKey, string> & { scheme: "light" | "dark"; density: Density; motion: Motion; look: LookName };
 
 // One way to read each number, and a separator required between two (a comma, a slash or a space): a pattern that could
 // split a run of digits many ways would take seconds on a hostile value, and this one runs at every start.
@@ -88,22 +243,29 @@ function palette(given: unknown, base: Palette): Palette {
 export function themeFrom(metadata: unknown): Theme {
   const t = plain(metadata) && plain(metadata.theme) ? metadata.theme : null;
   if (!t) return structuredClone(DEFAULT_THEME);
+  const look: LookName = (LOOK_NAMES as readonly unknown[]).includes(t.look) ? (t.look as LookName) : DEFAULT_LOOK;
+  const tokens: Partial<Record<StyleKey, string>> = {};
+  if (plain(t.tokens)) for (const k of STYLE_KEYS) { const v = styleValue(k, t.tokens[k]); if (v !== null) tokens[k] = v; }
   const fonts = { ...DEFAULT_THEME.fonts };
   if (plain(t.fonts)) for (const k of FONT_KEYS) if (isFontStack(t.fonts[k]) && !EARLIER_FONTS[k]?.includes((t.fonts[k] as string).trim())) fonts[k] = (t.fonts[k] as string).trim();
   return {
-    colors: palette(t.colors, DEFAULT_THEME.colors),
-    dark: palette(t.dark, DEFAULT_THEME.dark),
+    colors: palette(t.colors, LOOKS[look].colors),
+    dark: palette(t.dark, LOOKS[look].dark),
     fonts,
     density: (DENSITIES as readonly unknown[]).includes(t.density) ? (t.density as Density) : DEFAULT_THEME.density,
     scheme: (SCHEMES as readonly unknown[]).includes(t.scheme) ? (t.scheme as Scheme) : DEFAULT_THEME.scheme,
-    motion: (MOTIONS as readonly unknown[]).includes(t.motion) ? (t.motion as Motion) : DEFAULT_THEME.motion,
+    motion: (MOTIONS as readonly unknown[]).includes(t.motion) ? (t.motion as Motion) : LOOKS[look].motion ?? DEFAULT_THEME.motion,
+    look,
+    tokens,
   };
 }
 
 /** The theme as applied, for a device in dark mode or not. */
 export function tokensOf(theme: Theme, systemDark: boolean): Tokens {
   const dark = theme.scheme === "dark" || (theme.scheme === "system" && systemDark);
-  return { ...(dark ? theme.dark : theme.colors), ...theme.fonts, ...DENSITY[theme.density], scheme: dark ? "dark" : "light", density: theme.density, motion: theme.motion };
+  const look = LOOKS[theme.look] ?? LOOKS[DEFAULT_LOOK];
+  const style = { ...look.style, ...(dark ? look.darkStyle : {}), ...theme.tokens };
+  return { ...(dark ? theme.dark : theme.colors), ...theme.fonts, ...DENSITY[theme.density], ...style, scheme: dark ? "dark" : "light", density: theme.density, motion: theme.motion, look: theme.look };
 }
 
 /** The type scale: every text size the app and applets use, a step each, as a multiple of the body size (`--size`,
@@ -153,4 +315,18 @@ export function withTodaysFonts(raw: Record<string, unknown>): Record<string, un
 }
 
 /** The record a person starts from ("Make this mine"): the built-in theme, written out in full so every value is there to change. */
-export const recordOf = (theme: Theme) => ({ colors: { ...theme.colors }, dark: { ...theme.dark }, fonts: { ...theme.fonts }, density: theme.density, scheme: theme.scheme, motion: theme.motion });
+export const recordOf = (theme: Theme) => ({ colors: { ...theme.colors }, dark: { ...theme.dark }, fonts: { ...theme.fonts }, density: theme.density, scheme: theme.scheme, motion: theme.motion, look: theme.look, tokens: { ...theme.tokens } });
+
+/** A record moved to another look: the colours it holds that are only the old look's own (not changed by the person) go,
+ *  so the new look's palettes show; a colour the person chose stays over it. */
+export function withLook(raw: Record<string, unknown>, look: LookName): Record<string, unknown> {
+  const was = LOOKS[(LOOK_NAMES as readonly unknown[]).includes(raw.look) ? (raw.look as LookName) : DEFAULT_LOOK];
+  const own = (given: unknown, base: Palette) => {
+    if (!plain(given)) return undefined;
+    const kept = Object.fromEntries(Object.entries(given).filter(([k, v]) => !(k in base) || typeof v !== "string" || v.trim().toLowerCase() !== base[k as ColorKey].toLowerCase()));
+    return Object.keys(kept).length ? kept : undefined;
+  };
+  const { colors, dark, ...rest } = raw;
+  const c = own(colors, was.colors), d = own(dark, was.dark);
+  return { ...rest, ...(c ? { colors: c } : {}), ...(d ? { dark: d } : {}), look };
+}

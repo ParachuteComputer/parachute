@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 import { DENSITIES, SCHEMES, themeFrom, TOKEN_KEYS } from "./theme";
 
 const doc = (name: string) => readFileSync(join(process.cwd(), "docs", name), "utf8");
-const varsIn = (text: string) => [...new Set([...text.matchAll(/`--([a-z]+)`/g)].map((m) => m[1]))];
+/** The tokens a text names (`--accent`, `--line-row`), but the type scale's, the motion's and the parts' own. */
+const varsIn = (text: string) => [...new Set([...text.matchAll(/`--([a-z][a-z-]*)`/g)].map((m) => m[1]))].filter((v) => !/^(fs|ease|t|pa)-/.test(v));
 
 describe("docs/THEME.md", () => {
   const theme = doc("THEME.md");
