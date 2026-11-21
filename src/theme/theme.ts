@@ -38,13 +38,15 @@ export const DENSITY: Record<Density, Record<DensityKey, string>> = {
   roomy: { pad: "20px", gap: "18px", radius: "12px", size: "17px", leading: "1.55" },
 };
 
-/** The built-in theme: paper, ink and one moss accent; a book serif and a quiet sans (design/WHY.md, design/kit/WHY.md). */
+/** The built-in theme: paper, ink and one moss accent; a book serif (Literata) for reading and a quiet sans (Instrument
+ *  Sans) for the rest, both carried by the app (fonts.ts), each with a local font sized to it and the old system stacks
+ *  behind (design/WHY.md, design/kit/WHY.md). */
 export const DEFAULT_THEME: Theme = {
   colors: { bg: "#f2ede2", surface: "#fbf8f1", text: "#1d1a16", muted: "#6d665a", line: "#d9d1c1", accent: "#4f6b3a", danger: "#9a3324" },
   dark: { bg: "#171613", surface: "#201e1a", text: "#ece7dc", muted: "#a59d8e", line: "#3a362f", accent: "#a3bf8a", danger: "#f08f7f" },
   fonts: {
-    serif: `"Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif`,
-    sans: `system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`,
+    serif: `"Literata", "Literata fallback", "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif`,
+    sans: `"Instrument Sans", "Instrument Sans fallback", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`,
     mono: `ui-monospace, "SF Mono", Menlo, Consolas, monospace`,
   },
   density: "regular",
@@ -68,6 +70,13 @@ const FAMILY = /^\s*(?:"[A-Za-z0-9 -]{1,60}"|'[A-Za-z0-9 -]{1,60}'|-?[A-Za-z][A-
 /** A font stack this reads: family names (quoted or bare), separated by commas. */
 export const isFontStack = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 300 && v.split(",").length <= 12 && v.split(",").every((f) => FAMILY.test(f));
 
+/** The built-in stacks of an earlier app (system fonts only). "Make this look mine" wrote them into a person's theme in
+ *  full, so one there word for word is the built-in face of its day, not a choice: it reads as today's. */
+const EARLIER_FONTS: Partial<Record<FontKey, readonly string[]>> = {
+  serif: [`"Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif`],
+  sans: [`system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`],
+};
+
 const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
 function palette(given: unknown, base: Palette): Palette {
   const out = { ...base };
@@ -80,7 +89,7 @@ export function themeFrom(metadata: unknown): Theme {
   const t = plain(metadata) && plain(metadata.theme) ? metadata.theme : null;
   if (!t) return structuredClone(DEFAULT_THEME);
   const fonts = { ...DEFAULT_THEME.fonts };
-  if (plain(t.fonts)) for (const k of FONT_KEYS) if (isFontStack(t.fonts[k])) fonts[k] = (t.fonts[k] as string).trim();
+  if (plain(t.fonts)) for (const k of FONT_KEYS) if (isFontStack(t.fonts[k]) && !EARLIER_FONTS[k]?.includes((t.fonts[k] as string).trim())) fonts[k] = (t.fonts[k] as string).trim();
   return {
     colors: palette(t.colors, DEFAULT_THEME.colors),
     dark: palette(t.dark, DEFAULT_THEME.dark),
@@ -133,6 +142,15 @@ export const MOTION_CSS = `:root{${Object.entries(MOTION).map(([k, v]) => `--${k
  *  flows marks it so. */
 export const cssOf = (t: Tokens): string => `:root{${TOKEN_KEYS.map((k) => `--${k}:${t[k]};`).join("")}${TYPE_SCALE_CSS}color-scheme:${t.scheme};}`
   + `${MOTION_CSS}${t.motion === "still" ? `:root:not([data-motion="flowing"]){${STILL}}` : ""}`;
+
+/** A theme record as written back on a change: a font stack an earlier app wrote (EARLIER_FONTS) becomes today's, so the
+ *  note says what the app shows, and the rest is as it was. */
+export function withTodaysFonts(raw: Record<string, unknown>): Record<string, unknown> {
+  if (!plain(raw.fonts)) return raw;
+  const fonts: Record<string, unknown> = { ...raw.fonts };
+  for (const k of FONT_KEYS) if (typeof fonts[k] === "string" && EARLIER_FONTS[k]?.includes((fonts[k] as string).trim())) fonts[k] = DEFAULT_THEME.fonts[k];
+  return { ...raw, fonts };
+}
 
 /** The record a person starts from ("Make this mine"): the built-in theme, written out in full so every value is there to change. */
 export const recordOf = (theme: Theme) => ({ colors: { ...theme.colors }, dark: { ...theme.dark }, fonts: { ...theme.fonts }, density: theme.density, scheme: theme.scheme, motion: theme.motion });
