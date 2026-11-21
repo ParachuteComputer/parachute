@@ -1,5 +1,6 @@
-// A note's route, /v/<vault>/n/<id>: the one place open-with is decided (open/resolve.ts). Links, wikilinks, search
-// hits, Back and links from outside all arrive here. `?with=vault` always shows the plain vault view; `?with=choose` (a
+// A note's route, /v/<vault>/n/<id>: where open-with is decided (open/resolve.ts). Links, wikilinks, search hits, Back
+// and links from outside all arrive here; a tap in an applet on a note no applet claims goes straight to Vault instead
+// (shell/frameDeps.ts `vaultAtTap`). `?with=vault` always shows the plain vault view; `?with=choose` (a
 // long-press on a note link in an applet) asks with the Open with… sheet, whatever the defaults say.
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";

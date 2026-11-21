@@ -95,6 +95,12 @@ history the vault already keeps, not a second record of it (`src/applet/changes.
   vault view) opens in Vault, when Vault is in the home vault and allowed on this device:
   `/v/<vault>/n/<id>` carries on to `/v/<home>/a/<Vault>?vault=<vault>&record=<id>`, which Vault hears as its launch.
   A record an applet opens still opens there; nothing about open-with changed.
+- **A tap in an applet on such a record** (a row's `link.open`, a note link) goes straight to Vault's address: the shell
+  decides it at the tap as the note's route would (`open/resolve.ts`), from what this device read before (the copies,
+  `vault/readCache.ts`), so the record shows without the note's route starting first. Only for Parachute's own Vault
+  (its code is the app's), and only when no applet claims the record as the copies have it: a stale copy can then only
+  show the record in Vault, never run an applet. A record an applet claims, a choice to ask, or a line to show goes
+  through the note's route, which reads the applets as the hub has them now (`e2e/openwith.spec.ts`, "a tap in an applet").
 - **A vault's address**, `/v/<vault>`, carries on the same way, to that vault in Vault (decided once per visit: a Vault
   the home's read finds late doesn't take over a plain view being read). `/v/<vault>?with=vault` (and a note's `?with=vault`) is
   the plain view, asked for: the way back when Vault itself won't do.
