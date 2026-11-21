@@ -160,16 +160,15 @@ select.pa-finput { appearance: auto; }
    On the theme's curves and times only (theme.ts MOTION: --ease-*, --t-*), which are all 0 under the device's
    reduce-motion setting or a still theme, so nothing here moves then. Only transform and opacity move. What is used
    tens of times a day (a tab, a row, typing) changes at once; what arrives (a page, what was read, a new row, a sheet,
-   a toast) comes in once, in under 250 ms, readable from its first frames (the curve does most of its travel early),
-   and never holds a tap back. */
-@keyframes pa-in { from { opacity: 0; transform: translateY(var(--pa-rise, 6px)); } }
+   a toast) rises a few pixels in under 250 ms, and never holds a tap back. What arrives is READABLE ON ITS FIRST FRAME:
+   it starts from a light opacity (.85), never from blank, and nothing waits for its turn (no delay), so what was
+   already read (the copy kept of it) is on the screen at once. */
+@keyframes pa-in { from { opacity: .85; transform: translateY(var(--pa-rise, 6px)); } }
+/* "Reading…" alone starts from blank: it is the wait's own word, shown only once the wait runs long */
 @keyframes pa-fade { from { opacity: 0; } }
-/* a page's title comes first, then, one step after, what is under it, from a little lower; what is read later comes
-   in as it arrives (the same step, so 240 ms in all) */
+/* a page's title and what is under it arrive together, the title from a little nearer */
 .pa-page-head { --pa-rise: 3px; animation: pa-in var(--t-state) var(--ease-out) both; }
-:is(.pa-list, .pa-card, .pa-table, .pa-fields, .pa-note, .pa-empty, .pa-days, .pa-problem) { animation: pa-in var(--t-state) var(--ease-out) var(--t-step) both; }
-/* what went wrong is said at once */
-.pa-problem { animation-delay: 0s; }
+:is(.pa-list, .pa-card, .pa-table, .pa-fields, .pa-note, .pa-empty, .pa-days, .pa-problem) { animation: pa-in var(--t-state) var(--ease-out) both; }
 /* a row that arrives after the list was drawn (a book added, a message come in) */
 .pa-list li.pa-fresh { animation: pa-in var(--t-state) var(--ease-out) both; }
 /* "Reading…" only once reading takes a while (the kit's own wait, not a motion: it holds under reduce-motion too): a

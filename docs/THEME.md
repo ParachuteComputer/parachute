@@ -54,7 +54,7 @@ drawn on these values, so they follow the theme with no work. Each value is also
 
 Motion comes from three curves and four times: `--ease-out` (arriving or leaving), `--ease-in-out` (moving across
 the screen), `--ease-drawer` (a sheet rising), and `--t-press` (160 ms, a press), `--t-state` (200 ms, a part arriving
-or changing), `--t-sheet` (300 ms, a sheet or a toast) and `--t-step` (40 ms, between parts arriving together). Move
+or changing), `--t-sheet` (300 ms, a sheet or a toast) and `--t-step` (40 ms, a step between parts you move yourself; the kit's parts arrive together, with no delay). Move
 only `transform` and `opacity`, on these: with reduce-motion on the device or a still theme every time is 0, and your
 applet is still with the rest ([DESIGN-RULES.md](DESIGN-RULES.md)).
 

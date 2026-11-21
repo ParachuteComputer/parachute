@@ -23,12 +23,17 @@ The kit already follows them, so most applets get them by using its parts and ad
 6. **Only `transform` and `opacity` move**, never width, height, margins or position: moving those shifts the page
    under the reader. **checked** (no `transition: all` either)
 7. **On the theme's curves and times only:** `--ease-out` (arriving, leaving), `--ease-in-out` (moving across the
-   screen), `--ease-drawer` (a drawer); `--t-press` 160 ms, `--t-state` 200 ms, `--t-sheet` 300 ms, `--t-step` 40 ms.
+   screen), `--ease-drawer` (a drawer); `--t-press` 160 ms, `--t-state` 200 ms, `--t-sheet` 300 ms, `--t-step` 40 ms (the kit does not delay its parts with it).
    **checked**
-8. **Quick and never in the way:** a page arrives within 250 ms, readable from its first frames; nothing waits for an
-   animation before it answers a tap; leaving is quicker than arriving.
-9. **Nothing starts from nothing:** arrive from a few pixels away (`translateY(6px)`) or `scale(.96)`, never
-   `scale(0)`; never `ease-in` (it starts slow, just when the eye is on it).
+8. **Quick and never in the way:** a page arrives within 250 ms; nothing waits for an animation before it answers a
+   tap; leaving is quicker than arriving.
+   **Readable on the first frame:** what arrives is legible on the very first frame it is drawn (opacity at least
+   0.8), with no delay before it starts, the page's title and its content together. Content that was already read
+   (the copy kept of it) must never be hidden behind its own entrance. Tested on the kit's parts in `e2e/feel.spec.ts`.
+9. **Nothing starts from nothing:** content (a page, what was read, a row) arrives from a few pixels away
+   (`translateY(6px)`) and a light opacity (the kit starts at 0.85), never from `opacity: 0`; never `scale(0)` (use
+   `scale(.96)`); never `ease-in` (it starts slow, just when the eye is on it). A sheet, a toast and "Reading…"
+   (`Loading`, only after a wait of 300 ms) are not content already in hand, and may fade in from blank.
 10. **Still means still.** With the device's reduce-motion setting, on a screen slow to redraw (e-ink), or with a
     theme whose `motion` is `still`, every time is 0 and nothing moves. Using the times above, an applet gets this for free.
 
