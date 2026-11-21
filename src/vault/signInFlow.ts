@@ -194,7 +194,7 @@ function keep(pending: Pending, token: TokenResponse, vault: string): VaultRecor
   const said = whoseSaid({ issuer: p.issuer, vault });
   const rec = saveVault({ issuer: p.issuer, vault, tokenEndpoint: pending.tokenEndpoint, ...(pending.revocationEndpoint ? { revocationEndpoint: pending.revocationEndpoint } : {}), clientId: pending.clientId,
     accessToken: token.access_token, refreshToken: token.refresh_token, expiresAt: token.expires_in ? Date.now() + token.expires_in * 1000 : undefined, scope: token.scope ?? "",
-    addedAt: before?.addedAt ?? new Date().toISOString(), ...(url !== vaultUrlOf({ issuer: p.issuer, vault }) ? { url } : {}) });
+    addedAt: before?.addedAt ?? new Date().toISOString(), ...(url !== vaultUrlOf({ issuer: p.issuer, vault }) ? { url } : {}), ...(p.door === "cloud" ? { door: "cloud" as const } : {}) });
   if (before?.refreshToken && before.refreshToken !== token.refresh_token) void revoke(before);
   // whose it is (the sign-in said it of every vault it listed, before the consent): their answer on Add a Parachute,
   // for a vault this device still hasn't been told about. Signing in again never changes what they already said of a vault

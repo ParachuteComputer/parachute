@@ -436,7 +436,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       {canWrite && r.types.some((t) => t !== "template") && !r.types.includes("template") && <div className="acts"><Button small onClick={() => void makeTemplate(v, r).then((x) => x && open(x.id))}>Make this a template</Button></div>}
       {canWrite && <>
         <p className="sect">Sharing</p>
-        <p className="note-meta">{!published ? "Only you, and what you let in, can read it." : v.view === null ? "Marked published. Parachute Cloud doesn't show published records to others yet, so there is no link to send." : "Published: anyone with its link can read it."}</p>
+        <p className="note-meta">{!published ? "Only you, and what you let in, can read it." : v.view === null ? "Marked published. This Parachute doesn't show published records to others yet, so there is no link to send." : "Published: anyone with its link can read it."}</p>
         {published && link && <p className="addr">{link}</p>}
         {published && link && (v.reach === "this-device"
           ? <p className="note-meta">Only this computer can open it: your Parachute is on this computer's own address. To send it on, your Parachute needs an address others can reach (its setup's Expose step).</p>
