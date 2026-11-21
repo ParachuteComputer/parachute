@@ -30,10 +30,10 @@ The kit already follows them, so most applets get them by using its parts and ad
    **Readable on the first frame:** what arrives is legible on the very first frame it is drawn (opacity at least
    0.8), with no delay before it starts, the page's title and its content together. Content that was already read
    (the copy kept of it) must never be hidden behind its own entrance. Tested on the kit's parts in `e2e/feel.spec.ts`.
-9. **Nothing starts from nothing:** arrive from a few pixels away (`translateY(6px)`) and a light opacity
-   (the kit starts at 0.85), or `scale(.96)`; never from `opacity: 0`, never `scale(0)`; never `ease-in` (it
-   starts slow, just when the eye is on it). Only "Reading…" (`Loading`) starts from blank, and only after a wait of
-   300 ms.
+9. **Nothing starts from nothing:** content (a page, what was read, a row) arrives from a few pixels away
+   (`translateY(6px)`) and a light opacity (the kit starts at 0.85), never from `opacity: 0`; never `scale(0)` (use
+   `scale(.96)`); never `ease-in` (it starts slow, just when the eye is on it). A sheet, a toast and "Reading…"
+   (`Loading`, only after a wait of 300 ms) are not content already in hand, and may fade in from blank.
 10. **Still means still.** With the device's reduce-motion setting, on a screen slow to redraw (e-ink), or with a
     theme whose `motion` is `still`, every time is 0 and nothing moves. Using the times above, an applet gets this for free.
 
