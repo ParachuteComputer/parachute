@@ -96,8 +96,9 @@ fieldset.plain legend { padding: 0; }
 .note-fields dt { color: var(--muted); }
 .note-fields dd { margin: 0; overflow-wrap: anywhere; }
 .note-edit-fields { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 12px; margin: 10px 0 0; }
-.note-edit-fields input:not([type="checkbox"]), .note-edit-fields select { padding: 8px 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-size: max(16px, var(--fs-body)); min-width: 0; }
-.note-edit-fields input:not([type="checkbox"]):focus, .note-edit-fields select:focus, .note-into select:focus, .secret-field input:focus { border-color: var(--text); }
+/* a line to write in that sits among buttons (Settings' keys and passcodes): drawn as a field */
+.note-edit-fields input:not([type="checkbox"]), .note-edit-fields select, .text-input { padding: 8px 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-size: max(16px, var(--fs-body)); min-width: 0; }
+.note-edit-fields input:not([type="checkbox"]):focus, .note-edit-fields select:focus, .text-input:focus, .note-into select:focus, .secret-field input:focus { border-color: var(--text); }
 .note-edit-fields input[type="checkbox"] { justify-self: start; width: 20px; height: 20px; }
 .note-code { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-small)/1.5 var(--mono); }
 /* (the note view's prose is in the parts layer, below: beside the note renderer's rules, as it always was) */
@@ -283,9 +284,10 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 /* the shell's own words over a running applet (views/ShellSheets.tsx): a secret's sheet, and a passing line */
 .secret-field { display: grid; gap: 4px; margin: 10px 0; }
 .secret-field input { font: max(16px, var(--fs-body))/1.4 var(--mono, ui-monospace, monospace); padding: 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: inherit; }
-/* a passing line, drawn as the kit's toast is (.pa-toast): on the surface, which is never see-through, with a sheet's depth */
+/* a passing line: a toast's edge and depth (.pa-toast) on a card's corners (it may run to two lines), on the surface,
+   which is never see-through */
 .shell-line { position: fixed; left: 50%; bottom: calc(var(--bar-h, 0px) + 18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 31; margin: 0; max-width: min(520px, 92vw);
-  padding: 8px 14px; border: var(--line-card); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-sheet); font-size: var(--fs-small); }
+  padding: 8px 14px; border: var(--line-card); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-sheet); font-size: var(--fs-small); }
 .trust-key code { display: block; font-size: var(--fs-small); word-break: break-all; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-field); }
 
 /* Parachute Simplified (docs/SIMPLE.md): Notes, the editor, Connect */
@@ -295,7 +297,7 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .note-edit { margin-left: auto; font-size: var(--fs-small); text-decoration: none; }
 .note-edit + .note-copy { margin-left: 4px; }
 .note-text { width: 100%; box-sizing: border-box; min-height: 55vh; margin: 8px 0 0; padding: 14px 16px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font: var(--fs-lead)/1.55 var(--serif); resize: vertical; }
-.note-text:focus { outline: none; border-color: var(--text); }
+.note-text:focus { border-color: var(--text); }
 .note-into { margin: 8px 0 0; }
 .note-into select { padding: 8px 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-size: max(16px, var(--fs-body)); }
 .note-edit-actions { align-items: center; margin-top: 10px; }

@@ -32,7 +32,7 @@ export default function ApprovalSettings() {
       <p className="small">{held ? <>This device checks your key list against your root key <code>{shortNpub(npubEncode(held))}</code>: only the keys it names can approve.</> : <>Only if you keep a root key (written down, never on a device): its public half here means only the keys on the list it signs can approve.</>}</p>
       {held ? <button type="button" className="quiet-button" onClick={() => run(async () => setAnchor(null), "Root key removed from this device.")}>Remove it from this device</button>
         : <form className="row-buttons" onSubmit={(e) => { e.preventDefault(); run(async () => { setAnchor(anchor); setAnchorText(""); }, "Root key kept on this device."); }}>
-          <input aria-label="Your root key's public half" placeholder="npub1…" value={anchor} onChange={(e) => setAnchorText(e.target.value.trim())} autoCapitalize="off" spellCheck={false} />
+          <input className="text-input" aria-label="Your root key's public half" placeholder="npub1…" value={anchor} onChange={(e) => setAnchorText(e.target.value.trim())} autoCapitalize="off" spellCheck={false} />
           <button type="submit" className="quiet-button" disabled={!anchor}>Keep it</button>
         </form>}
       {done && <p className="small" role="status">{done}</p>}

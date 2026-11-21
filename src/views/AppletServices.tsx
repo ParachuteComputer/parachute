@@ -25,7 +25,7 @@ function TokenFor({ subject, service }: { subject: string; service: Service }) {
     {!open && <button type="button" className="quiet-button" onClick={() => setOpen(true)}>{has ? "Change it" : "Give it a token"}</button>}
     {has && !open && <button type="button" className="quiet-button" onClick={() => keep(null)}>Forget it</button>}
     {open && <form onSubmit={(e) => { e.preventDefault(); if (value.trim()) void keep(value.trim()); }}>
-      <label>Token for {hostWords(service)} <input type="password" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} /></label>
+      <label>Token for {hostWords(service)} <input className="text-input" type="password" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} /></label>
       <button type="submit" className="primary">Keep it</button> <button type="button" className="quiet-button" onClick={() => setOpen(false)}>Cancel</button>
       <p className="quiet">The app keeps it sealed on this device and adds it to this applet's requests. The applet never sees it.</p>
     </form>}
