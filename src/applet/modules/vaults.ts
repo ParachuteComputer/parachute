@@ -46,6 +46,7 @@ import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 import { packMethods } from "./packs.ts";
 import { isSelf, readChanges, writerName } from "../changes.ts";
+import { titleOf } from "../../vault/notes.ts";
 
 export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where an AI connects to this vault only (`<vault>/mcp`): the vault's own address, nothing secret */
@@ -148,7 +149,8 @@ export function writablePath(p: unknown): p is string {
   if (p.startsWith(VIEWS)) return segs.length >= 3;
   return !/^(?:applets|parachute|\.parachute)$/i.test(segs[0]) && !segs[0].startsWith(".");
 }
-const title = (path: string) => path.split("/").pop() ?? path;
+// a record's title as the vault's lists say it (a journal entry by its words)
+const title = (path: string) => titleOf({ id: path, path });
 /** In the app's own folders (`Applets/`, `Parachute/`, `.parachute/`), but saved views. */
 const appsPath = (p: string) => !p.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(p);
 /** Whose a record is, for Changes: an applet's or a component's code ("code": shown, never put back here), a record the
