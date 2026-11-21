@@ -55,7 +55,8 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
       .then((note) => { if (live) setRead((r) => (r && "note" in r && r.id === noteId && r.copy ? { ...r, note } : r)); }, () => {});
     void Promise.all([call("vault.note", { vault: v.key, id: noteId, kept: true }), call("vault.roles", { vault: v.key }).catch(() => null), readApplets(v.key, false), call("defaults.get", { vault: v.key })])
       .then(([note, roles, applets, chosen]) => {
-        if (!live) return;
+        // (the hub's answer, asked meanwhile, wins)
+        if (!live || asked) return;
         const r: Read = { id: noteId, note, roles, applets, copy: true };
         if (!note || !roles || !applets.ok || !showsOnly(decide(r, chosen).decision)) { now(); return; }
         setRead(r);
@@ -67,7 +68,7 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
       if (drawn) void again(); else told = true;
     });
     return () => { live = false; off(); };
-  }, [v?.key, noteId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [v?.key, noteId, fresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const out = useMemo((): OpenWith => {
     if (!v || !read || read.id !== noteId || !defaults) return { state: "loading" };
@@ -78,7 +79,7 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
     if (read.copy && !showsOnly(d.decision)) return { state: "loading" };
     return { state: "ok", note: read.note, ...d };
   }, [v, read, noteId, defaults]);
-  const waits = out.state === "loading" && !!read && "note" in read && read.copy === true;
+  const waits = out.state === "loading" && !!read && read.id === noteId && "note" in read && read.copy === true;
   useEffect(() => { if (waits) askHub.current(); }, [waits]);
   return out;
 }

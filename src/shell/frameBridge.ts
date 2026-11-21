@@ -78,7 +78,12 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "vault.query": return deps.client(vault(p.vault as string)).queryNotes(p.query as Query);
       case "vault.note": {
         const rec = vault(p.vault as string);
-        if (p.kept === true && keptAsked.size < 1000) keptAsked.add(`${rec.key}\u0000${p.id as string}`);
+        if (p.kept === true) {
+          // the last thousand such notes (a long-lived frame's oldest go first)
+          const k = `${rec.key}\u0000${p.id as string}`;
+          keptAsked.delete(k); keptAsked.add(k);
+          if (keptAsked.size > 1000) keptAsked.delete(keptAsked.values().next().value!);
+        }
         try { return await (p.kept === true ? deps.kept : deps.client)(rec).getNote(p.id as string); } catch (e) { if ((e as { status?: number } | null)?.status === 404) return null; throw e; }
       }
       case "vault.roles": return deps.roles(vault(p.vault as string)).catch(() => null);

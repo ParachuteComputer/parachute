@@ -275,8 +275,10 @@ test("the note's route: an unclaimed note opens without waiting for the hub's ap
   await allowApplet(page, "Recipe box");
   await page.goto(`/v/${VAULT}?with=vault`);
   await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
-  // the hub's list of applets never answers from here on
-  await page.route((u) => u.searchParams.get("tag") === "applet", () => {});
+  // the hub's list of applets answers only when let through (below)
+  let through = () => {};
+  const held = new Promise<void>((r) => { through = r; });
+  await page.route((u) => u.searchParams.get("tag") === "applet", async (r) => { await held; await r.continue().catch(() => {}); });
   try {
     await tapNote(page, "Welcome");
     await expectInVault(page, VAULT, await noteId("Welcome"), "Welcome");
@@ -285,7 +287,10 @@ test("the note's route: an unclaimed note opens without waiting for the hub's ap
     await page.waitForTimeout(2000);
     await expect(page.locator('iframe.applet-frame[title="Recipe box"]:visible')).toHaveCount(0);
     await expect(page).toHaveURL(/\/n\//);
-  } finally { await page.unrouteAll({ behavior: "ignoreErrors" }); }
+    // the hub answers: the recipe opens in the applet the person allowed
+    through();
+    await expect(frame(page).locator("#opened")).toHaveText("Opened: Recipes/Tomato toast");
+  } finally { through(); await page.unrouteAll({ behavior: "ignoreErrors" }); }
 });
 
 // T-476: where the open bundle leaves Parachute's own out (as a bundle of the person's own that names no publisher), a
@@ -310,5 +315,48 @@ test("no Vault in the bundle: a note shown plain from its copy is drawn again wh
   } finally {
     await clearBarAndHome();
     await api(st, "DELETE", `notes/${made.id}`).catch(() => {});
+  }
+});
+
+// T-476: a long-press on a note link in an applet asks with Open with… on the applets as the hub has them now, never on
+// the copies, even when the person's Always for the type is Vault (which, from the copies, only shows the note)
+test("a long-press in an applet asks on the applets as the hub has them now, even with Always: Vault", async ({ page }) => {
+  test.setTimeout(90_000);
+  const st = hubState();
+  const toast = await noteId("Recipes/Tomato toast");
+  const code = `import { Linked } from "parachute";
+export default function Asks() { return <main><h1 id="asks">Asks</h1><p id="said"><Linked text={${JSON.stringify(`${VAULT}:${toast}`)}} /></p></main>; }
+`;
+  const applet = await api(st, "POST", "notes", { path: "Applets/Asks", extension: "tsx", tags: ["applet"], content: code,
+    metadata: { applet: { contract: 2, id: "asks", name: "Asks", glyph: "⌁", access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }] }] }, app: ["open"] } });
+  const asks = page.frameLocator('iframe.applet-frame[title="Asks"]');
+  const sheet = ui(page).getByRole("dialog", { name: "Open with" });
+  let through = () => {};
+  try {
+    await allowApplet(page, "Recipe box");
+    // Always: Vault for recipes
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await notes(page).getByRole("link", { name: /^Tomato toast/ }).click({ button: "right" });
+    await expect(sheet.getByRole("checkbox")).toBeChecked();
+    await sheet.getByRole("button", { name: /Vault/ }).click();
+    await expect(ui(page).locator(".prose-note h1")).toHaveText("Tomato toast");
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Asks/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(asks.getByRole("link", { name: `${VAULT}:${toast}` })).toBeVisible();
+    await page.waitForTimeout(500);
+    // the hub's list of applets answers only when let through
+    const held = new Promise<void>((r) => { through = r; });
+    await page.route((u) => u.searchParams.get("tag") === "applet", async (r) => { await held; await r.continue().catch(() => {}); });
+    await asks.getByRole("link", { name: `${VAULT}:${toast}` }).click({ button: "right" });
+    await expect(page).toHaveURL(/\/n\/.*with=choose/);
+    await page.waitForTimeout(2000);
+    await expect(sheet.getByRole("button", { name: /Recipe box/ }), "a choice drawn from the copies").toHaveCount(0);
+    through();
+    await expect(sheet.getByRole("button", { name: /Recipe box/ })).toBeVisible();
+  } finally {
+    through();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await api(st, "DELETE", `notes/${applet.id}`).catch(() => {});
   }
 });

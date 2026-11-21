@@ -141,7 +141,9 @@ export async function vaultAtTap(href: string): Promise<string | null> {
   try {
     // never long: a read the copies can't answer (a note never read here) leaves it to the note's route, before the tap
     // wears off
-    const got = await Promise.race([Promise.all([keptClientFor(rec).getNote(id), readRoleTags(keptClientFor(rec)), applets(rec, false)]), new Promise<null>((r) => setTimeout(() => r(null), AT_TAP_MS))]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const got = await Promise.race([Promise.all([keptClientFor(rec).getNote(id), readRoleTags(keptClientFor(rec)), applets(rec, false)]), new Promise<null>((r) => { timer = setTimeout(() => r(null), AT_TAP_MS); })])
+      .finally(() => clearTimeout(timer));
     if (!got) return null;
     const [note, roles, list] = got;
     if (!note || typeof note.id !== "string" || !list.ok) return null;

@@ -28,10 +28,11 @@ export default function NoteRoute() {
   const location = useLocation();
   const rec = useVault(key);
   const plain = params.get("with") === "vault";
-  const ow = useOpenWith(plain ? null : rec, id, "copy-first");
+  const choose = params.get("with") === "choose";
+  // a long-press asks on the applets as the hub has them now: the sheet it opens lists them, and a pick runs one
+  const ow = useOpenWith(plain ? null : rec, id, choose ? true : "copy-first");
   const kept = (location.state as { decided?: Decided } | null)?.decided;
   if (kept && !decided.has(location.key)) decided.set(location.key, kept);
-  const choose = params.get("with") === "choose";
   const decision = ow.state === "ok" ? (choose ? { kind: "ask" as const, candidates: ow.cands } : ow.decision) : null;
 
   // a record no applet opens (or one whose "Always" is the vault view) opens in Vault, when it is there and allowed
