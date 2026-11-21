@@ -386,7 +386,10 @@ export default function AppletScreen() {
   const heldForHang = importsElsewhere && !hangCleared && marks.suspect(pageId);
   const runningImports = importsElsewhere && granted && started && !!page && !heldForHang;
   useEffect(() => (runningImports ? marks.hold(pageId) : undefined), [runningImports, pageId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const grant = useMemo(() => (entry ? resolvedOf(entry.manifest) : {}), [entry]);
+  // what was allowed, as one key: the note, its grant and its code. The frame's session (its router, its grant) is made
+  // again only when that changes; a change to the note alone (its fields, a page's embeds) leaves a running frame as it is
+  const allowedKey = entry && keys ? `${entry.noteId}|${keys.scope}|${keys.html}` : null;
+  const grant = useMemo(() => (entry ? resolvedOf(entry.manifest) : {}), [allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // keyed on the vault, not the record object: a token refresh rewrites the record, and rebuilding the router would close
   // the frame's session with the very call that caused the refresh still waiting
   // the servers it declared (docs/design/SERVICES.md): a broker for each of its frame's sessions, opened with the session
@@ -418,7 +421,7 @@ export default function AppletScreen() {
   useEffect(() => () => { void brokerRef.current?.broker.then((b) => b?.close()); brokerRef.current = null; }, []);
   const vaultsModule = useMemo(() => (rec && entry && (entry.app.includes("vaults") || entry.app.includes("sharing"))
     ? createVaultsModule(entry.app, vaultsDeps({ confirm: (q) => sheetsRef.current.confirm(q), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search }))
-    : null), [rec?.key, entry]); // eslint-disable-line react-hooks/exhaustive-deps
+    : null), [rec?.key, allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => vaultsModule?.stop(), [vaultsModule]);
   // the frame's reads, from the kept copies while its page redraws on fresh data: noted, so it is told only of those
   const reader = useMemo(() => (rec ? keptReaderFor(rec) : null), [rec?.key, rec?.issuer]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -439,7 +442,7 @@ export default function AppletScreen() {
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
     // every vault this device holds (the Vault applet's words: modules/vaults.ts), and what reaches each
     ...(vaultsModule ? [vaultsModule] : []),
-  ]) : null), [rec?.key, rec?.issuer, rec?.vault, entry, vaultsModule, reader]); // eslint-disable-line react-hooks/exhaustive-deps
+  ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
   const note = loaded.state === "ok" ? loaded.note : null;

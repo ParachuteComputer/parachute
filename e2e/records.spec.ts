@@ -1,5 +1,6 @@
 // The record door (src/vault/records.ts): on a hub that has `/api/records` (core 0.9) the app reads and writes there
 // and never on `/api/notes`; on one without it (0.8) it asks once and keeps `/api/notes`. CI runs this on both.
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mintToken, VAULT } from "./hub";
 import { ui } from "./helpers";
@@ -21,9 +22,11 @@ async function readANote(page: Page) {
 test("the app goes through the record door where the hub has one, and asks once per vault", async ({ page }) => {
   const door = await hasDoor();
   const calls = watch(page);
-  // a vault found to have the door is remembered on the device (T-476): it is then never asked again
-  await page.goto("/");
-  const remembered = await page.evaluate((v) => Object.keys(JSON.parse(localStorage.getItem("parachute.doors.v1") ?? "{}")).some((k) => k.includes(`/vault/${v}/`)), VAULT);
+  // a vault found to have the door is remembered on the device (T-476): it is then never asked again (the start the
+  // tests share remembers it, on a hub with the door)
+  const kept = JSON.parse(readFileSync("e2e/.signed-in.json", "utf8")) as { origins: { localStorage: { name: string; value: string }[] }[] };
+  const doors = kept.origins.flatMap((o) => o.localStorage).find((x) => x.name === "parachute.doors.v1")?.value ?? "{}";
+  const remembered = Object.keys(JSON.parse(doors)).some((k) => k.includes(`/vault/${VAULT}/`));
   await readANote(page);
   const probes = calls.filter((c) => c === "/records?limit=1");
   expect(probes).toHaveLength(remembered ? 0 : 1);
