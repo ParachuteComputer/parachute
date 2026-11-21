@@ -138,23 +138,34 @@ export type Tab = { key: string; label: ReactNode; count?: number };
  *  a count follows a label ("Inbox · 3"). */
 export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: readonly Tab[]; current: string; onChange: (key: string) => void }) {
   const nav = useRef<HTMLElement>(null);
-  // which ends have more past them (a fade says so; the bar itself isn't drawn on a phone)
+  // which ends have more past them (a fade says so; no bar is drawn): `start` and `end` as the row reads, either way
   const edges = () => {
     const n = nav.current;
     if (!n) return;
-    const more = [n.scrollLeft > 1 ? "start" : "", n.scrollLeft + n.clientWidth < n.scrollWidth - 1 ? "end" : ""].filter(Boolean).join(" ");
+    const from = Math.abs(n.scrollLeft);
+    const more = [from > 1 ? "start" : "", from + n.clientWidth < n.scrollWidth - 1 ? "end" : ""].filter(Boolean).join(" ");
     if (more) n.dataset.more = more; else delete n.dataset.more;
   };
-  // the one shown stays in view on the one line (scrolled sideways, never the page): when it changes, and when the
-  // places arrive or change (a list read after the first draw, a count that widens a tab)
+  // the one shown stays in view on the one line, clear of the fades (scrolled sideways, never the page): when it
+  // changes, and when the places arrive or change (a list read after the first draw, a count that widens a tab)
   const shape = tabs.map((t) => `${t.key}:${t.label}:${t.count ?? ""}`).join("|");
-  useEffect(() => {
+  useLayoutEffect(() => {
     const n = nav.current;
     const on = n?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (n && on && (on.offsetLeft < n.scrollLeft || on.offsetLeft + on.offsetWidth > n.scrollLeft + n.clientWidth)) n.scrollLeft = on.offsetLeft - (n.clientWidth - on.offsetWidth) / 2;
+    if (n && on) {
+      const r = on.getBoundingClientRect(), box = n.getBoundingClientRect(), FADE = 32;
+      if (r.left < box.left + FADE || r.right > box.right - FADE) n.scrollLeft += r.left + r.width / 2 - (box.left + box.width / 2);
+    }
     edges();
   }, [current, shape]);
-  useEffect(() => { addEventListener("resize", edges); return () => removeEventListener("resize", edges); }, []);
+  // the row's own width changing (a font, the density, a column) is read too
+  useEffect(() => {
+    const n = nav.current;
+    if (!n || typeof ResizeObserver !== "function") return;
+    const o = new ResizeObserver(edges);
+    o.observe(n);
+    return () => o.disconnect();
+  }, []);
   return (
     <nav className="pa-tabs" aria-label={label} ref={nav} onScroll={edges}>
       {tabs.map((t) => <button key={t.key} type="button" className="pa-tab" aria-current={t.key === current ? "page" : undefined} onClick={() => onChange(t.key)}>{t.label}{t.count ? ` · ${t.count}` : ""}</button>)}

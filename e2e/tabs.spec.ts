@@ -39,9 +39,11 @@ test("tabs stay on one line on a phone, scroll sideways, and keep the one shown 
   expect(new Set(tops).size, `tops ${tops}`).toBe(1);
   // more than fit: it scrolls, and the one shown (the last, chosen before the places arrived) is brought into view
   expect(await nav.evaluate((n) => n.scrollWidth > n.clientWidth)).toBe(true);
+  // in view and clear of a fade at either end
   const inView = (name: string) => nav.evaluate((n, want) => {
     const b = [...n.querySelectorAll("button")].find((x) => (x.textContent ?? "").startsWith(want))!.getBoundingClientRect(), r = n.getBoundingClientRect();
-    return b.left >= r.left - 1 && b.right <= r.right + 1;
+    const more = (n as HTMLElement).dataset.more ?? "";
+    return b.left >= r.left + (more.includes("start") ? 31 : -1) && b.right <= r.right - (more.includes("end") ? 31 : -1);
   }, name);
   await expect.poll(() => inView("Archive")).toBe(true);
   // the start has more past it now: that end fades
@@ -52,4 +54,9 @@ test("tabs stay on one line on a phone, scroll sideways, and keep the one shown 
   await app.getByRole("button", { name: "Waiting · 2" }).evaluate((b) => (b as HTMLButtonElement).click());
   await expect(app.getByText("At waiting")).toBeVisible();
   await expect.poll(() => inView("Waiting")).toBe(true);
+  // a tab half under the fade, chosen: brought clear of it
+  await nav.evaluate((n) => { const s = [...n.querySelectorAll("button")].find((x) => x.textContent === "Sent")!; n.scrollLeft = s.offsetLeft + s.offsetWidth - n.clientWidth + 10; });
+  await app.getByRole("button", { name: "Sent", exact: true }).evaluate((b) => (b as HTMLButtonElement).click());
+  await expect(app.getByText("At sent")).toBeVisible();
+  await expect.poll(() => inView("Sent")).toBe(true);
 });
