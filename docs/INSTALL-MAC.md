@@ -31,8 +31,8 @@ After that it opens like any app.
 
 ## 4. Sign in with your key
 
-No key? On the first screen, **Sign in with Parachute Cloud**, or **Sign in with its address** for a hub of your own,
-and skip to section 5.
+No key? On the first screen, **Sign in with Parachute Cloud** (you're done once it opens on your notes), or **Sign in
+with its address** for your own hub, an org's or a friend's, and skip to section 5.
 
 Parachute signs you in with your Nostr key and keeps it in your Mac's login Keychain (under `computer.parachute.app`).
 In the Nostr key card on the first screen:
