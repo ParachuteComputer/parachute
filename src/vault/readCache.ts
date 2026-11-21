@@ -155,15 +155,18 @@ function revalidate(vault: string, who: string, key: string, f: typeof fetch, in
   if (!forced.delete(key) && (now - (asked.get(key) ?? 0) < REVALIDATE_MS || now - (answered.get(key) ?? 0) < REVALIDATE_MS)) return;
   asked.set(key, now);
   const refused = () => { void dropKept(vault); tell(vault, key); };
+  // the hub's own answer, never the browser's copy of an earlier one (the hub sends ETag and Last-Modified and no
+  // Cache-Control, so a browser may reuse a read of a moment ago): asked again with the ETag, a 304 when unchanged
+  const asks: RequestInit = { ...init, cache: "no-cache" };
   const p = (async () => {
-    let r = await fromHub(vault, who, key, f, input, init);
+    let r = await fromHub(vault, who, key, f, input, asks);
     if (r.res.status === 401 || r.res.status === 403) {
       void r.res.body?.cancel().catch(() => {});
       const state = await signIn();
       if (state === "refused") { refused(); return; }
       if (state !== "alive") return;
       // the chain sends it again with the token the refresh stored (client.ts withCurrentToken)
-      r = await fromHub(vault, who, key, f, input, init);
+      r = await fromHub(vault, who, key, f, input, asks);
       if (r.res.status === 401 || r.res.status === 403) { refused(); return; }
     }
     void r.res.body?.cancel().catch(() => {});

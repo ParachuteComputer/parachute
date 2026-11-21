@@ -137,3 +137,16 @@ describe("a write still on its way", () => {
     expect(await (await read(URL_A)).text()).toBe('["after"]');
   });
 });
+
+describe("the hub's own answer", () => {
+  it("a check behind a copy never takes the browser's copy of an earlier answer", async () => {
+    dropAllKept();
+    const seen: (RequestCache | undefined)[] = [];
+    const f: typeof fetch = async (_input, init) => { seen.push(init?.cache); return new Response("[]", { status: 200, headers: { "content-type": "application/json" } }); };
+    const read = keptFetch("home", HUB, f, alive);
+    await read(URL_A);
+    later();
+    await read(URL_A); await settle();
+    expect(seen).toEqual([undefined, "no-cache"]);
+  });
+});
