@@ -484,8 +484,8 @@ export default function AppletScreen() {
   const name = entry?.manifest.name ?? "Applet";
   const sized = !!entry?.embeds.length;
   // a notification's tap opens the applet at a room and message (services/notifyLink.ts)
-  const launch: { room: string; event?: string } | { vault: string; record?: string } | null = launchOf(params) ?? (entry?.app.includes("vaults") ? vaultLaunchOf(params) : null);
-  const launchKey = launch ? ("room" in launch ? `${launch.room}|${launch.event ?? ""}` : `${launch.vault}|${launch.record ?? ""}|${location.key}`) : "";
+  const launch: { room: string; event?: string } | { vault: string; record?: string; show?: "changes" } | null = launchOf(params) ?? (entry?.app.includes("vaults") ? vaultLaunchOf(params) : null);
+  const launchKey = launch ? ("room" in launch ? `${launch.room}|${launch.event ?? ""}` : `${launch.vault}|${launch.record ?? ""}|${launch.show ?? ""}|${location.key}`) : "";
   // what it was allowed, as its card said it (the folders, and each server with its rooms and keys): an applet reads its
   // room, or which key is Uni's, from here rather than from a copy of its own
   // `shown`: a frame that boots while its screen is kept hidden knows so from the start

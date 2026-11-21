@@ -9,9 +9,9 @@
       "id": "vault-view",
       "name": "Vault",
       "glyph": "▦",
-      "note": "your vaults: their types, records, fields, links and history"
+      "note": "your vaults: their types, records, fields, links, history and what changed"
     },
-    "needs": 3,
+    "needs": 5,
     "app": ["vaults", "sharing"]
   }
 }

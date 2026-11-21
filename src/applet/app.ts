@@ -5,10 +5,12 @@
 // app's rooms (docs/design/KEYRING.md "Voice, files, links, storage"): links, save, attach (a file the person picks)
 // and storage (a little, on this device). Pure.
 //
-//   app: [recent, pins, open, links, save, attach, storage, vaults, sharing, copy]
+//   app: [recent, pins, open, links, save, attach, storage, vaults, sharing, copy, changes]
+// `changes` (Home's, level 5): how many changes others (an AI, another app) made today in the vaults this device holds,
+// and their names; never what changed.
 // `copy` (Connect's, docs/design/PARACHUTE-SOURCE.md): what the person taps goes to the clipboard, during their tap.
 // `vaults` and `sharing` are the Vault applet's (applets/vault.tsx; modules/vaults.ts): every vault this device holds.
-export const APP_WORDS = ["recent", "pins", "open", "links", "save", "attach", "storage", "vaults", "sharing", "copy"] as const;
+export const APP_WORDS = ["recent", "pins", "open", "links", "save", "attach", "storage", "vaults", "sharing", "copy", "changes"] as const;
 export type AppWord = (typeof APP_WORDS)[number];
 
 /** `metadata.app`: absent is none; anything but a short list of known words, each once, is refused (the applet then
@@ -31,6 +33,7 @@ export function appLines(app: readonly AppWord[]): { text: string; stress: boole
   if (app.includes("attach")) out.push({ text: "Ask you to pick a file or picture to give it", stress: false });
   if (app.includes("vaults")) out.push({ text: "See every record in every vault on this device (its words, fields, types, tags, links and history), and change records where you let Parachute change them; a published record (anyone with its link reads it) only after you say yes on the app's own sheet", stress: true });
   if (app.includes("sharing")) out.push({ text: "See what reaches each vault (this app, its applets), and, each after you say yes on the app's own sheet: publish a record (anyone with its link can read it), take an applet's access back, or make a vault read only", stress: true });
+  if (app.includes("changes")) out.push({ text: "See how many changes your AIs and other apps made today in the vaults on this device, and their names (not what they changed)", stress: false });
   if (app.includes("copy")) out.push({ text: "Put text of its own on your clipboard when you tap in it", stress: false });
   if (app.includes("storage")) out.push({ text: "Keep up to 256 KB on this device for itself (drafts, what it last showed)", stress: false });
   return out;
