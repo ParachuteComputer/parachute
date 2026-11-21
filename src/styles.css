@@ -27,6 +27,7 @@ button, input { font: inherit; color: inherit; }
 :is(input, textarea, select):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
 /* a bare choice list is drawn as a field (never the OS's grey box), at least 16px so a phone doesn't zoom to it */
 select { padding: 8px 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-family: inherit; font-size: max(16px, var(--fs-body)); }
+select:focus { border-color: var(--text); }
 input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); }
 }
 
@@ -98,7 +99,7 @@ fieldset.plain legend { padding: 0; }
 .note-edit-fields { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 12px; margin: 10px 0 0; }
 /* a line to write in that sits among buttons (Settings' keys and passcodes): drawn as a field */
 .note-edit-fields input:not([type="checkbox"]), .note-edit-fields select, .text-input { padding: 8px 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-size: max(16px, var(--fs-body)); min-width: 0; }
-.note-edit-fields input:not([type="checkbox"]):focus, .note-edit-fields select:focus, .text-input:focus, .note-into select:focus, .secret-field input:focus { border-color: var(--text); }
+.note-edit-fields input:not([type="checkbox"]):focus, .note-edit-fields select:focus, .text-input:focus, .secret-field input:focus { border-color: var(--text); }
 .note-edit-fields input[type="checkbox"] { justify-self: start; width: 20px; height: 20px; }
 .note-code { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-small)/1.5 var(--mono); }
 /* (the note view's prose is in the parts layer, below: beside the note renderer's rules, as it always was) */
@@ -293,15 +294,14 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 /* Parachute Simplified (docs/SIMPLE.md): Notes, the editor, Connect */
 .notes-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 22px 0 14px; padding-bottom: 10px; border-bottom: var(--line-head); }
 .notes-head h1 { margin: 0; font: var(--title-weight) calc(var(--size) * 3)/.95 var(--serif); letter-spacing: -.02em; }
-.notes-new { border-radius: var(--radius-button); padding: 10px 18px; white-space: nowrap; }
+.notes-new { padding: 10px 18px; white-space: nowrap; }
 .note-edit { margin-left: auto; font-size: var(--fs-small); text-decoration: none; }
 .note-edit + .note-copy { margin-left: 4px; }
 .note-text { width: 100%; box-sizing: border-box; min-height: 55vh; margin: 8px 0 0; padding: 14px 16px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font: var(--fs-lead)/1.55 var(--serif); resize: vertical; }
 .note-text:focus { border-color: var(--text); }
 .note-into { margin: 8px 0 0; }
-.note-into select { padding: 8px 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-size: max(16px, var(--fs-body)); }
 .note-edit-actions { align-items: center; margin-top: 10px; }
-.note-edit-actions .primary { border-radius: var(--radius-button); padding: 11px 28px; }
+.note-edit-actions .primary { padding: 11px 28px; }
 .connect .lead { margin-top: 14px; }
 .connect-address { font: var(--fs-small)/1.35 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 .connect-how p { margin: 0; font-size: var(--fs-body); line-height: 1.45; }
@@ -312,7 +312,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .idle-lock { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: var(--pad, 16px); }
 .idle-lock-inner { text-align: center; max-width: 320px; }
 .idle-lock h1 { font-family: var(--serif); font-weight: 500; font-size: var(--fs-title); margin: 0 0 6px; }
-.idle-lock-glyph { font-family: var(--serif); font-size: var(--fs-title); margin: 0 0 8px; color: var(--accent); }
+/* the glyph over the title: a mark, not type, so above the scale (2.5× the body, with the density) */
+.idle-lock-glyph { font-family: var(--serif); font-size: calc(var(--size) * 2.5); margin: 0 0 8px; color: var(--accent); }
 .idle-lock .primary { margin-top: 18px; min-width: 160px; }
 /* Settings → Security: one row an action, its choices side by side */
 .levels-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-top: 1px solid var(--line); }
