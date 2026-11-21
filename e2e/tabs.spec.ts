@@ -73,6 +73,14 @@ test("tabs stay on one line on a phone, scroll sideways, and keep the one shown 
   await frames();
   await page.setViewportSize(size);
   await expect.poll(() => inView("Archive")).toBe(true);
+  // a small clamp too (a window edge dragged a little): 2 px wider, then narrower
+  await page.setViewportSize({ width: size.width + 2, height: size.height });
+  await frames();
+  await page.setViewportSize({ width: size.width - 100, height: size.height });
+  await frames();
+  await expect.poll(() => inView("Archive")).toBe(true);
+  await page.setViewportSize(size);
+  await frames();
   // the person scrolls the row away themselves; a count arriving (Inbox widens) leaves it where they put it
   await frames();
   await nav.evaluate((n) => { n.scrollLeft = 0; });

@@ -151,8 +151,8 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
   // re-places it only while the row is where the kit put it (a scroll the person made is theirs)
   const places = tabs.map((t) => t.key).join("|");
   const counts = tabs.map((t) => `${t.key}:${t.count ?? ""}`).join("|");
-  // placed: the row is where keepClear put it, at placedAt
-  const placed = useRef(true), placedAt = useRef(0);
+  // placed: the row is where keepClear put it, at placedAt, when the row could scroll placedSpan
+  const placed = useRef(true), placedAt = useRef(0), placedSpan = useRef(0);
   /** The row's scroll range, as the row reads (scrollLeft runs negative right to left). */
   const range = (n: HTMLElement): [number, number] => { const span = n.scrollWidth - n.clientWidth; return getComputedStyle(n).direction === "rtl" ? [-span, 0] : [0, span]; };
   /** Scroll the row (never the page) so this tab is clear of the fades, at the ends that have one. */
@@ -162,9 +162,10 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
     const [lo, hi] = range(n);
     const FADE = 32, left = n.scrollLeft > lo + 1 ? FADE : 0, right = n.scrollLeft < hi - 1 ? FADE : 0;
     const r = on.getBoundingClientRect(), box = n.getBoundingClientRect();
-    if (r.left < box.left + left || r.right > box.right - right) n.scrollLeft += r.left + r.width / 2 - (box.left + box.width / 2);
+    if (r.left < box.left + left || r.right > box.right - right) n.scrollTo({ left: n.scrollLeft + r.left + r.width / 2 - (box.left + box.width / 2), behavior: "instant" });
     placed.current = true;
     placedAt.current = n.scrollLeft;
+    placedSpan.current = n.scrollWidth - n.clientWidth;
   };
   const shown = () => nav.current?.querySelector<HTMLElement>('[aria-current="page"]');
   useLayoutEffect(() => { keepClear(shown()); edges(); }, [current, places]);
@@ -180,12 +181,12 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
     return () => o.disconnect();
   }, [places]);
   // a scroll is the person's (a finger, a wheel, a key, a screen reader) unless it is where the kit put the row, or the
-  // browser clamping a resized row (the kit's mark no longer in range): theirs, the row stays where they put it
+  // browser clamping a row whose scroll extent changed (a resize): theirs, the row stays where they put it
   const scrolled = () => {
     const n = nav.current;
     if (n && placed.current) {
-      const [lo, hi] = range(n);
-      if (placedAt.current < lo - 2 || placedAt.current > hi + 2) placedAt.current = n.scrollLeft;
+      const span = n.scrollWidth - n.clientWidth;
+      if (Math.abs(span - placedSpan.current) > 0.5) { placedAt.current = n.scrollLeft; placedSpan.current = span; }
       else if (Math.abs(n.scrollLeft - placedAt.current) > 1) placed.current = false;
     }
     edges();
