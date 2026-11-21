@@ -10,6 +10,7 @@
 //   mail      the mail gateway answers a signed request: it refuses the test key by its own check ("pubkey not allowed",
 //             said only after the signature checked out)
 //   calendar  the calendar door, the same
+//   updates   the update feed builds read (src/shell/updates.ts) is a feed, and each file it names is there to download
 //   services  the last Services run on next (every real-server spec, in CI) passed and is under two days old; then it
 //             starts today's
 // Unset services are not checked. Prints one line, the counts; what failed and why goes to CANARY_LOG (mode 600).
@@ -23,6 +24,7 @@
 //                 CANARY_NTFY the push server (ntfy) its endpoint is on, read with the user `CANARY_NTFY_USER` (default
 //                 canary, read-only on topics upcanary*) and the password in CANARY_KEYS/ntfy.pw
 // CANARY_MAIL     the mail gateway's /mail/ URL      CANARY_CAL  the calendar door's base URL
+// CANARY_FEED     the update feed's address (the latest.json builds are made with: PARACHUTE_UPDATE_FEED)
 // CANARY_REPO     owner/repo whose Services workflow it reads and starts (needs `gh` signed in)
 // CANARY_LOG      where the details go (default ~/.local/state/parachute-canary/last.log)
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -33,6 +35,7 @@ import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { person } from "../e2e/services/client.ts";
 import { checkCard, makeCard, openAnswer, replyWrap, sealPub } from "../src/services/e2eCards.ts";
 import { b64u, decrypt } from "../services/push-gateway/src/webpush.ts";
+import { parseFeed } from "../src/shell/feed.ts";
 
 if (process.env.CANARY_ENV) for (const line of readFileSync(process.env.CANARY_ENV, "utf8").split("\n")) {
   const m = /^\s*([A-Z_]+)=(.*)$/.exec(line);
@@ -192,6 +195,17 @@ async function refusesByItsCheck(url: string, method: "GET" | "POST", body?: str
 }
 if (E.CANARY_MAIL && E.CANARY_KEYS) checks.push({ name: "mail", run: () => refusesByItsCheck(under(E.CANARY_MAIL!, "session"), "POST", "{}") });
 if (E.CANARY_CAL && E.CANARY_KEYS) checks.push({ name: "calendar", run: () => refusesByItsCheck(under(E.CANARY_CAL!, "cal/v1/session"), "GET") });
+
+if (E.CANARY_FEED) checks.push({ name: "updates", run: async () => {
+  const r = await get(E.CANARY_FEED!);
+  if (!r.ok) throw new Error(`the feed answered ${r.status}`);
+  const feed = parseFeed(await r.text(), E.CANARY_FEED!);
+  if (!feed || !Object.keys(feed.files).length) throw new Error("the feed isn't one, or names no file on its own origin");
+  for (const [platform, url] of Object.entries(feed.files)) {
+    const f = await get(url, { method: "HEAD" });
+    if (!f.ok) throw new Error(`${platform}'s file answered ${f.status}`);
+  }
+} });
 
 if (E.CANARY_REPO) checks.push({ name: "services", run: async () => {
   const gh = (...a: string[]) => execFileSync("gh", ["-R", E.CANARY_REPO!, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 });
