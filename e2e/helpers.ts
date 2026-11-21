@@ -8,6 +8,12 @@ import { keyDoor } from "./keys";
 async function backOnTheLauncher(page: Page, vault: string) {
   void vault;
   const list = ui(page).getByRole("list", { name: "Applets" });
+  // the list, or Parachute Simplified's Notes: Parachute's own applet (docs/design/PARACHUTE-SOURCE.md), or the frame's
+  await expect(page.locator('iframe.app-frame, iframe.applet-frame[title="Notes"]').first()).toBeVisible({ timeout: 20_000 });
+  if (await page.locator('iframe.applet-frame[title="Notes"]').count()) {
+    await expect(page.frameLocator('iframe.applet-frame[title="Notes"]').getByRole("heading", { level: 1, name: "Notes" })).toBeVisible({ timeout: 20_000 });
+    return;
+  }
   await expect(list.getByRole("link").first().or(list.getByText("No applets here yet.")).or(ui(page).getByRole("heading", { level: 1, name: "Notes" }))).toBeVisible({ timeout: 20_000 });
 }
 
@@ -20,7 +26,8 @@ export async function approveUntilBack(page: Page, hubOrigin: string, appOrigin:
   const pick = page.getByRole("button", { name: "Continue" });
   const where = async () => {
     const u = new URL(page.url());
-    if (u.origin === appOrigin && u.pathname === backAt) return "back";
+    // back on "/" (or where it leads in Parachute Simplified: Parachute's own Notes)
+    if (u.origin === appOrigin && (u.pathname === backAt || (backAt === "/" && /^\/v\/[^/]+\/a\/parachute%3Anotes$/.test(u.pathname)))) return "back";
     if (u.origin === appOrigin && await pick.isVisible().catch(() => false)) return "pick";
     return u.origin === hubOrigin && await approve.isVisible().catch(() => false) ? "asked" : "wait";
   };
@@ -189,4 +196,10 @@ export async function writeBundle(parts: { bar?: unknown[]; start?: unknown }) {
 /** Everything a test may have left of the bar and home: the bundle's record (both tags) and the settings note. */
 export async function clearBarAndHome() {
   for (const t of ["parachute-settings", "parachute-app", "parachute-bundle"]) for (const n of await tagged(t)) await api(hubState(), "DELETE", `notes/${n.id}`).catch(() => {});
+}
+
+/** A note no applet claims opens in Parachute's own Vault applet (no card): its address and its article. */
+export async function expectInVault(page: Page, vault: string, id: string, title: string) {
+  await expect(page).toHaveURL(new RegExp(`/a/parachute%3Avault\\?vault=${vault}&record=${id}`));
+  await expect(page.frameLocator('iframe.applet-frame[title="Vault"]').getByRole("article", { name: title })).toBeVisible();
 }

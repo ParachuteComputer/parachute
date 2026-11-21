@@ -16,7 +16,7 @@ test("saved state: a journal draft and the entry it had open survive closing the
   const older = await api(hubState(), "POST", "notes", { path: `Journal/2026/11-03/08-00 Frost on the beds ${stamp}`, tags: ["journal"], content: `Frost on the beds ${stamp}.` });
   made.push(older.id);
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const app = page.frameLocator("iframe.applet-frame");
@@ -25,7 +25,7 @@ test("saved state: a journal draft and the entry it had open survive closing the
     // the kit sends a change within 250 ms; a page torn down sooner than that loses that last moment
     await page.waitForTimeout(500);
     // open an entry from the vault: it is shown under the box
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: /Notes|Search results/ }).getByRole("link", { name: new RegExp(`Frost on the beds ${stamp}`) }).click();
     await expect(page.frameLocator("iframe.applet-frame").getByRole("region", { name: "The entry you opened" })).toContainText(`Frost on the beds ${stamp}`);
     await page.waitForTimeout(600);
@@ -65,7 +65,7 @@ test("Revoke clears what the applet saved: a draft isn't on the device for whate
   const draft = `A private line about the orchard ${stamp}`;
   const onDevice = () => page.evaluate((d) => Object.keys(localStorage).some((k) => (localStorage.getItem(k) ?? "").includes(d)), draft);
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const app = page.frameLocator("iframe.applet-frame");

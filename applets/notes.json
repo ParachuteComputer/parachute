@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "path": "Applets/Notes",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "notes",
+      "name": "Notes",
+      "glyph": "¶",
+      "note": "every vault's newest notes in one list, a search across them, and a new note"
+    },
+    "needs": 3,
+    "app": ["open", "vaults"]
+  }
+}

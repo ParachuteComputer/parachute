@@ -14,10 +14,8 @@ import type { AppPlace } from "./bundles";
 import { chooseStart, forgetStart } from "./start";
 import { clearMark } from "../open/mark";
 import { homeVault, useFrameSource } from "./frameSource";
-import { SHIPPED, shippedIn, type ShippedName } from "../applet/shipped";
-import { useApplets } from "../applet/useApplets";
+import { officialFace, officialPath, type OfficialName } from "../applet/parachuteSource";
 import { useVaults } from "../vault/hooks";
-import { appletPath } from "../open/paths";
 import { useBadge } from "../services/signals";
 
 type Item = Found & { place: Place; home: boolean };
@@ -53,18 +51,24 @@ export default function BottomBar() {
 }
 
 /** One of the app's own places a bundle's bar names (docs/SIMPLE.md): its home screen (Notes, or the list), Connect an
- *  AI, or an applet the app ships, Journal, Capture or Vault (the one in the home vault, or the screen that adds it). */
+ *  AI, or one of Parachute's own applets, Journal, Capture or Vault (docs/design/PARACHUTE-SOURCE.md). */
 function AppPlaceLink({ place, notes, pathname }: { place: AppPlace; notes: boolean; pathname: string }) {
-  if ("shipped" in place) return <ShippedPlace which={place.shipped} pathname={pathname} />;
-  const [href, glyph, name] = place.screen === "connect" ? ["/connect", "⌁", "Connect"] : notes ? ["/", "¶", "Notes"] : ["/", "⁂", "Applets"];
-  return <Link className="home-bar-place" to={href} aria-current={pathname === href ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{glyph}</span>{name}</Link>;
-}
-function ShippedPlace({ which, pathname }: { which: ShippedName; pathname: string }) {
   const home = homeVault(useVaults());
-  useApplets(home, false);
-  const id = shippedIn(home, which);
-  const href = home && id ? appletPath(home.key, id) : `/${which}`;
-  return <Link className="home-bar-place" to={href} aria-current={pathname === href || pathname === `/${which}` ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{which === "journal" ? "✎" : which === "vault" ? "▦" : "◉"}{"\uFE0E"}</span>{SHIPPED[which].name}</Link>;
+  if ("shipped" in place) return <ShippedPlace which={place.shipped} pathname={pathname} />;
+  // Connect is Parachute's own applet now (docs/design/PARACHUTE-SOURCE.md)
+  if (place.screen === "connect") return <ShippedPlace which="connect" pathname={pathname} />;
+  // the home: "/", which opens Parachute's own Notes in Parachute Simplified (shell/App.tsx), or the list
+  const [glyph, name] = notes ? ["¶", "Notes"] : ["⁂", "Applets"];
+  const at = pathname === "/" || (notes && !!home && pathname === officialPath(home.key, "notes"));
+  return <Link className="home-bar-place" to="/" aria-current={at ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{glyph}</span>{name}</Link>;
+}
+function ShippedPlace({ which, pathname }: { which: OfficialName; pathname: string }) {
+  // named on the bar, it is there, whatever the bundle's publishers say (they decide what is offered on their own: the
+  // list, where a record opens, Simplified's home)
+  const home = homeVault(useVaults());
+  const href = home ? officialPath(home.key, which) : `/${which}`;
+  const face = officialFace(which);
+  return <Link className="home-bar-place" to={href} aria-current={pathname === href || pathname === `/${which}` ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{face.glyph}{"\uFE0E"}</span>{face.name}</Link>;
 }
 
 function Place({ item, current, onHold }: { item: Item; current: boolean; onHold: () => void }) {

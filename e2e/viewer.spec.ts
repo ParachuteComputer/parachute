@@ -14,14 +14,11 @@ async function typed(): Promise<boolean> {
   const r = await fetch(`${hub().origin}/vault/${VAULT}/api/records?limit=1`, { headers: { authorization: `Bearer ${hub().token}` } });
   return r.ok;
 }
-/** Vault in the home vault and allowed in this browser: added with its one tap when it isn't there yet. */
+/** Vault, Parachute's own (docs/design/PARACHUTE-SOURCE.md): it opens with no card. */
 async function addAndAllow(page: Page) {
   await page.goto("/vault");
-  const add = page.getByRole("button", { name: "Add Vault" }), allow = page.getByRole("button", { name: "Allow" });
-  await expect(add.or(allow)).toBeVisible();
-  if (await add.isVisible()) await add.click();
-  await allow.click();
   await expect(vaultUi(page).getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Allow" })).toHaveCount(0);
 }
 const made: string[] = [];
 async function seed() {
@@ -44,22 +41,21 @@ test.describe("Vault", () => {
   test.beforeAll(async () => { await cleanup(); if (await typed()) await seed(); });
   test.afterAll(cleanup);
 
-  test("before it is added, a record opens plain, with a line that adds Vault", async ({ page }) => {
+  test("a record no applet opens opens in Vault, Parachute's own, with no card; ?with=vault is the plain view", async ({ page }) => {
     const [plain] = await api(hub(), "GET", "notes?path_prefix=Shelf%2F&limit=1");
     test.skip(!plain, "no typed records on this core");
     await page.goto(`/v/${VAULT}/n/${plain.id}`);
+    await expect(page).toHaveURL(/\/a\/parachute%3Avault\?/);
+    await expect(vaultUi(page).getByRole("heading", { name: plain.path.split("/").pop() })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Allow" })).toHaveCount(0);
+    await page.goto(`/v/${VAULT}/n/${plain.id}?with=vault`);
     await expect(ui(page).getByRole("heading", { name: plain.path.split("/").pop() })).toBeVisible();
-    await expect(ui(page).getByRole("link", { name: /See its fields, types, links and history in Vault: add it/ })).toBeVisible();
   });
 
-  test("add it, allow it; browse a type's table, open a record, change a field; what an AI writes appears", async ({ page }) => {
+  test("open it; browse a type's table, open a record, change a field; what an AI writes appears", async ({ page }) => {
     test.skip(!(await typed()), "types are core 0.9's");
-    await page.goto("/vault");
-    await page.getByRole("button", { name: "Add Vault" }).click();
-    const card = page.getByRole("region", { name: /asking for access/ });
-    await expect(card).toContainText("See every record in every vault on this device");
-    await expect(card).toContainText("See what reaches each vault");
-    await page.getByRole("button", { name: "Allow" }).click();
+    // Parachute's own: no card (docs/design/PARACHUTE-SOURCE.md)
+    await addAndAllow(page);
 
     // the person's vaults (three at home), then one: its types with how many records each has
     const v = vaultUi(page);
@@ -119,9 +115,9 @@ test.describe("Vault", () => {
     await page.goto("/");
     await page.goto(`/v/${VAULT}/n/${target}`);
     await expect(page).toHaveURL(new RegExp(`/a/[^/?]+\\?vault=${VAULT}&record=${target}`));
-    // arrived by an address, not a tap: it waits for Open (a tap on a record carries on running)
-    await page.getByRole("button", { name: "Open Vault" }).click();
+    // Parachute's own runs without waiting for a tap (docs/design/PARACHUTE-SOURCE.md)
     await expect(vaultUi(page).getByRole("article", { name: "Book 03" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open Vault" })).toHaveCount(0);
     // a recipe, which Recipe box and Cook mode open, still goes to them: not to Vault
     const [toast] = await api(hub(), "GET", `notes?path=${encodeURIComponent("Recipes/Tomato toast")}`);
     await page.goto(`/v/${VAULT}/n/${toast.id}`);
@@ -130,7 +126,6 @@ test.describe("Vault", () => {
     // a vault's own address opens it in Vault too
     await page.goto(`/v/${VAULT}`);
     await expect(page).toHaveURL(new RegExp(`/a/[^/?]+\\?vault=${VAULT}$`));
-    await page.getByRole("button", { name: "Open Vault" }).click();
     await expect(vaultUi(page).getByRole("region", { name: "Types" })).toBeVisible();
   });
 
@@ -199,15 +194,23 @@ test.describe("Vault", () => {
     await expect(v.getByRole("article", { name: "First seedling" })).toBeVisible();
     const types = await api(hub(), "GET", "types");
     expect(types.some((t: { name: string; kind: string }) => t.name === "seedling" && t.kind === "type")).toBe(true);
-    // Sharing: Revoke asks on the app's own sheet; yes takes Vault's own access back here
-    await v.getByRole("button", { name: "← Close" }).click();
-    await v.getByRole("button", { name: new RegExp(`${VAULT}$`) }).first().click();
+    // Sharing: Revoke asks on the app's own sheet; yes takes an applet's access back here (Vault itself is Parachute's
+    // own: it has no grant to take back, docs/design/PARACHUTE-SOURCE.md)
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const recipes = page.url();
+    await page.goto(`/vault?vault=${VAULT}`);
     await v.getByRole("button", { name: "Sharing" }).click();
-    await v.getByRole("region", { name: "Applets you allowed here" }).getByRole("button", { name: "Revoke" }).click();
-    const sheet = page.getByRole("dialog", { name: "Revoke Vault?" });
+    const allowed = v.getByRole("region", { name: "Applets you allowed here" });
+    await expect(allowed).not.toContainText("Vault");
+    await allowed.getByRole("listitem").filter({ hasText: "Recipe box" }).getByRole("button", { name: "Revoke" }).click();
+    const sheet = page.getByRole("dialog", { name: "Revoke Recipe box?" });
     await expect(sheet).toBeVisible();
     await page.waitForTimeout(800);
     await sheet.getByRole("button", { name: "Revoke" }).click();
+    await expect(sheet).toHaveCount(0);
+    await page.goto(recipes);
     await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible();
   });
 });

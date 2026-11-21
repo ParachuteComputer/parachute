@@ -6,8 +6,8 @@ and the one kit part that replaces it. `src/kit/conformance.ts` turns each row i
 a shipped applet that goes around the kit.
 
 The applets: Rooms (`applets/rooms.tsx`, its room view `applets/room.tsx`), Journal, Mail, Area, Capture, Accounts,
-Matrix (`applets/*.tsx`); Notes is the frame (`src/frame/views/NotesHome.tsx`, `VaultView.tsx`, `Launcher.tsx`),
-Connect a shell screen (`src/views/Connect.tsx`). Ideas lives only in a vault (Uni made it in `playground`); it isn't
+Matrix (`applets/*.tsx`); Notes, Connect and Vault are Parachute's own applets (`applets/notes.tsx`, `connect.tsx`,
+`vault.tsx`; the frame keeps `NotesHome.tsx`, `VaultView.tsx` and `Launcher.tsx` as the way back). Ideas lives only in a vault (Uni made it in `playground`); it isn't
 in this repo, so it moves when Uni rewrites it against the guide.
 
 | Concern | Before (each its own) | The kit |

@@ -105,7 +105,7 @@ describe("what the calls accept", () => {
 
 const appDeps = (log: string[] = []): AppDeps => ({
   recent: async () => [], pins: () => [], open: () => true, links: async (l) => l.map(() => null), follow: async () => false, address: () => null,
-  openLink: async (url) => { log.push(`link ${url}`); return true; },
+  openLink: async (url) => { log.push(`link ${url}`); return true; }, copy: async (text) => { log.push(`copy ${text}`); return true; },
   save: async (name, bytes, type) => { log.push(`save ${name} ${bytes.byteLength} ${type}`); return name; },
   pick: async (accept, multiple) => { log.push(`pick ${accept.join(",")} ${multiple}`); return []; },
 });
@@ -116,6 +116,15 @@ describe("the calls, refused without their word", () => {
     expect(await code(r.call("app", "openLink", { url: "https://example.org" }, {}))).toBe("not_granted");
     expect(await code(r.call("app", "save", { name: "a", bytes: new ArrayBuffer(1), type: "text/plain" }, {}))).toBe("not_granted");
     expect(await code(r.call("app", "pick", {}, {}))).toBe("not_granted");
+  });
+  it("app: copy is not_granted unless asked for (Connect's word); with it, only text, and the shell decides on the tap", async () => {
+    expect(await code(createRouter([createAppModule(["open"], appDeps())]).call("app", "copy", { text: "x" }, {}))).toBe("not_granted");
+    const log: string[] = [];
+    const r = createRouter([createAppModule(["copy"], appDeps(log))]);
+    expect(await r.call("app", "copy", { text: "https://hub.example/vault/kitchen/mcp" }, {})).toBe(true);
+    expect(await code(r.call("app", "copy", { text: 3 }, {}))).toBe("bad_params");
+    expect(await code(r.call("app", "copy", { text: "x".repeat(2001) }, {}))).toBe("bad_params");
+    expect(log).toEqual(["copy https://hub.example/vault/kitchen/mcp"]);
   });
   it("app: a link at most once a second; a saved name is made bare", async () => {
     let t = 10_000;

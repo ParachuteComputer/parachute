@@ -65,20 +65,15 @@ async function timed<T>(times: Record<string, number>, name: string, f: () => Pr
   return out;
 }
 
+/** Vault, Parachute's own: it opens with no card (docs/design/PARACHUTE-SOURCE.md). */
 async function addAllow(page: Page) {
   await page.goto("/vault");
-  const add = page.getByRole("button", { name: "Add Vault" }), allow = page.getByRole("button", { name: "Allow" });
-  await expect(add.or(allow)).toBeVisible();
-  if (await add.isVisible()) await add.click();
-  await expect(allow).toBeVisible();
 }
 
 test("5,000 records: a type of 2,000 as a table, the next page, a sort, a record, a search", async ({ page, browser }) => {
   expect(made.length).toBe(5000);
   const times: Record<string, number> = {};
   await addAllow(page);
-  await shot(page, "phone-01-card");
-  await page.getByRole("button", { name: "Allow" }).click();
   await expect(v(page).getByRole("button", { name: /^pantry/ })).toBeVisible();
   await shot(page, "phone-02-vaults");
   await v(page).getByRole("button", { name: /^pantry/ }).click();
@@ -106,12 +101,11 @@ test("5,000 records: a type of 2,000 as a table, the next page, a sort, a record
   console.log("viewer-5000", JSON.stringify(times));
 
   if (!SHOTS) return;
-  // the same at a Mac's size, a desktop browser of its own (its own Allow)
+  // the same at a Mac's size, a desktop browser of its own
   const mac = await browser.newContext({ storageState: "e2e/.signed-in.json", viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, baseURL: test.info().project.use.baseURL });
   const m = await mac.newPage();
   try {
     await addAllow(m);
-    await m.getByRole("button", { name: "Allow" }).click();
     await v(m).getByRole("button", { name: /^pantry/ }).click();
     await expect(v(m).getByRole("region", { name: "Types" })).toBeVisible();
     await shot(m, "mac-01-vault");
@@ -159,7 +153,6 @@ test("5,000 records: a type of 2,000 as a table, the next page, a sort, a record
     await shot(m, "mac-06-ai-wrote");
     // a record no other applet opens, tapped anywhere in the app, opens here
     await m.goto(`/v/${VAULT}/n/${made[7]}`);
-    await m.getByRole("button", { name: "Open Vault" }).click();
     await expect(v(m).getByRole("article")).toBeVisible();
     await shot(m, "mac-07-opened-here");
     // Sharing

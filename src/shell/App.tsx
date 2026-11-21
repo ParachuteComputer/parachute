@@ -3,20 +3,20 @@
 // Everything else (the vault list, a vault, a note, open-with) is the frame (src/frame), which runs sealed in
 // FrameHost and reaches the shell only through the bridge (src/bridge/protocol.ts).
 import { useEffect, useRef, useState } from "react";
-import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import AddParachute from "../views/AddParachute";
 import OAuthCallback from "../views/OAuthCallback";
 import OpenLink, { LinksIn } from "../links/LinksIn";
 import AppletScreen from "../views/AppletScreen";
 import Settings from "../views/Settings";
 import { SelfTestRunner } from "../applet/selftest/run";
+import { officialPath } from "../applet/parachuteSource";
 import { arrived, installTapListener } from "../open/mark";
 import { useVaults } from "../vault/hooks";
 import { listVaults } from "../vault/store";
 import FrameArea from "./FrameArea";
 import KeyStart from "../key/KeyStart";
-import Connect from "../views/Connect";
-import ShippedEntry from "../views/ShippedEntry";
+import OfficialRoute from "../views/OfficialRoute";
 import NoteEdit from "../views/NoteEdit";
 import Pair from "../key/Pair";
 import { keysHere, useKey } from "../key/key";
@@ -24,7 +24,7 @@ import BottomBar from "./BottomBar";
 import { keptId, KeptApplets } from "./kept";
 import { atFirstEntry } from "../ui/history";
 import { startPlace } from "./start";
-import { readSettings } from "./homeSettings";
+import { openBundleNow, readSettings, useSettings } from "./homeSettings";
 import { relistVaults } from "../vault/newVaults";
 import { isMine } from "../vault/whose";
 import { homeVault, useFrameSource } from "./frameSource";
@@ -54,6 +54,8 @@ function Taps() {
     return () => { gone = true; off(); };
   }, []);
   useEffect(() => { arrived(location.pathname); }, [location.pathname]);
+  // Parachute's own applets: a signed update, read once each time the app starts (docs/design/PARACHUTE-SOURCE.md)
+  useEffect(() => { void import("../applet/parachuteSource").then((s) => s.syncParachuteSource()); }, []);
   // the bar's counts (services/signals.ts): counted from the start; the applet on screen has none (what comes while it
   // is in front of the person is seen)
   useEffect(() => { let off = () => {}; void import("../services/signals").then((s) => { off = s.startSignals(); }); return () => off(); }, []);
@@ -140,9 +142,15 @@ function ShellRoutes() {
   const location = useLocation();
   const vaults = useVaults();
   const decided = useStart();
+  useSettings();
   const shell = /^\/(add|oauth\/callback|settings|open-link|key|key\/pair|connect|capture|journal|vault)$/.test(location.pathname) || /^\/v\/[^/]+\/a\/[^/]+$/.test(location.pathname) || isEditor(location.pathname)
     || (location.pathname === "/" && !vaults.length);
   if (!decided) return null;
+  // Parachute Simplified's home is Parachute's own Notes (docs/design/PARACHUTE-SOURCE.md); where the bundle leaves
+  // Parachute's own out, the frame's Notes stays (and `/?with=vault`, the way back if Notes won't run)
+  const homeKey = homeVault(vaults)?.key;
+  if (location.pathname === "/" && !location.search.includes("with=vault") && !shell && homeKey && openBundleNow().look === "notes" && openBundleNow().parachute)
+    return <Navigate to={officialPath(homeKey, "notes")} replace />;
   const bar = withBar(location.pathname, shell) && vaults.length > 0;
   const own = keptId(location) !== null;
   return (
@@ -155,10 +163,10 @@ function ShellRoutes() {
         <Route path="/oauth/callback" element={<OAuthCallback />} />
         <Route path="/v/:vault/a/:applet" element={own ? null : <AppletRoute />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/connect" element={<Connect />} />
-        <Route path="/capture" element={<ShippedEntry key="capture" which="capture" />} />
-        <Route path="/journal" element={<ShippedEntry key="journal" which="journal" />} />
-        <Route path="/vault" element={<ShippedEntry key={`vault${location.search}`} which="vault" />} />
+        <Route path="/connect" element={<OfficialRoute key="connect" which="connect" />} />
+        <Route path="/capture" element={<OfficialRoute key="capture" which="capture" />} />
+        <Route path="/journal" element={<OfficialRoute key="journal" which="journal" />} />
+        <Route path="/vault" element={<OfficialRoute key={`vault${location.search}`} which="vault" />} />
         <Route path="/v/:vault/new" element={<NoteEdit key={location.key} />} />
         <Route path="/v/:vault/n/:id/edit" element={<NoteEdit key={location.key} />} />
         <Route path="/open-link" element={<OpenLink />} />

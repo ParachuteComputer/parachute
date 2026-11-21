@@ -25,14 +25,14 @@ const ARGS = { path: "Applets/Kept", extension: "tsx", tags: ["applet"], body: C
   fields: { applet: { contract: 2, id: "kept", name: "Kept", glyph: "◇", note: "a test applet", access: [] }, app: ["open"] } };
 const OTHER = { ...ARGS, path: "Applets/Kept too", body: CODE.replace("<h1>Kept</h1>", "<h1>Kept too</h1>"), fields: { ...ARGS.fields, applet: { ...ARGS.fields.applet, id: "kept-too", name: "Kept too" } } };
 const openChip = async (page: Page, name: RegExp) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name }).click();
 };
 
 test("an applet left for another screen keeps running hidden, and is the same frame when the person comes back", async ({ page }) => {
   const note = await record(hubState(), "create", ARGS);
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Kept/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const booted = (await frame(page).locator("#booted").textContent())!;
@@ -68,7 +68,7 @@ test("an applet left for another screen keeps running hidden, and is the same fr
 test("an applet that is stopped or asking is not kept: back to it is as before", async ({ page }) => {
   const note = await record(hubState(), "create", ARGS);
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Kept/ }).click();
     await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible();
     await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();

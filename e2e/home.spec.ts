@@ -107,7 +107,7 @@ test("a home written only into the record opens on start after the person's tap,
 
 test("hostile: a home the record retargets to another allowed applet waits for a tap; changed code asks again", async ({ page }) => {
   // the person allowed Cook mode (an ordinary tap from the vault), and chose Recipe box as home here
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Cook mode/ }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(page.locator("iframe.applet-frame")).toHaveCount(1);
@@ -156,7 +156,7 @@ test("hostile: a frame can't pin or set a home without a tap", async ({ page }) 
 
 test("hostile: a frame of the person's can set a home only in the bundle record; this device still waits for their own tap", async ({ page }) => {
   // Cook mode allowed with an ordinary tap
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Cook mode/ }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(page.locator("iframe.applet-frame")).toHaveCount(1);
@@ -226,7 +226,7 @@ test("an applet the record names twice: one place on the bar, the home among the
   const recipes = await idOf("Applets/Recipes");
   await writeBundle({ start: { vault: VAULT, applet: "Applets/Cook mode" }, bar: [{ vault: VAULT, applet: recipes }, { vault: VAULT, applet: "Applets/Cook mode" }, { vault: VAULT, applet: "Applets/Recipes" }] });
   await start(page);
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   // the pins in the record's order, Recipe box once; the home (Cook mode) where it is pinned
   await expect(bar(page).getByRole("link")).toHaveText([/Recipe box/, /Cook mode/, /Applets/]);
   await bar(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
@@ -263,7 +263,7 @@ test("under a frame of the person's own, the app's Settings stays on screen howe
     await page.goto("/settings");
     await page.getByRole("button", { name: "Make this mine" }).click();
     await expect(page.locator(".frame-status")).toHaveText("Your frame runs: Parachute/Frame.");
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await expect(page.locator("iframe.app-frame")).toHaveAttribute("data-frame", "vault");
     const own = bar(page).getByRole("link", { name: "Settings (the app's own)" });
     const box = (await own.boundingBox())!;

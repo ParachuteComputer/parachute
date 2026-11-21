@@ -20,7 +20,7 @@ async function device(browser: Browser, key: string): Promise<Page> {
 const card = (p: Page) => p.getByRole("region", { name: /asking for access/ });
 const journal = (p: Page) => p.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Journal" });
 async function open(p: Page) {
-  await p.goto(`/v/${VAULT}`);
+  await p.goto(`/v/${VAULT}?with=vault`);
   await ui(p).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
 }
 type Row = { id: string; path: string; updatedAt: string; metadata: { approval?: { content: string; tags: string[][]; pubkey: string } } };

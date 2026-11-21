@@ -13,7 +13,7 @@
 // when they go elsewhere, and shows again at once; hidden, it gets no tap and is told so (`shown`); shown again, its
 // note is read again, and changed code or a changed grant puts the card in its place.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../ui/Bar";
 import { useVault } from "../vault/hooks";
@@ -29,7 +29,7 @@ import { fingerprint, grantExpiry, grantKey, grantOf } from "../applet/grant";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { codeHash, codeKindOf, extensionOf, modulePage, prepare, usesNote, type CodeKind } from "../applet/code";
 import { readImports, type Imported } from "../applet/resolveImports";
-import { compositeHash } from "../applet/imports";
+import { compositeHash, importsOf } from "../applet/imports";
 import reactKitSource from "virtual:react-kit";
 import reactNoteKitSource from "virtual:react-note-kit";
 import { embedsFrom, embedTargets, pointerFor, repin, type PointerNote } from "../applet/pointers";
@@ -77,7 +77,7 @@ import { hubCheck, knownHubs } from "../services/hubs";
 import type { Session } from "../applet/session";
 import { appDeps, tappingIn } from "../shell/appDeps";
 import { runDecision } from "../applet/selftest/gate";
-import { useGate } from "../applet/selftest/run";
+import { useGate, useSelfTestRun } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
 import { takeMark } from "../open/mark";
 import { chooseStart, startChosenHere, takeStart } from "../shell/start";
@@ -85,6 +85,7 @@ import { barNow, settingsReadNow } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
+import { inParachuteSpace, officialNow, officialOf } from "../applet/parachuteSource";
 
 const grants = deviceGrants();
 
@@ -118,7 +119,11 @@ const startedAtStart = new Map<string, { chosen: boolean; vault: string; noteId:
 
 /** `page` is null for code from someone else's vault until it is allowed: it is transpiled only then (`source` waits). */
 type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string } | { state: "newer"; entry: AppletEntry }
-  | { state: "ok"; entry: AppletEntry; page: string | null; source: { kind: CodeKind; text: string }; imports: Imported[]; note: Note | null; from: string[];
+  /** one of Parachute's own, asked for in a vault other than the home: it runs in the home (parachuteSource.ts) */
+  | { state: "home"; to: string }
+  | { state: "ok"; entry: AppletEntry;
+      /** Parachute's own (parachuteSource.ts): loaded from the Parachute source, never from the vault; no card */
+      official: boolean; page: string | null; source: { kind: CodeKind; text: string }; imports: Imported[]; note: Note | null; from: string[];
       /** the hash of what it asks as written, the same on every device (approvals.ts `asksHash`) */
       asks: string;
       /** its note as the hub says it is now: its content's hash, who made it and wrote it last (applet/changedBy.ts) */
@@ -138,6 +143,7 @@ export default function AppletScreen() {
   navRef.current = navigate;
   const rec = useVault(key);
   const mode = useGate();
+  const selfTest = useSelfTestRun();
   const keyring = useKeyring();
   const askedNote = params.get("note");
   const askedScreen = params.get("screen");
@@ -196,8 +202,21 @@ export default function AppletScreen() {
     const c = clientFor(rec);
     void (async () => {
       try {
-        const n = await c.getNote(appletId);
+        // Parachute's own: decided by the address alone, before anything is read from the vault (an id in Parachute's
+        // space is never asked of the hub), and loaded from the Parachute source (docs/design/PARACHUTE-SOURCE.md)
+        const which = officialOf(appletId);
+        if (inParachuteSpace(appletId) && !which) { if (on) setLoaded({ state: "newer", entry: { manifest: { contract: 2, id: "newer-parachute", name: "this applet", glyph: "·", allow: [], search: [], screens: [{ id: "home", name: "this applet" }] }, vault: rec.key, noteId: appletId, path: "", opens: [], app: [], embeds: [], services: [], signals: [], newer: true, newerWhy: "it is one of Parachute's own that this Parachute doesn't have" } }); return; }
+        if (which) {
+          const h = homeVault();
+          if (!h) { if (on) setLoaded({ state: "refused", error: "it runs in your home vault, and this device has none yet" }); return; }
+          if (h.key !== rec.key) { if (on) setLoaded({ state: "home", to: `/v/${encodeURIComponent(h.key)}/a/${encodeURIComponent(appletId)}${location.search}` }); return; }
+        }
+        const o = which ? await officialNow(which) : null;
+        const n = o ? ({ id: appletId, path: o.record.path, content: o.body, tags: o.record.tags, metadata: o.record.fields, extension: o.record.extension } as unknown as Note) : await c.getNote(appletId);
         if (!n) { if (on) setLoaded({ state: "refused", error: "its note is gone" }); return; }
+        // the note is the one asked for: a hub that answers with another id (one in Parachute's own space, say) would
+        // give it another applet's saved state, counts and Revoke
+        if (!o && (n.id !== appletId || inParachuteSpace(n.id))) { if (on) setLoaded({ state: "refused", error: "the hub answered with another note than the one asked for" }); return; }
         const kind = codeKindOf(n as { extension?: string });
         if (!kind) { if (on) setLoaded({ state: "refused", error: `its note is ${extensionOf(n as { extension?: string })}, and an applet's note is html, tsx or jsx` }); return; }
         if (notMine && (n.content ?? "").length > MAX_CODE_CHARS) { if (on) setLoaded({ state: "refused", error: "its code is bigger than an applet from someone else's vault may be" }); return; }
@@ -211,6 +230,8 @@ export default function AppletScreen() {
         const source = n.content ?? "";
         // someone else's code is only hashed here; it is transpiled once it is allowed (below)
         // a page that shows things from someone else's vaults says so on its card, and in its key (docs/design/EMBED.md)
+        // Parachute's own run with no card, so nothing of a vault's may come into them: no imports, no embeds
+        if (o && (a.entry.embeds.length || importsOf(source).length)) { if (on) setLoaded({ state: "refused", error: "Parachute's own applets bring in nothing from a vault (an import or an embed)" }); return; }
         const from = a.entry.embeds.length ? await embedsFrom(rec, a.entry.embeds) : [];
         // what it imports (component:<id>), from the person's own vaults or ones they trust: its hash covers each
         const imp = kind === "html" ? { ok: true as const, imports: [] } : await readImports(rec, source);
@@ -219,7 +240,7 @@ export default function AppletScreen() {
         // code from someone else's vault, its own or imported, is transpiled only once it is allowed
         const late = notMine || imports.some((i) => i.whose !== "mine");
         const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app, a.entry.services, a.entry.signals), embedsFrom: from }, a.entry.path),
-          late || imports.length ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), pointerFor(rec, n.id).catch(() => null)]);
+          late || imports.length ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), o ? null : pointerFor(rec, n.id).catch(() => null)]);
         const hash = imports.length && kind !== "html" ? await compositeHash(kind, source, imports) : code.hash;
         if (!on) return;
         if (quiet && was.current.keys?.scope === scope && was.current.keys?.html === hash) return;
@@ -236,7 +257,7 @@ export default function AppletScreen() {
         if (!on) return;
         // a reload that isn't a quiet recheck (another note asked of it, say) reads the approvals again, and waits for them
         if (!quiet) { setSigned(null); setWaitedFor(null); }
-        setLoaded({ state: "ok", entry: a.entry, page, source: { kind, text: source }, imports, note, from, asks, now });
+        setLoaded({ state: "ok", entry: a.entry, official: !!o, page, source: { kind, text: source }, imports, note, from, asks, now });
         setKeys({ scope, html: hash });
         setBrought(pointer);
       } catch (e) {
@@ -248,11 +269,17 @@ export default function AppletScreen() {
   }, [rec?.key, appletId, askedNote, notMine, recheck]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const entry = loaded.state === "ok" ? loaded.entry : null;
+  // Parachute's own: no card, no approval to read, no tap to wait for (docs/design/PARACHUTE-SOURCE.md)
+  const official = loaded.state === "ok" && loaded.official;
+  useEffect(() => { if (official) setStarted(true); }, [official]);
+  // read by the saved and signals modules, which a running frame keeps
+  const officialRef = useRef(false);
+  officialRef.current = official;
   const subject = rec && entry ? subjectOf(rec.key, entry.noteId) : null;
   const status = subject && keys ? grants.status(subject, keys.scope, keys.html) : "none";
   // a signed approval in the home vault (applet/approvalStore.ts): read for this exact code and asks, on a device that
   // holds the person's key. One that covers it allows it here too; a newer one that takes it back stops it here.
-  const signedFor = entry && rec && keys && loaded.state === "ok" ? `${keys.html}|${loaded.asks}` : null;
+  const signedFor = entry && rec && keys && loaded.state === "ok" && !loaded.official ? `${keys.html}|${loaded.asks}` : null;
   const [signed, setSigned] = useState<{ for: string; d: Decision | null } | null>(null);
   const [signing, setSigning] = useState<string | null>(null);
   const [passcode, setPasscode] = useState("");
@@ -275,7 +302,7 @@ export default function AppletScreen() {
     const t = setTimeout(() => setWaitedFor(signedFor), APPROVALS_WAIT_MS);
     return () => clearTimeout(t);
   }, [signedFor]);
-  const approvalsRead = signedNow !== undefined || (!!signedFor && waitedFor === signedFor);
+  const approvalsRead = official || signedNow !== undefined || (!!signedFor && waitedFor === signedFor);
   // taken back on another device after it was allowed here, or a newer approval for other code (this code was put back
   // over it): it stops here too
   useEffect(() => {
@@ -301,7 +328,7 @@ export default function AppletScreen() {
   // taken back since this device allowed it (the effect above forgets the grant): not drawn running in between
   const takenBack = !!subject && !!signedNow && !signedNow.run && (signedNow.why === "withdrawn" || signedNow.why === "other") && !!signedNow.newest
     && Date.parse(grants.record(subject)?.grantedAt ?? "") < Date.parse(signedNow.newest.at);
-  const granted = decision === "run" && !takenBack;
+  const granted = official || (decision === "run" && !takenBack);
   // the passcode is typed for one card: gone once that card is answered, and when another takes its place (changed code
   // on a screen kept running would otherwise find it still filled in, and Allow would ask the unlock alone)
   useEffect(() => { setPasscode(""); }, [signedFor, granted]);
@@ -395,9 +422,9 @@ export default function AppletScreen() {
     createStorageModule(entry.app.includes("storage"), storageFor(subjectOf(rec.key, entry.noteId))),
     // what the kit saves as the person goes (drafts, where it was): every applet's, the same store as `storage`
     // only while it is allowed: a frame still going for a moment after Revoke leaves nothing behind
-    createSavedModule({ all: () => deviceSaved().load(subjectOf(rec.key, entry.noteId)), put: (entries) => (grants.record(subjectOf(rec.key, entry.noteId)) ? deviceSaved().put(subjectOf(rec.key, entry.noteId), entries) : Promise.reject(new Error("not allowed"))) }),
+    createSavedModule({ all: () => deviceSaved().load(subjectOf(rec.key, entry.noteId)), put: (entries) => (officialRef.current || grants.record(subjectOf(rec.key, entry.noteId)) ? deviceSaved().put(subjectOf(rec.key, entry.noteId), entries) : Promise.reject(new Error("not allowed"))) }),
     // only while it is allowed, as saved state: a frame still going for a moment after Revoke says nothing
-    createSignalsModule({ set: (id, count) => entry.signals.some((s) => s.id === id) && !!grants.record(subjectOf(rec.key, entry.noteId)) && setOwn(rec.key, entry.noteId, id, count) }),
+    createSignalsModule({ set: (id, count) => entry.signals.some((s) => s.id === id) && (officialRef.current || !!grants.record(subjectOf(rec.key, entry.noteId))) && setOwn(rec.key, entry.noteId, id, count) }),
     ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
@@ -408,7 +435,7 @@ export default function AppletScreen() {
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
   const note = loaded.state === "ok" ? loaded.note : null;
   const claim = entry && note && note.id !== entry.noteId ? claimOf(entry.opens, note) : null;
-  const handed = decision === "run" && claim && note ? { note: { id: note.id, path: note.path ?? "" }, screen: screenOf(entry!.manifest, claim.screen ?? askedScreen).id } : null;
+  const handed = (official || decision === "run") && claim && note ? { note: { id: note.id, path: note.path ?? "" }, screen: screenOf(entry!.manifest, claim.screen ?? askedScreen).id } : null;
   const name = entry?.manifest.name ?? "Applet";
   const sized = !!entry?.embeds.length;
   // a notification's tap opens the applet at a room and message (services/notifyLink.ts)
@@ -454,9 +481,14 @@ export default function AppletScreen() {
   const theirsLabel = notMine ? ` · ${rec.vault}'s` : "";
   const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu} />{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;
 
-  if (mode === "closed") return shell(<div className="card" role="status"><p>Applets are off on this device until its self-test passes. See Settings.</p>{plainNote}</div>);
+  // Parachute's own run whatever the self-test found: it guards against code the person hasn't trusted, and this is the
+  // app's own (docs/design/PARACHUTE-SOURCE.md). Not while it runs, though: its probes' escapes would stop any frame
+  // beside them (applet/violations.ts), so a first start waits those few seconds
+  if (officialOf(appletId) && (!selfTest.known || selfTest.running)) return shell(<p className="quiet" role="status">Opening…</p>);
+  if (mode === "closed" && !officialOf(appletId)) return shell(<div className="card" role="status"><p>Applets are off on this device until its self-test passes. See Settings.</p>{plainNote}</div>);
   if (loaded.state === "loading" || (loaded.state === "ok" && !keys)) return shell(<p className="quiet" role="status">Opening…</p>);
   if (loaded.state === "error") return shell(<p className="error" role="alert">Couldn't open this applet: {loaded.error}.</p>);
+  if (loaded.state === "home") return <Navigate to={loaded.to} replace />;
   if (loaded.state === "refused") return shell(<div className="card" role="alert"><p>This applet can't open. It was not run: {loaded.error}.</p>{plainNote}</div>);
   if (loaded.state === "newer") return shell(<div className="card" role="status"><p><strong>{updateLine(loaded.entry.manifest.name)}</strong></p><p className="quiet">It was made for a newer Parachute than this one, so nothing of it ran here{loaded.entry.newerWhy ? ` (${loaded.entry.newerWhy})` : ""}.</p>{plainNote}</div>);
   if (!entry || !keys || !subject) return null;
@@ -533,9 +565,9 @@ export default function AppletScreen() {
   // how it runs, and Stop and Revoke: in the bar's menu (⋯), so the applet has the screen
   const closeMenu = () => setMenu(false);
   return shell(<>
-    {menu && kept.shown && <AppletMenu glyph={entry.manifest.glyph} name={name} runs={mode === "approved-code" ? "Approved code only" : "Sealed"} onClose={closeMenu}
+    {menu && kept.shown && <AppletMenu glyph={entry.manifest.glyph} name={name} runs={official ? "Parachute's own" : mode === "approved-code" ? "Approved code only" : "Sealed"} onClose={closeMenu}
       note={note ? { title: handed ? titleOf(note) : undefined, href: `${noteHref(rec.key, note.id)}?with=vault` } : null}
-      onStop={tap(() => { closeMenu(); setStarted(false); })} onRevoke={tap(() => { closeMenu(); revoke(); })} />}
+      onStop={tap(() => { closeMenu(); setStarted(false); })} onRevoke={official ? null : tap(() => { closeMenu(); revoke(); })} />}
     {late && "error" in late && late.hash === keys.html && <p className="error" role="alert">This applet can't run: its code doesn't compile: {late.error}.</p>}
     {router && page && savedNow && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
     {sheets.ui}
@@ -547,7 +579,7 @@ export default function AppletScreen() {
 /** A running applet's menu, from the bar's ⋯: how it runs (and the note it was handed), then the note in the vault,
  *  Stop, Revoke and Settings. A sheet over the frame, as the bar's own long-press menu is. */
 function AppletMenu({ glyph, name, runs, note, onStop, onRevoke, onClose }: { glyph: string; name: string; runs: string; note: { title?: string; href: string } | null;
-  onStop: (e: React.MouseEvent) => void; onRevoke: (e: React.MouseEvent) => void; onClose: () => void }) {
+  onStop: (e: React.MouseEvent) => void; onRevoke: ((e: React.MouseEvent) => void) | null; onClose: () => void }) {
   useEffect(() => { const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; addEventListener("keydown", esc); return () => removeEventListener("keydown", esc); }, [onClose]);
   return (
     <div className="sheet-scrim sheet-over-frames" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -557,7 +589,7 @@ function AppletMenu({ glyph, name, runs, note, onStop, onRevoke, onClose }: { gl
         <ul className="plain sheet-list">
           {note && <li><Link className="sheet-choice" to={note.href} onClick={onClose}>Open the note in the vault view</Link></li>}
           <li><button type="button" className="sheet-choice" onClick={onStop}>Stop</button></li>
-          <li><button type="button" className="sheet-choice" onClick={onRevoke}>Revoke</button></li>
+          {onRevoke && <li><button type="button" className="sheet-choice" onClick={onRevoke}>Revoke</button></li>}
           <li><Link className="sheet-choice" to="/settings" onClick={onClose}>Settings</Link></li>
         </ul>
       </section>

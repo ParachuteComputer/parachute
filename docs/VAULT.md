@@ -4,9 +4,9 @@ Aaron (11-20): *"a really good default vault viewer applet that ships from parac
 see the records, their fields, their types, their content … This is where things open by default as well. And sharing
 and such can be configured."*
 
-Vault is an applet like any other (`applets/vault.json`, `applets/vault.tsx`), shipped with the app the way Capture and Journal are (`src/applet/shipped.ts`):
-one tap puts it in the home vault as `Applets/Vault`, its card asks once, and from then on it is a record the person or
-their AI can read and change. The study it grew from: `STUDY.md` beside this work (Tana, Notion, Airtable, Obsidian
+Vault is one of Parachute's own applets (`applets/vault.json`, `applets/vault.tsx`; [design/PARACHUTE-SOURCE.md](design/PARACHUTE-SOURCE.md)):
+it comes with the app, runs with no card at `/v/<home>/a/parachute:vault`, and writes nothing into a vault to be added.
+A copy the person or their AI keeps in a vault is an ordinary applet, with its card. The study it grew from: `STUDY.md` beside this work (Tana, Notion, Airtable, Obsidian
 Bases, Anytype, Capacities).
 
 ## What a person sees
@@ -56,11 +56,11 @@ subscription, not a timer).
 - **A vault's address**, `/v/<vault>`, carries on the same way, to that vault in Vault (decided once per visit: a Vault
   the home's read finds late doesn't take over a plain view being read). `/v/<vault>?with=vault` (and a note's `?with=vault`) is
   the plain view, asked for: the way back when Vault itself won't do.
-- **Before Vault is added, or while it waits for its card** (new, or changed since it was allowed), or where applets
-  don't run on this device, the plain views stay, with one line at the top that leads to Vault. That is the way back if
-  Vault itself breaks (docs/NAVIGATION.md, "A way back").
-- **Listed by default**: Simple's bar has **Vault** (the applet, or the screen that adds it), and Everything's list says
-  **Add Vault** until it is there. Aaron's own bundle gets it only after his yes (a record of his, not applied here).
+- **Where the open bundle leaves Parachute's own out** (`"publishers": []`, or a bundle of the person's own that doesn't
+  name them), the plain views stay. That, and `?with=vault`, is the way back if Vault itself breaks (docs/NAVIGATION.md,
+  "A way back").
+- **Listed by default**: Simplified's bar has **Vault**, and Everything's list shows it first. Aaron's own bundle gets it
+  only after his yes: a bundle with no default offers Parachute's own only once its record names them.
 
 ## What the shell gave up (subtract)
 
