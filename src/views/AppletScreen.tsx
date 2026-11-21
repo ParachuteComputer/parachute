@@ -207,7 +207,7 @@ export default function AppletScreen() {
         const which = officialOf(appletId);
         if (inParachuteSpace(appletId) && !which) { if (on) setLoaded({ state: "newer", entry: { manifest: { contract: 2, id: "newer-parachute", name: "this applet", glyph: "·", allow: [], search: [], screens: [{ id: "home", name: "this applet" }] }, vault: rec.key, noteId: appletId, path: "", opens: [], app: [], embeds: [], services: [], signals: [], newer: true, newerWhy: "it is one of Parachute's own that this Parachute doesn't have" } }); return; }
         if (which) {
-          if (!openBundleNow().parachute) { if (on) setLoaded({ state: "refused", error: "your bundle leaves out Parachute's own applets (its publishers)" }); return; }
+          if (!openBundleNow().parachute) { if (on) setLoaded({ state: "refused", error: "your bundle doesn't offer Parachute's own applets (Settings, Your bundle)" }); return; }
           const h = homeVault();
           if (!h) { if (on) setLoaded({ state: "refused", error: "it runs in your home vault, and this device has none yet" }); return; }
           if (h.key !== rec.key) { if (on) setLoaded({ state: "home", to: `/v/${encodeURIComponent(h.key)}/a/${encodeURIComponent(appletId)}${location.search}` }); return; }

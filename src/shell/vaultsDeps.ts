@@ -13,6 +13,7 @@ import { deviceGrants, subjectOf } from "../applet/grants";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
 import { takeBack } from "../applet/approvalStore";
 import { forgetSaved } from "./saved";
+import { officialCopyOf } from "../applet/parachuteSource";
 
 type Requesting = { request<T>(path: string, init?: RequestInit): Promise<T> };
 const doors = new Map<string, Promise<"records" | "notes">>();
@@ -77,8 +78,11 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       await refreshApplets(v).catch(() => false);
       const read = appletsNow(v.key);
       const grants = deviceGrants();
-      return read?.state === "ok" ? read.found.entries.map((e) => ({ id: e.noteId, name: e.manifest.name, glyph: e.manifest.glyph, href: `/v/${encodeURIComponent(v.key)}/a/${encodeURIComponent(e.noteId)}`,
-        allowed: grants.status(subjectOf(v.key, e.noteId), e.keys.scope, e.keys.html) === "ok" })) : [];
+      return read?.state === "ok" ? read.found.entries.map((e) => {
+        const copy = officialCopyOf(e.manifest.id);
+        return { id: e.noteId, name: e.manifest.name, glyph: e.manifest.glyph, href: `/v/${encodeURIComponent(v.key)}/a/${encodeURIComponent(e.noteId)}`,
+          allowed: grants.status(subjectOf(v.key, e.noteId), e.keys.scope, e.keys.html) === "ok", ...(copy ? { copyOf: copy } : {}) };
+      }) : [];
     },
     async revoke(key, noteId) {
       const v = rec(key);

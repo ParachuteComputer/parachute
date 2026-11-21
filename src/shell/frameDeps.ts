@@ -52,9 +52,13 @@ function officialNow(): { official?: FrameApplet[] } {
  *  whenever applets run here. */
 function viewerNow(): { viewer?: FrameViewer } {
   const home = homeVault();
-  if (!home || !openBundleNow().parachute) return {};
+  if (!home) return {};
   // Parachute's own runs before the self-test is known (AppletScreen): always "ok"
-  return { viewer: { vault: home.key, noteId: officialId("vault"), status: "ok" } };
+  if (openBundleNow().parachute) return { viewer: { vault: home.key, noteId: officialId("vault"), status: "ok" } };
+  // a bundle that leaves Parachute's own out: a copy of Vault the person keeps in their home, as before (its card asks)
+  const a = appletsNow(home.key);
+  const e = a?.state === "ok" ? a.found.entries.find((x) => x.manifest.id === "vault-view") : undefined;
+  return e ? { viewer: { vault: home.key, noteId: e.noteId, status: statusOf(home.key, gateNow())(e) } } : {};
 }
 /** For a frame of the person's own, a write into their vault is asked about once more on the shell's own sheet. */
 const confirmed = (from: "built-in" | "vault", q: WriteAsk) => (from === "vault" ? confirmWrite(q) : Promise.resolve(true)).then((yes) => { if (!yes) throw new Error("not_allowed"); });

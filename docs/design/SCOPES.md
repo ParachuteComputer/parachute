@@ -44,7 +44,7 @@ Code: `src/vault/reach.ts` (what each vault needs and why), `src/vault/signInFlo
    never narrowed back to read (`reach.ts` `neededLevel`), and Vault offers no **Read only** for it.
 
 So a person with a key approves once; without a key, twice. Every other vault the hub listed is a line in Settings
-(and on Notes, in Parachute Simplified): **Open letters** · *Not now*. A tap is one page: `vault:letters:read`.
+(and, since 11-20, there only: Parachute Simplified's Notes is Parachute's own applet, which offers none): **Open letters** · *Not now*. A tap is one page: `vault:letters:read`.
 
 The hub's own pages, as they read on core 0.9 (`spike/`, the throwaway hubs):
 

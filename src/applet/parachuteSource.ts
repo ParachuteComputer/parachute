@@ -179,3 +179,13 @@ export function officialFace(name: OfficialName): { name: string; glyph: string;
 }
 /** The address of an official applet in the home vault. */
 export const officialPath = (homeKey: string, name: OfficialName) => `/v/${encodeURIComponent(homeKey)}/a/${encodeURIComponent(officialId(name))}`;
+
+/** The official applet a vault's applet copies by its manifest id (the old Add Capture wrote such copies into the home),
+ *  by name; null for any other. Only for telling the two apart in a list: a copy is still an ordinary applet. */
+export function officialCopyOf(manifestId: string): string | null {
+  for (const n of OFFICIAL_NAMES) {
+    const a = BUNDLED[n].record.fields.applet as { id?: string; name?: string } | undefined;
+    if (a?.id === manifestId) return a.name ?? n;
+  }
+  return null;
+}

@@ -85,9 +85,9 @@ ax press "Continue" || fail "no Continue on the pick"
 ax wait "Approve Parachute?" 30 || fail "the hub's Approve page didn't open"
 shot 13-hub-consent
 ax press "Approve" || fail "no Approve on the hub's page"
-# the list of the app's applets; in Settings, the home (recipes, the first by name, chosen on the pick) to open, and the
-# other vault a line to open (the sign-in read the home only)
-ax wait "No applets here yet." 40 || fail "the list of applets didn't open"
+# the list of the app's applets (Parachute's own first: docs/design/PARACHUTE-SOURCE.md); in Settings, the home (recipes,
+# the first by name, chosen on the pick) to open, and the other vault a line to open (the sign-in read the home only)
+ax wait "connect your AI" 40 || fail "the list of applets didn't open"
 sleep 2
 shot 14-list
 ax press "Settings" || fail "no Settings on the list"

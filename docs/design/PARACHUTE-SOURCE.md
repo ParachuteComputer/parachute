@@ -95,7 +95,8 @@ more. Until then, a `publishers` entry other than Parachute's is read as nothing
 | "Add Vault" in the list, and the line over plain views that adds it | nothing to add | now |
 | The bundle notices on Notes ("Your bundle didn't load") | the list's (Everything) only | now: Simplified no longer says it (gap) |
 | The first write ask in the home (a hub page, then "do it again") | the home at write from the sign-in | now; other vaults still ask, and the person saves again after (gap) |
-| Copies already in a vault (`Applets/Capture`, `Applets/Vault`, Aaron's too) | stay the person's own applets, with their card | their call |
+| Copies already in a vault (`Applets/Capture`, `Applets/Vault`, Aaron's too) | stay the person's own applets, with their card; Notes labels them "your copy of Parachute's Capture". The bar now leads to Parachute's own, whose drafts are its own: a draft kept by the copy stays with the copy | their call |
+| A vault's address and a note opening in the plain views, for Everything too | Vault, wherever the open bundle keeps Parachute's own; a bundle that leaves it out uses a Vault copy in the home, as before | now |
 
 ## What a newcomer on Parachute Cloud sees
 

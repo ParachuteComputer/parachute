@@ -8,7 +8,7 @@ import { app, Button, Empty, List, Loading, onShown, Page, Problem, Search, Tabs
 type Held = { key: string; name: string; home: boolean; level: "read" | "write" | null; mine: boolean };
 type Rec = { id: string; path: string; title: string; updatedAt: string | null; tags: string[]; types: string[] };
 type Row = { v: Held; r: Rec };
-type Applet = { id: string; name: string; glyph: string; href: string; allowed: boolean };
+type Applet = { id: string; name: string; glyph: string; href: string; allowed: boolean; copyOf?: string };
 
 const PER_VAULT = 40, SHOWN = 60;
 /** The app's own records and applets' code are not notes a person wrote. */
@@ -27,7 +27,10 @@ export default function Notes() {
   const [unread, setUnread] = useState<string[]>([]);
   const [writing, setWriting] = useSaved<string | null>("draft", null);
   const [busy, setBusy] = useState(false);
+  // turn: read the vaults (and the home's applets) again: on a return to the screen; fresh: read the notes again: on a
+  // vault's live change too
   const [turn, setTurn] = useState(0);
+  const [fresh, setFresh] = useState(0);
   // the applets in the home vault (one an AI just wrote among them): each a tap away, where its card asks
   const [applets, setApplets] = useState<Applet[]>([]);
   useEffect(() => { vaults.list().then((l: Held[]) => { setHeld(l); setFailed(null); }, (e: unknown) => setFailed(e)); }, [turn]);
@@ -35,6 +38,9 @@ export default function Notes() {
   // (a note, an applet: an applet's code sends no live change) is there
   useEffect(() => (typeof onShown === "function" ? onShown((on: boolean) => { if (on) setTurn((n) => n + 1); }) : undefined), []);
   const shown = held ? (held.find((v) => v.key === tab) ? held.filter((v) => v.key === tab) : held) : [];
+  // the vaults by key: a new list of the same vaults (each return) doesn't read or watch anything again
+  const keys = shown.map((v) => v.key).join("|");
+  const homeKey = held?.find((v) => v.home)?.key ?? null;
   useEffect(() => {
     if (!held) return;
     let on = true;
@@ -43,18 +49,22 @@ export default function Notes() {
     void Promise.all(shown.map((v) => vaults.query(v.key, term ? { search: term, limit: PER_VAULT } : { limit: PER_VAULT })
       .then((x: { records: Rec[] }) => x.records.filter((r) => !ownOfApp(r)).map((r) => ({ v, r })), () => { missed.push(v.name); return [] as Row[]; })))
       .then((per) => { if (!on) return; setUnread(missed); setRows(per.flat().sort((a, b) => (b.r.updatedAt ?? "").localeCompare(a.r.updatedAt ?? "")).slice(0, SHOWN)); });
-    const h = held.find((v) => v.home);
-    // older apps have no vaults.applets: then none are listed here
-    if (h && typeof (vaults as { applets?: unknown }).applets === "function") vaults.applets(h.key).then((a: Applet[]) => { if (on) setApplets(a); }, () => {});
     return () => { on = false; };
-  }, [held, tab, term, turn]);
+  }, [keys, term, turn, fresh]);
+  // the home's applets: on a return (an applet's code sends no live change); older apps have no vaults.applets
+  useEffect(() => {
+    if (!homeKey || typeof (vaults as { applets?: unknown }).applets !== "function") return;
+    let on = true;
+    vaults.applets(homeKey).then((a: Applet[]) => { if (on) setApplets(a); }, () => {});
+    return () => { on = false; };
+  }, [homeKey, turn]);
   // vaults.watch: what an AI writes shows as it lands, without a timer
   useEffect(() => {
-    if (!held) return;
+    if (!keys) return;
     let soon: ReturnType<typeof setTimeout> | null = null;
-    const offs = shown.map((v) => vaults.watch(v.key, null, () => { soon ??= setTimeout(() => { soon = null; setTurn((n) => n + 1); }, 400); }));
+    const offs = keys.split("|").map((k) => vaults.watch(k, null, () => { soon ??= setTimeout(() => { soon = null; setFresh((n) => n + 1); }, 400); }));
     return () => { offs.forEach((off: () => void) => off()); if (soon) clearTimeout(soon); };
-  }, [held, tab]);
+  }, [keys]);
   if (failed) return <Page title="Notes"><Problem error={failed} onRetry={() => setTurn((n) => n + 1)}>Your vaults couldn't be read</Problem></Page>;
   if (!held) return <Page title="Notes"><Loading /></Page>;
   const home = held.find((v) => v.home) ?? held[0];
@@ -80,7 +90,7 @@ export default function Notes() {
       <Search label={!held.find((v) => v.key === tab) ? "Search every vault" : `Search ${into?.name ?? ""}`} value={q} onChange={setQ} onSearch={setTerm} live={250} />
       {held.length > 1 && <Tabs label="Vaults" current={held.find((v) => v.key === tab) ? tab : ""} onChange={setTab} tabs={[{ key: "", label: "All" }, ...held.map((v) => ({ key: v.key, label: v.name }))]} />}
       {!term && home && (!tab || tab === home.key) && applets.length > 0 && <List label="Your applets" rows={applets.map((a) => ({
-        key: a.id, glyph: a.glyph, title: a.name, meta: a.allowed ? `in ${home.name}` : `in ${home.name} · asks before it runs`,
+        key: a.id, glyph: a.glyph, title: a.name, meta: `in ${home.name}${a.copyOf ? ` · your copy of Parachute's ${a.copyOf}` : ""}${a.allowed ? "" : " · asks before it runs"}`,
         onPress: () => void app.open(a.href),
       }))} />}
       {rows === null && <Loading>Reading your notes…</Loading>}

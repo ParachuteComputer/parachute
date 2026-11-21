@@ -47,7 +47,9 @@ export type Rec = {
 export type TypeRow = { name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, { type?: string; enum?: unknown[]; description?: string }> };
 export type Version = { ix: number; at: string; actor: string | null; via: string | null };
 export type AccessRow = { level: "read" | "write" | null; mine: boolean; home: boolean; hub: string; connector: string; applets: { noteId: string; name: string; glyph: string; since: string | null; changes: boolean }[] };
-export type AppletRow = { id: string; name: string; glyph: string; href: string; allowed: boolean };
+export type AppletRow = { id: string; name: string; glyph: string; href: string; allowed: boolean;
+  /** a copy of one of Parachute's own kept in the vault (the old Add Capture wrote these): its name, to tell the two apart */
+  copyOf?: string };
 export type WatchEvent = { upsert?: Rec } | { remove?: string };
 
 /** The shell's side: requests on the vault's own API with the app's sign-in (a change to a vault held for reading
