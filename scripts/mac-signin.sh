@@ -87,7 +87,7 @@ shot 13-hub-consent
 ax press "Approve" || fail "no Approve on the hub's page"
 # the list of the app's applets (Parachute's own first: docs/design/PARACHUTE-SOURCE.md); in Settings, the home (recipes,
 # the first by name, chosen on the pick) to open, and the other vault a line to open (the sign-in read the home only)
-ax wait "connect your AI: each vault's address, and how to add it to Claude or ChatGPT" 40 || fail "the list of applets didn't open"
+ax wait "connect your AI: one address for your vaults (or one vault's own), and how to add it to Claude or ChatGPT" 40 || fail "the list of applets didn't open"
 sleep 2
 shot 14-list
 ax press "Settings" || fail "no Settings on the list"
