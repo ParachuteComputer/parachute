@@ -49,11 +49,11 @@ The app reaches them as it reaches `list-vaults`: a request its key signs (NIP-9
 
 | Call | Who | Does |
 |---|---|---|
-| tool `invite-to-vault {vault, name, from}` | the owner's key | a single-use invite for `member` on `vault`, 7 days. Answers `{id, code, expires_at}`; the code is shown once, the hub keeps its hash. `from` becomes the owner's name on this hub. |
+| tool `invite-to-vault {vault, name, from}` | the owner's key | a single-use invite for `member` on `vault`, 7 days. Answers `{id, vault, name, code, url, expires_at}`; the code is shown once, the hub keeps its hash. `from` becomes the owner's name on this hub. |
 | tool `list-access {vault}` (exists) | the owner's key | gains `name` on each row and `invites: [{id, name, expires_at}]` for the vault's open invites. |
 | tool `take-back-invite {vault, id}` | the owner's key | takes back an open invite. |
 | tool `revoke-access {pubkey, vault}` (exists) | the owner's key | End: removes the role and revokes the person's tokens and consent for the vault in the same transaction (#130). Measured on next: the friend's next request is 401, 2 ms later. |
-| `POST /account/invites/look {code}` | anyone holding the code | `{vault, from, name, can}`, nothing used up (the app takes the hub from the link). |
+| `POST /account/invites/look {code}` | anyone holding the code | `{vault, from, name, can, expires_at}`, nothing used up (the app takes the hub from the link). |
 | `POST /account/invites/accept {code}` | NIP-98, the invitee's key | checks the code first; then makes or finds the hub user for that key (`ensureUserForPubkey`); then, in one transaction, gives it `member` on the vault and uses the invite (`recordInviteRedemption`'s zero-rows guard, so two accepts can't both win). Answers `{vault, from, name}`. A key that is already a hub admin or already on the vault is refused without using the invite. |
 | `GET /account/vaults/<v>/names?by=<stamp>…` | any token for `<v>` | `{names: {<stamp>: {name, you}}}`: the name for each stamp asked about, and `you` when it is the caller's own. Only people of this vault are named (its owners, its members, and anyone who ever accepted an invite to it, so an ended member's old edits keep his name). It never lists everyone: a caller names only stamps it already sees on records. No keys, roles or invites here: those are the owner's. |
 
@@ -71,7 +71,7 @@ password account.
 
 **Names.** The invite holds the name Aaron typed for Bo; that is Bo's name on this vault. The acceptance carries no
 name, so a leaked link can't name itself. Aaron's name is `from`, kept on his hub user (`users.display_name`, added the same way). Names
-are shown, never checked: authority comes from the key and the role. Bounded: 1 to 40 characters, no controls.
+are shown, never checked: authority comes from the key and the role. Bounded: 1 to 40 characters, no controls or invisible formatting (the joiners U+200C and U+200D stay), and not "You".
 
 **Attribution.** Every write already carries `by` = the hub user who wrote (the token's `sub`) and `via` = what wrote
 it. The slice changes no stamp; the app names `by` through `names`.
@@ -87,7 +87,7 @@ it. The slice changes no stamp; the app names `by` through `names`.
   owner's account-MCP calls above (a fixed list of tools), and `accept {code}`. Native in `door.rs` beside
   `list-vaults`; the e2e signer (`e2eNative.ts`) answers the same calls in tests. The web build has no key: it says
   to use the app on a phone or Mac.
-- **Names in Changes, History and Home's line**: one rule, at every place a writer is named (`writerName`, the
+- **Names in Changes, History and Home's line**: one rule (`changes.ts` `writer`), at every place a writer is named (Changes, the
   record's History in `modules/vaults.ts`, Home's line):
   - this device's sign-in wrote it: "You, in Parachute here";
   - a named key (an AI): its name, and when it wrote for someone else, "Aaron's claude";
@@ -95,9 +95,10 @@ it. The slice changes no stamp; the app names `by` through `names`.
   - no name known (an older hub, a stamp of no one in the vault): as today. A record opened straight from a link
     draws at once from the kept copy with the names already known, and asks for the rest behind it. Your own sign-ins on other devices stay
     "An app (…)": the hub can't yet tell your Parachute from a connector (open item 6).
-- **Ended**: when a vault answers 401 and its sign-in can't be refreshed, Vault says "You no longer reach recipes. If it
-  is someone else's, they may have ended your access; you can remove it in Settings." in place of "Vault rejected the
-  token (401)".
+- **Ended**: when a vault answers 401 and the hub refuses to refresh the sign-in, Vault says "You no longer reach
+  recipes. Its owner may have ended your access; you can remove it in Settings." in place of "Vault rejected the token
+  (401)"; for your own vault, "Parachute's sign-in to recipes has ended. Sign in again from Settings." A hub that
+  doesn't answer keeps the ordinary problem. Try again stays in each.
 
 ### The invite link
 
