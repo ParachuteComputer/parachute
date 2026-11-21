@@ -72,6 +72,7 @@ room reaches both.
 | Feature | State | Why |
 |---|---|---|
 | Home (the rooms list) | built: the Rooms applet is the home in the Uni layout (scripts/install-applets.ts) | — |
+| Applets from the Uni app's drawer (a note tagged `applet` in any vault: Recipes in its own vault `recipes`, made with uni-ops `applet publish`) | built: they run as they are. Parachute's kit is the Uni app's contract 2 (`window.uni`, the same manifest and vault calls), and it lists applets from every vault on the device, with the vault's name; the person signs in to that vault and allows the applet once | e2e/drawer.spec.ts: one published as `applet publish` writes it, in a vault that isn't home, listed, allowed, a recipe read, marked made (updateNote with if_updated_at) and one added, each checked in the vault (CI: a fixture with Recipes' controls and calls; with UNI_APPLET_DIR the real Recipes, green 11-21) |
 | Settings, the key, pairing a device | built in Parachute already (steps 3 and 7) | — |
 | Vault browser and notes | built in Parachute already (the launcher, the vault view) | — |
 | Search across the journal and vaults | part: each vault's search in the app; no one search across rooms and vaults | — |
