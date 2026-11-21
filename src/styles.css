@@ -25,9 +25,10 @@ button, input { font: inherit; color: inherit; }
 /* one focus ring from the keyboard, in the accent; a part's own (parts.css) wins over it */
 :is(button, a, .home-bar-place, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :is(input, textarea, select):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
-/* a bare choice list is drawn as a field (never the OS's grey box), at least 16px so a phone doesn't zoom to it */
-select { padding: 8px 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-family: inherit; font-size: max(16px, var(--fs-body)); }
-select:focus { border-color: var(--text); }
+/* a bare choice list is drawn as a field (never the OS's grey box), at least 16px so a phone doesn't zoom to it: the
+   same values as the kit's base gives one in a frame (src/kit/base.css), so a select is one height wherever it is */
+:where(select) { max-width: 100%; min-height: 40px; padding: 8px 12px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-family: inherit; font-size: max(16px, var(--fs-body)); }
+:where(select):focus { border-color: var(--text); }
 input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); }
 }
 
@@ -97,9 +98,10 @@ fieldset.plain legend { padding: 0; }
 .note-fields dt { color: var(--muted); }
 .note-fields dd { margin: 0; overflow-wrap: anywhere; }
 .note-edit-fields { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 12px; margin: 10px 0 0; }
+.note-edit-fields select { min-width: 0; }
 /* a line to write in that sits among buttons (Settings' keys and passcodes): drawn as a field */
-.note-edit-fields input:not([type="checkbox"]), .note-edit-fields select, .text-input { padding: 8px 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-size: max(16px, var(--fs-body)); min-width: 0; }
-.note-edit-fields input:not([type="checkbox"]):focus, .note-edit-fields select:focus, .text-input:focus, .secret-field input:focus { border-color: var(--text); }
+.note-edit-fields input:not([type="checkbox"]), .text-input { padding: 8px 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-size: max(16px, var(--fs-body)); min-width: 0; }
+.note-edit-fields input:not([type="checkbox"]):focus, .text-input:focus, .secret-field input:focus { border-color: var(--text); }
 .note-edit-fields input[type="checkbox"] { justify-self: start; width: 20px; height: 20px; }
 .note-code { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-small)/1.5 var(--mono); }
 /* (the note view's prose is in the parts layer, below: beside the note renderer's rules, as it always was) */
@@ -356,5 +358,4 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .prose-note code { font: .85em var(--mono); }
 .prose-note pre { overflow-x: auto; }
 .prose-note .wikilink-unresolved { border-bottom: 0; }
-}
 }
