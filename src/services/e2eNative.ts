@@ -243,7 +243,7 @@ export function e2eNative(secretHex: string): Native {
       const fields: Record<string, string[]> = { "list-access": ["vault"], "invite-to-vault": ["vault", "name", "from"], "take-back-invite": ["vault", "id"], "revoke-access": ["vault", "pubkey"] };
       // the same checks as door.rs `sharing_tool_body`: the fields each tool takes, and each value's shape
       const ok = (k: string, v: unknown) => typeof v === "string" && (k === "vault" ? /^[a-z0-9][a-z0-9_-]{0,63}$/.test(v)
-        : k === "name" || k === "from" ? v.trim().length > 0 && [...v.trim()].length <= 40 && !/[\u0000-\u001f\u007f-\u009f]/.test(v) && !/^you$/i.test(v.trim())
+        : k === "name" || k === "from" ? v.trim().length > 0 && [...v.trim()].length <= 40 && !/(?![\u200c\u200d])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(v) && !/^you$/i.test(v.trim())
         : /^[0-9a-f]{64}$/.test(v));
       if (!fields[tool] || !Object.entries(args).every(([k, v]) => fields[tool].includes(k) && ok(k, v)) || !args.vault) throw { code: "refused", message: "Parachute doesn't sign that request." };
       const origin = new URL(hub).origin;

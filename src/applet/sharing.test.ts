@@ -59,7 +59,7 @@ describe("sharing a vault, from an applet", () => {
     expect(stranger.sheets).toEqual([]);
   });
   it("names the hub won't take never reach a sheet: over 40 characters, a control, or You", async () => {
-    for (const name of ["x".repeat(41), "Bo\u0007", "you", " "]) {
+    for (const name of ["x".repeat(41), "Bo\u0007", "Bo\u202e", "Bo\u200b", "you", " "]) {
       const s = shell();
       await expect(s.call("invite", { vault: "recipes", name })).rejects.toThrow();
       expect(s.sheets).toEqual([]);

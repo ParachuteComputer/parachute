@@ -466,6 +466,12 @@ type PeopleNow = { people: { key: string; name: string | null; role: string }[];
   | { people: null; why: "no_key" | "not_owner" | "no_hub" | "unknown_key" };
 const roleWords = (role: string) => (role === "member" ? "can read and change everything" : role === "read" ? "can read everything" : "runs this vault with you");
 const shortKey = (k: string) => `${k.slice(0, 8)}…`;
+/** A name as the hub takes one: 1 to 40 characters, not "You"; said in a toast otherwise. */
+const nameOk = (x: string) => {
+  const ok = [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !/^you$/i.test(x.trim());
+  if (!ok) toast("A name is 1 to 40 characters, and not “You”.", { error: true });
+  return ok;
+};
 
 /** Who else is in a vault, for its owner (docs/design/SHARING.md): each person by the name you gave them, End; an invite
  *  nobody took yet, Take back; and Invite someone, which makes a link to send. Each is a request your key signs. */
@@ -510,8 +516,8 @@ function People({ v }: { v: Held }) {
       {typeof (app as { copy?: unknown }).copy === "function" && <Button small onClick={() => copy(made.url)}>Copy link</Button>}
     </div>}
     {from === null
-      ? <Field label="Your name, as the people you invite see it" placeholder="Like Aaron" action="Keep" onAction={(x) => { setFrom(x); }} />
-      : <Field label="Invite someone" placeholder="Their name, like Bo" action="Make the link" onAction={invite} />}
+      ? <Field label="Your name, as the people you invite see it" placeholder="Like Aaron" action="Keep" onAction={(x) => { if (nameOk(x)) setFrom(x); }} />
+      : <Field label="Invite someone" placeholder="Their name, like Bo" action="Make the link" onAction={(x) => (nameOk(x) ? invite(x) : Promise.reject(new Error("name")))} />}
   </>;
 }
 

@@ -309,7 +309,9 @@ function newIn(v: Record<string, unknown>): New | null {
 
 const refuse = (why: string) => new ContractError(ERROR_CODES.outOfScope, why);
 /** A person's name as the hub takes one (core share-invites.ts `parseName`): 1 to 40 characters, no control, not "You". */
-const personName = (x: unknown) => typeof x === "string" && [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !/[\u0000-\u001f\u007f-\u009f]/.test(x) && !/^you$/i.test(x.trim());
+const personName = (x: unknown) => typeof x === "string" && [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !UNSEEN_IN_NAME.test(x) && !/^you$/i.test(x.trim());
+/** Controls and invisible formatting (bidi, zero-width, line breaks), as the hub refuses them; the joiners stay. */
+const UNSEEN_IN_NAME = /(?![\u200c\u200d])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const failed = (e: unknown) => {
   if (e instanceof ContractError) return e;
   // the native side fails with {code, message} (native.ts NativeError), as the hub's refusals of a signed request do

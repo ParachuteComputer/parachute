@@ -285,6 +285,14 @@ fn hex64(v: &str) -> bool {
     v.len() == 64 && v.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// A character a name may not hold, as the hub refuses it (core share-invites.ts): a control, or invisible formatting that
+/// makes one name look like another (bidi, zero-width, line and paragraph separators). The joiners U+200C and U+200D
+/// stay: Persian names and emoji sequences need them.
+fn unseen(c: char) -> bool {
+    c.is_control()
+        || matches!(c, '\u{00ad}' | '\u{061c}' | '\u{180e}' | '\u{200b}' | '\u{200e}' | '\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{206f}' | '\u{feff}' | '\u{fff9}'..='\u{fffb}')
+}
+
 /// The JSON-RPC body for one sharing tool, from checked fields; refused for any other tool, field or value.
 pub fn sharing_tool_body(tool: &str, args: &serde_json::Map<String, Value>) -> Result<String, Refusal> {
     let bad = |m: &str| refusal("refused", m.to_string());
@@ -298,7 +306,7 @@ pub fn sharing_tool_body(tool: &str, args: &serde_json::Map<String, Value>) -> R
         let ok = match k.as_str() {
             "vault" => vault_name_ok(v),
             // as the hub takes a name (core share-invites.ts parseName): 1 to 40 characters, no control, not "You"
-            "name" | "from" => !v.trim().is_empty() && v.trim().chars().count() <= 40 && !v.chars().any(char::is_control) && !v.trim().eq_ignore_ascii_case("you"),
+            "name" | "from" => !v.trim().is_empty() && v.trim().chars().count() <= 40 && !v.chars().any(unseen) && !v.trim().eq_ignore_ascii_case("you"),
             "id" | "pubkey" => hex64(v),
             _ => false,
         };
@@ -548,6 +556,9 @@ mod tests {
         assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "Bo\u{0}")])).is_err());
         assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", &"x".repeat(41))])).is_err());
         assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "You")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "Bo\u{202e}")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "Bo\u{200b}")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "می\u{200c}خواهم")])).is_ok());
         assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", &"é".repeat(40))])).is_ok());
         assert!(sharing_tool_body("list-access", &args(&[])).is_err());
         let mut n = args(&[("vault", "recipes")]);
