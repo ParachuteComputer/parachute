@@ -79,10 +79,10 @@ export async function vaultNames(key: string, bys: string[]): Promise<PeopleName
     const f = withCurrentToken(rec.key, fetch);
     const asked = (token: string | undefined) => f(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
     // it never refreshes the sign-in itself (the screen's own reads, just before, refresh a token past its time). An
-    // answer, or any refusal but "wait" (a hub without the read answers 404 or 405; an ended sign-in, 401), settles
-    // these stamps for the session; no answer at all doesn't
+    // answer, or a hub without the read (404, 405), settles these stamps for the session; a sign-in refused for now
+    // (401), "wait" (429) or no answer at all leaves them to ask again
     const got = await asked(findVault(key)?.accessToken ?? rec.accessToken)
-      .then(async (res) => (res.ok ? ((await res.json()) as { names?: PeopleNames }).names ?? {} : res.status >= 400 && res.status < 500 && res.status !== 429 ? {} : null), () => null);
+      .then(async (res) => (res.ok ? ((await res.json()) as { names?: PeopleNames }).names ?? {} : res.status >= 400 && res.status < 500 && res.status !== 401 && res.status !== 429 ? {} : null), () => null);
     if (got === null) return {};
     for (const b of ask) known.set(`${key}\u0000${b}`, got[b] ?? null);
   }
