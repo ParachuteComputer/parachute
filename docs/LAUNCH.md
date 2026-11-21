@@ -51,8 +51,9 @@ from the repository secret `PARACHUTE_UPDATE_FEED` (none: no updates offered). B
 **Recommendation for launch:** on the Mac (and later Windows and Linux), Tauri's updater plugin, reading a signed
 `latest.json` that the release workflow attaches to each GitHub release; its signing key is one more secret
 (`TAURI_SIGNING_PRIVATE_KEY`). It should wait for notarisation, so an update doesn't bring back the Gatekeeper step. On
-Android, Google Play once the app is there; until then the feed above can sit beside the release's files, or testers
-can point Obtainium at this repository's releases.
+Android, Google Play once the app is there. The feed above is for builds made by hand or from next (the release
+workflow passes none, and GitHub's release downloads answer with a redirect, which the app doesn't follow); until
+then testers can point Obtainium at this repository's releases.
 
 ## 4. Crash reporting
 

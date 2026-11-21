@@ -15,6 +15,7 @@ mkdir -p "$ANDROID_USER_HOME"
 # which build this is (src/shell/updates.ts): the commit and its time, the same for the screens (vite.config.ts) and the
 # version code, which then only grows along next, so Android takes each newer build as an update of the one before
 export PARACHUTE_BUILD_AT=${PARACHUTE_BUILD_AT:-$(git log -1 --format=%ct)} PARACHUTE_BUILD_COMMIT=${PARACHUTE_BUILD_COMMIT:-$(git rev-parse --short=7 HEAD)}
+[[ $PARACHUTE_BUILD_AT =~ ^[0-9]+$ && -n $PARACHUTE_BUILD_COMMIT ]] || { echo "no build identity (git, or PARACHUTE_BUILD_AT and PARACHUTE_BUILD_COMMIT)" >&2; exit 1; }
 flags=(--apk --target "$target" --config "{\"bundle\":{\"android\":{\"versionCode\":$PARACHUTE_BUILD_AT}}}"); [ "$mode" = debug ] && flags+=(--debug)
 npx tauri android build "${flags[@]}"
 # the bundle the app was built from has no test signer (src/services/e2eNative.ts)

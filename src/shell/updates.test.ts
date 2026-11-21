@@ -51,6 +51,11 @@ describe("checkUpdates", () => {
     await checkUpdates(true, async () => ({ feed: FEED, body: feed({ at: OWN.at, commit: OWN.commit }), platform: "android" }));
     expect(updateNow()).toEqual({ kind: "current" });
   });
+  it("keeps an offer when a later read fails", async () => {
+    await checkUpdates(true, async () => ({ feed: FEED, body: feed({ at: OWN.at + 60, commit: "fedcba9" }), platform: "android" }));
+    await checkUpdates(true, async () => { throw new Error("Couldn't reach the update address."); });
+    expect(updateNow()).toMatchObject({ kind: "offer", offer: { commit: "fedcba9" } });
+  });
   it("reads by itself at most every few hours", async () => {
     let reads = 0;
     const read = async () => { reads++; return null; };

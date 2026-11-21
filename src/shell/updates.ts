@@ -80,7 +80,10 @@ export function checkUpdates(force = false, read: () => Promise<Answer> = native
     if (!a) return set({ kind: "none" });
     const offer = offerFor(parseFeed(a.body, a.feed), OWN, a.platform);
     set(offer ? { kind: "offer", offer, platform: a.platform } : { kind: "current" });
-  }, (e: unknown) => set({ kind: "error", message: e instanceof Error ? e.message : String(e) })).finally(() => { running = null; });
+  }, (e: unknown) => {
+    // a failed read doesn't take back an offer already made (offline in Settings, the newer build is still there)
+    if (state.kind !== "offer") set({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+  }).finally(() => { running = null; });
   return running;
 }
 async function nativeFeed(): Promise<Answer> {
