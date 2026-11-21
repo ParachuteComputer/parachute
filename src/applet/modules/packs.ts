@@ -128,10 +128,11 @@ export function packMethods(deps: VaultsDeps, word: (p: unknown) => void, held: 
       cap: null,
       validate: (p: unknown) => { word(p); return vaultOk(p, ["id"]) && typeof (p as { id?: unknown }).id === "string" ? { ok: true as const, value: p } : { ok: false as const }; },
       run: (async ({ vault, id }, _s, ctx) => {
-        // a request for each type and record, the reads and the receipt
-        held(vault as string); ctx.charge(12);
+        held(vault as string);
         const pack = STARTERS.find((s) => s.id === id);
         if (!pack) throw new ContractError(ERROR_CODES.outOfScope, "Parachute has no pack by that name");
+        // a request for each type and record, the two reads and the receipt
+        ctx.charge(3 + Object.keys(pack.types).length + pack.records.length);
         if ((await deps.door(vault as string)) !== "records") throw new ContractError(ERROR_CODES.failed, "This vault's server is older (0.8): packs need types, which come with 0.9. Nothing was changed.");
         try {
           const { added, kept, notes, changed } = await applyPack(pack, packTarget(deps, vault as string));

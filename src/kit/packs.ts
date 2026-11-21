@@ -212,7 +212,12 @@ export async function applyPack(pack: Pack, target: PackTarget): Promise<Applied
   // 3. The receipt, last
   const newer = !before || pack.version > before.receipt.version;
   const final = receipt();
-  if (wrote || newer) await target.writeReceipt(final, was);
+  if (wrote || newer) {
+    try { await target.writeReceipt(final, was); } catch (e) {
+      // what was made is in the vault but not in the receipt: the next apply would take it for the person's
+      throw new Error(`The pack's records were added, but the note of what it added wasn't saved (${(e as Error)?.message ?? e}). Adding it again adds nothing twice.`);
+    }
+  }
   return { added, kept, notes, changed: wrote || newer, receipt: final };
 }
 
