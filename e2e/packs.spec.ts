@@ -4,8 +4,8 @@
 // pack (the docs page's steps, here by the same applier over the MCP tools) leaves the same vault, and the app's Add
 // after it changes nothing; a vault with its own `task` type keeps its fields and says so.
 // Needs a hub where write access may define a type over REST (core #139); on an older one it skips.
-// In the `signs-in` project: the hub's 403 on the person's own `task` type makes the app refresh its sign-in, which
-// rotates the saved session's refresh token, so it runs after every spec that shares that session.
+// In its own project, `packs`, after every other: a 403 from the hub (the person's own `task` type; a server before
+// #139) makes the app refresh its sign-in, which rotates the saved session's refresh token the other specs share.
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mcp, mintToken, VAULT } from "./hub";
