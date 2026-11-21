@@ -268,7 +268,7 @@ export default function Taps() { return <main><h1 id="taps">Taps</h1><p id="said
   }
 });
 
-// T-476: the note's route decides first from what this device read before (frame/open/useOpenWith.ts `copyFirst`): a note
+// T-476: the note's route decides first from what this device read before (frame/open/useOpenWith.ts "copy-first"): a note
 // no applet claims shows at once, without waiting for the hub's list of applets; one an applet claims waits for it, and
 // never opens in the applet on the copy alone.
 test("the note's route: an unclaimed note opens without waiting for the hub's applets; a claimed one waits for them", async ({ page }) => {
