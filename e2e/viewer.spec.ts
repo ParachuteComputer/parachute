@@ -71,8 +71,9 @@ test.describe("Vault", () => {
     await expect(table).toBeVisible();
     const widths = await v.locator("body").evaluate((b) => ({ page: b.ownerDocument.documentElement.scrollWidth, screen: b.ownerDocument.documentElement.clientWidth }));
     expect(widths.page).toBeLessThanOrEqual(widths.screen);
-    const add = await v.getByRole("button", { name: "Add" }).boundingBox();
-    expect(add!.x + add!.width).toBeLessThanOrEqual(widths.screen);
+    expect(await v.getByRole("button", { name: "Add", exact: true }).evaluate((b) => b.getBoundingClientRect().right <= b.ownerDocument.documentElement.clientWidth)).toBe(true);
+    // the table scrolls across inside itself (not squashed, not clipped)
+    expect(await table.evaluate((t) => t.scrollWidth > t.clientWidth)).toBe(true);
     await expect(v.getByText(`${VAULT} · 30 records`)).toBeVisible();
     for (const col of ["Name", "author", "shelf status", "pages", "Updated"]) await expect(table.getByRole("columnheader", { name: col })).toBeVisible();
     await table.getByRole("columnheader", { name: "pages" }).getByRole("button").click();

@@ -172,6 +172,8 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   const [view, setView] = useSaved<View>(`view:${v.key}:${type}`, PLAIN);
   const [rows, setRows] = useState<Rec[] | null>(null);
   const [more, setMore] = useState(false);
+  // every row of the type is read and nothing narrowed the read: then the rows are the count
+  const [whole, setWhole] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<unknown>(null);
   const [term, setTerm] = useState("");
@@ -186,18 +188,19 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
     const n = ++asked.current;
     if (!again) setRows(null);
     setFailed(null);
-    return vaults.query(v.key, q(0)).then((x: { records: Rec[]; more: boolean; read?: number }) => { if (n === asked.current) { read.current = x.read ?? x.records.length; setRows(x.records); setMore(x.more); } }, (e: unknown) => { if (n === asked.current) setFailed(e); });
+    const narrow = !!term || view.where.length > 0;
+    return vaults.query(v.key, q(0)).then((x: { records: Rec[]; more: boolean; read?: number }) => { if (n === asked.current) { read.current = x.read ?? x.records.length; setRows(x.records); setMore(x.more); setWhole(!x.more && !narrow); } }, (e: unknown) => { if (n === asked.current) setFailed(e); });
   };
   const next = () => {
     if (busy || !rows) return;
     setBusy(true);
     const n = asked.current;
-    vaults.query(v.key, q(read.current)).then((x: { records: Rec[]; more: boolean; read?: number }) => { if (n === asked.current) { read.current += x.read ?? x.records.length; setRows((r) => [...(r ?? []), ...x.records.filter((y) => !(r ?? []).some((z) => z.id === y.id))]); setMore(x.more); } },
+    vaults.query(v.key, q(read.current)).then((x: { records: Rec[]; more: boolean; read?: number }) => { if (n === asked.current) { read.current += x.read ?? x.records.length; setRows((r) => [...(r ?? []), ...x.records.filter((y) => !(r ?? []).some((z) => z.id === y.id))]); setMore(x.more); if (!x.more) setWhole(!narrowed.current); } },
       (e: unknown) => toast(`More couldn't be read: ${said(e)}`, { error: true })).finally(() => setBusy(false));
   };
   const readViews = () => vaults.query(v.key, { tag: "parachute-view", path: `${VIEWS}${clean(type) || "_"}/`, limit: 20 })
     .then((x: { records: Rec[] }) => setViews(x.records.flatMap((r) => { const f = r.fields.view as View | undefined; return f && typeof f === "object" ? [{ ...PLAIN, ...f, name: r.title, id: r.id }] : []; })), () => setViews([]));
-  useEffect(() => { vaults.types(v.key).then((t: TypeRow[]) => setSpec(t.find((x) => x.name === name) ?? null), () => setSpec(null)); void readViews(); }, [v.key, type]);
+  useEffect(() => { vaults.types(v.key).then((t: TypeRow[]) => setSpec(t.find((x) => x.name === name && x.kind === (isTag ? "tag" : "type")) ?? t.find((x) => x.name === name) ?? null), () => setSpec(null)); void readViews(); }, [v.key, type]);
   useEffect(() => { void load(); }, [v.key, type, term, JSON.stringify(view.where), JSON.stringify(view.sort), view.group]);
   // what an AI (or another device) writes lands here as it happens
   const narrowed = useRef(false);
@@ -245,9 +248,10 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
     return g;
   }, new Map<string, Rec[]>())].map(([k, rs]) => ({ key: k, label: k, rows: rs })) : null;
   const viewTabs = [{ key: "All", label: "All" }, ...views.map((w) => ({ key: w.id!, label: w.name }))];
-  // how many: the rows themselves once all of them are read and nothing narrows them (a record added here, or by an
-  // AI, counts at once); else what the type said when it opened
-  const count = rows && !more && !term && !view.where.length ? rows.length : spec?.count;
+  // how many: the rows themselves once all of them are read and nothing narrowed the read (a record added here, or by
+  // an AI, counts at once); else the last count known, kept through a sort, a search or a filter
+  const count = rows && whole ? rows.length : spec?.count;
+  useEffect(() => { if (rows && whole) setSpec((s) => (s && s.count !== rows.length ? { ...s, count: rows.length } : s)); }, [rows, whole]);
   return (
     <Page title={isTag ? `#${name}` : label(name)} kicker={`${v.name}${count != null ? ` · ${count} ${count === 1 ? "record" : "records"}` : ""}`} back={back} wide className="vlt" onRefresh={() => load(true)}>
       <style>{CSS}</style>
