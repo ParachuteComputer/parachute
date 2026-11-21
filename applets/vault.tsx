@@ -62,6 +62,7 @@ const CSS = `
 .vlt .addr { font: var(--fs-small) var(--mono); overflow-wrap: anywhere; }
 .vlt .run { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: calc(var(--gap) * 1.25) 0 2px; }
 .vlt .run .who { font: 600 var(--fs-lead) var(--serif); }
+.vlt .run .done { font: italic var(--fs-small) var(--serif); color: var(--muted); }
 .vlt .run .when { flex: 1; font: var(--fs-small) var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
 .vlt .lede { margin: 0 0 var(--gap); font: var(--fs-small) var(--sans); color: var(--muted); }
 .vlt .warn { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--danger); font: var(--fs-small) var(--sans); }
@@ -727,7 +728,7 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
                     <span className="who">{run.who}</span>
                     <span className="when">{run.changes.length} {run.changes.length === 1 ? "change" : "changes"} · {when.time(run.changes[run.changes.length - 1].at)}{when.time(run.changes[0].at) !== when.time(run.changes[run.changes.length - 1].at) ? `–${when.time(run.changes[0].at)}` : ""}</span>
                     {canWrite && left.length > 0 && <Button small busy={busy === run.key} aria-label={`${outside ? "Put back anyway" : left.length === 1 ? "Put it back" : `Put all ${left.length} back`}, by ${run.who}`} onClick={() => void putRun(run)}>{outside ? "Put back anyway" : left.length === 1 ? "Put it back" : `Put all ${left.length} back`}</Button>}
-                    {canWrite && !left.length && run.changes.some((c) => putBackOf(c, all, puts)) && <span className="when">put back</span>}
+                    {canWrite && !left.length && run.changes.some((c) => putBackOf(c, all, puts)) && <span className="done">put back</span>}
                   </div>
                   {outside && <p className="warn">Some of these records changed again after. Putting them back undoes that too.</p>}
                   <div className="chg"><List label={`${run.who}, ${run.day}`} hideLabel rows={run.changes.map((c) => {
