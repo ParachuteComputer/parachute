@@ -53,9 +53,13 @@ The app reaches them as it reaches `list-vaults`: a request its key signs (NIP-9
 | tool `list-access {vault}` (exists) | the owner's key | gains `name` on each row and `invites: [{id, name, expires_at}]` for the vault's open invites. |
 | tool `take-back-invite {vault, id}` | the owner's key | takes back an open invite. |
 | tool `revoke-access {pubkey, vault}` (exists) | the owner's key | End: removes the role and revokes the person's tokens and consent for the vault in the same transaction (#130). Measured on next: the friend's next request is 401, 2 ms later. |
-| `POST /account/invites/look {code}` | anyone holding the code | `{vault, from, hub}`, nothing used up. |
-| `POST /account/invites/accept {code}` | NIP-98, the invitee's key | checks the code first; then makes or finds the hub user for that key (`ensureUserForPubkey`); then, in one transaction, gives it `member` on the vault and uses the invite (`recordInviteRedemption`'s zero-rows guard, so two accepts can't both win). Answers `{vault, from, hub}`. A key that is already a hub admin or already on the vault is refused without using the invite. |
-| `GET /account/vaults/<v>/names?by=<stamp>…` | any token for `<v>` | `{names: {<stamp>: {name, you}}}`: the name for each stamp asked about, and `you` when it is the caller's own. Only people of this vault are named (its owners, its members, and anyone who ever accepted an invite to it, so an ended member's old edits keep his name). No keys, roles or invites here: those are the owner's. |
+| `POST /account/invites/look {code}` | anyone holding the code | `{vault, from, name, can}`, nothing used up (the app takes the hub from the link). |
+| `POST /account/invites/accept {code}` | NIP-98, the invitee's key | checks the code first; then makes or finds the hub user for that key (`ensureUserForPubkey`); then, in one transaction, gives it `member` on the vault and uses the invite (`recordInviteRedemption`'s zero-rows guard, so two accepts can't both win). Answers `{vault, from, name}`. A key that is already a hub admin or already on the vault is refused without using the invite. |
+| `GET /account/vaults/<v>/names?by=<stamp>…` | any token for `<v>` | `{names: {<stamp>: {name, you}}}`: the name for each stamp asked about, and `you` when it is the caller's own. Only people of this vault are named (its owners, its members, and anyone who ever accepted an invite to it, so an ended member's old edits keep his name). It never lists everyone: a caller names only stamps it already sees on records. No keys, roles or invites here: those are the owner's. |
+
+An invite holds only while the person who made it can still run the vault, and only the person's own key (or the
+operator) makes or takes one back: an app's or an AI's connection to the account door can't. Renaming a vault moves
+its invites; deleting it removes them.
 
 `look` and `accept` give one answer for every failure (404 `no_invite`), so a stranger learns nothing. Both are rate
 limited like the hub's other doors.
@@ -88,7 +92,8 @@ it. The slice changes no stamp; the app names `by` through `names`.
   - this device's sign-in wrote it: "You, in Parachute here";
   - a named key (an AI): its name, and when it wrote for someone else, "Aaron's claude";
   - another person, through their app: their name ("Bo");
-  - no name known (an older hub, a stamp of no one in the vault): as today. Your own sign-ins on other devices stay
+  - no name known (an older hub, a stamp of no one in the vault): as today. A record opened straight from a link
+    draws at once from the kept copy with the names already known, and asks for the rest behind it. Your own sign-ins on other devices stay
     "An app (…)": the hub can't yet tell your Parachute from a connector (open item 6).
 - **Ended**: when a vault answers 401 and its sign-in can't be refreshed, Vault says "You no longer reach recipes. If it
   is someone else's, they may have ended your access; you can remove it in Settings." in place of "Vault rejected the
