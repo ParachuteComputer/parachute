@@ -67,8 +67,14 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
   const now = deps.now ?? Date.now;
   let pending = 0;
   // per vault, the frame's reads from the copy: the ones it is told of when the hub's answer differs
-  const readers = new Map<string, ReturnType<HostDeps["kept"]>>();
-  const reader = (rec: VaultRecord) => { let r = readers.get(rec.key); if (!r) readers.set(rec.key, r = deps.kept(rec)); return r; };
+  // (made again when the vault's address changes, as vault/client.ts clientFor is)
+  const readers = new Map<string, { at: string; reader: ReturnType<HostDeps["kept"]> }>();
+  const reader = (rec: VaultRecord) => {
+    const at = `${rec.issuer} ${rec.vault} ${rec.url ?? ""}`;
+    let r = readers.get(rec.key);
+    if (!r || r.at !== at) readers.set(rec.key, r = { at, reader: deps.kept(rec) });
+    return r.reader;
+  };
   const vault = (key: string) => {
     const rec = deps.vaults().find((r) => r.key === key);
     if (!rec) throw new Error("This device doesn't hold that vault.");
@@ -133,7 +139,7 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
     /** The hub's answer to a read of `vault` (its path and query, readCache `onFresh`) differs from the copy: a read of a
      *  note the frame made from the copy is told to it. */
     fresh(vault: string, read: string) {
-      if (!readers.get(vault)?.reads.has(read)) return;
+      if (!readers.get(vault)?.reader.reads.has(read)) return;
       let id: string | null = null;
       try { id = new URLSearchParams(read.slice(read.indexOf("?") + 1)).get("id"); } catch { /* not a read of one note */ }
       if (id !== null) post({ pf: PF, event: "changed", data: { what: "note", vault, id } });
