@@ -30,14 +30,15 @@ services:
     restart: "no"
   relay:
     # the relay production runs (relay-image.sh builds it; up.sh sets this): the specs hold its behaviour
-    image: ${BUZZ_IMAGE:?up.sh sets it: relay-image.sh}
+    image: "${BUZZ_IMAGE:?up.sh sets it (relay-image.sh)}"
     labels: *labels
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       minio-init: { condition: service_completed_successfully }
     ports: ["127.0.0.1:${RELAY_PORT:-3871}:3000"]
-    env_file: ["${SERVICES_DIR:?up.sh sets it}/relay.env"]
+    # not required, so down.sh can take down a set whose setup stopped early
+    env_file: [{ path: "${SERVICES_DIR:?up.sh sets it}/relay.env", required: false }]
     environment:
       DATABASE_URL: postgres://buzz:buzz_test@postgres:5432/buzz
       REDIS_URL: redis://redis:6379
@@ -63,7 +64,8 @@ services:
     # the version production runs; its management calls (x:Domain, x:Account) are version-specific
     image: stalwartlabs/stalwart@sha256:ec011be228596e37e65f41aab17deed573859614430472f7eeb42178c50d87b7
     labels: *labels
-    env_file: ["${SERVICES_DIR:?up.sh sets it}/stalwart.env"]
+    # not required, so down.sh can take down a set whose setup stopped early
+    env_file: [{ path: "${SERVICES_DIR:?up.sh sets it}/stalwart.env", required: false }]
     ports: ["127.0.0.1:${STALWART_PORT:-18443}:443", "127.0.0.1:${STALWART_SETUP_PORT:-18080}:8080"]
     volumes: [stalwart-etc:/etc/stalwart, stalwart-data:/var/lib/stalwart]
   mail-gateway:

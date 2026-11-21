@@ -4,7 +4,7 @@
 //           same port a Blossom-style media server: PUT /upload and GET /media/<sha256>.<ext>, both needing kind 24242.
 //   http    a server that checks NIP-98 on /mail/* (signature, u = the exact URL, method, payload hash) and records
 //           every request, signed or not.
-// Locally the same tests can run against the real ones (e2e/services/README.md).
+// The same tests run against the real ones in the Services workflow, and locally (e2e/services/README.md).
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { createHash, randomBytes } from "node:crypto";
 import { WebSocketServer, type WebSocket } from "ws";

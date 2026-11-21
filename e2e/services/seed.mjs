@@ -14,7 +14,7 @@ import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure
 import WebSocket from "ws";
 
 const [step, dir] = process.argv.slice(2);
-if (!step || !dir) throw new Error("usage: node seed.mjs <keys|mail-bootstrap|mail|matrix> <dir>");
+if (!step || !dir) throw new Error("usage: node seed.mjs <keys|mail-bootstrap|mail|relay|matrix> <dir>");
 const env = (k, d) => process.env[k] || d;
 const STALWART = `https://127.0.0.1:${env("STALWART_PORT", "18443")}`;
 const SETUP = `http://127.0.0.1:${env("STALWART_SETUP_PORT", "18080")}`;
@@ -126,6 +126,7 @@ if (step === "keys") {
 } else if (step === "relay") {
   // NIP-42 sign-in as the owner, then one 9030 (let in) per person; each must be accepted
   const sk = Uint8Array.from(Buffer.from(read(join(keysDir, "owner.hex")), "hex"));
+  setTimeout(() => { console.error("relay: no sign-in within 30 s"); process.exit(1); }, 30_000).unref();
   const ws = new WebSocket(RELAY);
   const waiting = new Map();
   // sends an event and waits for the relay's OK for it (registered before it can arrive)
