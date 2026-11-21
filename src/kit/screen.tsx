@@ -137,8 +137,16 @@ export type Tab = { key: string; label: ReactNode; count?: number };
 /** Places to switch between in one screen (a mailbox's Inbox, Later, Sent; a vault of several): the one shown is marked,
  *  a count follows a label ("Inbox · 3"). */
 export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: readonly Tab[]; current: string; onChange: (key: string) => void }) {
+  const nav = useRef<HTMLElement>(null);
+  // the one shown stays in view on the one line (scrolled sideways, never the page)
+  useEffect(() => {
+    const on = nav.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!on || !nav.current) return;
+    const n = nav.current;
+    if (on.offsetLeft < n.scrollLeft || on.offsetLeft + on.offsetWidth > n.scrollLeft + n.clientWidth) n.scrollLeft = on.offsetLeft - (n.clientWidth - on.offsetWidth) / 2;
+  }, [current]);
   return (
-    <nav className="pa-tabs" aria-label={label}>
+    <nav className="pa-tabs" aria-label={label} ref={nav}>
       {tabs.map((t) => <button key={t.key} type="button" className="pa-tab" aria-current={t.key === current ? "page" : undefined} onClick={() => onChange(t.key)}>{t.label}{t.count ? ` · ${t.count}` : ""}</button>)}
     </nav>
   );

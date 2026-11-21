@@ -180,7 +180,7 @@ export default function Mail() {
           meta: lines(`${h.item.fields?.subject || "(no subject)"}${h.item.fields?.attachments?.length ? ` · 📎 ${h.item.fields.attachments.length}` : ""}`, h.outcome?.text ?? h.item.problem ?? h.item.reason ?? ""),
         }))} />}
     </> : list === null ? <Loading /> : !list.length ? <p className="quiet">{searched ? "Nothing found." : place === "later" ? "Nothing put off for later." : "Nothing here."}</p> :
-      <List label={searched ? "Found" : placeName(place)} rows={list.map((e) => ({
+      <List label={searched ? "Found" : placeName(place)} hideLabel={!searched} rows={list.map((e) => ({
         key: e.id, strong: !e.keywords?.$seen, onPress: () => setView({ at: "read", id: e.id }), aside: when.short(e.receivedAt),
         title: <>{place === "sent" || place === "drafts" ? `To ${who(e.to)}` : who(e.from)}{e.keywords?.$flagged && place !== "later" && <span className="flag" aria-label="in Later">⚑</span>}</>,
         meta: lines(`${e.subject || "(no subject)"}${e.hasAttachment ? " · 📎" : ""}`, e.preview ?? ""),

@@ -105,8 +105,10 @@ div.pa-row { cursor: default; }
 /* Page's way back: a quiet button, in the serif, above the title */
 .pa-button.pa-back { display: flex; justify-content: start; margin: 0 0 2px; padding-left: 0; font: italic var(--fs-body) var(--serif); text-decoration: none; }
 
-.pa-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 4px; border-bottom: 1px solid var(--line); }
-.pa-tab { padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer; }
+/* one line: more places than fit scroll sideways (the one shown is kept in view), never a second row */
+.pa-tabs { position: relative; display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 4px; margin: 6px 0 4px; border-bottom: 1px solid var(--line); }
+.pa-tabs::-webkit-scrollbar { display: none; }
+.pa-tab { flex: none; white-space: nowrap; padding: 6px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer; }
 .pa-tab[aria-current="page"] { border-bottom-color: var(--text); color: var(--text); font-weight: 600; }
 .pa-write > .pa-field-label { display: block; margin-bottom: 2px; }
 
