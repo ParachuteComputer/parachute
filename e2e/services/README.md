@@ -10,7 +10,7 @@
 | `e2e/matrix.spec.ts` | `MATRIX_HS` (a Matrix homeserver), `MATRIX_TOKENS` (a folder with `alice.token`, `bob.token`), `BUZZ_KEYS` |
 | `src-tauri/tests/services_real.rs` | `BUZZ_RELAY`, `MAIL_BRIDGE`, `BUZZ_KEYS` (the native side, not the browser) |
 
-The **Services** workflow (`.github/workflows/services.yml`) runs all of them with the servers in the runner: daily, on
+The **Services** workflow (`.github/workflows/services.yml`) runs all of them with the servers in the runner: daily (on next), on
 demand (`gh workflow run services.yml --ref <branch> -f core=<npm version, or a branch or commit of parachute-core>`),
 and on every pull request that changes more than docs. A skip there fails the run.
 

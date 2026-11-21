@@ -1,8 +1,8 @@
 # The specs that need real servers (e2e/services/README.md): rooms, approvals, Home's today, devices, area and room links
 # on a Buzz relay; mail on Stalwart behind the mail gateway; Matrix on a homeserver; and the native side against the relay
 # and the gateway (src-tauri/tests/services_real.rs). They skip in CI's web job; here e2e/services/up.sh starts and seeds
-# those servers in the runner (loopback only, every key and password made up per run), so they run. Daily on the
-# default branch, on demand (any branch, any core), and on every pull request that changes more than docs.
+# those servers in the runner (loopback only, every key and password made up per run), so they run. Daily (fired from
+# main, testing next), on demand (any branch, any core), and on every pull request that changes more than docs.
 name: Services
 permissions:
   contents: read
@@ -14,11 +14,14 @@ on:
       core:
         description: "core: an npm version (0.9.0-pre.1) or a branch or commit of parachute-core"
         default: next
-  # on every PR but a docs-only one: what these specs exercise reaches across the app, the shell and the build
+  # on every PR but a docs-only one: what these specs exercise reaches across the app, the shell and the build (e2e/**
+  # again: its Markdown is the test vault's notes)
   pull_request:
-    paths-ignore:
-      - "**.md"
-      - docs/**
+    paths:
+      - "**"
+      - "!**.md"
+      - "!docs/**"
+      - "e2e/**"
 
 # one run per branch or PR (and core) at a time: a newer push replaces a run still going
 concurrency:
@@ -34,7 +37,10 @@ jobs:
       SPECS: e2e/approvals.spec.ts e2e/area.spec.ts e2e/devices.spec.ts e2e/mail.spec.ts e2e/matrix.spec.ts e2e/roomlinks.spec.ts e2e/rooms.spec.ts e2e/today.spec.ts
       SERVICES_DIR: ${{ github.workspace }}/../services
     steps:
+      # the daily run fires from the default branch (main) but tests next, where the work lands
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'next' || '' }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
