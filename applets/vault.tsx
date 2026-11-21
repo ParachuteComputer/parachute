@@ -412,6 +412,15 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const [a, setA] = useState<{ level: string | null; hub: string; connector: string; applets: { noteId: string; name: string; glyph: string; since: string | null; changes: boolean }[] } | null>(null);
   const [pub, setPub] = useState<Rec[] | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
+  // the hub's one address for an AI (T-476), when it has one; an older app has no `hubs`
+  const [one, setOne] = useState<string | null>(null);
+  useEffect(() => {
+    let on = true;
+    setOne(null);
+    const ask = (vaults as { hubs?: () => Promise<{ address: string | null; vaults: string[] }[]> }).hubs;
+    if (typeof ask === "function") ask().then((hs) => { if (on) setOne(hs.find((h) => h.vaults.includes(v.key))?.address ?? null); }, () => {});
+    return () => { on = false; };
+  }, [v.key]);
   // public as the hub judges it: the field, or its default publish tag
   const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { where: [{ field: "published", op: "eq", value: true }], limit: 50 }),
     vaults.query(v.key, { tag: "publish", limit: 50 })])
@@ -430,8 +439,15 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
         <List label="Published" rows={(pub ?? []).map((r) => ({ key: r.id, title: r.title, meta: "anyone with its link can read it" }))} />
         {pub && !pub.length && <p className="note-meta">Nothing in {v.name} is published.</p>}
         <p className="sect">Your AI</p>
-        <p className="note-meta">An AI you connect (Claude, ChatGPT…) reaches {v.name} at this address, with what you allowed when you connected it:</p>
-        <p className="addr">{a.connector}</p>
+        {one ? <>
+          <p className="note-meta">An AI you connect (Claude, ChatGPT…) reaches your vaults at one address, with what you allowed when you connected it:</p>
+          <p className="addr">{one}</p>
+          <p className="note-meta">To give an AI {v.name} alone, use its own address:</p>
+          <p className="addr">{a.connector}</p>
+        </> : <>
+          <p className="note-meta">An AI you connect (Claude, ChatGPT…) reaches {v.name} at this address, with what you allowed when you connected it:</p>
+          <p className="addr">{a.connector}</p>
+        </>}
         <p className="note-meta">The keys and AIs your hub has let in are listed on your hub, under Tokens, where you can revoke them. This app can't list them yet.</p>
       </>}
     </Page>

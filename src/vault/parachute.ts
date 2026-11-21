@@ -39,7 +39,18 @@ export type Parachute = { hub: string; issuer: string; accountMcp: string; vault
   door?: "cloud";
   /** The id the hub reserves for the Parachute app (its descriptor's `app_client_id`, Parachute Cloud's `parachute-app`):
    *  the app on a device signs in under it, named Parachute, instead of registering itself (oauth.ts). */
-  appClientId?: string };
+  appClientId?: string;
+  /** The one address an AI gets (its descriptor's `mcp_endpoint`, core 0.9.1 on, T-476): `<hub>/mcp`, every vault the
+   *  person lets it reach. */
+  mcp?: string;
+  /** The hub's descriptor named `account_mcp_endpoint` itself (rather than the app taking the path for granted). */
+  accountMcpListed?: boolean };
+
+/** Where an AI connects to every vault the person lets it reach on this hub, or null when it only takes one vault per
+ *  address. The hub's one address (`mcp_endpoint`); else, on a hub (not Parachute Cloud, whose account door doesn't carry
+ *  the vault's tools yet), its account door, which asks the same of the person; else none, and each vault's own
+ *  `<vault>/mcp` is the address (docs/design/VERSIONS.md: older hubs). */
+export const oneAddress = (p: Parachute): string | null => p.mcp ?? (p.door !== "cloud" && p.accountMcpListed ? p.accountMcp : null);
 
 /** https, or http on this machine. */
 const safe = (raw: unknown): raw is string => {
@@ -73,7 +84,13 @@ export async function describe(hub: string, fetchImpl: typeof fetch = fetch.bind
   const accountMcp = safe(d.account_mcp_endpoint) && onHubOrDomain(d.account_mcp_endpoint, hub) ? d.account_mcp_endpoint : plainHub.accountMcp;
   const vaultTemplate = safe(d.vault_url_template) && (d.vault_url_template as string).includes("{name}") && onHubOrDomain(d.vault_url_template.replace("{name}", "x"), hub) ? d.vault_url_template as string : plainHub.vaultTemplate;
   const appClientId = typeof d.app_client_id === "string" && /^[A-Za-z0-9._-]{1,100}$/.test(d.app_client_id) ? d.app_client_id : null;
-  return { hub, issuer, accountMcp, vaultTemplate, ...(d.door === "cloud" ? { door: "cloud" as const } : {}), ...(appClientId ? { appClientId } : {}) };
+  // an address a person copies into their AI is taken only as the hub wrote it in its plain form: no spaces, line
+  // breaks or other text after it (what a URL parser would quietly drop or rewrite)
+  const plainUrl = (raw: string) => { try { return new URL(raw).href === raw; } catch { return false; } };
+  const accountMcpListed = accountMcp === d.account_mcp_endpoint && plainUrl(accountMcp);
+  const mcp = safe(d.mcp_endpoint) && onHubOrDomain(d.mcp_endpoint, hub) && plainUrl(d.mcp_endpoint) ? d.mcp_endpoint : null;
+  return { hub, issuer, accountMcp, vaultTemplate, ...(d.door === "cloud" ? { door: "cloud" as const } : {}), ...(appClientId ? { appClientId } : {}),
+    ...(mcp ? { mcp } : {}), ...(accountMcpListed ? { accountMcpListed } : {}) };
 }
 
 /** A vault's API root, from where the Parachute says its vaults live. */

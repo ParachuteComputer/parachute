@@ -1,5 +1,5 @@
 // Parachute Simplified (docs/SIMPLE.md), as a person whose settings choose it signs in on a new device: they land on
-// Notes, find a note, change it (the first Save saves), write a new one, copy a vault's connector address, capture a
+// Notes, find a note, change it (the first Save saves), write a new one, copy the hub's one address and a vault's own, capture a
 // line into Inbox/ and write a Journal entry, both Parachute's own applets with no card. Against the real hub: what the app writes is read back.
 import { expect, test } from "@playwright/test";
 import { signIn } from "./helpers";
@@ -75,15 +75,24 @@ test("Parachute Simplified: sign in → Notes → find, edit and write a note �
     expect(fresh, "the new note, at the path its first line names").toBeTruthy();
     made.push(fresh!.id);
 
-    // Connect: the vault's connector address, to copy
+    // Connect: the hub's one address for an AI first (T-476: `mcp_endpoint`, or on a hub from before it the account
+    // door it names), then the vault's own under "Just one vault"; each to copy
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await bar.getByRole("link", { name: "Connect" }).click();
     // Parachute's own applet, no card
     const connect = page.frameLocator('iframe.applet-frame[title="Connect"]');
+    const said = await (await fetch(`${hub.origin}/.well-known/parachute-account`)).json() as { mcp_endpoint?: string; account_mcp_endpoint?: string };
+    const one = said.mcp_endpoint ?? said.account_mcp_endpoint;
+    expect(one, "the hub names an address for every vault").toBeTruthy();
+    await expect(connect.getByText(one!, { exact: true })).toBeVisible();
+    await connect.getByRole("button", { name: /^Copy the address of all your vaults/ }).click();
+    await expect(connect.getByRole("button", { name: /^Copied the address of all your vaults/ })).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(one);
     const address = `${hub.origin}/vault/${VAULT}/mcp`;
-    await expect(connect.getByText(address, { exact: true })).toBeVisible();
-    await connect.getByRole("button", { name: `Copy the address of ${VAULT}` }).click();
-    await expect(connect.getByRole("button", { name: `Copied the address of ${VAULT}` })).toBeVisible();
+    const justOne = connect.getByRole("region", { name: "Just one vault" });
+    await expect(justOne.getByText(address, { exact: true })).toBeVisible();
+    await justOne.getByRole("button", { name: `Copy the address of ${VAULT}` }).click();
+    await expect(justOne.getByRole("button", { name: `Copied the address of ${VAULT}` })).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(address);
     // then what to ask it: a cold AI connected by the address finds no word of applets in the vault (T-476 stranger
     // walk), so the person hands it the ask and the guide
