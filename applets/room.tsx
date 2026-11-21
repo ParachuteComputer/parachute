@@ -406,7 +406,11 @@ const CSS = `
 .room .card .ids { color: var(--muted); font-size: var(--fs-small); margin: 2px 0; }
 .room .card .ids summary { cursor: pointer; width: max-content; position: relative; }
 /* a finger's target (44 px) without a taller row: the hit area grows up over the quiet line, never down onto the buttons */
-@media (pointer: coarse) { .room .card .ids summary::after { content: ""; position: absolute; left: -10px; right: -10px; top: -26px; bottom: 0; } }
+@media (pointer: coarse) {
+  .room .card .ids summary::after { content: ""; position: absolute; left: -10px; right: -10px; top: calc(100% - 44px); bottom: 0; }
+  /* the buttons' own grown targets start below it: a tap meant for Details never approves */
+  .room .card .btns { margin-top: 13px; }
+}
 .room .card .ids p { margin: 2px 0 0; font-variant-numeric: tabular-nums; }
 .room .root { border-left: 3px solid var(--text); padding-left: 10px; margin-bottom: 8px; }
 .room .older { display: flex; justify-content: center; margin: 8px 0; }
