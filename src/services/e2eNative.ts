@@ -13,6 +13,16 @@ import { DEFAULTS, codeOf, floored, raise, type Level, type Levels, type LevelsS
 
 export const E2E_SIGNER_MARK = "parachute-e2e-test-signer";
 
+// the native side's two lines of a broker-worded scope (src-tauri/src/approvals/card.rs `reach_line`, `read_key_line`)
+const BROKER_WORDED = ["job.cloudflare", "mint.cloudflare", "lookup.cloudflare", "github.ruleset.apply"];
+const reachLine = (action: string, scope: string) => { const first = scope.split(/\r?\n/)[0].trim(); return BROKER_WORDED.includes(action) && ["🔴 ", "🟡 ", "🟢 "].some((d) => first.startsWith(d)) ? first : null; };
+const readKeyLine = (action: string, scope: string) => {
+  if (!BROKER_WORDED.includes(action)) return null;
+  const lines = scope.split(/\r?\n/).map((l) => l.replace(/\r$/, ""));
+  const said = lines.findIndex((l) => l.startsWith("Uni says:"));
+  return (said < 0 ? lines : lines.slice(0, said)).find((l) => l.startsWith("Read key: ")) ?? null;
+};
+
 type Sess = { applet: { name: string; subject: string }; services: Map<string, Service> };
 
 export function e2eNative(secretHex: string): Native {
@@ -149,7 +159,8 @@ export function e2eNative(secretHex: string): Native {
         const c = checkCard(ev, trusted(session, service), sk);
         return { kind: "single", event_id: ev.id, refused: null, rows: c.rows.map((r) => ({ rid: r.f.rid as string, action: r.f.action as string, credential: r.f.credential as string, class: r.f.class as "routine" | "powerful",
           scope: r.f.scope as string, ttl_s: r.f.ttl_s as number, uses: r.f.uses as number, payload: r.f.payload, request_digest: r.digest, expires: r.f.expires as number,
-          answer: answers?.find((a) => a.rid === r.f.rid) ?? null, always_unlock: r.f.class === "powerful", asked: ev.created_at, reach: null, read_key: null })) } satisfies CardView;
+          answer: answers?.find((a) => a.rid === r.f.rid) ?? null, always_unlock: r.f.class === "powerful", asked: ev.created_at,
+          reach: reachLine(r.f.action as string, r.f.scope as string), read_key: readKeyLine(r.f.action as string, r.f.scope as string) })) } satisfies CardView;
       } catch (e) {
         const s = svc(session, service);
         const from = s.kind === "nostr-relay" ? s.approvals?.from ?? [] : [];
