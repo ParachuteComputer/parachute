@@ -24,8 +24,8 @@ Each is one of Parachute's own applets (`applets/notes`, `journal`, `capture`, `
 `/v/<home>/a/parachute:<name>`. Settings is ⋯ on each screen; it has **Your bundle: Parachute Simplified / Everything**,
 and a line for each vault the sign-in didn't read (**Open letters**).
 
-On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key); the key's ways come
-after it.
+On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key), then **Sign in with its
+address** for another Parachute (your own hub, an org's, a friend's); the key's ways come after.
 
 ## Who gets it
 
