@@ -74,12 +74,19 @@ export type Row = {
 /** Rows under a label. A row with `onPress` is a button. A long list costs little: a row off screen isn't drawn until
  *  it scrolls near. `more` puts a button under the last row that asks for the next page (older entries, more mail). */
 export function List({ label, hideLabel, rows, more }: { label?: ReactNode; /** said to a screen reader only: the page's title says it already */ hideLabel?: boolean; rows: readonly Row[]; more?: { label: string; onPress: () => void; busy?: boolean } }) {
-  // a row that arrives after the list was first drawn comes in (parts.css .pa-fresh); the first rows come in with the list
+  // a row added to the rows already there comes in (parts.css .pa-fresh): a book added, a message come in, the next
+  // page. Rows that replace others (a search, a filter, another tab) are there at once, as typing should be.
   const seen = useRef<Set<string> | null>(null);
+  const last = useRef<string[]>([]);
   const fresh = useRef(new Set<string>());
   const keys = rows.map((r) => r.key).filter((k): k is string => typeof k === "string");
   if (seen.current === null) seen.current = new Set(keys);
-  else for (const k of keys) if (!seen.current.has(k)) { seen.current.add(k); fresh.current.add(k); }
+  else {
+    const now = new Set(keys);
+    const added = last.current.every((k) => now.has(k));
+    for (const k of keys) if (!seen.current.has(k)) { seen.current.add(k); if (added) fresh.current.add(k); }
+  }
+  last.current = keys;
   return (
     <section className="pa-list" aria-label={typeof label === "string" ? label : undefined}>
       {label && <h3 className={hideLabel ? "pa-list-label pa-unseen" : "pa-list-label"}>{label}</h3>}

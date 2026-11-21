@@ -274,9 +274,11 @@ function Attachment({ m }: { m: Media }) {
   const { url, err } = useBlob(k === "file" ? null : m);
   if (k === "file") return <FileRow m={m} />;
   if (err) return <div className="file">⚠ {k === "image" ? "Image" : "File"} unavailable</div>;
-  // an image whose size is known holds its place while it is fetched, so the messages under it don't move
-  if (!url) return k === "image" && m.w ? <div className="pic pic-wait" role="img" style={{ aspectRatio: `${m.w} / ${m.h}`, width: `min(${m.w}px, 100%, ${Math.round((420 * m.w) / m.h!)}px)` }} aria-label={`Loading image ${m.name}`} /> : <Loading>Loading {k === "image" ? "image" : k === "audio" ? "voice note" : "video"}…</Loading>;
-  if (k === "image") return <img className="pic" src={url} alt={m.name} width={m.w} height={m.h} />;
+  // an image whose size is known holds its place while it is fetched (the same box before and after), so the messages
+  // under it don't move: its own shape, no wider than 420 px or the column, no taller than 420 px
+  const box = k === "image" && m.w && m.h ? { aspectRatio: `${m.w} / ${m.h}`, width: `min(${m.w}px, 100%, 420px, ${Math.round((420 * m.w) / m.h)}px)`, height: "auto" } : undefined;
+  if (!url) return box ? <div className="pic pic-wait" role="img" style={box} aria-label={`Loading image ${m.name}`} /> : <Loading>Loading {k === "image" ? "image" : k === "audio" ? "voice note" : "video"}…</Loading>;
+  if (k === "image") return <img className="pic" src={url} alt={m.name} width={m.w} height={m.h} style={box} />;
   if (k === "video") return <video className="vid" src={url} controls playsInline />;
   return <audio className="aud" src={url} controls aria-label={`Voice note ${m.name}`} />;
 }

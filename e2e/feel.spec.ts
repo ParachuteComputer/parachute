@@ -76,7 +76,8 @@ test("flowing: the page arrives within 250 ms on the theme's times, and moves no
   for (const a of anims.filter((x) => !/pa-loading/.test(x.on))) expect(a.delay + a.duration, `${a.on} ${a.name}`).toBeLessThanOrEqual(250);
   // the theme's times reach the applet's frame
   expect(await inner.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--t-state").trim())).not.toBe("0ms");
-  // nothing already on the screen was moved by what arrived (the Layout Instability API, in the applet's own frame)
+  // nothing already on the screen was moved by what arrived (the Layout Instability API, in the applet's own frame):
+  // the title and the field are there before the list; an arrival on margins instead of transform moves them (seen: 0.004)
   await page.waitForTimeout(600);
   const shifted = await inner.evaluate(() => new Promise<number>((res) => {
     let sum = 0;
@@ -113,8 +114,9 @@ test("still: under reduce-motion nothing moves, and a drawer and a toast still g
     await expect(toast).toHaveText(`Added Elm ${stamp}`);
     await app.getByLabel("Add a thing").fill(`Yew ${stamp}`);
     await app.getByRole("button", { name: "Add" }).click();
-    await expect(toast).toHaveCount(1, { timeout: 2000 });
-    await expect(toast).toHaveText(`Added Yew ${stamp}`);
+    await expect(app.locator(".pa-toast", { hasText: `Added Yew ${stamp}` })).toBeVisible();
+    // the one it replaced is gone at once (well inside the 1 s a frame out of sight would wait)
+    await expect(toast).toHaveCount(1, { timeout: 300 });
   } finally { await ctx.close(); }
 });
 
@@ -134,6 +136,16 @@ test("a drawer follows the finger: let go near, it settles back; far, it goes", 
   await expect(drawer).toBeVisible();
   await page.waitForTimeout(400);
   const grip = app.locator(".pa-drawer-grip");
+  // mid-drag it is where the finger is, 1:1
+  const g = (await grip.boundingBox())!;
+  await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) { await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2 + i * 5); await page.waitForTimeout(16); }
+  expect(Math.abs(parseFloat(await drawer.evaluate((d) => (d as HTMLElement).style.getPropertyValue("--pa-drag"))) - 40)).toBeLessThan(2);
+  await page.waitForTimeout(300);
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  await expect(drawer).toBeVisible();
   // a little, slowly: back where it was
   await drag(page, (await grip.boundingBox())!, 20, 20);
   await page.waitForTimeout(400);
@@ -149,6 +161,42 @@ test("a drawer follows the finger: let go near, it settles back; far, it goes", 
   await page.waitForTimeout(400);
   await app.locator(".pa-drawer-scrim").click({ position: { x: 10, y: 10 } });
   await expect(drawer).toHaveCount(0, { timeout: 1500 });
+});
+
+test("a finger drags the drawer from anywhere on it while its content fits", async ({ page }) => {
+  const { app } = await openFeel(page);
+  await app.getByRole("button", { name: "More" }).click();
+  const drawer = app.getByRole("dialog", { name: "More about it" });
+  await expect(drawer).toBeVisible();
+  await page.waitForTimeout(400);
+  const words = (await app.getByText("What is inside a drawer.").boundingBox())!;
+  const cdp = await page.context().newCDPSession(page);
+  const x = words.x + 20, y = words.y + words.height / 2;
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+  for (let i = 1; i <= 10; i++) { await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y + i * 15 }] }); await page.waitForTimeout(16); }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await expect(drawer).toHaveCount(0, { timeout: 1500 });
+});
+
+test("a toast holds while the app is away, and goes on its own once it is back; a tap puts one away", async ({ page }) => {
+  const { app, inner } = await openFeel(page);
+  // the app out of sight when the toast comes
+  await inner.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, get: () => true }); document.dispatchEvent(new Event("visibilitychange")); });
+  await app.getByLabel("Add a thing").fill(`Pine ${stamp}`);
+  await app.getByRole("button", { name: "Add" }).click();
+  const toast = app.locator(".pa-toast");
+  await expect(toast).toHaveText(`Added Pine ${stamp}`);
+  await page.waitForTimeout(4200);
+  await expect(toast).toHaveCount(1);
+  await inner.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, get: () => false }); document.dispatchEvent(new Event("visibilitychange")); });
+  await expect(toast).toHaveCount(0, { timeout: 4500 });
+  // a tap: gone at once
+  await app.getByLabel("Add a thing").fill(`Larch ${stamp}`);
+  await app.getByRole("button", { name: "Add" }).click();
+  await expect(toast).toHaveText(`Added Larch ${stamp}`);
+  await page.waitForTimeout(400);
+  await toast.click();
+  await expect(toast).toHaveCount(0, { timeout: 1000 });
 });
 
 test("a toast goes when swiped down, before its time", async ({ page }) => {

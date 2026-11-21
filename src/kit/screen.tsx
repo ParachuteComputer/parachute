@@ -288,7 +288,8 @@ const goes = new WeakMap<HTMLElement, () => void>();
 const SWIPE = 45, FLICK = 0.11;
 /** A short word after an action, at the foot of the screen, gone by itself (an error stays longer, in the danger
  *  colour). A screen reader says it. One at a time: a new one takes the place of the last. It rises into place and goes
- *  back down; held while a pointer is on it or the screen is away, and a swipe down puts it away sooner. */
+ *  back down; its time stops while a pointer is on it, a finger holds it, or the app is out of sight, and a tap or a
+ *  swipe down puts it away at once (so it is never in the way of what is under it for more than a tap). */
 export function toast(text: string, { error = false }: { error?: boolean } = {}) {
   if (typeof document === "undefined") return;
   const fresh = !host || !host.isConnected;
@@ -303,33 +304,42 @@ export function toast(text: string, { error = false }: { error?: boolean } = {})
   p.textContent = String(text).slice(0, 300);
   const into = host!;
   latest = p;
-  let left = error ? 7000 : 3500, since = 0, timer = 0, held = 0, done = false;
+  // its time: running unless something holds it (a pointer on it, a finger, the app out of sight)
+  let left = error ? 7000 : 3500, since = 0, timer = 0, done = false;
+  const holds = new Set<string>();
   const go = () => {
     if (done) return;
     done = true;
     clearTimeout(timer);
     document.removeEventListener("visibilitychange", seen);
     p.dataset.state = "gone";
+    p.setAttribute("aria-hidden", "true"); // the live region says only the one that stays
     void settled(p).then(() => p.remove());
   };
   goes.set(p, go);
-  const run = () => { if (done || held > 0 || document.hidden) return; since = Date.now(); timer = window.setTimeout(go, left); };
-  const hold = () => { if (held++ === 0 && since) { clearTimeout(timer); left = Math.max(1000, left - (Date.now() - since)); since = 0; } };
-  const letGo = () => { if (held > 0 && --held === 0) run(); };
-  function seen() { if (document.hidden) hold(); else letGo(); }
-  p.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") hold(); });
-  p.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") letGo(); });
-  // a swipe down: it follows the finger 1:1; upward it only gives a little; let go far or fast enough and it goes
-  let y0: number | null = null, t0 = 0, dy = 0;
+  const hold = (why: string) => {
+    if (!holds.size && since) { clearTimeout(timer); left = Math.max(1000, left - (Date.now() - since)); since = 0; }
+    holds.add(why);
+  };
+  const free = (why: string) => {
+    holds.delete(why);
+    if (!holds.size && !since && !done) { since = Date.now(); timer = window.setTimeout(go, left); }
+  };
+  function seen() { if (document.hidden) hold("hidden"); else free("hidden"); }
+  p.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") hold("pointer"); });
+  p.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") free("pointer"); });
+  // a swipe down: it follows the finger 1:1; upward it only gives a little; let go far or fast enough, or tap it, and it goes
+  let y0: number | null = null, t0 = 0, dy = 0, moved = 0;
   p.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || done) return;
-    y0 = e.clientY; t0 = e.timeStamp; dy = 0;
+    y0 = e.clientY; t0 = e.timeStamp; dy = 0; moved = 0;
     p.setPointerCapture?.(e.pointerId);
-    hold();
+    hold("finger");
   });
   p.addEventListener("pointermove", (e) => {
     if (y0 === null) return;
     const d = e.clientY - y0;
+    moved = Math.max(moved, Math.abs(d));
     dy = d >= 0 ? d : d / (1.5 + Math.abs(d) / 20);
     p.dataset.swiping = "";
     p.style.setProperty("--pa-swipe", `${dy}px`);
@@ -339,9 +349,9 @@ export function toast(text: string, { error = false }: { error?: boolean } = {})
     y0 = null;
     delete p.dataset.swiping;
     const fast = dy / Math.max(1, e.timeStamp - t0) > FLICK;
-    if (dy >= SWIPE || (dy > 4 && fast)) { held = 0; go(); return; }
+    if (e.type === "pointerup" && (moved < 6 || dy >= SWIPE || (dy > 4 && fast))) { go(); return; }
     p.style.setProperty("--pa-swipe", "0px");
-    letGo();
+    free("finger");
   };
   p.addEventListener("pointerup", up);
   p.addEventListener("pointercancel", up);
@@ -353,7 +363,7 @@ export function toast(text: string, { error = false }: { error?: boolean } = {})
     into.appendChild(p);
     arrive(p);
     document.addEventListener("visibilitychange", seen);
-    run();
+    seen();
   };
   if (fresh) setTimeout(show, 50); else show();
 }

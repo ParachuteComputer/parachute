@@ -17,8 +17,9 @@ The kit already follows them, so most applets get them by using its parts and ad
 
 ## Motion
 
-5. **Most things don't move.** Anything done many times a day (a tab, a row, typing, a key) changes at once. What
-   moves is what arrives or leaves: a page, what was read, a new row, a drawer, a toast. The parts already do this.
+5. **Most things don't move.** Anything done many times a day (a tab, a row, typing, a search, a key) changes at
+   once (a colour may ease; nothing slides). What moves is what arrives or leaves: a page, what was read, a row
+   added, a drawer, a toast. The parts already do this.
 6. **Only `transform` and `opacity` move**, never width, height, margins or position: moving those shifts the page
    under the reader. **checked** (no `transition: all` either)
 7. **On the theme's curves and times only:** `--ease-out` (arriving, leaving), `--ease-in-out` (moving across the
@@ -36,7 +37,8 @@ The kit already follows them, so most applets get them by using its parts and ad
 11. **A press answers at once:** `Button` gives a little (`scale(.97)`) under the finger. Hover only where there is a
     pointer: `@media (hover: hover) and (pointer: fine)`.
 12. **A drag follows the finger 1:1** and can be let go of any time: far or fast enough and it goes, else it settles
-    back (`Drawer`, `toast`). Tap targets are at least 44 px on a phone.
+    back (`Drawer` by its grip, or anywhere while its content fits; `toast` swiped down). Tap targets are at least
+    44 px on a phone (the parts' buttons are, without looking bigger).
 13. **Focus is always visible** from the keyboard (`:focus-visible`, the accent ring the parts draw); a drawer takes
     focus and gives it back; Escape closes it.
 
