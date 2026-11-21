@@ -79,6 +79,13 @@ test("the rooms applet approves Uni's powerful card behind the unlock, gives a s
     // the powerful card: a plain tap does nothing; a hold asks for the unlock; a failed unlock sends nothing
     const sealed = log.getByRole("group", { name: "Uni asks to use a credential" });
     await expect(sealed).toContainText(`Change one DNS record ${stamp}`);
+    // it leads with what it is for, names the credential once, and keeps the action and job ids under Details
+    await expect(sealed.locator(".what").first()).toHaveText(`Change one DNS record ${stamp}`);
+    expect((await sealed.innerText()).split("cloudflare-dns").length - 1).toBe(1);
+    const ids = sealed.getByText(/^Action job\.cloudflare · job [0-9a-f]{4} [0-9a-f]{4}$/);
+    await expect(ids).toBeHidden();
+    await sealed.getByText("Details", { exact: true }).click();
+    await expect(ids).toBeVisible();
     const hold = sealed.getByRole("button", { name: "Hold to approve" });
     await hold.click();
     expect(await page.evaluate(() => (window as unknown as { __parachuteE2EUnlocks?: string[] }).__parachuteE2EUnlocks ?? [])).toEqual([]);

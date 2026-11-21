@@ -401,6 +401,9 @@ const CSS = `
 .room .card .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .room .card.ended { border-style: dashed; border-width: 1px; color: var(--muted); }
 .room .card pre { white-space: pre-wrap; font: var(--fs-small) var(--mono); margin: 6px 0; }
+.room .card .ids { color: var(--muted); font-size: var(--fs-small); margin: 2px 0; }
+.room .card .ids summary { cursor: pointer; width: max-content; }
+.room .card .ids p { margin: 2px 0 0; font-variant-numeric: tabular-nums; }
 .room .root { border-left: 3px solid var(--text); padding-left: 10px; margin-bottom: 8px; }
 .room .older { display: flex; justify-content: center; margin: 8px 0; }
 .room .quick { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
@@ -836,13 +839,15 @@ function SealedCard({ e }: { e: Ev }) {
   // a morning card is answered once, as a whole: after any row's answer the rest wait for a new card (as the Uni app)
   const open = view.rows.some((r: any) => r.answer) && view.kind === "morning" ? [] : view.rows.filter((r: any) => !r.answer);
   return <div className={`card${open.length ? "" : " ended"}`} role="group" aria-label={morning ? "Uni's morning card" : "Uni asks to use a credential"}>
-    <div className="head">{open.length ? "◆" : "◇"} {morning ? "Uni's morning card" : `Approve use of ${view.rows[0]?.credential}`}{view.rows.some((r: any) => r.class === "powerful") ? " · powerful" : ""}</div>
+    <div className="head">{open.length ? "◆" : "◇"} {morning ? "Uni's morning card" : "Uni's card"}{view.rows.some((r: any) => r.class === "powerful") ? " · powerful" : ""}</div>
+    {/* each request leads with what it is for (the words Uni signed on the card), then the credential once, for how
+        long and how often; the action and job ids, for checking against Uni's log, under Details */}
     {view.rows.map((r: any) => <div key={r.rid} className="sealed-row">
       {r.reach && <p className="what">{r.reach}</p>}
-      <p>{r.credential} · {r.action} · {SPAN(r.ttl_s)}, {r.uses === 1 ? "once" : `${r.uses} uses`}</p>
-      <p className="why">{r.scope}</p>
+      <p className="what">{r.scope}</p>
+      <p className="why">{r.credential}, {SPAN(r.ttl_s)}, {r.uses === 1 ? "once" : `${r.uses} uses`} · asked {when.ago(r.asked)}</p>
       {r.read_key && <p className="why">{r.read_key}</p>}
-      <p className="quiet">Asked {when.ago(r.asked)} · job {r.request_digest.slice(0, 4)} {r.request_digest.slice(4, 8)}</p>
+      <details className="ids"><summary>Details</summary><p>Action {r.action} · job {r.request_digest.slice(0, 4)} {r.request_digest.slice(4, 8)}</p></details>
       {r.answer && <p className="quiet">{r.answer.decision === "approve" ? `Approved${r.answer.until ? ` · open until ${when.time(r.answer.until)}` : ""}` : "Denied"}{r.answer.sent ? "" : " · not sent yet"}</p>}
       {r.answer && !r.answer.sent && <div className="btns"><Button small busy={busy} onClick={() => answer(r.answer.decision, [r.rid])}>Try again</Button></div>}
       {!r.answer && !morning && <div className="btns">
