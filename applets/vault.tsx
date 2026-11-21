@@ -391,12 +391,11 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       {old && <div className="old"><p className="note-meta">As it was before {when.full(old.at)}</p><Note body={old.body} path={r.path} /><Button small kind="quiet" onClick={() => setOld(null)}>Close</Button></div>}
       {canWrite && <>
         <p className="sect">Sharing</p>
-        <p className="note-meta">{published ? "Published: anyone with its link can read it." : "Only you, and what you let in, can read it."}</p>
+        <p className="note-meta">{!published ? "Only you, and what you let in, can read it." : v.view === null ? "Marked published. Parachute Cloud doesn't show published records to others yet, so there is no link to send." : "Published: anyone with its link can read it."}</p>
         {published && link && <p className="addr">{link}</p>}
         {published && link && (v.reach === "this-device"
           ? <p className="note-meta">Only this computer can open it: your Parachute is on this computer's own address. To send it on, your Parachute needs an address others can reach (its setup's Expose step).</p>
-          : v.reach === "network" ? <p className="note-meta">Only devices on your own network can open it.</p> : null)}
-        {published && !link && v.view === null && <p className="note-meta">Parachute Cloud doesn't show published records to others yet, so there is no link to send.</p>}
+          : v.reach === "network" ? <p className="note-meta">Only devices on your own network can open it. To send it further, your Parachute needs a public address (its setup's Expose step).</p> : null)}
         {published && link && !canCopy && <p className="note-meta">Press and hold the link to select it.</p>}
         <div className="acts">
           {published && link && canCopy && <Button small onClick={() => void (app as { copy(t: string): Promise<boolean> }).copy(link).then((ok) => toast(ok ? "Link copied." : "Press and hold the link to select it."), () => toast("Press and hold the link to select it."))}>Copy link</Button>}

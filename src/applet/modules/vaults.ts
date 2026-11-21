@@ -3,7 +3,7 @@
 // ask, and its card says so, stressed. An applet in someone else's vault asks the app for nothing (discovery.ts).
 //
 //   vaults        (read every vault this device holds; change records where the person lets Parachute change them)
-//     list()                                   the vaults: {key, name, host, mine, home, level, connector}
+//     list()                                   the vaults: {key, name, host, mine, home, level, connector, view, reach}
 //     types({vault})                           its types and tags, with counts and declared fields
 //     query({vault, type?, tag?, search?, path?, where?, sort?, limit?, offset?})
 //                                              a page of records (no body): {records, more}
