@@ -82,7 +82,8 @@ export async function vaultNames(key: string, bys: string[]): Promise<PeopleName
       // an access token past its time: refreshed once and asked again (withCurrentToken only resends a newer one)
       .then((res) => (res.status === 401 ? refreshOnce(key).then((t) => (t ? asked(t) : res)) : res))
       // an answer (or a hub without the read, 404) settles these stamps for the session; a refusal or no answer doesn't
-      .then(async (res) => (res.ok ? ((await res.json()) as { names?: PeopleNames }).names ?? {} : res.status === 404 ? {} : null), () => null);
+      // (a 401 that outlives the refresh settles them too: asking again would only refresh the sign-in again)
+      .then(async (res) => (res.ok ? ((await res.json()) as { names?: PeopleNames }).names ?? {} : res.status === 404 || res.status === 401 ? {} : null), () => null);
     if (got === null) return {};
     for (const b of ask) known.set(`${key}\u0000${b}`, got[b] ?? null);
   }
