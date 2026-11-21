@@ -112,7 +112,8 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
         const cid = d.self?.(rec.key) ?? null;
         const self = (via: string | null) => isSelf(cid, via);
         try { return { rec, ...(await countChanged({ get: (p) => d.request(rec.key, "GET", p), door: await d.door(rec.key), since, charge, self, own: ownKind })) }; }
-        catch { return { rec, count: 0, names: new Map<string, string>(), more: false }; }
+        // a vault that couldn't be read counts nothing, and the line says there may be more ("4+")
+        catch { return { rec, count: 0, names: new Map<string, string>(), more: true }; }
       }));
       // the writer who wrote last first: what just happened
       const names = new Map<string, string>();

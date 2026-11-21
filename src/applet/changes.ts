@@ -44,6 +44,8 @@ export type Change = {
 };
 export type ChangesPage = { changes: Change[]; deletes: "shown" | "hidden"; more: boolean };
 
+/** How many of today's deletions Home's line reads the tombstone of, per vault. */
+export const HOME_DELETED = 6;
 /** How many records one read of changes looks into (each costs a read of its versions). */
 export const CHANGES_RECORDS = 20;
 /** How many deleted records it looks into (each a read of its tombstone): with the records, within a frame's reads (60
@@ -83,9 +85,10 @@ export async function readChanges(opts: {
   const { get, door, since, charge, self, own } = opts;
   const offset = opts.offset ?? 0;
   const out: Change[] = [];
+  // the most it can read, charged before the first read: refused now, nothing has been asked of the hub
+  charge(2 + CHANGES_RECORDS + CHANGES_DELETED);
   const u = new URLSearchParams({ "meta[updated_at][gte]": since, order_by: "updated_at", sort: "desc", limit: String(CHANGES_RECORDS + 1), offset: String(offset) });
   u.set(door === "records" ? "include_body" : "include_content", "false");
-  charge(1);
   const raw = await get(`/${door}?${u.toString()}`);
   const all: unknown[] = Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.records) ? raw.records : plain(raw) && Array.isArray(raw.notes) ? raw.notes : [];
   const page = all.slice(0, CHANGES_RECORDS).filter(plain) as Record<string, unknown>[];
@@ -105,7 +108,6 @@ export async function readChanges(opts: {
     add({ id, path: v.path ?? path, op: opOf(v.op), at: v.at, via: v.via, kind: v.kind, by: v.by, before: v.ix, after: v.op === "delete" || i === 0 ? null : rows[i - 1].ix,
       gone, made: v.made, seen, ...(recreated ? { recreated: true } : {}) }, kind);
   });
-  charge(page.length);
   await few(page, async (r) => {
     if (typeof r.id !== "string") return;
     const id = r.id, path = typeof r.path === "string" ? r.path : id;
@@ -124,7 +126,6 @@ export async function readChanges(opts: {
   let deletes: ChangesPage["deletes"] = "shown";
   let moreGone = false;
   const dOffset = Math.round(offset / CHANGES_RECORDS) * CHANGES_DELETED;
-  charge(1);
   const gone = await get(`/history/deleted?limit=${CHANGES_DELETED + 1}&offset=${dOffset}`).catch((e: unknown) => { if (refused(e)) return null; throw e; });
   if (gone === null) deletes = "hidden";
   else {
@@ -133,7 +134,6 @@ export async function readChanges(opts: {
     const rows = listed.filter((n) => typeof n.deleted_at === "string" && n.deleted_at >= since);
     moreGone = rows.length > CHANGES_DELETED;
     const take = rows.slice(0, CHANGES_DELETED);
-    charge(take.length);
     await few(take, async (n) => {
       const id = n.id as string, path = typeof n.path === "string" ? n.path : id;
       const vs = rowsOf(await get(`/${door}/${encodeURIComponent(id)}/versions?limit=${VERSIONS}`).catch(() => null));
@@ -170,7 +170,7 @@ export function writerName(via: string | null, mine: boolean): string {
 /**
  * Today's changes by others in one vault, read lightly for Home's line (a read or two, not one per record): records whose
  * last write since `since` was another writer's, and records another writer deleted since (each tombstone read, at most
- * `CHANGES_DELETED`). Counts records, not every version: Vault's Changes has the rest. `names`: each writer, with when it
+ * `HOME_DELETED`). Counts records, not every version: Vault's Changes has the rest. `names`: each writer, with when it
  * last wrote.
  */
 export async function countChanged(opts: { get: Get; door: "records" | "notes"; since: string; charge: (n: number) => void; self: (via: string | null) => boolean;
@@ -181,7 +181,8 @@ export async function countChanged(opts: { get: Get; door: "records" | "notes"; 
   const note = (via: string | null, at: string) => { const n = writerName(via, false); if ((names.get(n) ?? "") < at) names.set(n, at); };
   const u = new URLSearchParams({ "meta[updated_at][gte]": since, order_by: "updated_at", sort: "desc", limit: "201" });
   u.set(door === "records" ? "include_body" : "include_content", "false");
-  charge(1);
+  // the most it reads, charged first (six vaults fit a frame's 60 reads)
+  charge(2 + HOME_DELETED);
   const raw = await get(`/${door}?${u.toString()}`);
   const all: unknown[] = Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.records) ? raw.records : plain(raw) && Array.isArray(raw.notes) ? raw.notes : [];
   let count = 0;
@@ -194,14 +195,13 @@ export async function countChanged(opts: { get: Get; door: "records" | "notes"; 
     if (own({ path: typeof r.path === "string" ? r.path : "", extension: strOr(r.extension), names }) === "app") continue;
     count++; note(via, strOr(r.updatedAt) ?? since);
   }
-  charge(1);
   const gone = await get("/history/deleted?limit=50").catch(() => null);
-  const rows = (plain(gone) && Array.isArray(gone.notes) ? gone.notes : []).filter((n: unknown): n is Record<string, unknown> => plain(n) && typeof n.id === "string" && typeof n.deleted_at === "string" && n.deleted_at >= since).slice(0, CHANGES_DELETED);
-  charge(rows.length);
+  const listed = (plain(gone) && Array.isArray(gone.notes) ? gone.notes : []).filter((n: unknown): n is Record<string, unknown> => plain(n) && typeof n.id === "string" && typeof n.deleted_at === "string" && n.deleted_at >= since);
+  const rows = listed.slice(0, HOME_DELETED);
   for (const v of await Promise.all(rows.map((n) => get(`/${door}/${encodeURIComponent(n.id as string)}/versions?limit=1`).then(rowsOf, () => [] as Row[])))) {
     const t = v[0];
     if (!t || t.op !== "delete" || t.via === null || self(t.via) || own({ path: t.path ?? "", extension: null, names: [] }) === "app") continue;
     count++; note(t.via, t.at);
   }
-  return { count, names, more: all.length > 200 };
+  return { count, names, more: all.length > 200 || listed.length > HOME_DELETED };
 }

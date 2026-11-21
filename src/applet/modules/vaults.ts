@@ -15,7 +15,8 @@
 //                                              tags?} or null (made by it; deleted by it)
 //     restore({vault, id, ix, if_updated_at?}) put a record back as version ix holds it (a deleted one comes back):
 //                                              a change of its own, kept in history; never rewrites it
-//     remove({vault, id, if_updated_at})       take away a record (putting back one an AI made): its tombstone is kept
+//     remove({vault, id, if_updated_at})       take away a record another app or AI made, or one a put back re-made
+//                                              (putting it back): a plain delete, its tombstone kept; nothing else
 //     update({vault, id, bytes})               a change, as JSON text in bytes (past the 8 KB a call carries):
 //                                              {if_updated_at, body?, fields?, types?: {add?, remove?}, tags?: {add?, remove?}}
 //     create({vault, bytes})                   a new record: {path, body, types?, fields?, tags?}
@@ -516,12 +517,21 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         cap: null,
         validate: one((p) => (vaultOnly(["id", "if_updated_at"])(p) && typeof p.id === "string" && ID.test(p.id) && str(p.if_updated_at, 64) ? p as { vault: string; id: string; if_updated_at: string } : null)),
         async run({ vault, id, if_updated_at }: { vault: string; id: string; if_updated_at: string }, _s, ctx) {
-          held(vault); ctx.charge(2);
+          held(vault); ctx.charge(4);
           let now: Rec & { extension?: unknown };
           try { now = await getRec(vault, id, false); } catch (e) { throw failed(e); }
           if (guarded(now) || appsPath(now.path) || now.path.startsWith(VIEWS)) throw refuse("this record is the app's own: no applet changes it");
           if (if_updated_at !== now.updatedAt) { changedMeanwhile.add(`${vault} ${id}`); throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read"); }
           const door = await deps.door(vault);
+          // only what putting back takes away: a record another app or AI made (not this device's Parachute, not one with no
+          // maker recorded), or one a put back re-made from deletion (its newest version a restore right after a delete).
+          // A record the vault keeps no history for is never deleted here: nothing could bring it back.
+          let rows: Record<string, unknown>[];
+          try { const raw = await deps.request(vault, "GET", `/${door}/${encodeURIComponent(now.id)}/versions?limit=2`); rows = (plain(raw) && Array.isArray(raw.versions) ? raw.versions : []).filter(plain); }
+          catch { throw refuse("this vault keeps no history: a record deleted here couldn't be put back"); }
+          const recreated = rows[0]?.op === "restore" && rows[1]?.op === "delete";
+          const maker = now.createdVia ?? null;
+          if (!recreated && (!maker || isSelf(deps.self?.(vault) ?? null, maker))) throw refuse("only a record another app or AI made, or one a put back brought back, is taken away here");
           // a plain delete: the vault keeps its tombstone, so it can be put back in turn
           try { await deps.request(vault, "DELETE", `/${door}/${encodeURIComponent(now.id)}`); return { removed: true }; } catch (e) { throw failed(e); }
         },

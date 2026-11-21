@@ -41,7 +41,7 @@ function hub(opts: { records?: Record<string, Record<string, unknown>>; versions
   const call = (method: string, params: unknown) => router.call("vaults", method, params, {}, { charge() {}, closed: () => false });
   return { call, calls, asked, deps };
 }
-const soup = { id: "S", path: "Recipes/Soup", body: "by the AI", types: ["recipe"], tags: [], fields: { serves: 4 }, createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-21T09:05:00.000Z", createdVia: "api", lastUpdatedVia: "key:claude" };
+const soup = { id: "S", path: "Recipes/Soup", body: "by the AI", types: ["recipe"], tags: [], fields: { serves: 4 }, createdAt: "2026-11-01T00:00:00.000Z", updatedAt: "2026-11-21T09:05:00.000Z", createdBy: "u1", createdVia: "api", lastUpdatedBy: "u1", lastUpdatedVia: "key:claude" };
 const v0 = { version_ix: 0, op: "update", path: "Recipes/Soup", body: "first", fields: { serves: 2 }, superseded_at: "2026-11-21T09:05:00.000Z", via: "key:claude", via_kind: "person", actor: "u1" };
 
 describe("putting a change back", () => {
@@ -87,10 +87,10 @@ describe("putting a change back", () => {
     expect(no.calls.some((c) => c.method === "POST")).toBe(false);
   });
   it("taking away a record an AI made is a plain delete (its tombstone is kept), judged on it as it is now", async () => {
-    const { call, calls } = hub({ records: { S: soup } });
+    const { call, calls } = hub({ records: { S: soup }, versions: { S: [v0] } });
     await call("remove", { vault: "home", id: "S", if_updated_at: soup.updatedAt });
     expect(calls.find((c) => c.method === "DELETE")).toEqual({ method: "DELETE", path: "/records/S", body: undefined });
-    await expect(hub({ records: { S: soup } }).call("remove", { vault: "home", id: "S", if_updated_at: "2020-01-01T00:00:00.000Z" })).rejects.toMatchObject({ message: expect.stringMatching(/conflict/) });
+    await expect(hub({ records: { S: soup }, versions: { S: [v0] } }).call("remove", { vault: "home", id: "S", if_updated_at: "2020-01-01T00:00:00.000Z" })).rejects.toMatchObject({ message: expect.stringMatching(/conflict/) });
     await expect(hub({ records: { S: { ...soup, tags: ["applet"] } } }).call("remove", { vault: "home", id: "S", if_updated_at: soup.updatedAt })).rejects.toMatchObject({ code: "out_of_scope" });
   });
   it("comparing never hands over an applet's code", async () => {
@@ -180,5 +180,26 @@ describe("what the review found (T-476 round 1)", () => {
     const r = await countChanged({ get: get(h), door: "records", since: "2026-11-21T00:00:00.000Z", charge: () => {}, self: (via) => via === "key:me", own: (x) => (x.path.startsWith("Parachute/") ? "app" : null) });
     expect(r.count).toBe(3);
     expect([...r.names].sort((x, y) => (x[1] < y[1] ? 1 : -1)).map(([n]) => n)).toEqual(["claude", "notes-bot"]);
+  });
+});
+
+describe("remove takes away only what putting back takes away (T-476 round 2)", () => {
+  it("never a record this device's Parachute made, nor one with no maker recorded; one a put back re-made, yes", async () => {
+    const mine = hub({ records: { S: { ...soup, createdVia: "key:0f8a6c2e-1111-4222-8333-944455556666" } }, versions: { S: [v0] }, self: "0f8a6c2e-1111-4222-8333-944455556666" });
+    await expect(mine.call("remove", { vault: "home", id: "S", if_updated_at: soup.updatedAt })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(mine.calls.some((c) => c.method === "DELETE")).toBe(false);
+    const unknown = hub({ records: { S: { ...soup, createdVia: null } }, versions: { S: [v0] } });
+    await expect(unknown.call("remove", { vault: "home", id: "S", if_updated_at: soup.updatedAt })).rejects.toMatchObject({ code: "out_of_scope" });
+    const remade = hub({ records: { S: { ...soup, createdVia: "key:0f8a6c2e-1111-4222-8333-944455556666" } }, self: "0f8a6c2e-1111-4222-8333-944455556666",
+      versions: { S: [{ ...v0, version_ix: 2, op: "restore" }, { ...v0, version_ix: 1, op: "delete" }, v0] } });
+    await remade.call("remove", { vault: "home", id: "S", if_updated_at: soup.updatedAt });
+    expect(remade.calls.some((c) => c.method === "DELETE")).toBe(true);
+  });
+  it("a vault that keeps no history: nothing is deleted, since nothing could bring it back", async () => {
+    const h = hub({ records: { S: soup } });
+    const orig = h.deps.request;
+    h.deps.request = async (v, m, p, b) => { if (/\/versions/.test(p)) throw Object.assign(new Error("404 not found"), { status: 404 }); return orig(v, m, p, b); };
+    await expect(h.call("remove", { vault: "home", id: "S", if_updated_at: soup.updatedAt })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(h.calls.some((c) => c.method === "DELETE")).toBe(false);
   });
 });

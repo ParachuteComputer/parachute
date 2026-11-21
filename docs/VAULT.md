@@ -42,19 +42,22 @@ history the vault already keeps, not a second record of it (`src/applet/changes.
   it shows as "An app (0f8a6c2e)" until the hub can say its name (gap 8).
 - **What it reads:** the 20 records changed most lately, each with its versions, and the 12 deleted most lately,
   six reads at a time; **Older changes** reads the next of each (one read costs at most 34 of a frame's 60 reads in ten
-  seconds). A change's two sides as it shows them (`vaults.compare`), the first ten behind the list. While an AI writes,
-  the list is read again at most every three seconds. Home's line is lighter: per vault, one read of what changed today,
-  one of what was deleted, and each deletion's tombstone (12 at most); it waits four seconds at most, then shows no line
-  rather than hold the notes back.
+  seconds, charged before the first read). A change's two sides as it shows them (`vaults.compare`), the first ten behind
+  the list, kept until the record changes. While an AI writes, the list is read again at most every eight seconds. Home's
+  line is lighter: per vault, one read of what changed today, one of what was deleted, and six deletions' tombstones at
+  most (six vaults fit a frame's reads); it waits four seconds at most, then shows no line rather than hold the notes
+  back, and a vault it couldn't read makes its count "4+".
 - **What it shows of the app's own records.** An applet's code, settings, approvals or saved views changed by another
   writer (an AI with a write key) show, marked the app's own, and aren't put back here. This device's Parachute keeping
-  them isn't shown; another device's Parachute keeping them is (it signs in as another app: gap 8). Home counts the
-  person's records only.
+  them isn't shown; another device's Parachute keeping them is (it signs in as another app: gap 8). Home's count leaves
+  out the app's own keeping, on any device; an applet's code an AI changed counts.
 - **What putting back can't do.** It never overwrites a write made after the list was read: the record's `updatedAt`
   must still be what the list saw, else it says "It changed again since you looked" and reads the list again. Putting a
   record back restores its words, fields and extension, not its place (core keeps a later move); it says so. A deleted
   record comes back at its tombstone's place, or not at all when another record is there now ("another record is at its
-  place now"). Taking away a record an AI made is a plain delete; core's DELETE takes no `if_updated_at`, so a write in
+  place now"). Taking away a record is a plain delete, and `vaults.remove` does only that: a record another app or AI made
+  (its `createdVia` is a writer other than this device's Parachute), or one a put back re-made from deletion, in a vault
+  that keeps history; never the person's own records made here. Core's DELETE takes no `if_updated_at`, so a write in
   the moment between the check and the delete goes with it (its tombstone keeps it). Which change a later put back
   undid isn't kept by the vault, so a change shows "put back since" when the record's very next change undid it, or this
   device put it back.
@@ -163,7 +166,8 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
    listed. A record put back from deletion reads as changed then only from core T-476 (before, it kept its old
    `updatedAt`, and Changes would lose sight of it).
 11. **Who made a deleted record** isn't kept (its row is gone; versions keep when, not who). So a record an AI made and
-   then deleted comes back with "Put all back" of that run; the change says when it was made. Core 0.9.4's write sets
+   then deleted comes back with "Put all back" of that run, with nothing said on the run; opened alone, the deletion says
+   when the record was made, if that was the same day. Core 0.9.4's write sets
    (#114/#115) know what a set made, and undo leaves it deleted.
 12. **A hub with history off** keeps no versions: Changes shows only records made since, and taking one away can't be
    undone. History is on by default.
