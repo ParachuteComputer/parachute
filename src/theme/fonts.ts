@@ -1,7 +1,7 @@
 // The faces the app carries: Literata (a book serif, for reading: notes, the journal, a record's body, names and titles)
 // and Instrument Sans (a quiet grotesk, for the app's own words: labels, buttons, the bar). Both SIL OFL 1.1, the licence
-// shipped with the app (public/licenses/), the same files as the docs site, Latin only: a letter outside it (ł, Greek,
-// Cyrillic) is drawn in the next font of the stack, as before. They are in the app's code as data: URLs, so one
+// shipped with the app (public/licenses/), the same files as the docs site, Latin-1 only: a letter outside it (ł, č,
+// Greek, Cyrillic) is drawn in the next font of the stack, as before. They are in the app's code as data: URLs, so one
 // sheet serves every document: the shell's, the frame's and each applet's sealed frame, whose content policy allows
 // fonts only as `data:` (srcdoc.ts FRAME_CSP). Nothing is fetched.
 //

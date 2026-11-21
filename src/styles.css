@@ -22,8 +22,9 @@ button, input { font: inherit; color: inherit; }
 .bar-back, .bar-menu, .bar-mark { display: inline-grid; place-items: center; min-width: 36px; height: 36px; border: 0; background: none; color: var(--text); font-size: 26px; line-height: 1; text-decoration: none; border-radius: 8px; cursor: pointer; }
 .bar-mark { color: var(--accent); font-size: 22px; }
 .bar-menu { font-size: 22px; }
-/* the back mark is Instrument Sans's ‹, a small guillemet: drawn larger so it reads as the chevron it was */
-.bar-back { font-size: 34px; }
+/* the back mark is Instrument Sans's ‹ (the app carries it whatever the theme's sans), a small guillemet: drawn larger
+   so it reads as the chevron it was */
+.bar-back { font: 34px/1 "Instrument Sans", var(--sans); }
 .bar-back:active, .bar-menu:active { background: var(--line); }
 
 /* lists of notes (a vault, search, open with): rows under an ink rule, dotted between, as the launcher and the parts */
@@ -104,7 +105,7 @@ fieldset.plain legend { padding: 0; }
 .embed-said { padding: 12px var(--pad); border: 1px dashed var(--line); border-radius: var(--radius); }
 .embed-said p { margin: 0 0 6px; }
 .sheet-over-frames { z-index: 30; }
-.grant-handed { font-style: italic; }
+.grant-handed { font-family: var(--serif); font-style: italic; } /* the serif's own italic: the sans has none */
 .selftest-frames { position: fixed; left: -10000px; top: 0; width: 360px; height: 640px; overflow: hidden; }
 .selftest-frames iframe { width: 360px; height: 640px; }
 .grant-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
