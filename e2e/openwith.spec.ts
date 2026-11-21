@@ -229,23 +229,24 @@ export default function Taps() { return <main><h1 id="taps">Taps</h1><p id="said
     w.__went = [];
     for (const k of ["pushState", "replaceState"] as const) { const f = history[k].bind(history); history[k] = (s, u, url) => { if (url) w.__went.push(String(url)); return f(s, u, url); }; }
   });
+  const taps = page.frameLocator('iframe.applet-frame[title="Taps"]');
   const went = () => page.evaluate(() => (window as unknown as { __went: string[] }).__went.splice(0));
   const appletReads: string[] = [];
   page.on("request", (r) => { if (new URL(r.url()).searchParams.get("tag") === "applet") appletReads.push(r.url()); });
+  let first = true;
   const open = async () => {
     await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Taps/ }).click();
-    const allow = page.getByRole("button", { name: "Allow" });
-    await expect(frame(page).locator("#taps").or(allow).first()).toBeVisible();
-    if (await allow.isVisible()) await allow.click();
-    await expect(frame(page).getByRole("link", { name: `${VAULT}:${welcome}` })).toBeVisible();
+    // asked once, then it runs
+    if (first) { await page.getByRole("button", { name: "Allow" }).click(); first = false; }
+    await expect(taps.getByRole("link", { name: `${VAULT}:${welcome}` })).toBeVisible();
     await page.waitForTimeout(500);
     await went(); appletReads.length = 0;
   };
   try {
     await allowApplet(page, "Recipe box");
     await open();
-    await frame(page).getByRole("link", { name: `${VAULT}:${welcome}` }).click();
+    await taps.getByRole("link", { name: `${VAULT}:${welcome}` }).click();
     await expectInVault(page, VAULT, welcome, "Welcome");
     expect((await went()).filter((u) => u.includes("/n/")), "the note's route").toEqual([]);
     expect(appletReads, "a read of the applets at the tap").toEqual([]);
@@ -255,7 +256,7 @@ export default function Taps() { return <main><h1 id="taps">Taps</h1><p id="said
     await open();
     await api(st, "PATCH", `notes/${recipes.id}`, { content: `${recipes.content}\n<!-- changed -->`, if_updated_at: recipes.updatedAt });
     await page.route((u) => u.searchParams.get("tag") === "applet", (r) => r.abort());
-    await frame(page).getByRole("link", { name: `${VAULT}:${toast}` }).click();
+    await taps.getByRole("link", { name: `${VAULT}:${toast}` }).click();
     await expectInVault(page, VAULT, toast, "Tomato toast");
     expect((await went()).some((u) => u.includes("/n/")), "the note's route").toBe(true);
     await expect(page.locator('iframe.applet-frame[title="Recipe box"]')).toHaveCount(0);
