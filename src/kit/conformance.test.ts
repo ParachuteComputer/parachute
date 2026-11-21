@@ -58,6 +58,8 @@ const PLANTED: Record<string, string> = {
   links: `<a href={url}>{name}</a>`,
   opening: `void app.openLink(url);`,
   storage: `localStorage.setItem("draft", text);`,
+  motion: `.card { transition: transform .3s cubic-bezier(.2,.8,.2,1); }`,
+  layout: `<img src={url} alt={name} />`,
 };
 // More each rule must catch: what slipped past the first version of the check (review of #68).
 const SLIPPED: [string, string][] = [
@@ -79,6 +81,15 @@ const SLIPPED: [string, string][] = [
   ["dates", `new Intl.RelativeTimeFormat(undefined).format(-1, "day")`],
   ["dates", `new Date(iso).toLocaleString()`],
   ["type", `.x { font: 600 calc(var(--fs-body) * 1.7) var(--sans); }`],
+  ["motion", `.x { transition: all var(--t-state) var(--ease-out); }`],
+  ["motion", `.x { animation: in 400ms var(--ease-out); }`],
+  ["motion", `.x { transition: opacity var(--t-state) ease-in; }`],
+  ["motion", `style={{ transitionDuration: "250ms" }}`],
+  ["motion", `el.animate([{ opacity: 0 }, { opacity: 1 }], 300);`],
+  ["layout", `.x { transition: height var(--t-state) var(--ease-out); }`],
+  ["layout", `.x { transition: opacity var(--t-state) var(--ease-out), margin-top var(--t-state) var(--ease-out); }`],
+  ["layout", `<img src={url} onError={() => setBad(true)} alt="" />`],
+  ["layout", `<img src={u} alt="" />; const width = 400;`],
 ];
 const CLEAN = `import { List, Page, when } from "parachute";
 // a comment may say <ul>, #a33, font: 12px, role="alert" or localStorage
@@ -95,7 +106,12 @@ const CARD = \`.card { border: 1px solid var(--line); box-shadow: 3px 3px 0 var(
 const S = { fontSize: "var(--fs-small)" };
 const CSS = \`.when { font: 600 var(--fs-label) var(--sans); color: var(--muted); } .x { font: inherit; font-weight: 600; }\`;
 export default function A() { return <Page title="A"><Loading>Reading your rooms…</Loading><List rows={[{ title: "B", aside: when.short(Date.now()) }]} /></Page>; }
-const tags = { "#h": [room], "#e": [id] };`;
+const tags = { "#h": [room], "#e": [id] };
+const MOVES = \`.x { transition: transform var(--t-press) var(--ease-out), opacity var(--t-state) ease; } .y { animation: in var(--t-state) var(--ease-out) var(--t-step) both; }\`;
+const pic = <img src={url} alt="" width={640} height={480} />;
+const pic2 = <img src={url} onError={() => setBad(true)} width={1} height={1} />;
+const RULED = \`.x { transition: border-top-color var(--t-press) ease; }\`;
+const transitions = { all: 2 }; const ms = 300;`;
 
 // Parachute Simplified's own screens (Notes, a vault's notes, Connect) are drawn with the same parts: the same rules, less
 // the page (a screen of the app has the app's bar and its router, not an applet's Page) and what each names here.

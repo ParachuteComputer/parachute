@@ -1,6 +1,6 @@
 /* The parts (src/kit/parts.tsx), built only on the theme's tokens (src/theme/theme.ts): the look of an old almanac,
    ink rules and type rather than boxes, one accent (design/kit/WHY.md). Every class starts `pa-`, so an applet's own
-   CSS can sit beside it. Nothing moves, nothing loads. */
+   CSS can sit beside it. How the parts move is at the end ("Motion"), on the theme's curves and times only. */
 .pa-days { display: block; margin: 0 0 var(--gap); color: var(--text); }
 .pa-days svg { display: block; height: calc(var(--size) * 3.6); width: auto; max-width: 100%; }
 .pa-days .pa-mark { fill: var(--text); }
@@ -39,7 +39,8 @@ div.pa-row { cursor: default; }
 .pa-field input:focus { border-bottom-width: 2px; padding-bottom: 5px; }
 .pa-field-action { padding: 6px 16px; border: 1px solid var(--text); border-radius: 999px; background: var(--text); color: var(--bg);
   font: 600 var(--fs-small) var(--sans); cursor: pointer; }
-.pa-field-action:disabled { opacity: .5; cursor: default; }
+/* not yet (nothing written): a quiet outline, not a grey block */
+.pa-field-action:disabled { border-color: var(--line); background: none; color: var(--muted); cursor: default; }
 
 .pa-empty { display: grid; justify-items: center; gap: 4px; padding: var(--gap) 0; color: var(--muted); font: italic var(--fs-lead) var(--serif); text-align: center; }
 .pa-empty p { margin: 0; }
@@ -99,6 +100,7 @@ div.pa-row { cursor: default; }
 .pa-button.pa-small { padding: 2px 12px; font-size: var(--fs-small); }
 .pa-button.pa-quiet.pa-small { padding-inline: 0; }
 .pa-button:disabled { opacity: .5; cursor: default; }
+.pa-button.pa-primary:disabled:not([aria-busy="true"]) { opacity: 1; border-color: var(--line); background: none; color: var(--muted); }
 .pa-button[aria-busy="true"] { opacity: .7; }
 /* Page's way back: a quiet button, in the serif, above the title */
 .pa-button.pa-back { display: flex; justify-content: start; margin: 0 0 2px; padding-left: 0; font: italic var(--fs-body) var(--serif); text-decoration: none; }
@@ -120,10 +122,6 @@ div.pa-row { cursor: default; }
 .pa-write.pa-line { display: flex; align-items: end; gap: 8px; margin: 0; }
 .pa-line .pa-write-box { flex: 1; min-width: 0; min-height: 2.4em; max-height: 9em; padding: 8px 10px; font: var(--fs-body)/1.4 var(--sans); resize: none; }
 
-.pa-toasts { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); display: grid; justify-items: center; pointer-events: none; z-index: 50; }
-.pa-toast { margin: 0 16px; max-width: 520px; padding: 8px 16px; border-radius: 999px; background: var(--text); color: var(--bg); font: var(--fs-small) var(--sans);
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--text) 25%, transparent); }
-.pa-toast-error { background: var(--danger); }
 
 /* Table and Fields (parts-data.tsx): records as rows and columns, ink rules as List's; the first column stays in view
    as the rest scroll across; a row off screen isn't drawn */
@@ -157,3 +155,87 @@ div.pa-row { cursor: default; }
 .pa-finput:focus { outline: none; border-color: var(--text); background: var(--surface); }
 select.pa-finput { appearance: auto; }
 .pa-fcheck { width: auto; accent-color: var(--accent); }
+
+/* ── Motion (docs/DESIGN-RULES.md) ──
+   On the theme's curves and times only (theme.ts MOTION: --ease-*, --t-*), which are all 0 under the device's
+   reduce-motion setting or a still theme, so nothing here moves then. Only transform and opacity move. What is used
+   tens of times a day (a tab, a row, typing) changes at once; what arrives (a page, what was read, a new row, a sheet,
+   a toast) comes in once, in under 250 ms, readable from its first frames (the curve does most of its travel early),
+   and never holds a tap back. */
+@keyframes pa-in { from { opacity: 0; transform: translateY(var(--pa-rise, 6px)); } }
+@keyframes pa-fade { from { opacity: 0; } }
+/* a page's title comes first, then, one step after, what is under it, from a little lower; what is read later comes
+   in as it arrives (the same step, so 240 ms in all) */
+.pa-page-head { --pa-rise: 3px; animation: pa-in var(--t-state) var(--ease-out) both; }
+:is(.pa-list, .pa-card, .pa-table, .pa-fields, .pa-note, .pa-empty, .pa-days, .pa-problem) { animation: pa-in var(--t-state) var(--ease-out) var(--t-step) both; }
+/* what went wrong is said at once */
+.pa-problem { animation-delay: 0s; }
+/* a row that arrives after the list was drawn (a book added, a message come in) */
+.pa-list li.pa-fresh { animation: pa-in var(--t-state) var(--ease-out) both; }
+/* "Reading…" only once reading takes a while (the kit's own wait, not a motion: it holds under reduce-motion too): a
+   quick read (from the cache) never flashes it, and it holds its place */
+:root { --pa-wait: 300ms; }
+.pa-loading { animation: pa-fade var(--t-state) var(--ease-out) var(--pa-wait) both; }
+
+/* a press gives under the finger at once, and comes back; a pointer's hover only where there is one */
+.pa-button, .pa-field-action, .pa-more, .pa-drawer-grip { transition: transform var(--t-press) var(--ease-out), background-color var(--t-press) ease, border-color var(--t-press) ease, opacity var(--t-press) ease; }
+:is(.pa-button, .pa-field-action, .pa-more):active:not(:disabled) { transform: scale(.97); }
+.pa-row, .pa-tab, .pa-trow .pa-tcell { transition: background-color var(--t-press) ease, color var(--t-press) ease; }
+@media (hover: hover) and (pointer: fine) {
+  .pa-button.pa-plain:hover:not(:disabled), .pa-more:hover { border-color: var(--muted); }
+  .pa-button.pa-primary:hover:not(:disabled), .pa-field-action:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 86%, var(--bg)); }
+  .pa-button.pa-quiet:hover:not(:disabled) { color: var(--text); }
+  button.pa-row:hover, a.pa-row:hover { background: color-mix(in srgb, var(--line) 22%, transparent); }
+  .pa-tab:hover { color: var(--text); }
+}
+/* on a touch screen a small button is still a finger's size to hit (44 px), with no change to how it looks */
+@media (pointer: coarse) {
+  :is(.pa-button, .pa-field-action, .pa-more) { position: relative; }
+  :is(.pa-button, .pa-field-action, .pa-more)::after { content: ""; position: absolute; inset: min(0px, calc(50% - 22px)) 0; }
+  /* buttons stacked with no gap between (a picker's choices): each only its own height, so none takes its neighbour's tap */
+  .pa-tight :is(.pa-button, .pa-field-action, .pa-more)::after { inset: 0; }
+  .pa-drawer-grip { height: 40px; }
+}
+/* focus from the keyboard: one ring, in the accent, on every part */
+:is(.pa-button, .pa-field-action, .pa-more, .pa-tab, .pa-link, .pa-tsort, .pa-drawer-grip):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:is(.pa-search, .pa-write-box):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+
+/* type: titles that break evenly, reading text without a lonely last word, figures that don't jump as they change */
+.pa-title, .pa-card-title, .pa-note h1, .pa-note h2, .pa-note h3 { text-wrap: balance; }
+.pa-note p, .pa-note li, .pa-empty p, .pa-card p { text-wrap: pretty; }
+.pa-row-aside, .pa-badge, .pa-tcount, .pa-days figcaption, .pa-tabs { font-variant-numeric: tabular-nums; }
+/* shelves of rows breathe apart; a label sits with its own rows */
+.pa-list + .pa-list { margin-top: calc(var(--gap) * 1.6); }
+
+/* ── toast (screen.tsx): one at a time, rising from the foot, going back down; swipe it away, held while pointed at ── */
+.pa-toasts { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); display: grid; justify-items: center; pointer-events: none; z-index: 50; }
+.pa-toast { grid-area: 1 / 1; margin: 0 16px; max-width: 520px; padding: 8px 18px; border: 1px solid var(--text); border-radius: 999px; background: var(--surface); color: var(--text);
+  font: var(--fs-small) var(--sans); box-shadow: 3px 3px 0 var(--line); pointer-events: auto; touch-action: none; user-select: none;
+  transform: translateY(var(--pa-swipe, 0px)); transition: transform var(--t-sheet) var(--ease-out), opacity var(--t-sheet) var(--ease-out); }
+.pa-toast[data-state="before"] { opacity: 0; transform: translateY(calc(100% + 16px)); }
+.pa-toast[data-state="gone"] { pointer-events: none; opacity: 0; transform: translateY(calc(100% + 16px + var(--pa-swipe, 0px))); transition-duration: calc(var(--t-sheet) * .8); }
+.pa-toast[data-swiping] { transition: none; }
+.pa-toast-error { border-color: var(--danger); color: var(--danger); }
+
+/* ── Drawer (drawer.tsx): rises from the foot of the screen; drag it down, tap outside or Escape to put it away ── */
+.pa-drawer-scrim { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end; justify-content: center;
+  background: color-mix(in srgb, var(--text) 22%, transparent); opacity: var(--pa-scrim, 1); transition: opacity var(--t-sheet) var(--ease-drawer); overscroll-behavior: contain; }
+.pa-drawer { position: relative; box-sizing: border-box; width: min(560px, 100%); max-height: 86dvh; overflow: auto; overscroll-behavior: contain;
+  padding: 6px var(--pad) calc(var(--pad) + env(safe-area-inset-bottom, 0px)); background: var(--bg); color: var(--text);
+  border-top: 1px solid var(--text); border-radius: var(--radius) var(--radius) 0 0;
+  transform: translateY(var(--pa-drag, 0px)); transition: transform var(--t-sheet) var(--ease-drawer); }
+.pa-drawer-scrim[data-state="before"], .pa-drawer-scrim[data-state="gone"] { --pa-scrim: 0; }
+.pa-drawer-scrim[data-state="gone"] { pointer-events: none; }
+/* content that fits: a finger drags it from anywhere (the page doesn't take the gesture); content that scrolls: by the grip */
+.pa-drawer:not([data-scrolls]) { touch-action: none; }
+.pa-drawer-scrim[data-state="before"] .pa-drawer, .pa-drawer-scrim[data-state="gone"] .pa-drawer { transform: translateY(100%); }
+.pa-drawer-scrim[data-state="gone"], .pa-drawer-scrim[data-state="gone"] .pa-drawer { transition-duration: calc(var(--t-sheet) * .8); }
+.pa-drawer-scrim[data-dragging], .pa-drawer-scrim[data-dragging] .pa-drawer { transition: none; }
+.pa-drawer-grip { display: block; width: 100%; height: 24px; margin: 0 0 2px; padding: 0; border: 0; background: none; cursor: grab; touch-action: none; }
+.pa-drawer-grip::before { content: ""; display: block; width: 36px; height: 4px; margin: 9px auto; border-radius: 2px; background: var(--line); }
+.pa-drawer-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--gap); margin: 0 0 var(--gap); }
+.pa-drawer-title { margin: 0; font: 400 var(--fs-head)/1.2 var(--serif); text-wrap: balance; }
+.pa-drawer-body > :last-child { margin-bottom: 0; }
+/* in a page drawn at its content's height (one with embeds) there is no screen's foot to rise from: it opens in place */
+.pa-drawer.pa-drawer-inline { position: relative; width: 100%; max-height: none; overflow: visible; margin: 0 0 var(--gap); padding-top: var(--pad);
+  border: 1px solid var(--text); border-radius: var(--radius); transform: none; transition: none; animation: pa-in var(--t-state) var(--ease-out) both; }

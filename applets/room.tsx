@@ -215,13 +215,15 @@ export function glyph(name: string) {
 }
 
 // ── media: an imeta tag drawn from the relay's media server, through the shell ──
-type Media = { url: string; type: string; sha: string; ext: string; name: string; size: number };
+type Media = { url: string; type: string; sha: string; ext: string; name: string; size: number; w?: number; h?: number };
 export function mediaOf(e: Ev): Media[] {
   return e.tags.filter((t) => t[0] === "imeta").map((t) => {
     const f: Record<string, string> = {};
     for (const p of t.slice(1)) { const i = p.indexOf(" "); if (i > 0) f[p.slice(0, i)] = p.slice(i + 1); }
     const m = /\/media\/([0-9a-f]{64})\.([a-z0-9]{1,8})$/.exec(f.url ?? "");
-    return m ? { url: f.url, type: f.m ?? "", sha: f.x ?? m[1], ext: m[2], name: f.filename ?? f.alt ?? "file", size: Number(f.size) || 0 } : null;
+    // its size as sent (`dim 1200x800`), so its place is kept before it is drawn
+    const d = /^(\d{1,5})x(\d{1,5})$/.exec(f.dim ?? "");
+    return m ? { url: f.url, type: f.m ?? "", sha: f.x ?? m[1], ext: m[2], name: f.filename ?? f.alt ?? "file", size: Number(f.size) || 0, ...(d && +d[1] > 0 && +d[2] > 0 ? { w: +d[1], h: +d[2] } : {}) } : null;
   }).filter((x): x is Media => !!x);
 }
 export const kindOf = (m: Media) => (m.type.startsWith("image/") && m.type !== "image/svg+xml" ? "image" : m.type.startsWith("video/") ? "video" : m.type.startsWith("audio/") ? "audio" : "file");
@@ -272,8 +274,11 @@ function Attachment({ m }: { m: Media }) {
   const { url, err } = useBlob(k === "file" ? null : m);
   if (k === "file") return <FileRow m={m} />;
   if (err) return <div className="file">⚠ {k === "image" ? "Image" : "File"} unavailable</div>;
-  if (!url) return <Loading>Loading {k === "image" ? "image" : k === "audio" ? "voice note" : "video"}…</Loading>;
-  if (k === "image") return <img className="pic" src={url} alt={m.name} />;
+  // an image whose size is known holds its place while it is fetched (the same box before and after), so the messages
+  // under it don't move: its own shape, no wider than 420 px or the column, no taller than 420 px
+  const box = k === "image" && m.w && m.h ? { aspectRatio: `${m.w} / ${m.h}`, width: `min(${m.w}px, 100%, 420px, ${Math.round((420 * m.w) / m.h)}px)`, height: "auto" } : undefined;
+  if (!url) return box ? <div className="pic pic-wait" role="img" style={box} aria-label={`Loading image ${m.name}`} /> : <Loading>Loading {k === "image" ? "image" : k === "audio" ? "voice note" : "video"}…</Loading>;
+  if (k === "image") return <img className="pic" src={url} alt={m.name} width={m.w} height={m.h} style={box} />;
   if (k === "video") return <video className="vid" src={url} controls playsInline />;
   return <audio className="aud" src={url} controls aria-label={`Voice note ${m.name}`} />;
 }
@@ -382,7 +387,8 @@ const CSS = `
 .room .edited { color: var(--muted); font-size: var(--fs-label); margin-left: 6px; }
 .room .acts { display: flex; gap: 4px 16px; flex-wrap: wrap; margin-top: 2px; }
 .room .file-chip { border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 1px 4px 1px 9px; font-size: var(--fs-small); }
-.room .pic { max-width: min(100%, 420px); max-height: 420px; border-radius: 6px; display: block; margin: 6px 0; }
+.room .pic { max-width: min(100%, 420px); max-height: 420px; height: auto; border-radius: 6px; display: block; margin: 6px 0; }
+.room .pic-wait { background: var(--surface); border: 1px solid var(--line); box-sizing: border-box; }
 .room .vid { max-width: 100%; max-height: 420px; display: block; margin: 6px 0; }
 .room .aud { display: block; margin: 6px 0; width: min(100%, 360px); }
 .room .file { border: 1px solid var(--line); padding: 6px 10px; border-radius: 6px; margin: 6px 0; display: inline-block; }
@@ -411,7 +417,7 @@ const CSS = `
 .room .pick { list-style: none; margin: 0 0 6px; padding: 0; border: 1px solid var(--line); background: var(--surface); }
 .room .pick li .pa-button { display: block; width: 100%; text-align: left; padding: 6px 10px; color: var(--text); text-decoration: none; border-radius: 0; }
 .room .pick li[aria-selected="true"] .pa-button { background: var(--line); }
-@media (prefers-reduced-motion: no-preference) { .room .msg.fresh { animation: in .4s cubic-bezier(.22,.8,.2,1); } @keyframes in { from { opacity: 0; transform: translateY(4px); } } }
+.room .msg.fresh { animation: in var(--t-state) var(--ease-out); } @keyframes in { from { opacity: 0; transform: translateY(4px); } }
 `;
 
 export function useStore(st: Store) {
@@ -722,7 +728,7 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
     {sealed && <SealedCard e={e} />}
     {secret && <SecretCard e={e} />}
     {media.map((m) => <Attachment key={m.sha} m={m} />)}
-    <div className="acts">
+    <div className="acts pa-tight">
       {!root && <Button kind="quiet" small onClick={openThread}>{replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : "Reply"}</Button>}
       {mine && !ask && editing === null && <Button kind="quiet" small onClick={() => setEditing(body)}>Edit</Button>}
       {mine && <Button kind="quiet" small onClick={async () => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } await change(e, null); }}>{sure ? "Tap again to delete" : "Delete"}</Button>}
@@ -995,7 +1001,7 @@ function Composer({ st, relay, room, thread, members, send, typing, setErr, send
           title={listen.on ? "Uni hears what you send here. Tap to mute." : "Uni is muted: your messages don't notify Uni. Tap to let Uni listen."}>{listen.on ? "Uni listening" : "Uni muted"}</Button>}
         {files.map((f, i) => <span key={i} className="file-chip">{f.name} <Button kind="quiet" small aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((_, j) => j !== i))}>×</Button></span>)}
       </div>
-      {pick && options.length > 0 && <ul className="pick" role="listbox" aria-label="People in this room">{options.map((o, i) => <li key={o.p} role="option" aria-selected={i === pick.sel}><Button kind="quiet" onMouseDown={(e) => { e.preventDefault(); choose(o); }}>{o.n}</Button></li>)}</ul>}
+      {pick && options.length > 0 && <ul className="pick pa-tight" role="listbox" aria-label="People in this room">{options.map((o, i) => <li key={o.p} role="option" aria-selected={i === pick.sel}><Button kind="quiet" onMouseDown={(e) => { e.preventDefault(); choose(o); }}>{o.n}</Button></li>)}</ul>}
       <Write line enter="send" label={`Message ${name}`} placeholder={thread ? "Reply in thread…" : `Message ${name}…`} value={text} maxLength={MAX_TEXT} inputRef={field}
         onChange={(v) => onChange(v, field.current?.selectionStart ?? v.length)}
         onKeyDown={(e) => {

@@ -263,10 +263,33 @@ export function useTranscripts(bodies: readonly (string | null | undefined)[], r
 
 // ── toast ──
 
+/** When what an element is doing now (its transitions, its animations) has run: at once when nothing moves (reduce
+ *  motion, a still theme), never later than `most` ms (a frame out of sight may not run them). Never waits on
+ *  transitionend, which a time of 0 never sends. */
+export function settled(el: Element, most = 1000): Promise<void> {
+  void getComputedStyle(el).opacity; // the change just made is styled now, so what it starts is there to wait for
+  const running = typeof el.getAnimations === "function" ? el.getAnimations({ subtree: true }) : [];
+  if (!running.length) return Promise.resolve();
+  return Promise.race([Promise.all(running.map((a) => a.finished.catch(() => {}))).then(() => {}), new Promise<void>((r) => setTimeout(r, most))]);
+}
+/** Into its place: drawn first as it starts (`data-state="before"`), then, the same moment, moved to "open", so the
+ *  change is a transition (which a newer change can take over from where it is). */
+export function arrive(el: HTMLElement) {
+  el.dataset.state = "before";
+  void el.getBoundingClientRect();
+  el.dataset.state = "open";
+}
+
 let host: HTMLElement | null = null;
 let latest: HTMLElement | null = null;
+/** How each toast on screen goes away (its timer and listeners with it). */
+const goes = new WeakMap<HTMLElement, () => void>();
+/** A swipe this far down (px), or this fast (px/ms), puts a toast away (Sonner's numbers). */
+const SWIPE = 45, FLICK = 0.11;
 /** A short word after an action, at the foot of the screen, gone by itself (an error stays longer, in the danger
- *  colour). A screen reader says it. One at a time: a new one takes the place of the last. */
+ *  colour). A screen reader says it. One at a time: a new one takes the place of the last. It rises into place and goes
+ *  back down; its time stops while a pointer is on it, a finger holds it, or the app is out of sight, and a tap or a
+ *  swipe down puts it away at once (so it is never in the way of what is under it for more than a tap). */
 export function toast(text: string, { error = false }: { error?: boolean } = {}) {
   if (typeof document === "undefined") return;
   const fresh = !host || !host.isConnected;
@@ -281,8 +304,66 @@ export function toast(text: string, { error = false }: { error?: boolean } = {})
   p.textContent = String(text).slice(0, 300);
   const into = host!;
   latest = p;
+  // its time: running unless something holds it (a pointer on it, a finger, the app out of sight)
+  let left = error ? 7000 : 3500, since = 0, timer = 0, done = false;
+  const holds = new Set<string>();
+  const go = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    document.removeEventListener("visibilitychange", seen);
+    p.dataset.state = "gone";
+    p.setAttribute("aria-hidden", "true"); // the live region says only the one that stays
+    void settled(p).then(() => p.remove());
+  };
+  goes.set(p, go);
+  const hold = (why: string) => {
+    if (!holds.size && since) { clearTimeout(timer); left = Math.max(1000, left - (Date.now() - since)); since = 0; }
+    holds.add(why);
+  };
+  const free = (why: string) => {
+    holds.delete(why);
+    if (!holds.size && !since && !done) { since = Date.now(); timer = window.setTimeout(go, left); }
+  };
+  function seen() { if (document.hidden) hold("hidden"); else free("hidden"); }
+  p.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") hold("pointer"); });
+  p.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") free("pointer"); });
+  // a swipe down: it follows the finger 1:1; upward it only gives a little; let go far or fast enough, or tap it, and it goes
+  let y0: number | null = null, t0 = 0, dy = 0, moved = 0;
+  p.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || done) return;
+    y0 = e.clientY; t0 = e.timeStamp; dy = 0; moved = 0;
+    p.setPointerCapture?.(e.pointerId);
+    hold("finger");
+  });
+  p.addEventListener("pointermove", (e) => {
+    if (y0 === null) return;
+    const d = e.clientY - y0;
+    moved = Math.max(moved, Math.abs(d));
+    dy = d >= 0 ? d : d / (1.5 + Math.abs(d) / 20);
+    p.dataset.swiping = "";
+    p.style.setProperty("--pa-swipe", `${dy}px`);
+  });
+  const up = (e: PointerEvent) => {
+    if (y0 === null) return;
+    y0 = null;
+    delete p.dataset.swiping;
+    const fast = dy / Math.max(1, e.timeStamp - t0) > FLICK;
+    if (e.type === "pointerup" && (moved < 6 || dy >= SWIPE || (dy > 4 && fast))) { go(); return; }
+    p.style.setProperty("--pa-swipe", "0px");
+    free("finger");
+  };
+  p.addEventListener("pointerup", up);
+  p.addEventListener("pointercancel", up);
   // a live region a screen reader has only just met says nothing: the words go in a moment after it is there (and a
   // newer toast meanwhile goes instead)
-  const show = () => { if (latest !== p) return; into.replaceChildren(p); setTimeout(() => p.remove(), error ? 7000 : 3500); };
+  const show = () => {
+    if (latest !== p) return;
+    for (const was of Array.from(into.children) as HTMLElement[]) if (was !== p) (goes.get(was) ?? (() => was.remove()))();
+    into.appendChild(p);
+    arrive(p);
+    document.addEventListener("visibilitychange", seen);
+    seen();
+  };
   if (fresh) setTimeout(show, 50); else show();
 }

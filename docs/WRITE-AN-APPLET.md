@@ -165,6 +165,7 @@ all look and behave as one app and follow the person's theme. Reach for the part
 | show rows of things, short or long | `List` (a long one draws only what is on screen; `more` for the next page) |
 | say it is reading, there is nothing yet, or it failed | `Loading`, `Empty`, `Problem` (with Try again) |
 | say what an action did ("Saved", "Not sent: …") | `toast` |
+| show a choice, a short form or a detail over the page | `Drawer` |
 | take words: a line, a box, a chat's composer | `Field`, `Write` |
 | search | `Search` |
 | switch between places in one screen | `Tabs` |
@@ -173,10 +174,12 @@ all look and behave as one app and follow the person's theme. Reach for the part
 | link to a note, or open one | `Link`, `Linked`, `Note`, `link.open` |
 | keep a draft, or where it was | `useSaved` |
 | colour and size | the theme's CSS variables and the type scale (`--fs-title` … `--fs-label`, [THEME.md](THEME.md)) |
+| move something | nothing, mostly: the parts already arrive, give under a press and rise as sheets. Your own: `transform` and `opacity` on the theme's curves and times (`--ease-out`, `--t-state`, …) |
 
-Your own CSS is for layout (columns, a card of your own) on those variables. The applets this repo ships are held to
+Your own CSS is for layout (columns, a card of your own) on those variables. What makes a screen feel good, as short
+rules an agent can check its work against, is in [DESIGN-RULES.md](DESIGN-RULES.md). The applets this repo ships are held to
 this: `src/kit/conformance.ts` fails one that formats a date itself, draws its own list, input, button, error or status
-line, or picks its own colour, font or text size, and says which part to use (`npm test`). Write yours the same way:
+line, picks its own colour, font or text size, or moves something on times of its own, and says which part to use (`npm test`). Write yours the same way:
 an agent can read that file for the exact rules (they run in this repo's tests, not in the app: an applet in a vault is
 asked to follow them, not checked). A shipped applet with a real reason to keep something of its own names the reason
 there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below are checked too.
@@ -215,7 +218,7 @@ there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below ar
 | `vaults.list()`, `vaults.types(vault)`, `vaults.query(vault, { type, tag, search, path, where, sort, limit, offset })`, `vaults.get(vault, id)`, `vaults.history(vault, id)`, `vaults.version(vault, id, ix)`, `vaults.update(vault, id, { if_updated_at, body?, fields?, types?, tags? })`, `vaults.create(vault, { path, body, types?, tags?, fields? })`, `vaults.watch(vault, type, cb)` | With `vaults` (Vault's, [VAULT.md](VAULT.md); its card says it, stressed): every vault this device holds (`{ key, name, host, mine, home, level }`), each one's types with counts and fields, a page of records (`{ records, more }`, 200 at most; `where` is `[{ field, op, value }]`, `op` one of eq, ne, gt, gte, lt, lte, in, not_in, exists; `sort` is `{ by, dir }`), one record with its links both ways, its kept versions, a change (to the version read: `if_updated_at` must be the record's) or a new record in one call, and `cb({ upsert } \| { remove })` as changes land (it returns the function that stops it). Never code, an applet's, a component's or the app's own records, nor publishing (the `publish`/`published` tag or field: that is `sharing`'s), and a change to a published record asks the person first; nor `Applets/`, `Parachute/` (but saved views in `Parachute/Views/`) or `.parachute/`. A change to a vault Parachute only reads asks the person first. |
 | `vaults.access(vault)`, `vaults.publish(vault, id, on)`, `vaults.revoke(vault, noteId)`, `vaults.readOnly(vault)` | With `sharing`: what reaches a vault (this app's level, the applets allowed there on this device, the address an AI connects at); and, each after the person's yes on the app's own sheet over their tap (fails with `not_confirmed` otherwise): publish a record (the field `published`: anyone with its link can read it; unpublishing isn't asked), take an applet's access back, or let Parachute only read the vault. `publish`/`published` is never a tag or field `vaults.update` or `create` gives or takes. A refused ask fails with `not_confirmed` (the person said no) or `needs_tap` (no live tap in the applet). |
 | `signal(id, count)` | Its own number for a signal its record declares (0 to 9999): the bar's count, and through the signal's gateway, the person's other devices'. Fails with `out_of_scope` for a signal it doesn't declare. |
-| `theme.get()`, `theme.now()`, `theme.on(cb)` | The app's look, which the person can change ([THEME.md](THEME.md)): `get` asks for it, `now` gives the last one sent (or null), `on` calls back now and at each change and returns a function that stops it. Beside the values below, it says `scheme` (`light` or `dark`) and `density`. Every value is also a CSS variable: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. |
+| `theme.get()`, `theme.now()`, `theme.on(cb)` | The app's look, which the person can change ([THEME.md](THEME.md)): `get` asks for it, `now` gives the last one sent (or null), `on` calls back now and at each change and returns a function that stops it. Beside the values below, it says `scheme` (`light` or `dark`), `density` and `motion` (`flowing` or `still`). Every value is also a CSS variable: `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`, `--gap`, `--radius`, `--size`, `--leading`. |
 
 A call outside what it was allowed fails with `out_of_scope` or `not_granted`. It never reaches anything else.
 
@@ -263,11 +266,12 @@ does. Each takes plain props; a newer prop is only ever added, never changed.
 | `<Search label placeholder? value? onChange? onSearch live? />` | A search box: Enter searches (each pause in typing, with `live` ms); emptying it searches for "". |
 | `<Write label labelled? value onChange onSend? send? sendLabel? canSend? busy? enter? line? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone on a computer, as in a chat). `labelled` shows the label above it, as a Field's. Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows; `sendLabel` names the action for a screen reader, `canSend` says there is something to send without words (a file). |
 | `<Record onRecorded label? max_s? disabled? kind? small? >…</Record>` | The microphone button: the app's own recorder sheet (needs `reach: [voice]`); `onRecorded({ bytes, type, duration })` on Send. |
-| `toast(text, { error? })` | A short word after an action ("Saved"), at the foot of the screen, gone by itself. |
+| `<Drawer open onClose title? label? >…</Drawer>` | A panel that rises from the foot of the screen over the page (level 4): a choice, a short form, a record's detail. Show it with `open`; `onClose` is asked to put it away (dragged down by its grip, or anywhere while its content fits; a tap outside; Escape; or your own button). It follows the finger; focus goes into it and back. In a page drawn at its content's height (one with embeds) it opens in place instead. |
+| `toast(text, { error? })` | A short word after an action ("Saved"), rising at the foot of the screen, gone by itself (held while pointed at or while the app is away; a tap or a swipe down puts it away). |
 | `voiceNote(recording, create)` | A recording made a note: `create(body)` makes the record (its path is yours), the recording is attached with transcription asked, and the hub writes the words in. |
 | `useTranscripts(bodies, reload)` | While a voice note waits for its words: reads again a few times; `say(body)` is the line to show, `strip(body)` the text without the hub's marker, `again()` after a new recording. |
 | `when (.time, .day, .date, .short, .full, .ago, .stamp, .path, .parse)` | Dates and times, one way in every applet, in the person's language: `when.short(t)` is "9:41 AM" today, "Yesterday", "Mon", "Nov 17". `t` is a Date, an ISO string, milliseconds or seconds. |
-| `useTheme()` | The look as values (`accent`, `bg`, …, `scheme`, `density`), or null until the app has sent it. Most applets need only the CSS variables. |
+| `useTheme()` | The look as values (`accent`, `bg`, …, `scheme`, `density`, `motion`), or null until the app has sent it. Most applets need only the CSS variables. |
 | `useSaved(key, initial)` | `useState` that the app keeps on this device: a draft, the box it was on, the item open. See [Saved state](#saved-state). |
 
 **Keep state in fields.** A box the person ticks is a field on the record (`fields: { book_status: "read" }`), not a
@@ -283,7 +287,7 @@ An HTML applet has no parts: it has the kit's calls and the CSS variables.
 **Older apps.** An applet lives in the vault, and each device's app updates on its own time, so an applet meets
 older apps ([docs/design/VERSIONS.md](design/VERSIONS.md)). Each part has the level of the app it came in. All the
 parts above are level 1, the floor: the kit of 11-20, with every prop it lists, but `Table` and `Fields`, which are level 3
-(as are the `vaults` and `sharing` words). A newer prop counts as a newer part,
+(as are the `vaults` and `sharing` words), and `Drawer`, level 4. A newer prop counts as a newer part,
 and an older app ignores it. If an applet uses a part above the floor, either fall back for it, or put
 `"needs": <its level>` beside `applet` in the fields. With `needs`, an older app lists the applet and says "Update
 Parachute to open …" instead of running it (`src/kit/olderApp.test.ts` checks the shipped applets do one or the other).

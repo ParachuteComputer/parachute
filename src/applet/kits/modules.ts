@@ -12,6 +12,8 @@ export const PART_LEVEL = {
   link: 1, toast: 1, useSaved: 1, useTheme: 1, useTranscripts: 1, voiceNote: 1, when: 1,
   // Vault's (T-476, docs/VAULT.md): records as a table, and a record's fields changed where they stand
   Table: 3, Fields: 3,
+  // the feel (T-476, docs/DESIGN-RULES.md): a panel from the foot of the screen
+  Drawer: 4,
 } as const;
 export type PartName = keyof typeof PART_LEVEL;
 export const PART_NAMES = Object.keys(PART_LEVEL) as PartName[];

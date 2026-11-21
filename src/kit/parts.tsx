@@ -8,7 +8,7 @@
 //   Field   a line to write on, with one action (Enter does it too)
 //   Empty   what shows when there is nothing yet: a sprig and a line
 //   Note    in parts-note.tsx: a note's text drawn by surface-render, rich notes included (a heavier bundle)
-import { useCallback, useId, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import "./parts.css";
 
 const DAY = 86_400_000;
@@ -74,6 +74,23 @@ export type Row = {
 /** Rows under a label. A row with `onPress` is a button. A long list costs little: a row off screen isn't drawn until
  *  it scrolls near. `more` puts a button under the last row that asks for the next page (older entries, more mail). */
 export function List({ label, hideLabel, rows, more }: { label?: ReactNode; /** said to a screen reader only: the page's title says it already */ hideLabel?: boolean; rows: readonly Row[]; more?: { label: string; onPress: () => void; busy?: boolean } }) {
+  // a row added to the rows already there comes in (parts.css .pa-fresh): a book added, a message come in, the next
+  // page. Rows that replace others (a search, a filter, another tab) are there at once, as typing should be.
+  const seen = useRef<Set<string> | null>(null);
+  const last = useRef<string[]>([]);
+  const fresh = useRef(new Set<string>());
+  const keys = rows.map((r) => r.key).filter((k): k is string => typeof k === "string");
+  if (seen.current === null) seen.current = new Set(keys);
+  else {
+    // added: some of the rows that were there still are, and no more went than came (the next page, a book added, a
+    // chat that lets its oldest go as a new one comes); else the rows were swapped (a search, a filter)
+    const now = new Set(keys);
+    const kept = last.current.filter((k) => now.has(k)).length;
+    const novel = keys.filter((k) => !seen.current!.has(k));
+    const added = kept > 0 && last.current.length - kept <= novel.length;
+    for (const k of novel) { seen.current.add(k); if (added) fresh.current.add(k); }
+  }
+  last.current = keys;
   return (
     <section className="pa-list" aria-label={typeof label === "string" ? label : undefined}>
       {label && <h3 className={hideLabel ? "pa-list-label pa-unseen" : "pa-list-label"}>{label}</h3>}
@@ -90,7 +107,7 @@ export function List({ label, hideLabel, rows, more }: { label?: ReactNode; /** 
               {r.under != null && r.under !== "" && <span className="pa-row-under">{r.under}</span>}
             </>
           );
-          return <li key={r.key ?? i}>{r.onPress
+          return <li key={r.key ?? i} className={r.key !== undefined && fresh.current.has(r.key) ? "pa-fresh" : undefined}>{r.onPress
             ? <button type="button" className={cls} onClick={r.onPress} aria-label={r.label} aria-current={r.current ? "true" : undefined} {...data}>{inner}</button>
             : <div className={cls} aria-current={r.current ? "true" : undefined} {...data}>{inner}</div>}</li>;
         })}

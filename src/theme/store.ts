@@ -14,7 +14,7 @@ import type { Note } from "@openparachute/surface-client";
 import { plain, stripExt } from "../applet/contract";
 import { clientFor } from "../vault/client";
 import { homeVault } from "../shell/frameSource";
-import { DEFAULT_THEME, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, type Theme, type Tokens } from "./theme";
+import { DEFAULT_THEME, MOTION_CSS, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, type Theme, type Tokens } from "./theme";
 
 export const THEME_TAG = "parachute-theme";
 export const THEME_PATH = "Parachute/Theme";
@@ -73,6 +73,15 @@ export function applyToDocument() {
   for (const k of TOKEN_KEYS) s.setProperty(`--${k}`, t[k]);
   for (const [k, v] of Object.entries(TYPE_SCALE)) s.setProperty(`--fs-${k}`, `calc(var(--size) * ${v})`);
   s.setProperty("color-scheme", t.scheme);
+  // how things move: the curves and times once, in a sheet (so the device's reduce-motion can still them), and the
+  // theme's choice on the root
+  if (!document.getElementById("pa-motion")) {
+    const m = document.createElement("style");
+    m.id = "pa-motion";
+    m.textContent = MOTION_CSS;
+    document.head.appendChild(m);
+  }
+  document.documentElement.dataset.motion = t.motion;
 }
 darkQuery()?.addEventListener?.("change", () => bump());
 
@@ -158,6 +167,7 @@ async function changeTheme(change: (raw: Record<string, unknown>) => Record<stri
 export const makeThemeMine = () => changeTheme((r) => r);
 export const setDensity = (density: Theme["density"]) => changeTheme((r) => ({ ...r, density }));
 export const setScheme = (scheme: Theme["scheme"]) => changeTheme((r) => ({ ...r, scheme }));
+export const setMotion = (motion: Theme["motion"]) => changeTheme((r) => ({ ...r, motion }));
 
 /** Signing out of a vault: the copy kept from it goes. */
 export function forgetVaultTheme(vault: string) {

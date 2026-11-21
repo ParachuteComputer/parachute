@@ -38,7 +38,7 @@ Checked against the taste notes (paraphrased here) on the screenshots, grayscale
 | Book serif for names, italic serif for what changed, a quiet sans for actions and the bar | Small, quiet old-book serifs beside a quiet grotesk |
 | Rows and hairline rules, no cards or tiles; two pages on the Daylight | Calm order with room; nothing boxy |
 | Dotted leaders, the ensō-like ◠ mark, glyphs as text (never colour emoji) | A handmade, analog feel |
-| No motion on the bar or the launcher; a sheet appears without a slide | One transition per tap, nothing looping (e-ink ghosts); never bouncy |
+| No motion on the bar or the launcher; what arrives (a page, a sheet, a toast) comes in once, in 200–300 ms, on one curve, and nothing moves on a slow screen or with reduce motion ([DESIGN-RULES.md](../docs/DESIGN-RULES.md)) | One transition per tap, nothing looping (e-ink ghosts); never bouncy |
 | A line of what changed beside each applet; vault names as chapter heads with "Open the vault" | Clear content first, plain navigation, obvious ways to dig deeper |
 | The home applet's day line | New ways to present information; good data visualisation |
 | Labels: "Launcher", "Pin to the bar", "Open on start"; no captions explaining the screen | Warm, quiet, few words; no SaaS tone, no explanatory chrome |
