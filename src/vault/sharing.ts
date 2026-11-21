@@ -63,20 +63,15 @@ export const endAccess = async (rec: VaultRecord, key: string) => (await tool(re
 
 /** Names already read, per vault and stamp, for this session (a name changes rarely; a new stamp is asked). */
 const known = new Map<string, { name: string | null; you: boolean } | null>();
-/** The vaults whose people were all asked for this session. */
-const everyone = new Set<string>();
 
-/** The names of a vault's people by the `by` stamps asked about (none: every person of the vault, once a session),
- *  with this device's sign-in to the vault. */
+/** The names of a vault's people by the `by` stamps asked about, with this device's sign-in to the vault. The hub names
+ *  only stamps asked about, never a list of everyone in the vault. */
 export async function vaultNames(key: string, bys: string[]): Promise<PeopleNames> {
   const rec = findVault(key);
   const hub = rec && sharingHub(rec);
   if (!rec || !hub) return {};
-  const all = bys.length === 0;
-  if (all && everyone.has(key)) return {};
-  const ask = all ? [] : bys.filter((b) => !known.has(`${key}\u0000${b}`)).slice(0, 100);
-  if (all || ask.length) {
-    if (all) everyone.add(key);
+  const ask = bys.filter((b) => !known.has(`${key}\u0000${b}`)).slice(0, 100);
+  if (ask.length) {
     const q = new URLSearchParams(ask.map((b) => ["by", b]));
     const f = withCurrentToken(rec.key, fetch);
     // an older hub has no such read (404, or no answer a browser may read): nobody is named, and those stamps aren't
@@ -84,9 +79,8 @@ export async function vaultNames(key: string, bys: string[]): Promise<PeopleName
     const got = await f(`${hub}/account/vaults/${encodeURIComponent(rec.vault)}/names?${q}`, { headers: { Authorization: `Bearer ${findVault(key)?.accessToken ?? rec.accessToken}` }, cache: "no-store" })
       // an answer (or a hub without the read, 404) settles these stamps for the session; a refusal or no answer doesn't
       .then(async (res) => (res.ok ? ((await res.json()) as { names?: PeopleNames }).names ?? {} : res.status === 404 ? {} : null), () => null);
-    if (got === null) { if (all) everyone.delete(key); return {}; }
+    if (got === null) return {};
     for (const b of ask) known.set(`${key}\u0000${b}`, got[b] ?? null);
-    for (const [b, n] of Object.entries(got)) known.set(`${key}\u0000${b}`, n);
   }
   const out: PeopleNames = {};
   for (const b of bys) { const n = known.get(`${key}\u0000${b}`); if (n) out[b] = n; }

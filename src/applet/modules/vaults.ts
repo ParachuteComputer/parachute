@@ -408,12 +408,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
       hubs: { cap: null, validate: one((p) => (hasOnly(p, []) ? {} : null)), run: async () => (deps.hubs ? deps.hubs() : []) },
       types: {
         cap: null, validate: one(vaultOnly()),
-        run: async ({ vault }: { vault: string }, _s, ctx) => {
-          held(vault); ctx.charge(1);
-          // a vault's page opens with its types: its people's names are asked behind, so its records name them at once
-          if (deps.names) void deps.names(vault, []).catch(() => {});
-          return types(vault).catch((e) => { throw failed(e); });
-        },
+        run: async ({ vault }: { vault: string }, _s, ctx) => { held(vault); ctx.charge(1); return types(vault).catch((e) => { throw failed(e); }); },
       },
       query: {
         cap: null, validate: one(queryOf),
