@@ -84,7 +84,7 @@ export type PersonRow = { key: string; name: string | null; role: "read" | "memb
 export type InviteRow = { id: string; name: string; expires_at: string };
 export type PeopleRow = { people: PersonRow[]; invites: InviteRow[];
   /** the person's own name as the people they invite see it, kept on this device (null: not given yet) */
-  from?: string | null } | { people: null; invites: null; why: "no_key" | "not_owner" | "no_hub" };
+  from?: string | null } | { people: null; invites: null; why: "no_key" | "not_owner" | "no_hub" | "unknown_key" };
 
 /** The shell's side: requests on the vault's own API with the app's sign-in (a change to a vault held for reading
  *  throws the write ask before it is sent), and what the app knows of each vault. */
@@ -308,14 +308,21 @@ function newIn(v: Record<string, unknown>): New | null {
 }
 
 const refuse = (why: string) => new ContractError(ERROR_CODES.outOfScope, why);
+/** A person's name as the hub takes one (core share-invites.ts `parseName`): 1 to 40 characters, no control, not "You". */
+const personName = (x: unknown) => typeof x === "string" && [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !/[\u0000-\u001f\u007f-\u009f]/.test(x) && !/^you$/i.test(x.trim());
 const failed = (e: unknown) => {
   if (e instanceof ContractError) return e;
+  // the native side fails with {code, message} (native.ts NativeError), as the hub's refusals of a signed request do
+  if (e && typeof e === "object" && !(e instanceof Error) && typeof (e as { code?: unknown }).code === "string") {
+    const { code, message } = e as { code: string; message?: string };
+    return new ContractError(code === "not_owner" ? ERROR_CODES.notGranted : ERROR_CODES.failed, String(message ?? code).slice(0, 300));
+  }
   const m = e instanceof Error ? e.message : String(e);
   // the person is asked to let Parachute change that vault: the applet hears it as refused, in the app's words
   if ((e as { name?: string })?.name === "NeedsWriteError") return new ContractError(ERROR_CODES.notGranted, m.slice(0, 300));
-  // the vault refuses this device's sign-in, and refreshing it was refused too: no longer reached (its owner may have
-  // ended the share, docs/design/SHARING.md, or the person signed out elsewhere)
-  if ((e as { name?: string; status?: number })?.name === "VaultAuthError" && (e as { status?: number }).status === 401 || /rejected the token \(401/.test(m)) return new ContractError(ERROR_CODES.failed, "no_reach");
+  // the vault refused this device's sign-in and the hub refused to refresh it (the shell says so: vaultsDeps.ts): no
+  // longer reached (its owner may have ended the share, docs/design/SHARING.md, or the sign-in was ended elsewhere)
+  if ((e as { name?: string })?.name === "NoReachError") return new ContractError(ERROR_CODES.failed, "no_reach");
   // a record put back where another now is (core's 409 path_conflict): not a change meanwhile, and not tried again
   if (/path_conflict/i.test(m)) return new ContractError(ERROR_CODES.failed, "path_taken: another record is at its place now");
   if (/conflict/i.test(m)) return new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read");
@@ -399,7 +406,12 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
       hubs: { cap: null, validate: one((p) => (hasOnly(p, []) ? {} : null)), run: async () => (deps.hubs ? deps.hubs() : []) },
       types: {
         cap: null, validate: one(vaultOnly()),
-        run: async ({ vault }: { vault: string }, _s, ctx) => { held(vault); ctx.charge(1); return types(vault).catch((e) => { throw failed(e); }); },
+        run: async ({ vault }: { vault: string }, _s, ctx) => {
+          held(vault); ctx.charge(1);
+          // a vault's page opens with its types: its people's names are asked behind, so its records name them at once
+          if (deps.names) void deps.names(vault, []).catch(() => {});
+          return types(vault).catch((e) => { throw failed(e); });
+        },
       },
       query: {
         cap: null, validate: one(queryOf),
@@ -731,14 +743,14 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
       },
       invite: {
         cap: null,
-        validate: one((p) => (vaultOnly(["name", "from"])(p) && typeof p.name === "string" && p.name.trim().length >= 1 && p.name.length <= 80
-          && (p.from === undefined || p.from === null || (typeof p.from === "string" && p.from.length <= 80)) ? p as { vault: string; name: string; from?: string | null } : null), "sharing"),
+        validate: one((p) => (vaultOnly(["name", "from"])(p) && personName(p.name)
+          && (p.from === undefined || p.from === null || personName(p.from)) ? p as { vault: string; name: string; from?: string | null } : null), "sharing"),
         async run({ vault, name, from }: { vault: string; name: string; from?: string | null }, _s, ctx) {
           const v = held(vault); ctx.charge(2);
           if (!deps.invite) throw refuse("inviting people needs your key: use Parachute on your phone or Mac");
           // a link that lets someone in is the person's to make, on the app's own sheet: an applet never gets one unasked
           await askFirst(deps, { title: `Invite ${sheetText(name)} to ${sheetText(v.name)}?`,
-            body: `You get a link to send ${sheetText(name)}. Whoever opens it with their own key can read and change everything in ${sheetText(v.name)} (${sheetText(v.host)}). It works once, for 7 days, and you can end it any time.`, act: "Make the link" });
+            body: `You get a link to send ${sheetText(name)}. Whoever opens it with their own key can read and change everything in ${sheetText(v.name)} (${sheetText(v.host)}). It works once, for 7 days, and you can end it any time.${from?.trim() ? ` It says it is from ${sheetText(from.trim())}.` : ""}`, act: "Make the link" });
           try { return await deps.invite(vault, name.trim(), from?.trim() || null); } catch (e) { throw failed(e); }
         },
       },
@@ -752,11 +764,16 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
       },
       end: {
         cap: null, validate: one((p) => (vaultOnly(["key", "name"])(p) && typeof p.key === "string" && /^[0-9a-f]{64}$/.test(p.key) && (p.name === undefined || typeof p.name === "string") ? p as { vault: string; key: string; name?: string } : null), "sharing"),
-        async run({ vault, key, name }: { vault: string; key: string; name?: string }, _s, ctx) {
-          const v = held(vault); ctx.charge(1);
-          if (!deps.end) throw refuse("this needs your key");
-          const who = sheetText(name || `the key ${key.slice(0, 8)}…`);
-          await askFirst(deps, { title: `End ${who}'s access to ${sheetText(v.name)}?`, body: `${who} can no longer read or change ${sheetText(v.name)} (${sheetText(v.host)}), on any device. What they wrote stays, under their name.`, act: "End" });
+        async run({ vault, key }: { vault: string; key: string }, _s, ctx) {
+          const v = held(vault); ctx.charge(2);
+          if (!deps.end || !deps.people) throw refuse("this needs your key");
+          // the sheet names the person as the hub has them, never as the applet says, and always shows the key
+          const listed = await deps.people(vault).catch((e: unknown) => { throw failed(e); });
+          const person = listed.people?.find((x) => x.key === key);
+          if (!person) throw refuse("no one with that key is in this vault");
+          const short = `${key.slice(0, 8)}…`;
+          const who = person.name ? sheetText(person.name) : `The key ${short}`;
+          await askFirst(deps, { title: `End ${who}'s access to ${sheetText(v.name)}?`, body: `${who} (key ${short}) can no longer read or change ${sheetText(v.name)} (${sheetText(v.host)}), on any device. What they wrote stays, under their name.`, act: "End" });
           try { return { ended: await deps.end(vault, key) }; } catch (e) { throw failed(e); }
         },
       },

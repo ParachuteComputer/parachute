@@ -39,14 +39,16 @@ const shown = (v: unknown) => (v === null || v === undefined || v === "" ? "" : 
 const label = (name: string) => name.replace(/_/g, " ");
 const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "");
 const said = (e: any) => String(e?.message ?? e ?? "it failed").slice(0, 200);
-/** What a refused ask says: nothing for the person's own No; "tap again" when no tap was live; else the reason. */
-/** A read that failed: the vault no longer reached (its owner ended the share, or the sign-in ended) in its own words;
- *  anything else as a problem with Try again. */
-function ReadProblem({ error, v, onRetry, children }: { error: unknown; v: { name: string }; onRetry: () => void; children: string }) {
-  if (/no_reach/.test(said(error))) return <Problem>You no longer reach {v.name}. If it is someone else's, they may have ended your access; you can remove it in Settings.</Problem>;
+/** A read that failed: a vault whose hub refused this device's sign-in in its own words (someone else's: they may have
+ *  ended your access; yours: sign in again); anything else as a problem. Try again either way. */
+function ReadProblem({ error, v, onRetry, children }: { error: unknown; v: { name: string; mine: boolean }; onRetry: () => void; children: string }) {
+  if (/no_reach/.test(said(error))) return <Problem onRetry={onRetry}>{v.mine
+    ? `Parachute's sign-in to ${v.name} has ended. Sign in again from Settings.`
+    : `You no longer reach ${v.name}. Its owner may have ended your access; you can remove it in Settings.`}</Problem>;
   return <Problem error={error} onRetry={onRetry}>{children}</Problem>;
 }
 
+/** What a refused ask says: nothing for the person's own No; "tap again" when no tap was live; else the reason. */
 const quiet = (e: unknown, what: string) => {
   const m = said(e);
   if (/not_confirmed/.test(m)) return;
@@ -461,7 +463,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
 /** What reaches a vault: this app (read, or read and change), its applets allowed on this device, your AI's address,
  *  what is published; and taking each back. */
 type PeopleNow = { people: { key: string; name: string | null; role: string }[]; invites: { id: string; name: string; expires_at: string }[]; from?: string | null }
-  | { people: null; why: "no_key" | "not_owner" | "no_hub" };
+  | { people: null; why: "no_key" | "not_owner" | "no_hub" | "unknown_key" };
 const roleWords = (role: string) => (role === "member" ? "can read and change everything" : role === "read" ? "can read everything" : "runs this vault with you");
 const shortKey = (k: string) => `${k.slice(0, 8)}…`;
 
@@ -483,6 +485,7 @@ function People({ v }: { v: Held }) {
     // only the owner's list is shown; a friend's vault, the web build and a host without sharing each say why, once
     return now.why === "not_owner" ? null : <><p className="sect">People</p><p className="note-meta">{now.why === "no_key"
       ? `Inviting people to ${v.name} is signed with your key: open Parachute on your phone or Mac.`
+      : now.why === "unknown_key" ? `This hub doesn't know your key yet, so it can't take an invite from it. Link your key to your account on the hub first.`
       : `Sharing ${v.name} with people isn't on this host yet.`}</p></>;
   }
   const invite = async (name: string) => {
@@ -497,9 +500,9 @@ function People({ v }: { v: Held }) {
     <List label="People" rows={[
       { key: "you", title: "You", meta: "owner" },
       ...now.people.map((p) => ({ key: p.key, title: p.name ?? `A key (${shortKey(p.key)})`, meta: `${roleWords(p.role)} · key ${shortKey(p.key)}`,
-        aside: <Button small kind="quiet" onClick={() => (vaults as any).end(v.key, p.key, p.name ?? "").then(() => { toast(`${p.name ?? "Their"} access ended.`); return load(); }, (e: unknown) => quiet(e, "Not ended"))}>End</Button> })),
+        aside: <Button small kind="quiet" onClick={() => (vaults as any).end(v.key, p.key).then((r: { ended?: boolean }) => { toast(r?.ended === false ? "Already ended." : `${p.name ? `${p.name}'s` : "Their"} access is ended.`); return load(); }, (e: unknown) => quiet(e, "Not ended"))}>End</Button> })),
       ...now.invites.map((i) => ({ key: i.id, title: i.name, meta: `invited · the link works once, until ${when.date(i.expires_at)}`,
-        aside: <Button small kind="quiet" onClick={() => (vaults as any).takeBack(v.key, i.id).then(() => { toast(`The invite for ${i.name} is taken back.`); if (made?.name === i.name) setMade(null); return load(); }, (e: unknown) => quiet(e, "Not taken back"))}>Take back</Button> })),
+        aside: <Button small kind="quiet" onClick={() => (vaults as any).takeBack(v.key, i.id).then((r: { takenBack?: boolean }) => { toast(r?.takenBack === false ? `The invite for ${i.name} was already used or taken back.` : `The invite for ${i.name} is taken back.`); if (made?.name === i.name) setMade(null); return load(); }, (e: unknown) => quiet(e, "Not taken back"))}>Take back</Button> })),
     ]} />
     {made && <div className="invite-made" aria-label="Invite link">
       <p className="note-meta">Send this link to {made.name} however you like. It works once, until {when.date(made.until)}.</p>

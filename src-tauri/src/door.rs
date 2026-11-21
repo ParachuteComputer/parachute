@@ -297,7 +297,8 @@ pub fn sharing_tool_body(tool: &str, args: &serde_json::Map<String, Value>) -> R
         let v = v.as_str().ok_or_else(|| bad("Parachute doesn't sign that request."))?;
         let ok = match k.as_str() {
             "vault" => vault_name_ok(v),
-            "name" | "from" => !v.trim().is_empty() && v.chars().count() <= 80 && !v.chars().any(char::is_control),
+            // as the hub takes a name (core share-invites.ts parseName): 1 to 40 characters, no control, not "You"
+            "name" | "from" => !v.trim().is_empty() && v.trim().chars().count() <= 40 && !v.chars().any(char::is_control) && !v.trim().eq_ignore_ascii_case("you"),
             "id" | "pubkey" => hex64(v),
             _ => false,
         };
@@ -545,6 +546,9 @@ mod tests {
         assert!(sharing_tool_body("revoke-access", &args(&[("vault", "recipes"), ("pubkey", "npub1zzz")])).is_err());
         assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "Recipes!"), ("name", "Bo")])).is_err());
         assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "Bo\u{0}")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", &"x".repeat(41))])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", "You")])).is_err());
+        assert!(sharing_tool_body("invite-to-vault", &args(&[("vault", "recipes"), ("name", &"é".repeat(40))])).is_ok());
         assert!(sharing_tool_body("list-access", &args(&[])).is_err());
         let mut n = args(&[("vault", "recipes")]);
         n.insert("name".into(), Value::from(3));

@@ -15,6 +15,8 @@ export default function AcceptInvite() {
   const [invite, setInvite] = useState<(InviteView & { hub: string; code: string }) | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // accepted already (the sign-in after it is what's left): Accept again would find the invite used
+  const [accepted, setAccepted] = useState(false);
 
   async function read(e: FormEvent) {
     e.preventDefault();
@@ -32,8 +34,11 @@ export default function AcceptInvite() {
     if (!invite) return;
     setBusy(true); setError(null);
     try {
-      const done = await acceptWithKey(invite.hub, invite.code);
-      if (!done) { setBusy(false); setError("Accepting is signed with your key: open Parachute on your phone or Mac and accept it there."); return; }
+      if (!accepted) {
+        const done = await acceptWithKey(invite.hub, invite.code);
+        if (!done) { setBusy(false); setError("Accepting is signed with your key: open Parachute on your phone or Mac and accept it there."); return; }
+        setAccepted(true);
+      }
       // in: now the usual sign-in to their Parachute, as someone else's, with the key when this device has one
       const next = await startSignIn(invite.hub, "theirs", !!key);
       if ("pick" in next) { window.location.assign(`/add?hub=${encodeURIComponent(invite.hub)}`); return; }
@@ -60,8 +65,12 @@ export default function AcceptInvite() {
         <p className="lead">{invite.from ?? "Someone"} invites you to <strong>{invite.vault}</strong>, on {hostOf(invite.hub)}.</p>
         <p>You can read and change everything in it. Your changes show as {invite.name}'s{invite.from ? `, and ${invite.from} can end your access any time` : ""}.</p>
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="primary" type="button" disabled={busy} onClick={() => void accept()}>{busy ? "Accepting…" : "Accept"}</button>
-        <button className="secondary" type="button" disabled={busy} onClick={() => { setInvite(null); setError(null); }}>Not now</button>
+        {accepted
+          ? <button className="primary" type="button" disabled={busy} onClick={() => void accept()}>{busy ? "Signing in…" : `Sign in to ${hostOf(invite.hub)}`}</button>
+          : <>
+            <button className="primary" type="button" disabled={busy} onClick={() => void accept()}>{busy ? "Accepting…" : "Accept"}</button>
+            <button className="secondary" type="button" disabled={busy} onClick={() => { setInvite(null); setError(null); }}>Not now</button>
+          </>}
       </section>}
     </main>
   );

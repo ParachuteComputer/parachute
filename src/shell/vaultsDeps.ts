@@ -4,7 +4,7 @@
 import type { VaultClient } from "@openparachute/surface-client";
 import type { AccessRow, HeldVault, HubRow, VaultsDeps, WatchEvent } from "../applet/modules/vaults";
 import { describe, oneAddress } from "../vault/parachute";
-import { clientFor, keptClientFor } from "../vault/client";
+import { clientFor, keptClientFor, signInState } from "../vault/client";
 import { connectorAddress, findVault, hostOf, listVaults, originOf, vaultUrlOf, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
 import { heldLevel, giveBack, appletLevel } from "../vault/reach";
@@ -58,6 +58,16 @@ export async function heldHubs(): Promise<HubRow[]> {
   return Promise.all([...by.values()].map(async ({ hub, ...row }) => ({ ...row, address: await addressOf(hub) })));
 }
 
+/** A vault that refuses this device's sign-in, when the hub also refused to refresh it, is no longer reached (its owner
+ *  may have ended the share: docs/design/SHARING.md); a refusal while the hub is out of reach stays what it was. */
+const noReach = (key: string) => async (e: unknown): Promise<never> => {
+  const status = (e as { status?: number })?.status;
+  if ((e as { name?: string })?.name === "VaultAuthError" && status === 401 && (await signInState(key).catch(() => "unreachable")) === "refused") {
+    throw Object.assign(new Error(`no_reach: this device's sign-in to the vault was refused`), { name: "NoReachError" });
+  }
+  throw e;
+};
+
 export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string;
   /** Each read made from the kept copies (the vault, the read's path and query as readCache names it). */ read?(vault: string, read: string): void }): VaultsDeps {
   const req = (key: string) => clientFor(rec(key)) as unknown as VaultClient & Requesting;
@@ -71,14 +81,14 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
     // a read as the hub has it now, kept for the screens that may show it from the copy (vault/readCache.ts); a change
     // goes as it is
     request: (key, method, path, body) => (method === "GET" ? (keptClientFor(rec(key)) as unknown as VaultClient & Requesting).request(`/api${path}`, { method, cache: "reload" })
-      : req(key).request(`/api${path}`, { method, cache: "no-store", ...(body === undefined ? {} : { body: JSON.stringify(body) }) })),
+      : req(key).request(`/api${path}`, { method, cache: "no-store", ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).catch(noReach(key)),
     // what a screen shows: from the copy kept of the read at once, the hub asked behind it (vault/readCache.ts)
     // a record for what shows, from the copy kept of it (vault/readCache.ts): only for an applet that redraws when told
     ...(opts.read ? { read: (key: string, path: string) => {
       const r = rec(key);
       // the read as the client asks it (its address without a trailing slash, then /api…), so it is named as onFresh names it
       try { const u = new URL(`${vaultUrlOf(r).replace(/\/+$/, "")}/api${path}`); opts.read?.(key, `${u.pathname}${u.search}`); } catch { /* not a URL */ }
-      return (keptClientFor(r) as unknown as VaultClient & Requesting).request(`/api${path}`, { cache: "no-store" });
+      return (keptClientFor(r) as unknown as VaultClient & Requesting).request(`/api${path}`, { cache: "no-store" }).catch(noReach(key));
     } } : {}),
     door(key) {
       let d = doors.get(key);
@@ -88,7 +98,7 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
           // only "no such route" says there is no door; anything else is asked again next time
           if ((e as { status?: number })?.status === 404 || (e as { name?: string })?.name === "VaultNotFoundError") return "notes" as const;
           doors.delete(key);
-          throw e;
+          return noReach(key)(e);
         });
         doors.set(key, d);
       }
