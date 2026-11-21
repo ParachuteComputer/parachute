@@ -13,8 +13,9 @@ const PLACES = [["inbox", "Inbox", 5], ["waiting", "Waiting", 2], ["later", "Lat
 export default function Places() {
   const [at, setAt] = useState("archive");
   const [places, setPlaces] = useState([]);
+  const [more, setMore] = useState(0);
   useEffect(() => { const t = setTimeout(() => setPlaces(PLACES), 400); return () => clearTimeout(t); }, []);
-  return <Page title="Places"><Tabs label="Places" current={at} onChange={setAt} tabs={places.map(([key, label, count]) => ({ key, label, count }))} /><p>At {at}</p></Page>;
+  return <Page title="Places"><Tabs label="Places" current={at} onChange={setAt} tabs={places.map(([key, label, count]) => ({ key, label, count: key === "inbox" ? count + more : count }))} /><p>At {at}</p><button onClick={() => setMore((m) => m + 7)}>More mail</button></Page>;
 }
 `;
 
@@ -61,7 +62,19 @@ test("tabs stay on one line on a phone, scroll sideways, and keep the one shown 
   await expect.poll(() => inView("Sent")).toBe(true);
   // the row narrowed (a phone turned): the one shown is kept clear again
   await app.getByRole("button", { name: "Archive", exact: true }).evaluate((b) => (b as HTMLButtonElement).click());
-  await nav.evaluate((n) => { (n as HTMLElement).style.width = "640px"; n.scrollLeft = 0; });
+  const frames = () => app.locator("body").evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await nav.evaluate((n) => { (n as HTMLElement).style.width = "640px"; });
+  await frames();
   await nav.evaluate((n) => { (n as HTMLElement).style.width = ""; });
   await expect.poll(() => inView("Archive")).toBe(true);
+  // the person scrolls the row away themselves; a count arriving (Inbox widens) leaves it where they put it
+  await frames();
+  await nav.evaluate((n) => { n.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); n.scrollLeft = 0; });
+  await frames();
+  const at = await nav.evaluate((n) => n.scrollLeft);
+  expect(at).toBe(0);
+  await app.getByRole("button", { name: "More mail" }).click();
+  await expect(app.getByRole("button", { name: /^Inbox · 12$/ })).toBeVisible();
+  await frames();
+  expect(await nav.evaluate((n) => n.scrollLeft)).toBe(at);
 });
