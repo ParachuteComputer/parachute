@@ -565,7 +565,18 @@ function GiveKey({ v, taken, cancel, made }: { v: Held; taken: string[]; cancel:
     if (!ok || busy) return;
     setBusy(true);
     // refused or ended meanwhile: said, and the list read again (managing may have ended while the screen was hidden)
-    sh.giveKey!(v.key, { name, can, types: all ? null : picked }).then(made, (e: unknown) => { quiet(e, "No key made"); if (/managing|ended/i.test(String((e as Error)?.message ?? e))) cancel(); }).finally(() => setBusy(false));
+    sh.giveKey!(v.key, { name, can, types: all ? null : picked }).then(made, (e: unknown) => {
+      const why = String((e as Error)?.message ?? e);
+      // a name is one key for good at the hub, an ended key's too: the next free one is offered
+      if (/already exists|name_taken/i.test(why)) {
+        const m = /^(.*?)(?:-(\d+))?$/.exec(name)!;
+        setName(`${m[1]}-${Number(m[2] ?? 1) + 1}`);
+        toast(`A key was called ${name} before (an ended key keeps its name). Try ${m[1]}-${Number(m[2] ?? 1) + 1}.`);
+        return;
+      }
+      quiet(e, "No key made");
+      if (/managing|ended/i.test(why)) cancel();
+    }).finally(() => setBusy(false));
   };
   return (
     <div className="give">

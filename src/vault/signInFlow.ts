@@ -5,7 +5,7 @@
 // Every other vault is asked for alone, when something the person allows needs it (vault/reach.ts). The screens (Add a
 // Parachute, the sign-in's return, the launcher's Open, an applet's Allow, a change that needs write) call these.
 import { beginSignIn, completeSignIn, dropPending, revoke, type AllowAfter, type Pending, type Why } from "./oauth";
-import { holdManage } from "./manage";
+import { endUnheld, holdManage } from "./manage";
 import { describe, homeFrom, homeWithToken, levelIn, listWithToken, reachesEvery, vaultUrlFrom, type Level, type Listed, type Parachute } from "./parachute";
 import { limitedFetch } from "./limited";
 import { MAX_VAULTS } from "./address";
@@ -179,7 +179,8 @@ export async function finishStep(code: string, state: string, iss?: string | nul
   if (pending.step === "manage") {
     const rec = listVaults().find((v) => v.issuer === pending.issuer && v.vault === vault);
     if (!rec) {
-      await revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint });
+      // ended at the hub, its access token too: the app holds no admin it isn't managing with
+      endUnheld(pending, token);
       throw new Error("That vault isn't on this device any more. Nothing changed.");
     }
     holdManage(pending, token, vault!);

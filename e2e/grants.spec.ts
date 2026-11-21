@@ -48,7 +48,9 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
 
   await signIn(page);
   const app = new URL(page.url()).origin;
-  await page.goto(`/vault?vault=${VAULT}`);
+  // Vault opened on a record (a tap on one): the way back from the hub still leads to Sharing
+  await page.goto(`/vault?vault=${VAULT}&record=${soup.id}`);
+  await page.frameLocator('iframe.applet-frame[title="Vault"]').getByRole("button", { name: "← Close" }).or(page.frameLocator('iframe.applet-frame[title="Vault"]').getByRole("button", { name: new RegExp(`${VAULT}$`) })).first().click();
   const v: FrameLocator = page.frameLocator('iframe.applet-frame[title="Vault"]');
   await v.getByRole("button", { name: "Sharing" }).click();
   const who = v.getByRole("region", { name: `Who reaches ${VAULT}` });

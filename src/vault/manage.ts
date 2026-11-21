@@ -41,6 +41,12 @@ function end(h: Held): void {
   }
 }
 
+/** End a manage step's tokens that were never held (the vault left the device meanwhile): access and refresh. */
+export function endUnheld(p: Pick<Pending, "issuer" | "clientId" | "revocationEndpoint">, token: TokenResponse): void {
+  end({ issuer: p.issuer, vault: "", applet: "", clientId: p.clientId, access: token.access_token, ...(token.refresh_token ? { refresh: token.refresh_token } : {}),
+    ...(p.revocationEndpoint ? { revocationEndpoint: p.revocationEndpoint } : {}), until: 0 });
+}
+
 let listening = false;
 /** The page going ends everything held (a reload, the tab closed). */
 function listen(): void {
