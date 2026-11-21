@@ -220,7 +220,7 @@ select.pa-finput { appearance: auto; }
 
 /* ── Drawer (drawer.tsx): rises from the foot of the screen; drag it down, tap outside or Escape to put it away ── */
 .pa-drawer-scrim { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-end; justify-content: center;
-  background: color-mix(in srgb, var(--text) 22%, transparent); opacity: var(--pa-scrim, 1); transition: opacity var(--t-sheet) var(--ease-drawer); overscroll-behavior: contain; }
+  background: color-mix(in srgb, var(--text) 22%, transparent); background: light-dark(color-mix(in srgb, var(--text) 22%, transparent), rgb(0 0 0 / .45)); opacity: var(--pa-scrim, 1); transition: opacity var(--t-sheet) var(--ease-drawer); overscroll-behavior: contain; }
 .pa-drawer { position: relative; box-sizing: border-box; width: min(560px, 100%); max-height: 86dvh; overflow: auto; overscroll-behavior: contain;
   padding: 6px var(--pad) calc(var(--pad) + env(safe-area-inset-bottom, 0px)); background: var(--bg); color: var(--text);
   border-top: 1px solid var(--text); border-radius: var(--radius) var(--radius) 0 0;

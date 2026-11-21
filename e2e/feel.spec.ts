@@ -214,23 +214,30 @@ test("a toast goes when swiped down, before its time", async ({ page }) => {
   await expect(app.locator("li.pa-fresh", { hasText: `Hazel ${stamp}` })).toHaveCount(1);
 });
 
-test("the app's own sheets arrive as a drawer does, and are still under reduce-motion", async ({ browser, page }) => {
-  // the applet's menu (⋯ on the bar): one of the shell's sheets
+test("the app's own sheets fade in holding still, over the app's bar, and are still under reduce-motion", async ({ browser, page }) => {
+  // the applet's menu (⋯ on the bar): one of the shell's sheets, which carry the app's own asks
   const sheetMotion = async (p: Page) => {
     await p.locator("header.bar").getByRole("button", { name: "Menu" }).click();
     const sheet = p.getByRole("dialog", { name: "Feel menu" });
-    await expect(sheet).toBeVisible();
-    const anims = await sheet.evaluate((el) => el.getAnimations().map((a) => ({ name: (a as CSSAnimation).animationName, duration: Number(a.effect!.getTiming().duration) })));
+    const button = sheet.getByRole("button").first();
+    const first = (await button.boundingBox())!;
+    const scrim = p.locator(".sheet-scrim").first();
+    const fade = await scrim.evaluate((el) => { const c = getComputedStyle(el); return { name: c.animationName, duration: c.animationDuration }; });
+    await p.waitForTimeout(450);
+    // its buttons are where they were drawn first: a tap never meets a button still on its way
+    expect(await button.boundingBox()).toEqual(first);
+    // the shade covers the app's own bar too: what a frame draws can't look like it
+    const bar = (await p.locator("header.bar").boundingBox())!;
+    expect(await p.evaluate(([x, y]) => document.elementFromPoint(x, y)?.className ?? "", [bar.x + bar.width / 2, bar.y + bar.height / 2])).toContain("sheet-scrim");
     await p.keyboard.press("Escape").catch(() => {});
-    return anims;
+    return fade;
   };
   await openFeel(page);
-  const flowing = await sheetMotion(page);
-  expect(flowing).toContainEqual({ name: "shell-rise", duration: 300 });
+  expect(await sheetMotion(page)).toEqual({ name: "shell-fade", duration: "0.3s" });
   const ctx = await browser.newContext({ storageState: "e2e/.signed-in.json", reducedMotion: "reduce", ...devices["Pixel 7"] });
   try {
     const still = await ctx.newPage();
     await openFeel(still);
-    for (const a of await sheetMotion(still)) expect(a.duration, a.name).toBe(0);
+    expect(await sheetMotion(still)).toEqual({ name: "shell-fade", duration: "0s" });
   } finally { await ctx.close(); }
 });

@@ -89,9 +89,10 @@ fieldset.plain legend { padding: 0; }
 .applet-screen { display: flex; flex-direction: column; min-height: calc(100dvh - 64px); }
 /* an applet's frame is the page under the bar, edge to edge, on the page's own paper: no box around it (the bar's rule
    above it is where the app ends and the applet begins) */
-.applet-frame { flex: 1; width: calc(100% + 2 * var(--pad)); margin: -10px calc(-1 * var(--pad)) 0; min-height: 70dvh; border: 0; background: var(--bg); }
+.applet-frame { flex: 1; width: calc(100% + 2 * var(--pad)); margin: 0 calc(-1 * var(--pad)); min-height: 70dvh; border: 0; background: var(--bg); }
 /* a page with embeds (docs/design/EMBED.md): the host as tall as its content, then each embed, the page scrolling whole */
-.applet-frame.applet-frame-sized { flex: none; min-height: 0; }
+/* a page with embeds: the host lines up with its embeds, inside the page's margins */
+.applet-frame.applet-frame-sized { flex: none; min-height: 0; width: 100%; margin: 0; }
 .embeds { display: grid; gap: 14px; margin-top: 14px; }
 .embed-place { display: grid; gap: 4px; }
 .embed-line { display: flex; align-items: baseline; gap: 8px; margin: 0; padding-top: 6px; border-top: 1px dotted var(--muted); font: italic 14px/1.3 var(--serif); color: var(--muted); }
@@ -153,17 +154,15 @@ fieldset.plain legend { padding: 0; }
 .open-line, .viewer-line { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 15px; }
 .open-line a, .viewer-line a { text-decoration: none; }
 .link-button { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
-/* the shell's sheets look and arrive as the kit's Drawer does (src/kit/parts.css): the theme's ink over the page, a
-   grip, rising on the drawer curve; still under reduce-motion (theme.ts MOTION) */
-.sheet-scrim { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--text) 32%, transparent); display: flex; align-items: flex-end; justify-content: center;
-  animation: shell-fade var(--t-sheet, 0ms) var(--ease-drawer, ease) both; overscroll-behavior: contain; }
-.sheet { width: min(560px, 100%); max-height: 80dvh; overflow: auto; overscroll-behavior: contain; background: var(--bg); border-radius: calc(var(--radius) * 1.6) calc(var(--radius) * 1.6) 0 0;
-  padding: 6px var(--pad) calc(14px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px color-mix(in srgb, var(--text) 14%, transparent);
-  animation: shell-rise var(--t-sheet, 0ms) var(--ease-drawer, ease) both; }
-.sheet::before { content: ""; display: block; width: 36px; height: 4px; margin: 3px auto 12px; border-radius: 2px; background: var(--line); }
+/* the shell's sheets look as the kit's Drawer does (src/kit/parts.css): the theme's ink over the page, an ink rule above,
+   no shadow. They fade in and never slide: they carry the app's own asks (Allow, the passcode, a link out), whose
+   buttons hold still from their first frame so a tap lands where it was meant (ui/press.ts); nor do they drag. Still
+   under reduce-motion (theme.ts MOTION). */
+.sheet-scrim { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--text) 22%, transparent); background: light-dark(color-mix(in srgb, var(--text) 22%, transparent), rgb(0 0 0 / .45));
+  display: flex; align-items: flex-end; justify-content: center; animation: shell-fade var(--t-sheet, 0ms) var(--ease-out, ease) backwards; overscroll-behavior: contain; }
+.sheet { width: min(560px, 100%); max-height: 80dvh; overflow: auto; overscroll-behavior: contain; background: var(--bg); border-top: 1px solid var(--text); border-radius: var(--radius) var(--radius) 0 0;
+  padding: 14px var(--pad) calc(14px + env(safe-area-inset-bottom)); }
 @keyframes shell-fade { from { opacity: 0; } }
-@keyframes shell-rise { from { transform: translateY(100%); } }
-@keyframes shell-in { from { opacity: 0; transform: translateY(6px); } }
 .sheet h2 { margin: 0 0 10px; font: 600 17px/1.3 var(--serif); }
 .sheet-choice { width: 100%; text-align: left; border: 0; background: none; font: inherit; cursor: pointer; }
 .sheet-choice:disabled { opacity: .5; }
@@ -300,13 +299,13 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 :is(.bar-back, .bar-menu, .home-bar-place, .row, .entry, .sheet-choice) { transition: background-color var(--t-press, 0ms) ease; }
 @media (hover: hover) and (pointer: fine) {
   :is(.secondary, .quiet-button, .part-chip):hover:not(:disabled) { border-color: var(--muted); }
-  .primary:hover:not(:disabled, [aria-disabled="true"]) { background: color-mix(in srgb, var(--accent) 86%, var(--text)); }
-  :is(.row, .entry, .sheet-choice):hover { background: color-mix(in srgb, var(--line) 22%, transparent); }
-  :is(.bar-back, .bar-menu):hover { background: color-mix(in srgb, var(--line) 50%, transparent); }
+  .primary:hover:not(:disabled, [aria-disabled="true"]) { background: color-mix(in srgb, var(--accent) 88%, var(--bg)); }
+  :is(.row, .entry, .sheet-choice):hover:not(:active) { background: color-mix(in srgb, var(--line) 22%, transparent); }
+  :is(.bar-back, .bar-menu):hover:not(:active) { background: color-mix(in srgb, var(--line) 50%, transparent); }
 }
 :is(button, a, .home-bar-place, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :is(input, textarea, select):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
-.grant-card, .shell-line { animation: shell-in var(--t-state, 0ms) var(--ease-out, ease) both; }
-.shell-line { animation-name: shell-fade; }
-.bar-title, .launcher-title, .notes-head h1, .grant-head h2, .sheet h2 { text-wrap: balance; }
+/* the Allow card and a passing line fade in once, holding their place (an ask's buttons never move) */
+.grant-card, .shell-line { animation: shell-fade var(--t-state, 0ms) var(--ease-out, ease) backwards; }
+.launcher-title, .notes-head h1, .grant-head h2, .sheet h2 { text-wrap: balance; }
 .home-bar-badge, .record-time, .entry-life { font-variant-numeric: tabular-nums; }
