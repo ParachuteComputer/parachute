@@ -12,7 +12,7 @@
 
 The **Services** workflow (`.github/workflows/services.yml`) runs all of them with the servers in the runner: daily, on
 demand (`gh workflow run services.yml --ref <branch> -f core=<npm version, or a branch or commit of parachute-core>`),
-and on a pull request that changes them. A skip there fails the run.
+and on every pull request that changes more than docs. A skip there fails the run.
 
 ## Running them here
 

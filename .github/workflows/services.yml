@@ -2,7 +2,7 @@
 # on a Buzz relay; mail on Stalwart behind the mail gateway; Matrix on a homeserver; and the native side against the relay
 # and the gateway (src-tauri/tests/services_real.rs). They skip in CI's web job; here e2e/services/up.sh starts and seeds
 # those servers in the runner (loopback only, every key and password made up per run), so they run. Daily on the
-# default branch, on demand (any branch, any core), and on a pull request that changes them.
+# default branch, on demand (any branch, any core), and on every pull request that changes more than docs.
 name: Services
 permissions:
   contents: read
@@ -14,33 +14,11 @@ on:
       core:
         description: "core: an npm version (0.9.0-pre.1) or a branch or commit of parachute-core"
         default: next
+  # on every PR but a docs-only one: what these specs exercise reaches across the app, the shell and the build
   pull_request:
-    paths:
-      - e2e/services/**
-      - e2e/approvals.spec.ts
-      - e2e/area.spec.ts
-      - e2e/devices.spec.ts
-      - e2e/mail.spec.ts
-      - e2e/matrix.spec.ts
-      - e2e/roomlinks.spec.ts
-      - e2e/rooms.spec.ts
-      - e2e/today.spec.ts
-      - src-tauri/tests/services_real.rs
-      # what those specs drive: the applets on real servers, the shell's broker and signer, the harness
-      - applets/**
-      - src/**
-      - src-tauri/src/**
-      - package.json
-      - package-lock.json
-      - vite.config.ts
-      - index.html
-      - tsconfig*.json
-      - src-tauri/Cargo.lock
-      - e2e/hub.ts
-      - e2e/helpers.ts
-      - playwright.config.ts
-      - .github/workflows/services.yml
-      - .github/actions/core/**
+    paths-ignore:
+      - "**.md"
+      - docs/**
 
 # one run per branch or PR (and core) at a time: a newer push replaces a run still going
 concurrency:
