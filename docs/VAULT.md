@@ -40,10 +40,24 @@ history the vault already keeps, not a second record of it (`src/applet/changes.
 - **Names.** A writer is shown by its key's name. `key:claude` is `claude`; this device's Parachute (its key is named
   for its client id) is "You, in Parachute here"; an app approved over OAuth is named by the hub for its client id, so
   it shows as "An app (0f8a6c2e)" until the hub can say its name (gap 8).
-- **What it reads:** the 24 records changed most lately, each with its versions, and up to 16 deleted ones, a few
-  reads at a time (within a frame's read budget); a change's two sides as it shows them (`vaults.compare`). Home's line
-  is lighter: one read of what changed today and one of what was deleted, per vault (`app.changes`, the `changes`
-  word). This device's Parachute keeping its own records (settings, saved views) isn't shown.
+- **What it reads:** the 20 records changed most lately, each with its versions, and the 12 deleted most lately,
+  six reads at a time; **Older changes** reads the next of each (one read costs at most 34 of a frame's 60 reads in ten
+  seconds). A change's two sides as it shows them (`vaults.compare`), the first ten behind the list. While an AI writes,
+  the list is read again at most every three seconds. Home's line is lighter: per vault, one read of what changed today,
+  one of what was deleted, and each deletion's tombstone (12 at most); it waits four seconds at most, then shows no line
+  rather than hold the notes back.
+- **What it shows of the app's own records.** An applet's code, settings, approvals or saved views changed by another
+  writer (an AI with a write key) show, marked the app's own, and aren't put back here. This device's Parachute keeping
+  them isn't shown; another device's Parachute keeping them is (it signs in as another app: gap 8). Home counts the
+  person's records only.
+- **What putting back can't do.** It never overwrites a write made after the list was read: the record's `updatedAt`
+  must still be what the list saw, else it says "It changed again since you looked" and reads the list again. Putting a
+  record back restores its words, fields and extension, not its place (core keeps a later move); it says so. A deleted
+  record comes back at its tombstone's place, or not at all when another record is there now ("another record is at its
+  place now"). Taking away a record an AI made is a plain delete; core's DELETE takes no `if_updated_at`, so a write in
+  the moment between the check and the delete goes with it (its tombstone keeps it). Which change a later put back
+  undid isn't kept by the vault, so a change shows "put back since" when the record's very next change undid it, or this
+  device put it back.
 - **Refused as in a change** (`vaults.update`): code, an applet's, a component's or the app's own records are never put
   back here; what comes back published, or a change to a published record, asks on the app's own sheet first.
 
@@ -148,5 +162,8 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
    access only once it pins T-476, so Changes on Cloud shows edits and new records, and says deleted records aren't
    listed. A record put back from deletion reads as changed then only from core T-476 (before, it kept its old
    `updatedAt`, and Changes would lose sight of it).
-11. **A hub with history off** keeps no versions: Changes shows only records made since, and taking one away can't be
+11. **Who made a deleted record** isn't kept (its row is gone; versions keep when, not who). So a record an AI made and
+   then deleted comes back with "Put all back" of that run; the change says when it was made. Core 0.9.4's write sets
+   (#114/#115) know what a set made, and undo leaves it deleted.
+12. **A hub with history off** keeps no versions: Changes shows only records made since, and taking one away can't be
    undone. History is on by default.

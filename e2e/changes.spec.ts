@@ -76,7 +76,7 @@ test("an AI changes three records and deletes one; Changes shows them under its 
 
   // Put all back: every record as it was, the deleted one too
   await vault.getByRole("button", { name: `Put all ${n} back, by ${ai}` }).click();
-  await expect(vault.getByText(`All ${n} are back as they were.`)).toBeVisible({ timeout: 20_000 });
+  await expect(vault.getByText(`${n} records are back as they were.`)).toBeVisible({ timeout: 20_000 });
   for (let i = 0; i < n; i++) {
     const now = await api(hub, "GET", `records/${recs[i].id}`) as Rec;
     expect(now.body, first[i].path).toBe(first[i].body);

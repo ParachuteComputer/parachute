@@ -21,7 +21,7 @@ type Where = { field: string; op: string; value: unknown };
 type View = { name: string; layout: "table" | "list"; sort: { by: string; dir: "asc" | "desc" } | null; where: Where[]; group: string | null; id?: string };
 type At = { vault: string | null; type: string | null; record: string | null; sharing?: boolean; changes?: boolean };
 type Change = { key: string; id: string; path: string; title: string; op: "created" | "changed" | "deleted" | "restored"; at: string; via: string | null; kind: string | null;
-  by: string | null; mine: boolean; who: string; before: number | null; after: number | null; gone: boolean; own: boolean };
+  by: string | null; mine: boolean; who: string; before: number | null; after: number | null; gone: boolean; own: boolean; made?: string | null; recreated?: boolean; seen?: string | null };
 type Side = { path: string; body: string; fields: Record<string, unknown>; types?: string[]; tags?: string[] };
 type Sides = { before: Side | null; after: Side | null };
 
@@ -76,6 +76,8 @@ const CSS = `
 .vlt .ldiff .same { color: var(--muted); }
 .vlt .ldiff .gap { color: var(--muted); font: italic var(--fs-small) var(--serif); }
 .vlt .ldiff .sign { display: inline-block; width: 1.2em; font-family: var(--mono); }
+/* what a change did fills in after the list shows: one line, so a row never grows under the finger */
+.vlt .chg .pa-row-meta { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 `;
 
 export default function Vault() {
@@ -312,7 +314,9 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<{ ix: number; at: string; via: string | null; op?: string; kind?: string | null; who?: string; mine?: boolean }[] | null>(null);
   const [opened, setOpened] = useState<Change | null>(null);
-  const readHistory = () => vaults.history(v.key, id).then(setHistory, (e: unknown) => toast(`History couldn't be read: ${said(e)}`, { error: true }));
+  const [histFailed, setHistFailed] = useState<unknown>(null);
+  const [puts, setPuts] = useSaved<string[]>(`puts:${v.key}`, []);
+  const readHistory = () => vaults.history(v.key, id).then((h: typeof history) => { setHistory(h); setHistFailed(null); }, setHistFailed);
   const editingRef = useRef(editing);
   editingRef.current = editing;
   const top = useRef<HTMLElement | null>(null);
@@ -397,11 +401,12 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       {out.length > 0 && <List label="Links to" rows={out.map((l) => ({ key: `o${l.id}`, title: l.path.split("/").pop() ?? l.path, meta: folderOf(l.path), onPress: () => open(l.id) }))} />}
       {into.length > 0 && <List label="Linked from" rows={into.map((l) => ({ key: `i${l.id}`, title: l.path.split("/").pop() ?? l.path, meta: folderOf(l.path), onPress: () => open(l.id) }))} />}
       <p className="sect">History</p>
-      {history === null ? <Loading />
+      {histFailed ? <Problem error={histFailed} onRetry={readHistory}>Its history couldn't be read</Problem>
+        : history === null ? <Loading />
         : <List label="Versions" hideLabel rows={[...historyRows(r, history).map((c) => ({ key: c.key, title: `${opWord(c)} by ${c.who}`, meta: when.full(c.at), current: opened?.key === c.key,
             label: `${opWord(c)} by ${c.who}, ${when.full(c.at)}: see what changed`, onPress: () => setOpened(opened?.key === c.key ? null : c) }))]} />}
       {history !== null && !history.length && !r.createdAt && <p className="note-meta">No earlier versions kept.</p>}
-      {opened && <div className="old"><ChangeView v={v} c={opened} all={historyRows(r, history ?? [])} canWrite={canWrite} done={() => { setOpened(null); void load(); }} /></div>}
+      {opened && <div className="old"><ChangeView v={v} c={opened} all={historyRows(r, history ?? [])} canWrite={canWrite} puts={puts} put={(keys) => setPuts((p: string[]) => [...keys, ...p].slice(0, 500))} done={() => { setOpened(null); void load(); }} /></div>}
       {canWrite && <>
         <p className="sect">Sharing</p>
         <p className="note-meta">{published ? "Published: anyone with its link can read it." : "Only you, and what you let in, can read it."}</p>
@@ -447,9 +452,12 @@ const opWord = (c: Pick<Change, "op">) => (c.op === "created" ? "Made" : c.op ==
 /** A record's history as changes, newest first: each kept version is the record before a write, so its after is the
  *  version above it (or the record as it is now); the first is its making. */
 function historyRows(r: Rec, history: { ix: number; at: string; via: string | null; op?: string; kind?: string | null; who?: string; mine?: boolean }[]): Change[] {
-  const base = { id: r.id, path: r.path, title: r.title, by: null, gone: false, own: false };
+  // the app's own records (an applet's code, its settings) aren't put back here, as in Changes
+  const own = /^(?:applets|parachute|\.parachute)\//i.test(r.path) || [...r.types, ...r.tags].some((t) => /^parachute/i.test(t) || t === "applet" || t === "component");
+  const base = { id: r.id, path: r.path, title: r.title, by: null, gone: false, own, seen: r.updatedAt };
   const rows: Change[] = history.map((h, i) => ({ ...base, key: `${r.id}:${h.ix}`, op: h.op === "restore" ? "restored" as const : h.op === "delete" ? "deleted" as const : "changed" as const,
-    at: h.at, via: h.via, kind: h.kind ?? null, mine: !!h.mine, who: h.who ?? h.via ?? "Not recorded", before: h.ix, after: i > 0 ? history[i - 1].ix : null }));
+    at: h.at, via: h.via, kind: h.kind ?? null, mine: !!h.mine, who: h.who ?? h.via ?? "Not recorded", before: h.ix, after: h.op === "delete" || i === 0 ? null : history[i - 1].ix,
+    ...(h.op === "restore" && history[i + 1]?.op === "delete" ? { recreated: true } : {}) }));
   if (r.createdAt) rows.push({ ...base, key: `${r.id}:new`, op: "created", at: r.createdAt, via: r.createdVia ?? null, kind: null, mine: false, who: r.madeBy ?? r.createdVia ?? "Not recorded",
     before: null, after: history.length ? history[history.length - 1].ix : null });
   return rows;
@@ -504,7 +512,7 @@ function summaryOf(c: Change, d: Sides | undefined): string {
 }
 
 /** A change's two sides: its fields before and after, its words line by line, a move, links, types and tags. */
-function ChangeView({ v, c, all, canWrite, done, sides }: { v: Held; c: Change; all: Change[]; canWrite: boolean; done: () => void; sides?: Sides }) {
+function ChangeView({ v, c, all, canWrite, done, sides, puts, put }: { v: Held; c: Change; all: Change[]; canWrite: boolean; done: () => void; sides?: Sides; puts: string[]; put: (keys: string[]) => void }) {
   const [d, setD] = useState<Sides | null>(sides ?? null);
   const [failed, setFailed] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -512,14 +520,24 @@ function ChangeView({ v, c, all, canWrite, done, sides }: { v: Held; c: Change; 
   useEffect(() => { if (sides) { setD(sides); return; } setD(null); setFailed(null); vaults.compare(v.key, c.id, c.before, c.after).then(setD, setFailed); }, [c.key]);
   // later changes to the same record, which putting this one back undoes too
   const later = all.filter((x) => x.id === c.id && x.at > c.at && x.key !== c.key);
-  const back = putBackOf(c, all);
+  const back = putBackOf(c, all, puts);
+  const takes = c.op === "created" || !!c.recreated;
   const go = async () => {
     setBusy(true);
-    try { await putBack(v, c); toast(c.op === "created" ? `${c.title} is taken away (it can be put back too).` : `${c.title} is back as it was.`); done(); }
-    catch (e) { quiet(e, "Not put back"); }
+    try {
+      await putBack(v, c);
+      put([c.key]);
+      toast(takes ? `${c.title} is deleted (it can be put back too).` : moved ? `${c.title} is back as it was; it stays at ${a!.path}.` : `${c.title} is back as it was.`);
+      done();
+    } catch (e) {
+      if (/changed_again/.test(said(e))) { toast("It changed again since you looked. The changes are read again: look, then put it back.", { error: true }); done(); }
+      else quiet(e, "Not put back");
+    }
     setBusy(false);
   };
-  const b = d?.before, a = d?.after;
+  // a deletion's after is nothing (the record as it is now, if it came back, is a later change's)
+  const b = d?.before, a = c.op === "deleted" ? null : d?.after;
+  const moved = !!(b && a && b.path !== a.path);
   const fields = b && a ? [...new Set([...Object.keys(b.fields), ...Object.keys(a.fields)])].filter((k) => !same(b.fields[k], a.fields[k]))
     : a ? Object.keys(a.fields) : b ? Object.keys(b.fields) : [];
   const lines = b && a && b.body !== a.body ? diffLines(b.body, a.body) : null;
@@ -553,30 +571,40 @@ function ChangeView({ v, c, all, canWrite, done, sides }: { v: Held; c: Change; 
         </>}
       {canWrite && !c.own && !back && (c.before !== null || c.op === "created") && <>
         {later.length > 0 && sure && <p className="warn">It changed again after this ({later.map((x) => `${x.who}, ${when.short(x.at)}`).join("; ")}). Putting it back undoes that too.</p>}
-        {c.op === "deleted" && !nb && <p className="lede">It comes back with its words and fields. Its types and tags weren't kept in history, so add them again if it had any.</p>}
-        <Button small kind="primary" busy={busy} onClick={() => (later.length > 0 && !sure ? setSure(true) : void go())}>{later.length > 0 && sure ? "Put it back anyway" : c.op === "created" ? "Take it away" : "Put it back"}</Button>
+        {c.op === "deleted" && !nb && <p className="lede">It comes back with its words and fields. Its types and tags weren't kept in history, so add them again if it had any.{c.made && c.made >= c.at.slice(0, 10) ? ` It was made ${when.full(c.made)}.` : ""}</p>}
+        {moved && <p className="lede">Its words and fields go back; its place doesn't: it stays at {a!.path}.</p>}
+        <Button small kind="primary" busy={busy} onClick={() => (later.length > 0 && !sure ? setSure(true) : void go())}>{later.length > 0 && sure ? "Put it back anyway" : takes ? "Delete it" : "Put it back"}</Button>
       </>}
-      {back && <p className="lede">Put back since ({back.who}, {when.short(back.at)}).</p>}
+      {back && <p className="lede">Put back since{back.who ? ` (${back.who}, ${when.short(back.at!)})` : ""}.</p>}
       {c.own && <p className="lede">The app's own record (an applet's code, a setting): it isn't put back here.</p>}
     </article>
   );
 }
 
-/** A later change that put this one back, if any: a put-back after it, or, for a record made, its deletion. */
-const putBackOf = (c: Change, all: Change[]) => all.find((x) => x.id === c.id && x.at > c.at && (x.op === "restored" || (c.op === "created" && x.op === "deleted")));
+/** Was this change put back? This device put it back (`puts`), or the record's very next change undid it: a put back
+ *  after a change; a deletion after a making; a put back after a deletion. A put back further on may have gone to another
+ *  version, so it isn't taken as this one's. */
+function putBackOf(c: Change, all: Change[], puts: string[]): { who?: string; at?: string } | null {
+  const next = all.filter((x) => x.id === c.id && x.at > c.at).sort((a, b) => (a.at < b.at ? -1 : 1))[0];
+  if (next && (next.op === "restored" ? !c.recreated : c.op === "created" || c.recreated ? next.op === "deleted" : false)) return { who: next.who, at: next.at };
+  return puts.includes(c.key) ? {} : null;
+}
 
-/** Put one change back: the record as it was before it (a made one is taken away; a deleted one comes back). Judged on
- *  the record as the hub has it now: a read that was stale is read once more. */
+/** Put one change back: the record as it was before it (a made one, or one a put back re-made, is deleted; a deleted
+ *  one comes back). Judged on the record as the hub has it now, against what the list saw (`seen`): a write since then
+ *  stops it (`changed_again`), and the person looks again. Only a stale copy of the read (a conflict on a record that
+ *  didn't change since the list) is read once more. */
 async function putBack(v: Held, c: Change) {
   const fresh = async (): Promise<Rec | null> => vaults.get(v.key, c.id).catch((e: unknown) => { if (/not_found/.test(said(e))) return null; throw e; });
   for (let tries = 0; ; tries++) {
     const now = await fresh();
+    if (now && c.seen && now.updatedAt && now.updatedAt > c.seen) throw new Error("changed_again: it changed again since you looked");
     try {
-      if (c.op === "created") { if (!now) return; await vaults.remove(v.key, c.id, now.updatedAt); return; }
+      if (c.op === "created" || c.recreated) { if (!now) return; await vaults.remove(v.key, c.id, now.updatedAt); return; }
       if (c.before === null) return;
       await vaults.restore(v.key, c.id, c.before, now ? now.updatedAt ?? undefined : undefined);
       return;
-    } catch (e) { if (tries > 0 || !/conflict/.test(said(e))) throw e; }
+    } catch (e) { if (tries > 0 || !/^conflict|failed: conflict|\bconflict:/.test(said(e)) || /path_taken/.test(said(e))) throw e; }
   }
 }
 
@@ -591,6 +619,9 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
   const [opened, setOpened] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [sure, setSure] = useState<string | null>(null);
+  // the changes this device put back (a record's history can't always say which version a put back went to)
+  const [puts, setPuts] = useSaved<string[]>(`puts:${v.key}`, []);
+  const put = (keys: string[]) => setPuts((p: string[]) => [...keys, ...p.filter((k) => !keys.includes(k))].slice(0, 500));
   const seq = useRef(0);
   const shownRef = useRef(false);
   // one read at a time: a read asked for while one runs is made once, after it
@@ -602,7 +633,12 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
     const n = ++seq.current;
     try {
       const x: { changes: Change[]; deletes: "shown" | "hidden"; more: boolean } = await vaults.changes(v.key, since(d));
-      if (n === seq.current) { setPage(x); setOffset(0); setFailed(null); shownRef.current = true; }
+      if (n === seq.current) {
+        // older pages already read stay; what is "now" in a change read before is read again
+        setPage((p) => (p && d === days ? { ...x, more: x.more || p.more, changes: [...x.changes, ...p.changes.filter((c) => !x.changes.some((y) => y.key === c.key) && !x.changes.some((y) => y.id === c.id))].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)) } : x));
+        setSides((s) => Object.fromEntries(Object.entries(s).filter(([k]) => x.changes.some((c) => c.key === k && c.after !== null))));
+        setFailed(null); shownRef.current = true;
+      }
     } catch (e) {
       // a read again that fails keeps what shows, and says so
       if (n === seq.current) { if (shownRef.current) toast(`Couldn't read the changes again: ${said(e)}`, { error: true }); else setFailed(e); }
@@ -614,22 +650,23 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
     }
   };
   useEffect(() => { void load(); }, [v.key]);
-  // an AI writing as you look: read again, once a second at most
+  // an AI writing as you look: read again, once every three seconds at most (a read costs up to 34 of the frame's 60
+  // reads in ten seconds)
   useEffect(() => {
     let soon: ReturnType<typeof setTimeout> | null = null;
-    const stop = vaults.watch(v.key, null, () => { soon ??= setTimeout(() => { soon = null; void load(); }, 1000); });
+    const stop = vaults.watch(v.key, null, () => { soon ??= setTimeout(() => { soon = null; void load(); }, 3000); });
     return () => { stop(); if (soon) clearTimeout(soon); };
   }, [v.key, days]);
   // what each change did, read a few at a time behind the list (each is two reads of the frame's budget)
   useEffect(() => {
     if (!page) return;
     let on = true;
-    const want = page.changes.filter((c) => !sides[c.key] && !c.own && c.op !== "deleted").slice(0, 16);
+    const want = page.changes.filter((c) => !sides[c.key] && !c.own && c.op !== "deleted").slice(0, 10);
     (async () => {
       for (const c of want) {
         if (!on) return;
         try { const d: Sides = await vaults.compare(v.key, c.id, c.before, c.after); if (on) setSides((s) => ({ ...s, [c.key]: d })); } catch { return; }
-        await new Promise((r) => setTimeout(r, 250));
+        await new Promise((r) => setTimeout(r, 500));
       }
     })();
     return () => { on = false; };
@@ -637,7 +674,7 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
   const older = () => {
     if (!page) return;
     if (page.more) {
-      const n = seq.current, at = offset + 24;
+      const n = seq.current, at = offset + 20;
       vaults.changes(v.key, since(days), at).then((x: { changes: Change[]; more: boolean }) => { if (n !== seq.current) return; setOffset(at); setPage((p) => p && { ...p, more: x.more, changes: [...p.changes, ...x.changes.filter((c) => !p.changes.some((y) => y.key === c.key))].sort((a, b) => (a.at < b.at ? 1 : -1)) }); }, (e: unknown) => toast(`Older changes couldn't be read: ${said(e)}`, { error: true }));
     } else { const d = days < 30 ? 30 : 180; setDays(d); void load(d); }
   };
@@ -654,16 +691,21 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
   /** A run put back: each record to how it was before the run's first change to it. */
   const putRun = async (run: (typeof runs)[number]) => {
     const first = new Map<string, Change>();
-    for (const c of run.changes) if (!c.own && !putBackOf(c, all) && (c.before !== null || c.op === "created")) first.set(c.id, c);
+    for (const c of run.changes) if (!c.own && !putBackOf(c, all, puts) && (c.before !== null || c.op === "created")) first.set(c.id, c);
     const plan = [...first.values()];
     const outside = plan.flatMap((c) => all.filter((x) => x.id === c.id && x.at > c.at && !run.changes.includes(x)));
     if (outside.length && sure !== run.key) { setSure(run.key); return; }
     setBusy(run.key); setSure(null);
     let ok = 0;
     const missed: string[] = [];
-    for (const c of plan) { try { await putBack(v, c); ok++; } catch (e) { missed.push(`${c.title}: ${said(e)}`); } }
+    const done: string[] = [];
+    for (const c of plan) {
+      try { await putBack(v, c); ok++; done.push(...run.changes.filter((x) => x.id === c.id).map((x) => x.key)); }
+      catch (e) { missed.push(`${c.title}: ${/changed_again/.test(said(e)) ? "it changed again since you looked" : said(e).replace(/^\w+: /, "")}`); }
+    }
+    put(done);
     setBusy(null);
-    toast(missed.length ? `Put back ${ok} of ${plan.length}. Not put back: ${missed.join("; ")}` : ok === 1 ? `${plan[0].title} is back as it was.` : `All ${ok} are back as they were.`, { error: missed.length > 0 });
+    toast(missed.length ? `Put back ${ok} of ${plan.length}. Not put back: ${missed.join("; ")}` : ok === 1 ? `${plan[0].title} is back as it was.` : `${ok} records are back as they were.`, { error: missed.length > 0 });
     await load();
   };
   const openC = all.find((c) => c.key === opened) ?? null;
@@ -677,7 +719,7 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
             : !page ? <Loading />
             : !all.length ? <Empty>Nothing changed in {v.name} in the last {days} days.</Empty>
             : runs.map((run, i) => {
-                const left = run.changes.filter((c) => !c.own && !putBackOf(c, all) && (c.before !== null || c.op === "created"));
+                const left = run.changes.filter((c) => !c.own && !putBackOf(c, all, puts) && (c.before !== null || c.op === "created"));
                 const outside = sure === run.key;
                 return <div key={run.key}>
                   {(i === 0 || runs[i - 1].day !== run.day) && <p className="sect">{run.day}</p>}
@@ -685,15 +727,15 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
                     <span className="who">{run.who}</span>
                     <span className="when">{run.changes.length} {run.changes.length === 1 ? "change" : "changes"} · {when.time(run.changes[run.changes.length - 1].at)}{when.time(run.changes[0].at) !== when.time(run.changes[run.changes.length - 1].at) ? `–${when.time(run.changes[0].at)}` : ""}</span>
                     {canWrite && left.length > 0 && <Button small busy={busy === run.key} aria-label={`${outside ? "Put back anyway" : left.length === 1 ? "Put it back" : `Put all ${left.length} back`}, by ${run.who}`} onClick={() => void putRun(run)}>{outside ? "Put back anyway" : left.length === 1 ? "Put it back" : `Put all ${left.length} back`}</Button>}
-                    {canWrite && !left.length && run.changes.some((c) => putBackOf(c, all)) && <span className="when">put back</span>}
+                    {canWrite && !left.length && run.changes.some((c) => putBackOf(c, all, puts)) && <span className="when">put back</span>}
                   </div>
                   {outside && <p className="warn">Some of these records changed again after. Putting them back undoes that too.</p>}
-                  <List label={`${run.who}, ${run.day}`} hideLabel rows={run.changes.map((c) => {
-                    const b = putBackOf(c, all);
+                  <div className="chg"><List label={`${run.who}, ${run.day}`} hideLabel rows={run.changes.map((c) => {
+                    const b = putBackOf(c, all, puts);
                     return { key: c.key, title: c.title, current: c.key === opened, label: `${opWord(c)} ${c.title}: see what changed`,
                       meta: [opWord(c).toLowerCase(), summaryOf(c, sides[c.key]), b ? "put back since" : "", c.own ? "the app's own" : ""].filter(Boolean).join(" · "),
                       aside: when.time(c.at), onPress: () => setOpened(c.key === opened ? null : c.key) };
-                  })} />
+                  })} /></div>
                 </div>;
               })}
           {page && (page.more || days < 180) && <Button small kind="quiet" onClick={older}>Older changes</Button>}
@@ -701,7 +743,7 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
         {openC && <aside className="side">
           <Button kind="quiet" onClick={() => setOpened(null)}>← Close</Button>
           <h2 className="pa-title">{openC.title}</h2>
-          <ChangeView key={openC.key} v={v} c={openC} all={all} canWrite={canWrite} sides={sides[openC.key]} done={() => { setOpened(null); void load(); }} />
+          <ChangeView key={openC.key} v={v} c={openC} all={all} canWrite={canWrite} sides={sides[openC.key]} puts={puts} put={put} done={() => { setOpened(null); void load(); }} />
           {!openC.gone && <Button small kind="quiet" onClick={() => open(openC.id)}>Open the record</Button>}
         </aside>}
       </div>

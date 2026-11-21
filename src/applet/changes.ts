@@ -35,13 +35,20 @@ export type Change = {
   gone: boolean;
   /** the record is code, or the app's own (an applet's, a component's, `parachute-*`): it can't be put back here */
   own: boolean;
+  /** when the record was first made, as its versions keep it (a deleted record's maker isn't kept) */
+  made?: string | null;
+  /** a put back that re-made a deleted record: putting this back deletes it again */
+  recreated?: boolean;
+  /** the record's updatedAt when this was read (null: deleted): a put back stops if it changed since */
+  seen?: string | null;
 };
 export type ChangesPage = { changes: Change[]; deletes: "shown" | "hidden"; more: boolean };
 
 /** How many records one read of changes looks into (each costs a read of its versions). */
-export const CHANGES_RECORDS = 24;
-/** How many deleted records it looks into (each a read of its tombstone): with the records, within a frame's reads. */
-export const CHANGES_DELETED = 16;
+export const CHANGES_RECORDS = 20;
+/** How many deleted records it looks into (each a read of its tombstone): with the records, within a frame's reads (60
+ *  in ten seconds: one read of changes costs at most 2 + 20 + 12). */
+export const CHANGES_DELETED = 12;
 const VERSIONS = 50;
 const strOr = (x: unknown) => (typeof x === "string" ? x : null);
 const titleOf = (path: string) => path.split("/").pop() || path;
@@ -52,23 +59,25 @@ async function few<T>(items: readonly T[], f: (x: T) => Promise<void>, n = 6): P
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) await f(items[i++]); }));
 }
-type Row = { ix: number; at: string; op: string; via: string | null; kind: string | null; by: string | null; path: string | null };
+type Row = { ix: number; at: string; op: string; via: string | null; kind: string | null; by: string | null; path: string | null; made: string | null };
 const rowsOf = (raw: unknown): Row[] => {
   const list = plain(raw) && Array.isArray(raw.versions) ? raw.versions : [];
   return list.flatMap((v: unknown): Row[] => (plain(v) && typeof v.version_ix === "number" && typeof v.superseded_at === "string"
-    ? [{ ix: v.version_ix, at: v.superseded_at, op: typeof v.op === "string" ? v.op : "update", via: strOr(v.via), kind: strOr(v.via_kind), by: strOr(v.actor), path: strOr(v.path) }] : []));
+    ? [{ ix: v.version_ix, at: v.superseded_at, op: typeof v.op === "string" ? v.op : "update", via: strOr(v.via), kind: strOr(v.via_kind), by: strOr(v.actor), path: strOr(v.path), made: strOr(v.created_at) }] : []));
 };
 const opOf = (op: string): ChangeOp => (op === "restore" ? "restored" : op === "delete" ? "deleted" : "changed");
+/** A list read the hub doesn't give this app (403: admin only; 404: no such route, an older or hosted door). */
+const refused = (e: unknown) => [403, 404].includes((e as { status?: number })?.status ?? 0) || /insufficient_scope|\b40[34]\b|not.?found/i.test(String((e as Error)?.message ?? e));
 
 /**
- * The changes in one vault since `since` (ISO), newest first, among the `CHANGES_RECORDS` records changed most lately
- * from `offset` on (`more`: there are more to read). `self(via)`: whether a via is this device's Parachute. `own(rec)`:
- * whether a record is code or the app's own.
+ * The changes in one vault since `since` (ISO), newest first: among the `CHANGES_RECORDS` records changed most lately
+ * from `offset` on, and the `CHANGES_DELETED` records deleted most lately from the matching place in the deleted list
+ * (`more`: either has more to read). `self(via)`: whether a via is this device's Parachute. `own(rec)`: whether a record
+ * is code ("code") or one the app keeps for itself ("app"); both show, as the app's own, and are never put back here,
+ * but this device's Parachute keeping its own records is left out.
  */
 export async function readChanges(opts: {
   get: Get; door: "records" | "notes"; since: string; offset?: number; charge: (n: number) => void;
-  /** "code": an applet's or a component's code (shown, never put back here); "app": a record the app keeps for itself
-   *  (settings, approvals, saved views: not a change to show); null: the person's own record */
   self: (via: string | null) => boolean; own: (r: { path: string; extension: string | null; names: string[] }) => "code" | "app" | null;
 }): Promise<ChangesPage> {
   const { get, door, since, charge, self, own } = opts;
@@ -80,54 +89,59 @@ export async function readChanges(opts: {
   const raw = await get(`/${door}?${u.toString()}`);
   const all: unknown[] = Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.records) ? raw.records : plain(raw) && Array.isArray(raw.notes) ? raw.notes : [];
   const page = all.slice(0, CHANGES_RECORDS).filter(plain) as Record<string, unknown>[];
-  // the app keeping its own records (settings, approvals, saved views), on this device or another, isn't a change to show
-  const add = (c: Omit<Change, "key" | "mine" | "title" | "who">, kind: "code" | "app" | null) => { if (kind === "app") return; const mine = self(c.via); out.push({ ...c, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: writerName(c.via, mine) }); };
+  const add = (c: Omit<Change, "key" | "mine" | "title" | "who" | "own">, kind: "code" | "app" | null) => {
+    const mine = self(c.via);
+    // this device's Parachute keeping its own records (settings, approvals, saved views) isn't a change to show
+    if (kind === "app" && mine) return;
+    out.push({ ...c, own: kind !== null, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: writerName(c.via, mine) });
+  };
+  /** A record's kept versions, newest first, as changes since then. */
+  const fromRows = (id: string, path: string, rows: Row[], kind: "code" | "app" | null, gone: boolean, seen: string | null) => rows.forEach((v, i) => {
+    if (v.at < since) return;
+    const older = rows[i + 1];
+    // a put back that re-made a deleted record: putting it back deletes it again
+    const recreated = v.op === "restore" && older?.op === "delete";
+    // a deletion's after is nothing; any other's is the version above it, or the record as it is now
+    add({ id, path: v.path ?? path, op: opOf(v.op), at: v.at, via: v.via, kind: v.kind, by: v.by, before: v.ix, after: v.op === "delete" || i === 0 ? null : rows[i - 1].ix,
+      gone, made: v.made, seen, ...(recreated ? { recreated: true } : {}) }, kind);
+  });
   charge(page.length);
   await few(page, async (r) => {
     if (typeof r.id !== "string") return;
     const id = r.id, path = typeof r.path === "string" ? r.path : id;
     const names = [...(Array.isArray(r.types) ? r.types : []), ...(Array.isArray(r.tags) ? r.tags : [])].filter((t): t is string => typeof t === "string");
-    const ownKind = own({ path, extension: strOr(r.extension), names }), isOwn = ownKind !== null;
+    const kind = own({ path, extension: strOr(r.extension), names });
     const rows = rowsOf(await get(`/${door}/${encodeURIComponent(id)}/versions?limit=${VERSIONS}`).catch(() => null));
-    // newest first: the "after" of row k is the row above it (k+1), or the record as it is now
-    rows.forEach((v, i) => {
-      if (v.at < since) return;
-      add({ id, path: v.path ?? path, op: opOf(v.op), at: v.at, via: v.via, kind: v.kind, by: v.by, before: v.ix, after: i > 0 ? rows[i - 1].ix : null, gone: false, own: isOwn }, ownKind);
-    });
+    fromRows(id, path, rows, kind, false, strOr(r.updatedAt));
     const created = strOr(r.createdAt);
     // a record put back from deletion keeps its first creation time; its making is not a change since then
     if (created && created >= since && !rows.some((v) => v.op === "delete")) {
       add({ id, path: rows.length ? rows[rows.length - 1].path ?? path : path, op: "created", at: created, via: strOr(r.createdVia), kind: null, by: strOr(r.createdBy),
-        before: null, after: rows.length ? rows[rows.length - 1].ix : null, gone: false, own: isOwn }, ownKind);
+        before: null, after: rows.length ? rows[rows.length - 1].ix : null, gone: false, made: created, seen: strOr(r.updatedAt) }, kind);
     }
   });
-  // what was deleted since: only on the first page (the list is its own, newest deletion first)
+  // what was deleted since, newest deletion first, paged beside the records
   let deletes: ChangesPage["deletes"] = "shown";
-  if (offset === 0) {
-    charge(1);
-    const gone = await get("/history/deleted?limit=100").catch((e: unknown) => {
-      if ((e as { status?: number })?.status === 403 || /insufficient_scope|403/.test(String((e as Error)?.message ?? e))) return null;
-      throw e;
+  let moreGone = false;
+  const dOffset = Math.round(offset / CHANGES_RECORDS) * CHANGES_DELETED;
+  charge(1);
+  const gone = await get(`/history/deleted?limit=${CHANGES_DELETED + 1}&offset=${dOffset}`).catch((e: unknown) => { if (refused(e)) return null; throw e; });
+  if (gone === null) deletes = "hidden";
+  else {
+    const listed = (plain(gone) && Array.isArray(gone.notes) ? gone.notes : []).filter((n: unknown): n is Record<string, unknown> => plain(n) && typeof n.id === "string");
+    // newest deletion first: those deleted since come first; one past the page that is still since means more
+    const rows = listed.filter((n) => typeof n.deleted_at === "string" && n.deleted_at >= since);
+    moreGone = rows.length > CHANGES_DELETED;
+    const take = rows.slice(0, CHANGES_DELETED);
+    charge(take.length);
+    await few(take, async (n) => {
+      const id = n.id as string, path = typeof n.path === "string" ? n.path : id;
+      const vs = rowsOf(await get(`/${door}/${encodeURIComponent(id)}/versions?limit=${VERSIONS}`).catch(() => null));
+      fromRows(id, path, vs, own({ path, extension: strOr(n.extension), names: [] }), true, null);
     });
-    if (gone === null) deletes = "hidden";
-    else {
-      const rows = (plain(gone) && Array.isArray(gone.notes) ? gone.notes : []).filter((n: unknown): n is Record<string, unknown> =>
-        plain(n) && typeof n.id === "string" && typeof n.deleted_at === "string" && n.deleted_at >= since).slice(0, CHANGES_DELETED);
-      charge(rows.length);
-      await few(rows, async (n) => {
-        const id = n.id as string, path = typeof n.path === "string" ? n.path : id;
-        const ownKind = own({ path, extension: strOr(n.extension), names: [] }), isOwn = ownKind !== null;
-        const vs = rowsOf(await get(`/${door}/${encodeURIComponent(id)}/versions?limit=${VERSIONS}`).catch(() => null));
-        vs.forEach((v, i) => {
-          if (v.at < since) return;
-          // the newest version is the tombstone; an earlier one's after is the row above it
-          add({ id, path: v.path ?? path, op: opOf(v.op), at: v.at, via: v.via, kind: v.kind, by: v.by, before: v.ix, after: v.op === "delete" ? null : i > 0 ? vs[i - 1].ix : null, gone: true, own: isOwn }, ownKind);
-        });
-      });
-    }
   }
   out.sort((a, b) => (b.at < a.at ? -1 : b.at > a.at ? 1 : a.key.localeCompare(b.key)));
-  return { changes: out, deletes, more: all.length > CHANGES_RECORDS };
+  return { changes: out, deletes, more: all.length > CHANGES_RECORDS || moreGone };
 }
 
 /** Is this write this device's Parachute's? It signed in as an app, whose key is named for its client id (`key:<id>`,

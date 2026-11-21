@@ -127,3 +127,58 @@ describe("reading what changed", () => {
     expect(writerName(null, false)).toBe("Not recorded");
   });
 });
+
+describe("what the review found (T-476 round 1)", () => {
+  const get = (h: ReturnType<typeof hub>) => (p: string) => h.deps.request("home", "GET", p);
+  it("a deleted record comes back at its tombstone's place: one deleted from the app's own folders isn't put back, whatever version is asked", async () => {
+    const tomb = { ...v0, version_ix: 1, op: "delete", path: "Parachute/Approvals/x" };
+    const { call, calls } = hub({ versions: { S: [tomb, { ...v0, path: "Recipes/Soup" }] } });
+    await expect(call("restore", { vault: "home", id: "S", ix: 0 })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+  it("a hub with no deleted list at all (404) shows edits, and says deletes are hidden", async () => {
+    const h = hub({ records: { S: soup }, versions: { S: [v0] } });
+    const orig = h.deps.request;
+    h.deps.request = async (v, m, p, b) => { if (p.startsWith("/history/deleted")) throw Object.assign(new Error("404 not found"), { status: 404 }); return orig(v, m, p, b); };
+    const page = await readChanges({ get: get(h), door: "records", since: "2026-11-20T00:00:00.000Z", charge: () => {}, self: () => false, own: () => null });
+    expect(page.deletes).toBe("hidden");
+    expect(page.changes).toHaveLength(1);
+  });
+  it("a deletion's after is nothing, and a put back that re-made it is marked: putting that back deletes it again", async () => {
+    const tomb = { ...v0, version_ix: 1, op: "delete", superseded_at: "2026-11-21T09:10:00.000Z" };
+    const marker = { ...v0, version_ix: 2, op: "restore", superseded_at: "2026-11-21T09:20:00.000Z", via: "key:me" };
+    const h = hub({ records: { S: soup }, versions: { S: [marker, tomb, v0] } });
+    const page = await readChanges({ get: get(h), door: "records", since: "2026-11-20T00:00:00.000Z", charge: () => {}, self: () => false, own: () => null });
+    const by = Object.fromEntries(page.changes.map((c) => [c.op, c]));
+    expect(by.deleted.after).toBeNull();
+    expect(by.restored.recreated).toBe(true);
+    expect(by.changed.after).toBe(1);
+    expect(by.changed.seen).toBe(soup.updatedAt);
+  });
+  it("the app's own records show when another writer changed them (an AI editing an approval), but not this device's own keeping", async () => {
+    const approval = { ...soup, id: "A", path: "Parachute/Approvals/x", tags: ["parachute-approval"] };
+    const h = hub({ records: { A: approval }, versions: { A: [{ ...v0, path: "Parachute/Approvals/x" }, { ...v0, version_ix: 0, via: "key:me", superseded_at: "2026-11-21T09:00:00.000Z" }].map((x, i) => ({ ...x, version_ix: 1 - i })) } });
+    const own = () => "app" as const;
+    const page = await readChanges({ get: get(h), door: "records", since: "2026-11-20T00:00:00.000Z", charge: () => {}, self: (via) => via === "key:me", own });
+    expect(page.changes.map((c) => [c.who, c.own])).toEqual([["claude", true]]);
+  });
+  it("a put back where another record now is says so, and isn't read as a change meanwhile", async () => {
+    const h = hub({ versions: { S: [{ ...v0, op: "delete", version_ix: 1 }, v0] } });
+    const orig = h.deps.request;
+    h.deps.request = async (v, m, p, b) => { if (m === "POST") throw new Error("409 path_conflict: Recipes/Soup is taken"); return orig(v, m, p, b); };
+    await expect(h.call("restore", { vault: "home", id: "S", ix: 1 })).rejects.toMatchObject({ message: expect.stringMatching(/^path_taken/) });
+  });
+  it("Home's count: another writer's records, not this device's and not the app's own keeping; the writer who wrote last first", async () => {
+    const recs = {
+      a: { id: "a", path: "Notes/a", lastUpdatedVia: "key:claude", updatedAt: "2026-11-21T09:00:00.000Z", tags: [] },
+      b: { id: "b", path: "Notes/b", lastUpdatedVia: "key:notes-bot", updatedAt: "2026-11-21T09:30:00.000Z", tags: [] },
+      c: { id: "c", path: "Notes/c", lastUpdatedVia: "key:me", updatedAt: "2026-11-21T09:40:00.000Z", tags: [] },
+      d: { id: "d", path: "Parachute/Settings", lastUpdatedVia: "key:other-device", updatedAt: "2026-11-21T09:50:00.000Z", tags: ["parachute-settings"] },
+    };
+    const h = hub({ records: recs, deleted: [{ id: "g", path: "Notes/g", deleted_at: "2026-11-21T09:45:00.000Z" }], versions: { g: [{ ...v0, op: "delete", path: "Notes/g", superseded_at: "2026-11-21T09:45:00.000Z" }] } });
+    const { countChanged } = await import("./changes");
+    const r = await countChanged({ get: get(h), door: "records", since: "2026-11-21T00:00:00.000Z", charge: () => {}, self: (via) => via === "key:me", own: (x) => (x.path.startsWith("Parachute/") ? "app" : null) });
+    expect(r.count).toBe(3);
+    expect([...r.names].sort((x, y) => (x[1] < y[1] ? 1 : -1)).map(([n]) => n)).toEqual(["claude", "notes-bot"]);
+  });
+});

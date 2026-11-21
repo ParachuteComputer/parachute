@@ -278,6 +278,8 @@ const failed = (e: unknown) => {
   const m = e instanceof Error ? e.message : String(e);
   // the person is asked to let Parachute change that vault: the applet hears it as refused, in the app's words
   if ((e as { name?: string })?.name === "NeedsWriteError") return new ContractError(ERROR_CODES.notGranted, m.slice(0, 300));
+  // a record put back where another now is (core's 409 path_conflict): not a change meanwhile, and not tried again
+  if (/path_conflict/i.test(m)) return new ContractError(ERROR_CODES.failed, "path_taken: another record is at its place now");
   if (/conflict/i.test(m)) return new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read");
   if (/not.?found|404/i.test(m)) return new ContractError(ERROR_CODES.failed, "not_found");
   return new ContractError(ERROR_CODES.failed, m.slice(0, 300));
@@ -471,7 +473,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         validate: one((p) => (vaultOnly(["id", "ix", "if_updated_at"])(p) && typeof p.id === "string" && ID.test(p.id) && Number.isInteger(p.ix) && (p.ix as number) >= 0
           && (p.if_updated_at === undefined || str(p.if_updated_at, 64)) ? p as { vault: string; id: string; ix: number; if_updated_at?: string } : null)),
         async run({ vault, id, ix, if_updated_at }: { vault: string; id: string; ix: number; if_updated_at?: string }, _s, ctx) {
-          const v = held(vault); ctx.charge(3);
+          const v = held(vault); ctx.charge(4);
           const door = await deps.door(vault);
           let now: (Rec & { extension?: unknown }) | null;
           try { now = await getRec(vault, id, false); } catch (e) { if (gone(e)) now = null; else throw failed(e); }
@@ -489,8 +491,15 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           if (now) {
             if (guarded(now) || appsPath(now.path)) throw refuse("this record is the app's own: no applet changes it");
             if (if_updated_at !== now.updatedAt) { changedMeanwhile.add(`${vault} ${id}`); throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read"); }
-          } else if (if_updated_at !== undefined) throw new ContractError(ERROR_CODES.failed, "conflict: it was deleted since it was read");
+          } else if (if_updated_at !== undefined) { changedMeanwhile.add(`${vault} ${id}`); throw new ContractError(ERROR_CODES.failed, "conflict: it was deleted since it was read"); }
           if (isCodeExtension({ path: wasPath, extension: typeof was.extension === "string" ? was.extension : null }) || appsPath(wasPath) || wasPath.startsWith(VIEWS)) throw refuse("this record is the app's own: no applet changes it");
+          // a deleted record comes back at its tombstone's place (core), which may not be where version ix was: judge that too
+          if (!now) {
+            let tomb: Record<string, unknown> | null = null;
+            try { const raw = await deps.request(vault, "GET", `/${door}/${encodeURIComponent(id)}/versions?limit=1`); const l = plain(raw) && Array.isArray(raw.versions) ? raw.versions : []; tomb = plain(l[0]) ? l[0] : null; } catch (e) { throw failed(e); }
+            const tp = tomb && typeof tomb.path === "string" ? tomb.path : "";
+            if (!tomb || isCodeExtension({ path: tp, extension: typeof tomb.extension === "string" ? tomb.extension : null }) || appsPath(tp) || tp.startsWith(VIEWS)) throw refuse("this record is the app's own: no applet changes it");
+          }
           // what comes back published, or a change to one that is: the person says yes first
           const wasPublic = wasFields[PUBLISH_FIELD] === true;
           if ((now && isPublic(now)) || wasPublic) await askFirst(deps, {

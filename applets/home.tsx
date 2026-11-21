@@ -35,7 +35,9 @@ export default function Home() {
   const [failed, setFailed] = useState<unknown>(null);
   // today's changes by others come with the newest notes, so the line never pushes them down; a Parachute before level 5
   // has no app.changes, and a failed count shows no line
-  const load = () => Promise.all([app.recent({ limit: 12 }), app.pins(), typeof app.changes === "function" ? app.changes().catch(() => null) : null])
+  // (waited for four seconds at most: a slow count shows no line rather than holding the notes back)
+  const changes = () => (typeof app.changes === "function" ? Promise.race([app.changes().catch(() => null), new Promise((r) => setTimeout(() => r(null), 4000))]) : null);
+  const load = () => Promise.all([app.recent({ limit: 12 }), app.pins(), changes()])
     .then(([r, p, c]: [Recent[], Place[], Changed | null]) => { setRecent(r); setPins(p.filter((x) => !x.home)); setChanged(c); setFailed(null); }, (e: unknown) => setFailed(e));
   useEffect(() => { ready().then(load, (e: unknown) => setFailed(e)); }, []);
   const save = async () => {
