@@ -1,4 +1,5 @@
-/* Parachute's one look: paper, ink and one moss accent, a book serif for names and reading, a quiet sans for the rest
+/* Parachute's one look: paper, ink and one moss accent, a book serif (Literata) for names and reading, a quiet sans
+   (Instrument Sans) for the rest
    (design/WHY.md, design/kit/WHY.md). Compact: content starts at the top, no big empty gaps. Hierarchy by type, weight
    and space, never colour alone: the Daylight shows grey.
    The tokens (--bg, --surface, --text, --muted, --line, --accent, --danger, --serif, --sans, --mono, --pad, --gap,
@@ -21,6 +22,9 @@ button, input { font: inherit; color: inherit; }
 .bar-back, .bar-menu, .bar-mark { display: inline-grid; place-items: center; min-width: 36px; height: 36px; border: 0; background: none; color: var(--text); font-size: 26px; line-height: 1; text-decoration: none; border-radius: 8px; cursor: pointer; }
 .bar-mark { color: var(--accent); font-size: 22px; }
 .bar-menu { font-size: 22px; }
+/* the back mark is Instrument Sans's ‹ (the app carries it whatever the theme's sans), a small guillemet: drawn larger
+   so it reads as the chevron it was */
+.bar-back { font: 34px/1 "Instrument Sans", "Instrument Sans fallback", var(--sans, sans-serif); }
 .bar-back:active, .bar-menu:active { background: var(--line); }
 
 /* lists of notes (a vault, search, open with): rows under an ink rule, dotted between, as the launcher and the parts */
@@ -101,7 +105,7 @@ fieldset.plain legend { padding: 0; }
 .embed-said { padding: 12px var(--pad); border: 1px dashed var(--line); border-radius: var(--radius); }
 .embed-said p { margin: 0 0 6px; }
 .sheet-over-frames { z-index: 30; }
-.grant-handed { font-style: italic; }
+.grant-handed { font-family: var(--serif); font-style: italic; } /* the serif's own italic: the sans has none */
 .selftest-frames { position: fixed; left: -10000px; top: 0; width: 360px; height: 640px; overflow: hidden; }
 .selftest-frames iframe { width: 360px; height: 640px; }
 .grant-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
@@ -305,7 +309,9 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 }
 :is(button, a, .home-bar-place, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :is(input, textarea, select):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
-/* the Allow card and a passing line fade in once, holding their place (an ask's buttons never move) */
-.grant-card, .shell-line { animation: shell-fade var(--t-state, 0ms) var(--ease-out, ease) backwards; }
+/* the Allow card and a passing line arrive once, readable on their first frame as the kit's parts are (from 0.85, never
+   from blank: docs/DESIGN-RULES.md 8, 9), holding their place: opacity only, so an ask's buttons never move */
+.grant-card, .shell-line { animation: shell-arrive var(--t-state, 0ms) var(--ease-out, ease) backwards; }
+@keyframes shell-arrive { from { opacity: .85; } }
 .launcher-title, .notes-head h1, .grant-head h2, .sheet h2 { text-wrap: balance; }
 .home-bar-badge, .record-time, .entry-life { font-variant-numeric: tabular-nums; }
