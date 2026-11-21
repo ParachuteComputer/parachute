@@ -38,7 +38,8 @@ type Revealing = Reveal & { done: () => void };
 function RevealSheet({ r }: { r: Revealing }) {
   const done = useRef<HTMLButtonElement>(null);
   const [said, setSaid] = useState<string | null>(null);
-  useEffect(() => { done.current?.focus(); }, [r]);
+  // Escape does what Done does (the secret is gone from the screen either way)
+  useEffect(() => { done.current?.focus(); const esc = (e: KeyboardEvent) => { if (e.key === "Escape") r.done(); }; addEventListener("keydown", esc); return () => removeEventListener("keydown", esc); }, [r]);
   const copy = (text: string, what: string) => void (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error("no clipboard")))
     .then(() => setSaid(`${what} copied.`), () => setSaid(`Press and hold the ${what.toLowerCase()} to select it.`));
   const until = (() => { try { return new Date(r.until).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }); } catch { return r.until; } })();

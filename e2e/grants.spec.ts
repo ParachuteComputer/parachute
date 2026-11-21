@@ -83,6 +83,8 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   expect(token.split(".")).toHaveLength(3);
   await expect(shown).toContainText("won't show it again");
   expect(await v.locator("body").innerText()).not.toContain(token);
+  // copying a key into an AI takes a while: the sheet stays as long as the person needs, and the key is made all the same
+  await page.waitForTimeout(25_000);
   await shown.getByRole("button", { name: "Done" }).click();
 
   // the list names it: what it may do, to which type, until when

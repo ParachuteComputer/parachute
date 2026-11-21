@@ -742,8 +742,9 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           await askFirst(deps, { title: `Give ${sheetText(name)} a key to ${sheetText(v.name)}?`, body: `${sheetText(name)} can ${what} ${which} in ${sheetText(v.name)} (${sheetText(v.host)}) for a year, or until you end it here. Whoever holds the key can do the same, and what it reads goes to them.`, act: "Make the key" });
           let made: GivenKey;
           try { made = await deps.giveKey(vault, { name, can, types: only }); } catch (e) { throw failed(e); }
-          // the secret goes to the person on the app's own sheet, never into the applet's frame
-          await deps.reveal?.({ name: made.name, vault: v.name, token: made.token, address: made.address, until: made.until }).catch(() => {});
+          // the secret goes to the person on the app's own sheet, never into the applet's frame; the call answers now, while
+          // the sheet stays up as long as the person needs it (copying a key into an AI takes longer than a call may)
+          void deps.reveal?.({ name: made.name, vault: v.name, token: made.token, address: made.address, until: made.until }).catch(() => {});
           return { name: made.name, until: made.until, types: made.types, address: made.address };
         },
       },
@@ -754,7 +755,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           if (!deps.reach || !deps.endReach) throw refuse("this Parachute can't end what reaches a vault");
           let rows: ReachRow[] | null;
           try { rows = await deps.reach(vault); } catch (e) { throw failed(e); }
-          const r = rows?.find((x) => x.id === id);
+          if (rows === null) throw new ContractError(ERROR_CODES.failed, "managing_ended: managing this vault has ended; ask again to see who reaches it");
+          const r = rows.find((x) => x.id === id);
           if (!r) throw refuse("nothing by that name reaches the vault now");
           const who = r.app ? (r.app === "Parachute" ? "Parachute on another device" : r.app) : r.name;
           await askFirst(deps, { title: `End ${sheetText(who)}?`, body: r.self ? `This is Parachute on a device of yours: ending it signs that device out of ${sheetText(v.name)}.` : `${sheetText(who)} can no longer reach ${sheetText(v.name)} (${sheetText(v.host)}): its next request is refused. This can't be undone; you can make a new key.`, act: "End it" });

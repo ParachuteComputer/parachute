@@ -7,8 +7,9 @@
 // person asks to (`askManage`, the hub's own page or the key door), and holds it only while they are managing, for the
 // applet that asked and no other. It is never the vault's own token: it lives in this tab's session storage, is never
 // refreshed, and is ended at the hub (its access token and its refresh token) when the applet leaves Sharing, when the
-// shell leaves or hides that applet (AppletScreen), when the page goes (`pagehide`), or when it runs out (the hub's
-// access tokens last 15 minutes).
+// shell leaves or hides that applet (AppletScreen), when the page goes (`pagehide`: a reload, the tab closed), or when it
+// runs out (the hub's access tokens last 15 minutes; an Android app sent to the background usually fires no `pagehide`,
+// so there that limit is what ends it).
 import type { TokenResponse } from "@openparachute/surface-client";
 import type { Pending } from "./oauth";
 import { onOrigin } from "./oauth";
@@ -41,7 +42,7 @@ function end(h: Held): void {
 }
 
 let listening = false;
-/** The page going ends everything held (a reload, the tab closed, the app sent to the background for good). */
+/** The page going ends everything held (a reload, the tab closed). */
 function listen(): void {
   if (listening || typeof addEventListener !== "function") return;
   listening = true;

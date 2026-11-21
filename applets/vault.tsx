@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 // Table, Fields and the vaults calls are level 3, Changes' calls (vaults.changes, compare, restore, remove) level 5, and
 // who reaches a vault (vaults.reach, manage, giveKey, endReach, stopManaging) level 6: its record says `needs: 6`, so an
 // older app says to update
-import { app, Button, Empty, Field, Fields, List, Loading, Note, onFresh, onLaunch, Page, Problem, ready, Search, Table, Tabs, toast, useSaved, vaults, when, Write } from "parachute";
+import { app, Button, Empty, Field, Fields, List, Loading, Note, onFresh, onLaunch, onShown, Page, Problem, ready, Search, Table, Tabs, toast, useSaved, vaults, when, Write } from "parachute";
 
 type Held = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where a published record is read (this plus its id): null where the hub has none; absent from an older app */
@@ -523,6 +523,8 @@ function Reach({ v, self }: { v: Held; self: { key: string; title: string; meta:
   const [giving, setGiving] = useState(false);
   const load = () => can ? sh.reach!(v.key).then((r) => { setManaging(r.managing); setRows(r.rows); setFailed(null); }, setFailed) : Promise.resolve();
   useEffect(() => { void load(); }, [v.key]);
+  // shown again after being hidden: the shell ended what was managed then (vault/manage.ts), so the list is read again
+  useEffect(() => (typeof onShown === "function" ? onShown((on: boolean) => { if (on) void load(); }) : undefined), [v.key]);
   // leaving Sharing gives the hub's yes back: Parachute holds no admin when nobody is managing
   useEffect(() => () => { if (can) void sh.stopManaging?.(v.key).catch(() => {}); }, [v.key]);
   const others = (rows ?? []).filter((r) => !r.self);
@@ -533,13 +535,13 @@ function Reach({ v, self }: { v: Held; self: { key: string; title: string; meta:
   const kindWord = (r: ReachRow) => (r.who === "agent" && !r.app ? "an AI, " : "");
   return <>
     <List label={`Who reaches ${v.name}`} rows={[self, ...others.map((r) => ({ key: r.id, title: title(r), meta: `${kindWord(r)}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`,
-      aside: <Button small kind="quiet" aria-label={`End ${title(r)}`} onClick={() => sh.endReach!(v.key, r.id).then(() => { toast(`${title(r)} can no longer reach ${v.name}.`); return load(); }, (e: unknown) => quiet(e, "Not ended"))}>End</Button> }))]} />
+      aside: <Button small kind="quiet" aria-label={`End ${title(r)}`} onClick={() => sh.endReach!(v.key, r.id).then(() => { toast(`${title(r)} can no longer reach ${v.name}.`); return load(); }, (e: unknown) => { quiet(e, "Not ended"); void load(); })}>End</Button> }))]} />
     {!can ? <p className="note-meta">The keys and AIs your hub has let in are listed on your hub, where you can end them. This Parachute can't list them yet.</p>
       : failed ? <Problem error={failed} onRetry={load}>Who reaches {v.name} couldn't be read</Problem>
       : managing === null ? <Loading />
       : !managing ? <div className="acts"><p className="note-meta">Every key, AI and app your hub lets into {v.name} is listed on your hub.</p>
           <Button small onClick={() => sh.manage!(v.key).catch((e: unknown) => quiet(e, "Not opened"))}>Show them all</Button></div>
-      : giving ? <GiveKey v={v} taken={(rows ?? []).map((r) => r.name)} cancel={() => setGiving(false)} made={(g) => { setGiving(false); toast(`${g.name} can reach ${typesWord(g.types)} in ${v.name}.`); void load(); }} />
+      : giving ? <GiveKey v={v} taken={(rows ?? []).map((r) => r.name)} cancel={() => { setGiving(false); void load(); }} made={(g) => { setGiving(false); toast(`${g.name} can reach ${typesWord(g.types)} in ${v.name}.`); void load(); }} />
       : <div className="acts">{!others.length && <p className="note-meta">Nothing else reaches {v.name} now.</p>}<Button small onClick={() => setGiving(true)}>Give an AI a key</Button></div>}
   </>;
 }
@@ -560,7 +562,8 @@ function GiveKey({ v, taken, cancel, made }: { v: Held; taken: string[]; cancel:
   const go = () => {
     if (!ok || busy) return;
     setBusy(true);
-    sh.giveKey!(v.key, { name, can, types: all ? null : picked }).then(made, (e: unknown) => quiet(e, "No key made")).finally(() => setBusy(false));
+    // refused or ended meanwhile: said, and the list read again (managing may have ended while the screen was hidden)
+    sh.giveKey!(v.key, { name, can, types: all ? null : picked }).then(made, (e: unknown) => { quiet(e, "No key made"); if (/managing|ended/i.test(String((e as Error)?.message ?? e))) cancel(); }).finally(() => setBusy(false));
   };
   return (
     <div className="give">
