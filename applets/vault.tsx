@@ -392,8 +392,11 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   // the hub's one address for an AI (T-476), when it has one; an older app has no `hubs`
   const [one, setOne] = useState<string | null>(null);
   useEffect(() => {
+    let on = true;
+    setOne(null);
     const ask = (vaults as { hubs?: () => Promise<{ address: string | null; vaults: string[] }[]> }).hubs;
-    if (typeof ask === "function") ask().then((hs) => setOne(hs.find((h) => h.vaults.includes(v.key))?.address ?? null), () => setOne(null));
+    if (typeof ask === "function") ask().then((hs) => { if (on) setOne(hs.find((h) => h.vaults.includes(v.key))?.address ?? null); }, () => {});
+    return () => { on = false; };
   }, [v.key]);
   // public as the hub judges it: the field, or its default publish tag
   const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { where: [{ field: "published", op: "eq", value: true }], limit: 50 }),

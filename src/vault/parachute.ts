@@ -84,8 +84,11 @@ export async function describe(hub: string, fetchImpl: typeof fetch = fetch.bind
   const accountMcp = safe(d.account_mcp_endpoint) && onHubOrDomain(d.account_mcp_endpoint, hub) ? d.account_mcp_endpoint : plainHub.accountMcp;
   const vaultTemplate = safe(d.vault_url_template) && (d.vault_url_template as string).includes("{name}") && onHubOrDomain(d.vault_url_template.replace("{name}", "x"), hub) ? d.vault_url_template as string : plainHub.vaultTemplate;
   const appClientId = typeof d.app_client_id === "string" && /^[A-Za-z0-9._-]{1,100}$/.test(d.app_client_id) ? d.app_client_id : null;
-  const accountMcpListed = accountMcp === d.account_mcp_endpoint;
-  const mcp = safe(d.mcp_endpoint) && onHubOrDomain(d.mcp_endpoint, hub) ? d.mcp_endpoint : null;
+  // an address a person copies into their AI is taken only as the hub wrote it in its plain form: no spaces, line
+  // breaks or other text after it (what a URL parser would quietly drop or rewrite)
+  const plainUrl = (raw: string) => { try { return new URL(raw).href === raw; } catch { return false; } };
+  const accountMcpListed = accountMcp === d.account_mcp_endpoint && plainUrl(accountMcp);
+  const mcp = safe(d.mcp_endpoint) && onHubOrDomain(d.mcp_endpoint, hub) && plainUrl(d.mcp_endpoint) ? d.mcp_endpoint : null;
   return { hub, issuer, accountMcp, vaultTemplate, ...(d.door === "cloud" ? { door: "cloud" as const } : {}), ...(appClientId ? { appClientId } : {}),
     ...(mcp ? { mcp } : {}), ...(accountMcpListed ? { accountMcpListed } : {}) };
 }

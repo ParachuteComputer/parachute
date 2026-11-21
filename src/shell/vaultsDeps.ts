@@ -30,12 +30,15 @@ export function heldVaults(): HeldVault[] {
   return listVaults().map((v) => ({ key: v.key, name: v.vault, host: hostOf(v.issuer), mine: isMine(v), home: home?.key === v.key, level: heldLevel(v), connector: connectorAddress(v) }));
 }
 
-/** Each hub's one address, asked of its description once a session (a hub that can't be read is asked again next time). */
+/** Each hub's one address, asked of its description once a session. A hub that doesn't answer within 4 s, or can't
+ *  be read, counts as none and is asked again after a minute; one slow hub never holds back the others. */
 const addresses = new Map<string, Promise<string | null>>();
+const ASK_MS = 4000, RETRY_MS = 60_000;
 const addressOf = (hub: string) => {
   let a = addresses.get(hub);
   if (!a) {
-    a = describe(hub).then(oneAddress, () => { addresses.delete(hub); return null; });
+    const timed: typeof fetch = (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(ASK_MS) });
+    a = describe(hub, timed).then(oneAddress, () => { setTimeout(() => addresses.delete(hub), RETRY_MS); return null; });
     addresses.set(hub, a);
   }
   return a;

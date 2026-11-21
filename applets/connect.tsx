@@ -58,9 +58,11 @@ export default function Connect() {
     under: copied[key] === "failed" || !canCopy ? <span className="small">Press and hold the address to select it.</span> : undefined,
   });
   const vaultRow = (v: Held) => row(v.key, v.name, v.connector!, v.name);
+  // "on <host>" whenever another hub's vaults are in the same list
+  const several = ones.length > 1 || rest.length > 0;
   const hubRow = (h: Hub & { address: string }) => {
-    const title = ones.length > 1 ? `All your vaults on ${h.host}` : "All your vaults";
-    return row(`hub:${h.host}`, title, h.address, ones.length > 1 ? `all your vaults on ${h.host}` : "all your vaults");
+    const title = several ? `All your vaults on ${h.host}` : "All your vaults";
+    return row(`hub:${h.host}`, title, h.address, several ? `all your vaults on ${h.host}` : "all your vaults");
   };
   const how = (
     <>
