@@ -95,29 +95,54 @@ export default function Journal() {
   // lines written while the vault couldn't be reached, oldest first, each with the moment it was written
   const [outbox, setOutbox] = useSaved<{ at: string; body: string }[]>("outbox", []);
   const box = useRef(outbox);
-  box.current = outbox;
-  const sending = useRef(false);
-  /** One line into the vault under the time it was written: the same words in the same minute get the seconds. */
-  const put = (body: string, at: Date) => {
-    const path = pathFor(body, at);
-    return vault.createRecord({ path, body }).catch((e: any) => { if (e?.status === 409 || /conflict|elsewhere/i.test(String(e?.message ?? e))) return vault.createRecord({ path: path.replace(/^(Journal\/[^ ]+)/, `Journal/${when.path(at, true)}`), body }); throw e; });
+  /** The outbox, now (the ref at once, for a flush already running; the state for the screen and the device's disk). */
+  const setBox = (next: { at: string; body: string }[]) => {
+    box.current = next;
+    setOutbox(next);
+    // written to the device's disk now, not in the kit's next 250 ms: the app may be closed right after
+    setTimeout(() => void (globalThis as any).parachute?.saved?.flush?.(), 0);
   };
-  /** Sends what waits, oldest first, until one isn't taken; the rest wait for the next time. */
-  const flush = async () => {
-    if (sending.current || !box.current.length) return;
+  const sending = useRef(false);
+  /** The vault couldn't be reached (no connection, the hub down): the line waits. What the app itself refuses (out of
+   *  scope, bad words) is said. (The app answers any failure at the hub as one 502, so a line the hub itself refused
+   *  waits too, and Try now says it still can't reach the vault.) */
+  const unreachable = (e: any) => /^Vault(Unreachable|Server)Error$/.test(String(e?.name ?? "")) || e?.status === 0 || e instanceof TypeError;
+  const taken = (e: any) => e?.status === 409 || /^Vault(Conflict|TargetExists)Error$/.test(String(e?.name ?? "")) || /conflict|elsewhere|exists/i.test(String(e?.message ?? e));
+  /** One line into the vault under the time it was written: the same words in the same minute get the seconds. A line
+   *  sent before whose answer was lost is there already, under one of those two paths: then it counts as sent. */
+  const put = async (body: string, at: Date) => {
+    const paths = [pathFor(body, at), pathFor(body, at).replace(/^(Journal\/[^ ]+)/, `Journal/${when.path(at, true)}`)];
+    for (const path of paths) {
+      try { await vault.createRecord({ path, body }); return; } catch (e: any) {
+        if (!taken(e)) throw e;
+        // the day's folder (a query names a folder), then the one at that path
+        const there = (await vault.queryRecords({ pathPrefix: path.slice(0, path.lastIndexOf("/") + 1), includeBody: true, limit: 200 })) as Entry[];
+        if (there.some((r) => r.path === path && (r.body ?? "").trim() === body)) return;
+      }
+    }
+    throw new Error("a note with those words at that time is there already, and says something else");
+  };
+  /** Sends what waits, oldest first. One the vault refuses is said, and stays; one it can't reach stops the rest. Runs
+   *  again if more was added meanwhile. Says whether anything still waits. */
+  const flush = async (asked = false): Promise<void> => {
+    if (sending.current) return;
     sending.current = true;
-    let sent = 0;
+    let sent = 0, refused = "", reached = true;
     try {
       for (const item of [...box.current]) {
-        try { await put(item.body, new Date(item.at)); } catch { break; }
+        try { await put(item.body, new Date(item.at)); }
+        catch (e: any) { if (unreachable(e)) { reached = false; break; } refused = e?.message ?? String(e); continue; }
         sent++;
-        setOutbox((b) => b.filter((x) => x !== item && !(x.at === item.at && x.body === item.body)));
+        setBox(box.current.filter((x) => !(x.at === item.at && x.body === item.body)));
       }
     } finally { sending.current = false; }
     if (sent) { toast(sent === 1 ? "A waiting entry is saved." : `${sent} waiting entries are saved.`); await load().catch(() => {}); }
+    if (refused) toast(`Your vault didn't take a waiting entry: ${refused}`, { error: true });
+    else if (asked && !reached) toast("Still can't reach your vault. They wait here.");
+    if (reached && !refused && box.current.length) return flush(asked);
   };
   useEffect(() => {
-    void ready().then(flush);
+    void ready().then(() => flush());
     // when Journal is in front again: shown in the app, or the app back from the background
     const back = () => { if ((typeof onScreen === "function" ? onScreen() : true) && document.visibilityState === "visible") void flush(); };
     const off = typeof onShown === "function" ? onShown(back) : () => {};
@@ -130,15 +155,19 @@ export default function Journal() {
     if (!body || busy) return;
     setBusy(true);
     const at = new Date();
-    try {
-      // behind an earlier one still waiting, it waits too (the order they were written in is kept)
-      if (box.current.length) throw new Error("waiting");
-      await put(body, at);
-    } catch {
-      setOutbox((b) => [...b, { at: at.toISOString(), body }]);
+    // behind lines still waiting, it waits with them (the order they were written in is kept), and all are tried now
+    if (box.current.length) {
+      setBox([...box.current, { at: at.toISOString(), body }]);
       setText("");
-      // written to the device's disk now, not in the kit's next 250 ms: the app may be closed right after
-      setTimeout(() => void (globalThis as any).parachute?.saved?.flush?.(), 0);
+      setBusy(false);
+      toast("Kept on this device: it goes to your journal when it can.");
+      void flush();
+      return;
+    }
+    try { await put(body, at); } catch (e: any) {
+      if (!unreachable(e)) { toast(`Not saved: ${e?.message ?? e}. Your words are still here.`, { error: true }); setBusy(false); return; }
+      setBox([...box.current, { at: at.toISOString(), body }]);
+      setText("");
       toast("Kept on this device: it goes to your journal when it can.");
       setBusy(false);
       return;
@@ -160,7 +189,7 @@ export default function Journal() {
       <Note body={words.strip(opened.body)} path={opened.path} tags={opened.tags} />
     </section>}
     {outbox.length > 0 && <List label="Waiting to be saved" rows={outbox.map((x) => ({ key: x.at, title: entryWords(x.body), meta: `${when.day(x.at)}, ${when.time(x.at)}` }))}
-      more={{ label: "Try now", onPress: () => void flush() }} />}
+      more={{ label: "Try now", onPress: () => void flush(true) }} />}
     <Days times={sorted.map((x) => x.at.toISOString())} label="entries, the last four weeks" />
     {failed ? <Problem error={failed} onRetry={() => void start()}>Couldn't read your journal</Problem>
       : entries === null ? <Loading /> : !sorted.length ? <Empty>Nothing yet. Write the first line above.</Empty> : null}
