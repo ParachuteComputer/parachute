@@ -554,7 +554,13 @@ export const FRAME_KIT = String.raw`(function () {
       access: function (vault) { return call("vaults", "access", { vault: vault }); },
       publish: function (vault, id, on) { return call("vaults", "publish", { vault: vault, id: id, on: on !== false }); },
       revoke: function (vault, noteId) { return call("vaults", "revoke", { vault: vault, noteId: noteId }); },
-      readOnly: function (vault) { return call("vaults", "readOnly", { vault: vault }); }
+      readOnly: function (vault) { return call("vaults", "readOnly", { vault: vault }); },
+      // who reaches a vault, a key for an AI, ending one (level 6, T-476)
+      reach: function (vault) { return call("vaults", "reach", { vault: vault }); },
+      manage: function (vault) { return call("vaults", "manage", { vault: vault }); },
+      giveKey: function (vault, k) { return call("vaults", "giveKey", { vault: vault, name: k && k.name, can: k && k.can, types: k && k.types ? k.types : null }); },
+      endReach: function (vault, id) { return call("vaults", "endReach", { vault: vault, id: id }); },
+      stopManaging: function (vault) { return call("vaults", "stopManaging", { vault: vault }); }
     }),
     theme: {
       get: function () { return call("theme", "get", {}); },

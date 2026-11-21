@@ -31,7 +31,7 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
 - **Vault**, Parachute's own viewer: your vaults, each one's types with counts, a type's records as a table (sort,
   filter, group, saved views), a record's fields (changed where they stand), words, links both ways and history; what
   your AI writes appears while you look; **Changes** shows what changed, by whom (your AI by its key's name), each
-  before and after, and puts a change or a whole run of them back; Sharing says what reaches a vault. One tap adds it ([docs/VAULT.md](docs/VAULT.md)).
+  before and after, and puts a change or a whole run of them back; Sharing lists who reaches a vault, every key, AI and app by name, ends any of them with one tap, and gives an AI a key to some of its types (on a hub with the list: core T-476). One tap adds it ([docs/VAULT.md](docs/VAULT.md)).
 - **Your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, else in
   Vault once it is added, else in the plain view. A typed record shows its fields (name and value). Write a new note and edit a note's words and
   fields in the app.

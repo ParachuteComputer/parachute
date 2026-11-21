@@ -12,6 +12,7 @@
 // At its own address it is a kept screen (shell/kept.tsx): while it runs, the person's own code, it stays running hidden
 // when they go elsewhere, and shows again at once; hidden, it gets no tap and is told so (`shown`); shown again, its
 // note is read again, and changed code or a changed grant puts the card in its place.
+import { endManageFor } from "../vault/manage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { Note } from "@openparachute/surface-client";
@@ -452,10 +453,15 @@ export default function AppletScreen() {
   const vaultsReads = useRef(new Map<string, Set<string>>());
   const vaultsModule = useMemo(() => (rec && entry && (entry.app.includes("vaults") || entry.app.includes("sharing"))
     ? createVaultsModule(entry.app, vaultsDeps({ confirm: (q) => sheetsRef.current.confirm(q), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search,
+      // what it manages is its own, and a key's secret is shown on the shell's sheet (vault/manage.ts, ShellSheets.tsx)
+      applet: subjectOf(rec.key, entry.noteId), reveal: (k) => sheetsRef.current.reveal(k),
       // Parachute's own Vault draws a record again when told: it may be answered from the copies kept of its reads
       ...(officialOf(entry.noteId) === "vault" ? { read: (vault: string, read: string) => { let m = vaultsReads.current.get(vault); if (!m) vaultsReads.current.set(vault, m = new Set()); if (m.size < 1000) m.add(read); } } : {}) }))
     : null), [rec?.key, allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => vaultsModule?.stop(), [vaultsModule]);
+  // left (another applet, the launcher, the shell's Back): whatever this applet was managing ends with it
+  const managing = rec && entry ? subjectOf(rec.key, entry.noteId) : null;
+  useEffect(() => () => { if (managing) endManageFor(managing); }, [managing]);
   // the frame's reads, from the kept copies while its page redraws on fresh data: noted, so it is told only of those
   const reader = useMemo(() => (rec ? keptReaderFor(rec) : null), [rec?.key, rec?.issuer]); // eslint-disable-line react-hooks/exhaustive-deps
   const router = useMemo(() => (rec && entry && reader ? createRouter([
@@ -484,7 +490,7 @@ export default function AppletScreen() {
   const name = entry?.manifest.name ?? "Applet";
   const sized = !!entry?.embeds.length;
   // a notification's tap opens the applet at a room and message (services/notifyLink.ts)
-  const launch: { room: string; event?: string } | { vault: string; record?: string; show?: "changes" } | null = launchOf(params) ?? (entry?.app.includes("vaults") ? vaultLaunchOf(params) : null);
+  const launch: { room: string; event?: string } | { vault: string; record?: string; show?: "changes" | "sharing" } | null = launchOf(params) ?? (entry?.app.includes("vaults") ? vaultLaunchOf(params) : null);
   const launchKey = launch ? ("room" in launch ? `${launch.room}|${launch.event ?? ""}` : `${launch.vault}|${launch.record ?? ""}|${launch.show ?? ""}|${location.key}`) : "";
   // what it was allowed, as its card said it (the folders, and each server with its rooms and keys): an applet reads its
   // room, or which key is Uni's, from here rather than from a copy of its own
@@ -525,7 +531,8 @@ export default function AppletScreen() {
     shownBefore.current = kept.shown;
     sessionNow.current?.sendEvent("shown", { shown: kept.shown });
     // shown again: its note and what it was judged on are asked of the hub again now, whenever they were last asked
-    if (!kept.shown) { device.cancel(); sheets.cancel(); setMenu(false); } else {
+    // hidden: what it was managing ends (vault/manage.ts), as when it is left
+    if (!kept.shown) { device.cancel(); sheets.cancel(); setMenu(false); if (rec && entry) endManageFor(subjectOf(rec.key, entry.noteId)); } else {
       if (rec) askAgain(rec.key);
       const h = homeVault(); if (h && h.key !== rec?.key) askAgain(h.key, (read) => /Parachute%2FApprovals%2F|[?&]tag=parachute-(?:pointer|keys)(?:&|$)/.test(read));
       setRecheck((n) => n + 1);

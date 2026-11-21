@@ -19,10 +19,38 @@ Bases, Anytype, Capacities).
 | A type | its records as a table: the type's fields are the columns, a header's tap sorts by it, the first column stays in view as the rest scroll across. **Filter** (a field's value), **Group** (by a field), **List** or **Table**, a search. Saved views as tabs. **New …** adds a record of the type, starting from its default template when it has one ([PACKS.md](PACKS.md)). A record opens beside the table on a computer, in its place on a phone |
 | A record | its fields, changed where they stand (a choice from the type's list, a box for yes or no, a number, a date), its types and tags, its words (rendered; **Edit words**), what it links to and what links to it, its history (each change, by whom: an AI by its key's name; tap one for its before and after, and **Put it back**), **Make this a template**, and **Publish** |
 | Changes | what changed in the vault in the last 7 days (**Older changes** reaches back further), newest first, each writer's run of changes together under its name (`claude`; "You, in Parachute here"; "You, in another app" for a write for your own account by a key with no name; "Someone else on your hub"; or "An app without a name", with a line saying the hub doesn't tell which). Each change says what it did ("serves 2 → 4, the words") and opens to its before and after: fields, the words line by line, a move, links added or gone. **Put it back** for one change, or **Put all 4 back** for a writer's run: each record goes back to how it was before the run's first change to it, a record the run made is taken away, and one it deleted comes back. The number counts records, so when a run has more changes than that, a line says why ("Put all 6 back covers 6 of these 9 changes. Not counted: 2 already put back, 1 more change to a record already counted"). When a record changed again after, it says so first. Home says it in a line: "claude changed 4 things today", with **See what changed** |
-| Sharing | what reaches the vault: this app (reads, or reads and changes; **Read only**), the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at. **Publish**, **Revoke** and **Read only** each ask on the app's own sheet first, naming the record's path or the applet, and the vault's host |
+| Sharing | **Who reaches** the vault: this app (reads, or reads and changes; **Read only**), and after **Show them all** every key, AI and app the hub lets in, each by name with what it may do, to which types and until when (**End**); **Give an AI a key** (its name; read, or read and change; every type or some), whose secret is shown once with its address, on the app's own sheet. Then the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at. **Show them all**, **Make the key**, **End**, **Publish**, **Revoke** and **Read only** each ask on the app's own sheet first, naming what they grant or take and the vault's host |
 
 What an AI writes shows as it lands: the type's table, an open record and Changes follow the vault's live changes (the
 hub's subscription, not a timer).
+
+## Who reaches a vault
+
+Sharing lists everything that reaches a vault and ends any of it with one tap (T-476; core's 1.0 grants slice,
+`docs/SPEC-1.0-grants.md` §7.3 in parachute-core).
+
+- **Asking.** The app holds no admin anywhere ([design/SCOPES.md](design/SCOPES.md)). **Show them all** asks the hub,
+  once (the app's own sheet, then the hub's page or its key door), for the vault's admin, and holds it in this tab's
+  session only, for Vault alone: never as the vault's token, never refreshed, and ended at the hub (its access and
+  refresh tokens) when the person leaves Sharing, when the shell leaves or hides Vault, when the page goes, or after the
+  hub's 15 minutes (`src/vault/manage.ts`).
+- **The list** is the hub's (`GET <hub>/account/vaults/<v>/statements`): every credential that reaches the vault is a
+  row, by name: a key made here, an AI or app connected by OAuth (with the name it registered), this app on another
+  device, a key that reaches several vaults. Each says what it may do (reads; reads and changes; manages; downloads a
+  backup), to which types (every type, or the ones named) and until when, and when it was last used.
+- **A key for an AI.** Its name (its writes read `key:<name>` in Changes), read or read and change, every type or some.
+  The vault keeps the grant and checks every request against it: a key for `recipe` reads and adds recipes and gets
+  nothing of a `journal` record, by id, search, links, counts, files or history (`POST <hub>/account/keys` with
+  `types`). The secret is shown once, with the vault's own MCP address, on the app's own sheet: the applet that asked
+  (Vault, or any applet with `sharing`) never sees it.
+- **End** revokes it at the hub and ends the vault's grant: its next request is refused, its live socket closes, a file
+  ticket it was given is spent no more (`DELETE <hub>/account/vaults/<v>/statements/<id>`).
+- **A hub without the list** (an older core, Parachute Cloud for now): Sharing asks the hub, with no credential, whether it
+  has the list, and where it doesn't keeps the line that the hub lists them, offering nothing it can't do.
+- **Not yet:** a key can't be narrowed after it is made (end it and make another); one key reads and writes the same
+  types (no read-one-write-another); a key that writes on behalf of others is the owner's to make, on the hub; a grant
+  sees no history until versions record their types (core #114/#115); Parachute Cloud has no typed keys or list yet
+  (core `deliberate.json` `typed-keys`); an app older than level 6 says to update before it opens Vault.
 
 ## Changes
 
@@ -125,12 +153,7 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
 
 ## Gaps, said plainly (proposals for core, not built)
 
-1. **Who can reach a vault.** Core lists tokens and OAuth grants only on the hub, for its operator
-   (`/api/auth/tokens`, `/api/grants`: host admin) or for the signed-in person's own tokens (`/api/account/tokens`: the
-   hub's session cookie). A vault token, even admin, is refused (checked on a throwaway hub: 403, 401). So Sharing can't
-   list the AIs and keys that reach a vault. Proposal: `GET /vault/<name>/api/access` with the vault's admin scope,
-   listing each live token and grant that covers the vault (client name, scope, created, last used), and
-   `POST …/access/<jti>/revoke`.
+1. **Who can reach a vault.** Built (T-476): "Who reaches a vault" above. Left: Parachute Cloud's twin.
 2. **Defining a type's fields.** With core #139, `PUT /api/types/<name>` takes the typed work's rule on REST too: write
    may define a new type, and add fields to a type it made. Add a pack uses it ([PACKS.md](PACKS.md)). **New type**
    still makes a type with its first record, and a field is added to a record; changing a field of a type someone else

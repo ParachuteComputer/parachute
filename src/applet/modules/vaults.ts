@@ -32,6 +32,17 @@
 //     publish({vault, id, on})                 anyone with its link may read the record (on), or no longer (off: no sheet)
 //     revoke({vault, noteId})                  take an applet's access back
 //     readOnly({vault})                        let Parachute only read the vault again
+//     reach({vault})                           who reaches the vault, each key, AI and app by name (level 6, T-476):
+//                                              {managing, lists, rows: [{id, name, who, app, can, types, until, lastUsed,
+//                                              self}] | null}; null while Parachute isn't managing it (`manage` asks);
+//                                              `lists` false where the hub has no such list (an older hub, Cloud for now)
+//     manage({vault})                          ask the hub to let Parachute manage who reaches it, until the person
+//                                              leaves (the page goes to the hub, or its key door, and comes back)
+//     giveKey({vault, name, can, types})       a key for an AI: read, or read and change (`can`), all types (null) or
+//                                              some; its secret is shown once on the app's own sheet, never to the
+//                                              applet: {name, until, types, address}
+//     endReach({vault, id})                    end one: its next request is refused
+//     stopManaging({vault})                    give the hub's yes back now (leaving Sharing does)
 //
 // What it never does, whatever the card says: change a code record (HTML, TSX, JSX) or one carrying an applet's,
 // component's or the app's own name (`applet`, `component`, `parachute-*`: its settings, apps, approvals, keys), give or
@@ -75,6 +86,12 @@ export type AppletRow = { id: string; name: string; glyph: string; href: string;
   /** a copy of one of Parachute's own kept in the vault (the old Add Capture wrote these): its name, to tell the two apart */
   copyOf?: string };
 export type WatchEvent = { upsert?: Rec } | { remove?: string };
+/** One key, AI or app that reaches a vault, as the hub lists it (vault/manage.ts): what it may do, to which types (null:
+ *  all of them), until when. `self`: this device's Parachute. */
+export type ReachRow = { id: string; name: string; who: "person" | "agent" | "app" | "service"; app: string | null; can: "read" | "change" | "manage" | "backup";
+  types: string[] | null; until: string | null; lastUsed: string | null; self: boolean };
+/** A key just made for an AI, as the shell has it (its secret shown once on the shell's own sheet), and where it connects. */
+export type GivenKey = { name: string; token: string; until: string; types: string[] | null; address: string };
 
 /** The shell's side: requests on the vault's own API with the app's sign-in (a change to a vault held for reading
  *  throws the write ask before it is sent), and what the app knows of each vault. */
@@ -102,6 +119,16 @@ export type VaultsDeps = {
   applets(vault: string): Promise<AppletRow[]>;
   revoke(vault: string, noteId: string): Promise<void>;
   readOnly(vault: string): Promise<void>;
+  /** Who reaches a vault (vault/manage.ts), while Parachute manages it; null when it doesn't now; false when the hub
+   *  has no such list (an older hub, Parachute Cloud for now). */
+  reach?(vault: string): Promise<ReachRow[] | null | false>;
+  /** Go to the hub to manage who reaches a vault, coming back to where the applet is. */
+  manage?(vault: string): Promise<void>;
+  giveKey?(vault: string, k: { name: string; can: "read" | "write"; types: string[] | null }): Promise<GivenKey>;
+  endReach?(vault: string, id: string): Promise<void>;
+  stopManaging?(vault: string): void;
+  /** The shell's own sheet showing a key's secret once (the applet never gets it). Absent: nothing shows it. */
+  reveal?(k: { name: string; vault: string; token: string; address: string; until: string }): Promise<void>;
   /** The app's own yes-or-no sheet over the applet, after a tap of the person's in it: "yes", "no", or "untapped" (no
    *  live tap in the applet, so no sheet was shown). */
   confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">;
@@ -115,6 +142,10 @@ const NAME = /^[A-Za-z0-9][A-Za-z0-9_/-]{0,99}$/;
 const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
 const FIELD = { test: (x: string) => FIELD_NAME.test(x) && !["__proto__", "constructor", "prototype"].includes(x) };
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
+/** A key's name at the hub (core keys.ts KEY_NAME_RE). */
+const KEY_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
+/** A type a key may be held to (core account-keys.ts): printable, no space, not `*`. */
+const GRANT_TYPE = { test: (x: string) => /^[!-~]{1,128}$/.test(x) && x !== "*" };
 const VIEWS = "Parachute/Views/";
 const VIEW_TAG = "parachute-view";
 const GUARDED = ["applet", "component", "parachute-pointer"];
@@ -682,6 +713,70 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           await deps.revoke(vault, noteId);
           return null;
         },
+      },
+      reach: {
+        cap: null, validate: one(vaultOnly(), "sharing"),
+        async run({ vault }: { vault: string }, _s, ctx) {
+          held(vault); ctx.charge(1);
+          if (!deps.reach) throw refuse("this Parachute can't list who reaches a vault");
+          try {
+            const rows = await deps.reach(vault);
+            return rows === false ? { managing: false, rows: null, lists: false } : { managing: rows !== null, rows, lists: true };
+          } catch (e) { throw failed(e); }
+        },
+      },
+      manage: {
+        cap: null, validate: one(vaultOnly(), "sharing"),
+        async run({ vault }: { vault: string }, _s, ctx) {
+          const v = held(vault); ctx.charge(1);
+          if (!deps.manage) throw refuse("this Parachute can't manage who reaches a vault");
+          await askFirst(deps, { title: `Manage who reaches ${sheetText(v.name)}?`, body: `Your hub (${sheetText(v.host)}) lets Parachute see every key, AI and app that reaches ${sheetText(v.name)}, make a key for an AI, and end one, until you leave Sharing.`, act: "Continue" });
+          await deps.manage(vault);
+          return null;
+        },
+      },
+      giveKey: {
+        cap: null,
+        validate: one((p) => {
+          if (!vaultOnly(["name", "can", "types"])(p) || typeof p.name !== "string" || !KEY_NAME.test(p.name) || (p.can !== "read" && p.can !== "write")) return null;
+          const t = p.types;
+          if (t !== null && (!Array.isArray(t) || t.length === 0 || t.length > 64 || t.some((x) => typeof x !== "string" || !GRANT_TYPE.test(x)) || new Set(t).size !== t.length)) return null;
+          return p as { vault: string; name: string; can: "read" | "write"; types: string[] | null };
+        }, "sharing"),
+        async run({ vault, name, can, types: only }: { vault: string; name: string; can: "read" | "write"; types: string[] | null }, _s, ctx) {
+          const v = held(vault); ctx.charge(2);
+          if (!deps.giveKey) throw refuse("this Parachute can't make a key");
+          const what = can === "write" ? "read, add, change and delete" : "read";
+          const which = only ? `${only.map(sheetText).join(", ")} records` : "every record";
+          await askFirst(deps, { title: `Give ${sheetText(name)} a key to ${sheetText(v.name)}?`, body: `${sheetText(name)} can ${what} ${which} in ${sheetText(v.name)} (${sheetText(v.host)}) for a year, or until you end it here. Whoever holds the key can do the same, and what it reads goes to them.`, act: "Make the key" });
+          let made: GivenKey;
+          try { made = await deps.giveKey(vault, { name, can, types: only }); } catch (e) { throw failed(e); }
+          // the secret goes to the person on the app's own sheet, never into the applet's frame; the call answers now, while
+          // the sheet stays up as long as the person needs it (copying a key into an AI takes longer than a call may)
+          void deps.reveal?.({ name: made.name, vault: v.name, token: made.token, address: made.address, until: made.until }).catch(() => {});
+          return { name: made.name, until: made.until, types: made.types, address: made.address };
+        },
+      },
+      endReach: {
+        cap: null, validate: one((p) => (vaultOnly(["id"])(p) && typeof p.id === "string" && KEY_NAME.test(p.id) ? p as { vault: string; id: string } : null), "sharing"),
+        async run({ vault, id }: { vault: string; id: string }, _s, ctx) {
+          const v = held(vault); ctx.charge(1);
+          if (!deps.reach || !deps.endReach) throw refuse("this Parachute can't end what reaches a vault");
+          let rows: ReachRow[] | null | false;
+          try { rows = await deps.reach(vault); } catch (e) { throw failed(e); }
+          if (rows === false) throw refuse("this vault's hub has no list of who reaches it");
+          if (rows === null) throw new ContractError(ERROR_CODES.failed, "managing_ended: managing this vault has ended; ask again to see who reaches it");
+          const r = rows.find((x) => x.id === id);
+          if (!r) throw refuse("nothing by that name reaches the vault now");
+          const who = r.app ? (r.app === "Parachute" ? "Parachute on another device" : r.app) : r.name;
+          await askFirst(deps, { title: `End ${sheetText(who)}?`, body: r.self ? `This is Parachute on a device of yours: ending it signs that device out of ${sheetText(v.name)}.` : `${sheetText(who)} can no longer reach ${sheetText(v.name)} (${sheetText(v.host)}): its next request is refused. This can't be undone; you can make a new key.`, act: "End it" });
+          try { await deps.endReach(vault, id); } catch (e) { throw failed(e); }
+          return null;
+        },
+      },
+      stopManaging: {
+        cap: null, validate: one(vaultOnly(), "sharing"),
+        run: async ({ vault }: { vault: string }) => { held(vault); deps.stopManaging?.(vault); return null; },
       },
       readOnly: {
         cap: null, validate: one(vaultOnly(), "sharing"),
