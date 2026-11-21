@@ -16,10 +16,12 @@ const UNI = "{{uni}}";
 const today = () => `Journal/${when.path(Date.now()).split("/").slice(0, 2).join("/")}/`;
 /** Journal/2026/11-19/09-41 First words of it (as the Journal applet names an entry). */
 function pathFor(text: string) {
-  // its first words, up to six, ending at the first sentence's end when that comes sooner ("Walked to the bakery")
-  const all = text.replace(/[#*_`>\[\]\\/:?"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6);
-  const end = all.findIndex((w) => /[.!]$/.test(w));
-  const words = (end >= 0 ? all.slice(0, end + 1) : all).join(" ").replace(/[.!]+$/, "").slice(0, 48).trim() || "Entry";
+  // its first line's first words, up to six, ending at the first sentence's end when that comes sooner ("Walked to
+  // the bakery", "How was today"); a number, an initial or a short title (1. J. Dr.) doesn't end a sentence
+  const line = text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  const all = line.replace(/[#*_`>\[\]\\/:"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6);
+  const end = all.findIndex((w) => /[.!?]$/.test(w) && !/^(\d+|\p{L}|dr|mr|mrs|ms|st|mt|vs|etc|no|jr|sr|e\.g|i\.e)$/iu.test(w.replace(/[.!?]+$/, "")));
+  const words = (end >= 0 ? all.slice(0, end + 1) : all).join(" ").replace(/\?/g, "").replace(/[.!]+$/, "").replace(/\s+/g, " ").slice(0, 48).trim() || "Entry";
   return `Journal/${when.path(Date.now())} ${words}`;
 }
 /** When an entry was written, from its path. */

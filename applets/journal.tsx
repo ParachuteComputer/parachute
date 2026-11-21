@@ -13,10 +13,12 @@ type Entry = { id: string; path: string; updatedAt: string | null; createdAt?: s
 const voicePath = (at: Date, seconds = false) => `Journal/${when.path(at, seconds)}`;
 /** Journal/2026/11-17/09-41 First words of it */
 export function pathFor(text: string, at = new Date()) {
-  // its first words, up to six, ending at the first sentence's end when that comes sooner ("Walked to the bakery")
-  const all = text.replace(/[#*_`>\[\]\\/:?"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6);
-  const end = all.findIndex((w) => /[.!]$/.test(w));
-  const words = (end >= 0 ? all.slice(0, end + 1) : all).join(" ").replace(/[.!]+$/, "").slice(0, 48).trim() || "Entry";
+  // its first line's first words, up to six, ending at the first sentence's end when that comes sooner ("Walked to
+  // the bakery", "How was today"); a number, an initial or a short title (1. J. Dr.) doesn't end a sentence
+  const line = text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  const all = line.replace(/[#*_`>\[\]\\/:"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6);
+  const end = all.findIndex((w) => /[.!?]$/.test(w) && !/^(\d+|\p{L}|dr|mr|mrs|ms|st|mt|vs|etc|no|jr|sr|e\.g|i\.e)$/iu.test(w.replace(/[.!?]+$/, "")));
+  const words = (end >= 0 ? all.slice(0, end + 1) : all).join(" ").replace(/\?/g, "").replace(/[.!]+$/, "").replace(/\s+/g, " ").slice(0, 48).trim() || "Entry";
   return `Journal/${when.path(at)} ${words}`;
 }
 /** When an entry was written: from its path (the Uni app's and this one's), else when it changed. */
@@ -83,7 +85,9 @@ export default function Journal() {
     if (!body || busy) return;
     setBusy(true);
     try {
-      await vault.createRecord({ path: pathFor(body), body });
+      // the same words in the same minute: the path is taken, so it gets the seconds (as Home does)
+      const path = pathFor(body);
+      await vault.createRecord({ path, body }).catch((e: any) => { if (e?.status === 409 || /conflict|elsewhere/i.test(String(e?.message ?? e))) return vault.createRecord({ path: path.replace(/^(Journal\/[^ ]+)/, `Journal/${when.path(Date.now(), true)}`), body }); throw e; });
     } catch (e: any) { toast(`Not saved: ${e?.message ?? e}. Your words are still here.`, { error: true }); setBusy(false); return; }
     setText("");
     toast("Saved to Journal.");

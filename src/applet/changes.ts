@@ -9,6 +9,7 @@
 //     "hidden"` says so.
 // Pure: it asks `get` (a GET under the vault's API, its JSON) and counts each read with `charge`.
 import { plain } from "./contract.ts";
+import { titleOf as noteTitle } from "../vault/notes.ts";
 
 export type ChangeOp = "created" | "changed" | "deleted" | "restored";
 export type Change = {
@@ -53,7 +54,8 @@ export const CHANGES_RECORDS = 20;
 export const CHANGES_DELETED = 12;
 const VERSIONS = 50;
 const strOr = (x: unknown) => (typeof x === "string" ? x : null);
-const titleOf = (path: string) => path.split("/").pop() || path;
+// a change's title as the vault's lists say it (a journal entry by its words)
+const titleOf = (path: string) => noteTitle({ id: path, path });
 
 type Get = (path: string) => Promise<unknown>;
 /** Each item through `f`, a few at a time (a vault's hub is asked for at most `n` reads at once). */
