@@ -12,8 +12,9 @@ export { FRAME_LIMITS };
 export type HostDeps = {
   vaults(): VaultRecord[];
   client(rec: VaultRecord): Pick<VaultClient, "queryNotes" | "getNote">;
-  /** Reads answered from the copy kept of them at once, the hub asked behind (vault/readCache.ts). */
-  kept(rec: VaultRecord): Pick<VaultClient, "getNote">;
+  /** Reads answered from the copy kept of them at once, the hub asked behind (vault/readCache.ts), and the reads made
+   *  through it (its path and query, as `onFresh` names them: vault/client.ts `keptReaderFor`). */
+  kept(rec: VaultRecord): { client: Pick<VaultClient, "getNote">; reads: ReadonlySet<string> };
   roles(rec: VaultRecord): Promise<string[]>;
   applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets>;
   /** `set` refuses (throws) a choice that names no applet of that vault, or one too many. */
@@ -65,8 +66,9 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
   const limiter = new RateLimiter(FRAME_LIMITS.perWindow, FRAME_LIMITS.windowMs);
   const now = deps.now ?? Date.now;
   let pending = 0;
-  // the notes the frame read from the copy: the ones it is told of when the hub's answer differs
-  const keptAsked = new Set<string>();
+  // per vault, the frame's reads from the copy: the ones it is told of when the hub's answer differs
+  const readers = new Map<string, ReturnType<HostDeps["kept"]>>();
+  const reader = (rec: VaultRecord) => { let r = readers.get(rec.key); if (!r) readers.set(rec.key, r = deps.kept(rec)); return r; };
   const vault = (key: string) => {
     const rec = deps.vaults().find((r) => r.key === key);
     if (!rec) throw new Error("This device doesn't hold that vault.");
@@ -78,13 +80,7 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "vault.query": return deps.client(vault(p.vault as string)).queryNotes(p.query as Query);
       case "vault.note": {
         const rec = vault(p.vault as string);
-        if (p.kept === true) {
-          // the last thousand such notes (a long-lived frame's oldest go first)
-          const k = `${rec.key}\u0000${p.id as string}`;
-          keptAsked.delete(k); keptAsked.add(k);
-          if (keptAsked.size > 1000) keptAsked.delete(keptAsked.values().next().value!);
-        }
-        try { return await (p.kept === true ? deps.kept : deps.client)(rec).getNote(p.id as string); } catch (e) { if ((e as { status?: number } | null)?.status === 404) return null; throw e; }
+        try { return await (p.kept === true ? reader(rec).client : deps.client(rec)).getNote(p.id as string); } catch (e) { if ((e as { status?: number } | null)?.status === 404) return null; throw e; }
       }
       case "vault.roles": return deps.roles(vault(p.vault as string)).catch(() => null);
       case "applets.list": return deps.applets(vault(p.vault as string), p.fresh as boolean);
@@ -134,12 +130,13 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       );
     },
     event<E extends keyof Events>(event: E, data: Events[E]) { post({ pf: PF, event, data }); },
-    /** The hub's answer to a read of `vault` (its path and query, readCache `onFresh`) differs from the copy: a note the
-     *  frame read from the copy is told to it. */
+    /** The hub's answer to a read of `vault` (its path and query, readCache `onFresh`) differs from the copy: a read of a
+     *  note the frame made from the copy is told to it. */
     fresh(vault: string, read: string) {
+      if (!readers.get(vault)?.reads.has(read)) return;
       let id: string | null = null;
       try { id = new URLSearchParams(read.slice(read.indexOf("?") + 1)).get("id"); } catch { /* not a read of one note */ }
-      if (id !== null && keptAsked.has(`${vault}\u0000${id}`)) post({ pf: PF, event: "changed", data: { what: "note", vault, id } });
+      if (id !== null) post({ pf: PF, event: "changed", data: { what: "note", vault, id } });
     },
   };
 }

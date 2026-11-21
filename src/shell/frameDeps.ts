@@ -9,7 +9,7 @@ import { clearDefault, defaultsFor, setDefault, VAULT } from "../open/defaults";
 import { candidates, resolve } from "../open/resolve";
 import { viewerHref } from "../open/paths";
 import { carryMark, clearMark, markTap } from "../open/mark";
-import { clientFor, keptClientFor } from "../vault/client";
+import { clientFor, keptClientFor, keptReaderFor } from "../vault/client";
 import { messageOf } from "../vault/hooks";
 import { inShell } from "../vault/oauth";
 import { confirmLinkOut, confirmWrite, homeVault, type WriteAsk } from "./frameSource";
@@ -251,7 +251,7 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
   return {
     vaults: listVaults,
     client: clientFor,
-    kept: keptClientFor,
+    kept: keptReaderFor,
     roles: (rec) => readRoleTags(keptClientFor(rec)),
     applets,
     defaults: { get: defaultsNow, set: setChoice },

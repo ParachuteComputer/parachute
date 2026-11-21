@@ -34,7 +34,7 @@ Its code may import only `react`, `react-dom`, `react-dom/client`, `react/jsx-ru
 | `installLongPress`, `openSheet`, `closeSheet`, `useOpenWith` | Open with, and the long-press that offers it. `useOpenWith(vault, note)` decides on the note and applets as the hub has them now; `useOpenWith(vault, note, "copy-first")`, as `NoteRoute` does, decides at once from what this device read before when that only shows the note, and waits for the hub otherwise |
 | `useVaults`, `useVault`, `useVaultQuery`, `readerFor`, `useApplets`, `useDefaults` | The vaults this device holds and reads of them (no sign-ins) |
 | `useHome`, `pinApplet`, `startApplet` | What is on the bar and which applet is home (and `app: "simple"` when the open bundle's home is Notes); pin, unpin or choose home (on a tap only). `useHome().parachutes`: your Parachutes, the home's first (`hub`, `host`, `name`, `home`, `signedIn`); a vault belongs to the one whose `hub` is its `issuer`'s origin |
-| `call` | The app's bridge, for anything else it offers. `call("vault.note", { vault, id, kept: true })` answers from the copy this device kept of that read, at once; the frame is then told with a `changed` event (`what: "note"`, `vault`, `id`) when the hub's answer differs |
+| `call` | The app's bridge, for anything else it offers. `call("vault.note", { vault, id, kept: true })` answers from the copy this device kept of that read, at once; the frame is then told with a `changed` event (`what: "note"`, `vault`, `id`) when the hub's answer differs (a note since deleted reads as `null` then) |
 | `noteHref`, `titleOf`, `folderOf` | Small helpers |
 
 Start from the built-in frame's code (the note "Make this mine" writes) and change what you need: add a screen,

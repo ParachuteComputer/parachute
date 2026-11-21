@@ -17,8 +17,10 @@ import { candidates, resolve, type Candidate, type Decision } from "../../open/r
 
 export type OpenWith = { state: "loading" } | { state: "error"; error: string } | { state: "ok"; note: Note | null; cands: Candidate[]; decision: Decision };
 
-/** `copy`: read from the copies (copy-first), not yet as the hub has them now. */
-type Read = { id: string; note: Note | null; roles: string[] | null; applets: FrameApplets; copy?: boolean };
+/** `at`: what it was read for (the vault, the note and how: forOf), so a read is never used for anything else, a
+ *  long-press on the same note among them; `copy`: read from the copies (copy-first), not yet as the hub has them now. */
+type Read = { at: string; note: Note | null; roles: string[] | null; applets: FrameApplets; copy?: boolean };
+const forOf = (vault: string, noteId: string, fresh: boolean | "copy-first") => `${vault}\u0000${noteId}\u0000${String(fresh)}`;
 /** A decision that only shows the note: in Vault or plain, with no line. */
 const showsOnly = (d: Decision) => d.kind === "vault" && !d.line;
 const decide = (r: Read, defaults: Record<string, string>): { cands: Candidate[]; decision: Decision } => {
@@ -29,7 +31,8 @@ const decide = (r: Read, defaults: Record<string, string>): { cands: Candidate[]
 };
 
 export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fresh: boolean | "copy-first" = true): OpenWith {
-  const [read, setRead] = useState<Read | { id: string; error: string } | null>(null);
+  const [read, setRead] = useState<Read | { at: string; error: string } | null>(null);
+  const at = v && noteId ? forOf(v.key, noteId, fresh) : "";
   const defaults = useDefaults(v?.key);
   // asks for the hub's answer, once per note: when a decision drawn from the copies no longer only shows the note
   const askHub = useRef<() => void>(() => {});
@@ -37,6 +40,7 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
   useEffect(() => {
     if (!v || !noteId) return;
     let live = true, asked = false;
+    const at = forOf(v.key, noteId, fresh);
     setRead(null);
     // the applets as they are now: the status is judged on each applet's note as read now. If that read fails, no
     // applet opens the note this time; roles unread (the vault answered badly) the same; the note itself still opens
@@ -44,7 +48,7 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
       if (asked) return;
       asked = true;
       void Promise.all([call("vault.note", { vault: v.key, id: noteId }), call("vault.roles", { vault: v.key }).catch(() => null), readApplets(v.key, fresh !== false)])
-        .then(([note, roles, applets]) => live && setRead({ id: noteId, note, roles, applets }), (e: unknown) => live && setRead({ id: noteId, error: e instanceof Error ? e.message : "the vault couldn't be read" }));
+        .then(([note, roles, applets]) => live && setRead({ at, note, roles, applets }), (e: unknown) => live && setRead({ at, error: e instanceof Error ? e.message : "the vault couldn't be read" }));
     };
     askHub.current = now;
     if (fresh !== "copy-first") { now(); return () => { live = false; }; }
@@ -52,12 +56,12 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
     // once it is)
     let drawn = false, told = false;
     const again = () => call("vault.note", { vault: v.key, id: noteId, kept: true })
-      .then((note) => { if (live) setRead((r) => (r && "note" in r && r.id === noteId && r.copy ? { ...r, note } : r)); }, () => {});
+      .then((note) => { if (live) setRead((r) => (r && "note" in r && r.at === at && r.copy ? { ...r, note } : r)); }, () => {});
     void Promise.all([call("vault.note", { vault: v.key, id: noteId, kept: true }), call("vault.roles", { vault: v.key }).catch(() => null), readApplets(v.key, false), call("defaults.get", { vault: v.key })])
       .then(([note, roles, applets, chosen]) => {
         // (the hub's answer, asked meanwhile, wins)
         if (!live || asked) return;
-        const r: Read = { id: noteId, note, roles, applets, copy: true };
+        const r: Read = { at, note, roles, applets, copy: true };
         if (!note || !roles || !applets.ok || !showsOnly(decide(r, chosen).decision)) { now(); return; }
         setRead(r);
         drawn = true;
@@ -71,15 +75,15 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
   }, [v?.key, noteId, fresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const out = useMemo((): OpenWith => {
-    if (!v || !read || read.id !== noteId || !defaults) return { state: "loading" };
+    if (!v || !read || read.at !== at || !defaults) return { state: "loading" };
     if ("error" in read) return { state: "error", error: read.error };
     const d = decide(read, defaults);
     // drawn from the copies, it may only show the note: a note read again, or a choice changed, that now leads anywhere
     // else waits for the note and the applets as the hub has them now
     if (read.copy && !showsOnly(d.decision)) return { state: "loading" };
     return { state: "ok", note: read.note, ...d };
-  }, [v, read, noteId, defaults]);
-  const waits = out.state === "loading" && !!read && read.id === noteId && "note" in read && read.copy === true;
+  }, [v, read, at, defaults]);
+  const waits = out.state === "loading" && !!read && read.at === at && "note" in read && read.copy === true;
   useEffect(() => { if (waits) askHub.current(); }, [waits]);
   return out;
 }

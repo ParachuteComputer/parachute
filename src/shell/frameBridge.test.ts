@@ -1,5 +1,6 @@
 // The shell's side of the bridge, played against as a hostile frame would: every call, every shape, and nothing it
 // answers carries a token, a client id or a grant; a move it asks for starts nothing without a tap.
+import type { Note } from "@openparachute/surface-client";
 import { describe, expect, it, vi } from "vitest";
 import { createFrameHost, FRAME_LIMITS, type HostDeps } from "./frameBridge";
 import { METHODS, PF } from "../bridge/protocol";
@@ -15,7 +16,8 @@ function setup(tap = false) {
     vaults: () => [REC],
     // a client that would leak its record if anything handed it on
     client: () => ({ queryNotes: async () => [{ id: "n1", path: "Recipes/Soup", tags: [] }], getNote: async (id: string) => (id === "gone" ? Promise.reject(Object.assign(new Error("x"), { status: 404 })) : { id, path: id, tags: [] }) }) as unknown as ReturnType<HostDeps["client"]>,
-    kept: () => ({ getNote: async (id: string) => ({ id, path: id, tags: [], kept: true }) }) as unknown as ReturnType<HostDeps["kept"]>,
+    // as vault/client.ts keptReaderFor: each read through it noted, as onFresh names it
+    kept: () => { const reads = new Set<string>(); return { reads, client: { getNote: async (id: string) => { reads.add(`/vault/kitchen/api/records?id=${id}&include_body=true`); return { id, path: id, tags: [], kept: true } as unknown as Note; } } }; },
     roles: async () => ["pinned"],
     applets: async () => ({ ok: true as const, skipped: 0, entries: [] }),
     defaults: { get: vi.fn(() => ({ recipe: "vault" })), set: vi.fn() },
