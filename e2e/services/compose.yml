@@ -16,17 +16,21 @@ services:
     image: redis:7-alpine
     labels: *labels
     healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 2s, retries: 20 }
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+  # the relay's file store (S3). MinIO no longer publishes its images; RustFS speaks the same S3
+  s3:
+    image: rustfs/rustfs@sha256:ee717072290bec9b11abfc0365f8310b00df1cd9b3639943edae47bdef05044a
     labels: *labels
-    command: server /data
-    environment: { MINIO_ROOT_USER: buzz_test, MINIO_ROOT_PASSWORD: buzz_test_secret }
-  minio-init:
-    # the client image: the server image has no `mc`
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    environment: { RUSTFS_ACCESS_KEY: buzz_test, RUSTFS_SECRET_KEY: buzz_test_secret, RUSTFS_VOLUMES: /data }
+  s3-init:
+    # makes the bucket once the store answers
+    image: amazon/aws-cli@sha256:b0102d2269f87d8531d931c1a59e248101ace586886e6c077058d94c1c37b846
     labels: *labels
-    depends_on: [minio]
-    entrypoint: ["/bin/sh", "-c", "until mc alias set l http://minio:9000 buzz_test buzz_test_secret >/dev/null 2>&1; do sleep 1; done; mc mb --ignore-existing l/buzz-media"]
+    depends_on: [s3]
+    environment: { AWS_ACCESS_KEY_ID: buzz_test, AWS_SECRET_ACCESS_KEY: buzz_test_secret, AWS_DEFAULT_REGION: us-east-1 }
+    entrypoint:
+      - /bin/sh
+      - -c
+      - for i in $$(seq 60); do aws --endpoint-url http://s3:9000 s3api head-bucket --bucket buzz-media 2>/dev/null && exit 0; aws --endpoint-url http://s3:9000 s3 mb s3://buzz-media && exit 0; sleep 1; done; exit 1
     restart: "no"
   relay:
     # the relay production runs (relay-image.sh builds it; up.sh sets this): the specs hold its behaviour
@@ -35,14 +39,14 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-      minio-init: { condition: service_completed_successfully }
+      s3-init: { condition: service_completed_successfully }
     ports: ["127.0.0.1:${RELAY_PORT:-3871}:3000"]
     # not required, so down.sh can take down a set whose setup stopped early
     env_file: [{ path: "${SERVICES_DIR:?up.sh sets it}/relay.env", required: false }]
     environment:
       DATABASE_URL: postgres://buzz:buzz_test@postgres:5432/buzz
       REDIS_URL: redis://redis:6379
-      BUZZ_S3_ENDPOINT: http://minio:9000
+      BUZZ_S3_ENDPOINT: http://s3:9000
       BUZZ_S3_ACCESS_KEY: buzz_test
       BUZZ_S3_SECRET_KEY: buzz_test_secret
       BUZZ_S3_BUCKET: buzz-media
