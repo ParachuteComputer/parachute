@@ -3,7 +3,7 @@ import type { Note } from "@openparachute/surface-client";
 import { notTapped, type AppDeps, type PickedFile, type RecentNote } from "../applet/modules/app";
 import { openLinkOut, saveFileOut } from "./device";
 import { markTap } from "../open/mark";
-import { clientFor } from "../vault/client";
+import { clientFor, keptClientFor } from "../vault/client";
 import { isAppOwn, noteHref, titleOf } from "../vault/notes";
 import { listVaults, type VaultRecord } from "../vault/store";
 import { addressIn, resolveLink, type Found, type ResolveDeps } from "../links/resolve";
@@ -53,7 +53,8 @@ export function noteFinder(read: (rec: VaultRecord, idOrPath: string) => Promise
  *  read there (a wikilink is looked up only in them). */
 export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameElement | null, picker: Picker, here: () => VaultRecord | null = () => null, reads: readonly string[] = []): AppDeps {
   const tappingInApplet = () => tappingIn(frame);
-  const find = noteFinder((rec, idOrPath) => clientFor(rec).getNote(idOrPath).catch((e: unknown) => {
+  // where a link leads, from the copy kept of that read at once (vault/readCache.ts): the note's route judges it again
+  const find = noteFinder((rec, idOrPath) => keptClientFor(rec).getNote(idOrPath).catch((e: unknown) => {
     // not there: the hub's 404; anything else is asked again later
     if ((e as { status?: unknown } | null)?.status === 404) return null;
     throw e;
