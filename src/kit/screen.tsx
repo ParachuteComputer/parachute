@@ -147,11 +147,12 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
     if (more) n.dataset.more = more; else delete n.dataset.more;
   };
   // the one shown stays in view on the one line, clear of the fades (scrolled sideways, never the page): when it
-  // changes and when the places arrive or change; a count or a font that widens a tab re-places it only while the
-  // person hasn't moved the row themselves since (their scroll is theirs)
+  // changes and when the places arrive or change; a count or a font that widens a tab, or the row's width changing,
+  // re-places it only while the row is where the kit put it (a scroll the person made is theirs)
   const places = tabs.map((t) => t.key).join("|");
-  // placed: the row is where keepClear put it (false once the person moved it: a finger, a wheel, a key)
-  const placed = useRef(true), touched = useRef(false);
+  const counts = tabs.map((t) => `${t.key}:${t.count ?? ""}`).join("|");
+  // placed: the row is where keepClear put it, at placedAt; input: when the person last touched, wheeled or keyed it
+  const placed = useRef(true), placedAt = useRef(0), input = useRef(-Infinity);
   /** Scroll the row (never the page) so this tab is clear of the fades, at the ends that have one. */
   const keepClear = (on: HTMLElement | null | undefined) => {
     const n = nav.current;
@@ -162,11 +163,13 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
     const r = on.getBoundingClientRect(), box = n.getBoundingClientRect();
     if (r.left < box.left + left || r.right > box.right - right) n.scrollLeft += r.left + r.width / 2 - (box.left + box.width / 2);
     placed.current = true;
-    touched.current = false;
+    placedAt.current = n.scrollLeft;
   };
   const shown = () => nav.current?.querySelector<HTMLElement>('[aria-current="page"]');
   useLayoutEffect(() => { keepClear(shown()); edges(); }, [current, places]);
-  // the row's width or a tab's changing (a phone turned, a column, a count, the faces loading)
+  // a count that widens a tab (read here too, where a webview has no ResizeObserver)
+  useLayoutEffect(() => { if (placed.current) keepClear(shown()); edges(); }, [counts]);
+  // the row's width or a tab's changing (a phone turned, a column, the faces loading)
   useEffect(() => {
     const n = nav.current;
     if (!n || typeof ResizeObserver !== "function") return;
@@ -175,13 +178,18 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
     n.querySelectorAll(".pa-tab").forEach((t) => o.observe(t));
     return () => o.disconnect();
   }, [places]);
-  // a scroll the person made (not keepClear's, nor the browser clamping a resized row): the row stays where they put it
-  const scrolled = () => { if (touched.current) placed.current = false; edges(); };
-  const touch = () => { touched.current = true; };
+  // a scroll is the person's when it follows their touch, wheel or key (within a second) and isn't where the kit put
+  // the row; one the kit made, or the browser clamping a resized row, leaves it placed
+  const scrolled = () => {
+    const n = nav.current;
+    if (n && performance.now() - input.current < 1000 && Math.abs(n.scrollLeft - placedAt.current) > 1) placed.current = false;
+    edges();
+  };
+  const touch = () => { input.current = performance.now(); };
   const focused = (el: HTMLElement) => { try { return el.matches(":focus-visible"); } catch { return false; } };
   return (
     // a tab reached from the keyboard is kept clear of the fades too (a tap needs nothing: it chooses, and the row follows)
-    <nav className="pa-tabs" aria-label={label} ref={nav} onScroll={scrolled} onPointerDown={touch} onWheel={touch} onTouchStart={touch} onKeyDown={touch} onFocus={(e) => { if (focused(e.target as HTMLElement)) keepClear(e.target as HTMLElement); }}>
+    <nav className="pa-tabs" aria-label={label} ref={nav} onScroll={scrolled} onPointerDown={touch} onPointerMove={touch} onTouchStart={touch} onTouchMove={touch} onWheel={touch} onKeyDown={touch} onFocus={(e) => { if (focused(e.target as HTMLElement)) keepClear(e.target as HTMLElement); }}>
       {tabs.map((t) => <button key={t.key} type="button" className="pa-tab" aria-current={t.key === current ? "page" : undefined} onClick={() => onChange(t.key)}>{t.label}{t.count ? ` · ${t.count}` : ""}</button>)}
     </nav>
   );

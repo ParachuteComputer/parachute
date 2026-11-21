@@ -77,4 +77,9 @@ test("tabs stay on one line on a phone, scroll sideways, and keep the one shown 
   await expect(app.getByRole("button", { name: /^Inbox · 12$/ })).toBeVisible();
   await frames();
   expect(await nav.evaluate((n) => n.scrollLeft)).toBe(at);
+  // nor does the row narrowing: it stays where they put it (a resize re-places only a row the kit placed)
+  await nav.evaluate((n) => { (n as HTMLElement).style.width = "300px"; });
+  await frames();
+  expect(await nav.evaluate((n) => n.scrollLeft)).toBe(at);
+  await nav.evaluate((n) => { (n as HTMLElement).style.width = ""; });
 });
