@@ -2,10 +2,11 @@
 import { VaultClient } from "@openparachute/surface-client";
 import { refresh, revoke } from "./oauth";
 import { recordsFetch } from "./records";
-import { findVault, updateVault, vaultUrlOf, type VaultRecord } from "./store";
+import { findVault, originOf, updateVault, vaultUrlOf, type VaultRecord } from "./store";
 import { limitedFetch } from "./limited";
 import { whoseOf } from "./whose";
 import { canWrite, needWrite } from "./writeAsk";
+import { dropKept, keptFetch, markWritten } from "./readCache";
 
 /** The fetch for a vault's hub: someone else's is read up to a limit (limited.ts), the person's own as before. Judged per
  *  call, so a change of whose it is applies at once. */
@@ -106,22 +107,61 @@ export function writesNeedWrite(key: string, f: typeof fetch): typeof fetch {
   };
 }
 
+/** A change through any of the app's clients for a vault: what is read after it comes from the hub (readCache.ts). */
+const marksWritten = (key: string, f: typeof fetch): typeof fetch => async (input, init) => {
+  const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+  if (method === "GET" || method === "HEAD") return f(input, init);
+  // when it is sent, and again when it has landed: a read answered while it was on its way isn't trusted after it
+  markWritten(key);
+  try { return await f(input, init); } finally { markWritten(key); }
+};
+// notes calls go through the hub's record door when it has one (records.ts)
+const chainFor = (rec: VaultRecord): typeof fetch => marksWritten(rec.key, writesNeedWrite(rec.key, recordsFetch(withCurrentToken(rec.key, fetchFor(rec)))));
+const makeClient = (rec: VaultRecord, fetchImpl: typeof fetch) => new VaultClient({
+  vaultUrl: vaultUrlOf(rec),
+  tokenProvider: () => findVault(rec.key)?.accessToken ?? rec.accessToken,
+  onAuthError: () => refreshOnce(rec.key),
+  fetchImpl,
+});
+
 export function clientFor(rec: VaultRecord): VaultClient {
   const hit = clients.get(rec.key);
   const at = `${rec.issuer} ${rec.vault} ${rec.url ?? ""}`;
   if (hit && hit.at === at) return hit.client;
-  const client = new VaultClient({
-    vaultUrl: vaultUrlOf(rec),
-    tokenProvider: () => findVault(rec.key)?.accessToken ?? rec.accessToken,
-    onAuthError: () => refreshOnce(rec.key),
-    // notes calls go through the hub's record door when it has one (records.ts)
-    fetchImpl: writesNeedWrite(rec.key, recordsFetch(withCurrentToken(rec.key, fetchFor(rec)))),
-  });
+  const client = makeClient(rec, chainFor(rec));
   clients.set(rec.key, { at, client });
   return client;
 }
 
-export const dropClient = (key: string) => { clients.delete(key); };
+const keptClients = new Map<string, { at: string; client: VaultClient }>();
+/**
+ * The same vault's client, for reads that may be answered from the copy kept of them at once while the hub is asked
+ * behind it (readCache.ts): what a screen draws first. Whoever reads through it listens to `onFresh` and reads again
+ * when the hub's answer differs; a write through it goes as through clientFor.
+ */
+export function keptClientFor(rec: VaultRecord): VaultClient {
+  const hit = keptClients.get(rec.key);
+  const at = `${rec.issuer} ${rec.vault} ${rec.url ?? ""}`;
+  if (hit && hit.at === at) return hit.client;
+  const client = makeClient(rec, keptFetchFor(rec));
+  keptClients.set(rec.key, { at, client });
+  return client;
+}
+const keptFetchFor = (rec: VaultRecord) => keptFetch(rec.key, originOf(rec.issuer), chainFor(rec), () => signInState(rec.key));
+
+/** A kept client of its own that notes each read made through it (its path and query, as `onFresh` names them): for an
+ *  applet's frame, told only of the reads it made. */
+export function keptReaderFor(rec: VaultRecord): { client: VaultClient; reads: Set<string> } {
+  const reads = new Set<string>(), f = keptFetchFor(rec);
+  const client = makeClient(rec, (input, init) => {
+    try { const u = new URL(input instanceof Request ? input.url : String(input)); if ((init?.method ?? "GET").toUpperCase() === "GET" && reads.size < 1000) reads.add(`${u.pathname}${u.search}`); } catch { /* not a URL */ }
+    return f(input, init);
+  });
+  return { client, reads };
+}
+
+/** Sign-out: the vault's clients, and what was kept of its reads. */
+export const dropClient = (key: string) => { clients.delete(key); keptClients.delete(key); void dropKept(key); };
 
 /**
  * Is this vault's sign-in still good, when a call to its hub failed with no answer the app could read? A hub may refuse a

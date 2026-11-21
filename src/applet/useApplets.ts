@@ -13,7 +13,9 @@ import { grantKey, grantOf } from "./grant";
 import { codeHash, codeKindOf } from "./code";
 import { withoutRoles } from "./opens";
 import { readRoleTags } from "../open/roles";
-import { clientFor } from "../vault/client";
+import { clientFor, keptClientFor } from "../vault/client";
+import { onFresh } from "../vault/readCache";
+import { findVault } from "../vault/store";
 import type { VaultRecord } from "../vault/store";
 
 type Entry = { state: "loading" } | { state: "ok"; found: Read; at: number } | { state: "error"; error: string };
@@ -60,17 +62,27 @@ export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getN
   return { entries, skipped: rows.length - found.entries.length };
 }
 
-/** Read a vault's applets again. Resolves to whether this read succeeded (a failure keeps the last list for the strip). */
-export function refreshApplets(rec: VaultRecord): Promise<boolean> {
-  const running = inflight.get(rec.key);
+/** Read a vault's applets again. Resolves to whether this read succeeded (a failure keeps the last list for the strip).
+ *  Drawn from the copy kept of the read, the hub asked behind it (vault/readCache.ts); `fresh`: the hub's answer now,
+ *  for what judges an applet as it is now (open-with at a tap, a pointer pinned to its code, a shipped applet added). */
+export function refreshApplets(rec: VaultRecord, fresh = false): Promise<boolean> {
+  const at = fresh ? `${rec.key}\u0000fresh` : rec.key;
+  const running = inflight.get(at);
   if (running) return running;
   if (!cache.has(rec.key)) cache.set(rec.key, { state: "loading" });
-  const p = readApplets(clientFor(rec), rec.key, whoseOf(rec) !== "mine", rec)
+  const p = readApplets(fresh ? clientFor(rec) : keptClientFor(rec), rec.key, whoseOf(rec) !== "mine", rec)
     .then((found) => { cache.set(rec.key, { state: "ok", found, at: Date.now() }); return true; }, (e: unknown) => { if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e) }); return false; })
-    .finally(() => { inflight.delete(rec.key); notify(); });
-  inflight.set(rec.key, p);
+    .finally(() => { inflight.delete(at); notify(); });
+  inflight.set(at, p);
   return p;
 }
+
+// what the list was drawn from (the copy kept of the reads, vault/readCache.ts) differs from the hub's answer: read again
+onFresh((vault, key) => {
+  if (!cache.has(vault) || !/[?&]tag=(?:applet|component)(?:&|$)|\.parachute%2Fnotes%2Fsettings|\/\.parachute\/notes\/settings/.test(key)) return;
+  const rec = findVault(vault);
+  if (rec) void refreshApplets(rec);
+});
 
 export function useApplets(rec: VaultRecord | null, refreshOnMount = true): Entry {
   const entry = useSyncExternalStore((cb) => { listeners.add(cb); return () => listeners.delete(cb); }, () => (rec ? cache.get(rec.key) : undefined) ?? LOADING);

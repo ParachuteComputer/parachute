@@ -79,12 +79,13 @@ never signs"), and a Rust test says the two are on it and refused even when decl
 | An applet | Asks the shell to sign kind 30479 or 30480 | Refused (`services.rs` test) |
 
 **Gaps, said plainly.** A device can't know of a taking back the vault hides from it (it keeps running what was
-approved until its year ends). A device that already allowed an applet reads the signed
-approvals before it starts it, and waits up to 1.5 s for them (`APPROVALS_WAIT_MS`, `src/views/AppletScreen.tsx`): a
-taking back made on another device stops it before it runs. When the home vault is slower than that or can't be reached,
-it starts on what this device allowed and stops when the answer lands (and on the next open, or when a kept screen is
-shown again). The cost is a vault read on every open, and at most 1.5 s on a slow one (review finding 16, T-476; Aaron
-may choose otherwise).
+approved until its year ends). A device that already allowed an applet checks it against the signed approvals as this
+device last read them (the copy kept of that read, `src/vault/readCache.ts`), at once, and asks the home vault behind
+it: a taking back made on another device stops it as soon as that read answers (and on the next open, or when a kept
+screen is shown again). With no copy yet (the first open on a device) it waits up to 1.5 s for the read
+(`APPROVALS_WAIT_MS`, `src/views/AppletScreen.tsx`), and past that starts on what this device allowed. So a taking back
+lets the applet run for about one read of the home vault on a device that already ran it (review finding 16; T-476
+"Parachute feels slow" chose this over a vault read before every open).
 A brand-new device served last month's code with last month's approval runs it: code
 the person approved, never new code. And the person's key has copies in other software (Uni's tools): anything that
 holds it can sign an approval. Making the key on the phone with no export, and other devices signing through it, is

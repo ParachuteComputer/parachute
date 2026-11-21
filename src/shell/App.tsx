@@ -9,7 +9,7 @@ import OAuthCallback from "../views/OAuthCallback";
 import OpenLink, { LinksIn } from "../links/LinksIn";
 import AppletScreen from "../views/AppletScreen";
 import Settings from "../views/Settings";
-import { SelfTestRunner } from "../applet/selftest/run";
+import { gateNow, SelfTestRunner } from "../applet/selftest/run";
 import { officialPath } from "../applet/parachuteSource";
 import { arrived, installTapListener } from "../open/mark";
 import { useVaults } from "../vault/hooks";
@@ -23,8 +23,8 @@ import { keysHere, useKey } from "../key/key";
 import BottomBar from "./BottomBar";
 import { keptId, KeptApplets } from "./kept";
 import { atFirstEntry } from "../ui/history";
-import { startPlace } from "./start";
-import { openBundleNow, readSettings, useSettings } from "./homeSettings";
+import { startNow, startPlace } from "./start";
+import { openBundleNow, readSettings, settingsReadNow, subscribeSettings, useSettings } from "./homeSettings";
 import { relistVaults } from "../vault/newVaults";
 import { isMine } from "../vault/whose";
 import { homeVault, useFrameSource } from "./frameSource";
@@ -99,6 +99,9 @@ function FirstRun() {
   return keysHere() && key === null ? <KeyStart first /> : <AddParachute first />;
 }
 
+/** How long after a start its decision may be made again, when the settings the vault answers differ from the copy. */
+const REDECIDE_MS = 10_000;
+
 /** Where the app opens (start.ts): at a start on the launcher (the first entry of this tab's history), the home applet
  *  if the person has one. Nothing is drawn until that is decided, so the launcher never shows and then gives way; but
  *  after a first sign-in on this device, the list the sign-in ends on gives way to the home once. */
@@ -106,6 +109,9 @@ function useStart(): boolean {
   const location = useLocation();
   const navigate = useNavigate();
   const [decided, setDecided] = useState(() => !(location.pathname === "/" && atFirstEntry() && listVaults().length > 0));
+  // where the start put the person, while it may still be decided again (below), and when
+  const landed = useRef<string | null>(null);
+  const landedAt = useRef(0);
   useEffect(() => {
     if (decided) { if (listVaults().length) void readSettings(); return; }
     let on = true;
@@ -113,10 +119,34 @@ function useStart(): boolean {
       if (!on) return;
       // only from where the app started: a link from outside that arrived meanwhile wins
       if (to && window.location.pathname === "/") { to.go(); navigate(to.href, { replace: true }); }
+      if (window.location.pathname === (to?.href ?? "/")) { landed.current = window.location.pathname; landedAt.current = Date.now(); }
       setDecided(true);
     }, () => { if (on) setDecided(true); });
     return () => { on = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The start is decided on the settings as this device read them last (vault/readCache.ts), at once. When the vault's
+  // answer differs (an agent moved the home, say) and the person is still where the start put them, it is decided again,
+  // as if the app had started now, within the first moments (REDECIDE_MS) and before the person has touched anything.
+  // Anywhere else, or later, the next start is.
+  useEffect(() => {
+    if (!decided || landed.current === null) return;
+    // a tap, a key or the focus going into a frame (a tap there) since: the person has taken over
+    const touched = () => { landed.current = null; };
+    addEventListener("pointerdown", touched, true); addEventListener("keydown", touched, true); addEventListener("blur", touched);
+    const off = subscribeSettings(() => {
+      const at = landed.current;
+      if (at !== null && Date.now() - landedAt.current > REDECIDE_MS) { landed.current = null; return; }
+      if (at === null || !settingsReadNow() || window.location.pathname !== at || !atFirstEntry()) { if (at !== null && (window.location.pathname !== at || !atFirstEntry())) landed.current = null; return; }
+      // (a gate closed for a moment, a self-test running again, decides nothing)
+      if (gateNow() === "closed") return;
+      const to = startNow(), where = to?.href ?? "/";
+      if (where === at) return;
+      to?.go();
+      landed.current = where;
+      navigate(where, { replace: true });
+    });
+    return () => { off(); removeEventListener("pointerdown", touched, true); removeEventListener("keydown", touched, true); removeEventListener("blur", touched); };
+  }, [decided]); // eslint-disable-line react-hooks/exhaustive-deps
   // the first sign-in on this device: the app started with no vault, so it decided nothing then. When the first one
   // arrives and the person is on the list, it decides as a start does: their settings' home opens, and their Allow or
   // Open on it is their choice of it as home here (otherwise the next start finds it stopped, waiting for a tap)

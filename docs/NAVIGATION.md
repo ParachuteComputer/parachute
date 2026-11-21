@@ -79,7 +79,11 @@ home vault, `Parachute/Settings`, tagged `parachute-settings`; its `bar` and `st
 until 2026-12-20, while the open bundle has no record of its own, and never written. Your agent can change the note
 by writing it. The app reads it at each start and each time it shows
 the list, a vault or a note, and keeps the last copy (with the names on the bar) for when the vault can't be
-reached. Entries it doesn't read are kept as they are when you change the bar.
+reached. Entries it doesn't read are kept as they are when you change the bar. Like every read the app draws a screen
+from, it is answered at once from what this device read last time and asked of the vault behind it
+(`src/vault/readCache.ts`, T-476): when the vault's answer differs, the app reads it again, and a home it no longer names
+stops. A start decided on the copy is decided again on the vault's answer when it comes within ten seconds and the person
+hasn't touched anything yet; otherwise the next start opens the new home.
 
 ```json
 {

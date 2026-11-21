@@ -12,7 +12,8 @@
 import { useSyncExternalStore } from "react";
 import type { Note } from "@openparachute/surface-client";
 import { plain, stripExt } from "../applet/contract";
-import { clientFor } from "../vault/client";
+import { clientFor, keptClientFor } from "../vault/client";
+import { onFresh } from "../vault/readCache";
 import { homeVault } from "../shell/frameSource";
 import { DEFAULT_THEME, MOTION_CSS, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, type Theme, type Tokens } from "./theme";
 
@@ -106,13 +107,15 @@ function take(vault: string, rows: Note[]) {
 }
 
 let generation = 0;
+// read from the copy kept of it (vault/readCache.ts), and again when the hub's answer differs
+onFresh((vault, key) => { if (vault === homeVault()?.key && /[?&]tag=parachute-theme(?:&|$)/.test(key)) void readTheme(); });
 /** Read the record again. A read a newer one (or a change of home) overtook is dropped. */
 export async function readTheme(): Promise<void> {
   const home = homeVault();
   const mine = ++generation;
   if (!home) { read = "read"; bump(); return; }
   try {
-    const rows = await clientFor(home).queryNotes({ tag: THEME_TAG, includeMetadata: true, limit: 20 });
+    const rows = await keptClientFor(home).queryNotes({ tag: THEME_TAG, includeMetadata: true, limit: 20 });
     if (mine !== generation || homeVault()?.key !== home.key) return;
     take(home.key, rows);
   } catch {

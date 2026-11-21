@@ -10,6 +10,10 @@
 //                                      running while the person is elsewhere (shell/kept.tsx); hidden, it gets no tap,
 //                                      and what only a person looking should do (mark a message read) waits.
 //   uni.frameFetch(url, init)        → fetch over the frame (pfr envelope), what VaultClient uses
+//   uni.onFresh(cb)                  → cb() when the vault's answer to a read differs from what it was answered with:
+//                                      while one is listening, the shell may answer a read at once from what it read
+//                                      before, and ask the hub behind it (T-476). The React kit's Page listens with its
+//                                      onRefresh, so a page drawn from that copy is drawn again from the hub's answer.
 //   uni.VaultClient / uni.vault      → surface-client's VaultClient on frameFetch, with the record-worded calls
 //                                      queryRecords/getRecord/createRecord/updateRecord (body, fields) beside its own
 //   uni.theme.get() / .on(cb)        → the app's look (src/theme): every token is also a CSS var --<key> on <html>
@@ -44,7 +48,7 @@
 
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
-  var svcSubs = {}, vaultWatches = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [];
+  var svcSubs = {}, vaultWatches = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [], freshCbs = [];
   // saved state (docs/WRITE-AN-APPLET.md "Saved state"): what the shell handed back, and what changed since it was sent
   // savedOn: the app hands saved state to this frame (an applet's own screen; an embed's has none)
   var savedVals = {}, savedDirty = null, savedTimer = null, savedFirst = 0, savedOn = false, SAVE_MS = 250, SAVE_MAX_MS = 1000, SCROLL = "parachute:scroll";
@@ -261,6 +265,7 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "props") { applyProps(m.data); return; }
     if (m.event === "theme") { applyTheme(m.data); return; }
     if (m.event === "open") { applyOpen(m.data); return; }
+    if (m.event === "vault.fresh") { freshCbs.slice().forEach(function (f) { try { f(); } catch (e) {} }); return; }
     if (m.event === "launch") { launchCbs.slice().forEach(function (f) { try { f(m.data); } catch (e) {} }); return; }
     if (m.event === "shown") { shownNow = !!(m.data && m.data.shown); if (!shownNow) savedFlush(); shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); return; }
     if (m.event === "services.events") {
@@ -299,6 +304,8 @@ export const FRAME_KIT = String.raw`(function () {
       if (h && typeof h.forEach === "function") h.forEach(function (v, k) { headers[k] = String(v); });
       else if (h) Object.keys(h).forEach(function (k) { headers[k] = String(h[k]); });
       delete headers.Authorization; delete headers.authorization;
+      // a read while something draws again on onFresh may be answered from what the shell read before
+      if (freshCbs.length && String(init.method || "GET").toUpperCase() === "GET") headers["x-parachute-redraws"] = "1";
       var id = "f" + (++n);
       send(fetches, id, { pfr: 1, channel: "vault", id: id, method: String(init.method || "GET"), path: u.pathname + u.search, headers: headers, body: typeof init.body === "string" ? init.body : null }, 20000, res, rej, false);
     });
@@ -392,6 +399,11 @@ export const FRAME_KIT = String.raw`(function () {
       if (typeof cb !== "function") throw new TypeError("onShown needs a function");
       shownCbs.push(cb);
       return function () { var i = shownCbs.indexOf(cb); if (i >= 0) shownCbs.splice(i, 1); };
+    },
+    onFresh: function (cb) {
+      if (typeof cb !== "function") throw new TypeError("onFresh needs a function");
+      freshCbs.push(cb);
+      return function () { var i = freshCbs.indexOf(cb); if (i >= 0) freshCbs.splice(i, 1); };
     },
     onOpen: function (cb) {
       if (typeof cb !== "function") throw new TypeError("onOpen needs a function");

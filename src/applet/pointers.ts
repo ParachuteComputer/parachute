@@ -2,7 +2,7 @@
 // Only the home vault's are read (docs/design/EMBED.md), and only when that vault is the person's own.
 import type { VaultClient } from "@openparachute/surface-client";
 import { homeVault } from "../shell/frameSource";
-import { clientFor } from "../vault/client";
+import { clientFor, keptClientFor } from "../vault/client";
 import { isMine } from "../vault/whose";
 import { originOf, listVaults, type VaultRecord } from "../vault/store";
 import { stripExt } from "./contract";
@@ -11,7 +11,7 @@ import { parsePointer, pointerPath, POINTER_TAG, type Pointer } from "./pointer"
 export type PointerNote = { noteId: string; path: string; updatedAt: string | null; pointer: Pointer };
 
 /** The home vault's pointers that parse. */
-export async function readPointers(c: Pick<VaultClient, "queryNotes"> | null = homeClient()): Promise<PointerNote[]> {
+export async function readPointers(c: Pick<VaultClient, "queryNotes"> | null = homeReader()): Promise<PointerNote[]> {
   if (!c) return [];
   const rows = await c.queryNotes({ tag: POINTER_TAG, includeMetadata: true, limit: 200 });
   const out: PointerNote[] = [];
@@ -23,6 +23,8 @@ export async function readPointers(c: Pick<VaultClient, "queryNotes"> | null = h
   return out;
 }
 function homeClient() { const h = homeVault(); return h && isMine(h) ? clientFor(h) : null; }
+/** For a read only: answered from the copy kept of it at once, the hub asked behind it (vault/readCache.ts). */
+function homeReader() { const h = homeVault(); return h && isMine(h) ? keptClientFor(h) : null; }
 
 /** Does this pointer name that record (on that hub and vault)? */
 export const names = (p: Pointer, rec: Pick<VaultRecord, "issuer" | "vault">, recordId: string) => p.hub === originOf(rec.issuer) && p.vault === rec.vault && p.record === recordId;

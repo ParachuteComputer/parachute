@@ -5,14 +5,24 @@ import type { VaultDeps, VaultNote } from "./modules/vault";
 
 const row = (n: { id: string; path?: string | null; extension?: string | null; updatedAt?: string | null }) => ({ id: n.id, path: n.path ?? null, extension: n.extension ?? null, updatedAt: n.updatedAt ?? null });
 
-export function vaultDeps(c: VaultClient): VaultDeps {
+/** The reads, on a client. */
+const reads = (c: VaultClient): Pick<VaultDeps, "listPaths" | "getNote" | "search" | "listFields" | "list"> => ({
+  listPaths: async () => (await c.queryNotes({ orderBy: "updated_at", sort: "desc", limit: 500 })).map((n) => row(n as never)),
+  getNote: async (ref) => { const n = await c.getNote(ref); if (!n) throw new Error("not found"); return n as VaultNote; },
+  search: async (query, limit, pathPrefix) => (await c.queryNotes({ search: query, limit: String(limit), ...(pathPrefix ? { path_prefix: pathPrefix } : {}) }))
+    .map((n) => ({ id: n.id, path: n.path ?? null, snippet: "" })),
+  // surface-client's typed words (pathPrefix, not path_prefix: a mix of the two drops the folder)
+  listFields: async (prefix, limit) => (await c.queryNotes({ pathPrefix: prefix, includeMetadata: true, orderBy: "updated_at", sort: "desc", limit })).map((n) => n as VaultNote),
+  // one ask for a folder's notes with a tag or their content (T-476: they were read one at a time, in a line)
+  list: async (prefix, o) => (await c.queryNotes({ ...(prefix ? { pathPrefix: prefix } : {}), ...(o.tag ? { tag: o.tag } : {}), includeMetadata: true, ...(o.content ? { includeContent: true } : {}), orderBy: "updated_at", sort: "desc", limit: o.limit })).map((n) => n as VaultNote),
+});
+
+/** `kept`: the same vault's client that answers a read from the copy kept of it (vault/client.ts keptClientFor), for a
+ *  frame that draws itself again when the hub's answer differs. */
+export function vaultDeps(c: VaultClient, kept?: VaultClient): VaultDeps {
   return {
-    listPaths: async () => (await c.queryNotes({ orderBy: "updated_at", sort: "desc", limit: 500 })).map((n) => row(n as never)),
-    getNote: async (ref) => { const n = await c.getNote(ref); if (!n) throw new Error("not found"); return n as VaultNote; },
-    search: async (query, limit, pathPrefix) => (await c.queryNotes({ search: query, limit: String(limit), ...(pathPrefix ? { path_prefix: pathPrefix } : {}) }))
-      .map((n) => ({ id: n.id, path: n.path ?? null, snippet: "" })),
-    // surface-client's typed words (pathPrefix, not path_prefix: a mix of the two drops the folder)
-    listFields: async (prefix, limit) => (await c.queryNotes({ pathPrefix: prefix, includeMetadata: true, orderBy: "updated_at", sort: "desc", limit })).map((n) => n as VaultNote),
+    ...reads(c),
+    ...(kept ? { kept: reads(kept) } : {}),
     // types and fields ride the same call (T-476): on core 0.9's record door they land as `types` and `fields`
     create: async (path, content, tags, more) => (await c.createNote({ path, content, ...(tags.length ? { tags } : {}), ...(more?.types?.length ? { types: more.types } : {}), ...(more?.metadata ? { metadata: more.metadata } : {}) } as CreateNotePayload)) as VaultNote,
     save: async (id, content, ifUpdatedAt, more) => {

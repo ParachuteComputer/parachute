@@ -43,6 +43,11 @@ export function takeStart(path: string): { chosen: boolean; vault: string; noteI
 export async function startPlace(o: { firstRun?: boolean } = {}): Promise<{ href: string; go(): void } | null> {
   arrival = null;
   await Promise.race([Promise.all([readSettings(), whenGateKnown()]), new Promise((r) => setTimeout(r, START_WAIT_MS))]);
+  return startNow(o);
+}
+
+/** Where the app opens, on the settings as read so far (no read of its own). */
+export function startNow(o: { firstRun?: boolean } = {}): { href: string; go(): void } | null {
   // a first sign-in goes to the home even while the self-test hasn't passed yet: its screen says applets are off until
   // it does, and shows the card then
   if (gateNow() === "closed" && !o.firstRun) return null;

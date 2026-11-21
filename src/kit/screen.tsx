@@ -11,12 +11,13 @@
 //   Record    the microphone button: the app's own recorder sheet, never the applet's
 //   toast     a short word after an action ("Saved"), gone by itself
 //   voiceNote a recording made a note whose words the hub writes in; useTranscripts waits for them
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import "./parts.css";
 
 type Recording = { bytes: ArrayBuffer; type: string; duration: number };
 type Rec = { id: string; updatedAt?: string | null };
 type Kit = {
+  onFresh?(cb: () => void): () => void;
   voice?: { record(o?: { max_s?: number }): Promise<Recording | null> };
   vault?: {
     attach(id: string, bytes: ArrayBuffer, type: string, o?: { transcribe?: boolean }): Promise<unknown>;
@@ -41,6 +42,9 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, className, c
   const refresh = useRef(onRefresh);
   refresh.current = onRefresh;
   const on = !!onRefresh;
+  // a page that reads again on pull is drawn from what the app read before, at once, and read again when the vault's
+  // answer differs (frameKit onFresh, T-476); before its own effects read (a layout effect runs first)
+  useLayoutEffect(() => (on ? kit()?.onFresh?.(() => { void Promise.resolve().then(() => refresh.current?.()).catch(() => {}); }) : undefined), [on]);
   useEffect(() => {
     if (!on) return;
     let start: number | null = null, dist = 0, running = false;

@@ -15,7 +15,8 @@ import { useSyncExternalStore } from "react";
 import defaultSource from "../frame/default-frame.tsx?raw";
 import { codeHash, codeKindOf, prepare, TRANSPILER } from "../applet/code";
 import { gateNow, selfTestRunning, subscribeGate } from "../applet/selftest/run";
-import { clientFor } from "../vault/client";
+import { clientFor, keptClientFor } from "../vault/client";
+import { onFresh } from "../vault/readCache";
 import { isMine, HOME_KEY } from "../vault/whose";
 import { listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
 import { choose, type Approved, type Choice, type Kept, type Mode, type Read } from "./frameChoice";
@@ -80,6 +81,8 @@ export function currentChoice(): Choice {
 }
 
 let generation = 0;
+// read from the copy kept of it (vault/readCache.ts), and again when the hub's answer differs
+onFresh((vault, key) => { if (vault === homeVault()?.key && /[?&]tag=parachute-frame(?:&|$)/.test(key)) void readFrameRecord(); });
 /** Read the home vault's frame record again (when the frame is shown, and from Settings). A read that a newer one
  *  (or a change of home) overtook is dropped. */
 export async function readFrameRecord(): Promise<void> {
@@ -89,7 +92,7 @@ export async function readFrameRecord(): Promise<void> {
   set({ reading: true });
   let read: Read;
   try {
-    const rows = await clientFor(home).queryNotes({ tag: FRAME_TAG, includeContent: true, includeMetadata: true, limit: 50 });
+    const rows = await keptClientFor(home).queryNotes({ tag: FRAME_TAG, includeContent: true, includeMetadata: true, limit: 50 });
     const frames = rows.filter((r) => { const k = codeKindOf(r as { extension?: string }); return k === "tsx" || k === "jsx"; });
     if (!frames.length) read = rows.length ? { vault: home.key, state: "bad", error: "its frame note isn't a tsx or jsx note" } : { vault: home.key, state: "none" };
     else if (frames.length > 1) read = { vault: home.key, state: "many", paths: frames.map((f) => f.path ?? f.id) };

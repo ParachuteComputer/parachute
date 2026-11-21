@@ -117,3 +117,62 @@ test("two applets kept: back and forth between them, each is the frame it was, b
     await api(hubState(), "DELETE", `notes/${b.id}`);
   }
 });
+
+// Review finding (T-476): a recheck that finds the applet's note changed but its code and grant as allowed (another
+// field, a page's embeds) takes the note, and leaves the running frame's session as it is: no second `ready`, so its
+// subscriptions and waiting calls go on.
+test("an applet whose note changes, its code and grant as they were, keeps its frame and its session", async ({ page }) => {
+  const SESSION = `import { useEffect, useState } from "react";
+const booted = Math.random().toString(36).slice(2, 8);
+export default function Kept() {
+  const [readies, setReadies] = useState(0);
+  useEffect(() => { const f = (e: MessageEvent) => { if (e.source === parent && (e.data as { event?: string } | null)?.event === "ready") setReadies((n) => n + 1); }; addEventListener("message", f); return () => removeEventListener("message", f); }, []);
+  return <main><h1>Kept</h1><p id="booted">Booted {booted}</p><p id="readies">Ready again {readies}</p></main>;
+}
+`;
+  const note = await record(hubState(), "create", { ...ARGS, body: SESSION });
+  try {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Kept/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const booted = (await frame(page).locator("#booted").textContent())!;
+    await expect(frame(page).locator("#readies")).toHaveText("Ready again 0");
+    // a field of its note changes on the hub (not its code, not what it asks)
+    const cur = await api(hubState(), "GET", `notes?id=${note.id}`);
+    await record(hubState(), "update", { id: note.id, fields: { ...((Array.isArray(cur) ? cur[0] : cur).metadata ?? {}), shelf: "changed" }, if_updated_at: (Array.isArray(cur) ? cur[0] : cur).updatedAt });
+    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
+    await page.goBack();
+    // the hub's answer comes back changed, and is taken: the same frame, never told ready again
+    await page.waitForTimeout(2500);
+    await expect(frame(page).locator("#booted")).toHaveText(booted);
+    await expect(frame(page).locator("#readies")).toHaveText("Ready again 0");
+  } finally {
+    await api(hubState(), "DELETE", `notes/${note.id}`);
+  }
+});
+
+// Review finding (T-476): a page that gains its first embed while it runs starts again, so its frame knows it has embeds
+// (it learns that as it starts) and is drawn at its content's height, not squeezed.
+test("a page that gains its first embed while kept starts again, drawn at its content's height", async ({ page }) => {
+  const comp = await api(hubState(), "POST", "notes", { path: "Components/Hello kept", extension: "tsx", tags: ["component"], content: "export default function Hello() { return <p>Hello from a component</p>; }",
+    metadata: { component: { contract: 1, id: "hello-kept", name: "Hello", access: [] } } });
+  const PAGE = CODE.replace("<h1>Kept</h1>", "<h1>Kept</h1><p>One line.</p><p>Another line.</p><p>A third line.</p>");
+  const note = await record(hubState(), "create", { ...ARGS, body: PAGE });
+  try {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Kept/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await expect(frame(page).locator("#booted")).toBeVisible();
+    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
+    // its record gains an embed: one of the person's own components
+    const cur = await api(hubState(), "GET", `notes?id=${note.id}`);
+    const n = Array.isArray(cur) ? cur[0] : cur;
+    await record(hubState(), "update", { id: note.id, fields: { ...(n.metadata ?? {}), embeds: [{ name: "hello", record: "Components/Hello kept" }] }, if_updated_at: n.updatedAt });
+    await page.goBack();
+    await expect(page.locator('.embed-place[data-embed="hello"]')).toBeVisible({ timeout: 10_000 });
+    await expect.poll(async () => (await page.locator("iframe.applet-frame:visible").first().boundingBox())?.height ?? 0, { timeout: 10_000 }).toBeGreaterThan(100);
+  } finally {
+    await api(hubState(), "DELETE", `notes/${note.id}`).catch(() => {});
+    await api(hubState(), "DELETE", `notes/${comp.id}`).catch(() => {});
+  }
+});
