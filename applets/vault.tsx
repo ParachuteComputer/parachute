@@ -801,6 +801,9 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
             : runs.map((run, i) => {
                 const { plan: left, notes } = planOf(run.changes, all, puts);
                 const outside = sure === run.key;
+                // why the button's number is less than the run's changes (not while it asks "Put back anyway")
+                const covers = canWrite && left.length > 0 && notes.length > 0 && !outside
+                  ? `${left.length === 1 ? "Put it back covers 1" : `Put all ${left.length} back covers ${left.length}`} of these ${run.changes.length} changes. Not counted: ${notes.join(", ")}.` : "";
                 return <div key={run.key}>
                   {(i === 0 || runs[i - 1].day !== run.day) && <p className="sect">{run.day}</p>}
                   <div className="run">
@@ -809,8 +812,8 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
                     {canWrite && left.length > 0 && <Button small busy={busy === run.key} aria-label={`${outside ? "Put back anyway" : left.length === 1 ? "Put it back" : `Put all ${left.length} back`}, by ${run.who}`} onClick={() => void putRun(run)}>{outside ? "Put back anyway" : left.length === 1 ? "Put it back" : `Put all ${left.length} back`}</Button>}
                     {canWrite && !left.length && run.changes.some((c) => putBackOf(c, all, puts)) && <span className="done">put back</span>}
                   </div>
-                  {(left.length > 0 && notes.length > 0 || run.changes[0].unnamed) && <p className="lede">
-                    {left.length > 0 && notes.length > 0 ? `${left.length === 1 ? "Put it back covers 1" : `Put all ${left.length} back covers ${left.length}`} of these ${run.changes.length} changes. Not counted: ${notes.join(", ")}. ` : ""}
+                  {(covers || run.changes[0].unnamed) && <p className="lede">
+                    {covers}{covers && run.changes[0].unnamed ? " " : ""}
                     {run.changes[0].unnamed ? "The hub doesn't say which app this was. Name an app's key when you make it, and its changes show here under that name." : ""}</p>}
                   {outside && <p className="warn">Some of these records changed again after. Putting them back undoes that too.</p>}
                   <div className="chg"><List label={`${run.who}, ${run.day}`} hideLabel rows={run.changes.map((c) => {

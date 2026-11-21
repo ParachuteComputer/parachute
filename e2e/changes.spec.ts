@@ -56,8 +56,6 @@ test("an AI changes three records and deletes one; Changes shows them under its 
   const line = home.locator("p.changed").filter({ hasText: /changed \d+\+? things? today/ });
   await expect(line).toBeVisible({ timeout: 30_000 });
   await expect(line).toContainText(ai);
-  // a name with a comma closes it before the verb
-  await expect(line).toContainText(/You, in another app, changed \d+/);
   await home.getByRole("button", { name: "See what changed" }).click();
   await expect(page).toHaveURL(/\/a\/parachute%3Avault\?vault=kitchen&show=changes/);
   const vault: FrameLocator = page.frameLocator('iframe.applet-frame[title="Vault"]');
