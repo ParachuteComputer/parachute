@@ -182,7 +182,11 @@ export function Tabs({ label, tabs, current, onChange }: { label: string; tabs: 
   // the row; one the kit made, or the browser clamping a resized row, leaves it placed
   const scrolled = () => {
     const n = nav.current;
-    if (n && performance.now() - input.current < 1000 && Math.abs(n.scrollLeft - placedAt.current) > 1) placed.current = false;
+    if (!n) return;
+    const span = n.scrollWidth - n.clientWidth, [lo, hi] = getComputedStyle(n).direction === "rtl" ? [-span, 0] : [0, span];
+    // where the kit put it is no longer in the row's range: the browser clamped a resized row (not the person)
+    if (placed.current && (placedAt.current < lo - 1 || placedAt.current > hi + 1)) placedAt.current = n.scrollLeft;
+    else if (performance.now() - input.current < 1000 && Math.abs(n.scrollLeft - placedAt.current) > 1) placed.current = false;
     edges();
   };
   const touch = () => { input.current = performance.now(); };

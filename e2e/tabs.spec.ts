@@ -67,6 +67,14 @@ test("tabs stay on one line on a phone, scroll sideways, and keep the one shown 
   await frames();
   await nav.evaluate((n) => { (n as HTMLElement).style.width = ""; });
   await expect.poll(() => inView("Archive")).toBe(true);
+  // a tap on the row, then at once the window widens and narrows again (a phone turned): the browser's clamp isn't the
+  // person's scroll, so the shown tab is brought back clear
+  const size = page.viewportSize()!;
+  await nav.evaluate((n) => n.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+  await page.setViewportSize({ width: 900, height: size.height });
+  await frames();
+  await page.setViewportSize(size);
+  await expect.poll(() => inView("Archive")).toBe(true);
   // the person scrolls the row away themselves; a count arriving (Inbox widens) leaves it where they put it
   await frames();
   await nav.evaluate((n) => { n.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); n.scrollLeft = 0; });
