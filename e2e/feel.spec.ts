@@ -1,5 +1,6 @@
 // How the kit feels (docs/DESIGN-RULES.md), in a real browser against a real hub: an applet written on the kit and
-// nothing else arrives within 250 ms, readable at once, without moving what is already there; under the device's
+// nothing else arrives within 250 ms, readable on its first frame (never from blank, never held back by a delay),
+// without moving what is already there; under the device's
 // reduce-motion setting nothing moves at all, and a drawer or a toast still goes the moment it is put away (no waiting
 // on an end of motion that never comes); a drawer and a toast follow the finger and go when let go far enough.
 import { devices, expect, test, type Frame, type Page } from "@playwright/test";
@@ -89,6 +90,31 @@ test("flowing: the page arrives within 250 ms on the theme's times, and moves no
   // a press gives under the finger (and comes back)
   const more = app.getByRole("button", { name: "More" });
   expect(await more.evaluate((b) => getComputedStyle(b).transitionProperty)).toContain("transform");
+});
+
+test("readable on the first frame: what arrives is never blank, and never waits for its turn", async ({ page }) => {
+  // In every frame (the applet's too), note each kit part the moment it is put in the page and again on the next
+  // frame: its opacity then is what the first painted frame shows (an animation held back by a delay shows its first
+  // keyframe, so a delay on content shows here as what it starts from).
+  await page.addInitScript(() => {
+    const SEL = ".pa-page-head, .pa-list, .pa-card, .pa-table, .pa-fields, .pa-note, .pa-empty, .pa-days, .pa-problem, .pa-list li";
+    const seen: { on: string; opacity: number; at: string }[] = [];
+    (window as unknown as { __first: typeof seen }).__first = seen;
+    const sample = (el: Element, at: string) => seen.push({ on: (el as HTMLElement).className, opacity: Number(getComputedStyle(el).opacity), at });
+    new MutationObserver((records) => {
+      for (const r of records) for (const n of r.addedNodes) {
+        if (!(n instanceof Element)) continue;
+        for (const el of [n, ...n.querySelectorAll("*")]) if (el.matches(SEL)) { sample(el, "inserted"); requestAnimationFrame(() => sample(el, "frame 1")); }
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+  const { inner } = await openFeel(page);
+  const first = await inner.evaluate(() => (window as unknown as { __first: { on: string; opacity: number; at: string }[] }).__first);
+  // the title and the list were both seen arriving, and each was readable (opacity >= 0.8) from the first frame
+  for (const part of ["pa-page-head", "pa-list"]) expect(first.some((f) => f.on.split(" ").includes(part)), `${part} seen arriving`).toBe(true);
+  for (const f of first) expect(f.opacity, `${f.on} at ${f.at}`).toBeGreaterThanOrEqual(0.8);
+  // and nothing in the page holds a part back: no delay on the parts' arrival, "Reading…" (a wait of its own) apart
+  for (const a of (await animations(inner)).filter((x) => !/pa-loading/.test(x.on))) expect(a.delay, `${a.on} ${a.name}`).toBe(0);
 });
 
 test("still: under reduce-motion nothing moves, and a drawer and a toast still go at once", async ({ browser }) => {

@@ -114,7 +114,7 @@ export const TYPE_SCALE_CSS = (Object.entries(TYPE_SCALE) as [TypeStep, number][
  *    t-press      a button giving under the finger
  *    t-state      a part arriving, or changing state; a page's arrival (every navigation stays within 250 ms)
  *    t-sheet      a sheet or a toast arriving (leaving takes four fifths of it)
- *    t-step       between one part and the next of a group arriving together
+ *    t-step       a step between one part and the next, for an applet's own group arriving (the kit's parts arrive together)
  *  With the device's reduce-motion setting, on a screen slow to redraw (e-ink), or with a theme whose `motion` is
  *  `still`, every time is 0: nothing moves. */
 export const MOTION = {
