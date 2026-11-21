@@ -17,7 +17,6 @@ import { homeVault, useFrameSource } from "./frameSource";
 import { officialFace, officialPath, type OfficialName } from "../applet/parachuteSource";
 import { useVaults } from "../vault/hooks";
 import { useBadge } from "../services/signals";
-import { useKeyboard } from "./keyboard";
 
 type Item = Found & { place: Place; home: boolean };
 
@@ -32,8 +31,6 @@ export default function BottomBar() {
   const here = (href: string) => pathname === href;
   useEffect(() => { setAsked(null); }, [pathname]);
   const wayHome = bar.entries.some((e) => "screen" in e && e.screen === "home");
-  // the keyboard up: the bar steps aside (keyboard.ts)
-  useKeyboard();
   return (
     <>
       <nav className="home-bar" aria-label="Bar">
