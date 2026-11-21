@@ -19,6 +19,7 @@ import { homeNow } from "./frameDeps";
 import { subscribeTheme, tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
 import { FONTS_CSS } from "../theme/fonts";
+import { onFresh } from "../vault/readCache";
 
 /** How long a frame from a vault has to say it is listening before the built-in one takes its place. */
 const WATCHDOG_MS = 10_000;
@@ -65,7 +66,7 @@ export default function FrameHost({ js, from, onFailed }: { js: string; from: "b
     const bundleChanged = () => { const now = JSON.stringify(openBundleNow()); if (now !== bundleWas) { bundleWas = now; host.event("changed", { what: "applets" }); } };
     themeWasRef.current = JSON.stringify(tokensNow());
     const themeChanged = () => { const t = tokensNow(), now = JSON.stringify(t); if (now !== themeWasRef.current) { themeWasRef.current = now; host.event("theme", t); } };
-    const offs = [subscribeTheme(themeChanged), subscribeVaults(changed("vaults")), subscribeVaults(homeChanged), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets")), subscribeSettings(homeChanged), subscribeSettings(bundleChanged), subscribeNewVaults(homeChanged)];
+    const offs = [onFresh((vault, read) => host.fresh(vault, read)), subscribeTheme(themeChanged), subscribeVaults(changed("vaults")), subscribeVaults(homeChanged), subscribeDefaults(changed("defaults")), subscribeApplets(changed("applets")), subscribeGate(changed("applets")), subscribeSettings(homeChanged), subscribeSettings(bundleChanged), subscribeNewVaults(homeChanged)];
     // a frame from a vault that never starts (or never listens) gives way to the built-in one
     const watchdog = from === "vault" ? window.setTimeout(() => { if (!heard.current) failedRef.current("it didn't start in time", false); }, WATCHDOG_MS) : 0;
     return () => { removeEventListener("message", onMessage); offs.forEach((f) => f()); window.clearTimeout(watchdog); };

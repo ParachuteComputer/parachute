@@ -28,7 +28,7 @@ export default function NoteRoute() {
   const location = useLocation();
   const rec = useVault(key);
   const plain = params.get("with") === "vault";
-  const ow = useOpenWith(plain ? null : rec, id);
+  const ow = useOpenWith(plain ? null : rec, id, true);
   const kept = (location.state as { decided?: Decided } | null)?.decided;
   if (kept && !decided.has(location.key)) decided.set(location.key, kept);
   const choose = params.get("with") === "choose";

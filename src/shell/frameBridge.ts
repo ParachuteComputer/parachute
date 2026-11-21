@@ -12,6 +12,8 @@ export { FRAME_LIMITS };
 export type HostDeps = {
   vaults(): VaultRecord[];
   client(rec: VaultRecord): Pick<VaultClient, "queryNotes" | "getNote">;
+  /** Reads answered from the copy kept of them at once, the hub asked behind (vault/readCache.ts). */
+  kept(rec: VaultRecord): Pick<VaultClient, "getNote">;
   roles(rec: VaultRecord): Promise<string[]>;
   applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets>;
   /** `set` refuses (throws) a choice that names no applet of that vault, or one too many. */
@@ -63,6 +65,8 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
   const limiter = new RateLimiter(FRAME_LIMITS.perWindow, FRAME_LIMITS.windowMs);
   const now = deps.now ?? Date.now;
   let pending = 0;
+  // the notes the frame read from the copy: the ones it is told of when the hub's answer differs
+  const keptAsked = new Set<string>();
   const vault = (key: string) => {
     const rec = deps.vaults().find((r) => r.key === key);
     if (!rec) throw new Error("This device doesn't hold that vault.");
@@ -73,7 +77,9 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "vaults.list": return deps.vaults().map((r) => frameVault(r, deps.whose?.(r), deps.homeKey?.() === r.key));
       case "vault.query": return deps.client(vault(p.vault as string)).queryNotes(p.query as Query);
       case "vault.note": {
-        try { return await deps.client(vault(p.vault as string)).getNote(p.id as string); } catch (e) { if ((e as { status?: number } | null)?.status === 404) return null; throw e; }
+        const rec = vault(p.vault as string);
+        if (p.kept === true) keptAsked.add(`${rec.key}\u0000${p.id as string}`);
+        try { return await (p.kept === true ? deps.kept : deps.client)(rec).getNote(p.id as string); } catch (e) { if ((e as { status?: number } | null)?.status === 404) return null; throw e; }
       }
       case "vault.roles": return deps.roles(vault(p.vault as string)).catch(() => null);
       case "applets.list": return deps.applets(vault(p.vault as string), p.fresh as boolean);
@@ -123,6 +129,13 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       );
     },
     event<E extends keyof Events>(event: E, data: Events[E]) { post({ pf: PF, event, data }); },
+    /** The hub's answer to a read of `vault` (its path and query, readCache `onFresh`) differs from the copy: a note the
+     *  frame read from the copy is told to it. */
+    fresh(vault: string, read: string) {
+      let id: string | null = null;
+      try { id = new URLSearchParams(read.slice(read.indexOf("?") + 1)).get("id"); } catch { /* not a read of one note */ }
+      if (id !== null && keptAsked.has(`${vault}\u0000${id}`)) post({ pf: PF, event: "changed", data: { what: "note", vault, id } });
+    },
   };
 }
 export type FrameHostApi = ReturnType<typeof createFrameHost>;

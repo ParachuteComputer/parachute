@@ -267,3 +267,24 @@ export default function Taps() { return <main><h1 id="taps">Taps</h1><p id="said
     await api(st, "DELETE", `notes/${applet.id}`);
   }
 });
+
+// T-476: the note's route decides first from what this device read before (frame/open/useOpenWith.ts `copyFirst`): a note
+// no applet claims shows at once, without waiting for the hub's list of applets; one an applet claims waits for it, and
+// never opens in the applet on the copy alone.
+test("the note's route: an unclaimed note opens without waiting for the hub's applets; a claimed one waits for them", async ({ page }) => {
+  await allowApplet(page, "Recipe box");
+  await page.goto(`/v/${VAULT}?with=vault`);
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
+  // the hub's list of applets never answers from here on
+  await page.route((u) => u.searchParams.get("tag") === "applet", () => {});
+  try {
+    await notes(page).getByRole("link", { name: /^Welcome(?: |$)/ }).click();
+    await expectInVault(page, VAULT, await noteId("Welcome"), "Welcome");
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await notes(page).getByRole("link", { name: /^Tomato toast(?: (?:Recipes|Applets) ·|$)/ }).click();
+    await expect(ui(page).getByRole("status").filter({ hasText: "Opening…" })).toBeVisible();
+    await page.waitForTimeout(2000);
+    await expect(page.locator('iframe.applet-frame[title="Recipe box"]:visible')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/n\//);
+  } finally { await page.unrouteAll({ behavior: "ignoreErrors" }); }
+});

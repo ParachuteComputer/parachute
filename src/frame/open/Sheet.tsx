@@ -20,7 +20,7 @@ function SheetFor({ vault, note, preset, fromRoute }: { vault: string; note: str
   const rec = useVault(vault);
   const nav = useNavigate();
   // a long-press reads the applets as they are now, as the note's route does
-  const read = useOpenWith(preset ? null : rec, note, true);
+  const read = useOpenWith(preset ? null : rec, note);
   const ow: OpenWith = preset ? { state: "ok", note: preset.note, cands: preset.cands, decision: { kind: "ask", candidates: preset.cands } } : read;
   const [always, setAlways] = useState(true);
   if (!rec) return null;

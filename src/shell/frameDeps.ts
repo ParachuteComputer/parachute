@@ -243,6 +243,7 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
   return {
     vaults: listVaults,
     client: clientFor,
+    kept: keptClientFor,
     roles: (rec) => readRoleTags(keptClientFor(rec)),
     applets,
     defaults: { get: defaultsNow, set: setChoice },
