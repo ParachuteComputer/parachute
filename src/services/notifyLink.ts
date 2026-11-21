@@ -28,10 +28,11 @@ export function notifyPath(raw: string): string | null {
 
 /** What an applet is told it was opened for (from its address's query): a room and a message. */
 /** A vault and a record in it, for an applet that reaches every vault (`app: [vaults]`): Vault opens there. */
-export function vaultLaunchOf(params: URLSearchParams): { vault: string; record?: string } | null {
+export function vaultLaunchOf(params: URLSearchParams): { vault: string; record?: string; show?: "changes" } | null {
   const vault = params.get("vault"), record = params.get("record");
   if (!vault || vault.length > 200 || /[\u0000-\u001f]/.test(vault)) return null;
-  return { vault, ...(record && ROOM.test(record) ? { record } : {}) };
+  // `show=changes`: the vault's Changes (Home's line, T-476)
+  return { vault, ...(record && ROOM.test(record) ? { record } : {}), ...(params.get("show") === "changes" ? { show: "changes" as const } : {}) };
 }
 
 export function launchOf(params: URLSearchParams): { room: string; event?: string } | null {

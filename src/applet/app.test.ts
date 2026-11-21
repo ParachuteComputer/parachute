@@ -47,6 +47,10 @@ describe("metadata.app", () => {
     // an applet at a room (its launch, as a notification's tap gives it), and nothing else in a query
     const ev = "a".repeat(64);
     for (const ok of ["/v/home/a/01ROOMS?room=parachute", `/v/home/a/01ROOMS?room=r_1-x&event=${ev}`]) expect(appHref(ok), ok).toBe(true);
+    // Home's line into Vault's Changes (T-476): that one launch, and nothing else in its query
+    expect(appHref("/v/home/a/parachute%3Avault?vault=kitchen&show=changes")).toBe(true);
+    for (const bad of ["/v/home/a/parachute%3Avault?vault=kitchen&show=changes&x=1", "/v/home/a/parachute%3Avault?vault=kitchen&show=all", "/v/home/a/parachute%3Avault?vault=a/b&show=changes", "/v/home?vault=kitchen&show=changes"])
+      expect(appHref(bad), bad).toBe(false);
     for (const bad of ["/v/home/n/01X?room=parachute", "/?room=x", "/v/home/a/01R?screen=x", "/v/home/a/01R?room=", "/v/home/a/01R?room=a/b", `/v/home/a/01R?event=${ev}&room=x`,
       "/v/home/a/01R?room=x&event=zz", "/v/home/a/01R?room=x&next=/settings", "/v/home/a/01R?room=x#h", "/v/home/a/../../settings?room=x", "/v/home/a/01R??room=x"]) expect(appHref(bad), bad).toBe(false);
     for (const bad of ["//evil.example", "https://evil.example", "/settings", "/add", "/v/k/n/x?y=1", "/v/k/x/y", "/oauth/callback", "javascript:alert(1)",

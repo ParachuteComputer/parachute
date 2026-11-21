@@ -3,6 +3,8 @@
 // All are the shell's answers; nothing here reads a token. The last four are docs/design/KEYRING.md's "Voice, files,
 // links, storage" (storage is its own module, storage.ts).
 //   app.recent({limit?})   the newest notes across the vaults this device holds: titles, where, when (never content)
+//   app.changes()          (changes) what others (an AI, another app) changed today across those vaults: how many, by
+//                          whom (names only), and where Vault shows them: {count, names, more, href} (count 0: href null)
 //   app.pins()             what is on the bar: the home applet and the pins, by name, glyph and address
 //   app.open({href})       go to a note or an applet in the app (an applet at a room: ?room=&event=, its launch), during
 //                          a tap only (and a tap there starts it as any tap does)
@@ -22,11 +24,16 @@ import { bareName, FILE_MAX, LINK_GAP_MS, linkOk, mediaType, parseAccept, SAVE_G
 /** A note as `recent` gives it: its title, its vault's name, when it changed, and where it opens. No folder, no content. */
 export type RecentNote = { vaultName: string; title: string; updatedAt: string | null; href: string };
 export type BarPlace = { name: string; glyph: string; href: string; home: boolean };
+/** Today's changes by others: how many, the writers' names (the one who wrote last first), whether there were more than were read, and
+ *  Vault's Changes for the vault with the most. */
+export type ChangedToday = { count: number; names: string[]; more: boolean; href: string | null };
 export type PickedFile = { name: string; type: string; bytes: ArrayBuffer };
 export type AppDeps = {
   /** The newest `limit` notes in each vault this device holds, newest first; `charge` counts the vault reads. */
   recent(limit: number, charge: (n: number) => void): Promise<RecentNote[]>;
   pins(): BarPlace[];
+  /** Changes since local midnight by writers other than this device's Parachute; `charge` counts the vault reads. */
+  changes(charge: (n: number) => void): Promise<ChangedToday>;
   /** Go there if the person is tapping in this applet now (and the address is one of the app's): whether it went. */
   open(href: string): boolean;
   /** Put text on the clipboard if the person is tapping in this applet now: whether it went. */
@@ -61,7 +68,7 @@ const SHAPE = /^\/(?:v\/[^/?#\\]+(?:\/[na]\/[^/?#\\]+)?)?$/;
 const APPLET = /^\/v\/[^/?#\\]+\/a\/[^/?#\\]+$/;
 /** Where in an applet to open it: a room, and a message in it, the same words a notification's tap carries
  *  (services/notifyLink.ts `launchOf`); the applet hears them as its launch (`onLaunch`). */
-const LAUNCH = /^\?room=[A-Za-z0-9_-]{1,64}(?:&event=[0-9a-f]{64})?$/;
+const LAUNCH = /^\?(?:room=[A-Za-z0-9_-]{1,64}(?:&event=[0-9a-f]{64})?|vault=[A-Za-z0-9%._~-]{1,300}&show=changes)$/;
 /** The app's addresses an applet may send the person to: the list, a vault, a note, an applet (and an applet at a room:
  *  `?room=<id>[&event=<id>]`); and only an address the browser reads back exactly as written (no backslash, dot segment,
  *  encoded dot or stripped character that it would turn into another address, such as the shell's own screens). */
@@ -88,6 +95,11 @@ export function createAppModule(allowed: readonly AppWord[], deps: AppDeps, now:
           return Number.isInteger(limit) && (limit as number) > 0 && (limit as number) <= RECENT_MAX ? { ok: true, value: limit as number } : { ok: false };
         },
         run: async (limit: number, _s, ctx) => (await deps.recent(limit, (n) => ctx.charge(n))).slice(0, limit),
+      },
+      changes: {
+        cap: null,
+        validate: (p) => { need("changes"); return plain(p) && hasOnly(p, []) ? { ok: true, value: null } : { ok: false }; },
+        run: async (_v: null, _s, ctx) => deps.changes((n) => ctx.charge(n)),
       },
       pins: { cap: null, validate: (p) => { need("pins"); return plain(p) && hasOnly(p, []) ? { ok: true, value: null } : { ok: false }; }, run: async () => deps.pins() },
       open: {

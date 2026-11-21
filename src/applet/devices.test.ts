@@ -104,7 +104,7 @@ describe("what the calls accept", () => {
 });
 
 const appDeps = (log: string[] = []): AppDeps => ({
-  recent: async () => [], pins: () => [], open: () => true, links: async (l) => l.map(() => null), follow: async () => false, address: () => null,
+  recent: async () => [], pins: () => [], changes: async () => ({ count: 0, names: [], more: false, href: null }), open: () => true, links: async (l) => l.map(() => null), follow: async () => false, address: () => null,
   openLink: async (url) => { log.push(`link ${url}`); return true; }, copy: async (text) => { log.push(`copy ${text}`); return true; },
   save: async (name, bytes, type) => { log.push(`save ${name} ${bytes.byteLength} ${type}`); return name; },
   pick: async (accept, multiple) => { log.push(`pick ${accept.join(",")} ${multiple}`); return []; },

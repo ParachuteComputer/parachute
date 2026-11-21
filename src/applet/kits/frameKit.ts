@@ -421,6 +421,8 @@ export const FRAME_KIT = String.raw`(function () {
     app: Object.freeze({
       recent: function (o) { return call("app", "recent", o || {}); },
       pins: function () { return call("app", "pins", {}); },
+      // with app: [changes] (level 5): what others changed today, how many and by whom; {count, names, more, href}
+      changes: function () { return call("app", "changes", {}); },
       open: function (href) { return call("app", "open", { href: href }); },
       copy: function (text) { return call("app", "copy", { text: text }); },
       links: function (links, from) { var p = { links: links }; if (typeof from === "string") p.from = from; return call("app", "links", p); },
@@ -528,6 +530,11 @@ export const FRAME_KIT = String.raw`(function () {
       get: function (vault, id) { return call("vaults", "get", { vault: vault, id: id }); },
       history: function (vault, id) { return call("vaults", "history", { vault: vault, id: id }); },
       version: function (vault, id, ix) { return call("vaults", "version", { vault: vault, id: id, ix: ix }); },
+      // what changed since an ISO time, by whom (newest first); a change's two sides; putting one back (level 5)
+      changes: function (vault, since, offset) { return call("vaults", "changes", offset ? { vault: vault, since: since, offset: offset } : { vault: vault, since: since }); },
+      compare: function (vault, id, before, after) { return call("vaults", "compare", { vault: vault, id: id, before: before === undefined ? null : before, after: after === undefined ? null : after }); },
+      restore: function (vault, id, ix, ifUpdatedAt) { return call("vaults", "restore", ifUpdatedAt ? { vault: vault, id: id, ix: ix, if_updated_at: ifUpdatedAt } : { vault: vault, id: id, ix: ix }); },
+      remove: function (vault, id, ifUpdatedAt) { return call("vaults", "remove", { vault: vault, id: id, if_updated_at: ifUpdatedAt }); },
       update: function (vault, id, change) { return call("vaults", "update", { vault: vault, id: id, bytes: new TextEncoder().encode(JSON.stringify(change)).buffer }); },
       create: function (vault, rec) { return call("vaults", "create", { vault: vault, bytes: new TextEncoder().encode(JSON.stringify(rec)).buffer }); },
       // cb({upsert: record} | {remove: id}) as changes land; returns a function that stops it

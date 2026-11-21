@@ -30,7 +30,8 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   A record that doesn't load leaves you the list and Settings ([docs/NAVIGATION.md](docs/NAVIGATION.md)).
 - **Vault**, Parachute's own viewer: your vaults, each one's types with counts, a type's records as a table (sort,
   filter, group, saved views), a record's fields (changed where they stand), words, links both ways and history; what
-  your AI writes appears while you look; Sharing says what reaches a vault. One tap adds it ([docs/VAULT.md](docs/VAULT.md)).
+  your AI writes appears while you look; **Changes** shows what changed, by whom (your AI by its key's name), each
+  before and after, and puts a change or a whole run of them back; Sharing says what reaches a vault. One tap adds it ([docs/VAULT.md](docs/VAULT.md)).
 - **Your notes.** Browse, search and read a vault's notes; a note opens in the applet that claims its type, else in
   Vault once it is added, else in the plain view. A typed record shows its fields (name and value). Write a new note and edit a note's words and
   fields in the app.
