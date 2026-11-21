@@ -11,14 +11,24 @@ type Entry = { id: string; path: string; updatedAt: string | null; createdAt?: s
 
 /** Journal/2026/11-17/09-41: a voice entry's path until its transcript lands, as the Uni app's */
 const voicePath = (at: Date, seconds = false) => `Journal/${when.path(at, seconds)}`;
+/** An entry's name: its first line with words, up to six of them, ending at the first sentence's end when that comes
+ *  sooner ("Walked to the bakery", "How was today"). A number, an initial, a short title or a dotted abbreviation (1.
+ *  J. Dr. U.S. p.m.) doesn't end a sentence, nor does punctuation alone (... !!!). The same in Journal and Home
+ *  (src/vault/naming.test.ts checks both copies). */
+function entryWords(text: string): string {
+  const line = text.split("\n").map((l) => l.trim()).find((l) => /[\p{L}\p{N}]/u.test(l)) ?? "";
+  const all = line.replace(/[#*_`>\[\]\\/:"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6);
+  const end = all.findIndex((w) => {
+    const bare = w.replace(/[.!?…。]+$/, "");
+    return /[.!?…。]$/.test(w) && /[^\p{P}\s]/u.test(w) && !/\.\p{L}/u.test(bare)
+      && !/^(\d+|\p{L}|dr|mr|mrs|ms|st|mt|vs|etc|no|jr|sr|prof|sen|rep|gov|gen|approx|fig|inc|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)$/iu.test(bare);
+  });
+  const words = (end >= 0 ? all.slice(0, end + 1) : all).join(" ").replace(/\?/g, "").replace(/[.!…。]+$/, "").replace(/\s+/g, " ").trim();
+  return Array.from(words).slice(0, 48).join("").trim() || "Entry";
+}
 /** Journal/2026/11-17/09-41 First words of it */
 export function pathFor(text: string, at = new Date()) {
-  // its first line's first words, up to six, ending at the first sentence's end when that comes sooner ("Walked to
-  // the bakery", "How was today"); a number, an initial or a short title (1. J. Dr.) doesn't end a sentence
-  const line = text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
-  const all = line.replace(/[#*_`>\[\]\\/:"<>|]/g, " ").split(/\s+/).filter(Boolean).slice(0, 6);
-  const end = all.findIndex((w) => /[.!?]$/.test(w) && !/^(\d+|\p{L}|dr|mr|mrs|ms|st|mt|vs|etc|no|jr|sr|e\.g|i\.e)$/iu.test(w.replace(/[.!?]+$/, "")));
-  const words = (end >= 0 ? all.slice(0, end + 1) : all).join(" ").replace(/\?/g, "").replace(/[.!]+$/, "").replace(/\s+/g, " ").slice(0, 48).trim() || "Entry";
+  const words = entryWords(text);
   return `Journal/${when.path(at)} ${words}`;
 }
 /** When an entry was written: from its path (the Uni app's and this one's), else when it changed. */

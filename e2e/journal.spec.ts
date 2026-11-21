@@ -34,8 +34,8 @@ test("journal: a line becomes a dated journal note; the days show, voice entries
     const rows = await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=50`) as { id: string; path: string; tags?: string[]; content?: string }[];
     const mine = rows.find((r) => r.content?.includes(`Planted garlic ${stamp}. The north`));
     // named by its first sentence when that is shorter than six words, so a title never stops mid-phrase
-    expect(mine?.path).toMatch(new RegExp(`^Journal/\\d{4}/\\d{2}-\\d{2}/\\d{2}-\\d{2}(-\\d{2})? Planted garlic ${stamp}$`));
     if (mine) made.push(mine.id);
+    expect(mine?.path).toMatch(new RegExp(`^Journal/\\d{4}/\\d{2}-\\d{2}/\\d{2}-\\d{2}(-\\d{2})? Planted garlic ${stamp}$`));
     // a question ends a sentence too; an initial or a title doesn't
     for (const [line, name] of [[`How was the walk ${stamp}? Long.`, `How was the walk ${stamp}`], [`Dr. Lee called ${stamp} about it.`, `Dr. Lee called ${stamp} about it`]]) {
       await app.getByLabel("Write in your journal").fill(line);
