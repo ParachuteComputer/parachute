@@ -269,4 +269,15 @@ describe("what shows, from what was read before (T-476)", () => {
     // the copy says post publishes nothing; the hub says it does: adding it is refused
     await expect(c("update", { vault: "home", id: "a", bytes: enc({ if_updated_at: book.updatedAt, types: { add: ["post"] } }) })).rejects.toThrow(/publish/);
   });
+  it("a change refused as changed meanwhile: the record's next read for what shows is the hub's, not the copy from before", async () => {
+    const { reads, calls, c } = kept();
+    await expect(c("update", { vault: "home", id: "a", bytes: enc({ body: "mine", if_updated_at: "2026-01-01T00:00:00.000Z" }) })).rejects.toThrow(/conflict/);
+    const before = calls.filter((x) => x.method === "GET" && x.path.startsWith("/records/a")).length;
+    await c("get", { vault: "home", id: "a" });
+    expect(calls.filter((x) => x.method === "GET" && x.path.startsWith("/records/a")).length).toBe(before + 1);
+    expect(reads.filter((p) => p.startsWith("/records/a"))).toEqual([]);
+    // and the one after that, from the copy again
+    await c("get", { vault: "home", id: "a" });
+    expect(reads.filter((p) => p.startsWith("/records/a"))).toHaveLength(1);
+  });
 });

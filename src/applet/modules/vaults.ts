@@ -293,12 +293,15 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
    *  which would publish without the sheet (core applySchemaDefaults). */
   const publishingTypes = async (vault: string) => new Set((await types(vault)).filter((t) => t.fields && Object.prototype.hasOwnProperty.call(t.fields, PUBLISH_FIELD) && (t.fields[PUBLISH_FIELD] as { default?: unknown })?.default !== undefined).map((t) => t.name));
   const namesFor = async (vault: string, shows = false) => typeNames.get(vault) ?? new Set((await types(vault, shows)).filter((t) => t.kind === "type").map((t) => t.name));
+  /** Records a change found changed meanwhile: their next read for what shows is the hub's (the copy is from before). */
+  const changedMeanwhile = new Set<string>();
   /** A record's GET for what shows: from what was read before, where the shell keeps it. */
   const shown = (vault: string, path: string) => (deps.read ? deps.read(vault, path) : deps.request(vault, "GET", path));
   /** A record: as it is now (`shows`: for what shows, which may be what was read before). */
   async function getRec(vault: string, id: string, body: boolean, shows = false): Promise<Rec & { extension?: unknown }> {
     const door = await deps.door(vault);
-    const raw = await (shows ? shown : (v: string, p: string) => deps.request(v, "GET", p))(vault, `/${door}/${encodeURIComponent(id)}?include_links=true${body ? "" : door === "records" ? "&include_body=false" : "&include_content=false"}`);
+    const fresh = !shows || changedMeanwhile.delete(`${vault} ${id}`);
+    const raw = await (fresh ? (v: string, p: string) => deps.request(v, "GET", p) : shown)(vault, `/${door}/${encodeURIComponent(id)}?include_links=true${body ? "" : door === "records" ? "&include_body=false" : "&include_content=false"}`);
     const r = recOf(raw, await namesFor(vault, shows));
     if (!r) throw new ContractError(ERROR_CODES.failed, "not_found");
     return { ...r, extension: plain(raw) ? raw.extension : undefined };
@@ -400,7 +403,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           if (guarded(now) || (!now.path.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(now.path))) throw refuse("this record is the app's own: no applet changes it");
           if (now.path.startsWith(VIEWS) && change.types?.remove?.length) throw refuse("a saved view keeps its names");
           // the change is to the version judged above, or none
-          if (change.if_updated_at !== now.updatedAt) throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read");
+          if (change.if_updated_at !== now.updatedAt) { changedMeanwhile.add(`${vault} ${id}`); throw new ContractError(ERROR_CODES.failed, "conflict: it changed since it was read"); }
           // what is written into a published record anyone with its link reads: the person says yes first
           if (isPublic(now)) await askFirst(deps, { title: `Change “${sheetText(now.path)}”?`, body: `It is published from ${sheetText(v.name)} (${sheetText(v.host)}): anyone with its link reads what is written there.`, act: "Change it" });
           const door = await deps.door(vault);
