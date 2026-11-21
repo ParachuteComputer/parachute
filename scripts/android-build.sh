@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build the Android app, signed with the play-test key, and check the signature.
 #   scripts/android-build.sh [--debug] [--target aarch64|x86_64]   (default: release, aarch64)
+# PARACHUTE_UPDATE_FEED=<https://…/latest.json> makes a build that looks there for newer ones (src-tauri/src/updates.rs).
 # Needs ANDROID_HOME, NDK_HOME, Java 17, and the key at ~/.config/parachute-playtest/keystore.properties (or
 # PARACHUTE_KEYSTORE_PROPERTIES). Gradle's own debug key is kept in a folder of the play-test's, never another app's.
 set -euo pipefail
@@ -11,7 +12,11 @@ props=${PARACHUTE_KEYSTORE_PROPERTIES:-$HOME/.config/parachute-playtest/keystore
 [ -f "$props" ] || { echo "no play-test key at $props" >&2; exit 1; }
 export ANDROID_USER_HOME="${PARACHUTE_ANDROID_USER_HOME:-$(dirname "$props")/android-home}"
 mkdir -p "$ANDROID_USER_HOME"
-flags=(--apk --target "$target"); [ "$mode" = debug ] && flags+=(--debug)
+# which build this is (src/shell/updates.ts): the commit and its time, the same for the screens (vite.config.ts) and the
+# version code, which then only grows along next, so Android takes each newer build as an update of the one before
+export PARACHUTE_BUILD_AT=${PARACHUTE_BUILD_AT:-$(git log -1 --format=%ct)} PARACHUTE_BUILD_COMMIT=${PARACHUTE_BUILD_COMMIT:-$(git rev-parse --short=7 HEAD)}
+[[ $PARACHUTE_BUILD_AT =~ ^[0-9]+$ && -n $PARACHUTE_BUILD_COMMIT ]] || { echo "no build identity (git, or PARACHUTE_BUILD_AT and PARACHUTE_BUILD_COMMIT)" >&2; exit 1; }
+flags=(--apk --target "$target" --config "{\"bundle\":{\"android\":{\"versionCode\":$PARACHUTE_BUILD_AT}}}"); [ "$mode" = debug ] && flags+=(--debug)
 npx tauri android build "${flags[@]}"
 # the bundle the app was built from has no test signer (src/services/e2eNative.ts)
 scripts/no-test-signer.sh dist >&2
