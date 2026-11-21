@@ -122,6 +122,16 @@ describe("an update that can't be taken whole", () => {
     expect(await sync(await index(3), { [sha]: newCapture }, store)).toBe("taken");
     expect((await officialNow("capture", { store, keys: KEYS })).from).toBe("update");
   });
+  it("an update the app couldn't take when the index came is taken after an app update, from the same index", async () => {
+    const store = memory();
+    const code = { [await sha256Hex(newCapture)]: newCapture };
+    const ev = await index(6, { needs: 4 });
+    expect(await syncParachuteSource({ fetch: publisher(ev, code), publisher: PUB, store, keys: KEYS, level: 3 })).toBe("taken");
+    expect((await officialNow("capture", { store, keys: KEYS, level: 4 })).from).toBe("app");
+    expect(await syncParachuteSource({ fetch: publisher(ev, code), publisher: PUB, store, keys: KEYS, level: 4 })).toBe("taken");
+    expect((await officialNow("capture", { store, keys: KEYS, level: 4 })).from).toBe("update");
+    expect(await syncParachuteSource({ fetch: publisher(ev, code), publisher: PUB, store, keys: KEYS, level: 4 })).toBe("same");
+  });
   it("one that imports from a vault is left: the app's own copy runs", async () => {
     const store = memory();
     const importing = `import Room from "component:room";\nexport default function C() { return null; }\n`;

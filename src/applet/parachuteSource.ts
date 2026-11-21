@@ -154,7 +154,11 @@ export async function syncParachuteSource(opts: { fetch?: typeof fetch; publishe
   const idx = readIndex(ev, opts.keys);
   if (!idx) return "refused";
   const was = readKept(store);
-  if (was && idx.n <= was.n) return idx.n === was.n ? "same" : "refused";
+  if (was && idx.n < was.n) return "refused";
+  // the same index: "same", unless it holds an update this app can take now that it couldn't then (an app update
+  // raised its level), whose code wasn't fetched
+  const wanted = OFFICIAL_NAMES.filter((n) => { const a = idx.applets[n]; return !!a && a.version > BUNDLED[n].version && !tooNew(a.needs, level); });
+  if (was && idx.n === was.n && wanted.every((n) => was.code[idx.applets[n]!.sha256] !== undefined)) return "same";
   const code: Record<string, string> = {};
   for (const name of OFFICIAL_NAMES) {
     const a = idx.applets[name];

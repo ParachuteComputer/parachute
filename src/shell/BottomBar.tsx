@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { useHold } from "../ui/hold";
 import { Link, useLocation } from "react-router";
-import { move, openBundleNow, pinApplet, setStart, useSettings, type Found, type Pin, type Place } from "./homeSettings";
+import { move, pinApplet, setStart, useSettings, type Found, type Pin, type Place } from "./homeSettings";
 import type { AppPlace } from "./bundles";
 import { chooseStart, forgetStart } from "./start";
 import { clearMark } from "../open/mark";
@@ -63,9 +63,9 @@ function AppPlaceLink({ place, notes, pathname }: { place: AppPlace; notes: bool
   return <Link className="home-bar-place" to="/" aria-current={at ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{glyph}</span>{name}</Link>;
 }
 function ShippedPlace({ which, pathname }: { which: OfficialName; pathname: string }) {
+  // named on the bar, it is there, whatever the bundle's publishers say (they decide what is offered on their own: the
+  // list, where a record opens, Simplified's home)
   const home = homeVault(useVaults());
-  // a bundle that leaves Parachute's own out (its `publishers`) has none of them on its bar
-  if (!openBundleNow().parachute) return null;
   const href = home ? officialPath(home.key, which) : `/${which}`;
   const face = officialFace(which);
   return <Link className="home-bar-place" to={href} aria-current={pathname === href || pathname === `/${which}` ? "page" : undefined}><span className="home-bar-glyph" aria-hidden="true">{face.glyph}{"\uFE0E"}</span>{face.name}</Link>;

@@ -81,7 +81,7 @@ import { useGate, useSelfTestRun } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
 import { takeMark } from "../open/mark";
 import { chooseStart, startChosenHere, takeStart } from "../shell/start";
-import { barNow, openBundleNow, settingsReadNow } from "../shell/homeSettings";
+import { barNow, settingsReadNow } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
@@ -207,7 +207,6 @@ export default function AppletScreen() {
         const which = officialOf(appletId);
         if (inParachuteSpace(appletId) && !which) { if (on) setLoaded({ state: "newer", entry: { manifest: { contract: 2, id: "newer-parachute", name: "this applet", glyph: "·", allow: [], search: [], screens: [{ id: "home", name: "this applet" }] }, vault: rec.key, noteId: appletId, path: "", opens: [], app: [], embeds: [], services: [], signals: [], newer: true, newerWhy: "it is one of Parachute's own that this Parachute doesn't have" } }); return; }
         if (which) {
-          if (!openBundleNow().parachute) { if (on) setLoaded({ state: "refused", error: "your bundle doesn't offer Parachute's own applets (Settings, Your bundle)" }); return; }
           const h = homeVault();
           if (!h) { if (on) setLoaded({ state: "refused", error: "it runs in your home vault, and this device has none yet" }); return; }
           if (h.key !== rec.key) { if (on) setLoaded({ state: "home", to: `/v/${encodeURIComponent(h.key)}/a/${encodeURIComponent(appletId)}${location.search}` }); return; }
@@ -436,7 +435,7 @@ export default function AppletScreen() {
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
   const note = loaded.state === "ok" ? loaded.note : null;
   const claim = entry && note && note.id !== entry.noteId ? claimOf(entry.opens, note) : null;
-  const handed = decision === "run" && claim && note ? { note: { id: note.id, path: note.path ?? "" }, screen: screenOf(entry!.manifest, claim.screen ?? askedScreen).id } : null;
+  const handed = (official || decision === "run") && claim && note ? { note: { id: note.id, path: note.path ?? "" }, screen: screenOf(entry!.manifest, claim.screen ?? askedScreen).id } : null;
   const name = entry?.manifest.name ?? "Applet";
   const sized = !!entry?.embeds.length;
   // a notification's tap opens the applet at a room and message (services/notifyLink.ts)

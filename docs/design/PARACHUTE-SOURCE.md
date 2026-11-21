@@ -59,8 +59,9 @@ release. Whoever holds it can ship code that runs as Parachute's, the same power
 ## In the bundle
 
 The source is an entry in the bundle record: `"publishers": [{ "url": "https://parachute.computer/applets/" }]`. Both
-bundles the app ships say it. A record that says `"publishers": []` leaves Parachute's own out: not listed, not on the
-bar, not where a record opens, and their addresses say so (`src/shell/bundles.ts` `parachute`). A record that says
+bundles the app ships say it. A record that says `"publishers": []` leaves Parachute's own out of what it offers by itself: not
+listed, not where a record opens (a Vault copy in the home is, as before), not Simplified's home (`src/shell/bundles.ts`
+`parachute`). A place its bar names, and their addresses, still open them: Parachute's own code is trusted either way. A record that says
 nothing takes its default's; a bundle of the person's own with no default (Aaron's `uni`) offers them only once it names
 them. A record can only name the source or leave it
 out: a key in it is read as nothing, since Parachute's keys are the app's own (`bundleTrust.test.ts`).

@@ -2,7 +2,7 @@
 // paste into Claude, ChatGPT or any app that speaks MCP, and how. The address is the vault's own (`<vault>/mcp`, as
 // Parachute Cloud's Connect page gives it); the AI then asks the person on their hub's page, so nothing here grants
 // anything. It reads which vaults this device holds (`vaults`) and copies an address on a tap (`copy`).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { app, Button, List, Loading, Page, Problem, vaults } from "parachute";
 
 type Held = { key: string; name: string; mine: boolean; home: boolean; connector?: string };
@@ -19,13 +19,17 @@ export default function Connect() {
   const [list, setList] = useState<Held[] | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
   const [copied, setCopied] = useState<Record<string, "yes" | "failed">>({});
+  // each row's "Copied" goes back after a moment, on its own; a new copy restarts it, and leaving clears them
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
   useEffect(() => { vaults.list().then((l: Held[]) => setList([...l].sort((a, b) => Number(b.mine) - Number(a.mine) || Number(b.home) - Number(a.home) || a.name.localeCompare(b.name))), setFailed); }, []);
   // an older app has no copy: the address is selected whole on a press, and the line says so
   const canCopy = typeof (app as { copy?: unknown }).copy === "function";
   const copy = async (v: Held) => {
     const ok = canCopy && v.connector ? await (app as { copy(t: string): Promise<boolean> }).copy(v.connector).catch(() => false) : false;
     setCopied((c) => ({ ...c, [v.key]: ok ? "yes" : "failed" }));
-    if (ok) setTimeout(() => setCopied((c) => { const n = { ...c }; if (n[v.key] === "yes") delete n[v.key]; return n; }), 2500);
+    clearTimeout(timers.current.get(v.key));
+    if (ok) timers.current.set(v.key, setTimeout(() => setCopied((c) => { const n = { ...c }; if (n[v.key] === "yes") delete n[v.key]; return n; }), 2500));
   };
   if (failed) return <Page title="Connect an AI"><Problem error={failed}>Your vaults couldn't be read</Problem></Page>;
   if (!list) return <Page title="Connect an AI"><Loading /></Page>;

@@ -57,7 +57,8 @@ Parachute Simplified is a bundle record the app ships (`src/shell/default-bundle
 other ([NAVIGATION.md](NAVIGATION.md#bundles)): `"look": "notes"`, `"everywhere": true`, `"publishers"` naming
 Parachute's source, and a `bar` of `{"screen": "home"}`, `{"shipped": "journal"}`, `{"shipped": "capture"}`,
 `{"shipped": "vault"}`, `{"screen": "connect"}`. A record `Parachute/Bundles/simple` says only what it changes;
-`"publishers": []` leaves Parachute's own applets out (the bar then keeps Notes, the frame's).
+`"publishers": []` leaves Parachute's own applets out of what it offers by itself: the home is then the frame's Notes,
+and the bar's places still open what they name.
 
 ## What this replaces (subtract)
 

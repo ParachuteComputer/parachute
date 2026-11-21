@@ -1,6 +1,6 @@
 // The shell's real answers to the frame (frameBridge.ts `HostDeps`), from what the shell holds.
 import type { Decided, FrameApplet, FrameApplets, FrameViewer } from "../bridge/protocol";
-import { OFFICIAL_NAMES, officialFace, officialId } from "../applet/parachuteSource";
+import { OFFICIAL_NAMES, officialCopyOf, officialFace, officialId } from "../applet/parachuteSource";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
 import { gateNow, whenGateKnown } from "../applet/selftest/run";
 import { statusOf } from "../open/status";
@@ -40,6 +40,11 @@ export const homeNow = () => {
     }), ...(openBundleNow().look === "notes" ? { look: "notes" as const, app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
     ...viewerNow(), ...officialNow() };
 };
+/** A home's copy of one of Parachute's own (the old Add Capture wrote these), listed beside Parachute's own: said so. */
+function copyNote(rec: VaultRecord, manifestId: string): { note: string } | null {
+  const home = homeVault(), of = officialCopyOf(manifestId);
+  return of && home?.key === rec.key && openBundleNow().parachute ? { note: `your copy of Parachute's ${of}` } : null;
+}
 /** Parachute's own applets, listed in the home (docs/design/PARACHUTE-SOURCE.md): from the app, never read from a vault. */
 function officialNow(): { official?: FrameApplet[] } {
   const home = homeVault();
@@ -106,7 +111,7 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   return {
     ok: true, skipped: e.found.skipped,
     entries: e.found.entries.filter(inApp).map((a) => ({ noteId: a.noteId, path: a.path, vault: a.vault, opens: a.opens, status: status(a),
-      manifest: { id: a.manifest.id, name: a.manifest.name, glyph: a.manifest.glyph, ...(a.manifest.note ? { note: a.manifest.note } : {}), screens: a.manifest.screens } })),
+      manifest: { id: a.manifest.id, name: a.manifest.name, glyph: a.manifest.glyph, ...(copyNote(rec, a.manifest.id) ?? (a.manifest.note ? { note: a.manifest.note } : {})), screens: a.manifest.screens } })),
   };
 }
 
