@@ -210,9 +210,9 @@ describe("the keyring's additions (docs/design/KEYRING.md)", () => {
     expect(lines).toContain("Tell you about messages only in «Garden» (3f2a1b2c…), named by the applet there that name you, and every message from Uni, even when Parachute is closed");
     const unknown = serviceLines([one<RelayService>(relay({ approvals: { from: [other] } }))]).map((l) => l.text).join("\n");
     expect(unknown).toMatch(/from a key you haven't trusted on this device \(npub1/);
-    expect(serviceLines([one<HttpService>(http({ approve: { field: "op", ops: ["send.approve"] } }))]).map((l) => l.text)).toContain("High risk. With your key: approve, at mail.example, what waits for your OK (send.approve)");
+    expect(serviceLines([one<HttpService>(http({ approve: { field: "op", ops: ["send.approve"] } }))]).map((l) => l.text)).toContain("High risk. With your key: sign its send.approve requests to mail.example with your approval key");
     // any op, and several: the same words, the ops as named
-    expect(serviceLines([one<HttpService>(http({ approve: { field: "op", ops: ["job.run", "send.approve"] } }))]).map((l) => l.text)).toContain("High risk. With your key: approve, at mail.example, what waits for your OK (job.run and send.approve)");
+    expect(serviceLines([one<HttpService>(http({ approve: { field: "op", ops: ["job.run", "send.approve"] } }))]).map((l) => l.text)).toContain("High risk. With your key: sign its job.run and send.approve requests to mail.example with your approval key");
   });
   it("keeps the keys of grants made before, and asks again for any change to rooms, approvers, notify or approve", async () => {
     const m = (() => { const r = parseManifest({ contract: 2, id: "rooms", name: "Rooms", access: [{ vault: "here", allow: [{ path: "Rooms/", verbs: ["read"] }] }] }); if (!r.ok) throw new Error(r.error); return r.manifest; })();

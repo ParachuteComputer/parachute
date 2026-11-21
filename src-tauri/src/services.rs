@@ -1537,19 +1537,19 @@ pub async fn svc_log<R: Runtime>(app: AppHandle<R>, state: State<'_, ServicesSta
     Ok(state.broker(&app)?.log_lines(&subject))
 }
 
-/// The unlock prompt's line for an approval op: what the shell knows of any op (an approve op is a request held for the
-/// person's OK, KEYRING.md "Held sends"), the host, and the op as the applet named it. An applet's own words never
-/// reach the prompt, and the shell claims no meaning for an op's name.
+/// The unlock prompt's line for an approval op: what the shell knows of it (this request, its host, the op as the
+/// applet named it, the key that signs it). An applet's own words never reach the prompt, and the shell claims no
+/// meaning for an op.
 pub fn approve_reason(op: &str, host: &str) -> String {
-    format!("Approve what waits for your OK at {host} ({op}). Signed with your approval key.")
+    format!("Approve this request to {host} ({op}), signed with your approval key.")
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn an_approval_op_is_said_as_what_waits_for_your_ok_with_its_host_and_op() {
-        assert_eq!(super::approve_reason("send.approve", "mail.example"), "Approve what waits for your OK at mail.example (send.approve). Signed with your approval key.");
-        assert_eq!(super::approve_reason("job.run", "x.example"), "Approve what waits for your OK at x.example (job.run). Signed with your approval key.");
+    fn an_approval_op_is_said_as_this_request_its_host_and_op() {
+        assert_eq!(super::approve_reason("send.approve", "mail.example"), "Approve this request to mail.example (send.approve), signed with your approval key.");
+        assert_eq!(super::approve_reason("job.run", "x.example"), "Approve this request to x.example (job.run), signed with your approval key.");
     }
 
     #[test]

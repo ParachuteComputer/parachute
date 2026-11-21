@@ -237,12 +237,11 @@ export type LineOptions = {
   /** The trusted list's name for a key ("Uni"), or null when it isn't on the list (docs/design/KEYRING.md). */
   approverName?: (hex: string) => string | null;
 };
-/** An approval-op line: what the shell knows of any op (a request held for your OK, docs/design/KEYRING.md "Held
- *  sends"), where, and the ops as the applet named them; the unlock prompt says the same (src-tauri services.rs
- *  `approve_reason`). No meaning is claimed for an op's name. `third`: as the card says it ("approves …"), not as a
- *  grant's list does ("approve …"). */
+/** An approval-op line: what the shell knows of these ops (requests to `at`, signed with the approval key, the ops as
+ *  the applet named them); the unlock prompt says it of each request (src-tauri services.rs `approve_reason`). No
+ *  meaning is claimed for an op. `third`: as the card says it ("signs …"), not as a grant's list does ("sign …"). */
 export function approveWords(ops: readonly string[], at: string, third = false): string {
-  return `${third ? "approves" : "approve"}, at ${at}, what waits for your OK (${joinWords([...ops])})`;
+  return `${third ? "signs" : "sign"} its ${joinWords([...ops])} requests to ${at} with your approval key`;
 }
 export const EVERYDAY = "With your everyday key: ";
 export const HIGH_RISK = "High risk. With your key: ";
