@@ -224,7 +224,7 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
   });
   const ui = <>
     {confirming && <ConfirmSheet c={confirming} />}
-    {revealing && <RevealSheet r={revealing} />}
+    {revealing && <RevealSheet key={revealing.token} r={revealing} />}
     {asking && <SecretSheet asking={asking} onDone={asking.done} />}
     {trusting && <TrustSheet t={trusting} />}
     {coding && <PasscodeSheet c={coding} />}

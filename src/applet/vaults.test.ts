@@ -342,13 +342,11 @@ describe("sharing: who reaches a vault, a key for an AI, ending one (level 6, T-
       expect(n.done).toEqual([]);
     }
   });
-  it("makes no key where nothing could show its secret, and ends a row by the hub's own id", async () => {
-    const without = make();
+  it("makes no key where nothing could show its secret", async () => {
     // a host of these words without the app's own sheet: no key made, so no secret shown to nobody
     const router = createRouter([createVaultsModule(["vaults", "sharing"], { ...({} as VaultsDeps), list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "c", view: null, reach: "anyone" }],
       giveKey: async () => { throw new Error("must not be called"); }, confirm: async () => "yes" } as VaultsDeps)]);
     await expect(router.call("vaults", "giveKey", { vault: "home", name: "claude", can: "read", types: null }, {}, { charge() {}, closed: () => false })).rejects.toMatchObject({ code: "out_of_scope" });
-    void without;
   });
   it("ends a row whose id isn't a name a key could be given here (an app's, a person's)", async () => {
     const { call, done } = make();
