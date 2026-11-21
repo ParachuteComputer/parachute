@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cssOf, DEFAULT_LOOK, DEFAULT_THEME, isColor, isFontStack, LOOKS, MOTION, recordOf, STYLE_KEYS, styleValue, themeFrom, TOKEN_KEYS, tokensOf, withLook, withTodaysFonts, type StyleKey } from "./theme";
+import { cssOf, DEFAULT_LOOK, onScreen, DEFAULT_THEME, isColor, isFontStack, LOOKS, MOTION, recordOf, STYLE_KEYS, styleValue, themeFrom, TOKEN_KEYS, tokensOf, withLook, withTodaysFonts, type StyleKey } from "./theme";
 
 describe("the theme record", () => {
   it("absent, or not a record, is the built-in theme", () => {
@@ -171,5 +171,17 @@ describe("looks and style tokens (theme.ts STYLE_TOKENS, LOOKS)", () => {
   it("the CSS a frame gets sets every style token", () => {
     const css = cssOf(tokensOf(themeFrom({ theme: { look: "book" } }), false));
     for (const k of STYLE_KEYS) expect(css).toContain(`--${k}:${LOOKS.book.style[k]};`);
+  });
+});
+
+describe("this screen's own choice (theme.ts onScreen)", () => {
+  it("Daylight on this screen is the Daylight look whatever the note gives; the theme is the note", () => {
+    const t = themeFrom({ theme: { look: "book", colors: { accent: "#2f5470" }, tokens: { "radius-card": "14px" } } });
+    const k = tokensOf(onScreen(t, "daylight"), false);
+    expect(k.bg).toBe(LOOKS.daylight.colors.bg);
+    expect(k.accent).toBe(LOOKS.daylight.colors.accent);
+    expect(k["radius-card"]).toBe(LOOKS.daylight.style["radius-card"]);
+    expect(onScreen(t, "daylight").motion).toBe("still");
+    expect(onScreen(t, "theme")).toBe(t);
   });
 });

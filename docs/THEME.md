@@ -10,6 +10,10 @@ rows, a printed card, a line to write on), `book` (a printed page: no raised par
 `daylight` (black on white for an e-paper screen: heavier rules, no tints or shadows, nothing moves). Every value a
 look sets is a token, and the note can change any of them one by one.
 
+Daylight is usually a screen's own choice, not the note's: the note syncs to every device, and only the e-paper one
+should go black and white. Settings → Look → This screen sets it on the device alone, and a screen that says it is
+e-paper (slow to redraw, or grey only) gets it by itself until you choose.
+
 ## The note
 
 `Parachute/Theme` in your home vault, tagged `parachute-theme`. The theme sits in its `fields.theme` (on a hub
@@ -45,7 +49,7 @@ Nothing else is read, so a theme can't load anything from the network.
 
 ## Changing it
 
-- **In the app:** Settings → Look. Choosing a style (the look), a density, light or dark, or motion writes the note; a new style keeps any colour you set yourself. The first change copies the
+- **In the app:** Settings → Look. Choosing a style (paper, almanac or book), a density, light or dark, or motion writes the note; a new style keeps any colour you set yourself. This screen (as the theme, or Daylight) is kept on the device and writes nothing. The first change copies the
   built-in theme into your vault in full, and from then on that note is your theme. "Make this look mine" copies it without
   changing anything.
 - **By your agent:** with the Parachute MCP, `create-record` or `update-record` on that record (`create-note`, `update-note` on older hubs). For example, "make the

@@ -127,3 +127,17 @@ test("a theme note's look and its own tokens restyle an applet while it runs; de
     await api(hubState(), "DELETE", `notes/${id}`);
   }
 });
+
+test("Daylight is this screen's own: chosen in Settings it draws black on white here, and writes nothing to the theme note", async ({ page }) => {
+  const themeRows = async () => { const r = await api(hubState(), "GET", "notes?tag=parachute-theme"); return (Array.isArray(r) ? r : r.notes) as { id: string }[]; };
+  const shellBg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.goto("/settings");
+  await page.getByRole("radio", { name: /^Daylight/ }).check();
+  await expect.poll(shellBg).toBe("rgb(255, 255, 255)");
+  expect(await themeRows()).toHaveLength(0);
+  // it stays on this device across a start
+  await page.reload();
+  await expect.poll(shellBg).toBe("rgb(255, 255, 255)");
+  await page.getByRole("radio", { name: "As the theme" }).check();
+  await expect.poll(shellBg).toBe(PAPER);
+});

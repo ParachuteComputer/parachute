@@ -99,7 +99,7 @@ export const LOOKS: Record<LookName, Look> = {
       "line-quote": "2px solid var(--line)", "field-line": "1px solid var(--line)", "button-line": "1px solid var(--line)",
       "card-edges": "1px", "field-edges": "1px", "field-pad": "9px 12px",
       "radius-card": "calc(var(--radius) * 1.4)", "radius-field": "var(--radius)", "radius-button": "999px",
-      "shadow-card": "0 1px 2px rgb(60 45 30 / .05), 0 12px 28px -18px rgb(60 45 30 / .28)",
+      "shadow-card": "0 1px 0 rgb(60 45 30 / .05), 0 8px 22px -16px rgb(60 45 30 / .22)",
       "shadow-sheet": "0 -1px 0 var(--line), 0 -16px 40px -24px rgb(40 30 20 / .35)",
       "label-transform": "none", "label-caps": "normal", "label-track": "0em", "title-weight": "400", "measure": "760px",
     },
@@ -189,6 +189,16 @@ export function styleValue(key: StyleKey, v: unknown): string | null {
     }
   })();
   return ok ? s : null;
+}
+
+/** What this one screen shows, whatever the theme note says (the note syncs to every device; a screen's own nature
+ *  doesn't): `daylight` draws the Daylight look, black on white and still, for an e-paper screen. */
+export const SCREENS = ["theme", "daylight"] as const;
+export type ScreenChoice = (typeof SCREENS)[number];
+export function onScreen(theme: Theme, screen: ScreenChoice): Theme {
+  if (screen !== "daylight") return theme;
+  const d = LOOKS.daylight;
+  return { ...theme, look: "daylight", colors: { ...d.colors }, dark: { ...d.dark }, tokens: {}, motion: "still" };
 }
 
 /** The built-in theme: paper, ink and one moss accent; a book serif (Literata) for reading and a quiet sans (Instrument
