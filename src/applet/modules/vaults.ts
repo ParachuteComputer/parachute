@@ -525,7 +525,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           const door = await deps.door(vault);
           // only what putting back takes away: a record another app or AI made (not this device's Parachute, not one with no
           // maker recorded), or one a put back re-made from deletion (its newest version a restore right after a delete).
-          // A record the vault keeps no history for is never deleted here: nothing could bring it back.
+          // A vault that answers no history at all (404) deletes nothing here. One with history turned off still answers (no
+          // versions), so there a delete is for good: docs/VAULT.md gap 12.
           let rows: Record<string, unknown>[];
           try { const raw = await deps.request(vault, "GET", `/${door}/${encodeURIComponent(now.id)}/versions?limit=2`); rows = (plain(raw) && Array.isArray(raw.versions) ? raw.versions : []).filter(plain); }
           catch { throw refuse("this vault keeps no history: a record deleted here couldn't be put back"); }

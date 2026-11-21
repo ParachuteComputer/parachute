@@ -140,8 +140,10 @@ export async function readChanges(opts: {
       fromRows(id, path, vs, own({ path, extension: strOr(n.extension), names: [] }), true, null);
     });
   }
-  out.sort((a, b) => (b.at < a.at ? -1 : b.at > a.at ? 1 : a.key.localeCompare(b.key)));
-  return { changes: out, deletes, more: all.length > CHANGES_RECORDS || moreGone };
+  // a record deleted between the two reads is in both: once
+  const once = [...new Map(out.map((c) => [c.key, c])).values()];
+  once.sort((a, b) => (b.at < a.at ? -1 : b.at > a.at ? 1 : a.key.localeCompare(b.key)));
+  return { changes: once, deletes, more: all.length > CHANGES_RECORDS || moreGone };
 }
 
 /** Is this write this device's Parachute's? It signed in as an app, whose key is named for its client id (`key:<id>`,

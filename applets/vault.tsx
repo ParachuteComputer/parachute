@@ -469,7 +469,7 @@ function historyRows(r: Rec, history: { ix: number; at: string; via: string | nu
   const rows: Change[] = history.map((h, i) => ({ ...base, key: `${r.id}:${h.ix}`, op: h.op === "restore" ? "restored" as const : h.op === "delete" ? "deleted" as const : "changed" as const,
     at: h.at, via: h.via, kind: h.kind ?? null, mine: !!h.mine, who: h.who ?? h.via ?? "Not recorded", before: h.ix, after: h.op === "delete" || i === 0 ? null : history[i - 1].ix,
     ...(h.op === "restore" && history[i + 1]?.op === "delete" ? { recreated: true } : {}) }));
-  if (r.createdAt) rows.push({ ...base, key: `${r.id}:new`, op: "created", at: r.createdAt, via: r.createdVia ?? null, kind: null, mine: false, who: r.madeBy ?? r.createdVia ?? "Not recorded",
+  if (r.createdAt) rows.push({ ...base, key: `${r.id}:new`, op: "created", at: r.createdAt, via: r.createdVia ?? null, kind: null, mine: r.madeBy === "You, in Parachute here", who: r.madeBy ?? r.createdVia ?? "Not recorded",
     before: null, after: history.length ? history[history.length - 1].ix : null });
   return rows;
 }
@@ -534,6 +534,7 @@ function ChangeView({ v, c, all, canWrite, done, sides, puts, put }: { v: Held; 
   const later = all.filter((x) => x.id === c.id && x.at > c.at && x.key !== c.key);
   const back = putBackOf(c, all, puts);
   const takes = c.op === "created" || !!c.recreated;
+  // a record made here isn't taken away here (the module refuses it): it is the person's own
   const go = async () => {
     setBusy(true);
     try {
@@ -582,7 +583,7 @@ function ChangeView({ v, c, all, canWrite, done, sides, puts, put }: { v: Held; 
           {nb && na && !same(nb, na) && <p className="lede">Types and tags: {nb.join(", ") || "none"} → {na.join(", ") || "none"}.</p>}
           {b && a && !fields.length && b.body === a.body && b.path === a.path && <p className="lede">No difference in its words, fields or place: its types or tags may have changed (this Parachute doesn't keep those in history).</p>}
         </>}
-      {canWrite && !c.own && !back && (c.before !== null || c.op === "created") && <>
+      {canWrite && !c.own && !back && (c.before !== null || (c.op === "created" && !c.mine)) && <>
         {later.length > 0 && sure && <p className="warn">It changed again after this ({later.map((x) => `${x.who}, ${when.short(x.at)}`).join("; ")}). Putting it back undoes that too.</p>}
         {c.op === "deleted" && !nb && <p className="lede">It comes back with its words and fields. Its types and tags weren't kept in history, so add them again if it had any.{c.made && c.made >= c.at.slice(0, 10) ? ` It was made ${when.full(c.made)}.` : ""}</p>}
         {moved && <p className="lede">Its words and fields go back; its place doesn't: it stays at {a!.path}.</p>}
@@ -616,6 +617,8 @@ async function putBack(v: Held, c: Change) {
     const now = await fresh();
     // a live record changed since the list was read, or one the list saw deleted that is back now: the person looks again
     if (now && (c.seen === null ? c.gone : c.seen && now.updatedAt && now.updatedAt > c.seen)) throw new Error("changed_again: it changed again since you looked");
+    // and one the list saw live that is deleted now: putting it back would undo that delete without a word
+    if (!now && !c.gone) throw new Error("changed_again: it was deleted since you looked");
     try {
       if (c.op === "created" || c.recreated) { if (!now) return; await vaults.remove(v.key, c.id, now.updatedAt); return; }
       if (c.before === null) return;
@@ -709,7 +712,7 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
   /** A run put back: each record to how it was before the run's first change to it. */
   const putRun = async (run: (typeof runs)[number]) => {
     const first = new Map<string, Change>();
-    for (const c of run.changes) if (!c.own && !putBackOf(c, all, puts) && (c.before !== null || c.op === "created")) first.set(c.id, c);
+    for (const c of run.changes) if (!c.own && !putBackOf(c, all, puts) && (c.before !== null || (c.op === "created" && !c.mine))) first.set(c.id, c);
     const plan = [...first.values()];
     const outside = plan.flatMap((c) => all.filter((x) => x.id === c.id && x.at > c.at && !run.changes.includes(x)));
     if (outside.length && sure !== run.key) { setSure(run.key); return; }
@@ -737,7 +740,7 @@ function ChangesScreen({ v, back, open }: { v: Held; back: { label: string; onPr
             : !page ? <Loading />
             : !all.length ? <Empty>Nothing changed in {v.name} in the last {days} days.</Empty>
             : runs.map((run, i) => {
-                const left = run.changes.filter((c) => !c.own && !putBackOf(c, all, puts) && (c.before !== null || c.op === "created"));
+                const left = run.changes.filter((c) => !c.own && !putBackOf(c, all, puts) && (c.before !== null || (c.op === "created" && !c.mine)));
                 const outside = sure === run.key;
                 return <div key={run.key}>
                   {(i === 0 || runs[i - 1].day !== run.day) && <p className="sect">{run.day}</p>}
