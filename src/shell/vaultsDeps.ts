@@ -3,8 +3,8 @@
 // is asked: vault/writeAsk.ts), the vault's live changes, and what the app knows of who reaches a vault.
 import type { VaultClient } from "@openparachute/surface-client";
 import type { AccessRow, HeldVault, VaultsDeps, WatchEvent } from "../applet/modules/vaults";
-import { clientFor } from "../vault/client";
-import { findVault, hostOf, listVaults, originOf, type VaultRecord } from "../vault/store";
+import { clientFor, keptClientFor } from "../vault/client";
+import { findVault, hostOf, listVaults, originOf, vaultUrlOf, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
 import { heldLevel, giveBack, appletLevel } from "../vault/reach";
 import { forgetOwnWrite } from "../vault/writeAsk";
@@ -29,17 +29,25 @@ export function heldVaults(): HeldVault[] {
   return listVaults().map((v) => ({ key: v.key, name: v.vault, host: hostOf(v.issuer), mine: isMine(v), home: home?.key === v.key, level: heldLevel(v) }));
 }
 
-export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string }): VaultsDeps {
+export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string;
+  /** Each read made from the kept copies (the vault, the read's path and query as readCache names it). */ read?(vault: string, read: string): void }): VaultsDeps {
   const req = (key: string) => clientFor(rec(key)) as unknown as VaultClient & Requesting;
   return {
     list: heldVaults,
     // never from the browser's cache: the hub sends ETag and Last-Modified with no Cache-Control, so a browser may reuse a
     // read of a moment ago (heuristic freshness), and a record just changed would read as it was
     request: (key, method, path, body) => req(key).request(`/api${path}`, { method, cache: "no-store", ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
+    // what a screen shows: from the copy kept of the read at once, the hub asked behind it (vault/readCache.ts)
+    read: (key, path) => {
+      const r = rec(key);
+      try { const u = new URL(`${vaultUrlOf(r)}/api${path}`); opts.read?.(key, `${u.pathname}${u.search}`); } catch { /* not a URL */ }
+      return (keptClientFor(r) as unknown as VaultClient & Requesting).request(`/api${path}`, { cache: "no-store" });
+    },
     door(key) {
       let d = doors.get(key);
       if (!d) {
-        d = req(key).request("/api/records?limit=1").then(() => "records" as const, (e: unknown) => {
+        // the answer kept from before, when there is one (a hub doesn't lose its door): no ask before the first read
+        d = (keptClientFor(rec(key)) as unknown as VaultClient & Requesting).request("/api/records?limit=1").then(() => "records" as const, (e: unknown) => {
           // only "no such route" says there is no door; anything else is asked again next time
           if ((e as { status?: number })?.status === 404 || (e as { name?: string })?.name === "VaultNotFoundError") return "notes" as const;
           doors.delete(key);

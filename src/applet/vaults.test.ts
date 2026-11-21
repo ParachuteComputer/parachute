@@ -224,3 +224,27 @@ describe("sharing", () => {
     expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
   });
 });
+
+describe("what shows, from what was read before (T-476)", () => {
+  it("a record, a list and the types are read through `read` (the kept copy); a change is judged on the hub's record now", async () => {
+    const reads: string[] = [], calls: Call[] = [];
+    // a shell with `read`: each read says where it went
+    const deps2: VaultsDeps = {
+      list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write" }],
+      door: async () => "records",
+      async request(_v, method, path, body) { calls.push({ method, path, body }); if (path.startsWith("/types")) return []; return method === "GET" ? (path.startsWith("/records/") ? book : [book]) : { ...book, body: "new" }; },
+      async read(_v, path) { reads.push(path); if (path.startsWith("/types")) return []; return path.startsWith("/records/") ? { ...book, updatedAt: "2026-11-01T00:00:00.000Z" } : [book]; },
+      watch: () => () => {}, access: async () => { throw new Error("no"); }, revoke: async () => {}, readOnly: async () => {}, confirm: async () => "yes", emit: () => {},
+    };
+    const router = createRouter([createVaultsModule(["vaults"], deps2)]);
+    const c = (method: string, params: unknown) => router.call("vaults", method, params, {}, { charge() {}, closed: () => false });
+    await c("get", { vault: "home", id: "a" });
+    await c("query", { vault: "home", type: "book" });
+    await c("types", { vault: "home" });
+    expect([...new Set(reads.map((p) => p.split("?")[0]))].sort()).toEqual(["/records", "/records/a", "/types"]);
+    expect(calls.filter((x) => x.method === "GET")).toEqual([]);
+    // the change: judged on the record as the hub has it now (its updatedAt), never the copy shown
+    await c("update", { vault: "home", id: "a", bytes: enc({ body: "new", if_updated_at: book.updatedAt }) });
+    expect(calls.map((x) => `${x.method} ${x.path.split("?")[0]}`)).toEqual(["GET /records/a", "PATCH /records/a"]);
+  });
+});
