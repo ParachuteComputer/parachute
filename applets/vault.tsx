@@ -468,8 +468,8 @@ const roleWords = (role: string) => (role === "member" ? "can read and change ev
 const shortKey = (k: string) => `${k.slice(0, 8)}…`;
 /** A name as the hub takes one: 1 to 40 characters, not "You"; said in a toast otherwise. */
 const nameOk = (x: string) => {
-  const ok = [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !/^you$/i.test(x.trim());
-  if (!ok) toast("A name is 1 to 40 characters, and not “You”.", { error: true });
+  const ok = [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !/^you$/i.test(x.trim()) && !/(?![\u200c\u200d])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(x);
+  if (!ok) toast("A name is 1 to 40 characters you can see, and not “You”.", { error: true });
   return ok;
 };
 
@@ -516,7 +516,7 @@ function People({ v }: { v: Held }) {
       {typeof (app as { copy?: unknown }).copy === "function" && <Button small onClick={() => copy(made.url)}>Copy link</Button>}
     </div>}
     {from === null
-      ? <Field label="Your name, as the people you invite see it" placeholder="Like Aaron" action="Keep" onAction={(x) => { if (nameOk(x)) setFrom(x); }} />
+      ? <Field label="Your name, as the people you invite see it" placeholder="Like Aaron" action="Keep" onAction={(x) => (nameOk(x) ? void setFrom(x) : Promise.reject(new Error("name")))} />
       : <Field label="Invite someone" placeholder="Their name, like Bo" action="Make the link" onAction={(x) => (nameOk(x) ? invite(x) : Promise.reject(new Error("name")))} />}
   </>;
 }
