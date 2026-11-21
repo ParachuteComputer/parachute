@@ -425,7 +425,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
             return await readChanges({
               get: (path) => deps.request(vault, "GET", path), door, since, offset, charge: (n) => ctx.charge(n),
               self: (via) => isSelf(cid, via),
-              own: (r) => isCodeExtension({ path: r.path, extension: r.extension }) || r.names.some(appsOwn) || appsPath(r.path) || r.path.startsWith(VIEWS),
+              own: (r) => (isCodeExtension({ path: r.path, extension: r.extension }) ? "code" : r.names.some(appsOwn) || appsPath(r.path) || r.path.startsWith(VIEWS) ? "app" : null),
             });
           } catch (e) { throw failed(e); }
         },

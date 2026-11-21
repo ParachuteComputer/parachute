@@ -529,7 +529,7 @@ function ChangeView({ v, c, all, canWrite, done, sides }: { v: Held; c: Change; 
   const nb = names(b), na = names(a);
   return (
     <article aria-label={`${opWord(c)} ${c.title}`}>
-      <p className="note-meta">{opWord(c)} by {c.who}{c.kind && !c.mine && c.kind !== "person" ? ` (${c.kind === "agent" ? "an agent" : c.kind === "app" ? "an app" : "a service"})` : ""} · {when.full(c.at)}{c.via && c.who !== c.via && !c.mine ? ` · its key: ${c.via.replace(/^key:/, "")}` : ""}</p>
+      <p className="note-meta">{opWord(c)} by {c.who}{c.kind && !c.mine && c.kind !== "person" ? ` (${c.kind === "agent" ? "an agent" : c.kind === "app" ? "an app" : "a service"})` : ""} · {when.full(c.at)}{c.via && c.who !== c.via.replace(/^key:/, "") && !c.mine ? ` · its key: ${c.via.replace(/^key:/, "")}` : ""}</p>
       {failed ? <Problem error={failed} onRetry={() => vaults.compare(v.key, c.id, c.before, c.after).then((x: Sides) => { setD(x); setFailed(null); }, setFailed)}>This change couldn't be read</Problem>
         : !d ? <Loading />
         : <>

@@ -101,7 +101,7 @@ describe("putting a change back", () => {
 
 describe("reading what changed", () => {
   const get = (h: ReturnType<typeof hub>) => (p: string) => h.deps.request("home", "GET", p);
-  const own = () => false;
+  const own = () => null;
   it("each kept version is a change by the key that made the next write; its after is the version above it, or now", async () => {
     const v1 = { ...v0, version_ix: 1, op: "restore", superseded_at: "2026-11-21T09:30:00.000Z", via: "key:0f8a6c2e-1111-4222-8333-944455556666" };
     const h = hub({ records: { S: soup }, versions: { S: [v1, v0] }, self: "0f8a6c2e-1111-4222-8333-944455556666" });

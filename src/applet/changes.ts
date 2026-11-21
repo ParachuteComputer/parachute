@@ -67,7 +67,9 @@ const opOf = (op: string): ChangeOp => (op === "restore" ? "restored" : op === "
  */
 export async function readChanges(opts: {
   get: Get; door: "records" | "notes"; since: string; offset?: number; charge: (n: number) => void;
-  self: (via: string | null) => boolean; own: (r: { path: string; extension: string | null; names: string[] }) => boolean;
+  /** "code": an applet's or a component's code (shown, never put back here); "app": a record the app keeps for itself
+   *  (settings, approvals, saved views: not a change to show); null: the person's own record */
+  self: (via: string | null) => boolean; own: (r: { path: string; extension: string | null; names: string[] }) => "code" | "app" | null;
 }): Promise<ChangesPage> {
   const { get, door, since, charge, self, own } = opts;
   const offset = opts.offset ?? 0;
@@ -78,25 +80,25 @@ export async function readChanges(opts: {
   const raw = await get(`/${door}?${u.toString()}`);
   const all: unknown[] = Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.records) ? raw.records : plain(raw) && Array.isArray(raw.notes) ? raw.notes : [];
   const page = all.slice(0, CHANGES_RECORDS).filter(plain) as Record<string, unknown>[];
-  // this device's Parachute keeping its own records (settings, approvals, saved views) isn't a change to show
-  const add = (c: Omit<Change, "key" | "mine" | "title" | "who">) => { const mine = self(c.via); if (mine && c.own) return; out.push({ ...c, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: writerName(c.via, mine) }); };
+  // the app keeping its own records (settings, approvals, saved views), on this device or another, isn't a change to show
+  const add = (c: Omit<Change, "key" | "mine" | "title" | "who">, kind: "code" | "app" | null) => { if (kind === "app") return; const mine = self(c.via); out.push({ ...c, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: writerName(c.via, mine) }); };
   charge(page.length);
   await few(page, async (r) => {
     if (typeof r.id !== "string") return;
     const id = r.id, path = typeof r.path === "string" ? r.path : id;
     const names = [...(Array.isArray(r.types) ? r.types : []), ...(Array.isArray(r.tags) ? r.tags : [])].filter((t): t is string => typeof t === "string");
-    const isOwn = own({ path, extension: strOr(r.extension), names });
+    const ownKind = own({ path, extension: strOr(r.extension), names }), isOwn = ownKind !== null;
     const rows = rowsOf(await get(`/${door}/${encodeURIComponent(id)}/versions?limit=${VERSIONS}`).catch(() => null));
     // newest first: the "after" of row k is the row above it (k+1), or the record as it is now
     rows.forEach((v, i) => {
       if (v.at < since) return;
-      add({ id, path: v.path ?? path, op: opOf(v.op), at: v.at, via: v.via, kind: v.kind, by: v.by, before: v.ix, after: i > 0 ? rows[i - 1].ix : null, gone: false, own: isOwn });
+      add({ id, path: v.path ?? path, op: opOf(v.op), at: v.at, via: v.via, kind: v.kind, by: v.by, before: v.ix, after: i > 0 ? rows[i - 1].ix : null, gone: false, own: isOwn }, ownKind);
     });
     const created = strOr(r.createdAt);
     // a record put back from deletion keeps its first creation time; its making is not a change since then
     if (created && created >= since && !rows.some((v) => v.op === "delete")) {
       add({ id, path: rows.length ? rows[rows.length - 1].path ?? path : path, op: "created", at: created, via: strOr(r.createdVia), kind: null, by: strOr(r.createdBy),
-        before: null, after: rows.length ? rows[rows.length - 1].ix : null, gone: false, own: isOwn });
+        before: null, after: rows.length ? rows[rows.length - 1].ix : null, gone: false, own: isOwn }, ownKind);
     }
   });
   // what was deleted since: only on the first page (the list is its own, newest deletion first)
@@ -114,12 +116,12 @@ export async function readChanges(opts: {
       charge(rows.length);
       await few(rows, async (n) => {
         const id = n.id as string, path = typeof n.path === "string" ? n.path : id;
-        const isOwn = own({ path, extension: strOr(n.extension), names: [] });
+        const ownKind = own({ path, extension: strOr(n.extension), names: [] }), isOwn = ownKind !== null;
         const vs = rowsOf(await get(`/${door}/${encodeURIComponent(id)}/versions?limit=${VERSIONS}`).catch(() => null));
         vs.forEach((v, i) => {
           if (v.at < since) return;
           // the newest version is the tombstone; an earlier one's after is the row above it
-          add({ id, path: v.path ?? path, op: opOf(v.op), at: v.at, via: v.via, kind: v.kind, by: v.by, before: v.ix, after: v.op === "delete" ? null : i > 0 ? vs[i - 1].ix : null, gone: true, own: isOwn });
+          add({ id, path: v.path ?? path, op: opOf(v.op), at: v.at, via: v.via, kind: v.kind, by: v.by, before: v.ix, after: v.op === "delete" ? null : i > 0 ? vs[i - 1].ix : null, gone: true, own: isOwn }, ownKind);
         });
       });
     }
