@@ -54,3 +54,37 @@ test("an applet opened again draws what it read before at once, then the hub's n
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
   }
 });
+
+test("a record opened again in Vault draws what it read before at once, then the hub's newer answer", async ({ page }) => {
+  const stamp = Date.now().toString(36);
+  const note = await api(hubState(), "POST", "notes", { path: `Shelf notes/Read once ${stamp}`, content: `First words ${stamp}.` });
+  try {
+    // Vault in the home vault, allowed; the record opened in it once (a tap on its address: the frame sends it on)
+    await page.goto("/vault");
+    const add = page.getByRole("button", { name: "Add Vault" }), allow = page.getByRole("button", { name: "Allow" });
+    await expect(add.or(allow)).toBeVisible();
+    if (await add.isVisible()) await add.click();
+    await allow.click();
+    await page.goto(`/v/${VAULT}/n/${note.id}`);
+    await expect(page).toHaveURL(new RegExp(`/a/[^/?]+\\?vault=${VAULT}&record=${note.id}`));
+    const app = page.frameLocator("iframe.applet-frame");
+    const open = page.getByRole("button", { name: /^Open Vault/ });
+    if (await open.isVisible().catch(() => false)) await open.click();
+    await expect(app.getByText(`First words ${stamp}.`)).toBeVisible();
+    const at = page.url();
+    // an agent changes it; the hub is slow
+    await api(hubState(), "PATCH", `notes/${note.id}`, { content: `Second words ${stamp}.`, force: true });
+    await page.route(`${hubState().origin}/**`, async (route) => {
+      if (route.request().method() === "GET") await new Promise((r) => setTimeout(r, HELD_MS));
+      await route.continue().catch(() => {});
+    });
+    const t0 = Date.now();
+    await page.goto(at);
+    await page.getByRole("button", { name: /^Open Vault/ }).click({ timeout: HELD_MS - 500 });
+    await expect(app.getByText(`First words ${stamp}.`)).toBeVisible({ timeout: HELD_MS - 500 - (Date.now() - t0) });
+    await expect(app.getByText(`Second words ${stamp}.`)).toBeVisible({ timeout: 4 * HELD_MS });
+  } finally {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await api(hubState(), "DELETE", `notes/${note.id}`).catch(() => {});
+  }
+});
