@@ -179,9 +179,11 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   const read = useRef(0);
   const q = (offset: number) => ({ ...(isTag ? { tag: name } : { type: name }), ...(term ? { search: term } : {}), where: view.where,
     ...(view.group ? { sort: { by: view.group, dir: "asc" } } : view.sort ? { sort: view.sort } : {}), limit: PAGE, offset });
-  const load = () => {
+  // read again (a pull, the vault's answer differing from what showed): the rows stay until the new ones come
+  const load = (again = false) => {
     const n = ++asked.current;
-    setRows(null); setFailed(null);
+    if (!again) setRows(null);
+    setFailed(null);
     return vaults.query(v.key, q(0)).then((x: { records: Rec[]; more: boolean; read?: number }) => { if (n === asked.current) { read.current = x.read ?? x.records.length; setRows(x.records); setMore(x.more); } }, (e: unknown) => { if (n === asked.current) setFailed(e); });
   };
   const next = () => {
@@ -242,7 +244,7 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   }, new Map<string, Rec[]>())].map(([k, rs]) => ({ key: k, label: k, rows: rs })) : null;
   const viewTabs = [{ key: "All", label: "All" }, ...views.map((w) => ({ key: w.id!, label: w.name }))];
   return (
-    <Page title={isTag ? `#${name}` : label(name)} kicker={`${v.name}${spec ? ` · ${spec.count} ${spec.count === 1 ? "record" : "records"}` : ""}`} back={back} wide className="vlt" onRefresh={load}>
+    <Page title={isTag ? `#${name}` : label(name)} kicker={`${v.name}${spec ? ` · ${spec.count} ${spec.count === 1 ? "record" : "records"}` : ""}`} back={back} wide className="vlt" onRefresh={() => load(true)}>
       <style>{CSS}</style>
       {views.length > 0 && <Tabs label="Views" tabs={viewTabs} current={view.id ?? (view.name === "All" ? "All" : "")} onChange={(k) => setView(k === "All" ? PLAIN : views.find((w) => w.id === k) ?? PLAIN)} />}
       <div className="bar">

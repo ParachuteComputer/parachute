@@ -150,3 +150,17 @@ describe("the hub's own answer", () => {
     expect(seen).toEqual([undefined, "no-cache"]);
   });
 });
+
+describe("a read that must be the hub's now", () => {
+  it("cache: reload waits for the hub even with a copy, and leaves its answer as the copy", async () => {
+    dropAllKept();
+    const { h, f } = hub();
+    const read = keptFetch("home", HUB, f, alive);
+    await read(URL_A);
+    h.body = '["now"]';
+    expect(await (await read(URL_A, { cache: "reload" })).text()).toBe('["now"]');
+    expect(h.asked).toHaveLength(2);
+    // the copy is the hub's answer just read
+    expect(await (await read(URL_A)).text()).toBe('["now"]');
+  });
+});

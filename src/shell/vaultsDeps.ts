@@ -36,13 +36,18 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
     list: heldVaults,
     // never from the browser's cache: the hub sends ETag and Last-Modified with no Cache-Control, so a browser may reuse a
     // read of a moment ago (heuristic freshness), and a record just changed would read as it was
-    request: (key, method, path, body) => req(key).request(`/api${path}`, { method, cache: "no-store", ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
+    // a read as the hub has it now, kept for the screens that may show it from the copy (vault/readCache.ts); a change
+    // goes as it is
+    request: (key, method, path, body) => (method === "GET" ? (keptClientFor(rec(key)) as unknown as VaultClient & Requesting).request(`/api${path}`, { method, cache: "reload" })
+      : req(key).request(`/api${path}`, { method, cache: "no-store", ...(body === undefined ? {} : { body: JSON.stringify(body) }) })),
     // what a screen shows: from the copy kept of the read at once, the hub asked behind it (vault/readCache.ts)
-    read: (key, path) => {
+    // a record for what shows, from the copy kept of it (vault/readCache.ts): only for an applet that redraws when told
+    ...(opts.read ? { read: (key: string, path: string) => {
       const r = rec(key);
-      try { const u = new URL(`${vaultUrlOf(r)}/api${path}`); opts.read?.(key, `${u.pathname}${u.search}`); } catch { /* not a URL */ }
+      // the read as the client asks it (its address without a trailing slash, then /api…), so it is named as onFresh names it
+      try { const u = new URL(`${vaultUrlOf(r).replace(/\/+$/, "")}/api${path}`); opts.read?.(key, `${u.pathname}${u.search}`); } catch { /* not a URL */ }
       return (keptClientFor(r) as unknown as VaultClient & Requesting).request(`/api${path}`, { cache: "no-store" });
-    },
+    } } : {}),
     door(key) {
       let d = doors.get(key);
       if (!d) {
