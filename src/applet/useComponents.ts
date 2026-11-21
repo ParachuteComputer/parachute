@@ -17,6 +17,8 @@ type Entry = { state: "ok"; entries: KeyedComponent[]; skipped: number; at: numb
 const FRESH_MS = 10_000;
 const cache = new Map<string, Entry>();
 const inflight = new Map<string, Promise<Entry>>();
+/** How many of the hub's own answers (fresh reads) have landed per vault. */
+const freshSet = new Map<string, number>();
 
 async function rows(client: Pick<VaultClient, "queryNotes" | "getNote">, notMine: boolean): Promise<Note[]> {
   return client.queryNotes({ tag: COMPONENT_TAG, limit: 200, includeMetadata: true, ...(notMine ? {} : { includeContent: true }) });
@@ -45,14 +47,22 @@ export async function readComponents(client: Pick<VaultClient, "queryNotes" | "g
 export function refreshComponents(rec: VaultRecord, fresh = false): Promise<Entry> {
   const hit = cache.get(rec.key);
   if (!fresh && hit?.state === "ok" && Date.now() - hit.at < FRESH_MS) return Promise.resolve(hit);
-  const running = inflight.get(rec.key);
+  // a fresh read never shares one from the copy that is on its way, nor is laid over by one that set off before it landed
+  const at = fresh ? `${rec.key}\u0000fresh` : rec.key;
+  const running = inflight.get(at);
   if (running) return running;
+  const set = freshSet.get(rec.key) ?? 0;
   // a fresh read (a write pins a hash on it) asks the hub; any other may be answered from the copy kept of it
   const p = readComponents(fresh ? clientFor(rec) : keptClientFor(rec), rec.key, whoseOf(rec) !== "mine")
     .then((r): Entry => ({ state: "ok", ...r, at: Date.now() }), (e: unknown): Entry => ({ state: "error", error: e instanceof Error ? e.message : String(e) }))
-    .then((e) => { cache.set(rec.key, e); return e; })
-    .finally(() => inflight.delete(rec.key));
-  inflight.set(rec.key, p);
+    .then((e) => {
+      // only the hub's answer counts as fresh (a failed fresh read leaves an answer from the copy on its way to land)
+      if (fresh && e.state === "ok") freshSet.set(rec.key, (freshSet.get(rec.key) ?? 0) + 1);
+      else if (!fresh && (freshSet.get(rec.key) ?? 0) !== set) return cache.get(rec.key) ?? e;
+      cache.set(rec.key, e); return e;
+    })
+    .finally(() => inflight.delete(at));
+  inflight.set(at, p);
   return p;
 }
 // the hub's answer to a vault's list of components differs from the copy it was read from: forgotten, so the next ask

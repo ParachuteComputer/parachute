@@ -22,6 +22,8 @@ type Entry = { state: "loading" } | { state: "ok"; found: Read; at: number } | {
 const cache = new Map<string, Entry>();
 const LOADING: Entry = { state: "loading" };
 const inflight = new Map<string, Promise<boolean>>();
+/** How many of the hub's own answers (fresh reads) have landed per vault. */
+const freshSet = new Map<string, number>();
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((f) => f());
 
@@ -70,8 +72,14 @@ export function refreshApplets(rec: VaultRecord, fresh = false): Promise<boolean
   const running = inflight.get(at);
   if (running) return running;
   if (!cache.has(rec.key)) cache.set(rec.key, { state: "loading" });
+  // a read from the copy that set off before the hub's own answer landed never lays its list over that answer
+  const set = freshSet.get(rec.key) ?? 0;
   const p = readApplets(fresh ? clientFor(rec) : keptClientFor(rec), rec.key, whoseOf(rec) !== "mine", rec)
-    .then((found) => { cache.set(rec.key, { state: "ok", found, at: Date.now() }); return true; }, (e: unknown) => { if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e) }); return false; })
+    .then((found) => {
+      if (!fresh && (freshSet.get(rec.key) ?? 0) !== set) return true;
+      if (fresh) freshSet.set(rec.key, (freshSet.get(rec.key) ?? 0) + 1);
+      cache.set(rec.key, { state: "ok", found, at: Date.now() }); return true;
+    }, (e: unknown) => { if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e) }); return false; })
     .finally(() => { inflight.delete(at); notify(); });
   inflight.set(at, p);
   return p;
