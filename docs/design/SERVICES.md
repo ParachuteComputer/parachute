@@ -362,7 +362,7 @@ the same sealed blob (wake, room, kind: never words), so Google and Apple see on
   build made with `VITE_E2E_SIGNER=1` (as `VITE_APPLET_TESTHOOKS`): it signs what it is handed and refuses to load in
   the shell. The policy it sits under is the shipping web-side policy. CI checks the bundle Tauri builds from
   (`beforeBuildCommand`'s `dist/`) has no test signer in it. In CI: a small test relay and a NIP-98 echo server (fakes of
-  servers we don't run). Locally (`e2e/services/README.md`): our Buzz relay in its own container with production's auth
+  servers we don't run). In the Services workflow (daily, and on every pull request but a docs-only one; locally `e2e/services/up.sh`, `e2e/services/README.md`): our Buzz relay in its own container with production's auth
   settings (relay membership, media read auth, auth tokens), a throwaway Stalwart behind the mail gateway, a throwaway
   Matrix homeserver.
 - **The broker's promises, each a test that fails if broken:** NIP-98 is signed only for an allowed origin; changed

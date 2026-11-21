@@ -3,7 +3,7 @@
 // Uni checks it (e2eCards.openAnswer: the seal is alice's, rumor 46042 naming the card, rid and digest). The web build
 // has no Rust: its test signer stands in for the native side (e2eNative.ts), with the device's trusted list and the
 // unlock set by the test. The native side's own checks are cargo's (src-tauri/src/approvals), and the emulator's.
-// Local only, as rooms.spec.ts: BUZZ_RELAY and BUZZ_KEYS (owner.hex, alice.hex, bob.hex).
+// Services workflow only, as rooms.spec.ts: BUZZ_RELAY and BUZZ_KEYS (owner.hex, alice.hex, bob.hex).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";

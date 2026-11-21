@@ -8,14 +8,16 @@ on:
 
 jobs:
   web:
-    # the hub before the record door (0.8) and with it (0.9): the app must work on both (src/vault/records.ts)
+    # the hub before the record door (0.8) and with it (0.9): the app must work on both (src/vault/records.ts); and
+    # core's next at a commit (built from source, .github/actions/core), for what the app needs before a release has it:
+    # move it on purpose, in the PR that needs it. The Services workflow follows core's next as it moves.
     strategy:
       fail-fast: false
       matrix:
-        core: ["0.8.0", "0.9.0-pre.1"]
+        core: ["0.8.0", "0.9.0-pre.1", "467b9ef1ec37dba958d1ec88ab13db1ed03388eb"]
     name: web (core ${{ matrix.core }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,15 +35,9 @@ jobs:
       - name: No test signer in the app's bundle
         run: npm run build && scripts/no-test-signer.sh dist
       # The end-to-end tests run the web build against a real hub: parachute-core, in a throwaway home, on loopback.
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/core
         with:
-          bun-version: 1.4.4
-      - name: Install a Parachute hub for the tests
-        run: |
-          mkdir -p "$RUNNER_TEMP/hub" && cd "$RUNNER_TEMP/hub"
-          echo '{"name":"e2e-hub","private":true}' > package.json
-          bun add @openparachute/core@${{ matrix.core }}
-          echo "PARACHUTE_CORE=$RUNNER_TEMP/hub/node_modules/.bin/parachute-core" >> "$GITHUB_ENV"
+          core: ${{ matrix.core }}
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: End-to-end tests (Playwright, web build)
@@ -69,15 +65,9 @@ jobs:
         with:
           workspaces: src-tauri
       # The key door test (src-tauri/tests/door_hub.rs) signs in to a real hub, as the web tests do.
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/core
         with:
-          bun-version: 1.4.4
-      - name: Install a Parachute hub for the key door test
-        run: |
-          mkdir -p "$RUNNER_TEMP/hub" && cd "$RUNNER_TEMP/hub"
-          echo '{"name":"e2e-hub","private":true}' > package.json
-          bun add @openparachute/core@0.8.0
-          echo "PARACHUTE_CORE=$RUNNER_TEMP/hub/node_modules/.bin/parachute-core" >> "$GITHUB_ENV"
+          core: 0.8.0
       - name: Shell tests
         run: |
           mkdir -p dist && echo '<!doctype html>' > dist/index.html

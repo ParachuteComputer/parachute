@@ -1,7 +1,7 @@
 // An area's applet (applets/area.tsx, docs/WRITE-AN-APPLET.md "An applet for an area"): the synthetic area Garden, its
 // room on our real Buzz relay beside its notes in the vault. Its grant names one room and one folder: the card says
 // so, the page shows only those, and a call from inside the frame for another room or folder is refused (and nothing
-// lands there, as bob sees it). Local only, as rooms.spec.ts: BUZZ_RELAY and BUZZ_KEYS.
+// lands there, as bob sees it). Services workflow only, as rooms.spec.ts: BUZZ_RELAY and BUZZ_KEYS.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";

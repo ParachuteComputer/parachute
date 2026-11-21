@@ -8,11 +8,12 @@ export async function person(relay: string, secretHex: string) {
   const sk = Uint8Array.from(Buffer.from(secretHex, "hex"));
   const ws = new WebSocket(relay);
   const waiting = new Map<string, (ok: boolean, msg: string) => void>(), subs = new Map<string, { events: Event[]; done: (e: Event[]) => void }>();
-  let authed: () => void = () => {};
-  const signedIn = new Promise<void>((r) => { authed = r; });
+  // a refused sign-in (a key the relay hasn't let in) fails here, not later as "auth-required" on some publish
+  let authed: (ok: boolean, msg: string) => void = () => {};
+  const signedIn = new Promise<void>((r, j) => { authed = (ok, msg) => ok ? r() : j(new Error(`relay refused ${getPublicKey(sk).slice(0, 8)}'s sign-in: ${msg}`)); });
   ws.on("message", (raw) => {
     const m = JSON.parse(String(raw));
-    if (m[0] === "AUTH") { const ev = finalizeEvent({ kind: 22242, created_at: Math.floor(Date.now() / 1000), tags: [["relay", relay], ["challenge", m[1]]], content: "" }, sk); waiting.set(ev.id, () => authed()); ws.send(JSON.stringify(["AUTH", ev])); }
+    if (m[0] === "AUTH") { const ev = finalizeEvent({ kind: 22242, created_at: Math.floor(Date.now() / 1000), tags: [["relay", relay], ["challenge", m[1]]], content: "" }, sk); waiting.set(ev.id, authed); ws.send(JSON.stringify(["AUTH", ev])); }
     if (m[0] === "OK") { const w = waiting.get(m[1]); if (w) { waiting.delete(m[1]); w(m[2], m[3]); } }
     if (m[0] === "EVENT") subs.get(m[1])?.events.push(m[2]);
     if (m[0] === "EOSE" || m[0] === "CLOSED") { const s = subs.get(m[1]); if (s) { subs.delete(m[1]); s.done(s.events); } }

@@ -1,56 +1,66 @@
 # The services tests against real servers
 
-`e2e/services.spec.ts` runs in CI against fakes with real checks (`servers.ts`). Three more run here, against the real
-servers the first applets use; each skips itself when its server isn't named.
+`e2e/services.spec.ts` runs in CI against fakes with real checks (`servers.ts`), and so does `e2e/manyrooms.spec.ts`
+(rooms put straight into the fake relay's store). These need real servers, and skip themselves when theirs isn't named:
 
 | Spec | Needs |
 |---|---|
-| `e2e/rooms.spec.ts` | `BUZZ_RELAY` (a Buzz relay), `BUZZ_KEYS` (a folder with `owner.hex`, `alice.hex`, `bob.hex`) |
-| `e2e/mail.spec.ts` | `MAIL_BRIDGE` (the Uni app's mail gateway in front of a Stalwart), `BUZZ_KEYS` |
+| `e2e/rooms.spec.ts`, `roomlinks`, `area`, `today`, `devices`, `approvals` | `BUZZ_RELAY` (a Buzz relay), `BUZZ_KEYS` (a folder with `owner.hex`, `alice.hex`, `bob.hex`) |
+| `e2e/mail.spec.ts` | `MAIL_BRIDGE` (the Uni app's mail gateway in front of a Stalwart), `BUZZ_KEYS` (also `unibot.hex`) |
 | `e2e/matrix.spec.ts` | `MATRIX_HS` (a Matrix homeserver), `MATRIX_TOKENS` (a folder with `alice.token`, `bob.token`), `BUZZ_KEYS` |
 | `src-tauri/tests/services_real.rs` | `BUZZ_RELAY`, `MAIL_BRIDGE`, `BUZZ_KEYS` (the native side, not the browser) |
 
-The keys are throwaway Nostr secret keys, 64 hex characters each, one per file. Never use a real person's key.
+The **Services** workflow (`.github/workflows/services.yml`) runs all of them with the servers in the runner: daily (on next), on
+demand (`gh workflow run services.yml --ref <branch> -f core=<npm version, or a branch or commit of parachute-core>`),
+and on every pull request that changes more than docs. A skip there fails the run.
 
-## A Buzz relay with production's settings
-
-`relay-compose.yml` runs one on `127.0.0.1:3871` with relay membership, auth tokens and media read auth on, as a
-production relay has them (a permissive relay passes tests a real one fails). It needs a file with the owner's public key
-and the relay's own secret key:
+## Running them here
 
 ```sh
-printf 'RELAY_OWNER_PUBKEY=%s\nBUZZ_RELAY_PRIVATE_KEY=%s\n' <owner pubkey hex> <relay secret hex> > relay.env
-BUZZ_ENV_FILE=$PWD/relay.env docker compose -f e2e/services/relay-compose.yml up -d
+e2e/services/up.sh                      # starts and seeds every server; writes e2e/.services/env
+set -a; . e2e/.services/env; set +a
+npx playwright test e2e/{approvals,area,devices,mail,matrix,roomlinks,rooms,today}.spec.ts --project=phone
+cargo test --manifest-path src-tauri/Cargo.toml --test services_real
+e2e/services/down.sh                    # removes the containers, their volumes and e2e/.services
 ```
 
-Use `ws://localhost:3871` (not 127.0.0.1): the relay binds its community to the host in `RELAY_URL`. The rooms spec makes
-its own rooms each run: the owner lets alice and bob in (kind 9030), makes two rooms (9007) and adds both (9000).
+`up.sh` runs `compose.yml` as its own compose project (`SERVICES_PROJECT`, default `parachute-e2e`) on loopback ports
+(`RELAY_PORT` 3871, `STALWART_PORT` 18443, `STALWART_SETUP_PORT` 18080, `MAIL_PORT` 19951, `MATRIX_PORT` 18008); set
+them to keep two sets on one machine apart. Every key and password is made up per run (`seed.mjs`) and kept in
+`SERVICES_DIR` (default `e2e/.services`, mode 700). Run again on a running set, it starts what stopped; after
+a setup that failed part way, or volumes removed by hand, run `down.sh` first.
 
-The compose file keeps Buzz's default rate per connection (10 messages a second over 5 s; a production relay may allow
-more): stricter than production, so the shell's pacing is tested. A rooms applet's person in many rooms is the case it
-holds: a burst of subscriptions is paced, and a post goes ahead of them.
+## The Buzz relay
+
+Production's relay: upstream Buzz with our voice patches (`relay/voice.patch`: audio-only Opus/WebM voice notes, per-kind
+duration limits, an audio's length). Stock Buzz answers a voice note with 415, so `rooms.spec` and `devices.spec` need
+them. `relay-image.sh` builds it once (10 to 25 minutes) at the upstream commit it names; move that commit and the patch
+together, to what production runs. `BUZZ_IMAGE` names another image instead.
+
+It runs with relay membership, auth tokens and media read auth on, as a production relay has them (a permissive relay
+passes tests a real one fails). Use `ws://localhost:3871` (not 127.0.0.1): the relay binds its community to the host in
+`RELAY_URL`. At setup its owner lets alice, bob and Uni's key (`unibot`) in, as on a relay people use; each spec makes
+its own rooms (9007) and adds people to them (9000). A key the relay hasn't let in fails at sign-in (`client.ts`).
+
+Buzz's default rate per connection (10 messages a second over 5 s; a production relay may allow more) is stricter than
+production, so the shell's pacing is tested. Its per-key quota (60 stored messages a minute) is raised to 600: the
+specs' keys post far more than a person does. A rooms applet's person in many rooms is the case it holds: a burst of
+subscriptions is paced, and a post goes ahead of them.
 
 What the relay taught the applet (and the tests hold it to): it sends live events only to a subscription for one room;
 typing (kind 20002) goes in a filter of its own; a file with metadata in it (camera data, encoder tags) is refused, so
-the applet draws a picture again before it sends it; read markers are whole seconds.
+the applet draws a picture again before it sends it; read markers and message times are whole seconds.
 
-## A mail stack
+## The mail stack
 
-A throwaway Stalwart (its own container, loopback ports, a test domain such as `test.test`) with two mailboxes, and the
-Uni app's mail gateway (not in this repo) in front of it, with alice's and bob's keys mapped to the two mailboxes
-(role `owner`). The browser can't call the gateway directly (it sends no CORS headers; the app's native side doesn't
-need them), so the spec starts a pass-through on `127.0.0.1:19952`: add `http://127.0.0.1:19952` to the gateway's
-`public_aliases`, so a request signed for that address is accepted.
+Stalwart (the version production runs; its first setup and accounts are `seed.mjs`'s `mail-bootstrap` and `mail`
+steps) with alice, bob and `uni@test.test`, and in front of it `mail/gateway.py`: a copy of the Uni app's mail gateway,
+which isn't in this repo (its header says what differs). Alice's and bob's keys map to their mailboxes (role `owner`),
+`unibot`'s to Uni's (role `uni`); Uni's mail is shared with alice, and Uni's outbound rules hold mail to bob for her.
+The browser can't call the gateway directly (it sends no CORS headers; the app's native side doesn't need them), so the
+spec starts a pass-through on `127.0.0.1:19952`, which the gateway accepts as an alias.
 
-## A Matrix homeserver
+## The Matrix homeserver
 
-Any homeserver on loopback with two users, alice and bob, in a room named Garden (tuwunel runs in one container), and
-each one's access token in a file. Matrix servers send CORS headers, so the browser reaches it directly.
-
-## Running them
-
-```sh
-PARACHUTE_CORE=… BUZZ_RELAY=ws://localhost:3871 MAIL_BRIDGE=http://127.0.0.1:<port> BUZZ_KEYS=<folder> \
-  MATRIX_HS=http://127.0.0.1:<port> MATRIX_TOKENS=<folder> npx playwright test e2e/rooms.spec.ts e2e/mail.spec.ts e2e/matrix.spec.ts --project=phone
-BUZZ_RELAY=… MAIL_BRIDGE=… BUZZ_KEYS=… cargo test --manifest-path src-tauri/Cargo.toml --test services_real
-```
+tuwunel, registration by a throwaway token, federation off; alice and bob, in rooms named Garden and Kitchen. Matrix
+servers send CORS headers, so the browser reaches it directly.

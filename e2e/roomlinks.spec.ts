@@ -1,6 +1,6 @@
 // A note link in a Room message (applets/room.tsx through the kit's Linked and Link), against our real Buzz relay: Uni
 // writes `<vault>:<ULID>` in chat; alice taps it and the note opens in the applet that opens its kind. The message's
-// text is left as Uni wrote it. Local only, as rooms.spec.ts (e2e/services/README.md): BUZZ_RELAY and BUZZ_KEYS.
+// text is left as Uni wrote it. Services workflow only, as rooms.spec.ts (e2e/services/README.md): BUZZ_RELAY and BUZZ_KEYS.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
