@@ -38,6 +38,10 @@ test("an AI changes three records and deletes one; Changes shows them under its 
   ];
   const recs: Rec[] = [];
   for (const f of first) recs.push(await api(hub, "POST", "records", { ...f, types: [`dish${stamp}`] }) as Rec);
+  // the person's own hub token (REST, no key name) makes one record and changes it twice: three changes, one record
+  const cake = await api(hub, "POST", "records", { path: `Pantry ${stamp}/Cake`, body: "# Cake\n\nFlour, eggs.", fields: { serves: 8 }, types: [`dish${stamp}`] }) as Rec;
+  await api(hub, "PATCH", `records/${cake.id}`, { fields: { serves: 10 }, force: true });
+  await api(hub, "PATCH", `records/${cake.id}`, { fields: { serves: 12 }, force: true });
   // the AI: three changes and a delete, over MCP
   await mcp(key, "update-record", { id: recs[0].id, body: "# Soup\n\nLeeks, potatoes, stock.\nA little cream.", fields: { serves: 4 }, force: true });
   await mcp(key, "update-record", { id: recs[1].id, fields: { serves: 12, status: "for the fair" }, force: true });
@@ -64,6 +68,19 @@ test("an AI changes three records and deletes one; Changes shows them under its 
   for (const t of ["Soup", "Bread", "Jam", ...(deletes ? ["Pie"] : [])]) await expect(run.getByRole("button", { name: new RegExp(`${t}: see what changed`) })).toBeVisible();
   if (deletes) await expect(run.getByRole("button", { name: /Deleted Pie/ })).toBeVisible();
   else await expect(vault.getByText("Deleted records aren't listed: this vault's hub shows them only to its admin.")).toBeVisible();
+  // the person's own hub token reads as them, in plain words: not "A key with no name (REST)"
+  const you = vault.getByRole("region", { name: "You, in another app, Today" });
+  await expect(you).toBeVisible();
+  await expect(vault.getByText(/with no name|\bREST\b|\bMCP\b/)).toHaveCount(0);
+  // and its counts agree: the group says how many changes it has, "Put all N back" says how many records that puts back,
+  // and the line between them says what the rest are (the cake's two later changes go back with the cake, so they aren't counted again)
+  const header = you.locator("xpath=ancestor::div[contains(@class,'chg')][1]/preceding-sibling::div[contains(@class,'run')][1]");
+  const changes = Number(/(\d+) changes/.exec(await header.innerText())![1]);
+  await expect(you.getByRole("button")).toHaveCount(changes);
+  const all = Number(/^Put all (\d+) back, by You/.exec(await header.getByRole("button").getAttribute("aria-label") ?? "")![1]);
+  const covers = header.locator("xpath=following-sibling::p[contains(@class,'lede')][1]");
+  await expect(covers).toHaveText(new RegExp(`^Put all ${all} back covers ${all} of these ${changes} changes\\. Not counted: .*2 more changes to a record already counted\\.`));
+  expect(all).toBeLessThan(changes);
   // what one change did: the field before and after, and the words line by line
   await expect(run.getByRole("button", { name: /Changed Soup/ })).toContainText("serves 2 → 4, the words");
   await run.getByRole("button", { name: /Changed Soup/ }).click();

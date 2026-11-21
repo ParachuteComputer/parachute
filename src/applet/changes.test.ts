@@ -126,6 +126,27 @@ describe("reading what changed", () => {
     expect(writerName("key:anything", true)).toBe("You, in Parachute here");
     expect(writerName(null, false)).toBe("Not recorded");
   });
+  it("a write by no named key says who it was in plain words: yours, another person's, or an app without a name; never REST, MCP or key", () => {
+    const me = "u-aaron";
+    // the person's own sign-in, or an app or token of theirs: for their account, by no named key
+    expect(writerName("api", false, { by: me, account: me })).toBe("You, in another app");
+    expect(writerName("mcp", false, { by: me, account: me })).toBe("You, in another app");
+    // another account on the hub is a person, not an app
+    expect(writerName("api", false, { by: "u-other", account: me })).toBe("Someone else on your hub");
+    // a hub token's own label, nothing recorded, or an account this device can't tell: an app without a name
+    for (const who of [{ by: "token:9f2", account: me }, { by: null, account: me }, { by: me, account: null }, undefined])
+      for (const via of ["api", "mcp"]) expect(writerName(via, false, who)).toBe("An app without a name");
+    for (const via of ["api", "mcp"]) expect(writerName(via, false, { by: "token:9f2", account: me })).not.toMatch(/REST|MCP|\bkey\b/i);
+    // this device's Parachute is still "You, in Parachute here", whatever the channel
+    expect(writerName("api", true, { by: me, account: me })).toBe("You, in Parachute here");
+  });
+  it("Changes groups an unnamed app by that name and says it is unnamed; a person's own write is theirs", async () => {
+    const rec = (id: string, by: string) => ({ id, path: `Pantry/${id}`, createdAt: "2026-11-19T10:00:00.000Z", updatedAt: "2026-11-20T10:00:00.000Z", createdVia: "key:claude", createdBy: "u-aaron", lastUpdatedVia: "api", lastUpdatedBy: by });
+    const ver = (by: string) => ({ version_ix: 0, superseded_at: "2026-11-20T10:00:00.000Z", op: "update", via: "api", actor: by, path: "x", body: "", fields: {} });
+    const h = hub({ records: { A: rec("A", "token:9f2"), B: rec("B", "u-aaron") }, versions: { A: [ver("token:9f2")], B: [ver("u-aaron")] }, deleted: [] });
+    const page = await readChanges({ get: (p) => h.deps.request("home", "GET", p), door: "records", since: "2026-11-20T00:00:00.000Z", charge: () => {}, self: () => false, account: "u-aaron", own: () => null });
+    expect(page.changes.map((c) => [c.id, c.who, c.unnamed]).sort()).toEqual([["A", "An app without a name", true], ["B", "You, in another app", false]]);
+  });
 });
 
 describe("what the review found (T-476 round 1)", () => {

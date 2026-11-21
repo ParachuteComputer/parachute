@@ -27,6 +27,8 @@ export type Change = {
   mine: boolean;
   /** the writer's name, as a person reads it (`writerName`) */
   who: string;
+  /** the writer is a key the hub gave no name (`An app without a name`): the hub can't say which one it was */
+  unnamed: boolean;
   /** the version holding the record before the change (null: it was made by it) */
   before: number | null;
   /** the version holding it after (null: as it is now, or, for a delete, nothing) */
@@ -81,8 +83,11 @@ const refused = (e: unknown) => [403, 404].includes((e as { status?: number })?.
 export async function readChanges(opts: {
   get: Get; door: "records" | "notes"; since: string; offset?: number; charge: (n: number) => void;
   self: (via: string | null) => boolean; own: (r: { path: string; extension: string | null; names: string[] }) => "code" | "app" | null;
+  /** the person's own account on this hub (their sign-in's `sub`), when known: a write for it by no named key is theirs */
+  account?: string | null;
 }): Promise<ChangesPage> {
   const { get, door, since, charge, self, own } = opts;
+  const account = opts.account ?? null;
   const offset = opts.offset ?? 0;
   const out: Change[] = [];
   // the most it can read, charged before the first read: refused now, nothing has been asked of the hub
@@ -92,11 +97,11 @@ export async function readChanges(opts: {
   const raw = await get(`/${door}?${u.toString()}`);
   const all: unknown[] = Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.records) ? raw.records : plain(raw) && Array.isArray(raw.notes) ? raw.notes : [];
   const page = all.slice(0, CHANGES_RECORDS).filter(plain) as Record<string, unknown>[];
-  const add = (c: Omit<Change, "key" | "mine" | "title" | "who" | "own">, kind: "code" | "app" | null) => {
+  const add = (c: Omit<Change, "key" | "mine" | "title" | "who" | "own" | "unnamed">, kind: "code" | "app" | null) => {
     const mine = self(c.via);
     // this device's Parachute keeping its own records (settings, approvals, saved views) isn't a change to show
     if (kind === "app" && mine) return;
-    out.push({ ...c, own: kind !== null, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: writerName(c.via, mine) });
+    out.push({ ...c, own: kind !== null, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: writerName(c.via, mine, { by: c.by, account }), unnamed: isUnnamed(c.via, mine, c.by, account) });
   };
   /** A record's kept versions, newest first, as changes since then. */
   const fromRows = (id: string, path: string, rows: Row[], kind: "code" | "app" | null, gone: boolean, seen: string | null) => rows.forEach((v, i) => {
@@ -151,9 +156,19 @@ export async function readChanges(opts: {
 export const isSelf = (clientId: string | null, via: string | null) =>
   !!clientId && !!via && (via === `key:${clientId}` || (via.startsWith(`key:${clientId}-`) && /^\d+$/.test(via.slice(clientId.length + 5))));
 
+/** Who a write by a channel (`api`, `mcp`) was, for the person: the hub stamps the channel and the person it was for,
+ *  not which key. For their own account: theirs. For another account: another person on the hub. For none they can
+ *  tell (a hub token's `token:<id>`, nothing recorded, or their account not known here): an app without a name. */
+const channelWriter = (via: string | null, by: string | null, account: string | null): "you" | "other" | "unnamed" | null =>
+  via !== "api" && via !== "mcp" ? null : account && by === account ? "you" : account && by && !by.includes(":") ? "other" : "unnamed";
+/** Is this write one by an app the hub gave no name (the hub can't say which one it was)? */
+export const isUnnamed = (via: string | null, mine: boolean, by: string | null, account: string | null) => !mine && channelWriter(via, by, account) === "unnamed";
+
 /** A writer's name, as a person reads it. `key:<name>` is its name; an app approved over OAuth is named for its client
- *  id (a long random id) until the hub can name it (docs/VAULT.md, gaps). */
-export function writerName(via: string | null, mine: boolean): string {
+ *  id (a long random id) until the hub can name it (docs/VAULT.md, gaps). A write by no named key is the person's own
+ *  when it was for their account (`who.account`, from their sign-in); else another person's on the hub, or "An app
+ *  without a name": the hub stamps no more than that (not which key, so not when it was made). No jargon in a title. */
+export function writerName(via: string | null, mine: boolean, who?: { by: string | null; account: string | null }): string {
   if (mine) return "You, in Parachute here";
   if (!via) return "Not recorded";
   if (via.startsWith("key:")) {
@@ -164,7 +179,8 @@ export function writerName(via: string | null, mine: boolean): string {
   }
   if (via.startsWith("nostr:")) return `A key (${via.slice(6, 14)}…)`;
   if (via === "operator") return "Your hub's operator";
-  if (via === "api" || via === "mcp") return `A key with no name (${via === "api" ? "REST" : "MCP"})`;
+  const c = channelWriter(via, who?.by ?? null, who?.account ?? null);
+  if (c) return c === "you" ? "You, in another app" : c === "other" ? "Someone else on your hub" : "An app without a name";
   if (via === "git-import") return "An import";
   return via;
 }
@@ -175,12 +191,13 @@ export function writerName(via: string | null, mine: boolean): string {
  * `HOME_DELETED`). Counts records, not every version: Vault's Changes has the rest. `names`: each writer, with when it
  * last wrote.
  */
-export async function countChanged(opts: { get: Get; door: "records" | "notes"; since: string; charge: (n: number) => void; self: (via: string | null) => boolean;
+export async function countChanged(opts: { get: Get; door: "records" | "notes"; since: string; charge: (n: number) => void; self: (via: string | null) => boolean; account?: string | null;
   own: (r: { path: string; extension: string | null; names: string[] }) => "code" | "app" | null }): Promise<{ count: number; names: Map<string, string>; more: boolean }> {
   const { get, door, since, charge, self, own } = opts;
   /** each writer's name, and when it last wrote */
   const names = new Map<string, string>();
-  const note = (via: string | null, at: string) => { const n = writerName(via, false); if ((names.get(n) ?? "") < at) names.set(n, at); };
+  const account = opts.account ?? null;
+  const note = (via: string | null, at: string, by: string | null) => { const n = writerName(via, false, { by, account }); if ((names.get(n) ?? "") < at) names.set(n, at); };
   const u = new URLSearchParams({ "meta[updated_at][gte]": since, order_by: "updated_at", sort: "desc", limit: "201" });
   u.set(door === "records" ? "include_body" : "include_content", "false");
   // the most it reads, charged first (six vaults fit a frame's 60 reads)
@@ -195,7 +212,7 @@ export async function countChanged(opts: { get: Get; door: "records" | "notes"; 
     // the app keeping its own records, on another device, isn't a change to count
     const names = [...(Array.isArray(r.types) ? r.types : []), ...(Array.isArray(r.tags) ? r.tags : [])].filter((t): t is string => typeof t === "string");
     if (own({ path: typeof r.path === "string" ? r.path : "", extension: strOr(r.extension), names }) === "app") continue;
-    count++; note(via, strOr(r.updatedAt) ?? since);
+    count++; note(via, strOr(r.updatedAt) ?? since, strOr(r.lastUpdatedBy));
   }
   const gone = await get("/history/deleted?limit=50").catch(() => null);
   const listed = (plain(gone) && Array.isArray(gone.notes) ? gone.notes : []).filter((n: unknown): n is Record<string, unknown> => plain(n) && typeof n.id === "string" && typeof n.deleted_at === "string" && n.deleted_at >= since);
@@ -203,7 +220,7 @@ export async function countChanged(opts: { get: Get; door: "records" | "notes"; 
   for (const v of await Promise.all(rows.map((n) => get(`/${door}/${encodeURIComponent(n.id as string)}/versions?limit=1`).then(rowsOf, () => [] as Row[])))) {
     const t = v[0];
     if (!t || t.op !== "delete" || t.via === null || self(t.via) || own({ path: t.path ?? "", extension: null, names: [] }) === "app") continue;
-    count++; note(t.via, t.at);
+    count++; note(t.via, t.at, t.by);
   }
   return { count, names, more: all.length > 200 || listed.length > HOME_DELETED };
 }
