@@ -463,7 +463,9 @@ async function templateFor(vault: string, type: string): Promise<Rec | null> {
 
 /** A record's headings, each with a blank line under it: what stays of it as a template. No headings: all of it. */
 const headingsOf = (body: string) => {
-  const hs = body.split("\n").filter((l) => /^#{1,6}\s+\S/.test(l));
+  // a `#` line inside a fenced block is code, not a heading
+  let fenced = false;
+  const hs = body.split("\n").filter((l) => { if (/^\s*(```|~~~)/.test(l)) { fenced = !fenced; return false; } return !fenced && /^#{1,6}\s+\S/.test(l); });
   return hs.length ? `${hs.join("\n\n")}\n` : body;
 };
 
@@ -477,7 +479,11 @@ async function makeTemplate(v: Held, r: Rec): Promise<Rec | null> {
     const x: Rec = await vaults.create(v.key, { path: `Templates/${clean(type) || "_"}/${clean(r.title) || type}`, body: headingsOf(full.body ?? ""), types: ["template"], fields: { for: type, default: first } });
     toast(first ? `Made a template. A new ${label(type)} starts from it.` : `Made a template for ${label(type)}.`);
     return x;
-  } catch (e) { toast(`The template wasn't made: ${said(e)}`, { error: true }); return null; }
+  } catch (e) {
+    // a create at a taken path comes back as a conflict
+    toast(/conflict|exists|taken/.test(said(e)) ? `There is already a template called ${clean(r.title) || type}: rename one of them first.` : `The template wasn't made: ${said(e)}`, { error: true });
+    return null;
+  }
 }
 
 type Starter = { id: string; name: string; summary: string; version: number; source: string; types: Record<string, string[]>; records: string[] };

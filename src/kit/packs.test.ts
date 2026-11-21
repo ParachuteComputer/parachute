@@ -1,6 +1,6 @@
 // The pack check is the gate between a page's block and the vault: what it lets through is what gets written.
 import { describe, expect, test } from "vitest";
-import { checkPack, packFromPage, receiptOf, receiptRecord } from "./packs";
+import { applyPack, checkPack, packFromPage, receiptOf, receiptRecord, type PackTarget, type Receipt } from "./packs";
 import coreTypes from "./packs/core-types.json";
 
 
@@ -49,4 +49,60 @@ test("a receipt reads back as it was written", () => {
   expect(rec.path).toBe("Parachute/Receipts/core-types");
   expect(receiptOf(rec.fields)).toEqual(r);
   expect(receiptOf({ receipt: { id: "x" } })).toBeNull();
+});
+
+// applyPack against a stand-in for the hub (the hub is the outside system here; e2e/packs.spec.ts runs a real one):
+// types and records in memory, with core's two rules the applier leans on: a taken path is left (if_exists: ignore),
+// and a field declared otherwise elsewhere refuses the whole type.
+function hub(failOnCreate = -1) {
+  const types = new Map<string, Record<string, { type: string; indexed?: boolean }>>();
+  const records = new Map<string, { id: string; body: string; fields?: unknown; tags?: string[] }>();
+  let creates = 0, n = 0;
+  const target: PackTarget = {
+    types: async () => [...types].map(([name, fields]) => ({ name, kind: "type" as const, count: 0, fields })),
+    defineType: async (name, def) => {
+      for (const [f, s] of Object.entries(def.fields)) for (const [o, fs] of types) if (o !== name && fs[f] && (fs[f].type !== s.type || !!fs[f].indexed !== !!s.indexed)) return { refused: "differently" };
+      types.set(name, { ...(types.get(name) ?? {}), ...def.fields });
+      return "ok";
+    },
+    create: async (r) => {
+      if (creates++ === failOnCreate) throw new Error("the line dropped");
+      const had = records.get(r.path);
+      if (had) return { id: had.id, updatedAt: "t0", existed: true };
+      const id = `r${++n}`; records.set(r.path, { id, body: r.body, fields: r.fields, tags: r.tags });
+      return { id, updatedAt: "t0", existed: false };
+    },
+    receipt: async (id) => { const r = records.get(`Parachute/Receipts/${id}`); return r ? { receipt: (r.fields as { receipt: Receipt }).receipt, id: r.id, updatedAt: "t0" } : null; },
+    writeReceipt: async (r) => { const rec = receiptRecord(r); records.set(rec.path, { id: records.get(rec.path)?.id ?? `r${++n}`, body: rec.body, fields: rec.fields, tags: rec.tags }); },
+  };
+  return { target, types, records };
+}
+
+describe("applyPack", () => {
+  test("a failure midway still records what was made, so the retry doesn't call the pack's own records the person's", async () => {
+    const h = hub(2);
+    await expect(applyPack(checkPack(core), h.target)).rejects.toThrow(/line dropped/);
+    const half = (await h.target.receipt("core-types"))!.receipt;
+    expect(Object.keys(half.made.types).length).toBe(5);
+    expect(half.made.records.map((r) => r.path)).toEqual(["Templates/meeting/Meeting", "Templates/project/Project"]);
+    const again = await applyPack(checkPack(core), h.target);
+    expect(again.notes).toEqual([]);
+    expect((await h.target.receipt("core-types"))!.receipt.made.records.map((r) => r.path)).toEqual(core.records.map((r: { path: string }) => r.path));
+  });
+  test("a field another type declares otherwise (here: indexed) is left out and said; the rest lands", async () => {
+    const h = hub();
+    h.types.set("journal", { date: { type: "date", indexed: true } });
+    const r = await applyPack(checkPack(core), h.target);
+    expect(r.notes).toContain("meeting's date wasn't added: your type journal has a date field of its own, set up differently.");
+    expect(Object.keys(h.types.get("meeting")!).sort()).toEqual(["people", "project"]);
+    expect(r.receipt.made.records).toHaveLength(core.records.length);
+  });
+  test("applying twice changes nothing: no write, not even the receipt", async () => {
+    const h = hub();
+    await applyPack(checkPack(core), h.target);
+    let writes = 0;
+    const counted: PackTarget = { ...h.target, defineType: async (...a) => { writes++; return h.target.defineType(...a); }, writeReceipt: async (...a) => { writes++; return h.target.writeReceipt(...a); } };
+    const again = await applyPack(checkPack(core), counted);
+    expect([again.changed, writes, again.added]).toEqual([false, 0, []]);
+  });
 });

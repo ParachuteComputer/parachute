@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mcp, mintToken, VAULT } from "./hub";
-import { applyPack, checkPack, RECEIPTS, receiptRecord, type PackTarget } from "../src/kit/packs";
+import { applyPack, checkPack, RECEIPTS, receiptRecord, refusalWords, type PackTarget } from "../src/kit/packs";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
@@ -31,7 +31,7 @@ async function restTypes(): Promise<boolean> {
 async function cleanup() {
   const a = admin();
   for (const f of FOLDERS) for (const n of await api(a, "GET", `notes?path_prefix=${encodeURIComponent(f)}&limit=200`)) await api(a, "DELETE", `notes/${n.id}`).catch(() => {});
-  for (const t of TYPES) await api(a, "DELETE", `types/${t}`).catch(() => {});
+  for (const t of [...TYPES, "journal"]) await api(a, "DELETE", `types/${t}`).catch(() => {});
 }
 /** What the pack touches, as the vault has it, without ids, times or who: two vaults set up alike read the same. */
 async function snapshot(times = false) {
@@ -69,7 +69,11 @@ async function openPacks(page: Page) {
  *  create-record with if_exists "ignore" per record, the receipt last (docs: build/templates). */
 const overMcp = (state: { origin: string; token: string }): PackTarget => ({
   types: async () => (await mcp(state, "list-types", { include_schema: true })).map((t: any) => ({ ...t, fields: t.fields ?? {} })),
-  defineType: async (name, def) => mcp(state, "manage-types", { tag: name, kind: "type", ...def }).then(() => "ok" as const, (e: Error) => { if (/admin/.test(e.message)) return "needs-admin" as const; throw e; }),
+  defineType: async (name, def) => mcp(state, "manage-types", { tag: name, kind: "type", ...def }).then(() => "ok" as const, (e: Error) => {
+    if (/With write access you can/.test(e.message)) return { refused: refusalWords(e.message) };
+    if (/admin/.test(e.message)) return "unsupported" as const;
+    throw e;
+  }),
   create: async (r) => { const x = await mcp(state, "create-record", { ...r, if_exists: "ignore" }); return { id: x.id, updatedAt: x.updatedAt ?? x.updated_at ?? null, existed: x.existed === true }; },
   receipt: async (id) => {
     const x = await mcp(state, "query-records", { id: `${RECEIPTS}${id}` }).catch(() => null);
@@ -166,16 +170,20 @@ test.describe.serial("Packs", () => {
     expect(receipt).toMatchObject({ contract: 1, id: "core-types", version: 1 });
   });
 
-  test("a vault with its own task type and a record at the template's path keeps both, gains the rest, and says so", async ({ page }) => {
+  test("a vault with its own task type, an indexed date of its own and a record at the template's path keeps them, gains the rest, and says so", async ({ page }) => {
     test.skip(!(await restTypes()), "needs core #139");
     await cleanup();
     await api(admin(), "PUT", "types/task", { kind: "type", description: "Mine", fields: { status: { type: "string", enum: ["open", "closed"] }, priority: { type: "integer" } } });
+    // core refuses a field declared otherwise elsewhere (its kind, or whether it is indexed): the pack leaves it out
+    await api(admin(), "PUT", "types/journal", { kind: "type", fields: { date: { type: "date", indexed: true } } });
     await api(hub(), "POST", "records", { path: "Templates/meeting/Meeting", body: "My own meeting notes.\n" });
     const app = await openPacks(page);
     await app.getByRole("button", { name: "Add Core types" }).click();
     const said = app.getByRole("region", { name: "What Core types did" });
     await expect(said).toContainText("task is already a type here and keeps its own fields. The pack's due, project and who weren't added: adding fields to a type made elsewhere needs admin.");
     await expect(said).toContainText("Templates/meeting/Meeting is already a record of yours, so it stays as it is.");
+    await expect(said).toContainText("meeting's date wasn't added: your type journal has a date field of its own, set up differently.");
+    expect(Object.keys(((await api(hub(), "GET", "types/meeting")) as { fields: object }).fields).sort()).toEqual(["people", "project"]);
     await shot(page, "05-own-task-kept");
     const task = (await api(hub(), "GET", "types/task")) as { description: string; fields: Record<string, { enum?: string[] }> };
     expect(task.description).toBe("Mine");

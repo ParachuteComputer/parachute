@@ -34,10 +34,13 @@ export type HeldType = { name: string; kind: "type" | "tag"; count: number; desc
 export interface PackTarget {
   /** Every type and tag, with declared fields. */
   types(): Promise<HeldType[]>;
-  /** PUT the type: a new one, or only fields it lacks. "needs-admin": the server said only admin may. */
-  defineType(name: string, def: { description?: string; fields: Record<string, FieldSpec> }): Promise<"ok" | "needs-admin">;
-  /** Create at a free path only (if_exists: ignore): existed = the path was taken, and nothing was written. */
-  create(r: PackRecord): Promise<{ id: string; updatedAt: string | null; existed: boolean }>;
+  /** PUT the type: a new one, or only fields it lacks. "unsupported": the server lets this connection make no type at
+   *  all (before core #139, or 0.8); `refused`: this type or these fields, in the server's words (needs admin, a field
+   *  another type declares otherwise). */
+  defineType(name: string, def: { description?: string; fields: Record<string, FieldSpec> }): Promise<"ok" | "unsupported" | { refused: string }>;
+  /** Create at a free path only (if_exists: ignore): existed = the path was taken, and nothing was written. `refused`:
+   *  not written, and why (it would publish). */
+  create(r: PackRecord): Promise<{ id: string; updatedAt: string | null; existed: boolean } | { refused: string }>;
   /** This pack's receipt in the vault, if any. */
   receipt(id: string): Promise<{ receipt: Receipt; id: string; updatedAt: string | null } | null>;
   /** Write the receipt: a new record, or a change to the one read (`was`). */
@@ -62,7 +65,7 @@ const KINDS = ["string", "number", "integer", "boolean", "array", "reference", "
 const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
 const only = (o: Record<string, unknown>, keys: string[]) => Object.keys(o).every((k) => keys.includes(k));
 /** Paths a pack may write: templates, saved views, and the person's own folders; never the app's or code. */
-export const packPath = (p: string) => p.length <= 200 && !/(^|\/)\.\.?(\/|$)|^\/|\/\/|\/$|\\/.test(p) &&
+export const packPath = (p: string) => p.length <= 200 && !/(^|\/)\.|^\/|\/\/|\/$|\\|%|[\u0000-\u001f]/.test(p) &&
   (p.startsWith("Templates/") || p.startsWith("Parachute/Views/") || !/^(applets|parachute|\.parachute)(\/|$)/i.test(p)) && !/\.(html?|tsx|jsx|js)$/i.test(p);
 
 /** The pack in a page: its one fenced block that carries `"parachute_pack"`. The prose around it is for people. */
@@ -85,7 +88,7 @@ export function checkPack(x: unknown): Pack {
   if (x.summary !== undefined && (typeof x.summary !== "string" || x.summary.length > 300)) return bad("summary");
   if (!plain(x.types)) return bad("types");
   for (const [t, def] of Object.entries(x.types)) {
-    if (!NAME.test(t) || !plain(def) || !only(def, ["description", "fields"]) || !plain(def.fields)) return bad(`type ${t}`);
+    if (!NAME.test(t) || /^(publish|published|applet|component|parachute)/.test(t) || !plain(def) || !only(def, ["description", "fields"]) || !plain(def.fields)) return bad(`type ${t}`);
     if (def.description !== undefined && typeof def.description !== "string") return bad(`type ${t}'s description`);
     for (const [f, spec] of Object.entries(def.fields)) {
       if (!FIELD.test(f) || f === "published" || !plain(spec) || !only(spec, ["type", "enum", "default", "cardinality", "description"])) return bad(`field ${t}.${f}`);
@@ -96,6 +99,7 @@ export function checkPack(x: unknown): Pack {
   if (!Array.isArray(x.records)) return bad("records");
   for (const r of x.records) {
     if (!plain(r) || !only(r, ["path", "body", "types", "tags", "fields"]) || typeof r.path !== "string" || !packPath(r.path) || typeof r.body !== "string") return bad("a record");
+    if ((r.types !== undefined && !Array.isArray(r.types)) || (r.tags !== undefined && !Array.isArray(r.tags))) return bad(`${r.path}'s types and tags are lists`);
     const names = [...(Array.isArray(r.types) ? r.types : []), ...(Array.isArray(r.tags) ? r.tags : [])];
     if (names.some((n) => typeof n !== "string" || /^(publish|published|applet|component)$/i.test(n) || (/^parachute/i.test(n) && n !== "parachute-view"))) return bad(`${r.path}'s names`);
     if ((Array.isArray(r.tags) && r.tags.includes("parachute-view")) !== r.path.startsWith("Parachute/Views/")) return bad(`${r.path}: saved views live in Parachute/Views/, tagged parachute-view`);
@@ -104,10 +108,23 @@ export function checkPack(x: unknown): Pack {
   return x as Pack;
 }
 
-const sameKind = (a: { type?: string } | undefined, b: FieldSpec) => (a?.type ?? "string") === b.type;
+/** Why core refused a type change, in a person's words (core type-write.ts `writeTypeProblem` says what write may do). */
+export function refusalWords(message: string): string {
+  if (/which you didn't make/.test(message)) return "adding fields to a type made elsewhere needs admin";
+  if (/plain tag/.test(message)) return "it is a tag here, and making a tag a type needs admin";
+  if (/parent/.test(message)) return "another type builds on it, so changing it needs admin";
+  if (/tag-scoped/.test(message)) return "this connection reaches only some tags";
+  if (/Changing the field/.test(message)) return "changing a field it already has needs admin";
+  return "that needs admin here";
+}
+
+/** Would core take this field beside another type's declaration of it? Its kind and its `indexed` must agree. */
+const agrees = (a: { type?: string; indexed?: boolean } | undefined, b: FieldSpec) => a?.type === b.type && !!a?.indexed === !!b.indexed;
+const sameKind = (a: { type?: string } | undefined, b: FieldSpec) => a?.type === b.type;
 const list = (xs: string[]) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
-/** Apply a pack to a vault (the rule at the top). */
+/** Apply a pack to a vault (the rule at the top). If a step fails after something was written, the receipt still
+ *  records what was made before the error goes on, so the next apply knows what is the pack's. */
 export async function applyPack(pack: Pack, target: PackTarget): Promise<Applied> {
   const kept: string[] = [], notes: string[] = [];
   const newTypes: string[] = [], newFields: string[] = [], newRecords: string[] = [];
@@ -115,58 +132,70 @@ export async function applyPack(pack: Pack, target: PackTarget): Promise<Applied
   const ours = new Set(before?.receipt.made.records.map((r) => r.path) ?? []);
   const made: Receipt["made"] = { types: { ...(before?.receipt.made.types ?? {}) }, records: [...(before?.receipt.made.records ?? [])] };
   let wrote = false;
+  const receipt = (): Receipt => ({ contract: 1, id: pack.id, name: pack.name, version: Math.max(pack.version, before?.receipt.version ?? 0), source: pack.source, made,
+    skipped: wrote || !before ? notes : before.receipt.skipped });
+  const was = before ? { id: before.id, updatedAt: before.updatedAt } : null;
 
-  // 1. Types
-  const held = await target.types();
-  for (const [name, def] of Object.entries(pack.types)) {
-    const h = held.find((t) => t.name === name);
-    if (h && h.kind === "tag" && h.count > 0) { notes.push(`#${name} is a tag in this vault, so it stays a tag (making it a type needs admin).`); continue; }
-    // a field another type already declares with another kind would be refused by the server: leave it out, say so
-    const fields: Record<string, FieldSpec> = {};
-    for (const [f, spec] of Object.entries(def.fields)) {
-      const other = held.find((t) => t.name !== name && t.fields[f] && !sameKind(t.fields[f], spec));
-      if (other) notes.push(`${name}'s ${f} wasn't added: your type ${other.name} has ${f} as ${other.fields[f].type ?? "string"}, not ${spec.type}.`);
-      else fields[f] = spec;
-    }
-    const has = h?.fields ?? {};
-    const missing = Object.fromEntries(Object.entries(fields).filter(([f]) => !(f in has)));
-    const different = Object.keys(fields).filter((f) => f in has && !sameKind(has[f], fields[f]));
-    const fresh = !h || (Object.keys(has).length === 0 && !h.description);
-    if (fresh) {
-      const r = await target.defineType(name, { ...(def.description ? { description: def.description } : {}), fields });
-      if (r === "needs-admin") {
-        // the first type a server refuses, with nothing written yet: it doesn't let this connection make types
-        if (!wrote) throw new Error("This vault's server doesn't let Parachute make types yet. Nothing was changed.");
-        notes.push(`The type ${name} wasn't made: that needs admin here.`);
+  try {
+    // 1. Types
+    const held = await target.types();
+    for (const [name, def] of Object.entries(pack.types)) {
+      const h = held.find((t) => t.name === name);
+      if (h && h.kind === "tag" && h.count > 0) { notes.push(`#${name} is a tag in this vault, so it stays a tag (making it a type needs admin).`); continue; }
+      // a field another type already declares otherwise (its kind, or whether it is indexed) would make the server
+      // refuse the whole type: leave it out, and say so
+      const fields: Record<string, FieldSpec> = {};
+      for (const [f, spec] of Object.entries(def.fields)) {
+        const other = held.find((t) => t.name !== name && t.fields[f] && !agrees(t.fields[f], spec));
+        if (other) notes.push(`${name}'s ${f} wasn't added: your type ${other.name} has a ${f} field of its own, set up differently.`);
+        else fields[f] = spec;
+      }
+      const has = h?.fields ?? {};
+      const missing = Object.fromEntries(Object.entries(fields).filter(([f]) => !(f in has)));
+      const different = Object.keys(fields).filter((f) => f in has && !sameKind(has[f], fields[f]));
+      const fresh = !h || (Object.keys(has).length === 0 && !h.description);
+      if (fresh) {
+        const r = await target.defineType(name, { ...(def.description ? { description: def.description } : {}), fields });
+        if (r === "unsupported") {
+          // the server's route refuses this connection any type: nothing of the pack can land
+          if (!wrote) throw new Error("This vault's server doesn't let Parachute make types yet. Nothing was changed.");
+          notes.push(`The type ${name} wasn't made: this vault's server doesn't let Parachute make types.`);
+          continue;
+        }
+        if (r !== "ok") { notes.push(`The type ${name} wasn't made: ${r.refused}`); continue; }
+        wrote = true;
+        made.types[name] = Object.keys(fields);
+        newTypes.push(name);
+        continue;
+      }
+      if (different.length) notes.push(`${name} is already a type here, and its ${list(different)} stay${different.length === 1 ? "s" : ""} as you have ${different.length === 1 ? "it" : "them"}.`);
+      if (!Object.keys(missing).length) { if (!(name in made.types)) kept.push(`the type ${name}`); continue; }
+      const r = await target.defineType(name, { fields: missing });
+      if (r !== "ok") {
+        notes.push(`${name} is already a type here and keeps its own fields. The pack's ${list(Object.keys(missing))} ${Object.keys(missing).length === 1 ? "wasn't" : "weren't"} added: ${r === "unsupported" ? "this vault's server doesn't let Parachute change types" : r.refused}.`);
         continue;
       }
       wrote = true;
-      made.types[name] = Object.keys(fields);
-      newTypes.push(name);
-      continue;
+      made.types[name] = [...new Set([...(made.types[name] ?? []), ...Object.keys(missing)])];
+      newFields.push(`${list(Object.keys(missing))} on ${name}`);
     }
-    if (different.length) notes.push(`${name} is already a type here, and its ${list(different)} stay${different.length === 1 ? "s" : ""} as you have ${different.length === 1 ? "it" : "them"}.`);
-    if (!Object.keys(missing).length) { if (!(name in made.types)) kept.push(`the type ${name}`); continue; }
-    const r = await target.defineType(name, { fields: missing });
-    if (r === "needs-admin") {
-      notes.push(`${name} is already a type here and keeps its own fields. The pack's ${list(Object.keys(missing))} ${Object.keys(missing).length === 1 ? "wasn't" : "weren't"} added: adding fields to a type made elsewhere needs admin.`);
-      continue;
-    }
-    wrote = true;
-    made.types[name] = [...new Set([...(made.types[name] ?? []), ...Object.keys(missing)])];
-    newFields.push(`${list(Object.keys(missing))} on ${name}`);
-  }
 
-  // 2. Records, only at free paths
-  for (const rec of pack.records) {
-    const r = await target.create(rec);
-    if (!r.existed) {
-      wrote = true;
-      made.records = made.records.filter((x) => x.path !== rec.path).concat({ path: rec.path, id: r.id, updated_at: r.updatedAt });
-      newRecords.push(rec.path);
-    } else if (!ours.has(rec.path)) {
-      notes.push(`${rec.path} is already a record of yours, so it stays as it is.`);
-    } else kept.push(rec.path);
+    // 2. Records, only at free paths
+    for (const rec of pack.records) {
+      const r = await target.create(rec);
+      if ("refused" in r) { notes.push(`${rec.path} wasn't written: ${r.refused}`); continue; }
+      if (!r.existed) {
+        wrote = true;
+        made.records = made.records.filter((x) => x.path !== rec.path).concat({ path: rec.path, id: r.id, updated_at: r.updatedAt });
+        newRecords.push(rec.path);
+      } else if (!ours.has(rec.path)) {
+        notes.push(`${rec.path} is already a record of yours, so it stays as it is.`);
+      } else kept.push(rec.path);
+    }
+  } catch (e) {
+    // what landed before the error is the pack's: say so in the receipt, so the next apply doesn't call it the person's
+    if (wrote) await target.writeReceipt(receipt(), was).catch(() => {});
+    throw e;
   }
 
   const templates = newRecords.filter((p) => p.startsWith("Templates/")), views = newRecords.filter((p) => p.startsWith("Parachute/Views/"));
@@ -179,11 +208,10 @@ export async function applyPack(pack: Pack, target: PackTarget): Promise<Applied
   ];
 
   // 3. The receipt, last
-  const receipt: Receipt = { contract: 1, id: pack.id, name: pack.name, version: Math.max(pack.version, before?.receipt.version ?? 0), source: pack.source, made,
-    skipped: wrote || !before ? notes : before.receipt.skipped };
   const newer = !before || pack.version > before.receipt.version;
-  if (wrote || newer) await target.writeReceipt(receipt, before ? { id: before.id, updatedAt: before.updatedAt } : null);
-  return { added, kept, notes, changed: wrote || newer, receipt };
+  const final = receipt();
+  if (wrote || newer) await target.writeReceipt(final, was);
+  return { added, kept, notes, changed: wrote || newer, receipt: final };
 }
 
 /** A receipt as a record: its path, tag, fields and a line for a person reading the vault. */
