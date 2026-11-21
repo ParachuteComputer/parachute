@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { carryOn } from "../FrameRouter";
-import ViewerLine, { viewerHref } from "./ViewerLine";
+import ViewerLine from "./ViewerLine";
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../../ui/Bar";
 import { useApplets, useHome, useHomeLoaded, useVault, useVaultQuery } from "../data";
@@ -9,7 +9,7 @@ import { folderOf, noteHref, titleOf } from "../../vault/notes";
 import NoVault from "./NoVault";
 import NoteRows from "./NoteRows";
 import { Loading, Problem, Search } from "../../kit/screen";
-import { appletPath } from "../../open/paths";
+import { appletPath, viewerHref } from "../../open/paths";
 
 const LIMIT = 60;
 

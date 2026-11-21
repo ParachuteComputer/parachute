@@ -2,10 +2,12 @@
 import type { Decided, FrameApplet, FrameApplets, FrameViewer } from "../bridge/protocol";
 import { OFFICIAL_NAMES, officialCopyOf, officialFace, officialId } from "../applet/parachuteSource";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
-import { gateNow, whenGateKnown } from "../applet/selftest/run";
+import { gateKnown, gateNow, selfTestRunning, whenGateKnown } from "../applet/selftest/run";
 import { statusOf } from "../open/status";
 import { readRoleTags } from "../open/roles";
 import { clearDefault, defaultsFor, setDefault, VAULT } from "../open/defaults";
+import { candidates, resolve } from "../open/resolve";
+import { viewerHref } from "../open/paths";
 import { carryMark, clearMark, markTap } from "../open/mark";
 import { clientFor, keptClientFor } from "../vault/client";
 import { messageOf } from "../vault/hooks";
@@ -116,6 +118,32 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   };
 }
 
+/** The person's choices for a vault: the open bundle's, and this device's "Always" over them. */
+const defaultsNow = (vault: string): Record<string, string> => ({ ...appDefaults(vault), ...defaultsFor(vault) });
+
+/** Where a tap on a note's address (`/v/<vault>/n/<id>`) leads, when that can be decided at the tap from what this device
+ *  read before (the copies, vault/readCache.ts) and it is Parachute's own Vault: the note opens there at once, without
+ *  the note's route (a sealed frame of its own, which reads the note and the applets from the hub first). Only for a
+ *  note no applet claims as the copies have it, decided as the note's route decides (open/resolve.ts), and only for
+ *  Parachute's own Vault, whose code is the app's: an old copy can then only show the note in Vault, never run an
+ *  applet. Anything else (an applet claims it, the person chose, a line to show, a read that fails, the self-test not
+ *  known yet): null, and the note's route decides on the applets as the hub has them now. */
+export async function vaultAtTap(href: string): Promise<string | null> {
+  const m = /^\/v\/([^/?#]+)\/n\/([^/?#]+)$/.exec(href);
+  if (!m) return null;
+  let key: string, id: string;
+  try { key = decodeURIComponent(m[1]); id = decodeURIComponent(m[2]); } catch { return null; }
+  const rec = listVaults().find((v) => v.key === key);
+  const viewer = viewerNow().viewer;
+  if (!rec || !viewer || viewer.status !== "ok" || viewer.noteId !== officialId("vault") || !gateKnown() || selfTestRunning()) return null;
+  try {
+    const [note, roles, list] = await Promise.all([keptClientFor(rec).getNote(id), readRoleTags(keptClientFor(rec)), applets(rec, false)]);
+    if (!note || typeof note.id !== "string" || !list.ok) return null;
+    const decision = resolve(candidates(note, list.entries, (e) => e.status, roles), defaultsNow(rec.key));
+    return decision.kind === "vault" && !decision.line ? viewerHref(viewer, rec.key, note.id) : null;
+  } catch { return null; }
+}
+
 // ── other Parachutes in the person's own (docs/design/EMBED.md) ──
 
 /** This device's vault for a pointer's hub and vault, if it holds it. */
@@ -217,7 +245,7 @@ export function shellDeps(go: (to: string, replace: boolean) => void, frame: () 
     client: clientFor,
     roles: (rec) => readRoleTags(keptClientFor(rec)),
     applets,
-    defaults: { get: (vault) => ({ ...appDefaults(vault), ...defaultsFor(vault) }), set: setChoice },
+    defaults: { get: defaultsNow, set: setChoice },
     home: homeDeps(from),
     pointers,
     components,

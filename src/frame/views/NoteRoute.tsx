@@ -4,11 +4,11 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import { useHome, useHomeLoaded, useVault } from "../data";
-import ViewerLine, { viewerHref } from "./ViewerLine";
+import ViewerLine from "./ViewerLine";
 import { titleOf } from "../../vault/notes";
 import { openSheet } from "../open/sheetState";
 import { useOpenWith } from "../open/useOpenWith";
-import { appletHref } from "../../open/paths";
+import { appletHref, viewerHref } from "../../open/paths";
 import { carryOn } from "../FrameRouter";
 import { call } from "../bridge";
 import type { Decided } from "../../bridge/protocol";

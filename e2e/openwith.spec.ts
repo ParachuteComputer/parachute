@@ -209,3 +209,60 @@ test("Back from an applet the note's line led to lands on the note, and decides 
     await api(st, "DELETE", `notes/${applet.id}`);
   }
 });
+
+// T-476: a tap in an applet on a note no applet claims opens Parachute's own Vault at once, decided from what this device
+// read before (shell/frameDeps.ts `vaultAtTap`): never through the note's route (its own sealed frame), and no read of
+// the applets at the tap. A note an applet claims still goes through the note's route and the applets as read now.
+test("a tap in an applet: a note no applet claims opens in Vault without the note's route; a claimed one is judged on the applets as read now", async ({ page }) => {
+  test.setTimeout(90_000);
+  const st = hubState();
+  const [welcome, toast] = await Promise.all(["Welcome", "Recipes/Tomato toast"].map(noteId));
+  const code = `import { Linked } from "parachute";
+export default function Taps() { return <main><h1 id="taps">Taps</h1><p id="said"><Linked text={${JSON.stringify(`${VAULT}:${welcome} and ${VAULT}:${toast}`)}} /></p></main>; }
+`;
+  const applet = await api(st, "POST", "notes", { path: "Applets/Taps", extension: "tsx", tags: ["applet"], content: code,
+    metadata: { applet: { contract: 2, id: "taps", name: "Taps", glyph: "⌁", access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }] }] }, app: ["open"] } });
+  const recipes = await api(st, "GET", `notes?id=${encodeURIComponent("Applets/Recipes")}`);
+  // every address the app goes to, in order (the note's route shows as /n/ before Vault replaces it)
+  await page.addInitScript(() => {
+    const w = window as unknown as { __went: string[] };
+    w.__went = [];
+    for (const k of ["pushState", "replaceState"] as const) { const f = history[k].bind(history); history[k] = (s, u, url) => { if (url) w.__went.push(String(url)); return f(s, u, url); }; }
+  });
+  const went = () => page.evaluate(() => (window as unknown as { __went: string[] }).__went.splice(0));
+  const appletReads: string[] = [];
+  page.on("request", (r) => { if (new URL(r.url()).searchParams.get("tag") === "applet") appletReads.push(r.url()); });
+  const open = async () => {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Taps/ }).click();
+    const allow = page.getByRole("button", { name: "Allow" });
+    await expect(frame(page).locator("#taps").or(allow).first()).toBeVisible();
+    if (await allow.isVisible()) await allow.click();
+    await expect(frame(page).getByRole("link", { name: `${VAULT}:${welcome}` })).toBeVisible();
+    await page.waitForTimeout(500);
+    await went(); appletReads.length = 0;
+  };
+  try {
+    await allowApplet(page, "Recipe box");
+    await open();
+    await frame(page).getByRole("link", { name: `${VAULT}:${welcome}` }).click();
+    await expectInVault(page, VAULT, welcome, "Welcome");
+    expect((await went()).filter((u) => u.includes("/n/")), "the note's route").toEqual([]);
+    expect(appletReads, "a read of the applets at the tap").toEqual([]);
+
+    // the Recipe box's code changes and the vault won't list its applets: the copy still says it may open the recipe,
+    // so the note's route decides, on the applets as read now, and that read fails: Vault, never the Recipe box
+    await open();
+    await api(st, "PATCH", `notes/${recipes.id}`, { content: `${recipes.content}\n<!-- changed -->`, if_updated_at: recipes.updatedAt });
+    await page.route((u) => u.searchParams.get("tag") === "applet", (r) => r.abort());
+    await frame(page).getByRole("link", { name: `${VAULT}:${toast}` }).click();
+    await expectInVault(page, VAULT, toast, "Tomato toast");
+    expect((await went()).some((u) => u.includes("/n/")), "the note's route").toBe(true);
+    await expect(page.locator('iframe.applet-frame[title="Recipe box"]')).toHaveCount(0);
+  } finally {
+    await page.unrouteAll();
+    const now = await api(st, "GET", `notes?id=${recipes.id}`);
+    if (now.content !== recipes.content) await api(st, "PATCH", `notes/${recipes.id}`, { content: recipes.content, if_updated_at: now.updatedAt });
+    await api(st, "DELETE", `notes/${applet.id}`);
+  }
+});
