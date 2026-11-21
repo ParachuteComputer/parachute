@@ -506,7 +506,7 @@ type ReachRow = { id: string; name: string; who: "person" | "agent" | "app" | "s
   types: string[] | null; until: string | null; lastUsed: string | null; self: boolean };
 /** A key just made: its secret was shown once on the app's own sheet and never reaches this applet. */
 type Given = { name: string; until: string; types: string[] | null; address: string };
-type Sharing = { reach?(vault: string): Promise<{ managing: boolean; rows: ReachRow[] | null }>; manage?(vault: string): Promise<null>;
+type Sharing = { reach?(vault: string): Promise<{ managing: boolean; rows: ReachRow[] | null; lists?: boolean }>; manage?(vault: string): Promise<null>;
   giveKey?(vault: string, k: { name: string; can: "read" | "write"; types: string[] | null }): Promise<Given>; endReach?(vault: string, id: string): Promise<null>; stopManaging?(vault: string): Promise<null> };
 const canWord = { read: "reads", change: "reads and changes", manage: "manages", backup: "downloads a backup of" } as const;
 const typesWord = (t: string[] | null) => (t ? t.map(label).join(", ") : "every type");
@@ -519,9 +519,11 @@ function Reach({ v, self }: { v: Held; self: { key: string; title: string; meta:
   const can = typeof sh.reach === "function";
   const [rows, setRows] = useState<ReachRow[] | null>(null);
   const [managing, setManaging] = useState<boolean | null>(null);
+  // the hub lists who reaches a vault (core T-476); an older hub, or Parachute Cloud for now, doesn't
+  const [lists, setLists] = useState(true);
   const [failed, setFailed] = useState<unknown>(null);
   const [giving, setGiving] = useState(false);
-  const load = () => can ? sh.reach!(v.key).then((r) => { setManaging(r.managing); setRows(r.rows); setFailed(null); }, setFailed) : Promise.resolve();
+  const load = () => can ? sh.reach!(v.key).then((r) => { setManaging(r.managing); setRows(r.rows); setLists(r.lists !== false); setFailed(null); }, setFailed) : Promise.resolve();
   useEffect(() => { void load(); }, [v.key]);
   // shown again after being hidden: the shell ended what was managed then (vault/manage.ts), so the list is read again
   useEffect(() => (typeof onShown === "function" ? onShown((on: boolean) => { if (on) void load(); }) : undefined), [v.key]);
@@ -536,7 +538,7 @@ function Reach({ v, self }: { v: Held; self: { key: string; title: string; meta:
   return <>
     <List label={`Who reaches ${v.name}`} rows={[self, ...others.map((r) => ({ key: r.id, title: title(r), meta: `${kindWord(r)}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`,
       aside: <Button small kind="quiet" aria-label={`End ${title(r)}`} onClick={() => sh.endReach!(v.key, r.id).then(() => { toast(`${title(r)} can no longer reach ${v.name}.`); return load(); }, (e: unknown) => { quiet(e, "Not ended"); void load(); })}>End</Button> }))]} />
-    {!can ? <p className="note-meta">The keys and AIs your hub has let in are listed on your hub, where you can end them. This Parachute can't list them yet.</p>
+    {!can || !lists ? <p className="note-meta">The keys and AIs your hub has let in are listed on your hub, where you can end them. {!can ? "This Parachute can't list them yet." : "Your hub can't list them here yet."}</p>
       : failed ? <Problem error={failed} onRetry={load}>Who reaches {v.name} couldn't be read</Problem>
       : managing === null ? <Loading />
       : !managing ? <div className="acts"><p className="note-meta">Every key, AI and app your hub lets into {v.name} is listed on your hub.</p>

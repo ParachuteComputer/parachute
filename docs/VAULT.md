@@ -45,6 +45,8 @@ Sharing lists everything that reaches a vault and ends any of it with one tap (T
   (Vault, or any applet with `sharing`) never sees it.
 - **End** revokes it at the hub and ends the vault's grant: its next request is refused, its live socket closes, a file
   ticket it was given is spent no more (`DELETE <hub>/account/vaults/<v>/statements/<id>`).
+- **A hub without the list** (an older core, Parachute Cloud for now): Sharing asks the hub, with no credential, whether it
+  has the list, and where it doesn't keeps the line that the hub lists them, offering nothing it can't do.
 - **Not yet:** a key can't be narrowed after it is made (end it and make another); one key reads and writes the same
   types (no read-one-write-another); a key that writes on behalf of others is the owner's to make, on the hub; a grant
   sees no history until versions record their types (core #114/#115); Parachute Cloud has no typed keys or list yet

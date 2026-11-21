@@ -97,6 +97,23 @@ export function endAllManage(): void {
   save([]);
 }
 
+const lists = new Map<string, Promise<boolean>>();
+/** Does this hub list who reaches a vault (core T-476)? Asked once a session, with no credential: a hub that has the
+ *  list answers its route with a 401 any origin may read; an older hub (or Parachute Cloud, for now) has no such route,
+ *  or doesn't let this app read the answer. Only then does Sharing offer to manage. */
+export function hubLists(rec: Where): Promise<boolean> {
+  const hub = originOf(rec.issuer);
+  let p = lists.get(hub);
+  if (!p) {
+    p = fetch(`${hub}/account/vaults/${encodeURIComponent(rec.vault)}/statements`, { cache: "no-store", signal: AbortSignal.timeout(4000) })
+      .then((r) => r.status === 401, () => false);
+    lists.set(hub, p);
+    // a hub that couldn't be reached is asked again next time
+    void p.then((yes) => { if (!yes) setTimeout(() => lists.delete(hub), 60_000); });
+  }
+  return p;
+}
+
 export class ManageEndedError extends Error {
   constructor() { super("Managing this vault has ended. Ask again to see who reaches it."); }
 }

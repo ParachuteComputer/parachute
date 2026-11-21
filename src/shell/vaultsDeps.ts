@@ -4,7 +4,7 @@
 import type { VaultClient } from "@openparachute/surface-client";
 import type { AccessRow, HeldVault, HubRow, ReachRow, VaultsDeps, WatchEvent } from "../applet/modules/vaults";
 import { askManage } from "../vault/signInFlow";
-import { endManage, endReach, listReach, makeKey, ManageEndedError, manageHeld, type HubGrantRow } from "../vault/manage";
+import { endManage, endReach, hubLists, listReach, makeKey, ManageEndedError, manageHeld, type HubGrantRow } from "../vault/manage";
 import { describe, oneAddress } from "../vault/parachute";
 import { clientFor, keptClientFor } from "../vault/client";
 import { connectorAddress, findVault, hostOf, listVaults, originOf, vaultUrlOf, type VaultRecord } from "../vault/store";
@@ -155,6 +155,8 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
     },
     async reach(key) {
       const v = rec(key);
+      // a hub without the list: nothing to manage here (Sharing keeps the hub's own line)
+      if (!(await hubLists(v))) return false;
       if (!manageHeld(v, applet)) return null;
       try {
         return (await listReach(v, applet)).filter((r) => r.state === "in_force").map((r) => reachRow(r, v.clientId ?? null));

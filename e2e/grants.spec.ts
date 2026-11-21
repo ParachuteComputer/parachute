@@ -146,3 +146,19 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   await expect.poll(held).toBeNull();
   await expect.poll(async () => (await fetch(statements, { headers: { authorization: `Bearer ${second}` } })).status).toBe(401);
 });
+
+test("on a hub without the list (an older core, Parachute Cloud for now), Sharing offers nothing it can't do", async ({ page }) => {
+  test.setTimeout(120_000);
+  const hub = hubState();
+  const admin = cli(hub, ["auth", "mint-token", "--scope", `vault:${VAULT}:admin`, "--json"]).token as string;
+  const list = await fetch(`${hub.origin}/account/vaults/${VAULT}/statements`, { headers: { authorization: `Bearer ${admin}` } });
+  test.skip(list.status !== 404 && list.status !== 405, "this hub has the list (the test above runs)");
+  await signIn(page);
+  await page.goto(`/vault?vault=${VAULT}`);
+  const v: FrameLocator = page.frameLocator('iframe.applet-frame[title="Vault"]');
+  await v.getByRole("button", { name: "Sharing" }).click();
+  await expect(v.getByRole("region", { name: `Who reaches ${VAULT}` })).toContainText("Parachute, on this device", { timeout: 30_000 });
+  await expect(v.getByText("Your hub can't list them here yet.")).toBeVisible({ timeout: 20_000 });
+  await expect(v.getByRole("button", { name: "Show them all" })).toHaveCount(0);
+  await expect(v.getByRole("button", { name: "Give an AI a key" })).toHaveCount(0);
+});

@@ -33,8 +33,9 @@
 //     revoke({vault, noteId})                  take an applet's access back
 //     readOnly({vault})                        let Parachute only read the vault again
 //     reach({vault})                           who reaches the vault, each key, AI and app by name (level 6, T-476):
-//                                              {managing, rows: [{id, name, who, app, can, types, until, lastUsed, self}]
-//                                              | null}; null while Parachute isn't managing it (`manage` asks)
+//                                              {managing, lists, rows: [{id, name, who, app, can, types, until, lastUsed,
+//                                              self}] | null}; null while Parachute isn't managing it (`manage` asks);
+//                                              `lists` false where the hub has no such list (an older hub, Cloud for now)
 //     manage({vault})                          ask the hub to let Parachute manage who reaches it, until the person
 //                                              leaves (the page goes to the hub, or its key door, and comes back)
 //     giveKey({vault, name, can, types})       a key for an AI: read, or read and change (`can`), all types (null) or
@@ -115,8 +116,9 @@ export type VaultsDeps = {
   applets(vault: string): Promise<AppletRow[]>;
   revoke(vault: string, noteId: string): Promise<void>;
   readOnly(vault: string): Promise<void>;
-  /** Who reaches a vault (vault/manage.ts), while Parachute manages it; null when it doesn't now. */
-  reach?(vault: string): Promise<ReachRow[] | null>;
+  /** Who reaches a vault (vault/manage.ts), while Parachute manages it; null when it doesn't now; false when the hub
+   *  has no such list (an older hub, Parachute Cloud for now). */
+  reach?(vault: string): Promise<ReachRow[] | null | false>;
   /** Go to the hub to manage who reaches a vault, coming back to where the applet is. */
   manage?(vault: string): Promise<void>;
   giveKey?(vault: string, k: { name: string; can: "read" | "write"; types: string[] | null }): Promise<GivenKey>;
@@ -713,7 +715,10 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         async run({ vault }: { vault: string }, _s, ctx) {
           held(vault); ctx.charge(1);
           if (!deps.reach) throw refuse("this Parachute can't list who reaches a vault");
-          try { const rows = await deps.reach(vault); return { managing: rows !== null, rows }; } catch (e) { throw failed(e); }
+          try {
+            const rows = await deps.reach(vault);
+            return rows === false ? { managing: false, rows: null, lists: false } : { managing: rows !== null, rows, lists: true };
+          } catch (e) { throw failed(e); }
         },
       },
       manage: {
@@ -753,8 +758,9 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         async run({ vault, id }: { vault: string; id: string }, _s, ctx) {
           const v = held(vault); ctx.charge(1);
           if (!deps.reach || !deps.endReach) throw refuse("this Parachute can't end what reaches a vault");
-          let rows: ReachRow[] | null;
+          let rows: ReachRow[] | null | false;
           try { rows = await deps.reach(vault); } catch (e) { throw failed(e); }
+          if (rows === false) throw refuse("this vault's hub has no list of who reaches it");
           if (rows === null) throw new ContractError(ERROR_CODES.failed, "managing_ended: managing this vault has ended; ask again to see who reaches it");
           const r = rows.find((x) => x.id === id);
           if (!r) throw refuse("nothing by that name reaches the vault now");
