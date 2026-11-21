@@ -12,6 +12,9 @@ export { FRAME_LIMITS };
 export type HostDeps = {
   vaults(): VaultRecord[];
   client(rec: VaultRecord): Pick<VaultClient, "queryNotes" | "getNote">;
+  /** Reads answered from the copy kept of them at once, the hub asked behind (vault/readCache.ts), and the reads made
+   *  through it (its path and query, as `onFresh` names them: vault/client.ts `keptReaderFor`). */
+  kept(rec: VaultRecord): { client: Pick<VaultClient, "getNote">; reads: ReadonlySet<string> };
   roles(rec: VaultRecord): Promise<string[]>;
   applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets>;
   /** `set` refuses (throws) a choice that names no applet of that vault, or one too many. */
@@ -63,6 +66,15 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
   const limiter = new RateLimiter(FRAME_LIMITS.perWindow, FRAME_LIMITS.windowMs);
   const now = deps.now ?? Date.now;
   let pending = 0;
+  // per vault, the frame's reads from the copy: the ones it is told of when the hub's answer differs
+  // (made again when the vault's address changes, as vault/client.ts clientFor is)
+  const readers = new Map<string, { at: string; reader: ReturnType<HostDeps["kept"]> }>();
+  const reader = (rec: VaultRecord) => {
+    const at = `${rec.issuer} ${rec.vault} ${rec.url ?? ""}`;
+    let r = readers.get(rec.key);
+    if (!r || r.at !== at) readers.set(rec.key, r = { at, reader: deps.kept(rec) });
+    return r.reader;
+  };
   const vault = (key: string) => {
     const rec = deps.vaults().find((r) => r.key === key);
     if (!rec) throw new Error("This device doesn't hold that vault.");
@@ -73,7 +85,8 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       case "vaults.list": return deps.vaults().map((r) => frameVault(r, deps.whose?.(r), deps.homeKey?.() === r.key));
       case "vault.query": return deps.client(vault(p.vault as string)).queryNotes(p.query as Query);
       case "vault.note": {
-        try { return await deps.client(vault(p.vault as string)).getNote(p.id as string); } catch (e) { if ((e as { status?: number } | null)?.status === 404) return null; throw e; }
+        const rec = vault(p.vault as string);
+        try { return await (p.kept === true ? reader(rec).client : deps.client(rec)).getNote(p.id as string); } catch (e) { if ((e as { status?: number } | null)?.status === 404) return null; throw e; }
       }
       case "vault.roles": return deps.roles(vault(p.vault as string)).catch(() => null);
       case "applets.list": return deps.applets(vault(p.vault as string), p.fresh as boolean);
@@ -123,6 +136,14 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
       );
     },
     event<E extends keyof Events>(event: E, data: Events[E]) { post({ pf: PF, event, data }); },
+    /** The hub's answer to a read of `vault` (its path and query, readCache `onFresh`) differs from the copy: a read of a
+     *  note the frame made from the copy is told to it. */
+    fresh(vault: string, read: string) {
+      if (!readers.get(vault)?.reader.reads.has(read)) return;
+      let id: string | null = null;
+      try { id = new URLSearchParams(read.slice(read.indexOf("?") + 1)).get("id"); } catch { /* not a read of one note */ }
+      if (id !== null) post({ pf: PF, event: "changed", data: { what: "note", vault, id } });
+    },
   };
 }
 export type FrameHostApi = ReturnType<typeof createFrameHost>;

@@ -1,4 +1,5 @@
-// Open with: decided in one place, at the note's route. Pure.
+// Open with: decided at the note's route, and by the shell at a tap in an applet when it leads to Vault (shell/frameDeps.ts
+// `vaultAtTap`, from what this device read before; anything else it leaves to the note's route). Pure.
 //
 //   status(applet)    "ok"       allowed, not expired, code unchanged, and the self-test passed on this device
 //                     "updated"  allowed, and its code changed since

@@ -15,6 +15,7 @@ import { ownKind } from "../applet/modules/vaults";
 import { homeVault } from "./frameSource";
 import { appletPath } from "../open/paths";
 import { officialId } from "../applet/parachuteSource";
+import { vaultAtTap } from "./frameDeps";
 
 /** Notes that are the app's own or an applet's code: never in a list of what the person wrote lately. */
 const own = (n: Note) => isAppOwn(n as Note & { extension?: string });
@@ -83,8 +84,13 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       // and the person still where they tapped
       if (r.answer === null || !tappingInApplet() || location.href !== at) return false;
       if (r.answer === "note") {
-        markTap(r.href);
-        go(choose ? `${r.href}?with=choose` : r.href);
+        // a note no applet claims opens in Vault at once, decided from what this device read (frameDeps.ts); else the
+        // note's route decides, on the applets as the hub has them now
+        const vault = choose ? null : await vaultAtTap(r.href);
+        if (!tappingInApplet() || location.href !== at) return false;
+        const to = vault ?? (choose ? `${r.href}?with=choose` : r.href);
+        markTap(new URL(to, "http://app.invalid").pathname);
+        go(to);
       } else go(r.href);
       return true;
     },
