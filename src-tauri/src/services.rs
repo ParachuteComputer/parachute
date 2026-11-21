@@ -1537,32 +1537,19 @@ pub async fn svc_log<R: Runtime>(app: AppHandle<R>, state: State<'_, ServicesSta
     Ok(state.broker(&app)?.log_lines(&subject))
 }
 
-/// An approval op the app knows, in words: the act, as the unlock prompt says it. Only these fixed words: an applet's
-/// own text never reaches the prompt. The mail gateway's (the Uni app's): a held send approved goes out.
-fn op_words(op: &str) -> Option<&'static str> {
-    match op {
-        "send.approve" => Some("Send the mail held for your OK"),
-        "send.decline" => Some("Decline the mail held for your OK"),
-        _ => None,
-    }
-}
-
-/// The unlock prompt's line for an approval op: the act in words when the app knows the op (the op beside it), else
-/// the op as it is.
+/// The unlock prompt's line for an approval op: what the shell knows of any op (an approve op is a request held for the
+/// person's OK, KEYRING.md "Held sends"), the host, and the op as the applet named it. An applet's own words never
+/// reach the prompt, and the shell claims no meaning for an op's name.
 pub fn approve_reason(op: &str, host: &str) -> String {
-    match op_words(op) {
-        Some(w) => format!("{w}, through {host} ({op}). Signed with your approval key."),
-        None => format!("Send {op} to {host}, signed with your approval key."),
-    }
+    format!("Approve what waits for your OK at {host} ({op}). Signed with your approval key.")
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn an_approval_op_the_app_knows_is_said_in_words_and_any_other_as_it_is() {
-        assert_eq!(super::approve_reason("send.approve", "mail.example"), "Send the mail held for your OK, through mail.example (send.approve). Signed with your approval key.");
-        assert_eq!(super::approve_reason("send.decline", "mail.example"), "Decline the mail held for your OK, through mail.example (send.decline). Signed with your approval key.");
-        assert_eq!(super::approve_reason("job.run", "x.example"), "Send job.run to x.example, signed with your approval key.");
+    fn an_approval_op_is_said_as_what_waits_for_your_ok_with_its_host_and_op() {
+        assert_eq!(super::approve_reason("send.approve", "mail.example"), "Approve what waits for your OK at mail.example (send.approve). Signed with your approval key.");
+        assert_eq!(super::approve_reason("job.run", "x.example"), "Approve what waits for your OK at x.example (job.run). Signed with your approval key.");
     }
 
     #[test]

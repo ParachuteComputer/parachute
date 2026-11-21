@@ -46,10 +46,10 @@ describe("the face keeps every stressed line's facts", () => {
   it("Aaron's four applets, Uni trusted", () => {
     for (const n of ["rooms", "mail", "journal", "accounts"]) { const { g, folder } = grantFor(n); holds(g, folder, trusted); }
   });
-  it("Mail's approval op is said as the act it is, with the op beside it", () => {
+  it("Mail's approval op is said as what waits for your OK, where, with the op beside it", () => {
     const { g, folder } = grantFor("mail");
     const t = faceTexts(holds(g, folder, trusted)).join(" ");
-    expect(t).toMatch(/High risk, with your key: sends the mail held for your OK, through [^ ]+ \(send\.approve\)\./);
+    expect(t).toMatch(/High risk, with your key: approves, at [^,]+, what waits for your OK \(send\.approve\)\./);
     expect(t).not.toContain("send.approve requests");
   });
   it("an approver this device doesn't trust is named by its whole key", () => {

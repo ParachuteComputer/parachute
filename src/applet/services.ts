@@ -237,16 +237,12 @@ export type LineOptions = {
   /** The trusted list's name for a key ("Uni"), or null when it isn't on the list (docs/design/KEYRING.md). */
   approverName?: (hex: string) => string | null;
 };
-/** Approval ops the app knows, in words: the same fixed words the unlock prompt says (src-tauri services.rs
- *  `op_words`). The mail gateway's (the Uni app's): a held send approved goes out, or is declined. */
-const OP_WORDS: Record<string, string> = { "send.approve": "send the mail held for your OK", "send.decline": "decline the mail held for your OK" };
-/** An approval-op line: the acts in words, through `at`, the ops beside them, when the app knows every op; else the ops
- *  as they are. `third`: as the card says it ("sends …"), not as a grant's list does ("send …"). */
+/** An approval-op line: what the shell knows of any op (a request held for your OK, docs/design/KEYRING.md "Held
+ *  sends"), where, and the ops as the applet named them; the unlock prompt says the same (src-tauri services.rs
+ *  `approve_reason`). No meaning is claimed for an op's name. `third`: as the card says it ("approves …"), not as a
+ *  grant's list does ("approve …"). */
 export function approveWords(ops: readonly string[], at: string, third = false): string {
-  const verb = (w: string) => (third ? w.replace(/^(\w+)/, "$1s") : w);
-  return ops.length && ops.every((o) => OP_WORDS[o])
-    ? `${joinWords(ops.map((o) => verb(OP_WORDS[o])))}, through ${at} (${joinWords([...ops])})`
-    : `${verb("send")} ${joinWords([...ops])} requests to ${at}`;
+  return `${third ? "approves" : "approve"}, at ${at}, what waits for your OK (${joinWords([...ops])})`;
 }
 export const EVERYDAY = "With your everyday key: ";
 export const HIGH_RISK = "High risk. With your key: ";

@@ -117,7 +117,9 @@ to read the room's own name (signing in there is part of what the card asks).
 (npub1…)".)
 
 `notify`: "Tell you about messages there that name you (and every message from Uni), even when Parachute is closed".
-http `approve`: "**High risk. With your approval key:** send send.approve requests to mail.example". With `approvals`,
+http `approve`: "**High risk. With your key:** approve, at mail.example, what waits for your OK (send.approve)"; the
+unlock prompt says the same ("Approve what waits for your OK at mail.example (send.approve)"), and claims no meaning
+for an op's name. With `approvals`,
 a note under it: "It sees what each card asks (the job, never a key), and that could reach the servers it uses".
 `reach: voice`: "Record from your microphone when you press record (the app shows its own recorder)". `links`: "Open
 web addresses in your browser: what it reads could leave in an address it opens" (stressed). `save`: "Save files to
