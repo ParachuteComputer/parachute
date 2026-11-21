@@ -1,5 +1,5 @@
 // Rooms (applets/rooms.tsx) against our real Buzz relay, two people: alice in the app, bob on his own connection.
-// Local only (e2e/services/README.md): it runs when BUZZ_RELAY names a relay run with production's auth settings, and
+// Run by the Services workflow, not CI's web job (e2e/services/README.md): it runs when BUZZ_RELAY names a relay run with production's auth settings, and
 // BUZZ_KEYS a folder with owner.hex (the relay's owner), alice.hex and bob.hex. Each run makes its own two rooms.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -210,6 +210,9 @@ test("Uni's turn in a room: a quick reply, working and Stop, muted, a draft with
     expect((await bob.publish({ kind: 7, content: "👀", tags: [["e", yes.id], ["p", alice], ["h", b]] })).ok).toBe(true);
     const turn = app.getByRole("status", { name: "Uni is working" });
     await expect(turn).toBeVisible({ timeout: 15_000 });
+    // the ping in a later second than her Yes: in the same second the room may order the Yes after it (whole seconds,
+    // then id), and the turn's line reads only the newest message (a real Uni pings minutes in)
+    await new Promise((r) => setTimeout(r, Math.max(0, (yes.created_at + 1) * 1000 - Date.now()) + 50));
     expect((await bob.publish({ kind: 9, content: "⏳ Working — 3 min — iteration 4/90, terminal", tags: [["h", b]] })).ok).toBe(true);
     await expect(turn).toContainText("Running a command", { timeout: 15_000 });
     await expect(log.locator("p.ping", { hasText: "Working — 3 min" })).toHaveCount(0); // said once, on the turn's line

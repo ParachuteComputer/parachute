@@ -3,6 +3,7 @@
 # that turn those specs on to $SERVICES_DIR/env (and to $GITHUB_ENV in CI). Again on a running set: seeds what's missing.
 #   SERVICES_DIR      where keys, passwords and the gateway's files go (default e2e/.services; mode 700)
 #   SERVICES_PROJECT  the compose project name, so two sets on one machine stay apart (default parachute-e2e)
+#   BUZZ_IMAGE        the relay's image (default: production's, built once by relay-image.sh)
 #   RELAY_PORT STALWART_PORT STALWART_SETUP_PORT MAIL_PORT MATRIX_PORT   loopback ports (3871 18443 18080 19951 18008)
 # The browser's pass-through to the mail gateway is always 127.0.0.1:19952 (e2e/mail.spec.ts).
 set -euo pipefail
@@ -12,6 +13,7 @@ chmod 700 "$SERVICES_DIR"
 P="${SERVICES_PROJECT:-parachute-e2e}"
 export RELAY_PORT="${RELAY_PORT:-3871}" STALWART_PORT="${STALWART_PORT:-18443}" STALWART_SETUP_PORT="${STALWART_SETUP_PORT:-18080}" \
   MAIL_PORT="${MAIL_PORT:-19951}" MATRIX_PORT="${MATRIX_PORT:-18008}"
+export BUZZ_IMAGE="${BUZZ_IMAGE:-$("$HERE/relay-image.sh")}"
 dc() { docker compose -p "$P" -f "$HERE/compose.yml" "$@"; }
 seed() { node "$HERE/seed.mjs" "$1" "$SERVICES_DIR"; }
 

@@ -1,4 +1,4 @@
-//! The native side against the real servers the first applets use, run locally (e2e/services/README.md): our Buzz
+//! The native side against the real servers the first applets use, run by the Services workflow (e2e/services/README.md): our Buzz
 //! relay (BUZZ_RELAY, e.g. ws://localhost:3871) and the Uni app's mail gateway (MAIL_BRIDGE). BUZZ_KEYS is a folder
 //! with alice.hex: a relay member and a gateway key. Skipped when they aren't set.
 use nostr::base64::engine::general_purpose::STANDARD as B64;

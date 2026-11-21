@@ -29,8 +29,8 @@ services:
     entrypoint: ["/bin/sh", "-c", "until mc alias set l http://minio:9000 buzz_test buzz_test_secret >/dev/null 2>&1; do sleep 1; done; mc mb --ignore-existing l/buzz-media"]
     restart: "no"
   relay:
-    # pinned: the specs hold the relay's behaviour (its rate, what media it takes); move it on purpose
-    image: ${BUZZ_IMAGE:-ghcr.io/block/buzz@sha256:ae80b5e428345e60b914e89ae2f92ff06168c2b1753c9236811a05bf4bb297cd}
+    # the relay production runs (relay-image.sh builds it; up.sh sets this): the specs hold its behaviour
+    image: ${BUZZ_IMAGE:?up.sh sets it: relay-image.sh}
     labels: *labels
     depends_on:
       postgres: { condition: service_healthy }

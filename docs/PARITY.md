@@ -3,7 +3,7 @@
 Every feature of the Uni app (`uni-app-pipeline`, 0.5.1) a person uses, and where it is in Parachute: **built** (with
 how it was tested), **part** (what is missing), or **left** (and why). Tests named `e2e/…` run in the browser against
 the web build; "real relay" and "real mail" mean our Buzz relay with production's auth settings and a Stalwart behind
-the Uni app's mail gateway (e2e/services/README.md); "CI" means it runs on every pull request.
+the Uni app's mail gateway (e2e/services/README.md); "CI" means it runs on every pull request; the real-server tests run in the Services workflow (daily, and on a pull request that changes them).
 
 ## Rooms (applets/rooms.tsx; a room is applets/room.tsx)
 
