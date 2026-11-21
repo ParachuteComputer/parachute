@@ -60,7 +60,7 @@ function nip98(sk: Uint8Array, url: string, method: string, body?: string) {
   return `Nostr ${Buffer.from(JSON.stringify(finalizeEvent({ kind: 27235, created_at: now(), content: "", tags }, sk))).toString("base64")}`;
 }
 /** A request whose answer, body and all, comes within `ms`. */
-const get = (url: string | URL, init: RequestInit = {}, ms = 15_000) => fetch(url, { ...init, signal: AbortSignal.timeout(ms) });
+const get = (url: string | URL, init: RequestInit = {}, ms = 15_000) => fetch(url, { ...init, signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms) });
 const under = (base: string, path: string) => `${base.replace(/\/$/, "")}/${path}`;
 
 type Check = { name: string; run: () => Promise<void> };
@@ -141,19 +141,23 @@ if (E.CANARY_PUSH && E.CANARY_NTFY && E.CANARY_KEYS && E.CANARY_RELAY) checks.pu
   const [c, uni] = await within(Promise.all([person(relay, readKey("canary.hex")), person(relay, readKey("uni.hex"))]), 20_000, "sign-in");
   const ctl = new AbortController();
   try {
-    if (E.CANARY_PUSH_KEY) await within(c.publish({ kind: 9000, tags: [["h", room], ["p", E.CANARY_PUSH_KEY]] }), 20_000, "add the gateway");
+    if (E.CANARY_PUSH_KEY) {
+      const r = await within(c.publish({ kind: 9000, tags: [["h", room], ["p", E.CANARY_PUSH_KEY]] }), 20_000, "add the gateway");
+      if (!r.ok) log(`  push: adding the gateway to the room: ${r.msg}`);
+    }
     // listen on the push server first, as the phone's distributor does
     const pw = readKey("ntfy.pw"), user = E.CANARY_NTFY_USER || "canary";
-    const sub = await get(`${under(E.CANARY_NTFY!, dev.topic)}/json`, { headers: { authorization: `Basic ${Buffer.from(`${user}:${pw}`).toString("base64")}` }, signal: ctl.signal } as RequestInit, 120_000).catch((e) => { throw new Error(`the push server: ${e instanceof Error ? e.message : String(e)}`); });
+    const sub = await get(`${under(E.CANARY_NTFY!, dev.topic)}/json`, { headers: { authorization: `Basic ${Buffer.from(`${user}:${pw}`).toString("base64")}` }, signal: ctl.signal } as RequestInit, 300_000).catch((e) => { throw new Error(`the push server: ${e instanceof Error ? e.message : String(e)}`); });
     if (!sub.ok || !sub.body) throw new Error(`the push server answered ${sub.status}`);
     const got: Uint8Array[] = [];
     let opened!: () => void; const open = new Promise<void>((r) => { opened = r; });
+    let closed = false;
     void (async () => { const rd = sub.body!.getReader(); let buf = ""; try { for (;;) { const { value, done } = await rd.read(); if (done) break; buf += new TextDecoder().decode(value); let i;
       while ((i = buf.indexOf("\n")) >= 0) { const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1); if (m.event === "open") opened();
-        if (m.event === "message") got.push(m.encoding === "base64" ? new Uint8Array(Buffer.from(m.message, "base64")) : new TextEncoder().encode(m.message)); } } } catch { /* closed */ } })();
+        if (m.event === "message") got.push(m.encoding === "base64" ? new Uint8Array(Buffer.from(m.message, "base64")) : new TextEncoder().encode(m.message)); } } } catch { /* cut */ } closed = true; })();
     await within(open, 15_000, "the push server's stream");
     // register (renews its 30 days), signed as the app signs it
-    const regUrl = new URL("register", E.CANARY_PUSH).toString();
+    const regUrl = under(E.CANARY_PUSH!, "register");
     const body = JSON.stringify({ endpoint, keys: { p256dh: dev.pub, auth: dev.auth }, relay, rooms: [room], mentions: true, from: [] });
     const reg = await get(regUrl, { method: "POST", headers: { authorization: nip98(canarySk, regUrl, "POST", body), "content-type": "application/json" }, body });
     if (!reg.ok) throw new Error(`register: ${reg.status} ${(await reg.text()).slice(0, 80)}`);
@@ -172,6 +176,7 @@ if (E.CANARY_PUSH && E.CANARY_NTFY && E.CANARY_KEYS && E.CANARY_RELAY) checks.pu
             if (p.room === room && p.event === posted && p.to === me) why = p.why ?? "?";
           } catch { /* not ours, or not for this key */ }
         }
+        if (!why && closed) throw new Error("the push server's stream closed");
         if (!why) await sleep(500);
       }
     }
@@ -190,8 +195,9 @@ if (E.CANARY_CAL && E.CANARY_KEYS) checks.push({ name: "calendar", run: () => re
 
 if (E.CANARY_REPO) checks.push({ name: "services", run: async () => {
   const gh = (...a: string[]) => execFileSync("gh", ["-R", E.CANARY_REPO!, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 });
-  // the newest run that finished (one cancelled by a newer start says nothing either way)
-  const runs = (JSON.parse(gh("run", "list", "--workflow", "services.yml", "--branch", "next", "--event", "workflow_dispatch", "--status", "completed", "--limit", "10", "--json", "conclusion,createdAt,url")) as { conclusion: string; createdAt: string; url: string }[])
+  // the newest run this account started that finished (one cancelled by a newer start says nothing either way; a
+  // dispatch by hand with another core is someone's experiment). When next is promoted to main, the schedule runs it.
+  const runs = (JSON.parse(gh("run", "list", "--workflow", "services.yml", "--branch", "next", "--event", "workflow_dispatch", "--user", execFileSync("gh", ["api", "user", "--jq", ".login"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 }).trim(), "--status", "completed", "--limit", "10", "--json", "conclusion,createdAt,url")) as { conclusion: string; createdAt: string; url: string }[])
     .filter((r) => r.conclusion !== "cancelled" && r.conclusion !== "skipped");
   // today's run, started after the check: tomorrow's canary reads it
   gh("workflow", "run", "services.yml", "--ref", "next");
@@ -206,7 +212,7 @@ let passed = 0;
 const failed: string[] = [];
 for (const c of checks) {
   try { await c.run(); passed++; log(`ok    ${c.name}`); }
-  catch (e) { failed.push(c.name); log(`FAIL  ${c.name}: ${e instanceof Error ? e.message : String(e)}`); }
+  catch (e) { failed.push(c.name); log(`FAIL  ${c.name}: ${(e instanceof Error ? e.message : String(e)).split("\n").slice(0, 2).join(" ").slice(0, 300)}`); }
 }
 console.log(`parachute-canary: ${passed} passed, ${failed.length} failed`);
 process.exit(failed.length || !checks.length ? 1 : 0);
