@@ -54,6 +54,7 @@ test.describe("Vault", () => {
 
   test("open it; browse a type's table, open a record, change a field; what an AI writes appears", async ({ page }) => {
     test.skip(!(await typed()), "types are core 0.9's");
+    test.setTimeout(90_000);
     // Parachute's own: no card (docs/design/PARACHUTE-SOURCE.md)
     await addAndAllow(page);
 
@@ -104,6 +105,14 @@ test.describe("Vault", () => {
     await page.waitForTimeout(800);
     await page.getByRole("dialog", { name: "Publish “Shelf/Book 01”?" }).getByRole("button", { name: "Publish" }).click();
     await expect.poll(unsigned).toBe(200);
+    // and its link shows, to copy and send (T-476 stranger walk: "anyone with its link", and no link); a hub on this
+    // computer's own address says the link opens here only
+    const link = `${hub().origin}/vault/${VAULT}/view/${made[1]}`;
+    await expect(v.getByText(link, { exact: true })).toBeVisible();
+    await expect(v.getByText("Only this computer can open it")).toBeVisible();
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await v.getByRole("button", { name: "Copy link" }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(link);
     await v.getByRole("button", { name: "Unpublish" }).click();
     await expect.poll(unsigned).not.toBe(200);
   });

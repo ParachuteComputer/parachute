@@ -6,9 +6,9 @@
 // An ordinary applet otherwise: a note in your vault (Applets/Vault); change it, or ask your AI to.
 import { useEffect, useMemo, useRef, useState } from "react";
 // Table, Fields and the vaults calls are level 3: its record says `needs: 3`, so an older app says to update
-import { Button, Empty, Field, Fields, List, Loading, Note, onFresh, onLaunch, Page, Problem, ready, Search, Table, Tabs, toast, useSaved, vaults, when, Write } from "parachute";
+import { app, Button, Empty, Field, Fields, List, Loading, Note, onFresh, onLaunch, Page, Problem, ready, Search, Table, Tabs, toast, useSaved, vaults, when, Write } from "parachute";
 
-type Held = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null };
+type Held = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null; connector?: string };
 type Spec = { type?: string; enum?: unknown[]; description?: string };
 type TypeRow = { name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, Spec> };
 type Rec = { id: string; path: string; title: string; createdAt: string | null; updatedAt: string | null; types: string[]; tags: string[]; fields: Record<string, unknown>;
@@ -326,6 +326,9 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   const out = links.filter((l) => l.dir === "out"), into = links.filter((l) => l.dir === "in");
   // public as the hub judges it: the field, or its default publish tag (a vault that names another tag isn't known here)
   const published = r.fields.published === true || [...r.types, ...r.tags].some((t) => t === "publish");
+  // its link: the hub's page for it (the vault's address, as its connector names it, then /view/<id>)
+  const link = v.connector ? v.connector.replace(/\/mcp$/, `/view/${encodeURIComponent(r.id)}`) : null;
+  const canCopy = typeof (app as { copy?: unknown }).copy === "function";
   return (
     <article aria-label={r.title} ref={top}>
       <Button kind="quiet" onClick={back.onPress}>{`← ${back.label}`}</Button>
@@ -377,6 +380,12 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       {canWrite && <>
         <p className="sect">Sharing</p>
         <p className="note-meta">{published ? "Published: anyone with its link can read it." : "Only you, and what you let in, can read it."}</p>
+        {published && link && <>
+          <p className="addr">{link}</p>
+          {canCopy && <Button small onClick={() => void (app as { copy(t: string): Promise<boolean> }).copy(link).then((ok) => toast(ok ? "Link copied." : "Press and hold the link to select it."), () => toast("Press and hold the link to select it."))}>Copy link</Button>}
+          {/* a hub on this computer's own address: the link opens here only (T-476 stranger walk: a link sent on went nowhere) */}
+          {/^https?:\/\/(127\.|localhost[:/]|\[::1\])/.test(link) && <p className="note-meta">Only this computer can open it: your Parachute is on this computer's own address.</p>}
+        </>}
         <Button small onClick={() => vaults.publish(v.key, r.id, !published).then((x: { published: boolean; changed: boolean }) => { toast(x.changed ? (x.published ? "Published." : "No longer published.") : x.published ? "It was published already." : "It wasn't published."); return load(); }, (e: unknown) => quiet(e, "Not changed"))}>{published ? "Unpublish" : "Publish"}</Button>
       </>}
     </article>
