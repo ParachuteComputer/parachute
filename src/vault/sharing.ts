@@ -5,7 +5,7 @@
 import type { PeopleNames } from "../applet/changes";
 import type { PeopleRow, PersonRow } from "../applet/modules/vaults";
 import { nativeNow, type InviteView } from "../services/native";
-import { refreshOnce, withCurrentToken } from "./client";
+import { withCurrentToken } from "./client";
 import { findVault, originOf, type VaultRecord } from "./store";
 
 /** The hub a vault is on, when its account door is there (a box); null for a vault that lives on another host (Cloud). */
@@ -78,12 +78,11 @@ export async function vaultNames(key: string, bys: string[]): Promise<PeopleName
     const url = `${hub}/account/vaults/${encodeURIComponent(rec.vault)}/names?${q}`;
     const f = withCurrentToken(rec.key, fetch);
     const asked = (token: string | undefined) => f(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    // it never refreshes the sign-in itself (the screen's own reads, just before, refresh a token past its time). An
+    // answer, or any refusal but "wait" (a hub without the read answers 404 or 405; an ended sign-in, 401), settles
+    // these stamps for the session; no answer at all doesn't
     const got = await asked(findVault(key)?.accessToken ?? rec.accessToken)
-      // an access token past its time: refreshed once and asked again (withCurrentToken only resends a newer one)
-      .then((res) => (res.status === 401 ? refreshOnce(key).then((t) => (t ? asked(t) : res)) : res))
-      // an answer (or a hub without the read, 404) settles these stamps for the session; a refusal or no answer doesn't
-      // (a 401 that outlives the refresh settles them too: asking again would only refresh the sign-in again)
-      .then(async (res) => (res.ok ? ((await res.json()) as { names?: PeopleNames }).names ?? {} : res.status === 404 || res.status === 401 ? {} : null), () => null);
+      .then(async (res) => (res.ok ? ((await res.json()) as { names?: PeopleNames }).names ?? {} : res.status >= 400 && res.status < 500 && res.status !== 429 ? {} : null), () => null);
     if (got === null) return {};
     for (const b of ask) known.set(`${key}\u0000${b}`, got[b] ?? null);
   }
