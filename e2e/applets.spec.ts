@@ -6,7 +6,7 @@ const idOf = async (path: string) => (await api(hubState(), "GET", `notes?id=${e
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
 
 async function openFromStrip(page: Page) {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
 }
 async function allow(page: Page) {
@@ -127,7 +127,7 @@ test("with no tap, it doesn't start: an address typed or restored waits with Ope
 test("a link that isn't a tap doesn't start it, even right after a tap on the same applet", async ({ page }) => {
   await allow(page);
   const url = new URL(page.url()).pathname;
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   // tap the applet, then come straight back. It may already run (it opens from what was read before, T-476): then it
   // is kept running, and a link back to it finds that same document, never a new start
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();

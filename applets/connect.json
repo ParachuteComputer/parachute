@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "path": "Applets/Connect",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "connect",
+      "name": "Connect",
+      "glyph": "⌁",
+      "note": "connect your AI: each vault's address, and how to add it to Claude or ChatGPT"
+    },
+    "needs": 3,
+    "app": ["vaults", "copy"]
+  }
+}

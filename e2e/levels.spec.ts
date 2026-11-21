@@ -100,7 +100,7 @@ test("approving code at the passcode level refuses the unlock alone", async ({ b
     await group(page, "Approving an applet's code").getByRole("button", { name: "Passcode" }).click();
     await expect(group(page, "Approving an applet's code").getByRole("button", { name: "Passcode" })).toHaveAttribute("aria-pressed", "true");
 
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toBeVisible();
@@ -137,7 +137,7 @@ test("the passcode typed for one card isn't left filled in for the next", async 
     await group(page, "Approving an applet's code").getByRole("button", { name: "Passcode" }).click();
     await expect(group(page, "Approving an applet's code").getByRole("button", { name: "Passcode" })).toHaveAttribute("aria-pressed", "true");
 
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
     await page.getByRole("textbox", { name: "Your passcode" }).fill("garden-gate");
     await page.getByRole("button", { name: "Allow" }).click();

@@ -4,7 +4,7 @@
 import type { VaultClient } from "@openparachute/surface-client";
 import type { AccessRow, HeldVault, VaultsDeps, WatchEvent } from "../applet/modules/vaults";
 import { clientFor } from "../vault/client";
-import { findVault, hostOf, listVaults, originOf, type VaultRecord } from "../vault/store";
+import { connectorAddress, findVault, hostOf, listVaults, originOf, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
 import { heldLevel, giveBack, appletLevel } from "../vault/reach";
 import { forgetOwnWrite } from "../vault/writeAsk";
@@ -13,7 +13,7 @@ import { deviceGrants, subjectOf } from "../applet/grants";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
 import { takeBack } from "../applet/approvalStore";
 import { forgetSaved } from "./saved";
-import { connectorAddress } from "../views/Connect";
+import { officialCopyOf } from "../applet/parachuteSource";
 
 type Requesting = { request<T>(path: string, init?: RequestInit): Promise<T> };
 const doors = new Map<string, Promise<"records" | "notes">>();
@@ -26,7 +26,7 @@ const rec = (key: string): VaultRecord => {
 
 export function heldVaults(): HeldVault[] {
   const home = homeVault();
-  return listVaults().map((v) => ({ key: v.key, name: v.vault, host: hostOf(v.issuer), mine: isMine(v), home: home?.key === v.key, level: heldLevel(v) }));
+  return listVaults().map((v) => ({ key: v.key, name: v.vault, host: hostOf(v.issuer), mine: isMine(v), home: home?.key === v.key, level: heldLevel(v), connector: connectorAddress(v) }));
 }
 
 export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string }): VaultsDeps {
@@ -71,6 +71,18 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
         return { noteId: id, name: e?.manifest.name ?? "An applet no longer in the vault", glyph: e?.manifest.glyph ?? "◇", since: grants.record(s)?.grantedAt || null, changes: e ? appletLevel(e.manifest) === "write" : false };
       });
       return { level: heldLevel(v), mine: isMine(v), home: homeVault()?.key === v.key, hub: originOf(v.issuer), connector: connectorAddress(v), applets };
+    },
+    async applets(key) {
+      const v = rec(key);
+      // read again each time: an applet an AI just wrote is what the person is looking for
+      await refreshApplets(v).catch(() => false);
+      const read = appletsNow(v.key);
+      const grants = deviceGrants();
+      return read?.state === "ok" ? read.found.entries.map((e) => {
+        const copy = officialCopyOf(e.manifest.id);
+        return { id: e.noteId, name: e.manifest.name, glyph: e.manifest.glyph, href: `/v/${encodeURIComponent(v.key)}/a/${encodeURIComponent(e.noteId)}`,
+          allowed: grants.status(subjectOf(v.key, e.noteId), e.keys.scope, e.keys.html) === "ok", ...(copy ? { copyOf: copy } : {}) };
+      }) : [];
     },
     async revoke(key, noteId) {
       const v = rec(key);

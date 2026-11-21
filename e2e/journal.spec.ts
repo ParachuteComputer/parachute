@@ -16,7 +16,7 @@ test("journal: a line becomes a dated journal note; the days show, voice entries
   const older = await api(hubState(), "POST", "notes", { path: `Journal/2026/11-02/07-15 Walked by the river ${stamp}`, tags: ["journal"], content: `Walked by the river ${stamp}. The herons were out.`, metadata: { source: "voice", client: "uni-app" } });
   made.push(older.id);
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText("Read, add and change notes in Journal/"); // change: a voice entry's recording is attached to it
@@ -38,7 +38,7 @@ test("journal: a line becomes a dated journal note; the days show, voice entries
     if (mine) made.push(mine.id);
 
     // an entry opened from elsewhere (a note link, the vault's list) is shown, not just the list it is somewhere in
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: /Notes|Search results/ }).getByRole("link", { name: new RegExp(`Walked by the river ${stamp}`) }).click();
     const opened = page.frameLocator("iframe.applet-frame").getByRole("region", { name: "The entry you opened" });
     await expect(opened).toContainText("The herons were out.");

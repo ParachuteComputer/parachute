@@ -11,7 +11,8 @@ One model, everywhere.
 | `/v/<vault>/n/<note>` | A note. It opens in the applet that opens its kind (open-with), else in Vault, else as plain text. |
 | `/v/<vault>/a/<applet>` | An applet. |
 | `/settings` | Settings. |
-| `/connect`, `/capture`, `/journal`, `/vault`, `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | Parachute Simplified's screens ([SIMPLE.md](SIMPLE.md)): Connect an AI, Capture, Journal and Vault (before each is added), a new note, a note's words. |
+| `/v/<home>/a/parachute:<name>` | Parachute's own applets ([design/PARACHUTE-SOURCE.md](design/PARACHUTE-SOURCE.md)): Notes, Journal, Capture, Vault, Connect, Home. `/connect`, `/capture`, `/journal` and `/vault` lead there. |
+| `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | The shell's editor: a new note, a note's words, from the plain views (`?with=vault`). |
 
 ## The four rules
 

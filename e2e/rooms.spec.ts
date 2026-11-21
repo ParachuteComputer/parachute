@@ -61,7 +61,7 @@ test("rooms on a real relay: two people talk, with cards, mentions, a reply, a p
     expect((await bob.publish({ kind: 9, content: "", tags: [["h", g], ["imeta", `url ${voice.url}`, `m ${voice.type}`, `x ${voice.sha256}`, `size ${voice.size}`, "filename voice.webm"]] })).ok).toBe(true);
 
     // alice opens Rooms: the card names the relay and what it does there as her
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText(`With your everyday key: sign in to ${new URL(RELAY!.replace(/^ws/, "http")).host} on this device as you`);
@@ -186,7 +186,7 @@ test("Uni's turn in a room: a quick reply, working and Stop, muted, a draft with
   const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   const mine = async (text: string) => (await bob.query({ kinds: [9], "#h": [b], authors: [alice], limit: 30 })).filter((e) => e.content === text || e.content.includes(text));
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Tell you about messages in your rooms there that name you, and every message from");
     await page.getByRole("button", { name: "Allow" }).click();
@@ -310,7 +310,7 @@ test("Rooms paints the list it last showed at once, keeps it while the relay is 
   await page.routeWebSocket((url) => url.href.startsWith(RELAY!), (ws) => { if (away) ws.close(); else ws.connectToServer(); });
   const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   const open = async () => {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
   };
   const row = (name: string) => frame(page).getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`${name} ${stamp}`) });
@@ -383,7 +383,7 @@ test("a room opens at once from what the list holds, at its foot once its own re
   const fromFoot = () => scroller().evaluate((x) => x.scrollHeight - x.scrollTop - x.clientHeight);
   const back = () => app.getByRole("button", { name: "← Rooms" }).click();
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     await expect(row()).toContainText(`Yard note ${N} ${stamp}`, { timeout: 30_000 });
@@ -457,7 +457,7 @@ test("in twenty-six rooms, a room full of asks and pictures opens and reads: not
   await page.route((url) => url.href.startsWith(RELAY!.replace(/^ws/, "http") + "/media/"), async (route) => { await new Promise((r) => setTimeout(r, 800)); await route.continue(); });
   const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);

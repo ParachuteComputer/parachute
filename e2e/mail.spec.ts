@@ -34,7 +34,7 @@ test("mail: alice reads what bob sent, replies after reviewing exactly what will
     const aliceAddr = (await mailAs(BRIDGE!, secret("alice")).post("session", {})).account as string;
     await bob.send(aliceAddr, `Tomato seedlings ${stamp}`, `Hi Alice,\n\nThe seedlings are ready to pick up on Saturday.\n\nBob`);
 
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Mail/ }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
     await expect(card).toContainText(`With your everyday key: send requests to 127.0.0.1:19952 on this device signed as you`);
@@ -101,7 +101,7 @@ test("mail: Uni's held sends wait for alice; she approves one (bob gets it) and 
     const aliceAddr = (await alice.post("session", {})).account as string;
     await bob.send(aliceAddr, `Fence repair ${stamp}`, `Alice,\n\nThe fence can wait until spring.\n\nBob`);
 
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Mail/ }).click();
     // the access card says approving goes out with the person's key, as high risk
     await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("High risk. With your key: send send.approve requests to 127.0.0.1:19952");

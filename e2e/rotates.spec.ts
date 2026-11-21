@@ -11,7 +11,7 @@ async function selfTestDone(page: Page) {
   await expect(page.getByRole("status").filter({ hasText: /approved code only|run sealed/ })).toBeVisible({ timeout: 45_000 });
 }
 async function allow(page: Page) {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(frame(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();

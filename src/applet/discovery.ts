@@ -13,6 +13,7 @@ import { resolveNeeds } from "./needs.ts";
 import { parseEmbeds, type Embed } from "./embeds.ts";
 import { parseServices, type Service } from "./services.ts";
 import { parseSignals, type Signal } from "./signals.ts";
+import { inParachuteSpace } from "./parachuteSource.ts";
 
 /** The app's own applet ids: a note may not take one. */
 export const BUILT_IN_IDS = ["vault"];
@@ -99,6 +100,8 @@ export function discoverApplets(rows: readonly Row[], vault: string, theirs = fa
   let skipped = 0;
   const sorted = [...rows].sort((a, b) => String(a.path ?? "").localeCompare(String(b.path ?? "")));
   for (const r of sorted) {
+    // an id in Parachute's own space is never a vault's (a hub's ids are ULIDs): those load from the Parachute source
+    if (inParachuteSpace(typeof r.id === "string" ? r.id : null)) { skipped++; continue; }
     const a = readApplet(r, vault, theirs, isHub, level);
     if (!a.ok || ids.has(a.entry.manifest.id)) { skipped++; continue; }
     ids.add(a.entry.manifest.id);

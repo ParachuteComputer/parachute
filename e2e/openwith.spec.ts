@@ -1,19 +1,20 @@
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, VAULT } from "./hub";
-import { ui } from "./helpers";
+import { expectInVault, ui } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
+const noteId = async (path: string) => (await api(hubState(), "GET", `notes?id=${encodeURIComponent(path)}`)).id as string;
 const notes = (page: Page) => ui(page).getByRole("list", { name: /Notes|Search results/ });
 async function allowApplet(page: Page, name: string) {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: new RegExp(name) }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(frame(page).locator("#opened")).toBeVisible();
 }
 async function tapNote(page: Page, title: string) {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await notes(page).getByRole("link", { name: new RegExp(`^${title}(?: (?:Recipes|Applets) ·|$)`) }).click();
 }
 
@@ -51,26 +52,27 @@ test("one applet allowed: a tap on a recipe opens it there, with the recipe, and
   await expect(page).toHaveURL(/\/a\//);
   await expect(frame(page).locator("#opened")).toHaveText("Opened: Recipes/Tomato toast");
   await page.goBack();
-  await expect(page).toHaveURL(new RegExp(`/v/${VAULT}$`));
+  await expect(page).toHaveURL(new RegExp(`/v/${VAULT}\\?with=vault$`));
 });
 
-test("a plain note opens plain, even with applets allowed", async ({ page }) => {
+test("a note no applet opens opens in Vault with no card, even with applets allowed", async ({ page }) => {
   await allowApplet(page, "Recipe box");
   await tapNote(page, "Welcome");
-  await expect(ui(page).locator(".prose-note h1")).toHaveText("Welcome");
-  await expect(ui(page).locator(".open-line")).toHaveCount(0);
+  await expectInVault(page, VAULT, await noteId("Welcome"), "Welcome");
+  await expect(page.getByRole("button", { name: "Allow" })).toHaveCount(0);
 });
 
 test("a link inside a note's text goes through the note's route like any other", async ({ page }) => {
   await allowApplet(page, "Recipe box");
-  await tapNote(page, "Welcome");
+  // the plain note view, where the note's text is links
+  await page.goto(`/v/${VAULT}/n/${await noteId("Welcome")}?with=vault`);
   await ui(page).getByRole("link", { name: "Recipes/Tomato toast" }).click();
   await expect(frame(page).locator("#opened")).toHaveText("Opened: Recipes/Tomato toast");
 });
 
 test("a search hit opens in the applet and starts it", async ({ page }) => {
   await allowApplet(page, "Recipe box");
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("searchbox").fill("beans");
   await ui(page).getByRole("list", { name: "Search results" }).getByRole("link").first().click();
   await expect(frame(page).locator("#opened")).toHaveText("Opened: Recipes/Rice and beans");
@@ -105,16 +107,17 @@ test("with Always unticked, nothing is kept: the next tap asks again", async ({ 
 
 test("a long-press offers Open with: Vault with Always opens plain from then on, until Clear in Settings", async ({ page }) => {
   await allowApplet(page, "Recipe box");
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   // a long-press on a phone and a right-click on desktop are both a contextmenu on the link
   await notes(page).getByRole("link", { name: /^Tomato toast/ }).click({ button: "right" });
   const sheet = ui(page).getByRole("dialog", { name: "Open with" });
   await expect(sheet.getByRole("checkbox")).toBeChecked();
   await sheet.getByRole("button", { name: /Vault/ }).click();
   await expect(ui(page).locator(".prose-note h1")).toHaveText("Tomato toast");
+  // Always: Vault means no applet's: the tap now carries on to Vault (not Recipe box), with no card
   await tapNote(page, "Tomato toast");
-  await expect(ui(page).locator(".prose-note h1")).toHaveText("Tomato toast");
-  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+  await expectInVault(page, VAULT, await noteId("Recipes/Tomato toast"), "Tomato toast");
+  await expect(page.locator('iframe.applet-frame[title="Recipe box"]')).toHaveCount(0);
   await page.goto("/settings");
   await page.getByRole("list", { name: "Defaults" }).getByRole("button", { name: "Clear" }).click();
   await tapNote(page, "Tomato toast");
@@ -136,20 +139,19 @@ test("changed code is seen at the tap: the recipe opens plain with a line, and n
   }
 });
 
-test("if reading the applets fails at the tap, the note opens plain: never on a list read before", async ({ page }) => {
+test("if reading the applets fails at the tap, the note opens in Vault: never in an applet on a list read before", async ({ page }) => {
   await allowApplet(page, "Recipe box");
   const st = hubState();
   const cur = await api(st, "GET", `notes?id=${encodeURIComponent("Applets/Recipes")}`);
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
   // the app has read the applets; now the applet's code changes, and the vault won't list its applets again
   await api(st, "PATCH", `notes/${cur.id}`, { content: `${cur.content}\n<!-- changed -->`, if_updated_at: cur.updatedAt });
   await page.route((u) => u.searchParams.get("tag") === "applet", (r) => r.abort());
   try {
     await notes(page).getByRole("link", { name: /^Tomato toast/ }).click();
-    await expect(ui(page).locator(".prose-note h1")).toHaveText("Tomato toast");
-    await expect(page).toHaveURL(/\/n\//);
-    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+    await expectInVault(page, VAULT, await noteId("Recipes/Tomato toast"), "Tomato toast");
+    await expect(page.locator('iframe.applet-frame[title="Recipe box"]')).toHaveCount(0);
   } finally {
     const now = await api(st, "GET", `notes?id=${cur.id}`);
     await api(st, "PATCH", `notes/${cur.id}`, { content: cur.content, if_updated_at: now.updatedAt });
@@ -165,26 +167,26 @@ test("Back from a note's sheet closes it", async ({ page }) => {
   await expect(ui(page).getByRole("dialog")).toHaveCount(0);
 });
 
-test("a tag the vault's settings give a role to is no applet's: a note with it opens plain, with no line", async ({ page }) => {
+test("a tag the vault's settings give a role to is no applet's: a note with it opens in Vault, with no line and no card", async ({ page }) => {
   await allowApplet(page, "Recipe box");
   const st = hubState();
   // as Parachute's web app writes it: the vault's settings note, metadata.notes.tagRoles
   const settings = await api(st, "POST", "notes", { path: ".parachute/notes/settings", content: "", metadata: { notes: { schemaVersion: 1, tagRoles: { pinned: "recipe" } } } });
   try {
     await tapNote(page, "Tomato toast");
-    await expect(ui(page).locator(".prose-note h1")).toHaveText("Tomato toast");
-    await expect(ui(page).locator(".open-line")).toHaveCount(0);
-    await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+    await expectInVault(page, VAULT, await noteId("Recipes/Tomato toast"), "Tomato toast");
+    await expect(page.getByRole("button", { name: "Allow" })).toHaveCount(0);
+    await expect(page.locator('iframe.applet-frame[title="Recipe box"]')).toHaveCount(0);
   } finally {
     await api(st, "DELETE", `notes/${settings.id}`);
   }
 });
 
-test("an applet's own note opens as text and never starts it", async ({ page }) => {
+test("an applet's own note opens in Vault as a note and never starts it", async ({ page }) => {
   await allowApplet(page, "Recipe box");
   await tapNote(page, "Recipes");
-  await expect(ui(page).getByLabel("The note's text")).toContainText("<!doctype html>");
-  await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+  await expectInVault(page, VAULT, await noteId("Applets/Recipes"), "Recipes");
+  await expect(page.locator('iframe.applet-frame[title="Recipe box"]')).toHaveCount(0);
 });
 
 test("Back from an applet the note's line led to lands on the note, and decides nothing again", async ({ page }) => {

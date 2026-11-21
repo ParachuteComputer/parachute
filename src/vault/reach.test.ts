@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appletLevel, appletsNeedingWrite, neededLevel, narrowIfWider } from "./reach";
 import { noteOwnWrite, forgetOwnWrite } from "./writeAsk";
 import { saveVault, type VaultRecord } from "./store";
+import { HOME_KEY, setWhose } from "./whose";
 import { dropClient } from "./client";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { appletsNow, forgetApplets, refreshApplets } from "../applet/useApplets";
@@ -32,7 +33,13 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); dropClient("letters"); forgetApplets("letters"); });
 
-const hold = (scope: string): VaultRecord => saveVault({ issuer: HUB, vault: "letters", tokenEndpoint: `${HUB}/oauth/token`, clientId: "c", accessToken: "t", refreshToken: "r", scope, addedAt: "2026-11-18T00:00:00Z" });
+const hold = (scope: string, vault = "letters"): VaultRecord => {
+  // letters isn't the home: kitchen is (the home stays at write, below)
+  localStorage.setItem(HOME_KEY, "kitchen");
+  setWhose({ issuer: HUB, vault: "letters" }, "mine"); setWhose({ issuer: HUB, vault: "kitchen" }, "mine");
+  if (vault !== "kitchen") saveVault({ issuer: HUB, vault: "kitchen", tokenEndpoint: `${HUB}/oauth/token`, clientId: "c", accessToken: "t0", refreshToken: "r0", scope: "vault:kitchen:read vault:kitchen:write", addedAt: "2026-11-17T00:00:00Z" });
+  return saveVault({ issuer: HUB, vault, tokenEndpoint: `${HUB}/oauth/token`, clientId: "c", accessToken: "t", refreshToken: "r", scope, addedAt: "2026-11-18T00:00:00Z" });
+};
 /** Allow an applet as its card does: under the keys the app read for it now. */
 function allow(r: VaultRecord, id: string) {
   const read = appletsNow(r.key);
@@ -52,6 +59,11 @@ describe("what an applet needs of its vault at the hub", () => {
 });
 
 describe("what the app needs of a vault now", () => {
+  it("the home: write, with nothing allowed there, so it is never given back (Parachute's own applets write there)", async () => {
+    const home = hold("vault:kitchen:read vault:kitchen:write", "kitchen");
+    expect(neededLevel(home)).toBe("write");
+    expect(await narrowIfWider(home.key, "/")).toBeNull();
+  });
   it("read with nothing allowed; write while an allowed applet writes there, or the person's own change", async () => {
     const r = hold("vault:letters:read vault:letters:write");
     expect(await refreshApplets(r)).toBe(true);

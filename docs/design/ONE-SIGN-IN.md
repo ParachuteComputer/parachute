@@ -1,6 +1,7 @@
 # One sign-in per Parachute (design, and what core could add)
 
-**Since 2026-11-18 the sign-in reads the home only** ([SCOPES.md](SCOPES.md)): steps 3 and 4 below (one consent for
+**Since 2026-11-18 the sign-in reads the home only** ([SCOPES.md](SCOPES.md); since 11-20 it reads and writes it, for
+Parachute's own applets): steps 3 and 4 below (one consent for
 every vault, then a hop per vault) are replaced by one consent for the home, and every other vault is asked for when
 the person opens it or allows an applet in it. The rest of this page (the descriptor, the listing, whose, the list of
 Parachutes, the home's choice) stands, with the changes marked.

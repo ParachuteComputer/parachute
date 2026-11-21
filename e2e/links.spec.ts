@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, VAULT } from "./hub";
-import { ui } from "./helpers";
+import { expectInVault, ui } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
@@ -12,11 +12,11 @@ const noteId = async (path: string) => (await api(hubState(), "GET", `notes?id=$
 test("a link to a note in a vault this device holds opens that note", async ({ page }) => {
   const id = await noteId("Welcome");
   await arrive(page, link(`${hubState().origin}/surface/parachute/v/${VAULT}/n/${id}`));
-  await expect(ui(page).locator(".prose-note h1")).toHaveText("Welcome");
+  await expectInVault(page, VAULT, id, "Welcome");
 });
 
 test("a link from outside never starts an applet: it waits with Open, and one tap shows the recipe", async ({ page }) => {
-  await page.goto(`/v/${VAULT}`);
+  await page.goto(`/v/${VAULT}?with=vault`);
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   const id = await noteId("Recipes/Tomato toast");
@@ -49,11 +49,11 @@ test("a malformed link is refused with its reason", async ({ page }) => {
 test("a note's Copy link makes the link that opens it here", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const id = await noteId("Welcome");
-  await page.goto(`/v/${VAULT}/n/${id}`);
+  await page.goto(`/v/${VAULT}/n/${id}?with=vault`);
   await ui(page).getByRole("button", { name: "Copy link" }).click();
   await expect(ui(page).getByRole("button", { name: "Link copied" })).toBeVisible();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toMatch(/^parachute:\/\/open\?url=/);
   await arrive(page, copied);
-  await expect(ui(page).locator(".prose-note h1")).toHaveText("Welcome");
+  await expectInVault(page, VAULT, id, "Welcome");
 });

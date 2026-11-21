@@ -56,7 +56,7 @@ export default function AddParachute({ first = false }: { first?: boolean }) {
     <main className="screen">
       <Bar title={first ? "Parachute" : "Add a Parachute"} back={first ? undefined : "/"} />
       <form className="card stack" onSubmit={submit}>
-        {first && <p className="lead">Your notes live in vaults on your Parachute. Sign in there once: Parachute reads your home vault, and asks before it reads any other.</p>}
+        {first && <p className="lead">Your notes live in vaults on your Parachute. Sign in there once: Parachute reads and writes your home vault, and asks before it reads any other.</p>}
         <label className="field">
           <span>Your Parachute's address</span>
           <input type="url" inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} placeholder="your-hub.example"

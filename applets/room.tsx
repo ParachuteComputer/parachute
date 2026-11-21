@@ -385,7 +385,9 @@ const CSS = `
 .room .md .mention { font-weight: 600; }
 .room .md .table { overflow-x: auto; } .room .md table { border-collapse: collapse; } .room .md td, .room .md th { border: 1px solid var(--line); padding: 2px 8px; }
 .room .edited { color: var(--muted); font-size: var(--fs-label); margin-left: 6px; }
+/* a wrapped row of actions keeps a finger's room between its lines, so each keeps its whole tap area */
 .room .acts { display: flex; gap: 4px 16px; flex-wrap: wrap; margin-top: 2px; }
+@media (pointer: coarse) { .room .acts { row-gap: 20px; } }
 .room .file-chip { border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 1px 4px 1px 9px; font-size: var(--fs-small); }
 .room .pic { max-width: min(100%, 420px); max-height: 420px; height: auto; border-radius: 6px; display: block; margin: 6px 0; }
 .room .pic-wait { background: var(--surface); border: 1px solid var(--line); box-sizing: border-box; }
@@ -728,7 +730,7 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
     {sealed && <SealedCard e={e} />}
     {secret && <SecretCard e={e} />}
     {media.map((m) => <Attachment key={m.sha} m={m} />)}
-    <div className="acts pa-tight">
+    <div className="acts">
       {!root && <Button kind="quiet" small onClick={openThread}>{replies ? `${replies} ${replies === 1 ? "reply" : "replies"}` : "Reply"}</Button>}
       {mine && !ask && editing === null && <Button kind="quiet" small onClick={() => setEditing(body)}>Edit</Button>}
       {mine && <Button kind="quiet" small onClick={async () => { if (!sure) { setSure(true); setTimeout(() => setSure(false), 4000); return; } await change(e, null); }}>{sure ? "Tap again to delete" : "Delete"}</Button>}

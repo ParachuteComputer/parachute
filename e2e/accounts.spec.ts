@@ -15,7 +15,7 @@ test("Claude accounts: each account's use, and which one new workers use, from t
   made.push(usage.id);
   made.push((await record(hubState(), "create", appletRecord("accounts"))).id);
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Claude accounts/ }).click();
     await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Read notes outside its own folder, in System/");
     await page.getByRole("button", { name: "Allow" }).click();

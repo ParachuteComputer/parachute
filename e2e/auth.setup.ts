@@ -3,7 +3,7 @@
 //   e2e/.signed-in.json:   also the app, with the e2e vault added and the self-test passed.
 import { expect, test as setup } from "@playwright/test";
 import { api, hubState } from "./hub";
-import { letWrite, openVault, signIn } from "./helpers";
+import { held, letWrite, openVault, signIn } from "./helpers";
 import { MORE_VAULTS, VAULT } from "./hub";
 
 export const HUB_SESSION = "e2e/.hub-session.json";
@@ -20,11 +20,12 @@ setup("sign in on the hub with a password, then add the vault in the app", async
   await page.waitForLoadState("networkidle");
   await page.context().storageState({ path: HUB_SESSION });
   await signIn(page);
-  // the sign-in reads the home only (docs/design/SCOPES.md; e2e/scopes.spec.ts checks that): the tests that share this
-  // start were written for a person who has opened every vault and let the app change notes in each, so it does that
-  // here, the way a person does
+  // the sign-in reads and writes the home only (docs/design/SCOPES.md; e2e/scopes.spec.ts checks that): the tests that
+  // share this start were written for a person who has opened every vault and let the app change notes in each, so it
+  // does that here, the way a person does
+  expect((await held(page))[VAULT]).toContain(`vault:${VAULT}:write`);
   for (const v of MORE_VAULTS) await openVault(page, v.vault);
-  for (const v of [VAULT, ...MORE_VAULTS.map((m) => m.vault)]) await letWrite(page, v);
+  for (const v of MORE_VAULTS.map((m) => m.vault)) await letWrite(page, v);
   // the sign-in put the hub on the person's list, in a settings note of the home vault; the tests that follow write
   // their own settings note, so the shared start has none (e2e/parachutes.spec.ts covers the list)
   for (const n of await api(hubState(), "GET", "notes?tag=parachute-settings")) await api(hubState(), "DELETE", `notes/${n.id}`);

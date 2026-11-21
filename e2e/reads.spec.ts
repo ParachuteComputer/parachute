@@ -24,7 +24,7 @@ test("an applet opened again draws what it read before at once, then the hub's n
     // the first open: the hub is asked. Journal's entries with their words come in one ask, never one per entry
     const perEntry: string[] = [];
     page.on("request", (r) => { if (r.method() === "GET" && entries.some((e) => r.url().includes(e.id))) perEntry.push(r.url()); });
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const app = page.frameLocator("iframe.applet-frame");

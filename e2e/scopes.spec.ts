@@ -1,12 +1,13 @@
 // The app asks a hub only for what something the person allowed needs (docs/design/SCOPES.md), checked at the hub:
-//   a fresh sign-in asks to see which vaults are theirs, then to read their home: nothing else, no other vault, no write;
+//   a fresh sign-in asks to see which vaults are theirs, then to read and write their home (Parachute's own applets write
+//   there: docs/design/PARACHUTE-SOURCE.md): nothing else, no other vault;
 //   opening another vault asks to read that one; allowing Journal there asks to change notes in that vault alone, and
 //   the Allow counts only once the hub said yes; revoking Journal gives that back: the token that could write is dead
 //   at the hub, and what the app holds reads only.
 // Runs last (signs-in project): signing in again retires the shared sign-in.
 import { expect, test, type Page } from "@playwright/test";
 import { api, cli, hubState, MORE_VAULTS, mintToken, ORG_VAULT, record, techneState, VAULT, type HubState } from "./hub";
-import { approveUntilBack, fromAppletMenu, held, letWrite, openVault, signIn, signInWithKey, ui } from "./helpers";
+import { approveUntilBack, fromAppletMenu, held, openVault, signIn, signInWithKey, ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";
 
 const OTHER = MORE_VAULTS[0].vault; // letters
@@ -26,7 +27,7 @@ function asksOf(page: Page): string[] {
 /** What the hub's consent page names, as plain text. */
 const consentText = async (page: Page) => (await page.locator("body").innerText()).replace(/\s+/g, " ");
 
-test("a fresh sign-in asks for the list of vaults and to read the home; Journal asks for its vault alone; revoking it ends the hub's write", async ({ page }) => {
+test("a fresh sign-in asks for the list of vaults and the home at write; Journal asks for its vault alone; revoking it ends the hub's write", async ({ page }) => {
   test.setTimeout(180_000);
   const hub = hubState();
   const asks = asksOf(page);
@@ -48,13 +49,13 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
   }, "/", onConsent);
   await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible({ timeout: 20_000 });
 
-  expect(asks).toEqual(["account:vaults", `vault:${VAULT}:read`]);
-  // the home's consent names the home, read only, and no other vault
+  const HOME = `vault:${VAULT}:read vault:${VAULT}:write`;
+  expect(asks).toEqual(["account:vaults", HOME]);
+  // the home's consent names the home, read and write, and no other vault
   const home = consents.at(-1)!;
-  expect(home).toContain(`vault:${VAULT}:read`);
-  expect(home).not.toContain(`vault:${VAULT}:write`);
+  expect(home).toContain(`vault:${VAULT}:write`);
   for (const v of MORE_VAULTS) expect(home).not.toContain(v.vault);
-  expect(await held(page)).toEqual({ [VAULT]: `vault:${VAULT}:read` });
+  expect(await held(page)).toEqual({ [VAULT]: HOME });
   // the other vaults are one line each in Settings, not read
   await page.goto("/settings");
   for (const v of MORE_VAULTS) await expect(page.getByRole("button", { name: `Open ${v.vault}`, exact: true })).toBeVisible();
@@ -69,7 +70,7 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
     expect(await openVault(page, OTHER, onConsent)).toBe(1);
     expect(asks).toEqual([`vault:${OTHER}:read`]);
     expect(consents[0]).not.toContain(`vault:${OTHER}:write`);
-    expect(await held(page)).toEqual({ [VAULT]: `vault:${VAULT}:read`, [OTHER]: `vault:${OTHER}:read` });
+    expect(await held(page)).toEqual({ [VAULT]: HOME, [OTHER]: `vault:${OTHER}:read` });
 
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).filter({ hasText: OTHER }).click();
     const card = page.getByRole("region", { name: /asking for access/ });
@@ -85,8 +86,8 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
     expect(consents[0]).not.toContain(VAULT);
     const frame = page.frameLocator("iframe.applet-frame");
     await expect(frame.getByRole("heading", { name: "Journal" })).toBeVisible();
-    // exactly its vault: the home is still read only
-    expect(await held(page)).toEqual({ [VAULT]: `vault:${VAULT}:read`, [OTHER]: `vault:${OTHER}:read vault:${OTHER}:write` });
+    // exactly its vault: the home is as it was
+    expect(await held(page)).toEqual({ [VAULT]: HOME, [OTHER]: `vault:${OTHER}:read vault:${OTHER}:write` });
     const stamp = Date.now().toString(36);
     await frame.getByLabel("Write in your journal").fill(`Allowed by the hub ${stamp}`);
     await frame.getByRole("button", { name: "Save" }).click();
@@ -102,7 +103,7 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
     await fromAppletMenu(page, "Revoke");
     // the app asks for read alone (the hub's grant covers it: no page) and comes back
     // (the page may be on its way to the hub and back while this reads: that read is just not yet)
-    await expect.poll(() => held(page).catch(() => ({})), { timeout: 20_000 }).toEqual({ [VAULT]: `vault:${VAULT}:read`, [OTHER]: `vault:${OTHER}:read` });
+    await expect.poll(() => held(page).catch(() => ({})), { timeout: 20_000 }).toEqual({ [VAULT]: HOME, [OTHER]: `vault:${OTHER}:read` });
     expect(asks).toEqual([`vault:${OTHER}:read`]);
     // at the hub: the token that could write is ended, both halves
     // (core 0.9 refuses it at once; 0.8's vault reads the hub's revocations within about a minute)
@@ -125,7 +126,6 @@ test("a fresh sign-in asks for the list of vaults and to read the home; Journal 
 test("signing in again keeps what the person let the app do: the home stays writable", async ({ page }) => {
   const hub = hubState();
   await signIn(page);
-  await letWrite(page, VAULT);
   expect((await held(page))[VAULT]).toBe(`vault:${VAULT}:read vault:${VAULT}:write`);
   // Settings → Sign in again on the Parachute: the hub's grant covers it, so no page; the home keeps write
   const asks = asksOf(page);
@@ -164,26 +164,27 @@ test("someone else's vault where the person may only read: an applet that writes
 });
 
 test("a new note asks for write in the vault the person chose, and lands there after the hub's yes", async ({ page }) => {
+  test.setTimeout(90_000);
   const hub = hubState();
   await signIn(page);
   await openVault(page, OTHER);
   const stamp = Date.now().toString(36);
-  await page.goto(`/v/${OTHER}/new`);
+  await page.goto(`/v/${VAULT}/new`);
   const app = new URL(page.url()).origin;
-  await page.getByRole("combobox").selectOption({ label: VAULT });
-  await page.getByLabel("The new note").fill(`Chosen vault ${stamp}\n\nInto the home.`);
+  await page.getByRole("combobox").selectOption({ label: OTHER });
+  await page.getByLabel("The new note").fill(`Chosen vault ${stamp}\n\nInto the other.`);
   await page.getByRole("button", { name: "Save" }).click();
-  const ask = page.getByRole("dialog", { name: `Change notes in ${VAULT}` });
+  const ask = page.getByRole("dialog", { name: `Change notes in ${OTHER}` });
   await expect(ask).toBeVisible();
   await ask.getByRole("button", { name: /^Continue to / }).click();
   await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
-  expect(await approveUntilBack(page, hub.origin, app, undefined, `/v/${OTHER}/new`)).toBe(1);
+  expect(await approveUntilBack(page, hub.origin, app, undefined, `/v/${VAULT}/new`)).toBe(1);
   // back: the words, and the vault the person chose
-  await expect(page.getByLabel("The new note")).toHaveValue(/Into the home\./);
-  await expect(page.getByRole("combobox")).toHaveValue(VAULT);
+  await expect(page.getByLabel("The new note")).toHaveValue(/Into the other\./);
+  await expect(page.getByRole("combobox")).toHaveValue(OTHER);
   await page.getByRole("button", { name: "Save" }).click();
-  await expect.poll(async () => ((await api(hub, "GET", `notes?search=${encodeURIComponent(stamp)}&limit=5`)) as { path: string }[]).map((n) => n.path)).toContain(`Chosen vault ${stamp}`);
   const there = { origin: hub.origin, token: mintToken(`vault:${OTHER}:write`) };
-  expect(((await api(there, "GET", `notes?search=${encodeURIComponent(stamp)}&limit=5`, undefined, OTHER)) as unknown[]).length).toBe(0);
-  for (const n of (await api(hub, "GET", `notes?search=${encodeURIComponent(stamp)}&limit=5`)) as { id: string }[]) await api(hub, "DELETE", `notes/${n.id}`).catch(() => {});
+  await expect.poll(async () => ((await api(there, "GET", `notes?search=${encodeURIComponent(stamp)}&limit=5`, undefined, OTHER)) as { path: string }[]).map((n) => n.path)).toContain(`Chosen vault ${stamp}`);
+  expect(((await api(hub, "GET", `notes?search=${encodeURIComponent(stamp)}&limit=5`)) as unknown[]).length).toBe(0);
+  for (const n of (await api(there, "GET", `notes?search=${encodeURIComponent(stamp)}&limit=5`, undefined, OTHER)) as { id: string }[]) await api(there, "DELETE", `notes/${n.id}`, undefined, OTHER).catch(() => {});
 });

@@ -47,7 +47,8 @@ export function PasscodeSheet({ c }: { c: Coding }) {
         <form onSubmit={(e) => { e.preventDefault(); if (code) { const x = code; setCode(""); c.done(x); } }}>
           <label className="secret-field">
             <span className="quiet">This device's passcode, then its unlock</span>
-            <input type="password" value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" autoFocus aria-label="Your passcode" />
+            {/* a wrong passcode: the box again, empty and in focus, the sheet itself staying where it is */}
+            <input key={c.wrong ?? ""} type="password" value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" autoFocus aria-label="Your passcode" />
           </label>
           {c.wrong && <p className="error" role="alert">{c.wrong}</p>}
           <div className="grant-actions">
@@ -184,7 +185,7 @@ export function useShellSheets(frame: () => HTMLIFrameElement | null) {
     {confirming && <ConfirmSheet c={confirming} />}
     {asking && <SecretSheet asking={asking} onDone={asking.done} />}
     {trusting && <TrustSheet t={trusting} />}
-    {coding && <PasscodeSheet key={`${coding.wrong ?? ""}`} c={coding} />}
+    {coding && <PasscodeSheet c={coding} />}
     {line && <p className="shell-line" role="status">{line}</p>}
   </>;
   // the screen hid (kept running, shell/kept.tsx): an open sheet answers "cancelled", as when the screen goes

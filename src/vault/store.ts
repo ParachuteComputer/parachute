@@ -74,6 +74,8 @@ export function removeVault(key: string) { write(listVaults().filter((r) => r.ke
 
 /** A vault's API root. */
 export const vaultUrlOf = (r: Pick<VaultRecord, "issuer" | "vault" | "url">) => r.url ?? `${r.issuer}/vault/${encodeURIComponent(r.vault)}`;
+/** A vault's connector address: where an AI's MCP client connects (`<vault>/mcp`, as Parachute Cloud's Connect page gives it). */
+export const connectorAddress = (r: Pick<VaultRecord, "issuer" | "vault" | "url">) => `${vaultUrlOf(r).replace(/\/$/, "")}/mcp`;
 
 export const findVault = (key: string | undefined) => listVaults().find((r) => r.key === key) ?? null;
 /** The vault a web address names: its hub and its name, among the vaults this device holds. */
