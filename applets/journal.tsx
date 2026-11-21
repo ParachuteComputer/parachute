@@ -45,7 +45,7 @@ const CSS = `
 .entry .when, .opened .when { font: 600 var(--fs-label) var(--sans); color: var(--muted); letter-spacing: .03em; }
 .entry .voice { margin-left: 8px; font-size: var(--fs-label); color: var(--muted); }
 .entry .wait { font-style: italic; color: var(--muted); }
-.opened { margin: 0 0 18px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.opened { margin: 0 0 18px; padding: 10px 14px; background: var(--card-fill); border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
 .opened .when { display: flex; justify-content: space-between; align-items: center; }
 .more { display: flex; justify-content: center; margin-top: var(--gap); }
 `;

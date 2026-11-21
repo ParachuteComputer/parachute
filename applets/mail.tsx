@@ -63,16 +63,16 @@ const CSS = `
 .mail .subj { color: var(--text); }
 .mail .pa-strong .subj { font-weight: 700; }
 .flag { margin-left: 6px; }
-.msg h2 { font: 400 var(--fs-head)/1.2 var(--serif); margin: 6px 0; }
+.msg h2 { font: var(--title-weight) var(--fs-head)/1.2 var(--serif); margin: 6px 0; }
 .msg .meta { color: var(--muted); font-size: var(--fs-small); margin-bottom: 10px; }
 .msg .body { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-body)/1.55 var(--serif); border-top: 1px solid var(--line); padding-top: 12px; }
 .msg + .msg { margin-top: 26px; }
-.files { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; } .files span { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font-size: var(--fs-small); }
+.files { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; } .files span { border: 1px solid var(--line); border-radius: var(--radius-field); padding: 2px 8px; font-size: var(--fs-small); }
 .compose .pa-write-box { min-height: 14em; }
-.review { border: 1.5px solid var(--text); border-radius: var(--radius); padding: 12px 14px; margin: 12px 0; background: var(--surface); }
+.review { border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); padding: 12px 14px; margin: 12px 0; background: var(--card-fill); box-shadow: var(--shadow-card); }
 .review pre { white-space: pre-wrap; font: var(--fs-body)/1.5 var(--serif); margin: 8px 0 0; }
 .held .why { border-left: 3px solid var(--text); padding: 2px 10px; margin: 8px 0 12px; }
-.held-note { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; margin: 10px 0; }
+.held-note { border: 1px dashed var(--line); border-radius: var(--radius-field); padding: 8px 10px; margin: 10px 0; }
 .outcome { font-weight: 600; margin: 12px 0; }
 .outcome.refused { color: var(--danger); }
 `;
