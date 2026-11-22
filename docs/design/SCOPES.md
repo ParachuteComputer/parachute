@@ -117,7 +117,7 @@ Signing out of a vault (Settings) revokes its token, as before.
 | `vault:<v>:read` alone | page, read-only token (write → 403) | the same | the same |
 | Widening read → write | a page with both lines | the same | the same |
 | Revoked token | the hub refuses its refresh at once; the vault refuses the access token within about a minute (it reads the hub's revocations; 40 s in CI) | refused at once (401) | listed in its revocation document; vaults refuse it within a minute |
-| Revoke drops the grant | no | no in 0.9.0-pre.1; yes on `next` (core #131), per registration | no before Cloud #422 (Disconnect in Cloud's account page does); yes on its `next` |
+| Revoke drops the grant | no | no in 0.9.0-pre.1; yes from 0.9.0-pre.2 (core #131), per registration | no before Cloud #422 (Disconnect in Cloud's account page does); yes on its `next` |
 | A new registration with the same name and loopback return | inherits the grant: no page | the same | — (Cloud keeps per-app connections; a reconnect *replaces* the same app's earlier one) |
 
 The last row matters on reinstall: a hub that already granted "Parachute" everything (the old app) answers the new,

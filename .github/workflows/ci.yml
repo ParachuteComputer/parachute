@@ -8,18 +8,17 @@ on:
 
 jobs:
   web:
-    # the hub before the record door (0.8) and with it (0.9): the app must work on both (src/vault/records.ts); and
-    # core's next at a commit (built from source, .github/actions/core), for what the app needs before a release has it:
-    # move it on purpose, in the PR that needs it (the shell job's second leg pins the same). There the specs for what that
-    # core has (who reaches a vault, sharing, the one list) must run: E2E_CORE_NEXT turns their skip into a failure.
-    # The Services workflow follows core's next as it moves.
+    # the hub before the record door (0.8) and with it (0.9, npm beta): the app must work on both (src/vault/records.ts).
+    # 0.9.0-pre.2 is the first release with typed keys, sharing and the one list (core #140 #141 #144), so on that leg
+    # their specs must run: E2E_CORE_NEXT turns their skip into a failure. When the app needs core before a release has
+    # it, a leg may name a core commit instead (built from source, .github/actions/core): move it on purpose, in the PR
+    # that needs it, and the shell job's second leg with it. The Services workflow follows core's next as it moves.
     strategy:
       fail-fast: false
       matrix:
         include:
           - core: "0.8.0"
-          - core: "0.9.0-pre.1"
-          - core: "b1d2da57a086bf04bfd7d7812cc377a790d393ed"
+          - core: "0.9.0-pre.2"
             next: "1"
     name: web (core ${{ matrix.core }})
     runs-on: ubuntu-latest
@@ -62,14 +61,13 @@ jobs:
           retention-days: 7
 
   shell:
-    # the released hub people run (0.8), and core's next at the web job's pinned commit, where sharing must run
-    # (E2E_CORE_NEXT), not skip
+    # the released hub people run (0.8), and the web job's 0.9 leg, where sharing must run (E2E_CORE_NEXT), not skip
     strategy:
       fail-fast: false
       matrix:
         include:
           - core: "0.8.0"
-          - core: "b1d2da57a086bf04bfd7d7812cc377a790d393ed"
+          - core: "0.9.0-pre.2"
             next: "1"
     name: shell (core ${{ matrix.core }})
     runs-on: ubuntu-latest
