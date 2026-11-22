@@ -9,7 +9,9 @@
       "name": "Claude accounts",
       "glyph": "◐",
       "note": "your Claude accounts and which one new workers use",
-      "access": [{ "vault": "here", "allow": [{ "path": "System/", "verbs": ["read"] }] }]
-    }
+      "access": [{ "vault": "here", "allow": [{ "path": "System/", "verbs": ["read"] }] }],
+      "screens": [{ "id": "home", "name": "Claude accounts" }, { "id": "usage", "name": "Claude usage" }]
+    },
+    "settings": { "name": "Claude usage", "screen": "usage" }
   }
 }

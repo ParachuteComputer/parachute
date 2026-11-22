@@ -257,7 +257,7 @@ export default function AppletScreen() {
         const imports = imp.imports;
         // code from someone else's vault, its own or imported, is transpiled only once it is allowed
         const late = notMine || imports.some((i) => i.whose !== "mine");
-        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app, a.entry.services, a.entry.signals), embedsFrom: from }, a.entry.path),
+        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app, a.entry.services, a.entry.signals, a.entry.settings), embedsFrom: from }, a.entry.path),
           late || imports.length ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), o ? null : pointerFor(rec, n.id).catch(() => null)]);
         const hash = imports.length && kind !== "html" ? await compositeHash(kind, source, imports) : code.hash;
         if (!on) return;
@@ -574,7 +574,7 @@ export default function AppletScreen() {
       {hubError && <p className="error" role="alert">{hubError}</p>}
       {needsPasscode && !approvedElsewhere && <label className="line passcode-line"><span>Your passcode, to approve it</span> <input type="password" autoComplete="off" aria-label="Your passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} /></label>}
       <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"}
-        grant={{ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services, entry.signals), embedsFrom: loaded.state === "ok" ? loaded.from : [] }} ownFolder={ownFolder(entry.path)} keyring={lineOptions(keyring)}
+        grant={{ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services, entry.signals, entry.settings), embedsFrom: loaded.state === "ok" ? loaded.from : [] }} ownFolder={ownFolder(entry.path)} keyring={lineOptions(keyring)}
         imports={loaded.state === "ok" ? loaded.imports : []} scope={keys.scope} code={keys.html} status={status} was={grants.record(subject)}
         broughtChanged={pinMoved} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         hubAsk={covers(heldLevel(rec), appletLevel(entry.manifest)) ? null : { host: hostOf(rec.issuer), level: appletLevel(entry.manifest) }}

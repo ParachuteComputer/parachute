@@ -50,7 +50,9 @@ whether I install the apk/dmg before or after you do the home thing".
 
 - **A kit part:** give it `APP_LEVEL + 1` in `PART_LEVEL` and raise `APP_LEVEL`. A shipped applet that uses it either
   falls back for it or sets `needs` in `applets/<name>.json` (`src/kit/olderApp.test.ts` checks every one).
-- **A record field older builds can do without:** nothing to do. Older builds leave it out.
+- **A record field older builds can do without:** nothing to do. Older builds leave it out. `settings` (an applet's
+  section of Settings, 11-22, [WRITE-AN-APPLET.md](../WRITE-AN-APPLET.md)) is one: an older build shows no section and
+  runs the applet as before; no `needs`, no new level.
 - **A record field older builds must not ignore** (one that narrows what is allowed, or changes what a place means):
   raise `APP_LEVEL` and have records that use the field say `needs`.
 - **A gateway field:** the app sends it, and an older gateway leaves it out. Gateways from before 11-20 refused any
