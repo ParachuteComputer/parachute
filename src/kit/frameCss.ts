@@ -10,8 +10,9 @@ import { FONTS_CSS } from "../theme/fonts";
 export const LAYERS = "@layer parachute.base, parachute.parts, parachute.app;";
 
 /** An applet's frame is a page: what it draws sits in the page's width and margins, as the kit's `Page` does, unless it
- *  draws a `Page` itself. The column is made by the body's padding alone (none of its width or margin), so an applet's
- *  `body { margin: 0 }` keeps it centred, and `body { padding: 0 }` makes the frame its own, edge to edge. An embed's
+ *  draws a `Page` itself. The column is made by the body's padding alone (none of its width or margin; the body is
+ *  content-box, base.css), so an applet's `body { margin: 0 }` keeps it centred, its own `body { max-width: 700px }`
+ *  keeps all 700px for its words, and `body { padding: 0 }` makes the frame its own, edge to edge. An embed's
  *  frame is not a page (it is sized to what it draws, inside someone's page). */
 const FRAME_PAGE = "@layer parachute.base{:where(body){padding:calc(var(--pad) * 1.2) max(var(--pad), calc((100% - 760px) / 2)) calc(var(--pad) * 3);}}"
   + "@layer parachute.parts{:root:has(.pa-page) body{padding:0;}}";

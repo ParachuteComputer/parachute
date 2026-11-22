@@ -32,9 +32,10 @@
   --rn-sunk: color-mix(in srgb, var(--line, #d8d2c4) 45%, var(--surface, #fbf8f1));
   --rn-serif: var(--serif, "Cormorant Garamond", Georgia, serif); --rn-display: var(--serif, "Cormorant Garamond", Georgia, serif);
   --rn-ui: var(--sans, Inter, system-ui, sans-serif); --rn-mono: var(--mono, ui-monospace, monospace);
-  /* Parachute: the one focus ring, in the accent */
+  /* Parachute: the one focus ring, in the accent (black on a slow, e-ink screen, as the renderer's own) */
   --rn-focus: var(--accent, #4f6b3a);
 }
+@media (update: slow) { .rn-theme-uni .rn, .rn-theme-uni.rn { --rn-focus: #000; } }
 .rn-ink .rn, .rn.rn-ink, [data-screen="ink"] .rn {
   --rn-ground: #fff; --rn-paper: #fff; --rn-sunk: #eee; --rn-ink: #000; --rn-ink-2: #222; --rn-ink-3: #444;
   --rn-line: rgba(0, 0, 0, .4); --rn-line-strong: rgba(0, 0, 0, .75); --rn-accent: #000; --rn-accent-soft: rgba(0, 0, 0, .08); --rn-needs: #000; --rn-focus: #000; --rn-hair: 1.5px; --rn-text: 18px;

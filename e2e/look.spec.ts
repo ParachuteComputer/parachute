@@ -107,3 +107,20 @@ test("a note the kit draws keeps the note renderer's own look: the base stays ou
     expect(await style(page, ".pa-note .rn blockquote", "border-left-style")).toBe("solid");
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });
+
+const OWN_BODY = `<!doctype html><html><head><style>body { max-width: 700px; margin: 2rem auto; }</style></head><body>
+<h1>Letters</h1><p id="words">A column of its own, seven hundred pixels wide.</p>
+<button id="long">A button with a long label that has to wrap on a phone rather than run off the side of the screen</button>
+</body></html>`;
+
+test("an applet's own body width is its own, and a long bare button wraps instead of running off the screen", async ({ page }) => {
+  const id = await opened(page, "Applets/Letters", "html", OWN_BODY, "letters-own", "Letters own", "Letters");
+  try {
+    // on a phone: the button wraps inside the page
+    expect(await frame(page).locator("html").evaluate((h) => h.scrollWidth <= h.clientWidth + 1)).toBe(true);
+    expect(await frame(page).locator("#long").evaluate((b) => b.scrollWidth <= b.clientWidth + 1)).toBe(true);
+    // on a wide screen: its 700px column keeps all 700px for its words (the kit's margins don't squeeze it)
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await expect.poll(() => frame(page).locator("#words").evaluate((p) => Math.round(p.getBoundingClientRect().width))).toBe(700);
+  } finally { await api(hubState(), "DELETE", `notes/${id}`); }
+});
