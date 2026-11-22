@@ -274,15 +274,15 @@ const faces = (doc: Page | Frame) => doc.evaluate(async () => {
   return [...document.fonts].map((f) => `${f.family.replace(/"/g, "")} ${f.style} ${f.status}`);
 });
 
-test("the app's own faces: Literata for reading, Instrument Sans for the rest, in the shell and in an applet, with nothing fetched", async ({ page }) => {
+test("the app's own faces: Fraunces for a place's name, Literata for reading, Instrument Sans for the rest, in the shell and in an applet, with nothing fetched", async ({ page }) => {
   const fetched: string[] = [];
   page.on("request", (r) => { if (r.resourceType() === "font" && !r.url().startsWith("data:")) fetched.push(r.url()); });
   const { app, inner } = await openFeel(page);
-  // the applet's frame (font-src data: only): the title in the serif, a button in the sans, both drawn in the faces
-  expect(await app.locator(".pa-title").evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/^"?Literata"?,/);
+  // the applet's frame (font-src data: only): the title in the display serif, a button in the sans, both drawn in the faces
+  expect(await app.locator(".pa-title").evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/^"?Fraunces"?,/);
   expect(await app.getByRole("button", { name: "More" }).evaluate((e) => getComputedStyle(e).fontFamily)).toMatch(/^"?Instrument Sans"?,/);
   const inFrame = await faces(inner);
-  for (const f of ["Literata normal loaded", "Instrument Sans normal loaded"]) expect(inFrame, "the applet's frame").toContain(f);
+  for (const f of ["Fraunces normal loaded", "Instrument Sans normal loaded"]) expect(inFrame, "the applet's frame").toContain(f);
   // (a "… fallback" face is a local font, absent on some devices; the two carried faces must never be refused)
   expect(inFrame.filter((f) => f.endsWith("error") && !f.includes("fallback")), "a face the frame refused").toEqual([]);
   // the shell: the bar's title in the serif, its own words in the sans

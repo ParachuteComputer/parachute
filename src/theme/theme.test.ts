@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cssOf, DEFAULT_LOOK, onScreen, DEFAULT_THEME, isColor, isFontStack, LOOKS, MOTION, recordOf, STYLE_KEYS, styleValue, themeFrom, TOKEN_KEYS, tokensOf, withLook, withTodaysFonts, type StyleKey } from "./theme";
+import { cssOf, DEFAULT_LOOK, onScreen, DEFAULT_THEME, isColor, isFontStack, LOOKS, MOTION, recordOf, STYLE_KEYS, styleValue, themeFrom, TOKEN_KEYS, tokensOf, withLook, withTodays, hourOf, HOURS, type Hour, type StyleKey, type Theme } from "./theme";
 
 describe("the theme record", () => {
   it("absent, or not a record, is the built-in theme", () => {
@@ -36,7 +36,7 @@ describe("the theme record", () => {
     expect(t.fonts.mono).toBe("ui-monospace, monospace");
     expect(themeFrom({ theme: { fonts: { serif: `"Iowan Old Style", Georgia, serif` } } }).fonts.serif).toBe(`"Iowan Old Style", Georgia, serif`);
     // and a change writes today's stacks back, leaving a chosen one and everything else as it was
-    const back = withTodaysFonts({ density: "roomy", fonts: { ...earlier, sans: "Inter, sans-serif" } });
+    const back = withTodays({ density: "roomy", fonts: { ...earlier, sans: "Inter, sans-serif" } });
     expect(back).toEqual({ density: "roomy", fonts: { serif: DEFAULT_THEME.fonts.serif, sans: "Inter, sans-serif", mono: "ui-monospace, monospace" } });
   });
 });
@@ -207,5 +207,42 @@ describe("the grammar holds a value to what CSS reads (else it falls back to the
   it("a bare 0 for a length is written 0px (a sheet's max(radius-card, radius) would drop a plain number)", () => {
     expect(styleValue("radius-card", "0")).toBe("0px");
     expect(styleValue("radius-card", "0px")).toBe("0px");
+  });
+});
+
+describe("the sky at a place's head (docs/LOOK.md)", () => {
+  it("follows the part of the day: morning from 5, midday from 11, evening from 16, night from 21", () => {
+    const at = (h: number) => hourOf(new Date(2026, 10, 22, h, 30));
+    expect([4, 5, 10, 11, 15, 16, 20, 21, 23].map(at)).toEqual(["night", "morning", "morning", "midday", "midday", "evening", "evening", "night", "night"]);
+  });
+  it("paper gives each part of the day its own sky, light and dark; a look without a sky keeps its ground", () => {
+    const skyAt = (t: Theme, dark: boolean, h: Hour) => { const k = tokensOf(t, dark, h); return [k["sky-top"], k["sky-mid"], k["sky-foot"]]; };
+    const light = HOURS.map((h) => skyAt(DEFAULT_THEME, false, h).join());
+    expect(new Set(light).size).toBe(4);
+    expect(skyAt(DEFAULT_THEME, false, "evening")).toEqual(["#e5e2ec", "#f6dccb", "#fbeee3"]);
+    expect(skyAt(DEFAULT_THEME, true, "evening")).not.toEqual(skyAt(DEFAULT_THEME, false, "evening"));
+    for (const look of ["almanac", "book", "daylight"] as const) for (const h of HOURS) expect(skyAt(themeFrom({ theme: { look } }), false, h)).toEqual(["var(--bg)", "var(--bg)", "var(--bg)"]);
+    // a theme's own sky stands at every hour
+    const own = themeFrom({ theme: { tokens: { "sky-top": "#123456" } } });
+    for (const h of HOURS) expect(tokensOf(own, false, h)["sky-top"]).toBe("#123456");
+    expect(tokensOf(DEFAULT_THEME, false, "night").hour).toBe("night");
+  });
+  it("a paper theme that holds paper's colours from before the sky word for word gets today's; a colour chosen stands", () => {
+    const before = { bg: "#f2ede2", surface: "#fbf8f1", text: "#1d1a16", muted: "#6d665a", line: "#d9d1c1", accent: "#4f6b3a", danger: "#9a3324" };
+    const darkBefore = { bg: "#171613", surface: "#201e1a", text: "#ece7dc", muted: "#a59d8e", line: "#3a362f", accent: "#a3bf8a", danger: "#f08f7f" };
+    expect(themeFrom({ theme: { look: "paper", colors: before, dark: darkBefore } }).colors).toEqual(DEFAULT_THEME.colors);
+    expect(themeFrom({ theme: { colors: before } }).colors).toEqual(DEFAULT_THEME.colors);
+    const chosen = themeFrom({ theme: { colors: { ...before, accent: "#2f5470" } } });
+    expect(chosen.colors).toEqual({ ...DEFAULT_THEME.colors, accent: "#2f5470" });
+    // the almanac's own palette is the same colours: there they are the look's, and stay
+    expect(themeFrom({ theme: { look: "almanac", colors: before } }).colors).toEqual(before);
+    // written back, the old colours go and the chosen one stays
+    expect(withTodays({ look: "paper", colors: { ...before, accent: "#2f5470" }, dark: darkBefore })).toEqual({ look: "paper", colors: { accent: "#2f5470" } });
+    expect(withTodays({ look: "almanac", colors: before })).toEqual({ look: "almanac", colors: before });
+  });
+  it("the display face is the theme's fourth stack, Fraunces first", () => {
+    expect(DEFAULT_THEME.fonts.display).toMatch(/^"Fraunces"/);
+    expect(cssOf(tokensOf(DEFAULT_THEME, false))).toContain("--display:");
+    expect(themeFrom({ theme: { fonts: { display: "Georgia, serif" } } }).fonts.display).toBe("Georgia, serif");
   });
 });

@@ -4,7 +4,7 @@
 //   the record    `Parachute/Theme` in the home vault, tagged `parachute-theme`. Its metadata `theme`:
 //                   colors:  { bg, surface, text, muted, line, accent, danger }   the light palette
 //                   dark:    { …the same keys }                                   the dark palette
-//                   fonts:   { serif, sans, mono }                                font stacks, by name
+//                   fonts:   { serif, sans, mono, display }                       font stacks, by name
 //                   density: compact | regular | roomy
 //                   scheme:  system | light | dark          which palette shows (system: the device's choice)
 //                   motion:  flowing | still                  whether the parts move (still: nothing does; the device's
@@ -20,7 +20,7 @@
 // could load a URL (url(), image-set(), @import) or reach another value (var(), attr()) can pass.
 
 export const COLOR_KEYS = ["bg", "surface", "text", "muted", "line", "accent", "danger"] as const;
-export const FONT_KEYS = ["serif", "sans", "mono"] as const;
+export const FONT_KEYS = ["serif", "sans", "mono", "display"] as const;
 export const DENSITIES = ["compact", "regular", "roomy"] as const;
 export const SCHEMES = ["system", "light", "dark"] as const;
 export const MOTIONS = ["flowing", "still"] as const;
@@ -76,38 +76,65 @@ export const STYLE_TOKENS = {
   "label-track":     { kind: "track", what: "a small label's letter spacing, in em" },
   "title-weight":    { kind: "weight", what: "the weight of a page's title and the serif headings" },
   "measure":         { kind: "length", what: "a page's width at most (never under 20em)" },
+  "sky-top":           { kind: "color", what: "the hour's sky at the very top of a place's first page (it changes with the time of day)" },
+  "sky-mid":           { kind: "color", what: "the hour's sky halfway down the head" },
+  "sky-foot":           { kind: "color", what: "where the sky meets the paper" },
 } as const satisfies Record<string, { kind: StyleKind; what: string }>;
 export type StyleKey = keyof typeof STYLE_TOKENS;
 export const STYLE_KEYS = Object.keys(STYLE_TOKENS) as StyleKey[];
 
 /** A built-in look: the two palettes and every style token (a value may name a palette colour, `var(--line)`, or mix
  *  them; a record's own values are held to the grammar instead), with what changes in the dark. */
-export type Look = { colors: Palette; dark: Palette; style: Record<StyleKey, string>; darkStyle?: Partial<Record<StyleKey, string>>; motion?: Motion };
+export type Look = { colors: Palette; dark: Palette; style: Record<StyleKey, string>; darkStyle?: Partial<Record<StyleKey, string>>; motion?: Motion;
+  /** the sky at the head of a place for each part of the day (sky-top, sky-mid, sky-foot), light and dark; a look without one
+   *  keeps its style's sky all day */
+  skies?: Record<Hour, readonly [string, string, string]>; darkSkies?: Record<Hour, readonly [string, string, string]> };
+/** The parts of the day the sky follows: morning (5 to 11), midday (to 16), evening (to 21), night. */
+export const HOURS = ["morning", "midday", "evening", "night"] as const;
+export type Hour = (typeof HOURS)[number];
+export const hourOf = (d: Date = new Date()): Hour => { const h = d.getHours(); return h < 5 ? "night" : h < 11 ? "morning" : h < 16 ? "midday" : h < 21 ? "evening" : "night"; };
 export const LOOK_NAMES = ["paper", "almanac", "book", "daylight"] as const;
 export type LookName = (typeof LOOK_NAMES)[number];
 
 const ALMANAC_COLORS: Palette = { bg: "#f2ede2", surface: "#fbf8f1", text: "#1d1a16", muted: "#6d665a", line: "#d9d1c1", accent: "#4f6b3a", danger: "#9a3324" };
 const ALMANAC_DARK: Palette = { bg: "#171613", surface: "#201e1a", text: "#ece7dc", muted: "#a59d8e", line: "#3a362f", accent: "#a3bf8a", danger: "#f08f7f" };
+/** Paper's palettes before the sky (11-22): moss on cream, the almanac's. "Make this look mine" wrote them into a theme in
+ *  full, so a colour in a paper theme that is one of these, key for key, is the built-in colour of its day, not a choice:
+ *  it reads as today's (EARLIER_FONTS does the same for the faces). */
+const EARLIER_PAPER: { colors: Palette; dark: Palette } = { colors: ALMANAC_COLORS, dark: ALMANAC_DARK };
+/** No sky: the look's ground all day (almanac, book, Daylight). */
+const NO_SKY = { "sky-top": "var(--bg)", "sky-mid": "var(--bg)", "sky-foot": "var(--bg)" } as const;
 
 export const LOOKS: Record<LookName, Look> = {
-  // Paper (the default): the app's paper and ink (the docs site's palette) with Cloud's finish. Hairlines, not ink; soft corners in three sizes; a card lifted a
-  // little off the page; boxed fields; labels in plain sentence case; the one accent on the main action.
+  // Paper (the default), under the sky (docs/LOOK.md): warm paper with hairlines where you read, scan or write; the hour's
+  // sky at the head of a place's first page; a place's name in Fraunces; coral only for the one thing you do next (the
+  // primary); the sky's own ink for links, focus and the ticked box. Soft corners in three sizes, the one card with light
+  // on it, boxed fields, labels in plain sentence case.
   paper: {
-    colors: ALMANAC_COLORS,
-    dark: ALMANAC_DARK,
+    colors: { bg: "#fbf8f1", surface: "#ffffff", text: "#27221d", muted: "#6b6459", line: "#e6ddcc", accent: "#36627d", danger: "#a3341f" },
+    dark: { bg: "#1a1814", surface: "#24211c", text: "#ede6d9", muted: "#a89f90", line: "#3a352d", accent: "#8fbad3", danger: "#f08f7f" },
+    skies: {
+      morning: ["#e6f0f6", "#fbf0d6", "#fcf7ec"], midday: ["#d9e9f2", "#edf4f6", "#fbf8f1"],
+      evening: ["#e5e2ec", "#f6dccb", "#fbeee3"], night: ["#d9dbe6", "#e9e4e6", "#f6f1ea"],
+    },
+    darkSkies: {
+      morning: ["#26323b", "#2e2a22", "#1f1c17"], midday: ["#1f313d", "#1f2a2e", "#1c1a16"],
+      evening: ["#2c2738", "#3a2a25", "#211b18"], night: ["#1b2032", "#211f27", "#1a1814"],
+    },
     style: {
-      "primary": "var(--accent)", "on-primary": "var(--surface)", "tint": "color-mix(in srgb, var(--text) 5%, transparent)",
+      "primary": "#bf4a2a", "on-primary": "#ffffff", "tint": "color-mix(in srgb, var(--text) 5%, transparent)",
       "card-fill": "var(--surface)", "field-fill": "var(--surface)", "button-fill": "var(--surface)", "label-ink": "var(--muted)",
       "line-head": "1px solid var(--line)", "line-row": "1px solid color-mix(in srgb, var(--line) 75%, transparent)", "line-card": "1px solid var(--line)",
       "line-quote": "2px solid var(--line)", "field-line": "1px solid var(--line)", "button-line": "1px solid var(--line)",
       "entry-line": "1px solid var(--line)", "entry-fill": "var(--surface)",
       "card-edges": "1px", "field-edges": "1px", "field-pad": "9px 12px",
       "radius-card": "calc(var(--radius) * 1.4)", "radius-field": "var(--radius)", "radius-entry": "var(--radius)", "radius-button": "999px",
-      "shadow-card": "0 1px 0 rgb(60 45 30 / .05), 0 8px 22px -16px rgb(60 45 30 / .22)",
+      "shadow-card": "0 1px 2px rgb(60 45 30 / .05), 0 12px 32px -6px rgb(60 45 30 / .12)",
       "shadow-sheet": "0 -1px 0 var(--line), 0 -16px 40px -24px rgb(40 30 20 / .35)",
-      "label-transform": "none", "label-caps": "normal", "label-track": "0em", "title-weight": "400", "measure": "760px",
+      "label-transform": "none", "label-caps": "normal", "label-track": "0em", "title-weight": "600", "measure": "760px",
+      "sky-top": "#d9e9f2", "sky-mid": "#edf4f6", "sky-foot": "#fbf8f1",
     },
-    darkStyle: { "on-primary": "var(--bg)", "shadow-card": "0 1px 0 rgb(0 0 0 / .3), 0 12px 28px -18px rgb(0 0 0 / .6)", "shadow-sheet": "0 -1px 0 var(--line), 0 -16px 40px -24px rgb(0 0 0 / .7)" },
+    darkStyle: { "primary": "#e07552", "on-primary": "#1a1814", "shadow-card": "0 1px 0 rgb(0 0 0 / .3), 0 12px 28px -18px rgb(0 0 0 / .6)", "shadow-sheet": "0 -1px 0 var(--line), 0 -16px 40px -24px rgb(0 0 0 / .7)" },
   },
   // Almanac: the look of an old almanac (design/kit/WHY.md): ink rules and type rather than boxes, dotted rows, a card
   // printed with a hard edge, a line to write on, small capital labels in the accent.
@@ -124,6 +151,7 @@ export const LOOKS: Record<LookName, Look> = {
       "radius-card": "0px", "radius-field": "var(--radius)", "radius-entry": "0px", "radius-button": "999px",
       "shadow-card": "3px 3px 0 var(--line)", "shadow-sheet": "none",
       "label-transform": "uppercase", "label-caps": "normal", "label-track": ".14em", "title-weight": "400", "measure": "760px",
+      ...NO_SKY,
     },
   },
   // Book: a printed page. No raised surfaces (a card is a section under a rule), a double rule over a list, rows set
@@ -141,6 +169,7 @@ export const LOOKS: Record<LookName, Look> = {
       "radius-card": "0px", "radius-field": "2px", "radius-entry": "0px", "radius-button": "3px",
       "shadow-card": "none", "shadow-sheet": "0 -1px 0 var(--text)",
       "label-transform": "none", "label-caps": "all-small-caps", "label-track": ".08em", "title-weight": "400", "measure": "700px",
+      ...NO_SKY,
     },
   },
   // Daylight: black on white for an e-paper screen, which shows grey badly and redraws slowly: no tints or shadows,
@@ -158,6 +187,7 @@ export const LOOKS: Record<LookName, Look> = {
       "radius-card": "var(--radius)", "radius-field": "var(--radius)", "radius-entry": "var(--radius)", "radius-button": "999px",
       "shadow-card": "none", "shadow-sheet": "none",
       "label-transform": "uppercase", "label-caps": "normal", "label-track": ".08em", "title-weight": "500", "measure": "760px",
+      ...NO_SKY,
     },
     motion: "still",
   },
@@ -212,9 +242,9 @@ export function onScreen(theme: Theme, screen: ScreenChoice): Theme {
   return { ...theme, look: "daylight", colors: { ...d.colors }, dark: { ...d.dark }, tokens: {}, motion: "still", scheme: "light" };
 }
 
-/** The built-in theme: paper, ink and one moss accent; a book serif (Literata) for reading and a quiet sans (Instrument
- *  Sans) for the rest, both carried by the app (fonts.ts), each with a local font sized to it and the old system stacks
- *  behind (design/WHY.md, design/kit/WHY.md). */
+/** The built-in theme: paper under the hour's sky, ink, coral for the one thing to do next; a display serif (Fraunces)
+ *  for a place's name, a book serif (Literata) for reading and a quiet sans (Instrument Sans) for the rest, all carried by
+ *  the app (fonts.ts), each with a local font sized to it and the old system stacks behind (docs/LOOK.md). */
 export const DEFAULT_THEME: Theme = {
   colors: { ...LOOKS[DEFAULT_LOOK].colors },
   dark: { ...LOOKS[DEFAULT_LOOK].dark },
@@ -222,6 +252,7 @@ export const DEFAULT_THEME: Theme = {
     serif: `"Literata", "Literata fallback", "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif`,
     sans: `"Instrument Sans", "Instrument Sans fallback", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`,
     mono: `ui-monospace, "SF Mono", Menlo, Consolas, monospace`,
+    display: `"Fraunces", "Fraunces fallback", "Literata", Georgia, serif`,
   },
   density: "regular",
   scheme: "system",
@@ -234,7 +265,7 @@ export const DEFAULT_THEME: Theme = {
 export const TOKEN_KEYS = [...COLOR_KEYS, ...FONT_KEYS, ...DENSITY_KEYS, ...STYLE_KEYS] as const;
 export type TokenKey = (typeof TOKEN_KEYS)[number];
 /** The look as applied: every token's value, which palette shows, the density by name, and whether the parts move. */
-export type Tokens = Record<TokenKey, string> & { scheme: "light" | "dark"; density: Density; motion: Motion; look: LookName };
+export type Tokens = Record<TokenKey, string> & { scheme: "light" | "dark"; density: Density; motion: Motion; look: LookName; hour: Hour };
 
 // One way to read each number, and a separator required between two (a comma, a slash or a space): a pattern that could
 // split a run of digits many ways would take seconds on a hostile value, and this one runs at every start.
@@ -256,9 +287,10 @@ const EARLIER_FONTS: Partial<Record<FontKey, readonly string[]>> = {
 };
 
 const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
-function palette(given: unknown, base: Palette): Palette {
+/** A palette over the look's: each colour the record gives that reads, but one that is only `earlier`'s built-in colour. */
+function palette(given: unknown, base: Palette, earlier?: Palette): Palette {
   const out = { ...base };
-  if (plain(given)) for (const k of COLOR_KEYS) if (isColor(given[k])) out[k] = given[k].trim();
+  if (plain(given)) for (const k of COLOR_KEYS) if (isColor(given[k]) && given[k].trim().toLowerCase() !== earlier?.[k].toLowerCase()) out[k] = given[k].trim();
   return out;
 }
 
@@ -272,8 +304,8 @@ export function themeFrom(metadata: unknown): Theme {
   const fonts = { ...DEFAULT_THEME.fonts };
   if (plain(t.fonts)) for (const k of FONT_KEYS) if (isFontStack(t.fonts[k]) && !EARLIER_FONTS[k]?.includes((t.fonts[k] as string).trim())) fonts[k] = (t.fonts[k] as string).trim();
   return {
-    colors: palette(t.colors, LOOKS[look].colors),
-    dark: palette(t.dark, LOOKS[look].dark),
+    colors: palette(t.colors, LOOKS[look].colors, look === "paper" ? EARLIER_PAPER.colors : undefined),
+    dark: palette(t.dark, LOOKS[look].dark, look === "paper" ? EARLIER_PAPER.dark : undefined),
     fonts,
     density: (DENSITIES as readonly unknown[]).includes(t.density) ? (t.density as Density) : DEFAULT_THEME.density,
     scheme: (SCHEMES as readonly unknown[]).includes(t.scheme) ? (t.scheme as Scheme) : DEFAULT_THEME.scheme,
@@ -283,19 +315,21 @@ export function themeFrom(metadata: unknown): Theme {
   };
 }
 
-/** The theme as applied, for a device in dark mode or not. */
-export function tokensOf(theme: Theme, systemDark: boolean): Tokens {
+/** The theme as applied, for a device in dark mode or not, at a part of the day (the sky at a place's head follows it). */
+export function tokensOf(theme: Theme, systemDark: boolean, hour: Hour = "midday"): Tokens {
   const dark = theme.scheme === "dark" || (theme.scheme === "system" && systemDark);
   const look = LOOKS[theme.look] ?? LOOKS[DEFAULT_LOOK];
-  const style = { ...look.style, ...(dark ? look.darkStyle : {}), ...theme.tokens };
-  return { ...(dark ? theme.dark : theme.colors), ...theme.fonts, ...DENSITY[theme.density], ...style, scheme: dark ? "dark" : "light", density: theme.density, motion: theme.motion, look: theme.look };
+  const skies = dark ? look.darkSkies : look.skies;
+  const sky = skies ? { "sky-top": skies[hour][0], "sky-mid": skies[hour][1], "sky-foot": skies[hour][2] } : {};
+  const style = { ...look.style, ...(dark ? look.darkStyle : {}), ...sky, ...theme.tokens };
+  return { ...(dark ? theme.dark : theme.colors), ...theme.fonts, ...DENSITY[theme.density], ...style, scheme: dark ? "dark" : "light", density: theme.density, motion: theme.motion, look: theme.look, hour };
 }
 
 /** The type scale: every text size the app and applets use, a step each, as a multiple of the body size (`--size`,
- *  which density sets). Each is the CSS variable `--fs-<step>`: a page's title, a heading, a row's or a note's lead
+ *  which density sets). Each is the CSS variable `--fs-<step>`: the one big line of a screen (Home's greeting), a page's title, a heading, a row's or a note's lead
  *  text, the body, a line under a row, and a small capital label. Applets size text only with these
  *  (src/kit/conformance.ts), so the same thing is the same size in every applet. */
-export const TYPE_SCALE = { title: 2, head: 1.35, lead: 1.12, body: 1, small: 0.875, label: 0.75 } as const;
+export const TYPE_SCALE = { display: 2.6, title: 2, head: 1.35, lead: 1.12, body: 1, small: 0.875, label: 0.75 } as const;
 export type TypeStep = keyof typeof TYPE_SCALE;
 /** The scale as CSS declarations, each on `--size` so a density (or a theme) moves them all. */
 export const TYPE_SCALE_CSS = (Object.entries(TYPE_SCALE) as [TypeStep, number][]).map(([k, v]) => `--fs-${k}:calc(var(--size) * ${v});`).join("");
@@ -328,13 +362,25 @@ export const MOTION_CSS = `:root{${Object.entries(MOTION).map(([k, v]) => `--${k
 export const cssOf = (t: Tokens): string => `:root{${TOKEN_KEYS.map((k) => `--${k}:${t[k]};`).join("")}${TYPE_SCALE_CSS}color-scheme:${t.scheme};}`
   + `${MOTION_CSS}${t.motion === "still" ? `:root:not([data-motion="flowing"]){${STILL}}` : ""}`;
 
-/** A theme record as written back on a change: a font stack an earlier app wrote (EARLIER_FONTS) becomes today's, so the
- *  note says what the app shows, and the rest is as it was. */
-export function withTodaysFonts(raw: Record<string, unknown>): Record<string, unknown> {
-  if (!plain(raw.fonts)) return raw;
-  const fonts: Record<string, unknown> = { ...raw.fonts };
-  for (const k of FONT_KEYS) if (typeof fonts[k] === "string" && EARLIER_FONTS[k]?.includes((fonts[k] as string).trim())) fonts[k] = DEFAULT_THEME.fonts[k];
-  return { ...raw, fonts };
+/** A theme record as written back on a change: a font stack an earlier app wrote (EARLIER_FONTS) becomes today's, and a
+ *  paper theme's colour that was only paper's before the sky (EARLIER_PAPER) goes, so the note says what the app shows;
+ *  the rest is as it was. */
+export function withTodays(raw: Record<string, unknown>): Record<string, unknown> {
+  let out = raw;
+  if (plain(raw.fonts)) {
+    const fonts: Record<string, unknown> = { ...raw.fonts };
+    for (const k of FONT_KEYS) if (typeof fonts[k] === "string" && EARLIER_FONTS[k]?.includes((fonts[k] as string).trim())) fonts[k] = DEFAULT_THEME.fonts[k];
+    out = { ...out, fonts };
+  }
+  const look = (LOOK_NAMES as readonly unknown[]).includes(raw.look) ? raw.look : DEFAULT_LOOK;
+  if (look === "paper") for (const which of ["colors", "dark"] as const) {
+    const given = out[which];
+    if (!plain(given)) continue;
+    const kept = Object.fromEntries(Object.entries(given).filter(([k, v]) => !(typeof v === "string" && k in EARLIER_PAPER[which] && v.trim().toLowerCase() === EARLIER_PAPER[which][k as ColorKey].toLowerCase())));
+    const { [which]: _gone, ...rest } = out;
+    out = Object.keys(kept).length ? { ...rest, [which]: kept } : rest;
+  }
+  return out;
 }
 
 /** The record a person starts from ("Make this mine"): the built-in theme, written out in full so every value is there to change. */

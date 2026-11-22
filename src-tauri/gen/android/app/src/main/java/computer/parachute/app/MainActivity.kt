@@ -60,7 +60,7 @@ class MainActivity : TauriActivity() {
 
   private fun ground(): Int {
     val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-    return if (night) 0xFF171613.toInt() else 0xFFF2EDE2.toInt()
+    return if (night) 0xFF1A1814.toInt() else 0xFFFBF8F1.toInt()
   }
 
   private fun paintGround(v: View) {

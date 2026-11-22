@@ -21,8 +21,8 @@
 * { box-sizing: border-box; }
 /* the fallbacks are the built-in theme's, for a paint before the shell sets the tokens */
 /* checkboxes, radios and ranges in the theme's accent, never the browser's blue */
-html { accent-color: var(--accent, #4f6b3a); }
-html, body { margin: 0; background: var(--bg, #f2ede2); color: var(--text, #1d1a16); font: var(--size, 16px)/var(--leading, 1.45) var(--sans, system-ui, sans-serif); -webkit-tap-highlight-color: transparent; font-variant-emoji: text; }
+html { accent-color: var(--accent, #36627d); }
+html, body { margin: 0; background: var(--bg, #fbf8f1); color: var(--text, #27221d); font: var(--size, 16px)/var(--leading, 1.45) var(--sans, system-ui, sans-serif); -webkit-tap-highlight-color: transparent; font-variant-emoji: text; }
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: var(--accent); }
 button, input { font: inherit; color: inherit; }
@@ -232,7 +232,7 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 :root.keyboard-up .update-line { display: none; }
 /* an applet's signals (services/signals.ts): its count, beside its glyph */
 .home-bar-place { position: relative; }
-.home-bar-badge { position: absolute; top: 1px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent); color: var(--bg); font: 700 var(--fs-label) var(--sans); line-height: 17px; text-align: center; }
+.home-bar-badge { position: absolute; top: 1px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--primary); color: var(--on-primary); font: 700 var(--fs-label) var(--sans); line-height: 17px; text-align: center; }
 /* the app's own Settings, under a frame of the person's: held at the right edge, on screen however full the bar is */
 .home-bar-own { position: sticky; right: 0; margin-left: auto; background: var(--surface); border-left: 1px solid var(--line); }
 .home-bar-sep { width: 1px; margin: 10px 6px; background: var(--line); flex: none; }

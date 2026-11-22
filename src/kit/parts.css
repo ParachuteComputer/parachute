@@ -96,7 +96,7 @@ div.pa-row { cursor: default; }
 :where(.pa-page) :where(button, input, textarea) { font: inherit; color: inherit; }
 .pa-page-head { display: flex; align-items: end; justify-content: space-between; gap: var(--gap); margin: 0 0 var(--gap); }
 .pa-page-aside { display: flex; gap: 8px; flex-wrap: wrap; justify-content: end; }
-.pa-title { margin: 0; font: var(--title-weight) var(--fs-title)/1.1 var(--serif); letter-spacing: -.01em; }
+.pa-title { margin: 0; font: var(--title-weight) var(--fs-title)/1.08 var(--display, var(--serif)); letter-spacing: -.015em; }
 .pa-kicker { margin: 0 0 2px; font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform); font-variant-caps: var(--label-caps);
   color: var(--label-ink); }
 .pa-pull { display: grid; place-items: end center; overflow: hidden; font: italic var(--fs-small) var(--serif); color: var(--muted); }
