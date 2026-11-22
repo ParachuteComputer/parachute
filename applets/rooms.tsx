@@ -12,7 +12,7 @@
 // it read in place of the snapshot: a room you left, or a message deleted meanwhile, goes.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button, Empty, List, Loading, onLaunch, Page, Problem, ready, Search, services, storage, when } from "parachute";
-import Room, { chunk, createStore, glyph, lastText, nameOf, now, openAsks, rootOf, tag, tags, textOf, useStore, visible, type Ev, type RoomMeta, type Store } from "component:room";
+import Room, { askEndings, chunk, createStore, glyph, lastText, nameOf, now, openAsks, rootOf, tag, tags, textOf, useStore, visible, type Ev, type RoomMeta, type Store } from "component:room";
 
 type View = { at: "list" } | { at: "room"; id: string; event?: string };
 
@@ -227,6 +227,8 @@ export default function Rooms() {
           pooled(chunk(ids, 100), 3, (c) => relay.query([{ kinds: [39000], "#d": c }])).then((xs) => xs.flat()),
           pooled(chunk(ids, 10), 3, (c) => relay.query(c.map((id) => ({ kinds: [9], "#h": [id], limit: 40 })))),
         ]);
+        // and how the asks among them ended: one its asker closed (an edit, uni-ask SPEC §3) no longer wants you
+        const endings = await askEndings(relay, (history as Ev[][]).flat());
         if (!on || down) return;
         // rooms listed but none of them described: a read cut short, not every room gone (what is painted stays)
         if (painted && !synced && ids.length && !(metas as Ev[]).length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't describe your rooms just now." }); return; }
@@ -239,6 +241,7 @@ export default function Rooms() {
         for (const id of ids) s.msgs.set(id, new Map());
         for (const id of [...s.msgs.keys()]) if (!s.rooms.has(id)) s.msgs.delete(id);
         history.flat().forEach(st.add);
+        endings.forEach(st.add);
         synced = true;
         st.bump();
         const rooms = [...s.rooms.keys()];
@@ -294,7 +297,8 @@ export default function Rooms() {
   // shortened copies (no signature) wait for the room's own read; edits go along as their own events
   const held = [...(s.msgs.get(id)?.values() ?? [])].filter((e) => visible(s, e) && (e as Ev & { sig?: string }).sig);
   const heldIds = new Set(held.map((e) => e.id));
-  const seed = { msgs: [...held, ...[...s.edits.entries()].filter(([t]) => heldIds.has(t)).map(([, ed]) => ed)], names: s.names, me: s.me };
+  // the held messages with their edits: the newest of anyone, and each editor's newest with no ask block (an ask's close)
+  const seed = { msgs: [...held, ...[...s.edits.entries(), ...[...s.plain.entries()].map(([k, ed]) => [k.split(" ")[0], ed] as const)].filter(([t]) => heldIds.has(t)).map(([, ed]) => ed)], names: s.names, me: s.me };
   const place = { get: () => places.current.get(id) ?? null, set: (d: number | null) => { places.current.set(id, d); } };
   // a room turns its own pages (its talk, room.tsx); the page around it doesn't
   const toRoom = (to: string) => { swapOut(); open(to); };

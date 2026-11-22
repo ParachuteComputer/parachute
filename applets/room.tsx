@@ -11,8 +11,8 @@
 //   onRead   optional: called with the newest message's time while the room is open and looked at (the importer keeps
 //            read state): not while the app is in the background or the applet is kept hidden (useLooking)
 //   onBack   optional: a "← Rooms" link back to the importer's list
-//   seed     optional: the room's messages the importer already holds (and their authors' names): drawn at once, before
-//            the room's own read, unless it opens at a message
+//   seed     optional: the room's messages the importer already holds (and their authors' names): drawn at
+//            once, before the room's own read, unless it opens at a message
 //   place    optional: where it was left, kept by the importer across opens: `get()` the distance from the foot it was
 //            left at (null: at the foot), `set(d)` when it goes
 // Which key is Uni's is the service's own declaration (ready().services: approvals.from, else notify.from): without
@@ -56,7 +56,7 @@ export function rootOf(e: Ev): string | null {
 // ── the store: everything read from the relay, kept in one place ──
 export function createStore() {
   const s = {
-    me: "", rooms: new Map<string, RoomMeta>(), msgs: new Map<string, Map<string, Ev>>(), edits: new Map<string, Ev>(), gone: new Map<string, Set<string>>(), removed: new Set<string>(),
+    me: "", rooms: new Map<string, RoomMeta>(), msgs: new Map<string, Map<string, Ev>>(), edits: new Map<string, Ev>(), plain: new Map<string, Ev>(), gone: new Map<string, Set<string>>(), removed: new Set<string>(),
     reacts: new Map<string, Map<string, Ev>>(), typing: new Map<string, Map<string, number>>(), names: new Map<string, string>(),
     read: {} as Record<string, number>, rev: 0, listeners: new Set<() => void>(), asked: new Set<string>(),
   };
@@ -70,6 +70,8 @@ export function createStore() {
       const target = tag(e, "e"); if (!target) return;
       const was = s.edits.get(target);
       if (!was || was.created_at <= e.created_at) s.edits.set(target, e);
+      // each editor's newest edit with no uni-ask block: an asker's close (SPEC §3: an edit that keeps a block is ignored)
+      if (!e.content.split("\n").includes("```uni-ask")) { const k = `${target} ${e.pubkey}`, p = s.plain.get(k); if (!p || p.created_at <= e.created_at) s.plain.set(k, e); }
     } else if (e.kind === 5) {
       // a deletion counts only from whoever wrote the message (checked when it is drawn: the message may come later)
       for (const t of tags(e, "e")) { const by = s.gone.get(t) ?? new Set<string>(); by.add(e.pubkey); s.gone.set(t, by); }
@@ -90,8 +92,12 @@ export type Store = ReturnType<typeof createStore>;
 
 /** A person as the room says them: the name they gave, else "Someone" (never a piece of their key). */
 export const nameOf = (st: Store["s"], pk: string) => st.names.get(pk) ?? "Someone";
-/** A message's text as it is now: its author's latest edit. */
-export const textOf = (st: Store["s"], e: Ev) => { const ed = st.edits.get(e.id); return ed && ed.pubkey === e.pubkey ? ed.content : e.content; };
+/** A message's text as it is now: its author's latest edit. An ask is the exception (uni-ask SPEC §3): only its asker's
+ *  edit that drops the uni-ask block (the close) changes what it says; one that keeps a block, or anyone else's, is ignored. */
+export const textOf = (st: Store["s"], e: Ev) => {
+  if (e.content.includes("```uni-ask") && askOf(e)) return st.plain.get(`${e.id} ${e.pubkey}`)?.content ?? e.content;
+  const ed = st.edits.get(e.id); return ed && ed.pubkey === e.pubkey ? ed.content : e.content;
+};
 export const visible = (st: Store["s"], e: Ev) => !st.removed.has(e.id) && !st.gone.get(e.id)?.has(e.pubkey);
 
 // ── markdown, the Uni app's subset, drawn as React (never as HTML) ──
@@ -188,6 +194,17 @@ export function askOf(e: Ev): Ask | null {
   const options = b.kind === "choose" && Array.isArray(b.options) ? b.options.filter((o: any) => o && /^[a-z0-9][a-z0-9-]{0,23}$/.test(o.id) && typeof o.label === "string").slice(0, 6) : [];
   if (b.kind === "choose" && options.length < 2) return null;
   return { kind: b.kind, what: b.what.slice(0, 200), why: b.why.slice(0, 500), until: b.until, options, context: typeof b.context === "string" ? b.context.slice(0, 4000) : undefined };
+}
+/** An ask as it stands (uni-ask SPEC §3): the asker's own edit that drops the uni-ask block closes it, for the card, the
+ *  room's "wants you" and Today's list alike, and for good (a later edit never reopens it); any other edit (one that
+ *  keeps a block, or someone else's) changes nothing, so the ask keeps the terms it was signed with. */
+export const askNow = (s: Store["s"], e: Ev) => s.plain.has(`${e.id} ${e.pubkey}`) ? null : askOf(e);
+/** The edits and deletions of the asks among these messages, asked for by the asks' own ids, so a close is found however
+ *  much else was edited in the room since (streamed replies are edits). At most a hundred asks a call. */
+export async function askEndings(relay: { query: (f: any[]) => Promise<any[]> }, msgs: Ev[]): Promise<Ev[]> {
+  const ids = msgs.filter((e) => e.kind === 9 && askOf(e)).map((e) => e.id);
+  const got = await Promise.all(chunk(ids, 100).map((c) => relay.query([{ kinds: [5, 40003], "#e": c, limit: 500 }]).catch(() => [])));
+  return got.flat() as Ev[];
 }
 type Prompt = { command: string; why: string; deadline: number | null };
 export function promptOf(e: Ev): Prompt | null {
@@ -450,11 +467,11 @@ export function useStore(st: Store) {
 export function openAsks(s: Store["s"], room: string) {
   const msgs = [...(s.msgs.get(room)?.values() ?? [])];
   const answered = new Set(msgs.flatMap((e) => tags(e, "q")));
-  return msgs.filter((e) => visible(s, e) && !answered.has(e.id) && e.pubkey !== s.me && (() => { const a = askOf(e); return a && a.until > now(); })()).length;
+  return msgs.filter((e) => visible(s, e) && !answered.has(e.id) && e.pubkey !== s.me && (() => { const a = askNow(s, e); return a && a.until > now(); })()).length;
 }
 /** A message as one line, for a list: an ask's question, a card's kind, or its words; else what it carries. */
 export function lastText(s: Store["s"], e: Ev) {
-  const a = askOf(e); if (a) return a.what;
+  const a = askNow(s, e); if (a) return a.what;
   if (promptOf(e)) return "Hermes asks to run a command";
   if (/```uni-sealed-(approval|morning)/.test(e.content)) return "Uni asks for your OK on a card";
   if (/```uni-secret-request/.test(e.content)) return "Uni asks for a secret";
@@ -545,6 +562,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
           // and what came between it and what was read, so the room has no gap ("Load older" reads before the oldest)
           if (found[0]) (await relay.query([{ kinds: [9], "#h": [room], since: found[0].created_at, until: oldest - 1, limit: 500 }]).catch(() => [])).forEach(st.add);
         }
+        // and how the asks among them ended, by their own ids: a close buried under later edits is found all the same
+        (await askEndings(relay, [...(s.msgs.get(room)?.values() ?? [])])).forEach(st.add);
         if (!on) return;
         const target = at ? s.msgs.get(room)?.get(at) : undefined;
         const root = target ? rootOf(target) : null;
@@ -615,7 +634,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     setOlder("loading");
     const oldest = all[0]?.created_at ?? now();
     const got = await relay.query([{ kinds: [9], "#h": [room], until: oldest - 1, limit: 100 }]).catch(() => []);
-    got.forEach(st.add); st.bump(); void names(got.map((e: Ev) => e.pubkey));
+    got.forEach(st.add); (await askEndings(relay, got)).forEach(st.add); st.bump(); void names(got.map((e: Ev) => e.pubkey));
     setOlder(got.length ? "more" : "start");
   };
 
@@ -748,7 +767,7 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
   const s = st.s;
   const mine = e.pubkey === s.me;
   const text = textOf(s, e);
-  const ask = askOf(e), prompt = promptOf(e), sealed = /```uni-sealed-(approval|morning)\n/.test(e.content), secret = !sealed && /```uni-secret-request\n/.test(e.content);
+  const ask = askNow(s, e), prompt = promptOf(e), sealed = /```uni-sealed-(approval|morning)\n/.test(e.content), secret = !sealed && /```uni-secret-request\n/.test(e.content);
   const media = mediaOf(e);
   const body = withoutFences(text).replace(/^!?\[[^\]]*\]\(https?:\/\/\S+\/media\/[0-9a-f]{64}\.[a-z0-9]+\)\s*$/gm, "").trim();
   const named = tags(e, "p").includes(s.me) && !mine;
