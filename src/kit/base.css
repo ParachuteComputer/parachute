@@ -3,13 +3,13 @@
    weighs nothing; and it sits in the first cascade layer, so the parts (parts.css), the app's own screens (styles.css) and
    above all an applet's own CSS, which is in no layer, win over it whatever their specificity (docs/THEME.md, "The order
    of styles"). The order of the layers is said once, here and at the top of each sheet that uses one.
-   Every rule but the page's own (box sizing, the body, a control's accent, an image's width) skips what the kit draws: an element with a part's class (`pa-…`), a note the kit's
+   Every rule but the page's own (the body, a control's accent, an image's width) skips what the kit draws: an element with a part's class (`pa-…`), a note the kit's
    Note or the note view draws (`.pa-note`, the renderer's `.rn`) and all inside it. Those are drawn by their own sheets
    alone, from the browser's defaults, as they always were. */
 @layer parachute.base, parachute.parts, parachute.app;
 
 @layer parachute.base {
-  :where(*, *::before, *::after) { box-sizing: border-box; }
+  :where(button, input, select, textarea, pre, table):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { box-sizing: border-box; }  /* only what the base draws: an applet's own boxes keep the browser's sizing */
   :where(html) { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   /* on each control, so an applet's own --accent (set on body or a wrapper) reaches it */
   :where(input, progress, meter) { accent-color: var(--accent); }
