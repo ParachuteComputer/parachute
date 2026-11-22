@@ -79,6 +79,9 @@ test("one ask: a close under a stream of later edits still ends it, on Today and
   tasks("ask", "--close", gone, "--reason", "withdrawn");
   // then Uni streams a long reply in the room: 45 edits of one message, newer than the close
   const bob = await person(RELAY!, secret("bob"));
+  // the asker edits the closed ask again, block and all: a close is final (uni-ask SPEC §3), so it stays closed
+  const until = Math.floor(Date.now() / 1000) + 3600;
+  expect((await bob.publish({ kind: 40003, content: `Reopened?\n\n\`\`\`uni-ask\n${JSON.stringify({ v: 1, kind: "do", what: `Closed then buried ${stamp}`, why: "x", until })}\n\`\`\``, tags: [["h", ROOM!], ["e", gone]] })).ok).toBe(true);
   const reply = await bob.publish({ kind: 9, content: "Thinking", tags: [["h", ROOM!]] });
   for (let i = 0; i < 45; i++) {
     for (let tries = 0; ; tries++) {                 // the relay's publish quota: wait as it says

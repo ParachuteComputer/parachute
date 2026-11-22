@@ -140,7 +140,7 @@ export default function Home() {
       const waiting = new Set<string>();
       if (openAsks(s, id) > 0) {
         const answered = new Set(all.flatMap((e) => e.tags.filter((t) => t[0] === "q").map((t) => t[1])));
-        for (const e of all) { const a = askNow(s, e); if (a && a.until > now() && !answered.has(e.id) && e.pubkey !== s.me) { waiting.add(e.id); wants.push({ key: e.id, room: id, roomName: room.name, text: a.what, at: e.created_at, event: e.id }); } }
+        for (const e of all) { const a = askNow(s, e); if (a && a.until > now() && !answered.has(e.id) && e.pubkey !== s.me && visible(s, e)) { waiting.add(e.id); wants.push({ key: e.id, room: id, roomName: room.name, text: a.what, at: e.created_at, event: e.id }); } }
       }
       // what names you since you last read the room (on any device) or wrote in it
       const mine = all.find((e) => e.pubkey === s.me)?.created_at ?? 0;
