@@ -22,11 +22,13 @@ const list = () => JSON.parse(tasks("ask", "--list", "--all", "--json")) as { id
 test("one ask: tasks.py asks, the room applet shows it, Aaron answers, the room closes it, and it clears", async ({ page }) => {
   test.setTimeout(180_000);
   const stamp = Date.now().toString(36);
+  for (const x of list().filter((x) => ["open", "later", "lapsed"].includes(x.state))) tasks("ask", "--close", x.id, "--reason", "withdrawn");   // earlier runs' leftovers
   const pick = tasks("ask", "--room", "asktest", "--kind", "choose", "--what", `Which bed gets the garlic ${stamp}?`, "--why", "Made-up ask (T-476 round trip)", "--options", "North bed,South bed", "--default", "North bed");
   const tell = tasks("ask", "--room", "asktest", "--kind", "tell", "--what", `The beans are up ${stamp}`, "--why", "Made-up ask (T-476 round trip)");
   const idOf = (out: string) => out.match(/ask ([0-9a-f]{64})/)![1];
   const [a, b] = [idOf(pick), idOf(tell)];
-  expect(list().filter((x) => x.id === a || x.id === b).map((x) => x.state)).toEqual(["open", "open"]);
+  const state = () => { const l = list(); return [l.find((x) => x.id === a)?.state, l.find((x) => x.id === b)?.state]; };
+  expect(state()).toEqual(["open", "open"]);
 
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
   const made = await installApplet("rooms", { relay: RELAY!, uni: getPublicKey(Uint8Array.from(Buffer.from(secret("bob"), "hex"))) });
@@ -53,15 +55,15 @@ test("one ask: tasks.py asks, the room applet shows it, Aaron answers, the room 
     // 3. the room closes both: the answered one as done, the unanswered one as withdrawn
     tasks("ask", "--close", a, "--reason", "done");
     tasks("ask", "--close", b, "--reason", "withdrawn");
-    expect(list().filter((x) => x.id === a || x.id === b).map((x) => x.state)).toEqual(["answered", "closed"]);   // an answered ask stays answered after its close (SPEC §4)
+    expect(state()).toEqual(["answered", "closed"]);   // an answered ask stays answered after its close (SPEC §4)
     // 4. cleared: no card is left asking, and the room's row no longer says it wants him
     await expect(log.getByRole("group", { name: `Wants you: The beans are up ${stamp}` })).toHaveCount(0, { timeout: 15_000 });
     await expect(log.getByRole("group", { name: /^Wants you: / })).toHaveCount(0);
     await expect(log.getByText(`Closed (withdrawn): The beans are up ${stamp}`)).toBeVisible();
     await page.screenshot({ path: "../walkthrough/04-closed-cleared.png" });
-    await app.getByRole("button", { name: /Back|Rooms/ }).first().click().catch(() => {});
+    // a fresh start of the applet reads the room again from the relay: the row no longer says it wants him
     await page.reload();
-    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click().catch(() => {});
+    await page.getByRole("button", { name: "Open Rooms" }).click();
     await expect(frame(page).getByRole("region", { name: "Your rooms" }).getByRole("button", { name: /ask-test-t476/ })).toBeVisible({ timeout: 30_000 });
     await expect(frame(page).getByRole("region", { name: "Your rooms" }).getByRole("button", { name: /ask-test-t476/ })).not.toContainText(/wants? you/);
   } finally { await made.remove(); }

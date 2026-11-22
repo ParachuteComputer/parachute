@@ -186,7 +186,8 @@ export default function Rooms() {
         const [metas, history] = await Promise.all([
           // a call for each hundred rooms: one naming every room is over a frame's request budget past about two hundred
           pooled(chunk(ids, 100), 3, (c) => relay.query([{ kinds: [39000], "#d": c }])).then((xs) => xs.flat()),
-          pooled(chunk(ids, 10), 3, (c) => relay.query(c.map((id) => ({ kinds: [9], "#h": [id], limit: 40 })))),
+          // with the newest edits and deletions: an ask its asker closed (an edit, uni-ask SPEC §3) no longer wants you
+          pooled(chunk(ids, 5), 3, (c) => relay.query(c.flatMap((id) => [{ kinds: [9], "#h": [id], limit: 40 }, { kinds: [5, 40003], "#h": [id], limit: 40 }]))),
         ]);
         if (!on || down) return;
         // rooms listed but none of them described: a read cut short, not every room gone (what is painted stays)
