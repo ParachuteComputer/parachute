@@ -9,9 +9,9 @@ The kit already follows them, so most applets get them by using its parts and ad
 
 1. **Colour from the theme only:** `var(--bg)`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`.
    One accent; meaning never by colour alone (say it in words too). **checked**
-2. **Type from the scale only:** `--fs-title` … `--fs-label`, in `--serif` (names, titles, reading: Literata) and
-   `--sans` (labels, buttons, the bar: Instrument Sans). Both faces come with the app, in every applet's frame; load
-   no others. Labels in sentence case. **checked**
+2. **Type from the scale only:** `--fs-display` … `--fs-label`, in `--display` (a place's name, the one big line of a
+   screen: Fraunces), `--serif` (names, headings, reading: Literata) and `--sans` (labels, buttons, the bar: Instrument
+   Sans). The three faces come with the app, in every applet's frame; load no others. Labels in sentence case. **checked**
 3. **Space from the theme:** `--pad` around, `--gap` between. Content starts at the top of the screen: no empty hero,
    no big gaps. Group with space and a rule (`--line`), not boxes inside boxes.
 4. **Lines, corners and depth from the look**, never fixed: `--line-head` over a list, `--line-row` between rows,

@@ -29,15 +29,15 @@ export const RULES: readonly Rule[] = [
       String.raw`\b(?:fill|stroke)\s*=\s*["'{]\s*["']?(?:#|(?:${NAMED_COLOR})\b)`,
       String.raw`\b(?:rgba?|hsla?|oklch|oklab|hwb|lab|lch)\s*\(`,
     ].join("|"), "i") },
-  { id: "type", what: "a text size of its own", use: "the type scale: var(--fs-title), var(--fs-head), var(--fs-lead), var(--fs-body), var(--fs-small), var(--fs-label)",
+  { id: "type", what: "a text size of its own", use: "the type scale: var(--fs-display), var(--fs-title), var(--fs-head), var(--fs-lead), var(--fs-body), var(--fs-small), var(--fs-label)",
     test: new RegExp([
       String.raw`\bfont-size\s*:(?!\s*(?:var\(--fs-|inherit\b))\s*[^\s;\x60"'}]`,
       String.raw`\bfont\s*:(?!\s*(?:inherit\b|string\b|["']inherit["']))(?!${SIZED}*var\(--fs-)\s*[^\s;\x60"'}]`,
       String.raw`\bfont(?:-size)?\s*:${SIZED}*calc\(\s*var\(--fs-`,
       String.raw`\bfontSize\s*:(?!\s*(?:string\b|["']var\(--fs-[a-z]+\)["']))`,
     ].join("|")) },
-  { id: "fonts", what: "a font of its own", use: "var(--serif), var(--sans), var(--mono)",
-    test: /\bfont-family\s*:(?!\s*(?:var\(--(?:serif|sans|mono)\)|inherit\b))|\bfontFamily\s*:(?!\s*(?:string\b|["']var\(--(?:serif|sans|mono)\)["']))/ },
+  { id: "fonts", what: "a font of its own", use: "var(--display), var(--serif), var(--sans), var(--mono)",
+    test: /\bfont-family\s*:(?!\s*(?:var\(--(?:display|serif|sans|mono)\)|inherit\b))|\bfontFamily\s*:(?!\s*(?:string\b|["']var\(--(?:display|serif|sans|mono)\)["']))/ },
   // how things move (docs/DESIGN-RULES.md): on the theme's curves and times, which are still under reduce-motion, and
   // only transform and opacity, so nothing moves the page under the reader
   { id: "motion", what: "motion of its own (a time or curve of its own, `all`, or a script moving it)",

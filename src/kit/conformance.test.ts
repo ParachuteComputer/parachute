@@ -107,6 +107,7 @@ const rows = [{ title: "Issue #123 is fixed" }, { name: "Gold", price: 10 }, { t
 const fruit = { ingredients: ["orange", "lime"] };
 const CARD = \`.card { border: 1px solid var(--line); box-shadow: 3px 3px 0 var(--line); color: var(--text); }\`;
 const S = { fontSize: "var(--fs-small)" };
+const BIG = \`.hello { font-family: var(--display); font-size: var(--fs-display); }\`;
 const CSS = \`.when { font: 600 var(--fs-label) var(--sans); color: var(--muted); } .x { font: inherit; font-weight: 600; }\`;
 export default function A() { return <Page title="A"><Loading>Reading your rooms…</Loading><List rows={[{ title: "B", aside: when.short(Date.now()) }]} /></Page>; }
 const tags = { "#h": [room], "#e": [id] };
