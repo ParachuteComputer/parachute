@@ -623,8 +623,8 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   }, [v.key]);
   useEffect(() => { const n = people.now; if (n?.people && n.from) setFrom((f) => f ?? n.from ?? null); }, [people.now]);
   // public as the hub judges it: the field, or its default publish tag (a hub that can't ask by the field, as 0.8 where no
-  // type indexes it, has none published that way: the tag still finds them)
-  const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { where: [{ field: "published", op: "eq", value: true }], limit: 50 }).catch(() => ({ records: [] })),
+  // type indexes it, says so and has none published that way: the tag still finds them; any other failure is said)
+  const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { where: [{ field: "published", op: "eq", value: true }], limit: 50 }).catch((e: unknown) => (/not indexed/i.test(said(e)) ? { records: [] } : Promise.reject(e))),
     vaults.query(v.key, { tag: "publish", limit: 50 })])
     .then(([x, ...ps]: [any, ...{ records: Rec[] }[]]) => { setA(x); setPub([...new Map(ps.flatMap((p) => p.records).map((r) => [r.id, r])).values()]); setFailed(null); }, setFailed);
   useEffect(() => { void load(); }, [v.key]);
