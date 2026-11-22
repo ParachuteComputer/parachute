@@ -42,7 +42,8 @@ function meter(label: string, w: Win | null | undefined, stop: number | null, no
   let note: string | null = null;
   if (info) note = "info, not a limit";
   else if (paused) note = `paused: keeping ${Math.round(100 - (stop as number))}% for rooms`;
-  else if (why && stop !== null) note = `spending to ${Math.round(stop)}%: ${why}`;
+  // mts says it in its own words ("spending to 100% before Fri 06:00 reset")
+  else if (why && stop !== null) note = /spending to/i.test(why) ? why : `spending to ${Math.round(stop)}%: ${why}`;
   else if (week && used !== null && w.resets_at && !passed) {
     const left = Math.max(0, (at(w.resets_at) - now) / 3600_000), even = Math.max(0, Math.min(100, 100 * (1 - left / WEEK_H)));
     note = used > even + 5 ? "ahead of pace" : "on pace";
@@ -88,7 +89,7 @@ const CSS = `
 .meter { display: grid; grid-template-columns: 7.5em 1fr auto; align-items: center; gap: 10px; }
 .meter-label { font-size: var(--fs-small); }
 .meter-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.meter-bar > span { display: block; height: 100%; background: var(--fg); border-radius: 3px; }
+.meter-bar > span { display: block; height: 100%; background: var(--text); border-radius: 3px; }
 .meter[data-state="paused"] .meter-bar > span, .meter[data-state="full"] .meter-bar > span { background: var(--accent); }
 .meter[data-state="info"] .meter-bar > span { background: var(--muted); }
 .meter-text { font-variant-numeric: tabular-nums; font-size: var(--fs-small); min-width: 3.2em; text-align: right; }

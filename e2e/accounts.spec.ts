@@ -27,6 +27,13 @@ test("Claude accounts: each account's use, and which one new workers use, from t
     await expect(app.getByText("New workers use whichever account has room.")).toBeVisible();
     await expect(app.getByRole("group", { name: "Week 96%" })).toContainText("paused: keeping 5% for rooms");
     await expect(app.getByRole("group", { name: "Fable week 16%" })).toBeVisible();
+    // the bar's fill is drawn in the theme's colour (the walk on 11-22 found it named a colour the theme doesn't have)
+    const [fill, text] = await app.getByRole("group", { name: "Fable week 16%" }).locator(".meter-bar > span").evaluate((e) => {
+      const probe = document.createElement("span"); probe.style.backgroundColor = "var(--text)"; document.body.appendChild(probe);
+      const t = getComputedStyle(probe).backgroundColor; probe.remove(); return [getComputedStyle(e).backgroundColor, t];
+    });
+    expect(fill).toBe(text);
+    expect(fill).not.toBe("rgba(0, 0, 0, 0)");
     await expect(app.getByRole("group", { name: "Session 40%" })).toContainText("info, not a limit");
     await expect(app.getByRole("region", { name: "Account B" })).toContainText("last reading 3h ago");
     await expect(app.getByRole("group", { name: "Week 12%" })).toContainText("on pace");
