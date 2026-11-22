@@ -182,15 +182,17 @@ const topLevel = (v: string) => { const out: string[] = []; let depth = 0, from 
 /** A style token's value as a record gives it: kept if its kind's grammar reads it, else null (the look's value stands). */
 export function styleValue(key: StyleKey, v: unknown): string | null {
   if (typeof v !== "string" || v.length > 200) return null;
-  const s = v.trim();
+  // trimmed of plain spaces only: String.trim would also take a no-break space or a line separator, which CSS doesn't
+  const ascii = (x: string) => x.replace(/^[ \t\n\r\f]+|[ \t\n\r\f]+$/g, "");
+  const s = ascii(v);
   const ok = (() => {
     switch (STYLE_TOKENS[key].kind) {
       case "color": return tokenColor(s);
-      case "line": { const m = LINE.exec(s); return !!m && tokenColor(m[2].trim()); }
+      case "line": { const m = LINE.exec(s); return !!m && tokenColor(ascii(m[2])); }
       case "edges": return EDGES.test(s);
       case "pad": return PAD.test(s);
       case "length": return new RegExp(`^${LEN}$`).test(s);
-      case "shadow": { const all = topLevel(s); return s === "none" || (all.length <= 3 && all.every((one) => { const m = ONE_SHADOW.exec(one.trim()); return !!m && tokenColor(m[3].trim()); })); }
+      case "shadow": { const all = topLevel(s); return s === "none" || (all.length <= 3 && all.every((one) => { const m = ONE_SHADOW.exec(ascii(one)); return !!m && tokenColor(ascii(m[3])); })); }
       case "transform": return ["none", "uppercase", "lowercase", "capitalize"].includes(s);
       case "caps": return ["normal", "small-caps", "all-small-caps"].includes(s);
       case "track": return /^-?(?:0|0?\.\d{1,3})em$/.test(s) && Math.abs(parseFloat(s)) <= 0.3;

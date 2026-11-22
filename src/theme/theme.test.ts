@@ -198,4 +198,10 @@ describe("the grammar holds a value to what CSS reads (else it falls back to the
     }
     expect(styleValue("line-row", "1px solid #000")).toBe("1px solid #000");
   });
+  it("an odd space before a colour or after a shadow's comma is refused too (trim takes only plain spaces)", () => {
+    expect(styleValue("line-row", "1px solid \u00a0#000")).toBeNull();
+    expect(styleValue("shadow-card", "0 0 #000,\u00a00 0 #000")).toBeNull();
+    expect(styleValue("shadow-card", "0 0 #000\u2028,0 0 #000")).toBeNull();
+    expect(styleValue("shadow-card", "0 0 #000, 0 0 #000")).toBe("0 0 #000, 0 0 #000");
+  });
 });
