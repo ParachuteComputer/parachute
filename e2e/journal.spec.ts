@@ -96,7 +96,9 @@ test("journal offline: lines the vault can't take wait on the device in order an
     await expect(box).toHaveValue("");
     // on the device's disk (the shell writes what the applet saved when its message comes; a browser keeps it in
     // localStorage), then the app restarts
-    await expect.poll(() => page.evaluate((t) => Object.keys(localStorage).some((k) => (localStorage.getItem(k) ?? "").includes(t)), `Rain on the roof ${stamp}`)).toBe(true);
+    await expect.poll(() => page.evaluate((t) => Object.keys(localStorage).some((k) => {
+      try { const v = JSON.parse(localStorage.getItem(k) ?? "null"); return Array.isArray(v?.outbox) && v.outbox.some((x: { body?: string }) => x.body?.includes(t)); } catch { return false; }
+    }), `Rain on the roof ${stamp}`)).toBe(true);
     await page.reload();
     await page.getByRole("button", { name: "Open Journal" }).click();
     await expect(waiting).toContainText(`Rain on the roof ${stamp}`);
