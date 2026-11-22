@@ -11,7 +11,7 @@
 // where it is in the page.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { arrive, Button, settled } from "./screen";
+import { arrive, Button, settled, still, STILL_DRAG } from "./screen";
 
 const FLICK = 0.4, SHARE = 0.25, SLOP_TOUCH = 10, SLOP_MOUSE = 2;
 /** Past the edge, a drag goes less and less far (Vaul's dampenValue). */
@@ -109,6 +109,8 @@ export function Drawer({ open, onClose, title, label, children }: { open: boolea
         el.setPointerCapture?.(id);
       }
       dy = d >= 0 ? d : -damp(-d);
+      // still: the drawer doesn't follow the finger (an e-paper screen would draw every step); far enough down, it closes
+      if (still()) { if (d >= STILL_DRAG) { y0 = null; dragging = false; delete sc.dataset.dragging; close.current(); } return; }
       set(dy);
     };
     const up = (e: PointerEvent) => {

@@ -14,6 +14,8 @@ export const PART_LEVEL = {
   Table: 3, Fields: 3,
   // the feel (T-476, docs/DESIGN-RULES.md): a panel from the foot of the screen
   Drawer: 4,
+  // the look (T-476, docs/LOOK.md): whether nothing should move now
+  still: 7,
 } as const;
 export type PartName = keyof typeof PART_LEVEL;
 export const PART_NAMES = Object.keys(PART_LEVEL) as PartName[];

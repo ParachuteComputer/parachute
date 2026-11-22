@@ -3,7 +3,7 @@
 // loader (code.ts) serves as the module's imports; `parts` joins the `parachute` import. Without the note renderer:
 // an applet that imports `Note` gets reactNoteEntry.ts instead.
 import { Card, Days, Empty, Field, List, useSaved } from "../../kit/parts";
-import { Button, Loading, Page, Problem, Record, Search, Tabs, toast, useTranscripts, voiceNote, Write } from "../../kit/screen";
+import { Button, Loading, Page, Problem, Record, Search, still, Tabs, toast, useTranscripts, voiceNote, Write } from "../../kit/screen";
 import { when } from "../../kit/when";
 import { Fields, Table } from "../../kit/parts-data";
 import { useTheme } from "../../kit/useTheme";
@@ -14,4 +14,4 @@ import { setModules } from "./modules";
 function Note() {
   throw new Error("Note isn't loaded here: import it by name (import { Note } from \"parachute\")");
 }
-setModules({ Button, Card, Days, Drawer, Empty, Field, Fields, Table, Link, Linked, List, Loading, Note, Page, Problem, Record, Search, Tabs, Write, link, toast, useSaved, useTheme, useTranscripts, voiceNote, when });
+setModules({ Button, Card, Days, Drawer, Empty, Field, Fields, Table, Link, Linked, List, Loading, Note, Page, Problem, Record, Search, Tabs, Write, link, toast, useSaved, useTheme, useTranscripts, voiceNote, when, still });
