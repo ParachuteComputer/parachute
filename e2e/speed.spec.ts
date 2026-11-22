@@ -343,7 +343,7 @@ async function openRecord(page: Page, allow = false): Promise<number> {
   const frames = await page.locator("iframe.applet-frame").all();
   for (let i = 0; i < frames.length; i++) {
     if (!(await frames[i].isVisible())) continue;
-    const r = page.frameLocator("iframe.applet-frame").nth(i).getByRole("region", { name: "Today", exact: true }).getByRole("button").first();
+    const r = page.frameLocator("iframe.applet-frame").nth(i).getByRole("region", { name: "Today", exact: true }).getByRole("button").filter({ hasText: MARK.journal }).first();
     if (await r.isVisible().catch(() => false)) { row = r; break; }
   }
   if (!row) throw new Error("no journal row on Home");
