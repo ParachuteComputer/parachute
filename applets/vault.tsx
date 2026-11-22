@@ -284,15 +284,8 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   const sortBy = (key: string) => setView((w: View) => ({ ...w, group: null, sort: w.sort?.by === key ? { by: key, dir: w.sort.dir === "asc" ? "desc" : "asc" } : { by: key, dir: "asc" } }));
   const where = Object.fromEntries(view.where.map((w) => [w.field, w.value]));
   const setWhere = (field: string, value: unknown) => setView((w: View) => ({ ...w, where: [...w.where.filter((x) => x.field !== field), ...(value === null || value === "" ? [] : [{ field, op: "eq", value }])] }));
-  // a reference reads as a record's name in the table: a name typed into Filter means the one path the rows read so far
-  // hold for it; a path, a name none holds, or one two folders share, is sent as typed
-  const pathFor = (field: string, name: string) => {
-    const found = new Set<string>();
-    for (const r of rows ?? []) { const x = r.fields[field]; if (typeof x === "string" && x.includes("/") && (x.split("/").pop() ?? "").toLowerCase() === name.trim().toLowerCase()) found.add(x); }
-    return found.size === 1 ? [...found][0] : name;
-  };
-  const filterBy = (field: string, value: unknown) => setWhere(field, isRef(spec?.fields?.[field]) && typeof value === "string" && !value.includes("/") ? pathFor(field, value) : value);
-  // a reference to many records can't be matched by one name: it isn't offered to filter by
+  // a reference to many records can't be matched by one value (the hub's eq compares the whole list): not offered. A
+  // reference to one is matched by its path, as it is stored
   const filterable = cols.filter((c) => !(isRef(spec?.fields?.[c]) && spec?.fields?.[c]?.cardinality === "many"));
   const canWrite = v.mine || v.level === "write";
   // New starts from the type's default template (Templates/<type>/, docs/PACKS.md): its body, as it is now
@@ -339,8 +332,8 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
         <Button small kind={panel === "group" || view.group ? "primary" : "plain"} onClick={() => setPanel(panel === "group" ? "" : "group")}>{view.group ? `Group · ${label(view.group)}` : "Group"}</Button>
         <Button small onClick={() => setView((w: View) => ({ ...w, layout: w.layout === "table" ? "list" : "table" }))}>{view.layout === "table" ? "List" : "Table"}</Button>
       </div>
-      {panel === "filter" && <Fields label="Show only records where" fields={filterable.map((c) => ({ name: c, kind: kindOf(spec?.fields?.[c]) === "list" ? "text" : kindOf(spec?.fields?.[c]), choices: (spec?.fields?.[c]?.enum ?? []).map(String), value: (isRef(spec?.fields?.[c]) ? shownAs(spec?.fields?.[c], where[c]) || null : where[c]) ?? null }))}
-        onSave={(f, val) => filterBy(f, val)} />}
+      {panel === "filter" && <Fields label="Show only records where" fields={filterable.map((c) => ({ name: c, kind: kindOf(spec?.fields?.[c]) === "list" ? "text" : kindOf(spec?.fields?.[c]), choices: (spec?.fields?.[c]?.enum ?? []).map(String), value: where[c] ?? null }))}
+        onSave={(f, val) => setWhere(f, val)} />}
       {panel === "group" && <div className="chips group">{[null, ...cols].map((c) => <Button key={c ?? "-"} small kind={view.group === c ? "primary" : "quiet"} onClick={() => setView((w: View) => ({ ...w, group: c }))}>{c ? label(c) : "No groups"}</Button>)}</div>}
       <div className={`cols${record ? " peek" : ""}`}>
         <section>
@@ -440,7 +433,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       {/* a reference to many is shown by the names of the records it points at (isRefList) */}
       {names.length ? <Fields label="Fields" fields={names.map((n) => isRefList(spec[n], r.fields[n])
         ? { name: n, kind: "text", choices: [], value: shownAs(spec[n], r.fields[n]) || null, readOnly: true }
-        : { name: n, kind: kindOf(spec[n], r.fields[n]), choices: (spec[n]?.enum ?? []).map(String), value: r.fields[n] ?? null, readOnly: !canWrite || (typeof r.fields[n] === "object" && r.fields[n] !== null && !Array.isArray(r.fields[n])) })}
+        : { name: n, kind: isRef(spec[n]) && spec[n]?.cardinality === "many" ? "list" : kindOf(spec[n], r.fields[n]), choices: (spec[n]?.enum ?? []).map(String), value: r.fields[n] ?? null, readOnly: !canWrite || (typeof r.fields[n] === "object" && r.fields[n] !== null && !Array.isArray(r.fields[n])) })}
         onSave={canWrite ? (n, val) => change({ fields: { [n]: val } }) : undefined} /> : <p className="note-meta">No fields.</p>}
       {canWrite && <Field label="Add a field" placeholder="its name, then its value below" action="Add" onAction={async (x) => {
         const f = x.trim().replace(/[^A-Za-z0-9_ -]/g, "").replace(/[\s-]+/g, "_").toLowerCase();
