@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Recipes</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 16px; color: var(--text, #111); background: var(--surface, #fff); }
+  .row { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #ddd; background: none; padding: 10px 2px; }
+</style></head>
+<body>
+<!-- A drawer applet written the way the Uni app's are (uni-ops applets, contract 2, window.uni, HTML, no kit parts): the
+     same controls and the same vault calls as the Recipes applet there (queryNotes, getNote, createNote, updateNote with
+     if_updated_at, ready), so e2e/drawer.spec.ts drives this one in CI and the real one with UNI_APPLET_DIR. -->
+<main>
+  <section aria-label="All recipes"><h1>Recipes</h1><ul id="rows"></ul><button type="button" id="add">Add a recipe</button></section>
+  <section id="page" aria-live="polite"></section>
+</main>
+<script>
+const FOLDER = "Recipes/";
+const $ = (id) => document.getElementById(id);
+const leaf = (p) => p.slice(FOLDER.length);
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+// Recipes' own words for a refused write (uni-ops applets/recipes `why`)
+const why = (e) => { const s = (e && (e.status || (e.response && e.response.status))) || 0; const m = String((e && (e.code || e.message)) || e);
+  return s === 409 || /conflict/i.test(m) ? "It changed elsewhere since you opened it. Go back and open it again." : "That didn't work. Try again in a moment."; };
+let open = null;
+function el(tag, attrs, text) { const e = document.createElement(tag); Object.assign(e, attrs || {}); if (text != null) e.textContent = text; return e; }
+function button(text, id, on) { const b = el("button", { type: "button", id: id || "" }, text); b.addEventListener("click", on); return b; }
+const say = (text) => { const p = $("say"); if (p) p.textContent = text; };
+async function list() {
+  const rows = await uni.vault.queryNotes({ pathPrefix: FOLDER, limit: 50 });
+  $("rows").replaceChildren(...rows.filter((n) => n.path.startsWith(FOLDER)).map((n) => {
+    const li = el("li"); li.appendChild(button(leaf(n.path), "", () => read(n.id))).className = "row"; return li;
+  }));
+}
+// as Recipes: what an update answers is what the next update is conditioned on (its updatedAt)
+async function update(content) {
+  const saved = await uni.vault.updateNote(open.id, { content, if_updated_at: open.updatedAt });
+  open = { ...open, content, updatedAt: saved.updatedAt };
+}
+async function read(id) {
+  open = await uni.vault.getNote(id);
+  const made = button(open.content.includes(`- ${today()}`) ? "Made today" : "We made this today", "made", async () => {
+    try { await update(`${open.content.replace(/\n+$/, "")}\n\n## Made\n- ${today()}\n`); made.textContent = "Made today"; made.disabled = true; say("Noted: made today."); }
+    catch (e) { say(why(e)); }
+  });
+  made.disabled = made.textContent === "Made today";
+  $("page").replaceChildren(button("← All recipes", "", () => $("page").replaceChildren()), el("h2", {}, leaf(open.path)), el("pre", {}, open.content), made,
+    button("Edit", "", edit), el("p", { id: "say" }));
+}
+function edit() {
+  const notes = el("textarea", { id: "f-notes", placeholder: "Anything worth remembering" });
+  $("page").replaceChildren(el("h2", {}, `Editing ${leaf(open.path)}`), notes, button("Save", "save", async () => {
+    try { await update(`${open.content.replace(/\n+$/, "")}\n\n## Notes\n${notes.value}\n`); await read(open.id); say("Saved."); }
+    catch (e) { say(why(e)); }
+  }), el("p", { id: "say" }));
+}
+$("add").addEventListener("click", () => {
+  const title = el("input", { id: "f-title", placeholder: "What is it called?" });
+  const ingredients = el("textarea", { id: "f-ingredients", placeholder: "One per line" });
+  $("page").replaceChildren(el("h2", {}, "A new recipe"), title, ingredients, button("Add to the book", "save", async () => {
+    const name = title.value.trim();
+    const lines = ingredients.value.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `- ${l}`).join("\n");
+    // as Recipes: the new recipe opens by the id the vault answered with
+    const made = await uni.vault.createNote({ path: FOLDER + name, content: `# ${name}\n\n## Ingredients\n${lines}\n` });
+    await list(); await read(made.id); say("Added to the book.");
+  }));
+});
+uni.ready().then(list);
+</script>
+</body>
+</html>

@@ -15,5 +15,7 @@ fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") && version != "0.55.1" {
         panic!("wry is {version}, but the Android RustWebView.kt/Ipc.kt overrides are derived from 0.55.1: re-derive them from the new wry templates (see MainFrameOnly.kt), then update this check");
     }
+    // the update feed a build reads (src/updates.rs) is fixed when it is built
+    println!("cargo:rerun-if-env-changed=PARACHUTE_UPDATE_FEED");
     tauri_build::build()
 }

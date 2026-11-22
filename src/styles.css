@@ -5,7 +5,11 @@
    The tokens (--bg, --surface, --text, --muted, --line, --accent, --danger, --serif, --sans, --mono, --pad, --gap,
    --radius, --size, --leading) are not set here: they come from the theme (src/theme/theme.ts), the built-in one or the
    person's theme record, and are set on <html> by the shell, and handed to the frame and every applet. */
-:root { --bar-h: 58px; }
+:root { --bar-h: 58px; --update-h: 0px; }
+/* what the foot holds above the screen's own content: the bar, and a newer build's line on it (shell/UpdateLine.tsx) */
+:root { --foot-h: calc(var(--bar-h) + var(--update-h)); }
+:root.update-showing:not(.keyboard-up) { --update-h: 44px; }
+:root.update-showing:not(.keyboard-up) body { padding-bottom: var(--update-h); }
 * { box-sizing: border-box; }
 /* the fallbacks are the built-in theme's, for a paint before the shell sets the tokens */
 /* checkboxes, radios and ranges in the theme's accent, never the browser's blue */
@@ -145,7 +149,7 @@ fieldset.plain legend { padding: 0; }
 .grant-warn { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--danger, #b4532a) 12%, var(--bg)); font-size: 14px; }
 /* on a page, the card's buttons stay in reach above the bar however long its rows run (Allow never needs a scroll) */
 .applet-screen .grant-card > .grant-actions { position: sticky; bottom: 0; z-index: 2; margin: 10px calc(-1 * var(--pad, 16px)) 0; padding: 10px var(--pad, 16px); background: var(--surface); border-top: 1px solid var(--line); }
-.with-bar .applet-screen .grant-card > .grant-actions { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
+.with-bar .applet-screen .grant-card > .grant-actions { bottom: calc(var(--foot-h) + env(safe-area-inset-bottom)); }
 .passcode-line { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
 .grant-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
 /* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the sheet rises once; in it nothing moves but the figures */
@@ -196,17 +200,22 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .home-bar-place[aria-current="page"] { font-weight: 700; }
 .home-bar-place[aria-current="page"]::after { content: ""; width: 26px; height: 2px; margin-top: 2px; background: var(--text); border-radius: 2px; }
 .home-bar-place:active { background: var(--line); }
+/* a newer build (shell/UpdateLine.tsx): one line at the foot (resting on the bar when there is one) until Download or Later */
+.update-line { position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom); height: var(--update-h); box-sizing: border-box; overflow: hidden; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 6px calc(env(safe-area-inset-right) + 12px) 6px calc(env(safe-area-inset-left) + 12px); background: var(--surface); border-top: 1px solid var(--line); font-size: 14px; }
+.with-bar .update-line { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
+.update-line > span:first-child { flex: 1 1 auto; min-width: 0; }
+:root.keyboard-up .update-line { display: none; }
 /* an applet's signals (services/signals.ts): its count, beside its glyph */
 .home-bar-place { position: relative; }
 .home-bar-badge { position: absolute; top: 1px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent); color: var(--bg); font: 700 11px/17px var(--sans); text-align: center; }
 /* the app's own Settings, under a frame of the person's: held at the right edge, on screen however full the bar is */
 .home-bar-own { position: sticky; right: 0; margin-left: auto; background: var(--surface); border-left: 1px solid var(--line); }
 .home-bar-sep { width: 1px; margin: 10px 6px; background: var(--line); flex: none; }
-.with-bar .app-frame { bottom: calc(env(safe-area-inset-bottom) + var(--bar-h)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--bar-h)); }
-.with-bar > .screen, .with-bar > main { padding-bottom: calc(var(--bar-h) + 24px); }
+.with-bar .app-frame { bottom: calc(env(safe-area-inset-bottom) + var(--foot-h)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--foot-h)); }
+.with-bar > .screen, .with-bar > main { padding-bottom: calc(var(--foot-h) + 24px); }
 .applet-screen { max-width: 1280px; }
-.with-bar .applet-screen { min-height: 100dvh; padding-bottom: calc(var(--bar-h) + 10px); }
-.with-bar .sheet-scrim { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
+.with-bar .applet-screen { min-height: 100dvh; padding-bottom: calc(var(--foot-h) + 10px); }
+.with-bar .sheet-scrim { bottom: calc(var(--foot-h) + env(safe-area-inset-bottom)); }
 .sheet-list li + li { border-top: 1px solid var(--line); }
 .sheet-list .sheet-choice { padding: 12px 2px; font-size: 16px; }
 .sheet-list a.sheet-choice { display: block; color: inherit; text-decoration: none; }
@@ -263,7 +272,7 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 /* the shell's own words over a running applet (views/ShellSheets.tsx): a secret's sheet, and a passing line */
 .secret-field { display: grid; gap: 4px; margin: 10px 0; }
 .secret-field input { font: 16px/1.4 var(--mono, ui-monospace, monospace); padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; }
-.shell-line { position: fixed; left: 50%; bottom: calc(var(--bar-h, 0px) + 18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 31; margin: 0; max-width: min(520px, 92vw);
+.shell-line { position: fixed; left: 50%; bottom: calc(var(--foot-h, 0px) + 18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 31; margin: 0; max-width: min(520px, 92vw);
   padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 14px; }
 .trust-key code { display: block; font-size: 13px; word-break: break-all; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
 

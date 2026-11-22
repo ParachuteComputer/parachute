@@ -57,3 +57,81 @@ test("journal: a line becomes a dated journal note; the days show, voice entries
     await expect(opened).toHaveCount(0);
   } finally { for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {}); }
 });
+
+test("journal offline: lines the vault can't take wait on the device in order and go in under their own time; a lost answer isn't saved twice", async ({ page }) => {
+  test.setTimeout(120_000);
+  const stamp = Date.now().toString(36);
+  const note = await record(hubState(), "create", appletRecord("journal"));
+  const made: string[] = [note.id];
+  const hub = new URL(hubState().origin);
+  const writes = (u: URL) => u.host === hub.host && u.pathname.includes(`/vault/${VAULT}/`);
+  // what the vault does with a write: "down" (no connection), "lose" (it lands, the answer is lost), "ok"
+  let mode: "down" | "lose" | "ok" = "ok";
+  await page.route(writes, async (r) => {
+    if (r.request().method() === "GET" || mode === "ok") return r.continue();
+    if (mode === "down") return r.abort("internetdisconnected");
+    await r.fetch();
+    mode = "ok";
+    return r.abort("connectionreset");
+  });
+  const entries = async () => ((await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=200`)) as { id: string; path: string; content?: string }[])
+    .filter((r) => r.path.includes(stamp) || !!r.content?.includes(stamp));
+  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}-${String(d.getMinutes()).padStart(2, "0")}`;
+  try {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = page.frameLocator("iframe.applet-frame");
+    const box = app.getByLabel("Write in your journal");
+    const waiting = app.getByRole("region", { name: "Waiting to be saved" });
+    await expect(app.getByRole("heading", { name: "Journal" })).toBeVisible();
+
+    // no connection: the line waits, the box clears, the vault has none; kept across a restart of the app
+    mode = "down";
+    const first = new Date();
+    await box.fill(`Rain on the roof ${stamp}. Stayed in.`);
+    await app.getByRole("button", { name: "Save" }).click();
+    await expect(app.getByRole("status").filter({ hasText: "Kept on this device" })).toBeVisible();
+    await expect(waiting).toContainText(`Rain on the roof ${stamp}`);
+    await expect(box).toHaveValue("");
+    // on the device's disk (the shell writes what the applet saved when its message comes; a browser keeps it in
+    // localStorage), then the app restarts
+    await expect.poll(() => page.evaluate((t) => Object.keys(localStorage).some((k) => {
+      try { const v = JSON.parse(localStorage.getItem(k) ?? "null"); return Array.isArray(v?.outbox) && v.outbox.some((x: { body?: string }) => x.body?.includes(t)); } catch { return false; }
+    }), `Rain on the roof ${stamp}`)).toBe(true);
+    await page.reload();
+    await page.getByRole("button", { name: "Open Journal" }).click();
+    await expect(waiting).toContainText(`Rain on the roof ${stamp}`);
+    // a second line queues behind it; Try now while still offline says so
+    await box.fill(`Soup for dinner ${stamp}.`);
+    await app.getByRole("button", { name: "Save" }).click();
+    await expect(waiting.getByRole("listitem")).toHaveCount(2);
+    await waiting.getByRole("button", { name: "Try now" }).click();
+    await expect(app.getByRole("status").filter({ hasText: "Still can't reach your vault" })).toBeVisible();
+    expect(await entries()).toHaveLength(0);
+
+    // the connection is back: Try now, with Journal still open; both go in, each under the minute it was written
+    mode = "ok";
+    await waiting.getByRole("button", { name: "Try now" }).click();
+    await expect(waiting).toHaveCount(0);
+    await expect(app.getByRole("article", { name: /Entry at/ }).filter({ hasText: `Rain on the roof ${stamp}. Stayed in.` })).toBeVisible();
+    await expect.poll(async () => (await entries()).length, { timeout: 15_000 }).toBe(2);
+    const got = await entries();
+    made.push(...got.map((r) => r.id));
+    expect(got.find((r) => r.path.includes("Rain"))?.path).toMatch(new RegExp(`^Journal/\\d{4}/\\d{2}-\\d{2}/${hhmm(first)}(-\\d{2})? Rain on the roof ${stamp}$`));
+
+    // a write that lands but whose answer is lost waits, and when sent again it counts as sent: one note, not two
+    mode = "lose";
+    await box.fill(`Called the plumber ${stamp}.`);
+    await app.getByRole("button", { name: "Save" }).click();
+    await expect(waiting).toContainText(`Called the plumber ${stamp}`);
+    await waiting.getByRole("button", { name: "Try now" }).click();
+    await expect(waiting).toHaveCount(0);
+    const plumber = (await entries()).filter((r) => r.path.includes("plumber"));
+    made.push(...plumber.map((r) => r.id));
+    expect(plumber).toHaveLength(1);
+  } finally {
+    await page.unroute(writes).catch(() => {});
+    for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
+  }
+});

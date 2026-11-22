@@ -5,11 +5,13 @@
 // keyword (the Inbox leaves a Later thread out until something new comes in on it); Waiting is the sends from Uni's
 // account its outbound rules hold for the owner, each approved (signed with the approval key) or declined here.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Field, Linked, List, Loading, Page, Problem, ready, Search, services, signal, Tabs, toast, useSaved, when, Write } from "parachute";
+import { app, Button, Field, Linked, List, Loading, Page, Problem, ready, Search, services, signal, Tabs, toast, useSaved, when, Write } from "parachute";
 
 type Addr = { name?: string | null; email: string };
 type Email = { id: string; threadId: string; mailboxIds: Record<string, boolean>; keywords: Record<string, boolean>; from?: Addr[]; to?: Addr[]; replyTo?: Addr[]; cc?: Addr[]; subject?: string; receivedAt: string; preview?: string; hasAttachment?: boolean;
-  textBody?: { partId: string }[]; htmlBody?: { partId: string }[]; bodyValues?: Record<string, { value: string }>; attachments?: { name?: string; type?: string; size?: number }[] };
+  textBody?: { partId: string }[]; htmlBody?: { partId: string }[]; bodyValues?: Record<string, { value: string }>; attachments?: File[] };
+/** A file that came with a message (JMAP's EmailBodyPart): its bytes are the gateway's `raw` of its blob. */
+type File = { blobId?: string; name?: string | null; type?: string; size?: number };
 type Box = { id: string; name: string; role: string | null; unreadEmails?: number; totalEmails?: number };
 type Session = { account: string; primaryAccounts: Record<string, string>; accounts: Record<string, { name: string }>; roles: Record<string, string>; operations: Record<string, string[]> };
 type View = { at: "list" } | { at: "read"; id: string } | { at: "compose"; draft?: Draft; reply?: Email } | { at: "held"; opId: string };
@@ -283,7 +285,7 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
       <h2>{e.subject || "(no subject)"}</h2>
       <div className="meta">From {who(e.from)} · to {who(e.to)}{e.cc?.length ? ` · cc ${who(e.cc)}` : ""} · {when.full(e.receivedAt)}</div>
       <div className="body"><Linked text={bodyOf(e)} /></div>
-      {!!e.attachments?.length && <div className="files">{e.attachments.map((a, i) => <span key={i}>📎 {a.name ?? "file"}</span>)}</div>}
+      {!!e.attachments?.length && <div className="files">{e.attachments.map((a, i) => <SaveFile key={a.blobId ?? i} account={account} file={a} />)}</div>}
     </article>)}
     {last && <div className="bar" style={{ marginTop: 16 }}>
       {inDrafts && last.keywords?.$draft && can("draft.save") ? <Button kind="primary" onClick={async () => { const r = await op("draft.review", account, { draftId: last.id }); edit({ draftId: last.id, fingerprint: r.fingerprint, fields: { to: r.fields.to ?? [], cc: r.fields.cc ?? [], bcc: r.fields.bcc ?? [], subject: r.fields.subject ?? "", text: r.fields.text ?? "" } }); }}>Open the draft</Button>
@@ -293,6 +295,25 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
     </div>}
     {said && <Problem>{said}</Problem>}
   </Page>;
+}
+
+/** One file of a message: Save puts it in Downloads (the gateway's `raw` gives its bytes; the app saves them). */
+function SaveFile({ account, file }: { account: string; file: File }) {
+  const [busy, setBusy] = useState(false);
+  const name = file.name || "file";
+  const size = file.size ? ` · ${file.size < 1024 * 1024 ? `${Math.max(1, Math.round(file.size / 1024))} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}` : "";
+  const save = async () => {
+    if (!file.blobId) return;
+    setBusy(true);
+    try {
+      const r: any = await services.fetch("mail", "raw", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountId: account, blobId: file.blobId }), as: "bytes" });
+      if (r.status >= 300) throw new Error(`the mail gateway said ${r.status}`);
+      const { saved } = await app.save(name, r.body, file.type || "application/octet-stream");
+      toast(`Saved to Downloads as ${saved}`);
+    } catch (e: any) { toast(`Couldn't save ${name}: ${e?.message ?? e}`, { error: true }); }
+    finally { setBusy(false); }
+  };
+  return <Button small kind="quiet" busy={busy} onClick={() => void save()}>{`Save ${name}`}<span className="quiet">{size}</span></Button>;
 }
 
 function Compose({ account, can, draft, reply, done }: { account: string; can: (o: string) => boolean; draft?: Draft; reply?: Email; done: (sent: boolean) => void }) {

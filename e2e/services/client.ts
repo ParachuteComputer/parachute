@@ -55,10 +55,11 @@ export function mailAs(bridge: string, secretHex: string) {
   };
   return {
     post,
-    async send(to: string, subject: string, text: string) {
+    async send(to: string, subject: string, text: string, files: { name: string; type: string; bytes: Buffer }[] = []) {
       const s = await post("session", {});
       const account = s.primaryAccounts["urn:ietf:params:jmap:mail"];
-      const d = await post("op", { op: "draft.save", accountId: account, fields: { to: [{ email: to }], subject, text } });
+      const attachments = files.map((f) => ({ name: f.name, type: f.type, base64: f.bytes.toString("base64") }));
+      const d = await post("op", { op: "draft.save", accountId: account, fields: { to: [{ email: to }], subject, text }, ...(attachments.length ? { attachments } : {}) });
       const r = await post("op", { op: "send", accountId: account, opId: randomHex(), draftId: d.draftId, fingerprint: d.fingerprint });
       if (r.state !== "cleaned" && r.state !== "submitted") throw new Error(`send: ${JSON.stringify(r)}`);
     },

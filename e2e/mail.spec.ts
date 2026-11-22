@@ -1,6 +1,6 @@
 // Mail (applets/mail.tsx) against a real mail stack: a throwaway Stalwart behind a copy of the Uni app's mail gateway,
 // two mailboxes. Alice in the app reads what bob sent, replies (save, review exactly what will go, send), and bob gets
-// it. Services workflow only (e2e/services/README.md): MAIL_BRIDGE is the gateway's address, BUZZ_KEYS holds alice.hex and bob.hex
+// it, and saves the file bob sent with it. Services workflow only (e2e/services/README.md): MAIL_BRIDGE is the gateway's address, BUZZ_KEYS holds alice.hex and bob.hex
 // (keys the gateway maps to the two mailboxes). The browser reaches the gateway through a pass-through that adds CORS on
 // port 19952 (which the gateway must accept as an alias); the app itself sends from its native side. The second test
 // needs Uni's account on that stack (seed.mjs makes it: uni@test.test, its key BUZZ_KEYS/unibot.hex, outbound rules that hold
@@ -32,7 +32,8 @@ test("mail: alice reads what bob sent, replies after reviewing exactly what will
   const note = await record(hubState(), "create", appletRecord("mail", { mail: `${proxy.url}/mail/` }));
   try {
     const aliceAddr = (await mailAs(BRIDGE!, secret("alice")).post("session", {})).account as string;
-    await bob.send(aliceAddr, `Tomato seedlings ${stamp}`, `Hi Alice,\n\nThe seedlings are ready to pick up on Saturday.\n\nBob`);
+    await bob.send(aliceAddr, `Tomato seedlings ${stamp}`, `Hi Alice,\n\nThe seedlings are ready to pick up on Saturday.\n\nBob`,
+      [{ name: "seed-list.txt", type: "text/plain", bytes: Buffer.from(`seed list ${stamp}\ntomatoes, basil\n`) }]);
 
     await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Mail/ }).click();
@@ -48,6 +49,13 @@ test("mail: alice reads what bob sent, replies after reviewing exactly what will
     // read it: the thread, marked seen
     await row.click();
     await expect(app.getByRole("article", { name: `Tomato seedlings ${stamp}` })).toContainText("ready to pick up on Saturday");
+    // its file, saved: the browser's own download (the app's Downloads on a device), with bob's bytes
+    const download = page.waitForEvent("download");
+    await app.getByRole("button", { name: "Save seed-list.txt" }).click();
+    const dl = await download;
+    expect(dl.suggestedFilename()).toBe("seed-list.txt");
+    expect(readFileSync(await dl.path()).toString()).toContain(`seed list ${stamp}`);
+    await expect(app.getByRole("status").filter({ hasText: "Saved to Downloads as seed-list.txt" })).toBeVisible();
     // reply: save, review what will go, send
     await app.getByRole("button", { name: "Reply" }).click();
     await expect(app.getByLabel("Subject")).toHaveValue(`Re: Tomato seedlings ${stamp}`);
