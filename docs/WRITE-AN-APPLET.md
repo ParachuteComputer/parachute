@@ -175,11 +175,14 @@ its own screen.
 Settings draws nothing of it, not even its heading, until the person has allowed it on this device as it is now (the
 card says "Show a section in Settings, «Claude usage»"). Where applets run as approved code rather than sealed, a
 section does too, as its own screen does: the person allowed it under that warning, and Settings says whose it is. The section is in the card's
-key on this device: adding it, renaming it or naming another screen asks again. It is left out of the approval your other devices read (so a
+key on this device: adding it, renaming it, naming another screen or renaming the applet (Settings says whose it is)
+asks again. It is left out of the approval your other devices read (so a
 device on an older build and one on a newer agree on it); an approval from another device covers it only when that
-device's card said it (its name and its screen), else the card asks here. Changed code takes the section away until it
-is allowed again; a Revoke on another device, heard here, revokes it here too. The section keeps the most room it has
-taken while Settings is open, even when its frame stops or goes, so nothing above it moves under a tap. Only an applet in a vault of the person's own, offered by the open bundle, has one; an HTML applet,
+device's card said it (its name, its screen and the applet's name), else the card asks here; such an approval is taken
+up the first time the applet is opened on this device, and from then on Settings shows the section. Changed code takes the section away until it
+is allowed again; a Revoke on another device revokes it here too, as soon as the home vault's answer shows it (also
+when this device read the approvals before). The section keeps the most room it has
+taken while Settings is open, even when its frame stops or goes or the applet leaves the list, so nothing above it moves under a tap. Only an applet in a vault of the person's own, offered by the open bundle, has one; an HTML applet,
 or one that imports a component or has embeds, gets a line saying it can't. A bad `settings` costs the applet its
 section, not the applet. Older apps leave the field out and show nothing ([design/VERSIONS.md](design/VERSIONS.md)).
 Example: `applets/accounts.tsx` and `applets/accounts.json`.

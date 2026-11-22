@@ -339,6 +339,16 @@ test("a section added after another device's approval asks again here; one appro
     await expect(card(laptopB)).toHaveCount(0);
     await laptopB.goto("/settings");
     await expect(laptopB.getByRole("region", { name: "A glance two" }).frameLocator("iframe").locator("#g")).toHaveText("glance");
+    // Revoke on the phone; the laptop's copy of the approvals still says allowed: Settings hears the hub's answer, and
+    // the section goes, revoked here too (third review of #161)
+    await openIt(phoneA);
+    await expect(runs(phoneA)).toBeVisible();
+    await fromAppletMenu(phoneA, "Revoke");
+    await laptopB.goto("/settings");
+    await expect(laptopB.getByRole("heading", { name: "Your Parachutes" })).toBeVisible();
+    await expect(laptopB.getByRole("region", { name: "A glance two" })).toHaveCount(0, { timeout: 15_000 });
+    await openIt(laptopB);
+    await expect(card(laptopB)).toBeVisible();
   } finally {
     await phoneA.context().close(); await laptopB.context().close();
     for (const a of await approvals()) await api(hubState(), "DELETE", `notes/${a.id}`).catch(() => {});

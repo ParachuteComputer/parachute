@@ -355,7 +355,7 @@ export default function AppletScreen() {
   const approvedElsewhere = !!signedNow?.run && status !== "ok" && !!subject && signedNow.content.n >= (floorOf(approvalSubject(rec!, entry!.noteId, entry!.manifest.id)) ?? 0)
     && (mode !== "approved-code" || signedNow.content.runs === "approved-code")
     // a section of Settings is out of the approval's hash: the card that was signed must have said it
-    && approvalCoversSection(entry?.settings, signedNow.content.face);
+    && approvalCoversSection(entry?.settings, entry?.manifest.name ?? "", signedNow.content.face);
   const hubCovers = !!entry && !!rec && covers(heldLevel(rec), appletLevel(entry.manifest));
   useEffect(() => {
     if (!approvedElsewhere || !hubCovers || !subject || !keys || !signedNow?.run) return;

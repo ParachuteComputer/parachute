@@ -84,7 +84,7 @@ export function grantLines(g: Grant, ownFolder: string | null, keyring: LineOpti
   if (g.reach?.includes("voice")) out.push({ text: "Record from your microphone when you press record (the app shows its own recorder)", stress: false });
   out.push(...serviceLines(g.services ?? [], keyring));
   out.push(...signalLines(g.signals ?? []));
-  if (g.settings) out.push(settingsLine(g.settings));
+  if (g.settings) out.push(settingsLine(g.settings, g.applet.name));
   const page = embedsLine(g.embedsFrom ?? []);
   if (page) out.push({ text: page, stress: true });
   return out;
@@ -114,7 +114,7 @@ export function grantKey(g: Grant, notePath: string): Promise<string> {
   // only when it declares signals: every other key stays as it was
   const signals = g.signals?.length ? signalsKeyPart(g.signals) : undefined;
   // only when it draws a section of Settings: every other key stays as it was
-  const settings = settingsKeyPart(g.settings);
+  const settings = settingsKeyPart(g.settings, g.applet.name);
   return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens, app, embeds, services, reach, signals, settings }));
 }
 
