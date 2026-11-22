@@ -107,7 +107,7 @@ export default function Connect() {
     return (
       <Page title="Connect an AI" className="cnx">
         <style>{CSS}</style>
-        <p>Claude, ChatGPT and other AIs read and write a vault through its address. Copy one, paste it into your AI, and allow it on Parachute's page.</p>
+        <p>Claude, ChatGPT and other AIs read and write a vault through its address. Copy one, paste it into your AI, and allow it on Parachute's page, with write if it should save things there.</p>
         <List label="Your vaults' addresses" hideLabel rows={own.map(vaultRow)} />
         {how}
         <p className="small">Each address reaches that one vault only. Cursor, Claude Code and any other MCP app take the same address.</p>
@@ -118,7 +118,7 @@ export default function Connect() {
   return (
     <Page title="Connect an AI" className="cnx">
       <style>{CSS}</style>
-      <p>Claude, ChatGPT and other AIs reach your vaults through one address. Copy it, paste it into your AI, and choose its vaults when Parachute asks.</p>
+      <p>Claude, ChatGPT and other AIs reach your vaults through one address. Copy it, paste it into your AI, and choose its vaults when Parachute asks: <b>Write</b> for each one it should save to, so it can remember things there.</p>
       <List label="Your address for AIs" hideLabel rows={[...ones.map(hubRow), ...rest.map(vaultRow)]} />
       {how}
       <p className="small">Cursor, Claude Code and any other MCP app take the same address.</p>

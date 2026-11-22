@@ -1,0 +1,83 @@
+{
+  "parachute_pack": 1,
+  "id": "reading",
+  "name": "Reading list",
+  "version": 1,
+  "source": "https://parachute.computer/docs/build/packs/reading",
+  "summary": "Books you want to read, are reading and have read, with a template for notes and a view of what you're reading now.",
+  "types": {
+    "book": {
+      "description": "A book you want to read, are reading, or have read.",
+      "fields": {
+        "author": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "want to read",
+            "reading",
+            "read"
+          ],
+          "default": "want to read"
+        },
+        "rating": {
+          "type": "number"
+        },
+        "finished": {
+          "type": "date"
+        }
+      }
+    },
+    "template": {
+      "description": "A starting point for new records of one type. Its body is the new record's body.",
+      "fields": {
+        "for": {
+          "type": "string"
+        },
+        "default": {
+          "type": "boolean"
+        },
+        "guide": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "records": [
+    {
+      "path": "Templates/book/Book",
+      "types": [
+        "template"
+      ],
+      "fields": {
+        "for": "book",
+        "default": true,
+        "guide": "Why I picked it: a line. Quotes: the words, then the page."
+      },
+      "body": "## Why I picked it\n\n## Notes\n\n## Quotes\n"
+    },
+    {
+      "path": "Parachute/Views/book/Reading now",
+      "tags": [
+        "parachute-view"
+      ],
+      "fields": {
+        "view": {
+          "contract": 1,
+          "layout": "table",
+          "sort": null,
+          "where": [
+            {
+              "field": "status",
+              "op": "eq",
+              "value": "reading"
+            }
+          ],
+          "group": null
+        }
+      },
+      "body": ""
+    }
+  ]
+}

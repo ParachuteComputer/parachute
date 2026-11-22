@@ -38,6 +38,7 @@ export default function Launcher() {
       <h1 className="launcher-title">Applets</h1>
       {home.notice === "bundle-record" && <p className="launcher-notice" role="status">Your bundle didn't load, so here is every applet. <Link to="/settings">Settings</Link></p>}
       {home.notice === "bundle-newer" && <p className="launcher-notice" role="status">{updateLine(home.noticeName ?? "your bundle")} For now this is another bundle. <Link to="/settings">Settings</Link></p>}
+      {(() => { const h = vaults.find((v) => v.home); return h ? <StartHere v={h} /> : null; })()}
       <ol className="entries" aria-label="Applets">
         {/* Parachute's own (docs/design/PARACHUTE-SOURCE.md), in the home: first, from the app */}
         {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
@@ -49,6 +50,42 @@ export default function Launcher() {
       {asked && <AppletSheet v={asked.v} a={asked.a} onClose={() => setAsked(null)} />}
       {part && <ComponentSheet v={part.v} c={part.c} onClose={() => setPart(null)} />}
     </main>
+  );
+}
+
+/** A record of the person's own, not one Parachute or a hub put there (the hub's #guide notes, the app's settings,
+ *  applets, templates, views, receipts). */
+const theirs = (n: Note) => {
+  const path = (n as { path?: string }).path ?? "", tags = (n as { tags?: string[] }).tags ?? [];
+  return !/^(Parachute|Applets|Templates|\.parachute)\//.test(path) && !tags.some((t) => t === "guide" || t === "applet" || t === "component" || t.startsWith("parachute"));
+};
+
+/** A new person's first screen (T-476 first run): while their home vault holds nothing of theirs, the two ways to
+ *  make it theirs, as rows of the list. Gone once anything of theirs is in it, or a pack they added. */
+function StartHere({ v }: { v: FrameVault }) {
+  const home = useHome();
+  const load = useVaultQuery<Note[]>(v, (r) => r.queryNotes({ orderBy: "updated_at", sort: "desc", limit: 40 }), []);
+  const own = (name: string) => (home.official ?? []).find((a) => a.manifest.name === name);
+  const vault = own("Vault"), connect = own("Connect");
+  // (a pack they added counts: its receipt says they started, though its templates and views aren't records of theirs)
+  const started = (n: Note) => theirs(n) || ((n as { path?: string }).path ?? "").startsWith("Parachute/Receipts/");
+  if (load.state !== "ok" || load.data.some(started) || (!vault && !connect)) return null;
+  const row = (a: FrameApplet, name: string, life: string) => (
+    <li><Link className="entry" to={appletPath(v.key, a.noteId)}>
+      <span className="entry-glyph" aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span>
+      <span className="entry-name">{name}</span>
+      <span className="entry-life">{life}</span>
+    </Link></li>
+  );
+  return (
+    <section aria-label="Start here">
+      <h2 className="lately-label">Start here</h2>
+      <ol className="entries start-here">
+        {vault && row(vault, "Bring in what you have", "Import from Notion, or start from a pack: clients and sessions, a reading list, people and projects")}
+        {connect && row(connect, "Connect your AI", "one address for Claude or ChatGPT; it reads and writes here when you allow it")}
+      </ol>
+      <h2 className="lately-label">All applets</h2>
+    </section>
   );
 }
 

@@ -1,0 +1,136 @@
+{
+  "parachute_pack": 1,
+  "id": "clients",
+  "name": "Clients and sessions",
+  "version": 1,
+  "source": "https://parachute.computer/docs/build/packs/clients",
+  "summary": "For a practice: your clients, a note for each session, and what you agreed to follow up, with a template each and a view of open follow-ups.",
+  "types": {
+    "client": {
+      "description": "Someone you work with over time: a coaching client, a patient, a student.",
+      "fields": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "paused",
+            "finished"
+          ],
+          "default": "active"
+        },
+        "working_on": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "next_session": {
+          "type": "date"
+        }
+      }
+    },
+    "session": {
+      "description": "One conversation with a client.",
+      "fields": {
+        "date": {
+          "type": "date"
+        },
+        "client": {
+          "type": "reference"
+        }
+      }
+    },
+    "follow-up": {
+      "description": "Something you or a client agreed to do, to check next time.",
+      "fields": {
+        "client": {
+          "type": "reference"
+        },
+        "due": {
+          "type": "date"
+        },
+        "done": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "template": {
+      "description": "A starting point for new records of one type. Its body is the new record's body.",
+      "fields": {
+        "for": {
+          "type": "string"
+        },
+        "default": {
+          "type": "boolean"
+        },
+        "guide": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "records": [
+    {
+      "path": "Templates/client/Client",
+      "types": [
+        "template"
+      ],
+      "fields": {
+        "for": "client",
+        "default": true,
+        "guide": "Working on: their goal in their own words, one line. Background is what's worth knowing before a session."
+      },
+      "body": "## Working on\n\n## Background\n\n## Notes\n"
+    },
+    {
+      "path": "Templates/session/Session",
+      "types": [
+        "template"
+      ],
+      "fields": {
+        "for": "session",
+        "default": true,
+        "guide": "Agreed: one line for each thing either of you will do; each can also be a follow-up. Next time: what to ask first."
+      },
+      "body": "## How they are\n\n## Notes\n\n## Agreed\n\n## Next time\n"
+    },
+    {
+      "path": "Templates/follow-up/Follow-up",
+      "types": [
+        "template"
+      ],
+      "fields": {
+        "for": "follow-up",
+        "default": true,
+        "guide": "Who does it, and what done looks like, in a sentence."
+      },
+      "body": "## Done when\n"
+    },
+    {
+      "path": "Parachute/Views/follow-up/Open",
+      "tags": [
+        "parachute-view"
+      ],
+      "fields": {
+        "view": {
+          "contract": 1,
+          "layout": "table",
+          "sort": {
+            "by": "due",
+            "dir": "asc"
+          },
+          "where": [
+            {
+              "field": "done",
+              "op": "ne",
+              "value": true
+            }
+          ],
+          "group": "client"
+        }
+      },
+      "body": ""
+    }
+  ]
+}

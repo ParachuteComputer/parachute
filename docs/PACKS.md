@@ -36,6 +36,10 @@ changed, which the person also changed) is not built.
 
 - `vaults.importNotion(vault)`, during a tap: the app's own picker for a Notion export, applied as a pack (From Notion,
   above): `{ picked: false }`, or `{ name, found: {pages, tables, rows}, made, types, notes, left, changed }`.
+- Parachute's starter packs (`src/kit/packs/*.json`, each the block of its page at parachute.computer/docs/build/packs/<id>):
+  **Core types** (person, project, meeting, task), **Clients and sessions** (client, session, follow-up: a practice, a
+  coach's or a tutor's) and **Reading list** (book). Each has a template per type and a saved view; all three go into one
+  vault together, in any order, with every field (`src/kit/packs.test.ts`).
 - `vaults.packs(vault)`: Parachute's starter packs and the vault's receipts (`installed`, with `newer` when the app
   ships a newer version). `vaults.addPack(vault, id)`: apply a starter pack; `{ added, kept, notes, changed }`.
   Shell side: `src/applet/modules/packs.ts`. An applet can't hand the app a pack of its own to apply: only the packs
