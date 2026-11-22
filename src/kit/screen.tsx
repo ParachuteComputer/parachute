@@ -337,8 +337,6 @@ export function settled(el: Element, most = 1000): Promise<void> {
   if (!running.length) return Promise.resolve();
   return Promise.race([Promise.all(running.map((a) => a.finished.catch(() => {}))).then(() => {}), new Promise<void>((r) => setTimeout(r, most))]);
 }
-/** Into its place: drawn first as it starts (`data-state="before"`), then, the same moment, moved to "open", so the
- *  change is a transition (which a newer change can take over from where it is). */
 /** Whether nothing should move now: the device asks for less motion, the screen is slow to redraw (e-paper), it shows
  *  Daylight, or the theme is still. It asks the same thing the kit's CSS does (every time is 0, theme.ts MOTION_CSS), so
  *  an applet's own motion, the kit's and the app's agree. Under still, a finger doesn't drag anything: a drag that goes
@@ -349,6 +347,9 @@ export function still(): boolean {
 }
 /** How far a finger goes under still before it counts, in px: then the thing turns, goes or closes at once. */
 export const STILL_DRAG = 48;
+
+/** Into its place: drawn first as it starts (`data-state="before"`), then, the same moment, moved to "open", so the
+ *  change is a transition (which a newer change can take over from where it is). */
 
 export function arrive(el: HTMLElement) {
   el.dataset.state = "before";
@@ -404,11 +405,12 @@ export function toast(text: string, { error = false }: { error?: boolean } = {})
   function seen() { if (document.hidden) hold("hidden"); else free("hidden"); }
   p.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") hold("pointer"); });
   p.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") free("pointer"); });
-  // a swipe down: it follows the finger 1:1; upward it only gives a little; let go far or fast enough, or tap it, and it goes
-  let y0: number | null = null, t0 = 0, dy = 0, moved = 0;
+  // a swipe down: it follows the finger 1:1; upward it only gives a little; let go far or fast enough, or tap it, and it
+  // goes (still: it doesn't follow, and 48 px down puts it away at once)
+  let y0: number | null = null, t0 = 0, dy = 0, moved = 0, calm = false;
   p.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || done) return;
-    y0 = e.clientY; t0 = e.timeStamp; dy = 0; moved = 0;
+    y0 = e.clientY; t0 = e.timeStamp; dy = 0; moved = 0; calm = still();
     p.setPointerCapture?.(e.pointerId);
     hold("finger");
   });
@@ -416,8 +418,8 @@ export function toast(text: string, { error = false }: { error?: boolean } = {})
     if (y0 === null) return;
     const d = e.clientY - y0;
     moved = Math.max(moved, Math.abs(d));
-    // still: it doesn't follow the finger; far enough down, it goes when let go
-    if (still()) { dy = d; if (d >= STILL_DRAG) { y0 = null; go(); } return; }
+    // still: it doesn't follow the finger; far enough down, it goes at once
+    if (calm) { dy = d; if (d >= STILL_DRAG) { y0 = null; go(); } return; }
     dy = d >= 0 ? d : d / (1.5 + Math.abs(d) / 20);
     p.dataset.swiping = "";
     p.style.setProperty("--pa-swipe", `${dy}px`);

@@ -79,7 +79,7 @@ export function Drawer({ open, onClose, title, label, children }: { open: boolea
   useEffect(() => {
     const el = sheet.current, sc = scrim.current;
     if (!open || !el || !sc) return;
-    let y0: number | null = null, t0 = 0, dy = 0, dragging = false, id = -1, slop = SLOP_TOUCH;
+    let y0: number | null = null, t0 = 0, dy = 0, dragging = false, id = -1, slop = SLOP_TOUCH, calm = false;
     const set = (v: number) => {
       // at rest it holds nothing of its own, so the states' values (arriving, leaving) apply
       if (v === 0) { el.style.removeProperty("--pa-drag"); sc.style.removeProperty("--pa-scrim"); return; }
@@ -96,7 +96,7 @@ export function Drawer({ open, onClose, title, label, children }: { open: boolea
         if (e.pointerType === "mouse" || "scrolls" in el.dataset) return;
         if (t.closest("button, a, input, textarea, select, label, [contenteditable], [role=button], .pa-no-drag")) return;
       }
-      y0 = e.clientY; t0 = e.timeStamp; dy = 0; dragging = false; id = e.pointerId;
+      y0 = e.clientY; t0 = e.timeStamp; dy = 0; dragging = false; id = e.pointerId; calm = still();
       slop = e.pointerType === "touch" ? SLOP_TOUCH : SLOP_MOUSE;
     };
     const move = (e: PointerEvent) => {
@@ -110,7 +110,7 @@ export function Drawer({ open, onClose, title, label, children }: { open: boolea
       }
       dy = d >= 0 ? d : -damp(-d);
       // still: the drawer doesn't follow the finger (an e-paper screen would draw every step); far enough down, it closes
-      if (still()) { if (d >= STILL_DRAG) { y0 = null; dragging = false; delete sc.dataset.dragging; close.current(); } return; }
+      if (calm) { if (d >= STILL_DRAG) { y0 = null; dragging = false; delete sc.dataset.dragging; close.current(); } return; }
       set(dy);
     };
     const up = (e: PointerEvent) => {

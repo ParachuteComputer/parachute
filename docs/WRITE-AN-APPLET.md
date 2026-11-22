@@ -334,7 +334,7 @@ kit's ([THEME.md](THEME.md#the-order-of-styles)).
 older apps ([docs/design/VERSIONS.md](design/VERSIONS.md)). Each part has the level of the app it came in. All the
 parts above are level 1, the floor: the kit of 11-20, with every prop it lists, but `Table` and `Fields`, which are level 3
 (as are the `vaults` and `sharing` words), and `Drawer`, level 4; `vaults.changes`, `compare`, `restore`, `remove` and
-the `changes` word are level 5; `vaults.reach`, `manage`, `giveKey`, `endReach` and `stopManaging` are level 6; `still` is level 7 (fall back with `const isStill = still ?? (() => matchMedia("(prefers-reduced-motion: reduce)").matches)`). A newer prop counts as a newer part,
+the `changes` word are level 5; `vaults.reach`, `manage`, `giveKey`, `endReach` and `stopManaging` are level 6; `still` is level 7 (fall back for it: `import { still as kitStill } from "parachute"`, then `const still = kitStill ?? (() => getComputedStyle(document.documentElement).getPropertyValue("--t-state").trim() === "0ms")`, which asks what the kit's own `still()` asks). A newer prop counts as a newer part,
 and an older app ignores it. If an applet uses a part above the floor, either fall back for it, or put
 `"needs": <its level>` beside `applet` in the fields (`"fields": { "applet": { … }, "needs": 4 }`, a bare number). With `needs`, an older app lists the applet and says "Update
 Parachute to open …" instead of running it (`src/kit/olderApp.test.ts` checks the shipped applets do one or the other).
