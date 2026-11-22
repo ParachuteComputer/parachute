@@ -42,9 +42,10 @@ const shown = (v: unknown) => (v === null || v === undefined || v === "" ? "" : 
 const label = (name: string) => name.replace(/_/g, " ");
 /** A reference names a record by its path: shown by the record's name (its last part), as a person reads it. */
 const isRef = (s: Spec | undefined) => s?.type === "reference";
-/** A reference to many records (a list of paths): shown by their names and not edited here, where a name typed over the
- *  list would replace it. A reference to one stays a box with its path, the one way to set it until there is a picker. */
-const isRefList = (s: Spec | undefined, v: unknown) => isRef(s) && (Array.isArray(v) || s?.cardinality === "many");
+/** A reference that holds a list of paths: shown by their names and not edited here, where a name typed over the list
+ *  would replace it. An empty one, or a reference to one record, stays a box with its path: the one way to set it until
+ *  there is a picker. */
+const isRefList = (s: Spec | undefined, v: unknown) => isRef(s) && Array.isArray(v) && v.length > 0;
 const shownAs = (s: Spec | undefined, v: unknown) => (isRef(s) && v !== null && v !== undefined && v !== ""
   ? (Array.isArray(v) ? v : [v]).map((x) => (typeof x === "string" ? x.split("/").pop() || x : shown(x))).join(", ") : shown(v));
 const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "");
@@ -283,11 +284,16 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   const sortBy = (key: string) => setView((w: View) => ({ ...w, group: null, sort: w.sort?.by === key ? { by: key, dir: w.sort.dir === "asc" ? "desc" : "asc" } : { by: key, dir: "asc" } }));
   const where = Object.fromEntries(view.where.map((w) => [w.field, w.value]));
   const setWhere = (field: string, value: unknown) => setView((w: View) => ({ ...w, where: [...w.where.filter((x) => x.field !== field), ...(value === null || value === "" ? [] : [{ field, op: "eq", value }])] }));
-  // a reference reads as a record's name in the table: a name typed into Filter means the path it stands for, as the rows
-  // read so far hold it (a path, or a name no row holds, is sent as typed)
-  const refPaths = useRef(new Map<string, string>());
-  for (const r of rows ?? []) for (const c of cols) if (isRef(spec?.fields?.[c])) for (const x of [r.fields[c]].flat()) if (typeof x === "string" && x.includes("/")) refPaths.current.set(`${c}|${(x.split("/").pop() ?? "").toLowerCase()}`, x);
-  const filterBy = (field: string, value: unknown) => setWhere(field, isRef(spec?.fields?.[field]) && typeof value === "string" && !value.includes("/") ? refPaths.current.get(`${field}|${value.trim().toLowerCase()}`) ?? value : value);
+  // a reference reads as a record's name in the table: a name typed into Filter means the one path the rows read so far
+  // hold for it; a path, a name none holds, or one two folders share, is sent as typed
+  const pathFor = (field: string, name: string) => {
+    const found = new Set<string>();
+    for (const r of rows ?? []) { const x = r.fields[field]; if (typeof x === "string" && x.includes("/") && (x.split("/").pop() ?? "").toLowerCase() === name.trim().toLowerCase()) found.add(x); }
+    return found.size === 1 ? [...found][0] : name;
+  };
+  const filterBy = (field: string, value: unknown) => setWhere(field, isRef(spec?.fields?.[field]) && typeof value === "string" && !value.includes("/") ? pathFor(field, value) : value);
+  // a reference to many records can't be matched by one name: it isn't offered to filter by
+  const filterable = cols.filter((c) => !(isRef(spec?.fields?.[c]) && spec?.fields?.[c]?.cardinality === "many"));
   const canWrite = v.mine || v.level === "write";
   // New starts from the type's default template (Templates/<type>/, docs/PACKS.md): its body, as it is now
   const [template, setTemplate] = useState<Rec | null>(null);
@@ -333,7 +339,7 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
         <Button small kind={panel === "group" || view.group ? "primary" : "plain"} onClick={() => setPanel(panel === "group" ? "" : "group")}>{view.group ? `Group · ${label(view.group)}` : "Group"}</Button>
         <Button small onClick={() => setView((w: View) => ({ ...w, layout: w.layout === "table" ? "list" : "table" }))}>{view.layout === "table" ? "List" : "Table"}</Button>
       </div>
-      {panel === "filter" && <Fields label="Show only records where" fields={cols.map((c) => ({ name: c, kind: kindOf(spec?.fields?.[c]) === "list" ? "text" : kindOf(spec?.fields?.[c]), choices: (spec?.fields?.[c]?.enum ?? []).map(String), value: (isRef(spec?.fields?.[c]) ? shownAs(spec?.fields?.[c], where[c]) || null : where[c]) ?? null }))}
+      {panel === "filter" && <Fields label="Show only records where" fields={filterable.map((c) => ({ name: c, kind: kindOf(spec?.fields?.[c]) === "list" ? "text" : kindOf(spec?.fields?.[c]), choices: (spec?.fields?.[c]?.enum ?? []).map(String), value: (isRef(spec?.fields?.[c]) ? shownAs(spec?.fields?.[c], where[c]) || null : where[c]) ?? null }))}
         onSave={(f, val) => filterBy(f, val)} />}
       {panel === "group" && <div className="chips group">{[null, ...cols].map((c) => <Button key={c ?? "-"} small kind={view.group === c ? "primary" : "quiet"} onClick={() => setView((w: View) => ({ ...w, group: c }))}>{c ? label(c) : "No groups"}</Button>)}</div>}
       <div className={`cols${record ? " peek" : ""}`}>

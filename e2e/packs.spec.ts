@@ -129,6 +129,9 @@ test.describe.serial("Packs", () => {
     await app.getByRole("textbox", { name: "New meeting" }).fill("Kickoff with Sam");
     await app.getByRole("button", { name: "Add", exact: true }).click();
     await expect(app.getByRole("article", { name: "Kickoff with Sam" })).toContainText("Decisions");
+    // its people, a reference to many with nothing in it yet, is still a box to fill in (only a list that holds paths is
+    // shown by names and read only)
+    await expect(app.getByRole("textbox", { name: "people" })).toBeEditable();
     const kick = ((await api(hub(), "GET", "records?type=meeting&include_body=true")) as { path: string; body: string }[]).find((r) => r.path.endsWith("Kickoff with Sam"));
     expect(kick?.body).toBe(PACK.records.find((r) => r.path === "Templates/meeting/Meeting")!.body);
     await shot(page, "03-new-meeting");
