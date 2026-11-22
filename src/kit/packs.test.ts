@@ -109,3 +109,27 @@ describe("applyPack", () => {
     expect([again.changed, writes, again.added]).toEqual([false, 0, []]);
   });
 });
+
+// Parachute's starter packs (T-476 first run: a coach, a reader, people and projects): a person may add all three to one
+// vault, and none may leave out a field of another's (a field one pack declares otherwise than another is refused).
+describe("the starter packs", () => {
+  test("each passes, and all three go into one vault in any order with every field", async () => {
+    const { STARTERS } = await import("../applet/modules/packs");
+    expect(STARTERS.map((p) => p.id)).toEqual(["core-types", "clients", "reading"]);
+    for (const order of [[0, 1, 2], [2, 1, 0], [1, 0, 2]]) {
+      const types = new Map<string, { name: string; kind: "type"; count: number; fields: Record<string, { type?: string }> }>();
+      const target: PackTarget = {
+        types: async () => [...types.values()],
+        defineType: async (name, def) => { const t = types.get(name) ?? { name, kind: "type" as const, count: 0, fields: {} }; Object.assign(t.fields, def.fields); types.set(name, t); return "ok"; },
+        create: async (r) => ({ id: r.path, updatedAt: null, existed: false }),
+        receipt: async () => null,
+        writeReceipt: async () => {},
+      };
+      for (const i of order) {
+        const r = await applyPack(STARTERS[i], target);
+        expect(r.notes, `${STARTERS[i].id} after ${order.join(",")}`).toEqual([]);
+      }
+      for (const p of STARTERS) for (const [t, def] of Object.entries(p.types)) expect(Object.keys(types.get(t)!.fields)).toEqual(expect.arrayContaining(Object.keys(def.fields)));
+    }
+  });
+});
