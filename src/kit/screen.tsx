@@ -109,10 +109,12 @@ export function Loading({ children }: { children?: ReactNode }) {
 /** What went wrong: your words, then the error's ("Couldn't read your rooms: offline"), and Try again with `onRetry`. */
 export function Problem({ error, onRetry, children }: { error?: unknown; onRetry?: () => void; children?: ReactNode }) {
   const why = error === undefined || error === null || error === "" ? "" : said(error);
+  // the plain sentence says what failed; the error's own words (an address, a code, the hub's answer) are under Details
   return (
     <div className="pa-problem" role="alert">
-      <p>{children}{children && why ? ": " : ""}{why}</p>
+      <p>{children ?? why}{typeof children === "string" && !/[.!?…:]$/.test(children.trim()) ? "." : ""}</p>
       {onRetry && <Button kind="plain" small onClick={onRetry}>Try again</Button>}
+      {children && why && <details className="pa-problem-why"><summary>Details</summary>{why}</details>}
     </div>
   );
 }

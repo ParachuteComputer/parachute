@@ -9,7 +9,7 @@
 import { createServer } from "node:http";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
 import { account, api, hubState, mintToken, record, VAULT } from "./hub";
 import { installApplet } from "./helpers";
@@ -25,6 +25,7 @@ const MACHINE: [string, RegExp][] = [
   ["a run of hex", /\b[0-9a-f]{16,}\b/gi],
   ["a Parachute/ path", /(?<![\w.])\.?Parachute\/\S*/gi],
   ["a raw scope", /\bvault:[\w-]+:(?:read|write|admin)\b/gi],
+  ["a raw answer (an encoded address, JSON)", /%7B|%22|\{"\w+":/g],
   ["a piece of a key", /\b[0-9a-f]{6,}…|\bnpub1[02-9ac-hj-np-z]{6,}/gi],
 ];
 /** Every machine word in `text`, with a little of what is around it. */
@@ -133,7 +134,9 @@ export default function Habits() {
 `;
 
 type World = { key: string; relay: Awaited<ReturnType<typeof startRelay>>; mail: Awaited<ReturnType<typeof fakeMail>>; cal: Awaited<ReturnType<typeof startCalendar>>;
-  ids: Record<string, string>; undo: (() => Promise<unknown>)[] };
+  ids: Record<string, string>; undo: (() => Promise<unknown>)[];
+  /** the hub lists types (0.9 on; 0.8 has none) */
+  types: boolean };
 let world: World;
 
 test.beforeAll(async () => {
@@ -144,7 +147,9 @@ test.beforeAll(async () => {
   const admin = { ...hubState(), token: mintToken(`vault:${VAULT}:admin`) };
   const made = async (path: string, rest: Record<string, unknown>) => { const r = await api(w, "POST", "notes", { path, ...rest }); undo.push(() => api(w, "DELETE", `notes/${r.id}`).catch(() => {})); return r.id as string; };
   // the person's own: books (a type with fields), journal lines, notes, and a record an AI wrote with no title (its path is its id)
-  const hadBook = ((await api(admin, "GET", "types")) as { name: string }[]).some((t) => t.name === "book");
+  // a hub before types (0.8) has no types to list: nothing is made, so nothing is taken away
+  const listed: { name: string }[] | null = await api(admin, "GET", "types").catch(() => null);
+  const hadBook = !listed || listed.some((x) => x.name === "book");
   await api(admin, "PUT", "types/book", { fields: { author: { type: "string" }, status: { type: "string", enum: ["reading", "want", "done"] } } }).catch(() => {});
   const ids: Record<string, string> = {};
   if (!hadBook) undo.push(() => api(admin, "DELETE", "types/book").catch(() => {}));
@@ -192,7 +197,7 @@ test.beforeAll(async () => {
   }
   ids.calendar = await rec(appletRecord("calendar", { calendar: `${cal.origin}/cal/v1/` }));
   ids.habits = await rec({ path: "Applets/Habits", extension: "tsx", tags: ["applet"], body: HABITS, fields: { applet: { contract: 2, id: "habits", name: "Habits", glyph: "✓", note: "tick what you did today", access: [] } } });
-  world = { key: hubState().key, relay, mail, cal, ids, undo };
+  world = { key: hubState().key, relay, mail, cal, ids, undo, types: !!listed };
   // one event tomorrow, put in as the owner (the door's own op, signed)
   const { createHash, randomBytes } = await import("node:crypto");
   const url = `${cal.origin}/cal/v1/op`, raw = JSON.stringify({ op: "create", opId: "seed-1", fields: { title: "Seed swap at the library", start: tomorrow.toISOString(), end: new Date(tomorrow.getTime() + 3_600_000).toISOString(), location: "The library" } });
@@ -210,13 +215,19 @@ const official = (name: string, q = "") => `/v/${VAULT}/a/${encodeURIComponent(`
 const STOPS: Stop[] = [
   { name: "home", go: async (p) => { await p.goto(official("home")); await see(p, "Lately"); } },
   { name: "applets", go: async (p) => { await p.goto("/"); await see(p, "Applets"); await p.waitForTimeout(1500); } },
-  { name: "vault list", go: async (p) => { await p.goto(official("vault")); await see(p, /Your vaults|Types/); const back = vaultApplet(p).getByRole("button", { name: /Your vaults/ }).first(); if (await back.isVisible().catch(() => false)) await back.click(); await see(p, "letters"); } },
+  // Vault opens where it was left (a vault, its Sharing): back, as a person goes, to the list of vaults
+  { name: "vault list", go: async (p) => { await p.goto(official("vault")); await see(p, /Your vaults|Types|Sharing|Changes|History/);
+    for (let i = 0; i < 4 && !(await vaultApplet(p).getByRole("button", { name: /^letters/ }).first().isVisible().catch(() => false)); i++) {
+      await vaultApplet(p).getByRole("button", { name: /^← |Your vaults/ }).first().click({ timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(600);
+    }
+    await see(p, "letters"); } },
   { name: "vault", go: async (p) => { await vaultApplet(p).getByRole("button", { name: new RegExp(`^${VAULT}`) }).first().click(); await see(p, "Lately"); } },
   // the app's own records: out of Lately, a tap away under Parachute's own, by plain names
   { name: "parachute's own", go: async (p) => { await vaultApplet(p).getByRole("button", { name: "Parachute's own" }).click(); await see(p, "Approval"); await expect(vaultApplet(p).getByRole("region", { name: "Parachute's own" })).toContainText("Approval"); } },
   { name: "vault, Lately again", go: async (p) => { await vaultApplet(p).getByRole("button", { name: "Parachute's own" }).click(); await see(p, "Lately"); await expect(vaultApplet(p).getByRole("region", { name: "Lately" })).not.toContainText("Approval"); } },
   { name: "vault search", go: async (p) => { await vaultApplet(p).getByRole("searchbox").first().fill("roof"); await see(p, "Found"); } },
-  { name: "type", go: async (p) => { await vaultApplet(p).getByRole("searchbox").first().fill(""); await vaultApplet(p).locator('[data-type="book"]').click(); await see(p, "The Overstory"); } },
+  { name: "type", go: async (p) => { if (!world.types) return; await vaultApplet(p).getByRole("searchbox").first().fill(""); await vaultApplet(p).locator('[data-type="book"]').click(); await see(p, "The Overstory"); } },
   { name: "record and its history", go: async (p) => { await p.goto(official("vault", `?vault=${VAULT}&record=${world.ids.untitled}`)); await see(p, "History"); } },
   { name: "changes", go: async (p) => { await p.goto(official("vault", `?vault=${VAULT}&show=changes`)); await see(p, /Changes/); await p.waitForTimeout(1500); } },
   { name: "sharing", go: async (p) => { await p.goto(official("vault", `?vault=${VAULT}&show=sharing`)); await see(p, "Sharing"); await p.waitForTimeout(2500); } },
@@ -234,28 +245,17 @@ const STOPS: Stop[] = [
 const SHOTS = process.env.PLAIN_SHOTS;
 const SIZES = { phone: { width: 390, height: 844 }, computer: { width: 1440, height: 900 } } as const;
 
-async function walk(browser: Browser, size: keyof typeof SIZES, look: "light" | "dark" | "daylight", found: string[]) {
-  const ctx = await browser.newContext({ storageState: "e2e/.signed-in.json", viewport: SIZES[size], isMobile: size === "phone", hasTouch: size === "phone", colorScheme: look === "dark" ? "dark" : "light" });
-  ctx.setDefaultTimeout(10_000);
-  const page = await ctx.newPage();
-  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, world.key);
-  if (look === "daylight") { await page.goto("/settings"); await page.getByRole("radio", { name: /^Daylight/ }).check(); }
+/** Every stop at one width in one look, in the page given. */
+async function walk(page: Page, size: keyof typeof SIZES, look: "light" | "dark" | "daylight", found: string[]) {
+  await page.setViewportSize(SIZES[size]);
+  await page.emulateMedia({ colorScheme: look === "dark" ? "dark" : "light" });
+  await page.goto("/settings");
+  await page.getByRole("radio", { name: look === "daylight" ? /^Daylight/ : "As the theme" }).check();
   for (const s of STOPS) {
     try { await s.go(page); } catch (e) { found.push(`${size} · ${s.name}: didn't open (${String(e).split("\n")[0].slice(0, 160)})`); }
     for (const w of machineWords(await onScreen(page))) found.push(`${size} · ${s.name}: ${w}`);
     if (SHOTS) { mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: join(SHOTS, `${s.name.replace(/\W+/g, "-")}-${size}-${look}.png`), fullPage: false }); }
   }
-  await ctx.close();
-}
-
-for (const size of Object.keys(SIZES) as (keyof typeof SIZES)[]) {
-  test(`no machine words on any screen, at a ${size}'s width`, async ({ browser }) => {
-    test.setTimeout(SHOTS ? 900_000 : 300_000);
-    const found: string[] = [];
-    for (const look of SHOTS ? (["light", "dark", "daylight"] as const) : (["light"] as const)) await walk(browser, size, look, found);
-    if (process.env.PLAIN_REPORT) appendFileSync(process.env.PLAIN_REPORT, [...new Set(found)].join("\n") + "\n");
-    expect([...new Set(found)], "machine words on screen").toEqual([]);
-  });
 }
 
 // The one address the card's face keeps whole: where the applet's requests go is what is being granted (src/applet/face.ts
@@ -290,4 +290,18 @@ test("a box not ticked is the same circle as a ticked one, empty, and every row'
   await water.click();
   await expect(water).toHaveAttribute("aria-pressed", "true");
   await expect(water.locator(".pa-row-mark")).toHaveText(/✓/);
+});
+
+// last in the file: on an older hub the walk reaches what it refuses, and the app signs in again (playwright.config.ts)
+// One page for both widths (and every look): the walk is long enough for the app to refresh its sign-in, and a second
+// page started from the saved sign-in would then hold one the hub has retired.
+test("no machine words on any screen, at a phone's width and a computer's", async ({ page }) => {
+  test.setTimeout(SHOTS ? 1_500_000 : 480_000);
+  page.setDefaultTimeout(10_000);
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, world.key);
+  const found: string[] = [];
+  for (const size of Object.keys(SIZES) as (keyof typeof SIZES)[])
+    for (const look of SHOTS ? (["light", "dark", "daylight"] as const) : (["light"] as const)) await walk(page, size, look, found);
+  if (process.env.PLAIN_REPORT) appendFileSync(process.env.PLAIN_REPORT, [...new Set(found)].join("\n") + "\n");
+  expect([...new Set(found)], "machine words on screen").toEqual([]);
 });

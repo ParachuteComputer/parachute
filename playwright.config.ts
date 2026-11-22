@@ -15,11 +15,13 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure" },
   projects: [
     { name: "setup", testMatch: /auth\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },
-    { name: "phone", dependencies: ["setup"], testIgnore: [/vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /packs\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    { name: "phone", dependencies: ["setup"], testIgnore: [/vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /packs\.spec\.ts/, /plainwords\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // signing in again or refreshing retires the sign-in the tests above share (after a minute or so), so these run last
     { name: "signs-in", dependencies: ["phone"], testMatch: [/vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // last: a 403 there makes the app refresh its sign-in, which rotates the saved session the specs before share
     { name: "packs", dependencies: ["signs-in"], testMatch: [/packs\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    // last of all, for the same reason: the walk of every screen reaches what an older hub refuses (Sharing, Changes)
+    { name: "plain", dependencies: ["packs"], testMatch: [/plainwords\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
   ],
   // VITE_E2E_SIGNER: the test signer for the services tests (src/services/e2eNative.ts); only this build has it
   webServer: { command: `VITE_E2E_SIGNER=1 npm run build && npx vite preview --port ${PORT} --strictPort`, url: `http://localhost:${PORT}`, reuseExistingServer: !process.env.CI, timeout: 120_000 },
