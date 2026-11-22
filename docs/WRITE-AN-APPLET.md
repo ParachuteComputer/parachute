@@ -173,7 +173,8 @@ counts, no microphone. Write it as a glance, with the kit's parts (`List`, `Empt
 its own screen.
 
 It runs only as the person allowed it on this device: the card says "Show a section in Settings, «Claude usage»", the
-section is in the card's key (adding or renaming it asks again), and changed code shows one line ("changed since you
+section is in the card's key on this device (adding or renaming it asks again here; it is left out of the approval your
+other devices read, so a device on an older build and one on a newer agree on it), and changed code shows one line ("changed since you
 allowed it") and a way to the applet instead of running. Only an applet in a vault of the person's own, offered by the
 open bundle, has one, and only a TSX or JSX applet that imports no component and has no embeds. A bad `settings` costs
 the applet its section, not the applet. Older apps leave the field out and show nothing
