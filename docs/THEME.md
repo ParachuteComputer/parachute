@@ -100,7 +100,7 @@ The style tokens, what each draws, and its value in `paper` and in `almanac` (`s
 | `--label-caps` | A small label in small capitals: `normal` or `all-small-caps`. | `normal` | `normal` |
 | `--label-track` | A small label's letter spacing, in em. | `0em` | `.14em` |
 | `--title-weight` | The weight of a page's title and the serif headings. | `400` | `400` |
-| `--measure` | A page's width at most. | `760px` | `760px` |
+| `--measure` | A page's width at most (never under 20em). | `760px` | `760px` |
 
 A case is `none`, `uppercase`, `lowercase` or `capitalize`; capitals `normal`, `small-caps` or `all-small-caps`; a
 letter spacing between `-0.3em` and `0.3em`; a weight `100` to `900`.
