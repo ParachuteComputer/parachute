@@ -376,7 +376,7 @@ function useClock(on: boolean) {
 
 // ── how it looks: everything under .room, so the page it sits in keeps its own look ──
 const CSS = `
-.room { display: flex; flex-direction: column; height: var(--room-h, 100dvh); min-height: 0; color: var(--text); font: var(--fs-body)/var(--leading) var(--sans); }
+.room { display: flex; flex-direction: column; height: var(--room-h, 100dvh); min-height: 0; color: var(--text); background: var(--bg); font: var(--fs-body)/var(--leading) var(--sans); }
 .room .quiet { color: var(--muted); }
 .room .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 10px var(--pad, 16px) 8px; background: linear-gradient(to bottom, var(--sky-top), var(--sky-mid)); }
 .room .top h2 { flex: 1; margin: 0; font: var(--title-weight) var(--fs-title)/1.1 var(--display, var(--serif)); letter-spacing: -.015em; }

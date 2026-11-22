@@ -340,3 +340,7 @@ select.pa-finput { appearance: auto; }
   :is(.pa-sky, .pa-mark, .pa-pageline, .pa-dock) { display: none; }
 }
 }
+@layer parachute.parts {
+/* a page that scrolls (`scroll`, `wide`) has the hour's sky at its head too, under its title, fading into the paper */
+:root:has(.pa-page:not(.pa-paged)):not([data-sized]) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 150px, var(--bg) 300px); background-size: 100% 300px; background-repeat: no-repeat; }
+}
