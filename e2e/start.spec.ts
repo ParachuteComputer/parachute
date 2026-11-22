@@ -75,7 +75,8 @@ test("a new vault: Start here leads to Vault and Connect; Clients and sessions s
   // Bring in what you have → Vault → Add a pack → Clients and sessions
   await ui(page).getByRole("region", { name: "Start here" }).getByRole("link", { name: /Bring in what you have/ }).click();
   const app = frame(page);
-  await app.getByRole("button", { name: "Add a pack" }).click({ timeout: 30_000 });
+  await expect(app.getByRole("button", { name: "Import from Notion" })).toBeVisible({ timeout: 30_000 });
+  await app.getByRole("button", { name: "Add a pack" }).click();
   await expect(app.getByRole("region", { name: "Clients and sessions" })).toContainText("client (status, working on, email, next session)");
   await expect(app.getByRole("region", { name: "Reading list" })).toBeVisible();
   await shot(page, "02-packs");
