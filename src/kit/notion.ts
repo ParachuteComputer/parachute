@@ -105,13 +105,18 @@ const idIn = (s: string) => NOTION_URL.exec(s)?.[1]?.toLowerCase() ?? / ([0-9a-f
  *  notion.so link as it is); null when the value isn't only such links. Found by their "(…)" alone: a title may hold
  *  commas ("November 21, 2026") and parentheses, and so may a path, one deep. */
 function relations(raw: string): string[] | null {
+  return links(raw)?.map((l) => l.to) ?? null;
+}
+/** The same, each with the title written before it (what a link to a page outside the export is known by). */
+function links(raw: string): { title: string; to: string }[] | null {
   const re = /\(((?:[^()]|\([^()]*\))+?\.(?:md|csv)|https?:\/\/(?:www\.)?notion\.so\/[^\s()]*?[0-9a-f]{32}[^\s()]*)\)/gi;
-  const out: string[] = [];
+  const out: { title: string; to: string }[] = [];
   let last = 0;
   for (const m of raw.matchAll(re)) {
     // what came before this link, after the last one and its comma, is its title: there must be one
-    if (!raw.slice(last, m.index).replace(/^\s*,/, "").trim()) return null;
-    out.push(/^https?:/i.test(m[1]) ? m[1] : dec(m[1]));
+    const title = raw.slice(last, m.index).replace(/^\s*,/, "").trim();
+    if (!title) return null;
+    out.push({ title, to: /^https?:/i.test(m[1]) ? m[1] : dec(m[1]) });
     last = m.index! + m[0].length;
   }
   return out.length && !raw.slice(last).trim() ? out : null;
@@ -280,7 +285,7 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
     })
     // a relation written into a page as text, "Title (path.md)": a wikilink, where it is a page of the export
     // (after a line's start, a property's "Key: " or another link's ", "; its title has no ":" or "," of its own)
-    .replace(/(^|: |, )([^\n()[\]:,]+?) \(([^()\s]+\.md|https?:\/\/(?:www\.)?notion\.so\/[^()\s]*)\)/gm, (all, lead: string, label: string, link: string) => {
+    .replace(/(^|: |, )([^\n()[\]:,]+?) \(([^()\s]+\.md|https?:\/\/(?:www\.)?notion\.so\/[^()\s]*)\)/gim, (all, lead: string, label: string, link: string) => {
       if (/^[a-z][a-z0-9+.-]*:/i.test(link) && !/^https?:\/\/(?:www\.)?notion\.so\//i.test(link)) return all;
       const rec = place.get(target(from, link));
       return rec ? `${lead}${wiki(rec, label.trim())}` : all;
@@ -304,7 +309,7 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
         : c.kind === "number" ? Number(v.replace(/,(?=\d{3}\b)/g, ""))
         : c.kind === "boolean" ? /^yes$/i.test(v)
         : c.kind === "list" ? v.split(",").map((x) => x.trim()).filter(Boolean)
-        : c.kind === "relation" ? relations(v)!.map((to) => { const f = target(t.csv, to); return place.get(f) ?? tableAt(f)?.place ?? (/^https?:/i.test(to) ? to : bare(to.split("/").pop()!.replace(/\.md$/, ""))); })
+        : c.kind === "relation" ? links(v)!.map(({ title, to }) => { const f = target(t.csv, to); return place.get(f) ?? tableAt(f)?.place ?? (/^https?:/i.test(to) ? title : bare(to.split("/").pop()!.replace(/\.md$/, ""))); })
         : v;
     }
     // the row's page: its words, less the title line and the property lines the table already holds
