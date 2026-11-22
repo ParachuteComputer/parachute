@@ -29,7 +29,9 @@ The kit already follows them, so most applets get them by using its parts and ad
 7. **Only `transform` and `opacity` move**, never width, height, margins or position: moving those shifts the page
    under the reader. **checked** (no `transition: all` either)
 8. **On the theme's curves and times only:** `--ease-out` (arriving, leaving), `--ease-in-out` (moving across the
-   screen), `--ease-drawer` (a drawer); `--t-press` 160 ms, `--t-state` 200 ms, `--t-sheet` 300 ms, `--t-step` 40 ms (the kit does not delay its parts with it).
+   screen), `--ease-drawer` (a drawer); `--t-press` 160 ms, `--t-state` 200 ms, `--t-sheet` 300 ms, `--t-step` 40 ms (the kit does not delay its parts with it),
+   `--t-turn` 240 ms (a page turned by an arrow), `--t-swap` 150 ms (a room giving way to another in place). What each
+   is for: [LOOK.md](LOOK.md), "Motion".
    **checked**
    The docs site has one more, `--t-settle` 640 ms, for its home page's drawing settling once. The app has no such
    time: nothing in it is a drawing that arrives on its own, and a page arrives within 250 ms (9).
@@ -42,14 +44,17 @@ The kit already follows them, so most applets get them by using its parts and ad
    (`translateY(6px)`) and a light opacity (the kit starts at 0.85), never from `opacity: 0`; never `scale(0)` (use
    `scale(.96)`); never `ease-in` (it starts slow, just when the eye is on it). A sheet, a toast and "Reading…"
    (`Loading`, only after a wait of 300 ms) are not content already in hand, and may fade in from blank.
-11. **Still means still.** With the device's reduce-motion setting, on a screen slow to redraw (e-ink), or with a
-    theme whose `motion` is `still`, every time is 0 and nothing moves. Using the times above, an applet gets this for free.
+11. **Still means still.** With the device's reduce-motion setting, on a screen slow to redraw (e-ink), on the Daylight
+    screen choice, or with a theme whose `motion` is `still`, every time is 0 and nothing moves, and no animation runs.
+    Using the times above, an applet gets this for free; motion an applet makes in its own code asks the kit's `still()`
+    first. Under still a finger drags nothing: a drag of 48 px does what letting go would, at once. Tested in
+    `e2e/still.spec.ts`.
 
 ## Touch and pointer
 
 12. **A press answers at once:** `Button` gives a little (`scale(.97)`) under the finger. Hover only where there is a
     pointer: `@media (hover: hover) and (pointer: fine)`.
-13. **A drag follows the finger 1:1** and can be let go of any time: far or fast enough and it goes, else it settles
+13. **A drag follows the finger 1:1** (but under still, 11) and can be let go of any time: far or fast enough and it goes, else it settles
     back (`Drawer` by its grip, or anywhere while its content fits; `toast` swiped down). Tap targets are at least
     44 px on a phone (the parts' buttons are, without looking bigger; buttons stacked with no gap between go in a
     `pa-tight` box, so none takes its neighbour's tap).
