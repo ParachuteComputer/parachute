@@ -102,7 +102,7 @@ export default function Home() {
       // what was read now takes the place of what was there: a room archived or left since goes
       s.rooms.clear(); s.msgs.clear();
       for (const [metas, msgs] of parts) {
-        for (const m of metas as Ev[]) { const id = tag(m, "d"); if (id && tag(m, "archived") !== "true") s.rooms.set(id, { id, name: tag(m, "name") || id.slice(0, 8), about: "", dm: false }); }
+        for (const m of metas as Ev[]) { const id = tag(m, "d"); if (id && tag(m, "archived") !== "true") s.rooms.set(id, { id, name: tag(m, "name") || "A room with no name", about: "", dm: false }); }
         (msgs as Ev[]).forEach(st.add);
       }
       setMarks((m) => later(m, got));

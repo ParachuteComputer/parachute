@@ -5,7 +5,7 @@ import ViewerLine from "./ViewerLine";
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../../ui/Bar";
 import { useApplets, useHome, useHomeLoaded, useVault, useVaultQuery } from "../data";
-import { entryTime, folderOf, noteHref, titleOf } from "../../vault/notes";
+import { entryTime, folderOf, isHousekeeping, noteHref, titleOf } from "../../vault/notes";
 import NoVault from "./NoVault";
 import NoteRows from "./NoteRows";
 import { Loading, Problem, Search } from "../../kit/screen";
@@ -41,6 +41,9 @@ function VaultVisit() {
     ? c.queryNotes({ search: term, limit: LIMIT })
     : c.queryNotes({ orderBy: "updated_at", sort: "desc", limit: LIMIT })), [term]);
   const applets = useApplets(rec?.key);
+  // the person's notes and applets: the records the app keeps for itself (its settings, approvals, saved views) stay in
+  // Vault's "Parachute's own"
+  const mine = load.state === "ok" ? load.data.filter((n) => !isHousekeeping(n)) : [];
   if (!rec) return <NoVault />;
   if (!homeRead || toViewer) return <main className="screen"><Bar title={rec.vault} back={true} /><Loading>Opening…</Loading></main>;
   return (
@@ -58,11 +61,12 @@ function VaultVisit() {
       <Search label="Search this vault" onSearch={setTerm} live={250} />
       {load.state === "loading" && <Loading />}
       {load.state === "error" && <Problem error={load.error}>Couldn't read {rec.vault}</Problem>}
-      {load.state === "ok" && (load.data.length
-        ? <NoteRows label={term ? "Search results" : "Notes"} rows={load.data.map((n) => ({
+      {load.state === "ok" && (mine.length
+        ? <NoteRows label={term ? "Search results" : "Notes"} rows={mine.map((n) => ({
           key: n.id, to: noteHref(rec.key, n.id), title: titleOf(n), meta: [folderOf(n), entryTime(n), ...(n.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · "),
         }))} />
-        : <p className="quiet">{term ? "Nothing matches." : "This vault is empty."}</p>)}
+        // the newest page held only the app's own records: say so, not that the vault is empty
+        : <p className="quiet">{load.data.length ? (term ? "Nothing of yours matches among the first results; Vault searches further." : "Only Parachute's own records changed lately. Search, or open Vault, for yours.") : term ? "Nothing matches." : "This vault is empty."}</p>)}
     </main>
   );
 }

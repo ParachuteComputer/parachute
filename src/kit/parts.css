@@ -104,6 +104,7 @@ div.pa-row { cursor: default; }
 .pa-loading { margin: var(--gap) 0; font: italic var(--fs-body) var(--serif); color: var(--muted); }
 .pa-problem { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: var(--gap) 0; color: var(--danger); }
 .pa-problem p { margin: 0; overflow-wrap: anywhere; }
+.pa-problem-why { flex-basis: 100%; color: var(--muted); font-size: var(--fs-small); overflow-wrap: anywhere; }
 
 .pa-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 7px 18px; border: var(--button-line); border-radius: var(--radius-button);
   background: var(--button-fill); color: var(--text); font: 500 var(--fs-body) var(--sans); white-space: nowrap; cursor: pointer; }

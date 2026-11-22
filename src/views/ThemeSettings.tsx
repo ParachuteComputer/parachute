@@ -2,7 +2,7 @@
 // (the built-in look it starts from, density, light or dark, whether things move). Anything else (colours, fonts) is the theme note's, changed there by the person or their
 // agent (docs/THEME.md). The first change copies the built-in theme into the home vault (copy-on-write).
 import { useEffect, useState } from "react";
-import { makeThemeMine, readTheme, screenNow, setDensity, setLook, setMotion, setScheme, setScreen, THEME_PATH, useTheme } from "../theme/store";
+import { makeThemeMine, readTheme, screenNow, setDensity, setLook, setMotion, setScheme, setScreen, useTheme } from "../theme/store";
 import { COLOR_KEYS, DENSITIES, LOOK_NAMES, MOTIONS, SCHEMES, type Density, type LookName, type Motion, type Scheme } from "../theme/theme";
 import { homeVault } from "../shell/frameSource";
 
@@ -25,7 +25,7 @@ export default function ThemeSettings() {
   return (
     <section className="card" aria-labelledby="s-look">
       <h2 id="s-look">Look</h2>
-      <p role="status" className="look-status">{t.from === "vault" ? <>Your theme: <strong>{THEME_PATH}</strong> in {home?.vault}. Change it there, or ask your agent to.</> : "The built-in theme."}</p>
+      <p role="status" className="look-status">{t.from === "vault" ? <>Your own theme, kept in <strong>{home?.vault}</strong>. Change it there (Vault, Parachute's own), or ask your agent to.</> : "The built-in theme."}</p>
       <p className="swatches" aria-label="Colours">{COLOR_KEYS.map((k) => <span key={k} className="swatch" title={k} style={{ background: palette[k] }} />)}</p>
       {home && (
         <>

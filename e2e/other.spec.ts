@@ -36,8 +36,9 @@ test("the org's vault, added with the person's key as someone else's, is marked 
   await page.goto("/settings");
   await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
   await expect(page.getByRole("combobox", { name: `Whose ${VAULT} is` })).toHaveValue("mine");
-  await expect(page.getByRole("radio", { name: new RegExp(`^${VAULT} on`) })).toBeChecked();
-  await expect(page.getByRole("radio", { name: new RegExp(`^${ORG_VAULT} on`) })).toHaveCount(0);
+  // (the home choice names each vault, and where it is only when the person's own span more than one Parachute)
+  await expect(page.getByRole("radio", { name: new RegExp(`^${VAULT}\\b`) })).toBeChecked();
+  await expect(page.getByRole("radio", { name: new RegExp(`^${ORG_VAULT}\\b`) })).toHaveCount(0);
 });
 
 test("an applet brought in from Techne: a pointer in the home vault, its card says whose, it reads only Techne, and a change upstream asks again", async ({ page }) => {
@@ -58,11 +59,11 @@ test("an applet brought in from Techne: a pointer in the home vault, its card sa
     expect(pinned).toMatch(/^tsx:[0-9a-f]{64}$/);
 
     // it sits among the home's own applets, saying where it is from
-    await expect(brought(page)).toContainText(`from ${ORG_VAULT} · at ${hostOf(techneState().origin)}`);
+    await expect(brought(page)).toContainText(`from ${ORG_VAULT} · at ${new URL(techneState().origin).hostname}`);
     await brought(page).click();
     await expect(page.getByRole("heading", { name: /Notice board · techne's/ })).toBeVisible();
     const card = page.getByRole("region", { name: /asking for access/ });
-    await expect(card).toContainText(`In the ${ORG_VAULT} vault (someone else's, at ${hostOf(techneState().origin)})`);
+    await expect(card).toContainText(`In the ${ORG_VAULT} vault (someone else's, at ${new URL(techneState().origin).hostname})`);
     await expect(card).toContainText("It acts as you in techne, with your sign-in there. It sees nothing in your own vaults.");
     // it asked for the person's recent notes; someone else's applet is never given that, so the card doesn't offer it
     await expect(card).not.toContainText("newest notes in every vault");

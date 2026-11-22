@@ -195,7 +195,7 @@ export default function Rooms() {
         s.rooms.clear();
         for (const m of metas as Ev[]) {
           const id = tag(m, "d"); if (!id || tag(m, "archived") === "true") continue;
-          s.rooms.set(id, { id, name: tag(m, "name") || id.slice(0, 8), about: tag(m, "about") || "", dm: m.tags.some((t) => (t[0] === "t" && t[1] === "dm") || t[0] === "hidden") });
+          s.rooms.set(id, { id, name: tag(m, "name") || "A room with no name", about: tag(m, "about") || "", dm: m.tags.some((t) => (t[0] === "t" && t[1] === "dm") || t[0] === "hidden") });
         }
         for (const id of ids) s.msgs.set(id, new Map());
         for (const id of [...s.msgs.keys()]) if (!s.rooms.has(id)) s.msgs.delete(id);

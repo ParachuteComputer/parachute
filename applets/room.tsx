@@ -88,7 +88,8 @@ export function createStore() {
 }
 export type Store = ReturnType<typeof createStore>;
 
-export const nameOf = (st: Store["s"], pk: string) => st.names.get(pk) ?? `${pk.slice(0, 8)}…`;
+/** A person as the room says them: the name they gave, else "Someone" (never a piece of their key). */
+export const nameOf = (st: Store["s"], pk: string) => st.names.get(pk) ?? "Someone";
 /** A message's text as it is now: its author's latest edit. */
 export const textOf = (st: Store["s"], e: Ev) => { const ed = st.edits.get(e.id); return ed && ed.pubkey === e.pubkey ? ed.content : e.content; };
 export const visible = (st: Store["s"], e: Ev) => !st.removed.has(e.id) && !st.gone.get(e.id)?.has(e.pubkey);
@@ -525,7 +526,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
         if (!on) return;
         const newestOf = (k: number) => (meta as Ev[]).filter((e) => e.kind === k).sort((a, b) => b.created_at - a.created_at)[0];
         const m0 = newestOf(39000), m2 = newestOf(39002);
-        if (m0) setName(tag(m0, "name") || room.slice(0, 8));
+        if (m0) setName(tag(m0, "name") || "A room with no name");
         if (m2) setMembers(tags(m2, "p"));
         (got as Ev[]).forEach(st.add);
         // the message it opens at, when it is older than what was read
@@ -610,7 +611,9 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   for (const e of all) for (const q of tags(e, "q")) if (!answered.has(q)) answered.set(q, e);
   const settled = new Set<string>();
   for (const e of all) if (OUTCOME.test(e.content)) { const p = all.filter((x) => x.pubkey === e.pubkey && x.created_at <= e.created_at && promptOf(x) && !settled.has(x.id)); if (p.length) settled.add(p[p.length - 1].id); }
-  const typing = [...(s.typing.get(room)?.keys() ?? [])].map((p) => nameOf(s, p));
+  // two people with no name are "Someone" and "Someone else", not "Someone and Someone"
+  const typers = [...(s.typing.get(room)?.keys() ?? [])];
+  const typing = typers.map((p, i) => (s.names.has(p) || !typers.slice(0, i).some((q) => !s.names.has(q)) ? nameOf(s, p) : "Someone else"));
   const authors = [...new Set(all.map((e) => e.pubkey))].filter((p) => p !== s.me);
 
   // Uni's turn: here when it is a member or has written here; listening unless you muted it in this room
@@ -845,7 +848,8 @@ function SealedCard({ e }: { e: Ev }) {
   };
   if (view.refused && view.trust) return <div className="card" role="group" aria-label="Uni's card">
     <p>◆ Uni's card · {view.refused}</p>
-    <p className="why">Uni's key ({view.trust.slice(0, 8)}…{view.trust.slice(-4)}) is the one this applet names for approvals. Trust it once on this device, and its cards here can be answered.</p>
+    <p className="why">Uni's key is the one this applet names for approvals. Trust it once on this device, and its cards here can be answered.</p>
+    <details className="why"><summary>Details</summary>Uni's key: {view.trust.slice(0, 8)}…{view.trust.slice(-4)}</details>
     <div className="btns"><Button kind="primary" small busy={busy} onClick={trust}>Trust Uni's key…</Button></div>
     {err && <Problem>{err}</Problem>}
   </div>;
@@ -956,7 +960,8 @@ function Composer({ st, relay, room, thread, members, send, typing, setErr, send
     const at = ++draftAt.current;
     setTimeout(() => { if (at === draftAt.current) storage.set(draftKey, v.trim() ? { text: v, mentions: [...bound.current] } : null).catch(() => {}); }, 500);
   };
-  const options = pick ? members.map((p) => ({ p, n: nameOf(s, p) })).filter((m) => m.n.toLowerCase().startsWith(pick.q.toLowerCase()) || m.n.toLowerCase().includes(` ${pick.q.toLowerCase()}`)).slice(0, 8) : [];
+  // only people with a name of their own: a mention is bound by the name typed, and "Someone" names nobody in particular
+  const options = pick ? members.filter((p) => s.names.has(p)).map((p) => ({ p, n: nameOf(s, p) })).filter((m) => m.n.toLowerCase().startsWith(pick.q.toLowerCase()) || m.n.toLowerCase().includes(` ${pick.q.toLowerCase()}`)).slice(0, 8) : [];
   const onChange = (v: string, caret: number) => {
     setText(v);
     edits.current++;

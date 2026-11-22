@@ -3,7 +3,7 @@
 // here is a promise to applets written against it (docs/WRITE-AN-APPLET.md): add with care, never change a prop's
 // meaning. Each part imports only React, so it could later be shared as a record of its own (step 6).
 //   Days    what changed, a day at a time: a column of ink marks per day (a tally), weeks set apart, today marked
-//   List    rows under a label: a title, a line below, a word at the right, and an optional glyph; a row may be tapped
+//   List    rows under a label: a title, a line below, a word at the right, and an optional glyph or box to tick; a row may be tapped
 //   Card    a raised block with a title
 //   Field   a line to write on, with one action (Enter does it too)
 //   Empty   what shows when there is nothing yet: a sprig and a line
@@ -60,6 +60,8 @@ export function Days({ counts, times, days = 28, label, inline }: { counts?: rea
 
 export type Row = {
   key?: string; title: ReactNode; meta?: ReactNode; aside?: ReactNode; glyph?: string; onPress?: () => void;
+  /** a box to tick, in the glyph's place: true draws the tick, false the same circle empty (a habit not done today) */
+  check?: boolean;
   /** a mark after the title: a count of new things, a word */
   badge?: ReactNode;
   /** drawn bold: something new in it */
@@ -100,9 +102,11 @@ export function List({ label, hideLabel, rows, more }: { label?: ReactNode; /** 
         {rows.map((r, i) => {
           const data = Object.fromEntries(Object.entries(r.data ?? {}).filter(([k]) => /^[a-z][a-z0-9-]*$/.test(k)).map(([k, v]) => [`data-${k}`, v]));
           const cls = `pa-row${r.strong ? " pa-strong" : ""}`;
+          const ticks = typeof r.check === "boolean";
           const inner = (
             <>
-              {r.glyph && <span className="pa-row-mark" aria-hidden="true">{r.glyph}{"\ufe0e"}</span>}
+              {ticks ? <span className={`pa-row-mark pa-check${r.check ? " pa-on" : ""}`} aria-hidden="true">{r.check ? "✓\ufe0e" : ""}</span>
+                : r.glyph && <span className="pa-row-mark" aria-hidden="true">{r.glyph}{"\ufe0e"}</span>}
               <span className="pa-row-title">{r.title}{r.badge != null && r.badge !== "" && <span className="pa-badge">{r.badge}</span>}</span>
               {r.meta != null && r.meta !== "" && <span className="pa-row-meta">{r.meta}</span>}
               {r.aside != null && r.aside !== "" && <span className="pa-row-aside">{r.aside}</span>}
@@ -110,7 +114,7 @@ export function List({ label, hideLabel, rows, more }: { label?: ReactNode; /** 
             </>
           );
           return <li key={r.key ?? i} className={r.key !== undefined && fresh.current.has(r.key) ? "pa-fresh" : undefined}>{r.onPress
-            ? <button type="button" className={cls} onClick={r.onPress} aria-label={r.label} aria-current={r.current ? "true" : undefined} {...data}>{inner}</button>
+            ? <button type="button" className={cls} onClick={r.onPress} aria-label={r.label} aria-current={r.current ? "true" : undefined} aria-pressed={ticks ? r.check : undefined} {...data}>{inner}</button>
             : <div className={cls} aria-current={r.current ? "true" : undefined} {...data}>{inner}</div>}</li>;
         })}
       </ul>

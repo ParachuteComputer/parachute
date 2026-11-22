@@ -20,6 +20,8 @@ type Held = { key: string; name: string; host: string; mine: boolean; home: bool
 type Spec = { type?: string; enum?: unknown[]; description?: string; cardinality?: string };
 type TypeRow = { name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, Spec> };
 type Rec = { id: string; path: string; title: string; createdAt: string | null; updatedAt: string | null; types: string[]; tags: string[]; fields: Record<string, unknown>;
+  /** the app's own (its settings, approvals, saved views): out of Lately and search unless asked for; absent from an older app */
+  own?: boolean;
   body?: string; createdBy?: string | null; createdVia?: string | null; updatedBy?: string | null; updatedVia?: string | null;
   /** who made it and who changed it last, as a person reads them (level 5) */ madeBy?: string; changedBy?: string; links?: { dir: "out" | "in"; id: string; path: string; relationship: string }[] };
 type Where = { field: string; op: string; value: unknown };
@@ -45,6 +47,19 @@ const isRef = (s: Spec | undefined) => s?.type === "reference";
 const shownAs = (s: Spec | undefined, v: unknown) => (isRef(s) && v !== null && v !== undefined && v !== ""
   ? (Array.isArray(v) ? v : [v]).map((x) => (typeof x === "string" ? x.split("/").pop() || x : shown(x))).join(", ") : shown(v));
 const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "");
+/** A linked record's name from its path: its last segment, unless that is an id (a record with no name of its own). */
+const pathTitle = (path: string) => { const last = (path.split("/").filter(Boolean).pop() ?? "").replace(/\.(md|html?|tsx|jsx)$/i, ""); return !last || /^(?:[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$/i.test(last) ? "A record with no name" : last; };
+/** Where a record sits, as a list says it: its folder, or "Parachute's own" for the app's own (never its path). */
+const whereOf = (r: Rec) => (r.own ? "Parachute's own" : folderOf(r.path));
+/** The same from a path alone (a link's other end): the app's folders are "Parachute's own". */
+const whereAt = (path: string) => (/^\.?parachute\/(?!from\/)/i.test(path) ? "Parachute's own" : folderOf(path));
+/** Where a vault is, only to tell apart two vaults of one name: its site, or its whole address when the site is shared. */
+const placeOf = (v: Held, list: Held[]) => {
+  const twins = list.filter((o) => o !== v && o.name === v.name);
+  if (!twins.length) return "";
+  const site = (h: string) => h.replace(/:\d+$/, "");
+  return `on ${twins.some((o) => site(o.host) === site(v.host)) ? v.host : site(v.host)}`;
+};
 const said = (e: any) => String(e?.message ?? e ?? "it failed").slice(0, 200);
 /** A read that failed: a vault whose hub refused this device's sign-in in its own words (someone else's: they may have
  *  ended your access; yours: sign in again); anything else as a problem. Try again either way. */
@@ -138,7 +153,7 @@ function Vaults({ list, onOpen, onRecord }: { list: Held[]; onOpen: (key: string
   useEffect(() => {
     if (!term) { setFound(null); return; }
     let on = true;
-    Promise.all(list.map((v) => vaults.query(v.key, { search: term, limit: 20 }).then((x: { records: Rec[] }) => x.records.map((r) => ({ v, r })), () => [])))
+    Promise.all(list.map((v) => vaults.query(v.key, { search: term, limit: 20 }).then((x: { records: Rec[] }) => x.records.filter((r) => !r.own).map((r) => ({ v, r })), () => [])))
       .then((all) => { if (on) setFound(all.flat()); });
     return () => { on = false; };
   }, [term]);
@@ -149,9 +164,25 @@ function Vaults({ list, onOpen, onRecord }: { list: Held[]; onOpen: (key: string
       {found ? (found.length
         ? <List label="Found" rows={found.map(({ v, r }) => ({ key: `${v.key}|${r.id}`, title: r.title, meta: [v.name, ...r.types].join(" · "), aside: when.short(r.updatedAt), onPress: () => onRecord(v.key, r.id) }))} />
         : <Empty>Nothing matches.</Empty>)
-        : <List label="Vaults" hideLabel rows={list.map((v) => ({ key: v.key, title: v.name, meta: `${v.host}${v.mine ? "" : " · someone else's"}`, aside: v.level === "write" ? "reads and changes" : "reads", onPress: () => onOpen(v.key) }))} />}
+        // a vault's address isn't its name: said only to tell apart two vaults of the same name (by its site, or its whole
+        // address when the site is the same too)
+        : <List label="Vaults" hideLabel rows={list.map((v) => ({ key: v.key, title: v.name, meta: [placeOf(v, list), v.mine ? "" : "someone else's"].filter(Boolean).join(" · "), aside: v.level === "write" ? "reads and changes" : "reads", onPress: () => onOpen(v.key) }))} />}
     </Page>
   );
+}
+
+/** The newest 8 records the person (or their AI) wrote: a page of 20, then further pages of 50 while the app's own fill
+ *  them (a run of approvals), 4 pages at most. */
+async function latelyIn(vault: string): Promise<Rec[]> {
+  const out: Rec[] = [];
+  let offset = 0;
+  for (let i = 0; i < 4 && out.length < 8; i++) {
+    const x: { records: Rec[]; more: boolean; read?: number } = await vaults.query(vault, { limit: i ? 50 : 20, offset });
+    out.push(...x.records.filter((r) => !r.own));
+    if (!x.more) break;
+    offset += x.read ?? x.records.length;
+  }
+  return out.slice(0, 8);
 }
 
 /** A vault: its types with their counts, its tags, a search, and a way to make a type. */
@@ -161,8 +192,24 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
   const [term, setTerm] = useState("");
   const [found, setFound] = useState<Rec[] | null>(null);
   const [recent, setRecent] = useState<Rec[] | null>(null);
-  const load = () => Promise.all([vaults.types(v.key), vaults.query(v.key, { limit: 8 })])
-    .then(([t, r]: [TypeRow[], { records: Rec[] }]) => { setTypes(t); setRecent(r.records); setFailed(null); }, setFailed);
+  // "Parachute's own": the records the app keeps for itself here (settings, approvals, saved views), in place of Lately,
+  // and in search; out of both otherwise
+  const [own, setOwn] = useState(false);
+  const [owned, setOwned] = useState<Rec[] | null>(null);
+  const [ownedCut, setOwnedCut] = useState(false);
+  const ownRef = useRef(own);
+  ownRef.current = own;
+  const asked = useRef(0);
+  // Parachute's own: its two folders, newest first (a record of its own elsewhere, by its tag alone, shows in search)
+  const readOwned = () => {
+    const n = ++asked.current;
+    return Promise.all(["Parachute/", ".parachute/"].map((path) => vaults.query(v.key, { path, limit: 100 }).then((x: { records: Rec[] }) => x.records, () => [] as Rec[])))
+      .then((all: Rec[][]) => { if (n === asked.current) { setOwnedCut(all.some((x) => x.length >= 100)); setOwned(all.flat().filter((r) => r.own).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))); } });
+  };
+  // Lately is what the person (or their AI) wrote: the newest 8 of theirs, read past a run of the app's own
+  const load = () => Promise.all([vaults.types(v.key), latelyIn(v.key)])
+    .then(([t, r]: [TypeRow[], Rec[]]) => { setTypes(t); setRecent(r); setFailed(null); if (ownRef.current) void readOwned(); }, setFailed);
+  useEffect(() => { setOwned(null); if (own) void readOwned(); else asked.current++; }, [own, v.key]);
   useEffect(() => {
     void load();
     // changes come in bursts (an AI writing many records): one read again for each second of them
@@ -173,9 +220,9 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
   useEffect(() => {
     if (!term) { setFound(null); return; }
     let on = true;
-    vaults.query(v.key, { search: term, limit: 50 }).then((x: { records: Rec[] }) => { if (on) setFound(x.records); }, (e: unknown) => toast(`Search failed: ${said(e)}`, { error: true }));
+    vaults.query(v.key, { search: term, limit: 50 }).then((x: { records: Rec[] }) => { if (on) setFound(own ? x.records : x.records.filter((r) => !r.own)); }, (e: unknown) => toast(`Search failed: ${said(e)}`, { error: true }));
     return () => { on = false; };
-  }, [term, v.key]);
+  }, [term, v.key, own]);
   const typed = (types ?? []).filter((t) => t.kind === "type" && !t.name.startsWith("parachute")).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   // the app's own names (an applet's, a component's) aren't the person's tags
   const tags = (types ?? []).filter((t) => t.kind === "tag" && t.count > 0 && !t.name.startsWith("parachute") && !["applet", "component"].includes(t.name)).sort((a, b) => b.count - a.count);
@@ -191,12 +238,12 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
     } catch (e) { toast(`${t} wasn't made: ${said(e)}`, { error: true }); throw e; }
   };
   return (
-    <Page title={v.name} kicker={v.mine ? v.host : `${v.host} · someone else's`} back={back} wide className="vlt" onRefresh={load}
+    <Page title={v.name} kicker={v.mine ? "Your vault" : "Someone else's vault"} back={back} wide className="vlt" onRefresh={load}
       aside={<><Button small onClick={changes}>Changes</Button> <Button small onClick={sharing}>Sharing</Button></>}>
       <style>{CSS}</style>
       <Search label={`Search ${v.name}`} placeholder={`Search ${v.name}`} onSearch={setTerm} live={300} />
       {found ? (found.length
-        ? <List label="Found" rows={found.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, folderOf(r.path)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />
+        ? <List label="Found" rows={found.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, whereOf(r)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />
         : <Empty>Nothing matches.</Empty>)
         : failed ? <ReadProblem error={failed} v={v} onRetry={load}>{`${v.name} couldn't be read`}</ReadProblem>
         : !types ? <Loading />
@@ -206,14 +253,23 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
                 : <Empty>No types yet. A type is a kind of record (a book, a task) with fields of its own. Add a pack to start with people, projects, meetings and tasks, or bring in your Notion workspace.</Empty>}
               {canWrite && <Field label="New type" placeholder="A name, like book" action="Make" onAction={makeType} />}
               {/* packs (T-476, docs/PACKS.md): types, templates and views added with one tap */}
-              {typeof vaults.packs === "function" && (() => {
-                const pack = <Button small kind={typed.length ? "plain" : "primary"} onClick={packs}>{typed.length ? "Packs" : "Add a pack"}</Button>;
-                return canWrite && typeof vaults.importNotion === "function" ? <FromNotion v={v} openType={openType} done={load}>{pack}</FromNotion> : <div className="chips">{pack}</div>;
+              {(() => {
+                const pack = typeof vaults.packs === "function" ? <Button small kind={typed.length ? "plain" : "primary"} onClick={packs}>{typed.length ? "Packs" : "Add a pack"}</Button> : null;
+                const row = <>{pack}{pack ? " " : ""}<Button small kind={own ? "primary" : "plain"} aria-pressed={own} onClick={() => setOwn(!own)}>Parachute's own</Button></>;
+                return canWrite && typeof vaults.importNotion === "function" ? <FromNotion v={v} openType={openType} done={load}>{row}</FromNotion> : <div className="chips">{row}</div>;
               })()}
+              <details className="more"><summary>Details</summary>
+                <p className="note-meta">Its address: <span className="addr">{v.host}</span></p>
+              </details>
             </section>
             <section>
               {tags.length > 0 && <List label="Tags" rows={tags.slice(0, 30).map((t) => ({ key: t.name, title: `#${t.name}`, aside: String(t.count), onPress: () => openType(`#${t.name}`) }))} />}
-              {recent && recent.length > 0 && <List label="Lately" rows={recent.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, folderOf(r.path)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />}
+              {own
+                ? <>
+                    <List label="Parachute's own" rows={(owned ?? []).map((r) => ({ key: r.id, title: r.title, meta: r.types.join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />
+                    {owned === null ? <Loading /> : <p className="lede">{owned.length ? `What Parachute keeps for itself here: its settings, the applets you allowed, saved views${ownedCut ? " (the newest of them)" : ""}. Parachute changes these, not you.` : "Parachute keeps nothing of its own here."}</p>}
+                  </>
+                : recent && recent.length > 0 && <List label="Lately" rows={recent.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, folderOf(r.path)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />}
             </section>
           </div>}
     </Page>
@@ -411,7 +467,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
     <article aria-label={r.title} ref={top}>
       <Button kind="quiet" onClick={back.onPress}>{`← ${back.label}`}</Button>
       <h2 className="pa-title">{r.title}</h2>
-      <p className="note-meta">{folderOf(r.path) || "/"} · changed {when.ago(r.updatedAt)}{r.changedBy ? ` · ${r.changedBy}` : ""}</p>
+      <p className="note-meta">{whereOf(r) || "/"} · changed {when.ago(r.updatedAt)}{r.changedBy ? ` · ${r.changedBy}` : ""}</p>
       <div className="chips">
         {r.types.map((t) => <span key={t} className="chip type">{label(t)}{canWrite && <Button small kind="quiet" onClick={() => void change({ types: { remove: [t] } }, `No longer a ${t}.`)}>×</Button>}</span>)}
         {r.tags.map((t) => <span key={t} className="chip">#{t}{canWrite && !["publish", "published"].includes(t.toLowerCase()) && <Button small kind="quiet" onClick={() => void change({ tags: { remove: [t] } })}>×</Button>}</span>)}
@@ -452,8 +508,8 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
             {canWrite && <Button small onClick={() => setEditing(r.body ?? "")}>Edit words</Button>}
           </>}
       {(out.length > 0 || into.length > 0) && <p className="sect">Links</p>}
-      {out.length > 0 && <List label="Links to" rows={out.map((l) => ({ key: `o${l.id}`, title: l.path.split("/").pop() ?? l.path, meta: folderOf(l.path), onPress: () => open(l.id) }))} />}
-      {into.length > 0 && <List label="Linked from" rows={into.map((l) => ({ key: `i${l.id}`, title: l.path.split("/").pop() ?? l.path, meta: folderOf(l.path), onPress: () => open(l.id) }))} />}
+      {out.length > 0 && <List label="Links to" rows={out.map((l) => ({ key: `o${l.id}`, title: pathTitle(l.path), meta: whereAt(l.path), onPress: () => open(l.id) }))} />}
+      {into.length > 0 && <List label="Linked from" rows={into.map((l) => ({ key: `i${l.id}`, title: pathTitle(l.path), meta: whereAt(l.path), onPress: () => open(l.id) }))} />}
       <p className="sect">History</p>
       {histFailed ? <Problem error={histFailed} onRetry={readHistory}>Its history couldn't be read</Problem>
         : history === null ? <Loading />
@@ -484,6 +540,9 @@ type PeopleNow = { people: { key: string; name: string | null; role: string }[];
   | { people: null; why: "no_key" | "not_owner" | "no_hub" | "unknown_key" };
 const roleWords = (role: string) => (role === "member" ? "reads and changes everything" : role === "read" ? "reads everything" : "runs this vault with you");
 const shortKey = (k: string) => `${k.slice(0, 8)}…`;
+/** A person's key, for telling two people with no name apart: under Details, never the row's own words. */
+const keyDetails = (k: string | null | undefined) => (k ? <details className="key"><summary>Details</summary>Their key: {shortKey(k)}</details> : null);
+const UNNAMED = "Someone with no name yet";
 /** A name as the hub takes one: 1 to 40 characters, not "You"; said in a toast otherwise. */
 const nameOk = (x: string) => {
   const ok = [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !/^you$/i.test(x.trim()) && !/(?![\u200c\u200d])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(x);
@@ -574,8 +633,9 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
     return () => { on = false; };
   }, [v.key]);
   useEffect(() => { const n = people.now; if (n?.people && n.from) setFrom((f) => f ?? n.from ?? null); }, [people.now]);
-  // public as the hub judges it: the field, or its default publish tag
-  const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { where: [{ field: "published", op: "eq", value: true }], limit: 50 }),
+  // public as the hub judges it: the field, or its default publish tag (a hub that can't ask by the field, as 0.8 where no
+  // type indexes it, says so and has none published that way: the tag still finds them; any other failure is said)
+  const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { where: [{ field: "published", op: "eq", value: true }], limit: 50 }).catch((e: unknown) => (/not indexed/i.test(said(e)) ? { records: [] } : Promise.reject(e))),
     vaults.query(v.key, { tag: "publish", limit: 50 })])
     .then(([x, ...ps]: [any, ...{ records: Rec[] }[]]) => { setA(x); setPub([...new Map(ps.flatMap((p) => p.records).map((r) => [r.id, r])).values()]); setFailed(null); }, setFailed);
   useEffect(() => { void load(); }, [v.key]);
@@ -603,7 +663,8 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
     toast(`${shown} can no longer reach ${v.name}.`);
     return Promise.all([reach.load(), people.load()]);
   }, (e: unknown) => { quiet(e, "Not ended"); void reach.load(); }); };
-  const endButton = (who: string, go: () => void) => <Button small kind="quiet" aria-label={`End ${who}`} onClick={go}>End</Button>;
+  // `key`: a person with no name is told apart by their key, to a screen reader as under Details
+  const endButton = (who: string, go: () => void, key?: string | null) => <Button small kind="quiet" aria-label={`End ${who}${key ? ` (key ${shortKey(key)})` : ""}`} onClick={go}>End</Button>;
   const keyRow = (r: ReachRow) => ({ key: r.id, title: title(r), meta: `${r.of ? `${r.of}'s · ` : ""}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`, aside: endButton(title(r), () => void end(r)) });
 
   // AIs and agents
@@ -618,17 +679,17 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const personRows = [
     ...hubPeople.filter((r) => !gone(r.member!.key ?? r.id)).map((r) => {
       const mine = np?.people.find((p) => p.key === r.member!.key);
-      const name = mine ? (mine.name ?? `A key (${shortKey(mine.key)})`) : r.name;
-      return { key: r.id, title: name, meta: `${roleWords(r.member!.role)}${r.member!.key ? ` · key ${shortKey(r.member!.key)}` : ""}${used(r)}`, aside: endButton(name, () => void end(r, name)) };
+      const name = mine ? (mine.name ?? UNNAMED) : r.name;
+      return { key: r.id, title: name, meta: <>{`${roleWords(r.member!.role)}${used(r)}`}{keyDetails(r.member!.key)}</>, aside: endButton(name, () => void end(r, name), name === UNNAMED ? r.member!.key : null) };
     }),
     ...(fromHub ? [] : np?.people ?? []).filter((p) => !gone(p.key)).map((p) => {
-      const name = p.name ?? `A key (${shortKey(p.key)})`;
+      const name = p.name ?? UNNAMED;
       const vault = v.key;
-      return { key: p.key, title: name, meta: roleWords(p.role), aside: endButton(name, () => void (vaults as any).end(vault, p.key).then((r: { ended?: boolean }) => {
+      return { key: p.key, title: name, meta: <>{roleWords(p.role)}{p.name ? null : keyDetails(p.key)}</>, aside: endButton(name, () => void (vaults as any).end(vault, p.key).then((r: { ended?: boolean }) => {
         didEnd({ key: p.key, group: "people", title: name }, vault);
         toast(r?.ended === false ? "Already ended." : `${p.name ? `${p.name}'s` : "Their"} access is ended.`);
         return Promise.all([reach.load(), people.load()]);
-      }, (e: unknown) => quiet(e, "Not ended"))) };
+      }, (e: unknown) => quiet(e, "Not ended")), p.name ? null : p.key) };
     }),
     ...(np?.invites ?? []).map((i) => ({ key: i.id, title: i.name, meta: `invited · the link works once, until ${when.date(i.expires_at)}`,
       aside: <Button small kind="quiet" aria-label={`Take back the invite for ${i.name}`} onClick={() => (vaults as any).takeBack(v.key, i.id).then((r: { takenBack?: boolean }) => { toast(r?.takenBack === false ? `The invite for ${i.name} was already used or taken back.` : `The invite for ${i.name} is taken back.`); if (made?.id === i.id) setMade(null); return people.load(); }, (e: unknown) => quiet(e, "Not taken back"))}>Take back</Button> })),

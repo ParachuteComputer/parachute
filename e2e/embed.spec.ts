@@ -63,7 +63,7 @@ test("Techne's Events on the home: the host's card says what its page shows, the
     // it takes the focus: a screen reader moves into it, and no frame holds the focus while it is open
     await expect(sheet).toBeFocused();
     await expect(sheet.getByRole("heading")).toHaveText("Allow the component Events?");
-    await expect(sheet).toContainText(`from techne (someone else's, at ${hostOf(techneState().origin)})`);
+    await expect(sheet).toContainText(`from techne (someone else's, at ${new URL(techneState().origin).hostname})`);
     await expect(sheet).toContainText("Read notes outside its own folder, in Events/");
     await expect(sheet).toContainText("Your page hands it: days 30.");
     await expect(sheet.getByText("It acts as you in techne, with your sign-in there. It sees nothing in your own vaults.")).toBeVisible();

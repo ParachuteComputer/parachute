@@ -7,6 +7,7 @@
 // the applet's name, shown quoted and marked unverified. Nothing runs until Allow, and only a real tap counts
 // (`isTrusted`). From the Uni app's GrantCard, reworded for this app.
 import { useId, useState, type MouseEvent } from "react";
+import { siteOfHost } from "../vault/site";
 import { grantLines, type Grant } from "./grant";
 import type { LineOptions } from "./services";
 import { importLines, type Imported } from "./resolveImports";
@@ -148,9 +149,11 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
     : change.kind === "expired" ? `${EXPIRED_LINE}${change.codeMoved ? ` ${codeLine}` : ""}${modeLine}${nothingNew}`
     : change.kind === "asks" ? (freshOnFace ? FRESH_LINE : change.fresh?.size ? FRESH_DETAILS_LINE : ASKS_OTHER_LINE)
     : change.kind === "mode" ? MODE_CHANGED_LINE : null;
-  const where = whose !== "mine" ? <> (someone else's{host ? `, at ${host}` : ""})</> : null;
+  // a vault by its name; someone else's hub by its site (the whole address is in a folder row's "?" note)
+  const site = host ? siteOfHost(host) : "";
+  const where = whose !== "mine" ? <> (someone else's{site ? `, at ${site}` : ""})</> : null;
   const rows = rowsOf(grant, face);
-  const from = whose === "mine" ? <>From your vault <strong>{vault}</strong>{host ? <> on {host}</> : null}</> : <>From <strong>{vault}</strong>, someone else's vault{host ? <> at {host}</> : null}</>;
+  const from = whose === "mine" ? <>From your vault <strong>{vault}</strong></> : <>From <strong>{vault}</strong>, someone else's vault{site ? <> at {site}</> : null}</>;
   return (
     <section className="card grant-card" role="region" aria-label={`${name} is asking for access`}>
       <header className="grant-head">
@@ -179,7 +182,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
         : reaches ? <><strong>Nothing else.</strong> It can't delete notes.</>
         : <><strong>Nothing else.</strong> It can't delete notes or reach the internet.</>}
         {whose === "mine" && what === "component" && <> It reads only that vault.</>}</p>
-      {hubAsk && <p className="grant-hub" role="note">Then your hub ({hubAsk.host}) asks you to let Parachute {hubAsk.level === "write" ? <>change notes in <strong>{vault}</strong></> : <>read <strong>{vault}</strong></>}: only this vault.</p>}
+      {hubAsk && <p className="grant-hub" role="note">Then your hub ({siteOfHost(hubAsk.host)}) asks you to let Parachute {hubAsk.level === "write" ? <>change notes in <strong>{vault}</strong></> : <>read <strong>{vault}</strong></>}: only this vault.</p>}
       {signing && <p className="error" role="alert">{signing}</p>}
       <div className="grant-actions">
         <button type="button" className="grant-more" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen((o) => !o)}>{open ? "Hide details" : "Show details"}</button>

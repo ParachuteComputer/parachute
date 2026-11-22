@@ -71,7 +71,7 @@ test("the first change in Settings copies the built-in theme into the home vault
   const look = page.getByRole("region", { name: "Look" });
   await expect(look.getByRole("status")).toHaveText("The built-in theme.");
   await look.getByRole("radio", { name: "Roomy" }).click();
-  await expect(look.getByRole("status")).toContainText("Your theme: Parachute/Theme");
+  await expect(look.getByRole("status")).toContainText("Your own theme, kept in");
   const n = await api(hubState(), "GET", `notes?id=${encodeURIComponent("Parachute/Theme")}`);
   expect(n.tags).toContain("parachute-theme");
   // written in full, so every value is there for the person or their agent to change

@@ -60,8 +60,8 @@ One `primary` on a screen: the main action. `plain` (the default) for the rest, 
 ```
 
 Things of a kind, as rows under a rule: a title, a line under it (`meta`), something at the right (`aside`), a mark
-(`glyph`), a count (`badge`), bold for what is new (`strong`), the row open now (`current`). A row with `onPress`
-is a button. A count goes in the label (`label={`Active · ${active.length}`}`); under `Tabs` that already name the
+(`glyph`), a box to tick (`check`: `true` draws the tick, `false` the same circle empty), a count (`badge`), bold for
+what is new (`strong`), the row open now (`current`). A row with `onPress` is a button. A count goes in the label (`label={`Active · ${active.length}`}`); under `Tabs` that already name the
 list, give `hideLabel` so the name isn't said twice.
 
 ## Card
@@ -117,7 +117,7 @@ Records as rows and columns; a record's fields, each changed where it stands.
 One strip for each thing in a list (a habit's last four weeks): put it in the row, `inline`, as the row's `meta`:
 
 ```tsx
-<List label="Habits" rows={habits.map((h) => ({ key: h.id, title: h.name, aside: `${h.streak}-day streak`,
+<List label="Habits" rows={habits.map((h) => ({ key: h.id, title: h.name, aside: `${h.streak}-day streak`, check: h.doneToday,
   meta: <Days inline counts={h.lastFourWeeks} />, onPress: () => tick(h) }))} />
 ```
 

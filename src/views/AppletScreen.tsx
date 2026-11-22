@@ -559,7 +559,8 @@ export default function AppletScreen() {
   if (officialOf(appletId) && (!selfTest.known || selfTest.running)) return shell(<p className="quiet" role="status">Opening…</p>);
   if (mode === "closed" && !officialOf(appletId)) return shell(<div className="card" role="status"><p>Applets are off on this device until its self-test passes. See Settings.</p>{plainNote}</div>);
   if (loaded.state === "loading" || (loaded.state === "ok" && !keys)) return shell(<p className="quiet" role="status">Opening…</p>);
-  if (loaded.state === "error") return shell(<p className="error" role="alert">Couldn't open this applet: {loaded.error}.</p>);
+  // the hub's own answer (an address, an id) is under Details
+  if (loaded.state === "error") return shell(<div role="alert"><p className="error">Couldn't open this applet.</p><details className="small"><summary>Details</summary>{loaded.error}</details></div>);
   if (loaded.state === "home") return <Navigate to={loaded.to} replace />;
   if (loaded.state === "refused") return shell(<div className="card" role="alert"><p>This applet can't open. It was not run: {loaded.error}.</p>{plainNote}</div>);
   if (loaded.state === "newer") return shell(<div className="card" role="status"><p><strong>{updateLine(loaded.entry.manifest.name)}</strong></p><p className="quiet">It was made for a newer Parachute than this one, so nothing of it ran here{loaded.entry.newerWhy ? ` (${loaded.entry.newerWhy})` : ""}.</p>{plainNote}</div>);
