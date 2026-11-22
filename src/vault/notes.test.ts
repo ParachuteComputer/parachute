@@ -22,6 +22,7 @@ describe("the app's own notes", () => {
     expect(isAppOwn({ path: ".parachute/state", tags: [] })).toBe(true);
     // the person's: a tag that only starts like the app's, and their own folders
     expect(isAppOwn({ path: "Notes/Parachute packing list", tags: ["parachuting"] })).toBe(false);
+    expect(isAppOwn({ path: "Jumps/First tandem", tags: ["parachute-jumps"] })).toBe(false);
     expect(isAppOwn({ path: "Trips/Parachute/Packing", tags: [] })).toBe(false);
   });
 });

@@ -56,7 +56,6 @@ export const CHANGES_RECORDS = 20;
 export const CHANGES_DELETED = 12;
 const VERSIONS = 50;
 const strOr = (x: unknown) => (typeof x === "string" ? x : null);
-// a change's title as the vault's lists say it (a journal entry by its words)
 
 type Get = (path: string) => Promise<unknown>;
 /** Each item through `f`, a few at a time (a vault's hub is asked for at most `n` reads at once). */

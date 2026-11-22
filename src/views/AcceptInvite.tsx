@@ -5,7 +5,7 @@ import { acceptWithKey, lookInvite, parseInviteLink } from "../vault/sharing";
 import { startSignIn, signInWords } from "../vault/signInFlow";
 import type { InviteView } from "../services/native";
 
-import { siteOf } from "../vault/site";
+const hostOf = (hub: string) => hub.replace(/^https?:\/\//, "");
 
 /** Accept an invite to someone's vault (docs/design/SHARING.md): paste the link, read who and what, Accept. Your key
  *  signs the acceptance; then the usual sign-in to their Parachute, as someone else's, and the vault opens. */
@@ -71,11 +71,11 @@ export default function AcceptInvite() {
         {error && <p className="error" id="accept-error" role="alert">{error}</p>}
         <button className="primary" type="submit" disabled={busy || !link.trim()}>{busy ? "Reading it…" : "Read the invite"}</button>
       </form> : <section className="card stack" aria-label="The invite">
-        <p className="lead">{invite.from ?? "Someone"} invites you to <strong>{invite.vault}</strong>, on {siteOf(invite.hub)}.</p>
+        <p className="lead">{invite.from ?? "Someone"} invites you to <strong>{invite.vault}</strong>, on {hostOf(invite.hub)}.</p>
         <p>You can read and change everything in it. Your changes show as {invite.name}'s{invite.from ? `, and ${invite.from} can end your access any time` : ""}.</p>
         {error && <p className="error" role="alert">{error}</p>}
         {accepted
-          ? <button className="primary" type="button" disabled={busy} onClick={() => void accept()}>{busy ? "Signing in…" : `Sign in to ${siteOf(invite.hub)}`}</button>
+          ? <button className="primary" type="button" disabled={busy} onClick={() => void accept()}>{busy ? "Signing in…" : `Sign in to ${hostOf(invite.hub)}`}</button>
           : <>
             <button className="primary" type="button" disabled={busy} onClick={() => void accept()}>{busy ? "Accepting…" : "Accept"}</button>
             <button className="secondary" type="button" disabled={busy} onClick={() => { setInvite(null); setError(null); }}>Not now</button>

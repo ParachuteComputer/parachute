@@ -72,12 +72,16 @@ export function folderOf(n: Pick<Note, "path">): string {
 export const isCodeNote = (n: { path?: string | null; tags?: readonly string[] | null; extension?: string | null }) =>
   isCodeExtension(n) || (n.tags ?? []).includes("applet");
 
-/** The records the app keeps for itself: anything carrying one of its own tags (`parachute-…`: its settings, bundle,
- *  frame, theme, approvals, keys, receipts, saved views and pointer records), and what sits in its folders
+/** The tags of the records the app keeps for itself (homeSettings.ts, bundles.ts and its older tag, frameSource.ts,
+ *  theme/store.ts, applet/pointer.ts, approvals.ts, the keyring's, receipts, saved views): exactly these, so a person's
+ *  own `parachute-jumps` stays theirs. */
+const APP_TAGS = new Set(["parachute-settings", "parachute-bundle", "parachute-app", "parachute-frame", "parachute-theme", POINTER_TAG,
+  "parachute-approval", "parachute-keys", "parachute-receipt", "parachute-view"]);
+/** The records the app keeps for itself: anything carrying one of its own tags, and what sits in its folders
  *  (`Parachute/…`, the vault's system space `.parachute/`). A person's own note under `Parachute/From/` (where the
  *  pointers to another Parachute's things live) is theirs, and shows. */
 export const isHousekeeping = (n: { path?: string | null; tags?: readonly string[] | null }) =>
-  (n.tags ?? []).some((t) => t === POINTER_TAG || /^parachute-/i.test(t))
+  (n.tags ?? []).some((t) => APP_TAGS.has(t))
   || /^\.parachute\//i.test(n.path ?? "") || (/^parachute\//i.test(n.path ?? "") && !/^parachute\/from\//i.test(n.path ?? ""));
 
 /** Notes that are the app's own: its housekeeping, and an applet's or a component's code. Never among what the person

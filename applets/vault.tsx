@@ -190,6 +190,7 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
   // and in search; out of both otherwise
   const [own, setOwn] = useState(false);
   const [owned, setOwned] = useState<Rec[] | null>(null);
+  const [ownedCut, setOwnedCut] = useState(false);
   const ownRef = useRef(own);
   ownRef.current = own;
   const asked = useRef(0);
@@ -197,7 +198,7 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
   const readOwned = () => {
     const n = ++asked.current;
     return Promise.all(["Parachute/", ".parachute/"].map((path) => vaults.query(v.key, { path, limit: 100 }).then((x: { records: Rec[] }) => x.records, () => [] as Rec[])))
-      .then((all: Rec[][]) => { if (n === asked.current) setOwned(all.flat().filter((r) => r.own).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))); });
+      .then((all: Rec[][]) => { if (n === asked.current) { setOwnedCut(all.some((x) => x.length >= 100)); setOwned(all.flat().filter((r) => r.own).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))); } });
   };
   // Lately is what the person (or their AI) wrote: the newest 8 of theirs, read past a run of the app's own
   const load = () => Promise.all([vaults.types(v.key), latelyIn(v.key)])
@@ -259,7 +260,7 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
               {own
                 ? <>
                     <List label="Parachute's own" rows={(owned ?? []).map((r) => ({ key: r.id, title: r.title, meta: r.types.join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />
-                    {owned === null ? <Loading /> : <p className="lede">{owned.length ? "What Parachute keeps for itself here: its settings, the applets you allowed, saved views. Parachute changes these, not you." : "Parachute keeps nothing of its own here."}</p>}
+                    {owned === null ? <Loading /> : <p className="lede">{owned.length ? `What Parachute keeps for itself here: its settings, the applets you allowed, saved views${ownedCut ? " (the newest of them)" : ""}. Parachute changes these, not you.` : "Parachute keeps nothing of its own here."}</p>}
                   </>
                 : recent && recent.length > 0 && <List label="Lately" rows={recent.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, folderOf(r.path)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />}
             </section>
@@ -647,7 +648,8 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
     toast(`${shown} can no longer reach ${v.name}.`);
     return Promise.all([reach.load(), people.load()]);
   }, (e: unknown) => { quiet(e, "Not ended"); void reach.load(); }); };
-  const endButton = (who: string, go: () => void) => <Button small kind="quiet" aria-label={`End ${who}`} onClick={go}>End</Button>;
+  // `key`: a person with no name is told apart by their key, to a screen reader as under Details
+  const endButton = (who: string, go: () => void, key?: string | null) => <Button small kind="quiet" aria-label={`End ${who}${key ? ` (key ${shortKey(key)})` : ""}`} onClick={go}>End</Button>;
   const keyRow = (r: ReachRow) => ({ key: r.id, title: title(r), meta: `${r.of ? `${r.of}'s · ` : ""}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`, aside: endButton(title(r), () => void end(r)) });
 
   // AIs and agents
@@ -663,7 +665,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
     ...hubPeople.filter((r) => !gone(r.member!.key ?? r.id)).map((r) => {
       const mine = np?.people.find((p) => p.key === r.member!.key);
       const name = mine ? (mine.name ?? UNNAMED) : r.name;
-      return { key: r.id, title: name, meta: <>{`${roleWords(r.member!.role)}${used(r)}`}{keyDetails(r.member!.key)}</>, aside: endButton(name, () => void end(r, name)) };
+      return { key: r.id, title: name, meta: <>{`${roleWords(r.member!.role)}${used(r)}`}{keyDetails(r.member!.key)}</>, aside: endButton(name, () => void end(r, name), name === UNNAMED ? r.member!.key : null) };
     }),
     ...(fromHub ? [] : np?.people ?? []).filter((p) => !gone(p.key)).map((p) => {
       const name = p.name ?? UNNAMED;
@@ -672,7 +674,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
         didEnd({ key: p.key, group: "people", title: name }, vault);
         toast(r?.ended === false ? "Already ended." : `${p.name ? `${p.name}'s` : "Their"} access is ended.`);
         return Promise.all([reach.load(), people.load()]);
-      }, (e: unknown) => quiet(e, "Not ended"))) };
+      }, (e: unknown) => quiet(e, "Not ended")), p.name ? null : p.key) };
     }),
     ...(np?.invites ?? []).map((i) => ({ key: i.id, title: i.name, meta: `invited · the link works once, until ${when.date(i.expires_at)}`,
       aside: <Button small kind="quiet" aria-label={`Take back the invite for ${i.name}`} onClick={() => (vaults as any).takeBack(v.key, i.id).then((r: { takenBack?: boolean }) => { toast(r?.takenBack === false ? `The invite for ${i.name} was already used or taken back.` : `The invite for ${i.name} is taken back.`); if (made?.id === i.id) setMade(null); return people.load(); }, (e: unknown) => quiet(e, "Not taken back"))}>Take back</Button> })),
