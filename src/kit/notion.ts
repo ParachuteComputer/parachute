@@ -171,11 +171,13 @@ function idOf(paths: string[]): string {
 
 /** Notion's Markdown & CSV export, as a pack. `name`: the file's name, for the receipt. */
 /** A type the vault has already, as the import reads it: its name and its declared fields (packs.ts HeldType). */
-export type Held = { name: string; fields: Record<string, { type?: string; indexed?: boolean; cardinality?: string }> };
+export type Held = { name: string; description?: string | null; fields: Record<string, { type?: string; indexed?: boolean }> };
 
-/** Notion's Markdown & CSV export, as a pack. `name`: the file's name, for the receipt. `held`: the vault's own types:
- *  a table never becomes one of them (Book is book-2 beside the person's book), and a column whose name one of them
- *  declares otherwise gets a name of its own (date_2), so no row is refused for it. */
+/** Notion's Markdown & CSV export, as a pack. `name`: the file's name, for the receipt. `held`: the vault's types. One an
+ *  import made ("From Notion: <the table's title>.") is that table's again, so this export, or a newer one of the same
+ *  workspace, adds to it. Any other is the person's: a table never becomes it (Book is book-2 beside their book), and a
+ *  column whose name it declares otherwise (another kind, or indexed: what a vault refuses) gets a name of its own
+ *  (date_2), so no row is refused for it. */
 export function notionImport(files: Map<string, Uint8Array>, name = "Notion export", held: Held[] = []): Imported {
   const text = (b: Uint8Array) => new TextDecoder("utf-8").decode(b);
   // the export's own wrapping: hidden files, its index page, and one root folder above everything
@@ -223,14 +225,18 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   const inFolder = (p: string, k: string) => p.startsWith(rowFolder(k)) && !p.slice(rowFolder(k).length).includes("/");
   type Col = { header: string; field: string; kind: Kind; i: number };
   type Table = { key: string; csv: string; title: string; type: string; place: string; header: string[]; body: string[][]; cols: Col[] };
-  const typeNames = new Set<string>(held.map((h) => h.name));
+  const fromNotion = (title: string) => held.find((h) => h.description === `From Notion: ${title}.`);
+  const theirs = held.filter((h) => !/^From Notion: .*\.$/.test(h.description ?? ""));
+  const typeNames = new Set<string>(theirs.map((h) => h.name));
   const tables: Table[] = [];
   for (const [key, csv] of dbs) {
     const [header = [], ...body] = parseCsv(text(files.get(csv)!));
     if (!header.length) continue;
     const taken = new Set<string>();
     const title = bare(noExt(key.split("/").pop()!));
-    tables.push({ key, csv, title, type: typeName(title, typeNames), place: unique(placeOf(key)), header, body,
+    const again = fromNotion(title);
+    if (again) typeNames.add(again.name);
+    tables.push({ key, csv, title, type: again?.name ?? typeName(title, typeNames), place: unique(placeOf(key)), header, body,
       cols: header.slice(1).map((h, i) => ({ header: h.trim(), field: fieldName(h, taken), kind: kindOf(body.map((r) => r[i + 1] ?? "")), i: i + 1 })) });
   }
   // a field is one thing in a vault: where two tables have a column of one name but of different kinds, it is text in
@@ -240,11 +246,12 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   for (const t of tables) for (const c of t.cols) if (kinds.get(c.field)!.size > 1) c.kind = "text";
   // and one the vault's own types declare otherwise is another field here
   const specOf = (c: Col): FieldSpec => (c.kind === "relation" ? { type: "reference", cardinality: "many" } : SPEC[c.kind as Exclude<Kind, "relation">]);
-  const clash = (f: string, spec: FieldSpec) => held.some((h) => { const d = h.fields[f]; return !!d && (d.type !== spec.type || !!d.indexed || (d.cardinality ?? "one") !== (spec.cardinality ?? "one")); });
+  // (what a vault refuses beside another type's field of that name: another kind, or an indexed one; cardinality it takes)
+  const clash = (f: string, spec: FieldSpec) => theirs.some((h) => { const d = h.fields[f]; return !!d && (d.type !== spec.type || !!d.indexed); });
   const renamed = new Map<string, string>();
   for (const t of tables) for (const c of t.cols) {
     if (!clash(c.field, specOf(c))) continue;
-    if (!renamed.has(`${c.field}|${c.kind}`)) { let i = 2, n = `${c.field}_${i}`; while (clash(n, specOf(c)) || held.some((h) => n in h.fields) || tables.some((x) => x.cols.some((y) => y.field === n))) n = `${c.field}_${++i}`; renamed.set(`${c.field}|${c.kind}`, n); }
+    if (!renamed.has(`${c.field}|${c.kind}`)) { let i = 2, n = `${c.field}_${i}`; while (clash(n, specOf(c)) || theirs.some((h) => n in h.fields) || tables.some((x) => x.cols.some((y) => y.field === n))) n = `${c.field}_${++i}`; renamed.set(`${c.field}|${c.kind}`, n); }
     c.field = renamed.get(`${c.field}|${c.kind}`)!;
   }
 

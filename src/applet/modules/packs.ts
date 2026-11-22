@@ -137,15 +137,12 @@ export function packMethods(deps: VaultsDeps, word: (p: unknown) => void, held: 
         const [file] = await deps.pick([".zip", "application/zip"], false);
         if (!file) return { picked: false };
         let pack: ReturnType<typeof notionImport>;
-        // the vault's own types, so the import's names stay clear of them: all but the ones this same export made before
-        // (its receipt says which), so bringing it in again finds its own types and changes nothing
+        // the vault's own types, so the import's names stay clear of them (notion.ts: a type an import made is known by
+        // its description, and used again)
         const target = packTarget(deps, vault as string);
-        const types = (await target.types()).filter((t) => t.kind === "type");
+        const held = (await target.types()).filter((t) => t.kind === "type").map((t) => ({ name: t.name, description: t.description ?? null, fields: t.fields as Record<string, { type?: string; indexed?: boolean }> }));
         try {
-          const files = await readZip(file.bytes, { want: NOTION_WANT });
-          const ours = new Set(Object.keys((await target.receipt(notionImport(files, file.name).pack.id))?.receipt.made.types ?? {}));
-          const held = types.filter((t) => !ours.has(t.name)).map((t) => ({ name: t.name, fields: t.fields as Record<string, { type?: string; indexed?: boolean; cardinality?: string }> }));
-          pack = notionImport(files, file.name, held);
+          pack = notionImport(await readZip(file.bytes, { want: NOTION_WANT }), file.name, held);
         } catch (e) {
           throw new ContractError(ERROR_CODES.failed, e instanceof Error ? e.message.slice(0, 300) : "That file couldn't be read.");
         }

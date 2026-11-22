@@ -154,6 +154,15 @@ describe("notionImport", () => {
     expect(r.pack.records.find((x) => x.path === "Notion/Book/a")?.fields).toEqual({ author: "Le Guin, Ursula", zip: "02134", date_2: "next week" });
   });
 
+  test("a type an import made is the table's again: a newer export of the same workspace adds to it, renames nothing", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const r = notionImport(new Map([["E/Book 2222222222222222222222222222222d_all.csv", enc("Name,Rating,Shelf\r\nc,05,top\r\n")]]), "newer",
+      [{ name: "book", description: "From Notion: Book.", fields: { rating: { type: "number" } } }, { name: "shelf-type", description: null, fields: { shelf: { type: "string", indexed: true } } }]);
+    expect(Object.keys(r.pack.types)).toEqual(["book"]);
+    // its own earlier field isn't another's (no rating_2); a field the person indexed elsewhere is
+    expect(Object.keys(r.pack.types.book.fields)).toEqual(["rating", "shelf_2"]);
+  });
+
   test("a column of one name in two tables, of two kinds, is text in both: the vault would refuse one type", () => {
     const csv = (rows: string) => new TextEncoder().encode(`\ufeffName,Tags\r\n${rows}`);
     const two = notionImport(new Map([
