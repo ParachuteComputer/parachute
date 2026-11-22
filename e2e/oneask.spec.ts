@@ -34,25 +34,22 @@ test("one ask: tasks.py asks, the room applet shows it, Aaron answers, the room 
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
   const made = await installApplet("rooms", { relay: RELAY!, uni: getPublicKey(Uint8Array.from(Buffer.from(secret("bob"), "hex"))) });
   try {
-    await page.goto(`/v/${VAULT}`);
+    await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
     const rooms = app.getByRole("region", { name: "Your rooms" });
     const row = rooms.getByRole("button", { name: /ask-test-t476/ });
     await expect(row).toContainText(/wants? you/, { timeout: 30_000 });
-    await page.screenshot({ path: "../walkthrough/01-rooms-wants-you.png" });
     await row.click();
     const log = app.getByRole("log");
     // 1. both asks tasks.py posted are cards
     await expect(log.getByRole("group", { name: `Wants you: Which bed gets the garlic ${stamp}?` })).toBeVisible({ timeout: 20_000 });
     await expect(log.getByRole("group", { name: `Wants you: The beans are up ${stamp}` })).toBeVisible();
-    await page.screenshot({ path: "../walkthrough/02-room-ask-cards.png" });
     // 2. Aaron answers the choose ask in the app; uni-tasks reads that answer off the relay
     await log.getByRole("group", { name: `Wants you: Which bed gets the garlic ${stamp}?` }).getByRole("button", { name: "North bed" }).click();
     await expect(log.getByRole("group", { name: "Ended ask" }).filter({ hasText: `garlic ${stamp}? · You picked North bed` })).toBeVisible();
     await expect.poll(() => list().find((x) => x.id === a)?.state, { timeout: 15_000 }).toBe("answered");
-    await page.screenshot({ path: "../walkthrough/03-answered.png" });
     // 3. the room closes both: the answered one as done, the unanswered one as withdrawn
     tasks("ask", "--close", a, "--reason", "done");
     tasks("ask", "--close", b, "--reason", "withdrawn");
@@ -61,7 +58,6 @@ test("one ask: tasks.py asks, the room applet shows it, Aaron answers, the room 
     await expect(log.getByRole("group", { name: `Wants you: The beans are up ${stamp}` })).toHaveCount(0, { timeout: 15_000 });
     await expect(log.getByRole("group", { name: /^Wants you: / })).toHaveCount(0);
     await expect(log.getByText(`Closed (withdrawn): The beans are up ${stamp}`)).toBeVisible();
-    await page.screenshot({ path: "../walkthrough/04-closed-cleared.png" });
     // a fresh start of the applet reads the room again from the relay: the row no longer says it wants him
     await page.reload();
     await page.getByRole("button", { name: "Open Rooms" }).click();
@@ -112,7 +108,6 @@ test("one ask: a close under a stream of later edits still ends it, on Today and
     const wants = frame(page).getByRole("region", { name: "Wants you" });
     await expect(wants).toContainText(`Stays open ${stamp}`, { timeout: 30_000 });
     await expect(wants).not.toContainText(`Closed then buried ${stamp}`);
-    await page.screenshot({ path: "../walkthrough/05-today-wants-you.png" });
     // Rooms, started fresh: the room wants him once (the open ask), not twice
     await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: /Rooms/ }).click();
     await page.getByRole("button", { name: "Allow" }).click().catch(() => {});
