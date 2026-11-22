@@ -163,6 +163,24 @@ describe("notionImport", () => {
     expect(Object.keys(r.pack.types.book.fields)).toEqual(["rating", "shelf_2"]);
   });
 
+  test("another import's types count in a clash; two tables of one title each find their own type again", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const files = new Map([
+      ["E/A 3333333333333333333333333333333a/Tasks 4444444444444444444444444444444a_all.csv", enc("Name,Owner\r\nx,me\r\n")],
+      ["E/B 5555555555555555555555555555555b/Tasks 6666666666666666666666666666666b_all.csv", enc("Name,Due\r\ny,soon\r\n")],
+      ["E/Books 7777777777777777777777777777777c_all.csv", enc("Name,Status\r\nz,read\r\n")],
+    ]);
+    const first = notionImport(files);
+    expect(Object.keys(first.pack.types).sort()).toEqual(["books", "tasks", "tasks-2"]);
+    const held = Object.entries(first.pack.types).map(([name, t]) => ({ name, description: t.description, fields: t.fields as Record<string, { type?: string }> }));
+    // the same export again: the same names, each table on its own type
+    expect(notionImport(files, "again", held).pack.types).toEqual(first.pack.types);
+    // another workspace's import made projects with a number status: a new table's text status is its own field
+    const other = notionImport(new Map([["E/Books 7777777777777777777777777777777c_all.csv", enc("Name,Status\r\nz,read\r\n")]]), "x",
+      [{ name: "projects", description: "From Notion: Projects.", fields: { status: { type: "number" } } }]);
+    expect(Object.keys(other.pack.types.books.fields)).toEqual(["status_2"]);
+  });
+
   test("a column of one name in two tables, of two kinds, is text in both: the vault would refuse one type", () => {
     const csv = (rows: string) => new TextEncoder().encode(`\ufeffName,Tags\r\n${rows}`);
     const two = notionImport(new Map([

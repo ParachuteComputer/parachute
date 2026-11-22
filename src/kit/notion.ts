@@ -225,9 +225,15 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   const inFolder = (p: string, k: string) => p.startsWith(rowFolder(k)) && !p.slice(rowFolder(k).length).includes("/");
   type Col = { header: string; field: string; kind: Kind; i: number };
   type Table = { key: string; csv: string; title: string; type: string; place: string; header: string[]; body: string[][]; cols: Col[] };
-  const fromNotion = (title: string) => held.find((h) => h.description === `From Notion: ${title}.`);
-  const theirs = held.filter((h) => !/^From Notion: .*\.$/.test(h.description ?? ""));
-  const typeNames = new Set<string>(theirs.map((h) => h.name));
+  // (two tables of one title made tasks and tasks-2: each takes the first one left, in the same order as then)
+  const claimed = new Set<string>();
+  const fromNotion = (title: string) => {
+    const h = held.filter((x) => x.description === `From Notion: ${title}.` && !claimed.has(x.name)).sort((a, b) => a.name.length - b.name.length || a.name.localeCompare(b.name))[0];
+    if (h) claimed.add(h.name);
+    return h;
+  };
+  // a new table's name avoids every type the vault has (a table found again keeps its own)
+  const typeNames = new Set<string>(held.map((h) => h.name));
   const tables: Table[] = [];
   for (const [key, csv] of dbs) {
     const [header = [], ...body] = parseCsv(text(files.get(csv)!));
@@ -235,7 +241,6 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
     const taken = new Set<string>();
     const title = bare(noExt(key.split("/").pop()!));
     const again = fromNotion(title);
-    if (again) typeNames.add(again.name);
     tables.push({ key, csv, title, type: again?.name ?? typeName(title, typeNames), place: unique(placeOf(key)), header, body,
       cols: header.slice(1).map((h, i) => ({ header: h.trim(), field: fieldName(h, taken), kind: kindOf(body.map((r) => r[i + 1] ?? "")), i: i + 1 })) });
   }
@@ -247,11 +252,12 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   // and one the vault's own types declare otherwise is another field here
   const specOf = (c: Col): FieldSpec => (c.kind === "relation" ? { type: "reference", cardinality: "many" } : SPEC[c.kind as Exclude<Kind, "relation">]);
   // (what a vault refuses beside another type's field of that name: another kind, or an indexed one; cardinality it takes)
-  const clash = (f: string, spec: FieldSpec) => theirs.some((h) => { const d = h.fields[f]; return !!d && (d.type !== spec.type || !!d.indexed); });
+  // (every type but the table's own again: another import's types count as much as the person's)
+  const clash = (f: string, spec: FieldSpec, own: string) => held.some((h) => { const d = h.name !== own && h.fields[f]; return !!d && (d.type !== spec.type || !!d.indexed); });
   const renamed = new Map<string, string>();
   for (const t of tables) for (const c of t.cols) {
-    if (!clash(c.field, specOf(c))) continue;
-    if (!renamed.has(`${c.field}|${c.kind}`)) { let i = 2, n = `${c.field}_${i}`; while (clash(n, specOf(c)) || theirs.some((h) => n in h.fields) || tables.some((x) => x.cols.some((y) => y.field === n))) n = `${c.field}_${++i}`; renamed.set(`${c.field}|${c.kind}`, n); }
+    if (!clash(c.field, specOf(c), t.type)) continue;
+    if (!renamed.has(`${c.field}|${c.kind}`)) { let i = 2, n = `${c.field}_${i}`; while (clash(n, specOf(c), t.type) || held.some((h) => h.name !== t.type && n in h.fields) || tables.some((x) => x.cols.some((y) => y.field === n))) n = `${c.field}_${++i}`; renamed.set(`${c.field}|${c.kind}`, n); }
     c.field = renamed.get(`${c.field}|${c.kind}`)!;
   }
 
