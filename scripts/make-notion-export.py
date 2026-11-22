@@ -55,7 +55,10 @@ for t, a, s, r, tg, f, n in books:
     files[f"{db}/{rl}/{nm(t)}.md"] = body
 # Projects and Tasks (a relation between them)
 pj, tk = nm("Projects"), nm("Tasks")
-def pj_ref(p): return f"{p} ({link(pj)}/{link(nm(p))}.md)"
+# a relation as current exports write it (2023 on): a notion.so link with the page's id; Projects' Tasks column below
+# keeps the older relative-path form, so both are in the export
+def url(t): return f"https://www.notion.so/{'-'.join(t.replace(':', '').split())}-{hid(t)}?pvs=21"
+def pj_ref(p): return f"{p} ({url(p)})"
 files[f"{db}/{pj}_all.csv"] = csv_rows(["Name", "Kind", "Status", "Due", "Client", "Tasks"],
     [[p, k, s, d, c, ", ".join(f"{t[0]} ({link(tk)}/{link(nm(t[0]))}.md)" for t in tasks if t[1] == p)] for p, k, s, d, c, _ in projects])
 files[f"{db}/{pj}.csv"] = files[f"{db}/{pj}_all.csv"]
@@ -65,7 +68,7 @@ for p, k, s, d, c, n in projects:
 files[f"{db}/{tk}_all.csv"] = csv_rows(["Name", "Project", "Due", "Done"], [[t, pj_ref(p), d, x] for t, p, d, x in tasks])
 files[f"{db}/{tk}.csv"] = files[f"{db}/{tk}_all.csv"]
 for t, p, d, x in tasks:
-    props = [f"Project: {p} (../{link(pj)}/{link(nm(p))}.md)"] + ([f"Due: {d}"] if d else []) + [f"Done: {x}"]
+    props = [f"Project: {pj_ref(p)}"] + ([f"Due: {d}"] if d else []) + [f"Done: {x}"]
     files[f"{db}/{tk}/{nm(t)}.md"] = f"# {t}\n\n" + "\n".join(props) + "\n"
 # Meeting notes: a plain page under Home with a child page
 mn = nm("Meeting notes")

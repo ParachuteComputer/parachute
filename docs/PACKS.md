@@ -57,7 +57,8 @@ changed, which the person also changed) is not built.
 and applies it as a pack, by the rule above, under one folder, `Notion/`:
 
 - a **database** becomes a type named for it (Reading List → `reading-list`), one field per column, its kind found from
-  the values (dates, numbers, yes/no, lists, links to other rows as references); its `_all.csv` is read, so rows a view
+  the values (dates, numbers, yes/no, lists, links to other rows as references: written as the export's relative paths,
+  or, as exports since about 2023 write them, notion.so links found by the page's id); its `_all.csv` is read, so rows a view
   filtered out come too. A record at the table's place says where its rows went.
 - a **row** becomes a record of that type at `Notion/<its place>/<title>`: the columns are its fields, its page (less
   its title and property lines) its words. A page is matched to its row by title, else by its property lines (Notion

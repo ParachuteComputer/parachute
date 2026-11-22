@@ -140,6 +140,11 @@ describe("notionImport", () => {
     expect(r.pack.records.find((x) => x.path === "Notion/Notes/a")?.fields).toEqual({ meeting: ["Notion/Meetings/November 21, 2026", "Notion/Meetings/Kickoff (v2)"] });
   });
 
+  test("a relation to a page outside the export keeps its title, not a notion.so link that reads like a path", () => {
+    const r = notionImport(new Map([["E/Tasks 9999999999999999999999999999999c_all.csv", new TextEncoder().encode("Name,Project\r\nx,Gone project (https://www.notion.so/Gone-project-0000000000000000000000000000000a?pvs=21)\r\n")]]));
+    expect(r.pack.records.find((x) => x.path === "Notion/Tasks/x")?.fields).toEqual({ project: ["Gone project"] });
+  });
+
   test("a column of one name in two tables, of two kinds, is text in both: the vault would refuse one type", () => {
     const csv = (rows: string) => new TextEncoder().encode(`\ufeffName,Tags\r\n${rows}`);
     const two = notionImport(new Map([
