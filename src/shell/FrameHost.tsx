@@ -1,7 +1,8 @@
-// The frame, as the shell holds it: one sealed iframe (frameDoc.ts), there only while one of the frame's addresses is
-// shown; a shell screen (an applet, Settings, signing in) removes it, and coming back starts it afresh, its reads new.
-// Only messages from its own window are read. The shell sends it each address it should show, and tells it when vaults,
-// applets or the person's choices change.
+// The frame, as the shell holds it: one sealed iframe (frameDoc.ts), made the first time one of the frame's addresses
+// shows and kept running, hidden, behind a shell screen (an applet, Settings, signing in), so coming back to it is at
+// once (FrameArea.tsx). Only messages from its own window are read. The shell sends it each address it should show
+// while it is shown (never a shell screen's), tells it when it is shown again or hidden, and when vaults, applets or the
+// person's choices change.
 import { useEffect, useMemo, useRef } from "react";
 import { NO_DEVICES } from "../applet/frame";
 import { useLocation, useNavigate } from "react-router";
@@ -24,7 +25,9 @@ import { onFresh } from "../vault/readCache";
 /** How long a frame from a vault has to say it is listening before the built-in one takes its place. */
 const WATCHDOG_MS = 10_000;
 
-export default function FrameHost({ js, from, onFailed }: { js: string; from: "built-in" | "vault"; onFailed: (why: string, persist: boolean) => void }) {
+export default function FrameHost({ js, from, onFailed, shown: visible = true }: { js: string; from: "built-in" | "vault"; onFailed: (why: string, persist: boolean) => void; shown?: boolean }) {
+  const shownRef = useRef(visible);
+  shownRef.current = visible;
   // the look as it is when the frame starts; each later change is a `theme` event
   const doc = useMemo(() => frameDocument(frameKit.js, frameKit.css, js, FONTS_CSS + cssOf(tokensNow())), [js]);
   const failedRef = useRef(onFailed);
@@ -38,8 +41,10 @@ export default function FrameHost({ js, from, onFailed }: { js: string; from: "b
   navRef.current = navigate;
   const shown = useRef(location);
   shown.current = location;
-  const host = useMemo(() => createFrameHost((m) => ref.current?.contentWindow?.postMessage(m, "*"), shellDeps((to, replace) => navRef.current(to, { replace }), () => ref.current, from)), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const host = useMemo(() => createFrameHost((m) => ref.current?.contentWindow?.postMessage(m, "*"), shellDeps((to, replace) => navRef.current(to, { replace }), () => ref.current, from, () => shownRef.current)), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // only while it is shown: hidden, the address is a shell screen's (a sign-in's return carries its code there)
   const sendLocation = () => {
+    if (!shownRef.current) return;
     const l = shown.current;
     const decided = decidedFor(l.key);
     host.event("location", { pathname: l.pathname, search: l.search, hash: l.hash, key: l.key, ...(decided ? { decided } : {}) });
@@ -73,6 +78,14 @@ export default function FrameHost({ js, from, onFailed }: { js: string; from: "b
   }, [host]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(sendLocation, [location.key, location.pathname, location.search]); // eslint-disable-line react-hooks/exhaustive-deps
+  // hidden and shown again: told so, and it reads again behind what it drew (the address now came just before: shown
+  // or hidden is always a change of address, shell screens and the frame's having addresses of their own)
+  const wasShown = useRef(visible);
+  useEffect(() => {
+    if (wasShown.current === visible) return;
+    wasShown.current = visible;
+    if (heard.current) host.event("shown", visible);
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <iframe ref={ref} className="app-frame" data-frame={from} title="Parachute" sandbox="allow-scripts" allow={NO_DEVICES} referrerPolicy="no-referrer" srcDoc={doc} />;
 }

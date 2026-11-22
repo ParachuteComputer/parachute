@@ -16,7 +16,7 @@ import { officialPath } from "../applet/parachuteSource";
 import { arrived, installTapListener } from "../open/mark";
 import { useVaults } from "../vault/hooks";
 import { listVaults } from "../vault/store";
-import FrameArea from "./FrameArea";
+import { KeptFrame } from "./FrameArea";
 import KeyStart from "../key/KeyStart";
 import OfficialRoute from "../views/OfficialRoute";
 import NoteEdit from "../views/NoteEdit";
@@ -204,9 +204,10 @@ function ShellRoutes() {
         <Route path="/v/:vault/n/:id/edit" element={<NoteEdit key={location.key} />} />
         <Route path="/open-link" element={<OpenLink />} />
       </Routes>}
-      {/* the frame exists only while it is shown: hidden, it would keep its bridge (and a tap on a shell screen would
-          count for it), and at boot it would learn the shell's address (a sign-in's return carries its code there) */}
-      {!shell && <FrameArea />}
+      {/* the frame, made the first time one of its addresses shows, then kept hidden behind the shell's screens, so back
+          to it is at once (FrameArea.tsx): hidden it gets no address (a sign-in's return carries its code there), no tap
+          and moves nothing */}
+      <KeptFrame shown={!shell} />
       {/* applets at their own address, and the ones kept running while hidden (kept.tsx), whatever is shown */}
       {vaults.length > 0 && <KeptApplets active={own} />}
       <UpdateLine />

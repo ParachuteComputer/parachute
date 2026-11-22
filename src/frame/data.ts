@@ -1,7 +1,7 @@
 // What the frame knows, all of it asked of the shell: the vaults this device holds (no tokens), reads of a vault, the
 // applets with their status, and the person's "Always" choices. Each is kept for the session and read again when the
 // shell says it changed.
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplets, FrameComponents, FrameHome, FramePointer, FrameVault, Query } from "../bridge/protocol";
 import { call, on } from "./bridge";
@@ -21,6 +21,22 @@ function store<T>(read: () => Promise<T>, initial: T) {
 const vaults = store<FrameVault[]>(() => call("vaults.list", {}), []);
 on("changed", ({ what }) => { if (what === "vaults") void vaults.load(); });
 
+// Kept running hidden behind the shell's screens (shell/FrameArea.tsx), the frame is told when it is shown again: what
+// it drew stays, and everything it read is read again behind it (as a new frame would have read it), quietly.
+let round = 0;
+const roundSubs = new Set<() => void>();
+const useRound = () => useSyncExternalStore((f) => { roundSubs.add(f); return () => { roundSubs.delete(f); }; }, () => round);
+on("shown", (shown) => {
+  if (!shown) return;
+  round++;
+  void vaults.load();
+  for (const k of applets.keys()) void readApplets(k, true);
+  for (const k of defaults.keys()) void readDefaults(k);
+  for (const k of components.keys()) void readComponents(k);
+  void home.load(); void pointers.load();
+  roundSubs.forEach((f) => f());
+});
+
 export const useVaults = (): FrameVault[] => useSyncExternalStore(vaults.subscribe, vaults.get);
 /** Whether the list of vaults has been read yet (before, every vault looks missing). */
 export const useVaultsLoaded = (): boolean => useSyncExternalStore(vaults.subscribe, vaults.loaded);
@@ -37,17 +53,24 @@ export const readerFor = (v: FrameVault): Reader => ({
 
 export type Load<T> = { state: "loading" } | { state: "error"; error: string } | { state: "ok"; data: T };
 
-/** Run `fn` against a vault whenever `deps` change; the last answer wins. */
+/** Run `fn` against a vault whenever `deps` change, and again, quietly (what it showed stays until the answer), when the
+ *  frame is shown again; the last answer wins. */
 export function useVaultQuery<T>(v: FrameVault | null, fn: (r: Reader) => Promise<T>, deps: unknown[]): Load<T> {
   const [load, setLoad] = useState<Load<T>>({ state: "loading" });
+  const again = useRound();
+  const asked = useRef("");
   useEffect(() => {
     if (!v) return;
     let live = true;
-    setLoad({ state: "loading" });
-    fn(readerFor(v)).then((data) => live && setLoad({ state: "ok", data }), (e: unknown) => live && setLoad({ state: "error", error: e instanceof Error && e.message ? e.message : "Something went wrong reaching the vault." }));
+    // the same question asked again (shown again): what it shows stays until the answer
+    const q = JSON.stringify([v.key, ...deps]);
+    const quiet = asked.current === q;
+    asked.current = q;
+    if (!quiet) setLoad({ state: "loading" });
+    fn(readerFor(v)).then((data) => live && setLoad({ state: "ok", data }), (e: unknown) => live && setLoad((was) => quiet && was.state === "ok" ? was : { state: "error", error: e instanceof Error && e.message ? e.message : "Something went wrong reaching the vault." }));
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [v?.key, ...deps]);
+  }, [v?.key, again, ...deps]);
   return load;
 }
 
