@@ -4,6 +4,10 @@
 //     packs({vault})       {starters: [{id, name, summary, version, types: {name: [field]}, records: [path]}],
 //                           installed: [{id, name, version, source, appliedAt, appliedBy, made, skipped, newer}]}
 //     addPack({vault, id}) apply one of Parachute's starter packs (src/kit/packs.ts): {added, kept, notes, changed}
+//     importNotion({vault}) during a tap: the shell's own picker for a Notion export (.zip), read here and applied as a
+//                          pack (src/kit/notion.ts): {picked: false} when none, else {name, found, made, types, notes,
+//                          left, changed}. The file comes from the person through the shell's sheet, never from the
+//                          applet, so this too applies only what Parachute itself made of it.
 //
 // A pack here is only one the app ships (src/kit/packs/*.json, the same block as its page on parachute.computer): an
 // applet can't hand the app a pack of its own to apply. What the pack writes is checked again here (checkPack): its
@@ -13,6 +17,8 @@
 import { ContractError, ERROR_CODES, hasOnly, plain } from "../contract.ts";
 import { applyPack, checkPack, receiptOf, receiptRecord, refusalWords, RECEIPTS, RECEIPT_TAG, type HeldType, type Pack, type PackTarget, type Receipt } from "../../kit/packs.ts";
 import coreTypes from "../../kit/packs/core-types.json";
+import { notionImport, NOTION_WANT } from "../../kit/notion.ts";
+import { readZip, ZipError } from "../../kit/zip.ts";
 import { PUBLISH_FIELD, type VaultsDeps } from "./vaults.ts";
 
 /** Parachute's own starter packs, checked once. */
@@ -114,7 +120,33 @@ type Run = (p: Record<string, unknown>, s: unknown, ctx: { charge(n: number): vo
 export function packMethods(deps: VaultsDeps, word: (p: unknown) => void, held: (vault: string) => { level: "read" | "write" | null; mine: boolean }) {
   const vaultOk = (p: unknown, keys: string[]) => plain(p) && hasOnly(p, ["vault", ...keys]) && typeof p.vault === "string" && p.vault.length > 0 && p.vault.length <= 200;
   const fail = (e: unknown) => e instanceof ContractError ? e : new ContractError(ERROR_CODES.failed, String((e as Error)?.message ?? e).slice(0, 300));
+  const writes = (vault: string) => { const h = held(vault); if (!h.mine && h.level !== "write") throw new ContractError(ERROR_CODES.notGranted, "Parachute only reads this vault, so it can't bring anything in here"); };
   return {
+    importNotion: {
+      cap: null,
+      validate: (p: unknown) => { word(p); return vaultOk(p, []) ? { ok: true as const, value: p } : { ok: false as const }; },
+      run: (async ({ vault }, _s, ctx) => {
+        writes(vault as string);
+        if (!deps.pick) throw new ContractError(ERROR_CODES.failed, "this screen can't open a file");
+        if ((await deps.door(vault as string)) !== "records") throw new ContractError(ERROR_CODES.failed, "This vault's server is older (0.8): an import needs types, which come with 0.9. Nothing was changed.");
+        // one call's worth, before the picker: the person's own tap and pick gate it, and a workspace can be hundreds of
+        // records (a frame's reads are 60 in 10 s: charged per record, any real export would be refused after the pick)
+        ctx.charge(5);
+        const [file] = await deps.pick([".zip", "application/zip"], false);
+        if (!file) return { picked: false };
+        let pack: ReturnType<typeof notionImport>;
+        try { pack = notionImport(await readZip(file.bytes, { want: NOTION_WANT }), file.name); } catch (e) {
+          throw new ContractError(ERROR_CODES.failed, e instanceof ZipError || e instanceof Error ? e.message.slice(0, 300) : "That file couldn't be read.");
+        }
+        try {
+          const r = await applyPack(pack.pack, packTarget(deps, vault as string));
+          return { picked: true, name: pack.pack.name, found: pack.found, made: r.receipt.made.records.length, types: Object.keys(pack.pack.types), notes: r.notes, left: pack.left, changed: r.changed };
+        } catch (e) {
+          if ((e as { name?: string })?.name === "NeedsWriteError") throw new ContractError(ERROR_CODES.notGranted, String((e as Error).message).slice(0, 300));
+          throw fail(e);
+        }
+      }) as Run,
+    },
     packs: {
       cap: null,
       validate: (p: unknown) => { word(p); return vaultOk(p, []) ? { ok: true as const, value: p } : { ok: false as const }; },

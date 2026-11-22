@@ -14,7 +14,7 @@ Bases, Anytype, Capacities).
 | Screen | What is on it |
 |---|---|
 | Your vaults | every vault on this device (where it is, whether Parachute reads or also changes it), and a search across all of them |
-| A vault | its types, each with how many records it has and its fields; its tags; the newest records; a search; **New type**; **Add a pack** (**Packs** once it has types); **Changes**; **Sharing** |
+| A vault | its types, each with how many records it has and its fields; its tags; the newest records; a search; **New type**; **Add a pack** (**Packs** once it has types); **Import from Notion**; **Changes**; **Sharing** |
 | Packs | **Installed packs** (version, when, **Update** when the app ships a newer one), and Parachute's own to add with one tap: what each adds, then **Add**. What it added, and what it left as the person had it, said in plain words ([PACKS.md](PACKS.md)) |
 | A type | its records as a table: the type's fields are the columns, a header's tap sorts by it, the first column stays in view as the rest scroll across. **Filter** (a field's value), **Group** (by a field), **List** or **Table**, a search. Saved views as tabs. **New …** adds a record of the type, starting from its default template when it has one ([PACKS.md](PACKS.md)). A record opens beside the table on a computer, in its place on a phone |
 | A record | its fields, changed where they stand (a choice from the type's list, a box for yes or no, a number, a date), its types and tags, its words (rendered; **Edit words**), what it links to and what links to it, its history (each change, by whom: an AI by its key's name; tap one for its before and after, and **Put it back**), **Make this a template**, and **Publish** |

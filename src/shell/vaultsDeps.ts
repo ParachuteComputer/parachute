@@ -87,10 +87,12 @@ function reachRow(r: HubGrantRow, self: string | null): ReachRow {
 export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act: string }): Promise<"yes" | "no" | "untapped">; emit(event: string, data: unknown): void; back(): string;
   /** The applet these words serve (its subject): what it manages is held for it alone (vault/manage.ts). */ applet?: string;
   /** The shell's own sheet that shows a key's secret once, never handing it to the applet. */ reveal?(k: { name: string; vault: string; token: string; address: string; until: string }): Promise<void>;
-  /** Each read made from the kept copies (the vault, the read's path and query as readCache names it). */ read?(vault: string, read: string): void }): VaultsDeps {
+  /** Each read made from the kept copies (the vault, the read's path and query as readCache names it). */ read?(vault: string, read: string): void;
+  /** The shell's own picker over the applet, during a tap (Import from Notion). */ pick?: VaultsDeps["pick"] }): VaultsDeps {
   const req = (key: string) => clientFor(rec(key)) as unknown as VaultClient & Requesting;
   const applet = opts.applet ?? "";
   return {
+    ...(opts.pick ? { pick: opts.pick } : {}),
     list: heldVaults,
     hubs: heldHubs,
     // this device's Parachute signed in as an app: its writes are its key's, named for this client id (core keys.ts)

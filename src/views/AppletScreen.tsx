@@ -54,6 +54,7 @@ import { tokensNow } from "../theme/store";
 import { createAppModule, notTapped } from "../applet/modules/app";
 import { createVoiceModule } from "../applet/modules/voice";
 import { createVaultsModule } from "../applet/modules/vaults";
+import { MAX_TOTAL as IMPORT_MAX } from "../kit/zip";
 import { vaultsDeps } from "../shell/vaultsDeps";
 import { createStorageModule } from "../applet/modules/storage";
 import { storageFor } from "../shell/device";
@@ -455,6 +456,9 @@ export default function AppletScreen() {
     ? createVaultsModule(entry.app, vaultsDeps({ confirm: (q) => sheetsRef.current.confirm(q), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search,
       // what it manages is its own, and a key's secret is shown on the shell's sheet (vault/manage.ts, ShellSheets.tsx)
       applet: subjectOf(rec.key, entry.noteId), reveal: (k) => sheetsRef.current.reveal(k),
+      // the shell's own picker, as `app.pick` opens it: only while the person taps in this applet
+      // (a Notion export carries its images: up to the import's own limit, not an attachment's 25 MB)
+      pick: (accept, multiple) => (tappingIn(() => frameEl.current) ? device.pick(accept, multiple, IMPORT_MAX, "Parachute reads it and writes it into this vault, under Notion/.") : Promise.reject(notTapped())),
       // Parachute's own Vault draws a record again when told: it may be answered from the copies kept of its reads
       ...(officialOf(entry.noteId) === "vault" ? { read: (vault: string, read: string) => { let m = vaultsReads.current.get(vault); if (!m) vaultsReads.current.set(vault, m = new Set()); if (m.size < 1000) m.add(read); } } : {}) }))
     : null), [rec?.key, allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps

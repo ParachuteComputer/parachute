@@ -24,6 +24,7 @@
 //     create({vault, bytes})                   a new record: {path, body, types?, fields?, tags?}
 //     watch({vault, type?}) / unwatch({id})    changes as they land: events `vaults.events` {id, upsert?: record, remove?: id}
 //     packs({vault}) / addPack({vault, id})    Parachute's starter packs and the vault's own; apply one (packs.ts)
+//     importNotion({vault})                    during a tap, the shell's picker for a Notion export, applied as a pack
 //     applets({vault})                         the applets in it, as the app lists them: {id, name, glyph, href, allowed}
 //                                              (their code is never handed over; a tap on one goes through `app.open`)
 //   sharing       (what reaches a vault; and, each after the person says yes on the app's own sheet over a tap of theirs,
@@ -127,6 +128,8 @@ export type VaultsDeps = {
    *  draws itself again when told (Parachute's own Vault); absent: `request`. A change, and every check one is judged
    *  on (the types that publish, the record as it is), never reads it. */
   read?(vault: string, path: string): Promise<unknown>;
+  /** The shell's own file picker over the applet, during a tap of the person's (Import from Notion); absent: none. */
+  pick?(accept: string[], multiple: boolean): Promise<{ name: string; type: string; bytes: ArrayBuffer }[]>;
   /** The vault's record door: `records` (core 0.9) or `notes` (0.8). */
   door(vault: string): Promise<"records" | "notes">;
   watch(vault: string, type: string | null, on: (e: WatchEvent) => void): () => void;

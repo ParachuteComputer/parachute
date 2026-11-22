@@ -11,7 +11,7 @@ import type { Recording } from "../applet/modules/voice";
 
 type Asking =
   | { kind: "record"; id: number; max: number; done: (r: Recording | null) => void }
-  | { kind: "pick"; id: number; accept: string[]; multiple: boolean; done: (files: PickedFile[]) => void };
+  | { kind: "pick"; id: number; accept: string[]; multiple: boolean; max: number; note?: string; done: (files: PickedFile[]) => void };
 let asks = 0;
 
 /** The recorder's format, as the Uni app picks it: WebM Opus where the webview has it (Chromium, Android). */
@@ -127,7 +127,7 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
   );
 }
 
-function PickSheet({ name, accept, multiple, done }: { name: string; accept: string[]; multiple: boolean; done: (files: PickedFile[]) => void }) {
+function PickSheet({ name, accept, multiple, max, note, done }: { name: string; accept: string[]; multiple: boolean; max: number; note?: string; done: (files: PickedFile[]) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState(false);
@@ -136,8 +136,8 @@ function PickSheet({ name, accept, multiple, done }: { name: string; accept: str
     const files = Array.from(list ?? []);
     if (!files.length) return;
     if (files.length > PICK_MAX) { setWhy(`Choose at most ${PICK_MAX} files.`); return; }
-    const big = files.find((f) => f.size > FILE_MAX);
-    if (big) { setWhy(`${big.name} is over 25 MB. Choose a smaller one.`); return; }
+    const big = files.find((f) => f.size > max);
+    if (big) { setWhy(`${big.name} is over ${Math.round(max / 1024 / 1024)} MB. Choose a smaller one.`); return; }
     setBusy(true);
     try {
       done(await Promise.all(files.map(async (f) => ({ name: bareName(f.name), type: mediaType(f.type) ?? "application/octet-stream", bytes: await f.arrayBuffer() }))));
@@ -147,7 +147,7 @@ function PickSheet({ name, accept, multiple, done }: { name: string; accept: str
     <div className="sheet-scrim sheet-over-frames" role="presentation">
       <section className="sheet device-sheet" role="dialog" aria-modal="true" aria-label={`${name} asks for ${what}`}>
         <h2>{name} asks for {what}</h2>
-        <p className="quiet">It gets only what you choose here{multiple ? `, up to ${PICK_MAX} files` : ""}, each at most 25 MB.</p>
+        <p className="quiet">{note ? `${note} At most ${Math.round(max / 1024 / 1024)} MB.` : `It gets only what you choose here${multiple ? `, up to ${PICK_MAX} files` : ""}, each at most ${Math.round(max / 1024 / 1024)} MB.`}</p>
         {why && <p role="alert">{why}</p>}
         <input ref={input} type="file" hidden data-shell-pick="" aria-label={`Choose ${what} for ${name}`} accept={accept.join(",") || undefined} multiple={multiple}
           onChange={(e) => { void chosen(e.target.files); e.target.value = ""; }} />
@@ -167,7 +167,7 @@ export function useDeviceSheets(name: string) {
   const [asking, setAsking] = useState<Asking | null>(null);
   const open = useRef<Asking | null>(null);
   useEffect(() => () => api.current?.cancel(), []);
-  const api = useRef<{ record(max: number): Promise<Recording | null>; pick(accept: string[], multiple: boolean): Promise<PickedFile[]>; cancel(): void } | null>(null);
+  const api = useRef<{ record(max: number): Promise<Recording | null>; pick(accept: string[], multiple: boolean, max?: number, note?: string): Promise<PickedFile[]>; cancel(): void } | null>(null);
   if (!api.current) {
     const ask = <T,>(make: (done: (x: T) => void) => Asking) => new Promise<T>((resolve, reject) => {
       if (open.current) { reject(new ContractError(ERROR_CODES.failed, "the app is already asking you something")); return; }
@@ -177,11 +177,11 @@ export function useDeviceSheets(name: string) {
     });
     api.current = {
       record: (max) => ask<Recording | null>((done) => ({ kind: "record", id: ++asks, max, done })),
-      pick: (accept, multiple) => ask<PickedFile[]>((done) => ({ kind: "pick", id: ++asks, accept, multiple, done })),
+      pick: (accept, multiple, max = FILE_MAX, note?: string) => ask<PickedFile[]>((done) => ({ kind: "pick", id: ++asks, accept, multiple, max, ...(note ? { note } : {}), done })),
       cancel: () => { const a = open.current; if (a?.kind === "record") a.done(null); else if (a?.kind === "pick") a.done([]); },
     };
   }
   const ui = asking?.kind === "record" ? <RecorderSheet key={asking.id} name={name} max={asking.max} done={asking.done} />
-    : asking?.kind === "pick" ? <PickSheet key={asking.id} name={name} accept={asking.accept} multiple={asking.multiple} done={asking.done} /> : null;
+    : asking?.kind === "pick" ? <PickSheet key={asking.id} name={name} accept={asking.accept} multiple={asking.multiple} max={asking.max} note={asking.note} done={asking.done} /> : null;
   return { record: api.current.record, pick: api.current.pick, cancel: api.current.cancel, ui };
 }
