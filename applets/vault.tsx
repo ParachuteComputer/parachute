@@ -17,7 +17,7 @@ import { app, Button, Empty, Field, Fields, List, Loading, Note, onFresh, onLaun
 type Held = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where a published record is read (this plus its id): null where the hub has none; absent from an older app */
   view?: string | null; reach?: "this-device" | "network" | "anyone" };
-type Spec = { type?: string; enum?: unknown[]; description?: string };
+type Spec = { type?: string; enum?: unknown[]; description?: string; cardinality?: string };
 type TypeRow = { name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, Spec> };
 type Rec = { id: string; path: string; title: string; createdAt: string | null; updatedAt: string | null; types: string[]; tags: string[]; fields: Record<string, unknown>;
   body?: string; createdBy?: string | null; createdVia?: string | null; updatedBy?: string | null; updatedVia?: string | null;
@@ -42,6 +42,9 @@ const shown = (v: unknown) => (v === null || v === undefined || v === "" ? "" : 
 const label = (name: string) => name.replace(/_/g, " ");
 /** A reference names a record by its path: shown by the record's name (its last part), as a person reads it. */
 const isRef = (s: Spec | undefined) => s?.type === "reference";
+/** A reference to many records (a list of paths): shown by their names and not edited here, where a name typed over the
+ *  list would replace it. A reference to one stays a box with its path, the one way to set it until there is a picker. */
+const isRefList = (s: Spec | undefined, v: unknown) => isRef(s) && (Array.isArray(v) || s?.cardinality === "many");
 const shownAs = (s: Spec | undefined, v: unknown) => (isRef(s) && v !== null && v !== undefined && v !== ""
   ? (Array.isArray(v) ? v : [v]).map((x) => (typeof x === "string" ? x.split("/").pop() || x : shown(x))).join(", ") : shown(v));
 const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "");
@@ -280,6 +283,11 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   const sortBy = (key: string) => setView((w: View) => ({ ...w, group: null, sort: w.sort?.by === key ? { by: key, dir: w.sort.dir === "asc" ? "desc" : "asc" } : { by: key, dir: "asc" } }));
   const where = Object.fromEntries(view.where.map((w) => [w.field, w.value]));
   const setWhere = (field: string, value: unknown) => setView((w: View) => ({ ...w, where: [...w.where.filter((x) => x.field !== field), ...(value === null || value === "" ? [] : [{ field, op: "eq", value }])] }));
+  // a reference reads as a record's name in the table: a name typed into Filter means the path it stands for, as the rows
+  // read so far hold it (a path, or a name no row holds, is sent as typed)
+  const refPaths = useRef(new Map<string, string>());
+  for (const r of rows ?? []) for (const c of cols) if (isRef(spec?.fields?.[c])) for (const x of [r.fields[c]].flat()) if (typeof x === "string" && x.includes("/")) refPaths.current.set(`${c}|${(x.split("/").pop() ?? "").toLowerCase()}`, x);
+  const filterBy = (field: string, value: unknown) => setWhere(field, isRef(spec?.fields?.[field]) && typeof value === "string" && !value.includes("/") ? refPaths.current.get(`${field}|${value.trim().toLowerCase()}`) ?? value : value);
   const canWrite = v.mine || v.level === "write";
   // New starts from the type's default template (Templates/<type>/, docs/PACKS.md): its body, as it is now
   const [template, setTemplate] = useState<Rec | null>(null);
@@ -325,8 +333,8 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
         <Button small kind={panel === "group" || view.group ? "primary" : "plain"} onClick={() => setPanel(panel === "group" ? "" : "group")}>{view.group ? `Group · ${label(view.group)}` : "Group"}</Button>
         <Button small onClick={() => setView((w: View) => ({ ...w, layout: w.layout === "table" ? "list" : "table" }))}>{view.layout === "table" ? "List" : "Table"}</Button>
       </div>
-      {panel === "filter" && <Fields label="Show only records where" fields={cols.map((c) => ({ name: c, kind: kindOf(spec?.fields?.[c]) === "list" ? "text" : kindOf(spec?.fields?.[c]), choices: (spec?.fields?.[c]?.enum ?? []).map(String), value: where[c] ?? null }))}
-        onSave={(f, val) => setWhere(f, val)} />}
+      {panel === "filter" && <Fields label="Show only records where" fields={cols.map((c) => ({ name: c, kind: kindOf(spec?.fields?.[c]) === "list" ? "text" : kindOf(spec?.fields?.[c]), choices: (spec?.fields?.[c]?.enum ?? []).map(String), value: (isRef(spec?.fields?.[c]) ? shownAs(spec?.fields?.[c], where[c]) || null : where[c]) ?? null }))}
+        onSave={(f, val) => filterBy(f, val)} />}
       {panel === "group" && <div className="chips group">{[null, ...cols].map((c) => <Button key={c ?? "-"} small kind={view.group === c ? "primary" : "quiet"} onClick={() => setView((w: View) => ({ ...w, group: c }))}>{c ? label(c) : "No groups"}</Button>)}</div>}
       <div className={`cols${record ? " peek" : ""}`}>
         <section>
@@ -423,9 +431,8 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
         await change(isType ? { types: { add: [t] } } : { tags: { add: [t] } });
       }} />}
       <p className="sect">Fields</p>
-      {/* a reference is shown by the names of the records it points at, not edited here: typed over, a name would replace
-          the path it stands for */}
-      {names.length ? <Fields label="Fields" fields={names.map((n) => isRef(spec[n])
+      {/* a reference to many is shown by the names of the records it points at (isRefList) */}
+      {names.length ? <Fields label="Fields" fields={names.map((n) => isRefList(spec[n], r.fields[n])
         ? { name: n, kind: "text", choices: [], value: shownAs(spec[n], r.fields[n]) || null, readOnly: true }
         : { name: n, kind: kindOf(spec[n], r.fields[n]), choices: (spec[n]?.enum ?? []).map(String), value: r.fields[n] ?? null, readOnly: !canWrite || (typeof r.fields[n] === "object" && r.fields[n] !== null && !Array.isArray(r.fields[n])) })}
         onSave={canWrite ? (n, val) => change({ fields: { [n]: val } }) : undefined} /> : <p className="note-meta">No fields.</p>}

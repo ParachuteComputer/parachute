@@ -90,7 +90,8 @@ test.describe.serial("Import from Notion", () => {
     await harbor.click();
     await shot(page, "04-reference");
     await expect(app.getByText("Send Harbor Books three sketches", { exact: true }).filter({ visible: true }).first()).toBeVisible();
-    await expect(app.getByText(/\["Notion\//)).toHaveCount(0);
+    // (and no box holds the list as text, as it did: `["Notion/Home/Tasks/…"]`)
+    expect(await app.locator("input, textarea").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value).filter((x) => x.startsWith("[")))).toEqual([]);
 
     // the same export again: nothing new, nothing changed
     const before = new Map(recs.map((r) => [r.path, r.updatedAt]));
