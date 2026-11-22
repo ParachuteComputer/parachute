@@ -1,9 +1,15 @@
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { build, defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
+// Which build this is (src/shell/updates.ts): its commit and that commit's time, which only grows along next, so a feed's
+// newer build is the one with the later time (and on Android the version code, scripts/android-build.sh). From
+// PARACHUTE_BUILD_AT / PARACHUTE_BUILD_COMMIT, else git; neither (a tarball) is build 0, which is offered nothing.
+function git(...args: string[]) { try { return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { return ""; } }
+const BUILD = { at: Number(process.env.PARACHUTE_BUILD_AT || git("log", "-1", "--format=%ct")) || 0, commit: process.env.PARACHUTE_BUILD_COMMIT || git("rev-parse", "--short=7", "HEAD") };
 
 // The app's content policy lives in src-tauri/tauri.conf.json (frame-src about: is what stops an applet frame from
 // navigating). The dev and preview servers send the same policy, so the browser the tests drive behaves like the app.
@@ -84,7 +90,7 @@ function frameKit(): Plugin {
 export default defineConfig({
   plugins: [react(), iifeKit("virtual:vault-client-kit", "./src/applet/kits/vaultClientEntry.ts", "__UniVC"), iifeKit("virtual:react-kit", "./src/applet/kits/reactEntry.ts", "__ParachuteReact"), iifeKit("virtual:react-note-kit", "./src/applet/kits/reactNoteEntry.ts", "__ParachuteReactNote"), frameKit()],
   resolve: { alias },
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  define: { __APP_VERSION__: JSON.stringify(pkg.version), __BUILD__: JSON.stringify(BUILD) },
   clearScreen: false,
   server: { port: 1420, strictPort: true, headers },
   preview: { headers },

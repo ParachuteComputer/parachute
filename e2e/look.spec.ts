@@ -124,3 +124,18 @@ test("an applet's own body width is its own, and a long bare button wraps instea
     await expect.poll(() => frame(page).locator("#words").evaluate((p) => Math.round(p.getBoundingClientRect().width))).toBe(700);
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });
+
+// the most common CSS reset, and a full-height body: an applet's own body rules mean what they mean in any page
+const RESET = `<!doctype html><html><head><style>*, *::before, *::after { box-sizing: border-box; } html, body { height: 100%; }
+body { max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; } main { flex: 1; } footer { padding: 8px 0; }</style></head>
+<body><main><h1>Ledger</h1><p id="words">A column of its own, under the common reset.</p></main><footer id="foot">Pinned to the foot</footer></body></html>`;
+
+test("an applet with the common reset and a full-height body: its column keeps its width, and nothing scrolls past the screen", async ({ page }) => {
+  const id = await opened(page, "Applets/Ledger", "html", RESET, "ledger-reset", "Ledger reset", "Ledger");
+  try {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await expect.poll(() => frame(page).locator("#words").evaluate((p) => Math.round(p.getBoundingClientRect().width))).toBe(700);
+    expect(await frame(page).locator("html").evaluate((h) => h.scrollHeight <= h.clientHeight + 1 && h.scrollWidth <= h.clientWidth + 1)).toBe(true);
+    expect(await frame(page).locator("#foot").evaluate((f) => f.getBoundingClientRect().bottom <= innerHeight + 1)).toBe(true);
+  } finally { await api(hubState(), "DELETE", `notes/${id}`); }
+});

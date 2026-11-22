@@ -49,6 +49,9 @@ jobs:
           cargo build --locked --manifest-path src-tauri/Cargo.toml --example pair_send
           echo "PAIR_SEND=$PWD/src-tauri/target/debug/examples/pair_send" >> "$GITHUB_ENV"
       - name: Build the app (ad-hoc signed)
+        # a build of next looks for newer ones at the repository's update feed, when it has one (src-tauri/src/updates.rs)
+        env:
+          PARACHUTE_UPDATE_FEED: ${{ github.event_name != 'pull_request' && secrets.PARACHUTE_UPDATE_FEED || '' }}
         run: npx tauri build --ci && scripts/no-test-signer.sh dist
       - name: Name the files
         id: files
