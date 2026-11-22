@@ -17,6 +17,7 @@ import { homeVault, useFrameSource } from "./frameSource";
 import { officialFace, officialPath, type OfficialName } from "../applet/parachuteSource";
 import { useVaults } from "../vault/hooks";
 import { useBadge } from "../services/signals";
+import { fromTab } from "./placeMotion";
 
 type Item = Found & { place: Place; home: boolean };
 
@@ -33,7 +34,7 @@ export default function BottomBar() {
   const wayHome = bar.entries.some((e) => "screen" in e && e.screen === "home");
   return (
     <>
-      <nav className="home-bar" aria-label="Bar">
+      <nav className="home-bar" aria-label="Bar" onClickCapture={(e) => { const tab = (e.target as Element).closest(".home-bar-place"); if (tab && e.detail > 0) fromTab(tab); }}>
         {bar.entries.map((e) => ("href" in e
           ? <Place key={e.href} item={item(e)} current={here(e.href)} onHold={() => setAsked(item(e))} />
           : <AppPlaceLink key={JSON.stringify(e)} place={e} notes={notes} pathname={pathname} />))}

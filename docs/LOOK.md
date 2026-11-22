@@ -5,8 +5,8 @@ of Sheets brought to it, and Sky's appearance, calmed. The Daylight keeps Pages'
 [THEME.md](THEME.md) (the tokens), [COMPONENTS.md](COMPONENTS.md) (the parts), [DESIGN-RULES.md](DESIGN-RULES.md)
 (the rules a part or an applet keeps), [NAVIGATION.md](NAVIGATION.md) (where things are).
 
-**Where it stands (T-476):** the sky, the faces and coral are in. Motion and still, the pages and tabs, and each screen
-on them come next, in that order.
+**Where it stands (T-476):** the sky, the faces and coral; motion and still; the pages and the tabs are in. Each
+screen and applet on them comes next.
 
 ## Structure
 

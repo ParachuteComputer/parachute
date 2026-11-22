@@ -19,7 +19,7 @@
 // one there is no turn line, no Stop and no listening switch. Its named exports (the store, the cards' readers) are for
 // the importer's own list; times are the kit's (when), a relay's seconds as they come.
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { app, Button, Link, Linked, link, Loading, onShown, Problem, ready, Record, services, shown as onScreen, storage, toast, when, Write } from "parachute";
+import { app, Button, Link, Linked, link, Loading, onShown, Pages as KitPages, Problem, ready, Record, services, shown as onScreen, storage, toast, when, Write } from "parachute";
 
 /** Whether a person can be looking: the applet on screen (the app keeps it running while hidden, kit `shown`/`onShown`,
  *  imported as onScreen: `shown` below is the media cache's) and the app in front. What is new is read only then. An
@@ -361,8 +361,14 @@ function useClock(on: boolean) {
 const CSS = `
 .room { display: flex; flex-direction: column; height: var(--room-h, 100dvh); min-height: 0; color: var(--text); font: var(--fs-body)/var(--leading) var(--sans); }
 .room .quiet { color: var(--muted); }
-.room .top { display: flex; align-items: center; gap: 10px; padding: 8px var(--pad, 16px); border-bottom: 1px solid var(--line); }
-.room .top h2 { flex: 1; margin: 0; font: var(--title-weight) var(--fs-head) var(--serif); }
+.room .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 10px var(--pad, 16px) 8px; background: linear-gradient(to bottom, var(--sky-top), var(--sky-mid)); }
+.room .top h2 { flex: 1; margin: 0; font: var(--title-weight) var(--fs-title)/1.1 var(--display, var(--serif)); letter-spacing: -.015em; }
+/* the rooms, a row at the head: the one you are in in bold and underlined, a diamond where something wants you */
+.room .rooms-row { flex-basis: 100%; display: flex; gap: 2px 14px; overflow-x: auto; scrollbar-width: none; margin: 4px 0 0; }
+.room .to-room { flex: none; gap: 5px; min-height: 36px; padding: 0; color: var(--muted); font: var(--fs-small) var(--sans); text-decoration: none; }
+.room .to-room[aria-current="page"] { color: var(--text); font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }
+.room .to-room .wants { color: var(--primary); }
+.room .talk .page { max-width: none; padding: 0; }
 .room .back { padding-left: 0; font-family: var(--serif); font-style: italic; text-decoration: none; }
 .room .scroll { flex: 1; min-height: 0; overflow-y: auto; position: relative; overscroll-behavior: contain; }
 .room .page { max-width: 760px; margin: 0 auto; padding: 0 var(--pad, 16px) 12px; }
@@ -461,9 +467,11 @@ export function lastText(s: Store["s"], e: Ev) {
 // ── the room ──
 type Place = { get(): number | null; set(fromFoot: number | null): void };
 type Props = { service: string; room: string; name?: string; at?: string; readAt?: number; onRead?: (latest: number) => void; onBack?: () => void;
-  seed?: { msgs: Ev[]; names: Map<string, string>; me?: string }; place?: Place };
+  seed?: { msgs: Ev[]; names: Map<string, string>; me?: string }; place?: Place;
+  /** the other rooms, as a row at the room's head: room to room in one tap (docs/LOOK.md) */
+  rooms?: { id: string; name: string; glyph?: string; wants?: boolean }[]; onRoom?: (id: string) => void };
 
-export default function Room({ service, room, name: named, at, readAt, onRead, onBack, seed, place }: Props) {
+export default function Room({ service, room, name: named, at, readAt, onRead, onBack, seed, place, rooms, onRoom }: Props) {
   const st = useMemo(createStore, [service, room]);
   const s = useStore(st);
   const relay = useMemo(() => services.relay(service), [service]);
@@ -562,9 +570,18 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   const all = [...(s.msgs.get(room)?.values() ?? [])].filter((e) => visible(s, e)).sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));
   const newest = all[all.length - 1];
   const toBottom = () => { const sc = scroller.current; if (sc) sc.scrollTop = sc.scrollHeight; };
+  // the talk's pages (KitPages): where a message is, the newest
+  const pagesRef = useRef<{ toElement(el: Element): void; toEnd(): void } | null>(null);
+  const roomRef = useRef<HTMLElement>(null);
   // opened: at the message it was opened for (once), else at the newest; a thread opens at its newest
   useEffect(() => {
     if (!loaded) return;
+    if (KitPages ?? null) {
+      const el = !placed.current && at ? roomRef.current?.querySelector(`[data-id="${at}"]`) : null;
+      placed.current = true;
+      if (el) pagesRef.current?.toElement(el); else pagesRef.current?.toEnd();
+      return;
+    }
     const sc = scroller.current;
     const el = !placed.current && at ? sc?.querySelector<HTMLElement>(`[data-id="${at}"]`) : null;
     // back in a room you left partway up: there again, measured from the foot (and again once the read has landed, above)
@@ -670,16 +687,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
 
   const title = name || "Room";
   let lastDay = "", prev: Ev | null = null, newShown = false;
-  return <Svc.Provider value={service}><section className="room" aria-label={`Room ${title}`}>
-    <style>{CSS}</style>
-    {/* without a list to go back to, the page it sits on names the room */}
-    {(thread || onBack) && <div className="top">
-      <Button kind="quiet" className="back" onClick={() => (thread ? setThread(null) : onBack?.())}>{thread ? `← ${title}` : "← Rooms"}</Button>
-      <h2>{thread ? "Thread" : title}</h2>
-    </div>}
-    <div className="scroll" ref={scroller} onScroll={(e) => { const x = e.currentTarget, d = x.scrollHeight - x.scrollTop - x.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }}
-      onWheel={() => { touched.current = true; }} onTouchStart={() => { touched.current = true; }} onPointerDown={() => { touched.current = true; }} onKeyDown={() => { touched.current = true; }}>
-      <div className="page">
+  // the talk: turned as pages (the kit's Pages, opening on the newest), or on an older app a box that scrolls
+  const talk = <div className="page">
         {!thread && (older === "start" ? <p className="day">Start of {title}</p> : <div className="older"><Button small busy={older === "loading"} onClick={loadOlder}>Load older messages</Button></div>)}
         <div className="log" role="log" aria-label={`Messages in ${name || "the room"}`}>
           {shown.map((e, i) => {
@@ -710,8 +719,21 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
           <Button small onClick={() => void postAs(STOP)} disabled={posting}>Stop Uni</Button>
         </div>}
         {chips && <div className="quick" role="group" aria-label="Quick replies">{chips.map((a) => <Button key={a} small onClick={() => void postAs(a)} disabled={posting}>{a}</Button>)}</div>}
-      </div>
-    </div>
+      </div>;
+  return <Svc.Provider value={service}><section className="room" ref={roomRef} aria-label={`Room ${title}`}>
+    <style>{CSS}</style>
+    {/* without a list to go back to, the page it sits on names the room */}
+    {(thread || onBack) && <div className="top">
+      <Button kind="quiet" className="back" onClick={() => (thread ? setThread(null) : onBack?.())}>{thread ? `← ${title}` : "← Rooms"}</Button>
+      <h2>{thread ? "Thread" : title}</h2>
+      {!thread && rooms && rooms.length > 1 && onRoom && <nav className="rooms-row" aria-label="Your rooms">{rooms.map((r) => (
+        <Button key={r.id} kind="quiet" className="to-room" aria-current={r.id === room ? "page" : undefined} onClick={() => { if (r.id !== room) onRoom(r.id); }}>
+          {r.glyph && <span aria-hidden="true">{r.glyph}</span>}{r.name}{r.wants && <span className="wants" aria-label=", something wants you">◆</span>}
+        </Button>))}</nav>}
+    </div>}
+    {KitPages ? <KitPages start="last" name={thread ? "Thread" : title} handle={pagesRef} className="talk">{talk}</KitPages>
+      : <div className="scroll" ref={scroller} onScroll={(e) => { const x = e.currentTarget, d = x.scrollHeight - x.scrollTop - x.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }}
+      onWheel={() => { touched.current = true; }} onTouchStart={() => { touched.current = true; }} onPointerDown={() => { touched.current = true; }} onKeyDown={() => { touched.current = true; }}>{talk}</div>}
     {/* at the foot, in view: what shows above may be the list's copy, and this says the room isn't live */}
     {readErr ? <div className="read-err"><Problem error={readErr} onRetry={() => setReadTry((n) => n + 1)}>Couldn't read the room</Problem></div> : null}
     <Composer key={`${room}|${thread ?? ""}`} st={st} relay={relay} room={room} thread={thread} members={authors} send={send} typing={typing} setErr={setErr} sendErr={sendErr} name={name || "the room"}

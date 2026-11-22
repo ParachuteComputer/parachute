@@ -54,7 +54,8 @@ div.pa-row { cursor: default; }
 
 .pa-empty { display: grid; justify-items: center; gap: 4px; padding: var(--gap) 0; color: var(--muted); font: italic var(--fs-lead) var(--serif); text-align: center; }
 .pa-empty p { margin: 0; }
-.pa-sprig { width: 110px; height: 36px; color: var(--accent); }
+.pa-sprig { width: 120px; height: 46px; color: var(--muted); }
+.pa-sprig-canopy { fill: var(--primary); stroke: var(--primary); stroke-width: 1; }
 
 .pa-note { font: var(--fs-lead)/1.6 var(--serif); color: var(--text); overflow-wrap: anywhere; }
 .pa-note h1 { margin: 0 0 6px; font: var(--title-weight) var(--fs-title)/1.1 var(--serif); }
@@ -277,4 +278,48 @@ select.pa-finput { appearance: auto; }
 /* in a page drawn at its content's height (one with embeds) there is no screen's foot to rise from: it opens in place */
 .pa-drawer.pa-drawer-inline { position: relative; width: 100%; max-height: none; overflow: visible; margin: 0 0 var(--gap); padding-top: var(--pad);
   border: var(--line-card); border-radius: max(var(--radius-card), var(--radius)); box-shadow: none; transform: none; transition: none; animation: pa-in var(--t-state) var(--ease-out) both; }
+}
+
+/* The pages (pages.ts, docs/LOOK.md): a place is a short run of pages you turn. The page is the frame's height: the book
+   (a sideways scroller that snaps to whole pages), the dock under it (what you write in, outside the pages), and the
+   page line ("2 of 3" and the arrows). The flow lays the page's content into page-sized columns. */
+@layer parachute.parts {
+:root:has(.pa-paged), :root:has(.pa-paged) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+.pa-page.pa-paged { display: flex; flex-direction: column; max-width: none; height: 100dvh; margin: 0; padding: 0; overflow: hidden; }
+.pa-book { position: relative; flex: 1; min-height: 0; max-width: 100%; margin: 0 auto; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain; scrollbar-width: none; touch-action: pan-x pinch-zoom; }
+.pa-book::-webkit-scrollbar { display: none; }
+/* still: nothing follows the finger; the book turns from code only (a swipe, the arrows, the keys: pages.ts) */
+@media (prefers-reduced-motion: reduce), (update: slow) { .pa-book { overflow-x: hidden; touch-action: pinch-zoom; } }
+:root[data-motion="still"] .pa-book { overflow-x: hidden; touch-action: pinch-zoom; }
+.pa-flow { position: relative; z-index: 1; box-sizing: border-box; height: 100%; padding-block: 40px calc(var(--pad) * .8); column-fill: auto; }
+/* what is read whole stays whole on its page; a heading stays with what follows it */
+.pa-flow :is(.pa-list li, .pa-card, .pa-field, .pa-search, .pa-write, .pa-empty, .pa-problem, .pa-page-head, .pa-days, .pa-tabs, .pa-trow, blockquote, figure, pre, tr, img) { break-inside: avoid; }
+.pa-flow :is(h1, h2, h3, h4, .pa-list-label, .pa-kicker) { break-after: avoid; }
+.pa-flow .pa-list li { content-visibility: visible; }
+.pa-flow :is(img, video) { max-height: 60dvh; object-fit: contain; }
+.pa-flow :is(p, li, dd, h1, h2, h3, td) { overflow-wrap: anywhere; }
+/* the first page's head: the hour's sky, behind the place's name (pages.ts hangs it, one page wide) */
+.pa-sky { position: absolute; top: 0; left: 0; z-index: 0; height: min(300px, 48%); pointer-events: none;
+  background: linear-gradient(to bottom, var(--sky-top) 0, var(--sky-mid) 55%, var(--sky-foot) 82%, var(--bg) 100%); }
+@media (min-width: 900px) { .pa-sky { height: min(380px, 48%); } }
+/* a snap point per spread, and every later page's running head: the place's name over a thin strip of the sky */
+.pa-mark { position: absolute; top: 0; height: 1px; pointer-events: none; }
+.pa-mark.pa-snap { scroll-snap-align: start; }
+.pa-runhead { box-sizing: border-box; height: 32px; padding: 9px 20px 0; border-top: 4px solid var(--sky-top); color: var(--muted);
+  font: var(--title-weight) var(--fs-small)/1.2 var(--display, var(--serif)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pa-dock { flex: none; box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: 8px var(--pad); border-top: var(--line-row); }
+.pa-dock:empty { display: none; }
+.pa-dock > .pa-write { margin: 0; }
+.pa-pageline { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; color: var(--muted); font: var(--fs-small) var(--sans); font-variant-numeric: tabular-nums; }
+.pa-turn { min-width: 44px; min-height: 36px; padding: 0; border: 0; background: none; color: var(--text); font: var(--fs-head)/1 var(--sans); cursor: pointer; }
+.pa-turn:disabled { visibility: hidden; }
+.pa-at { min-width: 6em; text-align: center; }
+}
+@layer parachute.parts { .pa-end { display: block; height: 0; break-before: avoid; } }
+@layer parachute.parts {
+/* Pages of their own inside a screen (a room's talk): the room the box gives them, turned as a Page's are */
+.pa-pages { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.pa-pages .pa-flow { padding-top: 34px; }
+.pa-pages > .pa-book > .pa-sky { display: none; }
 }

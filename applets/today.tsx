@@ -8,7 +8,7 @@
 // Uni"). Shown again (the app keeps it running while the person is elsewhere), or the app back in front, it reads again.
 // Nothing here is the shell's.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { app, Empty, link, List, Loading, onShown, Page, Problem, ready, services, shown, toast, vault, when, Write } from "parachute";
+import { app, Button, Card, Empty, link, List, Loading, onShown, Page, Problem, ready, services, shown, toast, vault, when, Write } from "parachute";
 import { askOf, chunk, createStore, lastText, now, openAsks, promptOf, tag, tags, useStore, visible, type Ev } from "component:room";
 
 const UNI = "{{uni}}";
@@ -61,12 +61,28 @@ const later = (a: Record<string, number>, b: Record<string, number>) => {
 const ownRule = (e: Ev) => !!askOf(e) || !!promptOf(e) || /```uni-(sealed-(approval|morning)|secret-request)\n/.test(e.content);
 
 type Entry = { id: string; path: string; body?: string };
-type Row = { key: string; room: string; roomName: string; text: string; at: number; event?: string };
+type Row = { key: string; room: string; roomName: string; text: string; at: number; event?: string; ask?: { why?: string; until?: number; kind?: string } };
 
+// Home's look (docs/LOOK.md): the greeting in the big serif in the hour's sky, what wants you as the one white card with
+// light on it, the horizon once, then Today on paper, the newest first
 const CSS = `
-.today .sum { margin: 0 0 12px; font: italic var(--fs-lead) var(--serif); color: var(--muted); }
-.today .pa-list { margin-top: 14px; }
+.today .pa-title { font-size: var(--fs-display); line-height: 1.02; }
+.today .sum { margin: 4px 0 16px; font: var(--fs-body)/1.4 var(--sans); color: var(--muted); }
+.today .ask { margin: 0 0 6px; border: 0; border-radius: calc(var(--radius) * 1.8); background: var(--surface); box-shadow: var(--shadow-card); }
+.today .ask .wants { display: flex; flex-wrap: wrap; gap: 2px 8px; margin: 0 0 6px; font: var(--fs-small)/1.3 var(--sans); color: var(--muted); }
+.today .ask .wants b { color: var(--primary); }
+.today .ask .pa-card-title { margin: 0 0 4px; font: var(--title-weight) var(--fs-head)/1.18 var(--display, var(--serif)); letter-spacing: -.01em; }
+.today .ask .why { margin: 0 0 12px; font: var(--fs-body)/1.45 var(--serif); color: var(--muted); }
+.today .ask .pa-button.pa-primary { min-height: 44px; }
+.today .also .pa-list { margin-top: 0; }
+.today .more { margin: 4px 0 0; font: var(--fs-small) var(--sans); color: var(--muted); }
+.today .horizon { display: block; width: 100%; height: 26px; margin: 6px 0 10px; overflow: visible; }
+.today .horizon path { fill: none; stroke: var(--line); stroke-width: 2; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.today .pa-list { margin-top: 0; }
 `;
+/** A count in words, to ten: "Two things want you." */
+const WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+const counted = (n: number) => n === 0 ? "Nothing wants you." : `${WORDS[n] ?? n} ${n === 1 ? "thing wants" : "things want"} you.`;
 
 export default function Home() {
   const st = useMemo(createStore, []);
@@ -137,7 +153,7 @@ export default function Home() {
       const waiting = new Set<string>();
       if (openAsks(s, id) > 0) {
         const answered = new Set(all.flatMap((e) => e.tags.filter((t) => t[0] === "q").map((t) => t[1])));
-        for (const e of all) { const a = askOf(e); if (a && a.until > now() && !answered.has(e.id) && e.pubkey !== s.me) { waiting.add(e.id); wants.push({ key: e.id, room: id, roomName: room.name, text: a.what, at: e.created_at, event: e.id }); } }
+        for (const e of all) { const a = askOf(e); if (a && a.until > now() && !answered.has(e.id) && e.pubkey !== s.me) { waiting.add(e.id); wants.push({ key: e.id, room: id, roomName: room.name, text: a.what, at: e.created_at, event: e.id, ask: { why: a.why, until: a.until, kind: a.kind } }); } }
       }
       // what names you since you last read the room (on any device) or wrote in it
       const mine = all.find((e) => e.pubkey === s.me)?.created_at ?? 0;
@@ -168,20 +184,37 @@ export default function Home() {
     setBusy(false);
   };
   const sorted = [...(entries ?? [])].sort((a, b) => b.path.localeCompare(a.path));
-  const roomRows = (rs: Row[], strong: boolean) => rs.map((r) => ({ key: r.key, title: r.text, meta: `#${r.roomName}`, aside: when.ago(r.at * 1000), strong, ...(rooms ? { onPress: () => openRoom(r) } : {}) }));
+  const roomRows = (rs: Row[], strong: boolean) => rs.map((r) => ({ key: r.key, title: r.text, meta: `${r.roomName}`, aside: when.ago(r.at * 1000), strong, ...(rooms ? { onPress: () => openRoom(r) } : {}) }));
+  // the one that wants you most (the newest ask, else the newest line that names you): the card; the rest under it
+  const first = wants.find((w) => w.ask) ?? wants[0];
+  const rest = wants.filter((w) => w !== first);
+  // Today, the newest first: Uni's lines and your journal, by the time each was written
+  const day = [
+    ...fromUni.map((r) => ({ key: r.key, at: r.at * 1000, title: r.text, meta: `Uni, in ${r.roomName}`, onPress: rooms ? () => openRoom(r) : undefined })),
+    ...sorted.map((e) => ({ key: e.id, at: writtenAt(e.path)?.getTime() ?? 0, title: firstLine(e.body ?? "") || e.path.split("/").pop() || "", meta: "Your journal", onPress: () => void link.open(e) })),
+  ].sort((a, b) => b.at - a.at).map(({ at, ...r }) => ({ ...r, aside: when.short(at) }));
   return (
-    <Page title={hello()} className="today" onRefresh={() => Promise.all([loadJournal(), loadRooms()])}>
+    <Page title={hello()} start="first" className="today" onRefresh={() => Promise.all([loadJournal(), loadRooms()])}>
       <style>{CSS}</style>
       {read === "reading" ? <Loading>Reading your rooms…</Loading>
         : read === "away" ? <Problem>Your rooms couldn't be read just now</Problem>
-        : <p className="sum">{waits ? `${waits} ${waits === 1 ? "thing wants" : "things want"} you.` : "Nothing waits for you."}</p>}
-      <Write line enter="send" label="A line for your journal" placeholder="A line for today's journal" value={line} onChange={setLine} onSend={save} send={busy ? "Saving…" : "Save"} busy={busy} />
+        : <p className="sum">{when.date(Date.now())}. {counted(waits)}</p>}
+      <Write line dock enter="send" label="A line for your journal" placeholder="A line for today" value={line} onChange={setLine} onSend={save} send={busy ? "Saving…" : "Save"} busy={busy} />
       {!rooms && read === "ok" && (wants.length > 0 || fromUni.length > 0) && <Empty>Pin Rooms to open these from here.</Empty>}
-      {wants.length > 0 && <List label="Wants you" rows={roomRows(wants, true)} />}
-      <List label="From Uni" rows={roomRows(fromUni, false)} />
-      {read === "ok" && !fromUni.length && <Empty>Nothing from Uni in the last {DAYS} days.</Empty>}
-      <List label="Today's journal" rows={sorted.map((e) => ({ key: e.id, title: firstLine(e.body ?? "") || e.path.split("/").pop(), aside: when.time(writtenAt(e.path)), onPress: () => void link.open(e) }))} />
-      {entries === null ? <Loading /> : !sorted.length && <Empty>Nothing written today. A line above starts it.</Empty>}
+      {first && <section className="wants-you" aria-label="Wants you">
+        <div className="ask"><Card>
+          <p className="wants"><b>◆ Wants you</b><span>{first.ask?.until ? `by ${when.short(first.ask.until * 1000)}, ` : ""}in {first.roomName}</span></p>
+          <h3 className="pa-card-title">{first.text}</h3>
+          {first.ask?.why && <p className="why">{first.ask.why}</p>}
+          {rooms && <Button kind="primary" onClick={() => openRoom(first)}>{first.ask ? `Answer in ${first.roomName}` : `Open ${first.roomName}`}</Button>}
+        </Card></div>
+        {rest.length > 0 && <div className="also"><List label="Also wants you" hideLabel rows={roomRows(rest.slice(0, 3), true)} /></div>}
+        {rest.length > 3 && <p className="more">{rest.length - 3} more in your rooms.</p>}
+      </section>}
+      {read === "ok" && !first && <Empty>Nothing wants you.</Empty>}
+      <svg className="horizon" viewBox="0 0 400 26" preserveAspectRatio="none" aria-hidden="true"><path d="M0 18C70 6 140 7 210 14S330 24 400 10" /></svg>
+      <List label="Today" rows={day} />
+      {entries === null ? <Loading /> : !day.length && <Empty>Nothing written today. A line below starts it.</Empty>}
     </Page>
   );
 }

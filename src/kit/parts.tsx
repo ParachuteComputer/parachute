@@ -158,18 +158,13 @@ export function Field({ label, value, onChange, placeholder, action, onAction, c
   );
 }
 
+// the empty state's small still scene (docs/LOOK.md, "Sky's rule"): the parachute landed on the hill
 const sprig = (
-  <svg className="pa-sprig" viewBox="0 0 120 40" aria-hidden="true">
-    <path d="M4 30 C30 26 60 18 116 8" fill="none" stroke="currentColor" strokeWidth="1.4" />
-    {[18, 34, 50, 66, 82, 98].map((x, i) => {
-      const y = 29 - x * 0.19, up = i % 2 === 0;
-      return (
-        <g key={x}>
-          <path d={`M${x} ${y} q${up ? -2 : 6} ${up ? -10 : 9} 12 ${up ? -6 : 4}`} fill="none" stroke="currentColor" strokeWidth="1.1" />
-          <ellipse cx={x + 9} cy={y + (up ? -7 : 6)} rx="4.5" ry="2" transform={`rotate(${up ? -30 : 30} ${x + 9} ${y + (up ? -7 : 6)})`} fill="currentColor" opacity=".55" />
-        </g>
-      );
-    })}
+  <svg className="pa-sprig" viewBox="0 0 168 64" aria-hidden="true">
+    <path className="pa-sprig-hill" d="M4 56C40 46 70 44 96 50S146 60 164 52" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M70 22 84 46M78 22 84.5 46M98 22 85.5 46M90 22 85 46" fill="none" stroke="currentColor" strokeWidth="1" />
+    <path className="pa-sprig-canopy" d="M68 22C68 13 75 8 84 8s16 5 16 14Q96.8 25 93.6 22 90.4 25 87.2 22 84 25 80.8 22 77.6 25 74.4 22 71.2 25 68 22Z" />
+    <rect x="81" y="45" width="7" height="6" rx="1.2" fill="currentColor" />
   </svg>
 );
 /** What shows when there is nothing yet. */

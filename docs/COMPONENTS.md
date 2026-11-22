@@ -22,9 +22,24 @@ export default function Shelf() {
 }
 ```
 
-`Page` gives the screen its title (on the type scale), one width and one margin, a way back (`back`), pull to read
-again (`onRefresh`), and with `wide` room for a board on a computer (lay its columns out with `pa-grid`, below). Start
-every applet with it; the frame adds no margin of its own around a `Page`.
+`Page` gives the screen its title (in the display serif, in the hour's sky), one width and one margin, a way back
+(`back`), pull to read again (`onRefresh`), and with `wide` room for a board on a computer (lay its columns out with
+`pa-grid`, below). Start every applet with it; the frame adds no margin of its own around a `Page`.
+
+A `Page` is a short run of pages you turn ([LOOK.md](LOOK.md)): what doesn't fit runs on to the next page, sideways,
+and the line at its foot says "2 of 3" with the arrows. A finger drags it, the arrows glide it, ← and → turn it; on a
+Mac it is an open book, two pages at a time. The first page carries the sky and the title; every later page a running
+head with the title. `start="first"` opens it on its first page each time it is shown (Home), `start="last"` on its
+last (a conversation). `scroll` makes it a page that scrolls instead (a long form, something drawn edge to edge), and
+so is a `wide` one. A `Write` with `dock` sits in a strip under the pages, outside them, so writing never turns the
+page:
+
+```tsx
+<Page title="Garden" start="last">
+  {talk}
+  <Write line dock enter="send" label="Say something" value={text} onChange={setText} onSend={send} send="Send" />
+</Page>
+```
 
 ## Button
 

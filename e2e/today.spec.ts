@@ -63,18 +63,19 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
     await expect(card).toContainText(new URL(RELAY!.replace(/^ws/, "http")).host);
     await page.getByRole("button", { name: "Allow" }).click();
     const app = frame(page);
-    await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Where should the garlic go ${stamp}?`, { timeout: 30_000 });
-    await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Could you water the beans ${stamp}?`);
-    await expect(app.getByText(/^\d+ things want you\.$/)).toBeVisible();
-    await expect(app.getByRole("region", { name: "Wants you" }).getByRole("button", { name: new RegExp(`garlic go ${stamp}`) })).toHaveCount(1);
-    await expect(app.getByRole("region", { name: "Wants you" })).not.toContainText(`Lapsed already ${stamp}?`);
-    await expect(app.getByRole("region", { name: "From Uni" })).toContainText(`The beans are up ${stamp}.`);
-    await expect(app.getByRole("region", { name: "Today's journal" })).toBeVisible();
+    await expect(app.getByRole("region", { name: "Wants you", exact: true })).toContainText(`Where should the garlic go ${stamp}?`, { timeout: 30_000 });
+    await expect(app.getByRole("region", { name: "Wants you", exact: true })).toContainText(`Could you water the beans ${stamp}?`);
+    await expect(app.getByText(/\. (Two|Three|Four|Five|Six|\d+) things want you\.$/)).toBeVisible();
+    // the ask is the one card (its question its heading), not a row too
+    await expect(app.getByRole("region", { name: "Wants you", exact: true }).getByText(new RegExp(`garlic go ${stamp}`))).toHaveCount(1);
+    await expect(app.getByRole("region", { name: "Wants you", exact: true }).getByRole("heading", { name: new RegExp(`garlic go ${stamp}`) })).toBeVisible();
+    await expect(app.getByRole("region", { name: "Wants you", exact: true })).not.toContainText(`Lapsed already ${stamp}?`);
+    await expect(app.getByRole("region", { name: "Today" })).toContainText(`The beans are up ${stamp}.`);
 
     // a line for today's journal: written where the Journal applet keeps entries
     await app.getByLabel("A line for your journal").fill(`Planted garlic ${stamp}`);
     await app.getByRole("button", { name: "Save" }).click();
-    await expect(app.getByRole("region", { name: "Today's journal" })).toContainText(`Planted garlic ${stamp}`);
+    await expect(app.getByRole("region", { name: "Today" })).toContainText(`Planted garlic ${stamp}`);
     const d = new Date(), pad = (n: number) => String(n).padStart(2, "0");
     const written = (await rows(`notes?path_prefix=${encodeURIComponent(`Journal/${d.getFullYear()}/${pad(d.getMonth() + 1)}-${pad(d.getDate())}/`)}&limit=50`)).filter((n) => n.path.includes(`Planted garlic ${stamp}`));
     expect(written).toHaveLength(1);
@@ -91,9 +92,9 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
     await new Promise((r) => setTimeout(r, 1100));
     expect((await bob.publish({ kind: 9, content: `Bring the trowel ${stamp}?`, tags: [["h", room], ["p", alice]] })).ok).toBe(true);
     await bar.getByRole("link", { name: /Home/ }).click();
-    await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Bring the trowel ${stamp}?`, { timeout: 30_000 });
-    await expect(app.getByRole("region", { name: "Wants you" })).not.toContainText(`Could you water the beans ${stamp}?`);
-    await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Where should the garlic go ${stamp}?`);
+    await expect(app.getByRole("region", { name: "Wants you", exact: true })).toContainText(`Bring the trowel ${stamp}?`, { timeout: 30_000 });
+    await expect(app.getByRole("region", { name: "Wants you", exact: true })).not.toContainText(`Could you water the beans ${stamp}?`);
+    await expect(app.getByRole("region", { name: "Wants you", exact: true })).toContainText(`Where should the garlic go ${stamp}?`);
     // read on another device (the read state Rooms keeps, sealed to her own key): that line no longer wants her either
     const sk = Uint8Array.from(Buffer.from(secret("alice"), "hex"));
     const marks = JSON.stringify({ v: 1, client_id: "e2e-other-device", contexts: { [room]: Math.floor(Date.now() / 1000) + 1 } });
@@ -103,12 +104,12 @@ test("Home: what wants you, the latest from Uni, today's journal and a line for 
     await bar.getByRole("link", { name: /Rooms/ }).click();
     await expect(page).toHaveURL(new RegExp(`/a/${rooms.id}`));
     await bar.getByRole("link", { name: /Home/ }).click();
-    await expect(app.getByRole("region", { name: "Wants you" })).not.toContainText(`Bring the trowel ${stamp}?`, { timeout: 30_000 });
-    await expect(app.getByRole("region", { name: "Wants you" })).toContainText(`Where should the garlic go ${stamp}?`);
+    await expect(app.getByRole("region", { name: "Wants you", exact: true })).not.toContainText(`Bring the trowel ${stamp}?`, { timeout: 30_000 });
+    await expect(app.getByRole("region", { name: "Wants you", exact: true })).toContainText(`Where should the garlic go ${stamp}?`);
 
     // the bar is the record's pins; a tap on the ask opens Rooms at that room and message
     await expect(bar.getByRole("link", { name: /Rooms/ })).toBeVisible();
-    await app.getByRole("region", { name: "Wants you" }).getByRole("button", { name: new RegExp(`garlic go ${stamp}`) }).click();
+    await app.getByRole("region", { name: "Wants you", exact: true }).getByRole("button", { name: /^Answer in Garden/ }).click();
     await expect(page).toHaveURL(new RegExp(`/a/${rooms.id}\\?room=${room}&event=${ask.ev.id}$`));
   } finally {
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});

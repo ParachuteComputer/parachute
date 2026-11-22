@@ -42,6 +42,14 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); }
 .screen { max-width: 720px; margin: 0 auto; padding: 0 var(--pad) 24px; }
 .bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; min-height: 52px; background: var(--bg); border-bottom: 1px solid var(--line); margin: 0 calc(-1 * var(--pad)) 10px; padding: 0 var(--pad); }
 .bar-title { flex: 1; margin: 0; font: 600 var(--fs-lead)/1.2 var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* over a running applet the bar is the top of its page: the hour's sky, no rule, Back and ⋯ only; the page carries the
+   place's name (in the sky, in Fraunces), so the bar says it only to a screen reader */
+.applet-screen > .bar { min-height: 44px; margin-bottom: 0; background: var(--sky-top); border-bottom: 0; }
+.applet-screen > .bar .bar-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.applet-screen > .bar .bar-back, .applet-screen > .bar .bar-menu { color: var(--muted); }
+.applet-screen > .bar .bar-menu { margin-left: auto; }
+/* what is above the bar on a phone (the clock and the battery) is the same sky */
+body { background-image: linear-gradient(var(--sky-top), var(--sky-top)); background-size: 100% env(safe-area-inset-top); background-repeat: no-repeat; }
 .bar-back, .bar-menu, .bar-mark { display: inline-grid; place-items: center; min-width: 36px; height: 36px; border: 0; background: none; color: var(--text); font-size: var(--fs-head); line-height: 1; text-decoration: none; border-radius: var(--radius-field); cursor: pointer; }
 .bar-mark { color: var(--accent); }
 /* the back mark is Instrument Sans's ‹ (the app carries it whatever the theme's sans), a small guillemet: drawn larger
@@ -211,11 +219,18 @@ fieldset.plain legend { padding: 0; }
 .link-whole { max-height: 30vh; overflow: auto; overflow-wrap: anywhere; }
 button.primary[aria-disabled="true"] { opacity: 0.5; }
 
-/* The bar (src/shell/BottomBar.tsx): a ribbon of words across the foot, under the look's head rule, the current place
-   in bold and underlined. */
+/* The bar (src/shell/BottomBar.tsx) is the tabs (docs/LOOK.md): one paper tab per place, hanging from the foot of the
+   page; the place you are in is the tab the colour of the page, joined to it. On a Mac they stand down the right edge,
+   a thumb index (below). */
 .home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: safe center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: var(--line-head); overflow-x: auto; }
 .home-bar-place { flex: 0 1 auto; min-width: 64px; max-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 8px 2px; color: var(--text); text-decoration: none; font-size: var(--fs-small); line-height: 1.2; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; -webkit-touch-callout: none; user-select: none; }
 .home-bar-glyph { font: var(--fs-head)/1 var(--serif); }
+.home-bar { --desk: color-mix(in srgb, var(--text) 5%, var(--bg)); align-items: start; gap: 4px; background: var(--desk); border-top: 0; box-shadow: inset 0 1px 0 var(--line); }
+.home-bar-place { margin: 0 0 6px; padding: 6px 8px 5px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; background: color-mix(in srgb, var(--text) 3%, var(--bg)); color: var(--muted); }
+.home-bar-place[aria-current="page"] { position: relative; margin-top: -1px; padding-top: 7px; background: var(--bg); color: var(--text); }
+:root[data-look="daylight"] .home-bar { --desk: var(--bg); box-shadow: inset 0 2px 0 var(--text); }
+:root[data-look="daylight"] .home-bar-place { border: 2px solid var(--text); border-top: 0; background: var(--bg); color: var(--text); }
+:root[data-look="daylight"] .home-bar-place[aria-current="page"] { margin-top: 0; background: var(--text); color: var(--bg); }
 /* the phone's keyboard is up (Android's MainActivity marks the root from the keyboard's own inset): the bar steps aside
    and what it held room for reaches the foot */
 :root.keyboard-up { --bar-h: 0px; }
@@ -223,7 +238,6 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 /* a glyph is ink: one with no text form (only a colour emoji) is drawn grey, never in colour */
 .home-bar-glyph, .entry-glyph, .grant-glyph { filter: grayscale(1); }
 .home-bar-place[aria-current="page"] { font-weight: 700; }
-.home-bar-place[aria-current="page"]::after { content: ""; width: 26px; height: 2px; margin-top: 2px; background: var(--text); border-radius: 2px; }
 .home-bar-place:active { background: var(--tint); }
 /* a newer build (shell/UpdateLine.tsx): one line at the foot (resting on the bar when there is one) until Download or Later */
 .update-line { position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom); height: var(--update-h); box-sizing: border-box; overflow: hidden; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 6px calc(env(safe-area-inset-right) + 12px) 6px calc(env(safe-area-inset-left) + 12px); background: var(--surface); border-top: 1px solid var(--line); font-size: var(--fs-small); }
@@ -239,7 +253,7 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .with-bar .app-frame { bottom: calc(env(safe-area-inset-bottom) + var(--foot-h)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--foot-h)); }
 .with-bar > .screen, .with-bar > main { padding-bottom: calc(var(--foot-h) + 24px); }
 .applet-screen { max-width: 1280px; }
-.with-bar .applet-screen { min-height: 100dvh; padding-bottom: calc(var(--foot-h) + 10px); }
+.with-bar .applet-screen { min-height: 100dvh; padding-bottom: var(--foot-h); }
 .with-bar .sheet-scrim { bottom: calc(var(--foot-h) + env(safe-area-inset-bottom)); }
 .sheet-list li + li { border-top: 1px solid var(--line); }
 .sheet-list .sheet-choice { padding: 12px 2px; font-size: var(--fs-body); }
@@ -285,7 +299,20 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 @media (min-width: 1000px) {
   .launcher { padding: 28px 64px 32px; }
   .entry-glyph { width: 50px; height: 50px; }
-  .home-bar-place { min-width: 96px; font-size: var(--fs-body); }
+}
+/* a Mac (and a tablet on its side): the tabs stand down the right edge of the book, a thumb index; the foot is free */
+@media (min-width: 960px) {
+  :root { --bar-h: 0px; --index-w: 132px; }
+  .with-bar { padding-right: var(--index-w); }
+  .home-bar { top: 0; left: auto; width: var(--index-w); height: auto; flex-direction: column; justify-content: start; align-items: stretch; gap: 6px;
+    padding: 72px 0 env(safe-area-inset-bottom); overflow-x: hidden; overflow-y: auto; box-shadow: inset 1px 0 0 var(--line); }
+  .home-bar-place { flex: none; max-width: none; flex-direction: row; justify-content: start; gap: 10px; margin: 0 10px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-left: 0; border-radius: 0 12px 12px 0; font-size: var(--fs-body); }
+  .home-bar-place[aria-current="page"] { margin: 0 10px 0 -1px; padding: 10px 12px 10px 13px; }
+  .home-bar-glyph { font-size: var(--fs-lead); }
+  .home-bar-badge { top: 4px; left: 28px; }
+  .with-bar .app-frame { right: calc(env(safe-area-inset-right) + var(--index-w)); width: auto; left: env(safe-area-inset-left); }
+  :root[data-look="daylight"] .home-bar { box-shadow: inset 2px 0 0 var(--text); }
+  :root[data-look="daylight"] .home-bar-place { border: 2px solid var(--text); border-left: 0; }
 }
 
 .swatches { display: flex; gap: 6px; margin: 6px 0; }

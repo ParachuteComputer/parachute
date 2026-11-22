@@ -99,7 +99,7 @@ function RoomView({ id, name, me, events, back, sent }: { id: string; name: stri
       setText("");
     } catch (e) { setErr(e); }
   };
-  return <Page title={name} back={{ label: "Matrix", onPress: back }} className="matrix">
+  return <Page scroll title={name} back={{ label: "Matrix", onPress: back }} className="matrix">
     <style>{CSS}</style>
     <div role="log" aria-label={`Messages in ${name}`}>{events.map((e) => <article key={e.event_id} className={`msg${e.sender === me ? " mine" : ""}`}>
       <div><span className="who">{e.sender === me ? "You" : short(e.sender)}</span><span className="when">{when.time(e.origin_server_ts)}</span></div>

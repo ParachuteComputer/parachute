@@ -16,7 +16,9 @@ One model, everywhere.
 
 ## The four rules
 
-1. **The bar is your pins.** It sits at the bottom of the list, a vault, a note and an applet. On it: the applets
+1. **The bar is your pins.** Its places are tabs ([LOOK.md](LOOK.md)): paper tabs hanging from the foot of the page on a
+   phone, a thumb index down the right edge on a Mac (960 px and up); the place you are in is the tab the colour of the
+   page, joined to it (on the Daylight, the black one), and a place opened from its tab rises from it. It sits at the bottom of the list, a vault, a note and an applet. On it: the applets
    pinned in the open bundle (its record's `bar`), in that order (up to 12), and nothing else of the app's but **Applets**
    at the end, the one way to the list (and Settings from there). The home applet is on the bar when it is pinned; pin
    it first to have it there. Under a frame of your own it also ends with the app's own way to Settings.
@@ -58,8 +60,8 @@ A home applet is an ordinary applet that asks the app for a little more: the new
 on your bar, and a way to take you somewhere on a tap (an applet at a room too: `?room=…&event=…`, the launch a
 notification's tap carries). The app's own screens hold no home content: what the first screen shows is the home
 applet's. Two ship with the app: `applets/home` (Parachute Simplified's starter: a line into Inbox, your newest notes,
-your pins) and `applets/today` (for a person with rooms and a journal: what wants you, the latest from Uni, today's
-journal, a line for it). Guide: [WRITE-AN-APPLET.md](WRITE-AN-APPLET.md#a-home-applet). Components can sit under its
+your pins) and `applets/today` (for a person with rooms and a journal: the greeting in the sky, what wants you as one card, Today (Uni's lines and the journal, the newest first), and a line
+for today's journal under its pages). Guide: [WRITE-AN-APPLET.md](WRITE-AN-APPLET.md#a-home-applet). Components can sit under its
 own content, each in its own frame: **Add to home** on a component in the list ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)).
 
 ## A way back
