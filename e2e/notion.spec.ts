@@ -81,6 +81,17 @@ test.describe.serial("Import from Notion", () => {
     await expect(app.getByText("Piranesi")).toBeVisible();
     await shot(page, "03-table");
 
+    // a relation reads as the names of the rows it links, in the table and on the record, not as paths
+    await app.getByRole("button", { name: `← ${VAULT}` }).click();
+    await app.getByText("projects", { exact: true }).first().click({ timeout: 30_000 });
+    const harbor = app.getByRole("row", { name: /Harbor Books cover/ });
+    await expect(harbor).toContainText("Send Harbor Books three sketches");
+    await expect(harbor).not.toContainText("Notion/");
+    await harbor.click();
+    await shot(page, "04-reference");
+    await expect(app.getByText("Send Harbor Books three sketches", { exact: true }).filter({ visible: true }).first()).toBeVisible();
+    await expect(app.getByText(/\["Notion\//)).toHaveCount(0);
+
     // the same export again: nothing new, nothing changed
     const before = new Map(recs.map((r) => [r.path, r.updatedAt]));
     await page.goto(`/v/${VAULT}`);

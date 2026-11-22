@@ -40,6 +40,10 @@ const kindOf = (s: Spec | undefined, v?: unknown) => {
 };
 const shown = (v: unknown) => (v === null || v === undefined || v === "" ? "" : typeof v === "boolean" ? (v ? "yes" : "no") : Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v));
 const label = (name: string) => name.replace(/_/g, " ");
+/** A reference names a record by its path: shown by the record's name (its last part), as a person reads it. */
+const isRef = (s: Spec | undefined) => s?.type === "reference";
+const shownAs = (s: Spec | undefined, v: unknown) => (isRef(s) && v !== null && v !== undefined && v !== ""
+  ? (Array.isArray(v) ? v : [v]).map((x) => (typeof x === "string" ? x.split("/").pop() || x : shown(x))).join(", ") : shown(v));
 const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "");
 const said = (e: any) => String(e?.message ?? e ?? "it failed").slice(0, 200);
 /** A read that failed: a vault whose hub refused this device's sign-in in its own words (someone else's: they may have
@@ -299,10 +303,10 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
   };
   const columns = [{ key: "title", label: "Name", width: 22, sortable: false }, ...cols.map((c) => ({ key: c, label: label(c), align: ["number"].includes(kindOf(spec?.fields?.[c])) ? "end" as const : "start" as const })), { key: "updated", label: "Updated", width: 9 }];
   const tableRow = (r: Rec) => ({ key: r.id, current: r.id === record, label: `Open ${r.title}`, onPress: () => open(r.id),
-    cells: { title: r.title, updated: when.short(r.updatedAt), ...Object.fromEntries(cols.map((c) => [c, shown(r.fields[c])])) } });
+    cells: { title: r.title, updated: when.short(r.updatedAt), ...Object.fromEntries(cols.map((c) => [c, shownAs(spec?.fields?.[c], r.fields[c])])) } });
   // each value once, in the order it first comes (a search's order isn't the group's)
   const groups = view.group && rows ? [...rows.reduce((g: Map<string, Rec[]>, r) => {
-    const k = shown(r.fields[view.group!]) || "–";
+    const k = shownAs(spec?.fields?.[view.group!], r.fields[view.group!]) || "–";
     g.set(k, [...(g.get(k) ?? []), r]);
     return g;
   }, new Map<string, Rec[]>())].map(([k, rs]) => ({ key: k, label: k, rows: rs })) : null;
@@ -330,7 +334,7 @@ function TypeScreen({ v, type, record, open, back }: { v: Held; type: string; re
             : rows === null ? <Loading />
             : !rows.length ? <Empty>{term || view.where.length ? "Nothing matches." : `No ${label(name)} records yet.`}</Empty>
             : view.layout === "list"
-              ? <List label={label(name)} hideLabel rows={rows.map((r) => ({ key: r.id, title: r.title, current: r.id === record, meta: cols.slice(0, 3).map((c) => shown(r.fields[c])).filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))}
+              ? <List label={label(name)} hideLabel rows={rows.map((r) => ({ key: r.id, title: r.title, current: r.id === record, meta: cols.slice(0, 3).map((c) => shownAs(spec?.fields?.[c], r.fields[c])).filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))}
                   more={more ? { label: "More", onPress: next, busy } : undefined} />
               : <Table label={label(name)} columns={columns} sort={view.group ? undefined : view.sort ?? undefined} onSort={(k) => sortBy(k === "updated" ? "updated" : k)}
                   {...(groups ? { groups: groups.map((g) => ({ key: g.key, label: g.label, count: g.rows.length, rows: g.rows.map(tableRow) })) } : { rows: rows.map(tableRow) })}
@@ -419,7 +423,11 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
         await change(isType ? { types: { add: [t] } } : { tags: { add: [t] } });
       }} />}
       <p className="sect">Fields</p>
-      {names.length ? <Fields label="Fields" fields={names.map((n) => ({ name: n, kind: kindOf(spec[n], r.fields[n]), choices: (spec[n]?.enum ?? []).map(String), value: r.fields[n] ?? null, readOnly: !canWrite || (typeof r.fields[n] === "object" && r.fields[n] !== null && !Array.isArray(r.fields[n])) }))}
+      {/* a reference is shown by the names of the records it points at, not edited here: typed over, a name would replace
+          the path it stands for */}
+      {names.length ? <Fields label="Fields" fields={names.map((n) => isRef(spec[n])
+        ? { name: n, kind: "text", choices: [], value: shownAs(spec[n], r.fields[n]) || null, readOnly: true }
+        : { name: n, kind: kindOf(spec[n], r.fields[n]), choices: (spec[n]?.enum ?? []).map(String), value: r.fields[n] ?? null, readOnly: !canWrite || (typeof r.fields[n] === "object" && r.fields[n] !== null && !Array.isArray(r.fields[n])) })}
         onSave={canWrite ? (n, val) => change({ fields: { [n]: val } }) : undefined} /> : <p className="note-meta">No fields.</p>}
       {canWrite && <Field label="Add a field" placeholder="its name, then its value below" action="Add" onAction={async (x) => {
         const f = x.trim().replace(/[^A-Za-z0-9_ -]/g, "").replace(/[\s-]+/g, "_").toLowerCase();
