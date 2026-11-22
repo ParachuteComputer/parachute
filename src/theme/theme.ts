@@ -75,7 +75,7 @@ export const STYLE_TOKENS = {
   "label-caps":      { kind: "caps", what: "a small label in small capitals: `normal` or `all-small-caps`" },
   "label-track":     { kind: "track", what: "a small label's letter spacing, in em" },
   "title-weight":    { kind: "weight", what: "the weight of a page's title and the serif headings" },
-  "measure":         { kind: "length", what: "a page's width at most" },
+  "measure":         { kind: "length", what: "a page's width at most (never under 20em)" },
 } as const satisfies Record<string, { kind: StyleKind; what: string }>;
 export type StyleKey = keyof typeof STYLE_TOKENS;
 export const STYLE_KEYS = Object.keys(STYLE_TOKENS) as StyleKey[];
