@@ -7,8 +7,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { getPublicKey } from "nostr-tools/pure";
-import { VAULT } from "./hub";
+import { api, hubState, VAULT } from "./hub";
 import { installApplet, ui } from "./helpers";
+import { person } from "./services/client";
 
 const RELAY = process.env.BUZZ_RELAY, KEYS = process.env.BUZZ_KEYS ?? "", ROOM = process.env.ONEASK_ROOM, ENV = process.env.ONEASK_ENV;
 test.skip(!RELAY || !KEYS || !ROOM || !ENV, "needs BUZZ_RELAY, BUZZ_KEYS, ONEASK_ROOM, ONEASK_ENV");
@@ -67,4 +68,56 @@ test("one ask: tasks.py asks, the room applet shows it, Aaron answers, the room 
     await expect(frame(page).getByRole("region", { name: "Your rooms" }).getByRole("button", { name: /ask-test-t476/ })).toBeVisible({ timeout: 30_000 });
     await expect(frame(page).getByRole("region", { name: "Your rooms" }).getByRole("button", { name: /ask-test-t476/ })).not.toContainText(/wants? you/);
   } finally { await made.remove(); }
+});
+
+test("one ask: a close under a stream of later edits still ends it, on Today and on a fresh Rooms", async ({ page }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now().toString(36);
+  for (const x of list().filter((x) => ["open", "later", "lapsed"].includes(x.state))) tasks("ask", "--close", x.id, "--reason", "withdrawn");
+  const keep = tasks("ask", "--room", "asktest", "--kind", "do", "--what", `Stays open ${stamp}`, "--why", "Made-up ask (T-476)").match(/ask ([0-9a-f]{64})/)![1];
+  const gone = tasks("ask", "--room", "asktest", "--kind", "do", "--what", `Closed then buried ${stamp}`, "--why", "Made-up ask (T-476)").match(/ask ([0-9a-f]{64})/)![1];
+  tasks("ask", "--close", gone, "--reason", "withdrawn");
+  // then Uni streams a long reply in the room: 45 edits of one message, newer than the close
+  const bob = await person(RELAY!, secret("bob"));
+  const reply = await bob.publish({ kind: 9, content: "Thinking", tags: [["h", ROOM!]] });
+  for (let i = 0; i < 45; i++) {
+    for (let tries = 0; ; tries++) {                 // the relay's publish quota: wait as it says
+      const r = await bob.publish({ kind: 40003, content: `Thinking ${"…".repeat(i)}`, tags: [["h", ROOM!], ["e", reply.ev.id]] });
+      if (r.ok) break;
+      const wait = Number(/retry in (\d+)s/.exec(r.msg)?.[1] ?? NaN);
+      expect(Number.isNaN(wait) || tries > 5, r.msg).toBe(false);
+      await new Promise((res) => setTimeout(res, wait * 1000 + 500));
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  bob.close();
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+  const uni = getPublicKey(Uint8Array.from(Buffer.from(secret("bob"), "hex")));
+  const rooms = await installApplet("rooms", { relay: RELAY!, uni });
+  const home = await installApplet("today", { relay: RELAY!, uni });
+  const made: string[] = [];
+  const rows = async (q: string) => { const r = await api(hubState(), "GET", q); return (Array.isArray(r) ? r : r.notes ?? []) as { id: string }[]; };
+  for (const t of ["parachute-settings", "parachute-app"]) for (const n of await rows(`notes?tag=${t}`)) await api(hubState(), "DELETE", `notes/${n.id}`);
+  try {
+    made.push((await api(hubState(), "POST", "notes", { path: "Parachute/Apps/uni", content: "an app", tags: ["parachute-app"], metadata: { app: {
+      contract: 1, id: "uni", name: "Uni", sources: [{ vault: VAULT, applet: "*" }], start: { vault: VAULT, applet: "Applets/Home" },
+      bar: [{ vault: VAULT, applet: "Applets/Home" }, { vault: VAULT, applet: "Applets/Rooms" }] } } })).id);
+    made.push((await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { app: "uni" } } })).id);
+    await page.goto("about:blank");
+    await page.goto("/");
+    await page.getByRole("button", { name: "Allow" }).click();
+    const wants = frame(page).getByRole("region", { name: "Wants you" });
+    await expect(wants).toContainText(`Stays open ${stamp}`, { timeout: 30_000 });
+    await expect(wants).not.toContainText(`Closed then buried ${stamp}`);
+    await page.screenshot({ path: "../walkthrough/05-today-wants-you.png" });
+    // Rooms, started fresh: the room wants him once (the open ask), not twice
+    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: /Rooms/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click().catch(() => {});
+    const row = page.locator("iframe.applet-frame:visible").contentFrame().getByRole("region", { name: "Your rooms" }).getByRole("button", { name: /ask-test-t476/ });
+    await expect(row).toContainText("Something wants you", { timeout: 30_000 });
+  } finally {
+    tasks("ask", "--close", keep, "--reason", "withdrawn");
+    for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
+    await home.remove(); await rooms.remove();
+  }
 });

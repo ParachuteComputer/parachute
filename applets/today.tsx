@@ -9,7 +9,7 @@
 // Nothing here is the shell's.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { app, Empty, link, List, Loading, onShown, Page, Problem, ready, services, shown, toast, vault, when, Write } from "parachute";
-import { askNow, askOf, chunk, createStore, lastText, now, openAsks, promptOf, tag, tags, useStore, visible, type Ev } from "component:room";
+import { askEndings, askNow, askOf, chunk, createStore, lastText, now, openAsks, promptOf, tag, tags, useStore, visible, type Ev } from "component:room";
 
 const UNI = "{{uni}}";
 /** Journal/2026/11-19/: where today's entries are (the Journal applet's paths). */
@@ -95,6 +95,8 @@ export default function Home() {
       const ids = [...new Set(members.map((e) => tag(e, "d")).filter(Boolean))] as string[];
       const since = now() - DAYS * 86400;
       const parts = await Promise.all(chunk(ids, 100).map((c) => Promise.all([relay.query([{ kinds: [39000], "#d": c }]), relay.query([{ kinds: [9], "#h": c, since, limit: 500 }])])));
+      // how the asks among them ended: one its asker closed (uni-ask SPEC §3) no longer wants you
+      const endings = await askEndings(relay, parts.flatMap(([, msgs]) => msgs as Ev[]));
       const got = await read;
       if (!current()) return;
       // a read again over rooms already shown that found none (a slow or dropped relay answers short): what is there stays
@@ -106,6 +108,7 @@ export default function Home() {
         (msgs as Ev[]).forEach(st.add);
       }
       setMarks((m) => later(m, got));
+      endings.forEach(st.add);
       st.bump(); setRead("ok");
     } catch { if (current() && !s.rooms.size) setRead("away"); }
   };

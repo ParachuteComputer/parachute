@@ -12,7 +12,7 @@
 // it read in place of the snapshot: a room you left, or a message deleted meanwhile, goes.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button, Empty, List, Loading, onLaunch, Page, Problem, ready, Search, services, storage, when } from "parachute";
-import Room, { chunk, createStore, glyph, lastText, nameOf, now, openAsks, rootOf, tag, tags, textOf, useStore, visible, type Ev, type RoomMeta, type Store } from "component:room";
+import Room, { askEndings, chunk, createStore, glyph, lastText, nameOf, now, openAsks, rootOf, tag, tags, textOf, useStore, visible, type Ev, type RoomMeta, type Store } from "component:room";
 
 type View = { at: "list" } | { at: "room"; id: string; event?: string };
 
@@ -186,9 +186,10 @@ export default function Rooms() {
         const [metas, history] = await Promise.all([
           // a call for each hundred rooms: one naming every room is over a frame's request budget past about two hundred
           pooled(chunk(ids, 100), 3, (c) => relay.query([{ kinds: [39000], "#d": c }])).then((xs) => xs.flat()),
-          // with the newest edits and deletions: an ask its asker closed (an edit, uni-ask SPEC §3) no longer wants you
-          pooled(chunk(ids, 5), 3, (c) => relay.query(c.flatMap((id) => [{ kinds: [9], "#h": [id], limit: 40 }, { kinds: [5, 40003], "#h": [id], limit: 40 }]))),
+          pooled(chunk(ids, 10), 3, (c) => relay.query(c.map((id) => ({ kinds: [9], "#h": [id], limit: 40 })))),
         ]);
+        // and how the asks among them ended: one its asker closed (an edit, uni-ask SPEC §3) no longer wants you
+        const endings = await askEndings(relay, (history as Ev[][]).flat());
         if (!on || down) return;
         // rooms listed but none of them described: a read cut short, not every room gone (what is painted stays)
         if (painted && !synced && ids.length && !(metas as Ev[]).length) { setStatus({ k: "note", t: "This is what you last saw: the relay didn't describe your rooms just now." }); return; }
@@ -201,6 +202,7 @@ export default function Rooms() {
         for (const id of ids) s.msgs.set(id, new Map());
         for (const id of [...s.msgs.keys()]) if (!s.rooms.has(id)) s.msgs.delete(id);
         history.flat().forEach(st.add);
+        endings.forEach(st.add);
         synced = true;
         st.bump();
         const rooms = [...s.rooms.keys()];

@@ -56,7 +56,7 @@ export function rootOf(e: Ev): string | null {
 // ── the store: everything read from the relay, kept in one place ──
 export function createStore() {
   const s = {
-    me: "", rooms: new Map<string, RoomMeta>(), msgs: new Map<string, Map<string, Ev>>(), edits: new Map<string, Ev>(), gone: new Map<string, Set<string>>(), removed: new Set<string>(),
+    me: "", rooms: new Map<string, RoomMeta>(), msgs: new Map<string, Map<string, Ev>>(), edits: new Map<string, Ev>(), editsBy: new Map<string, Ev>(), gone: new Map<string, Set<string>>(), removed: new Set<string>(),
     reacts: new Map<string, Map<string, Ev>>(), typing: new Map<string, Map<string, number>>(), names: new Map<string, string>(),
     read: {} as Record<string, number>, rev: 0, listeners: new Set<() => void>(), asked: new Set<string>(),
   };
@@ -70,6 +70,8 @@ export function createStore() {
       const target = tag(e, "e"); if (!target) return;
       const was = s.edits.get(target);
       if (!was || was.created_at <= e.created_at) s.edits.set(target, e);
+      const by = `${target} ${e.pubkey}`, mine = s.editsBy.get(by);   // each author's newest: a close by the asker holds
+      if (!mine || mine.created_at <= e.created_at) s.editsBy.set(by, e);
     } else if (e.kind === 5) {
       // a deletion counts only from whoever wrote the message (checked when it is drawn: the message may come later)
       for (const t of tags(e, "e")) { const by = s.gone.get(t) ?? new Set<string>(); by.add(e.pubkey); s.gone.set(t, by); }
@@ -189,9 +191,20 @@ export function askOf(e: Ev): Ask | null {
   if (b.kind === "choose" && options.length < 2) return null;
   return { kind: b.kind, what: b.what.slice(0, 200), why: b.why.slice(0, 500), until: b.until, options, context: typeof b.context === "string" ? b.context.slice(0, 4000) : undefined };
 }
-/** An ask as it stands: read from the message's newest text by its author, so the asker's close (an edit that drops the
- *  uni-ask block, uni-ask SPEC §3) ends the card, the room's "wants you" and Today's list alike. */
-export const askNow = (s: Store["s"], e: Ev) => askOf({ ...e, content: textOf(s, e) });
+/** An ask as it stands (uni-ask SPEC §3): the asker's own edit that drops the uni-ask block closes it, for the card, the
+ *  room's "wants you" and Today's list alike; any other edit (one that keeps a block, or someone else's) changes nothing,
+ *  so the ask keeps the terms it was signed with. */
+export const askNow = (s: Store["s"], e: Ev) => {
+  const ed = s.editsBy.get(`${e.id} ${e.pubkey}`);
+  return ed && !ed.content.split("\n").includes("```uni-ask") ? null : askOf(e);
+};
+/** The edits and deletions of the asks among these messages, asked for by the asks' own ids, so a close is found however
+ *  much else was edited in the room since (streamed replies are edits). At most a hundred asks a call. */
+export async function askEndings(relay: { query: (f: any[]) => Promise<any[]> }, msgs: Ev[]): Promise<Ev[]> {
+  const ids = msgs.filter((e) => e.kind === 9 && askOf(e)).map((e) => e.id);
+  const got = await Promise.all(chunk(ids, 100).map((c) => relay.query([{ kinds: [5, 40003], "#e": c, limit: 500 }]).catch(() => [])));
+  return got.flat() as Ev[];
+}
 type Prompt = { command: string; why: string; deadline: number | null };
 export function promptOf(e: Ev): Prompt | null {
   const lines = e.content.replace(/\r\n/g, "\n").split("\n");
