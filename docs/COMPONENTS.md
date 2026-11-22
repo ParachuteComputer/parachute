@@ -114,6 +114,13 @@ Records as rows and columns; a record's fields, each changed where it stands.
 <Days times={notes.map((n) => n.updatedAt)} label="Four weeks of notes" />
 ```
 
+One strip for each thing in a list (a habit's last four weeks): put it in the row, `inline`, as the row's `meta`:
+
+```tsx
+<List label="Habits" rows={habits.map((h) => ({ key: h.id, title: h.name, aside: `${h.streak}-day streak`,
+  meta: <Days inline counts={h.lastFourWeeks} />, onPress: () => tick(h) }))} />
+```
+
 ## Empty, Loading and Problem
 
 ![Empty](components/empty.png)
