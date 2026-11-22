@@ -19,10 +19,12 @@ import { applyPack, checkPack, receiptOf, receiptRecord, refusalWords, RECEIPTS,
 import coreTypes from "../../kit/packs/core-types.json";
 import { notionImport, NOTION_WANT } from "../../kit/notion.ts";
 import { readZip, ZipError } from "../../kit/zip.ts";
+import clients from "../../kit/packs/clients.json";
+import reading from "../../kit/packs/reading.json";
 import { PUBLISH_FIELD, type VaultsDeps } from "./vaults.ts";
 
 /** Parachute's own starter packs, checked once. */
-export const STARTERS: Pack[] = [checkPack(coreTypes)];
+export const STARTERS: Pack[] = [checkPack(coreTypes), checkPack(clients), checkPack(reading)];
 
 export type Installed = { id: string; name: string; version: number; source: string; appliedAt: string | null; appliedBy: string | null;
   made: Receipt["made"]; skipped: string[]; newer: number | null };

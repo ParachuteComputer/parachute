@@ -11,14 +11,21 @@ const files = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const
 // `tags.includes("x")`, `hasType(tags, "x")`, `tag === "x"`, `t === "x" || t.startsWith("x/")` on a tag
 const PATTERNS = [/tags[^;\n]{0,40}?\.includes\(\s*"([^"]+)"\s*\)/g, /hasType\([^,]+,\s*"([^"]+)"\)/g, /(?<!typeof )\b(?:tag|t)\s*===\s*"([^"]+)"/g, /\b(?:tag|t)\.startsWith\("([^"/]+)\//g];
 
+/** Tags the app reads only for a hint, never for how a note opens or what may run: an applet claiming one changes
+ *  nothing but that hint. Each says where and why. */
+const HINTS: Record<string, { file: string; why: string }> = {
+  guide: { file: "frame/views/Launcher.tsx", why: "the list's Start here: a hub's #guide notes aren't the person's own, so Start here shows until something of theirs is in the home" },
+};
+
 describe("tags the app reads", () => {
   it("are all reserved", () => {
-    const found = new Map<string, string>();
+    const found: [string, string][] = [];
     for (const f of files(join(import.meta.dirname, ".."))) {
       const src = readFileSync(f, "utf8");
-      for (const re of PATTERNS) for (const m of src.matchAll(re)) found.set(m[1], f);
+      for (const re of PATTERNS) for (const m of src.matchAll(re)) found.push([m[1], f]);
     }
-    expect(found.size).toBeGreaterThan(0);
-    for (const [tag, file] of found) expect(isReservedType(tag), `${file} reads the tag "${tag}", which an applet could claim`).toBe(true);
+    expect(found.length).toBeGreaterThan(0);
+    // a hint tag is let through only in the one file that reads it for that hint
+    for (const [tag, file] of found) expect(isReservedType(tag) || (tag in HINTS && file.endsWith(HINTS[tag].file)), `${file} reads the tag "${tag}", which an applet could claim`).toBe(true);
   });
 });
