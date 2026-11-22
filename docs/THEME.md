@@ -138,7 +138,8 @@ Every applet's frame, and every embed's, gets the look in four steps, each over 
 
 To draw edge to edge (a map, a canvas, a board), give the page back: `html, body { padding: 0 }`. To change a token for your
 applet only, set it on `body` or on your own wrapper (`body { --accent: #8a5a2b; }`), not on `:root`: the app sets
-the theme's values on the root itself, and sets them again when the theme changes. To add styles a later rule of yours
+the theme's values on the root itself, and sets them again when the theme changes (so name a variable of your own
+another way than a token, `--my-…`). To add styles a later rule of yours
 can still override at low weight, put them in a layer of your own (`@layer mine { … }`): a layer declared after the
 kit's sits above it.
 
