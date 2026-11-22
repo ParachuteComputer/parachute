@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplets, FrameVault } from "../../bridge/protocol";
 import { call, on } from "../bridge";
-import { readApplets, useDefaults } from "../data";
+import { readApplets, useDefaults, useShownAgain } from "../data";
 import { candidates, resolve, type Candidate, type Decision } from "../../open/resolve";
 
 export type OpenWith = { state: "loading" } | { state: "error"; error: string } | { state: "ok"; note: Note | null; cands: Candidate[]; decision: Decision };
@@ -36,12 +36,18 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
   const defaults = useDefaults(v?.key);
   // asks for the hub's answer, once per note: when a decision drawn from the copies no longer only shows the note
   const askHub = useRef<() => void>(() => {});
+  // shown again after a shell screen (the editor, Settings): the note and the applets are read again, as the hub has
+  // them now, and what was drawn stays until the answer
+  const again = useShownAgain();
+  const readFor = useRef("");
 
   useEffect(() => {
     if (!v || !noteId) return;
     let live = true, asked = false;
     const at = forOf(v.key, noteId, fresh);
-    setRead(null);
+    const quiet = readFor.current === at;
+    readFor.current = at;
+    if (!quiet) setRead(null);
     // the applets as they are now: the status is judged on each applet's note as read now. If that read fails, no
     // applet opens the note this time; roles unread (the vault answered badly) the same; the note itself still opens
     const now = () => {
@@ -51,7 +57,7 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
         .then(([note, roles, applets]) => live && setRead({ at, note, roles, applets }), (e: unknown) => live && setRead({ at, error: e instanceof Error ? e.message : "the vault couldn't be read" }));
     };
     askHub.current = now;
-    if (fresh !== "copy-first") { now(); return () => { live = false; }; }
+    if (fresh !== "copy-first" || quiet) { now(); return () => { live = false; }; }
     // the hub's answer for the note drawn from its copy differs: drawn again from it (told before the copy was drawn:
     // once it is)
     let drawn = false, told = false;
@@ -72,7 +78,7 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
       if (drawn) void again(); else told = true;
     });
     return () => { live = false; off(); };
-  }, [v?.key, noteId, fresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [v?.key, noteId, fresh, again]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const out = useMemo((): OpenWith => {
     if (!v || !read || read.at !== at || !defaults) return { state: "loading" };

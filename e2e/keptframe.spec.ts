@@ -74,3 +74,23 @@ test("back to the list of applets from an applet, from Settings and by the bar i
     if (added) await api(hubState(), "DELETE", `notes/${added.id}`);
   }
 });
+
+// Review finding (T-476, #160): kept, the frame's note page must read the note again when shown after the shell's editor.
+test("a note edited in the app's editor shows its new words on Back, in the same frame", async ({ page }) => {
+  const note = await record(hubState(), "create", { path: "Notes/Kept words", extension: "md", body: "The old words." });
+  try {
+    await page.goto(`/v/${VAULT}/n/${note.id}?with=vault`);
+    await expect(ui(page).getByText("The old words.")).toBeVisible();
+    await (await frameWindow(page))!.evaluate(() => { (window as unknown as Heard).__booted = 1; });
+    await ui(page).getByRole("link", { name: "Edit" }).click();
+    const box = page.getByRole("textbox", { name: "The note's words" });
+    await expect(box).toHaveValue("The old words.");
+    await box.fill("The new words.");
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(ui(page).getByText("The new words.")).toBeVisible();
+    await expect(ui(page).getByText("The old words.")).toHaveCount(0);
+    expect(await (await frameWindow(page))!.evaluate(() => (window as unknown as Heard).__booted)).toBe(1);
+  } finally {
+    await api(hubState(), "DELETE", `notes/${note.id}`);
+  }
+});

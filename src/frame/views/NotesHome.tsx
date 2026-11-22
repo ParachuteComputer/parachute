@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { updateLine } from "../../applet/level";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameVault } from "../../bridge/protocol";
-import { readerFor, useHome, useVaults } from "../data";
+import { readerFor, useHome, useShownAgain, useVaults } from "../data";
 import { isAppOwn, noteHref, titleOf } from "../../vault/notes";
 import { Empty } from "../../kit/parts";
 import { Loading, Problem, Search, Tabs } from "../../kit/screen";
@@ -29,15 +29,20 @@ async function inTurns<T, R>(items: T[], n: number, f: (x: T) => Promise<R>): Pr
 function useNotes(vaults: FrameVault[], term: string): { rows: Row[]; unread: string[] } | null {
   const [rows, setRows] = useState<{ rows: Row[]; unread: string[] } | null>(null);
   const keys = vaults.map((v) => v.key).join("|");
+  // shown again after a shell screen (a note written in the editor): read again, the list as it was until the answer
+  const again = useShownAgain();
+  const asked = useRef("");
   useEffect(() => {
     let live = true;
-    setRows(null);
+    const q = `${keys}\u0000${term}`;
+    if (asked.current !== q) setRows(null);
+    asked.current = q;
     const unread: string[] = [];
     void inTurns(vaults, AT_ONCE, (v) => readerFor(v).queryNotes(term ? { search: term, limit: PER_VAULT } : { orderBy: "updated_at", sort: "desc", limit: PER_VAULT })
       .then((ns) => ns.filter((n) => !isAppOwn(n)).map((n) => ({ v, n })), () => { unread.push(v.vault); return [] as Row[]; }))
       .then((per) => { if (live) setRows({ rows: per.flat().sort((a, b) => updated(b.n).localeCompare(updated(a.n))).slice(0, SHOWN), unread }); });
     return () => { live = false; };
-  }, [keys, term]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [keys, term, again]); // eslint-disable-line react-hooks/exhaustive-deps
   return rows;
 }
 

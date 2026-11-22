@@ -233,8 +233,9 @@ async function openOut(url: string) {
   else window.open(url, "_blank", "noopener,noreferrer");
 }
 
-/** What each history entry's note route decided, for the session: the frame is made afresh after every shell screen,
- *  and a return to an entry must not decide again (it would send the person on to the applet a second time). */
+/** What each history entry's note route decided, for the session: a frame may be made afresh (a new frame, a start, a
+ *  page loaded again), and a return to an entry must not decide again (it would send the person on to the applet a
+ *  second time). */
 const decisions = new Map<string, Decided>();
 export const decidedFor = (key: string): Decided | undefined => decisions.get(key);
 function decide(key: string, kind: Decided) {

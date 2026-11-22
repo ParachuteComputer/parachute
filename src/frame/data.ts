@@ -25,7 +25,10 @@ on("changed", ({ what }) => { if (what === "vaults") void vaults.load(); });
 // it drew stays, and everything it read is read again behind it (as a new frame would have read it), quietly.
 let round = 0;
 const roundSubs = new Set<() => void>();
-const useRound = () => useSyncExternalStore((f) => { roundSubs.add(f); return () => { roundSubs.delete(f); }; }, () => round);
+/** A number that grows each time the frame is shown again after a shell screen: a read that depends on it (an effect's
+ *  dependency) is made again then, as a new frame would have made it. Keep what it drew until the answer comes. */
+export const useShownAgain = (): number => useSyncExternalStore((f) => { roundSubs.add(f); return () => { roundSubs.delete(f); }; }, () => round);
+const useRound = useShownAgain;
 on("shown", (shown) => {
   if (!shown) return;
   round++;

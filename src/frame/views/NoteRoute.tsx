@@ -18,8 +18,8 @@ import NoVault from "./NoVault";
 import { Bar } from "../../ui/Bar";
 
 /** The history entries whose decision has been acted on: the route decides once per visit (a default the sheet
- *  stores a moment later must not send the person on a second time). The shell keeps them too, across frames (the
- *  frame is made afresh after a shell screen), and hands them back in the location's state. */
+ *  stores a moment later must not send the person on a second time). The shell keeps them too, across frames (a
+ *  frame may be made afresh: a new frame, the page loaded again), and hands them back in the location's state. */
 const decided = new Map<string, string>();
 
 export default function NoteRoute() {

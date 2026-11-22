@@ -21,6 +21,6 @@ export { Button, Loading, Page, Problem, Record, Search, Tabs, toast, useTranscr
 export { when } from "../kit/when";
 export { Drawer } from "../kit/drawer";
 export { Note } from "../kit/parts-note";
-export { pinApplet, readerFor, startApplet, useApplets, useDefaults, useHome, useVault, useVaultQuery, useVaults } from "./data";
+export { pinApplet, readerFor, startApplet, useApplets, useDefaults, useHome, useShownAgain, useVault, useVaultQuery, useVaults } from "./data";
 export { call } from "./bridge";
 export { folderOf, noteHref, titleOf } from "../vault/notes";

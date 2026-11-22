@@ -40,11 +40,16 @@ export default function FrameArea({ shown = true }: { shown?: boolean }) {
     });
     return () => { on = false; };
   }, [want]); // eslint-disable-line react-hooks/exhaustive-deps
-  const ready = code && (code.from === "vault" ? `vault:${code.hash}` : "built-in") === want ? code : null;
+  const now = code && (code.from === "vault" ? `vault:${code.hash}` : "built-in") === want ? code : null;
+  // hidden, no new frame is made: one booted behind a shell screen would read that screen's address (its document's
+  // base URL is the shell's, at boot). The frame that ran stays until the area is shown; then the new one starts
+  const last = useRef<Code | null>(null);
+  if (shown) last.current = now;
+  const ready = shown ? now : last.current;
   // a frame from a vault is marked while it is shown in the foreground, and unmarked when it is left, hidden or closed
   // (a page it hangs can't do that): if it hangs the app, the next start knows
   useEffect(() => {
-    if (ready?.from !== "vault" || !shown) return;
+    if (ready?.from !== "vault") return;
     const hash = ready.hash;
     const seen = () => (document.visibilityState === "hidden" ? frameHidden(hash) : frameShown(hash));
     const left = () => frameHidden(hash);
@@ -52,8 +57,8 @@ export default function FrameArea({ shown = true }: { shown?: boolean }) {
     document.addEventListener("visibilitychange", seen);
     addEventListener("pagehide", left);
     return () => { document.removeEventListener("visibilitychange", seen); removeEventListener("pagehide", left); frameHidden(hash); answerLinkOut(false); };
-  }, [ready?.hash, ready?.from, shown]);
-  if ("card" in choice) return <FrameCard {...choice.card} />;
+  }, [ready?.hash, ready?.from]);
+  if ("card" in choice && shown) return <FrameCard {...choice.card} />;
   if (!ready) return null;
   const vault = ready.from === "vault";
   return (

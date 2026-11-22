@@ -78,13 +78,17 @@ export default function FrameHost({ js, from, onFailed, shown: visible = true }:
   }, [host]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(sendLocation, [location.key, location.pathname, location.search]); // eslint-disable-line react-hooks/exhaustive-deps
-  // hidden and shown again: told so, and it reads again behind what it drew (the address now came just before: shown
-  // or hidden is always a change of address, shell screens and the frame's having addresses of their own)
+  // hidden and shown again: told so, and it reads again behind what it drew. Shown, it gets the address now first (the
+  // same address as when it was hidden sends no location of its own). Hidden, it lets go of the focus, so a tap on a
+  // shell screen that doesn't take the focus (WebKit's buttons) can't count for it when it shows again (tapIn)
   const wasShown = useRef(visible);
   useEffect(() => {
     if (wasShown.current === visible) return;
     wasShown.current = visible;
-    if (heard.current) host.event("shown", visible);
+    if (!visible && document.activeElement === ref.current) ref.current?.blur();
+    if (!heard.current) return;
+    if (visible) sendLocation();
+    host.event("shown", visible);
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <iframe ref={ref} className="app-frame" data-frame={from} title="Parachute" sandbox="allow-scripts" allow={NO_DEVICES} referrerPolicy="no-referrer" srcDoc={doc} />;
