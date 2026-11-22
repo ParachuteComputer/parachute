@@ -68,10 +68,12 @@ export function createStore() {
       s.typing.get(room)?.delete(e.pubkey);
     } else if (e.kind === 40003) {
       const target = tag(e, "e"); if (!target) return;
+      // an edit that still carries a uni-ask block is ignored: the ask is what was first signed, and a closed one is never
+      // reopened by an edit (SPEC §3). One that drops it is a close if its author asked (checked in askNow), final.
+      if (e.content.split("\n").includes("```uni-ask")) return;
+      s.closedBy.add(`${target} ${e.pubkey}`);
       const was = s.edits.get(target);
       if (!was || was.created_at <= e.created_at) s.edits.set(target, e);
-      // an edit by anyone that drops the uni-ask block: a close if its author asked (checked in askNow); final, as SPEC §3
-      if (!e.content.split("\n").includes("```uni-ask")) s.closedBy.add(`${target} ${e.pubkey}`);
     } else if (e.kind === 5) {
       // a deletion counts only from whoever wrote the message (checked when it is drawn: the message may come later)
       for (const t of tags(e, "e")) { const by = s.gone.get(t) ?? new Set<string>(); by.add(e.pubkey); s.gone.set(t, by); }
