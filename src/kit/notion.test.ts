@@ -145,6 +145,42 @@ describe("notionImport", () => {
     expect(r.pack.records.find((x) => x.path === "Notion/Tasks/x")?.fields).toEqual({ project: ["Gone project"] });
   });
 
+  test("names stay clear of the vault's own types; a name with a comma isn't a list; a leading zero isn't a number", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const r = notionImport(new Map([["E/Book 1111111111111111111111111111111d_all.csv", enc('Name,Author,Zip,Date\r\na,"Le Guin, Ursula",02134,next week\r\nb,"Butler, Octavia",01002,soon\r\n')]]), "x",
+      [{ name: "book", fields: { author: { type: "string" } } }, { name: "meeting", fields: { date: { type: "date" } } }]);
+    expect(Object.keys(r.pack.types)).toEqual(["book-2"]);
+    expect(r.pack.types["book-2"].fields).toEqual({ author: { type: "string" }, zip: { type: "string" }, date_2: { type: "string" } });
+    expect(r.pack.records.find((x) => x.path === "Notion/Book/a")?.fields).toEqual({ author: "Le Guin, Ursula", zip: "02134", date_2: "next week" });
+  });
+
+  test("a type an import made is the table's again: a newer export of the same workspace adds to it, renames nothing", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const r = notionImport(new Map([["E/Book 2222222222222222222222222222222d_all.csv", enc("Name,Rating,Shelf\r\nc,05,top\r\n")]]), "newer",
+      [{ name: "book", description: "From Notion: Book.", fields: { rating: { type: "number" } } }, { name: "shelf-type", description: null, fields: { shelf: { type: "string", indexed: true } } }]);
+    expect(Object.keys(r.pack.types)).toEqual(["book"]);
+    // its own earlier field isn't another's (no rating_2); a field the person indexed elsewhere is
+    expect(Object.keys(r.pack.types.book.fields)).toEqual(["rating", "shelf_2"]);
+  });
+
+  test("another import's types count in a clash; two tables of one title each find their own type again", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const files = new Map([
+      ["E/A 3333333333333333333333333333333a/Tasks 4444444444444444444444444444444a_all.csv", enc("Name,Owner\r\nx,me\r\n")],
+      ["E/B 5555555555555555555555555555555b/Tasks 6666666666666666666666666666666b_all.csv", enc("Name,Due\r\ny,soon\r\n")],
+      ["E/Books 7777777777777777777777777777777c_all.csv", enc("Name,Status\r\nz,read\r\n")],
+    ]);
+    const first = notionImport(files);
+    expect(Object.keys(first.pack.types).sort()).toEqual(["books", "tasks", "tasks-2"]);
+    const held = Object.entries(first.pack.types).map(([name, t]) => ({ name, description: t.description, fields: t.fields as Record<string, { type?: string }> }));
+    // the same export again: the same names, each table on its own type
+    expect(notionImport(files, "again", held).pack.types).toEqual(first.pack.types);
+    // another workspace's import made projects with a number status: a new table's text status is its own field
+    const other = notionImport(new Map([["E/Books 7777777777777777777777777777777c_all.csv", enc("Name,Status\r\nz,read\r\n")]]), "x",
+      [{ name: "projects", description: "From Notion: Projects.", fields: { status: { type: "number" } } }]);
+    expect(Object.keys(other.pack.types.books.fields)).toEqual(["status_2"]);
+  });
+
   test("a column of one name in two tables, of two kinds, is text in both: the vault would refuse one type", () => {
     const csv = (rows: string) => new TextEncoder().encode(`\ufeffName,Tags\r\n${rows}`);
     const two = notionImport(new Map([

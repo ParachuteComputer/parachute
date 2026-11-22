@@ -130,10 +130,14 @@ function kindOf(values: string[]): Kind {
   if (v.every((x) => relations(x))) return "relation";
   if (v.every((x) => /^(yes|no)$/i.test(x))) return "boolean";
   if (v.every((x) => notionDate(x))) return "date";
-  if (v.every((x) => /^-?\d+(\.\d+)?$/.test(x.replace(/,(?=\d{3}\b)/g, "")))) return "number";
+  // (a leading zero is an id, a zip code, not a number: kept as written)
+  if (v.every((x) => /^-?\d+(\.\d+)?$/.test(x.replace(/,(?=\d{3}\b)/g, ""))) && !v.some((x) => /^-?0\d/.test(x))) return "number";
   // a multi-select: short words split by commas, with no sentence in them
   // (not a number with a decimal comma, "1,5")
-  if (v.some((x) => x.includes(",")) && !v.every((x) => /^[\d\s.,-]+$/.test(x)) && v.every((x) => x.split(",").every((t) => { const w = t.trim(); return w.length > 0 && w.length <= 40 && !/[.!?]$/.test(w); }))) return "list";
+  // (and a choice used in more than one row, as a select's options are: "Le Guin, Ursula" names one author)
+  const seen = new Map<string, number>();
+  for (const x of v) for (const t of new Set(x.split(",").map((w) => w.trim().toLowerCase()))) seen.set(t, (seen.get(t) ?? 0) + 1);
+  if (v.some((x) => x.includes(",")) && !v.every((x) => /^[\d\s.,-]+$/.test(x)) && [...seen.values()].some((n) => n > 1) && v.every((x) => x.split(",").every((t) => { const w = t.trim(); return w.length > 0 && w.length <= 40 && !/[.!?]$/.test(w); }))) return "list";
   return "text";
 }
 const SPEC: Record<Exclude<Kind, "relation">, FieldSpec> = { date: { type: "date" }, number: { type: "number" }, boolean: { type: "boolean" }, list: { type: "array" }, text: { type: "string" } };
@@ -166,7 +170,15 @@ function idOf(paths: string[]): string {
 }
 
 /** Notion's Markdown & CSV export, as a pack. `name`: the file's name, for the receipt. */
-export function notionImport(files: Map<string, Uint8Array>, name = "Notion export"): Imported {
+/** A type the vault has already, as the import reads it: its name and its declared fields (packs.ts HeldType). */
+export type Held = { name: string; description?: string | null; fields: Record<string, { type?: string; indexed?: boolean }> };
+
+/** Notion's Markdown & CSV export, as a pack. `name`: the file's name, for the receipt. `held`: the vault's types. One an
+ *  import made ("From Notion: <the table's title>.") is that table's again, so this export, or a newer one of the same
+ *  workspace, adds to it. Any other is the person's: a table never becomes it (Book is book-2 beside their book), and a
+ *  column whose name it declares otherwise (another kind, or indexed: what a vault refuses) gets a name of its own
+ *  (date_2), so no row is refused for it. */
+export function notionImport(files: Map<string, Uint8Array>, name = "Notion export", held: Held[] = []): Imported {
   const text = (b: Uint8Array) => new TextDecoder("utf-8").decode(b);
   // the export's own wrapping: hidden files, its index page, and one root folder above everything
   let paths = [...files.keys()].filter((p) => !/(^|\/)(__MACOSX|\.DS_Store)(\/|$)/.test(p) && !/(^|\/)\._/.test(p));
@@ -213,14 +225,23 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   const inFolder = (p: string, k: string) => p.startsWith(rowFolder(k)) && !p.slice(rowFolder(k).length).includes("/");
   type Col = { header: string; field: string; kind: Kind; i: number };
   type Table = { key: string; csv: string; title: string; type: string; place: string; header: string[]; body: string[][]; cols: Col[] };
-  const typeNames = new Set<string>();
+  // (two tables of one title made tasks and tasks-2: each takes the first one left, in the same order as then)
+  const claimed = new Set<string>();
+  const fromNotion = (title: string) => {
+    const h = held.filter((x) => x.description === `From Notion: ${title}.` && !claimed.has(x.name)).sort((a, b) => a.name.length - b.name.length || a.name.localeCompare(b.name))[0];
+    if (h) claimed.add(h.name);
+    return h;
+  };
+  // a new table's name avoids every type the vault has (a table found again keeps its own)
+  const typeNames = new Set<string>(held.map((h) => h.name));
   const tables: Table[] = [];
   for (const [key, csv] of dbs) {
     const [header = [], ...body] = parseCsv(text(files.get(csv)!));
     if (!header.length) continue;
     const taken = new Set<string>();
     const title = bare(noExt(key.split("/").pop()!));
-    tables.push({ key, csv, title, type: typeName(title, typeNames), place: unique(placeOf(key)), header, body,
+    const again = fromNotion(title);
+    tables.push({ key, csv, title, type: again?.name ?? typeName(title, typeNames), place: unique(placeOf(key)), header, body,
       cols: header.slice(1).map((h, i) => ({ header: h.trim(), field: fieldName(h, taken), kind: kindOf(body.map((r) => r[i + 1] ?? "")), i: i + 1 })) });
   }
   // a field is one thing in a vault: where two tables have a column of one name but of different kinds, it is text in
@@ -228,6 +249,17 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   const kinds = new Map<string, Set<Kind>>();
   for (const t of tables) for (const c of t.cols) kinds.set(c.field, (kinds.get(c.field) ?? new Set()).add(c.kind));
   for (const t of tables) for (const c of t.cols) if (kinds.get(c.field)!.size > 1) c.kind = "text";
+  // and one the vault's own types declare otherwise is another field here
+  const specOf = (c: Col): FieldSpec => (c.kind === "relation" ? { type: "reference", cardinality: "many" } : SPEC[c.kind as Exclude<Kind, "relation">]);
+  // (what a vault refuses beside another type's field of that name: another kind, or an indexed one; cardinality it takes)
+  // (every type but the table's own again: another import's types count as much as the person's)
+  const clash = (f: string, spec: FieldSpec, own: string) => held.some((h) => { const d = h.name !== own && h.fields[f]; return !!d && (d.type !== spec.type || !!d.indexed); });
+  const renamed = new Map<string, string>();
+  for (const t of tables) for (const c of t.cols) {
+    if (!clash(c.field, specOf(c), t.type)) continue;
+    if (!renamed.has(`${c.field}|${c.kind}`)) { let i = 2, n = `${c.field}_${i}`; while (clash(n, specOf(c), t.type) || held.some((h) => h.name !== t.type && n in h.fields) || tables.some((x) => x.cols.some((y) => y.field === n))) n = `${c.field}_${++i}`; renamed.set(`${c.field}|${c.kind}`, n); }
+    c.field = renamed.get(`${c.field}|${c.kind}`)!;
+  }
 
   // 2. Rows and their pages: by title; a title the page says otherwise ("@Today" for a date), or two rows of one title,
   // by the property lines the page holds, so a row is one record and its page isn't a second
@@ -297,7 +329,7 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   const types: Pack["types"] = {};
   const records: PackRecord[] = [];
   for (const t of tables) {
-    types[t.type] = { description: `From Notion: ${t.title}.`, fields: Object.fromEntries(t.cols.map((c) => [c.field, c.kind === "relation" ? { type: "reference", cardinality: "many" } as FieldSpec : SPEC[c.kind as Exclude<Kind, "relation">]])) };
+    types[t.type] = { description: `From Notion: ${t.title}.`, fields: Object.fromEntries(t.cols.map((c) => [c.field, specOf(c)])) };
     records.push({ path: t.place, body: `This was the Notion table **${t.title}**. Its rows are the type ${t.type} here: open it in Vault.\n` });
   }
   for (const { t, r, path, page } of rowOf) {
