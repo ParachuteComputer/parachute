@@ -406,8 +406,8 @@ Before you hand it over, check it the way a person sees it:
 - Rows, not boxes: a `List` for things of a kind; a `Card` only for a block that stands apart.
 - Every state has words: `Loading` while reading, `Empty` with what to do next, `Problem` with Try again, a `toast`
   after an action.
-- It works at 390 px (a phone) and 1600 px (a computer): `Page` holds the width; `wide` gives two columns on a
-  computer.
+- It works at 390 px (a phone) and 1600 px (a computer): `Page` holds the width; `wide` lets a board grow on a
+  computer, and `pa-grid` makes its columns.
 - No fixed colour, size or font anywhere: it reads in light, in dark and on the Daylight's black and white.
 
 ## A worked example

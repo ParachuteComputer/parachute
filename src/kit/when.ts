@@ -53,11 +53,15 @@ function date(t: Moment, now = new Date()): string {
   return f(d.getFullYear() === now.getFullYear() ? { weekday: "long", month: "long", day: "numeric" } : { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(d);
 }
 
+/** A date alone ("2026-11-21", as a field holds one): it has a day and no time. */
+const dateOnly = (t: Moment) => typeof t === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.trim());
+
 function short(t: Moment, now = new Date()): string {
   const d = parse(t);
   if (!d) return "";
   const back = daysBack(d, now);
-  if (back === 0) return time(d);
+  // today's time, but a date with no time is just today (never "12:00 AM")
+  if (back === 0) return dateOnly(t) ? "Today" : time(d);
   if (back === 1) return "Yesterday";
   if (back > 1 && back < 7) return f({ weekday: "short" }).format(d);
   return f(d.getFullYear() === now.getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" }).format(d);

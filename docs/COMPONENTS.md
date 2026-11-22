@@ -23,7 +23,8 @@ export default function Shelf() {
 ```
 
 `Page` gives the screen its title (on the type scale), one width and one margin, a way back (`back`), pull to read
-again (`onRefresh`) and two columns on a computer (`wide`). Start every applet with it.
+again (`onRefresh`), and with `wide` room for a board on a computer (lay its columns out with `pa-grid`, below). Start
+every applet with it; the frame adds no margin of its own around a `Page`.
 
 ## Button
 
@@ -120,7 +121,7 @@ Records as rows and columns; a record's fields, each changed where it stands.
 
 ```tsx
 <Empty>No books yet. Add one above, or ask your AI.</Empty>
-<Loading />
+<Loading>Reading the shelf…</Loading>
 <Problem error={err} onRetry={load}>Couldn't read the shelf.</Problem>
 ```
 
@@ -136,7 +137,16 @@ Every state has words: what to do next, what is being read, what failed and Try 
 toast("Saved");
 ```
 
-A detail or a short form rises from the foot of the screen; a toast says what an action did.
+A detail or a short form rises from the foot of the screen; a toast says what an action did. A short form in a
+drawer, with no CSS:
+
+```tsx
+<Drawer open={!!book} onClose={() => setBook(null)} title={book?.title}>
+  <Fields label="This book" fields={[{ name: "status", kind: "choice", choices: ["want", "reading", "done"], value: book?.status }]} onSave={save} />
+  <Write label="A line about it" labelled value={line} onChange={setLine} onSend={keepLine} send="Keep" />
+  <div className="pa-actions"><Button kind="primary" onClick={finish}>Finished</Button><Button kind="quiet" onClick={() => setBook(null)}>Close</Button></div>
+</Drawer>
+```
 
 ## Laying them out
 
