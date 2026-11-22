@@ -125,7 +125,8 @@ Every applet's frame, and every embed's, gets the look in four steps, each over 
 2. **The base** (`@layer parachute.base`, `src/kit/base.css`): plain HTML drawn in the theme. Titles in the serif on
    the type scale, the sans for the rest, links in the accent; a bare `<button>`, `<input>`, `<select>`, `<textarea>`,
    `<table>`, `<blockquote>` or `<pre>` drawn as the kit draws them. An applet's frame is also a page: what it draws
-   sits in the kit's column and margins (an embed's frame is not: it is sized to what it draws). An applet with no CSS
+   sits in the kit's column and margins (an embed's frame is not, nor a page with embeds: each is sized to what it
+   draws, inside the shell's margins). An applet with no CSS
    of its own looks like the rest of Parachute.
 3. **The parts** (`@layer parachute.parts`, `src/kit/parts.css`, with the note renderer's sheet beside it): the
    `pa-` classes the kit's parts are drawn with. An HTML applet can use them too, for example
@@ -135,7 +136,7 @@ Every applet's frame, and every embed's, gets the look in four steps, each over 
    renderer's few `!important` rules hold against it). `button { border-radius: 4px }` changes every button in the
    applet, the kit's included. Write it on the variables and it still follows the theme.
 
-To draw edge to edge (a map, a canvas, a board), give the page back: `body { padding: 0 }`. To change a token for your
+To draw edge to edge (a map, a canvas, a board), give the page back: `html, body { padding: 0 }`. To change a token for your
 applet only, set it on `body` or on your own wrapper (`body { --accent: #8a5a2b; }`), not on `:root`: the app sets
 the theme's values on the root itself, and sets them again when the theme changes. To add styles a later rule of yours
 can still override at low weight, put them in a layer of your own (`@layer mine { … }`): a layer declared after the

@@ -8,6 +8,7 @@ pub mod approve;
 mod cards;
 pub mod door;
 mod files;
+mod updates;
 pub mod key;
 pub mod keyring;
 pub mod levels;
@@ -132,6 +133,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_version,
             webview_runtime,
+            updates::update_feed,
             files::open_link,
             files::save_file,
             saved::saved_get,

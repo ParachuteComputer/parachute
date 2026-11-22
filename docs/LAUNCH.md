@@ -38,13 +38,22 @@ with no Gatekeeper step, and a stable signature ends the Keychain question after
 
 ## 3. An update channel
 
-**Now:** none. People download each release by hand.
+**Now:** a build made with `PARACHUTE_UPDATE_FEED` (the address of a `latest.json` beside the builds) reads it at
+start, when it comes back to the front (at most every six hours) and when Settings opens, and offers a newer build:
+one line above the bar ("A newer Parachute is ready", **Download**, **Later**) and Settings → Updates. Download opens
+the file in the system's browser; the system installs it. On Android that is the trust: an APK installs over Parachute
+only when it is signed with the same key. The feed names files on its own origin only, and nothing from a vault or an
+applet can change where a build looks (src-tauri/src/updates.rs, src/shell/updates.ts). `scripts/update-feed.sh`
+writes the feed, last, after the files are in place. A build's identity is its commit and that commit's time; the time
+is also the Android version code, so each build of next installs over the one before. Mac builds of next get the feed
+from the repository secret `PARACHUTE_UPDATE_FEED` (none: no updates offered). Builds without a feed offer nothing.
 
-**Recommendation:** on the Mac (and later Windows and Linux), Tauri's updater plugin, reading a signed `latest.json`
-that the release workflow attaches to each GitHub release; its signing key is one more secret
+**Recommendation for launch:** on the Mac (and later Windows and Linux), Tauri's updater plugin, reading a signed
+`latest.json` that the release workflow attaches to each GitHub release; its signing key is one more secret
 (`TAURI_SIGNING_PRIVATE_KEY`). It should wait for notarisation, so an update doesn't bring back the Gatekeeper step. On
-Android, Google Play once the app is there. Until then, testers can point Obtainium at this repository's releases: it
-installs and updates the APK straight from them.
+Android, Google Play once the app is there. The feed above is for builds made by hand or from next (the release
+workflow passes none, and GitHub's release downloads answer with a redirect, which the app doesn't follow); until
+then testers can point Obtainium at this repository's releases.
 
 ## 4. Crash reporting
 
