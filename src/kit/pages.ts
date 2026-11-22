@@ -104,7 +104,7 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
     }
     const was = at;
     // asked for while hidden (shown again: toStart): that page, whatever scroll the browser kept for the hidden book
-    const to = pending ? (opts.start === "last" ? spreads() - 1 : Math.min(at, spreads() - 1))
+    const to = pending ? (opts.start === "last" ? spreads() - 1 : 0)
       : follow && (!touched || was >= Math.ceil(before / per) - 1) ? spreads() - 1 : Math.min(anim ? at : here(), spreads() - 1);
     pending = false;
     // a glide on its way goes on to where it was going; a finger on the book keeps it; else the book is set where it is

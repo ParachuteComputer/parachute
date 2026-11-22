@@ -419,7 +419,8 @@ the kit (`src/kit/links.test.ts` checks it): no `<a>` of their own, no `app.open
 
 An applet looks like the rest of Parachute without any CSS of its own. Three steps, in this order:
 
-1. **Draw it with the parts.** `Page` is the screen (its title, width and margins). `List` holds rows, `Card` a block
+1. **Draw it with the parts.** `Page` is the screen: its title in the hour's sky, its width and margins, and its
+   pages, which the person turns ([LOOK.md](LOOK.md)); a line to write in goes under them (`Write dock`). `List` holds rows, `Card` a block
    that stands apart, `Field`, `Search` and `Write` take words, `Button` acts (one `primary` on a screen), `Tabs`
    switch places, `Table` and `Fields` show records, `Empty`, `Loading` and `Problem` say what state it is in,
    `Drawer` holds a detail or a short form, and `toast` says what an action did. Each part follows the person's
@@ -431,7 +432,7 @@ An applet looks like the rest of Parachute without any CSS of its own. Three ste
 3. **Your own CSS only for what is yours** (a board, a chart, a grid of days), written on the tokens, never on fixed
    values: colours `var(--text)`, `var(--muted)`, `var(--line)`, `var(--accent)`, `var(--surface)`; space
    `var(--pad)` and `var(--gap)`; rules `var(--line-row)` and `var(--line-head)`; corners `var(--radius-card)`,
-   `var(--radius-field)`; type `var(--fs-title)` … `var(--fs-label)` in `var(--serif)` or `var(--sans)`. A fixed
+   `var(--radius-field)`; type `var(--fs-display)` … `var(--fs-label)` in `var(--display)`, `var(--serif)` or `var(--sans)`. A fixed
    colour or size breaks in dark mode and on an e-paper screen. The tokens: [THEME.md](THEME.md#in-an-applet).
    What you write wins over the kit's own rules ([THEME.md](THEME.md#the-order-of-styles)).
 
@@ -439,12 +440,14 @@ Before you hand it over, check it the way a person sees it:
 
 - One title (the `Page`'s, the applet's own name), and the content starts at the top of the screen: no empty hero, no
   big gaps.
-- One main action, as `kind="primary"`; the rest plain or quiet.
+- One main action, as `kind="primary"` (it is the coral on the screen); the rest plain or quiet.
+- Pages, not a scroll: the `Page` turns by itself; what the person writes in is a `Write dock`, so writing never
+  turns the page; a long form or something drawn edge to edge is a `<Page scroll>`. Motion of your own asks `still()`.
 - Rows, not boxes: a `List` for things of a kind; a `Card` only for a block that stands apart.
 - Every state has words: `Loading` while reading, `Empty` with what to do next, `Problem` with Try again, a `toast`
   after an action.
-- It works at 390 px (a phone) and 1600 px (a computer): `Page` holds the width; `wide` lets a board grow on a
-  computer, and `pa-grid` makes its columns.
+- It works at 390 px (a phone) and 1600 px (a computer): `Page` holds the width and is an open book of two pages on
+  a computer; `wide` lets a board grow there instead (and scrolls), and `pa-grid` makes its columns.
 - No fixed colour, size or font anywhere: it reads in light, in dark and on the Daylight's black and white.
 
 ## A worked example
