@@ -4,8 +4,9 @@ import type { Note } from "@openparachute/surface-client";
 import { isCodeExtension } from "../applet/code";
 
 /** A journal entry's path, as Journal (and the Uni app) files it: Journal/2026/11-21/07-15 Walked to the bakery (or
- *  under Notes/, as the Uni app once did); the seconds when the minute was taken (07-15-42). */
-const JOURNAL_ENTRY = /^(?:Journal|Notes)\/\d{4}\/\d{2}-\d{2}\/(\d{2})-(\d{2})(?:-\d{2})? ([^/]+)$/;
+ *  under Notes/, as the Uni app once did); the seconds when the minute was taken (07-15-42), and a number when that
+ *  second was too (07-15-42-2). */
+const JOURNAL_ENTRY = /^(?:Journal|Notes)\/\d{4}\/\d{2}-\d{2}\/(\d{2})-(\d{2})(?:-\d{2}(?:-\d+)?)? ([^/]+)$/;
 /** The last segment of the note's path, without an extension (a journal entry's without its time: the folder and the
  *  list say when); else its id. */
 export function titleOf(n: Pick<Note, "id" | "path">): string {
