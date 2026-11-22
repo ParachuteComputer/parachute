@@ -218,6 +218,8 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
   // the count again when the screen or what is on it changes (a list arrives, a line is added, the faces load)
   const ro = typeof ResizeObserver === "function" ? new ResizeObserver(soon) : null;
   ro?.observe(book.parentElement ?? book);
+  // the book itself: it shrinks when what sits under it grows (a docked line wrapping to two or three lines)
+  if (book.parentElement) ro?.observe(book);
   // what grows without the DOM changing: a picture or a video arriving, a fold opened
   for (const ev of ["load", "error", "loadedmetadata", "toggle"]) flow.addEventListener(ev, soon, true);
   const mo = new MutationObserver(soon);

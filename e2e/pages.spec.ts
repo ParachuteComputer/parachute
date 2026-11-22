@@ -119,6 +119,23 @@ test("writing never turns the page: the line sits under the pages, and a line ad
   }
 });
 
+test("a line that grows as you write shrinks the pages, and the count follows: the last of the place stays reachable", async ({ page }) => {
+  const { app, inner } = await openLeaves(page);
+  /** the count shown, and the pages the place really takes (the column its end falls in) */
+  const geo = () => inner.evaluate(() => {
+    const flow = document.querySelector<HTMLElement>(".pa-flow")!, end = flow.querySelector<HTMLElement>(":scope > .pa-end")!;
+    const w = document.querySelector<HTMLElement>(".pa-mark")!.offsetWidth;
+    return { shown: Number(/of (\d+)/.exec(document.querySelector(".pa-at")!.textContent ?? "")?.[1] ?? 0), need: Math.floor((end.getBoundingClientRect().left - flow.getBoundingClientRect().left) / w) + 1, h: document.querySelector<HTMLElement>(".pa-book")!.clientHeight };
+  });
+  const g0 = await geo();
+  expect(g0.shown).toBe(g0.need);
+  await app.getByLabel("A new leaf").fill("a long line that wraps ".repeat(30));
+  // the line grew and the book shrank by it: the place takes more pages than before
+  await expect.poll(async () => (await geo()).h).toBeLessThan(g0.h - 30);
+  await expect.poll(async () => (await geo()).need).toBeGreaterThan(g0.need);
+  await expect.poll(async () => { const g = await geo(); return g.shown === g.need; }).toBe(true);
+});
+
 test("a place that opens on its first page does, each time it is shown again", async ({ page }) => {
   const { app, inner } = await openLeaves(page);
   await app.getByRole("button", { name: "Next page" }).click();
