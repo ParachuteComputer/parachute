@@ -5,7 +5,7 @@ import ViewerLine from "./ViewerLine";
 import type { Note } from "@openparachute/surface-client";
 import { Bar } from "../../ui/Bar";
 import { useApplets, useHome, useHomeLoaded, useVault, useVaultQuery } from "../data";
-import { entryTime, folderOf, isAppOwn, noteHref, titleOf } from "../../vault/notes";
+import { entryTime, folderOf, isHousekeeping, noteHref, titleOf } from "../../vault/notes";
 import NoVault from "./NoVault";
 import NoteRows from "./NoteRows";
 import { Loading, Problem, Search } from "../../kit/screen";
@@ -41,8 +41,9 @@ function VaultVisit() {
     ? c.queryNotes({ search: term, limit: LIMIT })
     : c.queryNotes({ orderBy: "updated_at", sort: "desc", limit: LIMIT })), [term]);
   const applets = useApplets(rec?.key);
-  // what the person wrote: the app's own records (its settings, approvals, saved views) stay in Vault's "Parachute's own"
-  const mine = load.state === "ok" ? load.data.filter((n) => !isAppOwn(n as Note & { extension?: string })) : [];
+  // the person's notes and applets: the records the app keeps for itself (its settings, approvals, saved views) stay in
+  // Vault's "Parachute's own"
+  const mine = load.state === "ok" ? load.data.filter((n) => !isHousekeeping(n)) : [];
   if (!rec) return <NoVault />;
   if (!homeRead || toViewer) return <main className="screen"><Bar title={rec.vault} back={true} /><Loading>Opening…</Loading></main>;
   return (

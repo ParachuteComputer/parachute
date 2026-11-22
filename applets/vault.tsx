@@ -499,6 +499,9 @@ type PeopleNow = { people: { key: string; name: string | null; role: string }[];
   | { people: null; why: "no_key" | "not_owner" | "no_hub" | "unknown_key" };
 const roleWords = (role: string) => (role === "member" ? "reads and changes everything" : role === "read" ? "reads everything" : "runs this vault with you");
 const shortKey = (k: string) => `${k.slice(0, 8)}…`;
+/** A person's key, for telling two people with no name apart: under Details, never the row's own words. */
+const keyDetails = (k: string | null | undefined) => (k ? <details className="key"><summary>Details</summary>Their key: {shortKey(k)}</details> : null);
+const UNNAMED = "Someone with no name yet";
 /** A name as the hub takes one: 1 to 40 characters, not "You"; said in a toast otherwise. */
 const nameOk = (x: string) => {
   const ok = [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !/^you$/i.test(x.trim()) && !/(?![\u200c\u200d])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(x);
@@ -633,13 +636,13 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const personRows = [
     ...hubPeople.filter((r) => !gone(r.member!.key ?? r.id)).map((r) => {
       const mine = np?.people.find((p) => p.key === r.member!.key);
-      const name = mine ? (mine.name ?? `A key (${shortKey(mine.key)})`) : r.name;
-      return { key: r.id, title: name, meta: `${roleWords(r.member!.role)}${r.member!.key ? ` · key ${shortKey(r.member!.key)}` : ""}${used(r)}`, aside: endButton(name, () => void end(r, name)) };
+      const name = mine ? (mine.name ?? UNNAMED) : r.name;
+      return { key: r.id, title: name, meta: <>{`${roleWords(r.member!.role)}${used(r)}`}{keyDetails(r.member!.key)}</>, aside: endButton(name, () => void end(r, name)) };
     }),
     ...(fromHub ? [] : np?.people ?? []).filter((p) => !gone(p.key)).map((p) => {
-      const name = p.name ?? `A key (${shortKey(p.key)})`;
+      const name = p.name ?? UNNAMED;
       const vault = v.key;
-      return { key: p.key, title: name, meta: roleWords(p.role), aside: endButton(name, () => void (vaults as any).end(vault, p.key).then((r: { ended?: boolean }) => {
+      return { key: p.key, title: name, meta: <>{roleWords(p.role)}{p.name ? null : keyDetails(p.key)}</>, aside: endButton(name, () => void (vaults as any).end(vault, p.key).then((r: { ended?: boolean }) => {
         didEnd({ key: p.key, group: "people", title: name }, vault);
         toast(r?.ended === false ? "Already ended." : `${p.name ? `${p.name}'s` : "Their"} access is ended.`);
         return Promise.all([reach.load(), people.load()]);

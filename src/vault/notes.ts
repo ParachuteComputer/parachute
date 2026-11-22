@@ -71,14 +71,18 @@ export function folderOf(n: Pick<Note, "path">): string {
 export const isCodeNote = (n: { path?: string | null; tags?: readonly string[] | null; extension?: string | null }) =>
   isCodeExtension(n) || (n.tags ?? []).includes("applet");
 
-/** Notes that are the app's own: an applet's or a component's code, anything carrying one of the app's own tags
- *  (`parachute-…`: its settings, bundle, frame, theme, approvals, keys, receipts, saved views and pointer records), and
- *  what sits in its folders (`Parachute/…`, the vault's system space `.parachute/`). Never among what the person wrote
- *  lately (the launcher, `app.recent`, Vault's Lately and search). A person's own note under `Parachute/From/` (where
- *  the pointers to another Parachute's things live) is theirs, and shows. */
-export const isAppOwn = (n: { path?: string | null; tags?: readonly string[] | null; extension?: string | null }) =>
-  isCodeExtension(n) || (n.tags ?? []).some((t) => t === "applet" || t.startsWith("applet/") || t === "component" || t.startsWith("component/") || t === POINTER_TAG || /^parachute-/i.test(t))
+/** The records the app keeps for itself: anything carrying one of its own tags (`parachute-…`: its settings, bundle,
+ *  frame, theme, approvals, keys, receipts, saved views and pointer records), and what sits in its folders
+ *  (`Parachute/…`, the vault's system space `.parachute/`). A person's own note under `Parachute/From/` (where the
+ *  pointers to another Parachute's things live) is theirs, and shows. */
+export const isHousekeeping = (n: { path?: string | null; tags?: readonly string[] | null }) =>
+  (n.tags ?? []).some((t) => t === POINTER_TAG || /^parachute-/i.test(t))
   || /^\.parachute\//i.test(n.path ?? "") || (/^parachute\//i.test(n.path ?? "") && !/^parachute\/from\//i.test(n.path ?? ""));
+
+/** Notes that are the app's own: its housekeeping, and an applet's or a component's code. Never among what the person
+ *  wrote lately (the launcher, `app.recent`, Vault's Lately and search). */
+export const isAppOwn = (n: { path?: string | null; tags?: readonly string[] | null; extension?: string | null }) =>
+  isCodeExtension(n) || (n.tags ?? []).some((t) => t === "applet" || t.startsWith("applet/") || t === "component" || t.startsWith("component/")) || isHousekeeping(n);
 
 /** The app's own address for a note in a vault. */
 export const noteHref = (vaultKey: string, idOrPath: string) => `/v/${encodeURIComponent(vaultKey)}/n/${encodeURIComponent(idOrPath)}`;

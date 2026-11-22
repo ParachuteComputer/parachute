@@ -4,7 +4,7 @@
 // Mail on a small fake gateway, Calendar on the fake door). The walk visits Home, the vault list, a vault, a type, a
 // record and its history, Changes, Sharing, Settings, Rooms, Mail, Journal, Calendar and an applet's Allow card, at a
 // phone's width and a computer's, and fails on a ULID, an address with a port, a run of 16 or more hex digits, a
-// `Parachute/` path or a raw scope in any text on screen outside a Details tap (<details>).
+// `Parachute/` path, a raw scope or a piece of a key (`fd3fd141…`, `npub1…`) in any text on screen outside a Details tap (<details>).
 // PLAIN_SHOTS=<dir>: also a picture of each screen, light, dark and Daylight (the before and after shots of T-476).
 import { createServer } from "node:http";
 import { appendFileSync, mkdirSync } from "node:fs";
@@ -25,6 +25,7 @@ const MACHINE: [string, RegExp][] = [
   ["a run of hex", /\b[0-9a-f]{16,}\b/gi],
   ["a Parachute/ path", /(?<![\w.])\.?Parachute\/\S*/gi],
   ["a raw scope", /\bvault:[\w-]+:(?:read|write|admin)\b/gi],
+  ["a piece of a key", /\b[0-9a-f]{6,}…|\bnpub1[02-9ac-hj-np-z]{6,}/gi],
 ];
 /** Every machine word in `text`, with a little of what is around it. */
 export function machineWords(text: string): string[] {
@@ -144,8 +145,10 @@ test.beforeAll(async () => {
   const admin = { ...hubState(), token: mintToken(`vault:${VAULT}:admin`) };
   const made = async (path: string, rest: Record<string, unknown>) => { const r = await api(w, "POST", "notes", { path, ...rest }); undo.push(() => api(w, "DELETE", `notes/${r.id}`).catch(() => {})); return r.id as string; };
   // the person's own: books (a type with fields), journal lines, notes, and a record an AI wrote with no title (its path is its id)
+  const hadBook = ((await api(admin, "GET", "types")) as { name: string }[]).some((t) => t.name === "book");
   await api(admin, "PUT", "types/book", { fields: { author: { type: "string" }, status: { type: "string", enum: ["reading", "want", "done"] } } }).catch(() => {});
   const ids: Record<string, string> = {};
+  if (!hadBook) undo.push(() => api(admin, "DELETE", "types/book").catch(() => {}));
   for (const [t, a, s] of [["The Overstory", "Richard Powers", "reading"], ["A Pattern Language", "Christopher Alexander", "want"], ["Gilead", "Marilynne Robinson", "done"]]) {
     const r = await record(w, "create", { path: `Books/${t}`, body: "", tags: ["book"], fields: { author: a, status: s } });
     undo.push(() => api(w, "DELETE", `notes/${r.id}`).catch(() => {}));
@@ -160,6 +163,8 @@ test.beforeAll(async () => {
   for (const ulid of ["01KQ7Z4A1B2C3D4E5F6G7H8J9K", "01KQ7Z4A1B2C3D4E5F6G7H8J9M"]) await made(`Parachute/Approvals/${host}/${VAULT}/${ulid}`, { content: "{}", tags: ["parachute-approval"], metadata: { approval: { v: 1 } } });
   await made("Parachute/Views/book/Reading now", { content: "", tags: ["parachute-view"], metadata: { view: { contract: 1, layout: "list", sort: null, where: [{ field: "status", op: "eq", value: "reading" }], group: null } } });
   await made("Parachute/Receipts/kitchen", { content: "", tags: ["parachute-receipt"] });
+  // the person's own theme (the look they have now, kept in the home): Settings says where it is kept
+  if (!((await api(w, "GET", "notes?tag=parachute-theme")) as unknown[]).length) await made("Parachute/Theme", { content: "", tags: ["parachute-theme"], metadata: { theme: { look: "paper" } } });
   // someone the vault is shared with by their key alone (no name): Sharing shows them without the key
   const friend = getPublicKey(generateSecretKey());
   await account(hubState(), "grant-access", { pubkey: friend, vault: VAULT, role: "read" });
@@ -208,6 +213,9 @@ const STOPS: Stop[] = [
   { name: "applets", go: async (p) => { await p.goto("/"); await see(p, "Applets"); await p.waitForTimeout(1500); } },
   { name: "vault list", go: async (p) => { await p.goto(official("vault")); await see(p, /Your vaults|Types/); const back = vaultApplet(p).getByRole("button", { name: /Your vaults/ }).first(); if (await back.isVisible().catch(() => false)) await back.click(); await see(p, "letters"); } },
   { name: "vault", go: async (p) => { await vaultApplet(p).getByRole("button", { name: new RegExp(`^${VAULT}`) }).first().click(); await see(p, "Lately"); } },
+  // the app's own records: out of Lately, a tap away under Parachute's own, by plain names
+  { name: "parachute's own", go: async (p) => { await vaultApplet(p).getByRole("button", { name: "Parachute's own" }).click(); await see(p, "Approval"); await expect(vaultApplet(p).getByRole("region", { name: "Parachute's own" })).toContainText("Approval"); } },
+  { name: "vault, Lately again", go: async (p) => { await vaultApplet(p).getByRole("button", { name: "Parachute's own" }).click(); await see(p, "Lately"); await expect(vaultApplet(p).getByRole("region", { name: "Lately" })).not.toContainText("Approval"); } },
   { name: "vault search", go: async (p) => { await vaultApplet(p).getByRole("searchbox").first().fill("roof"); await see(p, "Found"); } },
   { name: "type", go: async (p) => { await vaultApplet(p).getByRole("searchbox").first().fill(""); await vaultApplet(p).locator('[data-type="book"]').click(); await see(p, "The Overstory"); } },
   { name: "record and its history", go: async (p) => { await p.goto(official("vault", `?vault=${VAULT}&record=${world.ids.untitled}`)); await see(p, "History"); } },

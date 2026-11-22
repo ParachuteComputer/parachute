@@ -88,7 +88,8 @@ export function createStore() {
 }
 export type Store = ReturnType<typeof createStore>;
 
-export const nameOf = (st: Store["s"], pk: string) => st.names.get(pk) ?? `${pk.slice(0, 8)}…`;
+/** A person as the room says them: the name they gave, else "Someone" (never a piece of their key). */
+export const nameOf = (st: Store["s"], pk: string) => st.names.get(pk) ?? "Someone";
 /** A message's text as it is now: its author's latest edit. */
 export const textOf = (st: Store["s"], e: Ev) => { const ed = st.edits.get(e.id); return ed && ed.pubkey === e.pubkey ? ed.content : e.content; };
 export const visible = (st: Store["s"], e: Ev) => !st.removed.has(e.id) && !st.gone.get(e.id)?.has(e.pubkey);
@@ -525,7 +526,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
         if (!on) return;
         const newestOf = (k: number) => (meta as Ev[]).filter((e) => e.kind === k).sort((a, b) => b.created_at - a.created_at)[0];
         const m0 = newestOf(39000), m2 = newestOf(39002);
-        if (m0) setName(tag(m0, "name") || room.slice(0, 8));
+        if (m0) setName(tag(m0, "name") || "A room with no name");
         if (m2) setMembers(tags(m2, "p"));
         (got as Ev[]).forEach(st.add);
         // the message it opens at, when it is older than what was read
@@ -845,7 +846,8 @@ function SealedCard({ e }: { e: Ev }) {
   };
   if (view.refused && view.trust) return <div className="card" role="group" aria-label="Uni's card">
     <p>◆ Uni's card · {view.refused}</p>
-    <p className="why">Uni's key ({view.trust.slice(0, 8)}…{view.trust.slice(-4)}) is the one this applet names for approvals. Trust it once on this device, and its cards here can be answered.</p>
+    <p className="why">Uni's key is the one this applet names for approvals. Trust it once on this device, and its cards here can be answered.</p>
+    <details className="why"><summary>Details</summary>Uni's key: {view.trust.slice(0, 8)}…{view.trust.slice(-4)}</details>
     <div className="btns"><Button kind="primary" small busy={busy} onClick={trust}>Trust Uni's key…</Button></div>
     {err && <Problem>{err}</Problem>}
   </div>;

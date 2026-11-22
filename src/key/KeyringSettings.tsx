@@ -53,12 +53,12 @@ export default function KeyringSettings({ cards }: { cards: boolean }) {
           </div>
         </div> : <button type="button" className="quiet-button" onClick={() => setRemoving(true)}>Use the everyday key again</button>}
       </div>}
-      <p className="small quiet">Sealing key (compare it with the one your agent shows): <code>{k.seal_pub.slice(0, 16)}…</code></p>
+      <details className="small quiet"><summary>Details</summary>Sealing key (compare it with the one your agent shows): <code>{k.seal_pub.slice(0, 16)}…</code></details>
 
       <h3>Trusted for approvals</h3>
       <p className="small">Only these keys can ask this device for an approval or a secret, whatever an applet says.</p>
       {k.approvers.length ? <ul className="plain">{k.approvers.map((a) => <li key={a.pubkey} className="row-buttons">
-        <span><strong>{a.name}</strong> <code className="quiet">{a.pubkey.slice(0, 12)}…</code></span>
+        <span><strong>{a.name}</strong> <details className="quiet small"><summary>Details</summary>Its key: <code>{a.pubkey.slice(0, 12)}…</code></details></span>
         <button type="button" className="quiet-button" onClick={() => run(() => invoke("approvers_remove", { pubkey: a.pubkey }))}>Stop trusting</button>
       </li>)}</ul> : <p className="quiet">None yet.</p>}
       <form className="row-buttons" onSubmit={(e) => { e.preventDefault(); run(() => invoke("approvers_add", { name, key: npub }).then(() => { setName(""); setNpub(""); })); }}>
