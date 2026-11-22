@@ -54,7 +54,9 @@ export function useOpenWith(v: FrameVault | null, noteId: string | undefined, fr
       if (asked) return;
       asked = true;
       void Promise.all([call("vault.note", { vault: v.key, id: noteId }), call("vault.roles", { vault: v.key }).catch(() => null), readApplets(v.key, fresh !== false)])
-        .then(([note, roles, applets]) => live && setRead({ at, note, roles, applets }), (e: unknown) => live && setRead({ at, error: e instanceof Error ? e.message : "the vault couldn't be read" }));
+        .then(([note, roles, applets]) => live && setRead({ at, note, roles, applets }),
+          // read again on show and failed (offline a moment): what was drawn stays
+          (e: unknown) => live && setRead((r) => (quiet && r && "note" in r && r.at === at ? r : { at, error: e instanceof Error ? e.message : "the vault couldn't be read" })));
     };
     askHub.current = now;
     if (fresh !== "copy-first" || quiet) { now(); return () => { live = false; }; }

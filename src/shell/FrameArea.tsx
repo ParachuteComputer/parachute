@@ -24,7 +24,7 @@ export function KeptFrame({ shown }: { shown: boolean }) {
   return <div className="kept-frame" hidden={!shown}><FrameArea shown={shown} /></div>;
 }
 
-export default function FrameArea({ shown = true }: { shown?: boolean }) {
+export default function FrameArea({ shown }: { shown: boolean }) {
   const { choice, linkOut, writeAsk } = useFrameSource();
   const [code, setCode] = useState<Code | null>(null);
   // the person's frame, settings and theme notes, read again each time the frame area is shown (the theme is also
@@ -44,7 +44,7 @@ export default function FrameArea({ shown = true }: { shown?: boolean }) {
   // hidden, no new frame is made: one booted behind a shell screen would read that screen's address (its document's
   // base URL is the shell's, at boot). The frame that ran stays until the area is shown; then the new one starts
   const last = useRef<Code | null>(null);
-  if (shown) last.current = now;
+  if (shown) last.current = "card" in choice ? null : now;
   const ready = shown ? now : last.current;
   // a frame from a vault is marked while it is shown in the foreground, and unmarked when it is left, hidden or closed
   // (a page it hangs can't do that): if it hangs the app, the next start knows

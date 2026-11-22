@@ -62,3 +62,4 @@ describe("open with, decided from the copies", () => {
     expect(result.current.state === "ok" && result.current.cands.map((c) => c.entry.noteId)).toEqual(["a1"]);
   });
 });
+

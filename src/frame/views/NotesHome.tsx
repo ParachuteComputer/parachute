@@ -40,7 +40,14 @@ function useNotes(vaults: FrameVault[], term: string): { rows: Row[]; unread: st
     const unread: string[] = [];
     void inTurns(vaults, AT_ONCE, (v) => readerFor(v).queryNotes(term ? { search: term, limit: PER_VAULT } : { orderBy: "updated_at", sort: "desc", limit: PER_VAULT })
       .then((ns) => ns.filter((n) => !isAppOwn(n)).map((n) => ({ v, n })), () => { unread.push(v.vault); return [] as Row[]; }))
-      .then((per) => { if (live) setRows({ rows: per.flat().sort((a, b) => updated(b.n).localeCompare(updated(a.n))).slice(0, SHOWN), unread }); });
+      .then((per) => {
+        if (!live) return;
+        // read again on show: a vault that couldn't be read this time keeps the rows it had
+        setRows((was) => {
+          const kept = was ? was.rows.filter((r) => unread.includes(r.v.vault)) : [];
+          return { rows: [...per.flat(), ...kept].sort((a, b) => updated(b.n).localeCompare(updated(a.n))).slice(0, SHOWN), unread };
+        });
+      });
     return () => { live = false; };
   }, [keys, term, again]); // eslint-disable-line react-hooks/exhaustive-deps
   return rows;

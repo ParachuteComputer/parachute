@@ -252,7 +252,7 @@ const tapIn = (frame: () => HTMLIFrameElement | null) => () => {
 };
 
 /** `from`: a frame of the person's (from their vault) asks the shell before it opens an address outside the app. */
-export function shellDeps(go: (to: string, replace: boolean) => void, frame: () => HTMLIFrameElement | null, from: "built-in" | "vault" = "built-in", shown: () => boolean = () => true): HostDeps {
+export function shellDeps(go: (to: string, replace: boolean) => void, frame: () => HTMLIFrameElement | null, from: "built-in" | "vault", shown: () => boolean): HostDeps {
   return {
     shown,
     vaults: listVaults,

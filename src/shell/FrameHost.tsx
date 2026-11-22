@@ -25,7 +25,7 @@ import { onFresh } from "../vault/readCache";
 /** How long a frame from a vault has to say it is listening before the built-in one takes its place. */
 const WATCHDOG_MS = 10_000;
 
-export default function FrameHost({ js, from, onFailed, shown: visible = true }: { js: string; from: "built-in" | "vault"; onFailed: (why: string, persist: boolean) => void; shown?: boolean }) {
+export default function FrameHost({ js, from, onFailed, shown: visible }: { js: string; from: "built-in" | "vault"; onFailed: (why: string, persist: boolean) => void; shown: boolean }) {
   const shownRef = useRef(visible);
   shownRef.current = visible;
   // the look as it is when the frame starts; each later change is a `theme` event

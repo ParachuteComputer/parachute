@@ -101,7 +101,8 @@ export function useApplets(vault: string | undefined, fresh = true): FrameApplet
 const defaults = new Map<string, Record<string, string>>();
 const defaultSubs = new Set<() => void>();
 async function readDefaults(vault: string) {
-  defaults.set(vault, await call("defaults.get", { vault }).catch(() => ({})));
+  // a failed read keeps the choices read before (it is asked again each time the frame shows)
+  defaults.set(vault, await call("defaults.get", { vault }).catch(() => defaults.get(vault) ?? {}));
   defaultSubs.forEach((f) => f());
 }
 on("changed", ({ what }) => { if (what === "defaults") for (const k of defaults.keys()) void readDefaults(k); });
@@ -144,7 +145,9 @@ export const bringIn = (vault: string, noteId: string) => call("home.bringIn", {
 const components = new Map<string, FrameComponents>();
 const componentSubs = new Set<() => void>();
 async function readComponents(vault: string) {
-  components.set(vault, await call("components.list", { vault }).catch((e: unknown): FrameComponents => ({ ok: false, error: String(e) })));
+  const got = await call("components.list", { vault }).catch((e: unknown): FrameComponents => ({ ok: false, error: String(e) }));
+  // a failed read keeps a good list read before
+  if (got.ok || !components.get(vault)?.ok) components.set(vault, got);
   componentSubs.forEach((f) => f());
 }
 on("changed", ({ what }) => { if (what === "applets") for (const k of components.keys()) void readComponents(k); });
