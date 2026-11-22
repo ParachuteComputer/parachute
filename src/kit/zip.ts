@@ -2,9 +2,11 @@
 // deflated entries (the two every exporter writes); deflate through the platform's own DecompressionStream, so no
 // library comes with it. A zip at the top of the zip (Notion puts its export in "Export-…-Part-1.zip") is opened too,
 // its files taking the place of the inner zip; a zip deeper in is an attachment, and stays one. Limits keep a hostile
-// file from filling memory or the clock, counted across the zip and every zip in it: at most MAX_FILES files, MAX_TOTAL
-// bytes of files and MAX_TOTAL of the zips at its top (each entry costing the larger of what it reads and makes), each
-// entry stopped as soon as it passes the size it claims, and one name only once. Entries the caller
+// file from filling memory or the clock, counted across the zip and every zip in it: at most MAX_FILES files with names
+// of 1 KB at most, MAX_TOTAL bytes of files and MAX_TOTAL of the zips at its top (each entry costing the larger of what
+// it reads and makes), each entry stopped as soon as it passes the size it claims, and one name only once. What it
+// holds at most: the file picked, MAX_TOTAL of files (the export's pages: the rest are names only), and one inner zip
+// while it is read. Entries the caller
 // doesn't `want` are listed by name with no bytes, never unpacked (an export's images, when only its pages are read).
 
 export type ZipFiles = Map<string, Uint8Array>;
@@ -40,7 +42,7 @@ function directory(b: Uint8Array): { at: number; count: number } {
 }
 
 export type ZipOptions = { want?: (path: string) => boolean; /** bytes once unpacked (MAX_TOTAL) */ max?: number };
-/** `bytes`: files unpacked; `inner`: the zips at the top, unpacked to be opened, never given back. */
+/** `bytes`: files unpacked; `inner`: the zips at the top, unpacked to be opened (their budget isn't given back). */
 type Budget = { bytes: number; inner: number; files: number };
 
 /** Every file in the zip by its path (folders left out), and the files of a zip at its top, at its place. */
@@ -60,6 +62,8 @@ async function readInto(b: Uint8Array, out: ZipFiles, budget: Budget, opts: ZipO
     if (u32(b, p) !== 0x02014b50) throw new ZipError("The zip's list of files is broken.");
     const flags = u16(b, p + 8), method = u16(b, p + 10), size = u32(b, p + 20), full = u32(b, p + 24);
     const nameLen = u16(b, p + 28), extraLen = u16(b, p + 30), commentLen = u16(b, p + 32), local = u32(b, p + 42);
+    // a name is a few hundred bytes at most (Notion's are short): a long one only fills memory as a key
+    if (nameLen > 1024) throw new ZipError("The zip has a file name over 1 KB.");
     const name = nameOf(b.subarray(p + 46, p + 46 + nameLen));
     p += 46 + nameLen + extraLen + commentLen;
     if (name.endsWith("/")) continue;
@@ -87,6 +91,7 @@ async function readInto(b: Uint8Array, out: ZipFiles, budget: Budget, opts: ZipO
     // unpacked for free
     if (inner) { await readInto(file, out, budget, opts, 1); continue; }
     if (out.has(path)) throw new ZipError(`The zip has ${path} twice.`);
-    out.set(path, file);
+    // a file of an inner zip is copied out, so the inner zip itself can be let go once it is read
+    out.set(path, depth > 0 && method === 0 ? data.slice() : file);
   }
 }

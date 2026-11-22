@@ -47,6 +47,9 @@ describe("readZip", () => {
     const entries: [string, Uint8Array][] = Array.from({ length: 5 }, (_, i) => [`e${i}.md`, empty]);
     await expect(readZip(zipOfMany(entries, entries.map(() => 0)), { max: 3000 })).rejects.toThrow(/over/);
   });
+  test("a file name over 1 KB is refused: names would fill memory as keys at no cost", async () => {
+    await expect(readZip(zipOfMany([[`${"n".repeat(2000)}.md`, deflateRawSync(Buffer.from("x"))]], [1]))).rejects.toThrow(/over 1 KB/);
+  });
   test("an entry that inflates past the size it claims is refused, not unpacked to the end", async () => {
     const big = deflateRawSync(Buffer.alloc(5_000_000, 97));
     await expect(readZip(zipOf("bomb.md", big, 10))).rejects.toThrow(/bigger than it says/);
