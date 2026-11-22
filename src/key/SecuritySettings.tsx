@@ -81,15 +81,15 @@ export default function SecuritySettings() {
       ))}
       {pending && <form className="row-buttons levels-confirm" onSubmit={(e) => { e.preventDefault(); lower(pending); }}>
         <span className="small"><strong>Less careful: {[pending.idle !== cur.idle ? `Lock after ${idleWords(pending.idle).toLowerCase()}` : null, ...ROWS.filter((r) => pending[r.key] !== cur[r.key]).map((r) => `${r.label}, ${levelWords[pending[r.key]].toLowerCase()}`)].filter(Boolean).join("; ")}.</strong> {status.passcode ? "Your passcode, then your unlock." : "Your unlock."}</span>
-        {status.passcode && <input type="password" aria-label="Your passcode, to make it less careful" placeholder="Passcode" value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" />}
+        {status.passcode && <input className="text-input" type="password" aria-label="Your passcode, to make it less careful" placeholder="Passcode" value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" />}
         <button type="submit" className="primary" disabled={status.passcode && !code}>Change</button>
         <button type="button" className="quiet-button" onClick={() => { setPending(null); setCode(""); }}>Cancel</button>
       </form>}
       <h3>Passcode</h3>
       <p className="small">{status.passcode ? "This device keeps a passcode: your own secret, not the phone's PIN, kept only as a slow hash here." : "A secret of your own, not the phone's PIN, for what you set to Passcode. Kept only as a slow hash on this device."}</p>
       <form className="row-buttons" onSubmit={(e) => { e.preventDefault(); run(async () => { await native.passcodeSet(status.passcode ? old : null, next || null); setOld(""); setNext(""); }, next ? "Passcode kept." : "Passcode removed."); }}>
-        {status.passcode && <input type="password" aria-label="Your passcode now" placeholder="Passcode now" value={old} onChange={(e) => setOld(e.target.value)} autoComplete="off" />}
-        <input type="password" aria-label="New passcode" placeholder={status.passcode ? "New (empty: none)" : "New passcode"} value={next} onChange={(e) => setNext(e.target.value)} autoComplete="off" />
+        {status.passcode && <input className="text-input" type="password" aria-label="Your passcode now" placeholder="Passcode now" value={old} onChange={(e) => setOld(e.target.value)} autoComplete="off" />}
+        <input className="text-input" type="password" aria-label="New passcode" placeholder={status.passcode ? "New (empty: none)" : "New passcode"} value={next} onChange={(e) => setNext(e.target.value)} autoComplete="off" />
         <button type="submit" className="quiet-button" disabled={!status.passcode && next.length < 4}>{status.passcode ? (next ? "Change" : "Remove") : "Set"}</button>
       </form>
       {done && <p className="small" role="status">{done}</p>}

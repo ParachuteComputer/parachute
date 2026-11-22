@@ -44,4 +44,10 @@ describe("when", () => {
     expect(when.path(at(7, 8, 5))).toBe("2026/11-07/08-05");
     expect(when.path(new Date(2026, 10, 7, 8, 5, 9), true)).toBe("2026/11-07/08-05-09");
   });
+  it("a date alone that is today says Today, not midnight's time", () => {
+    const now = new Date(2026, 10, 21, 15, 0);
+    expect(when.short("2026-11-21", now)).toBe("Today");
+    expect(when.short("2026-11-20", now)).toBe("Yesterday");
+    expect(when.short(new Date(2026, 10, 21, 9, 41), now)).not.toBe("Today");
+  });
 });

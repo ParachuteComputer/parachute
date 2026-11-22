@@ -42,7 +42,7 @@ export default function KeyringSettings({ cards }: { cards: boolean }) {
         <p className="small">Give it to your agent outside the chat: copy the enrollment below for <code>sealed enroll</code> on the machine your agent runs on. Not as a message: anything that can post as you could post a fake one.</p>
         {uni ? <div className="row-buttons">
           {k.approvers.length > 1 && <select aria-label="For" value={uni.pubkey} onChange={(e) => setForKey(e.target.value)}>{k.approvers.map((a) => <option key={a.pubkey} value={a.pubkey}>{a.name}</option>)}</select>}
-          <input aria-label={`${uni.name}'s room id`} placeholder={`${uni.name}'s room id`} value={room} onChange={(e) => setRoom(e.target.value.trim())} />
+          <input className="text-input" aria-label={`${uni.name}'s room id`} placeholder={`${uni.name}'s room id`} value={room} onChange={(e) => setRoom(e.target.value.trim())} />
           <button type="button" className="quiet-button" disabled={!room} onClick={() => run(async () => { const ev = await invoke<unknown>("keyring_enrollment", { room, uni: uni.pubkey }); await navigator.clipboard.writeText(JSON.stringify(ev)); setCopied(true); })}>{copied ? "Copied" : `Copy the enrollment for ${uni.name}`}</button>
         </div> : <p className="small quiet">Trust your agent's key below first.</p>}
         {removing ? <div className="stack">
@@ -62,8 +62,8 @@ export default function KeyringSettings({ cards }: { cards: boolean }) {
         <button type="button" className="quiet-button" onClick={() => run(() => invoke("approvers_remove", { pubkey: a.pubkey }))}>Stop trusting</button>
       </li>)}</ul> : <p className="quiet">None yet.</p>}
       <form className="row-buttons" onSubmit={(e) => { e.preventDefault(); run(() => invoke("approvers_add", { name, key: npub }).then(() => { setName(""); setNpub(""); })); }}>
-        <input aria-label="Name" placeholder="Whose key" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
-        <input aria-label="Public key" placeholder="npub1…" value={npub} onChange={(e) => setNpub(e.target.value.trim())} autoCapitalize="off" spellCheck={false} />
+        <input className="text-input" aria-label="Name" placeholder="Whose key" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
+        <input className="text-input" aria-label="Public key" placeholder="npub1…" value={npub} onChange={(e) => setNpub(e.target.value.trim())} autoCapitalize="off" spellCheck={false} />
         <button type="submit" className="quiet-button" disabled={!name.trim() || !npub}>Trust</button>
       </form>
       {error && <p className="error" role="alert">{error}</p>}

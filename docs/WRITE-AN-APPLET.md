@@ -169,14 +169,15 @@ all look and behave as one app and follow the person's theme. Reach for the part
 | take words: a line, a box, a chat's composer | `Field`, `Write` |
 | search | `Search` |
 | switch between places in one screen | `Tabs` |
-| a button | `Button` (`kind="primary"` for the one main action) |
+| a button | `Button` (`kind="primary"` for the one main action; a row's or a card's own action is plain and `small`) |
+| put buttons side by side, or groups in columns | `<div className="pa-actions">`, `<div className="pa-grid">` (with `Page wide` for a board) |
 | record a voice note | `Record`, then `voiceNote` and `useTranscripts` for one the hub transcribes |
 | link to a note, or open one | `Link`, `Linked`, `Note`, `link.open` |
 | keep a draft, or where it was | `useSaved` |
 | colour and size | the theme's CSS variables and the type scale (`--fs-title` … `--fs-label`, [THEME.md](THEME.md)) |
 | move something | nothing, mostly: the parts already arrive, give under a press and rise as sheets. Your own: `transform` and `opacity` on the theme's curves and times (`--ease-out`, `--t-state`, …) |
 
-Your own CSS is for layout (columns, a card of your own) on those variables. What makes a screen feel good, as short
+Your own CSS is for what no part draws (a chart, a calendar grid) on those variables; columns and rows of buttons are `pa-grid` and `pa-actions`. What makes a screen feel good, as short
 rules an agent can check its work against, is in [DESIGN-RULES.md](DESIGN-RULES.md). The applets this repo ships are held to
 this: `src/kit/conformance.ts` fails one that formats a date itself, draws its own list, input, button, error or status
 line, picks its own colour, font or text size, or moves something on times of its own, and says which part to use (`npm test`). Write yours the same way:
@@ -194,9 +195,9 @@ there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below ar
 | `shown()`, `onShown(cb)` | Whether it is on screen, and each change. The app keeps an applet running while the person is elsewhere, so going back to it is instant; hidden, it gets no tap, and anything only a person looking should do (marking a message read) waits for `true`. |
 | `onOpen(cb)` | `cb({ note: { id, path }, screen })` when the person opened a note in it (now, and each time after). |
 | `vault.queryRecords({ pathPrefix, tag, search, limit, includeBody, includeFields })` | Records in folders it may read: `{ id, path, updatedAt }`, and with `tag`, `includeBody` or `includeFields` also `tags` and `fields` (and with `includeBody` the `body`). |
-| `vault.getRecord(idOrPath)` | One record it may read, with its body. |
+| `vault.getRecord(idOrPath)` | One record it may read, with its body and its fields and tags. |
 | `vault.createRecord({ path, body, types?, tags?, fields? })` | A new record, in a folder it may `create` in, with its types, tags and fields: `{ id, path, types, tags, fields, updatedAt }` (`getRecord` for its body). |
-| `vault.updateRecord(id, { if_updated_at, body?, fields?, types?, tags? })` | A change to a record it may `update`, in one call: a new body, fields merged (`null` removes one), and `types` / `tags` as `{ add, remove }`. |
+| `vault.updateRecord(id, { if_updated_at, body?, fields?, types?, tags? })` | A change to a record it may `update`, in one call: a new body, fields merged (`null` removes one), and `types` / `tags` as `{ add, remove }`. `if_updated_at` is required: the record's `updatedAt` as you read it. Resolves the record as saved (`{ id, path, updatedAt, … }`: keep its `updatedAt` for the next change). If someone changed it since, it rejects with an error whose `status` is `409` (`name`: `VaultConflictError`): read it again, and change that. |
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
 | `app.copy(text)` | With `copy`: puts text on the clipboard while the person taps in the applet (up to 2,000 characters). Resolves to whether it went. |
@@ -257,14 +258,14 @@ does. Each takes plain props; a newer prop is only ever added, never changed.
 | `<Link to from? >…</Link>` | One link: a note's address, `<vault>:<ULID>`, `[[target]]` (with `from`, the path of the note it is in) or a web address. See [Links](#links). |
 | `<Linked text web? />` | Plain text with its note links drawn as `Link`s: a message, a mail. With `web`, its other web addresses too (they open only with `links`). |
 | `link (.to, .follow, .open, .parse, .find)` | The links as calls: `await link.to(record)` is the address to write for a note of the applet's vault; `link.follow(target, { from })` opens one on a tap; `link.open(record)` opens a note of its own vault on a tap (a row's `onPress`); `link.parse(text)` says what a link names (or null); `link.find(text)` gives the links in plain text. |
-| `<Days times? counts? days? label? inline? />` | What changed, a day at a time: a column of ink marks per day, weeks set apart, today marked. Give `times` (ISO times, counted by day) or `counts` (oldest first). `days` defaults to 28; `inline` draws it inside a line (a row, a link). |
-| `<List label? hideLabel? rows more? />` | Rows under a label. A row is `{ key?, title, meta?, aside?, glyph?, onPress?, badge?, strong?, current?, under?, label?, data? }`; one with `onPress` is a button. A long list costs little (a row off screen isn't drawn); `more: { label, onPress }` asks for the next page; `hideLabel` says the label to a screen reader only. |
-| `<Card title?>…</Card>` | A raised block with a title. |
+| `<Days times? counts? days? label? inline? />` | What changed, a day at a time: a column of ink marks per day, weeks set apart, today marked. Give `times` (ISO times, counted by day) or `counts` (one number a day, oldest first, today last: `1` and `0` for done or not). It shows; it is not a control. `days` defaults to 28; `inline` draws it inside a line (a row, a link). |
+| `<List label? hideLabel? rows more? />` | Rows under a label. A row is `{ key?, title, meta?, aside?, glyph?, onPress?, badge?, strong?, current?, under?, label?, data? }`: `meta` a line under the title, `aside` a word at the right (a date, a count), `glyph` one character in a mark at the left, `badge` a small count after the title, `strong` bold (what is new), `current` the row open now, `under` words in the accent across the row's foot (what wants the person: `under: "Late"`, not `true`), `label` what a screen reader says for it; one with `onPress` is a button. A long list costs little (a row off screen isn't drawn); `more: { label, onPress }` asks for the next page; `hideLabel` says the label to a screen reader only. |
+| `<Card title?>…</Card>` | A block that stands apart, with a title: a summary, one thing's detail, a choice to make. Buttons in it go in a `<div className="pa-actions">`. Rows of things are a `List`, not cards. |
 | `<Table label columns rows? groups? sort? onSort? more? />` | Records as rows and columns (level 3). `columns` is `[{ key, label, align?, width?, sortable? }]`, a row `{ key, cells: { [column key]: text }, onPress?, current?, label? }`; the first column stays in view as the rest scroll across, a header's tap calls `onSort(key)` (show it with `sort: { by, dir }`), `groups: [{ key, label, count?, rows }]` draws headings, and `more` reads the next page by itself as the foot comes near. A row off screen isn't drawn. |
 | `<Fields label? fields onSave? />` | A record's fields, name and value (level 3). A field is `{ name, label?, kind?, choices?, value, readOnly? }`, `kind` one of `text`, `number`, `yesno`, `choice`, `date`, `list`, `long`; with `onSave(name, value)` each is changed where it stands (a choice, a box for yes or no, a number, a date) and saved on Enter, on leaving it or on the pick, the value typed back by its kind (`""` is `null`). |
-| `<Field label placeholder? action? onAction? value? onChange? clearOnAction? />` | A line to write on, and one action (its button, or Enter). It keeps its own text unless `value` is given, and clears after the action unless `clearOnAction` is false. `onAction` should catch its own errors and show them: a failed action leaves the text as it was. |
+| `<Field label placeholder? action? onAction? value? onChange? clearOnAction? />` | A line to write on, and one action (its button, or Enter): `onAction(text)` gets what was written. It keeps its own text unless `value` is given, and clears after the action unless `clearOnAction` is false. `onAction` should catch its own errors and show them: a failed action leaves the text as it was. |
 | `<Empty>…</Empty>` | What shows when there is nothing yet: a sprig and a line. |
-| `<Page title? kicker? aside? back? onRefresh? wide? className? >…</Page>` | The applet's screen: one width and margin for every applet, its title on the type scale (a small `kicker` above, `aside` at its right, `back: { label, onPress }` a way back above it), with `onRefresh` pull down at the top to read again (and the page is drawn at once from what it read before, then `onRefresh` runs again by itself when the vault's answer differs: `onFresh`), and `wide` for two columns on a computer. |
+| `<Page title? kicker? aside? back? onRefresh? wide? className? >…</Page>` | The applet's screen: one width and margin for every applet (`--measure`: 760 px, 700 in Book), its title on the type scale (a small `kicker` above, `aside` at its right, `back: { label, onPress }` a way back above it), with `onRefresh` pull down at the top to read again (and the page is drawn at once from what it read before, then `onRefresh` runs again by itself when the vault's answer differs: `onFresh`). `wide` lets it grow to 1240 px on a computer, for a board or a table; put what sits side by side in a `<div className="pa-grid">`. |
 | `<Tabs label tabs current onChange />` | Places to switch between in one screen (Inbox, Later, Sent): `tabs` is `[{ key, label, count? }]`, the one shown is marked. |
 | `<Loading>…</Loading>` | The quiet line while something is read ("Reading…" unless you say). |
 | `<Problem error? onRetry? >…</Problem>` | What went wrong, said once: your words, then the error's, and Try again with `onRetry`. |
@@ -276,9 +277,10 @@ does. Each takes plain props; a newer prop is only ever added, never changed.
 | `toast(text, { error? })` | A short word after an action ("Saved"), rising at the foot of the screen, gone by itself (held while pointed at or while the app is away; a tap or a swipe down puts it away). |
 | `voiceNote(recording, create)` | A recording made a note: `create(body)` makes the record (its path is yours), the recording is attached with transcription asked, and the hub writes the words in. |
 | `useTranscripts(bodies, reload)` | While a voice note waits for its words: reads again a few times; `say(body)` is the line to show, `strip(body)` the text without the hub's marker, `again()` after a new recording. |
-| `when (.time, .day, .date, .short, .full, .ago, .stamp, .path, .parse)` | Dates and times, one way in every applet, in the person's language: `when.short(t)` is "9:41 AM" today, "Yesterday", "Mon", "Nov 17". `t` is a Date, an ISO string, milliseconds or seconds. |
+| `when (.time, .day, .date, .short, .full, .ago, .stamp, .path, .parse)` | Dates and times, one way in every applet, in the person's language: `when.short(t)` is "9:41 AM" today, "Yesterday", "Mon", "Nov 17"; `when.day(t)` "Today", "Yesterday" or the date; `when.date(t)` "Saturday, November 21"; `when.time(t)` "9:41 AM"; `when.full(t)` the date and time; `when.ago(t)` "now", "5m", "3h", then as `short`; `when.parse(t)` a `Date` (or null). `t` is a Date, an ISO string, milliseconds or seconds; a date alone (`"2026-11-21"`, as a field holds one) is that day on this device, not midnight in London. Today as a field holds a date: `when.stamp(Date.now()).slice(0, 10)` (`when.stamp` is `"2026-11-21 09-41"`, this device's day and time). |
 | `useTheme()` | The look as values (`accent`, `bg`, …, `scheme`, `density`, `motion`), or null until the app has sent it. Most applets need only the CSS variables. |
 | `useSaved(key, initial)` | `useState` that the app keeps on this device: a draft, the box it was on, the item open. See [Saved state](#saved-state). |
+| `pa-actions`, `pa-grid` (class names) | Layout with no CSS of yours: `<div className="pa-actions">` puts buttons side by side (a card's, a drawer's); `<div className="pa-grid">` puts lists or cards side by side on a wide screen, one under another on a phone. |
 
 **Keep state in fields.** A box the person ticks is a field on the record (`fields: { book_status: "read" }`), not a
 `- [x]` in its body: the vault, the note view and any AI connected to the vault then read the same value. The type and
@@ -299,7 +301,7 @@ parts above are level 1, the floor: the kit of 11-20, with every prop it lists, 
 (as are the `vaults` and `sharing` words), and `Drawer`, level 4; `vaults.changes`, `compare`, `restore`, `remove` and
 the `changes` word are level 5; `vaults.reach`, `manage`, `giveKey`, `endReach` and `stopManaging` are level 6. A newer prop counts as a newer part,
 and an older app ignores it. If an applet uses a part above the floor, either fall back for it, or put
-`"needs": <its level>` beside `applet` in the fields. With `needs`, an older app lists the applet and says "Update
+`"needs": <its level>` beside `applet` in the fields (`"fields": { "applet": { … }, "needs": 4 }`, a bare number). With `needs`, an older app lists the applet and says "Update
 Parachute to open …" instead of running it (`src/kit/olderApp.test.ts` checks the shipped applets do one or the other).
 If an applet touches a part this app doesn't have and then stops, the frame says to update rather than that it broke.
 A fallback:
@@ -377,6 +379,38 @@ A long-press (a right-click on a computer) on a note link asks with **Open with�
 the kit (`src/kit/links.test.ts` checks it): no `<a>` of their own, no `app.openLink` of their own, and no `app.open` but in a home applet (one that asks for `pins` or `recent`), for the app's own places.
 
 
+## Make it look like Parachute
+
+An applet looks like the rest of Parachute without any CSS of its own. Three steps, in this order:
+
+1. **Draw it with the parts.** `Page` is the screen (its title, width and margins). `List` holds rows, `Card` a block
+   that stands apart, `Field`, `Search` and `Write` take words, `Button` acts (one `primary` on a screen), `Tabs`
+   switch places, `Table` and `Fields` show records, `Empty`, `Loading` and `Problem` say what state it is in,
+   `Drawer` holds a detail or a short form, and `toast` says what an action did. Each part follows the person's
+   theme and their look (paper, almanac, book, daylight), light and dark, on a phone and a computer. Every part,
+   drawn live with the code that draws it: [COMPONENTS.md](COMPONENTS.md).
+2. **Plain HTML is drawn too.** `<h1>`, `<p>`, `<ul>`, `<table>`, `<blockquote>`, `<button>`, `<input>` and
+   `<select>` come out in the theme. In an HTML applet, the parts' classes give the same look as the parts:
+   `<button class="pa-button pa-primary">`, `<div class="pa-card">`.
+3. **Your own CSS only for what is yours** (a board, a chart, a grid of days), written on the tokens, never on fixed
+   values: colours `var(--text)`, `var(--muted)`, `var(--line)`, `var(--accent)`, `var(--surface)`; space
+   `var(--pad)` and `var(--gap)`; rules `var(--line-row)` and `var(--line-head)`; corners `var(--radius-card)`,
+   `var(--radius-field)`; type `var(--fs-title)` … `var(--fs-label)` in `var(--serif)` or `var(--sans)`. A fixed
+   colour or size breaks in dark mode and on an e-paper screen. The tokens: [THEME.md](THEME.md#in-an-applet).
+   What you write wins over the kit's own rules ([THEME.md](THEME.md#the-order-of-styles)).
+
+Before you hand it over, check it the way a person sees it:
+
+- One title (the `Page`'s, the applet's own name), and the content starts at the top of the screen: no empty hero, no
+  big gaps.
+- One main action, as `kind="primary"`; the rest plain or quiet.
+- Rows, not boxes: a `List` for things of a kind; a `Card` only for a block that stands apart.
+- Every state has words: `Loading` while reading, `Empty` with what to do next, `Problem` with Try again, a `toast`
+  after an action.
+- It works at 390 px (a phone) and 1600 px (a computer): `Page` holds the width; `wide` lets a board grow on a
+  computer, and `pa-grid` makes its columns.
+- No fixed colour, size or font anywhere: it reads in light, in dark and on the Daylight's black and white.
+
 ## A worked example
 
 These are the exact arguments for the MCP tool `create-record` (the same body works for `POST /api/records`). A hub
@@ -420,7 +454,7 @@ rather than `tags`: `"types": ["applet"]`. The note-named calls in the kit (`que
       }
     ]
   },
-  "body": "import { useEffect, useRef, useState } from \"react\";\nimport { Button, Days, Empty, Field, List, Loading, Note, onOpen, Page, ready, vault, when } from \"parachute\";\n\ntype Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };\nconst nameOf = (r: Recipe) => r.path.replace(\"Recipes/\", \"\");\n\nconst CSS = `\n.cols { display: grid; gap: calc(var(--gap) * 2); }\n@media (min-width: 900px) { .cols { grid-template-columns: 2fr 3fr; gap: 64px; } }\n`;\n\nexport default function RecipeCards() {\n  const [recipes, setRecipes] = useState<Recipe[] | null>(null);\n  const [open, setOpen] = useState<Recipe | null>(null);\n  const shown = useRef<HTMLElement>(null);\n  const load = () => vault.queryRecords({ pathPrefix: \"Recipes/\", tag: \"recipe\", includeBody: true }).then((rows: Recipe[]) => setRecipes(rows));\n  useEffect(() => {\n    ready().then(load);\n    return onOpen((o: { note: { id: string } }) => vault.getRecord(o.note.id).then(setOpen));\n  }, []);\n  // a recipe opened (or followed from a link) comes into view: below the list on a phone\n  useEffect(() => { if (open) shown.current?.scrollIntoView({ block: \"start\" }); }, [open]);\n  const add = async (name: string) => {\n    const made: Recipe = await vault.createRecord({ path: `Recipes/${name}`, body: `# ${name}\\n\\n## Ingredients\\n\\n## Steps\\n` });\n    await load();\n    setOpen(await vault.getRecord(made.id));\n  };\n  const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };\n  return (\n    <Page title=\"Recipe cards\" wide onRefresh={load}>\n      <style>{CSS}</style>\n      <div className=\"cols\">\n        <section>\n          <Days times={(recipes ?? []).map((r) => r.updatedAt)} label=\"changed, the last four weeks\" />\n          <Field label=\"New recipe\" placeholder=\"A name\" action=\"Add\" onAction={add} />\n          {recipes === null ? <Loading /> : recipes.length\n            ? <List label=\"Recipes\" rows={recipes.map((r) => ({ key: r.id, title: nameOf(r), aside: when.short(r.updatedAt), onPress: () => setOpen(r) }))} />\n            : <Empty>No recipes yet. Add one above, or ask your AI to.</Empty>}\n        </section>\n        {open && (\n          <section aria-label=\"Recipe\" ref={shown}>\n            <Button kind=\"quiet\" onClick={() => setOpen(null)}>Close</Button>\n            <Note body={open.body ?? \"\"} path={open.path} tags={open.tags} onLink={follow} />\n          </section>\n        )}\n      </div>\n    </Page>\n  );\n}\n"
+  "body": "import { useEffect, useRef, useState } from \"react\";\nimport { Button, Days, Empty, Field, List, Loading, Note, onOpen, Page, ready, vault, when } from \"parachute\";\n\ntype Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };\nconst nameOf = (r: Recipe) => r.path.replace(\"Recipes/\", \"\");\n\nexport default function RecipeCards() {\n  const [recipes, setRecipes] = useState<Recipe[] | null>(null);\n  const [open, setOpen] = useState<Recipe | null>(null);\n  const shown = useRef<HTMLElement>(null);\n  const load = () => vault.queryRecords({ pathPrefix: \"Recipes/\", tag: \"recipe\", includeBody: true }).then((rows: Recipe[]) => setRecipes(rows));\n  useEffect(() => {\n    ready().then(load);\n    return onOpen((o: { note: { id: string } }) => vault.getRecord(o.note.id).then(setOpen));\n  }, []);\n  // a recipe opened (or followed from a link) comes into view: below the list on a phone\n  useEffect(() => { if (open) shown.current?.scrollIntoView({ block: \"start\" }); }, [open]);\n  const add = async (name: string) => {\n    const made: Recipe = await vault.createRecord({ path: `Recipes/${name}`, body: `# ${name}\\n\\n## Ingredients\\n\\n## Steps\\n` });\n    await load();\n    setOpen(await vault.getRecord(made.id));\n  };\n  const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };\n  return (\n    <Page title=\"Recipe cards\" wide onRefresh={load}>\n      <div className=\"pa-grid\">\n        <section>\n          <Days times={(recipes ?? []).map((r) => r.updatedAt)} label=\"changed, the last four weeks\" />\n          <Field label=\"New recipe\" placeholder=\"A name\" action=\"Add\" onAction={add} />\n          {recipes === null ? <Loading /> : recipes.length\n            ? <List label=\"Recipes\" rows={recipes.map((r) => ({ key: r.id, title: nameOf(r), aside: when.short(r.updatedAt), onPress: () => setOpen(r) }))} />\n            : <Empty>No recipes yet. Add one above, or ask your AI to.</Empty>}\n        </section>\n        {open && (\n          <section aria-label=\"Recipe\" ref={shown}>\n            <Button kind=\"quiet\" onClick={() => setOpen(null)}>Close</Button>\n            <Note body={open.body ?? \"\"} path={open.path} tags={open.tags} onLink={follow} />\n          </section>\n        )}\n      </div>\n    </Page>\n  );\n}\n"
 }
 ```
 
@@ -432,11 +466,6 @@ import { Button, Days, Empty, Field, List, Loading, Note, onOpen, Page, ready, v
 
 type Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };
 const nameOf = (r: Recipe) => r.path.replace("Recipes/", "");
-
-const CSS = `
-.cols { display: grid; gap: calc(var(--gap) * 2); }
-@media (min-width: 900px) { .cols { grid-template-columns: 2fr 3fr; gap: 64px; } }
-`;
 
 export default function RecipeCards() {
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
@@ -457,8 +486,7 @@ export default function RecipeCards() {
   const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };
   return (
     <Page title="Recipe cards" wide onRefresh={load}>
-      <style>{CSS}</style>
-      <div className="cols">
+      <div className="pa-grid">
         <section>
           <Days times={(recipes ?? []).map((r) => r.updatedAt)} label="changed, the last four weeks" />
           <Field label="New recipe" placeholder="A name" action="Add" onAction={add} />
@@ -506,7 +534,7 @@ pinned applets. It reads no folder of its own vault, so it has no `access`; it a
       "open"
     ]
   },
-  "body": "import { useEffect, useState } from \"react\";\nimport { app, Days, Empty, List, Loading, Page, ready, when } from \"parachute\";\n\ntype Recent = { vaultName: string; title: string; updatedAt: string | null; href: string };\ntype Place = { name: string; glyph: string; href: string; home: boolean };\n\nconst CSS = `\n.head { display: grid; gap: 12px 32px; align-items: end; padding-bottom: var(--gap); border-bottom: 1px solid var(--text); }\n@media (min-width: 900px) { .head { grid-template-columns: 1fr minmax(240px, 380px); } .cols { grid-template-columns: 3fr 2fr; gap: 64px; } }\n.sum { margin: 0; font: var(--fs-lead)/1.5 var(--serif); }\n.cols { display: grid; gap: calc(var(--gap) * 1.5); padding-top: var(--gap); }\n.river { border-left: 2px solid var(--text); padding-left: 20px; }\n`;\n\nexport default function Home() {\n  const [recent, setRecent] = useState<Recent[] | null>(null);\n  const [pins, setPins] = useState<Place[]>([]);\n  const load = () => Promise.all([app.recent({ limit: 40 }), app.pins()])\n    .then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); }, () => setRecent([]));\n  useEffect(() => { ready().then(load); }, []);\n  const days: { label: string; notes: Recent[] }[] = [];\n  for (const n of (recent ?? []).slice(0, 12)) {\n    const label = when.day(n.updatedAt) || \"Earlier\";\n    if (days.at(-1)?.label !== label) days.push({ label, notes: [] });\n    days.at(-1)!.notes.push(n);\n  }\n  const vaults = new Set((recent ?? []).map((n) => n.vaultName)).size;\n  return (\n    <Page kicker={when.date(new Date())} title=\"Lately\" wide onRefresh={load}>\n      <style>{CSS}</style>\n      <header className=\"head\">\n        {recent === null ? <Loading /> : <p className=\"sum\">{`${recent.length} notes lately, in ${vaults} ${vaults === 1 ? \"vault\" : \"vaults\"}.`}</p>}\n        <Days times={(recent ?? []).map((n) => n.updatedAt)} days={14} label=\"the last two weeks\" />\n      </header>\n      <div className=\"cols\">\n        <section className=\"river\" aria-label=\"Lately\">\n          {days.map((d) => <List key={d.label} label={d.label} rows={d.notes.map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: when.time(n.updatedAt), onPress: () => app.open(n.href) }))} />)}\n          {recent !== null && !recent.length && <Empty>Nothing written yet.</Empty>}\n        </section>\n        {pins.length > 0 && <List label=\"Pinned\" rows={pins.map((p) => ({ key: p.href, title: p.name, glyph: p.glyph, onPress: () => app.open(p.href) }))} />}\n      </div>\n    </Page>\n  );\n}\n"
+  "body": "import { useEffect, useState } from \"react\";\nimport { app, Days, Empty, List, Loading, Page, ready, when } from \"parachute\";\n\ntype Recent = { vaultName: string; title: string; updatedAt: string | null; href: string };\ntype Place = { name: string; glyph: string; href: string; home: boolean };\n\nexport default function Home() {\n  const [recent, setRecent] = useState<Recent[] | null>(null);\n  const [pins, setPins] = useState<Place[]>([]);\n  const load = () => Promise.all([app.recent({ limit: 40 }), app.pins()])\n    .then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); }, () => setRecent([]));\n  useEffect(() => { ready().then(load); }, []);\n  const days: { label: string; notes: Recent[] }[] = [];\n  for (const n of (recent ?? []).slice(0, 12)) {\n    const label = when.day(n.updatedAt) || \"Earlier\";\n    if (days.at(-1)?.label !== label) days.push({ label, notes: [] });\n    days.at(-1)!.notes.push(n);\n  }\n  const vaults = new Set((recent ?? []).map((n) => n.vaultName)).size;\n  return (\n    <Page kicker={when.date(new Date())} title=\"Lately\" wide onRefresh={load}>\n      {recent === null ? <Loading /> : <p>{`${recent.length} notes lately, in ${vaults} ${vaults === 1 ? \"vault\" : \"vaults\"}.`}</p>}\n        <Days times={(recent ?? []).map((n) => n.updatedAt)} days={14} label=\"the last two weeks\" />\n      <div className=\"pa-grid\">\n        <section aria-label=\"Lately\">\n          {days.map((d) => <List key={d.label} label={d.label} rows={d.notes.map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: when.time(n.updatedAt), onPress: () => app.open(n.href) }))} />)}\n          {recent !== null && !recent.length && <Empty>Nothing written yet.</Empty>}\n        </section>\n        {pins.length > 0 && <List label=\"Pinned\" rows={pins.map((p) => ({ key: p.href, title: p.name, glyph: p.glyph, onPress: () => app.open(p.href) }))} />}\n      </div>\n    </Page>\n  );\n}\n"
 }
 ```
 
@@ -536,14 +564,6 @@ import { app, Days, Empty, List, Loading, Page, ready, when } from "parachute";
 type Recent = { vaultName: string; title: string; updatedAt: string | null; href: string };
 type Place = { name: string; glyph: string; href: string; home: boolean };
 
-const CSS = `
-.head { display: grid; gap: 12px 32px; align-items: end; padding-bottom: var(--gap); border-bottom: 1px solid var(--text); }
-@media (min-width: 900px) { .head { grid-template-columns: 1fr minmax(240px, 380px); } .cols { grid-template-columns: 3fr 2fr; gap: 64px; } }
-.sum { margin: 0; font: var(--fs-lead)/1.5 var(--serif); }
-.cols { display: grid; gap: calc(var(--gap) * 1.5); padding-top: var(--gap); }
-.river { border-left: 2px solid var(--text); padding-left: 20px; }
-`;
-
 export default function Home() {
   const [recent, setRecent] = useState<Recent[] | null>(null);
   const [pins, setPins] = useState<Place[]>([]);
@@ -559,13 +579,10 @@ export default function Home() {
   const vaults = new Set((recent ?? []).map((n) => n.vaultName)).size;
   return (
     <Page kicker={when.date(new Date())} title="Lately" wide onRefresh={load}>
-      <style>{CSS}</style>
-      <header className="head">
-        {recent === null ? <Loading /> : <p className="sum">{`${recent.length} notes lately, in ${vaults} ${vaults === 1 ? "vault" : "vaults"}.`}</p>}
+      {recent === null ? <Loading /> : <p>{`${recent.length} notes lately, in ${vaults} ${vaults === 1 ? "vault" : "vaults"}.`}</p>}
         <Days times={(recent ?? []).map((n) => n.updatedAt)} days={14} label="the last two weeks" />
-      </header>
-      <div className="cols">
-        <section className="river" aria-label="Lately">
+      <div className="pa-grid">
+        <section aria-label="Lately">
           {days.map((d) => <List key={d.label} label={d.label} rows={d.notes.map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: when.time(n.updatedAt), onPress: () => app.open(n.href) }))} />)}
           {recent !== null && !recent.length && <Empty>Nothing written yet.</Empty>}
         </section>

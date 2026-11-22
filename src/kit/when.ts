@@ -5,7 +5,7 @@
 //   when.time(t)    9:41 AM
 //   when.day(t)     Today · Yesterday · Monday, November 17 · Monday, November 17, 2025
 //   when.date(t)    Monday, November 17 (the year too when it isn't this one), whatever day it is
-//   when.short(t)   9:41 AM today · Yesterday · Mon this week · Nov 17 this year · Nov 17, 2025
+//   when.short(t)   9:41 AM today (Today for a date alone) · Yesterday · Mon this week · Nov 17 this year · Nov 17, 2025
 //   when.full(t)    Mon, Nov 17, 9:41 AM (the year too when it isn't this one)
 //   when.ago(t)     now · 5m · 3h · then as short()
 //   when.stamp(t)   2026-11-17 09-41: a moment in a note's name, sorted as text
@@ -53,11 +53,15 @@ function date(t: Moment, now = new Date()): string {
   return f(d.getFullYear() === now.getFullYear() ? { weekday: "long", month: "long", day: "numeric" } : { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(d);
 }
 
+/** A date alone ("2026-11-21", as a field holds one): it has a day and no time. */
+const dateOnly = (t: Moment) => typeof t === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.trim());
+
 function short(t: Moment, now = new Date()): string {
   const d = parse(t);
   if (!d) return "";
   const back = daysBack(d, now);
-  if (back === 0) return time(d);
+  // today's time, but a date with no time is just today (never "12:00 AM")
+  if (back === 0) return dateOnly(t) ? "Today" : time(d);
   if (back === 1) return "Yesterday";
   if (back > 1 && back < 7) return f({ weekday: "short" }).format(d);
   return f(d.getFullYear() === now.getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" }).format(d);

@@ -3,8 +3,11 @@
    (design/WHY.md, design/kit/WHY.md). Compact: content starts at the top, no big empty gaps. Hierarchy by type, weight
    and space, never colour alone: the Daylight shows grey.
    The tokens (--bg, --surface, --text, --muted, --line, --accent, --danger, --serif, --sans, --mono, --pad, --gap,
-   --radius, --size, --leading) are not set here: they come from the theme (src/theme/theme.ts), the built-in one or the
-   person's theme record, and are set on <html> by the shell, and handed to the frame and every applet.
+   --radius, --size, --leading), the type scale (--fs-title … --fs-label) and the look's style tokens (how rules,
+   corners, depth, buttons, fields and labels are drawn: theme.ts STYLE_TOKENS) are not set here: they come from the
+   theme (src/theme/theme.ts), the built-in one or the person's theme record, and are set on <html> by the shell, and
+   handed to the frame and every applet. The app's own screens use them as the kit's parts do (src/kit/parts.css), so
+   the shell and the parts are drawn alike under every look.
    The sheet is in cascade layers (src/kit/base.css): the elements below sit in the base, the app's own classes in
    `parachute.app`, above the parts (an applet's own CSS, in no layer, is only ever in its own frame). */
 @layer parachute.base, parachute.parts, parachute.app;
@@ -26,6 +29,11 @@ button, input { font: inherit; color: inherit; }
 /* one focus ring from the keyboard, in the accent; a part's own (parts.css) wins over it */
 :is(button, a, .home-bar-place, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 :is(input, textarea, select):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+/* a bare choice list is drawn as a field (never the OS's grey box), at least 16px so a phone doesn't zoom to it: the
+   same values as the kit's base gives one in a frame (src/kit/base.css), so a select is one height wherever it is */
+:where(select) { max-width: 100%; min-height: 40px; padding: 8px 12px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-family: inherit; font-size: max(16px, var(--fs-body)); }
+:where(select):focus { border-color: var(--text); }
+input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 @layer parachute.app {
@@ -33,47 +41,51 @@ button, input { font: inherit; color: inherit; }
 
 .screen { max-width: 720px; margin: 0 auto; padding: 0 var(--pad) 24px; }
 .bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; min-height: 52px; background: var(--bg); border-bottom: 1px solid var(--line); margin: 0 calc(-1 * var(--pad)) 10px; padding: 0 var(--pad); }
-.bar-title { flex: 1; margin: 0; font: 600 18px/1.2 var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar-back, .bar-menu, .bar-mark { display: inline-grid; place-items: center; min-width: 36px; height: 36px; border: 0; background: none; color: var(--text); font-size: 26px; line-height: 1; text-decoration: none; border-radius: 8px; cursor: pointer; }
-.bar-mark { color: var(--accent); font-size: 22px; }
-.bar-menu { font-size: 22px; }
+.bar-title { flex: 1; margin: 0; font: 600 var(--fs-lead)/1.2 var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-back, .bar-menu, .bar-mark { display: inline-grid; place-items: center; min-width: 36px; height: 36px; border: 0; background: none; color: var(--text); font-size: var(--fs-head); line-height: 1; text-decoration: none; border-radius: var(--radius-field); cursor: pointer; }
+.bar-mark { color: var(--accent); }
 /* the back mark is Instrument Sans's ‹ (the app carries it whatever the theme's sans), a small guillemet: drawn larger
    so it reads as the chevron it was */
-.bar-back { font: 34px/1 "Instrument Sans", "Instrument Sans fallback", var(--sans, sans-serif); }
-.bar-back:active, .bar-menu:active { background: var(--line); }
+.bar-back { font: var(--fs-title)/1 "Instrument Sans", "Instrument Sans fallback", var(--sans, sans-serif); }
+.bar-back:active, .bar-menu:active { background: var(--tint); }
 
-/* lists of notes (a vault, search, open with): rows under an ink rule, dotted between, as the launcher and the parts */
-.rows { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--text); }
-.rows li { border-bottom: 1px dotted var(--muted); }
+/* lists of notes (a vault, search, open with): rows under the look's head rule, its row rule between, as the launcher
+   and the parts */
+.rows { list-style: none; margin: 0; padding: 0; border-top: var(--line-head); }
+.rows li { border-bottom: var(--line-row); }
 .row { display: flex; flex-direction: column; gap: 1px; padding: calc(var(--gap) * .7) 2px; color: var(--text); text-decoration: none; -webkit-touch-callout: none; user-select: none; }
-.row:active { background: color-mix(in srgb, var(--line) 40%, transparent); }
-.row-title { font: 500 calc(var(--size) * 1.15)/1.3 var(--serif); overflow-wrap: anywhere; }
-.row-sub { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.row:active { background: var(--tint); }
+.row-title { font: 500 var(--fs-lead)/1.3 var(--serif); overflow-wrap: anywhere; }
+.row-sub { font-size: var(--fs-small); color: var(--muted); overflow-wrap: anywhere; }
 
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px var(--pad); margin: 0 0 10px; }
-.card h2 { margin: 0 0 6px; font: 600 15px/1.3 var(--sans); }
-.lead { margin: 0 0 12px; font-family: var(--serif); font-size: 18px; }
-.field { display: grid; gap: 4px; margin-bottom: 10px; font-size: 14px; color: var(--muted); }
-.field input, .search { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 16px; }
+.card { background: var(--card-fill); border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: 12px var(--pad); margin: 0 0 10px; }
+.card h2 { margin: 0 0 6px; font: 600 var(--fs-body)/1.3 var(--sans); }
+.lead { margin: 0 0 12px; font-family: var(--serif); font-size: var(--fs-lead); }
+.field { display: grid; gap: 4px; margin-bottom: 10px; font-size: var(--fs-small); color: var(--muted); }
+/* a one-line field as the kit's (.pa-field input): boxed, or a line to write on, as the look draws one */
+.field input { width: 100%; padding: var(--field-pad); border: var(--entry-line); border-width: var(--field-edges); border-radius: var(--radius-entry); background: var(--entry-fill); color: var(--text); font-size: max(16px, var(--fs-body)); }
+.search { width: 100%; padding: 8px 14px; border: var(--field-line); border-radius: var(--radius-button); background: var(--field-fill); color: var(--text); font-size: max(16px, var(--fs-body)); }
+.field input:focus, .search:focus, .field textarea:focus { border-color: var(--text); }
 .search { margin: 0 0 10px; }
-.primary { display: inline-block; padding: 10px 16px; border: 0; border-radius: 8px; background: var(--accent); color: var(--surface); font-weight: 600; text-decoration: none; cursor: pointer; }
+/* the buttons as the kit's (.pa-button): the main action in the look's primary, the rest on its button line and fill */
+.primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 7px 18px; border: 1px solid var(--primary); border-radius: var(--radius-button); background: var(--primary); color: var(--on-primary); font-weight: 600; text-decoration: none; cursor: pointer; }
 .primary:disabled { opacity: .6; }
-.secondary { display: inline-block; padding: 9px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-weight: 550; text-align: center; text-decoration: none; cursor: pointer; }
+.secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 7px 18px; border: var(--button-line); border-radius: var(--radius-button); background: var(--button-fill); color: var(--text); font-weight: 500; text-align: center; text-decoration: none; cursor: pointer; }
 .secondary:disabled { opacity: .6; }
 .stack { display: flex; flex-direction: column; gap: 8px; }
 .stack > p { margin: 0; }
 .stack .primary { text-align: center; }
-.small { font-size: 14px; }
+.small { font-size: var(--fs-small); }
 .row-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
 .steps { margin: 0; padding-left: 1.3em; }
 .steps li { padding: 2px 0; }
-.field textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font: 14px/1.4 var(--mono); }
-.sas { margin: 4px 0; font: 600 34px/1.2 var(--mono); letter-spacing: .08em; text-align: center; }
+.field textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font: max(16px, var(--fs-body))/1.4 var(--mono); }
+.sas { margin: 4px 0; font: 600 var(--fs-title)/1.2 var(--mono); letter-spacing: .08em; text-align: center; }
 .npub { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-.npub code { flex: 1; font: 13px/1.4 var(--mono); overflow-wrap: anywhere; }
+.npub code { flex: 1; font: var(--fs-small)/1.4 var(--mono); overflow-wrap: anywhere; }
 details summary { cursor: pointer; color: var(--muted); }
 details[open] summary { margin-bottom: 6px; }
-.quiet-button { border: 1px solid var(--line); background: none; border-radius: 8px; padding: 4px 10px; font-size: 14px; cursor: pointer; }
+.quiet-button { border: var(--button-line); background: var(--button-fill); border-radius: var(--radius-button); padding: 4px 12px; font-size: var(--fs-small); cursor: pointer; }
 .quiet { color: var(--muted); }
 .error { color: var(--danger); }
 .plain { list-style: none; margin: 0; padding: 0; }
@@ -81,23 +93,26 @@ fieldset.plain { border: 0; min-width: 0; }
 fieldset.plain legend { padding: 0; }
 .line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; }
 .line + .line { border-top: 1px solid var(--line); }
-.screen-foot { margin: 14px 0 0; font-size: 14px; }
+.screen-foot { margin: 14px 0 0; font-size: var(--fs-small); }
 
-.note { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 4px var(--pad) 12px; }
-.note-where { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
-.note-fields { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 10px 0 2px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 15px; }
+.note { background: var(--card-fill); border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); padding: 4px var(--pad) 12px; }
+.note-where { margin: 8px 0 0; font-size: var(--fs-small); color: var(--muted); }
+.note-fields { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 10px 0 2px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: var(--fs-body); }
 .note-fields div { display: contents; }
 .note-fields dt { color: var(--muted); }
 .note-fields dd { margin: 0; overflow-wrap: anywhere; }
 .note-edit-fields { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 6px 12px; margin: 10px 0 0; }
-.note-edit-fields input:not([type="checkbox"]), .note-edit-fields select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 15px; min-width: 0; }
+.note-edit-fields select { min-width: 0; }
+/* a line to write in that sits among buttons (Settings' keys and passcodes): drawn as a field */
+.note-edit-fields input:not([type="checkbox"]), .text-input { padding: 8px 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font-size: max(16px, var(--fs-body)); min-width: 0; }
+.note-edit-fields input:not([type="checkbox"]):focus, .text-input:focus, .secret-field input:focus { border-color: var(--text); }
 .note-edit-fields input[type="checkbox"] { justify-self: start; width: 20px; height: 20px; }
-.note-code { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 var(--mono); }
+.note-code { white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-small)/1.5 var(--mono); }
 /* (the note view's prose is in the parts layer, below: beside the note renderer's rules, as it always was) */
 
 /* applets */
 .applets { display: flex; gap: 8px; overflow-x: auto; margin: 0 0 10px; padding: 0; list-style: none; }
-.applet-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); text-decoration: none; white-space: nowrap; font-size: 15px; }
+.applet-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: var(--button-line); border-radius: var(--radius-button); background: var(--button-fill); color: var(--text); text-decoration: none; white-space: nowrap; font-size: var(--fs-body); }
 .applet-chip span[aria-hidden] { color: var(--accent); }
 .applet-screen { display: flex; flex-direction: column; min-height: calc(100dvh - 64px); }
 /* an applet's frame is the page under the bar, edge to edge, on the page's own paper: no box around it (the bar's rule
@@ -108,94 +123,99 @@ fieldset.plain legend { padding: 0; }
 .applet-frame.applet-frame-sized { flex: none; min-height: 0; width: 100%; margin: 0; }
 .embeds { display: grid; gap: 14px; margin-top: 14px; }
 .embed-place { display: grid; gap: 4px; }
-.embed-line { display: flex; align-items: baseline; gap: 8px; margin: 0; padding-top: 6px; border-top: 1px dotted var(--muted); font: italic 14px/1.3 var(--serif); color: var(--muted); }
+.embed-line { display: flex; align-items: baseline; gap: 8px; margin: 0; padding-top: 6px; border-top: var(--line-row); font: italic var(--fs-small)/1.3 var(--serif); color: var(--muted); }
 .embed-line .quiet-button { margin-left: auto; font-style: normal; }
 .embed-frame { display: block; width: 100%; border: 0; background: transparent; }
-.embed-said { padding: 12px var(--pad); border: 1px dashed var(--line); border-radius: var(--radius); }
+/* what an embed said in place of itself: a card's corners, dashed, so it never reads as the embed */
+.embed-said { padding: 12px var(--pad); border: 1px dashed var(--line); border-radius: var(--radius-card); }
 .embed-said p { margin: 0 0 6px; }
 .sheet-over-frames { z-index: 30; }
 .grant-handed { font-family: var(--serif); font-style: italic; } /* the serif's own italic: the sans has none */
 .selftest-frames { position: fixed; left: -10000px; top: 0; width: 360px; height: 640px; overflow: hidden; }
 .selftest-frames iframe { width: 360px; height: 640px; }
 .grant-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.grant-head h2 { margin: 0; font: 600 18px/1.2 var(--serif); }
-.grant-glyph { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 10px; font-size: 18px; color: var(--accent); }
+.grant-head h2 { margin: 0; font: 600 var(--fs-lead)/1.2 var(--serif); }
+.grant-glyph { display: grid; place-items: center; width: 34px; height: 34px; border: var(--line-card); border-radius: var(--radius-field); font-size: var(--fs-lead); color: var(--accent); }
 .grant-name { font-weight: 600; font-style: normal; }
 .grant-lines { margin: 0 0 8px; padding: 6px 0 6px 1.2em; border-block: 1px solid var(--line); }
 .grant-lines li { padding: 3px 0; overflow-wrap: anywhere; } /* a key (npub1…) is one long word: it wraps, not over the buttons */
 .grant-stress { font-weight: 600; }
-.grant-rest, .grant-changed { font-size: 14px; }
-.grant-meta { font-size: 12.5px; margin: 6px 0 0; }
+.grant-rest, .grant-changed { font-size: var(--fs-small); }
+.grant-meta { font-size: var(--fs-label); margin: 6px 0 0; }
 /* the card's face (face.ts): a short list, the risky asks in bold words; the exact lines fold under Show details */
-.grant-sub { font-size: 14px; margin: 0 0 8px; }
+.grant-sub { font-size: var(--fs-small); margin: 0 0 8px; }
 .grant-face { list-style: none; margin: 0 0 8px; padding: 0; }
-.grant-face li { padding: 6px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; font-size: 15px; line-height: 1.4; }
+.grant-face li { padding: 6px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; font-size: var(--fs-body); line-height: 1.4; }
 .grant-face li strong, .grant-whose strong { font-weight: 650; }
-.grant-also { margin: 0 0 8px; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
-.grant-whose { font-size: 15px; margin: 0 0 8px; }
-.grant-new { display: inline-block; margin-right: 6px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 1px; }
-.grant-more { margin-right: auto; min-height: 44px; padding: 6px 0; border: 0; background: none; font: inherit; font-size: 14px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.grant-details { margin-top: 12px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 14px; }
+.grant-also { margin: 0 0 8px; font-size: var(--fs-body); line-height: 1.4; overflow-wrap: anywhere; }
+.grant-whose { font-size: var(--fs-body); margin: 0 0 8px; }
+.grant-new { display: inline-block; margin-right: 6px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track);
+  text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--label-ink); vertical-align: 1px; }
+.grant-more { margin-right: auto; min-height: 44px; padding: 6px 0; border: 0; background: none; font: inherit; font-size: var(--fs-small); color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.grant-details { margin-top: 12px; padding-top: 6px; border-top: 1px solid var(--line); font-size: var(--fs-small); }
 /* the card's rows (docs/design/PERMISSIONS.md): a mark, a plain name, the line, and (?) for the exact detail */
 .grant-rows li { display: grid; grid-template-columns: 26px 1fr auto; gap: 2px 10px; align-items: start; padding: 8px 0; }
-.grant-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); color: var(--accent); font-size: 15px; }
+.grant-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius-field); background: var(--surface); border: var(--line-card); color: var(--accent); font-size: var(--fs-body); }
 .grant-row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.grant-row-title { font: 600 15.5px/1.3 var(--serif); }
-.grant-row-line { font-size: 14px; color: var(--muted); line-height: 1.4; }
+.grant-row-title { font: 600 var(--fs-body)/1.3 var(--serif); }
+.grant-row-line { font-size: var(--fs-small); color: var(--muted); line-height: 1.4; }
 .grant-row-line strong { color: var(--text); }
-.grant-q { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted); font: 600 13px/1 var(--sans); cursor: pointer; }
+.grant-q { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted); font: 600 var(--fs-small)/1 var(--sans); cursor: pointer; }
 .grant-q[aria-expanded="true"] { background: var(--text); color: var(--bg); }
-.grant-about { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--surface); font-size: 13.5px; }
+.grant-about { margin-top: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-field); background: var(--surface); font-size: var(--fs-small); }
 .grant-about p { margin: 6px 0 0; }
-.grant-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.grant-table { border-collapse: collapse; width: 100%; font-size: var(--fs-small); }
 .grant-table th, .grant-table td { padding: 3px 6px; border-bottom: 1px solid var(--line); text-align: center; }
 .grant-table th[scope="row"], .grant-table thead th:first-child { text-align: left; font-weight: 600; }
 .grant-from { margin: 0 0 8px; }
-.grant-warn { margin: 0 0 10px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--danger, #b4532a) 12%, var(--bg)); font-size: 14px; }
-/* on a page, the card's buttons stay in reach above the bar however long its rows run (Allow never needs a scroll) */
+.grant-warn { margin: 0 0 10px; padding: 8px 10px; border-radius: var(--radius-field); background: color-mix(in srgb, var(--danger, #b4532a) 12%, var(--bg)); font-size: var(--fs-small); }
+/* on a page, the card's buttons stay in reach above the bar however long its rows run (Allow never needs a scroll); on
+   the surface, which is never see-through, as the rows scroll under it */
 .applet-screen .grant-card > .grant-actions { position: sticky; bottom: 0; z-index: 2; margin: 10px calc(-1 * var(--pad, 16px)) 0; padding: 10px var(--pad, 16px); background: var(--surface); border-top: 1px solid var(--line); }
 .with-bar .applet-screen .grant-card > .grant-actions { bottom: calc(var(--foot-h) + env(safe-area-inset-bottom)); }
 .passcode-line { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
 .grant-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
 /* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the sheet rises once; in it nothing moves but the figures */
-.record-time { margin: 6px 0; font-size: 20px; font-variant-numeric: tabular-nums; }
-.notice { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: 0 0 8px; font-size: 14px; }
-.check-list { list-style: none; padding: 0; margin: 6px 0 0; font-size: 13px; columns: 2; }
+.record-time { margin: 6px 0; font-size: var(--fs-head); font-variant-numeric: tabular-nums; }
+.notice { padding: 8px 12px; border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); background: var(--card-fill); margin: 0 0 8px; font-size: var(--fs-small); }
+.check-list { list-style: none; padding: 0; margin: 6px 0 0; font-size: var(--fs-small); columns: 2; }
 .check-list .fail { color: var(--danger); }
 
 /* open with */
-.open-line, .viewer-line { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 15px; }
+.open-line, .viewer-line { margin: 0 0 8px; padding: 8px 12px; border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); background: var(--card-fill); font-size: var(--fs-body); }
 .open-line a, .viewer-line a { text-decoration: none; }
 .link-button { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
-/* the shell's sheets look as the kit's Drawer does (src/kit/parts.css): the theme's ink over the page, an ink rule above,
-   no shadow. They fade in and never slide: they carry the app's own asks (Allow, the passcode, a link out), whose
-   buttons hold still from their first frame so a tap lands where it was meant (ui/press.ts); nor do they drag. Still
-   under reduce-motion (theme.ts MOTION). */
+/* the shell's sheets look as the kit's Drawer does (src/kit/parts.css): the page's ground over the page, the look's
+   sheet edge above, corners and depth. They fade in and never slide: they carry the app's own asks (Allow, the
+   passcode, a link out), whose buttons hold still from their first frame so a tap lands where it was meant
+   (ui/press.ts); nor do they drag. Still under reduce-motion (theme.ts MOTION). */
 .sheet-scrim { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--text) 22%, transparent); background: light-dark(color-mix(in srgb, var(--text) 22%, transparent), rgb(0 0 0 / .45));
   display: flex; align-items: flex-end; justify-content: center; animation: shell-fade var(--t-sheet, 0ms) var(--ease-out, ease) backwards; overscroll-behavior: contain; }
-.sheet { width: min(560px, 100%); max-height: 80dvh; overflow: auto; overscroll-behavior: contain; background: var(--bg); border-top: 1px solid var(--text); border-radius: var(--radius) var(--radius) 0 0;
-  padding: 14px var(--pad) calc(14px + env(safe-area-inset-bottom)); }
+.sheet { width: min(560px, 100%); max-height: 80dvh; overflow: auto; overscroll-behavior: contain; background: var(--bg); border-top: var(--line-card); border-radius: max(var(--radius-card), var(--radius)) max(var(--radius-card), var(--radius)) 0 0;
+  box-shadow: var(--shadow-sheet); padding: 14px var(--pad) calc(14px + env(safe-area-inset-bottom)); }
 @keyframes shell-fade { from { opacity: 0; } }
-.sheet h2 { margin: 0 0 10px; font: 600 17px/1.3 var(--serif); }
+.sheet h2 { margin: 0 0 10px; font: 600 var(--fs-lead)/1.3 var(--serif); }
 /* a key just made, shown once (ShellSheets RevealSheet): the whole of it, selectable, never cut */
-.sheet .reveal-secret { margin: 6px 0 12px; padding: 8px 10px; border-left: 3px solid var(--accent); font: 13px/1.45 var(--mono, ui-monospace, monospace); overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
+.sheet .reveal-secret { margin: 6px 0 12px; padding: 8px 10px; border-left: 3px solid var(--accent); font: var(--fs-small)/1.45 var(--mono, ui-monospace, monospace); overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
 .sheet-choice { width: 100%; text-align: left; border: 0; background: none; font: inherit; cursor: pointer; }
 .sheet-choice:disabled { opacity: .5; }
-.sheet-always { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 15px; }
-.settings-sub { margin: 12px 0 2px; font: 600 13px/1.3 var(--sans); color: var(--muted); }
+.sheet-always { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: var(--fs-body); }
+/* Settings' small headings: a label as the kit's kicker (.pa-kicker), in the muted ink */
+.settings-sub { margin: 12px 0 2px; font: 600 var(--fs-label)/1.3 var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--muted); }
 .note-where { display: flex; justify-content: space-between; gap: 8px; }
-.note-copy { font-size: 13px; }
-.link-raw code { font: 12px/1.4 var(--mono); overflow-wrap: anywhere; color: var(--muted); }
+.note-copy { font-size: var(--fs-small); }
+.link-raw code { font: var(--fs-label)/1.4 var(--mono); overflow-wrap: anywhere; color: var(--muted); }
 
 /* The frame: the sealed iframe the shell shows the vault list, a vault and a note in, filling the screen inside the safe area. */
 .app-frame { position: fixed; top: env(safe-area-inset-top); right: env(safe-area-inset-right); bottom: env(safe-area-inset-bottom); left: env(safe-area-inset-left); width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom)); border: 0; background: var(--bg); }
 .link-whole { max-height: 30vh; overflow: auto; overflow-wrap: anywhere; }
 button.primary[aria-disabled="true"] { opacity: 0.5; }
 
-/* The bar (src/shell/BottomBar.tsx): a ribbon of words across the foot, the current place in bold and underlined. */
-.home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: safe center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: 1px solid var(--text); overflow-x: auto; }
-.home-bar-place { flex: 0 1 auto; min-width: 64px; max-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 8px 2px; color: var(--text); text-decoration: none; font-size: 13px; line-height: 1.2; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; -webkit-touch-callout: none; user-select: none; }
-.home-bar-glyph { font: 20px/1 var(--serif); }
+/* The bar (src/shell/BottomBar.tsx): a ribbon of words across the foot, under the look's head rule, the current place
+   in bold and underlined. */
+.home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: safe center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: var(--line-head); overflow-x: auto; }
+.home-bar-place { flex: 0 1 auto; min-width: 64px; max-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 8px 2px; color: var(--text); text-decoration: none; font-size: var(--fs-small); line-height: 1.2; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; -webkit-touch-callout: none; user-select: none; }
+.home-bar-glyph { font: var(--fs-head)/1 var(--serif); }
 /* the phone's keyboard is up (Android's MainActivity marks the root from the keyboard's own inset): the bar steps aside
    and what it held room for reaches the foot */
 :root.keyboard-up { --bar-h: 0px; }
@@ -204,15 +224,15 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .home-bar-glyph, .entry-glyph, .grant-glyph { filter: grayscale(1); }
 .home-bar-place[aria-current="page"] { font-weight: 700; }
 .home-bar-place[aria-current="page"]::after { content: ""; width: 26px; height: 2px; margin-top: 2px; background: var(--text); border-radius: 2px; }
-.home-bar-place:active { background: var(--line); }
+.home-bar-place:active { background: var(--tint); }
 /* a newer build (shell/UpdateLine.tsx): one line at the foot (resting on the bar when there is one) until Download or Later */
-.update-line { position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom); height: var(--update-h); box-sizing: border-box; overflow: hidden; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 6px calc(env(safe-area-inset-right) + 12px) 6px calc(env(safe-area-inset-left) + 12px); background: var(--surface); border-top: 1px solid var(--line); font-size: 14px; }
+.update-line { position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom); height: var(--update-h); box-sizing: border-box; overflow: hidden; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 6px calc(env(safe-area-inset-right) + 12px) 6px calc(env(safe-area-inset-left) + 12px); background: var(--surface); border-top: 1px solid var(--line); font-size: var(--fs-small); }
 .with-bar .update-line { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
 .update-line > span:first-child { flex: 1 1 auto; min-width: 0; }
 :root.keyboard-up .update-line { display: none; }
 /* an applet's signals (services/signals.ts): its count, beside its glyph */
 .home-bar-place { position: relative; }
-.home-bar-badge { position: absolute; top: 1px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent); color: var(--bg); font: 700 11px/17px var(--sans); text-align: center; }
+.home-bar-badge { position: absolute; top: 1px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--accent); color: var(--bg); font: 700 var(--fs-label) var(--sans); line-height: 17px; text-align: center; }
 /* the app's own Settings, under a frame of the person's: held at the right edge, on screen however full the bar is */
 .home-bar-own { position: sticky; right: 0; margin-left: auto; background: var(--surface); border-left: 1px solid var(--line); }
 .home-bar-sep { width: 1px; margin: 10px 6px; background: var(--line); flex: none; }
@@ -222,34 +242,34 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .with-bar .applet-screen { min-height: 100dvh; padding-bottom: calc(var(--foot-h) + 10px); }
 .with-bar .sheet-scrim { bottom: calc(var(--foot-h) + env(safe-area-inset-bottom)); }
 .sheet-list li + li { border-top: 1px solid var(--line); }
-.sheet-list .sheet-choice { padding: 12px 2px; font-size: 16px; }
+.sheet-list .sheet-choice { padding: 12px 2px; font-size: var(--fs-body); }
 .sheet-list a.sheet-choice { display: block; color: inherit; text-decoration: none; }
-.sheet-line { margin: -6px 0 6px; font-size: 14px; }
-.start-line { margin: 0 0 8px; font: italic 15px var(--serif); }
+.sheet-line { margin: -6px 0 6px; font-size: var(--fs-small); }
+.start-line { margin: 0 0 8px; font: italic var(--fs-body) var(--serif); }
 
 /* The list (src/frame/views/Launcher.tsx): the open app's applets, one plain list. The home page is the home applet's. */
 .launcher { max-width: 880px; padding-top: 14px; }
-.launcher-title { margin: 6px 0 4px; padding-bottom: 8px; border-bottom: 1px solid var(--text); font: 400 34px/1.05 var(--serif); }
-.launcher-notice { margin: 10px 0 4px; font: italic 16px/1.4 var(--serif); color: var(--muted); }
-.launcher-notice a { margin-left: 6px; font: 15px var(--sans); font-style: normal; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.launcher-title { margin: 6px 0 4px; padding-bottom: 8px; border-bottom: var(--line-head); font: var(--title-weight) var(--fs-title)/1.05 var(--serif); }
+.launcher-notice { margin: 10px 0 4px; font: italic var(--fs-body)/1.4 var(--serif); color: var(--muted); }
+.launcher-notice a { margin-left: 6px; font: var(--fs-body) var(--sans); font-style: normal; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 .entry-glyph { font-variant-emoji: text; }
 .entries { list-style: none; margin: 4px 0 0; padding: 0; }
-.entries > li { border-bottom: 1px dotted var(--muted); }
+.entries > li { border-bottom: var(--line-row); }
 .entry { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 14px; padding: 10px 0; color: var(--text); text-decoration: none; -webkit-touch-callout: none; user-select: none; }
-.entry:active { background: color-mix(in srgb, var(--line) 40%, transparent); }
-.entry-glyph { grid-row: 1 / 3; display: inline-grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--text); border-radius: 50%;
-  box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 4px var(--line); background: var(--surface); font: 21px var(--serif); }
-.entry-name { grid-column: 2; font: 500 22px/1.25 var(--serif); overflow-wrap: anywhere; }
-.entry-life { grid-column: 2; font: italic 15px/1.35 var(--serif); color: var(--muted); overflow-wrap: anywhere; }
+.entry:active { background: var(--tint); }
+.entry-glyph { grid-row: 1 / 3; display: inline-grid; place-items: center; width: 44px; height: 44px; border: var(--line-card); border-radius: 50%;
+  box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 4px var(--line); background: var(--surface); font: var(--fs-head) var(--serif); }
+.entry-name { grid-column: 2; font: 500 var(--fs-head)/1.25 var(--serif); overflow-wrap: anywhere; }
+.entry-life { grid-column: 2; font: italic var(--fs-body)/1.35 var(--serif); color: var(--muted); overflow-wrap: anywhere; }
 .entry-where { font-style: normal; }
 .entry-days { grid-row: 1 / 3; grid-column: 3; width: 64px; }
-.entry-days .pa-days { margin: 0; } .entry-days .pa-days svg { height: 24px; max-width: 64px; }
-.entry-home { margin-left: 8px; font: 600 11px var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); vertical-align: 3px; }
-.entry-pinned { margin-left: 8px; font: 12px var(--sans); color: var(--accent); vertical-align: 2px; }
-.entry-quiet { padding: 10px 0; font: italic 15px var(--serif); color: var(--muted); }
-.lately-label { margin: 18px 0 6px; font: 600 11px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.entry-days .pa-days { margin: 0; } .entry-days .pa-days svg { height: calc(24px * var(--pa-days-h, 1)); max-width: 64px; }
+.entry-home { margin-left: 8px; font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--label-ink); vertical-align: 3px; }
+.entry-pinned { margin-left: 8px; font: var(--fs-label) var(--sans); color: var(--accent); vertical-align: 2px; }
+.entry-quiet { padding: 10px 0; font: italic var(--fs-body) var(--serif); color: var(--muted); }
+.lately-label { margin: 18px 0 6px; font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--muted); }
 .parts-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
-.part-chip { border: 1px solid var(--line); border-radius: 999px; background: var(--surface); padding: 4px 12px; font: 16px var(--serif); color: var(--text); cursor: pointer; }
+.part-chip { border: var(--button-line); border-radius: var(--radius-button); background: var(--button-fill); padding: 4px 12px; font: var(--fs-body) var(--serif); color: var(--text); cursor: pointer; }
 /* a vault's line: its name and whose on one row, its buttons wrap beneath on a narrow phone, never past the card */
 .settings-parachute .line { flex-wrap: wrap; justify-content: flex-start; }
 .settings-parachute .line > span { flex: 1 1 12em; min-width: 0; }
@@ -257,16 +277,15 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 /* a vault made there since this device signed in (vault/newVaults.ts): one quiet line, a tap adds it (Notes, Settings) */
 .parachute-new { margin: 8px 0 4px; }
 .parachute-new li { display: flex; align-items: baseline; gap: 10px; padding: 2px 0; }
-.parachute-new-add { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: italic 17px/1.4 var(--serif); color: var(--muted); }
+.parachute-new-add { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: italic var(--fs-lead)/1.4 var(--serif); color: var(--muted); }
 .parachute-new-add b { font-style: normal; font-weight: 600; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
-.parachute-new .quiet-button { margin-left: auto; font-size: 13px; padding: 2px 8px; color: var(--muted); }
-.launcher-foot { display: flex; gap: 18px; margin: 22px 0 0; font-size: 14px; }
+.parachute-new .quiet-button { margin-left: auto; font-size: var(--fs-small); padding: 2px 8px; color: var(--muted); }
+.launcher-foot { display: flex; gap: 18px; margin: 22px 0 0; font-size: var(--fs-small); }
 .launcher-foot a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 @media (min-width: 1000px) {
   .launcher { padding: 28px 64px 32px; }
-  .entry-name { font-size: 25px; }
-  .entry-glyph { width: 50px; height: 50px; font-size: 24px; }
-  .home-bar-place { min-width: 96px; font-size: 15px; }
+  .entry-glyph { width: 50px; height: 50px; }
+  .home-bar-place { min-width: 96px; font-size: var(--fs-body); }
 }
 
 .swatches { display: flex; gap: 6px; margin: 6px 0; }
@@ -276,43 +295,46 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 
 /* the shell's own words over a running applet (views/ShellSheets.tsx): a secret's sheet, and a passing line */
 .secret-field { display: grid; gap: 4px; margin: 10px 0; }
-.secret-field input { font: 16px/1.4 var(--mono, ui-monospace, monospace); padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; }
+.secret-field input { font: max(16px, var(--fs-body))/1.4 var(--mono, ui-monospace, monospace); padding: 10px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: inherit; }
+/* a passing line: a toast's edge and depth (.pa-toast) on a card's corners (it may run to two lines), on the surface,
+   which is never see-through */
 .shell-line { position: fixed; left: 50%; bottom: calc(var(--foot-h, 0px) + 18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 31; margin: 0; max-width: min(520px, 92vw);
-  padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 14px; }
-.trust-key code { display: block; font-size: 13px; word-break: break-all; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+  padding: 8px 14px; border: var(--line-card); border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-card); font-size: var(--fs-small); }
+.trust-key code { display: block; font-size: var(--fs-small); word-break: break-all; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-field); }
 
 /* Parachute Simplified (docs/SIMPLE.md): Notes, the editor, Connect */
-.notes-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 22px 0 14px; padding-bottom: 10px; border-bottom: 2px solid var(--text); }
-.notes-head h1 { margin: 0; font: 400 calc(var(--size) * 3)/.95 var(--serif); letter-spacing: -.02em; }
-.notes-new { border-radius: 999px; padding: 10px 18px; white-space: nowrap; }
-.note-edit { margin-left: auto; font-size: 13px; text-decoration: none; }
+.notes-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 22px 0 14px; padding-bottom: 10px; border-bottom: var(--line-head); }
+.notes-head h1 { margin: 0; font: var(--title-weight) calc(var(--size) * 3)/.95 var(--serif); letter-spacing: -.02em; }
+.notes-new { padding: 10px 18px; white-space: nowrap; }
+.note-edit { margin-left: auto; font-size: var(--fs-small); text-decoration: none; }
 .note-edit + .note-copy { margin-left: 4px; }
-.note-text { width: 100%; box-sizing: border-box; min-height: 55vh; margin: 8px 0 0; padding: 14px 16px; border: 1.5px solid var(--text); border-radius: 12px; background: var(--surface); color: var(--text); font: 17px/1.55 var(--serif); resize: vertical; }
-.note-text:focus { outline: none; border-color: var(--accent); }
+.note-text { width: 100%; box-sizing: border-box; min-height: 55vh; margin: 8px 0 0; padding: 14px 16px; border: var(--field-line); border-radius: var(--radius-field); background: var(--field-fill); color: var(--text); font: var(--fs-lead)/1.55 var(--serif); resize: vertical; }
+.note-text:focus { border-color: var(--text); }
 .note-into { margin: 8px 0 0; }
-.note-into select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 15px; }
 .note-edit-actions { align-items: center; margin-top: 10px; }
-.note-edit-actions .primary { border-radius: 999px; padding: 11px 28px; }
+.note-edit-actions .primary { padding: 11px 28px; }
 .connect .lead { margin-top: 14px; }
 .connect-address { font: var(--fs-small)/1.35 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
-.connect-how p { margin: 0; font-size: 15px; line-height: 1.45; }
+.connect-how p { margin: 0; font-size: var(--fs-body); line-height: 1.45; }
 .connect-address { user-select: all; -webkit-user-select: all; }
 /* Copy and Copied take the same room, so the address beside it doesn't reflow */
 .connect .pa-row-aside .pa-button { min-width: 6.5em; }
 /* the idle lock (shell/Security.tsx): over everything, the sheets and the applets' frames included */
 .idle-lock { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: var(--pad, 16px); }
 .idle-lock-inner { text-align: center; max-width: 320px; }
-.idle-lock h1 { font-family: var(--serif); font-weight: 500; font-size: 26px; margin: 0 0 6px; }
-.idle-lock-glyph { font-family: var(--serif); font-size: 40px; margin: 0 0 8px; color: var(--accent); }
+.idle-lock h1 { font-family: var(--serif); font-weight: 500; font-size: var(--fs-title); margin: 0 0 6px; }
+/* the glyph over the title: a mark, not type, so above the scale (2.5× the body, with the density) */
+.idle-lock-glyph { font-family: var(--serif); font-size: calc(var(--size) * 2.5); margin: 0 0 8px; color: var(--accent); }
 .idle-lock .primary { margin-top: 18px; min-width: 160px; }
 /* Settings → Security: one row an action, its choices side by side */
 .levels-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-top: 1px solid var(--line); }
 .levels-row:first-of-type { border-top: 0; }
 .levels-row > span { flex: 1 1 180px; }
-.levels-choices { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.levels-choices button { font: inherit; font-size: 14px; padding: 6px 10px; border: 0; border-left: 1px solid var(--line); background: var(--bg); color: inherit; }
+/* a segmented control: the choices in one box on the button line, the one chosen in the look's primary */
+.levels-choices { display: inline-flex; border: var(--button-line); border-radius: var(--radius-field); overflow: hidden; }
+.levels-choices button { font: inherit; font-size: var(--fs-small); padding: 6px 10px; border: 0; border-left: var(--button-line); background: var(--button-fill); color: inherit; }
 .levels-choices button:first-child { border-left: 0; }
-.levels-choices button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+.levels-choices button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
 .levels-choices button:disabled { opacity: .45; }
 
 /* Feel (docs/DESIGN-RULES.md): the shell's own controls answer a press as the kit's do, hover only with a pointer, one
@@ -323,12 +345,12 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 :is(.bar-back, .bar-menu, .home-bar-place, .row, .entry, .sheet-choice) { transition: background-color var(--t-press, 0ms) ease; }
 @media (hover: hover) and (pointer: fine) {
   :is(.secondary, .quiet-button, .part-chip):hover:not(:disabled) { border-color: var(--muted); }
-  .primary:hover:not(:disabled, [aria-disabled="true"]) { background: color-mix(in srgb, var(--accent) 88%, var(--bg)); }
-  :is(.row, .entry, .sheet-choice):hover:not(:active) { background: color-mix(in srgb, var(--line) 22%, transparent); }
-  :is(.bar-back, .bar-menu):hover:not(:active) { background: color-mix(in srgb, var(--line) 50%, transparent); }
+  .primary:hover:not(:disabled, [aria-disabled="true"]) { background: color-mix(in srgb, var(--primary) 86%, var(--bg)); }
+  :is(.row, .entry, .sheet-choice):hover:not(:active) { background: var(--tint); }
+  :is(.bar-back, .bar-menu):hover:not(:active) { background: var(--tint); }
 }
 /* the Allow card and a passing line arrive once, readable on their first frame as the kit's parts are (from 0.85, never
-   from blank: docs/DESIGN-RULES.md 8, 9), holding their place: opacity only, so an ask's buttons never move */
+   from blank: docs/DESIGN-RULES.md 9, 10), holding their place: opacity only, so an ask's buttons never move */
 .grant-card, .shell-line { animation: shell-arrive var(--t-state, 0ms) var(--ease-out, ease) backwards; }
 @keyframes shell-arrive { from { opacity: .85; } }
 .launcher-title, .notes-head h1, .grant-head h2, .sheet h2 { text-wrap: balance; }
@@ -338,7 +360,7 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 /* the note view's prose (frame/views/NoteView.tsx): in the parts layer, after the note renderer's sheet (which the frame
    loads first), so the two settle by specificity and order as they did before there were layers */
 @layer parachute.parts {
-.prose-note { font-family: var(--serif); font-size: 17px; line-height: 1.55; overflow-wrap: anywhere; }
+.prose-note { font-family: var(--serif); font-size: var(--fs-lead); line-height: 1.55; overflow-wrap: anywhere; }
 .prose-note h1, .prose-note h2, .prose-note h3 { line-height: 1.2; margin: 1em 0 .4em; }
 .prose-note h1 { font-size: 1.5em; } .prose-note h2 { font-size: 1.2em; } .prose-note h3 { font-size: 1.05em; }
 .prose-note ul, .prose-note ol { padding-left: 1.3em; }

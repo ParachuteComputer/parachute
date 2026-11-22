@@ -361,13 +361,13 @@ const CSS = `
 .room { display: flex; flex-direction: column; height: var(--room-h, 100dvh); min-height: 0; color: var(--text); font: var(--fs-body)/var(--leading) var(--sans); }
 .room .quiet { color: var(--muted); }
 .room .top { display: flex; align-items: center; gap: 10px; padding: 8px var(--pad, 16px); border-bottom: 1px solid var(--line); }
-.room .top h2 { flex: 1; margin: 0; font: 400 var(--fs-head) var(--serif); }
+.room .top h2 { flex: 1; margin: 0; font: var(--title-weight) var(--fs-head) var(--serif); }
 .room .back { padding-left: 0; font-family: var(--serif); font-style: italic; text-decoration: none; }
 .room .scroll { flex: 1; min-height: 0; overflow-y: auto; position: relative; overscroll-behavior: contain; }
 .room .page { max-width: 760px; margin: 0 auto; padding: 0 var(--pad, 16px) 12px; }
 .room .log { margin-top: 6px; }
 .room .day { text-align: center; font: italic var(--fs-small) var(--serif); color: var(--muted); margin: 18px 0 6px; }
-.room .new { border-top: 1.5px solid var(--text); margin: 12px 0 4px; font: 600 var(--fs-label) var(--sans); }
+.room .new { border-top: 1.5px solid var(--accent); margin: 12px 0 4px; font: 600 var(--fs-label) var(--sans); }
 .room .msg { padding: 8px 0 4px; }
 .room .msg.grouped { padding-top: 0; }
 .room .msg.at { border-left: 3px double var(--text); padding-left: 10px; margin-left: -13px; }
@@ -378,7 +378,7 @@ const CSS = `
 .room .ping { margin: 6px 0; color: var(--muted); font: italic var(--fs-small) var(--serif); }
 .room .ping summary { cursor: pointer; }
 .room .md p { margin: 2px 0; overflow-wrap: anywhere; }
-.room .md pre { background: var(--surface); border: 1px solid var(--line); padding: 8px; overflow-x: auto; font: var(--fs-small) var(--mono); }
+.room .md pre { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-field); padding: 8px; overflow-x: auto; font: var(--fs-small) var(--mono); }
 .room .md code { font-family: var(--mono); font-size: var(--fs-small); }
 .room .md blockquote { margin: 4px 0; padding-left: 10px; border-left: 2px solid var(--line); color: var(--muted); }
 .room .md .pa-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
@@ -393,13 +393,13 @@ const CSS = `
 .room .pic-wait { background: var(--surface); border: 1px solid var(--line); box-sizing: border-box; }
 .room .vid { max-width: 100%; max-height: 420px; display: block; margin: 6px 0; }
 .room .aud { display: block; margin: 6px 0; width: min(100%, 360px); }
-.room .file { border: 1px solid var(--line); padding: 6px 10px; border-radius: 6px; margin: 6px 0; display: inline-block; }
-.room .card { border: 1.5px solid var(--text); border-radius: var(--radius, 10px); padding: 10px 14px; margin: 6px 0; background: var(--surface); }
-.room .card .head { font: 600 var(--fs-label) var(--sans); letter-spacing: .02em; text-transform: uppercase; }
+.room .file { border: 1px solid var(--line); padding: 6px 10px; border-radius: var(--radius-field); margin: 6px 0; display: inline-block; }
+.room .card { border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); padding: 10px 14px; margin: 6px 0; background: var(--card-fill); box-shadow: var(--shadow-card); }
+.room .card .head { font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--label-ink); }
 .room .card .what { font: var(--fs-lead)/1.35 var(--serif); margin: 4px 0; }
 .room .card .why { color: var(--muted); }
 .room .card .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.room .card.ended { border-style: dashed; border-width: 1px; color: var(--muted); }
+.room .card.ended { border-style: dashed; box-shadow: none; color: var(--muted); }
 .room .card pre { white-space: pre-wrap; font: var(--fs-small) var(--mono); margin: 6px 0; }
 .room .sealed-row .what, .room .sealed-row .why { overflow-wrap: anywhere; }
 .room .sealed-row .scope { white-space: pre-line; }
@@ -429,7 +429,7 @@ const CSS = `
 .room .composer .listen[aria-pressed="true"] { border-color: var(--text); color: var(--text); }
 .room .pick { list-style: none; margin: 0 0 6px; padding: 0; border: 1px solid var(--line); background: var(--surface); }
 .room .pick li .pa-button { display: block; width: 100%; text-align: left; padding: 6px 10px; color: var(--text); text-decoration: none; border-radius: 0; }
-.room .pick li[aria-selected="true"] .pa-button { background: var(--line); }
+.room .pick li[aria-selected="true"] .pa-button { background: var(--tint); box-shadow: inset 3px 0 0 var(--accent); }
 .room .msg.fresh { animation: in var(--t-state) var(--ease-out); } @keyframes in { from { opacity: 0; transform: translateY(4px); } }
 `;
 
@@ -757,7 +757,7 @@ function AskCard({ e, ask, answeredBy, mine, answer }: { e: Ev; ask: Ask; answer
   }
   const signed = ask.kind === "approve" || ask.kind === "give";
   return <div className="card" role="group" aria-label={`Wants you: ${ask.what}`}>
-    <div className="head">◆ wants you · {KIND_WORD[ask.kind]} · until {when.short(ask.until)}</div>
+    <div className="head">◆ Wants you · {KIND_WORD[ask.kind]} · until {when.short(ask.until)}</div>
     <p className="what">{ask.what}</p>
     <p className="why">{ask.why}</p>
     {ask.context && <Markdown text={ask.context} />}

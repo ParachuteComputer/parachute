@@ -5,7 +5,7 @@ applet. Until you change it, the app uses the built-in Parachute theme: paper, i
 (Literata) for reading and a quiet sans (Instrument Sans) for the app's own words.
 
 A theme starts from one of four built-in **looks**, which set the palettes and how the parts are drawn (rules, corners,
-depth, labels): `paper` (hairlines, soft corners, a card lifted a little, boxed fields), `almanac` (ink rules, dotted
+depth, labels): `paper`, the default (hairlines, soft corners, a card lifted a little, boxed fields), `almanac` (ink rules, dotted
 rows, a printed card, a line to write on), `book` (a printed page: no raised parts, a double rule, small capitals) and
 `daylight` (black on white for an e-paper screen: heavier rules, no tints or shadows, nothing moves). Every value a
 look sets is a token, and the note can change any of them one by one.
@@ -27,7 +27,7 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
   "density": "regular",
   "scheme": "system",
   "motion": "flowing",
-  "look": "almanac",
+  "look": "paper",
   "tokens": { "radius-card": "14px" }
 }
 ```
@@ -73,7 +73,7 @@ The style tokens, what each draws, and its value in `paper` and in `almanac` (`s
 | Token | What it draws | `paper` | `almanac` |
 |---|---|---|---|
 | `--primary` | The main action's fill (a primary button, a field's action). | `var(--accent)` | `var(--text)` |
-| `--on-primary` | Text on the main action. | `#fdfbf7` | `var(--bg)` |
+| `--on-primary` | Text on the main action. | `var(--surface)` | `var(--bg)` |
 | `--tint` | A row under the pointer, the row open now: a light wash. | `color-mix(in srgb, var(--text) 5%, transparent)` | `color-mix(in srgb, var(--line) 30%, transparent)` |
 | `--card-fill` | A card's ground. | `var(--surface)` | `var(--surface)` |
 | `--field-fill` | The ground of a box to write in (search, a text box, a bare input). | `var(--surface)` | `var(--surface)` |
@@ -100,7 +100,7 @@ The style tokens, what each draws, and its value in `paper` and in `almanac` (`s
 | `--label-caps` | A small label in small capitals: `normal` or `all-small-caps`. | `normal` | `normal` |
 | `--label-track` | A small label's letter spacing, in em. | `0em` | `.14em` |
 | `--title-weight` | The weight of a page's title and the serif headings. | `400` | `400` |
-| `--measure` | A page's width at most. | `760px` | `760px` |
+| `--measure` | A page's width at most (never under 20em). | `760px` | `760px` |
 
 A case is `none`, `uppercase`, `lowercase` or `capitalize`; capitals `normal`, `small-caps` or `all-small-caps`; a
 letter spacing between `-0.3em` and `0.3em`; a weight `100` to `900`.

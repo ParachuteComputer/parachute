@@ -17,7 +17,7 @@ const withoutTitle = (body: string, name: string) => body.replace(/^\s*#\s+([^\n
 const CSS = `
 .area .cols { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "note" "talk" "list"; column-gap: 56px; }
 .area .lede { grid-area: note; padding-bottom: 8px; }
-.area .talk { grid-area: talk; --room-h: 78dvh; margin: 10px calc(var(--pad) * -1); border-top: 1px solid var(--text); border-bottom: 1px solid var(--line); }
+.area .talk { grid-area: talk; --room-h: 78dvh; margin: 10px calc(var(--pad) * -1); border-top: var(--line-head); border-bottom: 1px solid var(--line); }
 .area .list { grid-area: list; padding: 14px 0 0; }
 .area .quiet { color: var(--muted); font-style: italic; font-family: var(--serif); }
 /* on a computer the room is the right column from the top of the screen, kept in view; the title and notes the left */

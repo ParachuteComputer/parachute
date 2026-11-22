@@ -6,7 +6,7 @@
 @layer parachute.base, parachute.parts, parachute.app;
 @layer parachute.parts {
 .pa-days { display: block; margin: 0 0 var(--gap); color: var(--text); }
-.pa-days svg { display: block; height: calc(var(--size) * 3.6); width: auto; max-width: 100%; }
+.pa-days svg { display: block; height: calc(var(--size) * 3.6 * var(--pa-days-h, 1)); width: auto; max-width: 100%; }
 .pa-days .pa-mark { fill: var(--text); }
 .pa-days .pa-base { fill: var(--muted); }
 .pa-days .pa-today { fill: var(--accent); }
@@ -21,7 +21,7 @@ button.pa-row:active, a.pa-row:active { background: var(--tint); }
 /* a row that is a link (the app's own lists of notes): no underline, and a held finger doesn't select or preview */
 a.pa-row { text-decoration: none; -webkit-touch-callout: none; user-select: none; }
 div.pa-row { cursor: default; }
-.pa-row-mark { grid-row: 1 / 3; display: inline-grid; place-items: center; width: 2.3em; height: 2.3em; border: 1px solid var(--text); border-radius: 50%;
+.pa-row-mark { grid-row: 1 / 3; box-sizing: border-box; display: inline-grid; place-items: center; width: 2.3em; height: 2.3em; border: 1px solid var(--text); border-radius: 50%;
   box-shadow: inset 0 0 0 3px var(--surface), inset 0 0 0 4px var(--line); background: var(--surface); font: var(--fs-lead) var(--serif); font-variant-emoji: text; }
 .pa-row-title { grid-column: 2; font: 500 var(--fs-lead)/1.3 var(--serif); overflow-wrap: anywhere; }
 .pa-row-meta { grid-column: 2; font-size: var(--fs-small); color: var(--muted); overflow-wrap: anywhere; }
@@ -29,6 +29,10 @@ div.pa-row { cursor: default; }
 .pa-row:not(:has(.pa-row-mark)) { grid-template-columns: 1fr auto; }
 .pa-row:not(:has(.pa-row-mark)) .pa-row-title, .pa-row:not(:has(.pa-row-mark)) .pa-row-meta { grid-column: 1; }
 .pa-row:not(:has(.pa-row-mark)) .pa-row-aside { grid-column: 2; }
+/* in a list where some rows have a mark, a row without one keeps the marks' column, so every title lines up */
+.pa-list:has(.pa-row-mark) .pa-row:not(:has(.pa-row-mark)) { grid-template-columns: calc(var(--fs-lead) * 2.3) 1fr auto; }
+.pa-list:has(.pa-row-mark) .pa-row:not(:has(.pa-row-mark)) :is(.pa-row-title, .pa-row-meta) { grid-column: 2; }
+.pa-list:has(.pa-row-mark) .pa-row:not(:has(.pa-row-mark)) .pa-row-aside { grid-column: 3; }
 
 .pa-card { margin: 0 0 var(--gap); padding: calc(var(--pad) * .8) var(--pad); background: var(--card-fill); border: var(--line-card); border-width: var(--card-edges);
   border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
@@ -36,9 +40,9 @@ div.pa-row { cursor: default; }
 .pa-card > :last-child { margin-bottom: 0; }
 .pa-card p { margin: 0 0 6px; color: var(--muted); }
 
-.pa-field { display: grid; gap: 2px; margin: 0 0 var(--gap); }
+.pa-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0 0 var(--gap); }
 .pa-field-label { font: italic var(--fs-small) var(--serif); color: var(--muted); }
-.pa-field-row { display: flex; align-items: end; gap: 12px; }
+.pa-field-row { display: flex; align-items: stretch; gap: 12px; }
 .pa-field input { flex: 1; min-width: 0; padding: var(--field-pad); border: var(--entry-line); border-width: var(--field-edges); border-radius: var(--radius-entry);
   background: var(--entry-fill); font: var(--fs-lead) var(--serif); color: var(--text); outline: none; }
 /* focused: the line darkens and thickens below (a box keeps its edge) */
@@ -86,7 +90,7 @@ div.pa-row { cursor: default; }
 
 /* The screen parts (screen.tsx). A page: one width, one margin, its title in the scale */
 :root:has(.pa-page) body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-body)/var(--leading) var(--sans); }
-.pa-page { box-sizing: border-box; max-width: var(--measure); margin: 0 auto; padding: calc(var(--pad) * 1.2) var(--pad) calc(var(--pad) * 4); color: var(--text); }
+.pa-page { box-sizing: border-box; max-width: max(var(--measure), 20em); margin: 0 auto; padding: calc(var(--pad) * 1.2) var(--pad) calc(var(--pad) * 4); color: var(--text); }
 .pa-page.pa-wide { max-width: 1240px; }
 /* an applet's own controls in the page's type (no weight at all: every part's own rule still wins) */
 :where(.pa-page) :where(button, input, textarea) { font: inherit; color: inherit; }
@@ -140,6 +144,13 @@ div.pa-row { cursor: default; }
 .pa-write.pa-line { display: flex; align-items: end; gap: 8px; margin: 0; }
 .pa-line .pa-write-box { flex: 1; min-width: 0; min-height: 2.4em; max-height: 9em; padding: 8px 10px; font: var(--fs-body)/1.4 var(--sans); resize: none; }
 
+
+/* Laying parts out, with no CSS of the applet's own: buttons side by side (a card's actions, a drawer's), and
+   groups side by side on a wide screen (lists by status, cards in a grid), one under another on a phone */
+.pa-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 var(--gap); }
+.pa-actions:last-child { margin-bottom: 0; }
+.pa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--gap) calc(var(--gap) * 1.6); align-items: start; margin: 0 0 var(--gap); }
+.pa-grid > * { min-width: 0; margin-bottom: 0; }
 
 /* Table and Fields (parts-data.tsx): records as rows and columns, ink rules as List's; the first column stays in view
    as the rest scroll across; a row off screen isn't drawn */
@@ -225,6 +236,13 @@ select.pa-finput { appearance: auto; }
 .pa-row-aside, .pa-badge, .pa-tcount, .pa-days figcaption, .pa-tabs { font-variant-numeric: tabular-nums; }
 /* shelves of rows breathe apart; a label sits with its own rows */
 .pa-list + .pa-list { margin-top: calc(var(--gap) * 1.6); }
+.pa-grid > .pa-list + .pa-list { margin-top: 0; }
+/* a list straight under the tabs that name it: the tabs' rule is its head (no second rule) */
+.pa-tabs + .pa-list:not(:has(> .pa-list-label:not(.pa-unseen))) ul { border-top: 0; }
+/* on a wide page, a line to write in keeps a reading width */
+.pa-wide > :is(.pa-field, .pa-search, .pa-write) { max-width: var(--measure); }
+/* a strip of days inside a row sits as a line of it */
+.pa-row .pa-days { margin: 0; }
 
 /* ── toast (screen.tsx): one at a time, rising from the foot, going back down; swipe it away, held while pointed at ── */
 .pa-toasts { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); display: grid; justify-items: center; pointer-events: none; z-index: 50; }

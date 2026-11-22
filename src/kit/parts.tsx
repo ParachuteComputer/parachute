@@ -8,7 +8,7 @@
 //   Field   a line to write on, with one action (Enter does it too)
 //   Empty   what shows when there is nothing yet: a sprig and a line
 //   Note    in parts-note.tsx: a note's text drawn by surface-render, rich notes included (a heavier bundle)
-import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useId, useMemo, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import "./parts.css";
 
 const DAY = 86_400_000;
@@ -31,14 +31,16 @@ export function daysFrom(times: readonly (string | number | null | undefined)[],
 export function Days({ counts, times, days = 28, label, inline }: { counts?: readonly number[]; times?: readonly (string | number | null | undefined)[]; days?: number; label?: string; /** inside a line of text (a link, a row): drawn in a span, not a figure */ inline?: boolean }) {
   const n = Math.max(1, Math.min(366, Math.floor(days) || 28));
   const values = useMemo(() => { const v = counts ? counts.slice(-n) : daysFrom(times ?? [], n); return v.length ? v : [0]; }, [counts, times, n]);
-  const tall = 8; // marks drawn at most: a busier day is drawn full (the label's total still counts every change)
+  // marks drawn at most: a busier day is drawn full (the label's total still counts every change); as tall as the busiest
+  // day needs (a done-or-not tally is two marks high, not eight), at the same scale, so no empty band sits over it
+  const tall = Math.min(8, Math.max(2, ...values));
   const total = values.reduce((a, b) => a + b, 0);
   const width = values.length * 9 + Math.floor((values.length - 1) / 7) * 6;
   const said = `${label ? `${label}: ` : ""}${total} in ${values.length} days`;
   const Box = inline ? "span" : "figure";
   return (
     <Box className="pa-days" role="img" aria-label={said}>
-      <svg viewBox={`0 0 ${width} ${tall * 5 + 12}`} preserveAspectRatio="xMinYMax meet" aria-hidden="true">
+      <svg viewBox={`0 0 ${width} ${tall * 5 + 12}`} preserveAspectRatio="xMinYMax meet" aria-hidden="true" style={{ "--pa-days-h": ((tall * 5 + 12) / 52).toFixed(3) } as CSSProperties}>
         {values.map((v, i) => {
           const x = i * 9 + Math.floor(i / 7) * 6;
           const base = tall * 5 + 2;
