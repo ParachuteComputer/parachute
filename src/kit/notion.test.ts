@@ -37,6 +37,8 @@ describe("readZip", () => {
     const files = await readZip(zipOfMany([["E/page.md", deflateRawSync(Buffer.from("# page"))], ["E/files/old.zip", inner("x.md", 10)], ["E/pic.png", deflateRawSync(Buffer.alloc(50, 1))]], [6, 10 + 98, 50]), { want: (p) => /\.md$/.test(p) });
     expect([...files.keys()].sort()).toEqual(["E/files/old.zip", "E/page.md", "E/pic.png"]);
     expect(files.get("E/pic.png")!.length).toBe(0);
+    // many entries naming the same big inner zip: refused once their unpacking passes the budget, not done each time
+    await expect(readZip(zipOfMany([["Export-1-Part-1.zip", inner("a.md", 600)], ["Export-1-Part-2.zip", inner("b.md", 600)], ["Export-1-Part-3.zip", inner("c.md", 600)]]), { max: 300, want: () => false })).rejects.toThrow(/over/);
   });
   test("an entry that inflates past the size it claims is refused, not unpacked to the end", async () => {
     const big = deflateRawSync(Buffer.alloc(5_000_000, 97));
@@ -98,6 +100,8 @@ describe("notionImport", () => {
     const r = notionImport(new Map([[`E/${long} ${id}/${long} ${id}/${page} ${id}.md`, enc("# p\n\nhi\n")], [`E/Sprint #12 | Q3 ${id}.md`, enc("# Sprint #12 | Q3\n\nplan\n")], [`E/Home ${id}.md`, enc(`# Home\n\n[Sprint](Sprint%20%2312%20%7C%20Q3%20${id}.md)\n`)]]));
     for (const x of r.pack.records) expect(x.path.length).toBeLessThanOrEqual(200);
     expect(r.pack.records.find((x) => x.path === "Notion/Home")!.body).toContain("[[Notion/Sprint -12 - Q3|Sprint]]");
+    const paren = notionImport(new Map([[`E/Notes (weekly) ${id}.md`, enc("# Notes (weekly)\n\nx\n")], [`E/Index ${id.replace("0", "1")}.md`, enc(`# Index\n\n[Notes](Notes%20(weekly)%20${id}.md)\n`)]]));
+    expect(paren.pack.records.find((x) => x.path === "Notion/Index")!.body).toContain("[[Notion/Notes (weekly)|Notes]]");
   });
 
   test("a row whose page says another title is matched by its properties, relations included", () => {

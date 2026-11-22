@@ -39,12 +39,13 @@ function directory(b: Uint8Array): { at: number; count: number } {
 }
 
 export type ZipOptions = { want?: (path: string) => boolean; /** bytes once unpacked (MAX_TOTAL) */ max?: number };
-type Budget = { bytes: number; files: number };
+/** `bytes`: files unpacked; `inner`: the zips at the top, unpacked to be opened, never given back. */
+type Budget = { bytes: number; inner: number; files: number };
 
 /** Every file in the zip by its path (folders left out), and the files of a zip at its top, at its place. */
 export async function readZip(bytes: ArrayBuffer | Uint8Array, opts: ZipOptions = {}): Promise<ZipFiles> {
   const out: ZipFiles = new Map();
-  await readInto(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), out, { bytes: 0, files: 0 }, opts, 0);
+  await readInto(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), out, { bytes: 0, inner: 0, files: 0 }, opts, 0);
   return out;
 }
 
@@ -73,12 +74,15 @@ async function readInto(b: Uint8Array, out: ZipFiles, budget: Budget, opts: ZipO
     const data = b.subarray(start, start + size);
     if (data.length !== size) throw new ZipError("The zip is cut short.");
     // one budget for the whole file: a zip inside can't start again from nothing
+    if (inner && budget.inner + full > (opts.max ?? MAX_TOTAL)) throw new ZipError(`The zip is over ${Math.round((opts.max ?? MAX_TOTAL) / 1024 / 1024)} MB unpacked.`);
     budget.bytes += full;
     if (budget.bytes > (opts.max ?? MAX_TOTAL)) throw new ZipError(`The zip is over ${Math.round((opts.max ?? MAX_TOTAL) / 1024 / 1024)} MB unpacked.`);
     const file = method === 0 ? data : method === 8 ? await inflate(data, full) : null;
     if (!file) throw new ZipError(`The zip uses a kind of compression this can't read (${method}).`);
     if (file.length !== full) throw new ZipError("The zip is broken: a file isn't the size it says.");
-    if (inner) { budget.bytes -= full; await readInto(file, out, budget, opts, 1); continue; }
+    // an inner zip's own bytes count once, apart from its files: many entries naming one big inner zip can't each be
+    // unpacked for free
+    if (inner) { budget.bytes -= full; budget.inner += full; if (budget.inner > (opts.max ?? MAX_TOTAL)) throw new ZipError(`The zip is over ${Math.round((opts.max ?? MAX_TOTAL) / 1024 / 1024)} MB unpacked.`); await readInto(file, out, budget, opts, 1); continue; }
     if (out.has(path)) throw new ZipError(`The zip has ${path} twice.`);
     out.set(path, file);
   }

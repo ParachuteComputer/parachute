@@ -244,7 +244,8 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   const tableAt = (to: string) => tables.find((t) => t.key === to.replace(/_all\.csv$/i, ".csv"));
   const wiki = (rec: string, label: string) => `[[${rec}${label && label !== rec.split("/").pop() ? `|${label}` : ""}]]`;
   const words = (from: string, body: string) => body
-    .replace(/(!?)\[([^\]]*)\]\(([^)\s]+)\)/g, (all, img: string, label: string, target: string) => {
+    // (a target may hold one level of parentheses: "Notes (weekly) <id>.md")
+    .replace(/(!?)\[([^\]]*)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (all, img: string, label: string, target: string) => {
       if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("#")) return all;
       const to = resolve(from, target);
       // a linked view of a table is a .csv the export doesn't hold: its page of the same name, if there is one
