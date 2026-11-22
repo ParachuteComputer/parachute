@@ -38,10 +38,9 @@ describe("a section of Settings", () => {
     expect(await grantKey(grantOf(m, "home", [], [], [], [], { ...SECTION, name: "Claude use" }), "Applets/Recipes")).not.toBe(withIt);
     expect(grantLines(grantOf(m, "home", [], [], [], [], SECTION), "Applets/").map((l) => l.text)).toContain("Show a section in Settings, «Claude usage»: what it reads, nothing it changes");
   });
-  it("is in the approval's hash only when declared: an approval made before it holds", async () => {
+  it("is not in the approval's hash: a build that doesn't know it hashes the same record the same, so devices on two builds never stop each other's Allow", async () => {
     const s = { hub: "https://hub.example", vault: "home", record: "n1", applet: "recipes" };
     const fields = { applet: RECIPES };
-    expect(await asksHash(s, "Applets/Recipes", fields)).toBe(await asksHash(s, "Applets/Recipes", { ...fields, settings: undefined }));
-    expect(await asksHash(s, "Applets/Recipes", { ...fields, settings: SECTION })).not.toBe(await asksHash(s, "Applets/Recipes", fields));
+    expect(await asksHash(s, "Applets/Recipes", { ...fields, settings: SECTION })).toBe(await asksHash(s, "Applets/Recipes", fields));
   });
 });

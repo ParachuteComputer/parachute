@@ -54,11 +54,14 @@ const hub = (s: Subject) => s.hub;
  *  whatever it calls the vault. */
 export function asksHash(subject: Subject, notePath: string, fields: Record<string, unknown>, resolved: { opens?: unknown; from?: readonly string[]; left?: readonly string[] } = {}): Promise<string> {
   const pick = (k: string) => (fields[k] === undefined ? null : fields[k]);
-  // signals and settings only when declared: an approval made before them holds
+  // signals only when declared: an approval made before them holds. Not `settings` (a section of Settings, which only
+  // reads what the applet may read): a build from before it would hash the same record without it and take a newer
+  // device's approval for another one ("other"), and each device's Allow would stop the other's. It is in this
+  // device's grant key (grant.ts), so the card here still asks once.
   // `left` (discovery.ts): which of these fields the approving device left out of its card and its grant (the vault is
   // someone else's there, or a server is one of its hubs). Only when it left something out, so an approval made where
   // nothing was holds. A device that leaves out less (or more) gets another hash, and asks for itself.
-  return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds"), signals: fields.signals, settings: fields.settings,
+  return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds"), signals: fields.signals,
     resolved: { opens: resolved.opens ?? null, from: resolved.from ? [...resolved.from].sort() : [], ...(resolved.left?.length ? { left: [...resolved.left].sort() } : {}) } }));
 }
 
