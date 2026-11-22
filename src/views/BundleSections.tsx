@@ -101,7 +101,7 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
   const [read, setRead] = useState<Read>({ state: "reading" });
   useEffect(() => {
     if (!runs) return;
-    let on = true, offFresh = () => {}, t: ReturnType<typeof setTimeout> | null = null;
+    let on = true, offFresh = () => {}, t: ReturnType<typeof setTimeout> | null = null, wait: ReturnType<typeof setTimeout> | null = null;
     setRead({ state: "reading" });
     void (async () => {
       const n = await keptClientFor(rec).getNote(a.noteId).catch(() => null) as (Note & { extension?: string; metadata?: Record<string, unknown> }) | null;
@@ -118,8 +118,8 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
       // to APPROVALS_WAIT_MS before it starts, and heard whenever it comes after
       const asks = await asksOf(approvalSubject(rec, a.noteId, a.manifest.id), a, (n.metadata ?? {}) as Record<string, unknown>, []);
       // judged on the grant as it is when the answer comes (an Allow made meanwhile is newer than an old taking back),
-      // and only while this section is on screen: the applet's own screen judges it otherwise
-      const takenBack = (d: Awaited<ReturnType<typeof approvalFor>>) => on && !!d && !d.run && (d.why === "withdrawn" || d.why === "other") && !!d.newest
+      // also when the answer comes after Settings was left: the grant is this device's either way
+      const takenBack = (d: Awaited<ReturnType<typeof approvalFor>>) => !!d && !d.run && (d.why === "withdrawn" || d.why === "other") && !!d.newest
         && Date.parse(grants.record(subject)?.grantedAt ?? "") < Date.parse(d.newest.at);
       const answer = approvalFor(approvalSubject(rec, a.noteId, a.manifest.id), a.keys.html, asks).catch(() => null);
       // taken back elsewhere: taken back here too, as the applet's own screen does (its saved state goes only with a
@@ -132,12 +132,12 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
         t = setTimeout(() => { t = null; void approvalFor(approvalSubject(rec, a.noteId, a.manifest.id), a.keys.html, asks).catch(() => null).then((d) => { if (takenBack(d)) giveUp(d); }); }, 30);
       });
       if (!on) { offFresh(); return; }
-      const signed = await Promise.race([answer, new Promise<null>((r) => setTimeout(() => r(null), APPROVALS_WAIT_MS))]);
+      const signed = await Promise.race([answer, new Promise<null>((r) => { wait = setTimeout(() => r(null), APPROVALS_WAIT_MS); })]);
       if (!on) return;
       if (takenBack(signed)) { giveUp(signed); return; }
       setRead({ state: "run", html: modulePage(code.compiled.js, usesNote(source) ? reactNoteKitSource : reactKitSource, [], name) });
     })();
-    return () => { on = false; offFresh(); if (t) clearTimeout(t); };
+    return () => { on = false; offFresh(); if (t) clearTimeout(t); if (wait) clearTimeout(wait); };
   }, [runs, a.keys.html, a.keys.scope, rec.key]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!runs || read.state === "gone") return null;
   return (
