@@ -4,7 +4,7 @@ import { notTapped, type AppDeps, type PickedFile, type RecentNote } from "../ap
 import { openLinkOut, saveFileOut } from "./device";
 import { markTap } from "../open/mark";
 import { clientFor, keptClientFor } from "../vault/client";
-import { isAppOwn, noteHref, titleOf } from "../vault/notes";
+import { isAppOwn, noteHref, titleOnly } from "../vault/notes";
 import { listVaults, type VaultRecord } from "../vault/store";
 import { addressIn, resolveLink, type Found, type ResolveDeps } from "../links/resolve";
 import { isAppletCode, type VaultNote } from "../applet/modules/vault";
@@ -104,7 +104,8 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       const lists = await Promise.all(vaults.map(async (rec) => {
         const rows = await clientFor(rec).queryNotes({ orderBy: "updated_at", sort: "desc", limit: limit + 10 }).catch(() => [] as Note[]);
         return rows.filter((n) => !own(n)).map((n): RecentNote => ({
-          vaultName: rec.vault, title: titleOf(n), updatedAt: (n as { updatedAt?: string }).updatedAt ?? null, href: noteHref(rec.key, n.id),
+          // titles only (its card says so): a note named by its id gives its date, never its first words
+          vaultName: rec.vault, title: titleOnly(n), updatedAt: (n as { updatedAt?: string }).updatedAt ?? null, href: noteHref(rec.key, n.id),
         }));
       }));
       return lists.flat().sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")).slice(0, limit);

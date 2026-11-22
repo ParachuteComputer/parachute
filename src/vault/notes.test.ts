@@ -68,6 +68,16 @@ describe("a note's title", () => {
   });
 });
 
+describe("a title for what may see titles only (app.recent)", () => {
+  it("never carries a note's words, even for a note named by its id", async () => {
+    const { titleOnly } = await import("./notes");
+    const n = { id: "01KQ7Z3V9M4T2B8XJ6R5N1C0HD", path: "Inbox/01KQ7Z3V9M4T2B8XJ6R5N1C0HD", content: "Call the doctor about the results", preview: "Call the doctor about the results", displayTitle: "Call the doctor", createdAt: "2026-11-21T12:00:00Z" };
+    expect(titleOnly(n)).not.toMatch(/doctor/);
+    expect(titleOnly(n)).toMatch(/^A note from /);
+    expect(titleOnly({ ...n, path: "Notes/Groceries" })).toBe("Groceries");
+  });
+});
+
 describe("a journal entry's time", () => {
   it("is said beside its title, so two entries of a day with the same words stay apart", async () => {
     const { entryTime } = await import("./notes");

@@ -127,8 +127,10 @@ function useShown(vaults: VaultRecord[]) {
   return { ...shown, cards: key && applets.some(usesCards) };
 }
 
-/** A Parachute in a sentence: "your Parachute" for the one with the home vault, else its name, else its site. */
-const said = (p: ParachuteLine) => (p.home ? "your Parachute" : p.name !== p.host ? p.name : siteOf(p.hub));
+/** A Parachute in a sentence: "your Parachute" for the one with the home vault, else its name, else its site (its whole
+ *  address when another on the list has the same site). */
+const said = (p: ParachuteLine, all: readonly ParachuteLine[] = []) => (p.home ? "your Parachute" : p.name !== p.host ? p.name
+  : all.some((o) => o.hub !== p.hub && siteOf(o.hub) === siteOf(p.hub)) ? p.host : siteOf(p.hub));
 
 /** The one place for what this device holds. Later sections (applets, the self-test) join here. */
 export default function Settings({ children }: { children?: ReactNode }) {
@@ -142,8 +144,8 @@ export default function Settings({ children }: { children?: ReactNode }) {
         <h2 id="s-vaults">Your Parachutes</h2>
         <AskWhose vaults={vaults} />
         {parachutes.length ? parachutes.map((p) => (
-          <section key={p.hub} className="settings-parachute" aria-label={`Parachute: ${said(p)}`}>
-            <h3>{p.home ? "Your Parachute" : said(p)}</h3>
+          <section key={p.hub} className="settings-parachute" aria-label={`Parachute: ${said(p, parachutes)}`}>
+            <h3>{p.home ? "Your Parachute" : said(p, parachutes)}</h3>
             <details className="small settings-details"><summary>Details</summary><p>Its address: <code>{p.hub}</code></p></details>
             {p.vaults.length ? <>
               <ul className="plain">
@@ -156,10 +158,10 @@ export default function Settings({ children }: { children?: ReactNode }) {
                   </li>
                 ))}
               </ul>
-              <VaultsToAdd hub={p.hub} name={said(p)} />
+              <VaultsToAdd hub={p.hub} name={said(p, parachutes)} />
               <p className="small"><Link to={`/add?hub=${encodeURIComponent(p.hub)}`}>Sign in again</Link> <span className="quiet">(sees which vaults you have there now)</span>{" · "}
-                <button type="button" className="quiet-button" onClick={() => signOutOf(p.hub, signOutVault)}>Sign out of {said(p)}</button></p>
-            </> : <p className="small">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`} aria-label={`Sign in to ${said(p)}`}>Sign in</Link>{" · "}
+                <button type="button" className="quiet-button" onClick={() => signOutOf(p.hub, signOutVault)}>Sign out of {said(p, parachutes)}</button></p>
+            </> : <p className="small">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`} aria-label={`Sign in to ${said(p, parachutes)}`}>Sign in</Link>{" · "}
               <button type="button" className="quiet-button" onClick={() => void listHub(p.hub, false).catch(() => undefined)}>Take off the list</button></p>}
           </section>
         )) : <p className="quiet">None yet.</p>}

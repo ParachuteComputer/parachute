@@ -611,8 +611,9 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   for (const e of all) for (const q of tags(e, "q")) if (!answered.has(q)) answered.set(q, e);
   const settled = new Set<string>();
   for (const e of all) if (OUTCOME.test(e.content)) { const p = all.filter((x) => x.pubkey === e.pubkey && x.created_at <= e.created_at && promptOf(x) && !settled.has(x.id)); if (p.length) settled.add(p[p.length - 1].id); }
-  // each name once: two people with no name are "Someone" and "Someone else", not "Someone and Someone"
-  const typing = [...(s.typing.get(room)?.keys() ?? [])].map((p) => nameOf(s, p)).map((n, i, all) => (all.indexOf(n) < i ? `${n} else` : n));
+  // two people with no name are "Someone" and "Someone else", not "Someone and Someone"
+  const typers = [...(s.typing.get(room)?.keys() ?? [])];
+  const typing = typers.map((p, i) => (s.names.has(p) || !typers.slice(0, i).some((q) => !s.names.has(q)) ? nameOf(s, p) : "Someone else"));
   const authors = [...new Set(all.map((e) => e.pubkey))].filter((p) => p !== s.me);
 
   // Uni's turn: here when it is a member or has written here; listening unless you muted it in this room

@@ -25,6 +25,10 @@ export function titleOf(n: Titled): string {
   return last && last !== n.id && !ID_LIKE.test(last) ? last : unnamedTitle(n, p);
 }
 
+/** A title from the record's name and dates alone, never its words: for what may see titles but not text (`app.recent`,
+ *  whose card says "the titles of the newest notes"). A record named by its id is "A note from Nov 21, 2026". */
+export const titleOnly = (n: Titled): string => titleOf({ id: n.id, path: n.path, createdAt: n.createdAt ?? null, updatedAt: n.updatedAt ?? null });
+
 /** The first line of a record's words that says something, without its markdown, cut on a word: "" when none does
  *  (an empty record, or data such as JSON). */
 export function firstWords(text: string | null | undefined, max = 60): string {

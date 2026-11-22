@@ -149,7 +149,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
     : change.kind === "expired" ? `${EXPIRED_LINE}${change.codeMoved ? ` ${codeLine}` : ""}${modeLine}${nothingNew}`
     : change.kind === "asks" ? (freshOnFace ? FRESH_LINE : change.fresh?.size ? FRESH_DETAILS_LINE : ASKS_OTHER_LINE)
     : change.kind === "mode" ? MODE_CHANGED_LINE : null;
-  // a vault by its name; its hub by its site (the whole address is under Show details)
+  // a vault by its name; someone else's hub by its site (the whole address is in a folder row's "?" note)
   const site = host ? siteOfHost(host) : "";
   const where = whose !== "mine" ? <> (someone else's{site ? `, at ${site}` : ""})</> : null;
   const rows = rowsOf(grant, face);

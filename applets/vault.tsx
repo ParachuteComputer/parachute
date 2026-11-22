@@ -47,6 +47,8 @@ const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.last
 const pathTitle = (path: string) => { const last = (path.split("/").filter(Boolean).pop() ?? "").replace(/\.(md|html?|tsx|jsx)$/i, ""); return !last || /^(?:[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$/i.test(last) ? "A record with no name" : last; };
 /** Where a record sits, as a list says it: its folder, or "Parachute's own" for the app's own (never its path). */
 const whereOf = (r: Rec) => (r.own ? "Parachute's own" : folderOf(r.path));
+/** The same from a path alone (a link's other end): the app's folders are "Parachute's own". */
+const whereAt = (path: string) => (/^\.?parachute\/(?!from\/)/i.test(path) ? "Parachute's own" : folderOf(path));
 /** Where a vault is, only to tell apart two vaults of one name: its site, or its whole address when the site is shared. */
 const placeOf = (v: Held, list: Held[]) => {
   const twins = list.filter((o) => o !== v && o.name === v.name);
@@ -249,7 +251,7 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
               {/* packs (T-476, docs/PACKS.md): types, templates and views added with one tap */}
               <div className="chips">
                 {typeof vaults.packs === "function" && <Button small kind={typed.length ? "plain" : "primary"} onClick={packs}>{typed.length ? "Packs" : "Add a pack"}</Button>}
-                <Button small kind={own ? "primary" : "plain"} onClick={() => setOwn(!own)}>Parachute's own</Button>
+                <Button small kind={own ? "primary" : "plain"} aria-pressed={own} onClick={() => setOwn(!own)}>Parachute's own</Button>
               </div>
               <details className="more"><summary>Details</summary>
                 <p className="note-meta">Its address: <span className="addr">{v.host}</span></p>
@@ -494,8 +496,8 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
             {canWrite && <Button small onClick={() => setEditing(r.body ?? "")}>Edit words</Button>}
           </>}
       {(out.length > 0 || into.length > 0) && <p className="sect">Links</p>}
-      {out.length > 0 && <List label="Links to" rows={out.map((l) => ({ key: `o${l.id}`, title: pathTitle(l.path), meta: folderOf(l.path), onPress: () => open(l.id) }))} />}
-      {into.length > 0 && <List label="Linked from" rows={into.map((l) => ({ key: `i${l.id}`, title: pathTitle(l.path), meta: folderOf(l.path), onPress: () => open(l.id) }))} />}
+      {out.length > 0 && <List label="Links to" rows={out.map((l) => ({ key: `o${l.id}`, title: pathTitle(l.path), meta: whereAt(l.path), onPress: () => open(l.id) }))} />}
+      {into.length > 0 && <List label="Linked from" rows={into.map((l) => ({ key: `i${l.id}`, title: pathTitle(l.path), meta: whereAt(l.path), onPress: () => open(l.id) }))} />}
       <p className="sect">History</p>
       {histFailed ? <Problem error={histFailed} onRetry={readHistory}>Its history couldn't be read</Problem>
         : history === null ? <Loading />
