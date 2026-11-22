@@ -140,7 +140,10 @@ export function packMethods(deps: VaultsDeps, word: (p: unknown) => void, held: 
         // the vault's own types, so the import's names stay clear of them (notion.ts: a type an import made is known by
         // its description, and used again)
         const target = packTarget(deps, vault as string);
-        const held = (await target.types()).filter((t) => t.kind === "type").map((t) => ({ name: t.name, description: t.description ?? null, fields: t.fields as Record<string, { type?: string; indexed?: boolean }> }));
+        let held: { name: string; description: string | null; fields: Record<string, { type?: string; indexed?: boolean }> }[];
+        // (a tag in use counts too: a table named like it would stay a tag, its type never made)
+        try { held = (await target.types()).filter((t) => t.kind === "type" || t.count > 0).map((t) => ({ name: t.name, description: t.description ?? null, fields: t.kind === "type" ? t.fields as Record<string, { type?: string; indexed?: boolean }> : {} })); }
+        catch (e) { throw fail(e); }
         try {
           pack = notionImport(await readZip(file.bytes, { want: NOTION_WANT }), file.name, held);
         } catch (e) {

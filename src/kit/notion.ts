@@ -124,7 +124,7 @@ function links(raw: string): { title: string; to: string }[] | null {
 
 type Kind = "date" | "number" | "boolean" | "list" | "relation" | "text";
 /** A column's kind, from every value it has: one that doesn't fit makes the column text. */
-function kindOf(values: string[]): Kind {
+function kindOf(values: string[], header = ""): Kind {
   const v = values.map((x) => x.trim()).filter(Boolean);
   if (!v.length) return "text";
   if (v.every((x) => relations(x))) return "relation";
@@ -137,7 +137,9 @@ function kindOf(values: string[]): Kind {
   // (and a choice used in more than one row, as a select's options are: "Le Guin, Ursula" names one author)
   const seen = new Map<string, number>();
   for (const x of v) for (const t of new Set(x.split(",").map((w) => w.trim().toLowerCase()))) seen.set(t, (seen.get(t) ?? 0) + 1);
-  if (v.some((x) => x.includes(",")) && !v.every((x) => /^[\d\s.,-]+$/.test(x)) && [...seen.values()].some((n) => n > 1) && v.every((x) => x.split(",").every((t) => { const w = t.trim(); return w.length > 0 && w.length <= 40 && !/[.!?]$/.test(w); }))) return "list";
+  // (or a column named as a multi-select is: Tags, Labels, Categories, Topics)
+  const tagsByName = /^(tags?|labels?|categor(y|ies)|topics?|keywords?)$/i.test(header.trim());
+  if (v.some((x) => x.includes(",")) && !v.every((x) => /^[\d\s.,-]+$/.test(x)) && (tagsByName || [...seen.values()].some((n) => n > 1)) && v.every((x) => x.split(",").every((t) => { const w = t.trim(); return w.length > 0 && w.length <= 40 && !/[.!?]$/.test(w); }))) return "list";
   return "text";
 }
 const SPEC: Record<Exclude<Kind, "relation">, FieldSpec> = { date: { type: "date" }, number: { type: "number" }, boolean: { type: "boolean" }, list: { type: "array" }, text: { type: "string" } };
@@ -242,7 +244,7 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
     const title = bare(noExt(key.split("/").pop()!));
     const again = fromNotion(title);
     tables.push({ key, csv, title, type: again?.name ?? typeName(title, typeNames), place: unique(placeOf(key)), header, body,
-      cols: header.slice(1).map((h, i) => ({ header: h.trim(), field: fieldName(h, taken), kind: kindOf(body.map((r) => r[i + 1] ?? "")), i: i + 1 })) });
+      cols: header.slice(1).map((h, i) => ({ header: h.trim(), field: fieldName(h, taken), kind: kindOf(body.map((r) => r[i + 1] ?? ""), h), i: i + 1 })) });
   }
   // a field is one thing in a vault: where two tables have a column of one name but of different kinds, it is text in
   // both (a vault refuses a type whose field another type declares otherwise)
@@ -253,11 +255,11 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   const specOf = (c: Col): FieldSpec => (c.kind === "relation" ? { type: "reference", cardinality: "many" } : SPEC[c.kind as Exclude<Kind, "relation">]);
   // (what a vault refuses beside another type's field of that name: another kind, or an indexed one; cardinality it takes)
   // (every type but the table's own again: another import's types count as much as the person's)
-  const clash = (f: string, spec: FieldSpec, own: string) => held.some((h) => { const d = h.name !== own && h.fields[f]; return !!d && (d.type !== spec.type || !!d.indexed); });
+  const clash = (f: string, spec: FieldSpec, own: string) => held.some((h) => { const d = h.name !== own && Object.hasOwn(h.fields, f) && h.fields[f]; return !!d && (d.type !== spec.type || !!d.indexed); });
   const renamed = new Map<string, string>();
   for (const t of tables) for (const c of t.cols) {
     if (!clash(c.field, specOf(c), t.type)) continue;
-    if (!renamed.has(`${c.field}|${c.kind}`)) { let i = 2, n = `${c.field}_${i}`; while (clash(n, specOf(c), t.type) || held.some((h) => h.name !== t.type && n in h.fields) || tables.some((x) => x.cols.some((y) => y.field === n))) n = `${c.field}_${++i}`; renamed.set(`${c.field}|${c.kind}`, n); }
+    if (!renamed.has(`${c.field}|${c.kind}`)) { let i = 2, n = `${c.field}_${i}`; while (clash(n, specOf(c), t.type) || held.some((h) => h.name !== t.type && Object.hasOwn(h.fields, n)) || tables.some((x) => x.cols.some((y) => y.field === n))) n = `${c.field}_${++i}`; renamed.set(`${c.field}|${c.kind}`, n); }
     c.field = renamed.get(`${c.field}|${c.kind}`)!;
   }
 

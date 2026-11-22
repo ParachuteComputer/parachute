@@ -163,6 +163,14 @@ describe("notionImport", () => {
     expect(Object.keys(r.pack.types.book.fields)).toEqual(["rating", "shelf_2"]);
   });
 
+  test("a column named Tags is a list even when no tag repeats; a used tag's name is taken; a field named Constructor is just a field", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const r = notionImport(new Map([["E/Reading 8888888888888888888888888888888e_all.csv", enc('Name,Tags,Constructor\r\na,"urgent, home",x\r\nb,"work, errands",y\r\n')]]), "x",
+      [{ name: "reading", description: null, fields: {} }, { name: "other", description: null, fields: { author: { type: "string" } } }]);
+    expect(Object.keys(r.pack.types)).toEqual(["reading-2"]);
+    expect(r.pack.types["reading-2"].fields).toEqual({ tags: { type: "array" }, constructor: { type: "string" } });
+  });
+
   test("another import's types count in a clash; two tables of one title each find their own type again", () => {
     const enc = (t: string) => new TextEncoder().encode(t);
     const files = new Map([
