@@ -9,7 +9,7 @@
 // Nothing here is the shell's.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { app, Empty, link, List, Loading, onShown, Page, Problem, ready, services, shown, toast, vault, when, Write } from "parachute";
-import { askOf, chunk, createStore, lastText, now, openAsks, promptOf, tag, tags, useStore, visible, type Ev } from "component:room";
+import { askNow, askOf, chunk, createStore, lastText, now, openAsks, promptOf, tag, tags, useStore, visible, type Ev } from "component:room";
 
 const UNI = "{{uni}}";
 /** Journal/2026/11-19/: where today's entries are (the Journal applet's paths). */
@@ -137,7 +137,7 @@ export default function Home() {
       const waiting = new Set<string>();
       if (openAsks(s, id) > 0) {
         const answered = new Set(all.flatMap((e) => e.tags.filter((t) => t[0] === "q").map((t) => t[1])));
-        for (const e of all) { const a = askOf(e); if (a && a.until > now() && !answered.has(e.id) && e.pubkey !== s.me) { waiting.add(e.id); wants.push({ key: e.id, room: id, roomName: room.name, text: a.what, at: e.created_at, event: e.id }); } }
+        for (const e of all) { const a = askNow(s, e); if (a && a.until > now() && !answered.has(e.id) && e.pubkey !== s.me) { waiting.add(e.id); wants.push({ key: e.id, room: id, roomName: room.name, text: a.what, at: e.created_at, event: e.id }); } }
       }
       // what names you since you last read the room (on any device) or wrote in it
       const mine = all.find((e) => e.pubkey === s.me)?.created_at ?? 0;

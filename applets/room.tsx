@@ -189,6 +189,9 @@ export function askOf(e: Ev): Ask | null {
   if (b.kind === "choose" && options.length < 2) return null;
   return { kind: b.kind, what: b.what.slice(0, 200), why: b.why.slice(0, 500), until: b.until, options, context: typeof b.context === "string" ? b.context.slice(0, 4000) : undefined };
 }
+/** An ask as it stands: read from the message's newest text by its author, so the asker's close (an edit that drops the
+ *  uni-ask block, uni-ask SPEC §3) ends the card, the room's "wants you" and Today's list alike. */
+export const askNow = (s: Store["s"], e: Ev) => askOf({ ...e, content: textOf(s, e) });
 type Prompt = { command: string; why: string; deadline: number | null };
 export function promptOf(e: Ev): Prompt | null {
   const lines = e.content.replace(/\r\n/g, "\n").split("\n");
@@ -444,11 +447,11 @@ export function useStore(st: Store) {
 export function openAsks(s: Store["s"], room: string) {
   const msgs = [...(s.msgs.get(room)?.values() ?? [])];
   const answered = new Set(msgs.flatMap((e) => tags(e, "q")));
-  return msgs.filter((e) => visible(s, e) && !answered.has(e.id) && e.pubkey !== s.me && (() => { const a = askOf(e); return a && a.until > now(); })()).length;
+  return msgs.filter((e) => visible(s, e) && !answered.has(e.id) && e.pubkey !== s.me && (() => { const a = askNow(s, e); return a && a.until > now(); })()).length;
 }
 /** A message as one line, for a list: an ask's question, a card's kind, or its words; else what it carries. */
 export function lastText(s: Store["s"], e: Ev) {
-  const a = askOf(e); if (a) return a.what;
+  const a = askNow(s, e); if (a) return a.what;
   if (promptOf(e)) return "Hermes asks to run a command";
   if (/```uni-sealed-(approval|morning)/.test(e.content)) return "Uni asks for your OK on a card";
   if (/```uni-secret-request/.test(e.content)) return "Uni asks for a secret";
@@ -726,7 +729,7 @@ function Message({ st, e, grouped, root, marked, replies, openThread, answer, an
   const s = st.s;
   const mine = e.pubkey === s.me;
   const text = textOf(s, e);
-  const ask = askOf(e), prompt = promptOf(e), sealed = /```uni-sealed-(approval|morning)\n/.test(e.content), secret = !sealed && /```uni-secret-request\n/.test(e.content);
+  const ask = askNow(s, e), prompt = promptOf(e), sealed = /```uni-sealed-(approval|morning)\n/.test(e.content), secret = !sealed && /```uni-secret-request\n/.test(e.content);
   const media = mediaOf(e);
   const body = withoutFences(text).replace(/^!?\[[^\]]*\]\(https?:\/\/\S+\/media\/[0-9a-f]{64}\.[a-z0-9]+\)\s*$/gm, "").trim();
   const named = tags(e, "p").includes(s.me) && !mine;
