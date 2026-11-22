@@ -1,5 +1,7 @@
 # The Uni app, rebuilt as applets: what is here
 
+The readiness gate for switching (what is done daily, its test, its status) is [SWITCH.md](SWITCH.md); this is the full list.
+
 Every feature of the Uni app (`uni-app-pipeline`, 0.5.1) a person uses, and where it is in Parachute: **built** (with
 how it was tested), **part** (what is missing), or **left** (and why). Tests named `e2e/…` run in the browser against
 the web build; "real relay" and "real mail" mean our Buzz relay with production's auth settings and a Stalwart behind

@@ -74,7 +74,8 @@ test key and a made-up "Uni" in a private room of their own on the person's rela
 sealed approval card made, checked as the app checks it, approved, and the answer opened as Uni opens it), a note
 written, read and deleted in a test vault on the hub, a push end to end (the test key registers its own endpoint with
 the push gateway, the made-up Uni names it, and the sealed push arrives on the push server and opens with the
-endpoint's keys), and the mail gateway and calendar door each refusing the test key by their own signature check. It
+endpoint's keys), the mail gateway and calendar door each refusing the test key by their own signature check, and the
+update feed (a feed, each file it names there to download). It
 also reads the last finished Services run on next and starts today's. It prints only the counts
 (`parachute-canary: 7 passed, 0 failed`); what failed and why goes to a log (mode 600), and it exits 1, so a timer's
 failure alert fires. Its header names the settings; a service left unset isn't checked.
