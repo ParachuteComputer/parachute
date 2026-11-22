@@ -169,6 +169,7 @@ export default function Journal() {
           refused = e?.message ?? String(e);
           // its words back in the box, on disk first (what React holds lands when it runs the update), then off the list
           const words = draft.current.trim() ? `${draft.current}\n\n${item.body}` : item.body;
+          draft.current = words; // a second refusal before React renders builds on this one
           (globalThis as any).parachute?.saved?.set?.("draft", words);
           setText((t: string) => (t.trim() ? `${t}\n\n${item.body}` : item.body));
           off();
