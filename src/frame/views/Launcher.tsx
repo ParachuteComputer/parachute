@@ -68,8 +68,8 @@ const theirs = (n: Note) => {
   return !/^(Parachute|Applets|Templates|\.parachute)\//.test(path) && !tags.some((t) => t === "guide" || t === "applet" || t === "component" || t.startsWith("parachute"));
 };
 
-/** Whether a home vault holds nothing of the person's yet, per vault for this session: once something of theirs is
- *  in it, it stays known; a new vault is read again on each visit. */
+/** Whether a home vault holds something of the person's, per vault for this session: once it does, it stays known; a
+ *  new vault is read again on each visit (the list waits for it). */
 const known = new Map<string, boolean>();
 const started = (n: Note) => theirs(n) || ((n as { path?: string }).path ?? "").startsWith("Parachute/Receipts/");
 /** `undefined` until the vaults are read and, for a home vault not read before, while its first read runs (the list
@@ -91,7 +91,9 @@ function useFresh(v: FrameVault | undefined, loaded: boolean): boolean | undefin
     const late = setTimeout(() => { if (live && !drawn) draw(false); }, 1500);
     readerFor(v).queryNotes({ orderBy: "updated_at", sort: "desc", limit: 40 }).then((notes) => {
       const isNew = !notes.some(started);
-      known.set(key, isNew);
+      // (only "not new" is kept: a vault read as new is read again on the next visit, which waits for it, so a Start
+      // here that something since then ended never shows first and then goes)
+      if (!isNew) known.set(key, false);
       // drawn already: only a Start here that goes may change it (nothing new pushes the list down)
       if (live && (!drawn || !isNew)) draw(isNew);
     }, () => { if (live && !drawn) draw(false); });

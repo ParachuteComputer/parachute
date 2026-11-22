@@ -127,6 +127,19 @@ describe("notionImport", () => {
     expect(r.pack.records.find((x) => x.path === "Notion/Tasks/@November 21, 2026")).toMatchObject({ fields: { project: ["Notion/Projects/Cover"], due: "2026-11-21" }, body: "Send it.\n" });
   });
 
+  test("a relation to a page whose title has a comma (a date) is still a relation", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const M = "Meetings 5555555555555555555555555555555e", N = "Notes 6666666666666666666666666666666f", id = "7777777777777777777777777777777a", id2 = "8888888888888888888888888888888b";
+    const r = notionImport(new Map([
+      [`E/${M}_all.csv`, enc("Name\r\nNovember 21, 2026\r\nKickoff (v2)\r\n")],
+      [`E/${M}/November 21, 2026 ${id}.md`, enc("# November 21, 2026\n")],
+      [`E/${M}/Kickoff (v2) ${id2}.md`, enc("# Kickoff (v2)\n")],
+      [`E/${N}_all.csv`, enc(`Name,Meeting\r\na,"November 21, 2026 (${encodeURIComponent(M)}/November%2021%2C%202026%20${id}.md), Kickoff (v2) (${encodeURIComponent(M)}/Kickoff%20(v2)%20${id2}.md)"\r\nb,Kickoff (v2) (${encodeURIComponent(M)}/Kickoff%20(v2)%20${id2}.md)\r\n`)],
+    ]));
+    expect(r.pack.types.notes.fields.meeting).toEqual({ type: "reference", cardinality: "many" });
+    expect(r.pack.records.find((x) => x.path === "Notion/Notes/a")?.fields).toEqual({ meeting: ["Notion/Meetings/November 21, 2026", "Notion/Meetings/Kickoff (v2)"] });
+  });
+
   test("a column of one name in two tables, of two kinds, is text in both: the vault would refuse one type", () => {
     const csv = (rows: string) => new TextEncoder().encode(`\ufeffName,Tags\r\n${rows}`);
     const two = notionImport(new Map([

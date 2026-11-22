@@ -95,12 +95,19 @@ export function notionDate(raw: string): string | null {
   return null;
 }
 
-/** "Title (path.md), Other (path2.md)": each link's path, URL-decoded; null when the value isn't only such links. */
+/** "Title (path.md), Other (path2.md)": each link's path, URL-decoded; null when the value isn't only such links. Found by
+ *  their "(….md)" alone: a title may hold commas ("November 21, 2026") and parentheses, and so may a path, one deep. */
 function relations(raw: string): string[] | null {
-  const parts = [...raw.matchAll(/(?:^|,\s*)([^,()]*?(?:\([^()]*\)[^,()]*?)*?)\s*\(([^()]+?\.(?:md|csv))\)/g)];
-  if (!parts.length) return null;
-  const rest = raw.replace(/(?:^|,\s*)[^,()]*?(?:\([^()]*\)[^,()]*?)*?\s*\([^()]+?\.(?:md|csv)\)/g, "").trim();
-  return rest ? null : parts.map((p) => dec(p[2]));
+  const re = /\(((?:[^()]|\([^()]*\))+?\.(?:md|csv))\)/g;
+  const out: string[] = [];
+  let last = 0;
+  for (const m of raw.matchAll(re)) {
+    // what came before this link, after the last one and its comma, is its title: there must be one
+    if (!raw.slice(last, m.index).replace(/^\s*,/, "").trim()) return null;
+    out.push(dec(m[1]));
+    last = m.index! + m[0].length;
+  }
+  return out.length && !raw.slice(last).trim() ? out : null;
 }
 
 type Kind = "date" | "number" | "boolean" | "list" | "relation" | "text";
