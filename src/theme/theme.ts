@@ -171,10 +171,12 @@ export const DEFAULT_LOOK: LookName = "paper";
 const PALETTE_REF = new RegExp(`^var\\(--(?:${COLOR_KEYS.join("|")})\\)$`);
 const tokenColor = (v: string) => isColor(v) || v === "transparent" || PALETTE_REF.test(v);
 const LEN = String.raw`(?:0|\d{1,3}(?:\.\d{1,2})?(?:px|em|rem))`;
-const LINE = new RegExp(String.raw`^(?:0|\d{1,2}(?:\.\d)?px)\s+(none|solid|dotted|dashed|double)\s+(.+)$`);
-const EDGES = new RegExp(String.raw`^(?:0|\d(?:\.\d)?px)(?:\s+(?:0|\d(?:\.\d)?px)){0,3}$`);
-const PAD = new RegExp(String.raw`^${LEN}(?:\s+${LEN}){0,3}$`);
-const ONE_SHADOW = new RegExp(String.raw`^(?:inset\s+)?(-?${LEN})\s+(-?${LEN})(?:\s+${LEN}(?:\s+-?${LEN})?)?\s+(.+)$`);
+/** Between two parts of a value: plain spaces only (a no-break or a line separator would pass \s and break the CSS). */
+const SP = "[ \\t]+";
+const LINE = new RegExp(String.raw`^(?:0|\d{1,2}(?:\.\d)?px)${SP}(none|solid|dotted|dashed|double)${SP}(.+)$`);
+const EDGES = new RegExp(String.raw`^(?:0|\d(?:\.\d)?px)(?:${SP}(?:0|\d(?:\.\d)?px)){0,3}$`);
+const PAD = new RegExp(String.raw`^${LEN}(?:${SP}${LEN}){0,3}$`);
+const ONE_SHADOW = new RegExp(String.raw`^(?:inset${SP})?(-?${LEN})${SP}(-?${LEN})(?:${SP}${LEN}(?:${SP}-?${LEN})?)?${SP}(.+)$`);
 /** A list's items split at its commas outside parentheses (a shadow's colour may be `rgba(1, 2, 3, .2)`). */
 const topLevel = (v: string) => { const out: string[] = []; let depth = 0, from = 0; for (let i = 0; i < v.length; i++) { const c = v[i]; if (c === "(") depth++; else if (c === ")") depth--; else if (c === "," && depth === 0) { out.push(v.slice(from, i)); from = i + 1; } } out.push(v.slice(from)); return out; };
 /** A style token's value as a record gives it: kept if its kind's grammar reads it, else null (the look's value stands). */
@@ -205,7 +207,7 @@ export type ScreenChoice = (typeof SCREENS)[number];
 export function onScreen(theme: Theme, screen: ScreenChoice): Theme {
   if (screen !== "daylight") return theme;
   const d = LOOKS.daylight;
-  return { ...theme, look: "daylight", colors: { ...d.colors }, dark: { ...d.dark }, tokens: {}, motion: "still" };
+  return { ...theme, look: "daylight", colors: { ...d.colors }, dark: { ...d.dark }, tokens: {}, motion: "still", scheme: "light" };
 }
 
 /** The built-in theme: paper, ink and one moss accent; a book serif (Literata) for reading and a quiet sans (Instrument
@@ -235,7 +237,9 @@ export type Tokens = Record<TokenKey, string> & { scheme: "light" | "dark"; dens
 // One way to read each number, and a separator required between two (a comma, a slash or a space): a pattern that could
 // split a run of digits many ways would take seconds on a hostile value, and this one runs at every start.
 const NUM = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:%|deg|turn|rad)?`;
-const FN = new RegExp(String.raw`^(?:rgba?|hsla?|oklch|oklab)\(\s*${NUM}(?:(?:\s*[,/]\s*|\s+)${NUM}){1,3}\s*\)$`, "i");
+// three values and an optional alpha, written one way throughout: commas (rgb(1, 2, 3, .5)) or spaces (rgb(1 2 3 / 50%))
+const W = "[ \\t]*";
+const FN = new RegExp(String.raw`^(?:rgba?|hsla?|oklch|oklab)\(${W}${NUM}(?:(?:${W},${W}${NUM}){2}(?:${W},${W}${NUM})?|(?:[ \t]+${NUM}){2}(?:${W}/${W}${NUM})?)${W}\)$`, "i");
 /** A colour this reads: hex (3, 4, 6 or 8 digits), or rgb/hsl/oklch/oklab with numbers only. */
 export const isColor = (v: unknown): v is string => typeof v === "string" && v.length <= 64 && (/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) || FN.test(v));
 const FAMILY = /^\s*(?:"[A-Za-z0-9 -]{1,60}"|'[A-Za-z0-9 -]{1,60}'|-?[A-Za-z][A-Za-z0-9 -]{0,60})\s*$/;

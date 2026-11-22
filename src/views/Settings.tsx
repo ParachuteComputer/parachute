@@ -1,3 +1,5 @@
+import UpdateSettings from "./UpdateSettings";
+import { OWN } from "../shell/updates";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Bar, backOrLauncher } from "../ui/Bar";
 import { Link } from "react-router";
@@ -166,10 +168,11 @@ export default function Settings({ children }: { children?: ReactNode }) {
       <KeyringSettings cards={shown.cards} />
       <NotifySettings />
       {shown.frame && <FrameSettings />}
+      <UpdateSettings />
       <ThemeSettings />
       <AppletSettings vaults={vaults} />
       {children}
-      <p className="screen-foot quiet">Parachute {__APP_VERSION__}</p>
+      <p className="screen-foot quiet">Parachute {__APP_VERSION__}{OWN.commit && <> · {OWN.commit}</>}</p>
     </main>
   );
 }
