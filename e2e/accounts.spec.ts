@@ -28,7 +28,7 @@ test("Claude accounts: each account's use, and which one new workers use, from t
     await expect(app.getByRole("group", { name: "Week 96%" })).toContainText("paused: keeping 5% for rooms");
     await expect(app.getByRole("group", { name: "Fable week 16%" })).toBeVisible();
     await expect(app.getByRole("group", { name: "Session 40%" })).toContainText("info, not a limit");
-    await expect(app.getByRole("region", { name: "Account B" })).toContainText(/last reading (3h ago|\w)/);
+    await expect(app.getByRole("region", { name: "Account B" })).toContainText("last reading 3h ago");
     await expect(app.getByRole("group", { name: "Week 12%" })).toContainText("on pace");
 
     // in Settings: its section, the meters without the info-only session, and who new workers go to

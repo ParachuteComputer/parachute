@@ -5,6 +5,7 @@
 // within an app bundle more directly, just for small things".
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, record, VAULT } from "./hub";
+import { ui } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
@@ -31,15 +32,17 @@ test("an applet's section of Settings: asks first, then reads what it was allowe
   const used = await record(hubState(), "create", { path: "Uses/Today", extension: "md", body: "41% of the week" });
   const note = await record(hubState(), "create", ARGS);
   try {
-    // not allowed yet: the heading, one line, and the way to it; nothing runs
+    // not allowed yet: Settings draws nothing of it, not its heading either (anything that writes the vault could
+    // otherwise put a heading in Settings)
     await page.goto("/settings");
-    await expect(section(page).getByRole("heading", { name: "How much is used" })).toBeVisible();
-    await expect(section(page)).toContainText("Use isn't allowed on this device yet.");
-    await expect(section(page).locator("iframe")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Your Parachutes" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "How much is used" })).toHaveCount(0);
 
-    // its card says the section; Allow on its own screen
-    await section(page).getByRole("link", { name: "Open Use" }).click();
-    await expect(page.getByText("Show a section in Settings, «How much is used»: what it reads, nothing it changes").first()).toBeVisible();
+    // its card says the section once; Allow on its own screen
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /^Use/ }).click();
+    await expect(page.getByText("Show a section in Settings", { exact: true })).toHaveCount(1);
+    await expect(page.getByText("Shows a section in Settings, «How much is used»: what it reads, nothing it changes.")).toBeVisible();
     await page.getByRole("button", { name: "Allow" }).click();
     const own = page.frameLocator("iframe.applet-frame:visible");
     await expect(own.locator("#where")).toHaveText("On its own screen");
@@ -57,12 +60,12 @@ test("an applet's section of Settings: asks first, then reads what it was allowe
     expect(await h()).toBeLessThan(400);
     await expect(section(page).getByRole("link", { name: /Use/ }).last()).toHaveAttribute("href", new RegExp(`/v/${VAULT}/a/`));
 
-    // its code changes (an agent's update): no frame, one line, until it is allowed again
+    // its code changes (an agent's update): the section goes until it is allowed again
     const cur = await api(hubState(), "GET", `notes?id=${note.id}`);
     await record(hubState(), "update", { id: note.id, body: CODE.replace("On its own screen", "On its own screen, changed"), if_updated_at: cur.updatedAt });
     await page.goto("/settings");
-    await expect(section(page)).toContainText("Use changed since you allowed it.");
-    await expect(section(page).locator("iframe")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Your Parachutes" })).toBeVisible();
+    await expect(section(page)).toHaveCount(0);
   } finally {
     for (const n of (await api(hubState(), "GET", "notes?path_prefix=Uses/&limit=50")) as { id: string }[]) await api(hubState(), "DELETE", `notes/${n.id}`);
     await api(hubState(), "DELETE", `notes/${note.id}`);

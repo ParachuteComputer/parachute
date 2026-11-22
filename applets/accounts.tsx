@@ -29,19 +29,25 @@ const pctText = (v: number | null) => (v === null ? "–" : `${v < 100 ? Math.mi
 type Meter = { label: string; used: number | null; text: string; reset: string | null; note: string | null; state: "ok" | "paused" | "full" | "info" };
 
 /** One window as the meter shows it, at `now`. */
-function meter(label: string, w: Win | null | undefined, stop: number | null | undefined, now: number, week = false, info = false): Meter | null {
-  if (!w) return null;
+/** The launcher's stop, a percent in (0, 100]; anything else is no stop. */
+const stopOf = (v: unknown): number | null => { const n = num(v); return n !== null && n > 0 && n <= 100 ? n : null; };
+/** `why`: the launcher lifted this account's stop (the week's last hours), and says why. A model's week (Fable) has no
+ *  headroom for rooms: mts fills it (model_stop, 97 by default) and the note doesn't carry that stop, so it never reads
+ *  paused here. */
+function meter(label: string, w: Win | null | undefined, stop: number | null, now: number, week = false, info = false, why: string | null = null): Meter | null {
+  if (!w || typeof w !== "object") return null;
   const passed = at(w.resets_at) <= now;
   const used = passed ? 0 : num(w.used);
   const full = used !== null && used >= 100, paused = !info && !full && used !== null && typeof stop === "number" && used >= stop;
   let note: string | null = null;
   if (info) note = "info, not a limit";
   else if (paused) note = `paused: keeping ${Math.round(100 - (stop as number))}% for rooms`;
+  else if (why && stop !== null) note = `spending to ${Math.round(stop)}%: ${why}`;
   else if (week && used !== null && w.resets_at && !passed) {
     const left = Math.max(0, (at(w.resets_at) - now) / 3600_000), even = Math.max(0, Math.min(100, 100 * (1 - left / WEEK_H)));
     note = used > even + 5 ? "ahead of pace" : "on pace";
   }
-  return { label, used, text: pctText(used), reset: !passed && w.resets_at && used ? `resets ${when.full(w.resets_at)}` : null, note, state: full ? "full" : paused ? "paused" : info ? "info" : "ok" };
+  return { label, used, text: pctText(used), reset: !passed && w.resets_at && (week || used) ? `resets ${when.full(w.resets_at)}` : null, note, state: full ? "full" : paused ? "paused" : info ? "info" : "ok" };
 }
 
 type Row = { name: string; label: string; meters: Meter[]; old: string | null; out: boolean };
@@ -49,19 +55,23 @@ type Row = { name: string; label: string; meters: Meter[]; old: string | null; o
 function rowsOf(f: Record<string, any>, now: number): Row[] {
   const d = f.claude_accounts;
   const accounts: Account[] = Array.isArray(d?.accounts) ? d.accounts.filter((a: any) => a && /^[a-z][a-z0-9]{0,15}$/.test(a.name)) : [];
-  const flat = num(d?.stop);
+  const flat = stopOf(d?.stop);
   return accounts.map((a) => {
     const out = a.signed_in === false;
     const age = (now - at(a.read_at)) / 60_000;
+    // an account's own stop: null is the launcher's "no stop"; anything that isn't a stop leaves the note's
+    const own = (v: unknown) => (v === null ? null : stopOf(v) ?? undefined);
     const hit = !!a.limit_hit && at(a.limit_hit.resets_at) > now;
-    const wStop = a.stop?.week !== undefined ? a.stop.week : flat, sStop = a.stop?.session !== undefined ? a.stop.session : flat;
+    const ws = own(a.stop?.week), ss = own(a.stop?.session);
+    const wStop = ws !== undefined ? ws : flat, sStop = ss !== undefined ? ss : flat;
+    const why = typeof a.stop?.why === "string" && wStop !== null && (flat === null || wStop > flat) ? a.stop.why.slice(0, 120) : null;
     const meters = [
-      meter("Week", a.week, wStop, now, true),
-      ...Object.values(a.models ?? {}).map((m) => meter(`${m.name ?? "Model"} week`, m, wStop, now, true)),
+      meter("Week", a.week, wStop, now, true, false, why),
+      ...Object.values(a.models && typeof a.models === "object" ? a.models : {}).filter((m) => m && typeof m === "object").map((m) => meter(`${typeof m.name === "string" ? m.name.slice(0, 20) : "Model"} week`, m, null, now, true)),
       hit ? { label: "Session", used: 100, text: "Full", reset: `until ${when.full(a.limit_hit!.resets_at)}`, note: null, state: "full" as const }
         : meter("Session", a.session, sStop, now, false, a.stop?.session_limit === false),
     ].filter((m): m is Meter => !!m);
-    return { name: a.name, label: `Account ${a.name.toUpperCase()}`, meters, out, old: out ? "signed out" : !a.read_at ? "no reading yet" : age > STALE_MIN ? `last reading ${agoText(a.read_at)}` : null };
+    return { name: a.name, label: `Account ${a.name.toUpperCase()}`, meters, out, old: out ? "signed out" : !a.read_at ? "no reading yet" : !(age <= STALE_MIN) ? `last reading ${agoText(a.read_at) || "of no known time"}` : null };
   });
 }
 

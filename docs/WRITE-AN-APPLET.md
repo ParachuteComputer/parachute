@@ -165,20 +165,24 @@ settings:
   screen: usage        # one of its screens: what it draws there
 ```
 
-Settings draws the heading, then that screen of the applet in a small frame at its content's height (up to 640 px),
+Settings draws the heading, then that screen of the applet in a small frame at its content's height (up to 640 px, never shrinking),
 after Settings' own sections, with a line under it that leads to the applet. There `ready()` says `place: "settings"`
 and `screen: "usage"`: draw the short view, not the whole applet. A section **only reads**, in the folders its card
 allowed. It has the theme and nothing else: no `create` or `update`, no app words, no servers, no saved state, no
 counts, no microphone. Write it as a glance, with the kit's parts (`List`, `Empty`, `when`), and leave the actions to
 its own screen.
 
-It runs only as the person allowed it on this device: the card says "Show a section in Settings, «Claude usage»", the
-section is in the card's key on this device (adding or renaming it asks again here; it is left out of the approval your
-other devices read, so a device on an older build and one on a newer agree on it), and changed code shows one line ("changed since you
-allowed it") and a way to the applet instead of running. Only an applet in a vault of the person's own, offered by the
-open bundle, has one, and only a TSX or JSX applet that imports no component and has no embeds. A bad `settings` costs
-the applet its section, not the applet. Older apps leave the field out and show nothing
-([design/VERSIONS.md](design/VERSIONS.md)). Example: `applets/accounts.tsx` and `applets/accounts.json`.
+Settings draws nothing of it, not even its heading, until the person has allowed it on this device as it is now (the
+card says "Show a section in Settings, «Claude usage»"). Where applets run as approved code rather than sealed, a
+section does too, as its own screen does: the person allowed it under that warning, and Settings says whose it is. The section is in the card's
+key on this device: adding or renaming it asks again. It is left out of the approval your other devices read (so a
+device on an older build and one on a newer agree on it); an approval from another device covers it only when that
+device's card said it, else the card asks here. Changed code, or a Revoke on another device, takes the section away
+until it is allowed again. The frame grows to its content and never shrinks while Settings is open, so nothing above it
+moves under a tap. Only an applet in a vault of the person's own, offered by the open bundle, has one; an HTML applet,
+or one that imports a component or has embeds, gets a line saying it can't. A bad `settings` costs the applet its
+section, not the applet. Older apps leave the field out and show nothing ([design/VERSIONS.md](design/VERSIONS.md)).
+Example: `applets/accounts.tsx` and `applets/accounts.json`.
 
 ### Write it on the kit
 

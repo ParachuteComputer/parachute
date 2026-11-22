@@ -57,7 +57,8 @@ export function asksHash(subject: Subject, notePath: string, fields: Record<stri
   // signals only when declared: an approval made before them holds. Not `settings` (a section of Settings, which only
   // reads what the applet may read): a build from before it would hash the same record without it and take a newer
   // device's approval for another one ("other"), and each device's Allow would stop the other's. It is in this
-  // device's grant key (grant.ts), so the card here still asks once.
+  // device's grant key (grant.ts), and an approval from another device covers it only when its card said it
+  // (settingsSection.ts approvalCoversSection), so the card here asks.
   // `left` (discovery.ts): which of these fields the approving device left out of its card and its grant (the vault is
   // someone else's there, or a server is one of its hubs). Only when it left something out, so an approval made where
   // nothing was holds. A device that leaves out less (or more) gets another hash, and asks for itself.

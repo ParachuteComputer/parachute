@@ -62,7 +62,7 @@ function SectionsIn({ rec, all }: { rec: VaultRecord; all: VaultRecord[] }) {
   return <>{with_.map((a) => <Section key={a.noteId} rec={rec} a={a} />)}</>;
 }
 
-type Read = { state: "reading" } | { state: "run"; html: string } | { state: "say"; line: string };
+type Read = { state: "reading" } | { state: "run"; html: string } | { state: "say"; line: string } | { state: "gone" };
 
 function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
   const mode = useGate();
@@ -71,11 +71,15 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
   const subject = subjectOf(rec.key, a.noteId);
   const status = grants.status(subject, a.keys.scope, a.keys.html);
   const decision = runDecision(mode, status, grants.grantedUnder(subject));
+  // only once allowed here as it is now: until then Settings draws nothing of it, not even its heading. (Where applets
+  // run as approved code, not sealed, it runs so too: the person allowed it under that warning, its own screen can do
+  // as much, and the section says whose it is under its frame.)
+  const runs = status === "ok" && decision === "run";
   const name = a.manifest.name;
   const to = `/v/${encodeURIComponent(rec.key)}/a/${encodeURIComponent(a.noteId)}`;
   const [read, setRead] = useState<Read>({ state: "reading" });
   useEffect(() => {
-    if (decision !== "run") return;
+    if (!runs) return;
     let on = true;
     setRead({ state: "reading" });
     void (async () => {
@@ -87,26 +91,28 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
       if (kind === "html" || importsOf(source).length || a.embeds.length) return setRead({ state: "say", line: `${name} can't show a section here: only a TSX or JSX applet that brings nothing in can.` });
       const code = await prepare(source, kind);
       // the code the person allowed, and nothing else: the list's key was read with it (useApplets.ts)
-      if (code.hash !== a.keys.html) return on && setRead({ state: "say", line: `${name} changed since you allowed it.` });
+      if (code.hash !== a.keys.html) return on && setRead({ state: "gone" });
       if (!code.compiled || !code.compiled.ok) return on && setRead({ state: "say", line: `${name} doesn't compile right now.` });
-      // a newer approval in the home vault that takes it back (another device's Revoke) stops it here too; slower than
-      // APPROVALS_WAIT_MS (or offline), it starts on what this device allowed
+      // a newer approval in the home vault that takes it back (another device's Revoke) stops it here too: waited for up
+      // to APPROVALS_WAIT_MS before it starts, and heard whenever it comes after
       const asks = await asksOf(approvalSubject(rec, a.noteId, a.manifest.id), a, (n.metadata ?? {}) as Record<string, unknown>, []);
-      const signed = await Promise.race([approvalFor(approvalSubject(rec, a.noteId, a.manifest.id), a.keys.html, asks).catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), APPROVALS_WAIT_MS))]);
       const allowedAt = Date.parse(grants.record(subject)?.grantedAt ?? "");
-      if (signed && !signed.run && (signed.why === "withdrawn" || signed.why === "other") && signed.newest && allowedAt < Date.parse(signed.newest.at)) return on && setRead({ state: "say", line: `${name} was taken back on another device.` });
-      if (on) setRead({ state: "run", html: modulePage(code.compiled.js, usesNote(source) ? reactNoteKitSource : reactKitSource, [], name) });
+      const takenBack = (d: Awaited<ReturnType<typeof approvalFor>>) => !!d && !d.run && (d.why === "withdrawn" || d.why === "other") && !!d.newest && allowedAt < Date.parse(d.newest.at);
+      const answer = approvalFor(approvalSubject(rec, a.noteId, a.manifest.id), a.keys.html, asks).catch(() => null);
+      void answer.then((d) => { if (on && takenBack(d)) setRead({ state: "gone" }); });
+      const signed = await Promise.race([answer, new Promise<null>((r) => setTimeout(() => r(null), APPROVALS_WAIT_MS))]);
+      if (!on || takenBack(signed)) return;
+      setRead({ state: "run", html: modulePage(code.compiled.js, usesNote(source) ? reactNoteKitSource : reactKitSource, [], name) });
     })();
     return () => { on = false; };
-  }, [decision, a.keys.html, a.keys.scope, rec.key]); // eslint-disable-line react-hooks/exhaustive-deps
-  const said = decision !== "run" ? (status === "updated" ? `${name} changed since you allowed it.` : mode === "closed" ? "Applets are off on this device until its self-test passes." : `${name} isn't allowed on this device yet.`)
-    : read.state === "say" ? read.line : null;
+  }, [runs, a.keys.html, a.keys.scope, rec.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!runs || read.state === "gone") return null;
   return (
     <section className="card bundle-section" aria-label={a.settings!.name}>
       <h2>{a.settings!.name}</h2>
-      {said !== null ? <p className="quiet">{said} <Link to={to}>Open {name}</Link></p>
+      {read.state === "say" ? <p className="quiet">{read.line} <Link to={to}>Open {name}</Link></p>
         : read.state === "run" ? <SectionFrame html={read.html} rec={rec} a={a} /> : <p className="quiet" aria-busy="true">Opening…</p>}
-      <p className="small quiet bundle-section-from">From <Link to={to}><span aria-hidden="true">{a.manifest.glyph}{"︎"}</span> {name}</Link></p>
+      <p className="small quiet bundle-section-from">From <Link to={to}><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> {name}</Link></p>
     </section>
   );
 }
@@ -124,7 +130,8 @@ function SectionFrame({ html, rec, a }: { html: string; rec: VaultRecord; a: Key
       // reads only: no create, no save
       createVaultModule({ listPaths: deps.listPaths, getNote: deps.getNote, search: deps.search, listFields: deps.listFields, list: deps.list }, { name: rec.vault }),
       createThemeModule({ theme: tokensNow }),
-      createPageModule((l) => setHeight(Math.max(SECTION_MIN, Math.min(SECTION_MAX, l.height)))),
+      // it grows and never shrinks while it is on screen: a frame that shrank under a tap would slide what is above it
+      createPageModule((l) => setHeight((h) => Math.max(h, Math.min(SECTION_MAX, l.height)))),
     ]);
   }, [rec.key, a.noteId]); // eslint-disable-line react-hooks/exhaustive-deps
   const ready = useMemo(() => ({ applet: { id: a.manifest.id, name: a.manifest.name }, access: allow, services: [], place: "settings", screen: a.settings!.screen, page: { sized: true }, shown: true }), [a.manifest.id, a.manifest.name, a.settings!.screen, allow]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -6,6 +6,7 @@
 // tagging, its own components) are left to the details; the small everyday asks are one "Also" line. Pure.
 import type { Grant } from "./grant";
 import { grantLines } from "./grant";
+import { sectionFace } from "./settingsSection";
 import { signalLines } from "./signals";
 import { NAMED_KINDS, approveWords, hostWords, npubOf, postsSplit, roomsWords, type LineOptions } from "./services";
 import type { Imported } from "./resolveImports";
@@ -64,7 +65,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
   // its signals (signals.ts), as the details say them
   for (const l of signalLines(g.signals ?? [])) lines.push({ lead: l.text, rest: "", risky: l.stress });
   // its section of Settings (settingsSection.ts), once
-  if (g.settings) lines.push({ lead: "Shows a section in Settings", rest: `, «${g.settings.name}»: what it reads, nothing it changes.`, risky: false });
+  if (g.settings) { const t = sectionFace(g.settings), lead = "Shows a section in Settings"; lines.push({ lead, rest: t.slice(lead.length), risky: false }); }
   for (const l of importLines(imports)) if (l.stress) lines.push({ lead: l.text, rest: "", risky: true });
 
   if (g.reach?.includes("voice")) also.push("the microphone when you press record");

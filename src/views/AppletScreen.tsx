@@ -12,6 +12,7 @@
 // At its own address it is a kept screen (shell/kept.tsx): while it runs, the person's own code, it stays running hidden
 // when they go elsewhere, and shows again at once; hidden, it gets no tap and is told so (`shown`); shown again, its
 // note is read again, and changed code or a changed grant puts the card in its place.
+import { approvalCoversSection } from "../applet/settingsSection";
 import { endManageFor } from "../vault/manage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
@@ -352,7 +353,9 @@ export default function AppletScreen() {
   // only from an approval no older than what this device has seen since (a Revoke here raises that), and, on a device
   // that runs approved code only, one made under that same warning
   const approvedElsewhere = !!signedNow?.run && status !== "ok" && !!subject && signedNow.content.n >= (floorOf(approvalSubject(rec!, entry!.noteId, entry!.manifest.id)) ?? 0)
-    && (mode !== "approved-code" || signedNow.content.runs === "approved-code");
+    && (mode !== "approved-code" || signedNow.content.runs === "approved-code")
+    // a section of Settings is out of the approval's hash: the card that was signed must have said it
+    && approvalCoversSection(entry?.settings, signedNow.content.face);
   const hubCovers = !!entry && !!rec && covers(heldLevel(rec), appletLevel(entry.manifest));
   useEffect(() => {
     if (!approvedElsewhere || !hubCovers || !subject || !keys || !signedNow?.run) return;

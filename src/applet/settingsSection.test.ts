@@ -7,7 +7,7 @@ import { grantKey, grantLines, grantOf } from "./grant";
 import { faceOf } from "./face";
 import { asksHash } from "./approvals";
 import { readApplet } from "./discovery";
-import { parseSettings } from "./settingsSection";
+import { approvalCoversSection, parseSettings, sectionFace } from "./settingsSection";
 import { RECIPES } from "./fixtures";
 
 const m = (() => { const r = parseManifest({ ...RECIPES, screens: [{ id: "home", name: "Recipes" }, { id: "use", name: "Use" }] }); if (!r.ok) throw new Error(r.error); return r.manifest; })();
@@ -47,5 +47,13 @@ describe("a section of Settings", () => {
     const s = { hub: "https://hub.example", vault: "home", record: "n1", applet: "recipes" };
     const fields = { applet: RECIPES };
     expect(await asksHash(s, "Applets/Recipes", { ...fields, settings: SECTION })).toBe(await asksHash(s, "Applets/Recipes", fields));
+  });
+  it("an approval from another device covers a section only when its card said it (review of #161)", () => {
+    expect(approvalCoversSection(null, undefined)).toBe(true);
+    expect(approvalCoversSection(SECTION, undefined)).toBe(false);
+    expect(approvalCoversSection(SECTION, ["Read notes in System/"])).toBe(false);
+    expect(approvalCoversSection(SECTION, ["Read notes in System/", sectionFace({ ...SECTION, name: "Security" })])).toBe(false);
+    const signed = faceOf(grantOf(m, "home", [], [], [], [], SECTION), "Applets/").lines.map((l) => l.lead + l.rest);
+    expect(approvalCoversSection(SECTION, signed)).toBe(true);
   });
 });
