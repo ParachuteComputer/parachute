@@ -41,7 +41,7 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
 | `scheme` | `system` (follow the device), `light` or `dark`. |
 | `motion` | `flowing` (pages, sheets and toasts arrive and go, a press gives) or `still` (nothing moves). A device set to reduce motion, or a screen slow to redraw (e-ink), is still whatever this says. |
 | `look` | The built-in look the theme starts from: `paper`, `almanac`, `book` or `daylight`. It sets the two palettes (any colour the note gives stands over them), every style token below, and for `daylight` motion `still` unless the note says otherwise. |
-| `tokens` | Any style token, by name without the `--` (`"radius-card": "14px"`, `"line-row": "1px dotted var(--muted)"`), over the look's value. Each is held to the grammar of its kind: a colour as above, `transparent`, or a palette colour by name (`var(--line)`); a rule (`1px solid <colour>`, the style one of `none`, `solid`, `dotted`, `dashed`, `double`); a length in `px`, `em` or `rem`; a shadow (`none`, or up to three of `<x> <y> <blur> <spread> <colour>`); a case, capitals or weight from the lists below. |
+| `tokens` | Any style token, by name without the `--` (`"radius-card": "14px"`, `"line-row": "1px dotted var(--muted)"`), over the look's value. Each is held to the grammar of its kind: a colour as `colors` takes one (below), `transparent`, or a palette colour by name (`var(--line)`); a rule (`1px solid <colour>`, the style one of `none`, `solid`, `dotted`, `dashed`, `double`); a length in `px`, `em` or `rem`; a shadow (`none`, or up to three of `<x> <y> <blur> <spread> <colour>`); a case, capitals or weight from the lists below. |
 
 Every key is optional. Anything you leave out, or write in a form the app doesn't read, stays the built-in value, and
 the rest still apply. A colour is hex (`#4f6b3a`) or `rgb()`, `hsl()`, `oklch()` or `oklab()` with plain numbers.
@@ -76,23 +76,26 @@ The style tokens, what each draws, and its value in `paper` and in `almanac` (`s
 | `--on-primary` | Text on the main action. | `#fdfbf7` | `var(--bg)` |
 | `--tint` | A row under the pointer, the row open now: a light wash. | `color-mix(in srgb, var(--text) 5%, transparent)` | `color-mix(in srgb, var(--line) 30%, transparent)` |
 | `--card-fill` | A card's ground. | `var(--surface)` | `var(--surface)` |
-| `--field-fill` | The ground of a box to write in (a field, search, a text box). | `var(--surface)` | `var(--surface)` |
+| `--field-fill` | The ground of a box to write in (search, a text box, a bare input). | `var(--surface)` | `var(--surface)` |
+| `--entry-fill` | A one-line field's ground (the Field part). | `var(--surface)` | `transparent` |
 | `--button-fill` | A plain button's ground. | `var(--surface)` | `var(--surface)` |
 | `--label-ink` | A small label's colour (a kicker over a title, a note's section head). | `var(--muted)` | `var(--accent)` |
 | `--line-head` | The rule over a list, a table or a record's fields. | `1px solid var(--line)` | `1px solid var(--text)` |
 | `--line-row` | The rule between two rows. | `1px solid color-mix(in srgb, var(--line) 75%, transparent)` | `1px dotted var(--muted)` |
 | `--line-card` | A card's edge, a toast's, a sheet's top. | `1px solid var(--line)` | `1px solid var(--text)` |
 | `--line-quote` | The rule beside a quotation. | `2px solid var(--line)` | `3px double var(--text)` |
-| `--field-line` | A box to write in: its edge. | `1px solid var(--line)` | `1px solid var(--line)` |
+| `--field-line` | A box to write in: its edge (search, a text box, a bare input). | `1px solid var(--line)` | `1px solid var(--line)` |
+| `--entry-line` | A one-line field's line (the Field part). | `1px solid var(--line)` | `1px solid var(--text)` |
 | `--button-line` | A plain button's edge. | `1px solid var(--line)` | `1px solid var(--line)` |
 | `--card-edges` | Which edges of a card are drawn (`1px`, or `1px 0 0` for a rule above only). | `1px` | `1px` |
 | `--field-edges` | Which edges of a one-line field are drawn (`1px` boxed, `0 0 1px` a line to write on). | `1px` | `0 0 1px` |
 | `--field-pad` | The space inside a one-line field. | `9px 12px` | `6px 0` |
-| `--radius-card` | A card's corners, a sheet's, a toast's. | `calc(var(--radius) * 1.4)` | `0px` |
+| `--radius-card` | A card's corners (a sheet's are at least --radius). | `calc(var(--radius) * 1.4)` | `0px` |
 | `--radius-field` | A box to write in: its corners. | `var(--radius)` | `var(--radius)` |
+| `--radius-entry` | A one-line field's corners (0 for a line to write on). | `var(--radius)` | `0px` |
 | `--radius-button` | A button's corners (`999px`: a pill). | `999px` | `999px` |
-| `--shadow-card` | A card's depth (`none`: flat on the page). | `0 1px 2px rgb(60 45 30 / .05), 0 12px 28px -18px rgb(60 45 30 / .28)` | `3px 3px 0 var(--line)` |
-| `--shadow-sheet` | The depth of what rises over the page: a sheet, a toast. | `0 -1px 0 var(--line), 0 -16px 40px -24px rgb(40 30 20 / .35)` | `3px 3px 0 var(--line)` |
+| `--shadow-card` | A card's depth, and a toast's (`none`: flat on the page). | `0 1px 0 rgb(60 45 30 / .05), 0 8px 22px -16px rgb(60 45 30 / .22)` | `3px 3px 0 var(--line)` |
+| `--shadow-sheet` | The depth of a sheet rising over the page. | `0 -1px 0 var(--line), 0 -16px 40px -24px rgb(40 30 20 / .35)` | `none` |
 | `--label-transform` | A small label's case: `none` or `uppercase`. | `none` | `uppercase` |
 | `--label-caps` | A small label in small capitals: `normal` or `all-small-caps`. | `normal` | `normal` |
 | `--label-track` | A small label's letter spacing, in em. | `0em` | `.14em` |

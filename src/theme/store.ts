@@ -55,12 +55,15 @@ const darkQuery = () => (typeof matchMedia === "function" ? matchMedia("(prefers
 // (slow to redraw, or grey only) gets Daylight by itself.
 export const SCREEN_KEY = "parachute.screen.v1";
 const einkQuery = () => (typeof matchMedia === "function" ? matchMedia("(update: slow), (monochrome)") : null);
+let screenHere: ScreenChoice | null | undefined; // read once, then kept here as it changes
 export function screenChoice(): ScreenChoice | null {
-  try { const v = storage()?.getItem(SCREEN_KEY); return v === "theme" || v === "daylight" ? v : null; } catch { return null; }
+  if (screenHere === undefined) { try { const v = storage()?.getItem(SCREEN_KEY); screenHere = v === "theme" || v === "daylight" ? v : null; } catch { screenHere = null; } }
+  return screenHere;
 }
 /** What this screen draws now: its own choice, else Daylight on an e-paper screen, else the theme. */
 export const screenNow = (): ScreenChoice => screenChoice() ?? (einkQuery()?.matches ? "daylight" : "theme");
 export function setScreen(v: ScreenChoice) {
+  screenHere = v;
   try { storage()?.setItem(SCREEN_KEY, v); } catch { /* for this session only */ }
   bump();
 }

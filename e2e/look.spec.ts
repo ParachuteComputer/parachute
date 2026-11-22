@@ -108,6 +108,23 @@ test("a note the kit draws keeps the note renderer's own look: the base stays ou
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });
 
+const OWN_BODY = `<!doctype html><html><head><style>body { max-width: 700px; margin: 2rem auto; }</style></head><body>
+<h1>Letters</h1><p id="words">A column of its own, seven hundred pixels wide.</p>
+<button id="long">A button with a long label that has to wrap on a phone rather than run off the side of the screen</button>
+</body></html>`;
+
+test("an applet's own body width is its own, and a long bare button wraps instead of running off the screen", async ({ page }) => {
+  const id = await opened(page, "Applets/Letters", "html", OWN_BODY, "letters-own", "Letters own", "Letters");
+  try {
+    // on a phone: the button wraps inside the page
+    expect(await frame(page).locator("html").evaluate((h) => h.scrollWidth <= h.clientWidth + 1)).toBe(true);
+    expect(await frame(page).locator("#long").evaluate((b) => b.scrollWidth <= b.clientWidth + 1)).toBe(true);
+    // on a wide screen: its 700px column keeps all 700px for its words (the kit's margins don't squeeze it)
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await expect.poll(() => frame(page).locator("#words").evaluate((p) => Math.round(p.getBoundingClientRect().width))).toBe(700);
+  } finally { await api(hubState(), "DELETE", `notes/${id}`); }
+});
+
 test("a theme note's look and its own tokens restyle an applet while it runs; deleting the note brings the default back", async ({ page }) => {
   const id = await opened(page, "Applets/Seed swap two", "html", PLAIN, "seed-swap-two", "Seed swap two", "Seed swap");
   const themeRows = async () => { const r = await api(hubState(), "GET", "notes?tag=parachute-theme"); return (Array.isArray(r) ? r : r.notes) as { id: string }[]; };
@@ -131,10 +148,11 @@ test("a theme note's look and its own tokens restyle an applet while it runs; de
 test("Daylight is this screen's own: chosen in Settings it draws black on white here, and writes nothing to the theme note", async ({ page }) => {
   const themeRows = async () => { const r = await api(hubState(), "GET", "notes?tag=parachute-theme"); return (Array.isArray(r) ? r : r.notes) as { id: string }[]; };
   const shellBg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const before = (await themeRows()).length;
   await page.goto("/settings");
   await page.getByRole("radio", { name: /^Daylight/ }).check();
   await expect.poll(shellBg).toBe("rgb(255, 255, 255)");
-  expect(await themeRows()).toHaveLength(0);
+  expect(await themeRows()).toHaveLength(before);
   // it stays on this device across a start
   await page.reload();
   await expect.poll(shellBg).toBe("rgb(255, 255, 255)");

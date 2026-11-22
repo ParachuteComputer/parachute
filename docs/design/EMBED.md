@@ -165,7 +165,8 @@ The host is an applet in a vault that is mine (usually the home applet), in its 
   vault (for Techne's Events, techne, through the person's own sign-in there), the theme module, the page module (its
   height), nothing else. No `app` module: it can't read recent titles or the bar, or move the person.
 - **The look.** The component gets the host's colours (each rewritten by the shell as `#rrggbb`), density and scheme,
-  and follows changes; its fonts are the app's built-in stacks. The theme record is free text an agent can write and
+  and the style tokens of the host's built-in look, by its name (never the theme note's own token values), and follows
+  changes; its fonts are the app's built-in stacks. The theme record is free text an agent can write and
   nothing on a card shows it, so only these few values cross; the bits left in fourteen colours are named and
   accepted.
 - **Its grant, per place.** The grant's subject is the place on the page: the host's vault and note and the embed's
@@ -354,7 +355,7 @@ A custom frame that ignores them keeps working.
 | 16 | **Android (approved-code mode)** | Only allowed code runs; the card says it is only as safe as its code and whose code it is. A hostile org component could send what it reads (its own vault's data, the props on its card, and what a colluding host signals it) to the internet; it still can't read the host or the person's vaults. | device steps |
 | 17 | **Code that hangs**, or a hub built to hang the shell | For anything from someone else's vault: replies read up to 4 MB, bodies over 200 KB refused before hashing, transpiled only after an Allow, never the home applet; embeds' mark set before the first read, so a start after a freeze leaves that page's embeds unread, with Review. | unit on the read limit, the cap and the mark |
 | 18 | **Someone else's vault becomes home** on a new device | Add a Parachute asks whose it is every time; the default home is the first vault that is mine; someone else's are never offered. | unit |
-| 19 | **The theme record as a channel** (an agent writes words into it) | Embeds get colours rewritten as `#rrggbb`, density and scheme; their fonts are the app's own. | unit |
+| 19 | **The theme record as a channel** (an agent writes words into it) | Embeds get colours rewritten as `#rrggbb`, density, scheme and a built-in look's style values by name; their fonts are the app's own. | unit |
 
 ## Subtract
 

@@ -39,9 +39,10 @@ div.pa-row { cursor: default; }
 .pa-field { display: grid; gap: 2px; margin: 0 0 var(--gap); }
 .pa-field-label { font: italic var(--fs-small) var(--serif); color: var(--muted); }
 .pa-field-row { display: flex; align-items: end; gap: 12px; }
-.pa-field input { flex: 1; min-width: 0; padding: var(--field-pad); border: var(--field-line); border-width: var(--field-edges); border-radius: var(--radius-field);
-  background: var(--field-fill); font: var(--fs-lead) var(--serif); color: var(--text); outline: none; }
-.pa-field input:focus { border-color: var(--text); }
+.pa-field input { flex: 1; min-width: 0; padding: var(--field-pad); border: var(--entry-line); border-width: var(--field-edges); border-radius: var(--radius-entry);
+  background: var(--entry-fill); font: var(--fs-lead) var(--serif); color: var(--text); outline: none; }
+/* focused: the line darkens and thickens below (a box keeps its edge) */
+.pa-field input:focus { border-color: var(--text); box-shadow: 0 1px 0 var(--text); }
 .pa-field-action { padding: 6px 16px; border: 1px solid var(--primary); border-radius: var(--radius-button); background: var(--primary); color: var(--on-primary);
   font: 600 var(--fs-small) var(--sans); cursor: pointer; }
 /* not yet (nothing written): a quiet outline, not a grey block */
@@ -158,8 +159,9 @@ div.pa-row { cursor: default; }
 .pa-tcount { margin-left: 8px; font: var(--fs-small) var(--sans); }
 .pa-topen { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: 500 var(--fs-body) var(--serif); text-align: left;
   overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-.pa-trow[aria-current="true"] .pa-tcell { background: linear-gradient(var(--tint), var(--tint)), var(--bg); box-shadow: inset 0 -1px 0 var(--line); }
-.pa-trow:hover .pa-tcell { background: linear-gradient(var(--tint), var(--tint)), var(--bg); }
+/* the wash over the cell's own opaque ground (the first column scrolls over the rest), as an inset that can ease */
+.pa-trow[aria-current="true"] .pa-tcell { box-shadow: inset 0 0 0 100vmax var(--tint); }
+.pa-trow:hover .pa-tcell { box-shadow: inset 0 0 0 100vmax var(--tint); }
 .pa-topen:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .pa-fields { display: grid; grid-template-columns: minmax(7em, max-content) 1fr; gap: 0 16px; margin: 0 0 var(--gap); border-top: var(--line-head); }
@@ -196,7 +198,7 @@ select.pa-finput { appearance: auto; }
 /* a press gives under the finger at once, and comes back; a pointer's hover only where there is one */
 .pa-button, .pa-field-action, .pa-more, .pa-drawer-grip { transition: transform var(--t-press) var(--ease-out), background-color var(--t-press) ease, border-color var(--t-press) ease, opacity var(--t-press) ease; }
 :is(.pa-button, .pa-field-action, .pa-more):active:not(:disabled) { transform: scale(.97); }
-.pa-row, .pa-tab, .pa-trow .pa-tcell { transition: background-color var(--t-press) ease, color var(--t-press) ease; }
+.pa-row, .pa-tab, .pa-trow .pa-tcell { transition: background-color var(--t-press) ease, color var(--t-press) ease, box-shadow var(--t-press) ease; }
 @media (hover: hover) and (pointer: fine) {
   .pa-button.pa-plain:hover:not(:disabled), .pa-more:hover { border-color: var(--muted); }
   .pa-button.pa-primary:hover:not(:disabled), .pa-field-action:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 86%, var(--bg)); }
@@ -227,7 +229,7 @@ select.pa-finput { appearance: auto; }
 /* ── toast (screen.tsx): one at a time, rising from the foot, going back down; swipe it away, held while pointed at ── */
 .pa-toasts { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); display: grid; justify-items: center; pointer-events: none; z-index: 50; }
 .pa-toast { grid-area: 1 / 1; margin: 0 16px; max-width: 520px; padding: 8px 18px; border: var(--line-card); border-radius: 999px; background: var(--surface); color: var(--text);
-  font: var(--fs-small) var(--sans); box-shadow: var(--shadow-sheet); pointer-events: auto; touch-action: none; user-select: none;
+  font: var(--fs-small) var(--sans); box-shadow: var(--shadow-card); pointer-events: auto; touch-action: none; user-select: none;
   transform: translateY(var(--pa-swipe, 0px)); transition: transform var(--t-sheet) var(--ease-out), opacity var(--t-sheet) var(--ease-out); }
 .pa-toast[data-state="before"] { opacity: 0; transform: translateY(calc(100% + 16px)); }
 .pa-toast[data-state="gone"] { pointer-events: none; opacity: 0; transform: translateY(calc(100% + 16px + var(--pa-swipe, 0px))); transition-duration: calc(var(--t-sheet) * .8); }
@@ -239,7 +241,7 @@ select.pa-finput { appearance: auto; }
   background: color-mix(in srgb, var(--text) 22%, transparent); background: light-dark(color-mix(in srgb, var(--text) 22%, transparent), rgb(0 0 0 / .45)); opacity: var(--pa-scrim, 1); transition: opacity var(--t-sheet) var(--ease-drawer); overscroll-behavior: contain; }
 .pa-drawer { position: relative; box-sizing: border-box; width: min(560px, 100%); max-height: 86dvh; overflow: auto; overscroll-behavior: contain;
   padding: 6px var(--pad) calc(var(--pad) + env(safe-area-inset-bottom, 0px)); background: var(--bg); color: var(--text);
-  border-top: var(--line-card); border-radius: var(--radius-card) var(--radius-card) 0 0; box-shadow: var(--shadow-sheet);
+  border-top: var(--line-card); border-radius: max(var(--radius-card), var(--radius)) max(var(--radius-card), var(--radius)) 0 0; box-shadow: var(--shadow-sheet);
   transform: translateY(var(--pa-drag, 0px)); transition: transform var(--t-sheet) var(--ease-drawer); }
 .pa-drawer-scrim[data-state="before"], .pa-drawer-scrim[data-state="gone"] { --pa-scrim: 0; }
 .pa-drawer-scrim[data-state="gone"] { pointer-events: none; }
@@ -255,5 +257,5 @@ select.pa-finput { appearance: auto; }
 .pa-drawer-body > :last-child { margin-bottom: 0; }
 /* in a page drawn at its content's height (one with embeds) there is no screen's foot to rise from: it opens in place */
 .pa-drawer.pa-drawer-inline { position: relative; width: 100%; max-height: none; overflow: visible; margin: 0 0 var(--gap); padding-top: var(--pad);
-  border: var(--line-card); border-radius: var(--radius-card); box-shadow: none; transform: none; transition: none; animation: pa-in var(--t-state) var(--ease-out) both; }
+  border: var(--line-card); border-radius: max(var(--radius-card), var(--radius)); box-shadow: none; transform: none; transition: none; animation: pa-in var(--t-state) var(--ease-out) both; }
 }

@@ -31,7 +31,7 @@ export default function ThemeSettings() {
         <>
           <fieldset className="plain choice" disabled={busy}>
             <legend className="settings-sub">Style</legend>
-            {STYLES.map((l) => <label key={l}><input type="radio" name="look" checked={t.theme.look === l} onChange={act(() => setLook(l))} /> {LOOK_NAME[l]}</label>)}
+            {(t.theme.look === "daylight" ? LOOK_NAMES : STYLES).map((l) => <label key={l}><input type="radio" name="look" checked={t.theme.look === l} onChange={act(() => setLook(l))} /> {LOOK_NAME[l]}</label>)}
           </fieldset>
           <fieldset className="plain choice" disabled={busy}>
             <legend className="settings-sub">Density</legend>
