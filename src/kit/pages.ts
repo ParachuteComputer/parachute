@@ -36,7 +36,7 @@ function bezier(x1: number, y1: number, x2: number, y2: number) {
 const curveOf = (v: string) => { const m = /cubic-bezier\(([^)]+)\)/.exec(v); const n = m ? m[1].split(",").map(Number) : [0.32, 0.72, 0, 1]; return bezier(n[0], n[1], n[2], n[3]); };
 
 export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElement; prev: HTMLButtonElement; next: HTMLButtonElement }, opts: PagesOptions): Pages {
-  let per = 1, pageW = 0, count = 1, at = 0, touched = false, follow = opts.start === "last", raf = 0, anim = 0, held = false, name = opts.name;
+  let per = 1, pageW = 0, count = 1, at = 0, touched = false, follow = opts.start === "last", raf = 0, anim = 0, held = false, name = opts.name, pending = false;
   const marks: HTMLElement[] = [];
   const sky = document.createElement("div");
   sky.className = "pa-sky";
@@ -103,7 +103,10 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
       if (m.textContent !== words) m.textContent = words;
     }
     const was = at;
-    const to = follow && (!touched || was >= Math.ceil(before / per) - 1) ? spreads() - 1 : Math.min(anim ? at : here(), spreads() - 1);
+    // asked for while hidden (shown again: toStart): that page, whatever scroll the browser kept for the hidden book
+    const to = pending ? (opts.start === "last" ? spreads() - 1 : Math.min(at, spreads() - 1))
+      : follow && (!touched || was >= Math.ceil(before / per) - 1) ? spreads() - 1 : Math.min(anim ? at : here(), spreads() - 1);
+    pending = false;
     // a glide on its way goes on to where it was going; a finger on the book keeps it; else the book is set where it is
     if (anim) { if (to !== at) glide(to); }
     else if (!held) jump(to);
@@ -216,7 +219,7 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
 
   return {
     turn, to: (p: number) => { touched = true; jump(Math.floor(p / per)); },
-    toStart() { touched = false; follow = opts.start === "last"; jump(opts.start === "last" ? spreads() - 1 : 0); },
+    toStart() { touched = false; follow = opts.start === "last"; jump(opts.start === "last" ? spreads() - 1 : 0); pending = true; soon(); },
     toEnd() { follow = true; jump(spreads() - 1); },
     setName(n) { if (n !== name) { name = n; soon(); } },
     toElement(el: Element) {
