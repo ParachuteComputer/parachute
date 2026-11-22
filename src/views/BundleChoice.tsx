@@ -15,6 +15,7 @@ export default function BundleChoice() {
   const isMine = useWhose();
   // only a vault that is the person's own can be the home (vault/whose.ts)
   const mine = vaults.filter((v) => isMine(v) === "mine");
+  const oneHub = new Set(mine.map((v) => v.issuer)).size <= 1;
   const home = homeVault(vaults);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -36,11 +37,12 @@ export default function BundleChoice() {
         ))}
       </fieldset>
       <p className="quiet small">Which applets this device shows, its bar and its home. Kept in {home.vault} too, so a new device opens the same one.</p>
+      {/* where each is, only when they are on more than one Parachute */}
       {mine.length > 1 && (
         <fieldset className="plain">
           <legend className="settings-sub">Home vault</legend>
           {mine.map((v) => (
-            <label key={v.key} className="line"><span><input type="radio" name="home" checked={home.key === v.key} onChange={() => { setHome(v.key); void readSettings(); }} /> <strong>{v.vault}</strong> <span className="quiet">on {siteOf(v.issuer)}</span></span></label>
+            <label key={v.key} className="line"><span><input type="radio" name="home" checked={home.key === v.key} onChange={() => { setHome(v.key); void readSettings(); }} /> <strong>{v.vault}</strong>{oneHub ? null : <span className="quiet"> on {siteOf(v.issuer)}</span>}</span></label>
           ))}
         </fieldset>
       )}
