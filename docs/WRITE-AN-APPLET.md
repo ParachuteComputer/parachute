@@ -453,7 +453,7 @@ rather than `tags`: `"types": ["applet"]`. The note-named calls in the kit (`que
       }
     ]
   },
-  "body": "import { useEffect, useRef, useState } from \"react\";\nimport { Button, Days, Empty, Field, List, Loading, Note, onOpen, Page, ready, vault, when } from \"parachute\";\n\ntype Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };\nconst nameOf = (r: Recipe) => r.path.replace(\"Recipes/\", \"\");\n\nconst CSS = `\n.cols { display: grid; gap: calc(var(--gap) * 2); }\n@media (min-width: 900px) { .cols { grid-template-columns: 2fr 3fr; gap: 64px; } }\n`;\n\nexport default function RecipeCards() {\n  const [recipes, setRecipes] = useState<Recipe[] | null>(null);\n  const [open, setOpen] = useState<Recipe | null>(null);\n  const shown = useRef<HTMLElement>(null);\n  const load = () => vault.queryRecords({ pathPrefix: \"Recipes/\", tag: \"recipe\", includeBody: true }).then((rows: Recipe[]) => setRecipes(rows));\n  useEffect(() => {\n    ready().then(load);\n    return onOpen((o: { note: { id: string } }) => vault.getRecord(o.note.id).then(setOpen));\n  }, []);\n  // a recipe opened (or followed from a link) comes into view: below the list on a phone\n  useEffect(() => { if (open) shown.current?.scrollIntoView({ block: \"start\" }); }, [open]);\n  const add = async (name: string) => {\n    const made: Recipe = await vault.createRecord({ path: `Recipes/${name}`, body: `# ${name}\\n\\n## Ingredients\\n\\n## Steps\\n` });\n    await load();\n    setOpen(await vault.getRecord(made.id));\n  };\n  const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };\n  return (\n    <Page title=\"Recipe cards\" wide onRefresh={load}>\n      <style>{CSS}</style>\n      <div className=\"cols\">\n        <section>\n          <Days times={(recipes ?? []).map((r) => r.updatedAt)} label=\"changed, the last four weeks\" />\n          <Field label=\"New recipe\" placeholder=\"A name\" action=\"Add\" onAction={add} />\n          {recipes === null ? <Loading /> : recipes.length\n            ? <List label=\"Recipes\" rows={recipes.map((r) => ({ key: r.id, title: nameOf(r), aside: when.short(r.updatedAt), onPress: () => setOpen(r) }))} />\n            : <Empty>No recipes yet. Add one above, or ask your AI to.</Empty>}\n        </section>\n        {open && (\n          <section aria-label=\"Recipe\" ref={shown}>\n            <Button kind=\"quiet\" onClick={() => setOpen(null)}>Close</Button>\n            <Note body={open.body ?? \"\"} path={open.path} tags={open.tags} onLink={follow} />\n          </section>\n        )}\n      </div>\n    </Page>\n  );\n}\n"
+  "body": "import { useEffect, useRef, useState } from \"react\";\nimport { Button, Days, Empty, Field, List, Loading, Note, onOpen, Page, ready, vault, when } from \"parachute\";\n\ntype Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };\nconst nameOf = (r: Recipe) => r.path.replace(\"Recipes/\", \"\");\n\nexport default function RecipeCards() {\n  const [recipes, setRecipes] = useState<Recipe[] | null>(null);\n  const [open, setOpen] = useState<Recipe | null>(null);\n  const shown = useRef<HTMLElement>(null);\n  const load = () => vault.queryRecords({ pathPrefix: \"Recipes/\", tag: \"recipe\", includeBody: true }).then((rows: Recipe[]) => setRecipes(rows));\n  useEffect(() => {\n    ready().then(load);\n    return onOpen((o: { note: { id: string } }) => vault.getRecord(o.note.id).then(setOpen));\n  }, []);\n  // a recipe opened (or followed from a link) comes into view: below the list on a phone\n  useEffect(() => { if (open) shown.current?.scrollIntoView({ block: \"start\" }); }, [open]);\n  const add = async (name: string) => {\n    const made: Recipe = await vault.createRecord({ path: `Recipes/${name}`, body: `# ${name}\\n\\n## Ingredients\\n\\n## Steps\\n` });\n    await load();\n    setOpen(await vault.getRecord(made.id));\n  };\n  const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };\n  return (\n    <Page title=\"Recipe cards\" wide onRefresh={load}>\n      <div className=\"pa-grid\">\n        <section>\n          <Days times={(recipes ?? []).map((r) => r.updatedAt)} label=\"changed, the last four weeks\" />\n          <Field label=\"New recipe\" placeholder=\"A name\" action=\"Add\" onAction={add} />\n          {recipes === null ? <Loading /> : recipes.length\n            ? <List label=\"Recipes\" rows={recipes.map((r) => ({ key: r.id, title: nameOf(r), aside: when.short(r.updatedAt), onPress: () => setOpen(r) }))} />\n            : <Empty>No recipes yet. Add one above, or ask your AI to.</Empty>}\n        </section>\n        {open && (\n          <section aria-label=\"Recipe\" ref={shown}>\n            <Button kind=\"quiet\" onClick={() => setOpen(null)}>Close</Button>\n            <Note body={open.body ?? \"\"} path={open.path} tags={open.tags} onLink={follow} />\n          </section>\n        )}\n      </div>\n    </Page>\n  );\n}\n"
 }
 ```
 
@@ -465,11 +465,6 @@ import { Button, Days, Empty, Field, List, Loading, Note, onOpen, Page, ready, v
 
 type Recipe = { id: string; path: string; updatedAt: string | null; tags?: string[]; body?: string };
 const nameOf = (r: Recipe) => r.path.replace("Recipes/", "");
-
-const CSS = `
-.cols { display: grid; gap: calc(var(--gap) * 2); }
-@media (min-width: 900px) { .cols { grid-template-columns: 2fr 3fr; gap: 64px; } }
-`;
 
 export default function RecipeCards() {
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
@@ -490,8 +485,7 @@ export default function RecipeCards() {
   const follow = (target: string) => { const r = recipes?.find((x) => nameOf(x) === target || x.path === target); if (r) setOpen(r); };
   return (
     <Page title="Recipe cards" wide onRefresh={load}>
-      <style>{CSS}</style>
-      <div className="cols">
+      <div className="pa-grid">
         <section>
           <Days times={(recipes ?? []).map((r) => r.updatedAt)} label="changed, the last four weeks" />
           <Field label="New recipe" placeholder="A name" action="Add" onAction={add} />
@@ -539,7 +533,7 @@ pinned applets. It reads no folder of its own vault, so it has no `access`; it a
       "open"
     ]
   },
-  "body": "import { useEffect, useState } from \"react\";\nimport { app, Days, Empty, List, Loading, Page, ready, when } from \"parachute\";\n\ntype Recent = { vaultName: string; title: string; updatedAt: string | null; href: string };\ntype Place = { name: string; glyph: string; href: string; home: boolean };\n\nconst CSS = `\n.head { display: grid; gap: 12px 32px; align-items: end; padding-bottom: var(--gap); border-bottom: 1px solid var(--text); }\n@media (min-width: 900px) { .head { grid-template-columns: 1fr minmax(240px, 380px); } .cols { grid-template-columns: 3fr 2fr; gap: 64px; } }\n.sum { margin: 0; font: var(--fs-lead)/1.5 var(--serif); }\n.cols { display: grid; gap: calc(var(--gap) * 1.5); padding-top: var(--gap); }\n.river { border-left: 2px solid var(--text); padding-left: 20px; }\n`;\n\nexport default function Home() {\n  const [recent, setRecent] = useState<Recent[] | null>(null);\n  const [pins, setPins] = useState<Place[]>([]);\n  const load = () => Promise.all([app.recent({ limit: 40 }), app.pins()])\n    .then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); }, () => setRecent([]));\n  useEffect(() => { ready().then(load); }, []);\n  const days: { label: string; notes: Recent[] }[] = [];\n  for (const n of (recent ?? []).slice(0, 12)) {\n    const label = when.day(n.updatedAt) || \"Earlier\";\n    if (days.at(-1)?.label !== label) days.push({ label, notes: [] });\n    days.at(-1)!.notes.push(n);\n  }\n  const vaults = new Set((recent ?? []).map((n) => n.vaultName)).size;\n  return (\n    <Page kicker={when.date(new Date())} title=\"Lately\" wide onRefresh={load}>\n      <style>{CSS}</style>\n      <header className=\"head\">\n        {recent === null ? <Loading /> : <p className=\"sum\">{`${recent.length} notes lately, in ${vaults} ${vaults === 1 ? \"vault\" : \"vaults\"}.`}</p>}\n        <Days times={(recent ?? []).map((n) => n.updatedAt)} days={14} label=\"the last two weeks\" />\n      </header>\n      <div className=\"cols\">\n        <section className=\"river\" aria-label=\"Lately\">\n          {days.map((d) => <List key={d.label} label={d.label} rows={d.notes.map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: when.time(n.updatedAt), onPress: () => app.open(n.href) }))} />)}\n          {recent !== null && !recent.length && <Empty>Nothing written yet.</Empty>}\n        </section>\n        {pins.length > 0 && <List label=\"Pinned\" rows={pins.map((p) => ({ key: p.href, title: p.name, glyph: p.glyph, onPress: () => app.open(p.href) }))} />}\n      </div>\n    </Page>\n  );\n}\n"
+  "body": "import { useEffect, useState } from \"react\";\nimport { app, Days, Empty, List, Loading, Page, ready, when } from \"parachute\";\n\ntype Recent = { vaultName: string; title: string; updatedAt: string | null; href: string };\ntype Place = { name: string; glyph: string; href: string; home: boolean };\n\nexport default function Home() {\n  const [recent, setRecent] = useState<Recent[] | null>(null);\n  const [pins, setPins] = useState<Place[]>([]);\n  const load = () => Promise.all([app.recent({ limit: 40 }), app.pins()])\n    .then(([r, p]: [Recent[], Place[]]) => { setRecent(r); setPins(p.filter((x) => !x.home)); }, () => setRecent([]));\n  useEffect(() => { ready().then(load); }, []);\n  const days: { label: string; notes: Recent[] }[] = [];\n  for (const n of (recent ?? []).slice(0, 12)) {\n    const label = when.day(n.updatedAt) || \"Earlier\";\n    if (days.at(-1)?.label !== label) days.push({ label, notes: [] });\n    days.at(-1)!.notes.push(n);\n  }\n  const vaults = new Set((recent ?? []).map((n) => n.vaultName)).size;\n  return (\n    <Page kicker={when.date(new Date())} title=\"Lately\" wide onRefresh={load}>\n      {recent === null ? <Loading /> : <p>{`${recent.length} notes lately, in ${vaults} ${vaults === 1 ? \"vault\" : \"vaults\"}.`}</p>}\n        <Days times={(recent ?? []).map((n) => n.updatedAt)} days={14} label=\"the last two weeks\" />\n      <div className=\"pa-grid\">\n        <section aria-label=\"Lately\">\n          {days.map((d) => <List key={d.label} label={d.label} rows={d.notes.map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: when.time(n.updatedAt), onPress: () => app.open(n.href) }))} />)}\n          {recent !== null && !recent.length && <Empty>Nothing written yet.</Empty>}\n        </section>\n        {pins.length > 0 && <List label=\"Pinned\" rows={pins.map((p) => ({ key: p.href, title: p.name, glyph: p.glyph, onPress: () => app.open(p.href) }))} />}\n      </div>\n    </Page>\n  );\n}\n"
 }
 ```
 
@@ -569,14 +563,6 @@ import { app, Days, Empty, List, Loading, Page, ready, when } from "parachute";
 type Recent = { vaultName: string; title: string; updatedAt: string | null; href: string };
 type Place = { name: string; glyph: string; href: string; home: boolean };
 
-const CSS = `
-.head { display: grid; gap: 12px 32px; align-items: end; padding-bottom: var(--gap); border-bottom: 1px solid var(--text); }
-@media (min-width: 900px) { .head { grid-template-columns: 1fr minmax(240px, 380px); } .cols { grid-template-columns: 3fr 2fr; gap: 64px; } }
-.sum { margin: 0; font: var(--fs-lead)/1.5 var(--serif); }
-.cols { display: grid; gap: calc(var(--gap) * 1.5); padding-top: var(--gap); }
-.river { border-left: 2px solid var(--text); padding-left: 20px; }
-`;
-
 export default function Home() {
   const [recent, setRecent] = useState<Recent[] | null>(null);
   const [pins, setPins] = useState<Place[]>([]);
@@ -592,13 +578,10 @@ export default function Home() {
   const vaults = new Set((recent ?? []).map((n) => n.vaultName)).size;
   return (
     <Page kicker={when.date(new Date())} title="Lately" wide onRefresh={load}>
-      <style>{CSS}</style>
-      <header className="head">
-        {recent === null ? <Loading /> : <p className="sum">{`${recent.length} notes lately, in ${vaults} ${vaults === 1 ? "vault" : "vaults"}.`}</p>}
+      {recent === null ? <Loading /> : <p>{`${recent.length} notes lately, in ${vaults} ${vaults === 1 ? "vault" : "vaults"}.`}</p>}
         <Days times={(recent ?? []).map((n) => n.updatedAt)} days={14} label="the last two weeks" />
-      </header>
-      <div className="cols">
-        <section className="river" aria-label="Lately">
+      <div className="pa-grid">
+        <section aria-label="Lately">
           {days.map((d) => <List key={d.label} label={d.label} rows={d.notes.map((n) => ({ key: n.href, title: n.title, meta: n.vaultName, aside: when.time(n.updatedAt), onPress: () => app.open(n.href) }))} />)}
           {recent !== null && !recent.length && <Empty>Nothing written yet.</Empty>}
         </section>

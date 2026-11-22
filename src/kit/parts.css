@@ -36,7 +36,7 @@ div.pa-row { cursor: default; }
 .pa-card > :last-child { margin-bottom: 0; }
 .pa-card p { margin: 0 0 6px; color: var(--muted); }
 
-.pa-field { display: grid; gap: 2px; margin: 0 0 var(--gap); }
+.pa-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0 0 var(--gap); }
 .pa-field-label { font: italic var(--fs-small) var(--serif); color: var(--muted); }
 .pa-field-row { display: flex; align-items: stretch; gap: 12px; }
 .pa-field input { flex: 1; min-width: 0; padding: var(--field-pad); border: var(--entry-line); border-width: var(--field-edges); border-radius: var(--radius-entry);

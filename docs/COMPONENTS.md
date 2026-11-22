@@ -60,7 +60,8 @@ One `primary` on a screen: the main action. `plain` (the default) for the rest, 
 
 Things of a kind, as rows under a rule: a title, a line under it (`meta`), something at the right (`aside`), a mark
 (`glyph`), a count (`badge`), bold for what is new (`strong`), the row open now (`current`). A row with `onPress`
-is a button.
+is a button. A count goes in the label (`label={`Active · ${active.length}`}`); under `Tabs` that already name the
+list, give `hideLabel` so the name isn't said twice.
 
 ## Card
 
@@ -69,7 +70,7 @@ is a button.
 ```tsx
 <Card title="Seed order">
   <p>Rye, late kale, the striped beans from last year.</p>
-  <Button small kind="primary">Send it</Button>
+  <div className="pa-actions"><Button small kind="primary">Send it</Button><Button small>Later</Button></div>
 </Card>
 ```
 
