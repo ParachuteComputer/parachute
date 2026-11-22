@@ -6,7 +6,7 @@
 @layer parachute.base, parachute.parts, parachute.app;
 @layer parachute.parts {
 .pa-days { display: block; margin: 0 0 var(--gap); color: var(--text); }
-.pa-days svg { display: block; height: calc(var(--size) * 3.6); width: auto; max-width: 100%; }
+.pa-days svg { display: block; height: calc(var(--size) * 3.6 * var(--pa-days-h, 1)); width: auto; max-width: 100%; }
 .pa-days .pa-mark { fill: var(--text); }
 .pa-days .pa-base { fill: var(--muted); }
 .pa-days .pa-today { fill: var(--accent); }
