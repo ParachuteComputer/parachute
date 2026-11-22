@@ -120,12 +120,15 @@ export default function Journal() {
   const unreachable = (e: any) => /^Vault(Unreachable|Server)Error$/.test(String(e?.name ?? "")) || e?.status === 0 || e?.status === 429
     || e instanceof TypeError || /rate_limited/i.test(String(e?.message ?? ""));
   const taken = (e: any) => e?.status === 409 || /^Vault(Conflict|TargetExists)Error$/.test(String(e?.name ?? "")) || /conflict|already exists|elsewhere/i.test(String(e?.message ?? e));
-  /** One line into the vault under the time it was written: the same words in the same minute get the seconds. `tried`
+  /** One line into the vault under the time it was written: the same words in the same minute get the seconds (and in
+   *  the same second, a number). `tried`
    *  (a waiting line whose write got no answer): if a note with its words is at that very path and was made after the
    *  line was written, that write landed, and it counts as sent. Otherwise the same words twice in a minute are two
    *  entries (written offline or not). A failure says which path it was trying (`e.tried`). */
   const put = async (body: string, at: Date, tried?: string) => {
-    const paths = [pathFor(body, at), pathFor(body, at).replace(/^(Journal\/[^ ]+)/, `Journal/${when.path(at, true)}`)];
+    // the minute, then its second, then (the same words again within that second) numbered
+    const secs = `Journal/${when.path(at, true)}`;
+    const paths = [pathFor(body, at), ...["", "-2", "-3", "-4", "-5"].map((n) => pathFor(body, at).replace(/^(Journal\/[^ ]+)/, `${secs}${n}`))];
     for (const path of paths) {
       try { await vault.createRecord({ path, body }); return; } catch (e: any) {
         if (e && typeof e === "object") e.tried = path;
