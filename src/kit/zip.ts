@@ -2,8 +2,9 @@
 // deflated entries (the two every exporter writes); deflate through the platform's own DecompressionStream, so no
 // library comes with it. A zip at the top of the zip (Notion puts its export in "Export-…-Part-1.zip") is opened too,
 // its files taking the place of the inner zip; a zip deeper in is an attachment, and stays one. Limits keep a hostile
-// file from filling memory, counted across the zip and every zip in it: at most MAX_FILES files and MAX_TOTAL bytes
-// once unpacked, each entry stopped as soon as it passes the size it claims, and one name only once. Entries the caller
+// file from filling memory or the clock, counted across the zip and every zip in it: at most MAX_FILES files, MAX_TOTAL
+// bytes of files and MAX_TOTAL of the zips at its top (each entry costing the larger of what it reads and makes), each
+// entry stopped as soon as it passes the size it claims, and one name only once. Entries the caller
 // doesn't `want` are listed by name with no bytes, never unpacked (an export's images, when only its pages are read).
 
 export type ZipFiles = Map<string, Uint8Array>;
@@ -73,16 +74,18 @@ async function readInto(b: Uint8Array, out: ZipFiles, budget: Budget, opts: ZipO
     const start = local + 30 + u16(b, local + 26) + u16(b, local + 28);
     const data = b.subarray(start, start + size);
     if (data.length !== size) throw new ZipError("The zip is cut short.");
-    // one budget for the whole file: a zip inside can't start again from nothing
-    if (inner && budget.inner + full > (opts.max ?? MAX_TOTAL)) throw new ZipError(`The zip is over ${Math.round((opts.max ?? MAX_TOTAL) / 1024 / 1024)} MB unpacked.`);
-    budget.bytes += full;
-    if (budget.bytes > (opts.max ?? MAX_TOTAL)) throw new ZipError(`The zip is over ${Math.round((opts.max ?? MAX_TOTAL) / 1024 / 1024)} MB unpacked.`);
+    // one budget for the whole file: a zip inside can't start again from nothing. An entry costs the larger of what it
+    // reads and what it claims to make, so one that claims nothing but takes long to read isn't free either
+    const max = opts.max ?? MAX_TOTAL, over = () => new ZipError(`The zip is over ${Math.round(max / 1024 / 1024)} MB unpacked.`);
+    const cost = Math.max(size, full);
+    if (inner ? budget.inner + cost > max : budget.bytes + cost > max) throw over();
+    if (inner) budget.inner += cost; else budget.bytes += cost;
     const file = method === 0 ? data : method === 8 ? await inflate(data, full) : null;
     if (!file) throw new ZipError(`The zip uses a kind of compression this can't read (${method}).`);
     if (file.length !== full) throw new ZipError("The zip is broken: a file isn't the size it says.");
     // an inner zip's own bytes count once, apart from its files: many entries naming one big inner zip can't each be
     // unpacked for free
-    if (inner) { budget.bytes -= full; budget.inner += full; if (budget.inner > (opts.max ?? MAX_TOTAL)) throw new ZipError(`The zip is over ${Math.round((opts.max ?? MAX_TOTAL) / 1024 / 1024)} MB unpacked.`); await readInto(file, out, budget, opts, 1); continue; }
+    if (inner) { await readInto(file, out, budget, opts, 1); continue; }
     if (out.has(path)) throw new ZipError(`The zip has ${path} twice.`);
     out.set(path, file);
   }

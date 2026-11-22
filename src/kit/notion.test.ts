@@ -40,6 +40,13 @@ describe("readZip", () => {
     // many entries naming the same big inner zip: refused once their unpacking passes the budget, not done each time
     await expect(readZip(zipOfMany([["Export-1-Part-1.zip", inner("a.md", 600)], ["Export-1-Part-2.zip", inner("b.md", 600)], ["Export-1-Part-3.zip", inner("c.md", 600)]]), { max: 300, want: () => false })).rejects.toThrow(/over/);
   });
+  test("an entry that claims to make nothing still costs what it reads: many of them are refused, not read for minutes", async () => {
+    // empty stored deflate blocks: 1000 bytes of input that make nothing
+    const empty = new Uint8Array(1000); for (let i = 0; i < 995; i += 5) empty.set([0, 0, 0, 0xff, 0xff], i);
+    empty.set([1, 0, 0, 0xff, 0xff], 995);
+    const entries: [string, Uint8Array][] = Array.from({ length: 5 }, (_, i) => [`e${i}.md`, empty]);
+    await expect(readZip(zipOfMany(entries, entries.map(() => 0)), { max: 3000 })).rejects.toThrow(/over/);
+  });
   test("an entry that inflates past the size it claims is refused, not unpacked to the end", async () => {
     const big = deflateRawSync(Buffer.alloc(5_000_000, 97));
     await expect(readZip(zipOf("bomb.md", big, 10))).rejects.toThrow(/bigger than it says/);
