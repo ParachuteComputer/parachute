@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { updateLine } from "../../applet/level";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVault } from "../../bridge/protocol";
-import { addEmbed, addVault, bringIn, dismissVault, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
+import { addEmbed, addVault, bringIn, dismissVault, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults, useVaultsLoaded } from "../data";
 import { titleOf } from "../../vault/notes";
 import { Days } from "../../kit/parts";
 import { when } from "../../kit/when";
@@ -35,7 +35,7 @@ export default function Launcher() {
   const many = vaults.length > 1;
   // Start here, above the list: known before the list draws (and kept per vault), so it never pushes the list down
   const homeVault = vaults.find((v) => v.home);
-  const fresh = useFresh(homeVault);
+  const fresh = useFresh(homeVault, useVaultsLoaded());
   return (
     <main className="screen launcher">
       <h1 className="launcher-title">Applets</h1>
@@ -70,25 +70,30 @@ const theirs = (n: Note) => {
  *  in it, it stays known; a new vault is read again on each visit. */
 const known = new Map<string, boolean>();
 const started = (n: Note) => theirs(n) || ((n as { path?: string }).path ?? "").startsWith("Parachute/Receipts/");
-/** `undefined` while the first read of a vault runs (the list waits for it, at most 1.5 s: then it draws without Start
- *  here, which this visit then never adds above it). */
-function useFresh(v: FrameVault | undefined): boolean | undefined {
-  const [fresh, setFresh] = useState<boolean | undefined>(() => (v ? known.get(v.key) : false));
+/** `undefined` until the vaults are read and, for a home vault not read before, while its first read runs (the list
+ *  waits for it, at most 1.5 s: then it draws without Start here, which this visit then never adds above it). Never
+ *  another vault's answer: a home that changes is read for itself. */
+function useFresh(v: FrameVault | undefined, loaded: boolean): boolean | undefined {
+  const [state, setState] = useState<{ key: string; fresh: boolean | undefined } | null>(null);
   useEffect(() => {
-    if (!v) { setFresh(false); return; }
-    setFresh(known.get(v.key));
-    if (known.get(v.key) === false) return;
-    let live = true, drawn = known.has(v.key);
-    const late = setTimeout(() => { if (live && !drawn) { drawn = true; setFresh(false); } }, 1500);
+    if (!loaded || !v) return;
+    const key = v.key;
+    setState({ key, fresh: known.get(key) });
+    if (known.get(key) === false) return;
+    let live = true, drawn = known.has(key);
+    const draw = (fresh: boolean) => { drawn = true; setState({ key, fresh }); };
+    const late = setTimeout(() => { if (live && !drawn) draw(false); }, 1500);
     readerFor(v).queryNotes({ orderBy: "updated_at", sort: "desc", limit: 40 }).then((notes) => {
       const isNew = !notes.some(started);
-      known.set(v.key, isNew);
+      known.set(key, isNew);
       // drawn already: only a Start here that goes may change it (nothing new pushes the list down)
-      if (live && (!drawn || !isNew)) { drawn = true; setFresh(isNew); }
-    }, () => { if (live && !drawn) { drawn = true; setFresh(false); } });
+      if (live && (!drawn || !isNew)) draw(isNew);
+    }, () => { if (live && !drawn) draw(false); });
     return () => { live = false; clearTimeout(late); };
-  }, [v?.key]);
-  return fresh;
+  }, [v?.key, loaded]);
+  if (!loaded) return undefined;
+  if (!v) return false;
+  return state?.key === v.key ? state.fresh : known.get(v.key);
 }
 
 /** A new person's first screen (T-476 first run): while their home vault holds nothing of theirs, the two ways to
