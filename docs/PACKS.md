@@ -34,6 +34,8 @@ changed, which the person also changed) is not built.
 
 ## In the app
 
+- `vaults.importNotion(vault)`, during a tap: the app's own picker for a Notion export, applied as a pack (From Notion,
+  above): `{ picked: false }`, or `{ name, found: {pages, tables, rows}, made, types, notes, left, changed }`.
 - `vaults.packs(vault)`: Parachute's starter packs and the vault's receipts (`installed`, with `newer` when the app
   ships a newer version). `vaults.addPack(vault, id)`: apply a starter pack; `{ added, kept, notes, changed }`.
   Shell side: `src/applet/modules/packs.ts`. An applet can't hand the app a pack of its own to apply: only the packs
@@ -43,6 +45,25 @@ changed, which the person also changed) is not built.
   is written ("This vault's server doesn't let Parachute make types yet"); on 0.8 (no types) Add a pack says so.
 - Vault: **Add a pack** (or **Packs**, once a vault has types) on a vault; **Installed packs**; **New <type>** from the
   default template; **Make this a template** on a record. Tested end to end: `e2e/packs.spec.ts`.
+
+## From Notion
+
+**Import from Notion** on a vault (Vault) opens the app's own picker for a Notion export (in Notion: Settings, Export,
+**Markdown & CSV**; the .zip as Notion gives it, up to 200 MB). The app reads it (`src/kit/zip.ts`, `src/kit/notion.ts`)
+and applies it as a pack, by the rule above, under one folder, `Notion/`:
+
+- a **database** becomes a type named for it (Reading List → `reading-list`), one field per column, its kind found from
+  the values (dates, numbers, yes/no, lists, links to other rows as references); its `_all.csv` is read, so rows a view
+  filtered out come too. A record at the table's place says where its rows went.
+- a **row** becomes a record of that type at `Notion/<its place>/<title>`: the columns are its fields, its page (less
+  its title and property lines) its words.
+- a **page** becomes a record at its place in the tree; links between pages become wikilinks.
+- **images and attachments** stay in the export, and the app says which.
+
+The receipt is `Parachute/Receipts/notion-<id>`, the id from the export's file list: choosing the same export again
+changes nothing, and **Installed packs** lists it. Checked against a made-up workspace shaped like a real export
+(`e2e/fixtures/notion-export.zip`, from `scripts/make-notion-export.py`; `src/kit/notion.test.ts`, `e2e/notion.spec.ts`)
+and a real export of a test workspace (Obsidian Importer's `tests/notion/Notion.Test.Export.zip`).
 
 ## For an AI
 

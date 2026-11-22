@@ -1,0 +1,123 @@
+// Import from Notion: what a made-up workspace's export (e2e/fixtures/notion-export.zip, from
+// scripts/make-notion-export.py, shaped like a real export) becomes. The parser is the point: each test is a way a real
+// export would come out wrong in the vault.
+import { readFileSync } from "node:fs";
+import { describe, expect, test } from "vitest";
+import { notionDate, notionImport, parseCsv } from "./notion";
+import { readZip, ZipError } from "./zip";
+import { applyPack, type PackTarget, type Receipt } from "./packs";
+
+const zip = () => readFileSync(`${process.cwd()}/e2e/fixtures/notion-export.zip`);
+const load = async () => notionImport(await readZip(zip()), "Export-0c5e1b7a-notion.zip");
+const rec = (r: Awaited<ReturnType<typeof load>>, path: string) => {
+  const x = r.pack.records.find((p) => p.path === path);
+  if (!x) throw new Error(`no record ${path}: ${r.pack.records.map((p) => p.path).join(", ")}`);
+  return x;
+};
+
+describe("readZip", () => {
+  test("opens Notion's zip inside the zip, deflated, with UTF-8 names", async () => {
+    const files = await readZip(zip());
+    const names = [...files.keys()];
+    expect(names.some((n) => n.endsWith(".zip"))).toBe(false);
+    expect(names).toContain("Export-0c5e1b7a-4f2d-4e1a-9b3c-7d8e9f0a1b2c/Home 8cf04a9734132302f96da8e113e80ce5/Tasks ef615563c8e8ea902c7fcac3cd2c4246/Invoice Little Fern Café 990fd3077d89dadb47367df091e3f051.md");
+    expect(new TextDecoder().decode(files.get(names.find((n) => n.endsWith("Rates 62fd280c30b9823d99fa1e3649ef293b.md"))!)!)).toContain("Deposits are half up front.");
+  });
+  test("says plainly when the file isn't a zip", async () => {
+    await expect(readZip(new TextEncoder().encode("not a zip at all, just words"))).rejects.toThrow(ZipError);
+  });
+});
+
+describe("notionImport", () => {
+  test("a database is a type, its columns fields of the right kind, its rows records with values a vault takes", async () => {
+    const r = await load();
+    expect(r.found).toEqual({ pages: 5, tables: 3, rows: 12 });
+    expect(Object.keys(r.pack.types).sort()).toEqual(["projects", "reading-list", "tasks"]);
+    expect(r.pack.types["reading-list"].fields).toEqual({
+      author: { type: "string" }, status: { type: "string" }, rating: { type: "number" }, tags: { type: "array" }, finished: { type: "date" }, notes: { type: "string" },
+    });
+    expect(r.pack.types.tasks.fields).toEqual({ project: { type: "reference", cardinality: "many" }, due: { type: "date" }, done: { type: "boolean" } });
+    // the row keeps its title as its name, and its values as fields: a date as a date, a number as a number, a list
+    const book = rec(r, "Notion/Home/Reading List/Piranesi");
+    expect(book.types).toEqual(["reading-list"]);
+    expect(book.fields).toEqual({ author: "Susanna Clarke", status: "Read", rating: 5, tags: ["Fiction"], finished: "2026-07-07", notes: "The house, the tides. Reread it." });
+    // the _all.csv is read, so a row the current view filtered out is still there
+    expect(rec(r, "Notion/Home/Reading List/The Creative Act").fields).toMatchObject({ status: "Want to read" });
+  });
+
+  test("a relation points at the record the other row became; yes and no are true and false", async () => {
+    const r = await load();
+    expect(rec(r, "Notion/Home/Tasks/Invoice Little Fern Café").fields).toEqual({ project: ["Notion/Home/Projects/Café menu illustrations"], due: "2026-09-30", done: true });
+    expect(rec(r, "Notion/Home/Projects/Zine: Night Birds").fields?.tasks).toEqual(["Notion/Home/Tasks/Pick paper for the zine", "Notion/Home/Tasks/Scan the owl drawings"]);
+  });
+
+  test("a row's page gives its words, without its title or the properties the table holds", async () => {
+    const r = await load();
+    expect(rec(r, "Notion/Home/Projects/Harbor Books cover").body).toBe("Cover for a poetry book, three sketches first.\n");
+  });
+
+  test("pages keep their place, their links become wikilinks, and an image is said, not lost silently", async () => {
+    const r = await load();
+    const home = rec(r, "Notion/Home");
+    expect(home.types ?? []).toEqual([]);
+    expect(home.body).toContain("[[Notion/Home/Meeting notes]]");
+    expect(home.body).toContain("[[Notion/Home/Reading List]]");
+    expect(home.body).not.toMatch(/%20|[0-9a-f]{32}/);
+    // a relation written into a page as text links too
+    expect(rec(r, "Notion/Home/Meeting notes/Kickoff with Harbor Books").body).toContain("Project: [[Notion/Home/Projects/Harbor Books cover]]");
+    const ideas = rec(r, "Notion/Home/Ideas").body;
+    expect(ideas).toContain("- [ ] A print series of city birds");
+    expect(ideas).toContain("image owl-sketch.png");
+    expect(r.left).toEqual(["Home 8cf04a9734132302f96da8e113e80ce5/Ideas d46ef9e7211d041671cdbe6c3d884884/owl-sketch.png"]);
+    // the table that held the rows has a record at its place, so a link to it lands somewhere
+    expect(rec(r, "Notion/Home/Reading List").body).toContain("reading-list");
+    // the export's own wrapping isn't the person's: no Export-… folder, no index page
+    expect(r.pack.records.every((x) => x.path.startsWith("Notion/") && !x.path.includes("Export-") && !/index/i.test(x.path))).toBe(true);
+  });
+
+  test("the same export is the same pack (its receipt), so bringing it in again changes nothing", async () => {
+    const a = await load(), b = await load();
+    expect(a.pack.id).toBe(b.pack.id);
+    const vault = memoryVault();
+    expect((await applyPack(a.pack, vault)).changed).toBe(true);
+    const n = vault.records.size;
+    const again = await applyPack(b.pack, vault);
+    expect(again.changed).toBe(false);
+    expect(vault.records.size).toBe(n);
+    // another export (one page more) is another pack
+    const files = await readZip(zip());
+    files.set("Export-0c5e1b7a-4f2d-4e1a-9b3c-7d8e9f0a1b2c/Later 0123456789abcdef0123456789abcdef.md", new TextEncoder().encode("# Later\n\nA new page.\n"));
+    expect(notionImport(files).pack.id).not.toBe(a.pack.id);
+  });
+
+  test("a zip with no Notion pages in it says what to do", () => {
+    expect(() => notionImport(new Map([["photo.png", new Uint8Array([1])]]))).toThrow(/Markdown & CSV/);
+  });
+});
+
+test("parseCsv: Notion's byte order mark, quotes, commas and line breaks inside a value", () => {
+  expect(parseCsv('﻿Name,Notes\r\n"A, b","said ""hi""\nthen left"\r\nC,\r\n')).toEqual([["Name", "Notes"], ["A, b", 'said "hi"\nthen left'], ["C", ""]]);
+});
+
+test("notionDate: the ways Notion writes a date, its first day; anything else is not one", () => {
+  expect(notionDate("March 2, 2026")).toBe("2026-03-02");
+  expect(notionDate("Dec 4, 2024 8:45 AM")).toBe("2024-12-04");
+  expect(notionDate("@December 1, 2024")).toBe("2024-12-01");
+  expect(notionDate("November 3, 2026 → November 5, 2026")).toBe("2026-11-03");
+  expect(notionDate("2026/11/03")).toBe("2026-11-03");
+  for (const no of ["Read", "13/45/2026", "Smarch 3, 2026", "5"]) expect(notionDate(no), no).toBeNull();
+});
+
+/** A vault in memory, as the applier sees one: types, records at free paths, the receipt. */
+function memoryVault(): PackTarget & { records: Map<string, unknown> } {
+  const types = new Map<string, Record<string, unknown>>(), records = new Map<string, unknown>();
+  let receipt: { receipt: Receipt; id: string; updatedAt: string | null } | null = null;
+  return {
+    records,
+    types: async () => [...types].map(([name, fields]) => ({ name, kind: "type" as const, count: 0, fields: fields as never })),
+    defineType: async (name, def) => { types.set(name, { ...(types.get(name) ?? {}), ...def.fields }); return "ok"; },
+    create: async (r) => { const existed = records.has(r.path); if (!existed) records.set(r.path, r); return { id: r.path, updatedAt: null, existed }; },
+    receipt: async () => receipt,
+    writeReceipt: async (r) => { receipt = { receipt: r, id: "receipt", updatedAt: null }; },
+  };
+}

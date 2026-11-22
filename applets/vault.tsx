@@ -199,10 +199,13 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
         : <div className="cols two">
             <section>
               {typed.length ? <List label="Types" rows={typed.map((t) => ({ key: t.name, title: label(t.name), meta: Object.keys(t.fields ?? {}).map(label).join(" · ") || t.description || "", aside: String(t.count), onPress: () => openType(t.name), data: { type: t.name } }))} />
-                : <Empty>No types yet. A type is a kind of record (a book, a task) with fields of its own. Add a pack to start with people, projects, meetings and tasks.</Empty>}
+                : <Empty>No types yet. A type is a kind of record (a book, a task) with fields of its own. Add a pack to start with people, projects, meetings and tasks, or bring in your Notion workspace.</Empty>}
               {canWrite && <Field label="New type" placeholder="A name, like book" action="Make" onAction={makeType} />}
               {/* packs (T-476, docs/PACKS.md): types, templates and views added with one tap */}
-              {typeof vaults.packs === "function" && <div className="chips"><Button small kind={typed.length ? "plain" : "primary"} onClick={packs}>{typed.length ? "Packs" : "Add a pack"}</Button></div>}
+              {typeof vaults.packs === "function" && (() => {
+                const pack = <Button small kind={typed.length ? "plain" : "primary"} onClick={packs}>{typed.length ? "Packs" : "Add a pack"}</Button>;
+                return canWrite && typeof vaults.importNotion === "function" ? <FromNotion v={v} openType={openType} done={load}>{pack}</FromNotion> : <div className="chips">{pack}</div>;
+              })()}
             </section>
             <section>
               {tags.length > 0 && <List label="Tags" rows={tags.slice(0, 30).map((t) => ({ key: t.name, title: `#${t.name}`, aside: String(t.count), onPress: () => openType(`#${t.name}`) }))} />}
@@ -1122,6 +1125,35 @@ type Installed = { id: string; name: string; version: number; source: string; ap
 type Applied = { added: string[]; kept: string[]; notes: string[]; changed: boolean };
 /** Who added it, in a person's words where the stamp says (an AI's sign-in, the app); a key's own name otherwise. */
 const byWhom = (via: string | null) => (via === "mcp" ? "by an AI" : via === "api" ? "in Parachute" : via?.startsWith("key:") && via.length < 30 ? `with the key ${via.slice(4)}` : "");
+
+type Brought = { picked: boolean; name?: string; found?: { pages: number; tables: number; rows: number }; made?: number; types?: string[]; notes?: string[]; left?: string[]; changed?: boolean };
+const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** Import from Notion: the app's own picker for the export (a .zip), then what came in, and where to see it. The same
+ *  export again changes nothing (it is a pack, with a receipt: docs/PACKS.md). */
+function FromNotion({ v, openType, done, children }: { v: Held; openType: (t: string) => void; done?: () => void; children?: ReactNode }) {
+  const [busy, setBusy] = useState(false);
+  const [r, setR] = useState<Brought | null>(null);
+  // the call goes in the tap itself: the app opens its picker only while you tap
+  const go = async () => {
+    setBusy(true);
+    try {
+      const x: Brought = await vaults.importNotion(v.key);
+      if (!x.picked) return;
+      setR(x);
+      toast(x.changed ? "Your Notion workspace is in." : "That export is here already. Nothing changed.");
+      done?.();
+    } catch (e) { quiet(e, "The Notion export wasn't brought in"); } finally { setBusy(false); }
+  };
+  return <>
+    <div className="chips">{children}{children ? " " : ""}<Button small busy={busy} onClick={() => void go()}>{busy ? "Bringing it in…" : "Import from Notion"}</Button></div>
+    {r?.found && <section aria-label="What came from Notion" className="stack">
+      <p className="note-meta">{r.changed ? "From Notion" : "Already here from Notion"}: {count(r.found.tables, "table")} ({count(r.found.rows, "row")}) and {count(r.found.pages, "page")}, under Notion/.{r.changed ? "" : " Nothing changed."}</p>
+      {(r.types ?? []).length > 0 && <div className="chips">{r.types!.map((t) => <Button key={t} small kind="quiet" onClick={() => openType(t)}>{label(t)}</Button>)}</div>}
+      {(r.notes ?? []).map((n) => <p key={n} className="note-meta">{n}</p>)}
+      {(r.left ?? []).length > 0 && <p className="note-meta">{count(r.left!.length, "file")} stayed in your export (images and attachments aren't brought in yet): {r.left!.slice(0, 3).map((f) => f.split("/").pop()).join(", ")}{r.left!.length > 3 ? "…" : ""}.</p>}
+    </section>}
+  </>;
+}
 
 /** The packs a vault has (Installed packs), and Parachute's own to add with one tap. */
 function Packs({ v, back, openType }: { v: Held; back: { label: string; onPress: () => void }; openType: (t: string) => void }) {

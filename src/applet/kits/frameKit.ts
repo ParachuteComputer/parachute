@@ -550,6 +550,8 @@ export const FRAME_KIT = String.raw`(function () {
       applets: function (vault) { return call("vaults", "applets", { vault: vault }); },
       packs: function (vault) { return call("vaults", "packs", { vault: vault }); },
       addPack: function (vault, id) { return call("vaults", "addPack", { vault: vault, id: id }); },
+      // during a tap: the app's own picker for a Notion export, brought in as a pack (docs/PACKS.md "From Notion")
+      importNotion: function (vault) { return call("vaults", "importNotion", { vault: vault }); },
       // with app: [sharing]
       access: function (vault) { return call("vaults", "access", { vault: vault }); },
       publish: function (vault, id, on) { return call("vaults", "publish", { vault: vault, id: id, on: on !== false }); },
