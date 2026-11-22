@@ -127,7 +127,8 @@ Every applet's frame, and every embed's, gets the look in four steps, each over 
    `<table>`, `<blockquote>` or `<pre>` drawn as the kit draws them. An applet's frame is also a page: what it draws
    sits in the kit's column and margins (an embed's frame is not, nor a page with embeds: each is sized to what it
    draws, inside the shell's margins). An applet with no CSS
-   of its own looks like the rest of Parachute.
+   of its own looks like the rest of Parachute. The bare controls, `pre` and `table` the base draws are `border-box`; nothing else of the
+   applet's is.
 3. **The parts** (`@layer parachute.parts`, `src/kit/parts.css`, with the note renderer's sheet beside it): the
    `pa-` classes the kit's parts are drawn with. An HTML applet can use them too, for example
    `<button class="pa-button pa-primary">Save</button>`. The base leaves an element with a `pa-` class to them, and

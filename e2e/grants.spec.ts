@@ -1,9 +1,10 @@
 // Who reaches a vault, and a key for an AI (T-476, docs/VAULT.md "Sharing"; core: the 1.0 grants slice). The person
 // opens Vault's Sharing, asks once to manage who reaches kitchen (the app's own sheet, then the hub's Approve), makes a
-// key named for an AI that may read and add one type only, and the list names it. With that key, at the vault's REST and
+// key named for an AI that may read and add one type only (Connect an AI), and the list names it. With that key, at the vault's REST and
 // MCP doors as an AI uses them, recipes are added and read, and a journal record is as if it didn't exist: by id, by
-// search, in the type list and in its history. Ending it in the list makes its very next request fail.
-// Needs a hub with typed keys (core uni/t476-typed-keys or later); an older hub (CI installs core from npm) skips.
+// search, in the type list and in its history. Ending it in the list makes its very next request fail; the row stays, ended.
+// Needs a hub with typed keys (core uni/t476-typed-keys or later); an older hub (core from npm) skips, unless
+// E2E_CORE_NEXT=1 says it is core's next (CI's pinned leg).
 import { expect, test, type FrameLocator, type Page } from "@playwright/test";
 import { signIn } from "./helpers";
 import { api, cli, hubState, VAULT } from "./hub";
@@ -36,7 +37,8 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   const stamp = Date.now().toString(36);
   const admin = cli(hub, ["auth", "mint-token", "--scope", `vault:${VAULT}:admin`, "--json"]).token as string;
   const list = await fetch(`${hub.origin}/account/vaults/${VAULT}/statements`, { headers: { authorization: `Bearer ${admin}` } });
-  test.skip(list.status === 404 || list.status === 405, "a hub without typed keys (core before the 1.0 grants slice)");
+  // E2E_CORE_NEXT=1: this hub is core's next (CI's pinned leg), so the list must be there: never skipped
+  test.skip((list.status === 404 || list.status === 405) && process.env.E2E_CORE_NEXT !== "1", "a hub without typed keys (core before the 1.0 grants slice)");
 
   // the owner's vault: a recipe, and a journal entry with a word only it holds
   const [recipe, journal] = [`recipe${stamp}`, `journal${stamp}`];
@@ -67,10 +69,11 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
   await approveBack(page, app);
   await expect(page).toHaveURL(/show=sharing/);
-  await expect(v.getByRole("button", { name: "Give an AI a key" })).toBeVisible({ timeout: 30_000 });
+  await expect(who.getByRole("region", { name: "AIs and agents" })).toBeVisible({ timeout: 30_000 });
 
-  // a key for an AI: its name, read and add, one type
+  // a key for an AI, from Connect an AI: its name, read and add, one type
   const name = `claude-${stamp}`;
+  await v.getByRole("button", { name: "Connect an AI" }).click();
   await v.getByRole("button", { name: "Give an AI a key" }).click();
   await v.getByLabel("Its name").fill(name);
   await v.getByRole("group", { name: "Which types" }).getByRole("button", { name: new RegExp(recipe, "i") }).click();
@@ -122,7 +125,8 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   await expect(end).toBeVisible();
   await page.waitForTimeout(800);
   await end.getByRole("button", { name: "End it" }).click();
-  await expect(who.getByRole("listitem").filter({ hasText: name })).toHaveCount(0, { timeout: 20_000 });
+  await expect(who.getByRole("listitem").filter({ hasText: name })).toContainText("ended", { timeout: 20_000 });
+  await expect(row.getByRole("button", { name: `End ${name}` })).toHaveCount(0);
   expect((await vaultApi(token, "GET", `records/${soup.id}`)).status).toBe(401);
   expect((await mcp(token, "query-notes", { id: soup.id })).status).toBe(401);
 
@@ -143,7 +147,7 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   await page.getByRole("dialog", { name: `Manage who reaches ${VAULT}?` }).getByRole("button", { name: "Continue" }).click();
   await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
   await approveBack(page, app);
-  await expect(v.getByRole("button", { name: "Give an AI a key" })).toBeVisible({ timeout: 30_000 });
+  await expect(who.getByRole("region", { name: "AIs and agents" })).toBeVisible({ timeout: 30_000 });
   const second = await held();
   expect(second).not.toBeNull();
   await page.getByRole("button", { name: "Back" }).first().click();

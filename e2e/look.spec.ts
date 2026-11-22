@@ -187,3 +187,22 @@ test("an applet that sets its own body margin and padding lays out exactly as in
     await expect.poll(() => frame(page).locator("#book").evaluate((b) => Math.round(b.getBoundingClientRect().width))).toBe(1180);
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });
+
+// three more of an applet's own: a margin of its own with a paragraph first, a padded box of its own, and text alone
+const OWN_MORE = `<!doctype html><html><head><style>body { max-width: 600px; margin: 2rem auto; } .box { width: 300px; padding: 20px; border: 2px solid; }</style></head>
+<body><p id="first">A paragraph first, under a margin of its own.</p><div class="box" id="box">A padded box</div></body></html>`;
+const TEXT_ONLY = `<!doctype html><html><body>Just a line of words, no element around them.</body></html>`;
+
+test("an applet's own margin, padded box and bare text: as in any page, and bare text sits in the column", async ({ page }) => {
+  const id = await opened(page, "Applets/Own more", "html", OWN_MORE, "own-more", "Own more", "A paragraph first");
+  try {
+    // the paragraph's margin collapses through the body's, as in any page: 32px (2rem) from the top, not 32 + 16
+    expect(await frame(page).locator("#first").evaluate((p) => Math.round(p.getBoundingClientRect().top))).toBe(32);
+    // its own box keeps the browser's sizing: 300 + 2 × 20 + 2 × 2
+    expect(await frame(page).locator("#box").evaluate((b) => Math.round(b.getBoundingClientRect().width))).toBe(344);
+  } finally { await api(hubState(), "DELETE", `notes/${id}`); }
+  const t = await opened(page, "Applets/Text only", "html", TEXT_ONLY, "text-only", "Text only", "Just a line");
+  try {
+    expect(await frame(page).locator("body").evaluate((b) => Math.round(b.getBoundingClientRect().left))).toBeGreaterThanOrEqual(14);
+  } finally { await api(hubState(), "DELETE", `notes/${t}`); }
+});
