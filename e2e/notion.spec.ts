@@ -87,10 +87,9 @@ test.describe.serial("Import from Notion", () => {
     const harbor = app.getByRole("row", { name: /Harbor Books cover/ });
     await expect(harbor).toContainText("Send Harbor Books three sketches");
     await expect(harbor).not.toContainText("Notion/");
-    await harbor.click();
     await shot(page, "04-reference");
-    await expect(app.getByText("Send Harbor Books three sketches", { exact: true }).filter({ visible: true }).first()).toBeVisible();
-    // (and no box holds the list as text, as it did: `["Notion/Home/Tasks/…"]`)
+    await harbor.click();
+    // on the record the list is edited as its paths, one after another, not as text in brackets (`["Notion/Home/Tasks/…"]`)
     expect(await app.locator("input, textarea").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value).filter((x) => x.startsWith("[")))).toEqual([]);
 
     // the same export again: nothing new, nothing changed

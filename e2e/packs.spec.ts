@@ -129,13 +129,14 @@ test.describe.serial("Packs", () => {
     await app.getByRole("textbox", { name: "New meeting" }).fill("Kickoff with Sam");
     await app.getByRole("button", { name: "Add", exact: true }).click();
     await expect(app.getByRole("article", { name: "Kickoff with Sam" })).toContainText("Decisions");
-    // its people, a reference to many with nothing in it yet, is still a box to fill in (only a list that holds paths is
-    // shown by names and read only)
+    // its people, a reference to many, is a box to fill in
     await expect(app.getByRole("textbox", { name: "people" })).toBeEditable();
     // and what is typed there is saved as a list, as the field declares (one path, then the vault holds ["…"])
     await app.getByRole("textbox", { name: "people" }).fill("People/Sam Okafor");
     await app.getByRole("textbox", { name: "people" }).press("Enter");
     await expect.poll(async () => ((await api(hub(), "GET", "records?type=meeting&include_fields=true")) as { path: string; fields: Record<string, unknown> }[]).find((r) => r.path.endsWith("Kickoff with Sam"))?.fields.people).toEqual(["People/Sam Okafor"]);
+    // and it stays a box once it holds one: a second person can be added
+    await expect(app.getByRole("textbox", { name: "people" })).toBeEditable();
     const kick = ((await api(hub(), "GET", "records?type=meeting&include_body=true")) as { path: string; body: string }[]).find((r) => r.path.endsWith("Kickoff with Sam"));
     expect(kick?.body).toBe(PACK.records.find((r) => r.path === "Templates/meeting/Meeting")!.body);
     await shot(page, "03-new-meeting");
