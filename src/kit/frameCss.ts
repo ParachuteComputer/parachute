@@ -9,16 +9,15 @@ import { FONTS_CSS } from "../theme/fonts";
  *  applet's CSS is in none. */
 export const LAYERS = "@layer parachute.base, parachute.parts, parachute.app;";
 
-/** An applet's frame is a page: what it draws sits in the page's column and margins, as the kit's `Page` does, unless it
- *  draws a `Page` itself. The column's sides are the root's padding and its top and foot the body's, nothing of the
- *  body's width, height or margin: so an applet's own body rules (a reset to `margin: 0` or `border-box`, its own
- *  `max-width`, `height: 100%` or `min-height: 100vh`) keep the meaning they have in any page, and
- *  `html, body { padding: 0 }` gives the whole frame to the applet, edge to edge. An embed's frame is not a page (it is
- *  sized to what it draws, inside someone's page). */
+/** An applet's frame is a page: what it draws sits in the kit's column, as a `Page`'s content does (the same width and
+ *  margins), unless it draws a `Page` itself. The column is the body's margin, nothing else: it takes the place of the
+ *  browser's own 8px, so an applet that sets its body's margin (a reset to 0, a centred column of its own, a full-height
+ *  or full-bleed layout) lays out exactly as it would in any page, and one that sets nothing gets the kit's page. An
+ *  embed's frame is not a page (it is sized to what it draws, inside someone's page), nor is a page with embeds. */
 // The column is there only once the frame holds what it is for, and never under a `Page`: before a TSX applet's first
 // render the body is empty (its #root too), so the switch to a Page moves nothing already on the screen.
-const COLUMN = ":where(html:not(:has(.pa-page)):has(> body > :not(script, style, link, #root:empty)))";
-const FRAME_PAGE = `@layer parachute.base{${COLUMN}{padding-inline:max(var(--pad), calc((100% - 760px) / 2));}${COLUMN} > :where(body){padding-block:calc(var(--pad) * 1.2) calc(var(--pad) * 3);}}`;
+const COLUMN = ":where(html:not(:has(.pa-page)):has(> body > :not(script, style, link, #root:empty))) > :where(body)";
+const FRAME_PAGE = `@layer parachute.base{${COLUMN}{margin:calc(var(--pad) * 1.2) max(var(--pad), calc((100% - 760px) / 2 + var(--pad))) calc(var(--pad) * 4);}}`;
 
 /** An embed's body shows the page it sits in through it, as it always did. */
 const EMBED_PAGE = "@layer parachute.base{:where(body){background:transparent;}}";

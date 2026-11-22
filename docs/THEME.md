@@ -136,7 +136,7 @@ Every applet's frame, and every embed's, gets the look in four steps, each over 
    renderer's few `!important` rules hold against it). `button { border-radius: 4px }` changes every button in the
    applet, the kit's included. Write it on the variables and it still follows the theme.
 
-To draw edge to edge (a map, a canvas, a board), give the page back: `html, body { padding: 0 }`. To change a token for your
+To draw edge to edge (a map, a canvas, a board), give the page back: `body { margin: 0 }` (the column is the body's margin, in place of the browser's own 8px). To change a token for your
 applet only, set it on `body` or on your own wrapper (`body { --accent: #8a5a2b; }`), not on `:root`: the app sets
 the theme's values on the root itself, and sets them again when the theme changes (so name a variable of your own
 another way than a token, `--my-…`). To add styles a later rule of yours
