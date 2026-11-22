@@ -28,6 +28,18 @@ const alias = [
 
 // Code the app puts inside sealed frames, each bundled once to an IIFE string (src/applet/kits): surface-client's
 // VaultClient (from the Uni app's vite.config.ts), and React for applets written as TSX/JSX modules.
+// The kit's own sheets (base.css, parts.css) are not in these: every frame has them in its head (src/kit/frameCss.ts).
+const KIT_SHEET = /[\\/]src[\\/]kit[\\/](?:base|parts)\.css$/;
+const noKitSheets: Plugin = {
+  name: "no-kit-sheets",
+  enforce: "pre",
+  async resolveId(source, importer) {
+    if (!importer || !source.endsWith(".css")) return null;
+    const r = await this.resolve(source, importer, { skipSelf: true });
+    return r && KIT_SHEET.test(r.id) ? "\0no-kit-sheet.css" : null;
+  },
+  load: (id) => (id === "\0no-kit-sheet.css" ? "" : null),
+};
 function iifeKit(id: string, entry: string, name: string): Plugin {
   return {
     name: id,
@@ -37,13 +49,15 @@ function iifeKit(id: string, entry: string, name: string): Plugin {
       const out = await build({
         configFile: false, logLevel: "silent", resolve: { alias },
         define: { "process.env.NODE_ENV": JSON.stringify("production") },
-        plugins: [react()],
+        plugins: [noKitSheets, react()],
         build: { write: false, minify: true, cssCodeSplit: false, lib: { entry: new URL(entry, import.meta.url).pathname, formats: ["iife"], name } },
       });
       const result = Array.isArray(out) ? out[0] : out;
       const files = "output" in result ? result.output : [];
       const code = files.flatMap((f) => (f.type === "chunk" ? [f.code] : []))[0] ?? "";
-      // the parts' styles go in with the script (the frame's CSP allows inline styles, and loads nothing)
+      // the note renderer's styles go in with the script (the frame's CSP allows inline styles, and loads nothing), at the
+      // end of the head: they share the parts' layer with the kit's sheet and come after it there, as they did when the
+      // parts' sheet was bundled with them (ahead of them)
       const css = files.filter((f) => f.type === "asset" && f.fileName.endsWith(".css")).map((f) => (f.type === "asset" ? String(f.source) : "")).join("\n");
       const withCss = css ? `(function(){var s=document.createElement("style");s.setAttribute("data-parachute-parts","");s.textContent=${JSON.stringify(css)};document.head.appendChild(s)})();\n${code}` : code;
       return `export default ${JSON.stringify(withCss)};`;

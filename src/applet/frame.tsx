@@ -10,7 +10,7 @@ import { buildKitSource } from "./kits";
 import { createSession, type Session } from "./session";
 import { subscribeTheme, tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
-import { FONTS_CSS } from "../theme/fonts";
+import { frameHead } from "../kit/frameCss";
 import type { Router } from "./router";
 import type { Resolved } from "./needs";
 import { judge, loadedAgain } from "./violations";
@@ -27,9 +27,9 @@ const KIT_SOURCE = buildKitSource({ vaultClientSource });
 /** What runs in the frame for an applet's code: an HTML note as written; a TSX/JSX note as its transpiled module, with React. */
 export const appletPage = (kind: CodeKind, content: string, js: string | null, name?: string): string => (kind === "html" ? content : modulePage(js ?? "", usesNote(content) ? reactNoteKitSource : reactKitSource, [], name));
 
-/** The sealed srcdoc for an applet: CSP first, WebRTC removed, the kits, the look as it is now (so the parts are drawn
- *  in it from the first paint; later changes come as theme events), then the applet. */
-export const frameSrcDoc = (html: string) => buildSrcdoc(html, { kitSource: KIT_SOURCE, headExtra: `<style>${FONTS_CSS}${cssOf(tokensNow()).replace(/</g, "")}</style>` });
+/** The sealed srcdoc for an applet: CSP first, WebRTC removed, the kits, the look as it is now and the kit's sheets (so
+ *  plain HTML and the parts are drawn in it from the first paint; later changes come as theme events), then the applet. */
+export const frameSrcDoc = (html: string, { page = true }: { page?: boolean } = {}) => buildSrcdoc(html, { kitSource: KIT_SOURCE, headExtra: frameHead(cssOf(tokensNow()), { page }) });
 
 /**
  * The sealed-frame host, shared by the real frame and the self-test's frame.
@@ -108,7 +108,9 @@ export function useSealedFrame(opts: { srcDoc: string; router: Router; grant: Re
 export default function AppletFrame({ html, title, router, grant, ready, onSession, onElement, height }: { html: string; title: string; router: Router; grant: Resolved; ready: unknown; /** The live session (null when it ends): the host's way to push events such as `open`. */ onSession?: (s: Session | null) => void;
   /** This frame's element, for the shell to tell a tap in it from a tap anywhere else. */ onElement?: (el: HTMLIFrameElement | null) => void;
   /** A page with embeds: the frame is as tall as its content, and the page scrolls as a whole. */ height?: number }) {
-  const srcDoc = useMemo(() => frameSrcDoc(html), [html]);
+  // a page with embeds sits in the shell's own margins beside them: its frame is not a page of its own (no column)
+  const sized = height !== undefined;
+  const srcDoc = useMemo(() => frameSrcDoc(html, { page: !sized }), [html, sized]);
   const { frame, stopped, onLoad, srcDoc: liveDoc } = useSealedFrame({ srcDoc, router, grant, ready, stopOnViolation: true, onSession });
   const onElementRef = useRef(onElement);
   onElementRef.current = onElement;

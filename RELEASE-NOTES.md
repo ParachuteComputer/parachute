@@ -44,6 +44,10 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   record's fields, types and tags too, so what it changes is what your AI reads back.
 - **One look.** The app and every applet follow one theme note in your home vault ([docs/THEME.md](docs/THEME.md)).
   Make the screens around your notes your own with a frame note ([docs/CHANGE-YOUR-FRAME.md](docs/CHANGE-YOUR-FRAME.md)).
+  *Changed:* an applet with no CSS of its own is drawn in the theme too (plain HTML: titles, lists, tables, buttons,
+  fields), inside the kit's page margins; an HTML applet can use the parts' `pa-` classes; and an applet's own CSS now
+  wins over the kit's whatever its specificity ([docs/THEME.md](docs/THEME.md#the-order-of-styles)). An applet
+  that sets its own body margin lays out as before; `body { margin: 0 }` draws edge to edge.
 - **Applets that talk to servers.** An applet can name its servers; the card says each and what the app signs there as
   you, and the app talks to them for it with your key, which the applet never holds. The first: Rooms (your rooms on a
   Buzz relay, with Uni's cards), Mail (through a mail gateway), Journal and Matrix ([docs/PARITY.md](docs/PARITY.md)).

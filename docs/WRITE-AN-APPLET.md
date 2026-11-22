@@ -288,7 +288,10 @@ ones its card names for that folder, what it opens there (`fields.opens`): a tag
 It never changes a note of the app's own (`applet`, `component`, `parachute-*`). An app from before this (T-476) refuses a write
 with fields, types or tags (`bad_params`), and its note view doesn't list fields.
 
-An HTML applet has no parts: it has the kit's calls and the CSS variables.
+An HTML applet has no parts as components, but it is drawn in the look all the same: plain HTML (a title, a list, a
+`<button>`, an `<input>`, a `<table>`) comes out in the theme with no CSS of its own, and the parts' classes work in it
+(`<button class="pa-button pa-primary">`). It has the kit's calls and the CSS variables; what your own CSS says wins over the
+kit's ([THEME.md](THEME.md#the-order-of-styles)).
 
 **Older apps.** An applet lives in the vault, and each device's app updates on its own time, so an applet meets
 older apps ([docs/design/VERSIONS.md](design/VERSIONS.md)). Each part has the level of the app it came in. All the

@@ -6,7 +6,9 @@ applets' `Note` part draw rich notes now, from one copy (AUDIT.md, section 3).
 
 - `src/`, `styles.css`, `rich-notes-kit.css`, `LICENSE`, `THIRD_PARTY.md` and `package.json` are as they were, except
   for two type casts in `src/markdown/remark-wikilinks.ts` (marked `parachute:`) so it type-checks against this
-  repo's mdast types. Its own tests stayed upstream (`src/__tests__`).
+  repo's mdast types. Its own tests stayed upstream (`src/__tests__`). The two sheets are wrapped in the app's
+  `parachute.parts` cascade layer (src/kit/base.css), and `rich-notes-kit.css` draws its focus ring in the app's accent
+  (both marked `Parachute:`).
 - The app imports it by its published name, `@openparachute/surface-render`, which `vite.config.ts` and
   `tsconfig.json` point here.
 - Licences: surface-render is AGPL-3.0 (`LICENSE`), as this app is. rich-notes-kit and its markdown-it are MIT

@@ -1,3 +1,7 @@
+/* Parachute: in the parts' cascade layer (src/kit/base.css says the order), beside the kit's own note rules (.pa-note,
+   .prose-note), so the two settle by specificity and by order as they did before there were layers. */
+@layer parachute.base, parachute.parts, parachute.app;
+@layer parachute.parts {
 /* rich-notes-kit: the look. A page of small serif text on a paper ground; live parts are quiet; one earthy accent;
    kinds told apart by word and shape, never by hue alone, so it holds in greyscale. One transition per tap; nothing
    loops; on a calm screen (reduced motion, a slow e-ink display, or [data-screen=ink]) nothing moves at all.
@@ -28,7 +32,10 @@
   --rn-sunk: color-mix(in srgb, var(--line, #d8d2c4) 45%, var(--surface, #fbf8f1));
   --rn-serif: var(--serif, "Cormorant Garamond", Georgia, serif); --rn-display: var(--serif, "Cormorant Garamond", Georgia, serif);
   --rn-ui: var(--sans, Inter, system-ui, sans-serif); --rn-mono: var(--mono, ui-monospace, monospace);
+  /* Parachute: the one focus ring, in the accent (black on a slow, e-ink screen, as the renderer's own) */
+  --rn-focus: var(--accent, #4f6b3a);
 }
+@media (update: slow) { .rn-theme-uni .rn, .rn-theme-uni.rn { --rn-focus: #000; } }
 .rn-ink .rn, .rn.rn-ink, [data-screen="ink"] .rn {
   --rn-ground: #fff; --rn-paper: #fff; --rn-sunk: #eee; --rn-ink: #000; --rn-ink-2: #222; --rn-ink-3: #444;
   --rn-line: rgba(0, 0, 0, .4); --rn-line-strong: rgba(0, 0, 0, .75); --rn-accent: #000; --rn-accent-soft: rgba(0, 0, 0, .08); --rn-needs: #000; --rn-focus: #000; --rn-hair: 1.5px; --rn-text: 18px;
@@ -271,3 +278,4 @@
 /* calm: still */
 @media (prefers-reduced-motion: reduce), (update: slow) { .rn *, .rn *::before, .rn *::after { transition: none !important; animation: none !important; } }
 .rn-ink .rn *, .rn.rn-ink * { transition: none !important; }
+}

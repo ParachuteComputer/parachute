@@ -1,3 +1,7 @@
+/* Parachute: in the parts' cascade layer (src/kit/base.css says the order), beside the kit's own note rules (.pa-note,
+   .prose-note), so the two settle by specificity and by order as they did before there were layers. */
+@layer parachute.base, parachute.parts, parachute.app;
+@layer parachute.parts {
 /*
  * @openparachute/surface-render — OPTIONAL baseline stylesheet.
  *
@@ -117,4 +121,5 @@ span.wikilink-unresolved {
 .hljs {
   display: block;
   overflow-x: auto;
+}
 }

@@ -64,6 +64,32 @@ under a row, 0.875×) and `--fs-label` (a small capital label, 0.75×). The ship
 and a check fails one that doesn't (`src/kit/conformance.ts`), so the same thing is the same size in every applet. `theme.get()` and `theme.on(cb)` give the same values as an object
 ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)).
 
+## The order of styles
+
+Every applet's frame, and every embed's, gets the look in four steps, each over the one before:
+
+1. **The tokens:** the theme's values as CSS variables on the root (`--bg`, `--accent`, `--fs-title`, …, above).
+2. **The base** (`@layer parachute.base`, `src/kit/base.css`): plain HTML drawn in the theme. Titles in the serif on
+   the type scale, the sans for the rest, links in the accent; a bare `<button>`, `<input>`, `<select>`, `<textarea>`,
+   `<table>`, `<blockquote>` or `<pre>` drawn as the kit draws them. An applet's frame is also a page: what it draws
+   sits in the kit's column and margins (an embed's frame is not, nor a page with embeds: each is sized to what it
+   draws, inside the shell's margins). An applet with no CSS
+   of its own looks like the rest of Parachute. The bare controls, `pre` and `table` the base draws are `border-box`; nothing else of the
+   applet's is.
+3. **The parts** (`@layer parachute.parts`, `src/kit/parts.css`, with the note renderer's sheet beside it): the
+   `pa-` classes the kit's parts are drawn with. An HTML applet can use them too, for example
+   `<button class="pa-button pa-primary">Save</button>`. The base leaves an element with a `pa-` class to them, and
+   a note the kit draws (its `Note`) to the note renderer.
+4. **The applet's own CSS**, in no layer: it wins over all of the above, whatever its specificity (only the note
+   renderer's few `!important` rules hold against it). `button { border-radius: 4px }` changes every button in the
+   applet, the kit's included. Write it on the variables and it still follows the theme.
+
+To draw edge to edge (a map, a canvas, a board), give the page back: `body { margin: 0 }` (the column is the body's margin, in place of the browser's own 8px). To change a token for your
+applet only, set it on `body` or on your own wrapper (`body { --accent: #8a5a2b; }`), not on `:root`: the app sets
+the theme's values on the root itself, and sets them again when the theme changes. To add styles a later rule of yours
+can still override at low weight, put them in a layer of your own (`@layer mine { … }`): a layer declared after the
+kit's sits above it.
+
 A component embedded in a page ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)) gets the same look, with two differences:
 each colour comes as `#rrggbb` (one written another way comes as the built-in colour), and its fonts are always the
 built-in ones. The theme note is text anyone you let write your vault can change, so only these few values reach code
