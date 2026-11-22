@@ -212,16 +212,13 @@ export function parseServices(raw: unknown, isHub: (origin: string) => boolean =
 
 const joinWords = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 /** A host as the card shows it: as written, with its punycode beside it when it has letters beyond ASCII. */
-export function hostWords(s: Pick<Service, "kind" | "url">, port = true): string {
-  const host = port ? hostLine(s) : new URL(originOf(s)).hostname;
+export function hostWords(s: Pick<Service, "kind" | "url">): string {
+  const host = hostLine(s);
   let shown = host;
   try { shown = decodeURIComponent(host.split(".").map((l) => (l.startsWith("xn--") ? punyDecode(l.slice(4)) : l)).join(".")); } catch { shown = host; }
   const here = isLoopback(new URL(originOf(s)).hostname) ? " on this device" : "";
   return (shown === host ? host : `${shown} (${host})`) + here;
 }
-
-/** Where a service is, as the card's face says it: its site, without a port (the whole address is under Show details). */
-export const siteWords = (s: Pick<Service, "kind" | "url">) => hostWords(s, false);
 
 /** "npub1…" for a hex key, in full: the card shows exactly whom it trusts. */
 export const npubOf = (hex: string): string => { try { return npubEncode(hex); } catch { return hex; } };

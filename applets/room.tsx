@@ -611,7 +611,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   for (const e of all) for (const q of tags(e, "q")) if (!answered.has(q)) answered.set(q, e);
   const settled = new Set<string>();
   for (const e of all) if (OUTCOME.test(e.content)) { const p = all.filter((x) => x.pubkey === e.pubkey && x.created_at <= e.created_at && promptOf(x) && !settled.has(x.id)); if (p.length) settled.add(p[p.length - 1].id); }
-  const typing = [...(s.typing.get(room)?.keys() ?? [])].map((p) => nameOf(s, p));
+  // each name once: two people with no name are "Someone" and "Someone else", not "Someone and Someone"
+  const typing = [...(s.typing.get(room)?.keys() ?? [])].map((p) => nameOf(s, p)).map((n, i, all) => (all.indexOf(n) < i ? `${n} else` : n));
   const authors = [...new Set(all.map((e) => e.pubkey))].filter((p) => p !== s.me);
 
   // Uni's turn: here when it is a member or has written here; listening unless you muted it in this room
@@ -958,7 +959,8 @@ function Composer({ st, relay, room, thread, members, send, typing, setErr, send
     const at = ++draftAt.current;
     setTimeout(() => { if (at === draftAt.current) storage.set(draftKey, v.trim() ? { text: v, mentions: [...bound.current] } : null).catch(() => {}); }, 500);
   };
-  const options = pick ? members.map((p) => ({ p, n: nameOf(s, p) })).filter((m) => m.n.toLowerCase().startsWith(pick.q.toLowerCase()) || m.n.toLowerCase().includes(` ${pick.q.toLowerCase()}`)).slice(0, 8) : [];
+  // only people with a name of their own: a mention is bound by the name typed, and "Someone" names nobody in particular
+  const options = pick ? members.filter((p) => s.names.has(p)).map((p) => ({ p, n: nameOf(s, p) })).filter((m) => m.n.toLowerCase().startsWith(pick.q.toLowerCase()) || m.n.toLowerCase().includes(` ${pick.q.toLowerCase()}`)).slice(0, 8) : [];
   const onChange = (v: string, caret: number) => {
     setText(v);
     edits.current++;

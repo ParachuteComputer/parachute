@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { siteOfHost } from "../../vault/site";
 import { useHold } from "../../ui/hold";
 import { Link } from "react-router";
 import { updateLine } from "../../applet/level";
@@ -118,9 +119,6 @@ export function VaultsToOpen({ p }: { p: FrameParachute }) {
     </ul>
   );
 }
-
-/** A host as a line says it: its site, without a port. */
-const siteOfHost = (host: string) => host.replace(/:\d+$/, "");
 
 /** Whose a chapter is, under its name: the home, or someone else's (and where). The person's other vaults need no word. */
 export function whoseLine(v: FrameVault, many: boolean): string | null {

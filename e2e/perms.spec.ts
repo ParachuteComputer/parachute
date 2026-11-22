@@ -51,13 +51,11 @@ test("first run: four applets, four short cards; changed code says whether it as
   try {
     for (const n of ["rooms", "mail", "journal", "accounts"]) made.push(await installApplet(n, vars));
     const relayHost = new URL(relay.url.replace(/^ws/, "http")).host;
-    // the card's face names a server by its site; its whole address (with the port) is under Show details
-    const relaySite = new URL(relay.url.replace(/^ws/, "http")).hostname;
 
     // Rooms: what it does as you, the approvals and the push gateway each on a line of their own, in bold words
     await open(page, /Rooms/);
     await expect(card(page).getByRole("heading")).toHaveText("Allow Rooms?");
-    await expect(face(page).getByText(`As you on ${relaySite} on this device`)).toBeVisible();
+    await expect(face(page).getByText(`As you on ${relayHost} on this device`)).toBeVisible();
     await expect(face(page).locator("strong", { hasText: "High risk, with your key:" })).toBeVisible();
     await expect(face(page)).toContainText("from Uni there. Powerful ones ask for your device unlock.");
     await expect(face(page)).toContainText("which gets your public key and where to reach this phone");

@@ -8,7 +8,7 @@ import { isCodeExtension } from "../applet/code";
  *  second was too (07-15-42-2). */
 const JOURNAL_ENTRY = /^(?:Journal|Notes)\/\d{4}\/\d{2}-\d{2}\/(\d{2})-(\d{2})(?:-\d{2}(?:-\d+)?)? ([^/]+)$/;
 /** A path's last segment that is an id, not a name: a ULID, a UUID, a long run of hex. */
-const ID_LIKE = /^(?:[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$/i;
+export const ID_LIKE = /^(?:[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$/i;
 /** What a title can be made of, past the path: the record's words, its types, when it was made. */
 export type Titled = Pick<Note, "id" | "path"> & { content?: string | null; body?: string | null;
   /** what a list read carries in place of the words: the hub's first line (`displayTitle`), its one-line preview */
@@ -46,11 +46,12 @@ export const dayOf = (iso: string | null | undefined) => { const t = iso ? Date.
 
 function unnamedTitle(n: Titled, path: string): string {
   // the app's own folders (Parachute/Approvals/…): the kind of thing it keeps, one of them
-  const own = /^\.?parachute\/([^/]+)\//i.exec(path)?.[1];
+  const own = /^\.?parachute\/(?!from\/)([^/]+)\//i.exec(path)?.[1];
   if (own) return cap(own.replace(/ies$/i, "y").replace(/s$/i, "").replace(/[-_]/g, " "));
   const type = n.types?.find((t) => t.trim());
   const kind = type ? cap(type.replace(/[-_]/g, " ")) : null;
-  const words = firstWords(n.content ?? n.body ?? n.displayTitle ?? n.preview);
+  // the first of these that says something: an empty body leaves the hub's first line and preview to try
+  const words = [n.content, n.body, n.displayTitle, n.preview].map((t) => firstWords(t)).find(Boolean) ?? "";
   if (words) return kind ? `${kind}: ${words}` : words;
   const day = dayOf(n.createdAt ?? n.updatedAt);
   return day ? `${kind ?? "A note"} from ${day}` : kind ? `A ${kind.toLowerCase()} with no name` : "A note with no name";

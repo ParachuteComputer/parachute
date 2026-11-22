@@ -48,6 +48,7 @@ describe("a note's title", () => {
     // a list read: the hub's first line, else its preview (lists carry no words)
     expect(titleOf({ id: ulid, path: ulid, displayTitle: "Call the roofer", preview: "# Call the roofer before the rain" })).toBe("Call the roofer");
     expect(titleOf({ id: ulid, path: ulid, preview: "Call the roofer before the rain." })).toBe("Call the roofer before the rain");
+    expect(titleOf({ id: ulid, path: ulid, content: "", displayTitle: "Call the roofer" })).toBe("Call the roofer");
     // a path that is a UUID or a hex run, or no path at all
     expect(titleOf({ id: "x", path: "Notes/3f2a9c1e-77b0-4c1d-9a55-0e8d2f4b6a10", content: "Seed swap" })).toBe("Seed swap");
     expect(titleOf({ id: "x", path: "Notes/a3f29c1e77b04c1d", content: "Seed swap" })).toBe("Seed swap");
@@ -59,6 +60,8 @@ describe("a note's title", () => {
     // the app's own folders: the kind of thing kept there
     expect(titleOf({ id: ulid, path: `Parachute/Approvals/127.0.0.1:26047/kitchen/${ulid}`, content: "{}" })).toBe("Approval");
     expect(titleOf({ id: ulid, path: `Parachute/Keys/${ulid}` })).toBe("Key");
+    // a pointer's folder isn't a kind of thing the app keeps: it is named as any record is
+    expect(titleOf({ id: ulid, path: `Parachute/From/techne.example/techne/${ulid}`, content: "Events board" })).toBe("Events board");
     // a name that only looks a little like an id is a name
     expect(titleOf({ id: ulid, path: "Notes/2026 budget" })).toBe("2026 budget");
   });

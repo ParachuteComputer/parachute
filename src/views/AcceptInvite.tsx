@@ -5,7 +5,7 @@ import { acceptWithKey, lookInvite, parseInviteLink } from "../vault/sharing";
 import { startSignIn, signInWords } from "../vault/signInFlow";
 import type { InviteView } from "../services/native";
 
-import { siteOf } from "../vault/store";
+import { siteOf } from "../vault/site";
 
 /** Accept an invite to someone's vault (docs/design/SHARING.md): paste the link, read who and what, Accept. Your key
  *  signs the acceptance; then the usual sign-in to their Parachute, as someone else's, and the vault opens. */

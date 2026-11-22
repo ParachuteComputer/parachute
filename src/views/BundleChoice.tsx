@@ -7,7 +7,7 @@ import { DEFAULT_BUNDLES } from "../shell/bundles";
 import { homeVault, setHome } from "../shell/frameSource";
 import { useVaults } from "../vault/hooks";
 import { useWhose } from "../vault/whose";
-import { siteOf } from "../vault/store";
+import { siteOf } from "../vault/site";
 
 export default function BundleChoice() {
   const { bundle, bundles } = useSettings();

@@ -4,7 +4,8 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { Bar, backOrLauncher } from "../ui/Bar";
 import { Link } from "react-router";
 import { useVaults } from "../vault/hooks";
-import { removeVault, siteOf, type VaultRecord } from "../vault/store";
+import { removeVault, type VaultRecord } from "../vault/store";
+import { siteOf } from "../vault/site";
 import { dropClient } from "../vault/client";
 import { revoke } from "../vault/oauth";
 import AppletSettings from "./AppletSettings";
@@ -142,7 +143,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
         <AskWhose vaults={vaults} />
         {parachutes.length ? parachutes.map((p) => (
           <section key={p.hub} className="settings-parachute" aria-label={`Parachute: ${said(p)}`}>
-            <h3>{p.home ? "Your Parachute" : p.name !== p.host ? p.name : siteOf(p.hub)}</h3>
+            <h3>{p.home ? "Your Parachute" : said(p)}</h3>
             <details className="small settings-details"><summary>Details</summary><p>Its address: <code>{p.hub}</code></p></details>
             {p.vaults.length ? <>
               <ul className="plain">

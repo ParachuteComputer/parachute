@@ -65,7 +65,8 @@ function VaultVisit() {
         ? <NoteRows label={term ? "Search results" : "Notes"} rows={mine.map((n) => ({
           key: n.id, to: noteHref(rec.key, n.id), title: titleOf(n), meta: [folderOf(n), entryTime(n), ...(n.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(" · "),
         }))} />
-        : <p className="quiet">{term ? "Nothing matches." : "This vault is empty."}</p>)}
+        // the newest page held only the app's own records: say so, not that the vault is empty
+        : <p className="quiet">{load.data.length ? (term ? "Nothing of yours matches among the first results; Vault searches further." : "Only Parachute's own records changed lately. Search, or open Vault, for yours.") : term ? "Nothing matches." : "This vault is empty."}</p>)}
     </main>
   );
 }

@@ -44,11 +44,16 @@ const shown = (v: unknown) => (v === null || v === undefined || v === "" ? "" : 
 const label = (name: string) => name.replace(/_/g, " ");
 const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "");
 /** A linked record's name from its path: its last segment, unless that is an id (a record with no name of its own). */
-const pathTitle = (path: string) => { const last = path.split("/").filter(Boolean).pop() ?? ""; return !last || /^(?:[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f-]{16,})$/i.test(last) ? "A record with no name" : last; };
+const pathTitle = (path: string) => { const last = (path.split("/").filter(Boolean).pop() ?? "").replace(/\.(md|html?|tsx|jsx)$/i, ""); return !last || /^(?:[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,})$/i.test(last) ? "A record with no name" : last; };
 /** Where a record sits, as a list says it: its folder, or "Parachute's own" for the app's own (never its path). */
 const whereOf = (r: Rec) => (r.own ? "Parachute's own" : folderOf(r.path));
-/** A vault's address without its port, for telling two vaults of one name apart. */
-const siteOf = (host: string) => host.replace(/:\d+$/, "");
+/** Where a vault is, only to tell apart two vaults of one name: its site, or its whole address when the site is shared. */
+const placeOf = (v: Held, list: Held[]) => {
+  const twins = list.filter((o) => o !== v && o.name === v.name);
+  if (!twins.length) return "";
+  const site = (h: string) => h.replace(/:\d+$/, "");
+  return `on ${twins.some((o) => site(o.host) === site(v.host)) ? v.host : site(v.host)}`;
+};
 const said = (e: any) => String(e?.message ?? e ?? "it failed").slice(0, 200);
 /** A read that failed: a vault whose hub refused this device's sign-in in its own words (someone else's: they may have
  *  ended your access; yours: sign in again); anything else as a problem. Try again either way. */
@@ -153,10 +158,25 @@ function Vaults({ list, onOpen, onRecord }: { list: Held[]; onOpen: (key: string
       {found ? (found.length
         ? <List label="Found" rows={found.map(({ v, r }) => ({ key: `${v.key}|${r.id}`, title: r.title, meta: [v.name, ...r.types].join(" · "), aside: when.short(r.updatedAt), onPress: () => onRecord(v.key, r.id) }))} />
         : <Empty>Nothing matches.</Empty>)
-        // a vault's address isn't its name: said only to tell apart two vaults of the same name (its port never)
-        : <List label="Vaults" hideLabel rows={list.map((v) => ({ key: v.key, title: v.name, meta: [list.some((o) => o !== v && o.name === v.name) ? `on ${siteOf(v.host)}` : "", v.mine ? "" : "someone else's"].filter(Boolean).join(" · "), aside: v.level === "write" ? "reads and changes" : "reads", onPress: () => onOpen(v.key) }))} />}
+        // a vault's address isn't its name: said only to tell apart two vaults of the same name (by its site, or its whole
+        // address when the site is the same too)
+        : <List label="Vaults" hideLabel rows={list.map((v) => ({ key: v.key, title: v.name, meta: [placeOf(v, list), v.mine ? "" : "someone else's"].filter(Boolean).join(" · "), aside: v.level === "write" ? "reads and changes" : "reads", onPress: () => onOpen(v.key) }))} />}
     </Page>
   );
+}
+
+/** The newest 8 records the person (or their AI) wrote: a page of 20, then further pages of 50 while the app's own fill
+ *  them (a run of approvals), 4 pages at most. */
+async function latelyIn(vault: string): Promise<Rec[]> {
+  const out: Rec[] = [];
+  let offset = 0;
+  for (let i = 0; i < 4 && out.length < 8; i++) {
+    const x: { records: Rec[]; more: boolean; read?: number } = await vaults.query(vault, { limit: i ? 50 : 20, offset });
+    out.push(...x.records.filter((r) => !r.own));
+    if (!x.more) break;
+    offset += x.read ?? x.records.length;
+  }
+  return out.slice(0, 8);
 }
 
 /** A vault: its types with their counts, its tags, a search, and a way to make a type. */
@@ -170,13 +190,19 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
   // and in search; out of both otherwise
   const [own, setOwn] = useState(false);
   const [owned, setOwned] = useState<Rec[] | null>(null);
-  // Lately is what the person (or their AI) wrote: the newest 8 of theirs, past what the app keeps for itself
-  const load = () => Promise.all([vaults.types(v.key), vaults.query(v.key, { limit: 40 })])
-    .then(([t, r]: [TypeRow[], { records: Rec[] }]) => { setTypes(t); setRecent(r.records.filter((x) => !x.own).slice(0, 8)); setFailed(null); }, setFailed);
-  useEffect(() => {
-    if (!own) return;
-    vaults.query(v.key, { path: "Parachute/", limit: 100 }).then((x: { records: Rec[] }) => setOwned(x.records.filter((r) => r.own)), (e: unknown) => { setOwned([]); toast(`Parachute's own couldn't be read: ${said(e)}`, { error: true }); });
-  }, [own, v.key]);
+  const ownRef = useRef(own);
+  ownRef.current = own;
+  const asked = useRef(0);
+  // Parachute's own: its two folders, newest first (a record of its own elsewhere, by its tag alone, shows in search)
+  const readOwned = () => {
+    const n = ++asked.current;
+    return Promise.all(["Parachute/", ".parachute/"].map((path) => vaults.query(v.key, { path, limit: 100 }).then((x: { records: Rec[] }) => x.records, () => [] as Rec[])))
+      .then((all: Rec[][]) => { if (n === asked.current) setOwned(all.flat().filter((r) => r.own).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))); });
+  };
+  // Lately is what the person (or their AI) wrote: the newest 8 of theirs, read past a run of the app's own
+  const load = () => Promise.all([vaults.types(v.key), latelyIn(v.key)])
+    .then(([t, r]: [TypeRow[], Rec[]]) => { setTypes(t); setRecent(r); setFailed(null); if (ownRef.current) void readOwned(); }, setFailed);
+  useEffect(() => { setOwned(null); if (own) void readOwned(); else asked.current++; }, [own, v.key]);
   useEffect(() => {
     void load();
     // changes come in bursts (an AI writing many records): one read again for each second of them

@@ -2,7 +2,8 @@
 // person. Making a vault count for more (mine, or trusted) is a card they read and a tap on its own button; making it
 // count for less is one tap.
 import { useState } from "react";
-import { siteOf, type VaultRecord } from "../vault/store";
+import { type VaultRecord } from "../vault/store";
+import { siteOf } from "../vault/site";
 import { askedAbout, setWhose, useWhose, type Whose } from "../vault/whose";
 import { applets, bundlesNow, effective, settingsNow } from "../shell/homeSettings";
 

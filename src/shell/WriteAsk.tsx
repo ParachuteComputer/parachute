@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { askOwnWrite } from "../vault/reach";
 import { clearWriteAsk, markDraftReturn, onWriteAsk } from "../vault/writeAsk";
-import { findVault, siteOf } from "../vault/store";
+import { findVault } from "../vault/store";
+import { siteOf } from "../vault/site";
 
 export default function WriteAsk() {
   const [key, setKey] = useState<string | null>(null);

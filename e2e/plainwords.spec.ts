@@ -58,20 +58,19 @@ async function onScreen(page: Page): Promise<string> {
   return parts.join("\n");
 }
 
-/** Wait until `text` shows in the page or a frame showing, allowing an applet that asks on the way. Returns what its
- *  Allow card said, when one asked. */
-async function see(page: Page, text: string | RegExp, tries = 30): Promise<string | null> {
-  let card: string | null = null;
+/** Wait until `text` shows in the page or a frame showing, allowing an applet that asks on the way (its card is the
+ *  Allow test's, below). */
+async function see(page: Page, text: string | RegExp, tries = 30): Promise<void> {
   for (let i = 0; i < tries; i++) {
     for (const f of page.frames()) {
-      const has = await f.evaluate((t) => { const s = document.body?.innerText ?? ""; return typeof t === "string" ? s.toLowerCase().includes(t.toLowerCase()) : new RegExp(t[0], `${t[1]}i`).test(s); }, typeof text === "string" ? text : [text.source, text.flags] as const).catch(() => false);
+      const has = await f.evaluate((t) => { /* not innerText: a long list leaves rows far off screen undrawn */ const s = document.body?.textContent ?? ""; return typeof t === "string" ? s.toLowerCase().includes(t.toLowerCase()) : new RegExp(t[0], `${t[1]}i`).test(s); }, typeof text === "string" ? text : [text.source, text.flags] as const).catch(() => false);
       if (!has) continue;
-      if (f === page.mainFrame()) return card;
+      if (f === page.mainFrame()) return;
       const el = await f.frameElement().catch(() => null);
-      if (el && (await el.isVisible().catch(() => false))) return card;
+      if (el && (await el.isVisible().catch(() => false))) return;
     }
     const allow = page.getByRole("button", { name: "Allow", exact: true });
-    if (await allow.isVisible().catch(() => false)) { card ??= await onScreen(page); await allow.click().catch(() => {}); }
+    if (await allow.isVisible().catch(() => false)) await allow.click().catch(() => {});
     // an applet stopped here (another screen took its place): opened again, as a person does
     const open = page.getByRole("button", { name: /^Open (Home|Vault|Journal|Rooms|Mail|Calendar|Habits)$/ }).first();
     if (await open.isVisible().catch(() => false)) await open.click().catch(() => {});
@@ -242,10 +241,7 @@ async function walk(browser: Browser, size: keyof typeof SIZES, look: "light" | 
   await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, world.key);
   if (look === "daylight") { await page.goto("/settings"); await page.getByRole("radio", { name: /^Daylight/ }).check(); }
   for (const s of STOPS) {
-    let card: string | null = null;
     try { await s.go(page); } catch (e) { found.push(`${size} · ${s.name}: didn't open (${String(e).split("\n")[0].slice(0, 160)})`); }
-    // what a first open's Allow card said, before it was allowed
-    void card;
     for (const w of machineWords(await onScreen(page))) found.push(`${size} · ${s.name}: ${w}`);
     if (SHOTS) { mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: join(SHOTS, `${s.name.replace(/\W+/g, "-")}-${size}-${look}.png`), fullPage: false }); }
   }
@@ -262,12 +258,17 @@ for (const size of Object.keys(SIZES) as (keyof typeof SIZES)[]) {
   });
 }
 
+// The one address the card's face keeps whole: where the applet's requests go is what is being granted (src/applet/face.ts
+// holds every stressed fact on the face, the port too; a server on its default port shows none). Everything else on the
+// card is plain words: the vault by its name, its hub out of the sentence.
 test("the Allow card says what an applet asks for in plain words", async ({ page }) => {
   const m = await installApplet("mail", { mail: world.mail.url }, (r) => ({ ...r, path: "Applets/Post office" }));
   try {
     await page.goto(`/v/${VAULT}/a/${m.id}`);
     await expect(page.getByRole("button", { name: "Allow", exact: true })).toBeVisible({ timeout: 20_000 });
-    expect(machineWords(await onScreen(page))).toEqual([]);
+    if (SHOTS) await page.screenshot({ path: join(SHOTS, "allow-card-phone-light.png") });
+    const granted = new URL(world.mail.url).host;
+    expect(machineWords(await onScreen(page)).filter((w) => !w.includes(`"${granted}"`))).toEqual([]);
   } finally { await m.remove(); }
 });
 

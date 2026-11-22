@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { siteOf } from "../vault/store";
+import { siteOf } from "../vault/site";
 import type { VaultPick } from "../vault/signInFlow";
 
 /** Before the hub's consent (docs/design/SCOPES.md): on a hub the person runs, which of its vaults are theirs; and which
