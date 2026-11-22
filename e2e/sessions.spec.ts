@@ -72,3 +72,50 @@ test("Sessions: working now, per room, how each ended and what it cost, and a se
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
   }
 });
+
+// Review of #162: every word of a run note goes through the redactor, not only the steps; a long session's earlier part
+// loads; and steps written while the person was elsewhere show when they come back.
+test("Sessions: a secret in any field of a run is hidden; earlier steps load from a part; new steps show on return", async ({ page }) => {
+  const made: string[] = [];
+  const mk = async (args: Record<string, unknown>) => { const r = await record(hubState(), "create", { extension: "md", ...args }); made.push(r.id); return r; };
+  const KEY = "sk-ant-qqqqqqqqqqqqqqqq";
+  try {
+    const part = await mk({ path: `Runs/Steps/${day} bbbb2222 part 0`, tags: ["run-feed"], fields: { first: 0, n: 3 },
+      body: ["# Steps, part 0", "", `- ${ago(30)} · said · first line`, `- ${ago(29)} · said · second line`, `- ${ago(28)} · said · third line`].join("\n") });
+    const head = ["# Steps", "", `- ${ago(20)} · said · fourth line`, `- ${ago(19)} · said · fifth line`];
+    const feed = await mk({ path: `Runs/Steps/${day} bbbb2222`, tags: ["run-feed"], fields: { first: 3, total: 5, parts: [{ id: part.id, first: 0, n: 3 }], dropped: 0 }, body: head.join("\n") });
+    await mk({ path: `Runs/${day} Fix the hinge token ${KEY}`, tags: ["run"], body: "# x",
+      fields: { state: "running", room: "sk-ant-zzzzzzzzzzzzzzzz", model: "sk-ant-api03-abcdefabcdef", task: "T-5", started_at: ago(40), doing_now: `Running curl -H "Bearer ${KEY}"`, doing_at: ago(1), steps: 2, feed: feed.id,
+        report: { open: `password=${KEY}` }, end_note: `token ${KEY}`, summary: `secret ${KEY}` } });
+    made.push((await record(hubState(), "create", appletRecord("sessions"))).id);
+
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Sessions/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = page.frameLocator("iframe.applet-frame:visible");
+    const now = app.getByRole("region", { name: "Working now" });
+    await expect(now).toContainText("Fix the hinge [hidden]");
+    await expect(now).toContainText("#no room · Running a command");
+    await now.getByRole("button").first().click();
+    await expect(app.getByText("fifth line")).toBeVisible();
+    const body = app.locator("body");
+    await expect(body).not.toContainText("sk-ant");
+    await expect(body).not.toContainText("Bearer");
+
+    // the earlier part, in front, every line once
+    await app.getByRole("button", { name: "Earlier steps" }).click();
+    const steps = app.getByRole("region", { name: "Steps" });
+    await expect(steps).toContainText("first line");
+    expect((await steps.textContent())!.match(/line/g)).toHaveLength(5);
+
+    // it writes a step while the person is elsewhere: back, it is there
+    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Applets" }).click();
+    const cur = await api(hubState(), "GET", `notes?id=${feed.id}`);
+    await record(hubState(), "update", { id: feed.id, body: [...head, `- ${ago(0)} · said · sixth line`].join("\n"), fields: { total: 6 }, if_updated_at: cur.updatedAt });
+    await page.goBack();
+    await expect(steps).toContainText("sixth line");
+    await expect(steps).toContainText("first line");
+  } finally {
+    for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
+  }
+});

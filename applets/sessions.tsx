@@ -177,6 +177,33 @@ function resultWords(summary: string | null): string | null {
   if (/^mts [a-z0-9]{8}: \w+$/.test(summary)) return null;
   return plainTitle(summary.replace(/\bmts [a-z0-9]{8}:?\s*/g, "").replace(/\brun=[a-z0-9]{8}\b/g, "")) || null;
 }
+/** Why a session ended, in a sentence (the Uni app's live.ts endWhy and sessionWords.ts endWords): mts's `ended` word,
+ *  else its closing line; `resumesAt` when it picks up again after a session limit. */
+const END_WHYS = ["done", "unverified", "blocked", "stopped", "killed", "limit", "turns", "context", "failed", "lost", "never_started"];
+function endWords(state: string, ended: unknown, summary: unknown, note: string | null, resumesAt: string | null): string | null {
+  if (state === "working") return null;
+  if (state === "silent") return "Didn't finish: nothing has been heard from it for a while. Its worker may have been lost.";
+  const sm = typeof summary === "string" ? summary : "";
+  const w = /^mts [a-z0-9]{8}: (\w+)/.exec(sm)?.[1];
+  const why = typeof ended === "string" && END_WHYS.includes(ended) ? ended : /^unverified:/.test(sm) ? "unverified" : w === "stopped" || w === "killed" ? w
+    : w === "unknown" ? "lost" : w === "failed_to_start" ? "never_started" : state === "finished" ? "done" : state === "waiting" ? "blocked" : state === "failed" ? "failed" : null;
+  const room = "Didn't finish: it ran out of room";
+  switch (why) {
+    case "done": return "Finished.";
+    case "unverified": return "Says it finished, but nothing it left could be checked yet.";
+    case "blocked": return "Stopped to ask you something.";
+    case "stopped": return "Didn't finish: it was stopped on purpose.";
+    case "killed": return `Didn't finish: it was cut off before the end.${note ? ` ${note}` : ""}`;
+    case "limit": return `${room}: the Claude account reached its session limit.${resumesAt ? ` It picks up again by itself at ${resumesAt}.` : ""}`;
+    case "turns": return `${room}: it used every turn it was given.`;
+    case "context": return `${room}: its conversation grew too long to go on.`;
+    case "failed": return `Didn't finish: it failed.${note ? ` What went wrong: ${note}` : ""}`;
+    case "lost": return "Didn't finish: its worker was lost (the machine restarted, or the worker was gone).";
+    case "never_started": return `It never started.${note ? ` ${note}` : ""}`;
+  }
+  return state === "stopped" ? "Didn't finish: it was stopped." : null;
+}
+
 /** A short id-like word (a room, a model) shown only when it is plainly one: nothing the redactor would hide. */
 const plainWord = (v: unknown, re: RegExp): string | null => (typeof v === "string" && re.test(v) && redactRaw(v) === v ? v : null);
 
@@ -230,12 +257,14 @@ const CSS = `
 .step { color: var(--muted); }
 `;
 
-function Steps({ run }: { run: Run }) {
+function Steps({ run, again }: { run: Run; again: number }) {
   const [held, setHeld] = useState<Held | null | undefined>(undefined);
   const [pages, setPages] = useState<Pages | null>(null);
+  const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
-  // the steps note read again when the session has taken more steps (a pull, the applet shown again): what was held
-  // before its first line stays (withHead)
+  const [earlierSaid, setEarlierSaid] = useState<{ gone: number; line: string } | null>(null);
+  // the steps note read again when the session has taken more steps, and on each pull (or the applet shown again):
+  // what was held before its first line stays (withHead)
   useEffect(() => {
     let live = true;
     if (!run.feed) { setHeld(null); return; }
@@ -243,51 +272,59 @@ function Steps({ run }: { run: Run }) {
       if (!live) return;
       const p = feedPages(n.fields) ?? { first: 0, total: 0, dropped: 0, parts: [] };
       const head = parseFeed(n.body, p.first);
-      setPages(p);
+      setPages(p); setFailed(false);
       setHeld((was) => withHead(was ?? null, head, { ...p, total: Math.max(p.total, p.first + head.length) }));
-    }, () => { if (live) setHeld((was) => was ?? null); });
+    }, () => { if (live) { setFailed(true); setHeld((was) => was ?? null); } });
     return () => { live = false; };
-  }, [run.feed, run.steps]);
-  const earlier = held ? partBefore(pages, held.from) : null;
+  }, [run.feed, run.steps, again]);
+  const part = held ? partBefore(pages, held.from) : null;
+  const earlier = part && !(earlierSaid && part.first + part.n <= earlierSaid.gone) ? part : null;
   const more = async () => {
     if (!earlier || !held || busy) return;
     setBusy(true);
     try {
       const n: Rec = await vault.getRecord(earlier.id);
+      // mts keeps the last 25 parts and reuses the oldest note for the next 200 steps: a part that now holds other steps
+      // is no longer these
+      if ((n.fields ?? {}).first !== earlier.first) { setEarlierSaid({ gone: earlier.first + earlier.n, line: "Those steps are no longer kept." }); return; }
       setHeld((h) => (h ? withPart(h, earlier, parseFeed(n.body, earlier.first)) : h));
-    } catch { /* the part is gone: the button stays */ } finally { setBusy(false); }
+    } catch { setEarlierSaid({ gone: earlier.first + earlier.n, line: "Couldn't load earlier steps." }); } finally { setBusy(false); }
   };
   if (held === undefined) return <Loading />;
-  if (held === null || !held.items.length) return <Empty>No steps written yet.</Empty>;
+  if (held === null || !held.items.length) return failed ? <Problem>The steps couldn't be read</Problem> : <Empty>No steps written yet.</Empty>;
   const dropped = pages && !earlier && pages.dropped > 0 && held.from <= pages.dropped ? pages.dropped : 0;
   return <>
-    {earlier ? <Button small busy={busy} onClick={more}>Earlier steps</Button> : dropped ? <p className="facts">The first {dropped} steps are no longer kept.</p> : null}
+    {earlier ? <Button small busy={busy} onClick={more}>Earlier steps</Button> : earlierSaid ? <p className="facts">{earlierSaid.line}</p> : dropped ? <p className="facts">The first {dropped} steps are no longer kept.</p> : null}
     <List label="Steps" hideLabel rows={held.items.map((it) => ({ key: String(it.n), title: <span className={it.kind}>{it.text}</span>, aside: it.at ? when.time(it.at) : undefined }))} />
   </>;
 }
 
 const PARTS: [string, string][] = [["summary", "What it did"], ["open", "Left open"], ["checks", "Checks"], ["artifacts", "What it made"], ["ripples", "Ripples"]];
 
-function Detail({ run, back, reload }: { run: Run; back: () => void; reload: () => unknown }) {
+function Detail({ run, back, reload, again, error, gone }: { run: Run; back: () => void; reload: () => unknown; again: number; error: string | null; gone: boolean }) {
   const report = run.fields.report && typeof run.fields.report === "object" ? run.fields.report : {};
   const facts = [WORDS[run.state], `#${run.room}`, `started ${when.full(run.started)}`, lasted(run), money(run.cost), run.model, run.task, run.steps ? `${run.steps} steps` : null].filter(Boolean).join(" · ");
   return <Page title={run.title} back={{ label: "Sessions", onPress: back }} onRefresh={reload}>
     <style>{CSS}</style>
     <p className="facts">{facts}</p>
+    {error ? <Problem error={error} onRetry={reload}>The sessions couldn't be read again</Problem> : null}
+    {gone ? <p className="facts">No longer among the {SHOWN} sessions that changed last: this is how it was.</p> : null}
     {run.now ? <p className="now"><strong>Now:</strong> {run.now} <span className="facts">({agoText(run.nowAt)})</span></p> : null}
-    {said(run.fields.end_note) ? <p className="now">{said(run.fields.end_note)}</p> : null}
+    {(() => { const t = endWords(run.state, run.fields.ended, run.fields.summary, said(run.fields.end_note, 200), when.full(run.fields.resumes_at) || null); return t ? <p className="now">{t}</p> : null; })()}
     {PARTS.map(([k, name]) => { const v = said(Array.isArray(report[k]) ? report[k].join("\n") : report[k], 1200); return v ? <section className="part" key={k}><h2>{name}</h2><p>{v}</p></section> : null; })}
-    <section className="part"><h2>Steps</h2><Steps key={run.id} run={run} /></section>
+    <section className="part"><h2>Steps</h2><Steps key={run.id} run={run} again={again} /></section>
   </Page>;
 }
 
 export default function Sessions() {
   const [runs, setRuns] = useState<Run[] | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<Run | null>(null);
+  const [again, setAgain] = useState(0);
   const asked = useRef(0);
   const load = async () => {
     const me = ++asked.current;
+    setAgain((n) => n + 1);
     try {
       const rows: Rec[] = await vault.queryRecords({ pathPrefix: "Runs/", tag: "run", includeFields: true, limit: SHOWN });
       if (me !== asked.current) return;
@@ -299,8 +336,9 @@ export default function Sessions() {
   };
   // read on open, each time it is shown again, and on a pull (here and on a session)
   useEffect(() => { ready().then(load); return onShown((on: boolean) => { if (on) void load(); }); }, []);
-  const run = open ? runs?.find((r) => r.id === open) ?? null : null;
-  if (run) return <Detail run={run} back={() => setOpen(null)} reload={load} />;
+  // the session open, as read now; one no longer among those read stays as it was, and says so
+  const fresh = open ? runs?.find((r) => r.id === open.id) ?? null : null;
+  if (open) return <Detail run={fresh ?? open} gone={!fresh} back={() => setOpen(null)} reload={load} again={again} error={error} />;
   const working = (runs ?? []).filter((r) => r.state === "working");
   // what is working is under Working now; each room lists the rest, newest first
   const done = (runs ?? []).filter((r) => r.state !== "working");
@@ -308,10 +346,10 @@ export default function Sessions() {
   return <Page title="Sessions" onRefresh={load}>
     <style>{CSS}</style>
     {error ? <Problem error={error} onRetry={load}>The sessions couldn't be read</Problem> : runs === undefined ? <Loading /> : !runs.length ? <Empty>No sessions yet: mts writes one here each time Uni starts a worker.</Empty> : <>
-      {working.length ? <List label="Working now" rows={working.map((r) => ({ key: r.id, title: r.title, meta: `#${r.room} · ${metaOf(r)}`, strong: true, onPress: () => setOpen(r.id) }))} />
+      {working.length ? <List label="Working now" rows={working.map((r) => ({ key: r.id, title: r.title, meta: `#${r.room} · ${metaOf(r)}`, strong: true, onPress: () => setOpen(r) }))} />
         : <p className="facts">Nothing is working now.</p>}
-      {rooms.map((room) => <List key={room} label={`#${room}`} rows={done.filter((r) => r.room === room).map((r) => ({ key: r.id, title: r.title, meta: metaOf(r), badge: WORDS[r.state], onPress: () => setOpen(r.id) }))} />)}
-      <p className="facts">The {SHOWN} sessions that changed last.</p>
+      {rooms.map((room) => <List key={room} label={`#${room}`} rows={done.filter((r) => r.room === room).map((r) => ({ key: r.id, title: r.title, meta: metaOf(r), badge: WORDS[r.state], onPress: () => setOpen(r) }))} />)}
+      {runs.length >= SHOWN ? <p className="facts">The {SHOWN} sessions that changed last.</p> : null}
     </>}
   </Page>;
 }
