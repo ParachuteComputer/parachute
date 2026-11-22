@@ -136,7 +136,6 @@ Every state has words: what to do next, what is being read, what failed and Try 
 
 ## Drawer and toast
 
-![Drawer](components/drawer.png)
 
 ```tsx
 <Button onClick={() => setOpen(true)}>More</Button>

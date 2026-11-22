@@ -401,7 +401,8 @@ An applet looks like the rest of Parachute without any CSS of its own. Three ste
 
 Before you hand it over, check it the way a person sees it:
 
-- One title (the `Page`'s), and the content starts at the top of the screen: no empty hero, no big gaps.
+- One title (the `Page`'s, the applet's own name), and the content starts at the top of the screen: no empty hero, no
+  big gaps.
 - One main action, as `kind="primary"`; the rest plain or quiet.
 - Rows, not boxes: a `List` for things of a kind; a `Card` only for a block that stands apart.
 - Every state has words: `Loading` while reading, `Empty` with what to do next, `Problem` with Try again, a `toast`

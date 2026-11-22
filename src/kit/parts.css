@@ -29,6 +29,10 @@ div.pa-row { cursor: default; }
 .pa-row:not(:has(.pa-row-mark)) { grid-template-columns: 1fr auto; }
 .pa-row:not(:has(.pa-row-mark)) .pa-row-title, .pa-row:not(:has(.pa-row-mark)) .pa-row-meta { grid-column: 1; }
 .pa-row:not(:has(.pa-row-mark)) .pa-row-aside { grid-column: 2; }
+/* in a list where some rows have a mark, a row without one keeps the marks' column, so every title lines up */
+.pa-list:has(.pa-row-mark) .pa-row:not(:has(.pa-row-mark)) { grid-template-columns: 2.3em 1fr auto; }
+.pa-list:has(.pa-row-mark) .pa-row:not(:has(.pa-row-mark)) :is(.pa-row-title, .pa-row-meta) { grid-column: 2; }
+.pa-list:has(.pa-row-mark) .pa-row:not(:has(.pa-row-mark)) .pa-row-aside { grid-column: 3; }
 
 .pa-card { margin: 0 0 var(--gap); padding: calc(var(--pad) * .8) var(--pad); background: var(--card-fill); border: var(--line-card); border-width: var(--card-edges);
   border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
