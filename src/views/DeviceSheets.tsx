@@ -147,7 +147,7 @@ function PickSheet({ name, accept, multiple, max, note, done }: { name: string; 
     <div className="sheet-scrim sheet-over-frames" role="presentation">
       <section className="sheet device-sheet" role="dialog" aria-modal="true" aria-label={`${name} asks for ${what}`}>
         <h2>{name} asks for {what}</h2>
-        <p className="quiet">{note ?? <>It gets only what you choose here{multiple ? `, up to ${PICK_MAX} files` : ""}</>}, each at most {Math.round(max / 1024 / 1024)} MB.</p>
+        <p className="quiet">{note ? `${note} At most ${Math.round(max / 1024 / 1024)} MB.` : `It gets only what you choose here${multiple ? `, up to ${PICK_MAX} files` : ""}, each at most ${Math.round(max / 1024 / 1024)} MB.`}</p>
         {why && <p role="alert">{why}</p>}
         <input ref={input} type="file" hidden data-shell-pick="" aria-label={`Choose ${what} for ${name}`} accept={accept.join(",") || undefined} multiple={multiple}
           onChange={(e) => { void chosen(e.target.files); e.target.value = ""; }} />

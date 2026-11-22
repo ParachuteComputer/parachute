@@ -17,7 +17,7 @@
 import { ContractError, ERROR_CODES, hasOnly, plain } from "../contract.ts";
 import { applyPack, checkPack, receiptOf, receiptRecord, refusalWords, RECEIPTS, RECEIPT_TAG, type HeldType, type Pack, type PackTarget, type Receipt } from "../../kit/packs.ts";
 import coreTypes from "../../kit/packs/core-types.json";
-import { notionImport } from "../../kit/notion.ts";
+import { notionImport, NOTION_WANT } from "../../kit/notion.ts";
 import { readZip, ZipError } from "../../kit/zip.ts";
 import { PUBLISH_FIELD, type VaultsDeps } from "./vaults.ts";
 
@@ -135,7 +135,7 @@ export function packMethods(deps: VaultsDeps, word: (p: unknown) => void, held: 
         const [file] = await deps.pick([".zip", "application/zip"], false);
         if (!file) return { picked: false };
         let pack: ReturnType<typeof notionImport>;
-        try { pack = notionImport(await readZip(file.bytes), file.name); } catch (e) {
+        try { pack = notionImport(await readZip(file.bytes, { want: NOTION_WANT }), file.name); } catch (e) {
           throw new ContractError(ERROR_CODES.failed, e instanceof ZipError || e instanceof Error ? e.message.slice(0, 300) : "That file couldn't be read.");
         }
         try {

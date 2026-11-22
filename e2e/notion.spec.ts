@@ -35,8 +35,7 @@ async function importIt(page: Page) {
   const app = frame(page);
   await app.getByRole("button", { name: "Import from Notion" }).click({ timeout: 30_000 });
   const picker = page.getByRole("dialog", { name: "Vault asks for a file" });
-  await expect(picker).toContainText("writes it into this vault, under Notion/");
-  await expect(picker).toContainText("at most 200 MB");
+  await expect(picker).toContainText("Parachute reads it and writes it into this vault, under Notion/. At most 200 MB.");
   await picker.locator("input[type=file]").setInputFiles({ name: "Export-0c5e1b7a-notion.zip", mimeType: "application/zip", buffer: ZIP });
   return app;
 }

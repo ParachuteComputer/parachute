@@ -39,9 +39,11 @@ const dec = (s: string) => { try { return decodeURIComponent(s); } catch { retur
 /** One segment of a record's path: no characters a vault path refuses, no ending it takes for code ("Next.js notes"
  *  is fine; a page titled "notes.js" becomes "notes-js"), not too long. */
 function seg(s: string): string {
-  const t = s.replace(/[\\%/\u0000-\u001f]/g, "-").replace(/^\.+/, "").replace(/\s+/g, " ").trim().slice(0, 80).trim().replace(/\.(html?|tsx|jsx|js)$/i, "-$1");
+  // (and none of the marks a wikilink reads: "Sprint #12" or "A | B" would break the link to it)
+  const t = codeEnd(s.replace(/[\\%/\u0000-\u001f[\]|#^]/g, "-").replace(/^\.+/, "").replace(/\s+/g, " ").trim().slice(0, 80).trim());
   return t || "Untitled";
 }
+const codeEnd = (t: string) => t.replace(/\.(html?|tsx|jsx|js)$/i, "-$1");
 /** A path a vault takes (200 characters at most, with room for " (2)"): its longest folders shortened first. */
 function fit(path: string, max = 190): string {
   const segs = path.split("/");
@@ -49,10 +51,14 @@ function fit(path: string, max = 190): string {
     let at = 1;
     for (let i = 1; i < segs.length; i++) if (segs[i].length > segs[at].length) at = i;
     if (segs[at].length <= 12) break;
-    segs[at] = segs[at].slice(0, Math.max(12, segs[at].length - (segs.join("/").length - max))).trim().replace(/\.$/, "");
+    segs[at] = codeEnd(segs[at].slice(0, Math.max(12, segs[at].length - (segs.join("/").length - max))).trim().replace(/\.$/, ""));
   }
-  return segs.join("/").slice(0, max);
+  // a cut can leave an ending a vault path refuses (".js"), a dot or a "/": the same guards again
+  return codeEnd(segs.join("/").slice(0, max).replace(/[/.\s]+$/, ""));
 }
+
+/** Only an export's pages and tables are read; its images and attachments are listed by name, never unpacked. */
+export const NOTION_WANT = (path: string) => /\.(md|csv)$/i.test(path);
 
 /** RFC 4180: quoted fields, doubled quotes, newlines inside quotes; a BOM first is dropped. */
 export function parseCsv(text: string): string[][] {
@@ -165,6 +171,13 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
     return out;
   };
 
+  const resolve = (from: string, target: string): string => {
+    const t = dec(target.replace(/[?#].*$/, ""));
+    const parts = (t.startsWith("/") ? [] : from.split("/").slice(0, -1));
+    for (const s of t.split("/")) { if (s === "..") parts.pop(); else if (s && s !== ".") parts.push(s); }
+    return parts.join("/");
+  };
+
   // 1. Databases: one per "<title> <id>", from its _all.csv when there is one, each a type
   const dbs = new Map<string, string>();
   for (const p of paths.filter((x) => ext(x) === "csv")) {
@@ -198,12 +211,21 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   for (const t of tables) {
     const pages = paths.filter((x) => ext(x) === "md" && inFolder(x, t.key));
     const props = new Map(pages.map((p) => [p, propsOf(p)]));
-    const score = (p: string, r: string[]) => t.cols.filter((c) => (r[c.i] ?? "").trim() && props.get(p)!.get(c.header.toLowerCase()) === (r[c.i] ?? "").trim()).length;
+    // a relation is written relative to where it is (the CSV, the page): compared by what it points at
+    const targets = (raw: string, from: string) => (relations(raw) ?? []).map((x) => resolve(from, x)).sort().join("\n");
+    const same = (c: Col, rowValue: string, page: string) => {
+      const v = props.get(page)!.get(c.header.toLowerCase());
+      if (v === undefined) return false;
+      return c.kind === "relation" ? targets(rowValue, t.csv) === targets(v, page) : v === rowValue;
+    };
+    const score = (p: string, r: string[]) => t.cols.filter((c) => (r[c.i] ?? "").trim() && same(c, (r[c.i] ?? "").trim(), p)).length;
     const free = new Set(pages);
+    const byTitle = new Map<string, string[]>();
+    for (const p of pages) { const k = bare(noExt(p.split("/").pop()!)).toLowerCase(); byTitle.set(k, [...(byTitle.get(k) ?? []), p]); }
     const rows = t.body.map((r) => ({ r, title: (r[0] ?? "").trim() || "Untitled", page: null as string | null }));
     for (const row of rows) {
-      const named = [...free].filter((p) => bare(noExt(p.split("/").pop()!)).toLowerCase() === row.title.toLowerCase());
-      const best = named.sort((a, b) => score(b, row.r) - score(a, row.r))[0];
+      const named = (byTitle.get(row.title.toLowerCase()) ?? []).filter((p) => free.has(p));
+      const best = named.length > 1 ? named.sort((a, b) => score(b, row.r) - score(a, row.r))[0] : named[0];
       if (best) { row.page = best; free.delete(best); }
     }
     for (const row of rows.filter((x) => !x.page)) {
@@ -219,12 +241,6 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   for (const p of paths.filter((x) => ext(x) === "md" && !place.has(x))) place.set(p, unique(placeOf(p)));
 
   // 3. Words: links to pages as wikilinks; a file said, whether it stayed in the export or was never in it
-  const resolve = (from: string, target: string): string => {
-    const t = dec(target.replace(/[?#].*$/, ""));
-    const parts = (t.startsWith("/") ? [] : from.split("/").slice(0, -1));
-    for (const s of t.split("/")) { if (s === "..") parts.pop(); else if (s && s !== ".") parts.push(s); }
-    return parts.join("/");
-  };
   const tableAt = (to: string) => tables.find((t) => t.key === to.replace(/_all\.csv$/i, ".csv"));
   const wiki = (rec: string, label: string) => `[[${rec}${label && label !== rec.split("/").pop() ? `|${label}` : ""}]]`;
   const words = (from: string, body: string) => body

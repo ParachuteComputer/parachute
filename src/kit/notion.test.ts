@@ -27,6 +27,17 @@ describe("readZip", () => {
   test("says plainly when the file isn't a zip", async () => {
     await expect(readZip(new TextEncoder().encode("not a zip at all, just words"))).rejects.toThrow(ZipError);
   });
+  test("one budget for the zip and every zip at its top; a name only once; attachments and unwanted files not unpacked", async () => {
+    const inner = (name: string, n: number) => zipOf(name, deflateRawSync(Buffer.alloc(n, 98)), n);
+    // two inner zips of 600 bytes each, under a 1000-byte budget: the second is refused, not given a budget of its own
+    await expect(readZip(zipOfMany([["Export-1-Part-1.zip", inner("a.md", 600)], ["Export-1-Part-2.zip", inner("b.md", 600)]]), { max: 1000 })).rejects.toThrow(/over/);
+    // the same name twice (from two parts) is refused rather than one silently replacing the other
+    await expect(readZip(zipOfMany([["Export-1-Part-1.zip", inner("a.md", 10)], ["Export-1-Part-2.zip", inner("a.md", 10)]]))).rejects.toThrow(/twice/);
+    // a zip deeper in is an attachment: kept by name, not opened; a file not wanted is named, not unpacked
+    const files = await readZip(zipOfMany([["E/page.md", deflateRawSync(Buffer.from("# page"))], ["E/files/old.zip", inner("x.md", 10)], ["E/pic.png", deflateRawSync(Buffer.alloc(50, 1))]], [6, 10 + 98, 50]), { want: (p) => /\.md$/.test(p) });
+    expect([...files.keys()].sort()).toEqual(["E/files/old.zip", "E/page.md", "E/pic.png"]);
+    expect(files.get("E/pic.png")!.length).toBe(0);
+  });
   test("an entry that inflates past the size it claims is refused, not unpacked to the end", async () => {
     const big = deflateRawSync(Buffer.alloc(5_000_000, 97));
     await expect(readZip(zipOf("bomb.md", big, 10))).rejects.toThrow(/bigger than it says/);
@@ -78,6 +89,28 @@ describe("notionImport", () => {
     expect(deep.path.length).toBeLessThanOrEqual(200);
     const odd = new Map([["E/notes.js 0123456789abcdef0123456789abcdef.md", new TextEncoder().encode("# notes.js\n\nhi\n")]]);
     expect(notionImport(odd).pack.records.map((x) => x.path)).toEqual(["Notion/notes-js"]);
+  });
+
+  test("a cut path never ends like code; a title with a wikilink's marks still links", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const long = "a".repeat(79), id = "0123456789abcdef0123456789abcdef";
+    const page = `${"x".repeat(20)}.js ${"y".repeat(56)}`;
+    const r = notionImport(new Map([[`E/${long} ${id}/${long} ${id}/${page} ${id}.md`, enc("# p\n\nhi\n")], [`E/Sprint #12 | Q3 ${id}.md`, enc("# Sprint #12 | Q3\n\nplan\n")], [`E/Home ${id}.md`, enc(`# Home\n\n[Sprint](Sprint%20%2312%20%7C%20Q3%20${id}.md)\n`)]]));
+    for (const x of r.pack.records) expect(x.path.length).toBeLessThanOrEqual(200);
+    expect(r.pack.records.find((x) => x.path === "Notion/Home")!.body).toContain("[[Notion/Sprint -12 - Q3|Sprint]]");
+  });
+
+  test("a row whose page says another title is matched by its properties, relations included", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const P = "Projects 1111111111111111111111111111111a", T = "Tasks 2222222222222222222222222222222b", pid = "3333333333333333333333333333333c";
+    const r = notionImport(new Map([
+      [`E/${P}_all.csv`, enc(`Name\r\nCover\r\n`)],
+      [`E/${P}/Cover ${pid}.md`, enc("# Cover\n")],
+      [`E/${T}_all.csv`, enc(`Name,Project,Due\r\n"@November 21, 2026",Cover (${encodeURIComponent(P)}/Cover%20${pid}.md),"November 21, 2026"\r\n`)],
+      [`E/${T}/@Today 4444444444444444444444444444444d.md`, enc(`# @Today\n\nProject: Cover (../${encodeURIComponent(P)}/Cover%20${pid}.md)\nDue: November 21, 2026\n\nSend it.\n`)],
+    ]));
+    expect(r.found).toEqual({ pages: 0, tables: 2, rows: 2 });
+    expect(r.pack.records.find((x) => x.path === "Notion/Tasks/@November 21, 2026")).toMatchObject({ fields: { project: ["Notion/Projects/Cover"], due: "2026-11-21" }, body: "Send it.\n" });
   });
 
   test("a column of one name in two tables, of two kinds, is text in both: the vault would refuse one type", () => {
@@ -171,4 +204,20 @@ function zipOf(name: string, data: Uint8Array, size: number): Uint8Array {
   const at = 30 + n.length + data.length;
   const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10); end.writeUInt32LE(46 + n.length, 12); end.writeUInt32LE(at, 16);
   return new Uint8Array(Buffer.concat([local, n, data, cd, n, end]));
+}
+
+/** A zip of several entries: deflated ones (data from deflateRawSync, with their unpacked sizes), or stored inner zips. */
+function zipOfMany(entries: [string, Uint8Array][], sizes?: number[]): Uint8Array {
+  const parts: Buffer[] = [], central: Buffer[] = [];
+  let at = 0;
+  entries.forEach(([name, data], i) => {
+    const n = Buffer.from(name), stored = name.endsWith(".zip") && !sizes, method = stored ? 0 : 8, size = sizes ? sizes[i] : data.length;
+    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(method, 8); local.writeUInt32LE(data.length, 18); local.writeUInt32LE(size, 22); local.writeUInt16LE(n.length, 26);
+    const cd = Buffer.alloc(46); cd.writeUInt32LE(0x02014b50, 0); cd.writeUInt16LE(0x800, 8); cd.writeUInt16LE(method, 10); cd.writeUInt32LE(data.length, 20); cd.writeUInt32LE(size, 24); cd.writeUInt16LE(n.length, 28); cd.writeUInt32LE(at, 42);
+    parts.push(local, n, Buffer.from(data)); central.push(cd, n);
+    at += 30 + n.length + data.length;
+  });
+  const cdLen = central.reduce((x, b) => x + b.length, 0);
+  const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10); end.writeUInt32LE(cdLen, 12); end.writeUInt32LE(at, 16);
+  return new Uint8Array(Buffer.concat([...parts, ...central, end]));
 }
