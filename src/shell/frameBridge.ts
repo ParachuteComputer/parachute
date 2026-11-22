@@ -39,6 +39,8 @@ export type HostDeps = {
   decide(key: string, kind: Decided): void;
   /** Is the person tapping right now (live user activation in the shell's own window)? */
   tapNow(): boolean;
+  /** Whether the frame is on screen: kept running hidden behind a shell screen (shell/FrameArea.tsx), it moves nothing. */
+  shown(): boolean;
   mark: { tap(path: string): void; carry(from: string, to: string): boolean; clear(): void };
   copy(text: string): Promise<boolean>;
   /** Open it (or, for a frame of the person's, ask first): whether it was opened. */
@@ -80,7 +82,14 @@ export function createFrameHost(post: (m: unknown) => void, deps: HostDeps) {
     if (!rec) throw new Error("This device doesn't hold that vault.");
     return rec;
   };
+  // hidden behind a shell screen (an applet, Settings, a sign-in), the frame may still read, but it moves nothing: no
+  // address, no Back, no decision for an entry, nothing a tap would do
+  const MOVES: readonly Method[] = ["nav.go", "nav.back", "nav.decided", "clipboard.write", "link.out", "defaults.set", "home.pin", "home.start", "home.bringIn", "home.addEmbed", "home.addVault", "home.dismissVault"];
   const run = async (method: Method, p: Record<string, unknown>): Promise<unknown> => {
+    if (!deps.shown() && MOVES.includes(method)) {
+      if (method === "clipboard.write" || method === "link.out") return false;
+      throw new Error("not_allowed");
+    }
     switch (method) {
       case "vaults.list": return deps.vaults().map((r) => frameVault(r, deps.whose?.(r), deps.homeKey?.() === r.key));
       case "vault.query": return deps.client(vault(p.vault as string)).queryNotes(p.query as Query);

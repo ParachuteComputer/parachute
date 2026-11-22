@@ -114,7 +114,10 @@ export const METHODS = ["vaults.list", "vault.query", "vault.note", "vault.roles
 
 export type Events = { location: FrameLocation;
   /** what: "note": the hub's answer for a note the frame read from the copy (`vault.note` with `kept`) differs from it */
-  changed: { what: "vaults" | "applets" | "defaults" | "home" | "pointers" } | { what: "note"; vault: string; id: string }; /** the look's tokens (src/theme), each a CSS variable --<key> */ theme: Record<string, string> };
+  changed: { what: "vaults" | "applets" | "defaults" | "home" | "pointers" } | { what: "note"; vault: string; id: string }; /** the look's tokens (src/theme), each a CSS variable --<key> */ theme: Record<string, string>;
+  /** the frame is on screen again (true) after a shell screen (an applet, Settings) hid it, or hidden (false): kept
+   *  running meanwhile (shell/FrameArea.tsx), it draws what it read at once and reads it again behind */
+  shown: boolean };
 
 export type Request = { pf: 1; id: string; method: Method; params: unknown };
 export type Reply = { pf: 1; id: string; result: unknown } | { pf: 1; id: string; error: string };

@@ -1,6 +1,9 @@
-// What shows on the frame's addresses: the frame this device runs now (frameSource.ts), or its card. The person's
-// frame is read again each time the frame area is shown, so a change made by them or their agent is seen at the next
-// return, not by polling. Over a frame from a vault the shell keeps two things of its own: a way to Settings (whatever
+// What shows on the frame's addresses: the frame this device runs now (frameSource.ts), or its card. Made the first time
+// one of those addresses shows, then kept, hidden, while a shell screen shows (an applet, Settings, a sign-in), so back
+// to the list of applets is the frame as it was, at once, not a new one booted and read again (Aaron, 11-22: "The
+// applets page re loads every time"). Hidden, it gets no address, no tap and moves nothing (FrameHost.tsx,
+// frameBridge.ts); shown again, it reads again behind what it drew. The person's frame is read again each time the
+// frame area is shown, so a change made by them or their agent is seen at the next return, not by polling. Over a frame from a vault the shell keeps two things of its own: a way to Settings (whatever
 // that frame draws: a place at the end of the bar, BottomBar.tsx), and the question before it opens an address outside
 // the app.
 import { useSettledPress } from "../ui/press";
@@ -13,12 +16,20 @@ import { readTheme } from "../theme/store";
 
 type Code = { js: string; hash: string; from: "built-in" | "vault" };
 
-export default function FrameArea() {
+/** The frame area, made the first time it is shown and kept after, hidden while `shown` is false. */
+export function KeptFrame({ shown }: { shown: boolean }) {
+  const [made, setMade] = useState(shown);
+  useEffect(() => { if (shown) setMade(true); }, [shown]);
+  if (!made && !shown) return null;
+  return <div className="kept-frame" hidden={!shown}><FrameArea shown={shown} /></div>;
+}
+
+export default function FrameArea({ shown }: { shown: boolean }) {
   const { choice, linkOut, writeAsk } = useFrameSource();
   const [code, setCode] = useState<Code | null>(null);
   // the person's frame, settings and theme notes, read again each time the frame area is shown (the theme is also
   // followed live; this is for when the live query is down)
-  useEffect(() => { void readFrameRecord(); void readSettings(); void readTheme(); }, []);
+  useEffect(() => { if (shown) { void readFrameRecord(); void readSettings(); void readTheme(); } else answerLinkOut(false); }, [shown]);
   const want = choice.run === "vault" ? `vault:${choice.hash}` : "built-in";
   useEffect(() => {
     let on = true;
@@ -29,7 +40,12 @@ export default function FrameArea() {
     });
     return () => { on = false; };
   }, [want]); // eslint-disable-line react-hooks/exhaustive-deps
-  const ready = code && (code.from === "vault" ? `vault:${code.hash}` : "built-in") === want ? code : null;
+  const now = code && (code.from === "vault" ? `vault:${code.hash}` : "built-in") === want ? code : null;
+  // hidden, no new frame is made: one booted behind a shell screen would read that screen's address (its document's
+  // base URL is the shell's, at boot). The frame that ran stays until the area is shown; then the new one starts
+  const last = useRef<Code | null>(null);
+  if (shown) last.current = "card" in choice ? null : now;
+  const ready = shown ? now : last.current;
   // a frame from a vault is marked while it is shown in the foreground, and unmarked when it is left, hidden or closed
   // (a page it hangs can't do that): if it hangs the app, the next start knows
   useEffect(() => {
@@ -42,15 +58,15 @@ export default function FrameArea() {
     addEventListener("pagehide", left);
     return () => { document.removeEventListener("visibilitychange", seen); removeEventListener("pagehide", left); frameHidden(hash); answerLinkOut(false); };
   }, [ready?.hash, ready?.from]);
-  if ("card" in choice) return <FrameCard {...choice.card} />;
+  if ("card" in choice && shown) return <FrameCard {...choice.card} />;
   if (!ready) return null;
   const vault = ready.from === "vault";
   return (
     <>
-      <FrameHost key={ready.hash} js={ready.js} from={ready.from}
+      <FrameHost key={ready.hash} js={ready.js} from={ready.from} shown={shown}
         onFailed={(why, persist) => { if (vault) frameFailed(ready.hash, why, persist); }} />
-      {linkOut !== null && <LinkOutQuestion key={linkOut} url={linkOut} />}
-      {writeAsk !== null && <WriteQuestion key={writeAsk.title} q={writeAsk} />}
+      {shown && linkOut !== null && <LinkOutQuestion key={linkOut} url={linkOut} />}
+      {shown && writeAsk !== null && <WriteQuestion key={writeAsk.title} q={writeAsk} />}
     </>
   );
 }

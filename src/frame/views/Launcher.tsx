@@ -6,7 +6,7 @@ import { Link } from "react-router";
 import { updateLine } from "../../applet/level";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVault } from "../../bridge/protocol";
-import { addEmbed, addVault, bringIn, dismissVault, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults, useVaultsLoaded, useHomeLoaded } from "../data";
+import { addEmbed, addVault, bringIn, dismissVault, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useShownAgain, useVaultQuery, useVaults, useVaultsLoaded, useHomeLoaded } from "../data";
 import { titleOf } from "../../vault/notes";
 import { Days } from "../../kit/parts";
 import { when } from "../../kit/when";
@@ -101,6 +101,23 @@ function useFresh(v: FrameVault | undefined, loaded: boolean): boolean | undefin
     }, () => { if (live && !drawn) draw(false); });
     return () => { live = false; clearTimeout(late); };
   }, [v?.key, loaded]);
+  // shown again after a shell screen (a first note written in the editor, a pack added): a Start here shown is read
+  // again, and goes once the vault holds something of the person's; nothing new is put above the list
+  const again = useShownAgain();
+  const seen = useRef(again);
+  useEffect(() => {
+    if (seen.current === again) return;
+    seen.current = again;
+    if (!v || state?.key !== v.key || state.fresh !== true) return;
+    let live = true;
+    const key = v.key;
+    readerFor(v).queryNotes({ orderBy: "updated_at", sort: "desc", limit: 200 }).then((notes) => {
+      if (!notes.some(started)) return;
+      known.set(key, false);
+      if (live) setState({ key, fresh: false });
+    }, () => {});
+    return () => { live = false; };
+  }, [again]); // eslint-disable-line react-hooks/exhaustive-deps
   const fresh = !loaded ? undefined : !v ? false : state?.key === v.key ? state.fresh : shown.current ? false : known.get(v.key);
   if (fresh !== undefined) shown.current = true;
   return fresh;

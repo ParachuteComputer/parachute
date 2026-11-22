@@ -98,12 +98,19 @@ test("a hostile frame can't approve an applet, or start one the person allowed",
   await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
 });
 
-test("the frame is there only while it is shown: never beside a shell screen, never at a sign-in's return", async ({ page }) => {
+test("the frame is hidden beside a shell screen and never told its address; never made at a sign-in's return", async ({ page }) => {
   await page.goto(`/v/${VAULT}?with=vault`);
   await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
-  await page.goto("/settings");
+  // what the shell tells the frame from here on (kept running hidden behind Settings: shell/FrameArea.tsx)
+  const win = page.frames().find((f) => f.parentFrame() === page.mainFrame() && f.url() === "about:srcdoc")!;
+  await win.evaluate(() => { const w = window as unknown as { __heard: string[] }; w.__heard = []; addEventListener("message", (e) => { const d = e.data as { event?: string; data?: { pathname?: string } }; if (d?.event === "location") w.__heard.push(String(d.data?.pathname)); }); });
+  await ui(page).getByRole("link", { name: "Settings" }).click();
   await expect(page.getByRole("heading", { name: "Your Parachutes" })).toBeVisible();
-  await expect(page.locator("iframe.app-frame")).toHaveCount(0);
+  await expect(page.locator("iframe.app-frame")).toBeHidden();
+  expect(await win.evaluate(() => (window as unknown as { __heard: string[] }).__heard)).toEqual([]);
+  await page.goBack();
+  await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
+  expect(await win.evaluate(() => (window as unknown as { __heard: string[] }).__heard)).not.toContain("/settings");
   // a return from the hub carries its code in the address: no frame is made there to read it
   await page.goto("/oauth/callback?code=CODE-FROM-HUB&state=nope");
   await expect(page.getByRole("alert").or(page.getByRole("status")).first()).toBeVisible();

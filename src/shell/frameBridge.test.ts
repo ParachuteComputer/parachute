@@ -10,9 +10,10 @@ const REC: VaultRecord = { key: "kitchen", issuer: "https://hub.example", vault:
   accessToken: "ACCESS-TOKEN-SECRET", refreshToken: "REFRESH-TOKEN-SECRET", scope: "vault:kitchen:read", addedAt: "2026-11-15" };
 const SECRETS = /ACCESS-TOKEN-SECRET|REFRESH-TOKEN-SECRET|CLIENT-ID-SECRET/;
 
-function setup(tap = false) {
+function setup(tap = false, shown = true) {
   const posts: unknown[] = [];
   const deps = {
+    shown: () => shown,
     vaults: () => [REC],
     // a client that would leak its record if anything handed it on
     client: () => ({ queryNotes: async () => [{ id: "n1", path: "Recipes/Soup", tags: [] }], getNote: async (id: string) => (id === "gone" ? Promise.reject(Object.assign(new Error("x"), { status: 404 })) : { id, path: id, tags: [] }) }) as unknown as ReturnType<HostDeps["client"]>,
@@ -182,5 +183,25 @@ describe("a note read from the copy", () => {
     expect(told()).toEqual([]);
     host.fresh("kitchen", "/vault/kitchen/api/records?id=n1&include_body=true");
     expect(told()).toEqual([{ what: "note", vault: "kitchen", id: "n1" }]);
+  });
+});
+
+// Kept running hidden behind a shell screen (shell/FrameArea.tsx, Aaron 11-22: the list of applets reloaded every time):
+// the frame may read, and nothing else.
+describe("a frame kept hidden behind a shell screen", () => {
+  it("moves nothing, even during a tap: no address, no Back, no decision, no choice, no pin, no link out", async () => {
+    const { ask, deps } = setup(true, false);
+    for (const [method, params] of [["nav.go", { to: "/v/kitchen" }], ["nav.back", {}], ["nav.decided", { key: "k1", kind: "vault" }], ["defaults.set", { vault: "kitchen", type: "recipe", choice: "vault" }],
+      ["home.pin", { vault: "kitchen", noteId: "a1", on: true }], ["home.start", { vault: "kitchen", noteId: "a1" }], ["home.bringIn", { vault: "kitchen", noteId: "a1" }],
+      ["home.addEmbed", { vault: "kitchen", noteId: "a1" }], ["home.addVault", { hub: "https://hub.example", vault: "x" }], ["home.dismissVault", { hub: "https://hub.example", vault: "x" }]] as const)
+      expect((await ask(method, params))?.error, method).toBe("not_allowed");
+    expect((await ask("clipboard.write", { text: "x" }))?.result).toBe(false);
+    expect((await ask("link.out", { url: "https://example.com/" }))?.result).toBe(false);
+    for (const f of [deps.go, deps.back, deps.decide, deps.defaults.set, deps.home.pin, deps.home.start, deps.home.bringIn, deps.home.addEmbed, deps.home.addVault, deps.home.dismissVault, deps.copy, deps.openOut]) expect(f).not.toHaveBeenCalled();
+  });
+  it("still reads, so it is ready when it is shown again", async () => {
+    const { ask } = setup(false, false);
+    expect((await ask("vault.query", PARAMS["vault.query"]))?.result).toEqual([{ id: "n1", path: "Recipes/Soup", tags: [] }]);
+    expect((await ask("applets.list", PARAMS["applets.list"]))?.result).toMatchObject({ ok: true });
   });
 });

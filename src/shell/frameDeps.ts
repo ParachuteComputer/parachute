@@ -1,4 +1,5 @@
 // The shell's real answers to the frame (frameBridge.ts `HostDeps`), from what the shell holds.
+import { onScreen } from "./appDeps";
 import type { Decided, FrameApplet, FrameApplets, FrameViewer } from "../bridge/protocol";
 import { OFFICIAL_NAMES, officialCopyOf, officialFace, officialId } from "../applet/parachuteSource";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
@@ -232,8 +233,9 @@ async function openOut(url: string) {
   else window.open(url, "_blank", "noopener,noreferrer");
 }
 
-/** What each history entry's note route decided, for the session: the frame is made afresh after every shell screen,
- *  and a return to an entry must not decide again (it would send the person on to the applet a second time). */
+/** What each history entry's note route decided, for the session: a frame may be made afresh (a new frame, a start, a
+ *  page loaded again), and a return to an entry must not decide again (it would send the person on to the applet a
+ *  second time). */
 const decisions = new Map<string, Decided>();
 export const decidedFor = (key: string): Decided | undefined => decisions.get(key);
 function decide(key: string, kind: Decided) {
@@ -241,14 +243,18 @@ function decide(key: string, kind: Decided) {
   if (decisions.size > 500) decisions.delete(decisions.keys().next().value!);
 }
 
-/** A tap counts for the frame only while the frame has the focus: a tap inside it gives it that, and a tap on a shell
- *  screen just before the frame was made (Back from Settings) doesn't. */
-const tapIn = (frame: () => HTMLIFrameElement | null) => () =>
-  (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true && !!frame() && document.activeElement === frame();
+/** A tap counts for the frame only while the frame has the focus and is on screen: a tap inside it gives it the focus,
+ *  and a tap on a shell screen just before the frame was shown again (Back from Settings) doesn't; kept hidden behind
+ *  a shell screen (FrameArea.tsx), it gets no tap however it came to hold the focus. */
+const tapIn = (frame: () => HTMLIFrameElement | null) => () => {
+  const f = frame();
+  return (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true && !!f && onScreen(f) && document.activeElement === f;
+};
 
 /** `from`: a frame of the person's (from their vault) asks the shell before it opens an address outside the app. */
-export function shellDeps(go: (to: string, replace: boolean) => void, frame: () => HTMLIFrameElement | null, from: "built-in" | "vault" = "built-in"): HostDeps {
+export function shellDeps(go: (to: string, replace: boolean) => void, frame: () => HTMLIFrameElement | null, from: "built-in" | "vault", shown: () => boolean): HostDeps {
   return {
+    shown,
     vaults: listVaults,
     client: clientFor,
     kept: keptReaderFor,

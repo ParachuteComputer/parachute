@@ -20,6 +20,7 @@ function shell(clock: { t: number }) {
     setTimeout(() => window.dispatchEvent(ev), 0);
   }, {
     vaults: () => [REC],
+    shown: () => true,
     // a vault read that takes a moment, so calls stay waiting in the shell
     roles: async () => { waiting++; most = Math.max(most, waiting); await new Promise((r) => setTimeout(r, 5)); waiting--; return ["pinned"]; },
     message: (e: unknown) => (e instanceof Error ? e.message : "failed"),

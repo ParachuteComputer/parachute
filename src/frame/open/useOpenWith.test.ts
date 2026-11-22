@@ -27,7 +27,7 @@ function shell() {
     Object.defineProperty(ev, "source", { value: parentWin });
     setTimeout(() => window.dispatchEvent(ev), 0);
   }, {
-    vaults: () => [REC],
+    shown: () => true, vaults: () => [REC],
     kept: () => ({ client: { getNote: async () => SOUP }, reads: new Set<string>() }),
     client: () => ({ getNote: async () => { await now; return SOUP; }, queryNotes: async () => [] }),
     roles: async () => ["pinned"],
@@ -62,3 +62,4 @@ describe("open with, decided from the copies", () => {
     expect(result.current.state === "ok" && result.current.cands.map((c) => c.entry.noteId)).toEqual(["a1"]);
   });
 });
+
