@@ -5,7 +5,7 @@
 //   when.time(t)    9:41 AM
 //   when.day(t)     Today · Yesterday · Monday, November 17 · Monday, November 17, 2025
 //   when.date(t)    Monday, November 17 (the year too when it isn't this one), whatever day it is
-//   when.short(t)   9:41 AM today · Yesterday · Mon this week · Nov 17 this year · Nov 17, 2025
+//   when.short(t)   9:41 AM today (Today for a date alone) · Yesterday · Mon this week · Nov 17 this year · Nov 17, 2025
 //   when.full(t)    Mon, Nov 17, 9:41 AM (the year too when it isn't this one)
 //   when.ago(t)     now · 5m · 3h · then as short()
 //   when.stamp(t)   2026-11-17 09-41: a moment in a note's name, sorted as text

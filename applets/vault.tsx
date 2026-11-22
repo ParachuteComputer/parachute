@@ -518,7 +518,7 @@ function People({ v }: { v: Held }) {
   return <>
     <List label="People" rows={[
       { key: "you", title: "You", meta: "owner" },
-      ...now.people.map((p) => ({ key: p.key, title: p.name ?? `A key (${shortKey(p.key)})`, meta: `${roleWords(p.role)} · key ${shortKey(p.key)}`,
+      ...now.people.map((p) => ({ key: p.key, title: p.name ?? `A key (${shortKey(p.key)})`, meta: roleWords(p.role),
         aside: <Button small kind="quiet" onClick={() => (vaults as any).end(v.key, p.key).then((r: { ended?: boolean }) => { toast(r?.ended === false ? "Already ended." : `${p.name ? `${p.name}'s` : "Their"} access is ended.`); return load(); }, (e: unknown) => quiet(e, "Not ended"))}>End</Button> })),
       ...now.invites.map((i) => ({ key: i.id, title: i.name, meta: `invited · the link works once, until ${when.date(i.expires_at)}`,
         aside: <Button small kind="quiet" onClick={() => (vaults as any).takeBack(v.key, i.id).then((r: { takenBack?: boolean }) => { toast(r?.takenBack === false ? `The invite for ${i.name} was already used or taken back.` : `The invite for ${i.name} is taken back.`); if (made?.id === i.id) setMade(null); return load(); }, (e: unknown) => quiet(e, "Not taken back"))}>Take back</Button> })),
@@ -557,7 +557,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
       <style>{CSS}</style>
       <People v={v} />
       {failed ? <Problem error={failed} onRetry={load}>What reaches {v.name} couldn't be read</Problem> : !a ? <Loading /> : <>
-        <Reach v={v} self={{ key: "app", title: "Parachute, on this device", meta: `${a.level === "write" ? "reads and changes" : "reads"} every type, at ${a.hub.replace(/^https?:\/\//, "")}`,
+        <Reach v={v} self={{ key: "app", title: "Parachute, on this device", meta: `${a.level === "write" ? "reads and changes" : "reads"} every type`,
           // the home stays writable: Parachute's own applets write there (docs/design/PARACHUTE-SOURCE.md)
           aside: a.level === "write" && !a.home ? <Button small kind="quiet" onClick={() => vaults.readOnly(v.key).then(load, (e: unknown) => quiet(e, "Not changed"))}>Read only</Button> : undefined }} />
         {a.applets.length ? <List label="Applets you allowed here" rows={a.applets.map((x) => ({ key: x.noteId, glyph: x.glyph, title: x.name, meta: `${x.changes ? "reads and changes" : "reads"}${x.since ? ` · since ${when.date(x.since)}` : ""}`,
