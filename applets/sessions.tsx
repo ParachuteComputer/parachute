@@ -12,7 +12,7 @@
 // mts redacts every line before it leaves the machine (T-304). This is the second net: every word read goes through
 // redactRaw first (the same rules and cases as mts's and the Uni app's: src/applet/redaction-vectors.json), and a step
 // shows only as a fixed phrase with a plain label (safeStep).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Empty, List, Loading, Page, Problem, onShown, ready, vault, when } from "parachute";
 
 // ── redact (the Uni app's sessionWords.ts; tested in src/applet/sessionsApplet.test.ts) ──
@@ -119,7 +119,71 @@ function parseFeed(content: string | null | undefined, first = 0): Item[] {
   return out;
 }
 
-const HEARD_MS = 2 * 3_600_000, UNHEARD_START_MS = 3 * 3_600_000, DAYS = 7;
+// ── the session's earlier steps, a part at a time (the Uni app's sessionWords.ts feedPages, withHead, partBefore,
+// withPart): the steps note holds the newest lines from `first` of `total`; `parts` hold the earlier ones, each a note
+// of its own; the first `dropped` are no longer kept. A part may overlap the note's own lines: they are counted once.
+type Part = { id: string; first: number; n: number };
+type Pages = { first: number; total: number; dropped: number; parts: Part[] };
+type Held = { items: Item[]; from: number; to: number };
+const HELD_MAX = 5_400;
+const count = (v: unknown): number | null => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : null);
+function feedPages(metadata: unknown): Pages | null {
+  const md = (metadata && typeof metadata === "object" ? metadata : {}) as Record<string, unknown>;
+  const first = count(md.first), total = count(md.total);
+  if (first === null || total === null || first > total) return null;
+  let parts: Part[] = [];
+  for (const p of Array.isArray(md.parts) ? md.parts : []) {
+    const o = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+    const id = typeof o.id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(o.id) ? o.id : null, f = count(o.first), n = count(o.n);
+    const prev = parts[parts.length - 1];
+    if (!id || f === null || !n || f >= first || (prev && prev.first + prev.n !== f)) { parts = []; continue; }
+    parts.push({ id, first: f, n });
+  }
+  const last = parts[parts.length - 1];
+  if (last && last.first + last.n < first) parts = [];
+  return { first, total, dropped: count(md.dropped) ?? 0, parts };
+}
+function withHead(held: Held | null, head: readonly Item[], pages: Pages): Held {
+  const floor = Math.max(pages.dropped, pages.total - HELD_MAX);
+  if (held && held.from < pages.first && held.to >= pages.first) {
+    const kept = held.items.filter((it) => it.n < pages.first && it.n >= floor);
+    return { items: [...kept, ...head], from: Math.max(held.from, Math.min(floor, pages.first)), to: pages.total };
+  }
+  return { items: [...head], from: pages.first, to: pages.total };
+}
+function partBefore(pages: Pages | null, from: number): Part | null {
+  let best: Part | null = null;
+  for (const p of pages?.parts ?? []) if (p.first < from && (!best || p.first > best.first)) best = p;
+  return best;
+}
+function withPart(held: Held, part: Part, lines: readonly Item[]): Held {
+  if (!(part.first < held.from && part.first + part.n >= held.from)) return held;
+  if (held.to - part.first > HELD_MAX) return held;
+  return { items: [...lines.filter((it) => it.n < held.from), ...held.items], from: part.first, to: held.to };
+}
+
+// ── words (the Uni app's live.ts plainTitle, resultWords): no task numbers, run ids or the launcher's own lines ──
+function plainTitle(raw: string): string {
+  return raw.replace(/\((?:resume|resumes|fork)\s+[a-z0-9]{8}\)/gi, "").replace(/\(\d+\)\s*$/, "").replace(/\bT-\d+[a-z]?\b:?/gi, "")
+    .replace(/\s{2,}/g, " ").replace(/^[\s·:–—-]+|[\s·:–—-]+$/g, "").trim();
+}
+function resultWords(summary: string | null): string | null {
+  if (!summary) return null;
+  const file = /evidence: file (\S+)/.exec(summary)?.[1];
+  if (file) return `Left ${file.split("/").pop()}.`;
+  if (/evidence: commit (?:[0-9a-f]{6,}|\[hidden\])/.test(summary)) return "Left a commit.";
+  if (/^unverified:/.test(summary)) return "Says it finished; nothing it left could be checked yet.";
+  if (/unit gone/.test(summary)) return "Its worker was gone; closed when the old runs were tidied.";
+  if (/^mts [a-z0-9]{8}: \w+$/.test(summary)) return null;
+  return plainTitle(summary.replace(/\bmts [a-z0-9]{8}:?\s*/g, "").replace(/\brun=[a-z0-9]{8}\b/g, "")) || null;
+}
+/** A short id-like word (a room, a model) shown only when it is plainly one: nothing the redactor would hide. */
+const plainWord = (v: unknown, re: RegExp): string | null => (typeof v === "string" && re.test(v) && redactRaw(v) === v ? v : null);
+
+const HEARD_MS = 2 * 3_600_000, UNHEARD_START_MS = 3 * 3_600_000;
+/** What the kit gives at most in one read (src/applet/contract.ts LIMITS.maxNotes): the sessions changed last. Working
+ *  ones say what they do every minute, so they are always among them. */
+const SHOWN = 50;
 type Rec = { id: string; path: string; updatedAt: string | null; fields?: Record<string, any>; body?: string };
 type State = "working" | "silent" | "finished" | "stopped" | "waiting" | "failed";
 type Run = { id: string; title: string; room: string; state: State; started: string; ended: string | null; now: string | null; nowAt: string | null;
@@ -140,14 +204,14 @@ function runOf(r: Rec, now: number): Run | null {
   const nowAt = time(f.doing_at);
   // a note that still says running but hasn't been heard from is silent, not working
   if (state === "working" && (nowAt !== null ? now - nowAt >= HEARD_MS : now - started >= UNHEARD_START_MS)) state = "silent";
-  const title = redactRaw(r.path.replace(/^Runs\/\d{4}-\d{2}-\d{2}\s*/, "")) || "A session";
+  const title = plainTitle(redactRaw(r.path.replace(/^Runs\/\d{4}-\d{2}-\d{2}\s*/, "").replace(/∕/g, "/"))) || "A session";
   return {
-    id: r.id, title, room: str(f.room)?.replace(/^#/, "") ?? "no room", state, started: new Date(started).toISOString(),
+    id: r.id, title, room: plainWord(str(f.room)?.replace(/^#/, ""), /^[a-z0-9][a-z0-9_-]{0,39}$/i) ?? "no room", state, started: new Date(started).toISOString(),
     ended: state === "working" ? null : str(f.ended_at) ?? (state === "silent" ? str(f.doing_at) : r.updatedAt),
     now: state === "working" ? (str(f.doing_now) ? safeStep(redactRaw(f.doing_now)) : null) : null, nowAt: str(f.doing_at),
     steps: typeof f.steps === "number" && f.steps > 0 ? Math.floor(f.steps) : 0,
-    cost: typeof f.cost === "number" && Number.isFinite(f.cost) ? f.cost : null, model: str(f.model) && /^[a-z0-9.-]{1,40}$/.test(f.model) ? f.model : null,
-    task: str(f.task) && /^T-\d+[a-z]?$/i.test(f.task) ? f.task.toUpperCase() : null, summary: said(f.summary, 200), feed: str(f.feed) && /^[A-Za-z0-9_-]{1,128}$/.test(f.feed) ? f.feed : null, fields: f,
+    cost: typeof f.cost === "number" && Number.isFinite(f.cost) && f.cost >= 0 ? f.cost : null, model: plainWord(f.model, /^claude-[a-z]+-\d+(?:-\d+)*$/),
+    task: str(f.task) && /^T-\d+[a-z]?$/i.test(f.task) ? f.task.toUpperCase() : null, summary: resultWords(said(f.summary, 300)), feed: str(f.feed) && /^[A-Za-z0-9_-]{1,128}$/.test(f.feed) ? f.feed : null, fields: f,
   };
 }
 
@@ -155,9 +219,7 @@ const WORDS: Record<State, string> = { working: "Working", silent: "Silent", fin
 const money = (c: number | null) => (c === null ? null : `$${c < 10 ? c.toFixed(2) : Math.round(c)}`);
 const agoText = (iso: string | null) => { const a = when.ago(iso); return /^\d+[mh]$/.test(a) ? `${a} ago` : a; };
 const lasted = (r: Run) => { const ms = (time(r.ended) ?? Date.now()) - Date.parse(r.started); const m = Math.max(0, Math.round(ms / 60_000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
-// the task only where the title doesn't start with it
-const metaOf = (r: Run) => [r.now ?? (r.state === "working" ? "starting" : r.summary), r.state === "working" ? `${lasted(r)} so far` : agoText(r.ended ?? r.started), money(r.cost),
-  r.task && !r.title.toUpperCase().startsWith(r.task) ? r.task : null].filter(Boolean).join(" · ");
+const metaOf = (r: Run) => [r.now ?? (r.state === "working" ? "starting" : r.summary), r.state === "working" ? `${lasted(r)} so far` : agoText(r.ended ?? r.started), money(r.cost), r.task].filter(Boolean).join(" · ");
 
 const CSS = `
 .facts { color: var(--muted); font-size: var(--fs-small); margin: 0 0 14px; }
@@ -169,49 +231,53 @@ const CSS = `
 `;
 
 function Steps({ run }: { run: Run }) {
-  const [items, setItems] = useState<Item[] | null | undefined>(undefined);
-  const [pages, setPages] = useState<{ first: number; total: number; dropped: number; parts: { id: string; first: number; n: number }[] } | null>(null);
-  const [from, setFrom] = useState(0);
-  const load = async () => {
-    if (!run.feed) { setItems(null); return; }
-    const n: Rec = await vault.getRecord(run.feed).catch(() => null);
-    if (!n) { setItems(null); return; }
-    const md = n.fields ?? {};
-    const first = Number.isInteger(md.first) && md.first >= 0 ? md.first : 0;
-    const parts = Array.isArray(md.parts) ? md.parts.filter((p: any) => p && /^[A-Za-z0-9_-]{1,128}$/.test(p.id) && Number.isInteger(p.first) && Number.isInteger(p.n)) : [];
-    setPages({ first, total: Number.isInteger(md.total) ? md.total : first, dropped: Number.isInteger(md.dropped) ? md.dropped : 0, parts });
-    setItems((was) => [...(was ?? []).filter((x) => x.n < first), ...parseFeed(n.body, first)]);
-    setFrom((f) => (f && f < first ? f : first));
-  };
-  useEffect(() => { setItems(undefined); setFrom(0); void load(); }, [run.id, run.feed, run.steps]); // eslint-disable-line react-hooks/exhaustive-deps
-  const earlier = pages?.parts.filter((p) => p.first + p.n <= from).pop() ?? null;
+  const [held, setHeld] = useState<Held | null | undefined>(undefined);
+  const [pages, setPages] = useState<Pages | null>(null);
+  const [busy, setBusy] = useState(false);
+  // the steps note read again when the session has taken more steps (a pull, the applet shown again): what was held
+  // before its first line stays (withHead)
+  useEffect(() => {
+    let live = true;
+    if (!run.feed) { setHeld(null); return; }
+    void vault.getRecord(run.feed).then((n: Rec) => {
+      if (!live) return;
+      const p = feedPages(n.fields) ?? { first: 0, total: 0, dropped: 0, parts: [] };
+      const head = parseFeed(n.body, p.first);
+      setPages(p);
+      setHeld((was) => withHead(was ?? null, head, { ...p, total: Math.max(p.total, p.first + head.length) }));
+    }, () => { if (live) setHeld((was) => was ?? null); });
+    return () => { live = false; };
+  }, [run.feed, run.steps]);
+  const earlier = held ? partBefore(pages, held.from) : null;
   const more = async () => {
-    if (!earlier) return;
-    const n: Rec = await vault.getRecord(earlier.id).catch(() => null);
-    if (!n) return;
-    setItems((was) => [...parseFeed(n.body, earlier.first), ...(was ?? [])]);
-    setFrom(earlier.first);
+    if (!earlier || !held || busy) return;
+    setBusy(true);
+    try {
+      const n: Rec = await vault.getRecord(earlier.id);
+      setHeld((h) => (h ? withPart(h, earlier, parseFeed(n.body, earlier.first)) : h));
+    } catch { /* the part is gone: the button stays */ } finally { setBusy(false); }
   };
-  if (items === undefined) return <Loading />;
-  if (items === null || !items.length) return <Empty>No steps written yet.</Empty>;
+  if (held === undefined) return <Loading />;
+  if (held === null || !held.items.length) return <Empty>No steps written yet.</Empty>;
+  const dropped = pages && !earlier && pages.dropped > 0 && held.from <= pages.dropped ? pages.dropped : 0;
   return <>
-    {earlier ? <Button small onClick={more}>Earlier steps</Button> : pages && pages.dropped > 0 && from <= pages.dropped ? <p className="facts">The first {pages.dropped} steps are no longer kept.</p> : null}
-    <List label="Steps" hideLabel rows={items.map((it) => ({ key: String(it.n), title: <span className={it.kind}>{it.text}</span>, aside: it.at ? when.time(it.at) : undefined }))} />
+    {earlier ? <Button small busy={busy} onClick={more}>Earlier steps</Button> : dropped ? <p className="facts">The first {dropped} steps are no longer kept.</p> : null}
+    <List label="Steps" hideLabel rows={held.items.map((it) => ({ key: String(it.n), title: <span className={it.kind}>{it.text}</span>, aside: it.at ? when.time(it.at) : undefined }))} />
   </>;
 }
 
 const PARTS: [string, string][] = [["summary", "What it did"], ["open", "Left open"], ["checks", "Checks"], ["artifacts", "What it made"], ["ripples", "Ripples"]];
 
-function Detail({ run, back }: { run: Run; back: () => void }) {
+function Detail({ run, back, reload }: { run: Run; back: () => void; reload: () => unknown }) {
   const report = run.fields.report && typeof run.fields.report === "object" ? run.fields.report : {};
   const facts = [WORDS[run.state], `#${run.room}`, `started ${when.full(run.started)}`, lasted(run), money(run.cost), run.model, run.task, run.steps ? `${run.steps} steps` : null].filter(Boolean).join(" · ");
-  return <Page title={run.title} back={{ label: "Sessions", onPress: back }}>
+  return <Page title={run.title} back={{ label: "Sessions", onPress: back }} onRefresh={reload}>
     <style>{CSS}</style>
     <p className="facts">{facts}</p>
     {run.now ? <p className="now"><strong>Now:</strong> {run.now} <span className="facts">({agoText(run.nowAt)})</span></p> : null}
     {said(run.fields.end_note) ? <p className="now">{said(run.fields.end_note)}</p> : null}
     {PARTS.map(([k, name]) => { const v = said(Array.isArray(report[k]) ? report[k].join("\n") : report[k], 1200); return v ? <section className="part" key={k}><h2>{name}</h2><p>{v}</p></section> : null; })}
-    <section className="part"><h2>Steps</h2><Steps run={run} /></section>
+    <section className="part"><h2>Steps</h2><Steps key={run.id} run={run} /></section>
   </Page>;
 }
 
@@ -219,29 +285,33 @@ export default function Sessions() {
   const [runs, setRuns] = useState<Run[] | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const asked = useRef(0);
   const load = async () => {
+    const me = ++asked.current;
     try {
-      const rows: Rec[] = await vault.queryRecords({ pathPrefix: "Runs/", tag: "run", includeFields: true, limit: 200 });
+      const rows: Rec[] = await vault.queryRecords({ pathPrefix: "Runs/", tag: "run", includeFields: true, limit: SHOWN });
+      if (me !== asked.current) return;
       const now = Date.now();
-      const all = rows.map((r) => runOf(r, now)).filter((r): r is Run => !!r && (r.state === "working" || now - Date.parse(r.ended ?? r.started) < DAYS * 86_400_000));
+      const all = rows.map((r) => runOf(r, now)).filter((r): r is Run => !!r);
       setRuns(all.sort((a, b) => Date.parse(b.started) - Date.parse(a.started)));
       setError(null);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { if (me === asked.current) setError(e instanceof Error ? e.message : String(e)); }
   };
-  // read on open, when shown again and on a pull; what is working now says what it is doing at most once a minute
+  // read on open, each time it is shown again, and on a pull (here and on a session)
   useEffect(() => { ready().then(load); return onShown((on: boolean) => { if (on) void load(); }); }, []);
   const run = open ? runs?.find((r) => r.id === open) ?? null : null;
-  if (run) return <Detail run={run} back={() => setOpen(null)} />;
+  if (run) return <Detail run={run} back={() => setOpen(null)} reload={load} />;
   const working = (runs ?? []).filter((r) => r.state === "working");
   // what is working is under Working now; each room lists the rest, newest first
   const done = (runs ?? []).filter((r) => r.state !== "working");
   const rooms = [...new Set(done.map((r) => r.room))];
   return <Page title="Sessions" onRefresh={load}>
     <style>{CSS}</style>
-    {error ? <Problem error={error} onRetry={load}>The sessions couldn't be read</Problem> : runs === undefined ? <Loading /> : !runs.length ? <Empty>No sessions in the last {DAYS} days.</Empty> : <>
+    {error ? <Problem error={error} onRetry={load}>The sessions couldn't be read</Problem> : runs === undefined ? <Loading /> : !runs.length ? <Empty>No sessions yet: mts writes one here each time Uni starts a worker.</Empty> : <>
       {working.length ? <List label="Working now" rows={working.map((r) => ({ key: r.id, title: r.title, meta: `#${r.room} · ${metaOf(r)}`, strong: true, onPress: () => setOpen(r.id) }))} />
         : <p className="facts">Nothing is working now.</p>}
       {rooms.map((room) => <List key={room} label={`#${room}`} rows={done.filter((r) => r.room === room).map((r) => ({ key: r.id, title: r.title, meta: metaOf(r), badge: WORDS[r.state], onPress: () => setOpen(r.id) }))} />)}
+      <p className="facts">The {SHOWN} sessions that changed last.</p>
     </>}
   </Page>;
 }
