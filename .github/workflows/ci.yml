@@ -10,7 +10,7 @@ jobs:
   web:
     # the hub before the record door (0.8) and with it (0.9): the app must work on both (src/vault/records.ts); and
     # core's next at a commit (built from source, .github/actions/core), for what the app needs before a release has it:
-    # move it on purpose, in the PR that needs it (the shell job below pins the same). There the specs for what that
+    # move it on purpose, in the PR that needs it (the shell job's second leg pins the same). There the specs for what that
     # core has (who reaches a vault, sharing, the one list) must run: E2E_CORE_NEXT turns their skip into a failure.
     # The Services workflow follows core's next as it moves.
     strategy:
@@ -60,6 +60,16 @@ jobs:
           retention-days: 7
 
   shell:
+    # the released hub people run (0.8), and core's next at the web job's pinned commit, where sharing must run
+    # (E2E_CORE_NEXT), not skip
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - core: "0.8.0"
+          - core: "a14ac97a63abff7f393684fc45fb7dd64bd52db1"
+            next: "1"
+    name: shell (core ${{ matrix.core }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -73,13 +83,13 @@ jobs:
         with:
           workspaces: src-tauri
       # The key door and sharing tests (src-tauri/tests/door_hub.rs, sharing_hub.rs) sign in to a real hub, as the web
-      # tests do: core's next at the web job's pinned commit, where sharing must run (E2E_CORE_NEXT), not skip.
+      # tests do.
       - uses: ./.github/actions/core
         with:
-          core: a14ac97a63abff7f393684fc45fb7dd64bd52db1
+          core: ${{ matrix.core }}
       - name: Shell tests
         env:
-          E2E_CORE_NEXT: "1"
+          E2E_CORE_NEXT: ${{ matrix.next }}
         run: |
           mkdir -p dist && echo '<!doctype html>' > dist/index.html
           cargo test --locked --manifest-path src-tauri/Cargo.toml

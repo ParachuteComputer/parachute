@@ -570,6 +570,8 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const refresh = () => Promise.all([load(), people.load(), reach.load()]);
 
   const { sh, rows, managing } = reach;
+  // managing ended (hidden, run out): the key form closes with it, and doesn't come back by itself
+  useEffect(() => { if (managing === false) setGiving(false); }, [managing]);
   const listed = reach.can && reach.lists;
   const others = (rows ?? []).filter((r) => !r.self);
   const until = (r: ReachRow) => (r.until ? ` · until ${when.date(r.until)}` : "");
@@ -582,10 +584,10 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
   const gone = (key: string) => ended.some((e) => e.key === key);
   const endedRows = (g: Group) => ended.filter((e) => e.group === g).map((e) => ({ key: `ended:${e.key}`, title: e.title, meta: `ended · ${g === "people" ? "their" : "its"} next request is refused` }));
   const didEnd = (e: Ended, vault: string) => { if (shownKey.current === vault) setEnded((x: Ended[]) => [...x.filter((y) => y.key !== e.key), e]); };
-  const end = (r: ReachRow) => { const vault = v.key; return sh.endReach!(vault, r.id).then(() => {
-    didEnd({ key: r.member?.key ?? r.id, group: groupOf(r), title: title(r) }, vault);
-    toast(`${title(r)} can no longer reach ${v.name}.`);
-    return refresh();
+  const end = (r: ReachRow, shown = title(r)) => { const vault = v.key; return sh.endReach!(vault, r.id).then(() => {
+    didEnd({ key: r.member?.key ?? r.id, group: groupOf(r), title: shown }, vault);
+    toast(`${shown} can no longer reach ${v.name}.`);
+    return Promise.all([reach.load(), people.load()]);
   }, (e: unknown) => { quiet(e, "Not ended"); void reach.load(); }); };
   const endButton = (who: string, go: () => void) => <Button small kind="quiet" aria-label={`End ${who}`} onClick={go}>End</Button>;
   const keyRow = (r: ReachRow) => ({ key: r.id, title: title(r), meta: `${r.of ? `${r.of}'s · ` : ""}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`, aside: endButton(title(r), () => void end(r)) });
@@ -603,7 +605,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
     ...hubPeople.filter((r) => !gone(r.member!.key ?? r.id)).map((r) => {
       const mine = np?.people.find((p) => p.key === r.member!.key);
       const name = mine ? (mine.name ?? `A key (${shortKey(mine.key)})`) : r.name;
-      return { key: r.id, title: name, meta: `${roleWords(r.member!.role)}${r.member!.key ? ` · key ${shortKey(r.member!.key)}` : ""}${used(r)}`, aside: endButton(name, () => void end(r)) };
+      return { key: r.id, title: name, meta: `${roleWords(r.member!.role)}${r.member!.key ? ` · key ${shortKey(r.member!.key)}` : ""}${used(r)}`, aside: endButton(name, () => void end(r, name)) };
     }),
     ...(fromHub ? [] : np?.people ?? []).filter((p) => !gone(p.key)).map((p) => {
       const name = p.name ?? `A key (${shortKey(p.key)})`;
@@ -611,7 +613,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
       return { key: p.key, title: name, meta: `${roleWords(p.role)} · key ${shortKey(p.key)}`, aside: endButton(name, () => void (vaults as any).end(vault, p.key).then((r: { ended?: boolean }) => {
         didEnd({ key: p.key, group: "people", title: name }, vault);
         toast(r?.ended === false ? "Already ended." : `${p.name ? `${p.name}'s` : "Their"} access is ended.`);
-        return refresh();
+        return Promise.all([reach.load(), people.load()]);
       }, (e: unknown) => quiet(e, "Not ended"))) };
     }),
     ...(np?.invites ?? []).map((i) => ({ key: i.id, title: i.name, meta: `invited · the link works once, until ${when.date(i.expires_at)}`,
@@ -646,13 +648,14 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
             {one && <><p className="note-meta">An AI you connect (Claude, ChatGPT…) reaches your vaults at one address, with what you allow when you connect it:</p><p className="addr">{one}</p></>}
             <p className="note-meta">{one ? `To give an AI ${v.name} alone, use its own address:` : `An AI you connect (Claude, ChatGPT…) reaches ${v.name} at this address, with what you allow when you connect it:`}</p>
             <p className="addr">{a.connector}</p>
-            {listed && v.mine && <><p className="note-meta">Or give it a key of its own, to every type or only some, read or change.</p>
+            {listed && <><p className="note-meta">Or give it a key of its own, to every type or only some, read or change.</p>
               <div className="acts"><Button small onClick={() => (managing ? setGiving(true) : void manage())}>Give an AI a key</Button></div></>}
           </>}
         </div>}
         {open === "invite" && <div className="give">
           {peopleWhy ? <p className="note-meta">{peopleWhy === "no_key" ? `Inviting people to ${v.name} is signed with your key: open Parachute on your phone or Mac.`
             : peopleWhy === "unknown_key" ? "This hub doesn't know your key yet, so it can't take an invite from it. Link your key to your account on the hub first."
+            : peopleWhy === "not_owner" ? `Only the owner of ${v.name} invites people to it.`
             : `Sharing ${v.name} with people isn't on this host yet.`}</p>
             : from === null
               ? <Field label="Your name, as the people you invite see it" placeholder="Like Aaron" action="Keep" onAction={(x) => (nameOk(x) ? void setFrom(x) : Promise.reject(new Error("name")))} />
@@ -663,7 +666,7 @@ function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => v
             {canCopy && <Button small onClick={() => copy(made.url)}>Copy link</Button>}
           </div>}
         </div>}
-        {listed && v.mine && (reach.failed ? <Problem error={reach.failed} onRetry={reach.load}>Who reaches {v.name} couldn't be read</Problem>
+        {listed && (reach.failed ? <Problem error={reach.failed} onRetry={reach.load}>Who reaches {v.name} couldn't be read</Problem>
           : managing === null ? <Loading />
           : !managing && <div className="acts"><p className="note-meta">Your hub keeps every key, AI and app it lets into {v.name}.</p><Button small onClick={() => void manage()}>Show them all</Button></div>)}
         {(managing || ended.some((e) => e.group === "ai")) && <List label="AIs and agents" rows={[...ais, ...endedRows("ai")]} />}
