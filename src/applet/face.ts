@@ -6,6 +6,7 @@
 // tagging, its own components) are left to the details; the small everyday asks are one "Also" line. Pure.
 import type { Grant } from "./grant";
 import { grantLines } from "./grant";
+import { sectionFace } from "./settingsSection";
 import { signalLines } from "./signals";
 import { NAMED_KINDS, approveWords, hostWords, npubOf, postsSplit, roomsWords, type LineOptions } from "./services";
 import type { Imported } from "./resolveImports";
@@ -25,7 +26,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
   const who = (hex: string) => opts.approverName?.(hex) ?? `a key you haven't trusted on this device (${npubOf(hex)})`;
 
   // notes: as the details say them (they are short already), each its own line
-  for (const l of grantLines({ ...g, opens: [], app: [], services: [], reach: [], embedsFrom: [], signals: [] }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
+  for (const l of grantLines({ ...g, opens: [], app: [], services: [], reach: [], embedsFrom: [], signals: [], settings: undefined }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
   for (const o of g.opens) also.push(`opens ${o.type} notes you tap`);
 
   // with one server, its approval and notification lines say "there"; with several, each names its own
@@ -60,9 +61,11 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
   if (g.app.includes("vaults")) lines.push({ lead: "Sees and changes records in every vault", rest: " on this device: their words, fields, types, tags, links and history, and puts a record back as it was, which deletes one another app or AI made; the vault keeps it, so it can be put back too (a change where Parachute only reads asks you first, and so does a change to a published record).", risky: true });
   if (g.app.includes("changes")) lines.push({ lead: "Sees how many changes your AIs and other apps made today", rest: " in every vault on this device, and their names (not what they changed).", risky: false });
   if (g.app.includes("sharing")) lines.push({ lead: "Sees what reaches each vault", rest: " (every key, AI and app, once you let Parachute manage it on your hub), and after your yes on the app's own sheet: gives an AI a key to some or all of a vault (its secret shown on Parachute's own sheet, never to the applet), ends what reaches a vault, invites someone to a vault or ends their access, publishes a record (anyone with its link can read it), takes an applet's access back, or makes a vault read only.", risky: true });
-  for (const l of grantLines({ ...g, allow: [], opens: [], app: [], services: [], reach: [], signals: [] }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
+  for (const l of grantLines({ ...g, allow: [], opens: [], app: [], services: [], reach: [], signals: [], settings: undefined }, ownFolder)) lines.push({ lead: l.text, rest: "", risky: l.stress });
   // its signals (signals.ts), as the details say them
   for (const l of signalLines(g.signals ?? [])) lines.push({ lead: l.text, rest: "", risky: l.stress });
+  // its section of Settings (settingsSection.ts), once
+  if (g.settings) { const t = sectionFace(g.settings, g.applet.name), lead = "Shows a section in Settings"; lines.push({ lead, rest: t.slice(lead.length), risky: false }); }
   for (const l of importLines(imports)) if (l.stress) lines.push({ lead: l.text, rest: "", risky: true });
 
   if (g.reach?.includes("voice")) also.push("the microphone when you press record");

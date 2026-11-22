@@ -15,6 +15,7 @@ the Parachute app reads the record, shows the person what it asks for, and runs 
 | `fields.opens` | Optional: which kind of note opens in it when the person taps one. |
 | `fields.app` | Optional: what it asks of the app beyond its vault: any of `recent`, `pins`, `open`, `links`, `save`, `attach`, `storage`, `vaults`, `sharing`, `copy`, `changes` (below). Anything else is ignored, and the applet then asks nothing of the app. |
 | `fields.services` | Optional: the servers it talks to, through the app (below). |
+| `fields.settings` | Optional: a section of Settings it draws, under a heading: `{ name, screen }` (below). |
 | `body` | The code: one self-contained file. |
 
 ### The manifest (`fields.applet`)
@@ -153,6 +154,39 @@ it runs (its own number wins: Mail knows what is unread). Opening the applet mak
 public key, the applet as a number it can't read back, the signal's id and the count: never what was counted. An
 applet in someone else's vault may count only its notes, and the count goes nowhere.
 
+### A section of Settings (`fields.settings`)
+
+For the small things a person looks for in Settings (how much of their Claude accounts is used, say), an applet can
+draw a section there. It names a heading and one of its `screens`:
+
+```yaml
+settings:
+  name: Claude usage   # the section's heading, one line, 40 characters at most
+  screen: usage        # one of its screens: what it draws there
+```
+
+Settings draws the heading, then that screen of the applet in a small frame at its content's height (up to 640 px, never shrinking),
+after Settings' own sections, with a line above it saying whose it is, which leads to the applet. There `ready()` says `place: "settings"`
+and `screen: "usage"`: draw the short view, not the whole applet. A section **only reads**, in the folders its card
+allowed. It has the theme and nothing else: no `create` or `update`, no app words, no servers, no saved state, no
+counts, no microphone. Write it as a glance, with the kit's parts (`List`, `Empty`, `when`), and leave the actions to
+its own screen.
+
+Settings draws nothing of it, not even its heading, until the person has allowed it on this device as it is now (the
+card says "Show a section in Settings, «Claude usage»"). Where applets run as approved code rather than sealed, a
+section does too, as its own screen does: the person allowed it under that warning, and Settings says whose it is. The section is in the card's
+key on this device: adding it, renaming it, naming another screen or renaming the applet (Settings says whose it is)
+asks again. It is left out of the approval your other devices read (so a
+device on an older build and one on a newer agree on it); an approval from another device covers it only when that
+device's card said it (its name, its screen and the applet's name), else the card asks here; such an approval is taken
+up the first time the applet is opened on this device, and from then on Settings shows the section. Changed code takes the section away until it
+is allowed again; a Revoke on another device revokes it here too, as soon as the home vault's answer shows it (also
+when this device read the approvals before). The section keeps the most room it has
+taken while Settings is open, even when its frame stops or goes or the applet leaves the list, so nothing above it moves under a tap. Only an applet in a vault of the person's own, offered by the open bundle, has one; an HTML applet,
+or one that imports a component or has embeds, gets a line saying it can't. A bad `settings` costs the applet its
+section, not the applet. Older apps leave the field out and show nothing ([design/VERSIONS.md](design/VERSIONS.md)).
+Example: `applets/accounts.tsx` and `applets/accounts.json`.
+
 ### Write it on the kit
 
 The kit is the standard library: for each thing an applet needs, there is one part, and every applet uses it, so they
@@ -189,7 +223,7 @@ there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below ar
 
 | Call | What it does |
 |---|---|
-| `ready()` | Resolves when the app has started it: `{ applet: { id, name }, access, services, theme, open?, launch? }`. `access` is the folders it was allowed (`[{ path, verbs }]`) and `services` its servers as its card allowed them (a relay's `rooms`, `approvals`, `notify`): read your room, or which key is Uni's, from here rather than keeping a copy in the code. |
+| `ready()` | Resolves when the app has started it: `{ applet: { id, name }, access, services, theme, open?, launch?, place?, screen? }` (`place: "settings"` and the `screen` it named in a section of Settings, above). `access` is the folders it was allowed (`[{ path, verbs }]`) and `services` its servers as its card allowed them (a relay's `rooms`, `approvals`, `notify`): read your room, or which key is Uni's, from here rather than keeping a copy in the code. |
 | `launch()`, `onLaunch(cb)` | What the app opened it for from a notification's tap: `{ room, event? }` (or null), and each later one. |
 | `onFresh(cb)` | `cb()` when the vault's answer to a read differs from what the read was answered with. While one listens, the app may answer a read at once from what it read before and ask the vault behind it, so a screen shows at once; `Page` with `onRefresh` listens for you (below). |
 | `shown()`, `onShown(cb)` | Whether it is on screen, and each change. The app keeps an applet running while the person is elsewhere, so going back to it is instant; hidden, it gets no tap, and anything only a person looking should do (marking a message read) waits for `true`. |

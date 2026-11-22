@@ -12,6 +12,7 @@
 // At its own address it is a kept screen (shell/kept.tsx): while it runs, the person's own code, it stays running hidden
 // when they go elsewhere, and shows again at once; hidden, it gets no tap and is told so (`shown`); shown again, its
 // note is read again, and changed code or a changed grant puts the card in its place.
+import { approvalCoversSection } from "../applet/settingsSection";
 import { endManageFor } from "../vault/manage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
@@ -257,7 +258,7 @@ export default function AppletScreen() {
         const imports = imp.imports;
         // code from someone else's vault, its own or imported, is transpiled only once it is allowed
         const late = notMine || imports.some((i) => i.whose !== "mine");
-        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app, a.entry.services, a.entry.signals), embedsFrom: from }, a.entry.path),
+        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app, a.entry.services, a.entry.signals, a.entry.settings), embedsFrom: from }, a.entry.path),
           late || imports.length ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), o ? null : pointerFor(rec, n.id).catch(() => null)]);
         const hash = imports.length && kind !== "html" ? await compositeHash(kind, source, imports) : code.hash;
         if (!on) return;
@@ -352,7 +353,9 @@ export default function AppletScreen() {
   // only from an approval no older than what this device has seen since (a Revoke here raises that), and, on a device
   // that runs approved code only, one made under that same warning
   const approvedElsewhere = !!signedNow?.run && status !== "ok" && !!subject && signedNow.content.n >= (floorOf(approvalSubject(rec!, entry!.noteId, entry!.manifest.id)) ?? 0)
-    && (mode !== "approved-code" || signedNow.content.runs === "approved-code");
+    && (mode !== "approved-code" || signedNow.content.runs === "approved-code")
+    // a section of Settings is out of the approval's hash: the card that was signed must have said it
+    && approvalCoversSection(entry?.settings, entry?.manifest.name ?? "", signedNow.content.face);
   const hubCovers = !!entry && !!rec && covers(heldLevel(rec), appletLevel(entry.manifest));
   useEffect(() => {
     if (!approvedElsewhere || !hubCovers || !subject || !keys || !signedNow?.run) return;
@@ -574,7 +577,7 @@ export default function AppletScreen() {
       {hubError && <p className="error" role="alert">{hubError}</p>}
       {needsPasscode && !approvedElsewhere && <label className="line passcode-line"><span>Your passcode, to approve it</span> <input type="password" autoComplete="off" aria-label="Your passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} /></label>}
       <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"}
-        grant={{ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services, entry.signals), embedsFrom: loaded.state === "ok" ? loaded.from : [] }} ownFolder={ownFolder(entry.path)} keyring={lineOptions(keyring)}
+        grant={{ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services, entry.signals, entry.settings), embedsFrom: loaded.state === "ok" ? loaded.from : [] }} ownFolder={ownFolder(entry.path)} keyring={lineOptions(keyring)}
         imports={loaded.state === "ok" ? loaded.imports : []} scope={keys.scope} code={keys.html} status={status} was={grants.record(subject)}
         broughtChanged={pinMoved} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         hubAsk={covers(heldLevel(rec), appletLevel(entry.manifest)) ? null : { host: hostOf(rec.issuer), level: appletLevel(entry.manifest) }}

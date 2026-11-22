@@ -32,6 +32,7 @@ import { listHub } from "../shell/homeSettings";
 import { askVault, signOutOf } from "../vault/signInFlow";
 import { dismissVault, newVaultsOn, newVaultsRev, startAddVault, subscribeNewVaults } from "../vault/newVaults";
 import BundleChoice from "./BundleChoice";
+import BundleSections from "./BundleSections";
 import { appletsNeedingWrite, forgetOwnWrite, giveBack, heldLevel } from "../vault/reach";
 import { anchorNow, forgetOwnKey, ownKey } from "../applet/approvalStore";
 import { useKey } from "../key/key";
@@ -178,6 +179,9 @@ export default function Settings({ children }: { children?: ReactNode }) {
       <UpdateSettings />
       <ThemeSettings />
       <AppletSettings vaults={vaults} />
+      {/* the sections the person's applets draw (BundleSections.tsx): last, so a frame that changes height moves nothing
+          of Settings' own under a tap */}
+      <BundleSections vaults={vaults} />
       {children}
       <p className="screen-foot quiet">Parachute {__APP_VERSION__}{OWN.commit && <> · {OWN.commit}</>}</p>
     </main>

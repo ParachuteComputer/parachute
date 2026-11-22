@@ -301,3 +301,57 @@ test("a device that allowed it starts on the approvals as it read them last; a t
     await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {});
   }
 });
+
+// A section of Settings (fields.settings, docs/WRITE-AN-APPLET.md) is left out of the approval's hash, so older builds
+// agree on it: an approval from another device covers it only when that device's card said it (review of #161).
+test("a section added after another device's approval asks again here; one approved with it runs here, in Settings too", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const me = newKey();
+  const GLANCE = { path: "Applets/Glance two", extension: "tsx", tags: ["applet"], body: "export default function G() { return <main><h1>Glance two</h1><p id=\"g\">glance</p></main>; }\n",
+    fields: { applet: { contract: 2, id: "glance-two", name: "Glance two", glyph: "◇", note: "a test applet", access: [], screens: [{ id: "home", name: "Glance two" }] } } };
+  const made = await record(hubState(), "create", GLANCE);
+  only = made.id;
+  const phoneA = await device(browser, me), laptopB = await device(browser, me);
+  const openIt = async (p: Page) => { await p.goto(`/v/${VAULT}?with=vault`); await ui(p).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Glance two/ }).click(); };
+  const runs = (p: Page) => p.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Glance two" });
+  try {
+    // the phone allows it without a section; then a section is added to its record (no code change)
+    await openIt(phoneA);
+    await phoneA.getByRole("button", { name: "Allow" }).click();
+    await expect(runs(phoneA)).toBeVisible();
+    const cur = await api(hubState(), "GET", `notes?id=${made.id}`);
+    await record(hubState(), "update", { id: made.id, fields: { settings: { name: "A glance two", screen: "home" } }, if_updated_at: cur.updatedAt });
+    // the laptop: the phone's approval doesn't cover the section, so it asks, and Settings shows nothing of it
+    await openIt(laptopB);
+    await expect(card(laptopB)).toBeVisible();
+    await expect(card(laptopB)).toContainText("Show a section in Settings");
+    await expect(runs(laptopB)).toHaveCount(0);
+    await laptopB.goto("/settings");
+    await expect(laptopB.getByRole("heading", { name: "Your Parachutes" })).toBeVisible();
+    await laptopB.waitForTimeout(2000);
+    await expect(laptopB.getByRole("region", { name: "A glance two" })).toHaveCount(0);
+    // the phone allows it with the section: the laptop runs it without asking, and its section shows in Settings
+    await openIt(phoneA);
+    await phoneA.getByRole("button", { name: /Allow/ }).click();
+    await expect(runs(phoneA)).toBeVisible();
+    await openIt(laptopB);
+    await expect(runs(laptopB)).toBeVisible();
+    await expect(card(laptopB)).toHaveCount(0);
+    await laptopB.goto("/settings");
+    await expect(laptopB.getByRole("region", { name: "A glance two" }).frameLocator("iframe").locator("#g")).toHaveText("glance");
+    // Revoke on the phone; the laptop's copy of the approvals still says allowed: Settings hears the hub's answer, and
+    // the section goes, revoked here too (third review of #161)
+    await openIt(phoneA);
+    await expect(runs(phoneA)).toBeVisible();
+    await fromAppletMenu(phoneA, "Revoke");
+    await laptopB.goto("/settings");
+    await expect(laptopB.getByRole("heading", { name: "Your Parachutes" })).toBeVisible();
+    await expect(laptopB.getByRole("region", { name: "A glance two" })).toHaveCount(0, { timeout: 15_000 });
+    await openIt(laptopB);
+    await expect(card(laptopB)).toBeVisible();
+  } finally {
+    await phoneA.context().close(); await laptopB.context().close();
+    for (const a of await approvals()) await api(hubState(), "DELETE", `notes/${a.id}`).catch(() => {});
+    await api(hubState(), "DELETE", `notes/${made.id}`);
+  }
+});
