@@ -101,7 +101,7 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
   const [read, setRead] = useState<Read>({ state: "reading" });
   useEffect(() => {
     if (!runs) return;
-    let on = true, offFresh = () => {};
+    let on = true, offFresh = () => {}, t: ReturnType<typeof setTimeout> | null = null, wait: ReturnType<typeof setTimeout> | null = null;
     setRead({ state: "reading" });
     void (async () => {
       const n = await keptClientFor(rec).getNote(a.noteId).catch(() => null) as (Note & { extension?: string; metadata?: Record<string, unknown> }) | null;
@@ -117,26 +117,27 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
       // a newer approval in the home vault that takes it back (another device's Revoke) stops it here too: waited for up
       // to APPROVALS_WAIT_MS before it starts, and heard whenever it comes after
       const asks = await asksOf(approvalSubject(rec, a.noteId, a.manifest.id), a, (n.metadata ?? {}) as Record<string, unknown>, []);
-      const allowedAt = Date.parse(grants.record(subject)?.grantedAt ?? "");
-      const takenBack = (d: Awaited<ReturnType<typeof approvalFor>>) => !!d && !d.run && (d.why === "withdrawn" || d.why === "other") && !!d.newest && allowedAt < Date.parse(d.newest.at);
+      // judged on the grant as it is when the answer comes (an Allow made meanwhile is newer than an old taking back),
+      // also when the answer comes after Settings was left: the grant is this device's either way
+      const takenBack = (d: Awaited<ReturnType<typeof approvalFor>>) => !!d && !d.run && (d.why === "withdrawn" || d.why === "other") && !!d.newest
+        && Date.parse(grants.record(subject)?.grantedAt ?? "") < Date.parse(d.newest.at);
       const answer = approvalFor(approvalSubject(rec, a.noteId, a.manifest.id), a.keys.html, asks).catch(() => null);
       // taken back elsewhere: taken back here too, as the applet's own screen does (its saved state goes only with a
       // withdrawal, not when older code was put back over a newer approval)
       const giveUp = (d: Awaited<ReturnType<typeof approvalFor>>) => { grants.revoke(subject); if (d && !d.run && d.why === "withdrawn") forgetSaved(subject); if (on) setRead({ state: "gone" }); };
       void answer.then((d) => { if (takenBack(d)) giveUp(d); });
       // the first answer may be the copy kept of the approvals: when the home vault's own answer differs, read again
-      let t: ReturnType<typeof setTimeout> | null = null;
       offFresh = onFresh((vault, key) => {
         if (vault !== homeVault()?.key || !/Parachute%2FApprovals%2F/.test(key) || t) return;
         t = setTimeout(() => { t = null; void approvalFor(approvalSubject(rec, a.noteId, a.manifest.id), a.keys.html, asks).catch(() => null).then((d) => { if (takenBack(d)) giveUp(d); }); }, 30);
       });
       if (!on) { offFresh(); return; }
-      const signed = await Promise.race([answer, new Promise<null>((r) => setTimeout(() => r(null), APPROVALS_WAIT_MS))]);
+      const signed = await Promise.race([answer, new Promise<null>((r) => { wait = setTimeout(() => r(null), APPROVALS_WAIT_MS); })]);
       if (!on) return;
       if (takenBack(signed)) { giveUp(signed); return; }
       setRead({ state: "run", html: modulePage(code.compiled.js, usesNote(source) ? reactNoteKitSource : reactKitSource, [], name) });
     })();
-    return () => { on = false; offFresh(); };
+    return () => { on = false; offFresh(); if (t) clearTimeout(t); if (wait) clearTimeout(wait); };
   }, [runs, a.keys.html, a.keys.scope, rec.key]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!runs || read.state === "gone") return null;
   return (

@@ -173,7 +173,7 @@ counts, no microphone. Write it as a glance, with the kit's parts (`List`, `Empt
 its own screen.
 
 Settings draws nothing of it, not even its heading, until the person has allowed it on this device as it is now (the
-card says "Show a section in Settings, «Claude usage»"). Where applets run as approved code rather than sealed, a
+card says "Shows a section in Settings, «Claude usage» … from «Claude accounts»"). Where applets run as approved code rather than sealed, a
 section does too, as its own screen does: the person allowed it under that warning, and Settings says whose it is. The section is in the card's
 key on this device: adding it, renaming it, naming another screen or renaming the applet (Settings says whose it is)
 asks again. It is left out of the approval your other devices read (so a
