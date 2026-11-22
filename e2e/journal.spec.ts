@@ -121,7 +121,21 @@ test("journal offline: lines the vault can't take wait on the device in order an
     // the minute it was written (the click may come a moment after the clock was read here: that minute or the next)
     expect(got.find((r) => r.path.includes("Rain"))?.path).toMatch(new RegExp(`^Journal/\\d{4}/\\d{2}-\\d{2}/(${hhmm(first)}|${hhmm(new Date(first.getTime() + 60_000))})(-\\d{2})? Rain on the roof ${stamp}$`));
 
-    // the same words twice in a minute, online: two entries (only a line sent again from the outbox counts as sent)
+    // the same words twice in a minute, offline: both wait, and both go in (one under the minute, one with its seconds)
+    mode = "down";
+    for (let n = 0; n < 2; n++) {
+      await box.fill(`Watered the ferns ${stamp}.`);
+      await app.getByRole("button", { name: "Save" }).click();
+      await expect(box).toHaveValue("");
+    }
+    await expect(waiting.getByRole("listitem")).toHaveCount(2);
+    mode = "ok";
+    await waiting.getByRole("button", { name: "Try now" }).click();
+    await expect(waiting).toHaveCount(0);
+    await expect.poll(async () => (await entries()).filter((r) => r.path.includes("ferns")).length, { timeout: 15_000 }).toBe(2);
+    made.push(...(await entries()).filter((r) => r.path.includes("ferns")).map((r) => r.id));
+
+    // the same words twice in a minute, online: two entries (only a line whose own write may have landed counts as sent)
     for (let n = 0; n < 2; n++) {
       await box.fill(`Took the vitamins ${stamp}.`);
       await app.getByRole("button", { name: "Save" }).click();
