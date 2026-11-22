@@ -300,13 +300,13 @@ describe("what shows, from what was read before (T-476)", () => {
 
 describe("sharing: who reaches a vault, a key for an AI, ending one (level 6, T-476)", () => {
   const rows: import("./modules/vaults").ReachRow[] = [{ id: "claude", name: "claude", who: "app", app: null, can: "change", types: ["recipe"], until: "2027-11-21T00:00:00.000Z", lastUsed: null, self: false }];
-  function make(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], answer: "yes" | "no" | "untapped" = "yes") {
+  function make(words: ("vaults" | "sharing")[] = ["vaults", "sharing"], answer: "yes" | "no" | "untapped" = "yes", listed = rows) {
     const done: string[] = [];
     const revealed: string[] = [];
     const asked: { title: string; body: string }[] = [];
     const deps = {
       list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "https://hub.example/vault/home/mcp", view: null, reach: "anyone" }],
-      reach: async () => rows,
+      reach: async () => listed,
       manage: async () => { done.push("manage"); },
       giveKey: async (_v: string, k: { name: string; can: string; types: string[] | null }) => { done.push(`give ${k.name} ${k.can} ${k.types?.join(",") ?? "all"}`); return { name: k.name, token: "t.o.k", until: "2027", types: k.types, address: "https://hub.example/vault/home/mcp" }; },
       endReach: async (_v: string, id: string) => { done.push(`end ${id}`); },
@@ -318,6 +318,16 @@ describe("sharing: who reaches a vault, a key for an AI, ending one (level 6, T-
     const call = (method: string, params: unknown) => router.call("vaults", method, params, {}, { charge() {}, closed: () => false });
     return { call, done, asked, revealed };
   }
+  it("ending a person in the list asks as ending their access does: their name, their key, every device; then ends them", async () => {
+    const key = "ab".repeat(32);
+    const bo: import("./modules/vaults").ReachRow = { id: `person:${key}`, name: "Bo", who: "person", app: null, can: "change", types: null, until: null, lastUsed: null, self: false, member: { key, role: "member" } };
+    const { call, done, asked } = make(undefined, "yes", [...rows, bo]);
+    await call("endReach", { vault: "home", id: `person:${key}` });
+    expect(asked[0].title).toBe("End Bo's access to home?");
+    expect(asked[0].body).toContain("key abababab…");
+    expect(asked[0].body).toContain("on any device");
+    expect(done).toEqual([`end person:${key}`]);
+  });
   it("needs the sharing word", async () => {
     const { call, done } = make(["vaults"]);
     for (const [m, p] of [["reach", { vault: "home" }], ["giveKey", { vault: "home", name: "claude", can: "write", types: ["recipe"] }], ["endReach", { vault: "home", id: "claude" }]] as const) await expect(call(m, p)).rejects.toMatchObject({ code: "not_granted" });

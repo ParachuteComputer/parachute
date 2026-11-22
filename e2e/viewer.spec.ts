@@ -223,7 +223,7 @@ test.describe("Vault", () => {
     const recipes = page.url();
     await page.goto(`/vault?vault=${VAULT}`);
     await v.getByRole("button", { name: "Sharing" }).click();
-    const allowed = v.getByRole("region", { name: "Applets you allowed here" });
+    const allowed = v.getByRole("region", { name: "Apps and devices" });
     await expect(allowed).not.toContainText("Vault");
     await allowed.getByRole("listitem").filter({ hasText: "Recipe box" }).getByRole("button", { name: "Revoke" }).click();
     const sheet = page.getByRole("dialog", { name: "Revoke Recipe box?" });

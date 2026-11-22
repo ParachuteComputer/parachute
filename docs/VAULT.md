@@ -19,15 +19,16 @@ Bases, Anytype, Capacities).
 | A type | its records as a table: the type's fields are the columns, a header's tap sorts by it, the first column stays in view as the rest scroll across. **Filter** (a field's value), **Group** (by a field), **List** or **Table**, a search. Saved views as tabs. **New …** adds a record of the type, starting from its default template when it has one ([PACKS.md](PACKS.md)). A record opens beside the table on a computer, in its place on a phone |
 | A record | its fields, changed where they stand (a choice from the type's list, a box for yes or no, a number, a date), its types and tags, its words (rendered; **Edit words**), what it links to and what links to it, its history (each change, by whom: an AI by its key's name; tap one for its before and after, and **Put it back**), **Make this a template**, and **Publish** |
 | Changes | what changed in the vault in the last 7 days (**Older changes** reaches back further), newest first, each writer's run of changes together under its name (`claude`; "You, in Parachute here"; "You, in another app" for a write for your own account by a key with no name; "Someone else on your hub"; or "An app without a name", with a line saying the hub doesn't tell which). Each change says what it did ("serves 2 → 4, the words") and opens to its before and after: fields, the words line by line, a move, links added or gone. **Put it back** for one change, or **Put all 4 back** for a writer's run: each record goes back to how it was before the run's first change to it, a record the run made is taken away, and one it deleted comes back. The number counts records, so when a run has more changes than that, a line says why ("Put all 6 back covers 6 of these 9 changes. Not counted: 2 already put back, 1 more change to a record already counted"). When a record changed again after, it says so first. Home says it in a line: "claude changed 4 things today", with **See what changed** |
-| Sharing | **People** first, for the vault's owner: who else is in it, by the name you gave them (**End**), invites nobody took yet (**Take back**), and **Invite someone**, which makes a link to send ([design/SHARING.md](design/SHARING.md)). Then **who reaches** the vault: this app (reads, or reads and changes; **Read only**), and after **Show them all** every key, AI and app the hub lets in, each by name with what it may do, to which types and until when (**End**); **Give an AI a key** (its name; read, or read and change; every type or some), whose secret is shown once with its address, on the app's own sheet. Then the applets allowed there on this device (**Revoke**), what is published, and the address your AI connects at. **Invite someone**, **Show them all**, **Make the key**, **End**, **Publish**, **Revoke** and **Read only** each ask on the app's own sheet first, naming what they grant or take and the vault's host |
+| Sharing | **Who reaches** the vault, in one list: **Connect an AI** (its address, or **Give an AI a key**: its name; read, or read and change; every type or some; the secret shown once with its address on the app's own sheet) and **Invite someone** (a link to send) at the top; then **AIs and agents**, **People** (you, each person by the name you gave them, invites nobody took yet with **Take back**), **Apps and devices** (this app, **Read only**; the applets allowed here on this device, **Revoke**; Parachute on your other devices; app keys), and what anyone with a link can read. Each row says what it reaches (reads; reads and changes; to which types; until when; when last used) and has **End**; what was ended stays in the list, said so. AIs, other devices and app keys show after **Show them all**; people show at once to the vault's owner. **Invite someone**, **Show them all**, **Make the key**, **End**, **Publish**, **Revoke** and **Read only** each ask on the app's own sheet first, naming what they grant or take and the vault's host |
 
 What an AI writes shows as it lands: the type's table, an open record and Changes follow the vault's live changes (the
 hub's subscription, not a timer).
 
 ## Who reaches a vault
 
-Sharing lists everything that reaches a vault and ends any of it with one tap (T-476; core's 1.0 grants slice,
-`docs/SPEC-1.0-grants.md` §7.3 in parachute-core).
+Sharing answers "who and what reaches this vault, and how do I stop it" in one list, and ends any of it with one tap
+(T-476; core's 1.0 grants slice, `docs/SPEC-1.0-grants.md` §7.3 and S10 in parachute-core). Parachute's usual case is
+you and your AIs and agents, each with its own key, so they come first; then people; then apps and devices.
 
 - **Asking.** The app holds no admin anywhere ([design/SCOPES.md](design/SCOPES.md)). **Show them all** asks the hub,
   once (the app's own sheet, then the hub's page or its key door), for the vault's admin, and holds it in this tab's
@@ -37,14 +38,23 @@ Sharing lists everything that reaches a vault and ends any of it with one tap (T
 - **The list** is the hub's (`GET <hub>/account/vaults/<v>/statements`): every credential that reaches the vault is a
   row, by name: a key made here, an AI or app connected by OAuth (with the name it registered), this app on another
   device, a key that reaches several vaults. Each says what it may do (reads; reads and changes; manages; downloads a
-  backup), to which types (every type, or the ones named) and until when, and when it was last used.
+  backup), to which types (every type, or the ones named) and until when, and when it was last used. The hub says who
+  each is for (`kind`): a key made with **Give an AI a key** is an agent's, so it is listed under AIs and agents, as
+  is anything that connected at the AI address by OAuth (Claude, ChatGPT: any app but Parachute itself). A key or
+  token someone you share with made says whose it is ("Wes's · …").
+- **A person is one row.** Someone you shared the vault with is one row (`by: "self"`, their key), by the name you
+  invited them by, with every sign-in of theirs in it: their Parachute on each device is never a row of its own. The
+  vault's owner sees people at once (read with their key, `vaults.people`); the hub's list adds when each last used it.
+- **Nothing twice.** Each person, key and app is in one group, once.
 - **A key for an AI.** Its name (its writes read `key:<name>` in Changes), read or read and change, every type or some.
   The vault keeps the grant and checks every request against it: a key for `recipe` reads and adds recipes and gets
   nothing of a `journal` record, by id, search, links, counts, files or history (`POST <hub>/account/keys` with
   `types`). The secret is shown once, with the vault's own MCP address, on the app's own sheet: the applet that asked
   (Vault, or any applet with `sharing`) never sees it.
 - **End** revokes it at the hub and ends the vault's grant: its next request is refused, its live socket closes, a file
-  ticket it was given is spent no more (`DELETE <hub>/account/vaults/<v>/statements/<id>`).
+  ticket it was given is spent no more (`DELETE <hub>/account/vaults/<v>/statements/<id>`). On a person it ends their
+  membership, not one sign-in: every credential of theirs for the vault, and they can't sign in to it again (as
+  `revoke-access`). The row stays in the list, said ended, until you leave Sharing.
 - **A hub without the list** (an older core, Parachute Cloud for now): Sharing asks the hub, with no credential, whether it
   has the list, and where it doesn't keeps the line that the hub lists them, offering nothing it can't do.
 - **Not yet:** a key can't be narrowed after it is made (end it and make another); one key reads and writes the same
