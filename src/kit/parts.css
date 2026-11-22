@@ -30,7 +30,7 @@ div.pa-row { cursor: default; }
 .pa-row:not(:has(.pa-row-mark)) .pa-row-title, .pa-row:not(:has(.pa-row-mark)) .pa-row-meta { grid-column: 1; }
 .pa-row:not(:has(.pa-row-mark)) .pa-row-aside { grid-column: 2; }
 /* in a list where some rows have a mark, a row without one keeps the marks' column, so every title lines up */
-.pa-list:has(.pa-row-mark) .pa-row:not(:has(.pa-row-mark)) { grid-template-columns: 2.3em 1fr auto; }
+.pa-list:has(.pa-row-mark) .pa-row:not(:has(.pa-row-mark)) { grid-template-columns: calc(var(--fs-lead) * 2.3) 1fr auto; }
 .pa-list:has(.pa-row-mark) .pa-row:not(:has(.pa-row-mark)) :is(.pa-row-title, .pa-row-meta) { grid-column: 2; }
 .pa-list:has(.pa-row-mark) .pa-row:not(:has(.pa-row-mark)) .pa-row-aside { grid-column: 3; }
 
@@ -240,7 +240,9 @@ select.pa-finput { appearance: auto; }
 /* a list straight under the tabs that name it: the tabs' rule is its head (no second rule) */
 .pa-tabs + .pa-list:not(:has(> .pa-list-label:not(.pa-unseen))) ul { border-top: 0; }
 /* on a wide page, a line to write in keeps a reading width */
-.pa-wide :is(.pa-field, .pa-search, .pa-write) { max-width: var(--measure); }
+.pa-wide > :is(.pa-field, .pa-search, .pa-write) { max-width: var(--measure); }
+/* a strip of days inside a row sits as a line of it */
+.pa-row .pa-days { margin: 0; }
 
 /* ── toast (screen.tsx): one at a time, rising from the foot, going back down; swipe it away, held while pointed at ── */
 .pa-toasts { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); display: grid; justify-items: center; pointer-events: none; z-index: 50; }

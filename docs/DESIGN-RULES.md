@@ -16,7 +16,7 @@ The kit already follows them, so most applets get them by using its parts and ad
    no big gaps. Group with space and a rule (`--line`), not boxes inside boxes.
 4. **Lines, corners and depth from the look**, never fixed: `--line-head` over a list, `--line-row` between rows,
    `--line-card` and `--radius-card` for a block that stands apart, `--field-line` and `--radius-field` for a box to
-   write in, `--shadow-card` for a lift, `--primary` for the main action ([THEME.md](THEME.md#in-an-applet)). Each look
+   write in (`--entry-line`, `--entry-fill`, `--radius-entry` for a one-line field), `--shadow-card` for a lift, `--primary` for the main action ([THEME.md](THEME.md#in-an-applet)). Each look
    (paper, almanac, book, daylight) draws these its own way; a fixed `1px solid #ccc` or a shadow of your own breaks
    three of them.
 5. **Figures that change** (counts, times) use `font-variant-numeric: tabular-nums`, so they don't jitter.
