@@ -66,6 +66,12 @@ and applies it as a pack, by the rule above, under one folder, `Notion/`:
 - a **page** becomes a record at its place in the tree; links between pages become wikilinks.
 - **images and attachments** stay in the export, and the app says which; a link to a linked view (a .csv the export
   doesn't hold) is said to be missing.
+- **names stay clear of the vault's own types and tags in use**: a Notion "Book" beside your own `book` type is
+  `book-2`, and a column one of your types declares as another kind (or indexed) gets a name of its own, `date_2`. A type
+  an import made is described "From Notion: <title>." and that table uses it again, so the same export, or a newer one of
+  the same workspace, adds to it. Two tables of one title each find theirs again in name order (tasks, tasks-2).
+- a comma column is a list when a choice repeats across rows, or when it is named like one (Tags, Labels, Categories,
+  Topics); "Le Guin, Ursula" alone stays one name. A value with a leading zero ("02134") keeps a column text.
 - a column named alike in two tables but of two kinds is text in both (a vault takes one meaning per field); a title a
   vault path won't take ("notes.js", a path over 200 characters) is changed just enough to land.
 
