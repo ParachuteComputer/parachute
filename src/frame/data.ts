@@ -61,13 +61,14 @@ export type Load<T> = { state: "loading" } | { state: "error"; error: string } |
 export function useVaultQuery<T>(v: FrameVault | null, fn: (r: Reader) => Promise<T>, deps: unknown[]): Load<T> {
   const [load, setLoad] = useState<Load<T>>({ state: "loading" });
   const again = useRound();
-  const asked = useRef("");
+  const asked = useRef<readonly unknown[] | null>(null);
   useEffect(() => {
     if (!v) return;
     let live = true;
     // the same question asked again (shown again): what it shows stays until the answer
-    const q = JSON.stringify([v.key, ...deps]);
-    const quiet = asked.current === q;
+    // compared one by one (Object.is), as React compares dependencies: a frame of the person's may pass anything
+    const q = [v.key, ...deps], was = asked.current;
+    const quiet = !!was && was.length === q.length && q.every((x, i) => Object.is(x, was[i]));
     asked.current = q;
     if (!quiet) setLoad({ state: "loading" });
     fn(readerFor(v)).then((data) => live && setLoad({ state: "ok", data }), (e: unknown) => live && setLoad((was) => quiet && was.state === "ok" ? was : { state: "error", error: e instanceof Error && e.message ? e.message : "Something went wrong reaching the vault." }));
