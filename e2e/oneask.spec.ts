@@ -80,8 +80,9 @@ test("one ask: a close under a stream of later edits still ends it, on Today and
   expect((await bob.publish({ kind: 40003, content: `Reopened?\n\n\`\`\`uni-ask\n${JSON.stringify({ v: 1, kind: "do", what: `Closed then buried ${stamp}`, why: "x", until })}\n\`\`\``, tags: [["h", ROOM!], ["e", gone]] })).ok).toBe(true);
   const reply = await bob.publish({ kind: 9, content: "Thinking", tags: [["h", ROOM!]] });
   for (let i = 0; i < 45; i++) {
+    if (i === 44) await new Promise((r) => setTimeout(r, 1100));   // edits are stamped in whole seconds: the last one is the newest by a second
     for (let tries = 0; ; tries++) {                 // the relay's publish quota: wait as it says
-      const r = await bob.publish({ kind: 40003, content: i === 44 ? "Thinking done: the ask format is a fenced block.\n\n```uni-ask\nan example, not an ask\n```" : `Thinking ${"…".repeat(i)}`, tags: [["h", ROOM!], ["e", reply.ev.id]] });
+      const r = await bob.publish({ kind: 40003, content: i === 44 ? `Thinking done ${stamp}: the ask format is a fenced block.\n\n\`\`\`uni-ask\nan example, not an ask\n\`\`\`` : `Thinking ${"…".repeat(i)}`, tags: [["h", ROOM!], ["e", reply.ev.id]] });
       if (r.ok) break;
       const wait = Number(/retry in (\d+)s/.exec(r.msg)?.[1] ?? NaN);
       expect(Number.isNaN(wait) || tries > 5, r.msg).toBe(false);
@@ -120,7 +121,7 @@ test("one ask: a close under a stream of later edits still ends it, on Today and
     await expect(log.getByRole("group", { name: `Wants you: Closed then buried ${stamp}` })).toHaveCount(0);
     await expect(log.getByText(`Closed (withdrawn): Closed then buried ${stamp}`)).toBeVisible();
     // a reply that quotes the ask format is no ask: its last streamed edit (it carries the fence line) is what the room shows
-    await expect(log.getByText("Thinking done: the ask format is a fenced block.")).toBeVisible();
+    await expect(log.getByText(`Thinking done ${stamp}: the ask format is a fenced block.`)).toBeVisible();
   } finally {
     tasks("ask", "--close", keep, "--reason", "withdrawn");
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});

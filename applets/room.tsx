@@ -95,7 +95,7 @@ export const nameOf = (st: Store["s"], pk: string) => st.names.get(pk) ?? "Someo
 /** A message's text as it is now: its author's latest edit. An ask is the exception (uni-ask SPEC §3): only its asker's
  *  edit that drops the uni-ask block (the close) changes what it says; one that keeps a block, or anyone else's, is ignored. */
 export const textOf = (st: Store["s"], e: Ev) => {
-  if (e.content.includes("```uni-ask")) return st.plain.get(`${e.id} ${e.pubkey}`)?.content ?? e.content;
+  if (e.content.includes("```uni-ask") && askOf(e)) return st.plain.get(`${e.id} ${e.pubkey}`)?.content ?? e.content;
   const ed = st.edits.get(e.id); return ed && ed.pubkey === e.pubkey ? ed.content : e.content;
 };
 export const visible = (st: Store["s"], e: Ev) => !st.removed.has(e.id) && !st.gone.get(e.id)?.has(e.pubkey);
