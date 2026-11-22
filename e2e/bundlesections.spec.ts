@@ -49,7 +49,7 @@ test("an applet's section of Settings: asks first, then reads what it was allowe
     await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /^Use/ }).click();
     await expect(page.getByText("Show a section in Settings", { exact: true })).toHaveCount(1);
-    await expect(page.getByText("Shows a section in Settings, «How much is used» (its screen short), signed «Use»: what it reads, nothing it changes.")).toBeVisible();
+    await expect(page.getByText("Shows a section in Settings, «How much is used» (its screen short), from «Use»: what it reads, nothing it changes.")).toBeVisible();
     await page.getByRole("button", { name: "Allow" }).click();
     const own = page.frameLocator("iframe.applet-frame:visible");
     await expect(own.locator("#where")).toHaveText("On its own screen");
