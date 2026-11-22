@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cssOf, DEFAULT_THEME, isColor, isFontStack, MOTION, recordOf, themeFrom, TOKEN_KEYS, tokensOf, withTodaysFonts } from "./theme";
+import { cssOf, DEFAULT_LOOK, onScreen, DEFAULT_THEME, isColor, isFontStack, LOOKS, MOTION, recordOf, STYLE_KEYS, styleValue, themeFrom, TOKEN_KEYS, tokensOf, withLook, withTodaysFonts, type StyleKey } from "./theme";
 
 describe("the theme record", () => {
   it("absent, or not a record, is the built-in theme", () => {
@@ -114,5 +114,98 @@ describe("motion (docs/DESIGN-RULES.md)", () => {
     const ms = (k: keyof typeof MOTION) => parseInt(MOTION[k], 10);
     expect(ms("t-state") + ms("t-step")).toBeLessThanOrEqual(250);
     expect(ms("t-press")).toBeLessThanOrEqual(200);
+  });
+});
+
+describe("looks and style tokens (theme.ts STYLE_TOKENS, LOOKS)", () => {
+  it("every look gives every style token a value, and the built-in theme is the default look's", () => {
+    for (const [name, look] of Object.entries(LOOKS)) expect(Object.keys(look.style).sort(), name).toEqual([...STYLE_KEYS].sort());
+    expect(DEFAULT_THEME.colors).toEqual(LOOKS[DEFAULT_LOOK].colors);
+    expect(tokensOf(DEFAULT_THEME, false)["line-row"]).toBe(LOOKS[DEFAULT_LOOK].style["line-row"]);
+  });
+
+  it("a record's look sets the palettes and the style; its own colours and tokens stand over them", () => {
+    const t = themeFrom({ theme: { look: "daylight", colors: { accent: "#2f5470" }, tokens: { "radius-card": "14px", "line-row": "1px dashed var(--muted)" } } });
+    const k = tokensOf(t, false);
+    expect(k.bg).toBe("#ffffff");
+    expect(k.accent).toBe("#2f5470");
+    expect(k["line-card"]).toBe(LOOKS.daylight.style["line-card"]);
+    expect(k["radius-card"]).toBe("14px");
+    expect(k["line-row"]).toBe("1px dashed var(--muted)");
+    expect(t.motion).toBe("still"); // daylight's, unless the record says
+    expect(themeFrom({ theme: { look: "daylight", motion: "flowing" } }).motion).toBe("flowing");
+    expect(themeFrom({ theme: { look: "sepia" } }).look).toBe(DEFAULT_LOOK);
+  });
+
+  it("the dark palette brings the look's dark style values", () => {
+    const k = tokensOf(themeFrom({ theme: { look: "paper" } }), true);
+    expect(k["shadow-card"]).toBe(LOOKS.paper.darkStyle!["shadow-card"]);
+    expect(k.bg).toBe(LOOKS.paper.dark.bg);
+  });
+
+  it("holds a record's style tokens to their kind's grammar: nothing loads, reaches another value or breaks out", () => {
+    const ok: [StyleKey, string][] = [["primary", "#2f5470"], ["primary", "var(--accent)"], ["card-fill", "transparent"], ["line-row", "1px dotted var(--muted)"], ["line-head", "3px double #000"],
+      ["card-edges", "1px 0 0"], ["field-pad", "8px 12px"], ["radius-card", "14px"], ["radius-button", "999px"], ["measure", "60rem"], ["shadow-card", "none"],
+      ["shadow-card", "0 1px 2px rgb(0 0 0 / .1), 0 10px 30px -12px rgba(60,45,30,.2)"], ["label-transform", "uppercase"], ["label-caps", "all-small-caps"], ["label-track", ".08em"], ["title-weight", "500"]];
+    for (const [k, v] of ok) expect(styleValue(k, v), `${k}: ${v}`).toBe(v);
+    const bad: [StyleKey, unknown][] = [["primary", "url(x)"], ["primary", "var(--x)"], ["primary", "var(--accent);}body{display:none"], ["line-row", "1px solid url(x)"], ["line-row", "1px groove #000"],
+      ["line-row", "1px solid var(--accent) !important"], ["card-edges", "1px 1px 1px 1px 1px"], ["radius-card", "calc(1px + 2px)"], ["radius-card", "14vw"], ["shadow-card", "0 0 4px attr(x)"],
+      ["shadow-card", "0 0 1px #000, 0 0 1px #000, 0 0 1px #000, 0 0 1px #000"], ["label-transform", "full-width"], ["label-track", "1em"], ["title-weight", "950"], ["title-weight", 500], ["measure", "x".repeat(300)]];
+    for (const [k, v] of bad) expect(styleValue(k, v), `${k}: ${String(v)}`).toBeNull();
+    // in a record: what doesn't read is the look's value, the rest stand
+    const t = themeFrom({ theme: { tokens: { primary: "url(x)", "radius-card": "6px", nope: "1px" } } });
+    expect(t.tokens).toEqual({ "radius-card": "6px" });
+  });
+
+  it("moving a record to another look keeps the colours the person chose and drops the old look's own", () => {
+    const raw = { ...recordOf(DEFAULT_THEME), colors: { ...LOOKS[DEFAULT_LOOK].colors, accent: "#2f5470" } };
+    const moved = withLook(raw, "book");
+    expect(moved.look).toBe("book");
+    expect(moved.colors).toEqual({ accent: "#2f5470" });
+    expect(moved.dark).toBeUndefined();
+    const t = themeFrom({ theme: moved });
+    expect(t.colors).toEqual({ ...LOOKS.book.colors, accent: "#2f5470" });
+    expect(t.density).toBe(DEFAULT_THEME.density);
+  });
+
+  it("the CSS a frame gets sets every style token", () => {
+    const css = cssOf(tokensOf(themeFrom({ theme: { look: "book" } }), false));
+    for (const k of STYLE_KEYS) expect(css).toContain(`--${k}:${LOOKS.book.style[k]};`);
+  });
+});
+
+describe("this screen's own choice (theme.ts onScreen)", () => {
+  it("Daylight on this screen is the Daylight look whatever the note gives; the theme is the note", () => {
+    const t = themeFrom({ theme: { look: "book", colors: { accent: "#2f5470" }, tokens: { "radius-card": "14px" } } });
+    const k = tokensOf(onScreen(t, "daylight"), false);
+    expect(k.bg).toBe(LOOKS.daylight.colors.bg);
+    expect(k.accent).toBe(LOOKS.daylight.colors.accent);
+    expect(k["radius-card"]).toBe(LOOKS.daylight.style["radius-card"]);
+    expect(onScreen(t, "daylight").motion).toBe("still");
+    expect(onScreen(t, "theme")).toBe(t);
+  });
+});
+
+describe("the grammar holds a value to what CSS reads (else it falls back to the look's, as THEME.md says)", () => {
+  it("reads a colour written one way throughout: commas, or spaces with an optional / alpha", () => {
+    for (const c of ["rgb(1, 2, 3)", "rgba(1,2,3,.5)", "rgb(1 2 3)", "rgb(1 2 3 / 50%)", "oklch(0.6 0.1 140)", "hsl(120deg 30% 40%)"]) expect(isColor(c), c).toBe(true);
+    for (const c of ["rgb(1 2)", "rgb(1, 2 3)", "rgb(1/2/3)", "rgb(1 2 3 4)", "rgb(1,2,3,4,5)"]) expect(isColor(c), c).toBe(false);
+  });
+  it("takes plain spaces between a value's parts, never a no-break or a line separator", () => {
+    for (const ws of [" ", " ", "\u000b", "﻿", "　"]) {
+      expect(styleValue("line-row", `1px${ws}solid #000`), JSON.stringify(ws)).toBeNull();
+      expect(styleValue("field-pad", `8px${ws}12px`), JSON.stringify(ws)).toBeNull();
+    }
+    expect(styleValue("line-row", "1px solid #000")).toBe("1px solid #000");
+  });
+  it("an odd space before a colour or after a shadow's comma is refused too (trim takes only plain spaces)", () => {
+    expect(styleValue("line-row", "1px solid \u00a0#000")).toBeNull();
+    expect(styleValue("shadow-card", "0 0 #000,\u00a00 0 #000")).toBeNull();
+    expect(styleValue("shadow-card", "0 0 #000\u2028,0 0 #000")).toBeNull();
+    expect(styleValue("shadow-card", "0 0 #000, 0 0 #000")).toBe("0 0 #000, 0 0 #000");
+  });
+  it("a bare 0 for a length is written 0px (a sheet's max(radius-card, radius) would drop a plain number)", () => {
+    expect(styleValue("radius-card", "0")).toBe("0px");
+    expect(styleValue("radius-card", "0px")).toBe("0px");
   });
 });

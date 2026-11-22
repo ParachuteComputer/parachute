@@ -5,7 +5,7 @@ import { grantKey, type Grant } from "./grant";
 import { grow } from "../views/AppletScreen";
 import { failureOf } from "../views/Embeds";
 import { VaultAuthError, VaultPermissionError, VaultUnreachableError } from "@openparachute/surface-client";
-import { DEFAULT_THEME } from "../theme/theme";
+import { DEFAULT_LOOK, DEFAULT_THEME, LOOKS } from "../theme/theme";
 
 describe("a page's embeds", () => {
   it("are at most 8, each name once; anything that isn't an embed is dropped", () => {
@@ -39,6 +39,15 @@ describe("a page's embeds", () => {
     expect(t.text).toBe("#112233");
     expect(t.serif).toBe(DEFAULT_THEME.fonts.serif);
     expect(t.pad).toBe("20px");
+  });
+  it("an embed gets a built-in look's style values by its name, never the person's own tokens", () => {
+    const t = embedTokens({ look: "book", "line-head": "1px solid url(x)", "radius-card": "40px", scheme: "dark" });
+    expect(t["line-head"]).toBe(LOOKS.book.style["line-head"]);
+    expect(t["radius-card"]).toBe(LOOKS.book.style["radius-card"]);
+    expect(t.look).toBe("book");
+    const u = embedTokens({ look: "nonsense" });
+    expect(u.look).toBe(DEFAULT_LOOK);
+    expect(u["line-row"]).toBe(LOOKS[DEFAULT_LOOK].style["line-row"]);
   });
 });
 

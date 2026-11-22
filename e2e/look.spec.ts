@@ -125,6 +125,41 @@ test("an applet's own body width is its own, and a long bare button wraps instea
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });
 
+test("a theme note's look and its own tokens restyle an applet while it runs; deleting the note brings the default back", async ({ page }) => {
+  const id = await opened(page, "Applets/Seed swap two", "html", PLAIN, "seed-swap-two", "Seed swap two", "Seed swap");
+  const themeRows = async () => { const r = await api(hubState(), "GET", "notes?tag=parachute-theme"); return (Array.isArray(r) ? r : r.notes) as { id: string }[]; };
+  for (const n of await themeRows()) await api(hubState(), "DELETE", `notes/${n.id}`);
+  try {
+    expect(await style(page, "#part", "border-top-left-radius")).toBe("999px");
+    // as an agent writes it: the book look, and one token of the person's own
+    await api(hubState(), "POST", "notes", { path: "Parachute/Theme", tags: ["parachute-theme"], metadata: { theme: { look: "book", tokens: { "radius-button": "4px" } } } });
+    await expect.poll(() => style(page, "body", "background-color")).toBe("rgb(246, 241, 231)"); // book's paper, #f6f1e7
+    expect(await style(page, "#part", "border-top-left-radius")).toBe("4px");
+    expect(await style(page, "th", "border-bottom-style")).toBe("double"); // book's rule over a table
+    for (const n of await themeRows()) await api(hubState(), "DELETE", `notes/${n.id}`);
+    await expect.poll(() => style(page, "body", "background-color")).toBe(PAPER);
+    expect(await style(page, "#part", "border-top-left-radius")).toBe("999px");
+  } finally {
+    for (const n of await themeRows()) await api(hubState(), "DELETE", `notes/${n.id}`);
+    await api(hubState(), "DELETE", `notes/${id}`);
+  }
+});
+
+test("Daylight is this screen's own: chosen in Settings it draws black on white here, and writes nothing to the theme note", async ({ page }) => {
+  const themeRows = async () => { const r = await api(hubState(), "GET", "notes?tag=parachute-theme"); return (Array.isArray(r) ? r : r.notes) as { id: string }[]; };
+  const shellBg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const before = (await themeRows()).length;
+  await page.goto("/settings");
+  await page.getByRole("radio", { name: /^Daylight/ }).check();
+  await expect.poll(shellBg).toBe("rgb(255, 255, 255)");
+  expect(await themeRows()).toHaveLength(before);
+  // it stays on this device across a start
+  await page.reload();
+  await expect.poll(shellBg).toBe("rgb(255, 255, 255)");
+  await page.getByRole("radio", { name: "As the theme" }).check();
+  await expect.poll(shellBg).toBe(PAPER);
+});
+
 // the most common CSS reset, and a full-height body: an applet's own body rules mean what they mean in any page
 const RESET = `<!doctype html><html><head><style>*, *::before, *::after { box-sizing: border-box; } html, body { height: 100%; }
 body { max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; } main { flex: 1; } footer { padding: 8px 0; }</style></head>

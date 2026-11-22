@@ -1,6 +1,6 @@
-/* The parts (src/kit/parts.tsx), built only on the theme's tokens (src/theme/theme.ts): the look of an old almanac,
-   ink rules and type rather than boxes, one accent (design/kit/WHY.md). Every class starts `pa-`, so an applet's own
-   CSS can sit beside it. How the parts move is at the end ("Motion"), on the theme's curves and times only. */
+/* The parts (src/kit/parts.tsx), built only on the theme's tokens (src/theme/theme.ts): the palette, the faces, the
+   density, and the style tokens a look sets (how rules, corners, depth and labels are drawn: theme.ts STYLE_TOKENS,
+   LOOKS). Every class starts `pa-`, so an applet's own CSS can sit beside it. How the parts move is at the end ("Motion"), on the theme's curves and times only. */
 /* In the parts layer (base.css says the order): above the base and the note renderer, below the app's own screens and any
    applet's own CSS, which wins over a part whatever its specificity. */
 @layer parachute.base, parachute.parts, parachute.app;
@@ -14,10 +14,10 @@
 
 .pa-list { margin: 0 0 var(--gap); }
 .pa-list-label { margin: 0 0 4px; font: italic 400 var(--fs-body) var(--serif); color: var(--muted); }
-.pa-list ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--text); }
+.pa-list ul { list-style: none; margin: 0; padding: 0; border-top: var(--line-head); }
 .pa-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0 12px; width: 100%; padding: calc(var(--gap) * .6) 0;
-  border: 0; border-bottom: 1px dotted var(--muted); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-button.pa-row:active, a.pa-row:active { background: color-mix(in srgb, var(--line) 40%, transparent); }
+  border: 0; border-bottom: var(--line-row); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+button.pa-row:active, a.pa-row:active { background: var(--tint); }
 /* a row that is a link (the app's own lists of notes): no underline, and a held finger doesn't select or preview */
 a.pa-row { text-decoration: none; -webkit-touch-callout: none; user-select: none; }
 div.pa-row { cursor: default; }
@@ -30,7 +30,8 @@ div.pa-row { cursor: default; }
 .pa-row:not(:has(.pa-row-mark)) .pa-row-title, .pa-row:not(:has(.pa-row-mark)) .pa-row-meta { grid-column: 1; }
 .pa-row:not(:has(.pa-row-mark)) .pa-row-aside { grid-column: 2; }
 
-.pa-card { margin: 0 0 var(--gap); padding: calc(var(--pad) * .8) var(--pad); background: var(--surface); border: 1px solid var(--text); box-shadow: 3px 3px 0 var(--line); }
+.pa-card { margin: 0 0 var(--gap); padding: calc(var(--pad) * .8) var(--pad); background: var(--card-fill); border: var(--line-card); border-width: var(--card-edges);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
 .pa-card-title { margin: 0 0 2px; font: 600 var(--fs-lead) var(--serif); }
 .pa-card > :last-child { margin-bottom: 0; }
 .pa-card p { margin: 0 0 6px; color: var(--muted); }
@@ -38,10 +39,11 @@ div.pa-row { cursor: default; }
 .pa-field { display: grid; gap: 2px; margin: 0 0 var(--gap); }
 .pa-field-label { font: italic var(--fs-small) var(--serif); color: var(--muted); }
 .pa-field-row { display: flex; align-items: end; gap: 12px; }
-.pa-field input { flex: 1; min-width: 0; padding: 6px 0; border: 0; border-bottom: 1px solid var(--text); border-radius: 0; background: none;
-  font: var(--fs-lead) var(--serif); color: var(--text); outline: none; }
-.pa-field input:focus { border-bottom-width: 2px; padding-bottom: 5px; }
-.pa-field-action { padding: 6px 16px; border: 1px solid var(--text); border-radius: 999px; background: var(--text); color: var(--bg);
+.pa-field input { flex: 1; min-width: 0; padding: var(--field-pad); border: var(--entry-line); border-width: var(--field-edges); border-radius: var(--radius-entry);
+  background: var(--entry-fill); font: var(--fs-lead) var(--serif); color: var(--text); outline: none; }
+/* focused: the line darkens and thickens below (a box keeps its edge) */
+.pa-field input:focus { border-color: var(--text); box-shadow: 0 1px 0 var(--text); }
+.pa-field-action { padding: 6px 16px; border: 1px solid var(--primary); border-radius: var(--radius-button); background: var(--primary); color: var(--on-primary);
   font: 600 var(--fs-small) var(--sans); cursor: pointer; }
 /* not yet (nothing written): a quiet outline, not a grey block */
 .pa-field-action:disabled { border-color: var(--line); background: none; color: var(--muted); cursor: default; }
@@ -51,15 +53,16 @@ div.pa-row { cursor: default; }
 .pa-sprig { width: 110px; height: 36px; color: var(--accent); }
 
 .pa-note { font: var(--fs-lead)/1.6 var(--serif); color: var(--text); overflow-wrap: anywhere; }
-.pa-note h1 { margin: 0 0 6px; font: 400 var(--fs-title)/1.1 var(--serif); }
+.pa-note h1 { margin: 0 0 6px; font: var(--title-weight) var(--fs-title)/1.1 var(--serif); }
 .pa-note h1::first-letter { color: var(--accent); }
-.pa-note h2 { margin: calc(var(--gap) * 1.3) 0 4px; font: 600 var(--fs-label) var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.pa-note h2 { margin: calc(var(--gap) * 1.3) 0 4px; font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform);
+  font-variant-caps: var(--label-caps); color: var(--label-ink); }
 .pa-note h3 { margin: var(--gap) 0 2px; font: 600 var(--fs-lead) var(--serif); }
 .pa-note ul, .pa-note ol { padding-left: 1.4em; }
 .pa-note a { color: var(--text); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; cursor: pointer; }
-.pa-note blockquote { margin: var(--gap) 0; padding: 0 0 0 14px; border-left: 3px double var(--text); font-style: italic; color: var(--muted); }
+.pa-note blockquote { margin: var(--gap) 0; padding: 0 0 0 14px; border-left: var(--line-quote); font-style: italic; color: var(--muted); }
 .pa-note code, .pa-note pre { font-family: var(--mono); font-size: .88em; }
-.pa-note pre { overflow-x: auto; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); }
+.pa-note pre { overflow-x: auto; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-field); }
 .pa-note table { border-collapse: collapse; } .pa-note td, .pa-note th { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: left; }
 .pa-note img { max-width: 100%; }
 
@@ -74,32 +77,33 @@ div.pa-row { cursor: default; }
 .pa-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pa-strong .pa-row-title { font-weight: 700; }
 .pa-unseen { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.pa-row[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
+.pa-row[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; background: var(--tint); }
 .pa-badge { margin-left: 8px; padding: 0 7px; border: 1.5px solid var(--text); border-radius: 999px; font: 600 var(--fs-label) var(--sans); vertical-align: .15em; }
 .pa-row-under { grid-column: 1 / -1; font-size: var(--fs-small); color: var(--accent); }
 .pa-row:not(:has(.pa-row-mark)) .pa-row-under { grid-column: 1 / -1; }
-.pa-more { display: block; margin: var(--gap) auto 0; padding: 5px 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+.pa-more { display: block; margin: var(--gap) auto 0; padding: 5px 16px; border: var(--button-line); border-radius: var(--radius-button); background: var(--button-fill);
   color: var(--text); font: var(--fs-small) var(--sans); cursor: pointer; }
 
 /* The screen parts (screen.tsx). A page: one width, one margin, its title in the scale */
 :root:has(.pa-page) body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-body)/var(--leading) var(--sans); }
-.pa-page { box-sizing: border-box; max-width: 760px; margin: 0 auto; padding: calc(var(--pad) * 1.2) var(--pad) calc(var(--pad) * 4); color: var(--text); }
+.pa-page { box-sizing: border-box; max-width: var(--measure); margin: 0 auto; padding: calc(var(--pad) * 1.2) var(--pad) calc(var(--pad) * 4); color: var(--text); }
 .pa-page.pa-wide { max-width: 1240px; }
 /* an applet's own controls in the page's type (no weight at all: every part's own rule still wins) */
 :where(.pa-page) :where(button, input, textarea) { font: inherit; color: inherit; }
 .pa-page-head { display: flex; align-items: end; justify-content: space-between; gap: var(--gap); margin: 0 0 var(--gap); }
 .pa-page-aside { display: flex; gap: 8px; flex-wrap: wrap; justify-content: end; }
-.pa-title { margin: 0; font: 400 var(--fs-title)/1.1 var(--serif); letter-spacing: -.01em; }
-.pa-kicker { margin: 0 0 2px; font: 600 var(--fs-label) var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.pa-title { margin: 0; font: var(--title-weight) var(--fs-title)/1.1 var(--serif); letter-spacing: -.01em; }
+.pa-kicker { margin: 0 0 2px; font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform); font-variant-caps: var(--label-caps);
+  color: var(--label-ink); }
 .pa-pull { display: grid; place-items: end center; overflow: hidden; font: italic var(--fs-small) var(--serif); color: var(--muted); }
 
 .pa-loading { margin: var(--gap) 0; font: italic var(--fs-body) var(--serif); color: var(--muted); }
 .pa-problem { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: var(--gap) 0; color: var(--danger); }
 .pa-problem p { margin: 0; overflow-wrap: anywhere; }
 
-.pa-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 7px 18px; border: 1px solid var(--line); border-radius: 999px;
-  background: var(--surface); color: var(--text); font: 500 var(--fs-body) var(--sans); white-space: nowrap; cursor: pointer; }
-.pa-button.pa-primary { border-color: var(--text); background: var(--text); color: var(--bg); font-weight: 600; }
+.pa-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 7px 18px; border: var(--button-line); border-radius: var(--radius-button);
+  background: var(--button-fill); color: var(--text); font: 500 var(--fs-body) var(--sans); white-space: nowrap; cursor: pointer; }
+.pa-button.pa-primary { border-color: var(--primary); background: var(--primary); color: var(--on-primary); font-weight: 600; }
 .pa-button.pa-quiet { border-color: transparent; background: none; padding-inline: 4px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .pa-button.pa-small { padding: 2px 12px; font-size: var(--fs-small); }
 .pa-button.pa-quiet.pa-small { padding-inline: 0; }
@@ -124,13 +128,13 @@ div.pa-row { cursor: default; }
 .pa-tab[aria-current="page"] { border-bottom-color: var(--text); color: var(--text); font-weight: 600; }
 .pa-write > .pa-field-label { display: block; margin-bottom: 2px; }
 
-.pa-search { display: block; width: 100%; box-sizing: border-box; margin: 0 0 var(--gap); padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
-  background: var(--surface); color: var(--text); font: var(--fs-body) var(--sans); }
+.pa-search { display: block; width: 100%; box-sizing: border-box; margin: 0 0 var(--gap); padding: 8px 14px; border: var(--field-line); border-radius: var(--radius-button);
+  background: var(--field-fill); color: var(--text); font: var(--fs-body) var(--sans); }
 .pa-search:focus { outline: none; border-color: var(--text); }
 
 .pa-write { margin: 0 0 var(--gap); }
-.pa-write-box { display: block; width: 100%; box-sizing: border-box; min-height: 6em; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface); color: var(--text); font: var(--fs-lead)/1.5 var(--serif); resize: vertical; }
+.pa-write-box { display: block; width: 100%; box-sizing: border-box; min-height: 6em; padding: 12px 14px; border: var(--field-line); border-radius: var(--radius-field);
+  background: var(--field-fill); color: var(--text); font: var(--fs-lead)/1.5 var(--serif); resize: vertical; }
 .pa-write-box:focus { outline: none; border-color: var(--text); }
 .pa-write-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
 .pa-write.pa-line { display: flex; align-items: end; gap: 8px; margin: 0; }
@@ -140,14 +144,14 @@ div.pa-row { cursor: default; }
 /* Table and Fields (parts-data.tsx): records as rows and columns, ink rules as List's; the first column stays in view
    as the rest scroll across; a row off screen isn't drawn */
 .pa-table { margin: 0 0 var(--gap); }
-.pa-tgrid { display: grid; grid-template-columns: var(--pa-cols); overflow-x: auto; border-top: 1px solid var(--text); overscroll-behavior-x: contain; }
+.pa-tgrid { display: grid; grid-template-columns: var(--pa-cols); overflow-x: auto; border-top: var(--line-head); overscroll-behavior-x: contain; }
 .pa-tgrid > [role="rowgroup"], .pa-trow, .pa-thead, .pa-tgroup { display: contents; }
-.pa-tcell { min-width: 0; padding: calc(var(--gap) * .45) 10px calc(var(--gap) * .45) 0; border-bottom: 1px dotted var(--muted); background: var(--bg);
+.pa-tcell { min-width: 0; padding: calc(var(--gap) * .45) 10px calc(var(--gap) * .45) 0; border-bottom: var(--line-row); background: var(--bg);
   font: var(--fs-body)/1.35 var(--sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; content-visibility: auto; contain-intrinsic-size: auto 2.4em; }
 .pa-tcell:first-child { position: sticky; left: 0; z-index: 1; padding-left: 2px; }
 .pa-tend { text-align: right; font-variant-numeric: tabular-nums; }
-.pa-thead .pa-tcell { position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--text); font: 600 var(--fs-label) var(--sans); letter-spacing: .06em;
-  text-transform: uppercase; color: var(--muted); content-visibility: visible; }
+.pa-thead .pa-tcell { position: sticky; top: 0; z-index: 2; border-bottom: var(--line-head); font: 600 var(--fs-label) var(--sans); letter-spacing: calc(var(--label-track) * 3 / 7);
+  text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--muted); content-visibility: visible; }
 .pa-thead .pa-tcell:first-child { z-index: 3; }
 .pa-tsort { padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
 .pa-thead [aria-sort] { color: var(--text); }
@@ -155,12 +159,13 @@ div.pa-row { cursor: default; }
 .pa-tcount { margin-left: 8px; font: var(--fs-small) var(--sans); }
 .pa-topen { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: 500 var(--fs-body) var(--serif); text-align: left;
   overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-.pa-trow[aria-current="true"] .pa-tcell { background: color-mix(in srgb, var(--line) 45%, var(--bg)); }
-.pa-trow:hover .pa-tcell { background: color-mix(in srgb, var(--line) 25%, var(--bg)); }
+/* the wash over the cell's own opaque ground (the first column scrolls over the rest), as an inset that can ease */
+.pa-trow[aria-current="true"] .pa-tcell { box-shadow: inset 0 0 0 100vmax var(--tint); }
+.pa-trow:hover .pa-tcell { box-shadow: inset 0 0 0 100vmax var(--tint); }
 .pa-topen:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.pa-fields { display: grid; grid-template-columns: minmax(7em, max-content) 1fr; gap: 0 16px; margin: 0 0 var(--gap); border-top: 1px solid var(--text); }
-.pa-fname, .pa-fvalue { margin: 0; padding: 6px 0; border-bottom: 1px dotted var(--muted); }
+.pa-fields { display: grid; grid-template-columns: minmax(7em, max-content) 1fr; gap: 0 16px; margin: 0 0 var(--gap); border-top: var(--line-head); }
+.pa-fname, .pa-fvalue { margin: 0; padding: 6px 0; border-bottom: var(--line-row); }
 .pa-fname { font: italic var(--fs-body) var(--serif); color: var(--muted); }
 .pa-fvalue { min-width: 0; overflow-wrap: anywhere; font: var(--fs-body) var(--sans); }
 .pa-finput { width: 100%; box-sizing: border-box; padding: 3px 6px; margin: -3px 0; border: 1px solid transparent; border-radius: 4px; background: none;
@@ -193,12 +198,12 @@ select.pa-finput { appearance: auto; }
 /* a press gives under the finger at once, and comes back; a pointer's hover only where there is one */
 .pa-button, .pa-field-action, .pa-more, .pa-drawer-grip { transition: transform var(--t-press) var(--ease-out), background-color var(--t-press) ease, border-color var(--t-press) ease, opacity var(--t-press) ease; }
 :is(.pa-button, .pa-field-action, .pa-more):active:not(:disabled) { transform: scale(.97); }
-.pa-row, .pa-tab, .pa-trow .pa-tcell { transition: background-color var(--t-press) ease, color var(--t-press) ease; }
+.pa-row, .pa-tab, .pa-trow .pa-tcell { transition: background-color var(--t-press) ease, color var(--t-press) ease, box-shadow var(--t-press) ease; }
 @media (hover: hover) and (pointer: fine) {
   .pa-button.pa-plain:hover:not(:disabled), .pa-more:hover { border-color: var(--muted); }
-  .pa-button.pa-primary:hover:not(:disabled), .pa-field-action:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 86%, var(--bg)); }
+  .pa-button.pa-primary:hover:not(:disabled), .pa-field-action:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 86%, var(--bg)); }
   .pa-button.pa-quiet:hover:not(:disabled) { color: var(--text); }
-  button.pa-row:hover, a.pa-row:hover { background: color-mix(in srgb, var(--line) 22%, transparent); }
+  button.pa-row:hover, a.pa-row:hover { background: var(--tint); }
   .pa-tab:hover { color: var(--text); }
 }
 /* on a touch screen a small button is still a finger's size to hit (44 px), with no change to how it looks */
@@ -223,8 +228,8 @@ select.pa-finput { appearance: auto; }
 
 /* ── toast (screen.tsx): one at a time, rising from the foot, going back down; swipe it away, held while pointed at ── */
 .pa-toasts { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); display: grid; justify-items: center; pointer-events: none; z-index: 50; }
-.pa-toast { grid-area: 1 / 1; margin: 0 16px; max-width: 520px; padding: 8px 18px; border: 1px solid var(--text); border-radius: 999px; background: var(--surface); color: var(--text);
-  font: var(--fs-small) var(--sans); box-shadow: 3px 3px 0 var(--line); pointer-events: auto; touch-action: none; user-select: none;
+.pa-toast { grid-area: 1 / 1; margin: 0 16px; max-width: 520px; padding: 8px 18px; border: var(--line-card); border-radius: 999px; background: var(--surface); color: var(--text);
+  font: var(--fs-small) var(--sans); box-shadow: var(--shadow-card); pointer-events: auto; touch-action: none; user-select: none;
   transform: translateY(var(--pa-swipe, 0px)); transition: transform var(--t-sheet) var(--ease-out), opacity var(--t-sheet) var(--ease-out); }
 .pa-toast[data-state="before"] { opacity: 0; transform: translateY(calc(100% + 16px)); }
 .pa-toast[data-state="gone"] { pointer-events: none; opacity: 0; transform: translateY(calc(100% + 16px + var(--pa-swipe, 0px))); transition-duration: calc(var(--t-sheet) * .8); }
@@ -236,7 +241,7 @@ select.pa-finput { appearance: auto; }
   background: color-mix(in srgb, var(--text) 22%, transparent); background: light-dark(color-mix(in srgb, var(--text) 22%, transparent), rgb(0 0 0 / .45)); opacity: var(--pa-scrim, 1); transition: opacity var(--t-sheet) var(--ease-drawer); overscroll-behavior: contain; }
 .pa-drawer { position: relative; box-sizing: border-box; width: min(560px, 100%); max-height: 86dvh; overflow: auto; overscroll-behavior: contain;
   padding: 6px var(--pad) calc(var(--pad) + env(safe-area-inset-bottom, 0px)); background: var(--bg); color: var(--text);
-  border-top: 1px solid var(--text); border-radius: var(--radius) var(--radius) 0 0;
+  border-top: var(--line-card); border-radius: max(var(--radius-card), var(--radius)) max(var(--radius-card), var(--radius)) 0 0; box-shadow: var(--shadow-sheet);
   transform: translateY(var(--pa-drag, 0px)); transition: transform var(--t-sheet) var(--ease-drawer); }
 .pa-drawer-scrim[data-state="before"], .pa-drawer-scrim[data-state="gone"] { --pa-scrim: 0; }
 .pa-drawer-scrim[data-state="gone"] { pointer-events: none; }
@@ -252,5 +257,5 @@ select.pa-finput { appearance: auto; }
 .pa-drawer-body > :last-child { margin-bottom: 0; }
 /* in a page drawn at its content's height (one with embeds) there is no screen's foot to rise from: it opens in place */
 .pa-drawer.pa-drawer-inline { position: relative; width: 100%; max-height: none; overflow: visible; margin: 0 0 var(--gap); padding-top: var(--pad);
-  border: 1px solid var(--text); border-radius: var(--radius); transform: none; transition: none; animation: pa-in var(--t-state) var(--ease-out) both; }
+  border: var(--line-card); border-radius: max(var(--radius-card), var(--radius)); box-shadow: none; transform: none; transition: none; animation: pa-in var(--t-state) var(--ease-out) both; }
 }

@@ -1,14 +1,17 @@
 // Settings → Look: the theme the app shows, where it comes from, and the choices most people want to change by hand
-// (density, light or dark, whether things move). Anything else (colours, fonts) is the theme note's, changed there by the person or their
+// (the built-in look it starts from, density, light or dark, whether things move). Anything else (colours, fonts) is the theme note's, changed there by the person or their
 // agent (docs/THEME.md). The first change copies the built-in theme into the home vault (copy-on-write).
 import { useEffect, useState } from "react";
-import { makeThemeMine, readTheme, setDensity, setMotion, setScheme, THEME_PATH, useTheme } from "../theme/store";
-import { COLOR_KEYS, DENSITIES, MOTIONS, SCHEMES, type Density, type Motion, type Scheme } from "../theme/theme";
+import { makeThemeMine, readTheme, screenNow, setDensity, setLook, setMotion, setScheme, setScreen, THEME_PATH, useTheme } from "../theme/store";
+import { COLOR_KEYS, DENSITIES, LOOK_NAMES, MOTIONS, SCHEMES, type Density, type LookName, type Motion, type Scheme } from "../theme/theme";
 import { homeVault } from "../shell/frameSource";
 
 const DENSITY_NAME: Record<Density, string> = { compact: "Compact", regular: "Regular", roomy: "Roomy" };
 const SCHEME_NAME: Record<Scheme, string> = { system: "As the device", light: "Light", dark: "Dark" };
 const MOTION_NAME: Record<Motion, string> = { flowing: "Flowing", still: "Still" };
+const LOOK_NAME: Record<LookName, string> = { paper: "Paper", almanac: "Almanac", book: "Book", daylight: "Daylight" };
+/** The looks to choose for every device; Daylight is this screen's own choice, below. */
+const STYLES = LOOK_NAMES.filter((l) => l !== "daylight");
 
 export default function ThemeSettings() {
   const t = useTheme();
@@ -27,6 +30,10 @@ export default function ThemeSettings() {
       {home && (
         <>
           <fieldset className="plain choice" disabled={busy}>
+            <legend className="settings-sub">Style</legend>
+            {(t.theme.look === "daylight" ? LOOK_NAMES : STYLES).map((l) => <label key={l}><input type="radio" name="look" checked={t.theme.look === l} onChange={act(() => setLook(l))} /> {LOOK_NAME[l]}</label>)}
+          </fieldset>
+          <fieldset className="plain choice" disabled={busy}>
             <legend className="settings-sub">Density</legend>
             {DENSITIES.map((d) => <label key={d}><input type="radio" name="density" checked={t.theme.density === d} onChange={act(() => setDensity(d))} /> {DENSITY_NAME[d]}</label>)}
           </fieldset>
@@ -41,6 +48,11 @@ export default function ThemeSettings() {
           {t.from === "built-in" && <button type="button" className="quiet-button" disabled={busy} onClick={act(makeThemeMine)}>Make this look mine</button>}
         </>
       )}
+      <fieldset className="plain choice">
+        <legend className="settings-sub">This screen</legend>
+        <label><input type="radio" name="screen" checked={screenNow() === "theme"} onChange={() => setScreen("theme")} /> As the theme</label>
+        <label><input type="radio" name="screen" checked={screenNow() === "daylight"} onChange={() => setScreen("daylight")} /> Daylight: black on white, for e-paper</label>
+      </fieldset>
       {error && <p className="error" role="alert">{error}</p>}
     </section>
   );

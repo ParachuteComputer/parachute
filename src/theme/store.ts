@@ -15,7 +15,7 @@ import { plain, stripExt } from "../applet/contract";
 import { clientFor, keptClientFor } from "../vault/client";
 import { onFresh } from "../vault/readCache";
 import { homeVault } from "../shell/frameSource";
-import { DEFAULT_THEME, MOTION_CSS, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, withTodaysFonts, type Theme, type Tokens } from "./theme";
+import { DEFAULT_THEME, MOTION_CSS, onScreen, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, withLook, withTodaysFonts, type ScreenChoice, type Theme, type Tokens } from "./theme";
 import { FONTS_CSS } from "./fonts";
 
 export const THEME_TAG = "parachute-theme";
@@ -49,8 +49,27 @@ export function themeNow(): { theme: Theme; from: "built-in" | "vault"; noteId: 
 }
 
 const darkQuery = () => (typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null);
-/** The tokens as applied now: the theme, in the palette the device's scheme (or the record) picks. */
-export const tokensNow = (): Tokens => tokensOf(themeNow().theme, !!darkQuery()?.matches);
+
+// This screen's own choice, kept on the device only (the theme note syncs to every device): `theme` draws the note's
+// look; `daylight` draws Daylight, black on white and still. With no choice made, a screen that says it is e-paper
+// (slow to redraw, or grey only) gets Daylight by itself.
+export const SCREEN_KEY = "parachute.screen.v1";
+const einkQuery = () => (typeof matchMedia === "function" ? matchMedia("(update: slow), (monochrome)") : null);
+let screenHere: ScreenChoice | null | undefined; // read once, then kept here as it changes
+export function screenChoice(): ScreenChoice | null {
+  if (screenHere === undefined) { try { const v = storage()?.getItem(SCREEN_KEY); screenHere = v === "theme" || v === "daylight" ? v : null; } catch { screenHere = null; } }
+  return screenHere;
+}
+/** What this screen draws now: its own choice, else Daylight on an e-paper screen, else the theme. */
+export const screenNow = (): ScreenChoice => screenChoice() ?? (einkQuery()?.matches ? "daylight" : "theme");
+export function setScreen(v: ScreenChoice) {
+  screenHere = v;
+  try { storage()?.setItem(SCREEN_KEY, v); } catch { /* for this session only */ }
+  bump();
+}
+
+/** The tokens as applied now: the theme (or Daylight, on this screen), in the palette the device's scheme (or the record) picks. */
+export const tokensNow = (): Tokens => tokensOf(onScreen(themeNow().theme, screenNow()), !!darkQuery()?.matches);
 
 // ── the store ──
 
@@ -93,6 +112,7 @@ export function applyToDocument() {
   document.documentElement.dataset.motion = t.motion;
 }
 darkQuery()?.addEventListener?.("change", () => bump());
+einkQuery()?.addEventListener?.("change", () => bump());
 
 export function subscribeTheme(f: () => void): () => void {
   listeners.add(f);
@@ -169,7 +189,7 @@ async function changeTheme(change: (raw: Record<string, unknown>) => Record<stri
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), theme }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
   } else {
     const theme = change(recordOf(DEFAULT_THEME));
-    await c.createNote({ path: THEME_PATH, content: "The look of the Parachute app: colours, fonts and density. See docs/THEME.md.", tags: [THEME_TAG], metadata: { theme } } as Parameters<typeof c.createNote>[0]);
+    await c.createNote({ path: THEME_PATH, content: "The look of the Parachute app: its look, colours, fonts and density. See docs/THEME.md.", tags: [THEME_TAG], metadata: { theme } } as Parameters<typeof c.createNote>[0]);
   }
   await readTheme();
 }
@@ -179,6 +199,8 @@ export const makeThemeMine = () => changeTheme((r) => r);
 export const setDensity = (density: Theme["density"]) => changeTheme((r) => ({ ...r, density }));
 export const setScheme = (scheme: Theme["scheme"]) => changeTheme((r) => ({ ...r, scheme }));
 export const setMotion = (motion: Theme["motion"]) => changeTheme((r) => ({ ...r, motion }));
+/** Another built-in look: its palettes and style, over which the colours the person chose stay (theme.ts withLook). */
+export const setLook = (look: Theme["look"]) => changeTheme((r) => withLook(r, look));
 
 /** Signing out of a vault: the copy kept from it goes. */
 export function forgetVaultTheme(vault: string) {

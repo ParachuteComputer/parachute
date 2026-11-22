@@ -17,7 +17,7 @@ export const LAYERS = "@layer parachute.base, parachute.parts, parachute.app;";
 // The column is there only once the frame holds what it is for, and never under a `Page`: before a TSX applet's first
 // render the body is empty (its #root too), so the switch to a Page moves nothing already on the screen.
 const COLUMN = ":where(html:not(:has(.pa-page)):not(:has(> body > #root:empty))) > :where(body)";
-const FRAME_PAGE = `@layer parachute.base{${COLUMN}{margin:calc(var(--pad) * 1.2) max(var(--pad), calc((100% - 760px) / 2 + var(--pad))) calc(var(--pad) * 4);}}`;
+const FRAME_PAGE = `@layer parachute.base{${COLUMN}{margin:calc(var(--pad) * 1.2) max(var(--pad), calc((100% - var(--measure, 760px)) / 2 + var(--pad))) calc(var(--pad) * 4);}}`;
 
 /** An embed's body shows the page it sits in through it, as it always did. */
 const EMBED_PAGE = "@layer parachute.base{:where(body){background:transparent;}}";
