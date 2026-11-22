@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Loading } from "../../kit/screen";
 import { useHold } from "../../ui/hold";
 import { Link } from "react-router";
 import { updateLine } from "../../applet/level";
@@ -41,7 +42,7 @@ export default function Launcher() {
       <h1 className="launcher-title">Applets</h1>
       {home.notice === "bundle-record" && <p className="launcher-notice" role="status">Your bundle didn't load, so here is every applet. <Link to="/settings">Settings</Link></p>}
       {home.notice === "bundle-newer" && <p className="launcher-notice" role="status">{updateLine(home.noticeName ?? "your bundle")} For now this is another bundle. <Link to="/settings">Settings</Link></p>}
-      {fresh === undefined ? null : <>
+      {fresh === undefined ? <Loading /> : <>
       {fresh && homeVault && <StartHere v={homeVault} />}
       {fresh && homeVault && <h2 className="lately-label">All applets</h2>}
       <ol className="entries" aria-label="Applets">
@@ -75,11 +76,15 @@ const started = (n: Note) => theirs(n) || ((n as { path?: string }).path ?? "").
  *  another vault's answer: a home that changes is read for itself. */
 function useFresh(v: FrameVault | undefined, loaded: boolean): boolean | undefined {
   const [state, setState] = useState<{ key: string; fresh: boolean | undefined } | null>(null);
+  // once the list has drawn, a home that changes under it (signed out of, another made home) neither blanks it nor
+  // puts Start here above it: only a Start here already shown may go
+  const shown = useRef(false);
   useEffect(() => {
     if (!loaded || !v) return;
     const key = v.key;
-    setState({ key, fresh: known.get(key) });
-    if (known.get(key) === false) return;
+    const first = shown.current ? false : known.get(key);
+    setState({ key, fresh: first });
+    if (first === false) return;
     let live = true, drawn = known.has(key);
     const draw = (fresh: boolean) => { drawn = true; setState({ key, fresh }); };
     const late = setTimeout(() => { if (live && !drawn) draw(false); }, 1500);
@@ -91,9 +96,9 @@ function useFresh(v: FrameVault | undefined, loaded: boolean): boolean | undefin
     }, () => { if (live && !drawn) draw(false); });
     return () => { live = false; clearTimeout(late); };
   }, [v?.key, loaded]);
-  if (!loaded) return undefined;
-  if (!v) return false;
-  return state?.key === v.key ? state.fresh : known.get(v.key);
+  const fresh = !loaded ? undefined : !v ? false : state?.key === v.key ? state.fresh : shown.current ? false : known.get(v.key);
+  if (fresh !== undefined) shown.current = true;
+  return fresh;
 }
 
 /** A new person's first screen (T-476 first run): while their home vault holds nothing of theirs, the two ways to
