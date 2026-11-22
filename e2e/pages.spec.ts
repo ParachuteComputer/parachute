@@ -32,8 +32,14 @@ export default function Leaves() {
 }
 `;
 
+// a place that scrolls instead (wide): no pages, but the hour's sky at its head all the same
+const WIDE = `import { Page, Empty } from "parachute";
+export default function Wide() { return <Page title="Wide place" wide><Empty title="Nothing yet" /></Page>; }
+`;
+
 const made: string[] = [];
 let appletId = "";
+let wideId = "";
 test.beforeAll(async () => {
   for (let i = 0; i < 30; i++) made.push(((await api(hubState(), "POST", "notes", { path: `${FOLDER}Leaf ${String(i).padStart(2, "0")}`, content: "a leaf" })) as { id: string }).id);
   const note = await record(hubState(), "create", {
@@ -42,6 +48,12 @@ test.beforeAll(async () => {
   });
   appletId = note.id;
   made.push(note.id);
+  const wide = await record(hubState(), "create", {
+    path: `Applets/Wide ${stamp}`, extension: "tsx", tags: ["applet"], body: WIDE,
+    fields: { needs: 7, applet: { contract: 2, id: `wide-${stamp}`, name: "Wide place", glyph: "❦", access: [] } },
+  });
+  wideId = wide.id;
+  made.push(wide.id);
 });
 test.afterAll(async () => {
   const rows = (await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent(FOLDER)}&limit=100`)) as { id: string }[];
@@ -116,6 +128,19 @@ test("a place that opens on its first page does, each time it is shown again", a
   await page.goBack();
   await expect(app.getByText("Leaf 00")).toBeVisible();
   await expect.poll(async () => (await book(inner)).left).toBe(0);
+});
+
+test("a place that scrolls (wide) has the hour's sky at its head too, fading into the paper", async ({ page }) => {
+  await page.goto(`/v/${VAULT}/a/${wideId}`);
+  const start = page.getByRole("button", { name: "Open Wide place" });
+  await start.or(page.getByRole("button", { name: "Allow" })).first().waitFor();
+  if (await start.isVisible()) await start.click();
+  const allow = page.getByRole("button", { name: "Allow" });
+  if (await allow.isVisible().catch(() => false)) await allow.click();
+  const app = page.frameLocator('iframe[title="Wide place"]');
+  await expect(app.getByRole("heading", { name: "Wide place" })).toBeVisible({ timeout: 20_000 });
+  const inner = (await (await page.locator('iframe[title="Wide place"]').elementHandle())!.contentFrame())!;
+  expect(await inner.evaluate(() => [!!document.querySelector(".pa-book"), getComputedStyle(document.body).backgroundImage])).toEqual([false, expect.stringContaining("linear-gradient")]);
 });
 
 async function onDaylight(browser: Browser) {
