@@ -22,10 +22,10 @@ files it names, and the last Services run).
 |---|---|---|---|---|
 | Rooms: the list, unread and @, search | Rooms applet | e2e/rooms.spec.ts | Services; canary relay | ready |
 | Reading and writing in a room: threads, mentions, edits, pictures, voice notes, files, drafts | Room component | e2e/rooms.spec.ts, e2e/devices.spec.ts | Services | ready |
-| Uni's ask cards (choose, do, tell), its turn line, Stop Uni | Room component | e2e/rooms.spec.ts | Services | ready |
+| Uni's ask cards (choose is tested; do and tell are built, not yet in a spec), its turn line, Stop Uni | Room component | e2e/rooms.spec.ts | Services | ready |
 | Approving Uni's sealed cards, secret requests | Room component, the approval key | e2e/approvals.spec.ts; cargo `approvals` | Services; canary card | ready |
 | Hermes's command prompts (`/approve`, `/deny`) | Room component | e2e/rooms.spec.ts, e2e/approvals.spec.ts | Services | ready |
-| What wants me now (the Uni app's Home) | Home applet (`today`) | e2e/today.spec.ts | Services | ready |
+| What wants me now (in the Uni app: the rooms list with its asks and mentions) | Home applet (`today`) | e2e/today.spec.ts | Services | ready |
 | A mention or a word from Uni while the app is closed (phone); a tap opens the room at it | UnifiedPush through the push gateway and ntfy (or Parachute's own connection) | services/push-gateway tests; canary push (relay → gateway → ntfy → opened with the endpoint's keys); the emulator against the person's own gateway and ntfy with a test key, Parachute killed: "A message for you · It names you" (11-21) | canary | ready; the phone registers when Rooms first opens there, with ntfy's server set to the person's own |
 | Mail: Inbox, read, search, reply and send | Mail applet | e2e/mail.spec.ts | Services; canary mail | ready |
 | Mail: approve or decline a send Uni held (Waiting); Later | Mail applet | e2e/mail.spec.ts | Services | ready |
@@ -34,7 +34,7 @@ files it names, and the last Services run).
 | Mail: attach a file to a message I write | — | — | — | left: Mail sends text only. Owner: app (Mail applet). Plan: the shell's `attach` (Rooms has it) into the gateway's `draft.save` attachments |
 | Journal: write a line, see the days, voice entries | Journal applet | e2e/journal.spec.ts, e2e/devices.spec.ts | CI; canary vault | ready |
 | Journal while offline | Journal applet: a line waits on the device and goes in under its own time | e2e/journal.spec.ts | CI | ready |
-| Calendar: the next days, an event, add, move, cancel | Calendar applet over the calendar door | e2e/calendar.spec.ts (CI: a fake door with the door's checks; locally the real door); cargo services_real (the native signer and the real door) | canary calendar | part: the week grid, editing a series or an event's words, invites, who can see it and conflicts stay in the Uni app. Owner: app. Plan: the week grid and editing an event's words next, from the Uni app's Calendar |
+| Calendar: the next days, an event, add, move, cancel | Calendar applet over the calendar door | e2e/calendar.spec.ts (CI: a fake door with the door's checks; locally the real door); cargo services_real (the native signer and the real door) | CI; canary calendar | part: the week grid, editing a series or an event's words, invites, who can see it and conflicts stay in the Uni app. Owner: app. Plan: the week grid and editing an event's words next, from the Uni app's Calendar |
 | Recipes (an applet in the drawer, its own vault) | Runs as it is: the Applets list, from vault `recipes` | e2e/drawer.spec.ts (with UNI_APPLET_DIR, the real Recipes) | CI | ready once the person signs in to `recipes` and allows it |
 | Notes and the vault browser, search in a vault | The vault view, Notes | e2e/vault.spec.ts, e2e/notelinks.spec.ts | CI; canary vault | ready |
 | One search across rooms and vaults | — | — | — | part: each place searches itself. Owner: app. Plan: later; not a daily blocker |
@@ -44,7 +44,7 @@ files it names, and the last Services run).
 | New builds without anyone installing them | The update line and Settings → Updates, from the build's feed | src/shell/updates.test.ts; the emulator (an older build offered the newer one, installed over) | canary updates | ready on Android and Mac builds made with the feed; the browser asks twice on the first download (an in-app install would ask less: app, later) |
 | The same key on every device; pairing | Pair from a device; Settings → Your key | src-tauri/tests/pairing.rs; scripts/mac-signin.sh (Mac CI) | CI | ready |
 | The unlock before powerful approvals | Security levels | e2e/levels.spec.ts; levels.rs | CI | ready |
-| Arcade, Studio, To Post, Decisions, route suggestions | — | — | — | left: not daily. Owner: Aaron decides if any comes over |
+| Arcade, Studio, To Post, Decisions, route suggestions | — | — | — | left: not daily. Owner: the person decides if any comes over |
 
 ## What the person does once
 
