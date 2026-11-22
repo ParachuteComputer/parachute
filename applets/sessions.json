@@ -1,0 +1,15 @@
+{
+  "path": "Applets/Sessions",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "sessions",
+      "name": "Sessions",
+      "glyph": "◉",
+      "note": "the Claude Code sessions Uni runs, per room: now, recent, and step by step",
+      "access": [{ "vault": "here", "allow": [{ "path": "Runs/", "verbs": ["read"] }] }]
+    }
+  }
+}
