@@ -166,7 +166,7 @@ settings:
 ```
 
 Settings draws the heading, then that screen of the applet in a small frame at its content's height (up to 640 px, never shrinking),
-after Settings' own sections, with a line under it that leads to the applet. There `ready()` says `place: "settings"`
+after Settings' own sections, with a line above it saying whose it is, which leads to the applet. There `ready()` says `place: "settings"`
 and `screen: "usage"`: draw the short view, not the whole applet. A section **only reads**, in the folders its card
 allowed. It has the theme and nothing else: no `create` or `update`, no app words, no servers, no saved state, no
 counts, no microphone. Write it as a glance, with the kit's parts (`List`, `Empty`, `when`), and leave the actions to
@@ -175,11 +175,11 @@ its own screen.
 Settings draws nothing of it, not even its heading, until the person has allowed it on this device as it is now (the
 card says "Show a section in Settings, «Claude usage»"). Where applets run as approved code rather than sealed, a
 section does too, as its own screen does: the person allowed it under that warning, and Settings says whose it is. The section is in the card's
-key on this device: adding or renaming it asks again. It is left out of the approval your other devices read (so a
+key on this device: adding it, renaming it or naming another screen asks again. It is left out of the approval your other devices read (so a
 device on an older build and one on a newer agree on it); an approval from another device covers it only when that
-device's card said it, else the card asks here. Changed code, or a Revoke on another device, takes the section away
-until it is allowed again. The frame grows to its content and never shrinks while Settings is open, so nothing above it
-moves under a tap. Only an applet in a vault of the person's own, offered by the open bundle, has one; an HTML applet,
+device's card said it (its name and its screen), else the card asks here. Changed code takes the section away until it
+is allowed again; a Revoke on another device, heard here, revokes it here too. The section keeps the most room it has
+taken while Settings is open, even when its frame stops or goes, so nothing above it moves under a tap. Only an applet in a vault of the person's own, offered by the open bundle, has one; an HTML applet,
 or one that imports a component or has embeds, gets a line saying it can't. A bad `settings` costs the applet its
 section, not the applet. Older apps leave the field out and show nothing ([design/VERSIONS.md](design/VERSIONS.md)).
 Example: `applets/accounts.tsx` and `applets/accounts.json`.

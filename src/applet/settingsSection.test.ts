@@ -37,11 +37,11 @@ describe("a section of Settings", () => {
     const withIt = await grantKey(grantOf(m, "home", [], [], [], [], SECTION), "Applets/Recipes");
     expect(withIt).not.toBe(without);
     expect(await grantKey(grantOf(m, "home", [], [], [], [], { ...SECTION, name: "Claude use" }), "Applets/Recipes")).not.toBe(withIt);
-    expect(grantLines(grantOf(m, "home", [], [], [], [], SECTION), "Applets/").map((l) => l.text)).toContain("Show a section in Settings, «Claude usage»: what it reads, nothing it changes");
+    expect(grantLines(grantOf(m, "home", [], [], [], [], SECTION), "Applets/").map((l) => l.text)).toContain("Show a section in Settings, «Claude usage» (its screen use): what it reads, nothing it changes");
   });
   it("is said once on the card's face, in its own words (the walk on 11-22 found it twice)", () => {
     const leads = faceOf(grantOf(m, "home", [], [], [], [], SECTION), "Applets/").lines.map((l) => l.lead + l.rest);
-    expect(leads.filter((l) => l.includes("Settings"))).toEqual(["Shows a section in Settings, «Claude usage»: what it reads, nothing it changes."]);
+    expect(leads.filter((l) => l.includes("Settings"))).toEqual(["Shows a section in Settings, «Claude usage» (its screen use): what it reads, nothing it changes."]);
   });
   it("is not in the approval's hash: a build that doesn't know it hashes the same record the same, so devices on two builds never stop each other's Allow", async () => {
     const s = { hub: "https://hub.example", vault: "home", record: "n1", applet: "recipes" };
@@ -53,6 +53,7 @@ describe("a section of Settings", () => {
     expect(approvalCoversSection(SECTION, undefined)).toBe(false);
     expect(approvalCoversSection(SECTION, ["Read notes in System/"])).toBe(false);
     expect(approvalCoversSection(SECTION, ["Read notes in System/", sectionFace({ ...SECTION, name: "Security" })])).toBe(false);
+    expect(approvalCoversSection(SECTION, [sectionFace({ ...SECTION, screen: "home" })])).toBe(false);
     const signed = faceOf(grantOf(m, "home", [], [], [], [], SECTION), "Applets/").lines.map((l) => l.lead + l.rest);
     expect(approvalCoversSection(SECTION, signed)).toBe(true);
   });

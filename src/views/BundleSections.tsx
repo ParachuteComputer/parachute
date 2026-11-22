@@ -10,7 +10,7 @@
 // section says why in one line, with a way to the applet. An applet that imports a component or has embeds has no
 // section (its code would come from more than one record). The sections sit after the shell's own, so a frame that
 // changes height moves nothing of Settings' under a tap.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { Note } from "@openparachute/surface-client";
 import AppletFrame from "../applet/frame";
@@ -20,6 +20,7 @@ import reactKitSource from "virtual:react-kit";
 import reactNoteKitSource from "virtual:react-note-kit";
 import { importsOf } from "../applet/imports";
 import { deviceGrants, subjectOf } from "../applet/grants";
+import { forgetSaved } from "../shell/saved";
 import { runDecision } from "../applet/selftest/gate";
 import { useGate } from "../applet/selftest/run";
 import { createRouter } from "../applet/router";
@@ -59,7 +60,22 @@ function SectionsIn({ rec, all }: { rec: VaultRecord; all: VaultRecord[] }) {
   const app = openBundleNow();
   const held = { hub: originOf(rec.issuer), vault: rec.vault };
   const with_ = applets.found.entries.filter((a) => a.settings && !a.newer && (!home || offered(app, held, a, originOf(home.issuer))));
-  return <>{with_.map((a) => <Section key={a.noteId} rec={rec} a={a} />)}</>;
+  return <>{with_.map((a) => <Held key={a.noteId}><Section rec={rec} a={a} /></Held>)}</>;
+}
+
+/** A section's place, never shorter than it has been while Settings is open: a frame that stops, goes or reads again
+ *  (or one that collapses itself on purpose) leaves its room, so nothing of Settings above it slides under a tap. */
+function Held({ children }: { children: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [most, setMost] = useState(0);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const o = new ResizeObserver(() => setMost((m) => Math.max(m, el.getBoundingClientRect().height)));
+    o.observe(el);
+    return () => o.disconnect();
+  }, []);
+  return <div ref={box} className="bundle-section-place" style={most ? { minHeight: most } : undefined}>{children}</div>;
 }
 
 type Read = { state: "reading" } | { state: "run"; html: string } | { state: "say"; line: string } | { state: "gone" };
@@ -99,7 +115,9 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
       const allowedAt = Date.parse(grants.record(subject)?.grantedAt ?? "");
       const takenBack = (d: Awaited<ReturnType<typeof approvalFor>>) => !!d && !d.run && (d.why === "withdrawn" || d.why === "other") && !!d.newest && allowedAt < Date.parse(d.newest.at);
       const answer = approvalFor(approvalSubject(rec, a.noteId, a.manifest.id), a.keys.html, asks).catch(() => null);
-      void answer.then((d) => { if (on && takenBack(d)) setRead({ state: "gone" }); });
+      // taken back elsewhere: taken back here too, as the applet's own screen does (its saved state goes with it)
+      const giveUp = () => { grants.revoke(subject); forgetSaved(subject); if (on) setRead({ state: "gone" }); };
+      void answer.then((d) => { if (takenBack(d)) giveUp(); });
       const signed = await Promise.race([answer, new Promise<null>((r) => setTimeout(() => r(null), APPROVALS_WAIT_MS))]);
       if (!on || takenBack(signed)) return;
       setRead({ state: "run", html: modulePage(code.compiled.js, usesNote(source) ? reactNoteKitSource : reactKitSource, [], name) });
@@ -110,9 +128,10 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
   return (
     <section className="card bundle-section" aria-label={a.settings!.name}>
       <h2>{a.settings!.name}</h2>
+      {/* whose it is, above its frame: what the frame draws under it is the applet's, not Settings' */}
+      <p className="small quiet bundle-section-from">From <Link to={to}><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> {name}</Link></p>
       {read.state === "say" ? <p className="quiet">{read.line} <Link to={to}>Open {name}</Link></p>
         : read.state === "run" ? <SectionFrame html={read.html} rec={rec} a={a} /> : <p className="quiet" aria-busy="true">Opening…</p>}
-      <p className="small quiet bundle-section-from">From <Link to={to}><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> {name}</Link></p>
     </section>
   );
 }

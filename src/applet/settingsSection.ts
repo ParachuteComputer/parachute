@@ -27,7 +27,7 @@ export function parseSettings(raw: unknown, m: Manifest): { ok: true; value: Set
 }
 
 /** Its line on the card's face, as an approval signed on another device keeps it (face.ts, approvals.ts `face`). */
-export const sectionFace = (s: SettingsSection) => `Shows a section in Settings, «${s.name}»: what it reads, nothing it changes.`;
+export const sectionFace = (s: SettingsSection) => `Shows a section in Settings, «${s.name}» (its screen ${s.screen}): what it reads, nothing it changes.`;
 
 /** Whether an approval signed on another device covers this applet's section: `settings` is left out of the approval's
  *  hash (older builds agree on it), so its card's face must have said it. One from a device that didn't show it (an
@@ -35,7 +35,7 @@ export const sectionFace = (s: SettingsSection) => `Shows a section in Settings,
 export const approvalCoversSection = (s: SettingsSection | null | undefined, face: readonly string[] | undefined) => !s || !!face?.includes(sectionFace(s));
 
 /** Its line on the card. */
-export const settingsLine = (s: SettingsSection) => ({ text: `Show a section in Settings, «${s.name}»: what it reads, nothing it changes`, stress: false });
+export const settingsLine = (s: SettingsSection) => ({ text: `Show a section in Settings, «${s.name}» (its screen ${s.screen}): what it reads, nothing it changes`, stress: false });
 
 /** Its part of the grant's key, only when declared: every other key stays as it was. */
 export const settingsKeyPart = (s: SettingsSection | null | undefined) => (s ? { name: s.name, screen: s.screen } : undefined);

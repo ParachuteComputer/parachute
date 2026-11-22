@@ -19,30 +19,37 @@ export default function Use() {
     const n = await vault.getRecord("Uses/Today"); setRead(n.body);
     try { await vault.createRecord({ path: "Uses/Wrote " + Date.now(), body: "x" }); setWrote("wrote"); } catch { setWrote("not written"); }
   }); }, []);
-  return <main><h1 id="where">{where}</h1><p id="read">{read}</p><p id="wrote">{wrote}</p></main>;
+  return <main><h1 id="where">{where}</h1><p id="read">{read}</p><p id="wrote">{wrote}</p><div style={{ height: 300 }} /><button id="leave" onClick={() => { location.href = "https://example.com/"; }}>Leave</button></main>;
 }
 `;
 const ARGS = { path: "Applets/Use", extension: "tsx", tags: ["applet"], body: CODE,
   fields: { applet: { contract: 2, id: "use", name: "Use", glyph: "◔", note: "a test applet", access: [{ vault: "here", allow: [{ path: "Uses/", verbs: ["read", "create"] }] }],
     screens: [{ id: "home", name: "Use" }, { id: "short", name: "Use, in short" }] }, settings: { name: "How much is used", screen: "short" } } };
 const section = (page: Page) => page.getByRole("region", { name: "How much is used" });
+// another applet with a section, allowed first: once its section shows, the vault's applets have been read
+const CONTROL = { path: "Applets/Glance", extension: "tsx", tags: ["applet"], body: "export default function G() { return <main><p id=\"g\">glance</p></main>; }\n",
+  fields: { applet: { contract: 2, id: "glance", name: "Glance", glyph: "◇", note: "a test applet", access: [], screens: [{ id: "home", name: "Glance" }] }, settings: { name: "A glance", screen: "home" } } };
 const inSection = (page: Page) => section(page).frameLocator("iframe");
 
 test("an applet's section of Settings: asks first, then reads what it was allowed and changes nothing; changed code stops it", async ({ page }) => {
   const used = await record(hubState(), "create", { path: "Uses/Today", extension: "md", body: "41% of the week" });
   const note = await record(hubState(), "create", ARGS);
+  const control = await record(hubState(), "create", CONTROL);
   try {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Glance/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
     // not allowed yet: Settings draws nothing of it, not its heading either (anything that writes the vault could
     // otherwise put a heading in Settings)
     await page.goto("/settings");
-    await expect(page.getByRole("heading", { name: "Your Parachutes" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "A glance" }).frameLocator("iframe").locator("#g")).toHaveText("glance");
     await expect(page.getByRole("heading", { name: "How much is used" })).toHaveCount(0);
 
     // its card says the section once; Allow on its own screen
     await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /^Use/ }).click();
     await expect(page.getByText("Show a section in Settings", { exact: true })).toHaveCount(1);
-    await expect(page.getByText("Shows a section in Settings, «How much is used»: what it reads, nothing it changes.")).toBeVisible();
+    await expect(page.getByText("Shows a section in Settings, «How much is used» (its screen short): what it reads, nothing it changes.")).toBeVisible();
     await page.getByRole("button", { name: "Allow" }).click();
     const own = page.frameLocator("iframe.applet-frame:visible");
     await expect(own.locator("#where")).toHaveText("On its own screen");
@@ -57,18 +64,26 @@ test("an applet's section of Settings: asks first, then reads what it was allowe
     await section(page).scrollIntoViewIfNeeded();
     const h = () => section(page).locator("iframe").evaluate((f) => (f as HTMLElement).getBoundingClientRect().height);
     await expect.poll(h).toBeGreaterThan(60);
-    expect(await h()).toBeLessThan(400);
+    expect(await h()).toBeLessThan(640);
     await expect(section(page).getByRole("link", { name: /Use/ }).last()).toHaveAttribute("href", new RegExp(`/v/${VAULT}/a/`));
+
+    // the frame leaves on purpose (it is stopped and drawn as one line): its place in Settings doesn't shrink
+    const before = await section(page).evaluate((e) => (e.parentElement as HTMLElement).getBoundingClientRect().height);
+    await inSection(page).locator("#leave").click();
+    await expect(section(page).locator("iframe")).toHaveCount(0);
+    await page.waitForTimeout(500);
+    expect(await section(page).evaluate((e) => (e.parentElement as HTMLElement).getBoundingClientRect().height)).toBeGreaterThanOrEqual(before - 1);
 
     // its code changes (an agent's update): the section goes until it is allowed again
     const cur = await api(hubState(), "GET", `notes?id=${note.id}`);
     await record(hubState(), "update", { id: note.id, body: CODE.replace("On its own screen", "On its own screen, changed"), if_updated_at: cur.updatedAt });
     await page.goto("/settings");
-    await expect(page.getByRole("heading", { name: "Your Parachutes" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "A glance" }).frameLocator("iframe").locator("#g")).toHaveText("glance");
     await expect(section(page)).toHaveCount(0);
   } finally {
     for (const n of (await api(hubState(), "GET", "notes?path_prefix=Uses/&limit=50")) as { id: string }[]) await api(hubState(), "DELETE", `notes/${n.id}`);
     await api(hubState(), "DELETE", `notes/${note.id}`);
+    await api(hubState(), "DELETE", `notes/${control.id}`);
     void used;
   }
 });
