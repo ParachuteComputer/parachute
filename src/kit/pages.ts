@@ -36,7 +36,7 @@ function bezier(x1: number, y1: number, x2: number, y2: number) {
 const curveOf = (v: string) => { const m = /cubic-bezier\(([^)]+)\)/.exec(v); const n = m ? m[1].split(",").map(Number) : [0.32, 0.72, 0, 1]; return bezier(n[0], n[1], n[2], n[3]); };
 
 export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElement; prev: HTMLButtonElement; next: HTMLButtonElement }, opts: PagesOptions): Pages {
-  let per = 1, pageW = 0, count = 1, at = 0, touched = false, follow = opts.start === "last", raf = 0, anim = 0, held = false, name = opts.name, pending = false;
+  let per = 1, pageW = 0, count = 1, at = 0, touched = false, follow = opts.start === "last", raf = 0, anim = 0, held = false, name = opts.name, pending = false, pinned = false;
   const marks: HTMLElement[] = [];
   const sky = document.createElement("div");
   sky.className = "pa-sky";
@@ -139,13 +139,22 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
     };
     anim = requestAnimationFrame(step);
   }
-  const turn = (by: number, how: "motion" | "cut" = "motion") => { touched = true; follow = opts.start === "last" && here() + by >= spreads() - 1; (how === "cut" ? jump : glide)(at + by); };
+  const turn = (by: number, how: "motion" | "cut" = "motion") => { touched = true; pinned = false; follow = opts.start === "last" && here() + by >= spreads() - 1; (how === "cut" ? jump : glide)(at + by); };
 
   // where the book is, as the person scrolls it (a finger, a trackpad): the line follows
-  const onScroll = () => { if (anim) return; const h = here(); if (h !== at) { at = h; touched = true; follow = opts.start === "last" && at >= spreads() - 1; say(); } };
+  const onScroll = () => {
+    if (anim) return;
+    const h = here();
+    // pinned to where it opens (toStart) and no one has touched it since: a scroll the browser gave it goes back
+    if (pinned && !held) { if (h !== at) jump(at); return; }
+    if (h !== at) { at = h; touched = true; follow = opts.start === "last" && at >= spreads() - 1; say(); }
+  };
+  // the person's own hand on the book (a finger, a wheel) ends the pin
+  const unpin = () => { pinned = false; };
+  book.addEventListener("wheel", unpin, { passive: true });
   book.addEventListener("scroll", onScroll, { passive: true });
   // a finger on the book stops a glide where it is
-  const stop = () => { held = true; if (anim) { cancelAnimationFrame(anim); anim = 0; book.style.removeProperty("scroll-snap-type"); at = here(); say(); } };
+  const stop = () => { held = true; pinned = false; if (anim) { cancelAnimationFrame(anim); anim = 0; book.style.removeProperty("scroll-snap-type"); at = here(); say(); } };
   const lift = () => { held = false; };
   book.addEventListener("pointerdown", stop);
   addEventListener("pointerup", lift, true);
@@ -199,7 +208,7 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
     if (!flow.contains(t) || !spreadW()) return;
     const x = t.getBoundingClientRect().left - book.getBoundingClientRect().left + book.scrollLeft;
     const s = Math.floor(x / spreadW());
-    if (s !== at) { touched = true; jump(s); }
+    if (s !== at) { touched = true; pinned = false; jump(s); }
   };
   flow.addEventListener("focusin", focus);
   const prev = () => turn(-1, "motion"), next = () => turn(1, "motion");
@@ -218,11 +227,14 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
   if (opts.start === "last") jump(spreads() - 1);
 
   return {
-    turn, to: (p: number) => { touched = true; jump(Math.floor(p / per)); },
-    toStart() { touched = false; follow = opts.start === "last"; jump(opts.start === "last" ? spreads() - 1 : 0); pending = true; soon(); },
+    turn, to: (p: number) => { touched = true; pinned = false; jump(Math.floor(p / per)); },
+    // (and pinned there until the person turns it: a browser may give a book shown again the scroll it had when it was
+    // hidden, after it has been measured)
+    toStart() { touched = false; follow = opts.start === "last"; jump(opts.start === "last" ? spreads() - 1 : 0); pending = true; pinned = true; soon(); },
     toEnd() { follow = true; jump(spreads() - 1); },
     setName(n) { if (n !== name) { name = n; soon(); } },
     toElement(el: Element) {
+      pinned = false;
       measure();
       const x = el.getBoundingClientRect().left - book.getBoundingClientRect().left + book.scrollLeft;
       touched = true; follow = false;
@@ -231,7 +243,7 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
     get at() { return at * per; }, get count() { return count; },
     destroy() {
       cancelAnimationFrame(raf); cancelAnimationFrame(anim); ro?.disconnect(); mo.disconnect();
-      book.removeEventListener("scroll", onScroll); book.removeEventListener("pointerdown", stop);
+      book.removeEventListener("scroll", onScroll); book.removeEventListener("pointerdown", stop); book.removeEventListener("wheel", unpin);
       book.removeEventListener("pointerdown", down); book.removeEventListener("pointermove", move); book.removeEventListener("pointerup", up); book.removeEventListener("pointercancel", up);
       book.removeEventListener("click", click, true); book.removeEventListener("wheel", wheel); document.removeEventListener("keydown", key);
       removeEventListener("pointerup", lift, true); removeEventListener("pointercancel", lift, true);
