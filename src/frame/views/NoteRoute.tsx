@@ -46,18 +46,19 @@ export default function NoteRoute() {
     if (toViewer && viewer) {
       decided.set(location.key, "applet");
       const key = location.key;
-      void carryOn(location.pathname, viewerHref(viewer, rec.key, id)).then(() => call("nav.decided", { key, kind: "applet" }), () => { decided.set(key, "vault"); refused((n) => n + 1); });
+      void carryOn(location.pathname, viewerHref(viewer, rec.key, id)).then(() => call("nav.decided", { key, kind: "applet" }).catch(() => {}), () => { decided.set(key, "vault"); refused((n) => n + 1); });
       return;
     }
     decided.set(location.key, decision.kind);
     // the shell keeps it for a return to this entry; "applet" only once the shell has sent the person on
-    if (decision.kind !== "applet") void call("nav.decided", { key: location.key, kind: decision.kind });
+    // (refused when the frame is already hidden behind the applet it sent the person to: the shell keeps the entry's own)
+    if (decision.kind !== "applet") void call("nav.decided", { key: location.key, kind: decision.kind }).catch(() => {});
     if (decision.kind === "applet") {
       // a tap that led to this note leads on to the applet, once (the shell keeps the tap); anything else arrives stopped
       const key = location.key;
       // a move the shell refuses (the person already left) is forgotten: this entry decides again when it is shown again
       carryOn(location.pathname, appletHref(rec.key, decision.candidate, id))
-        .then(() => call("nav.decided", { key, kind: "applet" }), () => { decided.delete(key); });
+        .then(() => call("nav.decided", { key, kind: "applet" }).catch(() => {}), () => { decided.delete(key); });
     } else if (decision.kind === "ask" && ow.state === "ok" && ow.note) {
       openSheet(rec.key, id, true, { note: ow.note, cands: decision.candidates });
     }
