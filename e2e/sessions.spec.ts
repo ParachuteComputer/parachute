@@ -119,3 +119,43 @@ test("Sessions: a secret in any field of a run is hidden; earlier steps load fro
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
   }
 });
+
+// Third review of #162: a finished session's end, closing line and every report part go through the redactor; a steps
+// note that can't be read says so; a part mts reused for later steps says so.
+test("Sessions: a finished session's words are redacted; a missing steps note and a reused part say so", async ({ page }) => {
+  const made: string[] = [];
+  const mk = async (args: Record<string, unknown>) => { const r = await record(hubState(), "create", { extension: "md", ...args }); made.push(r.id); return r; };
+  const KEY = "sk-ant-wwwwwwwwwwwwwwww";
+  try {
+    await mk({ path: `Runs/${day} Mend the fence`, tags: ["run"], body: "# x",
+      fields: { state: "failed", ended: "failed", room: "yard", started_at: ago(90), ended_at: ago(60), summary: `bearer ${KEY}`, end_note: `password: ${KEY}`, feed: "01NOSUCHNOTE00000000000000",
+        report: { summary: `did it with ${KEY}`, artifacts: `token=${KEY}`, checks: `api_key ${KEY}`, open: `secret ${KEY}`, ripples: `${KEY}` } } });
+    const reused = await mk({ path: `Runs/Steps/${day} cccc3333 part 0`, tags: ["run-feed"], fields: { first: 400, n: 3 }, body: ["# Steps, part 2", "", `- ${ago(30)} · said · a later line`].join("\n") });
+    const feed = await mk({ path: `Runs/Steps/${day} cccc3333`, tags: ["run-feed"], fields: { first: 3, total: 4, parts: [{ id: reused.id, first: 0, n: 3 }], dropped: 0 },
+      body: ["# Steps", "", `- ${ago(20)} · said · the newest line`].join("\n") });
+    await mk({ path: `Runs/${day} Paint the shed`, tags: ["run"], body: "# x", fields: { state: "done", room: "yard", started_at: ago(50), ended_at: ago(40), summary: "Painted", feed: feed.id } });
+    made.push((await record(hubState(), "create", appletRecord("sessions"))).id);
+
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Sessions/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = page.frameLocator("iframe.applet-frame:visible");
+    const yard = app.getByRole("region", { name: "#yard" });
+    await expect(yard).toContainText("Mend the fence");
+    await expect(yard).not.toContainText("sk-ant");
+    await yard.getByRole("button", { name: /Mend the fence/ }).click();
+    await expect(app.getByText(/^Didn't finish: it failed\. What went wrong: \[hidden\]$/)).toBeVisible();
+    await expect(app.getByText("The steps couldn't be read")).toBeVisible();
+    const body = app.locator("body");
+    for (const w of ["sk-ant", "bearer", "password", "token=", "api_key"]) await expect(body).not.toContainText(w);
+
+    await app.getByRole("button", { name: /Sessions/ }).first().click();
+    await yard.getByRole("button", { name: /Paint the shed/ }).click();
+    await expect(app.getByText("the newest line")).toBeVisible();
+    await app.getByRole("button", { name: "Earlier steps" }).click();
+    await expect(app.getByText("Those steps are no longer kept.")).toBeVisible();
+    await expect(app.getByText("a later line")).toHaveCount(0);
+  } finally {
+    for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
+  }
+});

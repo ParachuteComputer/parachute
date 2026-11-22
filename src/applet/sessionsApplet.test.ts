@@ -11,11 +11,12 @@ const code = transform(block, { transforms: ["typescript"] }).code;
 type Item = { at: string | null; kind: string; text: string; n: number };
 type Pages = { first: number; total: number; dropped: number; parts: { id: string; first: number; n: number }[] };
 type Held = { items: Item[]; from: number; to: number };
-const { redactRaw, labelOk, safeStep, parseFeed, feedPages, withHead, partBefore, withPart, plainTitle, resultWords, plainWord } = new Function(`${code}; return { redactRaw, labelOk, safeStep, parseFeed, feedPages, withHead, partBefore, withPart, plainTitle, resultWords, plainWord };`)() as {
+const { redactRaw, labelOk, safeStep, parseFeed, feedPages, withHead, partBefore, withPart, plainTitle, resultWords, plainWord, endWords } = new Function(`${code}; return { redactRaw, labelOk, safeStep, parseFeed, feedPages, withHead, partBefore, withPart, plainTitle, resultWords, plainWord, endWords };`)() as {
   redactRaw: (t: string) => string; labelOk: (l: string) => boolean; safeStep: (t: string) => string;
   parseFeed: (c: string, first?: number) => Item[]; feedPages: (m: unknown) => Pages | null; withHead: (h: Held | null, head: Item[], p: Pages) => Held;
   partBefore: (p: Pages | null, from: number) => Pages["parts"][number] | null; withPart: (h: Held, part: Pages["parts"][number], lines: Item[]) => Held;
-  plainTitle: (t: string) => string; resultWords: (s: string | null) => string | null; plainWord: (v: unknown, re: RegExp) => string | null };
+  plainTitle: (t: string) => string; resultWords: (s: string | null) => string | null; plainWord: (v: unknown, re: RegExp) => string | null;
+  endWords: (state: string, ended: unknown, summary: unknown, note: string | null, resumesAt: string | null) => string | null };
 const V = JSON.parse(readFileSync(`${process.cwd()}/src/applet/redaction-vectors.json`, "utf8")) as {
   rules: { name: string; re: string; flags: string; mix: boolean }[]; fold: Record<string, string>; dashes: string;
   cases: { name: string; in: string; out: string }[]; label_cases: { name: string; label: string; ok: boolean }[]; step_lines: { name: string; in: string; out: string }[] };
@@ -56,6 +57,22 @@ describe("a long session, a part at a time", () => {
     const held = withPart(withHead(null, parseFeed(lines(171, 231), 171), pages), pages.parts[0], parseFeed(lines(0, 200), 0));
     const again = withHead(held, parseFeed(lines(180, 240), 180), { ...pages, first: 180, total: 240 });
     expect(again.items.map((x) => x.n)).toEqual(Array.from({ length: 240 }, (_, i) => i));
+  });
+});
+
+describe("how it ended", () => {
+  it("in a sentence, from mts's ended word or its closing line", () => {
+    expect(endWords("working", "done", null, null, null)).toBeNull();
+    expect(endWords("failed", "limit", null, null, "Sat 7:00 AM")).toBe("Didn't finish: it ran out of room: the Claude account reached its session limit. It picks up again by itself at Sat 7:00 AM.");
+    expect(endWords("failed", "killed", null, "out of memory", null)).toBe("Didn't finish: it was cut off before the end. out of memory");
+    expect(endWords("failed", null, "mts ab12cd34: failed_to_start", null, null)).toBe("It never started.");
+    expect(endWords("finished", null, null, null, null)).toBe("Finished.");
+    expect(endWords("stopped", "superseded", null, null, null)).toBe("Didn't finish: it was stopped.");
+    expect(endWords("silent", null, null, null, null)).toMatch(/^Didn't finish: nothing has been heard/);
+  });
+  it("a title cut short or carrying a run id reads as words", () => {
+    expect(plainTitle("T-488: Gemini Neon as implementers (resu")).toBe("Gemini Neon as implementers");
+    expect(plainTitle("Messages wait during a restart (xofe0cpt)")).toBe("Messages wait during a restart");
   });
 });
 

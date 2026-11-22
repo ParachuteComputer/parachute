@@ -164,7 +164,7 @@ function withPart(held: Held, part: Part, lines: readonly Item[]): Held {
 
 // ── words (the Uni app's live.ts plainTitle, resultWords): no task numbers, run ids or the launcher's own lines ──
 function plainTitle(raw: string): string {
-  return raw.replace(/\((?:resume|resumes|fork)\s+[a-z0-9]{8}\)/gi, "").replace(/\(\d+\)\s*$/, "").replace(/\bT-\d+[a-z]?\b:?/gi, "")
+  return raw.replace(/\((?:resume|resumes|fork)\s+[a-z0-9]{8}\)/gi, "").replace(/\s*\([a-z0-9]{8}\)/g, "").replace(/\s*\([^)]{0,12}$/, "").replace(/\(\d+\)\s*$/, "").replace(/\bT-\d+[a-z]?\b:?/gi, "")
     .replace(/\s{2,}/g, " ").replace(/^[\s·:–—-]+|[\s·:–—-]+$/g, "").trim();
 }
 function resultWords(summary: string | null): string | null {
@@ -237,7 +237,7 @@ function runOf(r: Rec, now: number): Run | null {
     ended: state === "working" ? null : str(f.ended_at) ?? (state === "silent" ? str(f.doing_at) : r.updatedAt),
     now: state === "working" ? (str(f.doing_now) ? safeStep(redactRaw(f.doing_now)) : null) : null, nowAt: str(f.doing_at),
     steps: typeof f.steps === "number" && f.steps > 0 ? Math.floor(f.steps) : 0,
-    cost: typeof f.cost === "number" && Number.isFinite(f.cost) && f.cost >= 0 ? f.cost : null, model: plainWord(f.model, /^claude-[a-z]+-\d+(?:-\d+)*$/),
+    cost: typeof f.cost === "number" && Number.isFinite(f.cost) && f.cost >= 0 ? f.cost : null, model: plainWord(f.model, /^claude-[a-z]+-\d+(?:-\d+)*(?:\[1m\])?$/),
     task: str(f.task) && /^T-\d+[a-z]?$/i.test(f.task) ? f.task.toUpperCase() : null, summary: resultWords(said(f.summary, 300)), feed: str(f.feed) && /^[A-Za-z0-9_-]{1,128}$/.test(f.feed) ? f.feed : null, fields: f,
   };
 }
@@ -263,13 +263,16 @@ function Steps({ run, again }: { run: Run; again: number }) {
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [earlierSaid, setEarlierSaid] = useState<{ gone: number; line: string } | null>(null);
+  const [partFailed, setPartFailed] = useState(false);
   // the steps note read again when the session has taken more steps, and on each pull (or the applet shown again):
   // what was held before its first line stays (withHead)
   useEffect(() => {
     let live = true;
     if (!run.feed) { setHeld(null); return; }
-    void vault.getRecord(run.feed).then((n: Rec) => {
+    void vault.getRecord(run.feed).then((n: Rec | null) => {
       if (!live) return;
+      // the kit answers a note it can't read (gone, or the hub out of reach) with null
+      if (!n) { setFailed(true); setHeld((was) => was ?? null); return; }
       const p = feedPages(n.fields) ?? { first: 0, total: 0, dropped: 0, parts: [] };
       const head = parseFeed(n.body, p.first);
       setPages(p); setFailed(false);
@@ -286,14 +289,18 @@ function Steps({ run, again }: { run: Run; again: number }) {
       const n: Rec = await vault.getRecord(earlier.id);
       // mts keeps the last 25 parts and reuses the oldest note for the next 200 steps: a part that now holds other steps
       // is no longer these
+      if (!n) throw new Error("unread");
       if ((n.fields ?? {}).first !== earlier.first) { setEarlierSaid({ gone: earlier.first + earlier.n, line: "Those steps are no longer kept." }); return; }
+      setPartFailed(false);
       setHeld((h) => (h ? withPart(h, earlier, parseFeed(n.body, earlier.first)) : h));
-    } catch { setEarlierSaid({ gone: earlier.first + earlier.n, line: "Couldn't load earlier steps." }); } finally { setBusy(false); }
+    } catch { setPartFailed(true); } finally { setBusy(false); }
   };
   if (held === undefined) return <Loading />;
   if (held === null || !held.items.length) return failed ? <Problem>The steps couldn't be read</Problem> : <Empty>No steps written yet.</Empty>;
   const dropped = pages && !earlier && pages.dropped > 0 && held.from <= pages.dropped ? pages.dropped : 0;
   return <>
+    {failed ? <p className="facts">The steps couldn't be read again: this is what was read before.</p> : null}
+    {partFailed ? <p className="facts">Couldn't load earlier steps.</p> : null}
     {earlier ? <Button small busy={busy} onClick={more}>Earlier steps</Button> : earlierSaid ? <p className="facts">{earlierSaid.line}</p> : dropped ? <p className="facts">The first {dropped} steps are no longer kept.</p> : null}
     <List label="Steps" hideLabel rows={held.items.map((it) => ({ key: String(it.n), title: <span className={it.kind}>{it.text}</span>, aside: it.at ? when.time(it.at) : undefined }))} />
   </>;
@@ -321,6 +328,7 @@ export default function Sessions() {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Run | null>(null);
   const [again, setAgain] = useState(0);
+  const [capped, setCapped] = useState(false);
   const asked = useRef(0);
   const load = async () => {
     const me = ++asked.current;
@@ -328,6 +336,7 @@ export default function Sessions() {
     try {
       const rows: Rec[] = await vault.queryRecords({ pathPrefix: "Runs/", tag: "run", includeFields: true, limit: SHOWN });
       if (me !== asked.current) return;
+      setCapped(rows.length >= SHOWN);
       const now = Date.now();
       const all = rows.map((r) => runOf(r, now)).filter((r): r is Run => !!r);
       setRuns(all.sort((a, b) => Date.parse(b.started) - Date.parse(a.started)));
@@ -345,11 +354,12 @@ export default function Sessions() {
   const rooms = [...new Set(done.map((r) => r.room))];
   return <Page title="Sessions" onRefresh={load}>
     <style>{CSS}</style>
-    {error ? <Problem error={error} onRetry={load}>The sessions couldn't be read</Problem> : runs === undefined ? <Loading /> : !runs.length ? <Empty>No sessions yet: mts writes one here each time Uni starts a worker.</Empty> : <>
+    {error ? <Problem error={error} onRetry={load}>{runs ? "The sessions couldn't be read again" : "The sessions couldn't be read"}</Problem> : null}
+    {runs === undefined ? (error ? null : <Loading />) : runs === null ? null : !runs.length ? <Empty>No sessions yet: mts writes one here each time Uni starts a worker.</Empty> : <>
       {working.length ? <List label="Working now" rows={working.map((r) => ({ key: r.id, title: r.title, meta: `#${r.room} · ${metaOf(r)}`, strong: true, onPress: () => setOpen(r) }))} />
         : <p className="facts">Nothing is working now.</p>}
       {rooms.map((room) => <List key={room} label={`#${room}`} rows={done.filter((r) => r.room === room).map((r) => ({ key: r.id, title: r.title, meta: metaOf(r), badge: WORDS[r.state], onPress: () => setOpen(r) }))} />)}
-      {runs.length >= SHOWN ? <p className="facts">The {SHOWN} sessions that changed last.</p> : null}
+      {capped ? <p className="facts">The {SHOWN} sessions that changed last.</p> : null}
     </>}
   </Page>;
 }
