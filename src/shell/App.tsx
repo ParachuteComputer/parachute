@@ -30,7 +30,7 @@ import { openBundleNow, readSettings, settingsReadNow, subscribeSettings, useSet
 import { relistVaults } from "../vault/newVaults";
 import { isMine } from "../vault/whose";
 import { homeVault, useFrameSource } from "./frameSource";
-import { readTheme, watchTheme } from "../theme/store";
+import { lookAtTheHour, readTheme, watchTheme } from "../theme/store";
 import WriteAsk from "./WriteAsk";
 import Security from "./Security";
 
@@ -55,7 +55,7 @@ function Taps() {
     });
     return () => { gone = true; off(); };
   }, []);
-  useEffect(() => { arrived(location.pathname); }, [location.pathname]);
+  useEffect(() => { arrived(location.pathname); lookAtTheHour(); }, [location.pathname]);
   // Parachute's own applets: a signed update, read once each time the app starts (docs/design/PARACHUTE-SOURCE.md)
   useEffect(() => { void import("../applet/parachuteSource").then((s) => s.syncParachuteSource()); }, []);
   // the bar's counts (services/signals.ts): counted from the start; the applet on screen has none (what comes while it

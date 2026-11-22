@@ -5,7 +5,7 @@ import { grantKey, type Grant } from "./grant";
 import { grow } from "../views/AppletScreen";
 import { failureOf } from "../views/Embeds";
 import { VaultAuthError, VaultPermissionError, VaultUnreachableError } from "@openparachute/surface-client";
-import { DEFAULT_LOOK, DEFAULT_THEME, LOOKS } from "../theme/theme";
+import { DEFAULT_LOOK, DEFAULT_THEME, LOOKS, tokensOf } from "../theme/theme";
 
 describe("a page's embeds", () => {
   it("are at most 8, each name once; anything that isn't an embed is dropped", () => {
@@ -48,6 +48,14 @@ describe("a page's embeds", () => {
     const u = embedTokens({ look: "nonsense" });
     expect(u.look).toBe(DEFAULT_LOOK);
     expect(u["line-row"]).toBe(LOOKS[DEFAULT_LOOK].style["line-row"]);
+  });
+  it("an embed gets the host's sky at the host's hour, light or dark, never the record's own sky", () => {
+    const shell = tokensOf(DEFAULT_THEME, true, "evening");
+    const t = embedTokens({ ...shell, "sky-top": "#123456" });
+    for (const k of ["sky-top", "sky-mid", "sky-foot"] as const) expect(t[k]).toBe(shell[k]);
+    expect(t.hour).toBe("evening");
+    expect(embedTokens({ scheme: "light", hour: "nonsense" })["sky-top"]).toBe(tokensOf(DEFAULT_THEME, false, "midday")["sky-top"]);
+    expect(embedTokens({ look: "almanac", hour: "night" })["sky-top"]).toBe("var(--bg)");
   });
 });
 

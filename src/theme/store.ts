@@ -15,7 +15,7 @@ import { plain, stripExt } from "../applet/contract";
 import { clientFor, keptClientFor } from "../vault/client";
 import { onFresh } from "../vault/readCache";
 import { homeVault } from "../shell/frameSource";
-import { DEFAULT_THEME, MOTION_CSS, onScreen, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, withLook, withTodaysFonts, type ScreenChoice, type Theme, type Tokens } from "./theme";
+import { DEFAULT_THEME, hourOf, MOTION_CSS, onScreen, recordOf, themeFrom, TOKEN_KEYS, TYPE_SCALE, tokensOf, withLook, withTodays, type Hour, type ScreenChoice, type Theme, type Tokens } from "./theme";
 import { FONTS_CSS } from "./fonts";
 
 export const THEME_TAG = "parachute-theme";
@@ -68,8 +68,21 @@ export function setScreen(v: ScreenChoice) {
   bump();
 }
 
-/** The tokens as applied now: the theme (or Daylight, on this screen), in the palette the device's scheme (or the record) picks. */
-export const tokensNow = (): Tokens => tokensOf(onScreen(themeNow().theme, screenNow()), !!darkQuery()?.matches);
+// The part of the day the sky at a place's head follows (theme.ts hourOf). Looked at again when the app comes back to the
+// front and on each move to another screen (shell/App.tsx), never on a timer: a sky that turns while the person reads
+// would be a change they didn't make.
+let hourHere: Hour = hourOf();
+/** The sky follows the clock: when the part of the day has changed since it was last looked at, every screen gets the new sky. */
+export function lookAtTheHour() {
+  const now = hourOf();
+  if (now === hourHere) return;
+  hourHere = now;
+  bump();
+}
+if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") lookAtTheHour(); });
+
+/** The tokens as applied now: the theme (or Daylight, on this screen), in the palette the device's scheme (or the record) picks, under the hour's sky. */
+export const tokensNow = (): Tokens => tokensOf(onScreen(themeNow().theme, screenNow()), !!darkQuery()?.matches, hourHere);
 
 // ── the store ──
 
@@ -110,6 +123,7 @@ export function applyToDocument() {
     document.head.appendChild(f);
   }
   document.documentElement.dataset.motion = t.motion;
+  document.documentElement.dataset.hour = t.hour;
 }
 darkQuery()?.addEventListener?.("change", () => bump());
 einkQuery()?.addEventListener?.("change", () => bump());
@@ -184,7 +198,7 @@ async function changeTheme(change: (raw: Record<string, unknown>) => Record<stri
   if (!n && rows.length > 1) throw new Error(`Your home vault has ${rows.length} theme notes; keep one, at ${THEME_PATH}.`);
   if (n) {
     const was = themeOf(n);
-    const theme = change(plain(was) ? withTodaysFonts({ ...was }) : recordOf(DEFAULT_THEME));
+    const theme = change(plain(was) ? withTodays({ ...was }) : recordOf(DEFAULT_THEME));
     const updatedAt = (n as { updatedAt?: string }).updatedAt;
     await c.updateNote(n.id, { metadata: { ...(n.metadata ?? {}), theme }, ...(updatedAt ? { if_updated_at: updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
   } else {

@@ -1,11 +1,12 @@
 # The theme
 
 The look of the whole app comes from one note: the app's own screens, the frame (launcher, vaults, notes) and every
-applet. Until you change it, the app uses the built-in Parachute theme: paper, ink, a moss accent, a book serif
-(Literata) for reading and a quiet sans (Instrument Sans) for the app's own words.
+applet. Until you change it, the app uses the built-in Parachute theme ([LOOK.md](LOOK.md)): warm paper with hairlines,
+the sky of the hour at the head of each place, coral for the one thing you do next, a display serif (Fraunces) for a
+place's name, a book serif (Literata) for reading and a quiet sans (Instrument Sans) for the app's own words.
 
 A theme starts from one of four built-in **looks**, which set the palettes and how the parts are drawn (rules, corners,
-depth, labels): `paper`, the default (hairlines, soft corners, a card lifted a little, boxed fields), `almanac` (ink rules, dotted
+depth, labels): `paper`, the default (the hour's sky at a place's head, hairlines, soft corners, the one card with light on it, boxed fields, coral on the main action), `almanac` (ink rules, dotted
 rows, a printed card, a line to write on), `book` (a printed page: no raised parts, a double rule, small capitals) and
 `daylight` (black on white for an e-paper screen: heavier rules, no tints or shadows, nothing moves). Every value a
 look sets is a token, and the note can change any of them one by one.
@@ -21,9 +22,9 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
 
 ```json
 {
-  "colors": { "bg": "#f2ede2", "surface": "#fbf8f1", "text": "#1d1a16", "muted": "#6d665a", "line": "#d9d1c1", "accent": "#4f6b3a", "danger": "#9a3324" },
-  "dark": { "bg": "#171613", "surface": "#201e1a", "text": "#ece7dc", "muted": "#a59d8e", "line": "#3a362f", "accent": "#a3bf8a", "danger": "#f08f7f" },
-  "fonts": { "serif": "Literata, \"Literata fallback\", Georgia, serif", "sans": "\"Instrument Sans\", \"Instrument Sans fallback\", system-ui, sans-serif", "mono": "ui-monospace, monospace" },
+  "colors": { "bg": "#fbf8f1", "surface": "#ffffff", "text": "#27221d", "muted": "#6b6459", "line": "#e6ddcc", "accent": "#2f5470", "danger": "#a3341f" },
+  "dark": { "bg": "#1a1814", "surface": "#24211c", "text": "#ede6d9", "muted": "#a89f90", "line": "#3a352d", "accent": "#8fbad3", "danger": "#f08f7f" },
+  "fonts": { "serif": "Literata, \"Literata fallback\", Georgia, serif", "sans": "\"Instrument Sans\", \"Instrument Sans fallback\", system-ui, sans-serif", "mono": "ui-monospace, monospace", "display": "Fraunces, \"Fraunces fallback\", Georgia, serif" },
   "density": "regular",
   "scheme": "system",
   "motion": "flowing",
@@ -34,9 +35,9 @@ before 0.9, where a record's fields are called `metadata`, in `metadata.theme`):
 
 | Key | What it sets |
 |---|---|
-| `colors` | The light palette: the page (`bg`), raised parts (`surface`), text, quieter text (`muted`), rules (`line`), the one accent, and `danger`. |
+| `colors` | The light palette: the page (`bg`), raised parts (`surface`), text, quieter text (`muted`), rules (`line`), the accent (links, the focus ring, a ticked box), and `danger`. In a `paper` theme, a colour that is exactly paper's before the sky (the moss and cream of 11-20, `#f2ede2`, `#4f6b3a` and the rest) reads as today's: "Make this look mine" wrote them in full, so they were the built-in colours of their day, not a choice. The next change in Settings takes them out of the note. |
 | `dark` | The same seven, for dark mode. |
-| `fonts` | `serif` (names, titles and reading: notes, the journal, a record's body), `sans` (labels, buttons, the bar) and `mono`: lists of font names. The app carries two faces, Literata and Instrument Sans (SIL OFL, licences in `public/licenses/`), in every screen and applet with no download; any other font must be one the device has, since a theme loads nothing. They hold Western European letters (Latin-1), common punctuation, € and ™: ł, č, ő and the like, and any other script, come from the next font in the list. End with `serif`, `sans-serif` or `monospace`. A theme that holds the earlier built-in stacks word for word (written by "Make this look mine" before the app carried these faces) gets them too, and the next change in Settings writes them in; to keep system fonts, write the list another way. `… fallback` is a local font sized to the face, for the moment before it is drawn. |
+| `fonts` | `display` (a place's name and the one big line of a screen, such as Home's greeting), `serif` (names and reading: notes, the journal, a record's body, headings), `sans` (labels, buttons, the bar) and `mono`: lists of font names. The app carries three faces, Fraunces, Literata and Instrument Sans (SIL OFL, licences in `public/licenses/`), in every screen and applet with no download; any other font must be one the device has, since a theme loads nothing. They hold Western European letters (Latin-1), common punctuation, € and ™: ł, č, ő and the like, and any other script, come from the next font in the list. End with `serif`, `sans-serif` or `monospace`. A theme that holds the earlier built-in stacks word for word (written by "Make this look mine" before the app carried these faces) gets them too, and the next change in Settings writes them in; to keep system fonts, write the list another way. `… fallback` is a local font sized to the face, for the moment before it is drawn. |
 | `density` | `compact`, `regular` or `roomy`: the padding, gaps, corners and text size. |
 | `scheme` | `system` (follow the device), `light` or `dark`. |
 | `motion` | `flowing` (pages, sheets and toasts arrive and go, a press gives) or `still` (nothing moves). A device set to reduce motion, or a screen slow to redraw (e-ink), is still whatever this says. |
@@ -64,7 +65,7 @@ it uses the built-in theme. Delete the note to go back to it.
 The kit's parts (`Page`, `List`, `Button`, `Write`, `Note` and the rest, [WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)) are
 drawn on these values, so they follow the theme with no work. Each value is also a CSS variable in the applet's frame:
 `--bg`, `--surface`, `--text`, `--muted`, `--line`, `--accent`, `--danger`, `--serif`, `--sans`, `--mono`, `--pad`,
-`--gap`, `--radius`, `--size`, `--leading`, and the style tokens in the table below. Write your CSS on these, and the
+`--gap`, `--radius`, `--size`, `--leading`, `--display` (the display face), and the style tokens in the table below. Write your CSS on these, and the
 applet changes with the theme.
 
 The style tokens, what each draws, and its value in `paper` and in `almanac` (`src/theme/theme.ts`, `STYLE_TOKENS` and
@@ -72,8 +73,8 @@ The style tokens, what each draws, and its value in `paper` and in `almanac` (`s
 
 | Token | What it draws | `paper` | `almanac` |
 |---|---|---|---|
-| `--primary` | The main action's fill (a primary button, a field's action). | `var(--accent)` | `var(--text)` |
-| `--on-primary` | Text on the main action. | `var(--surface)` | `var(--bg)` |
+| `--primary` | The main action's fill (a primary button, a field's action): the one thing you do next, and a count of what wants you on the bar. In `paper` it is coral whatever the accent is; set it in `tokens` to change it. | `#bf4a2a` (coral; `#e07552` in the dark) | `var(--text)` |
+| `--on-primary` | Text on the main action. | `#ffffff` | `var(--bg)` |
 | `--tint` | A row under the pointer, the row open now: a light wash. | `color-mix(in srgb, var(--text) 5%, transparent)` | `color-mix(in srgb, var(--line) 30%, transparent)` |
 | `--card-fill` | A card's ground. | `var(--surface)` | `var(--surface)` |
 | `--field-fill` | The ground of a box to write in (search, a text box, a bare input). | `var(--surface)` | `var(--surface)` |
@@ -94,13 +95,21 @@ The style tokens, what each draws, and its value in `paper` and in `almanac` (`s
 | `--radius-field` | A box to write in: its corners. | `var(--radius)` | `var(--radius)` |
 | `--radius-entry` | A one-line field's corners (0 for a line to write on). | `var(--radius)` | `0px` |
 | `--radius-button` | A button's corners (`999px`: a pill). | `999px` | `999px` |
-| `--shadow-card` | A card's depth, and a toast's (`none`: flat on the page). | `0 1px 0 rgb(60 45 30 / .05), 0 8px 22px -16px rgb(60 45 30 / .22)` | `3px 3px 0 var(--line)` |
+| `--shadow-card` | A card's depth, and a toast's (`none`: flat on the page). | `0 1px 2px rgb(60 45 30 / .05), 0 12px 32px -6px rgb(60 45 30 / .12)` | `3px 3px 0 var(--line)` |
 | `--shadow-sheet` | The depth of a sheet rising over the page. | `0 -1px 0 var(--line), 0 -16px 40px -24px rgb(40 30 20 / .35)` | `none` |
 | `--label-transform` | A small label's case: `none` or `uppercase`. | `none` | `uppercase` |
 | `--label-caps` | A small label in small capitals: `normal` or `all-small-caps`. | `normal` | `normal` |
 | `--label-track` | A small label's letter spacing, in em. | `0em` | `.14em` |
-| `--title-weight` | The weight of a page's title and the serif headings. | `400` | `400` |
+| `--title-weight` | The weight of a page's title (in the display face) and the serif headings. | `600` | `400` |
 | `--measure` | A page's width at most (never under 20em). | `760px` | `760px` |
+| `--sky-top` | The hour's sky at the very top of a place's first page. | the hour's: `#d9e9f2` at midday | `var(--bg)` (no sky) |
+| `--sky-mid` | The sky halfway down the head. | `#edf4f6` at midday | `var(--bg)` |
+| `--sky-foot` | Where the sky meets the paper. | `#fbf8f1` at midday | `var(--bg)` |
+
+The sky follows the time of day in `paper`: morning (5 to 11) gold, midday clear, evening (16 to 21) rose, night a
+dusk lilac, each in a light and a dark version. The app looks at the hour when it comes to the front and at each move
+to another place, never on a timer, so the sky never turns under your eyes. A theme's `tokens` can fix any of the three
+for every hour. `theme.get()` says the part of the day as `hour`.
 
 A case is `none`, `uppercase`, `lowercase` or `capitalize`; capitals `normal`, `small-caps` or `all-small-caps`; a
 letter spacing between `-0.3em` and `0.3em`; a weight `100` to `900`.
@@ -111,7 +120,7 @@ or changing), `--t-sheet` (300 ms, a sheet or a toast) and `--t-step` (40 ms, a 
 only `transform` and `opacity`, on these: with reduce-motion on the device or a still theme every time is 0, and your
 applet is still with the rest ([DESIGN-RULES.md](DESIGN-RULES.md)).
 
-Text sizes come from one scale, a step each on `--size` (so density moves them all): `--fs-title` (a page's title, 2×),
+Text sizes come from one scale, a step each on `--size` (so density moves them all): `--fs-display` (the one big line of a screen, Home's greeting, 2.6×), `--fs-title` (a page's title, 2×),
 `--fs-head` (a heading, 1.35×), `--fs-lead` (a row's or a note's text, 1.12×), `--fs-body` (1×), `--fs-small` (a line
 under a row, 0.875×) and `--fs-label` (a small capital label, 0.75×). The shipped applets size text only with these,
 and a check fails one that doesn't (`src/kit/conformance.ts`), so the same thing is the same size in every applet. `theme.get()` and `theme.on(cb)` give the same values as an object

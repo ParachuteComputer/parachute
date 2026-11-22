@@ -6,8 +6,8 @@ import { api, hubState, record } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
-const PAPER = "rgb(242, 237, 226)"; // the built-in --bg, #f2ede2
-const SURFACE = "rgb(251, 248, 241)"; // --surface, #fbf8f1
+const PAPER = "rgb(251, 248, 241)"; // the built-in --bg, #fbf8f1
+const SURFACE = "rgb(255, 255, 255)"; // --surface, #ffffff
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
 const style = (page: Page, sel: string, prop: string) => frame(page).locator(sel).first().evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), prop);
 
@@ -54,7 +54,7 @@ test("an HTML applet with no CSS of its own is drawn in the theme, can use the p
     // the page: paper, the sans for the words, the serif for the title
     expect(await style(page, "body", "background-color")).toBe(PAPER);
     expect(await style(page, "body", "font-family")).toContain("Instrument Sans");
-    expect(await style(page, "h1", "font-family")).toContain("Literata");
+    expect(await style(page, "h1", "font-family")).toMatch(/^"?Fraunces"?,/);
     // a bare button and field look like the kit's, not the browser's
     expect(await style(page, "#plain", "background-color")).toBe(SURFACE);
     expect(parseFloat(await style(page, "#plain", "border-top-left-radius"))).toBeGreaterThan(6);
@@ -73,7 +73,7 @@ test("a TSX applet that draws its own markup without the parts still gets the pa
   try {
     expect(await style(page, "body", "background-color")).toBe(PAPER);
     expect(await style(page, "body", "font-family")).toContain("Instrument Sans");
-    expect(await style(page, "h1", "font-family")).toContain("Literata");
+    expect(await style(page, "h1", "font-family")).toMatch(/^"?Fraunces"?,/);
     expect(await style(page, "button", "background-color")).toBe(SURFACE);
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });

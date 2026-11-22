@@ -7,7 +7,7 @@ import { ui } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
-const PAPER = "rgb(242, 237, 226)"; // the built-in bg, #f2ede2
+const PAPER = "rgb(251, 248, 241)"; // the built-in bg, #fbf8f1
 const SAGE = "rgb(236, 238, 233)"; // #eceee9
 const THEME = { colors: { bg: "#eceee9", accent: "#2f5470" }, density: "roomy" };
 
@@ -41,7 +41,7 @@ test("writing the theme note restyles the shell and the frame while the app runs
 
   // a value that doesn't read is the built-in one; the rest stand
   await api(hubState(), "PATCH", `notes/${note.id}`, { metadata: { theme: { ...THEME, colors: { ...THEME.colors, accent: "url(https://example.invalid/x.png)" } } }, if_updated_at: note.updatedAt });
-  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim())).toBe("#4f6b3a");
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim())).toBe("#36627d");
   expect(await shellBg(page)).toBe(SAGE);
 
   await api(hubState(), "DELETE", `notes/${note.id}`);
@@ -55,7 +55,7 @@ test("a running applet restyles too", async ({ page }) => {
   await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(applet(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
-  await expect.poll(() => appletVar(page, "--accent")).toBe("#4f6b3a");
+  await expect.poll(() => appletVar(page, "--accent")).toBe("#36627d");
   const same = await notReloaded(page);
 
   await api(hubState(), "POST", "notes", { path: "Parachute/Theme", tags: ["parachute-theme"], metadata: { theme: THEME } });
@@ -76,7 +76,7 @@ test("the first change in Settings copies the built-in theme into the home vault
   expect(n.tags).toContain("parachute-theme");
   // written in full, so every value is there for the person or their agent to change
   expect(n.metadata.theme.density).toBe("roomy");
-  expect(n.metadata.theme.colors.accent).toBe("#4f6b3a");
+  expect(n.metadata.theme.colors.accent).toBe("#36627d");
   expect(Object.keys(n.metadata.theme.dark)).toHaveLength(7);
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--gap").trim())).toBe("18px");
   await expect(look.getByRole("button", { name: "Make this look mine" })).toHaveCount(0);
@@ -88,4 +88,24 @@ test("a theme written while the app was closed is the look of the shell and the 
   await expect(ui(page).getByRole("list", { name: "Notes" })).toBeVisible();
   await expect.poll(() => shellBg(page)).toBe(SAGE);
   await expect.poll(() => frameBg(page), { timeout: 3000 }).toBe(SAGE);
+});
+
+test("the sky at a place's head follows the part of the day, looked at on each move, in the shell and in an applet", async ({ page }) => {
+  // an evening: the rose sky (docs/LOOK.md)
+  await page.clock.setFixedTime(new Date(2026, 10, 22, 18, 30));
+  await page.goto(`/v/${VAULT}?with=vault`);
+  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
+  await page.getByRole("button", { name: "Allow" }).click();
+  await expect(applet(page).getByRole("heading", { name: "Recipe box" })).toBeVisible();
+  const shellSky = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--sky-top").trim());
+  expect(await shellSky()).toBe("#e5e2ec");
+  await expect.poll(() => appletVar(page, "--sky-top")).toBe("#e5e2ec");
+  // the next morning, the person moves to another place and back: the morning's sky, in the shell and the applet
+  await page.clock.setFixedTime(new Date(2026, 10, 23, 8, 15));
+  const same = await notReloaded(page);
+  await page.getByRole("button", { name: "Back" }).click();
+  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Recipe box/ }).click();
+  await expect.poll(shellSky).toBe("#e6f0f6");
+  await expect.poll(() => appletVar(page, "--sky-top")).toBe("#e6f0f6");
+  expect(await same()).toBe(1);
 });

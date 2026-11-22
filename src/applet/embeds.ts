@@ -12,7 +12,7 @@ import { hasHidden, hasOnly, plain } from "./contract.ts";
 import { canonical as canonicalJson } from "./grant.ts";
 import { sha256Hex } from "./needs.ts";
 import type { Rule } from "./manifest.ts";
-import { COLOR_KEYS, DEFAULT_LOOK, DEFAULT_THEME, DENSITY, DENSITY_KEYS, FONT_KEYS, LOOK_NAMES, LOOKS, type Density, type LookName } from "../theme/theme.ts";
+import { COLOR_KEYS, DEFAULT_LOOK, DEFAULT_THEME, DENSITY, DENSITY_KEYS, FONT_KEYS, HOURS, LOOK_NAMES, LOOKS, type Density, type Hour, type LookName } from "../theme/theme.ts";
 
 export type Embed = { name: string; record: string; props: Record<string, unknown> };
 export const MAX_EMBEDS = 8;
@@ -72,6 +72,11 @@ export function embedTokens(t: Record<string, string>): Record<string, string> {
   // how the parts are drawn: a built-in look's own values, by its name (the record's own style tokens don't come along)
   const look = LOOKS[(LOOK_NAMES as readonly string[]).includes(t.look) ? (t.look as LookName) : DEFAULT_LOOK];
   Object.assign(out, look.style, dark ? look.darkStyle : {});
+  // the hour's sky, as the host has it (a built-in look's own, never the record's)
+  const hour: Hour = (HOURS as readonly string[]).includes(t.hour) ? (t.hour as Hour) : "midday";
+  const skies = dark ? look.darkSkies : look.skies;
+  if (skies) { out["sky-top"] = skies[hour][0]; out["sky-mid"] = skies[hour][1]; out["sky-foot"] = skies[hour][2]; }
+  out.hour = hour;
   out.look = (LOOK_NAMES as readonly string[]).includes(t.look) ? t.look : DEFAULT_LOOK;
   return out;
 }
