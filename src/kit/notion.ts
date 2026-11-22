@@ -95,16 +95,23 @@ export function notionDate(raw: string): string | null {
   return null;
 }
 
-/** "Title (path.md), Other (path2.md)": each link's path, URL-decoded; null when the value isn't only such links. Found by
- *  their "(….md)" alone: a title may hold commas ("November 21, 2026") and parentheses, and so may a path, one deep. */
+/** A link to a page on notion.so: "https://www.notion.so/Harbor-Books-cover-<32 hex>?pvs=21". Since about 2023 Notion's
+ *  CSVs write a relation this way; older exports, and links inside pages, use the export's own relative paths. */
+const NOTION_URL = /^https?:\/\/(?:www\.)?notion\.so\/[^\s()]*?([0-9a-f]{32})(?:[?#][^\s()]*)?$/i;
+/** The 32-hex id Notion gives a page, from the end of a file name or a notion.so link; null when there is none. */
+const idIn = (s: string) => NOTION_URL.exec(s)?.[1]?.toLowerCase() ?? / ([0-9a-f]{32})(?:\.[a-z0-9]+)?$/i.exec(s)?.[1]?.toLowerCase() ?? null;
+
+/** "Title (path.md), Other (https://www.notion.so/Other-<id>?pvs=21)": each link's target (a path URL-decoded, or the
+ *  notion.so link as it is); null when the value isn't only such links. Found by their "(…)" alone: a title may hold
+ *  commas ("November 21, 2026") and parentheses, and so may a path, one deep. */
 function relations(raw: string): string[] | null {
-  const re = /\(((?:[^()]|\([^()]*\))+?\.(?:md|csv))\)/g;
+  const re = /\(((?:[^()]|\([^()]*\))+?\.(?:md|csv)|https?:\/\/(?:www\.)?notion\.so\/[^\s()]*?[0-9a-f]{32}[^\s()]*)\)/gi;
   const out: string[] = [];
   let last = 0;
   for (const m of raw.matchAll(re)) {
     // what came before this link, after the last one and its comma, is its title: there must be one
     if (!raw.slice(last, m.index).replace(/^\s*,/, "").trim()) return null;
-    out.push(dec(m[1]));
+    out.push(/^https?:/i.test(m[1]) ? m[1] : dec(m[1]));
     last = m.index! + m[0].length;
   }
   return out.length && !raw.slice(last).trim() ? out : null;
@@ -185,6 +192,12 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
     return parts.join("/");
   };
 
+  // every page and table by Notion's id, so a notion.so link finds what it became
+  const byId = new Map<string, string>();
+  for (const p of paths) { const id = idIn(noExt(p.replace(/_all\.csv$/i, ".csv")).split("/").pop()!); if (id && /\.(md|csv)$/i.test(p)) byId.set(id, p.replace(/_all\.csv$/i, ".csv")); }
+  /** Where a link leads in the export: a notion.so link by its id, a path from where it is written. */
+  const target = (from: string, raw: string) => (/^https?:/i.test(raw) ? byId.get(idIn(raw) ?? "") ?? raw : resolve(from, raw));
+
   // 1. Databases: one per "<title> <id>", from its _all.csv when there is one, each a type
   const dbs = new Map<string, string>();
   for (const p of paths.filter((x) => ext(x) === "csv")) {
@@ -219,7 +232,7 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
     const pages = paths.filter((x) => ext(x) === "md" && inFolder(x, t.key));
     const props = new Map(pages.map((p) => [p, propsOf(p)]));
     // a relation is written relative to where it is (the CSV, the page): compared by what it points at
-    const targets = (raw: string, from: string) => (relations(raw) ?? []).map((x) => resolve(from, x)).sort().join("\n");
+    const targets = (raw: string, from: string) => (relations(raw) ?? []).map((x) => target(from, x)).sort().join("\n");
     const same = (c: Col, rowValue: string, page: string) => {
       const v = props.get(page)!.get(c.header.toLowerCase());
       if (v === undefined) return false;
@@ -252,22 +265,24 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   const wiki = (rec: string, label: string) => `[[${rec}${label && label !== rec.split("/").pop() ? `|${label}` : ""}]]`;
   const words = (from: string, body: string) => body
     // (a target may hold one level of parentheses: "Notes (weekly) <id>.md")
-    .replace(/(!?)\[([^\]]*)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (all, img: string, label: string, target: string) => {
-      if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("#")) return all;
-      const to = resolve(from, target);
+    .replace(/(!?)\[([^\]]*)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (all, img: string, label: string, link: string) => {
+      // a link to a notion.so page the export holds: to the record it became
+      if (/^https?:/i.test(link)) { const to = target(from, link); const rec = place.get(to) ?? tableAt(to)?.place; return rec ? wiki(rec, label) : all; }
+      if (/^[a-z][a-z0-9+.-]*:/i.test(link) || link.startsWith("#")) return all;
+      const to = resolve(from, link);
       // a linked view of a table is a .csv the export doesn't hold: its page of the same name, if there is one
       const rec = place.get(to) ?? tableAt(to)?.place ?? (ext(to) === "csv" ? place.get(to.replace(/(_all)?\.csv$/i, ".md")) : undefined);
       if (rec) return wiki(rec, label);
-      const file = dec(target.split("/").pop() ?? target);
+      const file = dec(link.split("/").pop() ?? link);
       const there = files.has(to);
       return img ? `*(image ${file}: ${there ? "it stayed in your Notion export" : "not in your Notion export"})*`
         : `${label || file} *(${there ? "it stayed in your Notion export" : "not in your Notion export"})*`;
     })
     // a relation written into a page as text, "Title (path.md)": a wikilink, where it is a page of the export
     // (after a line's start, a property's "Key: " or another link's ", "; its title has no ":" or "," of its own)
-    .replace(/(^|: |, )([^\n()[\]:,]+?) \(([^()\s]+\.md)\)/gm, (all, lead: string, label: string, target: string) => {
-      if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return all;
-      const rec = place.get(resolve(from, target));
+    .replace(/(^|: |, )([^\n()[\]:,]+?) \(([^()\s]+\.md|https?:\/\/(?:www\.)?notion\.so\/[^()\s]*)\)/gm, (all, lead: string, label: string, link: string) => {
+      if (/^[a-z][a-z0-9+.-]*:/i.test(link) && !/^https?:\/\/(?:www\.)?notion\.so\//i.test(link)) return all;
+      const rec = place.get(target(from, link));
       return rec ? `${lead}${wiki(rec, label.trim())}` : all;
     })
     // Notion writes a checklist item as "- [ ]  text", two spaces after the box
@@ -289,7 +304,7 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
         : c.kind === "number" ? Number(v.replace(/,(?=\d{3}\b)/g, ""))
         : c.kind === "boolean" ? /^yes$/i.test(v)
         : c.kind === "list" ? v.split(",").map((x) => x.trim()).filter(Boolean)
-        : c.kind === "relation" ? relations(v)!.map((to) => { const f = resolve(t.csv, to); return place.get(f) ?? tableAt(f)?.place ?? bare(to.split("/").pop()!.replace(/\.md$/, "")); })
+        : c.kind === "relation" ? relations(v)!.map((to) => { const f = target(t.csv, to); return place.get(f) ?? tableAt(f)?.place ?? (/^https?:/i.test(to) ? to : bare(to.split("/").pop()!.replace(/\.md$/, ""))); })
         : v;
     }
     // the row's page: its words, less the title line and the property lines the table already holds
