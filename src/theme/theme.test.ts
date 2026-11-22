@@ -185,3 +185,17 @@ describe("this screen's own choice (theme.ts onScreen)", () => {
     expect(onScreen(t, "theme")).toBe(t);
   });
 });
+
+describe("the grammar holds a value to what CSS reads (else it falls back to the look's, as THEME.md says)", () => {
+  it("reads a colour written one way throughout: commas, or spaces with an optional / alpha", () => {
+    for (const c of ["rgb(1, 2, 3)", "rgba(1,2,3,.5)", "rgb(1 2 3)", "rgb(1 2 3 / 50%)", "oklch(0.6 0.1 140)", "hsl(120deg 30% 40%)"]) expect(isColor(c), c).toBe(true);
+    for (const c of ["rgb(1 2)", "rgb(1, 2 3)", "rgb(1/2/3)", "rgb(1 2 3 4)", "rgb(1,2,3,4,5)"]) expect(isColor(c), c).toBe(false);
+  });
+  it("takes plain spaces between a value's parts, never a no-break or a line separator", () => {
+    for (const ws of [" ", " ", "\u000b", "﻿", "　"]) {
+      expect(styleValue("line-row", `1px${ws}solid #000`), JSON.stringify(ws)).toBeNull();
+      expect(styleValue("field-pad", `8px${ws}12px`), JSON.stringify(ws)).toBeNull();
+    }
+    expect(styleValue("line-row", "1px solid #000")).toBe("1px solid #000");
+  });
+});

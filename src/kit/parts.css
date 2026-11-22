@@ -150,7 +150,7 @@ div.pa-row { cursor: default; }
   font: var(--fs-body)/1.35 var(--sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; content-visibility: auto; contain-intrinsic-size: auto 2.4em; }
 .pa-tcell:first-child { position: sticky; left: 0; z-index: 1; padding-left: 2px; }
 .pa-tend { text-align: right; font-variant-numeric: tabular-nums; }
-.pa-thead .pa-tcell { position: sticky; top: 0; z-index: 2; border-bottom: var(--line-head); font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track);
+.pa-thead .pa-tcell { position: sticky; top: 0; z-index: 2; border-bottom: var(--line-head); font: 600 var(--fs-label) var(--sans); letter-spacing: calc(var(--label-track) * .45);
   text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--muted); content-visibility: visible; }
 .pa-thead .pa-tcell:first-child { z-index: 3; }
 .pa-tsort { padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
