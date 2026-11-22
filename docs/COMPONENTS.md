@@ -137,6 +137,24 @@ toast("Saved");
 
 A detail or a short form rises from the foot of the screen; a toast says what an action did.
 
+## Laying them out
+
+```tsx
+<Page title="Clients" wide>
+  <div className="pa-grid">
+    <List label="Active" rows={active} />
+    <List label="Waiting" rows={waiting} />
+  </div>
+  <Card title="Next up">
+    <p>Call Ada about the second draft.</p>
+    <div className="pa-actions"><Button small kind="primary">Done</Button><Button small>Later</Button></div>
+  </Card>
+</Page>
+```
+
+`pa-grid` puts its children side by side when there is room (about 280 px each) and one under another on a phone;
+`Page wide` gives a board room on a computer. `pa-actions` puts buttons in a row that wraps. No CSS of yours.
+
 ## Plain HTML
 
 ![Plain HTML](components/plain-html.png)

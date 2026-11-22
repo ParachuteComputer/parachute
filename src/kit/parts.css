@@ -141,6 +141,13 @@ div.pa-row { cursor: default; }
 .pa-line .pa-write-box { flex: 1; min-width: 0; min-height: 2.4em; max-height: 9em; padding: 8px 10px; font: var(--fs-body)/1.4 var(--sans); resize: none; }
 
 
+/* Laying parts out, with no CSS of the applet's own: buttons side by side (a card's actions, a drawer's), and
+   groups side by side on a wide screen (lists by status, cards in a grid), one under another on a phone */
+.pa-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 var(--gap); }
+.pa-actions:last-child { margin-bottom: 0; }
+.pa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: var(--gap) calc(var(--gap) * 1.6); align-items: start; margin: 0 0 var(--gap); }
+.pa-grid > * { min-width: 0; margin-bottom: 0; }
+
 /* Table and Fields (parts-data.tsx): records as rows and columns, ink rules as List's; the first column stays in view
    as the rest scroll across; a row off screen isn't drawn */
 .pa-table { margin: 0 0 var(--gap); }
@@ -225,6 +232,7 @@ select.pa-finput { appearance: auto; }
 .pa-row-aside, .pa-badge, .pa-tcount, .pa-days figcaption, .pa-tabs { font-variant-numeric: tabular-nums; }
 /* shelves of rows breathe apart; a label sits with its own rows */
 .pa-list + .pa-list { margin-top: calc(var(--gap) * 1.6); }
+.pa-grid > .pa-list + .pa-list { margin-top: 0; }
 
 /* ── toast (screen.tsx): one at a time, rising from the foot, going back down; swipe it away, held while pointed at ── */
 .pa-toasts { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); display: grid; justify-items: center; pointer-events: none; z-index: 50; }
