@@ -46,7 +46,8 @@ const PULL = 64;
 /** Where a page's docked parts go (a Write with `dock`): the strip under the pages, outside them. */
 const Dock = createContext<HTMLElement | null>(null);
 /** A frame drawn at its content's height (a page with embeds, an embed) never scrolls itself, nor turns. */
-const sizedFrame = () => typeof document !== "undefined" && (getComputedStyle(document.documentElement).overflowY === "hidden" || getComputedStyle(document.body).overflowY === "hidden");
+// (the kit marks such a frame's root `data-sized`, frameKit.ts; the pages' own `overflow: hidden` is not this)
+const sizedFrame = () => typeof document !== "undefined" && document.documentElement.hasAttribute("data-sized");
 
 export function Page({ title, kicker, aside, back, onRefresh, wide, scroll, start, className, children }: { title?: ReactNode; kicker?: ReactNode; aside?: ReactNode; back?: { label: string; onPress: () => void }; onRefresh?: () => unknown; wide?: boolean;
   /** a page that scrolls instead of turning: a long form, a board, something drawn edge to edge */ scroll?: boolean;
@@ -64,7 +65,7 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, scroll, star
     if (!on) return;
     let start: number | null = null, dist = 0, running = false;
     // a frame drawn at its content's height (a page with embeds) never scrolls itself: the page around it does
-    const sized = () => getComputedStyle(document.documentElement).overflowY === "hidden" || getComputedStyle(document.body).overflowY === "hidden";
+    const sized = sizedFrame;
     // a touch for something else: in a box being written in, or in a part scrolled away from its own top
     const elsewhere = (t: EventTarget | null) => {
       for (let el = t instanceof Element ? t : null; el && el !== document.body; el = el.parentElement) {
@@ -98,8 +99,7 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, scroll, star
     return () => { removeEventListener("touchstart", down); removeEventListener("touchmove", move); removeEventListener("touchend", up); removeEventListener("touchcancel", up); };
   }, [on]);
   // the pages (pages.ts): not for a wide page, one that asked to scroll, or a frame sized to what it draws
-  const [sized] = useState(sizedFrame);
-  const paged = !wide && !scroll && !sized;
+  const paged = !wide && !scroll && !sizedFrame();
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const top = <>
       {on && (pull > 0 || busy) && <div className="pa-pull" style={{ height: busy ? PULL * 0.6 : pull * 0.6 }} role="status">{busy ? "Reading again…" : pull >= PULL ? "Let go to read again" : "Pull to read again"}</div>}
@@ -127,15 +127,19 @@ export type PagesHandle = { toElement(el: Element): void; toEnd(): void; toStart
 function Book({ start, reopen, dock, name, handle, children }: { start: "first" | "last"; reopen?: boolean; dock?: (el: HTMLElement | null) => void; name?: string; handle?: Ref<PagesHandle | null>; children?: ReactNode }) {
   const book = useRef<HTMLDivElement>(null), flow = useRef<HTMLDivElement>(null), at = useRef<HTMLSpanElement>(null);
   const prev = useRef<HTMLButtonElement>(null), next = useRef<HTMLButtonElement>(null);
+  const engine = useRef<ReturnType<typeof pages> | null>(null);
   useLayoutEffect(() => {
     if (!book.current || !flow.current || !at.current || !prev.current || !next.current) return;
     const p = pages(book.current, flow.current, { at: at.current, prev: prev.current, next: next.current }, { start, name });
+    engine.current = p;
     const h: PagesHandle = { toElement: (el) => p.toElement(el), toEnd: () => p.toEnd(), toStart: () => p.toStart() };
     if (typeof handle === "function") handle(h); else if (handle) (handle as { current: PagesHandle | null }).current = h;
     // shown again (the app keeps an applet running while the person is elsewhere): a place that opens on a page opens there
     const off = reopen ? kit()?.onShown?.((on: boolean) => { if (on) p.toStart(); }) : undefined;
-    return () => { p.destroy(); if (typeof off === "function") off(); if (typeof handle === "function") handle(null); else if (handle) (handle as { current: PagesHandle | null }).current = null; };
+    return () => { p.destroy(); engine.current = null; if (typeof off === "function") off(); if (typeof handle === "function") handle(null); else if (handle) (handle as { current: PagesHandle | null }).current = null; };
   }, [start, reopen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the running heads' words, when they change (a room's name read, a thread opened)
+  useEffect(() => { engine.current?.setName(name); }, [name]);
   return <>
     <div className="pa-book" ref={book}>
       <div className="pa-flow" ref={flow}>{children}<span className="pa-end" aria-hidden="true" /></div>

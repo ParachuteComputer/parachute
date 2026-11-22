@@ -263,7 +263,7 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 
 /* The list (src/frame/views/Launcher.tsx): the open app's applets, one plain list. The home page is the home applet's. */
 .launcher { max-width: 880px; padding-top: 14px; }
-.launcher-title { margin: 6px 0 4px; padding-bottom: 8px; border-bottom: var(--line-head); font: var(--title-weight) var(--fs-title)/1.05 var(--serif); }
+.launcher-title { margin: 6px 0 10px; font: var(--title-weight) var(--fs-title)/1.05 var(--display, var(--serif)); letter-spacing: -.015em; }
 .launcher-notice { margin: 10px 0 4px; font: italic var(--fs-body)/1.4 var(--serif); color: var(--muted); }
 .launcher-notice a { margin-left: 6px; font: var(--fs-body) var(--sans); font-style: normal; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 .entry-glyph { font-variant-emoji: text; }
@@ -311,6 +311,9 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
   .home-bar-glyph { font-size: var(--fs-lead); }
   .home-bar-badge { top: 4px; left: 28px; }
   .with-bar .app-frame { right: calc(env(safe-area-inset-right) + var(--index-w)); width: auto; left: env(safe-area-inset-left); }
+  /* what sits along the foot (a newer build's line, the shell's passing line) stays beside the index, not under it */
+  .with-bar .update-line { right: var(--index-w); }
+  .with-bar .shell-line { left: calc((100% - var(--index-w)) / 2); }
   :root[data-look="daylight"] .home-bar { box-shadow: inset 2px 0 0 var(--text); }
   :root[data-look="daylight"] .home-bar-place { border: 2px solid var(--text); border-left: 0; }
 }
@@ -331,7 +334,7 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 
 /* Parachute Simplified (docs/SIMPLE.md): Notes, the editor, Connect */
 .notes-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 22px 0 14px; padding-bottom: 10px; border-bottom: var(--line-head); }
-.notes-head h1 { margin: 0; font: var(--title-weight) calc(var(--size) * 3)/.95 var(--serif); letter-spacing: -.02em; }
+.notes-head h1 { margin: 0; font: var(--title-weight) var(--fs-display)/1 var(--display, var(--serif)); letter-spacing: -.02em; }
 .notes-new { padding: 10px 18px; white-space: nowrap; }
 .note-edit { margin-left: auto; font-size: var(--fs-small); text-decoration: none; }
 .note-edit + .note-copy { margin-left: 4px; }
@@ -394,4 +397,18 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .prose-note code { font: .85em var(--mono); }
 .prose-note pre { overflow-x: auto; }
 .prose-note .wikilink-unresolved { border-bottom: 0; }
+}
+
+/* The app's own screens (Settings, adding a Parachute, a key, an invite; docs/LOOK.md "Sky's rule"): the hour's sky at
+   the head and the screen's name in the big serif in it; plain paper with hairlines below, where you read and change
+   things. They are forms, so they scroll. */
+@layer parachute.app {
+:root:has(main.screen:not(.applet-screen)) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 150px, var(--bg) 300px); background-size: 100% 300px; }
+main.screen:not(.applet-screen) > .bar { position: static; min-height: 56px; margin-bottom: 2px; background: none; border-bottom: 0; }
+main.screen:not(.applet-screen) > .bar .bar-title { font: var(--title-weight) var(--fs-title)/1.1 var(--display, var(--serif)); letter-spacing: -.015em; white-space: normal; }
+main.screen:not(.applet-screen) > .bar :is(.bar-back, .bar-menu) { color: var(--muted); }
+/* Settings: its groups are paper under a hairline, not cards */
+main.settings > .card { margin: 0; padding: 14px 0 16px; background: none; border: 0; border-top: var(--line-row); border-radius: 0; box-shadow: none; }
+main.settings > .card:first-of-type { border-top: 0; }
+main.settings > .card > h2 { margin: 0 0 8px; font: var(--title-weight) var(--fs-head)/1.2 var(--display, var(--serif)); }
 }

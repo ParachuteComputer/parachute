@@ -1,6 +1,7 @@
 // The pages (docs/LOOK.md, "Structure"): a place is a short run of pages you turn, not a column you scroll. The kit's
 // Page lays what it holds into page-sized columns (CSS multi-column, a fixed height, column-fill auto), so content that
-// doesn't fit runs on to the next page, sideways; the book shows one page on a phone and two (an open book) from 960 px.
+// doesn't fit runs on to the next page, sideways; the book shows one page on a phone and two (an open book) once it has
+// 900 px of room (a Mac, a tablet on its side).
 //
 //   turning   flowing: the book is a sideways scroller that snaps to whole pages, so a finger drags the page 1:1 and the
 //             device settles it on a page (a flick turns); an arrow turns it on --t-turn and --ease-drawer. Still (the
@@ -14,7 +15,7 @@
 import { still, STILL_DRAG } from "./still";
 
 export type PagesOptions = { start: "first" | "last"; /** the running heads' words (else the page's title) */ name?: string };
-export type Pages = { turn(by: number, how?: "motion" | "cut"): void; to(page: number): void; toStart(): void; toEnd(): void; toElement(el: Element): void; destroy(): void; readonly at: number; readonly count: number };
+export type Pages = { turn(by: number, how?: "motion" | "cut"): void; to(page: number): void; toStart(): void; toEnd(): void; toElement(el: Element): void; setName(name: string | undefined): void; destroy(): void; readonly at: number; readonly count: number };
 
 /** A spread is two pages from this book width on. */
 export const SPREAD_FROM = 900;
@@ -35,7 +36,7 @@ function bezier(x1: number, y1: number, x2: number, y2: number) {
 const curveOf = (v: string) => { const m = /cubic-bezier\(([^)]+)\)/.exec(v); const n = m ? m[1].split(",").map(Number) : [0.32, 0.72, 0, 1]; return bezier(n[0], n[1], n[2], n[3]); };
 
 export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElement; prev: HTMLButtonElement; next: HTMLButtonElement }, opts: PagesOptions): Pages {
-  let per = 1, pageW = 0, count = 1, at = 0, touched = false, follow = opts.start === "last", raf = 0, anim = 0;
+  let per = 1, pageW = 0, count = 1, at = 0, touched = false, follow = opts.start === "last", raf = 0, anim = 0, held = false, name = opts.name;
   const marks: HTMLElement[] = [];
   const sky = document.createElement("div");
   sky.className = "pa-sky";
@@ -71,6 +72,9 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
     flow.style.paddingInline = `${side}px`;
     flow.style.columnWidth = `${pageW - 2 * side}px`;
     flow.style.columnGap = `${2 * side}px`;
+    // what can't be split across pages (a code block, a table that scrolls sideways) is at most a page tall, and scrolls
+    const cs = getComputedStyle(flow);
+    flow.style.setProperty("--pa-col-h", `${Math.max(120, flow.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 8)}px`);
     // the sky over the first page; on a Mac over the open book's first spread, under the bar's own sky
     sky.style.width = `${per * pageW}px`;
     const before = count;
@@ -78,26 +82,31 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
     const end = flow.querySelector<HTMLElement>(":scope > .pa-end");
     const x = end ? end.getBoundingClientRect().left - flow.getBoundingClientRect().left : flow.scrollWidth - 1;
     count = Math.max(1, Math.floor(x / pageW) + 1);
-    // a spread's second page is part of the book even when it is blank
-    const name = opts.name ?? flow.querySelector(".pa-title")?.textContent?.trim() ?? "";
-    while (marks.length > count) marks.pop()!.remove();
-    for (let i = 0; i < count; i++) {
+    // a mark per page of every spread (a spread's second page is part of the book even when blank, so the book scrolls
+    // to its last spread): a snap point at each spread, and a running head on every page after the first that has words
+    const said = name ?? flow.querySelector(".pa-title")?.textContent?.trim() ?? "";
+    const all = spreads() * per;
+    while (marks.length > all) marks.pop()!.remove();
+    for (let i = 0; i < all; i++) {
       let m = marks[i];
       if (!m) {
         m = document.createElement("div");
-        m.className = i === 0 ? "pa-mark" : "pa-mark pa-runhead";
         m.setAttribute("aria-hidden", "true");
         book.appendChild(m);
         marks.push(m);
       }
+      const head = i > 0 && i < count;
+      m.className = `pa-mark${head ? " pa-runhead" : ""}${i % per === 0 ? " pa-snap" : ""}`;
       m.style.left = `${i * pageW}px`;
       m.style.width = `${pageW}px`;
-      m.classList.toggle("pa-snap", i % per === 0);
-      if (i > 0 && m.textContent !== name) m.textContent = name;
+      const words = head ? said : "";
+      if (m.textContent !== words) m.textContent = words;
     }
     const was = at;
-    if (follow && (!touched || was >= Math.ceil(before / per) - 1)) jump(spreads() - 1);
-    else jump(Math.min(here(), spreads() - 1));
+    const to = follow && (!touched || was >= Math.ceil(before / per) - 1) ? spreads() - 1 : Math.min(anim ? at : here(), spreads() - 1);
+    // a glide on its way goes on to where it was going; a finger on the book keeps it; else the book is set where it is
+    if (anim) { if (to !== at) glide(to); }
+    else if (!held) jump(to);
     say();
   }
   const soon = () => { if (!raf) raf = requestAnimationFrame(measure); };
@@ -133,8 +142,11 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
   const onScroll = () => { if (anim) return; const h = here(); if (h !== at) { at = h; touched = true; follow = opts.start === "last" && at >= spreads() - 1; say(); } };
   book.addEventListener("scroll", onScroll, { passive: true });
   // a finger on the book stops a glide where it is
-  const stop = () => { if (anim) { cancelAnimationFrame(anim); anim = 0; book.style.removeProperty("scroll-snap-type"); at = here(); say(); } };
+  const stop = () => { held = true; if (anim) { cancelAnimationFrame(anim); anim = 0; book.style.removeProperty("scroll-snap-type"); at = here(); say(); } };
+  const lift = () => { held = false; };
   book.addEventListener("pointerdown", stop);
+  addEventListener("pointerup", lift, true);
+  addEventListener("pointercancel", lift, true);
 
   // still: the book doesn't follow the finger (it scrolls only from code); a swipe past 48 px turns once
   let sx: number | null = null, sy = 0, swiped = false;
@@ -167,6 +179,11 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
   // the keyboard turns at once, outside a box being written in, and not past an open drawer
   const key = (e: KeyboardEvent) => {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || editable(e.target) || document.querySelector(".pa-drawer-scrim[data-state=open]")) return;
+    // the keys are the book's only from the page itself (nothing focused, or something on its pages or its line), and
+    // never from a control that has its own use for them (a voice note's seek, a slider, a list to choose in)
+    const t = e.target as Element | null;
+    if (t && t !== document.body && t !== document.documentElement && !book.contains(t) && !line.at.parentElement?.contains(t)) return;
+    if (t instanceof Element && t.closest("audio, video, [role=slider], [role=listbox], [role=tablist], [role=menu], [role=radiogroup], [role=grid]")) return;
     const by = e.key === "ArrowRight" || e.key === "PageDown" ? 1 : e.key === "ArrowLeft" || e.key === "PageUp" ? -1 : 0;
     if (!by || count <= 1) return;
     e.preventDefault();
@@ -189,6 +206,8 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
   // the count again when the screen or what is on it changes (a list arrives, a line is added, the faces load)
   const ro = typeof ResizeObserver === "function" ? new ResizeObserver(soon) : null;
   ro?.observe(book.parentElement ?? book);
+  // what grows without the DOM changing: a picture or a video arriving, a fold opened
+  for (const ev of ["load", "error", "loadedmetadata", "toggle"]) flow.addEventListener(ev, soon, true);
   const mo = new MutationObserver(soon);
   mo.observe(flow, { childList: true, subtree: true, characterData: true });
   void document.fonts?.ready.then(soon);
@@ -199,6 +218,7 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
     turn, to: (p: number) => { touched = true; jump(Math.floor(p / per)); },
     toStart() { touched = false; follow = opts.start === "last"; jump(opts.start === "last" ? spreads() - 1 : 0); },
     toEnd() { follow = true; jump(spreads() - 1); },
+    setName(n) { if (n !== name) { name = n; soon(); } },
     toElement(el: Element) {
       measure();
       const x = el.getBoundingClientRect().left - book.getBoundingClientRect().left + book.scrollLeft;
@@ -211,6 +231,8 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
       book.removeEventListener("scroll", onScroll); book.removeEventListener("pointerdown", stop);
       book.removeEventListener("pointerdown", down); book.removeEventListener("pointermove", move); book.removeEventListener("pointerup", up); book.removeEventListener("pointercancel", up);
       book.removeEventListener("click", click, true); book.removeEventListener("wheel", wheel); document.removeEventListener("keydown", key);
+      removeEventListener("pointerup", lift, true); removeEventListener("pointercancel", lift, true);
+      for (const ev of ["load", "error", "loadedmetadata", "toggle"]) flow.removeEventListener(ev, soon, true);
       flow.removeEventListener("focusin", focus); line.prev.removeEventListener("click", prev); line.next.removeEventListener("click", next);
       sky.remove(); marks.forEach((m) => m.remove());
     },

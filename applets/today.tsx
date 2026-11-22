@@ -209,7 +209,7 @@ export default function Home() {
           {rooms && <Button kind="primary" onClick={() => openRoom(first)}>{first.ask ? `Answer in ${first.roomName}` : `Open ${first.roomName}`}</Button>}
         </Card></div>
         {rest.length > 0 && <div className="also"><List label="Also wants you" hideLabel rows={roomRows(rest.slice(0, 3), true)} /></div>}
-        {rest.length > 3 && <p className="more">{rest.length - 3} more in your rooms.</p>}
+        {waits > 4 && <p className="more">{waits - 4} more in your rooms.</p>}
       </section>}
       {read === "ok" && !first && <Empty>Nothing wants you.</Empty>}
       <svg className="horizon" viewBox="0 0 400 26" preserveAspectRatio="none" aria-hidden="true"><path d="M0 18C70 6 140 7 210 14S330 24 400 10" /></svg>

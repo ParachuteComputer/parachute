@@ -19,11 +19,15 @@ export default function Leaves() {
   const load = () => vault.queryRecords({ pathPrefix: ${JSON.stringify(FOLDER)}, limit: 100 }).then((r) => setRows(r.sort((a, b) => a.path.localeCompare(b.path))));
   useEffect(() => { ready().then(load); }, []);
   const add = async () => { await vault.createRecord({ path: ${JSON.stringify(FOLDER)} + "zz " + line, body: "" }); setLine(""); await load(); };
+  // while it reads, a page of its own; then another (a new Page drawn while the first is still there: it pages too)
+  if (rows === null) return <Page title="Leaves"><Loading /></Page>;
   return (
-    <Page title="Leaves" start="first">
-      {rows === null ? <Loading /> : <List label="Leaves" rows={rows.map((r) => ({ key: r.id, title: r.path.slice(${FOLDER.length}), meta: "A leaf of the oak, the ash or the rowan" }))} />}
-      <Write line dock enter="send" label="A new leaf" placeholder="A new leaf" value={line} onChange={setLine} onSend={add} send="Add" />
-    </Page>
+    <>
+      <Page title="Leaves" start="first">
+        <List label="Leaves" rows={rows.map((r) => ({ key: r.id, title: r.path.slice(${FOLDER.length}), meta: "A leaf of the oak, the ash or the rowan" }))} />
+        <Write line dock enter="send" label="A new leaf" placeholder="A new leaf" value={line} onChange={setLine} onSend={add} send="Add" />
+      </Page>
+    </>
   );
 }
 `;
@@ -54,7 +58,7 @@ async function openLeaves(page: Page) {
   const app = page.frameLocator('iframe[title="Leaves"]');
   await expect(app.getByText("Leaf 00")).toBeVisible({ timeout: 20_000 });
   const inner = (await (await page.locator('iframe[title="Leaves"]').elementHandle())!.contentFrame())!;
-  await expect(app.locator(".pa-at")).toHaveText(/^1 of \d+$/);
+  await expect(app.locator(".pa-at")).toHaveText(/^1(–2)? of \d+$/);
   return { app, inner };
 }
 /** The book's scroll, and the page width it turns by. */
@@ -163,10 +167,32 @@ test("the bar's places are tabs: the one you are in is the page's colour, joined
   // a phone: along the foot
   const foot = (await bar.boundingBox())!;
   expect(foot.y + foot.height).toBeGreaterThan(page.viewportSize()!.height - 2);
-  // a Mac: down the right edge, the page beside them
+  // a Mac: down the right edge, the page beside them; the applet an open book whose last spread shows its last leaf
   await page.setViewportSize({ width: 1440, height: 900 });
   const side = (await bar.boundingBox())!;
   expect(side.x + side.width).toBeGreaterThan(1438);
   expect(side.height).toBeGreaterThan(600);
   expect(side.width).toBeLessThan(200);
+});
+
+test("on a Mac the place is an open book, two pages a turn; the last turn shows the last of it, whatever the count", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const { app, inner } = await openLeaves(page);
+  await expect(app.locator(".pa-at")).toHaveText(/^1–2 of \d+$/);
+  const { count } = await book(inner);
+  // a click on the page, then the arrow key, as a person on a Mac turns
+  await app.locator(".pa-title").click();
+  for (let i = 0; i < count; i++) await page.keyboard.press("ArrowRight");
+  // the last leaf is on the spread the book shows
+  const shown = await inner.evaluate(() => {
+    const b = document.querySelector<HTMLElement>(".pa-book")!.getBoundingClientRect();
+    const rows = [...document.querySelectorAll(".pa-list li")];
+    const last = rows[rows.length - 1].getBoundingClientRect();
+    return { ok: last.left >= b.left - 1 && last.right <= b.right + 1, b: [b.left, b.right], last: [last.left, last.right], scroll: document.querySelector<HTMLElement>(".pa-book")!.scrollLeft, at: document.querySelector(".pa-at")!.textContent };
+  });
+  expect(shown.ok, JSON.stringify(shown)).toBe(true);
+  // and it shows a whole spread, the one the line names (never half of one, with a page repeated)
+  const { left, page: w } = await book(inner);
+  expect(left % (2 * w)).toBe(0);
+  expect(left / (2 * w)).toBe(Math.ceil(count / 2) - 1);
 });

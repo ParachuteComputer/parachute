@@ -298,6 +298,8 @@ select.pa-finput { appearance: auto; }
 .pa-flow :is(h1, h2, h3, h4, .pa-list-label, .pa-kicker) { break-after: avoid; }
 .pa-flow .pa-list li { content-visibility: visible; }
 .pa-flow :is(img, video) { max-height: 60dvh; object-fit: contain; }
+/* what the browser won't split across pages (a code block, a table that scrolls sideways): at most a page, scrolling */
+.pa-flow :is(pre, .pa-tgrid) { max-height: var(--pa-col-h, 60dvh); overflow-y: auto; }
 .pa-flow :is(p, li, dd, h1, h2, h3, td) { overflow-wrap: anywhere; }
 /* the first page's head: the hour's sky, behind the place's name (pages.ts hangs it, one page wide) */
 .pa-sky { position: absolute; top: 0; left: 0; z-index: 0; height: min(300px, 48%); pointer-events: none;
@@ -322,4 +324,19 @@ select.pa-finput { appearance: auto; }
 .pa-pages { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
 .pa-pages .pa-flow { padding-top: 34px; }
 .pa-pages > .pa-book > .pa-sky { display: none; }
+}
+@layer parachute.parts {
+/* a frame drawn at its content's height (a page with embeds) never turns: should it be marked so after a Page is drawn
+   paged, the page lays out as one column at its own height; and so does a page printed */
+:root[data-sized] .pa-page.pa-paged { display: block; height: auto; }
+:root[data-sized] .pa-book { overflow: visible; width: auto !important; }
+:root[data-sized] .pa-flow { height: auto; column-width: auto !important; column-count: 1 !important; width: auto !important; }
+:root[data-sized] :is(.pa-sky, .pa-mark, .pa-pageline) { display: none; }
+@media print {
+  :root:has(.pa-paged), :root:has(.pa-paged) body { height: auto; overflow: visible; }
+  .pa-page.pa-paged { display: block; height: auto; overflow: visible; }
+  .pa-book { overflow: visible; width: auto !important; }
+  .pa-flow { height: auto; column-width: auto !important; column-count: 1 !important; width: auto !important; }
+  :is(.pa-sky, .pa-mark, .pa-pageline, .pa-dock) { display: none; }
+}
 }
