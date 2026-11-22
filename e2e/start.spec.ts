@@ -99,6 +99,8 @@ test("a new vault: Start here leads to Vault and Connect; Clients and sessions s
   await app.getByLabel("New session").fill("Sam, first session");
   await app.getByRole("button", { name: "Add" }).click();
   await expect(app.getByText("How they are")).toBeVisible({ timeout: 30_000 });
+  // a session's client, a reference to one record, stays a box to fill in (it is how a session is tied to a client)
+  await expect(app.getByRole("textbox", { name: "client" })).toBeEditable();
   await shot(page, "03-new-session");
 
 });

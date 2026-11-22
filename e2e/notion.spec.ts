@@ -81,6 +81,19 @@ test.describe.serial("Import from Notion", () => {
     await expect(app.getByText("Piranesi")).toBeVisible();
     await shot(page, "03-table");
 
+    // a relation reads as the names of the rows it links in the table; on the record it is its paths, as a list
+    await app.getByRole("button", { name: `← ${VAULT}` }).click();
+    await app.getByText("projects", { exact: true }).first().click({ timeout: 30_000 });
+    const harbor = app.getByRole("row", { name: /Harbor Books cover/ });
+    await expect(harbor).toContainText("Send Harbor Books three sketches");
+    await expect(harbor).not.toContainText("Notion/");
+    await shot(page, "04-reference");
+    await harbor.click();
+    await expect(app.getByRole("article", { name: /Harbor Books cover/ })).toBeVisible();
+    await expect(app.getByRole("textbox", { name: "tasks" })).toHaveValue("Notion/Home/Tasks/Send Harbor Books three sketches");
+    // on the record the list is edited as its paths, one after another, not as text in brackets (`["Notion/Home/Tasks/…"]`)
+    expect(await app.locator("input, textarea").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value).filter((x) => x.startsWith("[")))).toEqual([]);
+
     // the same export again: nothing new, nothing changed
     const before = new Map(recs.map((r) => [r.path, r.updatedAt]));
     await page.goto(`/v/${VAULT}`);
