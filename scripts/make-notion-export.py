@@ -13,6 +13,7 @@ files = {}
 eid = "0c5e1b7a-4f2d-4e1a-9b3c-7d8e9f0a1b2c"
 root = f"Export-{eid}"  # as a real export: one root folder named for the export (Obsidian Importer tests/notion)
 home = nm("Home")
+sl = nm("Sketch log")
 
 books = [
     ("The Overstory", "Richard Powers", "Read", "5", "Fiction, Nature", "March 2, 2026", "Trees as characters. Slow and huge."),
@@ -80,7 +81,27 @@ files[f"{db}/{nm('Ideas')}/owl-sketch.png"] = bytes.fromhex("89504e470d0a1a0a000
 # Home links to everything, the way Notion writes it
 files[f"{root}/{home}.md"] = ("# Home\n\nMy studio, in one place.\n\n"
     f"[Reading List]({link(home + '/' + rl)}.csv)\n\n[Projects]({link(home + '/' + pj)}.csv)\n\n[Tasks]({link(home + '/' + tk)}.csv)\n\n"
-    f"[Meeting notes]({link(home + '/' + mn)}.md)\n\n[Ideas]({link(home + '/' + nm('Ideas'))}.md)\n")
+    f"[Meeting notes]({link(home + '/' + mn)}.md)\n\n[Ideas]({link(home + '/' + nm('Ideas'))}.md)\n\n[Sketch log]({link(home + '/' + sl)}.csv)\n\n"
+    f"[Open tasks]({link(home + '/' + nm('Open tasks'))}.csv)\n")
+# a daily log: 70 rows (more than a frame's 60 reads in 10 s), its title a date mention as Notion writes one in the CSV;
+# two of its pages are headed "@Today" and "@Yesterday" (relative mentions), so only their properties say which row they are
+import datetime
+days = [datetime.date(2026, 9, 13) + datetime.timedelta(days=i) for i in range(70)]
+def mention(d): return f"@{d.strftime('%B')} {d.day}, {d.year}"
+rows = [[mention(d) + " ", "Yes" if i % 3 else "No", str(10 + i % 50), "Owls" if i % 2 else "Herons"] for i, d in enumerate(days)]
+files[f"{db}/{sl}_all.csv"] = csv_rows(["Day", "Drew", "Minutes", "Subject"], rows)
+files[f"{db}/{sl}.csv"] = csv_rows(["Day", "Drew", "Minutes", "Subject"], rows[-14:])
+for i, d in enumerate(days):
+    title = "@Today" if i == 69 else "@Yesterday" if i == 68 else mention(d)
+    page = f"# {title}\n\nDrew: {rows[i][1]}\nMinutes: {rows[i][2]}\nSubject: {rows[i][3]}\n"
+    if i >= 68: page += f"\nDay {i + 1}: {'owl wings, three tries' if i == 69 else 'heron legs'}.\n"
+    files[f"{db}/{sl}/{title} {hid(title + str(i))}.md"] = page
+# odd titles a real workspace has: one ending like code, and pages nested deep with long names
+files[f"{root}/{nm('Next.js notes')}.md"] = "# Next.js notes\n\nFor the portfolio site.\n"
+deep = root
+for t in ["Client archive for the years before I went freelance full time", "Harbor Books and the other small presses I worked with", "Every single draft cover with the notes from each round of feedback"]:
+    deep = f"{deep}/{nm(t)}"
+    files[f"{deep}.md"] = f"# {t}\n\nOld things.\n"
 # a top-level page with a table in it
 files[f"{root}/{nm('Rates')}.md"] = ("# Rates\n\n| Work | Price |\n| --- | --- |\n| Spot illustration | $180 |\n"
     "| Book cover | $1,200 |\n| Zine page | $90 |\n\nDeposits are half up front.\n")

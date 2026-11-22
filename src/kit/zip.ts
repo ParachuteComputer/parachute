@@ -13,9 +13,19 @@ export class ZipError extends Error { constructor(m: string) { super(m); this.na
 const u16 = (b: Uint8Array, o: number) => b[o] | (b[o + 1] << 8);
 const u32 = (b: Uint8Array, o: number) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
 
-async function inflate(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(data); c.close(); } }).pipeThrough(new DecompressionStream("deflate-raw"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+/** Inflate, stopping as soon as it passes the size the zip says it is: a small entry can't grow to fill memory. */
+async function inflate(data: Uint8Array, size: number): Promise<Uint8Array> {
+  const reader = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(data); c.close(); } }).pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (at + value.length > size) { await reader.cancel().catch(() => {}); throw new ZipError("The zip is broken: a file is bigger than it says."); }
+    out.set(value, at); at += value.length;
+  }
+  if (at !== size) throw new ZipError("The zip is broken: a file isn't the size it says.");
+  return out;
 }
 
 /** The end of central directory record: where the list of entries starts, and how many. */
@@ -52,7 +62,7 @@ export async function readZip(bytes: ArrayBuffer | Uint8Array, depth = 0): Promi
     if (data.length !== size) throw new ZipError("The zip is cut short.");
     total += full;
     if (total > MAX_TOTAL) throw new ZipError("The zip is over 200 MB unpacked.");
-    const file = method === 0 ? data : method === 8 ? await inflate(data) : null;
+    const file = method === 0 ? data : method === 8 ? await inflate(data, full) : null;
     if (!file) throw new ZipError(`The zip uses a kind of compression this can't read (${method}).`);
     if (file.length !== full) throw new ZipError("The zip is broken: a file isn't the size it says.");
     const path = name.replace(/\\/g, "/").replace(/^\/+/, "");

@@ -11,7 +11,7 @@ import { signIn } from "./helpers";
 import { RECEIPTS } from "../src/kit/packs";
 
 const ZIP = readFileSync(new URL("./fixtures/notion-export.zip", import.meta.url));
-const TYPES = ["reading-list", "projects", "tasks"];
+const TYPES = ["reading-list", "projects", "tasks", "sketch-log"];
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
 const hub = () => hubState();
 const admin = () => ({ ...hub(), token: mintToken(`vault:${VAULT}:admin`) });
@@ -35,6 +35,7 @@ async function importIt(page: Page) {
   const app = frame(page);
   await app.getByRole("button", { name: "Import from Notion" }).click({ timeout: 30_000 });
   const picker = page.getByRole("dialog", { name: "Vault asks for a file" });
+  await expect(picker).toContainText("writes it into this vault, under Notion/");
   await expect(picker).toContainText("at most 200 MB");
   await picker.locator("input[type=file]").setInputFiles({ name: "Export-0c5e1b7a-notion.zip", mimeType: "application/zip", buffer: ZIP });
   return app;
@@ -53,7 +54,7 @@ test.describe.serial("Import from Notion", () => {
     await shot(page, "01-vault");
     const app = await importIt(page);
     const said = app.getByRole("region", { name: "What came from Notion" });
-    await expect(said).toContainText("From Notion: 3 tables (12 rows) and 5 pages, under Notion/.", { timeout: 60_000 });
+    await expect(said).toContainText("From Notion: 4 tables (82 rows) and 9 pages, under Notion/.", { timeout: 60_000 });
     await expect(said).toContainText("1 file stayed in your export");
     await shot(page, "02-imported");
 
@@ -63,7 +64,12 @@ test.describe.serial("Import from Notion", () => {
     expect(books?.fields).toMatchObject({ rating: { type: "number" }, finished: { type: "date" }, tags: { type: "array" } });
     expect(types.find((t) => t.name === "tasks")?.fields.project).toMatchObject({ type: "reference", cardinality: "many" });
     const recs = await under("Notion/");
-    expect(recs.length).toBe(20); // 12 rows, 5 pages, 3 tables' own records
+    // 82 rows, 9 pages, 4 tables' own records: more than a frame's 60 reads in 10 s, in one tap
+    expect(recs.length).toBe(95);
+    // the page headed "@Today" is its row's words, under the row's own name
+    const today = recs.find((r) => r.path === "Notion/Home/Sketch log/@November 21, 2026")!;
+    expect(today.fields).toMatchObject({ minutes: 29, subject: "Owls" });
+    expect((await api(hub(), "GET", `records/${today.id}`)).body).toContain("owl wings");
     expect(recs.find((r) => r.path === "Notion/Home/Reading List/Piranesi")).toMatchObject({ types: ["reading-list"], fields: { author: "Susanna Clarke", rating: 5, finished: "2026-07-07" } });
     expect(recs.find((r) => r.path === "Notion/Home/Tasks/Invoice Little Fern Café")?.fields).toMatchObject({ done: true, project: ["Notion/Home/Projects/Café menu illustrations"] });
     const home = recs.find((r) => r.path === "Notion/Home")!;

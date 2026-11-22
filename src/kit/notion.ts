@@ -36,10 +36,22 @@ const ext = (p: string) => /\.([a-z0-9]+)$/i.exec(p)?.[1]?.toLowerCase() ?? "";
 const noExt = (p: string) => p.replace(/\.[a-z0-9]+$/i, "");
 const dec = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
 
-/** One segment of a record's path: no characters a vault path refuses, not too long. */
+/** One segment of a record's path: no characters a vault path refuses, no ending it takes for code ("Next.js notes"
+ *  is fine; a page titled "notes.js" becomes "notes-js"), not too long. */
 function seg(s: string): string {
-  const t = s.replace(/[\\%/\u0000-\u001f]/g, "-").replace(/^\.+/, "").replace(/\s+/g, " ").trim().slice(0, 80).trim();
+  const t = s.replace(/[\\%/\u0000-\u001f]/g, "-").replace(/^\.+/, "").replace(/\s+/g, " ").trim().slice(0, 80).trim().replace(/\.(html?|tsx|jsx|js)$/i, "-$1");
   return t || "Untitled";
+}
+/** A path a vault takes (200 characters at most, with room for " (2)"): its longest folders shortened first. */
+function fit(path: string, max = 190): string {
+  const segs = path.split("/");
+  while (segs.join("/").length > max) {
+    let at = 1;
+    for (let i = 1; i < segs.length; i++) if (segs[i].length > segs[at].length) at = i;
+    if (segs[at].length <= 12) break;
+    segs[at] = segs[at].slice(0, Math.max(12, segs[at].length - (segs.join("/").length - max))).trim().replace(/\.$/, "");
+  }
+  return segs.join("/").slice(0, max);
 }
 
 /** RFC 4180: quoted fields, doubled quotes, newlines inside quotes; a BOM first is dropped. */
@@ -95,7 +107,8 @@ function kindOf(values: string[]): Kind {
   if (v.every((x) => notionDate(x))) return "date";
   if (v.every((x) => /^-?\d+(\.\d+)?$/.test(x.replace(/,(?=\d{3}\b)/g, "")))) return "number";
   // a multi-select: short words split by commas, with no sentence in them
-  if (v.some((x) => x.includes(",")) && v.every((x) => x.split(",").every((t) => { const w = t.trim(); return w.length > 0 && w.length <= 40 && !/[.!?]$/.test(w); }))) return "list";
+  // (not a number with a decimal comma, "1,5")
+  if (v.some((x) => x.includes(",")) && !v.every((x) => /^[\d\s.,-]+$/.test(x)) && v.every((x) => x.split(",").every((t) => { const w = t.trim(); return w.length > 0 && w.length <= 40 && !/[.!?]$/.test(w); }))) return "list";
   return "text";
 }
 const SPEC: Record<Exclude<Kind, "relation">, FieldSpec> = { date: { type: "date" }, number: { type: "number" }, boolean: { type: "boolean" }, list: { type: "array" }, text: { type: "string" } };
@@ -138,130 +151,153 @@ export function notionImport(files: Map<string, Uint8Array>, name = "Notion expo
   paths = paths.filter((p) => !(strip ? rel(p) === "index.html" : p === "index.html"));
   if (!paths.some((p) => ext(p) === "md" || ext(p) === "csv")) throw new Error("This zip has no Notion pages in it. In Notion: Settings, Export, Markdown & CSV.");
 
-  /** Where an export path lands: Notion/<titles, less ids>. */
-  const placeOf = (p: string) => ROOT + rel(noExt(p)).split("/").map((s) => seg(bare(dec(s)))).join("/");
+  /** Where an export path lands: Notion/<titles, less ids>, short enough for a vault. */
+  const placeOf = (p: string) => fit(ROOT + rel(noExt(p)).split("/").map((s) => seg(bare(dec(s)))).join("/"));
+  const used = new Set<string>();
+  const unique = (path: string) => { let n = path, i = 2; while (used.has(n.toLowerCase())) n = `${path} (${i++})`; used.add(n.toLowerCase()); return n; };
+  const lines = (p: string) => text(files.get(p)!).replace(/\r\n/g, "\n").split("\n");
+  /** A row page's property lines (after its title), as Notion writes them: "Key: Value" until the first other line. */
+  const propsOf = (p: string) => {
+    const l = lines(p), out = new Map<string, string>();
+    let i = /^# /.test(l[0] ?? "") ? 1 : 0;
+    while (i < l.length && l[i].trim() === "") i++;
+    for (; i < l.length && /^[^:\n]{1,60}: /.test(l[i]); i++) out.set(l[i].slice(0, l[i].indexOf(":")).trim().toLowerCase(), l[i].slice(l[i].indexOf(":") + 1).trim());
+    return out;
+  };
 
-  // databases: one per "<title> <id>", from its _all.csv when there is one
+  // 1. Databases: one per "<title> <id>", from its _all.csv when there is one, each a type
   const dbs = new Map<string, string>();
   for (const p of paths.filter((x) => ext(x) === "csv")) {
     const key = p.replace(/_all\.csv$/i, ".csv");
     if (!dbs.has(key) || /_all\.csv$/i.test(p)) dbs.set(key, p);
   }
   const rowFolder = (csvKey: string) => noExt(csvKey) + "/";
-  const isRow = (p: string) => [...dbs.keys()].some((k) => p.startsWith(rowFolder(k)) && !p.slice(rowFolder(k).length).includes("/"));
-
-  // every md page and row's place, so links can be made into wikilinks
-  const used = new Set<string>();
-  const unique = (path: string) => { let n = path, i = 2; while (used.has(n.toLowerCase())) n = `${path} (${i++})`; used.add(n.toLowerCase()); return n; };
-  const place = new Map<string, string>(); // export path (decoded, less root) -> record path
-  const tables = new Map<string, { type: string; place: string }>();
+  const inFolder = (p: string, k: string) => p.startsWith(rowFolder(k)) && !p.slice(rowFolder(k).length).includes("/");
+  type Col = { header: string; field: string; kind: Kind; i: number };
+  type Table = { key: string; csv: string; title: string; type: string; place: string; header: string[]; body: string[][]; cols: Col[] };
   const typeNames = new Set<string>();
-  for (const [key] of dbs) tables.set(key, { type: typeName(bare(noExt(key.split("/").pop()!)), typeNames), place: unique(placeOf(key)) });
-  for (const p of paths.filter((x) => ext(x) === "md")) place.set(p, unique(placeOf(p)));
+  const tables: Table[] = [];
+  for (const [key, csv] of dbs) {
+    const [header = [], ...body] = parseCsv(text(files.get(csv)!));
+    if (!header.length) continue;
+    const taken = new Set<string>();
+    const title = bare(noExt(key.split("/").pop()!));
+    tables.push({ key, csv, title, type: typeName(title, typeNames), place: unique(placeOf(key)), header, body,
+      cols: header.slice(1).map((h, i) => ({ header: h.trim(), field: fieldName(h, taken), kind: kindOf(body.map((r) => r[i + 1] ?? "")), i: i + 1 })) });
+  }
+  // a field is one thing in a vault: where two tables have a column of one name but of different kinds, it is text in
+  // both (a vault refuses a type whose field another type declares otherwise)
+  const kinds = new Map<string, Set<Kind>>();
+  for (const t of tables) for (const c of t.cols) kinds.set(c.field, (kinds.get(c.field) ?? new Set()).add(c.kind));
+  for (const t of tables) for (const c of t.cols) if (kinds.get(c.field)!.size > 1) c.kind = "text";
 
+  // 2. Rows and their pages: by title; a title the page says otherwise ("@Today" for a date), or two rows of one title,
+  // by the property lines the page holds, so a row is one record and its page isn't a second
+  const place = new Map<string, string>(); // export path -> record path
+  const rowOf: { t: Table; r: string[]; path: string; page: string | null }[] = [];
+  for (const t of tables) {
+    const pages = paths.filter((x) => ext(x) === "md" && inFolder(x, t.key));
+    const props = new Map(pages.map((p) => [p, propsOf(p)]));
+    const score = (p: string, r: string[]) => t.cols.filter((c) => (r[c.i] ?? "").trim() && props.get(p)!.get(c.header.toLowerCase()) === (r[c.i] ?? "").trim()).length;
+    const free = new Set(pages);
+    const rows = t.body.map((r) => ({ r, title: (r[0] ?? "").trim() || "Untitled", page: null as string | null }));
+    for (const row of rows) {
+      const named = [...free].filter((p) => bare(noExt(p.split("/").pop()!)).toLowerCase() === row.title.toLowerCase());
+      const best = named.sort((a, b) => score(b, row.r) - score(a, row.r))[0];
+      if (best) { row.page = best; free.delete(best); }
+    }
+    for (const row of rows.filter((x) => !x.page)) {
+      const [best, next] = [...free].map((p) => ({ p, n: score(p, row.r) })).sort((a, b) => b.n - a.n);
+      if (best && best.n > 0 && best.n === props.get(best.p)!.size && (!next || next.n < best.n)) { row.page = best.p; free.delete(best.p); }
+    }
+    for (const row of rows) {
+      const path = unique(fit(`${t.place}/${seg(row.title)}`));
+      if (row.page) place.set(row.page, path);
+      rowOf.push({ t, r: row.r, path, page: row.page });
+    }
+  }
+  for (const p of paths.filter((x) => ext(x) === "md" && !place.has(x))) place.set(p, unique(placeOf(p)));
+
+  // 3. Words: links to pages as wikilinks; a file said, whether it stayed in the export or was never in it
   const resolve = (from: string, target: string): string => {
     const t = dec(target.replace(/[?#].*$/, ""));
     const parts = (t.startsWith("/") ? [] : from.split("/").slice(0, -1));
     for (const s of t.split("/")) { if (s === "..") parts.pop(); else if (s && s !== ".") parts.push(s); }
     return parts.join("/");
   };
-  const left: string[] = [];
-  /** A page's words: its links to pages as wikilinks; images and files said, since they stay in the export. */
+  const tableAt = (to: string) => tables.find((t) => t.key === to.replace(/_all\.csv$/i, ".csv"));
+  const wiki = (rec: string, label: string) => `[[${rec}${label && label !== rec.split("/").pop() ? `|${label}` : ""}]]`;
   const words = (from: string, body: string) => body
     .replace(/(!?)\[([^\]]*)\]\(([^)\s]+)\)/g, (all, img: string, label: string, target: string) => {
       if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("#")) return all;
       const to = resolve(from, target);
-      const rec = place.get(to) ?? tables.get(to.replace(/_all\.csv$/i, ".csv"))?.place;
-      if (rec) return `[[${rec}${label && label !== rec.split("/").pop() ? `|${label}` : ""}]]`;
+      // a linked view of a table is a .csv the export doesn't hold: its page of the same name, if there is one
+      const rec = place.get(to) ?? tableAt(to)?.place ?? (ext(to) === "csv" ? place.get(to.replace(/(_all)?\.csv$/i, ".md")) : undefined);
+      if (rec) return wiki(rec, label);
       const file = dec(target.split("/").pop() ?? target);
-      return img ? `*(image ${file}: it stayed in your Notion export)*` : `${label || file} *(it stayed in your Notion export)*`;
+      const there = files.has(to);
+      return img ? `*(image ${file}: ${there ? "it stayed in your Notion export" : "not in your Notion export"})*`
+        : `${label || file} *(${there ? "it stayed in your Notion export" : "not in your Notion export"})*`;
     })
     // a relation written into a page as text, "Title (path.md)": a wikilink, where it is a page of the export
     // (after a line's start, a property's "Key: " or another link's ", "; its title has no ":" or "," of its own)
     .replace(/(^|: |, )([^\n()[\]:,]+?) \(([^()\s]+\.md)\)/gm, (all, lead: string, label: string, target: string) => {
       if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return all;
       const rec = place.get(resolve(from, target));
-      const name = label.trim();
-      return rec ? `${lead}[[${rec}${name && name !== rec.split("/").pop() ? `|${name}` : ""}]]` : all;
+      return rec ? `${lead}${wiki(rec, label.trim())}` : all;
     })
     // Notion writes a checklist item as "- [ ]  text", two spaces after the box
     .replace(/^(\s*[-*] \[[ xX]\]) {2,}/gm, "$1 ");
 
+  // 4. Records: each table's own, its rows, then every other page
   const types: Pack["types"] = {};
   const records: PackRecord[] = [];
-  let rows = 0;
-  for (const [key, csvPath] of dbs) {
-    const t = tables.get(key)!;
-    const grid = parseCsv(text(files.get(csvPath)!));
-    const [header = [], ...body] = grid;
-    if (!header.length) continue;
-    const taken = new Set<string>();
-    const cols = header.slice(1).map((h, i) => {
-      const values = body.map((r) => r[i + 1] ?? "");
-      const kind = kindOf(values);
-      return { header: h.trim(), field: fieldName(h, taken), kind, i: i + 1 };
-    });
-    types[t.type] = { description: `From Notion: ${bare(noExt(key.split("/").pop()!))}.`, fields: Object.fromEntries(cols.map((c) => [c.field, c.kind === "relation" ? { type: "reference", cardinality: "many" } as FieldSpec : SPEC[c.kind]])) };
-    records.push({ path: t.place, body: `This was the Notion table **${bare(noExt(key.split("/").pop()!))}**. Its rows are the type ${t.type} here: open it in Vault.\n` });
-    // the rows' own pages, by their title, in the database's folder
-    const pages = new Map<string, string[]>();
-    for (const p of paths.filter((x) => ext(x) === "md" && x.startsWith(rowFolder(key)) && !x.slice(rowFolder(key).length).includes("/"))) {
-      const k = bare(noExt(p.split("/").pop()!)).toLowerCase();
-      pages.set(k, [...(pages.get(k) ?? []), p]);
-    }
-    for (const r of body) {
-      const title = (r[0] ?? "").trim() || "Untitled";
-      const page = pages.get(title.toLowerCase())?.shift() ?? null;
-      const at = page ? place.get(page)! : unique(`${t.place}/${seg(title)}`);
-      const fields: Record<string, unknown> = {};
-      for (const c of cols) {
-        const v = (r[c.i] ?? "").trim();
-        if (!v) continue;
-        fields[c.field] = c.kind === "date" ? notionDate(v)
-          : c.kind === "number" ? Number(v.replace(/,(?=\d{3}\b)/g, ""))
-          : c.kind === "boolean" ? /^yes$/i.test(v)
-          : c.kind === "list" ? v.split(",").map((x) => x.trim()).filter(Boolean)
-          : c.kind === "relation" ? relations(v)!.map((to) => { const f = resolve(csvPath, to); return place.get(f) ?? tables.get(f)?.place ?? bare(to.split("/").pop()!.replace(/\.md$/, "")); })
-          : v;
-      }
-      // the row's page: its words, less the title line and the property lines the table already holds
-      let words_ = "";
-      if (page) {
-        const lines = text(files.get(page)!).replace(/\r\n/g, "\n").split("\n");
-        let i = 0;
-        if (/^# /.test(lines[0] ?? "")) i = 1;
-        while (i < lines.length && lines[i].trim() === "") i++;
-        const keys = new Set(header.map((h) => h.trim().toLowerCase()));
-        while (i < lines.length && /^[^:\n]{1,60}: /.test(lines[i]) && keys.has(lines[i].split(":")[0].trim().toLowerCase())) i++;
-        words_ = words(page, lines.slice(i).join("\n").trim());
-      }
-      records.push({ path: at, types: [t.type], fields, body: words_ ? `${words_}\n` : "" });
-      rows++;
-    }
+  for (const t of tables) {
+    types[t.type] = { description: `From Notion: ${t.title}.`, fields: Object.fromEntries(t.cols.map((c) => [c.field, c.kind === "relation" ? { type: "reference", cardinality: "many" } as FieldSpec : SPEC[c.kind as Exclude<Kind, "relation">]])) };
+    records.push({ path: t.place, body: `This was the Notion table **${t.title}**. Its rows are the type ${t.type} here: open it in Vault.\n` });
   }
-  // pages that aren't a table's rows: their words, less the title line (the path names them)
+  for (const { t, r, path, page } of rowOf) {
+    const fields: Record<string, unknown> = {};
+    for (const c of t.cols) {
+      const v = (r[c.i] ?? "").trim();
+      if (!v) continue;
+      fields[c.field] = c.kind === "date" ? notionDate(v)
+        : c.kind === "number" ? Number(v.replace(/,(?=\d{3}\b)/g, ""))
+        : c.kind === "boolean" ? /^yes$/i.test(v)
+        : c.kind === "list" ? v.split(",").map((x) => x.trim()).filter(Boolean)
+        : c.kind === "relation" ? relations(v)!.map((to) => { const f = resolve(t.csv, to); return place.get(f) ?? tableAt(f)?.place ?? bare(to.split("/").pop()!.replace(/\.md$/, "")); })
+        : v;
+    }
+    // the row's page: its words, less the title line and the property lines the table already holds
+    let body = "";
+    if (page) {
+      const l = lines(page);
+      let i = /^# /.test(l[0] ?? "") ? 1 : 0;
+      while (i < l.length && l[i].trim() === "") i++;
+      const keys = new Set(t.header.map((h) => h.trim().toLowerCase()));
+      while (i < l.length && /^[^:\n]{1,60}: /.test(l[i]) && keys.has(l[i].split(":")[0].trim().toLowerCase())) i++;
+      body = words(page, l.slice(i).join("\n").trim());
+    }
+    records.push({ path, types: [t.type], fields, body: body ? `${body}\n` : "" });
+  }
+  // pages, and a row's page its table's CSV didn't list: their words, less the title line (the path names them)
+  const rowPages = new Set(rowOf.map((x) => x.page).filter(Boolean));
   let pageCount = 0;
-  for (const p of paths.filter((x) => ext(x) === "md" && !isRow(x))) {
-    const lines = text(files.get(p)!).replace(/\r\n/g, "\n").split("\n");
-    if (/^# /.test(lines[0] ?? "")) lines.shift();
-    records.push({ path: place.get(p)!, body: `${words(p, lines.join("\n").trim())}\n` });
+  for (const p of paths.filter((x) => ext(x) === "md" && !rowPages.has(x))) {
+    const l = lines(p);
+    if (/^# /.test(l[0] ?? "")) l.shift();
+    records.push({ path: place.get(p)!, body: `${words(p, l.join("\n").trim())}\n` });
     pageCount++;
   }
-  // a row whose page wasn't in its table's CSV (a filtered view): a page of its own, so nothing is lost
-  for (const p of paths.filter((x) => ext(x) === "md" && isRow(x))) {
-    if (records.some((r) => r.path === place.get(p))) continue;
-    const lines = text(files.get(p)!).replace(/\r\n/g, "\n").split("\n");
-    if (/^# /.test(lines[0] ?? "")) lines.shift();
-    records.push({ path: place.get(p)!, body: `${words(p, lines.join("\n").trim())}\n` });
-    pageCount++;
-  }
-  for (const p of paths) if (!["md", "csv"].includes(ext(p))) left.push(rel(p));
+  const left = paths.filter((p) => !["md", "csv"].includes(ext(p))).map(rel);
+  const rows = rowOf.length;
+  const dbsCount = tables.length;
 
   const label = name.replace(/\.zip$/i, "").slice(0, 60) || "Notion export";
   const pack = checkPack({
     parachute_pack: 1, id: `notion-${idOf(paths.map(rel))}`, name: `Notion: ${label}`, version: 1, source: NOTION_SOURCE,
-    summary: `${pageCount} page${pageCount === 1 ? "" : "s"} and ${dbs.size} table${dbs.size === 1 ? "" : "s"} from Notion.`,
+    summary: `${pageCount} page${pageCount === 1 ? "" : "s"} and ${dbsCount} table${dbsCount === 1 ? "" : "s"} from Notion.`,
     types, records,
   });
-  return { pack, found: { pages: pageCount, tables: dbs.size, rows }, left };
+  return { pack, found: { pages: pageCount, tables: dbsCount, rows }, left };
 }

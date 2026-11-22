@@ -56,9 +56,13 @@ and applies it as a pack, by the rule above, under one folder, `Notion/`:
   the values (dates, numbers, yes/no, lists, links to other rows as references); its `_all.csv` is read, so rows a view
   filtered out come too. A record at the table's place says where its rows went.
 - a **row** becomes a record of that type at `Notion/<its place>/<title>`: the columns are its fields, its page (less
-  its title and property lines) its words.
+  its title and property lines) its words. A page is matched to its row by title, else by its property lines (Notion
+  heads a date's page "@Today" where the CSV says the date), so a row is never two records.
 - a **page** becomes a record at its place in the tree; links between pages become wikilinks.
-- **images and attachments** stay in the export, and the app says which.
+- **images and attachments** stay in the export, and the app says which; a link to a linked view (a .csv the export
+  doesn't hold) is said to be missing.
+- a column named alike in two tables but of two kinds is text in both (a vault takes one meaning per field); a title a
+  vault path won't take ("notes.js", a path over 200 characters) is changed just enough to land.
 
 The receipt is `Parachute/Receipts/notion-<id>`, the id from the export's file list: choosing the same export again
 changes nothing, and **Installed packs** lists it. Checked against a made-up workspace shaped like a real export

@@ -129,14 +129,15 @@ export function packMethods(deps: VaultsDeps, word: (p: unknown) => void, held: 
         writes(vault as string);
         if (!deps.pick) throw new ContractError(ERROR_CODES.failed, "this screen can't open a file");
         if ((await deps.door(vault as string)) !== "records") throw new ContractError(ERROR_CODES.failed, "This vault's server is older (0.8): an import needs types, which come with 0.9. Nothing was changed.");
+        // one call's worth, before the picker: the person's own tap and pick gate it, and a workspace can be hundreds of
+        // records (a frame's reads are 60 in 10 s: charged per record, any real export would be refused after the pick)
+        ctx.charge(5);
         const [file] = await deps.pick([".zip", "application/zip"], false);
         if (!file) return { picked: false };
         let pack: ReturnType<typeof notionImport>;
         try { pack = notionImport(await readZip(file.bytes), file.name); } catch (e) {
           throw new ContractError(ERROR_CODES.failed, e instanceof ZipError || e instanceof Error ? e.message.slice(0, 300) : "That file couldn't be read.");
         }
-        // a request for each type and record, the two reads and the receipt
-        ctx.charge(3 + Object.keys(pack.pack.types).length + pack.pack.records.length);
         try {
           const r = await applyPack(pack.pack, packTarget(deps, vault as string));
           return { picked: true, name: pack.pack.name, found: pack.found, made: r.receipt.made.records.length, types: Object.keys(pack.pack.types), notes: r.notes, left: pack.left, changed: r.changed };

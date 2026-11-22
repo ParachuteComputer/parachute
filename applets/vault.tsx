@@ -1149,7 +1149,8 @@ function FromNotion({ v, openType, done, children }: { v: Held; openType: (t: st
     {r?.found && <section aria-label="What came from Notion" className="stack">
       <p className="note-meta">{r.changed ? "From Notion" : "Already here from Notion"}: {count(r.found.tables, "table")} ({count(r.found.rows, "row")}) and {count(r.found.pages, "page")}, under Notion/.{r.changed ? "" : " Nothing changed."}</p>
       {(r.types ?? []).length > 0 && <div className="chips">{r.types!.map((t) => <Button key={t} small kind="quiet" onClick={() => openType(t)}>{label(t)}</Button>)}</div>}
-      {(r.notes ?? []).map((n) => <p key={n} className="note-meta">{n}</p>)}
+      {(r.notes ?? []).slice(0, 5).map((n) => <p key={n} className="note-meta">{n}</p>)}
+      {(r.notes ?? []).length > 5 && <p className="note-meta">And {r.notes!.length - 5} more like these.</p>}
       {(r.left ?? []).length > 0 && <p className="note-meta">{count(r.left!.length, "file")} stayed in your export (images and attachments aren't brought in yet): {r.left!.slice(0, 3).map((f) => f.split("/").pop()).join(", ")}{r.left!.length > 3 ? "…" : ""}.</p>}
     </section>}
   </>;
