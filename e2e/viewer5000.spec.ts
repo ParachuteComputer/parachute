@@ -159,7 +159,7 @@ test("5,000 records: a type of 2,000 as a table, the next page, a sort, a record
     await m.goto(`/v/${VAULT}`);
     await m.getByRole("button", { name: "Open Vault" }).click();
     await v(m).getByRole("button", { name: "Sharing" }).click();
-    await expect(v(m).getByText("Your AI")).toBeVisible();
+    await expect(v(m).getByRole("button", { name: "Connect an AI" })).toBeVisible();
     await shot(m, "mac-08-sharing");
   } finally { await mac.close(); }
 });

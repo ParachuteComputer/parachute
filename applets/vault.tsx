@@ -1,8 +1,9 @@
 // Vault: Parachute's own way to see what is in your vaults (T-476). Your vaults, each one's types with how many records
 // each has, a type's records as a table (its fields as columns: sort, filter, group, saved views), and a record: its
 // fields (changed where they stand), types and tags, its words, what links to it and from it, and its history. A record
-// no other applet opens opens here. Sharing says who reaches a vault (this app, its applets, and every key, AI and app
-// the hub lets in), gives an AI a key to some of its types, and takes access back. Changes says what changed
+// no other applet opens opens here. Sharing says who reaches a vault in one list (your AIs and agents, then people, then
+// apps and devices: this app, its applets, every key and app the hub lets in), connects an AI or gives it a key to some
+// of its types, invites someone, and takes access back. Changes says what changed
 // in a vault, by whom (your AI by its key's name), each before and after, and puts a change, or a writer's run of them,
 // back: putting back is a change of its own, kept in history (docs/VAULT.md "Changes").
 // It asks the app for every vault on this device (`vaults`) and what reaches them (`sharing`): its card says so.
@@ -464,11 +465,10 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   );
 }
 
-/** What reaches a vault: this app (read, or read and change), its applets allowed on this device, your AI's address,
- *  what is published; and taking each back. */
+/** A person in a vault, as its owner sees them (the hub's `list-access`, signed by the person's key). */
 type PeopleNow = { people: { key: string; name: string | null; role: string }[]; invites: { id: string; name: string; expires_at: string }[]; from?: string | null }
   | { people: null; why: "no_key" | "not_owner" | "no_hub" | "unknown_key" };
-const roleWords = (role: string) => (role === "member" ? "can read and change everything" : role === "read" ? "can read everything" : "runs this vault with you");
+const roleWords = (role: string) => (role === "member" ? "reads and changes everything" : role === "read" ? "reads everything" : "runs this vault with you");
 const shortKey = (k: string) => `${k.slice(0, 8)}…`;
 /** A name as the hub takes one: 1 to 40 characters, not "You"; said in a toast otherwise. */
 const nameOk = (x: string) => {
@@ -477,111 +477,32 @@ const nameOk = (x: string) => {
   return ok;
 };
 
-/** Who else is in a vault, for its owner (docs/design/SHARING.md): each person by the name you gave them, End; an invite
- *  nobody took yet, Take back; and Invite someone, which makes a link to send. Each is a request your key signs. */
-function People({ v }: { v: Held }) {
+/** Who else is in a vault, for its owner (docs/design/SHARING.md): read with the person's key, so it shows without
+ *  managing; with their open invites. Null for someone else's vault or an app before sharing. */
+function usePeople(v: Held) {
   const [now, setNow] = useState<PeopleNow | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
-  const [from, setFrom] = useState<string | null>(null);
-  const [made, setMade] = useState<{ id: string; name: string; url: string; until: string } | null>(null);
   const ask = (vaults as { people?: (k: string) => Promise<PeopleNow> }).people;
+  const on = typeof ask === "function" && v.mine;
   // an answer for a vault no longer shown is dropped
   const current = useRef(v.key);
   const load = () => {
-    if (typeof ask !== "function") return Promise.resolve();
+    if (!on) return Promise.resolve();
     const key = v.key;
-    return ask(key).then((x) => { if (current.current !== key) return; setNow(x); setFailed(null); if (x.people && x.from) setFrom((f) => f ?? x.from ?? null); },
+    return ask!(key).then((x) => { if (current.current === key) { setNow(x); setFailed(null); } },
       (e: unknown) => { if (current.current === key) { setNow(null); setFailed(e); } });
   };
-  // only the vault's owner lists its people: a vault of someone else's asks nothing (no signed request for a no). Another
-  // vault starts clean: none of the last one's people, invites or link
-  useEffect(() => { current.current = v.key; setMade(null); setNow(null); setFailed(null); if (v.mine) void load(); }, [v.key]);
-  // an app from before sharing, or someone else's vault: nothing to show
-  if (typeof ask !== "function" || !v.mine) return null;
-  if (failed) return <Problem error={failed} onRetry={load}>Who is in {v.name} couldn't be read</Problem>;
-  if (!now) return <Loading />;
-  if (!now.people) {
-    // only the owner's list is shown; a friend's vault, the web build and a host without sharing each say why, once
-    return now.why === "not_owner" ? null : <><p className="sect">People</p><p className="note-meta">{now.why === "no_key"
-      ? `Inviting people to ${v.name} is signed with your key: open Parachute on your phone or Mac.`
-      : now.why === "unknown_key" ? `This hub doesn't know your key yet, so it can't take an invite from it. Link your key to your account on the hub first.`
-      : `Sharing ${v.name} with people isn't on this host yet.`}</p></>;
-  }
-  const invite = async (name: string) => {
-    try {
-      const r = await (vaults as any).invite(v.key, name, from);
-      setMade({ id: r.id, name, url: r.url, until: r.expires_at });
-      await load();
-    } catch (e) { quiet(e, "No link made"); throw e; }
-  };
-  const copy = (url: string) => void (app as { copy(t: string): Promise<boolean> }).copy(url).then((ok) => toast(ok ? "Link copied." : "Press and hold the link to select it."), () => toast("Press and hold the link to select it."));
-  return <>
-    <List label="People" rows={[
-      { key: "you", title: "You", meta: "owner" },
-      ...now.people.map((p) => ({ key: p.key, title: p.name ?? `A key (${shortKey(p.key)})`, meta: `${roleWords(p.role)} · key ${shortKey(p.key)}`,
-        aside: <Button small kind="quiet" onClick={() => (vaults as any).end(v.key, p.key).then((r: { ended?: boolean }) => { toast(r?.ended === false ? "Already ended." : `${p.name ? `${p.name}'s` : "Their"} access is ended.`); return load(); }, (e: unknown) => quiet(e, "Not ended"))}>End</Button> })),
-      ...now.invites.map((i) => ({ key: i.id, title: i.name, meta: `invited · the link works once, until ${when.date(i.expires_at)}`,
-        aside: <Button small kind="quiet" onClick={() => (vaults as any).takeBack(v.key, i.id).then((r: { takenBack?: boolean }) => { toast(r?.takenBack === false ? `The invite for ${i.name} was already used or taken back.` : `The invite for ${i.name} is taken back.`); if (made?.id === i.id) setMade(null); return load(); }, (e: unknown) => quiet(e, "Not taken back"))}>Take back</Button> })),
-    ]} />
-    {made && <div className="invite-made" aria-label="Invite link">
-      <p className="note-meta">Send this link to {made.name} however you like. It works once, until {when.date(made.until)}.</p>
-      <p className="addr">{made.url}</p>
-      {typeof (app as { copy?: unknown }).copy === "function" && <Button small onClick={() => copy(made.url)}>Copy link</Button>}
-    </div>}
-    {from === null
-      ? <Field label="Your name, as the people you invite see it" placeholder="Like Aaron" action="Keep" onAction={(x) => (nameOk(x) ? void setFrom(x) : Promise.reject(new Error("name")))} />
-      : <Field label="Invite someone" placeholder="Their name, like Bo" action="Make the link" onAction={(x) => (nameOk(x) ? invite(x) : Promise.reject(new Error("name")))} />}
-  </>;
-}
-
-function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => void } }) {
-  const [a, setA] = useState<{ level: string | null; hub: string; connector: string; applets: { noteId: string; name: string; glyph: string; since: string | null; changes: boolean }[] } | null>(null);
-  const [pub, setPub] = useState<Rec[] | null>(null);
-  const [failed, setFailed] = useState<unknown>(null);
-  // the hub's one address for an AI (T-476), when it has one; an older app has no `hubs`
-  const [one, setOne] = useState<string | null>(null);
-  useEffect(() => {
-    let on = true;
-    setOne(null);
-    const ask = (vaults as { hubs?: () => Promise<{ address: string | null; vaults: string[] }[]> }).hubs;
-    if (typeof ask === "function") ask().then((hs) => { if (on) setOne(hs.find((h) => h.vaults.includes(v.key))?.address ?? null); }, () => {});
-    return () => { on = false; };
-  }, [v.key]);
-  // public as the hub judges it: the field, or its default publish tag
-  const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { where: [{ field: "published", op: "eq", value: true }], limit: 50 }),
-    vaults.query(v.key, { tag: "publish", limit: 50 })])
-    .then(([x, ...ps]: [any, ...{ records: Rec[] }[]]) => { setA(x); setPub([...new Map(ps.flatMap((p) => p.records).map((r) => [r.id, r])).values()]); setFailed(null); }, setFailed);
-  useEffect(() => { void load(); }, [v.key]);
-  return (
-    <Page title="Sharing" kicker={v.name} back={back} className="vlt" onRefresh={load}>
-      <style>{CSS}</style>
-      <People v={v} />
-      {failed ? <Problem error={failed} onRetry={load}>What reaches {v.name} couldn't be read</Problem> : !a ? <Loading /> : <>
-        <Reach v={v} self={{ key: "app", title: "Parachute, on this device", meta: `${a.level === "write" ? "reads and changes" : "reads"} every type, at ${a.hub.replace(/^https?:\/\//, "")}`,
-          // the home stays writable: Parachute's own applets write there (docs/design/PARACHUTE-SOURCE.md)
-          aside: a.level === "write" && !a.home ? <Button small kind="quiet" onClick={() => vaults.readOnly(v.key).then(load, (e: unknown) => quiet(e, "Not changed"))}>Read only</Button> : undefined }} />
-        {a.applets.length ? <List label="Applets you allowed here" rows={a.applets.map((x) => ({ key: x.noteId, glyph: x.glyph, title: x.name, meta: `${x.changes ? "reads and changes" : "reads"}${x.since ? ` · since ${when.date(x.since)}` : ""}`,
-          aside: <Button small kind="quiet" onClick={() => vaults.revoke(v.key, x.noteId).then(() => { toast(`${x.name} revoked.`); return load(); }, (e: unknown) => quiet(e, "Not revoked"))}>Revoke</Button> }))} />
-          : <Empty>No applet is allowed in {v.name} on this device.</Empty>}
-        <List label="Published" rows={(pub ?? []).map((r) => ({ key: r.id, title: r.title, meta: "anyone with its link can read it" }))} />
-        {pub && !pub.length && <p className="note-meta">Nothing in {v.name} is published.</p>}
-        <p className="sect">Your AI</p>
-        {one ? <>
-          <p className="note-meta">An AI you connect (Claude, ChatGPT…) reaches your vaults at one address, with what you allowed when you connected it:</p>
-          <p className="addr">{one}</p>
-          <p className="note-meta">To give an AI {v.name} alone, use its own address:</p>
-          <p className="addr">{a.connector}</p>
-        </> : <>
-          <p className="note-meta">An AI you connect (Claude, ChatGPT…) reaches {v.name} at this address, with what you allowed when you connected it:</p>
-          <p className="addr">{a.connector}</p>
-        </>}
-      </>}
-    </Page>
-  );
+  // only the vault's owner lists its people: a vault of someone else's asks nothing (no signed request for a no)
+  useEffect(() => { current.current = v.key; setNow(null); setFailed(null); void load(); }, [v.key]);
+  return { on, now, failed, load };
 }
 
 type ReachRow = { id: string; name: string; who: "person" | "agent" | "app" | "service"; app: string | null; can: "read" | "change" | "manage" | "backup";
-  types: string[] | null; until: string | null; lastUsed: string | null; self: boolean };
+  types: string[] | null; until: string | null; lastUsed: string | null; self: boolean;
+  /** a person the vault is shared with (one row for them and all their sign-ins): their key, and their role there */
+  member?: { key: string | null; role: string };
+  /** whose key this is, when someone else's than yours (a key a person you share with made) */
+  of?: string };
 /** A key just made: its secret was shown once on the app's own sheet and never reaches this applet. */
 type Given = { name: string; until: string; types: string[] | null; address: string };
 type Sharing = { reach?(vault: string): Promise<{ managing: boolean; rows: ReachRow[] | null; lists?: boolean }>; manage?(vault: string): Promise<null>;
@@ -589,10 +510,9 @@ type Sharing = { reach?(vault: string): Promise<{ managing: boolean; rows: Reach
 const canWord = { read: "reads", change: "reads and changes", manage: "manages", backup: "downloads a backup of" } as const;
 const typesWord = (t: string[] | null) => (t ? t.map(label).join(", ") : "every type");
 
-/** Who reaches a vault (T-476, level 6): this app, then, while Parachute manages the vault (one yes on the hub, until
- *  the person leaves Sharing), every key, AI and app the hub lets in, each by name with what it may do to which types
- *  and until when, and one tap to end it; and a key made for an AI, to all the vault's types or some. */
-function Reach({ v, self }: { v: Held; self: { key: string; title: string; meta: string; aside?: ReactNode } }) {
+/** Every key, AI, app and person the hub lets into a vault, while Parachute manages it (T-476, level 6: one yes on the
+ *  hub, until the person leaves Sharing). */
+function useReach(v: Held) {
   const sh = vaults as unknown as Sharing;
   const can = typeof sh.reach === "function";
   const [rows, setRows] = useState<ReachRow[] | null>(null);
@@ -600,30 +520,171 @@ function Reach({ v, self }: { v: Held; self: { key: string; title: string; meta:
   // the hub lists who reaches a vault (core T-476); an older hub, or Parachute Cloud for now, doesn't
   const [lists, setLists] = useState(true);
   const [failed, setFailed] = useState<unknown>(null);
-  const [giving, setGiving] = useState(false);
   const load = () => can ? sh.reach!(v.key).then((r) => { setManaging(r.managing); setRows(r.rows); setLists(r.lists !== false); setFailed(null); }, setFailed) : Promise.resolve();
-  useEffect(() => { void load(); }, [v.key]);
+  useEffect(() => { setRows(null); setManaging(null); void load(); }, [v.key]);
   // shown again after being hidden: the shell ended what was managed then (vault/manage.ts), so the list is read again
   useEffect(() => (typeof onShown === "function" ? onShown((on: boolean) => { if (on) void load(); }) : undefined), [v.key]);
   // leaving Sharing gives the hub's yes back: Parachute holds no admin when nobody is managing
   useEffect(() => () => { if (can) void sh.stopManaging?.(v.key).catch(() => {}); }, [v.key]);
+  return { sh, can, rows, managing, lists, failed, load };
+}
+
+type Group = "ai" | "people" | "apps";
+type Ended = { key: string; group: Group; title: string };
+
+/** Who reaches a vault, in one list (docs/VAULT.md "Sharing"): your AIs and agents first, then people, then apps and
+ *  devices (this Parachute, its applets here, other devices, app keys), then what anyone with a link can read. Each row
+ *  says what it reaches in plain words and ends with one tap; what was ended stays in the list, said so. Connect an AI
+ *  and Invite someone are at the top. */
+function Sharing({ v, back }: { v: Held; back: { label: string; onPress: () => void } }) {
+  const [a, setA] = useState<{ level: string | null; hub: string; connector: string; applets: { noteId: string; name: string; glyph: string; since: string | null; changes: boolean }[] } | null>(null);
+  const [pub, setPub] = useState<Rec[] | null>(null);
+  const [failed, setFailed] = useState<unknown>(null);
+  // the hub's one address for an AI (T-476), when it has one; an older app has no `hubs`
+  const [one, setOne] = useState<string | null>(null);
+  const people = usePeople(v);
+  const reach = useReach(v);
+  // an End that answers after another vault is shown marks nothing there
+  const shownKey = useRef(v.key);
+  shownKey.current = v.key;
+  const [open, setOpen] = useState<"ai" | "invite" | null>(null);
+  const [giving, setGiving] = useState(false);
+  const [ended, setEnded] = useState<Ended[]>([]);
+  const [from, setFrom] = useState<string | null>(null);
+  const [made, setMade] = useState<{ id: string; name: string; url: string; until: string } | null>(null);
+  useEffect(() => {
+    let on = true;
+    setOne(null); setOpen(null); setGiving(false); setEnded([]); setMade(null);
+    const ask = (vaults as { hubs?: () => Promise<{ address: string | null; vaults: string[] }[]> }).hubs;
+    if (typeof ask === "function") ask().then((hs) => { if (on) setOne(hs.find((h) => h.vaults.includes(v.key))?.address ?? null); }, () => {});
+    return () => { on = false; };
+  }, [v.key]);
+  useEffect(() => { const n = people.now; if (n?.people && n.from) setFrom((f) => f ?? n.from ?? null); }, [people.now]);
+  // public as the hub judges it: the field, or its default publish tag
+  const load = () => Promise.all([vaults.access(v.key), vaults.query(v.key, { where: [{ field: "published", op: "eq", value: true }], limit: 50 }),
+    vaults.query(v.key, { tag: "publish", limit: 50 })])
+    .then(([x, ...ps]: [any, ...{ records: Rec[] }[]]) => { setA(x); setPub([...new Map(ps.flatMap((p) => p.records).map((r) => [r.id, r])).values()]); setFailed(null); }, setFailed);
+  useEffect(() => { void load(); }, [v.key]);
+  // back from the background: who is in may have changed (the hub's list reads itself again, useReach)
+  useEffect(() => (typeof onShown === "function" ? onShown((on: boolean) => { if (on) void people.load(); }) : undefined), [v.key]);
+  const refresh = () => Promise.all([load(), people.load(), reach.load()]);
+
+  const { sh, rows, managing } = reach;
+  // managing ended (hidden, run out): the key form closes with it, and doesn't come back by itself
+  useEffect(() => { if (managing === false) setGiving(false); }, [managing]);
+  const listed = reach.can && reach.lists;
   const others = (rows ?? []).filter((r) => !r.self);
   const until = (r: ReachRow) => (r.until ? ` · until ${when.date(r.until)}` : "");
   const used = (r: ReachRow) => (r.lastUsed ? ` · used ${when.ago(r.lastUsed)}` : "");
   // an app connected by OAuth is named by the name it registered (Parachute on another device, Claude…), never its id
   const title = (r: ReachRow) => (r.app ? (r.app === "Parachute" ? "Parachute, on another device" : r.app) : r.name);
-  const kindWord = (r: ReachRow) => (r.who === "agent" && !r.app ? "an AI, " : "");
-  return <>
-    <List label={`Who reaches ${v.name}`} rows={[self, ...others.map((r) => ({ key: r.id, title: title(r), meta: `${kindWord(r)}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`,
-      aside: <Button small kind="quiet" aria-label={`End ${title(r)}`} onClick={() => sh.endReach!(v.key, r.id).then(() => { toast(`${title(r)} can no longer reach ${v.name}.`); return load(); }, (e: unknown) => { quiet(e, "Not ended"); void load(); })}>End</Button> }))]} />
-    {!can || !lists ? <p className="note-meta">The keys and AIs your hub has let in are listed on your hub, where you can end them. {!can ? "This Parachute can't list them yet." : "Your hub can't list them here yet."}</p>
-      : failed ? <Problem error={failed} onRetry={load}>Who reaches {v.name} couldn't be read</Problem>
-      : managing === null ? <Loading />
-      : !managing ? <div className="acts"><p className="note-meta">Every key, AI and app your hub lets into {v.name} is listed on your hub.</p>
-          <Button small onClick={() => sh.manage!(v.key).catch((e: unknown) => quiet(e, "Not opened"))}>Show them all</Button></div>
-      : giving ? <GiveKey v={v} taken={(rows ?? []).map((r) => r.name)} cancel={() => { setGiving(false); void load(); }} made={(g) => { setGiving(false); toast(`${g.name} can reach ${typesWord(g.types)} in ${v.name}.`); void load(); }} />
-      : <div className="acts">{!others.length && <p className="note-meta">Nothing else reaches {v.name} now.</p>}<Button small onClick={() => setGiving(true)}>Give an AI a key</Button></div>}
-  </>;
+  // an AI: a key made for one, or what connected at its address by OAuth (Claude, ChatGPT…: any app but Parachute
+  // itself); apps: this Parachute elsewhere, app keys, a script's token
+  const groupOf = (r: ReachRow): Group => (r.member ? "people" : r.who === "agent" || (r.app !== null && r.app !== "Parachute") ? "ai" : "apps");
+  const gone = (key: string) => ended.some((e) => e.key === key);
+  const endedRows = (g: Group) => ended.filter((e) => e.group === g).map((e) => ({ key: `ended:${e.key}`, title: e.title, meta: `ended · ${g === "people" ? "their" : "its"} next request is refused` }));
+  const didEnd = (e: Ended, vault: string) => { if (shownKey.current === vault) setEnded((x: Ended[]) => [...x.filter((y) => y.key !== e.key), e]); };
+  const end = (r: ReachRow, shown = title(r)) => { const vault = v.key; return sh.endReach!(vault, r.id).then(() => {
+    didEnd({ key: r.member?.key ?? r.id, group: groupOf(r), title: shown }, vault);
+    toast(`${shown} can no longer reach ${v.name}.`);
+    return Promise.all([reach.load(), people.load()]);
+  }, (e: unknown) => { quiet(e, "Not ended"); void reach.load(); }); };
+  const endButton = (who: string, go: () => void) => <Button small kind="quiet" aria-label={`End ${who}`} onClick={go}>End</Button>;
+  const keyRow = (r: ReachRow) => ({ key: r.id, title: title(r), meta: `${r.of ? `${r.of}'s · ` : ""}${canWord[r.can]} ${typesWord(r.types)}${until(r)}${used(r)}`, aside: endButton(title(r), () => void end(r)) });
+
+  // AIs and agents
+  const ais = others.filter((r) => groupOf(r) === "ai" && !gone(r.id)).map(keyRow);
+  // people: you; each person the vault is shared with, once (the hub's list while managing, else your key's), by the
+  // name you gave them; an invite nobody took yet
+  const np = people.now?.people ? people.now : null;
+  const hubPeople = others.filter((r) => r.member);
+  // the hub's list, when it names people, is the one source of who is in (a person with two keys is one row there);
+  // your key's list then gives only the invites nobody took yet
+  const fromHub = hubPeople.length > 0;
+  const personRows = [
+    ...hubPeople.filter((r) => !gone(r.member!.key ?? r.id)).map((r) => {
+      const mine = np?.people.find((p) => p.key === r.member!.key);
+      const name = mine ? (mine.name ?? `A key (${shortKey(mine.key)})`) : r.name;
+      return { key: r.id, title: name, meta: `${roleWords(r.member!.role)}${r.member!.key ? ` · key ${shortKey(r.member!.key)}` : ""}${used(r)}`, aside: endButton(name, () => void end(r, name)) };
+    }),
+    ...(fromHub ? [] : np?.people ?? []).filter((p) => !gone(p.key)).map((p) => {
+      const name = p.name ?? `A key (${shortKey(p.key)})`;
+      const vault = v.key;
+      return { key: p.key, title: name, meta: `${roleWords(p.role)} · key ${shortKey(p.key)}`, aside: endButton(name, () => void (vaults as any).end(vault, p.key).then((r: { ended?: boolean }) => {
+        didEnd({ key: p.key, group: "people", title: name }, vault);
+        toast(r?.ended === false ? "Already ended." : `${p.name ? `${p.name}'s` : "Their"} access is ended.`);
+        return Promise.all([reach.load(), people.load()]);
+      }, (e: unknown) => quiet(e, "Not ended"))) };
+    }),
+    ...(np?.invites ?? []).map((i) => ({ key: i.id, title: i.name, meta: `invited · the link works once, until ${when.date(i.expires_at)}`,
+      aside: <Button small kind="quiet" aria-label={`Take back the invite for ${i.name}`} onClick={() => (vaults as any).takeBack(v.key, i.id).then((r: { takenBack?: boolean }) => { toast(r?.takenBack === false ? `The invite for ${i.name} was already used or taken back.` : `The invite for ${i.name} is taken back.`); if (made?.id === i.id) setMade(null); return people.load(); }, (e: unknown) => quiet(e, "Not taken back"))}>Take back</Button> })),
+  ];
+  // apps and devices: this Parachute, the applets let in on this device, Parachute on your other devices, app keys
+  const apps = others.filter((r) => groupOf(r) === "apps" && !gone(r.id)).map(keyRow);
+
+  const invite = async (name: string) => {
+    try {
+      const r = await (vaults as any).invite(v.key, name, from);
+      setMade({ id: r.id, name, url: r.url, until: r.expires_at });
+      await people.load();
+    } catch (e) { quiet(e, "No link made"); throw e; }
+  };
+  const copy = (url: string) => void (app as { copy(t: string): Promise<boolean> }).copy(url).then((ok) => toast(ok ? "Link copied." : "Press and hold the link to select it."), () => toast("Press and hold the link to select it."));
+  const canCopy = typeof (app as { copy?: unknown }).copy === "function";
+  const peopleWhy = !people.on ? null : people.now && !people.now.people ? people.now.why : null;
+  const manage = () => sh.manage!(v.key).catch((e: unknown) => quiet(e, "Not opened"));
+
+  return (
+    <Page title="Sharing" kicker={v.name} back={back} className="vlt" onRefresh={refresh}>
+      <style>{CSS}</style>
+      {failed ? <Problem error={failed} onRetry={load}>What reaches {v.name} couldn't be read</Problem> : !a ? <Loading /> : <section className="reach" aria-label={`Who reaches ${v.name}`}>
+        <h2 className="sect">Who reaches {v.name}</h2>
+        <div className="acts">
+          <Button small kind={open === "ai" ? "primary" : "plain"} aria-expanded={open === "ai"} onClick={() => { setOpen(open === "ai" ? null : "ai"); setGiving(false); }}>Connect an AI</Button>
+          {people.on && !(people.now && !people.now.people && people.now.why === "not_owner") && <Button small kind={open === "invite" ? "primary" : "plain"} aria-expanded={open === "invite"} onClick={() => setOpen(open === "invite" ? null : "invite")}>Invite someone</Button>}
+        </div>
+        {open === "ai" && <div className="give">
+          {giving && managing ? <GiveKey v={v} taken={(rows ?? []).map((r) => r.name)} cancel={() => { setGiving(false); void reach.load(); }} made={(g) => { setGiving(false); setOpen(null); toast(`${g.name} can reach ${typesWord(g.types)} in ${v.name}.`); void reach.load(); }} /> : <>
+            {one && <><p className="note-meta">An AI you connect (Claude, ChatGPT…) reaches your vaults at one address, with what you allow when you connect it:</p><p className="addr">{one}</p></>}
+            <p className="note-meta">{one ? `To give an AI ${v.name} alone, use its own address:` : `An AI you connect (Claude, ChatGPT…) reaches ${v.name} at this address, with what you allow when you connect it:`}</p>
+            <p className="addr">{a.connector}</p>
+            {listed && <><p className="note-meta">Or give it a key of its own, to every type or only some, read or change.</p>
+              <div className="acts"><Button small onClick={() => (managing ? setGiving(true) : void manage())}>Give an AI a key</Button></div></>}
+          </>}
+        </div>}
+        {open === "invite" && <div className="give">
+          {peopleWhy ? <p className="note-meta">{peopleWhy === "no_key" ? `Inviting people to ${v.name} is signed with your key: open Parachute on your phone or Mac.`
+            : peopleWhy === "unknown_key" ? "This hub doesn't know your key yet, so it can't take an invite from it. Link your key to your account on the hub first."
+            : peopleWhy === "not_owner" ? `Only the owner of ${v.name} invites people to it.`
+            : `Sharing ${v.name} with people isn't on this host yet.`}</p>
+            : from === null
+              ? <Field label="Your name, as the people you invite see it" placeholder="Like Aaron" action="Keep" onAction={(x) => (nameOk(x) ? void setFrom(x) : Promise.reject(new Error("name")))} />
+              : <Field label="Invite someone" placeholder="Their name, like Bo" action="Make the link" onAction={(x) => (nameOk(x) ? invite(x) : Promise.reject(new Error("name")))} />}
+          {made && <div className="invite-made" aria-label="Invite link">
+            <p className="note-meta">Send this link to {made.name} however you like. It works once, until {when.date(made.until)}.</p>
+            <p className="addr">{made.url}</p>
+            {canCopy && <Button small onClick={() => copy(made.url)}>Copy link</Button>}
+          </div>}
+        </div>}
+        {listed && (reach.failed ? <Problem error={reach.failed} onRetry={reach.load}>Who reaches {v.name} couldn't be read</Problem>
+          : managing === null ? <Loading />
+          : !managing && <div className="acts"><p className="note-meta">Your hub keeps every key, AI and app it lets into {v.name}.</p><Button small onClick={() => void manage()}>Show them all</Button></div>)}
+        {(managing || ended.some((e) => e.group === "ai")) && <List label="AIs and agents" rows={[...ais, ...endedRows("ai")]} />}
+        {managing && !ais.length && !ended.some((e) => e.group === "ai") && <p className="note-meta">No AI reaches {v.name}. Connect one above.</p>}
+        {(v.mine || personRows.length > 0) && <List label="People" rows={[...(v.mine ? [{ key: "you", title: "You", meta: "owner" }] : []), ...personRows, ...endedRows("people")]} />}
+        {people.failed && <Problem error={people.failed} onRetry={people.load}>{fromHub ? `The invites to ${v.name} couldn't be read` : `Who is in ${v.name} couldn't be read`}</Problem>}
+        <List label="Apps and devices" rows={[
+          { key: "self:app", title: "Parachute, on this device", meta: `${a.level === "write" ? "reads and changes" : "reads"} every type, at ${a.hub.replace(/^https?:\/\//, "")}`,
+            // the home stays writable: Parachute's own applets write there (docs/design/PARACHUTE-SOURCE.md)
+            aside: a.level === "write" && !a.home ? <Button small kind="quiet" onClick={() => vaults.readOnly(v.key).then(load, (e: unknown) => quiet(e, "Not changed"))}>Read only</Button> : undefined },
+          ...a.applets.map((x) => ({ key: `applet:${x.noteId}`, glyph: x.glyph, title: x.name, meta: `an applet on this device · ${x.changes ? "reads and changes" : "reads"}${x.since ? ` · since ${when.date(x.since)}` : ""}`,
+            aside: <Button small kind="quiet" onClick={() => vaults.revoke(v.key, x.noteId).then(() => { toast(`${x.name} revoked.`); return load(); }, (e: unknown) => quiet(e, "Not revoked"))}>Revoke</Button> })),
+          ...apps, ...endedRows("apps")]} />
+        {!listed && <p className="note-meta">The keys and AIs your hub has let in are listed on your hub, where you can end them. {!reach.can ? "This Parachute can't list them yet." : "Your hub can't list them here yet."}</p>}
+        {pub && pub.length > 0 && <List label="Anyone with the link" rows={pub.map((r) => ({ key: r.id, title: r.title, meta: "published: anyone with its link can read it" }))} />}
+      </section>}
+    </Page>
+  );
 }
 
 /** A key for an AI: its name, what it may do, and which types (all, or some). */
