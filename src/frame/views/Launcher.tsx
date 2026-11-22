@@ -6,7 +6,7 @@ import { Link } from "react-router";
 import { updateLine } from "../../applet/level";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVault } from "../../bridge/protocol";
-import { addEmbed, addVault, bringIn, dismissVault, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults, useVaultsLoaded } from "../data";
+import { addEmbed, addVault, bringIn, dismissVault, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults, useVaultsLoaded, useHomeLoaded } from "../data";
 import { titleOf } from "../../vault/notes";
 import { Days } from "../../kit/parts";
 import { when } from "../../kit/when";
@@ -37,7 +37,9 @@ export default function Launcher() {
   const many = vaults.length > 1;
   // Start here, above the list: known before the list draws (and kept per vault), so it never pushes the list down
   const homeVault = vaults.find((v) => v.home);
-  const fresh = useFresh(homeVault, useVaultsLoaded());
+  // (the home record too: Start here's rows are its applets, so nothing is drawn above the list after it)
+  const vaultsRead = useVaultsLoaded(), homeRead = useHomeLoaded();
+  const fresh = useFresh(homeVault, vaultsRead && homeRead);
   return (
     <main className="screen launcher">
       <h1 className="launcher-title">Applets</h1>
@@ -86,10 +88,10 @@ function useFresh(v: FrameVault | undefined, loaded: boolean): boolean | undefin
     const first = shown.current ? false : known.get(key);
     setState({ key, fresh: first });
     if (first === false) return;
-    let live = true, drawn = known.has(key);
+    let live = true, drawn = false;
     const draw = (fresh: boolean) => { drawn = true; setState({ key, fresh }); };
     const late = setTimeout(() => { if (live && !drawn) draw(false); }, 1500);
-    readerFor(v).queryNotes({ orderBy: "updated_at", sort: "desc", limit: 40 }).then((notes) => {
+    readerFor(v).queryNotes({ orderBy: "updated_at", sort: "desc", limit: 200 }).then((notes) => {
       const isNew = !notes.some(started);
       // (only "not new" is kept: a vault read as new is read again on the next visit, which waits for it, so a Start
       // here that something since then ended never shows first and then goes)

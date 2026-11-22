@@ -18,7 +18,7 @@ import { ContractError, ERROR_CODES, hasOnly, plain } from "../contract.ts";
 import { applyPack, checkPack, receiptOf, receiptRecord, refusalWords, RECEIPTS, RECEIPT_TAG, type HeldType, type Pack, type PackTarget, type Receipt } from "../../kit/packs.ts";
 import coreTypes from "../../kit/packs/core-types.json";
 import { notionImport, NOTION_WANT } from "../../kit/notion.ts";
-import { readZip, ZipError } from "../../kit/zip.ts";
+import { readZip } from "../../kit/zip.ts";
 import clients from "../../kit/packs/clients.json";
 import reading from "../../kit/packs/reading.json";
 import { PUBLISH_FIELD, type VaultsDeps } from "./vaults.ts";
@@ -137,11 +137,20 @@ export function packMethods(deps: VaultsDeps, word: (p: unknown) => void, held: 
         const [file] = await deps.pick([".zip", "application/zip"], false);
         if (!file) return { picked: false };
         let pack: ReturnType<typeof notionImport>;
-        try { pack = notionImport(await readZip(file.bytes, { want: NOTION_WANT }), file.name); } catch (e) {
-          throw new ContractError(ERROR_CODES.failed, e instanceof ZipError || e instanceof Error ? e.message.slice(0, 300) : "That file couldn't be read.");
+        // the vault's own types, so the import's names stay clear of them: all but the ones this same export made before
+        // (its receipt says which), so bringing it in again finds its own types and changes nothing
+        const target = packTarget(deps, vault as string);
+        const types = (await target.types()).filter((t) => t.kind === "type");
+        try {
+          const files = await readZip(file.bytes, { want: NOTION_WANT });
+          const ours = new Set(Object.keys((await target.receipt(notionImport(files, file.name).pack.id))?.receipt.made.types ?? {}));
+          const held = types.filter((t) => !ours.has(t.name)).map((t) => ({ name: t.name, fields: t.fields as Record<string, { type?: string; indexed?: boolean; cardinality?: string }> }));
+          pack = notionImport(files, file.name, held);
+        } catch (e) {
+          throw new ContractError(ERROR_CODES.failed, e instanceof Error ? e.message.slice(0, 300) : "That file couldn't be read.");
         }
         try {
-          const r = await applyPack(pack.pack, packTarget(deps, vault as string));
+          const r = await applyPack(pack.pack, target);
           return { picked: true, name: pack.pack.name, found: pack.found, made: r.receipt.made.records.length, types: Object.keys(pack.pack.types), notes: r.notes, left: pack.left, changed: r.changed };
         } catch (e) {
           if ((e as { name?: string })?.name === "NeedsWriteError") throw new ContractError(ERROR_CODES.notGranted, String((e as Error).message).slice(0, 300));

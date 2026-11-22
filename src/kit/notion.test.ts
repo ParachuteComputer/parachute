@@ -145,6 +145,15 @@ describe("notionImport", () => {
     expect(r.pack.records.find((x) => x.path === "Notion/Tasks/x")?.fields).toEqual({ project: ["Gone project"] });
   });
 
+  test("names stay clear of the vault's own types; a name with a comma isn't a list; a leading zero isn't a number", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const r = notionImport(new Map([["E/Book 1111111111111111111111111111111d_all.csv", enc('Name,Author,Zip,Date\r\na,"Le Guin, Ursula",02134,next week\r\nb,"Butler, Octavia",01002,soon\r\n')]]), "x",
+      [{ name: "book", fields: { author: { type: "string" } } }, { name: "meeting", fields: { date: { type: "date" } } }]);
+    expect(Object.keys(r.pack.types)).toEqual(["book-2"]);
+    expect(r.pack.types["book-2"].fields).toEqual({ author: { type: "string" }, zip: { type: "string" }, date_2: { type: "string" } });
+    expect(r.pack.records.find((x) => x.path === "Notion/Book/a")?.fields).toEqual({ author: "Le Guin, Ursula", zip: "02134", date_2: "next week" });
+  });
+
   test("a column of one name in two tables, of two kinds, is text in both: the vault would refuse one type", () => {
     const csv = (rows: string) => new TextEncoder().encode(`\ufeffName,Tags\r\n${rows}`);
     const two = notionImport(new Map([
