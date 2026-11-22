@@ -82,17 +82,22 @@ test("a new vault: Start here leads to Vault and Connect; Clients and sessions s
   await app.getByRole("button", { name: "Add Clients and sessions" }).click();
   await expect(app.getByRole("region", { name: "What Clients and sessions did" })).toContainText("Added the types client, session, follow-up and template, 3 templates and the saved view Open.", { timeout: 30_000 });
 
+  // a pack added is a start: back on the list, no Start here (before any record of theirs)
+  await page.goto("/");
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible({ timeout: 30_000 });
+  await expect(ui(page).getByRole("region", { name: "Start here" })).toHaveCount(0);
+  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /^Vault/ }).click();
+
   // the vault has them, and a new session starts from its template
   const types = (await api({ origin: hub.origin, token: mintToken(`vault:${FRESH}:read`) }, "GET", "types?include_schema=true", undefined, FRESH)) as { name: string; fields: Record<string, { type: string }> }[];
   expect(types.find((t) => t.name === "follow-up")?.fields).toMatchObject({ client: { type: "reference" }, due: { type: "date" }, done: { type: "boolean" } });
-  await app.getByRole("region", { name: "What Clients and sessions did" }).getByRole("button", { name: "session", exact: true }).click();
+  // Vault opens where it was left (Packs, with Clients and sessions installed): back to the vault, its session type
+  await expect(app.getByRole("region", { name: "Installed packs" })).toContainText("Clients and sessions", { timeout: 30_000 });
+  await app.getByRole("button", { name: `← ${FRESH}` }).click();
+  await app.getByText("session", { exact: true }).click({ timeout: 30_000 });
   await app.getByLabel("New session").fill("Sam, first session");
   await app.getByRole("button", { name: "Add" }).click();
   await expect(app.getByText("How they are")).toBeVisible({ timeout: 30_000 });
   await shot(page, "03-new-session");
 
-  // something of theirs is in it now: the list no longer says where to start
-  await page.goto("/");
-  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
-  await expect(ui(page).getByRole("region", { name: "Start here" })).toHaveCount(0);
 });

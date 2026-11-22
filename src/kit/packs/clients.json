@@ -116,10 +116,7 @@
         "view": {
           "contract": 1,
           "layout": "table",
-          "sort": {
-            "by": "due",
-            "dir": "asc"
-          },
+          "sort": null,
           "where": [
             {
               "field": "done",

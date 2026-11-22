@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { updateLine } from "../../applet/level";
 import type { Note } from "@openparachute/surface-client";
 import type { FrameApplet, FrameComponent, FrameParachute, FramePointer, FrameVault } from "../../bridge/protocol";
-import { addEmbed, addVault, bringIn, dismissVault, pinApplet, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
+import { addEmbed, addVault, bringIn, dismissVault, pinApplet, readerFor, startApplet, useApplets, useComponents, useHome, usePointers, useVaultQuery, useVaults } from "../data";
 import { titleOf } from "../../vault/notes";
 import { Days } from "../../kit/parts";
 import { when } from "../../kit/when";
@@ -33,12 +33,17 @@ export default function Launcher() {
   const read = vaults.every((v) => counts[v.key] !== undefined);
   const anyApplets = !!home.official?.length || vaults.some((v) => (counts[v.key] ?? 0) > 0);
   const many = vaults.length > 1;
+  // Start here, above the list: known before the list draws (and kept per vault), so it never pushes the list down
+  const homeVault = vaults.find((v) => v.home);
+  const fresh = useFresh(homeVault);
   return (
     <main className="screen launcher">
       <h1 className="launcher-title">Applets</h1>
       {home.notice === "bundle-record" && <p className="launcher-notice" role="status">Your bundle didn't load, so here is every applet. <Link to="/settings">Settings</Link></p>}
       {home.notice === "bundle-newer" && <p className="launcher-notice" role="status">{updateLine(home.noticeName ?? "your bundle")} For now this is another bundle. <Link to="/settings">Settings</Link></p>}
-      {(() => { const h = vaults.find((v) => v.home); return h ? <StartHere v={h} /> : null; })()}
+      {fresh === undefined ? null : <>
+      {fresh && homeVault && <StartHere v={homeVault} />}
+      {fresh && homeVault && <h2 className="lately-label">All applets</h2>}
       <ol className="entries" aria-label="Applets">
         {/* Parachute's own (docs/design/PARACHUTE-SOURCE.md), in the home: first, from the app */}
         {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
@@ -47,6 +52,7 @@ export default function Launcher() {
       </ol>
       <Components vaults={vaults} onPart={(v, c) => setPart({ v, c })} />
       <p className="launcher-foot"><Link to="/settings">Settings</Link></p>
+      </>}
       {asked && <AppletSheet v={asked.v} a={asked.a} onClose={() => setAsked(null)} />}
       {part && <ComponentSheet v={part.v} c={part.c} onClose={() => setPart(null)} />}
     </main>
@@ -60,16 +66,38 @@ const theirs = (n: Note) => {
   return !/^(Parachute|Applets|Templates|\.parachute)\//.test(path) && !tags.some((t) => t === "guide" || t === "applet" || t === "component" || t.startsWith("parachute"));
 };
 
+/** Whether a home vault holds nothing of the person's yet, per vault for this session: once something of theirs is
+ *  in it, it stays known; a new vault is read again on each visit. */
+const known = new Map<string, boolean>();
+const started = (n: Note) => theirs(n) || ((n as { path?: string }).path ?? "").startsWith("Parachute/Receipts/");
+/** `undefined` while the first read of a vault runs (the list waits for it, at most 1.5 s: then it draws without Start
+ *  here, which this visit then never adds above it). */
+function useFresh(v: FrameVault | undefined): boolean | undefined {
+  const [fresh, setFresh] = useState<boolean | undefined>(() => (v ? known.get(v.key) : false));
+  useEffect(() => {
+    if (!v) { setFresh(false); return; }
+    setFresh(known.get(v.key));
+    if (known.get(v.key) === false) return;
+    let live = true, drawn = known.has(v.key);
+    const late = setTimeout(() => { if (live && !drawn) { drawn = true; setFresh(false); } }, 1500);
+    readerFor(v).queryNotes({ orderBy: "updated_at", sort: "desc", limit: 40 }).then((notes) => {
+      const isNew = !notes.some(started);
+      known.set(v.key, isNew);
+      // drawn already: only a Start here that goes may change it (nothing new pushes the list down)
+      if (live && (!drawn || !isNew)) { drawn = true; setFresh(isNew); }
+    }, () => { if (live && !drawn) { drawn = true; setFresh(false); } });
+    return () => { live = false; clearTimeout(late); };
+  }, [v?.key]);
+  return fresh;
+}
+
 /** A new person's first screen (T-476 first run): while their home vault holds nothing of theirs, the two ways to
  *  make it theirs, as rows of the list. Gone once anything of theirs is in it, or a pack they added. */
 function StartHere({ v }: { v: FrameVault }) {
   const home = useHome();
-  const load = useVaultQuery<Note[]>(v, (r) => r.queryNotes({ orderBy: "updated_at", sort: "desc", limit: 40 }), []);
   const own = (name: string) => (home.official ?? []).find((a) => a.manifest.name === name);
   const vault = own("Vault"), connect = own("Connect");
-  // (a pack they added counts: its receipt says they started, though its templates and views aren't records of theirs)
-  const started = (n: Note) => theirs(n) || ((n as { path?: string }).path ?? "").startsWith("Parachute/Receipts/");
-  if (load.state !== "ok" || load.data.some(started) || (!vault && !connect)) return null;
+  if (!vault && !connect) return null;
   const row = (a: FrameApplet, name: string, life: string) => (
     <li><Link className="entry" to={appletPath(v.key, a.noteId)}>
       <span className="entry-glyph" aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span>
@@ -82,9 +110,8 @@ function StartHere({ v }: { v: FrameVault }) {
       <h2 className="lately-label">Start here</h2>
       <ol className="entries start-here">
         {vault && row(vault, "Bring in what you have", "Import from Notion, or start from a pack: clients and sessions, a reading list, people and projects")}
-        {connect && row(connect, "Connect your AI", "one address for Claude or ChatGPT; it reads and writes here when you allow it")}
+        {connect && row(connect, "Connect your AI", "one address for Claude or ChatGPT; choose Write so it can save here")}
       </ol>
-      <h2 className="lately-label">All applets</h2>
     </section>
   );
 }
