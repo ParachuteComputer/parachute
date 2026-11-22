@@ -11,7 +11,7 @@
 //   onRead   optional: called with the newest message's time while the room is open and looked at (the importer keeps
 //            read state): not while the app is in the background or the applet is kept hidden (useLooking)
 //   onBack   optional: a "← Rooms" link back to the importer's list
-//   seed     optional: the room's messages the importer already holds (their authors' names, the asks closed): drawn at
+//   seed     optional: the room's messages the importer already holds (and their authors' names): drawn at
 //            once, before the room's own read, unless it opens at a message
 //   place    optional: where it was left, kept by the importer across opens: `get()` the distance from the foot it was
 //            left at (null: at the foot), `set(d)` when it goes
@@ -56,7 +56,7 @@ export function rootOf(e: Ev): string | null {
 // ── the store: everything read from the relay, kept in one place ──
 export function createStore() {
   const s = {
-    me: "", rooms: new Map<string, RoomMeta>(), msgs: new Map<string, Map<string, Ev>>(), edits: new Map<string, Ev>(), closedBy: new Set<string>(), gone: new Map<string, Set<string>>(), removed: new Set<string>(),
+    me: "", rooms: new Map<string, RoomMeta>(), msgs: new Map<string, Map<string, Ev>>(), edits: new Map<string, Ev>(), plain: new Map<string, Ev>(), gone: new Map<string, Set<string>>(), removed: new Set<string>(),
     reacts: new Map<string, Map<string, Ev>>(), typing: new Map<string, Map<string, number>>(), names: new Map<string, string>(),
     read: {} as Record<string, number>, rev: 0, listeners: new Set<() => void>(), asked: new Set<string>(),
   };
@@ -68,12 +68,10 @@ export function createStore() {
       s.typing.get(room)?.delete(e.pubkey);
     } else if (e.kind === 40003) {
       const target = tag(e, "e"); if (!target) return;
-      // an edit that still carries a uni-ask block is ignored: the ask is what was first signed, and a closed one is never
-      // reopened by an edit (SPEC §3). One that drops it is a close if its author asked (checked in askNow), final.
-      if (e.content.split("\n").includes("```uni-ask")) return;
-      s.closedBy.add(`${target} ${e.pubkey}`);
       const was = s.edits.get(target);
       if (!was || was.created_at <= e.created_at) s.edits.set(target, e);
+      // each editor's newest edit with no uni-ask block: an asker's close (SPEC §3: an edit that keeps a block is ignored)
+      if (!e.content.split("\n").includes("```uni-ask")) { const k = `${target} ${e.pubkey}`, p = s.plain.get(k); if (!p || p.created_at <= e.created_at) s.plain.set(k, e); }
     } else if (e.kind === 5) {
       // a deletion counts only from whoever wrote the message (checked when it is drawn: the message may come later)
       for (const t of tags(e, "e")) { const by = s.gone.get(t) ?? new Set<string>(); by.add(e.pubkey); s.gone.set(t, by); }
@@ -94,8 +92,12 @@ export type Store = ReturnType<typeof createStore>;
 
 /** A person as the room says them: the name they gave, else "Someone" (never a piece of their key). */
 export const nameOf = (st: Store["s"], pk: string) => st.names.get(pk) ?? "Someone";
-/** A message's text as it is now: its author's latest edit. */
-export const textOf = (st: Store["s"], e: Ev) => { const ed = st.edits.get(e.id); return ed && ed.pubkey === e.pubkey ? ed.content : e.content; };
+/** A message's text as it is now: its author's latest edit. An ask is the exception (uni-ask SPEC §3): only its asker's
+ *  edit that drops the uni-ask block (the close) changes what it says; one that keeps a block, or anyone else's, is ignored. */
+export const textOf = (st: Store["s"], e: Ev) => {
+  if (e.content.includes("```uni-ask")) return st.plain.get(`${e.id} ${e.pubkey}`)?.content ?? e.content;
+  const ed = st.edits.get(e.id); return ed && ed.pubkey === e.pubkey ? ed.content : e.content;
+};
 export const visible = (st: Store["s"], e: Ev) => !st.removed.has(e.id) && !st.gone.get(e.id)?.has(e.pubkey);
 
 // ── markdown, the Uni app's subset, drawn as React (never as HTML) ──
@@ -196,7 +198,7 @@ export function askOf(e: Ev): Ask | null {
 /** An ask as it stands (uni-ask SPEC §3): the asker's own edit that drops the uni-ask block closes it, for the card, the
  *  room's "wants you" and Today's list alike, and for good (a later edit never reopens it); any other edit (one that
  *  keeps a block, or someone else's) changes nothing, so the ask keeps the terms it was signed with. */
-export const askNow = (s: Store["s"], e: Ev) => s.closedBy.has(`${e.id} ${e.pubkey}`) ? null : askOf(e);
+export const askNow = (s: Store["s"], e: Ev) => s.plain.has(`${e.id} ${e.pubkey}`) ? null : askOf(e);
 /** The edits and deletions of the asks among these messages, asked for by the asks' own ids, so a close is found however
  *  much else was edited in the room since (streamed replies are edits). At most a hundred asks a call. */
 export async function askEndings(relay: { query: (f: any[]) => Promise<any[]> }, msgs: Ev[]): Promise<Ev[]> {
@@ -476,7 +478,7 @@ export function lastText(s: Store["s"], e: Ev) {
 // ── the room ──
 type Place = { get(): number | null; set(fromFoot: number | null): void };
 type Props = { service: string; room: string; name?: string; at?: string; readAt?: number; onRead?: (latest: number) => void; onBack?: () => void;
-  seed?: { msgs: Ev[]; names: Map<string, string>; me?: string; closed?: Set<string> }; place?: Place };
+  seed?: { msgs: Ev[]; names: Map<string, string>; me?: string }; place?: Place };
 
 export default function Room({ service, room, name: named, at, readAt, onRead, onBack, seed, place }: Props) {
   const st = useMemo(createStore, [service, room]);
@@ -518,7 +520,6 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     if (seed.me) st.s.me = seed.me;
     for (const [k, v] of seed.names) st.s.names.set(k, v);
     seed.msgs.forEach(st.add);
-    seed.closed?.forEach((k) => st.s.closedBy.add(k));   // the asks its askers closed, as the importer read them
   }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
