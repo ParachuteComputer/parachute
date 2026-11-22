@@ -144,6 +144,17 @@ test("journal offline: lines the vault can't take wait on the device in order an
     await expect.poll(async () => (await entries()).filter((r) => r.path.includes("vitamins")).length, { timeout: 15_000 }).toBe(2);
     made.push(...(await entries()).filter((r) => r.path.includes("vitamins")).map((r) => r.id));
 
+    // the same words as an entry saved a moment ago, written offline: it is its own entry, not taken for the earlier one
+    await box.fill(`Took the vitamins ${stamp}.`);
+    mode = "down";
+    await app.getByRole("button", { name: "Save" }).click();
+    await expect(waiting).toContainText(`Took the vitamins ${stamp}`);
+    mode = "ok";
+    await waiting.getByRole("button", { name: "Try now" }).click();
+    await expect(waiting).toHaveCount(0);
+    await expect.poll(async () => (await entries()).filter((r) => r.path.includes("vitamins")).length, { timeout: 15_000 }).toBe(3);
+    made.push(...(await entries()).filter((r) => r.path.includes("vitamins") && !made.includes(r.id)).map((r) => r.id));
+
     // a write that lands but whose answer is lost waits, and when sent again it counts as sent: one note, not two
     mode = "lose";
     await box.fill(`Called the plumber ${stamp}.`);

@@ -121,9 +121,9 @@ export default function Journal() {
     || e instanceof TypeError || /rate_limited/i.test(String(e?.message ?? ""));
   const taken = (e: any) => e?.status === 409 || /^Vault(Conflict|TargetExists)Error$/.test(String(e?.name ?? "")) || /conflict|already exists|elsewhere/i.test(String(e?.message ?? e));
   /** One line into the vault under the time it was written: the same words in the same minute get the seconds. `tried`
-   *  (a waiting line whose first write got no answer): if a note with its words is at that very path, that write
-   *  landed, and it counts as sent. Otherwise the same words twice in a minute are two entries (written offline or
-   *  not). A failure says which path it was trying (`e.tried`). */
+   *  (a waiting line whose write got no answer): if a note with its words is at that very path and was made after the
+   *  line was written, that write landed, and it counts as sent. Otherwise the same words twice in a minute are two
+   *  entries (written offline or not). A failure says which path it was trying (`e.tried`). */
   const put = async (body: string, at: Date, tried?: string) => {
     const paths = [pathFor(body, at), pathFor(body, at).replace(/^(Journal\/[^ ]+)/, `Journal/${when.path(at, true)}`)];
     for (const path of paths) {
@@ -133,7 +133,10 @@ export default function Journal() {
         if (path !== tried) continue;
         // the day's folder (a query names a folder), then the one at that path
         const there = (await vault.queryRecords({ pathPrefix: path.slice(0, path.lastIndexOf("/") + 1), includeBody: true, limit: 200 })) as Entry[];
-        if (there.some((r) => r.path === path && (r.body ?? "").trim() === body)) return;
+        // made at or after the moment the line was written: an earlier note is another entry. (A hub clock behind the
+        // phone's can make its own landed write look earlier: then it is sent again, a duplicate, never a lost line.)
+        const mine = (r: Entry) => r.path === path && (r.body ?? "").trim() === body && (Date.parse(r.createdAt ?? "") || 0) >= at.getTime();
+        if (there.some(mine)) return;
       }
     }
     throw new Error("a note with those words at that time is there already, and says something else");
@@ -149,7 +152,11 @@ export default function Journal() {
         const off = () => setBox(box.current.filter((x) => !(x.at === item.at && x.body === item.body)));
         try { await put(item.body, new Date(item.at), item.tried); }
         catch (e: any) {
-          if (unreachable(e)) { reached = false; break; }
+          if (unreachable(e)) {
+            // no answer: this write may have landed; the next try looks there first
+            if (typeof e?.tried === "string" && e.tried !== item.tried) setBox(box.current.map((x) => (x.at === item.at && x.body === item.body ? { ...x, tried: e.tried } : x)));
+            reached = false; break;
+          }
           refused = e?.message ?? String(e);
           // its words back in the box, on disk first, then off the list: never in neither place
           const words = draft.current.trim() ? `${draft.current}\n\n${item.body}` : item.body;
