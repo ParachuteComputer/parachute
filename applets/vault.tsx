@@ -424,7 +424,13 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
       }} />}
       <p className="sect">Fields</p>
       {/* a reference is edited by its paths here (the table shows names): a reference to many as a list of them */}
-      {names.length ? <Fields label="Fields" fields={names.map((n) => ({ name: n, kind: isRef(spec[n]) && (spec[n]?.cardinality === "many" || Array.isArray(r.fields[n])) ? "list" : kindOf(spec[n], r.fields[n]), choices: (spec[n]?.enum ?? []).map(String), value: r.fields[n] ?? null, readOnly: !canWrite || (typeof r.fields[n] === "object" && r.fields[n] !== null && !Array.isArray(r.fields[n])) }))}
+      {/* (a list whose path holds a comma, "…/@November 21, 2026", would be split by the list's commas: shown, not edited) */}
+      {names.length ? <Fields label="Fields" fields={names.map((n) => {
+        const many = isRef(spec[n]) && (spec[n]?.cardinality === "many" || Array.isArray(r.fields[n]));
+        const commas = many && Array.isArray(r.fields[n]) && (r.fields[n] as unknown[]).some((x) => typeof x === "string" && x.includes(","));
+        if (commas) return { name: n, kind: "text", choices: [], value: (r.fields[n] as string[]).join("; "), readOnly: true };
+        return { name: n, kind: many ? "list" : kindOf(spec[n], r.fields[n]), choices: (spec[n]?.enum ?? []).map(String), value: r.fields[n] ?? null, readOnly: !canWrite || (typeof r.fields[n] === "object" && r.fields[n] !== null && !Array.isArray(r.fields[n])) };
+      })}
         onSave={canWrite ? (n, val) => change({ fields: { [n]: val } }) : undefined} /> : <p className="note-meta">No fields.</p>}
       {canWrite && <Field label="Add a field" placeholder="its name, then its value below" action="Add" onAction={async (x) => {
         const f = x.trim().replace(/[^A-Za-z0-9_ -]/g, "").replace(/[\s-]+/g, "_").toLowerCase();
