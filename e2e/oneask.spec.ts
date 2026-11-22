@@ -113,6 +113,12 @@ test("one ask: a close under a stream of later edits still ends it, on Today and
     await page.getByRole("button", { name: "Allow" }).click().catch(() => {});
     const row = page.locator("iframe.applet-frame:visible").contentFrame().getByRole("region", { name: "Your rooms" }).getByRole("button", { name: /ask-test-t476/ });
     await expect(row).toContainText("Something wants you", { timeout: 30_000 });
+    // and in the room: the open ask is a card, the closed one (re-edited with its block after, buried under edits) is not
+    await row.click();
+    const log = page.locator("iframe.applet-frame:visible").contentFrame().getByRole("log");
+    await expect(log.getByRole("group", { name: `Wants you: Stays open ${stamp}` })).toBeVisible({ timeout: 20_000 });
+    await expect(log.getByRole("group", { name: `Wants you: Closed then buried ${stamp}` })).toHaveCount(0);
+    await expect(log.getByText(`Closed (withdrawn): Closed then buried ${stamp}`)).toBeVisible();
   } finally {
     tasks("ask", "--close", keep, "--reason", "withdrawn");
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});

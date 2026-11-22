@@ -11,8 +11,8 @@
 //   onRead   optional: called with the newest message's time while the room is open and looked at (the importer keeps
 //            read state): not while the app is in the background or the applet is kept hidden (useLooking)
 //   onBack   optional: a "← Rooms" link back to the importer's list
-//   seed     optional: the room's messages the importer already holds (and their authors' names): drawn at once, before
-//            the room's own read, unless it opens at a message
+//   seed     optional: the room's messages the importer already holds (their authors' names, the asks closed): drawn at
+//            once, before the room's own read, unless it opens at a message
 //   place    optional: where it was left, kept by the importer across opens: `get()` the distance from the foot it was
 //            left at (null: at the foot), `set(d)` when it goes
 // Which key is Uni's is the service's own declaration (ready().services: approvals.from, else notify.from): without
@@ -474,7 +474,7 @@ export function lastText(s: Store["s"], e: Ev) {
 // ── the room ──
 type Place = { get(): number | null; set(fromFoot: number | null): void };
 type Props = { service: string; room: string; name?: string; at?: string; readAt?: number; onRead?: (latest: number) => void; onBack?: () => void;
-  seed?: { msgs: Ev[]; names: Map<string, string>; me?: string }; place?: Place };
+  seed?: { msgs: Ev[]; names: Map<string, string>; me?: string; closed?: Set<string> }; place?: Place };
 
 export default function Room({ service, room, name: named, at, readAt, onRead, onBack, seed, place }: Props) {
   const st = useMemo(createStore, [service, room]);
@@ -516,6 +516,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     if (seed.me) st.s.me = seed.me;
     for (const [k, v] of seed.names) st.s.names.set(k, v);
     seed.msgs.forEach(st.add);
+    seed.closed?.forEach((k) => st.s.closedBy.add(k));   // the asks its askers closed, as the importer read them
   }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -550,6 +551,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
           // and what came between it and what was read, so the room has no gap ("Load older" reads before the oldest)
           if (found[0]) (await relay.query([{ kinds: [9], "#h": [room], since: found[0].created_at, until: oldest - 1, limit: 500 }]).catch(() => [])).forEach(st.add);
         }
+        // and how the asks among them ended, by their own ids: a close buried under later edits is found all the same
+        (await askEndings(relay, [...(s.msgs.get(room)?.values() ?? [])])).forEach(st.add);
         if (!on) return;
         const target = at ? s.msgs.get(room)?.get(at) : undefined;
         const root = target ? rootOf(target) : null;
@@ -611,7 +614,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     setOlder("loading");
     const oldest = all[0]?.created_at ?? now();
     const got = await relay.query([{ kinds: [9], "#h": [room], until: oldest - 1, limit: 100 }]).catch(() => []);
-    got.forEach(st.add); st.bump(); void names(got.map((e: Ev) => e.pubkey));
+    got.forEach(st.add); (await askEndings(relay, got)).forEach(st.add); st.bump(); void names(got.map((e: Ev) => e.pubkey));
     setOlder(got.length ? "more" : "start");
   };
 

@@ -258,7 +258,7 @@ export default function Rooms() {
   // shortened copies (no signature) wait for the room's own read; edits go along as their own events
   const held = [...(s.msgs.get(id)?.values() ?? [])].filter((e) => visible(s, e) && (e as Ev & { sig?: string }).sig);
   const heldIds = new Set(held.map((e) => e.id));
-  const seed = { msgs: [...held, ...[...s.edits.entries()].filter(([t]) => heldIds.has(t)).map(([, ed]) => ed)], names: s.names, me: s.me };
+  const seed = { msgs: [...held, ...[...s.edits.entries()].filter(([t]) => heldIds.has(t)).map(([, ed]) => ed)], names: s.names, me: s.me, closed: s.closedBy };
   const place = { get: () => places.current.get(id) ?? null, set: (d: number | null) => { places.current.set(id, d); } };
   return <Page className="in-room"><style>{CSS}</style>
     <Room key={id + (view.event ?? "")} service="rooms" room={id} name={s.rooms.get(id)?.name} at={view.event} readAt={s.read[id] ?? 0} seed={seed} place={place}
