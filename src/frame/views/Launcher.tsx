@@ -119,11 +119,14 @@ export function VaultsToOpen({ p }: { p: FrameParachute }) {
   );
 }
 
+/** A host as a line says it: its site, without a port. */
+const siteOfHost = (host: string) => host.replace(/:\d+$/, "");
+
 /** Whose a chapter is, under its name: the home, or someone else's (and where). The person's other vaults need no word. */
 export function whoseLine(v: FrameVault, many: boolean): string | null {
   if (v.home) return many ? "your home" : null;
-  if (v.whose === "trusted") return `someone else's, trusted · at ${v.host}`;
-  if (v.whose === "theirs") return `someone else's · at ${v.host}`;
+  if (v.whose === "trusted") return `someone else's, trusted · at ${siteOfHost(v.host)}`;
+  if (v.whose === "theirs") return `someone else's · at ${siteOfHost(v.host)}`;
   return null;
 }
 
@@ -151,7 +154,7 @@ function Entry({ v, a, where, home, pinned, onHold }: { v: FrameVault; a: FrameA
 /** An applet brought in from someone else's Parachute (a pointer in the home vault): it opens where it lives, and says
  *  where that is. Its own screen checks the pin and asks before anything runs. */
 function Brought({ p }: { p: FramePointer }) {
-  const line = !p.at ? `from ${p.from.vault} · this device isn't signed in there` : p.changed ? `from ${p.from.vault} · changed since you brought it in` : `from ${p.from.vault} · at ${p.from.host}`;
+  const line = !p.at ? `from ${p.from.vault} · this device isn't signed in there` : p.changed ? `from ${p.from.vault} · changed since you brought it in` : `from ${p.from.vault} · at ${siteOfHost(p.from.host)}`;
   return (
     <li>
       <Link className="entry entry-brought" to={p.at ? appletPath(p.at, p.record) : "/add"}>

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { askOwnWrite } from "../vault/reach";
 import { clearWriteAsk, markDraftReturn, onWriteAsk } from "../vault/writeAsk";
-import { findVault, hostOf } from "../vault/store";
+import { findVault, siteOf } from "../vault/store";
 
 export default function WriteAsk() {
   const [key, setKey] = useState<string | null>(null);
@@ -36,12 +36,12 @@ export default function WriteAsk() {
     <div className="sheet-scrim sheet-over-frames" role="presentation">
       <section className="sheet" role="dialog" aria-modal="true" aria-label={`Change notes in ${rec.vault}`}>
         <h2>Let Parachute change notes in {rec.vault}?</h2>
-        <p>Parachute only reads {rec.vault} so far. To save this, your hub ({hostOf(rec.issuer)}) asks you to let it add, change and delete notes there.</p>
+        <p>Parachute only reads {rec.vault} so far. To save this, your hub ({siteOf(rec.issuer)}) asks you to let it add, change and delete notes there.</p>
         <p className="quiet">Nothing was saved yet. After you say yes, do it again.</p>
         {error && <p className="error" role="alert">{error}</p>}
         <div className="grant-actions">
           <button type="button" className="quiet-button" disabled={busy} onClick={close}>Not now</button>
-          <button type="button" className="primary" disabled={busy} onClick={(e) => void go(e)}>{busy ? "Opening your hub…" : `Continue to ${hostOf(rec.issuer)}`}</button>
+          <button type="button" className="primary" disabled={busy} onClick={(e) => void go(e)}>{busy ? "Opening your hub…" : `Continue to ${siteOf(rec.issuer)}`}</button>
         </div>
       </section>
     </div>

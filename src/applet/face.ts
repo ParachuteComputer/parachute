@@ -7,7 +7,7 @@
 import type { Grant } from "./grant";
 import { grantLines } from "./grant";
 import { signalLines } from "./signals";
-import { NAMED_KINDS, approveWords, hostWords, npubOf, postsSplit, roomsWords, type LineOptions } from "./services";
+import { NAMED_KINDS, approveWords, npubOf, siteWords, postsSplit, roomsWords, type LineOptions } from "./services";
 import type { Imported } from "./resolveImports";
 import { importLines } from "./resolveImports";
 
@@ -31,7 +31,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
   // with one server, its approval and notification lines say "there"; with several, each names its own
   const several = (g.services ?? []).filter((x) => x.kind === "nostr-relay").length > 1;
   for (const s of g.services ?? []) {
-    const at = hostWords(s);
+    const at = siteWords(s);
     const there = several ? `on ${at}` : "there";
     if (s.kind === "nostr-relay") {
       // room kinds stay in its rooms; any other kind goes anywhere on the relay (services.ts ROOM_KINDS)
@@ -42,7 +42,7 @@ export function faceOf(g: Grant, ownFolder: string | null, opts: LineOptions = {
       if (s.approvals) lines.push({ lead: "High risk, with your key:", rest: ` answers approval cards and secret requests from ${joinWords(s.approvals.from.map(who))} ${there}. Powerful ones ask for your device unlock.`, risky: true });
       if (s.notify) {
         const what = [s.notify.mentions ? "messages that name you" : "", s.notify.from.length ? `every message from ${joinWords(s.notify.from.map(who))}` : ""].filter(Boolean).join(" and ");
-        const gw = s.notify.gateway ? hostWords({ kind: "http", url: s.notify.gateway }) : null;
+        const gw = s.notify.gateway ? siteWords({ kind: "http", url: s.notify.gateway }) : null;
         lines.push({ lead: "Notifies you while Parachute is closed", rest: `: ${what} ${there}${s.rooms?.length ? `, ${roomsWords(s)}` : ""}${gw ? `. Through ${gw}, which gets your public key and where to reach this phone` : ""}.`, risky: !!gw });
       }
     } else {

@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { Bar, backOrLauncher } from "../ui/Bar";
 import { Link } from "react-router";
 import { useVaults } from "../vault/hooks";
-import { removeVault, type VaultRecord } from "../vault/store";
+import { removeVault, siteOf, type VaultRecord } from "../vault/store";
 import { dropClient } from "../vault/client";
 import { revoke } from "../vault/oauth";
 import AppletSettings from "./AppletSettings";
@@ -26,7 +26,7 @@ import ApprovalSettings from "../key/ApprovalSettings";
 import SecuritySettings from "../key/SecuritySettings";
 import NotifySettings from "./NotifySettings";
 import { AskWhose, WhoseLine } from "./Whose";
-import { useParachutes } from "../shell/parachutes";
+import { useParachutes, type ParachuteLine } from "../shell/parachutes";
 import { listHub } from "../shell/homeSettings";
 import { askVault, signOutOf } from "../vault/signInFlow";
 import { dismissVault, newVaultsOn, newVaultsRev, startAddVault, subscribeNewVaults } from "../vault/newVaults";
@@ -126,6 +126,9 @@ function useShown(vaults: VaultRecord[]) {
   return { ...shown, cards: key && applets.some(usesCards) };
 }
 
+/** A Parachute in a sentence: "your Parachute" for the one with the home vault, else its name, else its site. */
+const said = (p: ParachuteLine) => (p.home ? "your Parachute" : p.name !== p.host ? p.name : siteOf(p.hub));
+
 /** The one place for what this device holds. Later sections (applets, the self-test) join here. */
 export default function Settings({ children }: { children?: ReactNode }) {
   const vaults = useVaults();
@@ -138,8 +141,9 @@ export default function Settings({ children }: { children?: ReactNode }) {
         <h2 id="s-vaults">Your Parachutes</h2>
         <AskWhose vaults={vaults} />
         {parachutes.length ? parachutes.map((p) => (
-          <section key={p.hub} className="settings-parachute" aria-label={`Parachute: ${p.name}`}>
-            <h3>{p.name}{p.name !== p.host && <span className="quiet"> · {p.host}</span>}</h3>
+          <section key={p.hub} className="settings-parachute" aria-label={`Parachute: ${said(p)}`}>
+            <h3>{p.home ? "Your Parachute" : p.name !== p.host ? p.name : siteOf(p.hub)}</h3>
+            <details className="small settings-details"><summary>Details</summary><p>Its address: <code>{p.hub}</code></p></details>
             {p.vaults.length ? <>
               <ul className="plain">
                 {p.vaults.map((v) => (
@@ -151,10 +155,10 @@ export default function Settings({ children }: { children?: ReactNode }) {
                   </li>
                 ))}
               </ul>
-              <VaultsToAdd hub={p.hub} name={p.name} />
+              <VaultsToAdd hub={p.hub} name={said(p)} />
               <p className="small"><Link to={`/add?hub=${encodeURIComponent(p.hub)}`}>Sign in again</Link> <span className="quiet">(sees which vaults you have there now)</span>{" · "}
-                <button type="button" className="quiet-button" onClick={() => signOutOf(p.hub, signOutVault)}>Sign out of {p.name}</button></p>
-            </> : <p className="small">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`} aria-label={`Sign in to ${p.name}`}>Sign in</Link>{" · "}
+                <button type="button" className="quiet-button" onClick={() => signOutOf(p.hub, signOutVault)}>Sign out of {said(p)}</button></p>
+            </> : <p className="small">On your list, not signed in on this device. <Link to={`/add?hub=${encodeURIComponent(p.hub)}`} aria-label={`Sign in to ${said(p)}`}>Sign in</Link>{" · "}
               <button type="button" className="quiet-button" onClick={() => void listHub(p.hub, false).catch(() => undefined)}>Take off the list</button></p>}
           </section>
         )) : <p className="quiet">None yet.</p>}

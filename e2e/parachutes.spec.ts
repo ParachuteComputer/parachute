@@ -6,9 +6,10 @@ import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mintToken, MORE_VAULTS, NOT_GIVEN, ORG_VAULT, techneState, VAULT } from "./hub";
 import { approveUntilBack, held, openVault, signInWithKey, ui } from "./helpers";
 
-const hostOf = (origin: string) => new URL(origin).host;
 /** A Parachute in Settings: its vaults, and a line for each vault there this device doesn't read yet. */
-const parachute = (page: Page, origin: string) => page.getByRole("region", { name: `Parachute: ${hostOf(origin)}` });
+/** A Parachute in Settings: the home's is "your Parachute"; another is called by its site (its address is under Details). */
+const said = (origin: string) => (origin === hubState().origin ? "your Parachute" : new URL(origin).hostname);
+const parachute = (page: Page, origin: string) => page.getByRole("region", { name: `Parachute: ${said(origin)}` });
 const home = (method: string, path: string, body?: unknown) => api(hubState(), method, path, body, VAULT);
 
 /** Sign out of everything this test signed in to on the hubs' side: the settings note's list goes too. */
@@ -52,7 +53,7 @@ test("sign in once per hub with the key: the home read, every other vault of you
   await expect(org.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
   await expect(page.getByRole("link", { name: `Open ${NOT_GIVEN}`, exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: `Open ${NOT_GIVEN}`, exact: true })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: /^Parachute: / }).first()).toHaveAccessibleName(`Parachute: ${hostOf(hubState().origin)}`);
+  await expect(page.getByRole("region", { name: /^Parachute: / }).first()).toHaveAccessibleName("Parachute: your Parachute");
 
   // another vault, opened: the hub asks to read that one, and its applet runs through that vault's own token
   expect(await openVault(page, "letters")).toBe(1);
@@ -67,10 +68,10 @@ test("sign in once per hub with the key: the home read, every other vault of you
 
   // Settings: one place per Parachute; whose came from the one answer for all its vaults
   await page.goto("/settings");
-  const s = page.getByRole("region", { name: `Parachute: ${hostOf(hubState().origin)}` });
+  const s = parachute(page, hubState().origin);
   for (const v of [VAULT, "letters"]) await expect(s.getByRole("combobox", { name: `Whose ${v} is` })).toHaveValue("mine");
   await expect(s).toContainText("reads and changes notes");
-  await expect(page.getByRole("region", { name: `Parachute: ${hostOf(techneState().origin)}` }).getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
+  await expect(parachute(page, techneState().origin).getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
 });
 
 test("each vault keeps a sign-in of its own: one refreshed, the others untouched", async ({ page }) => {
@@ -149,7 +150,7 @@ test("signing in again never changes what the person said of a vault", async ({ 
   await page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` }).selectOption("mine");
   await page.getByRole("button", { name: `${ORG_VAULT} is mine` }).click();
   // then signs in to Techne again, answering as before
-  await page.getByRole("region", { name: `Parachute: ${hostOf(techneState().origin)}` }).getByRole("link", { name: "Sign in again" }).click();
+  await parachute(page, techneState().origin).getByRole("link", { name: "Sign in again" }).click();
   await expect(page.getByLabel("Your Parachute's address")).toHaveValue(techneState().origin);
   await page.getByRole("radio", { name: /Someone else's/ }).check();
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -201,7 +202,7 @@ test("a second device that signs in to the home Parachute finds Techne on the li
   await expect(org).toContainText("not signed in on this device");
   await expect(org.getByRole("link", { name: `Open ${ORG_VAULT}`, exact: true })).toHaveCount(0);
   // its Sign in fills in the address and still asks whose it is
-  await org.getByRole("link", { name: `Sign in to ${hostOf(techneState().origin)}` }).click();
+  await org.getByRole("link", { name: `Sign in to ${said(techneState().origin)}` }).click();
   await expect(b.getByLabel("Your Parachute's address")).toHaveValue(techneState().origin);
   await expect(b.getByRole("radio", { name: "Mine" })).not.toBeChecked();
   await expect(b.getByRole("radio", { name: /Someone else's/ })).not.toBeChecked();

@@ -20,6 +20,8 @@ type Held = { key: string; name: string; host: string; mine: boolean; home: bool
 type Spec = { type?: string; enum?: unknown[]; description?: string };
 type TypeRow = { name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, Spec> };
 type Rec = { id: string; path: string; title: string; createdAt: string | null; updatedAt: string | null; types: string[]; tags: string[]; fields: Record<string, unknown>;
+  /** the app's own (its settings, approvals, saved views): out of Lately and search unless asked for; absent from an older app */
+  own?: boolean;
   body?: string; createdBy?: string | null; createdVia?: string | null; updatedBy?: string | null; updatedVia?: string | null;
   /** who made it and who changed it last, as a person reads them (level 5) */ madeBy?: string; changedBy?: string; links?: { dir: "out" | "in"; id: string; path: string; relationship: string }[] };
 type Where = { field: string; op: string; value: unknown };
@@ -41,6 +43,12 @@ const kindOf = (s: Spec | undefined, v?: unknown) => {
 const shown = (v: unknown) => (v === null || v === undefined || v === "" ? "" : typeof v === "boolean" ? (v ? "yes" : "no") : Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v));
 const label = (name: string) => name.replace(/_/g, " ");
 const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "");
+/** A linked record's name from its path: its last segment, unless that is an id (a record with no name of its own). */
+const pathTitle = (path: string) => { const last = path.split("/").filter(Boolean).pop() ?? ""; return !last || /^(?:[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f-]{16,})$/i.test(last) ? "A record with no name" : last; };
+/** Where a record sits, as a list says it: its folder, or "Parachute's own" for the app's own (never its path). */
+const whereOf = (r: Rec) => (r.own ? "Parachute's own" : folderOf(r.path));
+/** A vault's address without its port, for telling two vaults of one name apart. */
+const siteOf = (host: string) => host.replace(/:\d+$/, "");
 const said = (e: any) => String(e?.message ?? e ?? "it failed").slice(0, 200);
 /** A read that failed: a vault whose hub refused this device's sign-in in its own words (someone else's: they may have
  *  ended your access; yours: sign in again); anything else as a problem. Try again either way. */
@@ -134,7 +142,7 @@ function Vaults({ list, onOpen, onRecord }: { list: Held[]; onOpen: (key: string
   useEffect(() => {
     if (!term) { setFound(null); return; }
     let on = true;
-    Promise.all(list.map((v) => vaults.query(v.key, { search: term, limit: 20 }).then((x: { records: Rec[] }) => x.records.map((r) => ({ v, r })), () => [])))
+    Promise.all(list.map((v) => vaults.query(v.key, { search: term, limit: 20 }).then((x: { records: Rec[] }) => x.records.filter((r) => !r.own).map((r) => ({ v, r })), () => [])))
       .then((all) => { if (on) setFound(all.flat()); });
     return () => { on = false; };
   }, [term]);
@@ -145,7 +153,8 @@ function Vaults({ list, onOpen, onRecord }: { list: Held[]; onOpen: (key: string
       {found ? (found.length
         ? <List label="Found" rows={found.map(({ v, r }) => ({ key: `${v.key}|${r.id}`, title: r.title, meta: [v.name, ...r.types].join(" · "), aside: when.short(r.updatedAt), onPress: () => onRecord(v.key, r.id) }))} />
         : <Empty>Nothing matches.</Empty>)
-        : <List label="Vaults" hideLabel rows={list.map((v) => ({ key: v.key, title: v.name, meta: `${v.host}${v.mine ? "" : " · someone else's"}`, aside: v.level === "write" ? "reads and changes" : "reads", onPress: () => onOpen(v.key) }))} />}
+        // a vault's address isn't its name: said only to tell apart two vaults of the same name (its port never)
+        : <List label="Vaults" hideLabel rows={list.map((v) => ({ key: v.key, title: v.name, meta: [list.some((o) => o !== v && o.name === v.name) ? `on ${siteOf(v.host)}` : "", v.mine ? "" : "someone else's"].filter(Boolean).join(" · "), aside: v.level === "write" ? "reads and changes" : "reads", onPress: () => onOpen(v.key) }))} />}
     </Page>
   );
 }
@@ -157,8 +166,17 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
   const [term, setTerm] = useState("");
   const [found, setFound] = useState<Rec[] | null>(null);
   const [recent, setRecent] = useState<Rec[] | null>(null);
-  const load = () => Promise.all([vaults.types(v.key), vaults.query(v.key, { limit: 8 })])
-    .then(([t, r]: [TypeRow[], { records: Rec[] }]) => { setTypes(t); setRecent(r.records); setFailed(null); }, setFailed);
+  // "Parachute's own": the records the app keeps for itself here (settings, approvals, saved views), in place of Lately,
+  // and in search; out of both otherwise
+  const [own, setOwn] = useState(false);
+  const [owned, setOwned] = useState<Rec[] | null>(null);
+  // Lately is what the person (or their AI) wrote: the newest 8 of theirs, past what the app keeps for itself
+  const load = () => Promise.all([vaults.types(v.key), vaults.query(v.key, { limit: 40 })])
+    .then(([t, r]: [TypeRow[], { records: Rec[] }]) => { setTypes(t); setRecent(r.records.filter((x) => !x.own).slice(0, 8)); setFailed(null); }, setFailed);
+  useEffect(() => {
+    if (!own) return;
+    vaults.query(v.key, { path: "Parachute/", limit: 100 }).then((x: { records: Rec[] }) => setOwned(x.records.filter((r) => r.own)), (e: unknown) => { setOwned([]); toast(`Parachute's own couldn't be read: ${said(e)}`, { error: true }); });
+  }, [own, v.key]);
   useEffect(() => {
     void load();
     // changes come in bursts (an AI writing many records): one read again for each second of them
@@ -169,9 +187,9 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
   useEffect(() => {
     if (!term) { setFound(null); return; }
     let on = true;
-    vaults.query(v.key, { search: term, limit: 50 }).then((x: { records: Rec[] }) => { if (on) setFound(x.records); }, (e: unknown) => toast(`Search failed: ${said(e)}`, { error: true }));
+    vaults.query(v.key, { search: term, limit: 50 }).then((x: { records: Rec[] }) => { if (on) setFound(own ? x.records : x.records.filter((r) => !r.own)); }, (e: unknown) => toast(`Search failed: ${said(e)}`, { error: true }));
     return () => { on = false; };
-  }, [term, v.key]);
+  }, [term, v.key, own]);
   const typed = (types ?? []).filter((t) => t.kind === "type" && !t.name.startsWith("parachute")).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   // the app's own names (an applet's, a component's) aren't the person's tags
   const tags = (types ?? []).filter((t) => t.kind === "tag" && t.count > 0 && !t.name.startsWith("parachute") && !["applet", "component"].includes(t.name)).sort((a, b) => b.count - a.count);
@@ -187,12 +205,12 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
     } catch (e) { toast(`${t} wasn't made: ${said(e)}`, { error: true }); throw e; }
   };
   return (
-    <Page title={v.name} kicker={v.mine ? v.host : `${v.host} · someone else's`} back={back} wide className="vlt" onRefresh={load}
+    <Page title={v.name} kicker={v.mine ? "Your vault" : "Someone else's vault"} back={back} wide className="vlt" onRefresh={load}
       aside={<><Button small onClick={changes}>Changes</Button> <Button small onClick={sharing}>Sharing</Button></>}>
       <style>{CSS}</style>
       <Search label={`Search ${v.name}`} placeholder={`Search ${v.name}`} onSearch={setTerm} live={300} />
       {found ? (found.length
-        ? <List label="Found" rows={found.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, folderOf(r.path)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />
+        ? <List label="Found" rows={found.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, whereOf(r)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />
         : <Empty>Nothing matches.</Empty>)
         : failed ? <ReadProblem error={failed} v={v} onRetry={load}>{`${v.name} couldn't be read`}</ReadProblem>
         : !types ? <Loading />
@@ -202,11 +220,22 @@ function VaultScreen({ v, back, openType, open, sharing, changes, packs }: { v: 
                 : <Empty>No types yet. A type is a kind of record (a book, a task) with fields of its own. Add a pack to start with people, projects, meetings and tasks.</Empty>}
               {canWrite && <Field label="New type" placeholder="A name, like book" action="Make" onAction={makeType} />}
               {/* packs (T-476, docs/PACKS.md): types, templates and views added with one tap */}
-              {typeof vaults.packs === "function" && <div className="chips"><Button small kind={typed.length ? "plain" : "primary"} onClick={packs}>{typed.length ? "Packs" : "Add a pack"}</Button></div>}
+              <div className="chips">
+                {typeof vaults.packs === "function" && <Button small kind={typed.length ? "plain" : "primary"} onClick={packs}>{typed.length ? "Packs" : "Add a pack"}</Button>}
+                <Button small kind={own ? "primary" : "plain"} onClick={() => setOwn(!own)}>Parachute's own</Button>
+              </div>
+              <details className="more"><summary>Details</summary>
+                <p className="note-meta">Its address: <span className="addr">{v.host}</span></p>
+              </details>
             </section>
             <section>
               {tags.length > 0 && <List label="Tags" rows={tags.slice(0, 30).map((t) => ({ key: t.name, title: `#${t.name}`, aside: String(t.count), onPress: () => openType(`#${t.name}`) }))} />}
-              {recent && recent.length > 0 && <List label="Lately" rows={recent.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, folderOf(r.path)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />}
+              {own
+                ? <>
+                    <List label="Parachute's own" rows={(owned ?? []).map((r) => ({ key: r.id, title: r.title, meta: r.types.join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />
+                    {owned === null ? <Loading /> : <p className="lede">{owned.length ? "What Parachute keeps for itself here: its settings, the applets you allowed, saved views. Parachute changes these, not you." : "Parachute keeps nothing of its own here."}</p>}
+                  </>
+                : recent && recent.length > 0 && <List label="Lately" rows={recent.map((r) => ({ key: r.id, title: r.title, meta: [...r.types, folderOf(r.path)].filter(Boolean).join(" · "), aside: when.short(r.updatedAt), onPress: () => open(r.id) }))} />}
             </section>
           </div>}
     </Page>
@@ -404,7 +433,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
     <article aria-label={r.title} ref={top}>
       <Button kind="quiet" onClick={back.onPress}>{`← ${back.label}`}</Button>
       <h2 className="pa-title">{r.title}</h2>
-      <p className="note-meta">{folderOf(r.path) || "/"} · changed {when.ago(r.updatedAt)}{r.changedBy ? ` · ${r.changedBy}` : ""}</p>
+      <p className="note-meta">{whereOf(r) || "/"} · changed {when.ago(r.updatedAt)}{r.changedBy ? ` · ${r.changedBy}` : ""}</p>
       <div className="chips">
         {r.types.map((t) => <span key={t} className="chip type">{label(t)}{canWrite && <Button small kind="quiet" onClick={() => void change({ types: { remove: [t] } }, `No longer a ${t}.`)}>×</Button>}</span>)}
         {r.tags.map((t) => <span key={t} className="chip">#{t}{canWrite && !["publish", "published"].includes(t.toLowerCase()) && <Button small kind="quiet" onClick={() => void change({ tags: { remove: [t] } })}>×</Button>}</span>)}
@@ -438,8 +467,8 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
             {canWrite && <Button small onClick={() => setEditing(r.body ?? "")}>Edit words</Button>}
           </>}
       {(out.length > 0 || into.length > 0) && <p className="sect">Links</p>}
-      {out.length > 0 && <List label="Links to" rows={out.map((l) => ({ key: `o${l.id}`, title: l.path.split("/").pop() ?? l.path, meta: folderOf(l.path), onPress: () => open(l.id) }))} />}
-      {into.length > 0 && <List label="Linked from" rows={into.map((l) => ({ key: `i${l.id}`, title: l.path.split("/").pop() ?? l.path, meta: folderOf(l.path), onPress: () => open(l.id) }))} />}
+      {out.length > 0 && <List label="Links to" rows={out.map((l) => ({ key: `o${l.id}`, title: pathTitle(l.path), meta: folderOf(l.path), onPress: () => open(l.id) }))} />}
+      {into.length > 0 && <List label="Linked from" rows={into.map((l) => ({ key: `i${l.id}`, title: pathTitle(l.path), meta: folderOf(l.path), onPress: () => open(l.id) }))} />}
       <p className="sect">History</p>
       {histFailed ? <Problem error={histFailed} onRetry={readHistory}>Its history couldn't be read</Problem>
         : history === null ? <Loading />

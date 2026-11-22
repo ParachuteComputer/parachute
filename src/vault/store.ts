@@ -100,3 +100,5 @@ export const originOf = (issuer: string) => { try { return new URL(issuer).origi
 
 /** The host of a hub's address, for showing; the address itself when it can't be read. */
 export function hostOf(issuer: string): string { try { return new URL(issuer).host; } catch { return issuer; } }
+/** A Parachute's address as a sentence says it: its site, without a port (hosts and ports go under Details). */
+export function siteOf(issuer: string): string { try { return new URL(issuer).hostname.replace(/^\[|\]$/g, ""); } catch { return issuer.replace(/:\d+$/, ""); } }

@@ -131,7 +131,7 @@ test("signing in again keeps what the person let the app do: the home stays writ
   const asks = asksOf(page);
   await page.goto("/settings");
   const app = new URL(page.url()).origin;
-  await page.getByRole("region", { name: `Parachute: ${new URL(hub.origin).host}` }).getByRole("link", { name: "Sign in again" }).click();
+  await page.getByRole("region", { name: "Parachute: your Parachute" }).getByRole("link", { name: "Sign in again" }).click();
   await page.getByRole("radio", { name: "Mine" }).check();
   await page.getByRole("button", { name: "Sign in" }).click();
   await approveUntilBack(page, hub.origin, app);

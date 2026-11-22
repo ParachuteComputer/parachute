@@ -63,7 +63,7 @@ import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 import { packMethods } from "./packs.ts";
 import { isSelf, namesOf as peopleNamesOf, readChanges, writer, type PeopleNames } from "../changes.ts";
-import { titleOf } from "../../vault/notes.ts";
+import { isAppOwn, titleOf } from "../../vault/notes.ts";
 
 export type HeldVault = { key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null;
   /** where an AI connects to this vault only (`<vault>/mcp`): the vault's own address, nothing secret */
@@ -80,6 +80,8 @@ export type HubRow = { host: string; address: string | null; vaults: string[] };
 export type Rec = {
   id: string; path: string; title: string; createdAt: string | null; updatedAt: string | null;
   types: string[]; tags: string[]; fields: Record<string, unknown>;
+  /** the app's own record (its settings, approvals, saved views, an applet's code): left out of what the person wrote */
+  own: boolean;
   body?: string; createdBy?: string | null; createdVia?: string | null; updatedBy?: string | null; updatedVia?: string | null;
   links?: { dir: "out" | "in"; id: string; path: string; relationship: string }[];
 };
@@ -205,8 +207,6 @@ export function writablePath(p: unknown): p is string {
   if (p.startsWith(VIEWS)) return segs.length >= 3;
   return !/^(?:applets|parachute|\.parachute)$/i.test(segs[0]) && !segs[0].startsWith(".");
 }
-// a record's title as the vault's lists say it (a journal entry by its words)
-const title = (path: string) => titleOf({ id: path, path });
 /** In the app's own folders (`Applets/`, `Parachute/`, `.parachute/`), but saved views. */
 const appsPath = (p: string) => !p.startsWith(VIEWS) && /^(?:applets|parachute|\.parachute)\//i.test(p);
 /** Whose a record is, for Changes: an applet's or a component's code ("code": shown, never put back here), a record the
@@ -233,11 +233,14 @@ export function recOf(raw: unknown, typeNames?: ReadonlySet<string>): Rec | null
   const types = typesIn.length || !typeNames ? typesIn : tagsIn.filter((t) => typeNames.has(t));
   const tags = tagsIn.filter((t) => !types.includes(t));
   const fields = plain(raw.fields) ? raw.fields : plain(raw.metadata) ? raw.metadata : {};
-  const out: Rec = {
-    id: raw.id, path, title: title(path),
-    createdAt: strOr(raw.createdAt), updatedAt: strOr(raw.updatedAt), types, tags, fields: { ...fields },
-  };
   const body = typeof raw.body === "string" ? raw.body : typeof raw.content === "string" ? raw.content : undefined;
+  const createdAt = strOr(raw.createdAt), updatedAt = strOr(raw.updatedAt);
+  // a record's title as the vault's lists say it: a journal entry by its words, one named by its id by its first words
+  const out: Rec = {
+    id: raw.id, path, title: titleOf({ id: raw.id, path, content: body, displayTitle: strOr(raw.displayTitle), preview: strOr(raw.preview), types, createdAt, updatedAt }),
+    createdAt, updatedAt, types, tags, fields: { ...fields },
+    own: isAppOwn({ path, tags: [...types, ...tagsIn], extension: typeof raw.extension === "string" ? raw.extension : null }),
+  };
   if (body !== undefined) out.body = body;
   if ("createdBy" in raw) { out.createdBy = strOr(raw.createdBy); out.createdVia = strOr(raw.createdVia); out.updatedBy = strOr(raw.lastUpdatedBy); out.updatedVia = strOr(raw.lastUpdatedVia); }
   if (Array.isArray(raw.links)) {

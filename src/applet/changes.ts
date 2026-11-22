@@ -57,7 +57,6 @@ export const CHANGES_DELETED = 12;
 const VERSIONS = 50;
 const strOr = (x: unknown) => (typeof x === "string" ? x : null);
 // a change's title as the vault's lists say it (a journal entry by its words)
-const titleOf = (path: string) => noteTitle({ id: path, path });
 
 type Get = (path: string) => Promise<unknown>;
 /** Each item through `f`, a few at a time (a vault's hub is asked for at most `n` reads at once). */
@@ -105,7 +104,7 @@ export async function readChanges(opts: {
     const mine = self(c.via);
     // this device's Parachute keeping its own records (settings, approvals, saved views) isn't a change to show
     if (kind === "app" && mine) return;
-    out.push({ ...c, own: kind !== null, key: `${c.id}:${c.before ?? "new"}`, title: titleOf(c.path), mine, who: writerName(c.via, mine, { by: c.by, account }), unnamed: isUnnamed(c.via, mine, c.by, account) });
+    out.push({ ...c, own: kind !== null, key: `${c.id}:${c.before ?? "new"}`, title: noteTitle({ id: c.id, path: c.path, createdAt: c.made ?? null, updatedAt: c.at }), mine, who: writerName(c.via, mine, { by: c.by, account }), unnamed: isUnnamed(c.via, mine, c.by, account) });
   };
   /** A record's kept versions, newest first, as changes since then. */
   const fromRows = (id: string, path: string, rows: Row[], kind: "code" | "app" | null, gone: boolean, seen: string | null) => rows.forEach((v, i) => {

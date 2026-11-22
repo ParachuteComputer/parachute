@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { hostOf } from "../vault/store";
+import { siteOf } from "../vault/store";
 import type { VaultPick } from "../vault/signInFlow";
 
 /** Before the hub's consent (docs/design/SCOPES.md): on a hub the person runs, which of its vaults are theirs; and which
@@ -20,7 +20,7 @@ export default function PickVaults({ pick, onError, onCancel }: { pick: VaultPic
   return (
     <div className="stack">
       {pick.askMine && <fieldset className="plain">
-        <legend>Which vaults on {hostOf(pick.hub)} are yours?</legend>
+        <legend>Which vaults on {siteOf(pick.hub)} are yours?</legend>
         {pick.vaults.map((v) => (
           <label key={v} className="line"><span><input type="checkbox" checked={mine.includes(v)} onChange={() => flip(v)} /> {v}</span></label>
         ))}

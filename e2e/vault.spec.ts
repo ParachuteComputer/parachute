@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openVault as openAnother, signIn, ui } from "./helpers";
-import { hubState, MORE_VAULTS, VAULT } from "./hub";
+import { MORE_VAULTS, VAULT } from "./hub";
 
 /** Into a vault, as a person does: Settings, its Open (which carries on to Vault, Parachute's own applet); then its plain view, which these tests read. */
 const openVault = async (page: Page, vault = VAULT) => {
@@ -50,7 +50,7 @@ test("the vaults stay after a reload, and Sign out of the Parachute forgets them
   expect(recs.map((r) => r.vault).sort()).toEqual([VAULT, MORE_VAULTS[0].vault].sort());
   await ui(page).getByRole("link", { name: "Settings" }).click();
   const revoked = page.waitForResponse((r) => r.url() === recs[0].revocationEndpoint);
-  await page.getByRole("button", { name: `Sign out of ${new URL(hubState().origin).host}` }).click();
+  await page.getByRole("button", { name: "Sign out of your Parachute" }).click();
   await revoked;
   await expect(page.getByText("None yet.")).toBeVisible();
   await page.goto("/");
