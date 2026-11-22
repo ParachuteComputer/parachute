@@ -195,9 +195,9 @@ there (`EXCEPTIONS` in `conformance.test.ts`). The guide's own examples below ar
 | `shown()`, `onShown(cb)` | Whether it is on screen, and each change. The app keeps an applet running while the person is elsewhere, so going back to it is instant; hidden, it gets no tap, and anything only a person looking should do (marking a message read) waits for `true`. |
 | `onOpen(cb)` | `cb({ note: { id, path }, screen })` when the person opened a note in it (now, and each time after). |
 | `vault.queryRecords({ pathPrefix, tag, search, limit, includeBody, includeFields })` | Records in folders it may read: `{ id, path, updatedAt }`, and with `tag`, `includeBody` or `includeFields` also `tags` and `fields` (and with `includeBody` the `body`). |
-| `vault.getRecord(idOrPath)` | One record it may read, with its body. |
+| `vault.getRecord(idOrPath)` | One record it may read, with its body and its fields and tags. |
 | `vault.createRecord({ path, body, types?, tags?, fields? })` | A new record, in a folder it may `create` in, with its types, tags and fields: `{ id, path, types, tags, fields, updatedAt }` (`getRecord` for its body). |
-| `vault.updateRecord(id, { if_updated_at, body?, fields?, types?, tags? })` | A change to a record it may `update`, in one call: a new body, fields merged (`null` removes one), and `types` / `tags` as `{ add, remove }`. `if_updated_at` is required: the record's `updatedAt` as you read it. Resolves the record as saved (`{ id, path, updatedAt, … }`: keep its `updatedAt` for the next change). If someone changed it since, it rejects with `conflict`: read it again, and change that. |
+| `vault.updateRecord(id, { if_updated_at, body?, fields?, types?, tags? })` | A change to a record it may `update`, in one call: a new body, fields merged (`null` removes one), and `types` / `tags` as `{ add, remove }`. `if_updated_at` is required: the record's `updatedAt` as you read it. Resolves the record as saved (`{ id, path, updatedAt, … }`: keep its `updatedAt` for the next change). If someone changed it since, it rejects with an error whose `status` is `409` (`name`: `VaultConflictError`): read it again, and change that. |
 | `app.recent({ limit })` | With `recent`: the newest notes across every vault on this device, newest first: `{ vaultName, title, updatedAt, href }`. Titles only: no folder, never content. `limit` up to 40. |
 | `app.pins()` | With `pins`: what is on the person's bar: `{ name, glyph, href, home }`. |
 | `app.copy(text)` | With `copy`: puts text on the clipboard while the person taps in the applet (up to 2,000 characters). Resolves to whether it went. |
@@ -301,7 +301,7 @@ parts above are level 1, the floor: the kit of 11-20, with every prop it lists, 
 (as are the `vaults` and `sharing` words), and `Drawer`, level 4; `vaults.changes`, `compare`, `restore`, `remove` and
 the `changes` word are level 5; `vaults.reach`, `manage`, `giveKey`, `endReach` and `stopManaging` are level 6. A newer prop counts as a newer part,
 and an older app ignores it. If an applet uses a part above the floor, either fall back for it, or put
-`"needs": <its level>` beside `applet` in the fields. With `needs`, an older app lists the applet and says "Update
+`"needs": <its level>` beside `applet` in the fields (`"fields": { "applet": { … }, "needs": 4 }`, a bare number). With `needs`, an older app lists the applet and says "Update
 Parachute to open …" instead of running it (`src/kit/olderApp.test.ts` checks the shipped applets do one or the other).
 If an applet touches a part this app doesn't have and then stops, the frame says to update rather than that it broke.
 A fallback:
