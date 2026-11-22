@@ -35,7 +35,7 @@
   :where(:not(pre) > code):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { padding: 1px 5px; border-radius: 4px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
   :where(pre):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { overflow-x: auto; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-field); background: var(--surface); line-height: 1.5; }
   :where(mark):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; }
-  :where(img, video, canvas, svg) { max-width: 100%; }
+  :where(img, video) { max-width: 100%; }
   :where(img, video) { height: auto; }
   :where(dt):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { font: italic var(--fs-small) var(--serif); color: var(--muted); }
   :where(dd):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { margin: 0 0 calc(var(--gap) * .6); }

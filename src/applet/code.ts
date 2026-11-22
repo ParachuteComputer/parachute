@@ -119,7 +119,8 @@ const FAILURE = String.raw`(function () {
   var missing = window.__parachuteMissing = [];
   window.__parachuteFail = function (e) {
     var root = document.getElementById("root"); if (!root) return; root.textContent = "";
-    // the line sits at the frame's edge, like the shell card's text (a style on the element, which the CSP allows)
+    // the line sits at the frame's edge, like the shell card's text (a style on the element, which the CSP allows; it
+    // also takes the place of the kit's page column, which is the body's margin)
     if (document.body) document.body.style.margin = "0";
     // the whole error, stack and all, is for the applet's author, in the console
     try { console.warn("This applet stopped:", e); } catch (x) { /* no console */ }

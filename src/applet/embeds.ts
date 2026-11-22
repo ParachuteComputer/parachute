@@ -60,10 +60,12 @@ export const embedKey = (what: { hub: string; vault: string; record: string; all
 export function embedTokens(t: Record<string, string>): Record<string, string> {
   const dark = t.scheme === "dark";
   const out: Record<string, string> = { scheme: dark ? "dark" : "light", density: ["compact", "regular", "roomy"].includes(t.density) ? t.density : "regular" };
+  // a colour that doesn't come as hex falls back to the host's built-in look's own
+  const own = LOOKS[(LOOK_NAMES as readonly string[]).includes(t.look) ? (t.look as LookName) : DEFAULT_LOOK];
   for (const k of COLOR_KEYS) {
     const v = typeof t[k] === "string" ? t[k].trim() : "";
     const six = /^#[0-9a-f]{6}$/i.test(v) ? v : /^#[0-9a-f]{3}$/i.test(v) ? `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}` : /^#[0-9a-f]{8}$/i.test(v) ? v.slice(0, 7) : null;
-    out[k] = (six ?? (dark ? DEFAULT_THEME.dark : DEFAULT_THEME.colors)[k]).toLowerCase();
+    out[k] = (six ?? (dark ? own.dark : own.colors)[k]).toLowerCase();
   }
   for (const k of FONT_KEYS) out[k] = DEFAULT_THEME.fonts[k];
   for (const k of DENSITY_KEYS) out[k] = DENSITY[out.density as Density][k];

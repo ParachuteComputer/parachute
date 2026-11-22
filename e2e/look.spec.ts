@@ -174,3 +174,16 @@ test("an applet with the common reset and a full-height body: its column keeps i
     expect(await frame(page).locator("#foot").evaluate((f) => f.getBoundingClientRect().bottom <= innerHeight + 1)).toBe(true);
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });
+
+// as a real applet in use does it (Recipes): its own margin and padding, and a wide layout of its own
+const OWN_PADDING = `<!doctype html><html><head><style>html, body { margin: 0; } body { padding: 18px; } .book { max-width: 1180px; margin: 0 auto; }</style></head>
+<body><div class="book" id="book"><h1>Recipes</h1><p>A book of its own width.</p></div></body></html>`;
+
+test("an applet that sets its own body margin and padding lays out exactly as in any page: the kit's column steps aside", async ({ page }) => {
+  const id = await opened(page, "Applets/Own padding", "html", OWN_PADDING, "own-padding", "Own padding", "Recipes");
+  try {
+    expect(await frame(page).locator("#book").evaluate((b) => Math.round(b.getBoundingClientRect().left))).toBe(18);
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await expect.poll(() => frame(page).locator("#book").evaluate((b) => Math.round(b.getBoundingClientRect().width))).toBe(1180);
+  } finally { await api(hubState(), "DELETE", `notes/${id}`); }
+});
