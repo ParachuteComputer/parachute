@@ -67,7 +67,7 @@ room reaches both.
 | Write a line: a note in `Journal/YYYY/MM-DD/HH-MM <first words>`, tagged journal | built | e2e/journal.spec.ts, CI (core 0.8 and 0.9) |
 | Entries by day, voice entries marked, a tally of the last four weeks | built | journal.spec |
 | Voice entries (record, upload, transcribe) | built: recorded on the shell's sheet, written as the Uni app writes one, the recording attached with transcribe asked (`vault.attach`); "Transcribing…" while the hub works, read again ten times | e2e/devices.spec.ts on core 0.8 and 0.9: the attachment and the hub's transcribe mark |
-| Offline outbox | left: the applet saves when the vault answers | — |
+| Offline outbox | built: a line the vault can't be reached for is kept on the device (written to disk at once), listed under "Waiting to be saved", and sent in order under the minute it was written when Journal starts or is shown again, the app comes back, or on Try now (which says when it still can't reach the vault); one sent before whose answer was lost counts as sent, not saved twice; a refusal by the app itself (scope, bad words) is said and the words stay. The app answers any failure at the hub as one 502, so a line the hub itself refuses waits too | journal.spec: offline, a line waits and survives a restart; a second queues behind; Try now offline says so; back online, both go in under their minutes; a write that landed with its answer lost is one note |
 
 ## The rest of the Uni app
 
