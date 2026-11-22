@@ -204,4 +204,8 @@ describe("the grammar holds a value to what CSS reads (else it falls back to the
     expect(styleValue("shadow-card", "0 0 #000\u2028,0 0 #000")).toBeNull();
     expect(styleValue("shadow-card", "0 0 #000, 0 0 #000")).toBe("0 0 #000, 0 0 #000");
   });
+  it("a bare 0 for a length is written 0px (a sheet's max(radius-card, radius) would drop a plain number)", () => {
+    expect(styleValue("radius-card", "0")).toBe("0px");
+    expect(styleValue("radius-card", "0px")).toBe("0px");
+  });
 });

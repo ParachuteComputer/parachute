@@ -191,7 +191,7 @@ export function styleValue(key: StyleKey, v: unknown): string | null {
       case "line": { const m = LINE.exec(s); return !!m && tokenColor(ascii(m[2])); }
       case "edges": return EDGES.test(s);
       case "pad": return PAD.test(s);
-      case "length": return new RegExp(`^${LEN}$`).test(s);
+      case "length": return new RegExp(`^${LEN}$`).test(s);  // a bare 0 is written 0px below: max(0, 10px) is not CSS
       case "shadow": { const all = topLevel(s); return s === "none" || (all.length <= 3 && all.every((one) => { const m = ONE_SHADOW.exec(ascii(one)); return !!m && tokenColor(ascii(m[3])); })); }
       case "transform": return ["none", "uppercase", "lowercase", "capitalize"].includes(s);
       case "caps": return ["normal", "small-caps", "all-small-caps"].includes(s);
@@ -199,7 +199,7 @@ export function styleValue(key: StyleKey, v: unknown): string | null {
       case "weight": return /^[1-9]00$/.test(s);
     }
   })();
-  return ok ? s : null;
+  return ok ? (STYLE_TOKENS[key].kind === "length" && s === "0" ? "0px" : s) : null;
 }
 
 /** What this one screen shows, whatever the theme note says (the note syncs to every device; a screen's own nature
