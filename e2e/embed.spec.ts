@@ -25,6 +25,7 @@ async function orgComponent(made: Made, id: string, name: string, code: string, 
   made.home.push((await home("POST", "notes", { path: pointerPathFor(id), content: `${name}, from techne.`, tags: ["parachute-pointer"], metadata: { pointer: { hub: techneState().origin, vault: ORG_VAULT, record: c.id, kind: "component", id, name, code: `tsx:${await sha(code)}` } } })).id);
   return c.id as string;
 }
+// each test's Home has an id of its own: an applet "home" another spec allowed (worked.spec) would otherwise ask again
 async function setUp(made: Made, opts: { props?: Record<string, unknown>; more?: { name: string; record: string }[] } = {}) {
   for (const [title, when] of [["Seed swap", "2026-11-20"], ["Barn raising", "2026-11-28"]]) made.org.push((await org("POST", "notes", { path: `Events/${title}`, content: title, metadata: { when } })).id);
   const events = await org("POST", "notes", { path: "Components/Events", extension: "tsx", content: fixture("techne/Events.tsx"), tags: ["component"], metadata: EVENTS_FIELDS });
@@ -33,7 +34,7 @@ async function setUp(made: Made, opts: { props?: Record<string, unknown>; more?:
   const pointerPath = `Parachute/From/${hostOf(techneState().origin).replace(/[^A-Za-z0-9.-]/g, "-")}/${ORG_VAULT}/component-events`;
   made.home.push((await home("POST", "notes", { path: pointerPath, content: "Events, from techne.", tags: ["parachute-pointer"], metadata: { pointer: { hub: techneState().origin, vault: ORG_VAULT, record: events.id, kind: "component", id: "events", name: "Events", code } } })).id);
   const h = await home("POST", "notes", { path: "Applets/Home", extension: "tsx", content: fixture("techne/Home.tsx"), tags: ["applet"],
-    metadata: { applet: { contract: 2, id: "home", name: "Home", glyph: "⌂", access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }] }] }, embeds: [{ name: "events", record: pointerPath, props: opts.props ?? { days: 30 } }, ...(opts.more ?? [])] } });
+    metadata: { applet: { contract: 2, id: `home-${Date.now().toString(36)}`, name: "Home", glyph: "⌂", access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }] }] }, embeds: [{ name: "events", record: pointerPath, props: opts.props ?? { days: 30 } }, ...(opts.more ?? [])] } });
   made.home.push(h.id);
   return { events: events.id, home: h.id, pointerPath };
 }
@@ -103,14 +104,7 @@ async function reopen(page: Page) {
 async function openAndAllow(page: Page, homeId: string, embeds: string[]) {
   await page.goto(`/v/${VAULT}/a/${homeId}`);
   await page.getByRole("button", { name: "Allow" }).click();
-  // a "home" another test allowed with less asks again for what is new here: allowed too
-  const heading = host(page).getByRole("heading", { name: "Home" });
-  await expect.poll(async () => {
-    if (await heading.isVisible()) return true;
-    const again = page.getByRole("button", { name: "Allow" });
-    if (await again.isVisible()) await again.click();
-    return false;
-  }, { timeout: 15_000 }).toBe(true);
+  await expect(host(page).getByRole("heading", { name: "Home" })).toBeVisible();
   for (const name of embeds) {
     await page.locator(`.embed-place[data-embed="${name}"]`).getByRole("button", { name: "Review" }).click();
     const sheet = page.getByRole("dialog", { name: /is asking for access/ });
