@@ -460,7 +460,7 @@ function timelineOf(person: PersonRecord): Moment[] {
   talksOf(person.fields).forEach((t, i) => out.push({ key: `talk-${i}`, date: t.date, title: t.what || "Talked", kind: "Talked", id: null, isPerson: false, detail: "" }));
   for (const m of mentionsOf(person)) {
     if (m.isPerson) continue;
-    out.push({ key: m.id, date: m.date, title: m.title, kind: m.kind, id: m.id, isPerson: false, detail: m.relationship && m.relationship !== "link" ? m.relationship : "" });
+    out.push({ key: m.id, date: m.date, title: m.title, kind: m.kind, id: m.id, isPerson: false, detail: m.relationship && !/^(wiki)?link$/.test(m.relationship) ? m.relationship : "" });
   }
   const met = ymdOf(person.fields?.met) ?? (/^\d{4}(-\d{2})?$/.test(str(person.fields?.met)) ? str(person.fields?.met) : null);
   const how = str(person.fields?.how_we_met);
@@ -2124,7 +2124,7 @@ export default function People() {
         {linkedPeople.length > 0 && (
           <List
             label={`People linked · ${linkedPeople.length}`}
-            rows={linkedPeople.map((m) => ({ key: m.id, title: m.title, meta: m.relationship && m.relationship !== "link" ? m.relationship : undefined, onPress: () => void openPerson(m.id) }))}
+            rows={linkedPeople.map((m) => ({ key: m.id, title: m.title, meta: m.relationship && !/^(wiki)?link$/.test(m.relationship) ? m.relationship : undefined, onPress: () => void openPerson(m.id) }))}
           />
         )}
 
