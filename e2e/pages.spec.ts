@@ -140,8 +140,11 @@ test("a place that opens on its first page does, each time it is shown again", a
   const { app, inner } = await openLeaves(page);
   await app.getByRole("button", { name: "Next page" }).click();
   await expect.poll(async () => (await book(inner)).left).toBeGreaterThan(0);
-  // away by a tab, and back: the applet kept running, shown again on its first page
-  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: /Applets/ }).click();
+  // away to Settings (by its menu: "/" may be this very applet, where a vault starts on it), and back: the applet kept
+  // running, shown again on its first page
+  await page.getByRole("button", { name: "Menu" }).click();
+  await page.getByRole("dialog", { name: /menu$/ }).getByRole("link", { name: "Settings" }).click();
+  await expect(page.locator('iframe[title="Leaves"]')).toBeHidden();
   await page.goBack();
   await expect(app.getByText("Leaf 00")).toBeVisible();
   await expect.poll(async () => (await book(inner)).left).toBe(0);
