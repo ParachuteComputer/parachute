@@ -18,8 +18,9 @@ Cloud), and the relays, push services and sites your applets name. What you writ
 - **Rooms and messages.** Messages go to the relays your rooms use, signed with your key.
 - **Notifications while the app is closed (Android).** If an applet asks for them, the app registers this phone's push
   address with the push service that applet names, through the UnifiedPush app on your phone (ntfy or another). The
-  push service learns that address, the relay, and which rooms and keys to tell you about; what it sends holds no words. If you
-  have no UnifiedPush app, the app keeps its own connection to the relay instead, and Android shows that it is running.
+  push service learns that address, the relay, and which rooms and keys to tell you about; what it sends holds no
+  words. If you have no UnifiedPush app, the app keeps its own connection to the relay instead, and Android shows that
+  it is running.
 - **Pairing.** When you pair your key from another device, it comes over the relay named in the pairing link,
   encrypted end to end. The relay can't read it.
 - **Applets.** An applet can reach only the services you allowed on its card, and it asks before it uses a new one.
@@ -32,8 +33,8 @@ We never sell data, never share it with advertisers, and never use it to train A
 
 ## What stays on your device
 
-Your Nostr key is kept by the device's own key store (Android Keystore, or the Mac's Keychain), and leaves only when
-you pair it to another device of yours. The app also keeps, on this device only: which Parachutes you signed in to and
+Your Nostr key is kept by the device's own key store (Android Keystore, or the Mac's Keychain). The app never sends it
+anywhere; it only signs with it. The app also keeps, on this device only: which Parachutes you signed in to and
 their sign-in tokens, drafts, your passcode's hash, the approvals you gave, and settings. None of it goes into Android's
 backup or a device-to-device transfer. On Android, uninstalling the app removes it. On a Mac, moving the app to the Bin
 leaves it behind: also delete the folder `~/Library/Application Support/computer.parachute.app` and, in Keychain
