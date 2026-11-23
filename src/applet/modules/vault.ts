@@ -236,8 +236,10 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     const links = rawLinks === "true";
     const tag = q.get("tag")?.replace(/^#/, "") || null;
     const want = offset + limit;
-    // a page with bodies or links is smaller (what the hub sends for it is bigger)
-    const size = content || links ? HUB_PAGE_FULL : HUB_PAGE;
+    // a search is one page, so it is read whole (bodies and links for the notes it keeps are read after, one by one);
+    // a list's page with bodies or links is smaller (what the hub sends for it is bigger)
+    const later = !!search && (content || links);
+    const size = !later && (content || links) ? HUB_PAGE_FULL : HUB_PAGE;
     const pages = search ? 1 : Math.ceil(want / size);
     const seen = new Set<string>();
     const out: (VaultNote & { path: string })[] = [];
@@ -250,7 +252,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         // while it reads moves to the front, so one other may be missed: a list read in pages, as any is)
         for (let at = 0, read = 0; mine.length < want && read < pages + EXTRA_PAGES; read++) {
           // a search too is asked for a whole page and cut after judging: the hub ranks it and drops offset, never limit
-          const rows = await d.query(p, { limit: size, offset: at, tag, search: search || null, content, links, orderBy, sort, meta });
+          const rows = await d.query(p, { limit: size, offset: at, tag, search: search || null, content: content && !later, links: links && !later, orderBy, sort, meta });
           at += rows.length;
           for (const n of rows) {
             if (!n || !n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null || (tag && !(n.tags ?? []).includes(tag))) continue;
@@ -271,7 +273,16 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       const dir = sort === "desc" ? -1 : 1;
       out.sort((a, b) => dir * ((a[key] ?? "").localeCompare(b[key] ?? "") || a.id.localeCompare(b.id)));
     }
-    return json(200, "OK", out.slice(offset, want).map((n) => publicNote(n, content, links ? granted : null)));
+    // bodies and links read one by one after a search: at most maxScan of them, as a search with bodies always was
+    let page = out.slice(offset, later ? Math.min(want, offset + LIMITS.maxScan) : want);
+    if (later) {
+      const full: (VaultNote & { path: string })[] = [];
+      for (const n of page) {
+        try { const x = await getNote(n.id, ctx, d, links); if (inScope(prefixes, x.path)) full.push({ ...x, path: x.path as string }); } catch (e) { if (e instanceof ContractError) throw e; }
+      }
+      page = full;
+    }
+    return json(200, "OK", page.map((n) => publicNote(n, content, links ? granted : null)));
   }
 
   /** GET /api/tags: the tags on the notes in its folders, each with how many of those notes carry it. Never the vault's

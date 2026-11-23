@@ -351,6 +351,8 @@ describe("the hub's query words, kept to the folders", () => {
       { id: "w2", path: "Recipes/B", content: "memo", tags: [], metadata: { cost: 300 }, updatedAt: "2026-11-08" },
       { id: "w3", path: "Recipes/C", content: "memo", tags: [], metadata: { cost: 900 }, updatedAt: "2026-11-09" },
     );
+    // enough of its own to fill a page of bodies (50), dearer than any above
+    for (let i = 0; i < 60; i++) notes.push({ id: `m${i}`, path: `Recipes/Memo ${i}`, content: "memo", tags: [], metadata: { cost: 1000 + i }, updatedAt: "2026-11-06" });
     const hidden: VaultNote = { id: "w9", path: "recipes/Boss", content: "memo", tags: [], metadata: { cost: 777 }, updatedAt: "2026-11-10" };
     const pages = async () => {
       const f = frameOn(hub), said: string[] = [];
@@ -358,12 +360,16 @@ describe("the hub's query words, kept to the folders", () => {
       for (const o of [0, 1, 2, 3]) said.push(JSON.stringify((await f.get(`/api/notes?order_by=cost&sort=asc&limit=1&offset=${o}&meta[cost][gte]=1`)).body.map((n: { path: string }) => n.path)));
       // a search, ranked by the hub with the hidden note first, the same
       for (const x of [101, 700, 777, 778]) said.push(JSON.stringify((await f.get(`/api/notes?search=memo&limit=1&meta[cost][gte]=${x}`)).body.map((n: { path: string }) => n.path)));
+      // and asking for bodies and links, a page as long as the hub's page of them
+      for (const x of [101, 777, 778]) said.push(JSON.stringify((await frameOn(hub).get(`/api/notes?search=memo&include_content=true&include_links=true&limit=50&meta[cost][gte]=${x}`)).body.map((n: { path: string; content: string }) => n.path + ":" + n.content)));
       return said;
     };
     const without = await pages();
     notes.push(hidden);
     expect(await pages()).toEqual(without);
     expect(without.slice(0, 4)).toEqual(['["Recipes/C"]', '["Recipes/C"]', '["Recipes/C"]', '["Recipes/C"]']);
+    // bodies after a search: at most 20, read one by one
+    expect(JSON.parse(without[12])).toHaveLength(20);
   });
 
   it("two folders: newest changed first unless asked, put together as the hub orders each", async () => {
