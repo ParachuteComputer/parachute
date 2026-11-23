@@ -20,13 +20,14 @@ export default function UpdateLine() {
     <aside className="update-line" aria-label="A newer Parachute">
       {install.kind === "downloading" ? <span role="status">Downloading the newer Parachute… {share(install.got, install.total)}</span>
         : install.kind === "installing" ? <span role="status">Android is asking: tap Update</span>
+        : install.kind === "installed" ? <span role="status">Installed: open Parachute again</span>
         : missed ? <span role="status">The update didn't install</span>
         : <span>A newer Parachute is ready <span className="quiet">(built {builtOn(s.offer.at)})</span></span>}
-      {(install.kind === "idle" || install.kind === "failed") && <>
-        {missed ? <button type="button" className="quiet-button" onClick={() => void navigate("/settings#s-updates")}>Why</button>
-          : <button type="button" className="quiet-button" onClick={go}>Download</button>}
-        <button type="button" className="quiet-button" onClick={() => putOff(s.offer.at)}>Later</button>
-      </>}
+      {(install.kind === "idle" || install.kind === "failed") && (missed
+        ? <button type="button" className="quiet-button" onClick={() => void navigate("/settings#s-updates")}>Why</button>
+        : <button type="button" className="quiet-button" onClick={go}>Download</button>)}
+      {/* Later even while Android asks: its question can go away without an answer (Settings has Download again) */}
+      {install.kind !== "downloading" && install.kind !== "installed" && <button type="button" className="quiet-button" onClick={() => putOff(s.offer.at)}>Later</button>}
     </aside>
   );
 }

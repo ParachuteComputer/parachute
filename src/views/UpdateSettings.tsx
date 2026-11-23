@@ -15,7 +15,7 @@ export default function UpdateSettings() {
   const shown = s.kind !== "none";
   useEffect(() => { if (shown && at.hash === "#s-updates") document.getElementById("s-updates")?.scrollIntoView({ block: "start" }); }, [at.key, at.hash, shown]);
   if (s.kind === "none") return null;
-  const busy = install.kind === "downloading";
+  const busy = install.kind === "downloading" || install.kind === "installed";
   // the try that didn't take, while its build is still the one offered
   const stuck = after.kind === "stuck" && install.kind === "idle" && s.kind === "offer" && s.offer.commit === after.to ? after : null;
   return (
@@ -40,6 +40,7 @@ export default function UpdateSettings() {
           <p>Android is asking whether to update Parachute: tap Update. The app closes while it installs; open it again after.</p>
           <p className="small quiet">{install.checked ? "The file matches the update list." : "The update list doesn't say what the file should be, so the app couldn't check it. Android still installs it only if it comes from the same maker."}</p>
         </div>}
+        {install.kind === "installed" && <p role="status">Installed. Android closes Parachute now; open it again.</p>}
         {!busy && <div className="row-buttons"><button type="button" className="primary" onClick={() => void download(s.offer, s.platform)}>Download</button></div>}
         {install.kind === "failed" && <>
           <p className="error" role="alert">{install.message}</p>

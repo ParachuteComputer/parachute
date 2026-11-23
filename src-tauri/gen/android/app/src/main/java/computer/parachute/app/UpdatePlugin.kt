@@ -97,8 +97,11 @@ class UpdatePlugin(private val activity: Activity) : Plugin(activity) {
       }
       val file = updateFile(args.path)
       if (file == null) { invoke.reject("The downloaded update is missing. Try again."); return@runOnUiThread }
-      // a try still waiting on Android (its question went away without an answer): this one replaces it
+      // a try still waiting on Android (its question went away without an answer): this one replaces it, and its
+      // session goes (Android's answer about it is then for no one: `session`)
       finish("Not installed: a newer try replaced this one.")
+      val installer = activity.packageManager.packageInstaller
+      for (old in installer.mySessions) runCatching { installer.abandonSession(old.sessionId) }
       waiting = invoke
       apk = file
       if (activity.packageManager.canRequestPackageInstalls()) {
@@ -121,14 +124,16 @@ class UpdatePlugin(private val activity: Activity) : Plugin(activity) {
     else finish("Not installed: Parachute needs your OK to install its updates. Tap Download and turn on “Allow from this source”.")
   }
 
-  /** Looks at the file, then hands it to Android's installer. Off the main thread: the file is tens of MB. */
+  /** Looks at the file, then hands it to Android's installer. Off the main thread: the file is tens of MB. The thread
+   *  acts for its own try only: once a newer one replaced it, it ends without a word. */
   private fun go() {
+    val mine = waiting ?: return
     val file = apk ?: return finish("The downloaded update is missing. Try again.")
     Thread {
-      val error = try { looked(file) ?: commit(file) } catch (e: Exception) {
+      val error = try { looked(file) ?: commit(file, mine) } catch (e: Exception) {
         "Not installed: Android couldn't take the file (${e.message ?: e.javaClass.simpleName})."
       }
-      if (error != null) activity.runOnUiThread { finish(error) }
+      if (error != null) activity.runOnUiThread { if (waiting === mine) finish(error) }
     }.start()
   }
 
@@ -172,16 +177,16 @@ class UpdatePlugin(private val activity: Activity) : Plugin(activity) {
   }
 
   /** A PackageInstaller session with the file, committed; Android's answers come to InstallStatus. */
-  private fun commit(file: File): String? {
+  private fun commit(file: File, mine: Invoke): String? {
     val installer = activity.packageManager.packageInstaller
-    // a session an earlier try left (the app was closed mid-install)
-    for (old in installer.mySessions) runCatching { installer.abandonSession(old.sessionId) }
+    if (waiting !== mine) return null
     val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
       setAppPackageName(activity.packageName)
       setSize(file.length())
       setInstallReason(PackageManager.INSTALL_REASON_USER)
     }
     val id = installer.createSession(params)
+    if (waiting !== mine) { runCatching { installer.abandonSession(id) }; return null }
     session = id
     val session = installer.openSession(id)
     try {

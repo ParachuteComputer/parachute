@@ -57,7 +57,8 @@ export function checkUpdates(force = false, read: () => Promise<Answer> = native
     const offer = offerFor(parseFeed(a.body, a.feed), OWN, a.platform);
     set(offer ? { kind: "offer", offer, platform: a.platform } : { kind: "current" });
     // a refusal was about the build offered then
-    if (installNow().install.kind === "failed" && offer?.commit !== before) setInst({ kind: "idle" });
+    const was = installNow().install;
+    if (was.kind === "failed" && offer?.commit !== before && offer?.commit !== was.to) setInst({ kind: "idle" });
   }, (e: unknown) => {
     // a failed read doesn't take back an offer already made (offline in Settings, the newer build is still there)
     if (state.kind !== "offer") set({ kind: "error", message: e instanceof Error ? e.message : String(e) });
@@ -95,19 +96,21 @@ export type Install =
   | { kind: "idle" }
   | { kind: "downloading"; got: number; total: number }  // total 0: the server didn't say
   | { kind: "installing"; checked: boolean }             // with Android's installer, which asks the person
-  | { kind: "failed"; message: string; browser?: boolean };  // browser: the download itself failed, so the browser's may work
+  | { kind: "installed" }                                // Android says done; it closes the app any moment
+  // browser: the way to the file failed (not the file), so the browser's download may work; to: the build tried
+  | { kind: "failed"; message: string; browser?: boolean; to?: string };
 
 /** An install handed to Android, kept across starts: from this build to the feed's. `why`: Android's refusal, if it
  *  gave one before the app closed. */
-export type Tried = { from: string; to: string; toAt: number; when: number; why?: string };
+export type Tried = { from: string; to: string; toAt: number; when: number; why?: string; seen?: boolean };
 /** What the last try came to, seen from this build (`to`: the build tried). */
 export type After = { kind: "none" } | { kind: "updated"; at: number } | { kind: "stuck"; to: string; at: number; why: string };
 
-/** This build is the one tried: updated. Still the build it was tried from: stuck. Another (installed some other way):
- *  nothing to say. */
+/** This build is the one tried: updated (said on its first start only: `seen`). Still the build it was tried from:
+ *  stuck. Another (installed some other way): nothing to say. */
 export function afterTry(t: Tried | null, own: Build): After {
   if (!t) return { kind: "none" };
-  if (own.commit === t.to) return { kind: "updated", at: t.toAt };
+  if (own.commit === t.to) return t.seen ? { kind: "none" } : { kind: "updated", at: t.toAt };
   if (own.commit === t.from) return { kind: "stuck", to: t.to, at: t.toAt, why: t.why ?? "" };
   return { kind: "none" };
 }
@@ -123,7 +126,14 @@ function readTried(): Tried | null {
 type Installing = { install: Install; after: After };
 let inst: Installing | null = null;  // read from storage on first use
 const instSubs = new Set<() => void>();
-const installNow = (): Installing => (inst ??= { install: { kind: "idle" }, after: afterTry(readTried(), OWN) });
+function installNow(): Installing {
+  if (inst) return inst;
+  const t = readTried();
+  inst = { install: { kind: "idle" }, after: afterTry(t, OWN) };
+  // "The update installed" is for this start: the next one says nothing
+  if (t && inst.after.kind === "updated") try { localStorage.setItem(TRIED_KEY, JSON.stringify({ ...t, seen: true })); } catch { /* private mode */ }
+  return inst;
+}
 const publish = (next: Installing) => { inst = next; for (const f of instSubs) f(); };
 const setInst = (install: Install) => publish({ ...installNow(), install });
 function writeTried(t: Tried) {
@@ -154,24 +164,30 @@ export async function download(offer: Offer, platform: string, native: Native = 
   }
   if (installNow().install.kind === "downloading") return;
   const mine = ++tries;
-  const now = (i: Install) => { if (mine === tries) setInst(i); };  // a replaced try says nothing more
+  let open = true;  // a step that arrives after the answer, or for a replaced try, says nothing
+  const now = (i: Install) => { if (open && mine === tries) setInst(i); };
   now({ kind: "downloading", got: 0, total: 0 });
   let handed: Tried | null = null;
-  let whole = false;  // every byte arrived: a failure after that is the file (its sum, its maker), not the way to it
   try {
     await native((s) => {
-      if (s.stage === "download") { whole = s.total > 0 && s.got >= s.total; return now({ kind: "downloading", got: s.got, total: s.total }); }
+      if (!open || mine !== tries) return;
+      if (s.stage === "download") return now({ kind: "downloading", got: s.got, total: s.total });
       handed = { from: OWN.commit, to: s.commit, toAt: s.at, when: Date.now() };
-      if (mine === tries) writeTried(handed);
+      writeTried(handed);
       now({ kind: "installing", checked: s.checked });
     });
-    // Android installed it (the app is usually closed by then, and the next start says so)
-    now({ kind: "idle" });
+    // Android installed it; it closes the app any moment (the next start says so)
+    now({ kind: "installed" });
   } catch (e) {
     if (mine !== tries) return;
-    const message = e instanceof Error ? e.message : String(e);
-    if (handed) writeTried({ ...(handed as Tried), why: message });
-    setInst({ kind: "failed", message, browser: !handed && !whole });
+    // the shell's refusal ({ message, browser }: updates.rs `Refused`), or an Error
+    const r = (e ?? {}) as { message?: unknown; browser?: unknown };
+    const message = typeof r.message === "string" ? r.message : String(e);
+    const tried = handed as Tried | null;
+    if (tried) writeTried({ ...tried, why: message });
+    now({ kind: "failed", message, browser: r.browser === true, ...(tried ? { to: tried.to } : {}) });
+  } finally {
+    open = false;
   }
 }
 async function nativeInstall(step: (s: Step) => void): Promise<void> {

@@ -116,6 +116,21 @@ fn pick(body: &str, feed: &url::Url, platform: &str) -> Result<Pick, String> {
     Ok(Pick { url, sha256, commit, at })
 }
 
+/// Why a Download didn't reach Android's installer, or what Android said; `browser`: the way to the file failed (the
+/// address, the network), so the browser's download may still work. Not for a file that was refused (its sum, its maker).
+#[derive(serde::Serialize, Debug, PartialEq)]
+pub struct Refused {
+    pub message: String,
+    pub browser: bool,
+}
+
+fn transfer(message: impl Into<String>) -> Refused {
+    Refused { message: message.into(), browser: true }
+}
+fn file(message: impl Into<String>) -> Refused {
+    Refused { message: message.into(), browser: false }
+}
+
 /// Downloads `url` to `dest`, hashing as it goes; `step` hears the bytes so far. With `want`, a file whose sha256 differs
 /// is removed and refused. Returns whether it was checked (a feed without a sha256 can't be).
 pub async fn fetch_checked(
@@ -124,20 +139,21 @@ pub async fn fetch_checked(
     want: Option<&str>,
     dest: &Path,
     mut step: impl FnMut(u64, u64),
-) -> Result<bool, String> {
+) -> Result<bool, Refused> {
     use sha2::{Digest, Sha256};
-    use std::io::Write;
+    use tokio::io::AsyncWriteExt;
     let want = want.map(str::to_ascii_lowercase);
-    let mut res = http.get(url).send().await.map_err(|_| "Couldn't reach the update's address.".to_string())?;
+    let mut res = http.get(url).send().await.map_err(|_| transfer("Couldn't reach the update's address."))?;
     if !res.status().is_success() {
-        return Err(format!("The update's address answered {}.", res.status().as_u16()));
+        return Err(transfer(format!("The update's address answered {}.", res.status().as_u16())));
     }
     let total = res.content_length().unwrap_or(0);
     if total > APK_MAX {
-        return Err("The update's file is too large to be Parachute.".into());
+        return Err(file("The update's file is too large to be Parachute."));
     }
+    let saving = |e: std::io::Error| file(format!("Couldn't save the update: {e}"));
     let part = dest.with_extension("part");
-    let mut out = std::fs::File::create(&part).map_err(|e| format!("Couldn't save the update: {e}"))?;
+    let mut out = tokio::fs::File::create(&part).await.map_err(saving)?;
     let mut hash = Sha256::new();
     let mut got: u64 = 0;
     let mut said: u64 = 0;
@@ -146,15 +162,15 @@ pub async fn fetch_checked(
         loop {
             let chunk = tokio::time::timeout(STALL, res.chunk())
                 .await
-                .map_err(|_| "The download stalled. Try again on a better connection.".to_string())?
-                .map_err(|_| "The download broke off. Try again.".to_string())?;
+                .map_err(|_| transfer("The download stalled. Try again on a better connection."))?
+                .map_err(|_| transfer("The download broke off. Try again."))?;
             let Some(chunk) = chunk else { break };
             got += chunk.len() as u64;
             if got > APK_MAX {
-                return Err("The update's file is too large to be Parachute.".to_string());
+                return Err(file("The update's file is too large to be Parachute."));
             }
             hash.update(&chunk);
-            out.write_all(&chunk).map_err(|e| format!("Couldn't save the update: {e}"))?;
+            out.write_all(&chunk).await.map_err(saving)?;
             // about every 1%, and at least every 4 MB without a length
             if got - said >= (total / 100).max(256 * 1024).min(4 << 20) {
                 said = got;
@@ -162,28 +178,28 @@ pub async fn fetch_checked(
             }
         }
         if total > 0 && got != total {
-            return Err("The download broke off. Try again.".to_string());
+            return Err(transfer("The download broke off. Try again."));
         }
-        out.sync_all().map_err(|e| format!("Couldn't save the update: {e}"))?;
+        out.sync_all().await.map_err(saving)?;
         step(got, total);
         Ok(())
     };
     let done = read.await;
     drop(out);
-    let checked = match (&done, &want) {
+    let checked = match (done, &want) {
         (Ok(()), Some(w)) if crate::saved::hex(&hash.finalize()) != *w => {
-            Err("The downloaded file isn't the one the update list names (its checksum differs), so it wasn't installed.".to_string())
+            Err(file("The downloaded file isn't the one the update list names (its checksum differs), so it wasn't installed."))
         }
         (Ok(()), w) => Ok(w.is_some()),
-        (Err(e), _) => Err(e.clone()),
+        (Err(e), _) => Err(e),
     };
     match checked {
         Ok(c) => {
-            std::fs::rename(&part, dest).map_err(|e| format!("Couldn't save the update: {e}"))?;
+            tokio::fs::rename(&part, dest).await.map_err(saving)?;
             Ok(c)
         }
         Err(e) => {
-            let _ = std::fs::remove_file(&part);
+            let _ = tokio::fs::remove_file(&part).await;
             Err(e)
         }
     }
@@ -201,6 +217,10 @@ pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
                 use tauri::Manager;
                 let handle = _api.register_android_plugin("computer.parachute.app", "UpdatePlugin")?;
                 _app.manage(UpdateHandle(handle));
+                // the file an install left (Android closes the app before the try can remove it)
+                if let Ok(cache) = _app.path().app_cache_dir() {
+                    let _ = std::fs::remove_dir_all(cache.join("update"));
+                }
             }
             Ok(())
         })
@@ -213,18 +233,18 @@ pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 /// install Android closes the app first. A second Download while Android's question is open replaces the first.
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub async fn update_install<R: tauri::Runtime>(app: tauri::AppHandle<R>, on_step: tauri::ipc::Channel<Step>) -> Result<(), String> {
+pub async fn update_install<R: tauri::Runtime>(app: tauri::AppHandle<R>, on_step: tauri::ipc::Channel<Step>) -> Result<(), Refused> {
     use tauri::Manager;
-    let Some((feed, body)) = read_feed().await? else { return Err("This build has no updates.".into()) };
-    let Pick { url, sha256, commit, at } = pick(&body, &feed, PLATFORM)?;
-    let handle = app.try_state::<UpdateHandle<R>>().map(|h| h.0.clone()).ok_or("The installer isn't registered.")?;
-    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("update");
+    let Some((feed, body)) = read_feed().await.map_err(transfer)? else { return Err(file("This build has no updates.")) };
+    let Pick { url, sha256, commit, at } = pick(&body, &feed, PLATFORM).map_err(file)?;
+    let handle = app.try_state::<UpdateHandle<R>>().map(|h| h.0.clone()).ok_or_else(|| file("The installer isn't registered."))?;
+    let dir = app.path().app_cache_dir().map_err(|e| file(e.to_string()))?.join("update");
     // this try's own file; what earlier tries left goes (a file already handed to Android was copied into its session)
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Couldn't save the update: {e}"))?;
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+    tokio::fs::create_dir_all(&dir).await.map_err(|e| file(format!("Couldn't save the update: {e}")))?;
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let apk = dir.join(format!("parachute-{commit}-{nanos}.apk"));
-    let http = crate::door::http_client(Duration::from_secs(30 * 60)).map_err(|_| "Couldn't download the update.".to_string())?;
+    let http = crate::door::http_client(Duration::from_secs(30 * 60)).map_err(|_| transfer("Couldn't download the update."))?;
     let checked = fetch_checked(&http, url, sha256.as_deref(), &apk, |got, total| {
         let _ = on_step.send(Step::Download { got, total });
     })
@@ -238,17 +258,17 @@ pub async fn update_install<R: tauri::Runtime>(app: tauri::AppHandle<R>, on_step
         .run_mobile_plugin_async::<serde_json::Value>("install", Args { path: &apk.to_string_lossy() })
         .await
         .map(|_| ())
-        .map_err(|e| e.to_string());
+        .map_err(|e| file(e.to_string()));
     // only this try's file: a later try may be using the folder by now
-    let _ = std::fs::remove_file(&apk);
+    let _ = tokio::fs::remove_file(&apk).await;
     done
 }
 
 /// Elsewhere Download opens the file in the browser (src/shell/updates.ts); this is Android's.
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-pub async fn update_install(_on_step: tauri::ipc::Channel<Step>) -> Result<(), String> {
-    Err("Only the Android app installs its update itself.".into())
+pub async fn update_install(_on_step: tauri::ipc::Channel<Step>) -> Result<(), Refused> {
+    Err(file("Only the Android app installs its update itself."))
 }
 
 #[cfg(test)]
@@ -342,13 +362,20 @@ mod tests {
         // a tampered file (the sum of another): refused, and nothing is left to install
         let mut other = apk.clone();
         other[1_234_567] ^= 1;
-        let refused = super::fetch_checked(&http, url.clone(), Some(&sha(&other)), &dest, |_, _| {}).await;
-        assert!(refused.unwrap_err().contains("checksum differs"));
+        let refused = super::fetch_checked(&http, url.clone(), Some(&sha(&other)), &dest, |_, _| {}).await.unwrap_err();
+        // the file was refused, not the way to it: no browser for it either
+        assert!(refused.message.contains("checksum differs") && !refused.browser);
         assert!(!dest.exists() && !dest.with_extension("part").exists());
 
         // an old feed without sums: still downloaded, and said to be unchecked
-        assert_eq!(super::fetch_checked(&http, url, None, &dest, |_, _| {}).await, Ok(false));
+        assert_eq!(super::fetch_checked(&http, url.clone(), None, &dest, |_, _| {}).await, Ok(false));
         assert_eq!(std::fs::read(&dest).unwrap(), apk);
+
+        // a file that isn't there: the way to it failed, so the browser's download is worth offering
+        let mut gone = url;
+        gone.set_port(Some(1)).unwrap();
+        let unreachable = super::fetch_checked(&http, gone, None, &dest.with_file_name("x.apk"), |_, _| {}).await.unwrap_err();
+        assert!(unreachable.browser, "{unreachable:?}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
