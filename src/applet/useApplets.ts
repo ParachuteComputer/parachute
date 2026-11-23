@@ -1,6 +1,6 @@
 // The applets in one vault, as the app lists them (discovery.ts), read from the vault's notes tagged `applet` and kept
 // for this session. Read again when a screen asks (`refresh`), so a newly published applet shows up.
-import { failureOf, type Failure } from "../vault/failure";
+import { failureOf, settled, type Failure } from "../vault/failure";
 import { hubCheck } from "../services/hubs";
 import { useEffect, useSyncExternalStore } from "react";
 import type { Note, VaultClient } from "@openparachute/surface-client";
@@ -80,7 +80,12 @@ export function refreshApplets(rec: VaultRecord, fresh = false): Promise<boolean
       if (!fresh && (freshSet.get(rec.key) ?? 0) !== set) return true;
       if (fresh) freshSet.set(rec.key, (freshSet.get(rec.key) ?? 0) + 1);
       cache.set(rec.key, { state: "ok", found, at: Date.now() }); return true;
-    }, (e: unknown) => { if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e), failure: failureOf(e) }); return false; })
+    }, async (e: unknown) => {
+      // what went wrong, in the words the list says it with (a read that reached no hub may be a refused sign-in)
+      const f = await settled(rec, failureOf(e)).catch(() => "other" as const);
+      if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e), failure: f === "alive" ? "offline" : f });
+      return false;
+    })
     .finally(() => { inflight.delete(at); notify(); });
   inflight.set(at, p);
   return p;

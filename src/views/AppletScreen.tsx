@@ -43,7 +43,7 @@ import { PageEmbeds, PAGE_MAX } from "./Embeds";
 import { isMine, useWhose, whoseOf } from "../vault/whose";
 import { pageMarks } from "../applet/pageMark";
 import { MAX_CODE_CHARS } from "../vault/limited";
-import { findVault, hostOf, listVaults } from "../vault/store";
+import { findVault, hostOf, listVaults, originOf } from "../vault/store";
 import { covers } from "../vault/parachute";
 import { appletLevel, canWrite, giveBack, heldLevel } from "../vault/reach";
 import { homeVault } from "../shell/frameSource";
@@ -92,7 +92,7 @@ import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
 import { inParachuteSpace, officialFace, officialNow, officialOf } from "../applet/parachuteSource";
-import { failureOf, type Failure } from "../vault/failure";
+import { failureOf, settled, type Failure } from "../vault/failure";
 import { siteOf } from "../vault/site";
 
 const grants = deviceGrants();
@@ -200,6 +200,8 @@ export default function AppletScreen() {
   const kept = useKept();
   // shown again after being kept hidden: its note is read again (below), quietly while nothing changed
   const [recheck, setRecheck] = useState(0);
+  // a failed read whose sign-in the hub renewed is tried once more, not again and again
+  const renewed = useRef(false);
   const rechecked = useRef(0);
   const was = useRef({ loaded, keys });
   was.current = { loaded, keys };
@@ -289,7 +291,12 @@ export default function AppletScreen() {
         setBrought(pointer);
       } catch (e) {
         // a recheck the vault couldn't answer (offline a moment) leaves the running screen as it is
-        if (on && !quiet) setLoaded({ state: "error", error: e instanceof Error ? e.message : "the vault couldn't be read", failure: failureOf(e) });
+        if (!on || quiet) return;
+        // a read that reached no hub may be a refused sign-in the browser couldn't read; one the hub renewed is read once more
+        const f = await settled(rec, failureOf(e)).catch(() => "other" as const);
+        if (!on) return;
+        if (f === "alive" && !renewed.current) { renewed.current = true; setRecheck((n) => n + 1); return; }
+        setLoaded({ state: "error", error: e instanceof Error ? e.message : "the vault couldn't be read", failure: f === "alive" ? "offline" : f });
       }
     })();
     return () => { on = false; };
@@ -591,18 +598,18 @@ export default function AppletScreen() {
   if (officialOf(appletId) && (!selfTest.known || selfTest.running)) return shell(<p className="quiet" role="status">Opening…</p>);
   if (mode === "closed" && !officialOf(appletId)) return shell(<div className="card" role="status"><p>Applets are off on this device until its self-test passes. See Settings.</p>{plainNote}</div>);
   if (loaded.state === "loading" || (loaded.state === "ok" && !keys)) return shell(<p className="quiet" role="status">Opening…</p>);
-  // the hub's own answer (an address, an id) is under Details
   // a vault the app can't reach or whose sign-in was refused: what is wrong and what to do, in plain words; the hub's own
   // answer (an address, an id) under Details for anything else
-  if (loaded.state === "error" && rec && loaded.failure !== "other") {
+  if (loaded.state === "error" && rec && (loaded.failure === "offline" || loaded.failure === "refused")) {
     const which = officialOf(appletId), isHome = homeVault()?.key === rec.key;
-    const where = `${rec.vault}${isHome ? ", your home vault," : ""}`;
+    const runs = which ? ` ${officialFace(which).name} runs there.` : "";
     return shell(<div className="card" role="alert">
-      {loaded.failure === "unreached"
-        ? <p>Parachute can't reach {where} just now.{which ? ` ${officialFace(which).name} runs there.` : ""}</p>
-        : <p>{rec.vault} on {siteOf(rec.issuer)} wants you to sign in again.{which ? ` ${officialFace(which).name} runs there.` : ""}</p>}
-      <p className="small quiet">{loaded.failure === "unreached" ? `Its Parachute is ${siteOf(rec.issuer)}. ` : ""}In <Link to="/settings">Settings</Link> you can sign in to it again{isHome ? " or make another vault your home" : ""}.</p>
-      <p><button type="button" className="quiet-button" onClick={() => setRecheck((n) => n + 1)}>Try again</button></p>
+      {loaded.failure === "offline"
+        ? <><p>Parachute can't reach {rec.vault}{isHome ? ", your home vault," : ""} just now.{runs}</p>
+          <p className="small quiet">Its Parachute is {siteOf(rec.issuer)}.{isHome ? <> In <Link to="/settings">Settings</Link> you can make another vault your home.</> : null}</p></>
+        : <><p>{rec.vault} on {siteOf(rec.issuer)} wants you to sign in again.{runs}</p>
+          <p className="small quiet"><Link to={`/add?hub=${encodeURIComponent(originOf(rec.issuer))}`}>Sign in again</Link>{isHome ? <>, or make another vault your home in <Link to="/settings">Settings</Link></> : null}.</p></>}
+      <p><button type="button" className="quiet-button" onClick={() => { renewed.current = false; setRecheck((n) => n + 1); }}>Try again</button></p>
     </div>);
   }
   if (loaded.state === "error") return shell(<div role="alert"><p className="error">Couldn't open this applet.</p><details className="small"><summary>Details</summary>{loaded.error}</details></div>);

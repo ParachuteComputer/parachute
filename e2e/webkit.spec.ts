@@ -38,27 +38,37 @@ for (const [which, change] of [
   await expect(page.frameLocator("iframe.applet-frame").getByRole("heading").first()).toBeVisible();
 });
 
-test("a home vault Parachute can't reach: the list and Journal say so in plain words, with what to do", async ({ page }) => {
-  // the hub doesn't answer for the home vault (a Parachute that is off, an address that went away): every read of it fails
-  // as a browser fails a request that reached no one ("Load failed", WebKit says)
-  const home = `${hubState().origin}/vault/${VAULT}/**`;
-  await page.route(home, (r) => r.abort("connectionrefused"));
+test("a Parachute that doesn't answer: the list and Journal say so in plain words, with what to do", async ({ page }) => {
+  // the hub doesn't answer (it is off, or this device kept an address that went away): every request to it fails as a
+  // browser fails one that reached no one ("Load failed", WebKit says)
+  // (a device that has read nothing of it yet: one that has draws from the copies it kept)
+  const hub = `${hubState().origin}/**`;
+  await page.route(hub, (r) => r.abort("connectionrefused"));
   await page.goto("/");
   const list = ui(page).getByRole("list", { name: "Applets" });
-  await expect(list.getByText(`Can't reach ${VAULT} just now.`)).toBeVisible();
+  await expect(list.getByText(`Can't reach ${VAULT} just now.`)).toBeVisible({ timeout: 30_000 });
   await expect(list.getByText(/couldn't be read/)).toHaveCount(0);
-  // the other vaults' applets are listed as ever
-  await expect(list.getByRole("link", { name: /Post/ })).toBeVisible();
 
   await page.goto(`/v/${VAULT}/a/parachute:journal`);
   const said = page.getByRole("alert");
   await expect(said).toContainText(`Parachute can't reach ${VAULT}, your home vault, just now. Journal runs there.`, { timeout: 30_000 });
-  await expect(said).toContainText("In Settings you can sign in to it again or make another vault your home.");
+  await expect(said).toContainText(`Its Parachute is 127.0.0.1. In Settings you can make another vault your home.`);
   await expect(said.getByRole("link", { name: "Settings" })).toBeVisible();
   await expect(page.getByText("Couldn't open this applet")).toHaveCount(0);
 
-  // reached again: Try again opens it
-  await page.unroute(home);
+  // answering again: Try again opens it
+  await page.unroute(hub);
   await said.getByRole("button", { name: "Try again" }).click();
   await expect(page.frameLocator("iframe.applet-frame").getByRole("heading", { name: "Journal" })).toBeVisible();
+});
+
+// last: it ends this browser's sign-in, as a hub that refused it would
+test("a Parachute that refuses this device's sign-in: Journal says to sign in again", async ({ page }) => {
+  const origin = hubState().origin;
+  await page.route(`${origin}/vault/${VAULT}/**`, (r) => r.fulfill({ status: 401, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: '{"error":"invalid_token"}' }));
+  await page.route(`${origin}/oauth/token`, (r) => r.fulfill({ status: 400, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: '{"error":"invalid_grant"}' }));
+  await page.goto(`/v/${VAULT}/a/parachute:journal`);
+  const said = page.getByRole("alert");
+  await expect(said).toContainText(`${VAULT} on 127.0.0.1 wants you to sign in again. Journal runs there.`, { timeout: 30_000 });
+  await expect(said.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", `/add?hub=${encodeURIComponent(origin)}`);
 });

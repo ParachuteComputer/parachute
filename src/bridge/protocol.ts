@@ -39,7 +39,7 @@ export type FrameApplet = {
   status: "ok" | "updated" | "none" | "off";
 };
 /** `why` when it failed: its Parachute wasn't reached, or refused this device's sign-in (vault/failure.ts). */
-export type FrameApplets = { ok: true; entries: FrameApplet[]; skipped: number } | { ok: false; error: string; why?: "unreached" | "refused" };
+export type FrameApplets = { ok: true; entries: FrameApplet[]; skipped: number } | { ok: false; error: string; why?: "offline" | "refused" };
 /** An applet as the bar names it: its vault (this device's key) and its note. */
 export type FramePlace = { vault: string; noteId: string };
 /** The bar and the home (docs/NAVIGATION.md): what this device can find of the person's settings note. */
