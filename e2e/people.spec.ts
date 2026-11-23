@@ -325,6 +325,7 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
 // everyone listed; a .vcf whose notes match two of them reads those two, and its preview says truly what changes.
 test("People installed by install-applets lists 130 people and previews an import against them", async ({ page }) => {
   test.setTimeout(180_000);
+  if (SHOTS) await page.setViewportSize({ width: 390, height: 844 });
   const hub = hubState();
   const createdIds: string[] = [];
   const dir = mkdtempSync(join(tmpdir(), "people-t476-install-"));
@@ -355,6 +356,7 @@ test("People installed by install-applets lists 130 people and previews an impor
     await f.getByRole("searchbox", { name: "Search people" }).fill("Bulk Person");
     await expect(f.getByText(/^130 of \d+ people$/)).toBeVisible({ timeout: 30_000 });
     await expect(f.getByRole("button", { name: "Bulk Person 001" })).toBeVisible();
+    await shot(page, "09-many-people");
     await f.getByRole("searchbox", { name: "Search people" }).fill("Bulk Person 130");
     await expect(f.getByRole("button", { name: "Bulk Person 130" })).toBeVisible();
 
@@ -370,6 +372,7 @@ test("People installed by install-applets lists 130 people and previews an impor
     await expect(f.getByText("Already up to date (Bulk Person 007)")).toBeVisible();
     await expect(f.getByText(/Matches Bulk Person 120 by email · will merge/)).toBeVisible();
     await expect(f.getByText("rowan@example.test")).toBeVisible();
+    await shot(page, "10-import-preview-many");
   } finally {
     rmSync(dir, { recursive: true, force: true });
     for (const id of createdIds) await api(hub, "DELETE", `notes/${id}`).catch(() => {});

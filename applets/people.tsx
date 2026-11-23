@@ -1611,12 +1611,14 @@ export default function People() {
     const name = personName(p);
     const pf = readPersonFields(p.fields);
     const photoUrl = pf.photo ? photoUrls[`${p.id}|${pf.photo}`] : undefined;
+    const aside = opts.aside ?? (drafts[p.id] ? "Unsaved edit" : pf.favorite ? "★" : relationLabel(pf.relation));
+    // the relation once: beside the name when it stands there, else under it
+    const relationAside = aside === relationLabel(pf.relation);
     const meta = opts.metaOverride ?? (
-      [pf.summary || relationLabel(pf.relation), pf.groups.length ? pf.groups.join(" · ") : ""].filter(Boolean).join(" · ")
+      [pf.summary || (relationAside ? "" : relationLabel(pf.relation)), pf.groups.length ? pf.groups.join(" · ") : ""].filter(Boolean).join(" · ")
       || pf.email
       || (pf.phones[0] ? parsePhoneEntry(pf.phones[0]).number : "")
     );
-    const aside = opts.aside ?? (drafts[p.id] ? "Unsaved edit" : pf.favorite ? "★" : relationLabel(pf.relation));
     return {
       key: p.id,
       label: name,
