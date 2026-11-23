@@ -114,7 +114,8 @@ pub fn run() {
         .plugin(unlock_plugin())
         .plugin(notify::plugin())
         .plugin(notify::push_plugin())
-        .plugin(files::plugin());
+        .plugin(files::plugin())
+        .plugin(updates::plugin());
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
     // the native OK/Cancel before an approval where there is no device unlock to ask (keyring.rs); Rust calls it, the
@@ -134,6 +135,7 @@ pub fn run() {
             app_version,
             webview_runtime,
             updates::update_feed,
+            updates::update_install,
             files::open_link,
             files::save_file,
             saved::saved_get,
