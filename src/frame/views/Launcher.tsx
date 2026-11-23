@@ -12,6 +12,9 @@ import { Days } from "../../kit/parts";
 import { when } from "../../kit/when";
 import { appletPath } from "../../open/paths";
 
+/** Connect an AI: a setting (Settings → Your AI) and a first step (Start here), not an applet in the list. */
+const CONNECT = "parachute:connect";
+
 /** A day inside a line of words: "today", "yesterday", "Monday, November 17". */
 const inLine = (day: string) => (day === "Today" || day === "Yesterday" ? day.toLowerCase() : day);
 
@@ -50,7 +53,7 @@ export default function Launcher() {
       {fresh && homeVault && <h2 className="lately-label">All applets</h2>}
       <ol className="entries" aria-label="Applets">
         {/* Parachute's own (docs/design/PARACHUTE-SOURCE.md), in the home: first, from the app */}
-        {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
+        {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).filter((a) => a.noteId !== CONNECT).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
         {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
         {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
