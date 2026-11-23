@@ -450,6 +450,18 @@ Before you hand it over, check it the way a person sees it:
   a computer; `wide` lets a board grow there instead (and scrolls), and `pa-grid` makes its columns.
 - No fixed colour, size or font anywhere: it reads in light, in dark and on the Daylight's black and white.
 
+## Start from the template, check before it goes in
+
+With this repo checked out, the shortest way in is to copy the starter and check it before it goes into a vault:
+
+- `applets/starter.json` and `applets/starter.tsx`: a small applet that lists, searches, adds, opens and edits notes in
+  `Notes/`. Change its id, name, folder and what it opens. `e2e/starter.spec.ts` runs it as shipped, against a real hub.
+- `applets/parachute.d.ts`: types for `import { … } from "parachute"`, for an editor (a test holds it to the kit's parts).
+- `npx vite-node scripts/check-applet.ts applets/<name> [--strict]`: reads the record as the app does (the manifest and
+  each field it may leave out), compiles the code with the app's compiler, refuses what the frame won't load (an npm
+  package, a relative file), and says which parts need a higher `needs` and what the kit would draw instead.
+  `--strict` fails on a warning too.
+
 ## A worked example
 
 These are the exact arguments for the MCP tool `create-record` (the same body works for `POST /api/records`). A hub

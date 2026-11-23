@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "path": "Applets/Starter",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "starter",
+      "name": "Starter",
+      "glyph": "✦",
+      "note": "a minimal applet template: list, search, read and add notes in Notes/",
+      "access": [
+        {
+          "vault": "here",
+          "allow": [
+            {
+              "path": "Notes/",
+              "verbs": ["read", "create", "update"]
+            }
+          ]
+        }
+      ],
+      "screens": [
+        { "id": "home", "name": "Starter" }
+      ]
+    },
+    "opens": [
+      {
+        "type": "note",
+        "path": "Notes/"
+      }
+    ]
+  }
+}
