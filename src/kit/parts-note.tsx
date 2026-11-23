@@ -8,7 +8,8 @@
 // With `onLink`, a tap goes there instead, with a wikilink's target as written (`[[Green herb rice]]` gives
 // "Green herb rice"), the `<vault>:<ULID>` or the web address: the applet may open it itself, or call `link.follow`.
 // With `fetchBlob`, a picture the note links in the vault's storage (`/api/storage/…`) is drawn from the bytes it hands
-// back (Vault gives `vaults.file` for the record: docs/design/PICTURES.md); without it, it reads "(not loaded)".
+// back (Vault gives `vaults.file` for the record: docs/design/PICTURES.md); without it, pictures aren't drawn: the note
+// shows the picture's name in their place.
 import { useMemo, type MouseEvent } from "react";
 import { NoteRenderer } from "@openparachute/surface-render/note";
 import type { WikilinkResolver } from "@openparachute/surface-render/markdown";

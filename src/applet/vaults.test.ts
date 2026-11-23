@@ -451,7 +451,7 @@ describe("vaults.file: a picture's bytes, only of a file attached to the record 
       // the hub's list of each record's attachments: Ideas has the owl, Letter (another record) has a letter
       async request(_v: string, method: string, path: string) {
         if (method === "GET" && path === "/records/ideas/attachments") return [{ id: "att1", path: OWL, mimeType: "image/png" }];
-        if (method === "GET" && path === "/records/song/attachments") return [{ id: "att4", path: "2026-11-22/1766-song.png", mimeType: "audio/mpeg" }];
+        if (method === "GET" && path === "/records/song/attachments") return [{ id: "att4", path: "2026-11-22/1766-song.png", mimeType: "image/jpeg" }, { id: "att5", path: "2026-11-22/1767-memo.webm", mimeType: "audio/webm" }];
         if (method === "GET" && path === "/records/letter/attachments") return [{ id: "att2", path: OTHER, mimeType: "image/png" }, { id: "att3", path: "2026-11-22/1765-tour.mp4", mimeType: "video/mp4" }];
         throw new Error("404 not found");
       },
@@ -483,9 +483,10 @@ describe("vaults.file: a picture's bytes, only of a file attached to the record 
     await expect(make({ file: false }).call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "not_granted" });
     await expect(make().call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}`, more: 1 })).rejects.toThrow();
   });
-  it("hands over a picture or a sound only: a video is refused before it is read", async () => {
+  it("hands over a picture only: a video or a voice memo is refused before it is read", async () => {
     const { call, fetched } = make();
     await expect(call({ vault: "home", id: "letter", path: "/api/storage/2026-11-22/1765-tour.mp4" })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(call({ vault: "home", id: "song", path: "/api/storage/2026-11-22/1767-memo.webm" })).rejects.toMatchObject({ code: "out_of_scope" });
     expect(fetched).toEqual([]);
   });
   it("says the hub's type before the one the attacher wrote", async () => {

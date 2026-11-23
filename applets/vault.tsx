@@ -419,7 +419,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   const readHistory = () => vaults.history(v.key, id).then((h: typeof history) => { setHistory(h); setHistFailed(null); }, setHistFailed);
   const editingRef = useRef(editing);
   editingRef.current = editing;
-  // its pictures, from the files attached to it (a Parachute before 11-22 has no vaults.file: they read "(not loaded)")
+  // its pictures, from the files attached to it (a Parachute before 11-22 has no vaults.file: their names show in their place)
   const fetchBlob = useCallback((src: string): Promise<Blob> => vaults.file(v.key, id, src), [v.key, id]);
   const pictures = typeof (vaults as { file?: unknown }).file === "function" ? fetchBlob : undefined;
   const top = useRef<HTMLElement | null>(null);

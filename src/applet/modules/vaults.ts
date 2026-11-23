@@ -10,7 +10,7 @@
 //     query({vault, type?, tag?, search?, path?, where?, sort?, limit?, offset?})
 //                                              a page of records (no body): {records, more}
 //     get({vault, id})                         one record: body, fields, types, tags, links both ways, who and when
-//     file({vault, id, path})                  the bytes of a picture or sound attached to that record ({type, bytes}; `path` as its
+//     file({vault, id, path})                  the bytes of a picture attached to that record ({type, bytes}; `path` as its
 //                                              words link it, /api/storage/<date>/<file>), to draw its pictures: only one
 //                                              the hub lists as the record's own, 25 MB at most (docs/design/PICTURES.md)
 //     history({vault, id})                     its kept versions, newest first; version({vault, id, ix}): one of them
@@ -363,8 +363,8 @@ function newIn(v: Record<string, unknown>): New | null {
 }
 
 const refuse = (why: string) => new ContractError(ERROR_CODES.outOfScope, why);
-/** What a note draws: a picture or a sound. */
-const DRAWN = /^(image|audio)\//;
+/** What a note draws: a picture (a sound, a video or a document is opened, not drawn). */
+const DRAWN = /^image\//;
 /** A file's place in the vault's storage, from a link in a record's words (`/api/storage/<date>/<file>`, or the bare
  *  `<date>/<file>`): decoded once; null for anything else (a query, a fragment, a dot segment, a backslash, a control). */
 export function storagePath(src: string): string | null {
@@ -524,8 +524,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
           const list: unknown[] = Array.isArray(rows) ? rows : plain(rows) && Array.isArray(rows.attachments) ? rows.attachments : [];
           const att = list.find((a): a is Record<string, unknown> => plain(a) && a.path === want);
           if (!att) throw refuse("only a file attached to the record");
-          // what a note draws: a picture or a sound (a video or a document is opened, not drawn), asked before it is read
-          if (!DRAWN.test(mediaType(att.mimeType ?? att.mime_type) ?? "")) throw refuse("only a picture or a sound is handed over");
+          // only what a note draws, asked before it is read
+          if (!DRAWN.test(mediaType(att.mimeType ?? att.mime_type) ?? "")) throw refuse("only a picture is handed over");
           let blob: Blob;
           try { blob = await deps.file(vault, want); } catch (e) { throw failed(e); }
           if (blob.size > FILE_MAX) throw new ContractError(ERROR_CODES.tooLarge, "too_large: a file over 25 MB isn't handed over");
