@@ -514,25 +514,23 @@ describe("People at thousands of people", () => {
     return { query, pages: () => pages };
   }
 
-  it("lists everyone once, in their newest version, while records change, go and arrive during the read", async () => {
+  it("lists everyone once, in their newest version, while records change and arrive during the read", async () => {
     const rows = many(3000);
     let clock = 10_000;
-    const gone: string[] = [];
     const { query } = hub(rows, (page) => {
       if (page === 3) {
         // already read, then changed; and one not read yet, changed
         rows[10] = { ...rows[10], updatedAt: stamp(clock++), fields: { ...rows[10].fields, summary: "changed" } };
         rows[2500] = { ...rows[2500], updatedAt: stamp(clock++) };
-        // three already read, deleted (they stay in this read, as anything read before it went does)
-        gone.push(...rows.splice(20, 3).map((r) => r.id));
       }
       if (page === 7) rows.push({ id: "znew", path: "People/New Person", createdAt: stamp(clock), updatedAt: stamp(clock++) });
     });
     const got = await api.readFolder(query, { pathPrefix: "People/", includeFields: true });
     const ids = got.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
-    // every record there now, none missed by the rows that moved behind the read
-    expect(new Set(ids.filter((id) => !gone.includes(id)))).toEqual(new Set(rows.map((r) => r.id)));
+    // every record there now, none missed by one that changed while it read (a delete behind it: the app's to go on
+    // past, src/applet/vault.test.ts)
+    expect(new Set(ids)).toEqual(new Set(rows.map((r) => r.id)));
     expect(got.find((r) => r.id === "p00010")?.fields?.summary).toBe("changed");
   });
 
@@ -574,6 +572,21 @@ describe("People at thousands of people", () => {
     one = 0; all = 0;
     await api.withBodiesForCards([cards[3]], people, readOne, readAll);
     expect([one, all]).toEqual([0, 0]);
+  });
+
+  it("never lets a link carry a second card: one with a newline is dropped on import and on export", () => {
+    const [card] = api.parseVCard("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ann Lee\r\nURL:https://ann.example\\nEND:VCARD\\nBEGIN:VCARD\\nFN:Mallory\r\nURL:https://ann.example/ok\r\nEND:VCARD\r\n");
+    expect(card.links).toEqual(["https://ann.example/ok"]);
+    // written by an AI straight into the field
+    const out = api.exportVCard([{ id: "a", path: "People/Ann Lee", updatedAt: null, fields: { links: ["https://ann.example\nEND:VCARD\nBEGIN:VCARD\nFN:Mallory", "https://ann.example/ok"] } }]);
+    expect(api.parseVCard(out).map((c) => c.name)).toEqual(["Ann Lee"]);
+    expect(out).toContain("URL:https://ann.example/ok");
+  });
+
+  it("a person gone since the list was read leaves the preview standing", async () => {
+    const people = many(100).map(({ body: _b, ...p }) => p);
+    const got = await api.withBodiesForCards([blank({ emails: ["person3@example.test"], note: "x" })], people, async () => { throw new Error("gone"); }, async () => []);
+    expect(got).toHaveLength(100);
   });
 
   it("matches as a scan of the list would: email, then phone, then name, the first person holding the key", () => {

@@ -488,6 +488,11 @@ function foldVCardLine(line: string): string {
   return out.join("\r\n");
 }
 
+/** A web address as one line: http(s), no spaces or control characters (a newline in one would end a card on export). */
+function webLink(u: string): boolean {
+  return /^https?:\/\/[^\s\u0000-\u001f\u007f]+$/i.test(u);
+}
+
 function base64ToBytes(b64: string): Uint8Array | null {
   const clean = b64.replace(/\s+/g, "");
   if (!clean) return null;
@@ -662,7 +667,7 @@ function parseVCard(text: string): VCardContact[] {
         if (parsed && !birthday) birthday = parsed;
       } else if (p.name === "URL") {
         const cleaned = unescapeVCard(val).trim();
-        if (/^https?:\/\//i.test(cleaned)) links.push(cleaned);
+        if (webLink(cleaned)) links.push(cleaned);
       } else if (p.name === "CATEGORIES") {
         for (const c of splitVCardEscaped(val, ",").map((x) => unescapeVCard(x).trim()).filter(Boolean)) groups.push(c);
       } else if (p.name === "X-PARACHUTE-TAGS") {
@@ -787,8 +792,6 @@ function matchVCardContact(card: VCardContact, people: readonly PersonRecord[]):
 
 /** A folder's page: 50, the most the app gives. */
 const FOLDER_PAGE = 50;
-/** Each page starts this many rows back, so up to this many records deleted behind it while it reads push none past it. */
-const FOLDER_OVERLAP = 5;
 
 /** The people as listed, with bodies for those a card's note would merge into: so the preview says truly what will
  *  change without reading every person's notes. Each is read alone, or the folder in pages when that is fewer reads. */
@@ -807,7 +810,8 @@ async function withBodiesForCards(
   if (!want.size) return [...people];
   const bodies = new Map<string, string>();
   if (want.size <= Math.ceil(people.length / FOLDER_PAGE)) {
-    for (const id of want) { const r = await readOne(id); if (r) bodies.set(id, r.body ?? ""); }
+    // one gone since the list was read: its body stays unknown, and the preview says it will merge
+    for (const id of want) { const r = await readOne(id).catch(() => null); if (r) bodies.set(id, r.body ?? ""); }
   } else {
     for (const r of await readAll()) if (want.has(r.id)) bodies.set(r.id, r.body ?? "");
   }
@@ -816,7 +820,9 @@ async function withBodiesForCards(
 
 /** Every record a folder query finds, in pages of a stable order: oldest made first, so a record changed while it reads
  *  moves nowhere and a new one lands at the end. Then one page newest-changed first, so a record changed while it read
- *  comes in its newest version. A hub that can't order by when a record was made (0.8) is read newest-changed first. */
+ *  comes in its newest version. A hub that can't order by when a record was made (0.8) is read newest-changed first.
+ *  Each page asks for the offset the last one ended at: the app goes on reading from there (and a record removed
+ *  behind it moves none past it), so thousands cost one read a page, not a read of everything before it. */
 async function readFolder(query: (q: Record<string, unknown>) => Promise<PersonRecord[]>, base: Record<string, unknown>): Promise<PersonRecord[]> {
   const byId = new Map<string, PersonRecord>();
   const keep = (r: PersonRecord) => {
@@ -824,7 +830,7 @@ async function readFolder(query: (q: Record<string, unknown>) => Promise<PersonR
     if (!had || (r.updatedAt ?? "") >= (had.updatedAt ?? "")) byId.set(r.id, r);
   };
   let stable = true;
-  for (let offset = 0; ; offset += FOLDER_PAGE - FOLDER_OVERLAP) {
+  for (let offset = 0; ; offset += FOLDER_PAGE) {
     let rows: PersonRecord[];
     try {
       rows = await query({ ...base, ...(stable ? { orderBy: "created_at", sort: "asc" } : {}), limit: FOLDER_PAGE, offset });
@@ -966,7 +972,7 @@ function exportVCard(people: readonly PersonRecord[], photosById?: Map<string, V
     }
 
     for (const u of pf.links) {
-      if (/^https?:\/\//i.test(u)) lines.push(`URL:${u}`);
+      if (webLink(u)) lines.push(`URL:${u}`);
     }
 
     if (pf.groups.length) {
@@ -1449,6 +1455,7 @@ export default function People() {
       const files = await app.pick({ accept: ".vcf,text/vcard,text/x-vcard", multiple: false });
       const file = files[0];
       if (!file) return;
+      setVcfBusy(true);
       const text = new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(file.bytes));
       const parsed = parseVCard(text);
       if (!parsed.length) {
@@ -1490,6 +1497,8 @@ export default function People() {
       setVcfPlan({ fileName: file.name, rows });
     } catch (e) {
       toast(`Could not read .vcf file: ${e instanceof Error ? e.message : String(e)}`, { error: true });
+    } finally {
+      setVcfBusy(false);
     }
   };
 
@@ -1879,7 +1888,8 @@ export default function People() {
       kicker={kicker}
       aside={
         <>
-          <Button small onClick={() => setVcfOpen(true)}>vCard</Button>
+          {/* contacts in and out match against everyone: only once everyone is listed */}
+          <Button small disabled={people === null || !!error} onClick={() => setVcfOpen(true)}>vCard</Button>
           <Button kind="primary" small onClick={() => { setNewDraft(EMPTY_NEW); setAddOpen(true); }}>Add</Button>
         </>
       }

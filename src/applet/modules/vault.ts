@@ -92,6 +92,9 @@ type AttachFromParams = { noteId: string; from: string; path: string };
 /** One refusal for a record outside the folders, one it can't find and a file not attached to it: none tells it more. */
 const notAttached = () => new ContractError(ERROR_CODES.outOfScope, "only a picture attached to a record it reads");
 type FetchParams = { method: string; path: string; headers: Record<string, string>; body: string | null };
+/** A list read in pages: its words, the offset its last page ended at, where the hub was read to, the notes it kept past
+ *  that page, and every note it has seen (each is listed once). */
+type Resume = { next: number; at: number; ahead: (VaultNote & { path: string })[]; seen: Set<string>; time: number };
 
 const MAX_BODY = 512 * 1024;
 const NOTE_TTL_MS = 10_000;
@@ -113,6 +116,8 @@ const MAX_OFFSET = 5_000;
 const HUB_PAGE = 200;
 const HUB_PAGE_FULL = 50;
 const EXTRA_PAGES = 3;
+/** A list going on from where its last page stopped reads this many of the hub's rows again first. */
+const RESUME_BACK = 5;
 /** What a list may be ordered by: when it was made or changed, or a field (never link_count: it counts links to notes
  *  outside the folders). */
 const orderable = (v: string) => v === "updated_at" || v === "created_at" || (/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(v) && v !== "link_count");
@@ -193,6 +198,9 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
   /** Each note's attachments as the hub listed them in the last 10 s: a note's pictures ask once, not once each. */
   const lists = attachmentLists((id) => deps.attachments!(id));
   const cache = new Map<string, { at: number; note: VaultNote }>();
+  /** Where each list read in pages stopped (one folder, no search; the last few lists), kept 10 s: its next page goes on
+   *  from there. */
+  const resumes = new Map<string, Resume>();
   const remember = (key: string, note: VaultNote) => {
     cache.delete(key);
     cache.set(key, { at: now(), note });
@@ -227,6 +235,10 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
    *  the hub: the hub's folder is a case-blind string prefix (and a tag takes in its subtypes), so its limit and offset
    *  would count notes the applet never sees, and where a page ends would tell of them. It reads the hub's pages until
    *  it has offset + limit of its own (a bounded number), and is charged by what was asked, not by how many it read.
+   *  A list read in pages (one folder, no search) goes on where its last page stopped, when the next asks for the offset
+   *  that page ended at, with the same words, within 10 s: the hub is read on from there (a few rows back, for a note
+   *  removed meanwhile), not again from its first row, and it is charged for the page it asked for. What it hands back
+   *  is the same either way.
    *  Ordering by a field takes one folder (path_prefix, or a grant of one): two folders' fields can't be put together. */
   async function hubList(q: URLSearchParams, prefixes: string[], granted: string[], limit: number, content: boolean, ctx: CallCtx, d: Reads): Promise<FetchResult> {
     if (!d.query) return fail(400, "bad_params");
@@ -259,18 +271,27 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     // a list's page with bodies or links is smaller (what the hub sends for it is bigger)
     const later = !!search && (content || links);
     const size = !later && (content || links) ? HUB_PAGE_FULL : HUB_PAGE;
-    const pages = search ? 1 : Math.ceil(want / size);
-    const seen = new Set<string>();
+    // the last page of this same list ended at this offset, a moment ago: go on from there
+    const key = prefixes.length === 1 && !search ? JSON.stringify([prefixes[0], tag, content, links, orderBy, sort, meta, d === deps.kept]) : null;
+    const last = key !== null ? resumes.get(key) : undefined;
+    if (key !== null) resumes.delete(key);
+    const go = last && last.next === offset && now() - last.time < NOTE_TTL_MS ? last : null;
+    /** Where `mine` starts in its own list: 0, or the offset it goes on from. */
+    const from = go ? offset : 0;
+    const pages = search ? 1 : Math.ceil((want - from) / size);
+    const seen = go?.seen ?? new Set<string>();
     const out: (VaultNote & { path: string })[] = [];
     try {
       for (const p of prefixes) {
         ctx.charge(pages);
-        const mine: (VaultNote & { path: string })[] = [];
+        const mine: (VaultNote & { path: string })[] = go ? [...go.ahead] : [];
         // a few pages more than asked, for the notes the judging drops; then what it has
         // (past EXTRA_PAGES of notes it drops ahead of the last one asked for, a page comes back short, and a search's past
         // HUB_PAGE less its limit; and a note changed
         // while it reads moves to the front, so one other may be missed: a list read in pages, as any is)
-        for (let at = 0, read = 0; mine.length < want && read < pages + EXTRA_PAGES; read++) {
+        // going on: from a few of the hub's rows back, so a note removed behind it moves none past it (each listed once)
+        let at = go ? Math.max(0, go.at - RESUME_BACK) : 0;
+        for (let read = 0; from + mine.length < want && read < pages + EXTRA_PAGES; read++) {
           // a search too is asked for a whole page and cut after judging: the hub ranks it and drops offset, never limit
           const rows = await d.query(p, { limit: size, offset: at, tag, search: search || null, content: content && !later, links: links && !later, orderBy, sort, meta });
           at += rows.length;
@@ -280,7 +301,11 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
           }
           if (search || rows.length < size) break;
         }
-        out.push(...mine.slice(0, want));
+        out.push(...mine.slice(0, want - from));
+        if (key !== null) {
+          resumes.set(key, { next: want, at, ahead: mine.slice(want - from), seen, time: now() });
+          while (resumes.size > 4) resumes.delete(resumes.keys().next().value as string);
+        }
       }
     } catch (e) {
       if (e instanceof ContractError) throw e;
@@ -294,7 +319,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       out.sort((a, b) => dir * ((a[key] ?? "").localeCompare(b[key] ?? "") || a.id.localeCompare(b.id)));
     }
     // bodies and links read one by one after a search: at most maxScan of them, as a search with bodies always was
-    let page = out.slice(offset, later ? Math.min(want, offset + LIMITS.maxScan) : want);
+    let page = out.slice(offset - from, (later ? Math.min(want, offset + LIMITS.maxScan) : want) - from);
     if (later) {
       const full: (VaultNote & { path: string })[] = [];
       for (const n of page) {

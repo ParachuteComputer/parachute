@@ -373,6 +373,38 @@ describe("the hub's query words, kept to the folders", () => {
     expect(JSON.parse(without[12])).toHaveLength(20);
   });
 
+  it("a list read in pages goes on where its last page stopped: the hub read through once, the same notes as from the start", async () => {
+    for (let i = 0; i < 300; i++) notes.push({ id: `b${String(i).padStart(3, "0")}`, path: `Recipes/Bulk ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    // and one the hub counts that isn't the folder's (case-blind): it must move no page's edge
+    notes.push({ id: "b-hidden", path: "recipes/Bulk hidden", content: "", tags: [], updatedAt: "2026-11-01", createdAt: "2026-10-01T00:02:30Z" });
+    const words = "order_by=created_at&sort=asc&include_links=true&limit=50";
+    const ids = (r: { body: { id: string }[] }) => r.body.map((n) => n.id);
+    // each page from the start, in a frame of its own: what it must hand back
+    const want: string[][] = [];
+    for (let o = 0; o < 350; o += 50) want.push(ids(await frameOn(hub).get(`/api/notes?${words}&offset=${o}`)));
+    asked = [];
+    const f = frameOn(hub);
+    const got: string[][] = [];
+    for (let o = 0; o < 350; o += 50) got.push(ids(await f.get(`/api/notes?${words}&offset=${o}`)));
+    expect(got).toEqual(want);
+    expect(got.flat()).not.toContain("b-hidden");
+    // a page of links is 50 of the hub's: read through once (a few rows back each time), not again from the first
+    expect(asked.length).toBeLessThanOrEqual(8);
+    expect(asked.slice(1).every((a, i) => a.q.offset > asked[i].q.offset)).toBe(true);
+    // an offset its last page didn't end at reads from the start again
+    asked = [];
+    await f.get(`/api/notes?${words}&offset=100`);
+    expect(asked[0].q.offset).toBe(0);
+    // notes removed behind it while it reads: the next page is still the one after the last it handed back, none missed
+    const g = frameOn(hub);
+    const first = ids(await g.get(`/api/notes?${words}&offset=0`));
+    await g.get(`/api/notes?${words}&offset=50`);
+    for (const id of first.slice(10, 13)) notes.splice(notes.findIndex((n) => n.id === id), 1);
+    asked = [];
+    expect(ids(await g.get(`/api/notes?${words}&offset=100`))).toEqual(want[2]);
+    expect(asked.length).toBeGreaterThan(0);
+  });
+
   it("two folders: newest changed first unless asked, put together as the hub orders each", async () => {
     const two = parseManifest({ ...RECIPES, access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }, { path: "Soups/", verbs: ["read"] }] }] });
     if (!two.ok) throw new Error(two.error);

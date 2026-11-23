@@ -82,10 +82,12 @@ A group could be either a list field on each person (`fields.groups: string[]`) 
 ## Thousands of people
 
 The list reads `People/` in pages of 50, oldest made first (`orderBy: "created_at"`), so a person changed while it
-reads moves nowhere and a new one lands at the end; each page starts five rows back, so a person deleted behind it
-pushes none past it. Then one page newest-changed first brings in anyone changed while it read. A 0.8 hub, which
-can't order by when a record was made, is read newest-changed first. The app pages up to an offset of 5,000, so the
-list holds about 5,000 people at most.
+reads moves nowhere and a new one lands at the end. Each page asks for the offset the last one ended at, so the app goes
+on reading from there (a few rows back, so a person deleted meanwhile pushes none past it) instead of reading everyone
+before it again: one read a page. Then one page newest-changed first brings in anyone changed while it read. A 0.8 hub,
+which can't order by when a record was made, is read newest-changed first. The app pages up to an offset of 5,000, so
+the list holds about 5,000 people at most. vCard in and out wait until everyone is listed, so an import never misses a
+match.
 
 ## vCard (`.vcf`) import and export
 
