@@ -132,10 +132,10 @@ Parachute's own applets keep their notes, and 5 changes what an approval holds. 
      ticked. Parachute's own (no card): a line the shell draws over it, as in 4: *Vault reaches **kitchen** · Change*.
      It doesn't block; the applet opens on the home, and Change opens the ticks. The ticks list every vault this device
      knows of on your hubs; one shared with you is marked *someone else's*. Journal and Capture keep notes in one vault,
-     so for them it is one choice, not ticks. With one vault, nothing is asked and no pick is signed: no pick means the
-     home. There is no "all": a vault added later is in no pick until you tick it. Ticking a vault the device doesn't
-     hold asks its hub for it, one page (`askVault`): read for the cross-vault words (write comes later, as now, through
-     the write ask), write for Journal and Capture.
+     so for them it is one choice, not ticks. With one vault, nothing is asked and no pick is signed. No pick means the
+     home, and for an applet with a card its own vault too. There is no "all": a vault added later is in no pick until
+     you tick it. Ticking a vault the device doesn't hold asks its hub for it, one page (`askVault`): read for the
+     cross-vault words (write comes later, as now, through the write ask), write for Journal and Capture.
    - **Where the pick lives: in the signed approval.** The approval gets `vaults: [{hub, vault}]`. The other places, and
      why not:
      - *the applet's record*: it is the author's, one record for everyone who runs it (in someone else's vault, or
@@ -152,13 +152,13 @@ Parachute's own applets keep their notes, and 5 changes what an approval holds. 
        anchor (then it reads the signed ones, as it reads approvals now).
      - What this gives up from 4: an agent can no longer set where Journal keeps its notes. It can tell you, and you
        change it.
-   - **The approval's hash.** The signature is what holds the pick: a device reads the pick from the approval it checks,
-     never from a copy of its own. The pick also goes into the asks' hash, only when there is one (as `left` does). That
-     is for older builds: they hash without it, so a picked approval doesn't count there. An approval with no pick
-     hashes as today, so every other applet's approval holds. On a new build, an approval made before still counts but
-     holds no pick, so the applet reaches the home alone until you pick. Today the device takes the hash before it reads
-     the approval (`AppletScreen.tsx` `approvalFor`); that order has to change. This is the contract change, so it is a
-     design only.
+   - **The approval's hash.** The signature is what holds the pick: a device that checks approvals reads the pick from
+     the approval it checks, never from a copy of its own. The pick also goes into the asks' hash, only when there is
+     one (as `left` does). That is for older builds: they hash without it, so a picked approval doesn't count there. An
+     approval with no pick hashes as today, so every other applet's approval holds. On a new build, an approval made
+     before still counts but holds no pick, so the applet reaches the home (and its own vault) until you pick. Today the
+     device takes the hash before it reads the approval (`AppletScreen.tsx` `approvalFor`); that order has to change.
+     This is the contract change, so it is a design only.
    - **Older builds, plainly.** An older build doesn't know picks. There Parachute's own Vault, Notes, Connect and Home
      (no card) still reach every vault that device holds; only updating the app ends that, and the release notes should
      say so. For an applet with a card, the two builds undo each other: a pick made on a new device ends the old
@@ -178,12 +178,13 @@ Parachute's own applets keep their notes, and 5 changes what an approval holds. 
      `shell/vaultsDeps.ts`, whose `list` and `hubs` both read every vault held today; both are cut to the pick. Every
      call that names a vault goes through `held()` (`modules/vaults.ts`), so it refuses any other, with *not one of the
      vaults you gave it*; `sharing` is in the same module and is cut the same way. `recent` and `changes`
-     (`shell/appDeps.ts`) read the picked vaults only, and so does `open` when it checks whether a link leads to a note.
-     A tap on a link into another vault still opens it, since the shell opens it, not the applet. Journal's and
-     Capture's `here` is the picked vault (`/v/<it>/a/parachute:journal`). A change of pick ends the applet's session
-     and starts it on the new pick, so nothing it kept reaches a vault taken away. The hub does nothing new now (one
-     token per vault; the shell makes every call). In 1.0 the shell asks a vault for a token *as applet* only where it
-     is picked, so each vault's list of grants shows *Vault* only in the vaults you gave it.
+     (`shell/appDeps.ts`) read the picked vaults only, and so does `open` when it checks whether a link leads to a note
+     (`links`). A tap (`follow`) still resolves against every vault held, so a link into another vault opens; the applet
+     learns only whether that tap opened something. Journal's and Capture's `here` is the picked vault
+     (`/v/<it>/a/parachute:journal`). A change of pick ends the applet's session and starts it on the new pick, so
+     nothing it kept reaches a vault taken away. The hub does nothing new now (one token per vault; the shell makes
+     every call). In 1.0 the shell asks a vault for a token *as applet* only where it is picked, so each vault's list of
+     grants shows *Vault* only in the vaults you gave it.
    - **Changing it.** Settings → Applets: *Vault reaches kitchen and letters · Change*. The long-press offers the same.
      The applet can ask too, during a tap: `vaults.ask()` (new) opens the shell's own sheet; the applet learns what you
      picked, never the list you picked from, and can't set it. Each change signs a new approval, so every device follows
