@@ -1,8 +1,14 @@
 name: Mac
 # The Mac app for Apple Silicon: the shell's tests on macOS (the key in the real Keychain, pairing, the hub's key door),
-# then the app built, ad-hoc signed (no Apple account yet), installed from its dmg the way docs/INSTALL-MAC.md says,
-# started, and signed in to a throwaway hub with a key, driven as a person would. The dmg and the .app.tar.gz are this
-# run's artifact; the screenshots are `mac-smoke`. The release workflow builds through this one too.
+# then the app built, installed from its dmg the way docs/INSTALL-MAC.md says, started, and signed in to a throwaway hub
+# with a key, driven as a person would. The dmg and the .app.tar.gz are this run's artifact; the screenshots are
+# `mac-smoke`. The release workflow builds through this one too.
+#
+# Signed: a build of next, a release or a run by hand is signed with the Developer ID certificate and notarised (the app
+# and the dmg, each stapled) when all five Apple secrets are set: APPLE_CERTIFICATE (the .p12, base64),
+# APPLE_CERTIFICATE_PASSWORD, APPLE_API_KEY (the App Store Connect key's id), APPLE_API_ISSUER (its issuer id) and
+# APPLE_API_KEY_P8 (the .p8 file's text). With none of them, and on every pull request, it is ad-hoc signed as before
+# (macOS asks once: docs/INSTALL-MAC.md). Some but not all is an error. docs/STORES.md
 permissions:
   contents: read
 on:
@@ -17,6 +23,17 @@ on:
       - "design/**"
   workflow_dispatch:
   workflow_call:
+    secrets:
+      APPLE_CERTIFICATE:
+        required: false
+      APPLE_CERTIFICATE_PASSWORD:
+        required: false
+      APPLE_API_KEY:
+        required: false
+      APPLE_API_ISSUER:
+        required: false
+      APPLE_API_KEY_P8:
+        required: false
 
 defaults:
   run:
@@ -48,11 +65,46 @@ jobs:
           cargo test --locked --manifest-path src-tauri/Cargo.toml
           cargo build --locked --manifest-path src-tauri/Cargo.toml --example pair_send
           echo "PAIR_SEND=$PWD/src-tauri/target/debug/examples/pair_send" >> "$GITHUB_ENV"
-      - name: Build the app (ad-hoc signed)
-        # a build of next looks for newer ones at the repository's update feed, when it has one (src-tauri/src/updates.rs)
+      - name: Signed, or ad-hoc
+        id: sign
+        env:
+          APPLE_CERTIFICATE: ${{ github.event_name != 'pull_request' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ github.event_name != 'pull_request' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_ISSUER: ${{ github.event_name != 'pull_request' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_API_KEY_P8: ${{ github.event_name != 'pull_request' && secrets.APPLE_API_KEY_P8 || '' }}
+        run: |
+          have=0
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_P8; do [ -n "${!v}" ] && have=$((have+1)); done
+          if [ "$have" = 0 ]; then
+            echo "signed=" >> "$GITHUB_OUTPUT"
+            echo "Ad-hoc signed: no Apple secrets here (or a pull request)." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$have" = 5 ]; then
+            # the key file where notarytool and Tauri read it, outside the checkout; removed after the build
+            dir="$RUNNER_TEMP/apple" && mkdir -p "$dir" && chmod 700 "$dir"
+            printf '%s\n' "$APPLE_API_KEY_P8" > "$dir/AuthKey_$APPLE_API_KEY.p8" && chmod 600 "$dir/AuthKey_$APPLE_API_KEY.p8"
+            echo "APPLE_API_KEY_PATH=$dir/AuthKey_$APPLE_API_KEY.p8" >> "$GITHUB_ENV"
+            echo "signed=1" >> "$GITHUB_OUTPUT"
+            echo "Signed with the Developer ID certificate and notarised." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::$have of the five Apple secrets are set: set all of APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_API_KEY, APPLE_API_ISSUER and APPLE_API_KEY_P8, or none (docs/STORES.md)."
+            exit 1
+          fi
+      - name: Build the app (${{ steps.sign.outputs.signed && 'Developer ID, notarised' || 'ad-hoc signed' }})
+        # a build of next looks for newer ones at the repository's update feed, when it has one (src-tauri/src/updates.rs).
+        # Signed: Tauri imports the certificate into a keychain of its own, signs the app with the hardened runtime
+        # (Entitlements.plist), notarises and staples it, and signs the dmg; any "Developer ID Application" identity in
+        # the certificate is the one.
         env:
           PARACHUTE_UPDATE_FEED: ${{ github.event_name != 'pull_request' && secrets.PARACHUTE_UPDATE_FEED || '' }}
-        run: npx tauri build --ci && scripts/no-test-signer.sh dist
+          APPLE_CERTIFICATE: ${{ steps.sign.outputs.signed && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ steps.sign.outputs.signed && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ steps.sign.outputs.signed && 'Developer ID Application' || '' }}
+          APPLE_API_KEY: ${{ steps.sign.outputs.signed && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_ISSUER: ${{ steps.sign.outputs.signed && secrets.APPLE_API_ISSUER || '' }}
+        run: |
+          [ -n "$APPLE_SIGNING_IDENTITY" ] || unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_PATH
+          npx tauri build --ci && scripts/no-test-signer.sh dist
       - name: Name the files
         id: files
         run: |
@@ -62,7 +114,20 @@ jobs:
           cp "$bundle/dmg/Parachute_${version}_aarch64.dmg" out/
           tar -czf "out/Parachute_${version}_aarch64.app.tar.gz" -C "$bundle/macos" Parachute.app
           echo "dmg=out/Parachute_${version}_aarch64.dmg" >> "$GITHUB_OUTPUT"
+      # Tauri notarises the app; the dmg around it is notarised and stapled here, so it opens with no question even
+      # offline. Then both are checked as Gatekeeper sees a download.
+      - name: Notarise the dmg, and check both
+        if: steps.sign.outputs.signed
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: scripts/mac-notarise-dmg.sh "${{ steps.files.outputs.dmg }}" src-tauri/target/release/bundle/macos/Parachute.app
+      - name: Remove the App Store Connect key from the runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/apple"
       - name: Install from the dmg and start it (docs/INSTALL-MAC.md, as far as a runner can)
+        env:
+          PARACHUTE_MAC_SIGNED: ${{ steps.sign.outputs.signed }}
         run: scripts/mac-smoke.sh "${{ steps.files.outputs.dmg }}" mac-smoke
       # driven through accessibility, as a person would: a pasted, a new and a paired key, each into the Keychain; a key
       # sign-in on a hub on loopback through its consent page into the vault

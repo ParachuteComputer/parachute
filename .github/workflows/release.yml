@@ -38,9 +38,16 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/next || git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
             || { echo "tag $GITHUB_REF_NAME is on a commit that isn't on next or main" >&2; exit 1; }
 
+  # signed and notarised when the five Apple secrets are set (mac.yml); the update feed is never passed: a release has none
   mac:
     needs: check
     uses: ./.github/workflows/mac.yml
+    secrets:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
 
   android:
     needs: check
