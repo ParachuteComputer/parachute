@@ -93,6 +93,7 @@ import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
 import { inParachuteSpace, officialFace, officialNow, officialOf } from "../applet/parachuteSource";
 import { failureNow, settled, type Failure } from "../vault/failure";
+import { OtherHomes } from "./HomeChoice";
 import { siteOf } from "../vault/site";
 
 const grants = deviceGrants();
@@ -608,7 +609,9 @@ export default function AppletScreen() {
     return shell(<div className="card" role="alert">
       {loaded.failure === "offline"
         ? <><p>Parachute can't reach {rec.vault}{isHome ? ", your home vault," : ""} just now.{runs}</p>
-          <p className="small quiet">Its Parachute is {siteOf(rec.issuer)}.{isHome ? <> In <Link to="/settings">Settings</Link> you can make another vault your home.</> : null}</p></>
+          <p className="small quiet">Its Parachute is {siteOf(rec.issuer)}.{isHome ? <> In <Link to="/settings">Settings</Link> you can make another vault your home.</> : null}</p>
+          {/* the person's other vaults, one tap to make one home: one of Parachute's own then opens there */}
+          {isHome && <OtherHomes onChosen={() => setRecheck((n) => n + 1)} />}</>
         : <><p>{rec.vault} on {siteOf(rec.issuer)} wants you to sign in again.{runs}</p>
           <p className="small quiet"><Link to={`/add?hub=${encodeURIComponent(originOf(rec.issuer))}`}>Sign in again</Link>{isHome ? <>, or make another vault your home in <Link to="/settings">Settings</Link></> : null}.</p></>}
       <p><button type="button" className="quiet-button" onClick={() => void tryAgain(loaded.failure)}>Try again</button></p>
