@@ -438,6 +438,21 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
    *  which would publish without the sheet (core applySchemaDefaults). */
   const publishingTypes = async (vault: string) => new Set((await types(vault)).filter((t) => t.fields && Object.prototype.hasOwnProperty.call(t.fields, PUBLISH_FIELD) && (t.fields[PUBLISH_FIELD] as { default?: unknown })?.default !== undefined).map((t) => t.name));
   const namesFor = async (vault: string, shows = false) => typeNames.get(vault) ?? new Set((await types(vault, shows)).filter((t) => t.kind === "type").map((t) => t.name));
+  /** A record's attachments as the hub listed them in the last 10 s: a note's pictures ask once, not once each. */
+  const lists = new Map<string, { at: number; rows: Promise<unknown[]> }>();
+  const attachmentsOf = (vault: string, id: string, ctx: { charge(n: number): void }) => {
+    const key = `${vault} ${id}`, hit = lists.get(key);
+    if (hit && Date.now() - hit.at < 10_000) return hit.rows;
+    ctx.charge(1);
+    const rows = (async () => {
+      const raw = await deps.request(vault, "GET", `/${await deps.door(vault)}/${encodeURIComponent(id)}/attachments`);
+      return Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.attachments) ? raw.attachments as unknown[] : [];
+    })();
+    rows.catch(() => { if (lists.get(key)?.rows === rows) lists.delete(key); });
+    lists.set(key, { at: Date.now(), rows });
+    while (lists.size > 20) lists.delete(lists.keys().next().value as string);
+    return rows;
+  };
   /** Records a change found changed meanwhile: their next read for what shows is the hub's (the copy is from before). */
   const changedMeanwhile = new Set<string>();
   /** A record's GET for what shows: from what was read before, where the shell keeps it. */
@@ -515,22 +530,22 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         cap: null, validate: one((p) => (vaultOnly(["id", "path"])(p) && typeof p.id === "string" && ID.test(p.id) && typeof p.path === "string" ? p as { vault: string; id: string; path: string } : null)),
         // no more reach than `get`: a file the hub lists as attached to a record this device reads, under its sign-in
         async run({ vault, id, path }: { vault: string; id: string; path: string }, _s, ctx) {
-          held(vault); ctx.charge(2);
+          held(vault); ctx.charge(1);
           const want = storagePath(path);
           if (!want) throw refuse("only a file attached to the record");
           if (!deps.file) throw new ContractError(ERROR_CODES.notGranted, "this screen hands over no files");
-          let rows: unknown;
-          try { rows = await deps.request(vault, "GET", `/${await deps.door(vault)}/${encodeURIComponent(id)}/attachments`); } catch (e) { throw failed(e); }
-          const list: unknown[] = Array.isArray(rows) ? rows : plain(rows) && Array.isArray(rows.attachments) ? rows.attachments : [];
+          let list: unknown[];
+          try { list = await attachmentsOf(vault, id, ctx); } catch (e) { throw failed(e); }
           const att = list.find((a): a is Record<string, unknown> => plain(a) && a.path === want);
           if (!att) throw refuse("only a file attached to the record");
-          // only what a note draws, asked before it is read
+          // only what a note draws: listed as a picture before it is read, and served as one by the hub (the type it
+          // gives from the file's name: the listed one is whatever the attacher wrote)
           if (!DRAWN.test(mediaType(att.mimeType ?? att.mime_type) ?? "")) throw refuse("only a picture is handed over");
           let blob: Blob;
           try { blob = await deps.file(vault, want); } catch (e) { throw failed(e); }
+          const type = mediaType(blob.type);
+          if (!type || !DRAWN.test(type)) throw refuse("only a picture is handed over");
           if (blob.size > FILE_MAX) throw new ContractError(ERROR_CODES.tooLarge, "too_large: a file over 25 MB isn't handed over");
-          // the hub's type (from the file's name) before the one the attacher wrote
-          const type = [mediaType(blob.type), mediaType(att.mimeType ?? att.mime_type)].find((t) => t && DRAWN.test(t)) ?? "application/octet-stream";
           return { type, bytes: await blob.arrayBuffer() };
         },
       },

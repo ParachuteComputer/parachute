@@ -444,21 +444,23 @@ describe("vaults.importNotion: shell wiring for attachments and re-import", () =
 describe("vaults.file: a picture's bytes, only of a file attached to the record (docs/design/PICTURES.md)", () => {
   const OWL = "2026-11-22/1763-owl.png", OTHER = "2026-11-22/1764-letter.png";
   const make = (o: { words?: ("vaults" | "sharing")[]; file?: boolean; big?: boolean } = {}) => {
-    const fetched: string[] = [];
+    const fetched: string[] = [], listed: string[] = [];
     const deps = {
       list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "read", connector: "", view: null, reach: "anyone" }],
       door: async () => "records",
       // the hub's list of each record's attachments: Ideas has the owl, Letter (another record) has a letter
       async request(_v: string, method: string, path: string) {
+        listed.push(path);
+        if (method === "GET" && path === "/records/memo/attachments") return [{ id: "att6", path: "2026-11-22/1768-memo.webm", mimeType: "image/png" }];
         if (method === "GET" && path === "/records/ideas/attachments") return [{ id: "att1", path: OWL, mimeType: "image/png" }];
         if (method === "GET" && path === "/records/song/attachments") return [{ id: "att4", path: "2026-11-22/1766-song.png", mimeType: "image/jpeg" }, { id: "att5", path: "2026-11-22/1767-memo.webm", mimeType: "audio/webm" }];
         if (method === "GET" && path === "/records/letter/attachments") return [{ id: "att2", path: OTHER, mimeType: "image/png" }, { id: "att3", path: "2026-11-22/1765-tour.mp4", mimeType: "video/mp4" }];
         throw new Error("404 not found");
       },
-      ...(o.file === false ? {} : { file: async (_v: string, p: string) => { fetched.push(p); return new NodeBlob([new Uint8Array(o.big ? 25 * 1024 * 1024 + 1 : 4)], { type: "image/png" }); } }),
+      ...(o.file === false ? {} : { file: async (_v: string, p: string) => { fetched.push(p); return new NodeBlob([new Uint8Array(o.big ? 25 * 1024 * 1024 + 1 : 4)], { type: p.endsWith(".webm") ? "audio/webm" : "image/png" }); } }),
     } as unknown as VaultsDeps;
     const router = createRouter([createVaultsModule(o.words ?? ["vaults"], deps)]);
-    return { fetched, call: (params: unknown) => router.call("vaults", "file", params, {}, { charge() {}, closed: () => false }) as Promise<{ type: string; bytes: ArrayBuffer }> };
+    return { fetched, listed, call: (params: unknown) => router.call("vaults", "file", params, {}, { charge() {}, closed: () => false }) as Promise<{ type: string; bytes: ArrayBuffer }> };
   };
   it("hands over the bytes of a file the hub lists as the record's own, as its words link it", async () => {
     const { call, fetched } = make();
@@ -489,8 +491,15 @@ describe("vaults.file: a picture's bytes, only of a file attached to the record 
     await expect(call({ vault: "home", id: "song", path: "/api/storage/2026-11-22/1767-memo.webm" })).rejects.toMatchObject({ code: "out_of_scope" });
     expect(fetched).toEqual([]);
   });
-  it("says the hub's type before the one the attacher wrote", async () => {
+  it("says the hub's type, not the one the attacher wrote; one the hub serves as a sound is refused", async () => {
     expect((await make().call({ vault: "home", id: "song", path: "/api/storage/2026-11-22/1766-song.png" })).type).toBe("image/png");
+    await expect(make().call({ vault: "home", id: "memo", path: "/api/storage/2026-11-22/1768-memo.webm" })).rejects.toMatchObject({ code: "out_of_scope" });
+  });
+  it("a note's pictures ask for the record's list once", async () => {
+    const { call, listed } = make();
+    await Promise.all([call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}` }), call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}` })]);
+    await expect(call({ vault: "home", id: "ideas", path: `/api/storage/${OTHER}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(listed).toEqual(["/records/ideas/attachments"]);
   });
   it("reads a path as the words link it: decoded once, never out of storage", () => {
     expect(storagePath(`/api/storage/2026-11-22/caf%C3%A9.png`)).toBe("2026-11-22/café.png");

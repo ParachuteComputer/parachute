@@ -11,8 +11,8 @@ bytes.
   `vaults.file(vault, id, path)` returns a `Blob`.
 - The shell checks that it holds the vault. It then asks the hub for record `id`'s attachments
   (`GET /records/:id/attachments`, with this device's sign-in for that vault). `path` (as the words link it, or
-  `<date>/<file>`) must be one of them, listed as a picture (`image/*`). Only then does it read
-  the bytes from `/api/storage/<path>` and hand back `{type, bytes}`.
+  `<date>/<file>`) must be one of them, listed as a picture (`image/*`). Only then does it read the bytes from
+  `/api/storage/<path>`, and it hands back `{type, bytes}` only when the hub serves them as a picture too.
 - The kit's `Note` takes `fetchBlob(src)`. Vault gives it `src => vaults.file(vault, record.id, src)`. The renderer
   asks only for a `/api/storage/…` src, and draws the bytes from a `blob:` URL, which the frame's CSP already allows
   (`img-src data: blob:`).
@@ -36,9 +36,10 @@ because the person allowed `vaults` on its card. What it must not gain:
   `.svg`/`.html` uploads, and its storage sends `nosniff`.
 
 What's refused: an unknown vault (out_of_scope), an applet without `vaults` (not_granted), a path not attached to
-that record (out_of_scope), a file listed as anything but a picture (out_of_scope, before it is read), a
-record the hub can't find (failed), a file over 25 MB (too_large), and every call
-from a screen whose shell hands over no files (not_granted).
+that record (out_of_scope), a file listed as anything but a picture (out_of_scope, before it is read), one the hub
+serves as anything but a picture (out_of_scope: the listed type is whatever the attacher wrote, the hub's comes from
+the file's name), a record the hub can't find (failed), a file over 25 MB (too_large), and every call from a screen
+whose shell hands over no files (not_granted).
 
 ## No new reach, no contract change
 
@@ -49,13 +50,13 @@ Vault checks for it, so there a picture's name shows in its place, as before.
 ## Cache and size limits
 
 - 25 MB a file (the vault's own `FILE_MAX`). The hub's list gives no size, so a bigger one is refused after it is read,
-  and never handed over. A file listed as a sound, a video or a document is refused before it is read: a note draws none of them, and a voice
-  memo's bytes are more than drawing pictures needs. The list's type is what
-  the attacher wrote, so a big file listed as a picture is still read (up to the hub's own upload limit) before it is
-  refused.
-- Each call costs 2 of the frame's read budget (the list and the bytes). The kit waits up to 2 minutes for one.
-- No cache in the shell. Storage files never change (each upload gets a new name), and the renderer asks once per
-  picture per drawn view. It then holds the `blob:` URL and frees it when the view closes.
+  and never handed over. A file listed as a sound, a video or a document is refused before it is read: a note draws
+  none of them, and a voice memo's bytes are more than drawing pictures needs. The listed type is what the attacher
+  wrote, so a big file listed as a picture is still read (up to the hub's own upload limit) before it is refused.
+- A call costs 1 of the frame's read budget, and 1 more when it reads the record's list. The list is kept 10 s (20
+  records at most), so a note's pictures read it once. The kit waits up to 2 minutes for a call.
+- No cache of bytes in the shell. Storage files never change (each upload gets a new name), and the renderer asks
+  once per picture per drawn view. It then holds the `blob:` URL and frees it when the view closes.
 
 ## Not in this change
 
