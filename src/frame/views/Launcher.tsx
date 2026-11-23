@@ -12,7 +12,8 @@ import { Days } from "../../kit/parts";
 import { when } from "../../kit/when";
 import { appletPath } from "../../open/paths";
 
-/** Connect an AI: a setting (Settings → Your AI) and a first step (Start here), not an applet in the list. */
+/** Connect an AI: a setting (Settings → Your AI) and a first step (Start here), not an applet in the list. (Its address
+ *  is written out: the frame imports nothing of the shell's applet code, src/frame/boundary.test.ts.) */
 const CONNECT = "parachute:connect";
 
 /** A day inside a line of words: "today", "yesterday", "Monday, November 17". */
