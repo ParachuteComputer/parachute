@@ -222,8 +222,8 @@ fieldset.plain legend { padding: 0; }
 button.primary[aria-disabled="true"] { opacity: 0.5; }
 
 /* The bar (src/shell/BottomBar.tsx) is the tabs (docs/LOOK.md): one paper tab per place, hanging from the foot of the
-   page; the place you are in is the tab the colour of the page, joined to it. On a Mac they stand down the right edge,
-   a thumb index (below). */
+   page; the place you are in is the tab the colour of the page, joined to it. On a Mac they stand down the left edge,
+   a sidebar (below). */
 .home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; scroll-padding-inline-end: calc(96px + env(safe-area-inset-right)); justify-content: safe center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: var(--line-head); overflow-x: auto; }
 .home-bar-place { flex: 0 1 auto; min-width: 64px; max-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 8px 2px; color: var(--text); text-decoration: none; font-size: var(--fs-small); line-height: 1.2; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; -webkit-touch-callout: none; user-select: none; }
 .home-bar-glyph { font: var(--fs-head)/1 var(--serif); }
@@ -324,27 +324,32 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
   .launcher { padding: 28px 64px 32px; }
   .entry-glyph { width: 50px; height: 50px; }
 }
-/* a Mac (and a tablet on its side): the tabs stand down the right edge of the book, a thumb index; the foot is free */
+/* a Mac (and a tablet on its side): the places stand down the left edge, a sidebar the page is joined to (T-476, Aaron
+   11-23: "the styling on the left and right sides of the mac feels a bit awkward; like there's some strange sidebars");
+   the page takes the rest of the width, an applet all of it, and the foot is free */
 @media (min-width: 960px) {
-  :root { --bar-h: 0px; --index-w: 132px; }
-  .with-bar { padding-right: var(--index-w); }
-  .home-bar { top: 0; left: auto; width: var(--index-w); height: auto; flex-direction: column; justify-content: start; align-items: stretch; gap: 6px;
-    padding: 72px 0 env(safe-area-inset-bottom); overflow-x: hidden; overflow-y: auto; box-shadow: inset 1px 0 0 var(--line); }
-  .home-bar-place { flex: none; max-width: none; flex-direction: row; justify-content: start; gap: 10px; margin: 0 10px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-left: 0; border-radius: 0 12px 12px 0; font-size: var(--fs-body); }
-  .home-bar-place[aria-current="page"] { margin: 0 10px 0 -1px; padding: 10px 12px 10px 13px; }
+  :root { --bar-h: 0px; --index-w: 188px; }
+  .with-bar { padding-left: var(--index-w); }
+  .home-bar { top: 0; right: auto; width: var(--index-w); height: auto; flex-direction: column; justify-content: start; align-items: stretch; gap: 4px;
+    padding: 64px 0 env(safe-area-inset-bottom) env(safe-area-inset-left); overflow-x: hidden; overflow-y: auto; box-shadow: inset -1px 0 0 var(--line); }
+  .home-bar-place { flex: none; max-width: none; flex-direction: row; justify-content: start; gap: 10px; margin: 0 0 0 12px; padding: 9px 12px; border: 1px solid var(--line); border-right: 0; border-radius: 12px 0 0 12px; font-size: var(--fs-body); }
+  .home-bar-place[aria-current="page"] { margin: 0 -1px 0 12px; padding: 9px 13px 9px 12px; }
   .home-bar-glyph { font-size: var(--fs-lead); }
   .home-bar-badge { top: 4px; left: 28px; }
-  /* Settings at the foot of the index */
+  /* Settings at the foot of the sidebar */
   .home-bar { scroll-padding-block-end: 80px; }
   /* (:root: over Daylight's current tab, which sets its top margin) */
-  :root .home-bar .home-bar-settings, :root .home-bar .home-bar-settings[aria-current="page"] { position: sticky; right: auto; bottom: 16px; margin-top: auto; margin-bottom: 16px; box-shadow: 2px -6px 0 var(--desk), 2px 16px 0 var(--desk); }
+  :root .home-bar .home-bar-settings, :root .home-bar .home-bar-settings[aria-current="page"] { position: sticky; right: auto; bottom: 16px; margin-top: auto; margin-bottom: 16px; box-shadow: -2px -6px 0 var(--desk), -2px 16px 0 var(--desk); }
   /* (a width of its own: an iframe left at width auto between left and right is its default 300px) */
-  .with-bar .app-frame { right: calc(env(safe-area-inset-right) + var(--index-w)); left: env(safe-area-inset-left); width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right) - var(--index-w)); }
-  /* what sits along the foot (a newer build's line, the shell's passing line) stays beside the index, not under it */
-  .with-bar .update-line { right: var(--index-w); }
-  .with-bar .shell-line { left: calc((100% - var(--index-w)) / 2); }
-  :root[data-look="daylight"] .home-bar { box-shadow: inset 2px 0 0 var(--text); }
-  :root[data-look="daylight"] .home-bar-place { border: 2px solid var(--text); border-left: 0; }
+  .with-bar .app-frame { left: calc(env(safe-area-inset-left) + var(--index-w)); right: env(safe-area-inset-right); width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right) - var(--index-w)); }
+  /* an applet takes the whole page beside the sidebar: its own sky reaches both edges, and it sets its own measure */
+  .applet-screen { max-width: none; }
+  /* what sits along the foot (a newer build's line, the shell's passing line) stays beside the sidebar, not under it */
+  .with-bar .update-line { left: var(--index-w); }
+  .with-bar .shell-line { left: calc(var(--index-w) + (100% - var(--index-w)) / 2); }
+  :root[data-look="daylight"] .home-bar { box-shadow: inset -2px 0 0 var(--text); }
+  :root[data-look="daylight"] .home-bar-place { border: 2px solid var(--text); border-right: 0; }
+}
 }
 
 .swatches { display: flex; gap: 6px; margin: 6px 0; }

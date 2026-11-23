@@ -183,7 +183,7 @@ test("an applet that sets its own body margin and padding lays out exactly as in
   const id = await opened(page, "Applets/Own padding", "html", OWN_PADDING, "own-padding", "Own padding", "Recipes");
   try {
     expect(await frame(page).locator("#book").evaluate((b) => Math.round(b.getBoundingClientRect().left))).toBe(18);
-    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.setViewportSize({ width: 1460, height: 900 });
     await expect.poll(() => frame(page).locator("#book").evaluate((b) => Math.round(b.getBoundingClientRect().width))).toBe(1180);
   } finally { await api(hubState(), "DELETE", `notes/${id}`); }
 });
