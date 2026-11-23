@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "path": "Applets/Shelf",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "shelf",
+      "name": "Shelf",
+      "glyph": "▤",
+      "note": "a test applet bundled from several files: the books in Shelf/",
+      "access": [{ "vault": "here", "allow": [{ "path": "Shelf/", "verbs": ["read"] }] }]
+    },
+    "needs": 3
+  }
+}
