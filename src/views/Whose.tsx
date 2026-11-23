@@ -2,7 +2,8 @@
 // person. Making a vault count for more (mine, or trusted) is a card they read and a tap on its own button; making it
 // count for less is one tap.
 import { useState } from "react";
-import { hostOf, type VaultRecord } from "../vault/store";
+import type { VaultRecord } from "../vault/store";
+import { siteOf } from "../vault/site";
 import { askedAbout, setWhose, useWhose, type Whose } from "../vault/whose";
 import { applets, bundlesNow, effective, settingsNow } from "../shell/homeSettings";
 
@@ -13,7 +14,7 @@ export function whoseCard(v: Pick<VaultRecord, "vault" | "issuer">, to: Whose): 
   if (to === "mine") return { title: `Is ${v.vault} yours?`, act: `${v.vault} is mine`, lines: [
     `Its applets could then ask the app for things across your vaults (the titles of your newest notes, your bar, or every record in every vault, to read and change), if their card says so.`,
     `Its applets could show things from other Parachutes on their page, and it could be your home.`,
-    `Say so only for a vault that is yours, on a hub you trust (${hostOf(v.issuer)}).`] };
+    `Say so only for a vault that is yours, on a hub you trust (${siteOf(v.issuer)}).`] };
   if (to === "trusted") return { title: `Trust ${v.vault}?`, act: `Trust ${v.vault}`, lines: [
     `Code from ${v.vault} could then run inside your own applets, with everything they reach: your notes included.`,
     `Embedding is the safer way: it keeps ${v.vault}'s code in its own frame, seeing only ${v.vault}.`,
@@ -68,7 +69,7 @@ export function AskWhose({ vaults }: { vaults: VaultRecord[] }) {
     <div className="notice" role="status">
       <p>Are these yours? Until you say, Parachute treats them as someone else's: their applets can't ask the app for anything, show things from elsewhere, or open on start.</p>
       <ul className="plain">{asked.map((v) => (
-        <li key={v.key} className="line"><span><strong>{v.vault}</strong> <span className="quiet">on {hostOf(v.issuer)}</span></span>
+        <li key={v.key} className="line"><span><strong>{v.vault}</strong> <span className="quiet">on {siteOf(v.issuer)}</span></span>
           <span><button type="button" className="quiet-button" onClick={() => setMine(v)}>Mine</button>{" "}
             <button type="button" className="quiet-button" onClick={() => setWhose(v, "theirs")}>Someone else's</button></span></li>
       ))}</ul>

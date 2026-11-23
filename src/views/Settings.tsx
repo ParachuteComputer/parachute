@@ -215,8 +215,8 @@ export default function Settings({ children }: { children?: ReactNode }) {
           <AskWhose vaults={vaults} />
           {parachutes.length ? parachutes.map((p) => (
             <section key={p.hub} className="settings-parachute" aria-label={`Parachute: ${said(p, parachutes)}`}>
-              {/* its site beside its name when the name doesn't say it (never a port: plainwords.spec) */}
-              <h4>{p.home ? "Your Parachute" : said(p, parachutes)}{siteOf(p.hub) !== said(p, parachutes) && <span className="quiet small">{siteOf(p.hub)}</span>}</h4>
+              {/* its site beside its name, when it is called by a name (never a port: plainwords.spec) */}
+              <h4>{p.home ? "Your Parachute" : said(p, parachutes)}{(p.home || p.name !== p.host) && <span className="quiet small">{siteOf(p.hub)}</span>}</h4>
               {p.vaults.length ? <>
                 <p className="small quiet">{reachCount(p.vaults.length)}</p>
                 <ul className="plain vault-rows">{p.vaults.map((v) => <VaultRow key={v.key} v={v} />)}</ul>
