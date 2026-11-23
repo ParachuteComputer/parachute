@@ -6,14 +6,32 @@ import type { VaultDeps, VaultNote } from "./modules/vault";
 const row = (n: { id: string; path?: string | null; extension?: string | null; updatedAt?: string | null }) => ({ id: n.id, path: n.path ?? null, extension: n.extension ?? null, updatedAt: n.updatedAt ?? null });
 
 /** The reads, on a client. */
-const reads = (c: VaultClient): Pick<VaultDeps, "listPaths" | "getNote" | "search" | "listFields" | "list"> => ({
+const reads = (c: VaultClient): Pick<VaultDeps, "listPaths" | "getNote" | "search" | "listFields" | "list" | "query"> => ({
   listPaths: async () => (await c.queryNotes({ orderBy: "updated_at", sort: "desc", limit: 500 })).map((n) => row(n as never)),
-  getNote: async (ref) => { const n = await c.getNote(ref); if (!n) throw new Error("not found"); return n as VaultNote; },
+  getNote: async (ref, o) => { const n = await c.getNote(ref, o?.links ? { includeLinks: true } : {}); if (!n) throw new Error("not found"); return n as VaultNote; },
   search: async (query, limit, pathPrefix) => (await c.queryNotes({ search: query, limit: String(limit), ...(pathPrefix ? { path_prefix: pathPrefix } : {}) }))
     .map((n) => ({ id: n.id, path: n.path ?? null, snippet: "" })),
   // surface-client's typed words (pathPrefix, not path_prefix: a mix of the two drops the folder)
   listFields: async (prefix, limit) => (await c.queryNotes({ pathPrefix: prefix, includeMetadata: true, orderBy: "updated_at", sort: "desc", limit })).map((n) => n as VaultNote),
   // one ask for a folder's notes with a tag or their content (T-476: they were read one at a time, in a line)
+  // the hub's own query words, the folder pinned (the module checked each word, and judges each note it gets back);
+  // the wire's words as they are, in the order asked (meta[...] keys are the hub's grammar)
+  query: async (prefix, q) => {
+    const p = new URLSearchParams({ path_prefix: prefix, include_metadata: "true", limit: String(q.limit) });
+    if (q.offset) p.set("offset", String(q.offset));
+    if (q.tag) p.set("tag", q.tag);
+    if (q.search) p.set("search", q.search);
+    if (q.content) p.set("include_content", "true");
+    if (q.links) p.set("include_links", "true");
+    if (q.orderBy) p.set("order_by", q.orderBy);
+    if (q.sort) p.set("sort", q.sort);
+    for (const [k, v] of q.meta) p.append(k, v);
+    try { return (await c.queryNotes(p)).map((n) => n as VaultNote); } catch (e) {
+      // the hub refusing the words (0.8 orders only by an indexed field): said as a 400, for the module to pass on
+      if (/\bfailed \(400\)/.test(String((e as Error)?.message))) throw Object.assign(new Error("the hub refused the query"), { status: 400 });
+      throw e;
+    }
+  },
   list: async (prefix, o) => (await c.queryNotes({ ...(prefix ? { pathPrefix: prefix } : {}), ...(o.tag ? { tag: o.tag } : {}), includeMetadata: true, ...(o.content ? { includeContent: true } : {}), orderBy: "updated_at", sort: "desc", limit: o.limit })).map((n) => n as VaultNote),
 });
 

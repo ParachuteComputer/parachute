@@ -43,6 +43,9 @@ export const LIMITS = {
   maxHeaders: 20,
   /** A frame-fetch body: a written note's content rides in it, so it is most of the request (7 KB of the 8). */
   maxFetchBody: 7 * 1024,
+  /** A frame-fetch body sent as bytes beside the request (a long note's write, T-476), as a `vaults.create` carries
+   *  one: under the 512 KB a read answers (modules/vault.ts), so what is written can be read back. */
+  maxWriteBytes: 500 * 1024,
   /** Bytes a `services`, `app.save` or `vault.attach` call may carry beside its 8 KB (an upload, a request's body, a
    *  file): docs/design/SERVICES.md, KEYRING.md. */
   maxBytes: 25 * 1024 * 1024,
@@ -92,7 +95,7 @@ export function withinBudget(x: unknown, budget: { left: number }, depth = 0): b
 }
 
 const UNI_KEYS = ["uni", "id", "ns", "method", "params"];
-const PFR_KEYS = ["pfr", "channel", "id", "method", "path", "headers", "body"];
+const PFR_KEYS = ["pfr", "channel", "id", "method", "path", "headers", "body", "bytes"];
 const idOf = (x: unknown) => (typeof x === "string" && x.length >= 1 && x.length <= 64 ? x : null);
 
 /** Validate the envelope of one message from the frame. Never throws. */
@@ -106,7 +109,14 @@ export function parseEnvelope(raw: unknown): Envelope {
   const params = "uni" in raw && (raw.ns === "services" || raw.ns === "app" || raw.ns === "vault" || raw.ns === "storage" || raw.ns === "saved" || raw.ns === "vaults") && plain(raw.params) ? raw.params : null;
   const bytes = params && params.bytes instanceof ArrayBuffer ? params.bytes : null;
   if (bytes && bytes.byteLength > LIMITS.maxBytes) return bad(ERROR_CODES.tooLarge);
-  const measured = bytes ? { ...raw, params: { ...params, bytes: null } } : raw;
+  // a frame fetch's body may come as bytes (UTF-8 text) instead, outside the budget and capped on its own
+  // (an ArrayBuffer by its tag, as vaults.ts reads one: one made in the frame's realm is still one)
+  const pfrBytes = "pfr" in raw && raw.bytes !== undefined ? raw.bytes : undefined;
+  const isBuffer = Object.prototype.toString.call(pfrBytes) === "[object ArrayBuffer]";
+  // only a write carries a body
+  if (pfrBytes !== undefined && (!isBuffer || raw.body !== null || (raw.method !== "POST" && raw.method !== "PATCH"))) return bad(ERROR_CODES.badRequest);
+  if (isBuffer && (pfrBytes as ArrayBuffer).byteLength > LIMITS.maxWriteBytes) return bad(ERROR_CODES.tooLarge);
+  const measured = bytes ? { ...raw, params: { ...params, bytes: null } } : pfrBytes !== undefined ? { ...raw, bytes: null } : raw;
   if (!withinBudget(measured, { left: LIMITS.maxRequestBytes })) return bad(ERROR_CODES.tooLarge);
   if ("uni" in raw) {
     if (raw.uni !== CONTRACT_VERSION) return bad(ERROR_CODES.badVersion);
@@ -120,7 +130,11 @@ export function parseEnvelope(raw: unknown): Envelope {
     if (typeof raw.path !== "string" || !raw.path.startsWith("/") || raw.path.length > LIMITS.maxPath) return bad(ERROR_CODES.badRequest);
     if (!plain(raw.headers) || Object.keys(raw.headers).length > LIMITS.maxHeaders || !Object.values(raw.headers).every((v) => typeof v === "string")) return bad(ERROR_CODES.badRequest);
     if (raw.body !== null && (typeof raw.body !== "string" || raw.body.length > LIMITS.maxFetchBody)) return bad(ERROR_CODES.badRequest);
-    return { kind: "pfr", pfr: 1, channel: "vault", id, method: raw.method, path: raw.path, headers: raw.headers as Record<string, string>, body: raw.body as string | null };
+    let body = raw.body as string | null;
+    if (isBuffer) {
+      try { body = new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(pfrBytes as ArrayBuffer)); } catch { return bad(ERROR_CODES.badRequest); }
+    }
+    return { kind: "pfr", pfr: 1, channel: "vault", id, method: raw.method, path: raw.path, headers: raw.headers as Record<string, string>, body };
   }
   return bad(ERROR_CODES.badRequest);
 }

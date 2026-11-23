@@ -308,7 +308,11 @@ export const FRAME_KIT = String.raw`(function () {
       // a read while something draws again on onFresh may be answered from what the shell read before
       if (freshCbs.length && String(init.method || "GET").toUpperCase() === "GET") headers["x-parachute-redraws"] = "1";
       var id = "f" + (++n);
-      send(fetches, id, { pfr: 1, channel: "vault", id: id, method: String(init.method || "GET"), path: u.pathname + u.search, headers: headers, body: typeof init.body === "string" ? init.body : null }, 20000, res, rej, false);
+      var msg = { pfr: 1, channel: "vault", id: id, method: String(init.method || "GET"), path: u.pathname + u.search, headers: headers, body: typeof init.body === "string" ? init.body : null };
+      // a long body (a long note written) goes as bytes beside the request, past the 8 KB a request carries (its path and
+      // headers take some of those)
+      if (msg.body !== null && msg.body.length > 4000) { msg.bytes = new TextEncoder().encode(msg.body).buffer; msg.body = null; }
+      send(fetches, id, msg, 20000, res, rej, false);
     });
   }
   // In a srcdoc frame a bare "#section" link resolves against the *host's* URL, so the browser would navigate the
@@ -586,9 +590,16 @@ export const FRAME_KIT = String.raw`(function () {
     var renamed = function (o, map) { if (!o || typeof o !== "object") return o; var r = {}; Object.keys(o).forEach(function (k) { r[map[k] || k] = o[k]; }); return r; };
     var IN = { body: "content", fields: "metadata", includeBody: "includeContent", includeFields: "includeMetadata" };
     var OUT = { content: "body", metadata: "fields" };
-    var rec = function (n) { return renamed(n, OUT); };
+    // a link's ends are records too (includeLinks): their metadata is their fields
+    var end = function (e) { return e && typeof e === "object" ? renamed(e, OUT) : e; };
+    var rec = function (n) {
+      var r = renamed(n, OUT);
+      if (r && Array.isArray(r.links)) r.links = r.links.map(function (l) { return l && typeof l === "object" ? Object.assign(renamed(l, OUT), { sourceNote: end(l.sourceNote), targetNote: end(l.targetNote) }) : l; });
+      return r;
+    };
+    // orderBy, sort, offset, fields: {name: value | {op: value}} and includeLinks are the hub's own words, the folder kept
     vc.queryRecords = function (o) { return vc.queryNotes(renamed(o || {}, IN)).then(function (rows) { return Array.isArray(rows) ? rows.map(rec) : rows; }); };
-    vc.getRecord = function (id) { return vc.getNote(id).then(rec); };
+    vc.getRecord = function (id, o) { return vc.getNote(id, o && o.includeLinks ? { includeLinks: true } : {}).then(rec); };
     vc.createRecord = function (o) { return vc.createNote(renamed(o || {}, IN)).then(rec); };
     vc.updateRecord = function (id, o) { return vc.updateNote(id, renamed(o || {}, IN)).then(rec); };
     // a file onto a note it may change (the hub's upload and attach routes, through the shell); transcribe asks the
