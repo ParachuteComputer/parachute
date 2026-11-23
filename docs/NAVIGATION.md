@@ -1,6 +1,8 @@
 # How you move around the app
 
-One model, everywhere.
+One model, everywhere, and the one any phone app has: the bar's tabs switch places; a place scrolls; a tap on a row
+opens it; Back goes back; a chat keeps its box to write in pinned at the foot. Nothing is turned like a page
+([LOOK.md](LOOK.md)).
 
 ## The places
 

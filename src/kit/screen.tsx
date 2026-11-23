@@ -1,8 +1,8 @@
 // The kit's screen parts: what every applet had built for itself (docs/INVENTORY.md), now one each, drawn on the
 // theme's tokens and type scale (parts.css), so every applet looks and behaves the same. Like parts.tsx, every export
 // is a promise to applets written against it (docs/WRITE-AN-APPLET.md): add with care, never change a prop's meaning.
-//   Page      the applet's screen: a short run of pages you turn (pages.ts), its title in the sky, a way back, two
-//             columns (wide), pull to refresh; `scroll` for a page that scrolls instead
+//   Page      the applet's screen: a column that scrolls, its title in the sky, a way back, two columns (wide), pull to
+//             refresh; what you write in pinned at its foot (Write `dock`)
 //   Loading   the quiet line while something is read
 //   Problem   what went wrong, said once, with Try again
 //   Button    a button in the app's look: primary, plain or quiet
@@ -18,7 +18,6 @@ import "./parts.css";
 import { createContext, useContext } from "react";
 import { createPortal } from "react-dom";
 import { still, STILL_DRAG } from "./still";
-import { pages } from "./pages";
 
 type Recording = { bytes: ArrayBuffer; type: string; duration: number };
 type Rec = { id: string; updatedAt?: string | null };
@@ -43,16 +42,16 @@ const PULL = 64;
  *  `back` puts a way back above the title (from a room to the list: `{ label: "Matrix", onPress }`).
  *  `wide` for a page of two columns on a computer (an area: its notes beside its room); `className` is for the
  *  applet's own CSS on what is inside. */
-/** Where a page's docked parts go (a Write with `dock`): the strip under the pages, outside them. */
+/** Where a page's docked parts go (a Write with `dock`): the strip pinned at the page's foot. */
 const Dock = createContext<HTMLElement | null>(null);
-/** A frame drawn at its content's height (a page with embeds, an embed) never scrolls itself, nor turns. */
-// (the kit marks such a frame's root `data-sized`, frameKit.ts; the pages' own `overflow: hidden` is not this)
+/** A frame drawn at its content's height (a page with embeds, an embed) never scrolls itself. */
+// (the kit marks such a frame's root `data-sized`, frameKit.ts)
 const sizedFrame = () => typeof document !== "undefined" && document.documentElement.hasAttribute("data-sized");
 
-export function Page({ title, kicker, aside, back, onRefresh, wide, scroll, start, className, children }: { title?: ReactNode; kicker?: ReactNode; aside?: ReactNode; back?: { label: string; onPress: () => void }; onRefresh?: () => unknown; wide?: boolean;
-  /** a page that scrolls instead of turning: a long form, a board, something drawn edge to edge */ scroll?: boolean;
-  /** which page it opens on each time it is shown: the first (Home), or the last (a conversation: the newest). Left
-   *  out, it opens on the first and is where you left it when you come back. */ start?: "first" | "last"; className?: string; children?: ReactNode }) {
+export function Page({ title, kicker, aside, back, onRefresh, wide, start, className, children }: { title?: ReactNode; kicker?: ReactNode; aside?: ReactNode; back?: { label: string; onPress: () => void }; onRefresh?: () => unknown; wide?: boolean;
+  /** (every page scrolls now; kept for applets written when pages turned) */ scroll?: boolean;
+  /** where it opens each time it is shown: its top (Home), or its foot (a conversation: the newest). Left out, it is
+   *  where you left it when you come back. */ start?: "first" | "last"; className?: string; children?: ReactNode }) {
   const [pull, setPull] = useState(0);
   const [busy, setBusy] = useState(false);
   const refresh = useRef(onRefresh);
@@ -98,12 +97,37 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, scroll, star
     addEventListener("touchcancel", up);
     return () => { removeEventListener("touchstart", down); removeEventListener("touchmove", move); removeEventListener("touchend", up); removeEventListener("touchcancel", up); };
   }, [on]);
-  // the pages (pages.ts): not for a wide page, one that asked to scroll, or a frame sized to what it draws; nor for a page
-  // with no head of its own (no title, kicker, aside or back): a screen the applet lays out itself, as a room written
-  // before the pages did (its talk, and its box to write in at the foot of the screen), which pages would push sideways
-  const paged = !wide && !scroll && !sizedFrame() && !!(title || kicker || aside || back);
+  // what you write in (a Write with `dock`) is pinned at the page's foot: not in a frame drawn at its content's height,
+  // which has no foot of its own (there it sits in place)
   const [dock, setDock] = useState<HTMLElement | null>(null);
-  const top = <>
+  const sized = sizedFrame();
+  // the page ends above the strip, by its height (it grows as a line grows)
+  useLayoutEffect(() => {
+    const main = dock?.parentElement;
+    if (!dock || !main || typeof ResizeObserver !== "function") return;
+    const ro = new ResizeObserver(() => main.style.setProperty("--pa-dock-h", `${dock.offsetHeight}px`));
+    ro.observe(dock);
+    return () => ro.disconnect();
+  }, [dock]);
+  // shown again (the app keeps an applet running while the person is elsewhere): a place that opens somewhere opens
+  // there, its top (a home) or its foot (a conversation's newest); the first time, too
+  useLayoutEffect(() => {
+    if (!start || sized) return;
+    const root = document.documentElement;
+    // at its foot (a conversation): it stays there as more arrives, until the person scrolls up
+    let foot = start === "last";
+    const to = () => { foot = start === "last"; window.scrollTo(0, foot ? root.scrollHeight : 0); };
+    to();
+    const off = kit()?.onShown?.((on: boolean) => { if (on) to(); });
+    const scrolled = () => { foot = start === "last" && root.scrollHeight - scrollY - innerHeight < 48; };
+    const ro = start === "last" && typeof ResizeObserver === "function" ? new ResizeObserver(() => { if (foot) window.scrollTo(0, root.scrollHeight); }) : null;
+    // (the window itself shrinking, as the keyboard comes up, keeps the foot too)
+    const shrunk = () => { if (foot) window.scrollTo(0, root.scrollHeight); };
+    if (ro) { ro.observe(document.body); addEventListener("scroll", scrolled, { passive: true }); addEventListener("resize", shrunk); }
+    return () => { if (typeof off === "function") off(); ro?.disconnect(); removeEventListener("scroll", scrolled); removeEventListener("resize", shrunk); };
+  }, [start, sized]);
+  return (
+    <main className={`pa-page${wide ? " pa-wide" : ""}${className ? ` ${className}` : ""}`} data-start={start}>
       {on && (pull > 0 || busy) && <div className="pa-pull" style={{ height: busy ? PULL * 0.6 : pull * 0.6 }} role="status">{busy ? "Reading again…" : pull >= PULL ? "Let go to read again" : "Pull to read again"}</div>}
       {(title || kicker || aside || back) && (
         <header className="pa-page-head">
@@ -114,53 +138,47 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, scroll, star
           {aside && <div className="pa-page-aside">{aside}</div>}
         </header>
       )}
-  </>;
-  if (!paged) return <main className={`pa-page${wide ? " pa-wide" : ""}${className ? ` ${className}` : ""}`}>{top}{children}</main>;
-  return (
-    <main className={`pa-page pa-paged${className ? ` ${className}` : ""}`}>
-      <Book start={start ?? "first"} reopen={!!start} dock={setDock}>{top}<Dock.Provider value={dock}>{children}</Dock.Provider></Book>
+      <Dock.Provider value={sized ? null : dock}>{children}</Dock.Provider>
+      {!sized && <div className="pa-dock" ref={setDock} />}
     </main>
   );
 }
 
-/** What a Pages can be asked to do from code: show a thing's page, the last page, the first. */
+/** What a Pages can be asked to do from code: show a thing, the newest (its foot), where it opens. */
 export type PagesHandle = { toElement(el: Element): void; toEnd(): void; toStart(): void };
-/** The book (pages.ts): the pages, the dock under them when asked for, and the page line. */
-function Book({ start, reopen, dock, name, handle, children }: { start: "first" | "last"; reopen?: boolean; dock?: (el: HTMLElement | null) => void; name?: string; handle?: Ref<PagesHandle | null>; children?: ReactNode }) {
-  const book = useRef<HTMLDivElement>(null), flow = useRef<HTMLDivElement>(null), at = useRef<HTMLSpanElement>(null);
-  const prev = useRef<HTMLButtonElement>(null), next = useRef<HTMLButtonElement>(null);
-  const engine = useRef<ReturnType<typeof pages> | null>(null);
-  useLayoutEffect(() => {
-    if (!book.current || !flow.current || !at.current || !prev.current || !next.current) return;
-    const p = pages(book.current, flow.current, { at: at.current, prev: prev.current, next: next.current }, { start, name });
-    engine.current = p;
-    const h: PagesHandle = { toElement: (el) => p.toElement(el), toEnd: () => p.toEnd(), toStart: () => p.toStart() };
-    if (typeof handle === "function") handle(h); else if (handle) (handle as { current: PagesHandle | null }).current = h;
-    // shown again (the app keeps an applet running while the person is elsewhere): a place that opens on a page opens there
-    const off = reopen ? kit()?.onShown?.((on: boolean) => { if (on) p.toStart(); }) : undefined;
-    return () => { p.destroy(); engine.current = null; if (typeof off === "function") off(); if (typeof handle === "function") handle(null); else if (handle) (handle as { current: PagesHandle | null }).current = null; };
-  }, [start, reopen]); // eslint-disable-line react-hooks/exhaustive-deps
-  // the running heads' words, when they change (a room's name read, a thread opened)
-  useEffect(() => { engine.current?.setName(name); }, [name]);
-  return <>
-    <div className="pa-book" ref={book}>
-      <div className="pa-flow" ref={flow}>{children}<span className="pa-end" aria-hidden="true" /></div>
-    </div>
-    {dock && <div className="pa-dock" ref={dock} />}
-    <nav className="pa-pageline" aria-label="Pages">
-      <button type="button" ref={prev} className="pa-turn" aria-label="Previous page" hidden>‹</button>
-      <span ref={at} className="pa-at" aria-live="polite" />
-      <button type="button" ref={next} className="pa-turn" aria-label="Next page" hidden>›</button>
-    </nav>
-  </>;
-}
 
-/** Pages of their own inside a screen (a room's talk, between its head and what you write): what it holds, turned
- *  as a Page's pages are, filling the room its box gives it. `start="last"` opens on the newest and stays with it while
- *  you are there; `name` is said in the running head of every page after the first; `handle` turns to a thing's page
- *  from code (a message a notification opened). On an older app it is undefined: fall back to a box that scrolls. */
-export function Pages({ start = "first", name, handle, className, children }: { start?: "first" | "last"; name?: string; handle?: Ref<PagesHandle | null>; className?: string; children?: ReactNode }) {
-  return <div className={`pa-pages${className ? ` ${className}` : ""}`}><Book start={start} name={name} handle={handle}>{children}</Book></div>;
+/** A part of a screen that scrolls on its own (a room's talk, between its head and what you write), filling the room
+ *  its box gives it. `start="last"` opens at its foot (the newest) and stays there as more comes in while you are at
+ *  the foot; scrolled up to read, a new line doesn't move you. `handle` shows a thing from code (a message a
+ *  notification opened). (`name` was a running head's words, when places were pages; it is no longer drawn.) */
+export function Pages({ start = "first", handle, className, children }: { start?: "first" | "last"; name?: string; handle?: Ref<PagesHandle | null>; className?: string; children?: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null), flow = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    // following the foot: from the start for a conversation, and again whenever the person scrolls back down to it
+    let follow = start === "last";
+    const end = () => { el.scrollTop = el.scrollHeight; };
+    const opening = () => { follow = start === "last"; if (follow) end(); else el.scrollTop = 0; };
+    opening();
+    const h: PagesHandle = {
+      toElement: (t) => { follow = false; const r = t.getBoundingClientRect(), b = el.getBoundingClientRect(); el.scrollTop += r.top - b.top - el.clientHeight / 3; },
+      toEnd: () => { follow = true; end(); },
+      toStart: opening,
+    };
+    if (typeof handle === "function") handle(h); else if (handle) (handle as { current: PagesHandle | null }).current = h;
+    const scrolled = () => { follow = el.scrollHeight - el.scrollTop - el.clientHeight < 48; };
+    el.addEventListener("scroll", scrolled, { passive: true });
+    // what grows under it (a line arriving, a picture loading, the box shrinking as the keyboard comes up) keeps the foot
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(() => { if (follow) end(); }) : null;
+    ro?.observe(el);
+    if (flow.current) ro?.observe(flow.current);
+    return () => {
+      el.removeEventListener("scroll", scrolled); ro?.disconnect();
+      if (typeof handle === "function") handle(null); else if (handle) (handle as { current: PagesHandle | null }).current = null;
+    };
+  }, [start]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <div className={`pa-pages${className ? ` ${className}` : ""}`} ref={box}><div className="pa-pages-flow" ref={flow}>{children}</div></div>;
 }
 
 // ── Loading, Problem ──
@@ -298,7 +316,7 @@ export function Search({ label, placeholder, value, onChange, onSearch, live }: 
  *  it out as one line that grows as it is written in (a chat's composer). The text is yours (`value`, `onChange`):
  *  keep a draft with useSaved. No form submits (a sealed frame has none). */
 export function Write({ label, labelled, value, onChange, placeholder, onSend, send = "Save", sendLabel, canSend, busy, enter = "newline", line, dock, maxLength, inputRef, onKeyDown, children }: {
-  /** in the strip under the pages, outside them, so writing never turns the page (a page that scrolls: in place) */ dock?: boolean;
+  /** pinned at the page's foot, where a chat keeps its box: always in reach as the page scrolls under it */ dock?: boolean;
   label: string; /** the label shown above the box, as a Field's (else it is only said to a screen reader) */ labelled?: boolean; value: string; onChange: (v: string) => void; placeholder?: string;
   onSend?: () => void | Promise<unknown>; send?: ReactNode; /** what a screen reader calls the action, when `send` is short */ sendLabel?: string;
   /** whether there is something to send (a file with no words); else, whether there are words */ canSend?: boolean; busy?: boolean; enter?: "newline" | "send"; line?: boolean;

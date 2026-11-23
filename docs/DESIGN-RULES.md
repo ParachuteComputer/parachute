@@ -13,9 +13,9 @@ The kit already follows them, so most applets get them by using its parts and ad
    screen: Fraunces), `--serif` (names, headings, reading: Literata) and `--sans` (labels, buttons, the bar: Instrument
    Sans). The three faces come with the app, in every applet's frame; load no others. Labels in sentence case. **checked**
 3. **Space from the theme:** `--pad` around, `--gap` between. Content starts at the top of the screen: no empty hero,
-   no big gaps. Group with space and a rule (`--line`), not boxes inside boxes. A place is pages, not a scroll
-   ([LOOK.md](LOOK.md)): the kit's `Page` turns, what is written in sits under the pages (`Write dock`), and only a
-   long form or something drawn edge to edge scrolls (`<Page scroll>`). The sky is at the head of a place only;
+   no big gaps. Group with space and a rule (`--line`), not boxes inside boxes. A place scrolls, as on any phone
+   ([LOOK.md](LOOK.md)): the kit's `Page` holds the column, and what is written in is pinned at its foot (`Write
+   dock`). The sky is at the head of a place only;
    where you read, scan or write it is paper with hairlines, and coral is the one thing to do next.
 4. **Lines, corners and depth from the look**, never fixed: `--line-head` over a list, `--line-row` between rows,
    `--line-card` and `--radius-card` for a block that stands apart, `--field-line` and `--radius-field` for a box to
@@ -33,7 +33,7 @@ The kit already follows them, so most applets get them by using its parts and ad
    under the reader. **checked** (no `transition: all` either)
 8. **On the theme's curves and times only:** `--ease-out` (arriving, leaving), `--ease-in-out` (moving across the
    screen), `--ease-drawer` (a drawer); `--t-press` 160 ms, `--t-state` 200 ms, `--t-sheet` 300 ms, `--t-step` 40 ms (the kit does not delay its parts with it),
-   `--t-turn` 240 ms (a page turned by an arrow), `--t-swap` 150 ms (a room giving way to another in place). What each
+   `--t-swap` 150 ms (a room giving way to another in place). What each
    is for: [LOOK.md](LOOK.md), "Motion".
    **checked**
    The docs site has one more, `--t-settle` 640 ms, for its home page's drawing settling once. The app has no such

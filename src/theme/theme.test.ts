@@ -114,8 +114,7 @@ describe("motion (docs/DESIGN-RULES.md)", () => {
     const ms = (k: keyof typeof MOTION) => parseInt(MOTION[k], 10);
     expect(ms("t-state") + ms("t-step")).toBeLessThanOrEqual(250);
     expect(ms("t-press")).toBeLessThanOrEqual(200);
-    // moving between places and pages (docs/LOOK.md): a turn, a room giving way to another
-    expect(ms("t-turn")).toBeLessThanOrEqual(250);
+    // moving between places (docs/LOOK.md): a room giving way to another
     expect(ms("t-swap")).toBeLessThanOrEqual(150);
   });
 });

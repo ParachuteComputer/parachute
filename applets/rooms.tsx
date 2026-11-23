@@ -118,9 +118,9 @@ function swapOut() {
   ghost.removeAttribute("aria-label");
   ghost.style.cssText = `position: fixed; left: ${r.left}px; top: ${r.top}px; width: ${r.width}px; height: ${r.height}px; margin: 0; z-index: 5; pointer-events: none; background: var(--bg); transition: opacity var(--t-swap) var(--ease-out);`;
   document.body.appendChild(ghost);
-  // the copy shows the page the room was on
-  const from = el.querySelector<HTMLElement>(".pa-book"), to = ghost.querySelector<HTMLElement>(".pa-book");
-  if (from && to) to.scrollLeft = from.scrollLeft;
+  // the copy shows the talk where it was scrolled (a copy starts at its top)
+  const from = el.querySelector<HTMLElement>(".scroll"), to = ghost.querySelector<HTMLElement>(".scroll");
+  if (from && to) to.scrollTop = from.scrollTop;
   void ghost.getBoundingClientRect();
   ghost.style.opacity = "0";
   const gone = () => ghost.remove();
@@ -300,7 +300,7 @@ export default function Rooms() {
   // the held messages with their edits: the newest of anyone, and each editor's newest with no ask block (an ask's close)
   const seed = { msgs: [...held, ...[...s.edits.entries(), ...[...s.plain.entries()].map(([k, ed]) => [k.split(" ")[0], ed] as const)].filter(([t]) => heldIds.has(t)).map(([, ed]) => ed)], names: s.names, me: s.me };
   const place = { get: () => places.current.get(id) ?? null, set: (d: number | null) => { places.current.set(id, d); } };
-  // a room turns its own pages (its talk, room.tsx); the page around it doesn't
+  // a room scrolls its own talk (room.tsx), its box to write in at the foot; the page around it doesn't move
   const toRoom = (to: string) => { swapOut(); open(to); };
   const theRoom = <Room key={id + (view.event ?? "")} service="rooms" room={id} name={s.rooms.get(id)?.name} at={view.event} readAt={s.read[id] ?? 0} seed={seed} place={place}
       onRead={(latest: number) => markRead(id, latest)} onBack={() => setView({ at: "list" })} rooms={inOrder(s)} onRoom={toRoom} />;

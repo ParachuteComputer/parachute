@@ -11,7 +11,7 @@
 // from its bytes (docs/design/PICTURES.md). Give the record's `id` and the Note asks `vault.file(id, src)` by itself (the
 // applet's own vault); or give `fetchBlob` (Vault gives `vaults.file` for a record of any vault). Without either, or in
 // an app older than `vault.file`, the note shows the picture's name in its place. A web picture is never loaded.
-import { useCallback, useMemo, type MouseEvent } from "react";
+import { memo, useCallback, useMemo, type MouseEvent } from "react";
 import { NoteRenderer } from "@openparachute/surface-render/note";
 import type { WikilinkResolver } from "@openparachute/surface-render/markdown";
 import "@openparachute/surface-render/styles.css";
@@ -53,8 +53,10 @@ type Files = { file?(id: string, path: string): Promise<Blob> };
 /** The applet's own vault's `file`, where the app has one (an app before 11-23 has none). */
 const ownVault = () => { const v = (globalThis as unknown as { parachute?: { vault?: Files } }).parachute?.vault; return v && typeof v.file === "function" ? v as Required<Files> : null; };
 
-/** `tags` and `fields` (the record's) let it draw a typed note richly: a note tagged `recipe` as a recipe. */
-export function Note({ id, body, path, tags, fields, onLink, fetchBlob }: {
+/** `tags` and `fields` (the record's) let it draw a typed note richly: a note tagged `recipe` as a recipe. Drawn again
+ *  only when what it is given changes: a page that draws many notes (a journal) and re-renders on every key typed
+ *  above them doesn't parse each note again (T-476: typing showed late in a long journal). */
+export const Note = memo(function Note({ id, body, path, tags, fields, onLink, fetchBlob }: {
   /** The record's id in the applet's own vault: its attached pictures are drawn (vault.file). */
   id?: string; body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void;
   /** The bytes of a file the note links in the vault's storage, in place of `id`'s; keep it the same function between
@@ -124,4 +126,4 @@ export function Note({ id, body, path, tags, fields, onLink, fetchBlob }: {
       <NoteRenderer key={`${path ?? body}\n${wikis.size}`} note={note} format="markdown" rich calm resolve={resolve} onNavigate={tap} openLink={tap} fetchBlob={pictures} />
     </div>
   );
-}
+});

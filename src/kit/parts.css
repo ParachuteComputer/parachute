@@ -281,67 +281,24 @@ select.pa-finput { appearance: auto; }
   border: var(--line-card); border-radius: max(var(--radius-card), var(--radius)); box-shadow: none; transform: none; transition: none; animation: pa-in var(--t-state) var(--ease-out) both; }
 }
 
-/* The pages (pages.ts, docs/LOOK.md): a place is a short run of pages you turn. The page is the frame's height: the book
-   (a sideways scroller that snaps to whole pages), the dock under it (what you write in, outside the pages), and the
-   page line ("2 of 3" and the arrows). The flow lays the page's content into page-sized columns. */
+/* What you write in, pinned at the screen's foot (a Write with `dock`: Home's line, docs/LOOK.md), in the page's own
+   column, whatever is above it; the page ends that much higher (Page measures the strip: --pa-dock-h), so its last
+   row scrolls clear of it. The page's own layout is untouched. */
 @layer parachute.parts {
-:root:has(.pa-paged), :root:has(.pa-paged) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
-.pa-page.pa-paged { display: flex; flex-direction: column; max-width: none; height: 100dvh; margin: 0; padding: 0; overflow: hidden; }
-.pa-book { position: relative; flex: 1; min-height: 0; max-width: 100%; margin: 0 auto; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory;
-  overscroll-behavior-x: contain; scrollbar-width: none; touch-action: pan-x pinch-zoom; }
-.pa-book::-webkit-scrollbar { display: none; }
-/* still: nothing follows the finger; the book turns from code only (a swipe, the arrows, the keys: pages.ts) */
-@media (prefers-reduced-motion: reduce), (update: slow) { .pa-book { overflow-x: hidden; touch-action: pinch-zoom; } }
-:root[data-motion="still"] .pa-book { overflow-x: hidden; touch-action: pinch-zoom; }
-.pa-flow { position: relative; z-index: 1; box-sizing: border-box; height: 100%; padding-block: 40px calc(var(--pad) * .8); column-fill: auto; }
-/* what is read whole stays whole on its page; a heading stays with what follows it */
-.pa-flow :is(.pa-list li, .pa-card, .pa-field, .pa-search, .pa-write, .pa-empty, .pa-problem, .pa-page-head, .pa-days, .pa-tabs, .pa-trow, blockquote, figure, pre, tr, img) { break-inside: avoid; }
-.pa-flow :is(h1, h2, h3, h4, .pa-list-label, .pa-kicker) { break-after: avoid; }
-.pa-flow .pa-list li { content-visibility: visible; }
-.pa-flow :is(img, video) { max-height: 60dvh; object-fit: contain; }
-/* what the browser won't split across pages (a code block, a table that scrolls sideways): at most a page, scrolling */
-.pa-flow :is(pre, .pa-tgrid) { max-height: var(--pa-col-h, 60dvh); overflow-y: auto; }
-.pa-flow :is(p, li, dd, h1, h2, h3, td) { overflow-wrap: anywhere; }
-/* the first page's head: the hour's sky, behind the place's name (pages.ts hangs it, one page wide) */
-/* as tall as the head (pages.ts sets it from the place's head; this is for a book with no head of its own) */
-.pa-sky { position: absolute; top: 0; left: 0; z-index: 0; height: min(160px, 30%); pointer-events: none;
-  background: linear-gradient(to bottom, var(--sky-top) 0, var(--sky-mid) 55%, var(--sky-foot) 82%, var(--bg) 100%); }
-/* a snap point per spread, and every later page's running head: the place's name over a thin strip of the sky */
-.pa-leaf { position: absolute; top: 0; height: 1px; pointer-events: none; }
-.pa-leaf.pa-snap { scroll-snap-align: start; }
-.pa-runhead { box-sizing: border-box; height: 32px; padding: 9px 20px 0; border-top: 4px solid var(--sky-top); color: var(--muted);
-  font: var(--title-weight) var(--fs-small)/1.2 var(--display, var(--serif)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pa-dock { flex: none; box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: 8px var(--pad); border-top: var(--line-row); }
+.pa-page:has(> .pa-dock:not(:empty)) { padding-bottom: calc(var(--pa-dock-h, 64px) + var(--pad)); }
+.pa-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; box-sizing: border-box; max-width: inherit; margin: 0 auto;
+  padding: 8px var(--pad) calc(8px + env(safe-area-inset-bottom, 0px)); border-top: var(--line-row); background: var(--bg); }
 .pa-dock:empty { display: none; }
+.pa-wide > .pa-dock > .pa-write { max-width: var(--measure); margin-inline: auto; }
+/* a frame drawn at its content's height has no screen's foot: the line sits in place */
+:root[data-sized] .pa-dock { position: static; padding-inline: 0; border-top: 0; background: none; }
+:root[data-sized] .pa-page:has(> .pa-dock:not(:empty)) { padding-bottom: calc(var(--pad) * 4); }
 .pa-dock > .pa-write { margin: 0; }
-.pa-pageline { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; color: var(--muted); font: var(--fs-small) var(--sans); font-variant-numeric: tabular-nums; }
-.pa-turn { min-width: 44px; min-height: 36px; padding: 0; border: 0; background: none; color: var(--text); font: var(--fs-head)/1 var(--sans); cursor: pointer; }
-.pa-turn:disabled { visibility: hidden; }
-.pa-at { min-width: 6em; text-align: center; }
-}
-@layer parachute.parts { .pa-end { display: block; height: 0; break-before: avoid; } }
-@layer parachute.parts {
-/* Pages of their own inside a screen (a room's talk): the room the box gives them, turned as a Page's are */
-.pa-pages { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
-.pa-pages .pa-flow { padding-top: 34px; }
-.pa-pages > .pa-book > .pa-sky { display: none; }
+/* a part of a screen that scrolls on its own (a room's talk): the room its box gives it */
+.pa-pages { flex: 1; min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; }
+@media print { .pa-dock { display: none; } .pa-pages { overflow: visible; } }
 }
 @layer parachute.parts {
-/* a frame drawn at its content's height (a page with embeds) never turns: should it be marked so after a Page is drawn
-   paged, the page lays out as one column at its own height; and so does a page printed */
-:root[data-sized] .pa-page.pa-paged { display: block; height: auto; }
-:root[data-sized] .pa-book { overflow: visible; width: auto !important; }
-:root[data-sized] .pa-flow { height: auto; column-width: auto !important; column-count: 1 !important; width: auto !important; }
-:root[data-sized] :is(.pa-sky, .pa-leaf, .pa-pageline) { display: none; }
-@media print {
-  :root:has(.pa-paged), :root:has(.pa-paged) body { height: auto; overflow: visible; }
-  .pa-page.pa-paged { display: block; height: auto; overflow: visible; }
-  .pa-book { overflow: visible; width: auto !important; }
-  .pa-flow { height: auto; column-width: auto !important; column-count: 1 !important; width: auto !important; }
-  :is(.pa-sky, .pa-leaf, .pa-pageline, .pa-dock) { display: none; }
-}
-}
-@layer parachute.parts {
-/* a page that scrolls (`scroll`, `wide`) has the hour's sky at its head too, under its title, fading into the paper */
-:root:has(.pa-page:not(.pa-paged)):not([data-sized]) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 90px, var(--bg) 170px); background-size: 100% 170px; background-repeat: no-repeat; }
+/* the hour's sky at the page's head, under its title, fading into the paper */
+:root:has(.pa-page):not([data-sized]) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 90px, var(--bg) 170px); background-size: 100% 170px; background-repeat: no-repeat; }
 }

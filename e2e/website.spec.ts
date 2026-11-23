@@ -45,9 +45,9 @@ test("the starter as a website: link your Parachute, then it reads and writes th
     await page.reload();
     await expect(page.getByText(`Linked to ${VAULT}`)).toBeVisible();
     await expect(page.locator("header").getByRole("heading", { name: "Written from the website" })).toBeVisible();
-    // the applet has the whole screen under the line: its page line is on it
-    const line = await page.getByRole("navigation", { name: "Pages" }).boundingBox();
-    expect(line && line.y + line.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+    // the line stays at the top as the applet scrolls with the window under it
+    await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+    expect((await page.getByText(`Linked to ${VAULT}`).boundingBox())!.y).toBeLessThan(40);
     // Unlink: this browser holds nothing of the vault, no token and nothing the applet saved
     await page.getByRole("button", { name: "Unlink" }).click();
     await expect(page.getByRole("button", { name: "Link your Parachute" })).toBeVisible();

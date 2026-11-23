@@ -1,7 +1,5 @@
-/* A linked website (LinkParachute.tsx): the "Linked to …" line, then the applet in what is left of the screen. A paged
-   Page is a screen tall where it stands alone (src/kit/parts.css); here it is as tall as its part of the screen. */
-.pa-linked { display: flex; flex-direction: column; height: 100dvh; }
-.pa-linked-line { display: flex; justify-content: space-between; align-items: center; gap: var(--gap); margin: 0;
+/* A linked website (LinkParachute.tsx): the "Linked to …" line, held at the top, then the applet, which scrolls with
+   the window as it does in the app (its Page's start, its saved place and its pinned line to write in all use the
+   window). */
+.pa-linked-line { position: sticky; top: 0; z-index: 3; background: var(--bg); display: flex; justify-content: space-between; align-items: center; gap: var(--gap); margin: 0;
   padding: calc(var(--gap) / 2) var(--pad); color: var(--muted); font-size: var(--fs-small, 0.875rem); border-bottom: 1px solid var(--line); }
-.pa-linked-applet { flex: 1; min-height: 0; overflow: auto; }
-.pa-linked-applet .pa-page.pa-paged { height: 100%; }

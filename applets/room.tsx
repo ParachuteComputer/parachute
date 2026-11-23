@@ -20,7 +20,7 @@
 // switch, kept per room): then "Uni muted" shows, and a tap lets Uni listen again; listening is never shown. Its named exports (the store, the cards' readers) are for
 // the importer's own list; times are the kit's (when), a relay's seconds as they come.
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { app, Button, Link, Linked, link, Loading, onShown, Pages as KitPages, Problem, ready, Record, services, shown as onScreen, storage, toast, when, Write } from "parachute";
+import { app, Button, Link, Linked, link, Loading, onShown, Problem, ready, Record, services, shown as onScreen, storage, toast, when, Write } from "parachute";
 
 /** Whether a person can be looking: the applet on screen (the app keeps it running while hidden, kit `shown`/`onShown`,
  *  imported as onScreen: `shown` below is the media cache's) and the app in front. What is new is read only then. An
@@ -386,7 +386,6 @@ const CSS = `
 .room .to-room { flex: none; gap: 5px; min-height: 36px; padding: 0; color: var(--muted); font: var(--fs-small) var(--sans); text-decoration: none; }
 .room .to-room[aria-current="page"] { color: var(--text); font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }
 .room .to-room .wants { color: var(--primary); }
-.room .talk .page { max-width: none; padding: 0; }
 .room .back { padding-left: 0; font-family: var(--serif); font-style: italic; text-decoration: none; }
 .room .scroll { flex: 1; min-height: 0; overflow-y: auto; position: relative; overscroll-behavior: contain; }
 .room .page { max-width: 760px; margin: 0 auto; padding: 0 var(--pad, 16px) 12px; }
@@ -590,18 +589,18 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   const all = [...(s.msgs.get(room)?.values() ?? [])].filter((e) => visible(s, e)).sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));
   const newest = all[all.length - 1];
   const toBottom = () => { const sc = scroller.current; if (sc) sc.scrollTop = sc.scrollHeight; };
-  // the talk's pages (KitPages): where a message is, the newest
-  const pagesRef = useRef<{ toElement(el: Element): void; toEnd(): void } | null>(null);
-  const roomRef = useRef<HTMLElement>(null);
+  // at the foot, it stays there as the talk's box shrinks (the keyboard coming up) or what is in it grows (a picture)
+  useEffect(() => {
+    const sc = scroller.current;
+    if (!sc || typeof ResizeObserver !== "function") return;
+    const ro = new ResizeObserver(() => { if (atBottom.current) toBottom(); });
+    ro.observe(sc);
+    if (sc.firstElementChild) ro.observe(sc.firstElementChild);
+    return () => ro.disconnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // opened: at the message it was opened for (once), else at the newest; a thread opens at its newest
   useEffect(() => {
     if (!loaded) return;
-    if (KitPages ?? null) {
-      const el = !placed.current && at ? roomRef.current?.querySelector(`[data-id="${at}"]`) : null;
-      placed.current = true;
-      if (el) pagesRef.current?.toElement(el); else pagesRef.current?.toEnd();
-      return;
-    }
     const sc = scroller.current;
     const el = !placed.current && at ? sc?.querySelector<HTMLElement>(`[data-id="${at}"]`) : null;
     // back in a room you left partway up: there again, measured from the foot (and again once the read has landed, above)
@@ -632,11 +631,18 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   useEffect(() => { if (!newest || !loaded || !looking) return; onReadNow.current?.(newest.created_at); if (atBottom.current) toBottom(); }, [newest?.id, loaded, looking]);
 
   const loadOlder = async () => {
+    // asked for older lines: they land above, and the talk doesn't go to its foot for them
+    atBottom.current = false;
     setOlder("loading");
     const oldest = all[0]?.created_at ?? now();
     const got = await relay.query([{ kinds: [9], "#h": [room], until: oldest - 1, limit: 100 }]).catch(() => []);
     got.forEach(st.add); (await askEndings(relay, got)).forEach(st.add); st.bump(); void names(got.map((e: Ev) => e.pubkey));
     setOlder(got.length ? "more" : "start");
+    // once they are drawn, at the foot or not is the talk's own again (a short talk can still be at its foot)
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const sc = scroller.current;
+      if (sc) { const d = sc.scrollHeight - sc.scrollTop - sc.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }
+    }));
   };
 
   const replies = new Map<string, Ev[]>();
@@ -670,8 +676,12 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     const rootAuthor = root && !(root.pubkey === uni && !toUni) ? [root.pubkey] : [];
     const p = [...new Set([s.me, ...rootAuthor, ...mentions, ...(toUni ? [uni!] : [])])].map((x) => ["p", x]);
     const tg = [["h", room], ...p, ...(thread ? [["e", thread, "", "root"]] : []), ...extra];
-    const r = await relay.publish({ kind: 9, content, tags: tg });
-    if (!r.ok) { setErr(`Not sent: ${r.message || "the relay refused it"}`); return false; }
+    // what you send is shown, as in any chat: the talk goes to its foot, wherever you had scrolled to (set before the
+    // relay's answer: the line may come back by the subscription first)
+    const was = atBottom.current;
+    atBottom.current = true;
+    const r = await relay.publish({ kind: 9, content, tags: tg }).catch((e: unknown) => { atBottom.current = was; throw e; });
+    if (!r.ok) { atBottom.current = was; setErr(`Not sent: ${r.message || "the relay refused it"}`); return false; }
     st.add(r.event); st.bump();
     return true;
   };
@@ -683,10 +693,13 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     // Stop answers Uni's turn on the main line (where the turn line comes from), wherever it is pressed
     const target = body === STOP ? null : thread ? (s.msgs.get(room)?.has(thread) ? thread : shown[shown.length - 1]?.id ?? null) : null;
     setPosting(true); setErr("");
+    // (at the foot before the relay answers, as for a message: the line may come back by the subscription first)
+    const was = atBottom.current;
+    atBottom.current = true;
     try {
       const r = await relay.publish({ kind: 9, content: body, tags: [["h", room], ...(naming ? [["p", uni!]] : []), ...(target ? [["e", target, "", "root"]] : [])] });
-      if (r.ok) { st.add(r.event); st.bump(); } else setErr(`Not sent: ${r.message || "the relay refused it"}`);
-    } catch (e: any) { setErr(`Not sent: ${e?.message ?? e}`); }
+      if (r.ok) { st.add(r.event); st.bump(); } else { atBottom.current = was; setErr(`Not sent: ${r.message || "the relay refused it"}`); }
+    } catch (e: any) { atBottom.current = was; setErr(`Not sent: ${e?.message ?? e}`); }
     setPosting(false);
   };
   // muted (a choice an older build offered, kept per room): one tap and Uni hears this room again
@@ -708,7 +721,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
 
   const title = name || "Room";
   let lastDay = "", prev: Ev | null = null, newShown = false;
-  // the talk: turned as pages (the kit's Pages, opening on the newest), or on an older app a box that scrolls
+  // the talk: a box that scrolls, opening on the newest
   const talk = <div className="page">
         {!thread && (older === "start" ? <p className="day">Start of {title}</p> : <div className="older"><Button small busy={older === "loading"} onClick={loadOlder}>Load older messages</Button></div>)}
         <div className="log" role="log" aria-label={`Messages in ${name || "the room"}`}>
@@ -741,7 +754,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
         </div>}
         {chips && <div className="quick" role="group" aria-label="Quick replies">{chips.map((a) => <Button key={a} small onClick={() => void postAs(a)} disabled={posting}>{a}</Button>)}</div>}
       </div>;
-  return <Svc.Provider value={service}><section className="room" ref={roomRef} aria-label={`Room ${title}`}>
+  return <Svc.Provider value={service}><section className="room" aria-label={`Room ${title}`}>
     <style>{CSS}</style>
     {/* without a list to go back to, the page it sits on names the room */}
     {(thread || onBack) && <div className="top">
@@ -752,9 +765,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
           {r.glyph && <span aria-hidden="true">{r.glyph}</span>}{r.name}{r.wants && <span className="wants" aria-label=", something wants you">◆</span>}
         </Button>))}</nav>}
     </div>}
-    {KitPages ? <KitPages start="last" name={thread ? "Thread" : title} handle={pagesRef} className="talk">{talk}</KitPages>
-      : <div className="scroll" ref={scroller} onScroll={(e) => { const x = e.currentTarget, d = x.scrollHeight - x.scrollTop - x.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }}
-      onWheel={() => { touched.current = true; }} onTouchStart={() => { touched.current = true; }} onPointerDown={() => { touched.current = true; }} onKeyDown={() => { touched.current = true; }}>{talk}</div>}
+    <div className="scroll" ref={scroller} onScroll={(e) => { const x = e.currentTarget, d = x.scrollHeight - x.scrollTop - x.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }}
+      onWheel={() => { touched.current = true; }} onTouchStart={() => { touched.current = true; }} onPointerDown={() => { touched.current = true; }} onKeyDown={() => { touched.current = true; }}>{talk}</div>
     {/* at the foot, in view: what shows above may be the list's copy, and this says the room isn't live */}
     {readErr ? <div className="read-err"><Problem error={readErr} onRetry={() => setReadTry((n) => n + 1)}>Couldn't read the room</Problem></div> : null}
     <Composer key={`${room}|${thread ?? ""}`} st={st} relay={relay} room={room} thread={thread} members={authors} send={send} typing={typing} setErr={setErr} sendErr={sendErr} name={name || "the room"}

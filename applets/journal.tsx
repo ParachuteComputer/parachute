@@ -45,7 +45,7 @@ const CSS = `
 .day { margin: calc(var(--gap) * 1.8) 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--line); font: italic var(--fs-body) var(--serif); color: var(--muted); }
 .entry { padding: 6px 0 10px; }
 .entry .when, .opened .when { font: 600 var(--fs-label) var(--sans); color: var(--muted); letter-spacing: .03em; }
-/* on pages: a day's name and an entry's time stay with what follows them */
+/* printed (and on an app of 11-22, whose places turned like pages): a day's name and an entry's time stay with what follows them */
 .day, .entry .when { break-after: avoid; }
 .entry .voice { margin-left: 8px; font-size: var(--fs-label); color: var(--muted); }
 .entry .wait { font-style: italic; color: var(--muted); }
