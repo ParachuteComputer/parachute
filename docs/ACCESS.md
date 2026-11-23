@@ -163,7 +163,7 @@ Parachute's own applets keep their notes, and 5 changes what an approval holds. 
      (no card) still reach every vault that device holds; only updating the app ends that, and the release notes should
      say so. For an applet with a card, the two builds undo each other: a pick made on a new device ends the old
      device's Allow (it sees other asks), and an Allow given again on the old device is the newest approval, with no
-     pick, so new devices drop to the home. Updating the old device ends it.
+     pick, so new devices fall back to no pick. Updating the old device ends it.
    - **What an AI with write on the home can do.** It can't make or widen a pick (no key). It could delete an approval:
      the applet drops to the home, the narrow side. It could put back an older, wider one it kept: a device that has
      seen the newer one refuses it (each device keeps the highest number it has seen, `approvalStore.ts`); a device new
