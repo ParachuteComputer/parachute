@@ -40,3 +40,35 @@ test("Your bundle lists the bundles in the person's other vaults and says what e
     for (const n of await api(pantry(), "GET", "notes?tag=parachute-settings", undefined, PANTRY) as { id: string }[]) await api(pantry(), "DELETE", `notes/${n.id}`, undefined, PANTRY);
   }
 });
+
+test("the line says the person's own pins where a bundle has no bar of its own", async ({ page }) => {
+  // the settings note's pins, as an older install kept them, on Everything (which has no bar of its own)
+  const note = await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar: [{ vault: "letters", applet: "Applets/Post" }] } } });
+  try {
+    await page.goto("/settings");
+    const choice = page.getByRole("group", { name: "Which bundle opens" });
+    await expect(choice).toContainText("Everything: every applet in every vault on this device, in one list. On the bar: Post, Applets.");
+    await page.goto("/");
+    await expect(bar(page).getByRole("link", { name: /Post/ })).toBeVisible();
+  } finally { await api(hubState(), "DELETE", `notes/${note.id}`); }
+});
+
+test("choosing a bundle in another vault that can't be saved there leaves the home as it was, and says so", async ({ page }) => {
+  const made = await api(pantry(), "POST", "notes", { path: "Parachute/Apps/uni", content: "Uni", tags: ["parachute-app"], metadata: { app: {
+    contract: 1, id: "uni", name: "Uni", glyph: "◉", sources: [{ vault: PANTRY, applet: "*" }], bar: [{ vault: PANTRY, applet: "Applets/Shelves" }] } } }, PANTRY);
+  try {
+    await page.goto("/settings");
+    const choice = page.getByRole("group", { name: "Which bundle opens" });
+    await expect(choice.getByRole("radio", { name: /Uni/ })).toBeVisible();
+    // pantry reads, but takes no change (a Parachute that refuses writes there)
+    await page.route(`${hubState().origin}/vault/${PANTRY}/**`, (r) => (r.request().method() === "GET" ? r.continue() : r.fulfill({ status: 500, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: '{"error":"no"}' })));
+    await choice.getByRole("radio", { name: /Uni/ }).check();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByRole("radio", { name: "kitchen", exact: true })).toBeChecked();
+    await expect(choice.getByRole("radio", { name: /Everything/ })).toBeChecked();
+  } finally {
+    await page.unrouteAll();
+    await api(pantry(), "DELETE", `notes/${made.id}`, undefined, PANTRY);
+    for (const n of await api(pantry(), "GET", "notes?tag=parachute-settings", undefined, PANTRY) as { id: string }[]) await api(pantry(), "DELETE", `notes/${n.id}`, undefined, PANTRY);
+  }
+});

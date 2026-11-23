@@ -29,7 +29,7 @@ import { clientFor, keptClientFor } from "../vault/client";
 import { onFresh } from "../vault/readCache";
 import { originOf, listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
-import { homeVault } from "./frameSource";
+import { homeVault, setHome } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
 import type { Levels } from "./levels";
@@ -412,7 +412,25 @@ async function readBundleRecords(home: VaultRecord): Promise<RawBundle[]> {
  *  that vault the home). Read as the home's are, but for following someone else's: a followed one is listed as written. */
 export async function bundlesIn(rec: VaultRecord): Promise<Bundle[]> {
   const shipped = new Set(defaultBundles().map((d) => d.id));
-  return (await bundleRows(keptClientFor(rec))).map(({ row, body }) => bundleRecordOf(body, row.path ?? null, row.id)).filter((b): b is Bundle => !!b && !shipped.has(b.id));
+  // each id once: the newer record first, as the home's are read (bundlesFrom)
+  const all = (await bundleRows(keptClientFor(rec))).map(({ row, body }) => bundleRecordOf(body, row.path ?? null, row.id)).filter((b): b is Bundle => !!b && !shipped.has(b.id));
+  return all.filter((b, i) => all.findIndex((x) => x.id === b.id) === i);
+}
+/** Open a bundle kept in another of the person's vaults: that vault becomes the home, then the bundle opens there as
+ *  chooseBundle opens one. If its record can't be read there or the choice can't be saved, the home goes back to the
+ *  one before and the error says why. */
+export async function chooseBundleIn(key: string, id: string): Promise<void> {
+  const before = homeVault()?.key ?? null;
+  setHome(key);
+  try {
+    await readSettings();
+    if (!bundlesNow().some((b) => b.id === id)) throw new Error("That bundle couldn't be read there just now.");
+    await chooseBundle(id);
+  } catch (e) {
+    try { const v = JSON.parse(localStorage.getItem(DEVICE_BUNDLE_KEY) ?? "{}") as Record<string, unknown>; delete v[key]; localStorage.setItem(DEVICE_BUNDLE_KEY, JSON.stringify(v)); } catch { /* nothing kept */ }
+    if (before) { setHome(before); void readSettings(); }
+    throw e;
+  }
 }
 const parseBundles = (raw: readonly RawBundle[]): Bundle[] => bundlesFrom(raw.map((r) => { const a = bundleRecordOf(r.app, r.path, r.noteId); return a && r.hubOf ? { ...a, hubOf: r.hubOf } : a; }).filter((a): a is Bundle => !!a));
 

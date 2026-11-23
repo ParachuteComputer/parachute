@@ -101,4 +101,12 @@ describe("what a bundle puts on the bar", () => {
     const pinned = bundleOf({ contract: 1, id: "desk", name: "Desk", look: "notes", bar: [{ shipped: "capture" }, { vault: "home", applet: "Applets/Rooms.tsx" }, { screen: "home" }] }, "Parachute/Bundles/desk", "d")!;
     expect(barNames(pinned)).toEqual(["Capture", "Rooms", "Notes"]);
   });
+  it("a bundle with no bar of its own: its default's places, then the person's pins, by the name they are listed with", () => {
+    const pins = [{ vault: "letters", applet: "Applets/Post.html" }, { vault: "home", applet: "Applets/Rooms" }];
+    const named = (p: { applet: string }) => (p.applet === "Applets/Post.html" ? "Letters" : null);
+    expect(barNames(def("everything"), pins, named)).toEqual(["Letters", "Rooms", "Applets"]);
+    expect(barNames(def("simple"), pins)).toEqual(["Notes", "Journal", "Capture", "Vault", "Connect", "Post", "Rooms"]);
+    // a bar of its own: the pins aren't on it
+    expect(barNames(uni, pins)).toEqual(["Journal", "Applets"]);
+  });
 });
