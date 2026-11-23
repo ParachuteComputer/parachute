@@ -77,6 +77,15 @@ A group could be either a list field on each person (`fields.groups: string[]`) 
 - **`app`:** `["open", "links", "save", "attach", "copy"]` — open linked notes, open `mailto:` / `https://` links, save exported `.vcf` files, pick `.vcf` files and contact photos, and copy phone/email/address.
 - **`needs`:** `4` (uses kit `Fields` at level 3 and `Drawer` at level 4; degrades gracefully if `vault.file` or `onBack` is absent on older builds).
 - **Photos (`vault.file`):** Uses the folder-scoped `vault.file(id, path)` read (checked against the applet's `vault.read` folders and the record's image attachments, per `docs/design/PICTURES.md`).
+- **Install:** `node scripts/install-applets.ts … --applet people` puts it in a vault (`Applets/People`); it takes no `--set` values.
+
+## Thousands of people
+
+The list reads `People/` in pages of 50, oldest made first (`orderBy: "created_at"`), so a person changed while it
+reads moves nowhere and a new one lands at the end; each page starts five rows back, so a person deleted behind it
+pushes none past it. Then one page newest-changed first brings in anyone changed while it read. A 0.8 hub, which
+can't order by when a record was made, is read newest-changed first. The app pages up to an offset of 5,000, so the
+list holds about 5,000 people at most.
 
 ## vCard (`.vcf`) import and export
 
@@ -90,8 +99,10 @@ A group could be either a list field on each person (`fields.groups: string[]`) 
 - **Matching:** email (primary or `emails`, any case) → phone (digits only; a leading US `1` is ignored) → name (any
   case). Cards within one file match each other too, so a file never makes the same person twice. A match is merged
   additively: an empty field is filled, lists gain what's new, nothing is overwritten or dropped.
-- **Preview:** before writing, the import lists each card as New, Merge or Same (it reads the people's bodies when a
-  card brings a note, so Same means nothing will change).
+- **Preview:** before writing, the import lists each card as New, Merge or Same. It reads the bodies of the people a
+  card's note would merge into, so Same means nothing will change: each alone, or the folder in pages when that is
+  fewer reads. Cards are matched through one index of emails, phones and names, so a phone's whole address book
+  against thousands of people takes no longer than reading it.
 - **Export:** vCard 4.0 (CRLF, 75-octet folding, escaped values) for everyone, the filtered list, or one person: phones,
   emails, address, birthday, links, `groups` as `CATEGORIES`, `tags` as `X-PARACHUTE-TAGS`, `summary` as `NOTE`, and
   the photo embedded. Importing an export back changes nothing.

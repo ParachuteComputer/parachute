@@ -745,33 +745,99 @@ function parseVCard(text: string): VCardContact[] {
   return cards;
 }
 
+/** People by email, phone and name, built once for many cards: a .vcf of thousands is matched without reading every
+ *  person for each card. A key belongs to the first person in the list that has it, so a match is the one a scan of the
+ *  list would find. `put` adds a person, or a person's new version in its place (merges only add keys). */
+function peopleIndex(people: readonly PersonRecord[]) {
+  const list: PersonRecord[] = [];
+  const at = new Map<string, number>();
+  const keys = { email: new Map<string, number>(), phone: new Map<string, number>(), name: new Map<string, number>() };
+  const claim = (m: Map<string, number>, k: string, i: number) => { if (k && !(m.get(k)! <= i)) m.set(k, i); };
+  const put = (person: PersonRecord) => {
+    let i = at.get(person.id);
+    if (i === undefined) { i = list.length; at.set(person.id, i); }
+    list[i] = person;
+    const pf = readPersonFields(person.fields);
+    for (const e of allEmailsOf(pf)) claim(keys.email, e, i);
+    for (const ph of pf.phones) claim(keys.phone, normalizePhoneKey(ph), i);
+    claim(keys.name, normalizeNameKey(personName(person)), i);
+  };
+  const first = (m: Map<string, number>, ks: readonly string[]) => {
+    let best: number | undefined;
+    for (const k of ks) { const i = k ? m.get(k) : undefined; if (i !== undefined && (best === undefined || i < best)) best = i; }
+    return best;
+  };
+  /** By email, then phone, then name. */
+  const match = (card: VCardContact): VCardMatch | null => {
+    const byEmail = first(keys.email, card.emails.map((e) => e.toLowerCase()));
+    if (byEmail !== undefined) return { person: list[byEmail], by: "email" };
+    const byPhone = first(keys.phone, card.phones.map(normalizePhoneKey));
+    if (byPhone !== undefined) return { person: list[byPhone], by: "phone" };
+    const byName = first(keys.name, [normalizeNameKey(card.name)]);
+    return byName !== undefined ? { person: list[byName], by: "name" } : null;
+  };
+  for (const p of people) put(p);
+  return { match, put };
+}
+
 /** Match an imported vCard against existing vault people by email, then phone, then name. */
 function matchVCardContact(card: VCardContact, people: readonly PersonRecord[]): VCardMatch | null {
-  const cardEmails = new Set(card.emails.map((e) => e.toLowerCase()));
-  if (cardEmails.size > 0) {
-    for (const person of people) {
-      const pf = readPersonFields(person.fields);
-      if (allEmailsOf(pf).some((e) => cardEmails.has(e))) return { person, by: "email" };
-    }
-  }
+  return peopleIndex(people).match(card);
+}
 
-  const cardPhones = new Set(card.phones.map(normalizePhoneKey).filter(Boolean));
-  if (cardPhones.size > 0) {
-    for (const person of people) {
-      const pf = readPersonFields(person.fields);
-      if (pf.phones.some((p) => { const k = normalizePhoneKey(p); return !!k && cardPhones.has(k); })) {
-        return { person, by: "phone" };
-      }
-    }
-  }
+/** A folder's page: 50, the most the app gives. */
+const FOLDER_PAGE = 50;
+/** Each page starts this many rows back, so up to this many records deleted behind it while it reads push none past it. */
+const FOLDER_OVERLAP = 5;
 
-  const cardName = normalizeNameKey(card.name);
-  if (cardName) {
-    for (const person of people) {
-      if (normalizeNameKey(personName(person)) === cardName) return { person, by: "name" };
-    }
+/** The people as listed, with bodies for those a card's note would merge into: so the preview says truly what will
+ *  change without reading every person's notes. Each is read alone, or the folder in pages when that is fewer reads. */
+async function withBodiesForCards(
+  cards: readonly VCardContact[],
+  people: readonly PersonRecord[],
+  readOne: (id: string) => Promise<PersonRecord | null>,
+  readAll: () => Promise<PersonRecord[]>,
+): Promise<PersonRecord[]> {
+  const index = peopleIndex(people);
+  const want = new Set<string>();
+  for (const card of cards) {
+    const m = card.note ? index.match(card) : null;
+    if (m) want.add(m.person.id);
   }
-  return null;
+  if (!want.size) return [...people];
+  const bodies = new Map<string, string>();
+  if (want.size <= Math.ceil(people.length / FOLDER_PAGE)) {
+    for (const id of want) { const r = await readOne(id); if (r) bodies.set(id, r.body ?? ""); }
+  } else {
+    for (const r of await readAll()) if (want.has(r.id)) bodies.set(r.id, r.body ?? "");
+  }
+  return people.map((p) => (bodies.has(p.id) ? { ...p, body: bodies.get(p.id) } : p));
+}
+
+/** Every record a folder query finds, in pages of a stable order: oldest made first, so a record changed while it reads
+ *  moves nowhere and a new one lands at the end. Then one page newest-changed first, so a record changed while it read
+ *  comes in its newest version. A hub that can't order by when a record was made (0.8) is read newest-changed first. */
+async function readFolder(query: (q: Record<string, unknown>) => Promise<PersonRecord[]>, base: Record<string, unknown>): Promise<PersonRecord[]> {
+  const byId = new Map<string, PersonRecord>();
+  const keep = (r: PersonRecord) => {
+    const had = byId.get(r.id);
+    if (!had || (r.updatedAt ?? "") >= (had.updatedAt ?? "")) byId.set(r.id, r);
+  };
+  let stable = true;
+  for (let offset = 0; ; offset += FOLDER_PAGE - FOLDER_OVERLAP) {
+    let rows: PersonRecord[];
+    try {
+      rows = await query({ ...base, ...(stable ? { orderBy: "created_at", sort: "asc" } : {}), limit: FOLDER_PAGE, offset });
+    } catch (e) {
+      if (offset > 0 || !stable) throw e;
+      stable = false;
+      rows = await query({ ...base, limit: FOLDER_PAGE, offset });
+    }
+    for (const r of rows) keep(r);
+    if (rows.length < FOLDER_PAGE) break;
+  }
+  if (stable) for (const r of await query({ ...base, limit: FOLDER_PAGE })) keep(r);
+  return [...byId.values()];
 }
 
 /** Build an additive patch to merge a vCard into an existing person without dropping or overwriting existing fields. */
@@ -1117,25 +1183,14 @@ export default function People() {
   const load = useCallback(async () => {
     const n = ++asked.current;
     try {
-      const all: PersonRecord[] = [];
-      const seen = new Set<string>();
-      const PAGE_SIZE = 50;
+      const base = { pathPrefix: FOLDER, includeFields: true };
+      const query = (q: Record<string, unknown>) => vault.queryRecords(q) as Promise<PersonRecord[]>;
       // a hub that doesn't hand links with a folder's records: the list still loads, without "last talked"
-      let links = true;
-      for (let page = 0; ; page++) {
-        const q = { pathPrefix: FOLDER, includeFields: true, limit: PAGE_SIZE, offset: page * PAGE_SIZE };
-        let rows: PersonRecord[];
-        try {
-          rows = await vault.queryRecords(links ? { ...q, includeLinks: true } : q) as PersonRecord[];
-        } catch (e) {
-          if (page > 0 || !links) throw e;
-          links = false;
-          rows = await vault.queryRecords(q) as PersonRecord[];
-        }
-        for (const r of rows) {
-          if (!seen.has(r.id)) { seen.add(r.id); all.push(r); }
-        }
-        if (rows.length < PAGE_SIZE) break;
+      let all: PersonRecord[];
+      try {
+        all = await readFolder(query, { ...base, includeLinks: true });
+      } catch {
+        all = await readFolder(query, base);
       }
       if (n !== asked.current) return;
       setPeople(all);
@@ -1400,21 +1455,18 @@ export default function People() {
         toast("No contacts found in that .vcf file.", { error: true });
         return;
       }
-      // the list has no bodies: read them when a card brings a note, so the preview says truly what will change
-      let existing = people ?? [];
-      if (parsed.some((c) => c.note)) {
-        const bodies = new Map<string, string>();
-        for (let page = 0; ; page++) {
-          const got = await vault.queryRecords({ pathPrefix: FOLDER, includeBody: true, limit: 50, offset: page * 50 }) as PersonRecord[];
-          for (const r of got) bodies.set(r.id, r.body ?? "");
-          if (got.length < 50) break;
-        }
-        existing = existing.map((p) => ({ ...p, body: bodies.get(p.id) ?? p.body ?? "" }));
-      }
+      // the list has no bodies: read those a card's note would merge into, so the preview says truly what will change
+      const existing = await withBodiesForCards(
+        parsed,
+        people ?? [],
+        (id) => vault.getRecord(id) as Promise<PersonRecord | null>,
+        () => readFolder((q) => vault.queryRecords(q) as Promise<PersonRecord[]>, { pathPrefix: FOLDER, includeBody: true }),
+      );
       const rows: VcfPlanRow[] = [];
       const seenNew: PersonRecord[] = [];
+      const index = peopleIndex(existing);
       for (const card of parsed) {
-        const match = matchVCardContact(card, [...existing, ...seenNew]);
+        const match = index.match(card);
         if (match) {
           const merged = mergeVCardIntoPerson(match.person, card);
           rows.push({
@@ -1430,7 +1482,9 @@ export default function People() {
             action: "new",
             detail: [card.emails[0], card.phones[0], card.photo ? "with photo" : ""].filter(Boolean).join(" · ") || "New person",
           });
-          seenNew.push({ id: `pending:${seenNew.length}`, path: `${FOLDER}${card.name}`, updatedAt: null, fields: fieldsForNewVCard(card), body: bodyForNewVCard(card) });
+          const pending: PersonRecord = { id: `pending:${seenNew.length}`, path: `${FOLDER}${card.name}`, updatedAt: null, fields: fieldsForNewVCard(card), body: bodyForNewVCard(card) };
+          seenNew.push(pending);
+          index.put(pending);
         }
       }
       setVcfPlan({ fileName: file.name, rows });
@@ -1448,11 +1502,12 @@ export default function People() {
     let failedCount = 0;
     try {
       // Live list updated as each contact lands so duplicate entries inside one .vcf never duplicate
-      const live: PersonRecord[] = [...(people ?? [])];
+      const live = peopleIndex(people ?? []);
+      const paths = new Set((people ?? []).map((x) => x.path.toLowerCase()));
       for (const row of vcfPlan.rows) {
         const card = row.card;
         try {
-          const match = matchVCardContact(card, live);
+          const match = live.match(card);
           if (match) {
             const full = (await vault.getRecord(match.person.id) as PersonRecord | null) ?? match.person;
             const merged = mergeVCardIntoPerson(full, card);
@@ -1478,14 +1533,13 @@ export default function People() {
                 target = { ...target, ...updatedPhoto, fields: { ...(target.fields ?? {}), photo: att.path } };
               } catch { /* keep the merged contact even if photo upload fails */ }
             }
-            const idx = live.findIndex((x) => x.id === target.id);
-            if (idx >= 0) live[idx] = target;
+            live.put(target);
             mergedCount++;
           } else {
             // Avoid path collisions if two distinct people share a sanitized path
             let path = `${FOLDER}${card.name}`;
             let suffix = 2;
-            while (live.some((x) => x.path.toLowerCase() === path.toLowerCase())) path = `${FOLDER}${card.name} ${suffix++}`;
+            while (paths.has(path.toLowerCase())) path = `${FOLDER}${card.name} ${suffix++}`;
             const fields = fieldsForNewVCard(card);
             const body = bodyForNewVCard(card);
             let made = await vault.createRecord({ path, body, fields }) as PersonRecord;
@@ -1497,7 +1551,8 @@ export default function People() {
                 made = { ...made, ...updatedPhoto, fields: { ...fields, photo: att.path } };
               } catch { /* photo attach best-effort */ }
             }
-            live.push(made);
+            live.put(made);
+            paths.add(made.path.toLowerCase());
             createdCount++;
           }
         } catch {

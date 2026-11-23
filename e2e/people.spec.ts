@@ -4,7 +4,9 @@
 // them"), editing details and body in place, adding a person, importing a .vcf (deduping an existing contact by email
 // and creating a new contact with an attached photo rendered via vault.file), and Daylight mode.
 // Set PEOPLE_SHOTS=<dir> to also capture 390x844 phone screenshots (Paper + Daylight) for the walkthrough.
-import { mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 import { expect, test, type Page } from "@playwright/test";
@@ -315,6 +317,61 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
     await expect(f.locator("header").getByRole("heading", { name: "Maya Lin" })).toBeVisible();
     await shot(page, "08-person-card-daylight");
   } finally {
+    for (const id of createdIds) await api(hub, "DELETE", `notes/${id}`).catch(() => {});
+  }
+});
+
+// Installed as Uni installs it (scripts/install-applets.ts --applet people), over a folder of three pages of people:
+// everyone listed; a .vcf whose notes match two of them reads those two, and its preview says truly what changes.
+test("People installed by install-applets lists 130 people and previews an import against them", async ({ page }) => {
+  test.setTimeout(180_000);
+  const hub = hubState();
+  const createdIds: string[] = [];
+  const dir = mkdtempSync(join(tmpdir(), "people-t476-install-"));
+  try {
+    writeFileSync(join(dir, "token"), hub.token, { mode: 0o600 });
+    const out = execFileSync("node", ["scripts/install-applets.ts", "--hub", hub.origin, "--vault", VAULT, "--token-file", join(dir, "token"), "--applet", "people", "--apply"]).toString();
+    expect(out).toContain("Applets/People");
+    const installed = (await api(hub, "GET", `notes?path_prefix=${encodeURIComponent("Applets/People")}&limit=5`) as { id: string; path: string }[])
+      .find((n) => n.path === "Applets/People");
+    expect(installed).toBeTruthy();
+    createdIds.push(installed!.id);
+
+    const pad = (i: number) => String(i).padStart(3, "0");
+    for (let i = 1; i <= 130; i++) {
+      const n = await api(hub, "POST", "notes", {
+        path: `People/Bulk Person ${pad(i)}`,
+        content: `## Memories and moments\n\nMet bulk ${pad(i)} at the co-op.\n`,
+        tags: ["person"],
+        metadata: { relation: "friend", email: `bulk${pad(i)}@example.test` },
+      });
+      createdIds.push(n.id);
+    }
+
+    await page.goto(`/v/${VAULT}/a/${installed!.id}`);
+    await page.getByRole("button", { name: "Allow" }).click();
+    const f = frame(page);
+    await expect(f.getByRole("heading", { name: "People" })).toBeVisible({ timeout: 30_000 });
+    await f.getByRole("searchbox", { name: "Search people" }).fill("Bulk Person");
+    await expect(f.getByText(/^130 of \d+ people$/)).toBeVisible({ timeout: 30_000 });
+    await expect(f.getByRole("button", { name: "Bulk Person 001" })).toBeVisible();
+    await f.getByRole("searchbox", { name: "Search people" }).fill("Bulk Person 130");
+    await expect(f.getByRole("button", { name: "Bulk Person 130" })).toBeVisible();
+
+    const vcf = [
+      "BEGIN:VCARD", "VERSION:3.0", "FN:Bulk Person 007", "EMAIL:bulk007@example.test", "NOTE:Met bulk 007 at the co-op.", "END:VCARD",
+      "BEGIN:VCARD", "VERSION:3.0", "FN:Bulk Person 120", "EMAIL:bulk120@example.test", "NOTE:Plays cello on Sundays.", "END:VCARD",
+      "BEGIN:VCARD", "VERSION:3.0", "FN:Rowan Vale", "EMAIL:rowan@example.test", "END:VCARD",
+    ].join("\r\n");
+    await f.getByRole("button", { name: "vCard" }).click();
+    await f.getByRole("button", { name: "Choose .vcf file" }).click();
+    await page.getByRole("dialog", { name: /People asks for (a file|files)/ }).locator("input[type=file]")
+      .setInputFiles({ name: "bulk.vcf", mimeType: "text/vcard", buffer: Buffer.from(vcf, "utf8") });
+    await expect(f.getByText("Already up to date (Bulk Person 007)")).toBeVisible();
+    await expect(f.getByText(/Matches Bulk Person 120 by email · will merge/)).toBeVisible();
+    await expect(f.getByText("rowan@example.test")).toBeVisible();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
     for (const id of createdIds) await api(hub, "DELETE", `notes/${id}`).catch(() => {});
   }
 });

@@ -46,7 +46,7 @@ type PersonRecord = {
 };
 
 const api = new Function(
-  `${code}; return { parseVCard, exportVCard, matchVCardContact, mergeVCardIntoPerson, fieldsForNewVCard, upcomingBirthdays, reconnectList, filterPeople, normalizePhoneKey, initialsOf, letterOf, readPersonFields };`,
+  `${code}; return { parseVCard, exportVCard, matchVCardContact, mergeVCardIntoPerson, fieldsForNewVCard, upcomingBirthdays, reconnectList, filterPeople, normalizePhoneKey, initialsOf, letterOf, readPersonFields, peopleIndex, withBodiesForCards, readFolder };`,
 )() as {
   parseVCard: (text: string) => VCardContact[];
   exportVCard: (people: readonly PersonRecord[], photos?: Map<string, VCardPhoto>) => string;
@@ -63,6 +63,17 @@ const api = new Function(
   initialsOf: (name: string) => string;
   letterOf: (name: string) => string;
   readPersonFields: (fields?: Record<string, unknown>) => Record<string, unknown>;
+  peopleIndex: (people: readonly PersonRecord[]) => {
+    match: (card: VCardContact) => { person: PersonRecord; by: "email" | "phone" | "name" } | null;
+    put: (person: PersonRecord) => void;
+  };
+  withBodiesForCards: (
+    cards: readonly VCardContact[],
+    people: readonly PersonRecord[],
+    readOne: (id: string) => Promise<PersonRecord | null>,
+    readAll: () => Promise<PersonRecord[]>,
+  ) => Promise<PersonRecord[]>;
+  readFolder: (query: (q: Record<string, unknown>) => Promise<PersonRecord[]>, base: Record<string, unknown>) => Promise<PersonRecord[]>;
 };
 
 // Tiny valid 1x1 PNG bytes encoded as base64 (made-up fixture photo)
@@ -465,5 +476,121 @@ describe("People second review round", () => {
       { id: "b", path: "People/Bo Lee", updatedAt: null, fields: { birthday: "--02-29" } },
     ];
     expect(api.upcomingBirthdays(people, "2026-11-23", 366).map((b) => b.name)).toEqual(["Bo Lee"]);
+  });
+});
+
+// Thousands of people (T-476 land): made-up records, a hub that pages and orders as Parachute's does
+// (created_at or updated_at, ties by id; 50 at most a page), and records that change while the list reads.
+describe("People at thousands of people", () => {
+  const stamp = (n: number) => new Date(Date.UTC(2026, 0, 1) + n * 60_000).toISOString();
+  const many = (n: number): PersonRecord[] => Array.from({ length: n }, (_, i) => ({
+    id: `p${String(i).padStart(5, "0")}`,
+    path: `People/Person ${i}`,
+    createdAt: stamp(i),
+    updatedAt: stamp(i),
+    fields: { email: `person${i}@example.test`, phones: [`mobile: +1 303-555-${String(i).padStart(4, "0")}`] },
+    body: `## Memories and moments\n\nMet person ${i}.\n`,
+  }));
+  const blank = (over: Partial<VCardContact>): VCardContact => ({
+    name: "", phones: [], emails: [], address: "", birthday: "", links: [], groups: [], tags: [], summary: "", note: "", photo: null, ...over,
+  });
+
+  /** A hub over `rows`; `between(page)` runs after each page is handed back (an edit, a delete, a new record). */
+  function hub(rows: PersonRecord[], between: (page: number) => void = () => {}, oldHub = false) {
+    let pages = 0;
+    const query = async (q: Record<string, unknown>) => {
+      if (oldHub && q.orderBy === "created_at") throw Object.assign(new Error("bad_params"), { status: 400 });
+      const key = q.orderBy === "created_at" ? "createdAt" : "updatedAt";
+      const dir = q.orderBy === undefined ? "desc" : q.sort;
+      const sorted = [...rows].sort((a, b) => {
+        const c = String(a[key] ?? "").localeCompare(String(b[key] ?? "")) || a.id.localeCompare(b.id);
+        return dir === "desc" ? -c : c;
+      });
+      const offset = Number(q.offset ?? 0);
+      const page = sorted.slice(offset, offset + Math.min(Number(q.limit ?? 50), 50)).map((r) => ({ ...r }));
+      between(pages++);
+      return page;
+    };
+    return { query, pages: () => pages };
+  }
+
+  it("lists everyone once, in their newest version, while records change, go and arrive during the read", async () => {
+    const rows = many(3000);
+    let clock = 10_000;
+    const gone: string[] = [];
+    const { query } = hub(rows, (page) => {
+      if (page === 3) {
+        // already read, then changed; and one not read yet, changed
+        rows[10] = { ...rows[10], updatedAt: stamp(clock++), fields: { ...rows[10].fields, summary: "changed" } };
+        rows[2500] = { ...rows[2500], updatedAt: stamp(clock++) };
+        // three already read, deleted (they stay in this read, as anything read before it went does)
+        gone.push(...rows.splice(20, 3).map((r) => r.id));
+      }
+      if (page === 7) rows.push({ id: "znew", path: "People/New Person", createdAt: stamp(clock), updatedAt: stamp(clock++) });
+    });
+    const got = await api.readFolder(query, { pathPrefix: "People/", includeFields: true });
+    const ids = got.map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    // every record there now, none missed by the rows that moved behind the read
+    expect(new Set(ids.filter((id) => !gone.includes(id)))).toEqual(new Set(rows.map((r) => r.id)));
+    expect(got.find((r) => r.id === "p00010")?.fields?.summary).toBe("changed");
+  });
+
+  it("reads a hub that can't order by when a record was made newest-changed first", async () => {
+    const rows = many(120);
+    const { query } = hub(rows, () => {}, true);
+    const got = await api.readFolder(query, { pathPrefix: "People/" });
+    expect(got.map((r) => r.id).sort()).toEqual(rows.map((r) => r.id).sort());
+  });
+
+  it("reads bodies only for the people a card's note merges into", async () => {
+    const people = many(3000).map(({ body: _b, ...p }) => p);
+    let one = 0, all = 0;
+    const full = many(3000);
+    const readOne = async (id: string) => { one++; return full.find((p) => p.id === id) ?? null; };
+    const readAll = async () => { all++; return full; };
+    const cards = [
+      blank({ name: "Person 7", emails: ["person7@example.test"], note: "Plays cello" }),
+      blank({ name: "Person 2999", phones: ["+1 303 555 2999"], note: "Met person 2999." }),
+      blank({ name: "Someone New", note: "New" }),
+      blank({ name: "Person 12", emails: ["person12@example.test"] }),
+    ];
+    const got = await api.withBodiesForCards(cards, people, readOne, readAll);
+    expect([one, all]).toEqual([2, 0]);
+    expect(got.find((p) => p.id === "p00007")?.body).toContain("Met person 7.");
+    expect(got.find((p) => p.id === "p00012")?.body).toBeUndefined();
+    // the preview's answer is then true: the note already there is "Same"; the other merges
+    const index = api.peopleIndex(got);
+    expect(api.mergeVCardIntoPerson(index.match(cards[1])!.person, cards[1]).changed).toBe(false);
+    expect(api.mergeVCardIntoPerson(index.match(cards[0])!.person, cards[0]).changed).toBe(true);
+
+    // a phone's whole address book, every card with a note: the folder in pages, not one read each
+    one = 0; all = 0;
+    const every = people.map((_, i) => blank({ name: `Person ${i}`, emails: [`person${i}@example.test`], note: "x" }));
+    await api.withBodiesForCards(every, people, readOne, readAll);
+    expect([one, all]).toEqual([0, 1]);
+
+    // no card brings a note: nothing is read
+    one = 0; all = 0;
+    await api.withBodiesForCards([cards[3]], people, readOne, readAll);
+    expect([one, all]).toEqual([0, 0]);
+  });
+
+  it("matches as a scan of the list would: email, then phone, then name, the first person holding the key", () => {
+    const people: PersonRecord[] = [
+      { id: "a", path: "People/Ada Fox", updatedAt: null, fields: { phones: ["+1 303-555-0101"] } },
+      { id: "b", path: "People/Bo Lee", updatedAt: null, fields: { email: "shared@example.test", phones: ["+1 303-555-0101"] } },
+      { id: "c", path: "People/Ada Fox", updatedAt: null, fields: { emails: ["shared@example.test"] } },
+    ];
+    const index = api.peopleIndex(people);
+    expect(index.match(blank({ name: "Ada Fox", phones: ["303 555 0101"], emails: ["shared@example.test"] }))).toMatchObject({ person: { id: "b" }, by: "email" });
+    expect(index.match(blank({ name: "Ada Fox", phones: ["(303) 555-0101"] }))).toMatchObject({ person: { id: "a" }, by: "phone" });
+    expect(index.match(blank({ name: "ada fox" }))).toMatchObject({ person: { id: "a" }, by: "name" });
+    // a merge adds a key to an earlier person: it is theirs now, as a scan would find it
+    index.put({ ...people[0], fields: { ...people[0].fields, email: "shared@example.test" } });
+    expect(index.match(blank({ emails: ["shared@example.test"] }))?.person.id).toBe("a");
+    // a new person from the same file is found by the next card, never made twice
+    index.put({ id: "pending:0", path: "People/Cy Moss", updatedAt: null, fields: { email: "cy@example.test" } });
+    expect(index.match(blank({ name: "Cy M", emails: ["CY@example.test"] }))?.person.id).toBe("pending:0");
   });
 });
