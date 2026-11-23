@@ -31,6 +31,9 @@
 // And `vault.file {id, path}`: the bytes of a picture attached to a record in its `vault.read` folders, to draw its
 // pictures (docs/design/PICTURES.md): only one the hub lists as that record's own, the same check as `vaults.file`.
 // The kit names it `uni.vault.file(id, path)`, a Blob; the kit's Note asks it by itself when given the record's `id`.
+// And `vault.attachFrom {noteId, from, path}`: a file already attached to record `from` (one it reads) attached to
+// `noteId` too (one it may change, judged as `attach` is), through the hub's attach route: no new bytes, so a picture
+// shown on a second record is that record's own as well. It never attaches a file it couldn't already name.
 
 import { CODE_PATH, codeKindOf, isCodeExtension } from "../code.ts";
 import { attachedPicture, attachmentLists, FILE_MAX, mediaType, storagePath } from "../files.ts";
@@ -80,9 +83,12 @@ export type VaultDeps = {
   attachments?(id: string): Promise<unknown>;
   /** The bytes of a file in the vault's storage (`<date>/<file>`). Asked only for one the hub lists as the note's own. */
   file?(path: string): Promise<Blob>;
+  /** Attach a file already in the vault's storage (`<date>/<file>`) to the note `id`. Absent: attachFrom is not_granted. */
+  attachPath?(id: string, path: string, mimeType: string): Promise<{ id?: string; path: string; mimeType?: string }>;
 };
 type AttachParams = { noteId: string; bytes: ArrayBuffer; type: string; transcribe: boolean };
 type FileParams = { id: string; path: string };
+type AttachFromParams = { noteId: string; from: string; path: string };
 /** One refusal for a record outside the folders, one it can't find and a file not attached to it: none tells it more. */
 const notAttached = () => new ContractError(ERROR_CODES.outOfScope, "only a picture attached to a record it reads");
 type FetchParams = { method: string; path: string; headers: Record<string, string>; body: string | null };
@@ -505,7 +511,43 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
           if (ctx.closed()) throw new ContractError(ERROR_CODES.failed);
           const a = await deps.attach(note.id, v.bytes, v.type, v.transcribe).catch((e: unknown) => { throw new ContractError(ERROR_CODES.failed, `the vault didn't take it: ${e instanceof Error ? e.message.slice(0, 200) : "it failed"}`); });
           forget(v.noteId, note.id, note.path);
+          lists.forget(note.id);
           return { id: a.id ?? null, path: a.path, type: a.mimeType ?? v.type, transcribe: v.transcribe };
+        },
+      },
+      attachFrom: {
+        cap: "vault.update",
+        validate: (p: unknown) => (plain(p) && hasOnly(p, ["noteId", "from", "path"]) && typeof p.noteId === "string" && safeRef(p.noteId)
+          && typeof p.from === "string" && safeRef(p.from) && typeof p.path === "string" ? { ok: true, value: { noteId: p.noteId, from: p.from, path: p.path } } : { ok: false }),
+        async run(v: AttachFromParams, scopes, ctx) {
+          const want = storagePath(v.path);
+          if (!want) throw notAttached();
+          if (!deps.attachments || !deps.attachPath) throw new ContractError(ERROR_CODES.notGranted, "this vault takes no files from applets here");
+          // the file: one attached to a record it reads, as the hub lists it now
+          ctx.charge(1);
+          let from: VaultNote;
+          try { from = await deps.getNote(v.from); } catch (e) { if (e instanceof ContractError) throw e; throw notAttached(); }
+          if (!inScope(scopes["vault.read"] ?? [], from.path)) throw notAttached();
+          let had: unknown[];
+          try { had = await lists(from.id, () => ctx.charge(1), true); } catch (e) { if (e instanceof ContractError) throw e; throw new ContractError(ERROR_CODES.failed); }
+          const att = had.find((a): a is Record<string, unknown> => plain(a) && a.path === want);
+          const type = att && mediaType(att.mimeType ?? att.mime_type);
+          if (!att || !type) throw notAttached();
+          // the record it goes onto: judged as attach is, on the note as read now
+          ctx.charge(1);
+          let note: VaultNote;
+          try { note = await deps.getNote(v.noteId); } catch (e) { if (e instanceof ContractError) throw e; throw new ContractError(ERROR_CODES.outOfScope, "it may attach files only to notes it may change"); }
+          if (!inScope(scopes["vault.update"] ?? [], note.path) || isAppletCode(note)) throw new ContractError(ERROR_CODES.outOfScope, "it may attach files only to notes it may change");
+          // there already: nothing to do (a save that attaches each time it is made stays one attachment)
+          let has: unknown[];
+          try { has = await lists(note.id, () => ctx.charge(1), true); } catch (e) { if (e instanceof ContractError) throw e; throw new ContractError(ERROR_CODES.failed); }
+          const there = has.find((a): a is Record<string, unknown> => plain(a) && a.path === want);
+          if (there) return { id: typeof there.id === "string" ? there.id : null, path: want, type };
+          if (ctx.closed()) throw new ContractError(ERROR_CODES.failed);
+          const a = await deps.attachPath(note.id, want, type).catch((e: unknown) => { throw new ContractError(ERROR_CODES.failed, `the vault didn't take it: ${e instanceof Error ? e.message.slice(0, 200) : "it failed"}`); });
+          forget(v.noteId, note.id, note.path);
+          lists.forget(note.id);
+          return { id: a.id ?? null, path: a.path ?? want, type: a.mimeType ?? type };
         },
       },
       file: {

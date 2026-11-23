@@ -182,7 +182,8 @@ export default function Starter() {
         ) : (
           // nothing written and no fields: say so (a typed record's fields still show)
           selected.body?.trim() || Object.keys(selected.fields ?? {}).length
-            ? <Note body={selected.body ?? ""} path={selected.path} tags={selected.tags} fields={selected.fields} />
+            // its id: the pictures attached to it are drawn (`![](/api/storage/…)` in its words)
+            ? <Note id={selected.id} body={selected.body ?? ""} path={selected.path} tags={selected.tags} fields={selected.fields} />
             : <Empty>Nothing written yet. Edit to start.</Empty>
         )}
       </Page>

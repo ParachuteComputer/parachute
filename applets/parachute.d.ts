@@ -108,6 +108,12 @@ declare module "parachute" {
     createNote(rec: { path: string; content: string; types?: string[]; tags?: string[]; metadata?: Record<string, unknown> }): Promise<AppletRecord>;
     updateNote(id: string, change: { if_updated_at?: string; content?: string; metadata?: Record<string, unknown>; types?: { add?: string[]; remove?: string[] }; tags?: { add?: string[]; remove?: string[] } }): Promise<AppletRecord>;
     attach(noteId: string, bytes: ArrayBuffer | ArrayBufferView, type: string, opts?: { transcribe?: boolean }): Promise<{ id: string | null; path: string; type: string; transcribe: boolean }>;
+    /** A picture attached to a record in its folders, as its words link it (`/api/storage/…`). The Note asks it by itself
+     *  when given the record's id. Absent in an app before 11-23. */
+    file?(id: string, path: string): Promise<Blob>;
+    /** A file attached to record `fromId` (one it reads) attached to `noteId` (one it may change) too, with no new bytes:
+     *  a picture shown on a second record. Already there: nothing more. Absent in an app before 11-23. */
+    attachFrom?(noteId: string, fromId: string, path: string): Promise<{ id: string | null; path: string; type: string }>;
   }
   export const vault: AppletVault;
 
@@ -118,6 +124,8 @@ declare module "parachute" {
     types(vault: string): Promise<{ name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, { type?: string; enum?: unknown[]; description?: string }> }[]>;
     query(vault: string, q?: { type?: string; tag?: string; search?: string; path?: string; where?: { field: string; op: string; value: unknown }[]; sort?: { by: string; dir: "asc" | "desc" }; limit?: number; offset?: number }): Promise<{ records: VaultsRecord[]; more: boolean }>;
     get(vault: string, id: string): Promise<VaultsRecord>;
+    /** A picture attached to that record, as its words link it (`/api/storage/…`): give it to the Note as fetchBlob. */
+    file(vault: string, id: string, path: string): Promise<Blob>;
     history(vault: string, id: string): Promise<unknown[]>;
     version(vault: string, id: string, ix: number): Promise<unknown>;
     create(vault: string, rec: { path: string; body: string; types?: string[]; tags?: string[]; fields?: Record<string, unknown> }): Promise<VaultsRecord>;
@@ -231,7 +239,9 @@ declare module "parachute" {
   export function Loading(props: { children?: ReactNode }): ReactNode;
   export function Problem(props: { error?: unknown; onRetry?: () => unknown; children?: ReactNode }): ReactNode;
   export function Record(props: { onRecorded: (r: { bytes: ArrayBuffer; type: string; duration: number }) => unknown; label?: string; max_s?: number; disabled?: boolean; kind?: "primary" | "plain" | "quiet"; small?: boolean; children?: ReactNode }): ReactNode;
-  export function Note(props: { body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void }): ReactNode;
+  /** `id`: the record's, in its own vault: the pictures attached to it are drawn. `fetchBlob`: a picture's bytes, in place
+   *  of `id`'s (Vault's, for a record of any vault). */
+  export function Note(props: { id?: string; body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void; fetchBlob?: (src: string) => Promise<Blob> }): ReactNode;
   export function Link(props: { to: string; from?: string; children?: ReactNode }): ReactNode;
   export function Linked(props: { text: string; web?: boolean }): ReactNode;
   export const link: {

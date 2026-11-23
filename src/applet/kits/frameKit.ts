@@ -41,6 +41,7 @@
 //   uni.vault.attach(noteId, bytes, type, {transcribe}) → a file onto a note it may change, through the hub
 //   uni.vault.file(id, path)         → a picture attached to a record in its folders, as a Blob (path as its words link
 //                                      it, /api/storage/…): the kit's Note asks it by itself when given the record's id
+//   uni.vault.attachFrom(noteId, fromId, path) → a file attached to a record it reads, attached to one it may change too
 //   uni.services.*                   → the servers it declared (docs/design/SERVICES.md); card/answer/secret: Uni's
 //                                      approvals, with the approval key (docs/design/KEYRING.md)
 //   uni.props() / uni.onProps(cb)    → a component's props (plain data from the page's record), and later changes
@@ -75,7 +76,7 @@ export const FRAME_KIT = String.raw`(function () {
   var readyP = new Promise(function (r) { readyRes = r; });
   // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen; and the shell may:
   // a Notion export is chosen, then its records written and up to 150 MB of its files uploaded one at a time
-  var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000, "vaults.file": 120000, "vault.file": 120000 };
+  var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000, "vaults.file": 120000, "vault.file": 120000, "vault.attachFrom": 120000 };
   // bytes as an ArrayBuffer (what the shell takes), from an ArrayBuffer or a view of one
   function buf(b) { return b instanceof ArrayBuffer ? b : b && ArrayBuffer.isView(b) ? b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) : null; }
   function post(m) { parent.postMessage(m, "*"); }
@@ -641,6 +642,8 @@ export const FRAME_KIT = String.raw`(function () {
     };
     // a picture attached to a record in its folders, as a Blob (to draw its pictures: the kit's Note asks it by itself)
     vc.file = function (id, path) { return call("vault", "file", { id: id, path: path }).then(function (r) { return new Blob([r.bytes], { type: r.type }); }); };
+    // a picture shown on another record attached to this one too (no new bytes): {id, path, type}
+    vc.attachFrom = function (noteId, fromId, path) { return call("vault", "attachFrom", { noteId: noteId, from: fromId, path: path }); };
     uni.vault = vc;
   }
   Object.freeze(uni.theme);

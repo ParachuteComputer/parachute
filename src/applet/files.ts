@@ -89,9 +89,10 @@ export function storagePath(src: string): string | null {
  *  not once each. `read` asks the hub; `charge` is paid only when it does. */
 export function attachmentLists(read: (key: string) => Promise<unknown>) {
   const lists = new Map<string, { at: number; rows: Promise<unknown[]> }>();
-  return (key: string, charge: () => void): Promise<unknown[]> => {
+  /** `fresh`: asked of the hub whatever is kept (a write is judged on it). */
+  const of = (key: string, charge: () => void, fresh = false): Promise<unknown[]> => {
     const hit = lists.get(key);
-    if (hit && Date.now() - hit.at < 10_000) return hit.rows;
+    if (hit && !fresh && Date.now() - hit.at < 10_000) return hit.rows;
     charge();
     const rows = read(key).then((raw) => (Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.attachments) ? raw.attachments as unknown[] : []));
     rows.catch(() => { if (lists.get(key)?.rows === rows) lists.delete(key); });
@@ -99,6 +100,8 @@ export function attachmentLists(read: (key: string) => Promise<unknown>) {
     while (lists.size > 20) lists.delete(lists.keys().next().value as string);
     return rows;
   };
+  /** A record given a file: its list is asked again next time. */
+  return Object.assign(of, { forget: (key: string) => { lists.delete(key); } });
 }
 
 /** The picture at storage path `want` (from storagePath), only when it is in the record's attachment list: listed as a
