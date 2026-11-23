@@ -121,8 +121,10 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, start, class
     const off = kit()?.onShown?.((on: boolean) => { if (on) to(); });
     const scrolled = () => { foot = start === "last" && root.scrollHeight - scrollY - innerHeight < 48; };
     const ro = start === "last" && typeof ResizeObserver === "function" ? new ResizeObserver(() => { if (foot) window.scrollTo(0, root.scrollHeight); }) : null;
-    if (ro) { ro.observe(document.body); addEventListener("scroll", scrolled, { passive: true }); }
-    return () => { if (typeof off === "function") off(); ro?.disconnect(); removeEventListener("scroll", scrolled); };
+    // (the window itself shrinking, as the keyboard comes up, keeps the foot too)
+    const shrunk = () => { if (foot) window.scrollTo(0, root.scrollHeight); };
+    if (ro) { ro.observe(document.body); addEventListener("scroll", scrolled, { passive: true }); addEventListener("resize", shrunk); }
+    return () => { if (typeof off === "function") off(); ro?.disconnect(); removeEventListener("scroll", scrolled); removeEventListener("resize", shrunk); };
   }, [start, sized]);
   return (
     <main className={`pa-page${wide ? " pa-wide" : ""}${className ? ` ${className}` : ""}`} data-start={start}>
@@ -171,9 +173,8 @@ export function Pages({ start = "first", handle, className, children }: { start?
     const ro = typeof ResizeObserver === "function" ? new ResizeObserver(() => { if (follow) end(); }) : null;
     ro?.observe(el);
     if (flow.current) ro?.observe(flow.current);
-    const off = start === "last" ? kit()?.onShown?.((on: boolean) => { if (on) opening(); }) : undefined;
     return () => {
-      el.removeEventListener("scroll", scrolled); ro?.disconnect(); if (typeof off === "function") off();
+      el.removeEventListener("scroll", scrolled); ro?.disconnect();
       if (typeof handle === "function") handle(null); else if (handle) (handle as { current: PagesHandle | null }).current = null;
     };
   }, [start]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -114,7 +114,7 @@ for every hour. `theme.get()` says the part of the day as `hour`.
 A case is `none`, `uppercase`, `lowercase` or `capitalize`; capitals `normal`, `small-caps` or `all-small-caps`; a
 letter spacing between `-0.3em` and `0.3em`; a weight `100` to `900`.
 
-Motion comes from three curves and five times: `--ease-out` (arriving or leaving), `--ease-in-out` (moving across
+Motion comes from three curves and five times (and `--t-turn`, 240 ms, kept for applets written when places turned like pages): `--ease-out` (arriving or leaving), `--ease-in-out` (moving across
 the screen), `--ease-drawer` (a sheet rising), and `--t-press` (160 ms, a press), `--t-state` (200 ms, a
 part arriving or changing), `--t-sheet` (300 ms, a sheet or a toast), `--t-step` (40 ms, a step between parts you move
 yourself; the kit's parts arrive together, with no delay) and `--t-swap`

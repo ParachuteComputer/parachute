@@ -344,12 +344,13 @@ export const TYPE_SCALE_CSS = (Object.entries(TYPE_SCALE) as [TypeStep, number][
  *    t-state      a part arriving, or changing state; a page's arrival (every navigation stays within 250 ms)
  *    t-sheet      a sheet or a toast arriving (leaving takes four fifths of it)
  *    t-step       a step between one part and the next, for an applet's own group arriving (the kit's parts arrive together)
+ *    t-turn       kept for applets of 11-22 (a page turned by an arrow); the kit no longer turns pages
  *    t-swap       one room giving way to another in place: the old fades out over the new (docs/LOOK.md)
  *  With the device's reduce-motion setting, on a screen slow to redraw (e-ink), or with a theme whose `motion` is
  *  `still`, every time is 0: nothing moves. */
 export const MOTION = {
   "ease-out": "cubic-bezier(0.23, 1, 0.32, 1)", "ease-in-out": "cubic-bezier(0.77, 0, 0.175, 1)", "ease-drawer": "cubic-bezier(0.32, 0.72, 0, 1)",
-  "t-press": "160ms", "t-state": "200ms", "t-sheet": "300ms", "t-step": "40ms", "t-swap": "150ms",
+  "t-press": "160ms", "t-state": "200ms", "t-sheet": "300ms", "t-step": "40ms", "t-turn": "240ms", "t-swap": "150ms",
 } as const;
 const TIMES = (Object.keys(MOTION) as (keyof typeof MOTION)[]).filter((k) => k.startsWith("t-"));
 const STILL = TIMES.map((k) => `--${k}:0ms;`).join("");

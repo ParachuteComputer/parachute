@@ -664,7 +664,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     // relay's answer: the line may come back by the subscription first)
     const was = atBottom.current;
     atBottom.current = true;
-    const r = await relay.publish({ kind: 9, content, tags: tg });
+    const r = await relay.publish({ kind: 9, content, tags: tg }).catch((e: unknown) => { atBottom.current = was; throw e; });
     if (!r.ok) { atBottom.current = was; setErr(`Not sent: ${r.message || "the relay refused it"}`); return false; }
     st.add(r.event); st.bump();
     return true;
@@ -683,7 +683,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     try {
       const r = await relay.publish({ kind: 9, content: body, tags: [["h", room], ...(naming ? [["p", uni!]] : []), ...(target ? [["e", target, "", "root"]] : [])] });
       if (r.ok) { st.add(r.event); st.bump(); } else { atBottom.current = was; setErr(`Not sent: ${r.message || "the relay refused it"}`); }
-    } catch (e: any) { setErr(`Not sent: ${e?.message ?? e}`); }
+    } catch (e: any) { atBottom.current = was; setErr(`Not sent: ${e?.message ?? e}`); }
     setPosting(false);
   };
   // muted (a choice an older build offered, kept per room): one tap and Uni hears this room again
@@ -705,7 +705,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
 
   const title = name || "Room";
   let lastDay = "", prev: Ev | null = null, newShown = false;
-  // the talk: turned as pages (the kit's Pages, opening on the newest), or on an older app a box that scrolls
+  // the talk: a box that scrolls, opening on the newest
   const talk = <div className="page">
         {!thread && (older === "start" ? <p className="day">Start of {title}</p> : <div className="older"><Button small busy={older === "loading"} onClick={loadOlder}>Load older messages</Button></div>)}
         <div className="log" role="log" aria-label={`Messages in ${name || "the room"}`}>

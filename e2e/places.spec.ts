@@ -133,6 +133,8 @@ test("what you write in is pinned at the foot: in reach at the top of a place an
   await inner.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
   await expect.poll(() => onScreen(page, app.getByText("Leaf 29"))).toBe(true);
   expect(await onScreen(page, box)).toBe(true);
+  // the last row clears the pinned line: the page ends above it
+  expect((await app.getByText("Leaf 29").boundingBox())!.y + (await app.getByText("Leaf 29").boundingBox())!.height).toBeLessThanOrEqual((await app.locator(".pa-dock").boundingBox())!.y);
   expect(await atFoot()).toBeLessThan(40);
   // up again a little, then add a line: the place stays where it is
   await inner.evaluate(() => scrollTo(0, 300));

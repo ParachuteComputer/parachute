@@ -289,6 +289,10 @@ select.pa-finput { appearance: auto; }
 .pa-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; box-sizing: border-box; max-width: inherit; margin: 0 auto;
   padding: 8px var(--pad) calc(8px + env(safe-area-inset-bottom, 0px)); border-top: var(--line-row); background: var(--bg); }
 .pa-dock:empty { display: none; }
+.pa-wide > .pa-dock > .pa-write { max-width: var(--measure); margin-inline: auto; }
+/* a frame drawn at its content's height has no screen's foot: the line sits in place */
+:root[data-sized] .pa-dock { position: static; padding-inline: 0; border-top: 0; background: none; }
+:root[data-sized] .pa-page:has(> .pa-dock:not(:empty)) { padding-bottom: calc(var(--pad) * 4); }
 .pa-dock > .pa-write { margin: 0; }
 /* a part of a screen that scrolls on its own (a room's talk): the room its box gives it */
 .pa-pages { flex: 1; min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; }
