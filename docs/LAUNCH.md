@@ -30,11 +30,10 @@ in `src-tauri/tauri.conf.json`: derive it from the version before the second rel
 **Now:** the Mac app is ad-hoc signed. macOS asks once before opening it (docs/INSTALL-MAC.md), and after each update
 asks again whether Parachute may use its Keychain item, because every build has a new signature.
 
-**Recommendation:** join the Apple Developer Program as an organisation (99 USD a year; needs a D-U-N-S number), make a
-*Developer ID Application* certificate and an App Store Connect API key, and add them as secrets: `APPLE_CERTIFICATE`,
-`APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_ISSUER`, `APPLE_API_KEY`, and the key file. Tauri
-signs and notarises with exactly these; `mac.yml` then signs with the identity instead of `-`. Notarised, the app opens
-with no Gatekeeper step, and a stable signature ends the Keychain question after updates.
+**Wired, waiting for the keys:** `mac.yml` signs with a Developer ID certificate and notarises the app and the dmg once
+the five Apple secrets are set; [STORES.md](STORES.md) says which, and why a notarised dmg rather than the Mac App Store
+for now. Notarised, the app opens with no Gatekeeper step, and a stable signature ends the Keychain question after
+updates.
 
 ## 3. An update channel
 
