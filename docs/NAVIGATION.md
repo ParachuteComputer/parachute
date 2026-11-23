@@ -24,7 +24,7 @@ One model, everywhere.
    it first to have it there. Under a frame of your own it also ends with the app's own way to Settings.
    An applet that declares signals shows its count beside its glyph unless it is the screen in front ([design/APP-RECORD.md](design/APP-RECORD.md), "Signals").
 2. **The list is your bundle.** Every applet the open bundle offers ([Bundles](#bundles)), in one plain list. In Everything, that
-   is every applet in every vault. Vaults are not on it: they are in Settings (**Your Parachutes**, each with **Open**),
+   is every applet in every vault. Vaults are not on it: they are in Settings (**Your Parachutes**, one line each saying what Parachute holds of it and what for, with **Open**),
    and in a Vault applet when the bundle lists one.
 3. **Back returns where you came from.** The app's Back and the phone's Back both go one step back in what you did. On
    the first screen of a start, the app's Back goes to the list, and the phone's Back leaves the app.
@@ -177,9 +177,9 @@ hub's origin) and, if you like, a `name` Settings shows. The app adds one each t
 agent can add one by writing an entry. A Parachute on the list that a device isn't signed in to shows in Settings
 as one line with **Sign in**; nothing is signed in to, or fetched from it, until you tap that and say whose it is.
 
-Signing in reads your home vault only. Each other vault on that Parachute, and any made there later, shows up under it
-in Settings as one quiet line, **Open playground**. A tap asks your hub to let Parachute read that one vault; **Not
-now** stops offering it on this device ([design/SCOPES.md](design/SCOPES.md), [design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md),
+Signing in reads your home vault only. Each other vault on that Parachute, and any made there later, is counted under
+it in Settings (*3 more vaults there, which Parachute doesn't read*); a tap on that line shows them, each as **Open
+playground**. A tap asks your hub to let Parachute read that one vault; **Not now** stops offering it on this device ([design/SCOPES.md](design/SCOPES.md), [design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md),
 step 7).
 
 ## What is whose

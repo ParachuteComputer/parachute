@@ -29,7 +29,7 @@ export default function BundleChoice() {
   const order = [...bundles].sort((a, b) => rank(a.id) - rank(b.id) || a.name.localeCompare(b.name));
   return (
     <section className="card" aria-labelledby="s-bundle">
-      <h2 id="s-bundle">Your bundle</h2>
+      <h3 id="s-bundle">Your bundle</h3>
       <fieldset className="plain" disabled={busy}>
         <legend className="sr-only">Which bundle opens</legend>
         {order.map((a) => (

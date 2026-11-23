@@ -142,7 +142,7 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
   if (!runs || read.state === "gone") return null;
   return (
     <section className="card bundle-section" aria-label={a.settings!.name}>
-      <h2>{a.settings!.name}</h2>
+      <h3>{a.settings!.name}</h3>
       {/* whose it is, above its frame: what the frame draws under it is the applet's, not Settings' */}
       <p className="small quiet bundle-section-from">From <Link to={to}><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> {name}</Link></p>
       {read.state === "say" ? <p className="quiet">{read.line} <Link to={to}>Open {name}</Link></p>

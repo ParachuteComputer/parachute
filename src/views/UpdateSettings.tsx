@@ -12,7 +12,7 @@ export default function UpdateSettings() {
   const download = (url: string) => { setError(""); void openLinkOut(url).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e))); };
   return (
     <section className="card" aria-labelledby="s-updates">
-      <h2 id="s-updates">Updates</h2>
+      <h3 id="s-updates" className="sr-only">Updates</h3>
       <p>This build: {OWN.at ? <>built {builtOn(OWN.at)} <span className="quiet">({OWN.commit})</span></> : "not from a release"}.</p>
       {s.kind === "checking" && <p className="quiet">Looking for a newer one…</p>}
       {s.kind === "current" && <p className="quiet">It's the newest.</p>}

@@ -24,7 +24,7 @@ export default function ThemeSettings() {
   const palette = t.tokens.scheme === "dark" ? t.theme.dark : t.theme.colors;
   return (
     <section className="card" aria-labelledby="s-look">
-      <h2 id="s-look">Look</h2>
+      <h3 id="s-look">Look</h3>
       <p role="status" className="look-status">{t.from === "vault" ? <>Your own theme, kept in <strong>{home?.vault}</strong>. Change it there (Vault, Parachute's own), or ask your agent to.</> : "The built-in theme."}</p>
       <p className="swatches" aria-label="Colours">{COLOR_KEYS.map((k) => <span key={k} className="swatch" title={k} style={{ background: palette[k] }} />)}</p>
       {home && (

@@ -2,7 +2,7 @@
 // Notes, find a note, change it (the first Save saves), write a new one, copy the hub's one address and a vault's own, capture a
 // line into Inbox/ and write a Journal entry, both Parachute's own applets with no card. Against the real hub: what the app writes is read back.
 import { expect, test } from "@playwright/test";
-import { signIn } from "./helpers";
+import { moreVaults, signIn } from "./helpers";
 import { api, hubState, VAULT } from "./hub";
 
 type Row = { id: string; path: string; content?: string; tags?: string[] };
@@ -31,6 +31,7 @@ test("Parachute Simplified: sign in → Notes → find, edit and write a note �
     await expect(bar.getByRole("link", { name: "Capture" })).toBeVisible();
     // each vault the sign-in didn't read is a line in Settings
     await page.goto("/settings");
+    await moreVaults(page);
     await expect(page.getByRole("button", { name: "Open letters", exact: true })).toBeVisible();
     await bar.getByRole("link", { name: "Notes" }).click();
 

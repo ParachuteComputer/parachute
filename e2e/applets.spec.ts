@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { fromAppletMenu, ui } from "./helpers";
+import { fromAppletMenu, ui, vaultRow } from "./helpers";
 import { api, hubState, VAULT } from "./hub";
 
 const idOf = async (path: string) => (await api(hubState(), "GET", `notes?id=${encodeURIComponent(path)}`)).id as string;
@@ -196,6 +196,7 @@ test("signing out of a vault ends its applets' grants on this device", async ({ 
   await page.route((u) => u.pathname === "/oauth/revoke", (r) => { revoked = true; return r.fulfill({ status: 200, body: "" }); });
   await page.goto("/settings");
   await expect(page.getByRole("list", { name: "Allowed applets" }).getByRole("listitem")).toHaveCount(1);
+  await vaultRow(page, "kitchen");
   await page.getByRole("button", { name: "Sign out of kitchen" }).click();
   expect(await page.evaluate(() => localStorage.getItem("parachute.applets.grants.v1"))).toBe("{}");
   await expect.poll(() => revoked).toBe(true);

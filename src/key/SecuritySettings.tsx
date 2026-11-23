@@ -62,7 +62,7 @@ export default function SecuritySettings() {
   const shown = pending ?? cur;
   return (
     <section className="card" aria-labelledby="s-security">
-      <h2 id="s-security">Security</h2>
+      <h3 id="s-security">Security</h3>
       <p className="small">What Parachute asks before it acts for you, in <strong>{app.name}</strong>. Stricter is a tap; looser asks your {status.passcode ? "passcode and " : ""}unlock, signed for your other devices.</p>
       <div className="levels-row">
         <span>Lock after<br /><span className="small quiet">untouched; then your unlock opens it</span></span>
@@ -85,7 +85,7 @@ export default function SecuritySettings() {
         <button type="submit" className="primary" disabled={status.passcode && !code}>Change</button>
         <button type="button" className="quiet-button" onClick={() => { setPending(null); setCode(""); }}>Cancel</button>
       </form>}
-      <h3>Passcode</h3>
+      <h4>Passcode</h4>
       <p className="small">{status.passcode ? "This device keeps a passcode: your own secret, not the phone's PIN, kept only as a slow hash here." : "A secret of your own, not the phone's PIN, for what you set to Passcode. Kept only as a slow hash on this device."}</p>
       <form className="row-buttons" onSubmit={(e) => { e.preventDefault(); run(async () => { await native.passcodeSet(status.passcode ? old : null, next || null); setOld(""); setNext(""); }, next ? "Passcode kept." : "Passcode removed."); }}>
         {status.passcode && <input className="text-input" type="password" aria-label="Your passcode now" placeholder="Passcode now" value={old} onChange={(e) => setOld(e.target.value)} autoComplete="off" />}

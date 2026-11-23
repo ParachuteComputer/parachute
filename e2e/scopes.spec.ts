@@ -7,7 +7,7 @@
 // Runs last (signs-in project): signing in again retires the shared sign-in.
 import { expect, test, type Page } from "@playwright/test";
 import { api, cli, hubState, MORE_VAULTS, mintToken, ORG_VAULT, record, techneState, VAULT, type HubState } from "./hub";
-import { approveUntilBack, fromAppletMenu, held, openVault, signIn, signInWithKey, ui } from "./helpers";
+import { approveUntilBack, fromAppletMenu, held, moreVaults, openVault, signIn, signInWithKey, ui } from "./helpers";
 import { appletRecord } from "../applets/record.ts";
 
 const OTHER = MORE_VAULTS[0].vault; // letters
@@ -58,6 +58,7 @@ test("a fresh sign-in asks for the list of vaults and the home at write; Journal
   expect(await held(page)).toEqual({ [VAULT]: HOME });
   // the other vaults are one line each in Settings, not read
   await page.goto("/settings");
+  await moreVaults(page);
   for (const v of MORE_VAULTS) await expect(page.getByRole("button", { name: `Open ${v.vault}`, exact: true })).toBeVisible();
   // a new device: applets run once the self-test has passed
   await expect(page.getByRole("status").filter({ hasText: /approved code only|run sealed/ })).toBeVisible({ timeout: 45_000 });
