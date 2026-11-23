@@ -24,6 +24,9 @@ declare module "parachute" {
   export function shown(): boolean;
   export function onShown(cb: (isShown: boolean) => void): () => void;
   export function onFresh(cb: () => void): () => void;
+  /** While held, the app's Back (its bar's ‹, Android's) calls `cb` instead of leaving: close a screen of your own.
+   *  Hold it in the tap that opened that screen. Returns the function that lets go. Not on an app before 11-23. */
+  export function onBack(cb: () => void): () => void;
   export function onOpen(cb: (open: { note: { id: string; path: string }; screen: string }) => void): () => void;
   export function props(): Record<string, unknown>;
   export function onProps(cb: (next: Record<string, unknown>) => void): () => void;

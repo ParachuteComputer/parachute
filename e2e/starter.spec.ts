@@ -39,6 +39,13 @@ test("the starter applet runs as shipped: lists, adds, opens, edits and saves a 
     // back to the list: the note is there
     await f.getByRole("button", { name: "← Starter" }).click();
     await expect(f.getByRole("region", { name: /Notes ·/ })).toContainText("Seed packets to sort");
+    // the app's own Back closes an open note first, and the person stays in the applet
+    const at = page.url();
+    await f.getByRole("button", { name: "Seed packets to sort" }).click();
+    await expect(f.locator("header").getByRole("heading", { name: "Seed packets to sort" })).toBeVisible();
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(f.getByRole("region", { name: /Notes ·/ })).toContainText("Seed packets to sort");
+    expect(page.url()).toBe(at);
   } finally {
     // by path, so a note added before a failed step goes too
     const left = added ?? await api(hubState(), "GET", `notes?id=${encodeURIComponent("Notes/Seed packets to sort")}`).catch(() => null);

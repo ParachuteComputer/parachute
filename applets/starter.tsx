@@ -2,7 +2,7 @@
 // folder (FOLDER here, and the access and opens paths in the .json); then run
 // `npx vite-node scripts/check-applet.ts applets/<name> --strict` before putting the record in your vault.
 import { useEffect, useRef, useState } from "react";
-import { Button, Days, Empty, Field, List, Loading, Note, onOpen, Page, Problem, ready, Search, toast, useSaved, vault, when, Write } from "parachute";
+import { Button, Days, Empty, Field, List, Loading, Note, onBack, onOpen, Page, Problem, ready, Search, toast, useSaved, vault, when, Write } from "parachute";
 
 type Item = {
   id: string;
@@ -118,12 +118,17 @@ export default function Starter() {
     }
   };
 
+  // back to the list (the page's own ← and the app's Back alike)
+  const close = () => { opening.current++; setSelected(null); setSelectedId(null); setDraft(null); };
+  // while a note is open, the app's Back (its bar's ‹, Android's) closes it first (an app before 11-23 has no onBack)
+  useEffect(() => (selected && typeof onBack === "function" ? onBack(close) : undefined), [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (selected) {
     return (
       <Page
         title={titleOf(selected)}
         kicker={selected.updatedAt ? `Updated ${when.short(selected.updatedAt)}` : undefined}
-        back={{ label: "Starter", onPress: () => { opening.current++; setSelected(null); setSelectedId(null); setDraft(null); } }}
+        back={{ label: "Starter", onPress: close }}
         aside={!editing ? <Button small onClick={() => setDraft({ id: selected.id, body: selected.body ?? "", base: selected.updatedAt })}>Edit</Button> : undefined}
         onRefresh={editing ? undefined : () => openItem(selected.id)}
       >
