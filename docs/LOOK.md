@@ -70,8 +70,9 @@ applet that moves things in its own code asks the kit `still()` first.
 
 **Sky lives at the head of a place and in arrivals. It steps back wherever you read, scan or write.**
 
-- **The head.** The first page's top carries the hour's sky (`--sky-top` into `--sky-mid` into the paper, over about
-  300 px on a phone and 380 on a Mac): morning gold, midday clear, evening rose, night a dusk lilac. It is looked at
+- **The head.** The first page's top carries the hour's sky (`--sky-top` into `--sky-mid` into the paper), as tall as
+  the place's head (its name, what sits over and beside it) and a short fade, so the first rows are on paper: morning
+  gold, midday clear, evening rose, night a dusk lilac. A page that scrolls has a fixed head of sky, about 170 px. It is looked at
   when the app comes to the front and at each move, never on a timer.
 - **Home.** The greeting in Fraunces sits in the sky. What wants you is the one white card with light on it, and its
   one coral button opens the room to answer it (Home reads rooms; it never answers for you). In the room, the ask's

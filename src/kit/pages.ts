@@ -19,6 +19,8 @@ export type Pages = { turn(by: number, how?: "motion" | "cut"): void; to(page: n
 
 /** A spread is two pages from this book width on. */
 export const SPREAD_FROM = 900;
+/** How far the sky fades into the paper under a place's head. */
+const SKY_FADE = 36;
 /** A page is never wider than this (a reading measure, with its margins). */
 const MOST = 720;
 
@@ -77,6 +79,10 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
     flow.style.setProperty("--pa-col-h", `${Math.max(120, flow.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 8)}px`);
     // the sky over the first page; on a Mac over the open book's first spread, under the bar's own sky
     sky.style.width = `${per * pageW}px`;
+    // as tall as the place's head (its name, what sits over and beside it) and a short fade: the rows under it are on paper
+    const head = flow.querySelector<HTMLElement>(":scope > .pa-page-head");
+    if (head) sky.style.height = `${Math.round(head.getBoundingClientRect().bottom - book.getBoundingClientRect().top + SKY_FADE)}px`;
+    else sky.style.removeProperty("height");
     const before = count;
     // the content's extent: the column the end of the flow (a mark after everything in it) falls in
     const end = flow.querySelector<HTMLElement>(":scope > .pa-end");

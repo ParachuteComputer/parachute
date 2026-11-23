@@ -409,7 +409,7 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
    the head and the screen's name in the big serif in it; plain paper with hairlines below, where you read and change
    things. They are forms, so they scroll. */
 @layer parachute.app {
-:root:has(main.screen:not(.applet-screen)) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 150px, var(--bg) 300px); background-size: 100% 300px; }
+:root:has(main.screen:not(.applet-screen)) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 70px, var(--bg) 150px); background-size: 100% 150px; }
 main.screen:not(.applet-screen) > .bar { position: static; min-height: 56px; margin-bottom: 2px; background: none; border-bottom: 0; }
 main.screen:not(.applet-screen) > .bar .bar-title { font: var(--title-weight) var(--fs-title)/1.1 var(--display, var(--serif)); letter-spacing: -.015em; white-space: normal; }
 main.screen:not(.applet-screen) > .bar :is(.bar-back, .bar-menu) { color: var(--muted); }
