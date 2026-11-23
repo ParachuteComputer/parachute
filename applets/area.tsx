@@ -68,7 +68,7 @@ export default function Area() {
     <div className="cols">
       <section className="lede" ref={lede} aria-label={shown ? title(shown) : `About ${place.name}`}>
         {open && <Button kind="quiet" className="pa-back" onClick={() => setOpen(null)}>← {place.name}</Button>}
-        {shown ? <Note body={shown === own ? withoutTitle(own.body ?? "", place.name) : shown.body ?? ""} path={shown.path} tags={shown.tags} fields={shown.fields} onLink={follow} />
+        {shown ? <Note id={shown.id} body={shown === own ? withoutTitle(own.body ?? "", place.name) : shown.body ?? ""} path={shown.path} tags={shown.tags} fields={shown.fields} onLink={follow} />
           : notes && <p className="quiet">Nothing written about {place.name} yet. A note at {place.folder}{place.name} shows here.</p>}
       </section>
       <section className="talk" aria-label={`Talk about ${place.name}`}>

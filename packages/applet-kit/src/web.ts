@@ -5,6 +5,7 @@
 import type { VaultClient } from "@openparachute/surface-client";
 import { cssOf, DEFAULT_THEME, tokensOf } from "../../../src/theme/theme.ts";
 import { FONTS_CSS } from "../../../src/theme/fonts.ts";
+import { attachedPicture, storagePath } from "../../../src/applet/files.ts";
 
 export type AppletInfo = { id: string; name: string };
 type Rec = Record<string, unknown>;
@@ -44,6 +45,15 @@ export const vault = {
   getNote: (id: string, o?: { includeLinks?: boolean; includeAttachments?: boolean }) => need().getNote(id, o),
   createNote: (p: Rec) => need().createNote(p as never),
   updateNote: (id: string, p: Rec) => need().updateNote(id, p as never),
+  // a picture attached to the record (the Note asks it by itself, given the record's id): the frame's one rule, a
+  // picture the hub lists as the record's own (docs/design/PICTURES.md)
+  file: async (id: string, src: string) => {
+    const want = storagePath(src);
+    if (!want) throw new Error("only a picture attached to the record");
+    const c = need();
+    const got = await attachedPicture(want, await c.listAttachments(id), (p) => c.fetchAttachmentBlob(`/api/storage/${p.split("/").map(encodeURIComponent).join("/")}`), (e) => e as never);
+    return new Blob([got.bytes], { type: got.type });
+  },
 };
 
 /** What it saved (useSaved), kept in this browser, under the applet's id and the vault linked. */

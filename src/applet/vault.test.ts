@@ -10,6 +10,7 @@ import { parseManifest } from "./manifest";
 import { resolvedOf } from "./discovery";
 import { RECIPES } from "./fixtures";
 import { LIMITS, type HostMessage } from "./contract";
+import { Blob as NodeBlob } from "node:buffer";
 
 const manifest = (() => { const r = parseManifest(RECIPES); if (!r.ok) throw new Error(r.error); return r.manifest; })();
 let notes: VaultNote[];
@@ -448,5 +449,160 @@ describe("the hub's query words, kept to the folders", () => {
     expect(notes.some((n) => n.path === "Recipes/X")).toBe(false);
     // only a write carries a body
     expect((await f.send({ method: "GET", path: "/api/notes", bytes: bytes({}) })).status).toBe(400);
+  });
+});
+
+describe("vault.file: a picture attached to a record in the applet's folders, and nothing else (docs/design/PICTURES.md)", () => {
+  const OWL = "2026-11-23/1763-owl.png", DIARY = "2026-11-23/1764-diary.png", TOUR = "2026-11-23/1765-tour.mp4";
+  // Recipes/Toast has the owl and a video; Journal/Secret (outside the folders) has the diary photo, and the owl too
+  const ATTACHED: Record<string, { path: string; mimeType: string }[]> = {
+    r1: [{ path: OWL, mimeType: "image/png" }, { path: TOUR, mimeType: "video/mp4" }],
+    j1: [{ path: DIARY, mimeType: "image/png" }, { path: OWL, mimeType: "image/png" }],
+  };
+  const make = (o: { files?: boolean; big?: boolean; served?: string } = {}) => {
+    const fetched: string[] = [], listed: string[] = [];
+    const deps: VaultDeps = {
+      ...vault,
+      ...(o.files === false ? {} : {
+        async attachments(id: string) { listed.push(id); return ATTACHED[id] ?? []; },
+        async file(p: string) { fetched.push(p); return new NodeBlob([new Uint8Array(o.big ? 25 * 1024 * 1024 + 1 : 4)], { type: o.served ?? "image/png" }) as unknown as Blob; },
+      }),
+    };
+    const router = createRouter([createVaultModule(deps)]);
+    const call = (params: unknown, grant: Record<string, string[]> = { "vault.read": ["Recipes/"] }) =>
+      router.call("vault", "file", params, grant, { charge() {}, closed: () => false }) as Promise<{ type: string; bytes: ArrayBuffer }>;
+    return { call, fetched, listed };
+  };
+  it("hands over the bytes of a picture attached to a record in its folders, by id or path", async () => {
+    const { call, fetched } = make();
+    const got = await call({ id: "r1", path: `/api/storage/${OWL}` });
+    expect(got.type).toBe("image/png");
+    expect(got.bytes.byteLength).toBe(4);
+    expect((await call({ id: "Recipes/Toast", path: OWL })).type).toBe("image/png");
+    expect(fetched).toEqual([OWL, OWL]);
+  });
+  it("refuses a record outside its folders, said as a record it can't find, and reads nothing of it", async () => {
+    const { call, fetched, listed } = make();
+    const outside = await call({ id: "j1", path: `/api/storage/${DIARY}` }).catch((e) => e);
+    const missing = await call({ id: "nosuch", path: `/api/storage/${DIARY}` }).catch((e) => e);
+    expect(outside).toMatchObject({ code: "out_of_scope" });
+    // the same words for both: it can't learn that the record is there
+    expect(String(outside.message)).toBe(String(missing.message));
+    // the owl is attached to Journal/Secret too, but asked for through that record it is still refused
+    await expect(call({ id: "Journal/Secret", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(fetched).toEqual([]);
+    expect(listed).toEqual([]);
+  });
+  it("refuses a file not in the record's list: another record's, one attached to nothing", async () => {
+    const { call, fetched } = make();
+    await expect(call({ id: "r1", path: `/api/storage/${DIARY}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(call({ id: "r1", path: "/api/storage/2026-11-23/nobody.png" })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(fetched).toEqual([]);
+  });
+  it("refuses path tricks: a way out of storage, an encoded one, a query, another host, a record named by a dot path", async () => {
+    const { call, fetched, listed } = make();
+    for (const path of [`/api/storage/2026-11-23/../../${DIARY}`, "/api/storage/2026-11-23%2F..%2F..%2Fsecrets", `/api/storage/${OWL}?x=1`, `/api/storage/${OWL}#f`,
+      `/api/storage/2026-11-23\\1763-owl.png`, `https://elsewhere.example/api/storage/${OWL}`, `//elsewhere.example/api/storage/${OWL}`, `/api/storage/%2e%2e/${OWL}`, "/api/storage/" + "a/".repeat(300) + "b.png"]) {
+      await expect(call({ id: "r1", path }), path).rejects.toMatchObject({ code: "out_of_scope" });
+    }
+    for (const id of ["Recipes/../Journal/Secret", "../Journal/Secret", "Recipes/./Toast", "Recipes\\..\\Journal"]) {
+      await expect(call({ id, path: `/api/storage/${OWL}` }), id).rejects.toMatchObject({ code: "bad_params" });
+    }
+    await expect(call({ id: "r1", path: `/api/storage/${OWL}`, vault: "elsewhere" })).rejects.toMatchObject({ code: "bad_params" });
+    expect(fetched).toEqual([]);
+    expect(listed).toEqual([]);
+  });
+  it("needs vault.read; a screen whose shell hands over no files hands none", async () => {
+    await expect(make().call({ id: "r1", path: `/api/storage/${OWL}` }, {})).rejects.toMatchObject({ code: "not_granted" });
+    await expect(make({ files: false }).call({ id: "r1", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "not_granted" });
+  });
+  it("hands over a picture only (a video is refused before it is read, a file the hub serves as anything else after), 25 MB at most", async () => {
+    const { call, fetched } = make();
+    await expect(call({ id: "r1", path: `/api/storage/${TOUR}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(fetched).toEqual([]);
+    await expect(make({ served: "text/html" }).call({ id: "r1", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(make({ big: true }).call({ id: "r1", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "too_large" });
+  });
+  it("costs read budget each call, even when the record and its list are kept", async () => {
+    let spent = 0;
+    const router = createRouter([createVaultModule({ ...vault, attachments: async (id) => ATTACHED[id] ?? [], file: async () => new NodeBlob([new Uint8Array(4)], { type: "image/png" }) as unknown as Blob })]);
+    const charged = () => router.call("vault", "file", { id: "r1", path: OWL }, { "vault.read": ["Recipes/"] }, { charge(n: number) { spent += n; }, closed: () => false });
+    await charged();
+    const first = spent;
+    await charged();
+    expect(spent - first).toBeGreaterThanOrEqual(1);
+    expect(first).toBe(3);
+  });
+  it("a note's pictures ask for the record's list once", async () => {
+    const { call, listed } = make();
+    await Promise.all([call({ id: "r1", path: `/api/storage/${OWL}` }), call({ id: "r1", path: `/api/storage/${OWL}` })]);
+    await expect(call({ id: "r1", path: `/api/storage/${DIARY}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(listed).toEqual(["r1"]);
+  });
+});
+
+describe("vault.attachFrom: a picture attached to a record it reads, attached to one it may change too (WEB.md §5)", () => {
+  const OWL = "2026-11-23/1763-owl.png", DIARY = "2026-11-23/1764-diary.png";
+  const make = () => {
+    notes.push({ id: "r2", path: "Recipes/Soup", content: "soup", tags: ["recipe"], updatedAt: "2026-11-04" });
+    const attached: Record<string, { id: string; path: string; mimeType: string }[]> = { r1: [{ id: "att1", path: OWL, mimeType: "image/png" }, { id: "att7", path: "2026-11-23/1766-contract.pdf", mimeType: "application/pdf" }, { id: "att8", path: "2026-11-23/1767-contract.pdf", mimeType: "image/png" }], j1: [{ id: "att2", path: DIARY, mimeType: "image/png" }] };
+    const added: [string, string, string][] = [];
+    const deps: VaultDeps = {
+      ...vault,
+      async attachments(id) { return (attached[id] ?? []).map((a) => ({ ...a })); },
+      async file() { return new NodeBlob([new Uint8Array(4)], { type: "image/png" }) as unknown as Blob; },
+      async attachPath(id, path, mimeType) { added.push([id, path, mimeType]); const a = { id: `att${added.length + 2}`, path, mimeType }; (attached[id] ??= []).push(a); return a; },
+    };
+    const router = createRouter([createVaultModule(deps)]);
+    const grant = { "vault.read": ["Recipes/"], "vault.update": ["Recipes/"] };
+    const ctx = { charge() {}, closed: () => false };
+    return {
+      added,
+      attachFrom: (params: unknown, g: Record<string, string[]> = grant) => router.call("vault", "attachFrom", params, g, ctx) as Promise<{ id: string | null; path: string; type: string }>,
+      file: (params: unknown) => router.call("vault", "file", params, grant, ctx) as Promise<{ type: string }>,
+    };
+  };
+  it("attaches the same stored file to the second record, once, and the second record then draws it", async () => {
+    const { attachFrom, file, added } = make();
+    // read first (its list is kept a moment), then attached: the new attachment is seen at once
+    await expect(file({ id: "r2", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(await attachFrom({ noteId: "r2", from: "r1", path: `/api/storage/${OWL}` })).toMatchObject({ path: OWL, type: "image/png" });
+    expect((await file({ id: "r2", path: `/api/storage/${OWL}` })).type).toBe("image/png");
+    // again: already there, nothing more attached
+    await attachFrom({ noteId: "Recipes/Soup", from: "Recipes/Toast", path: OWL });
+    expect(added).toEqual([["r2", OWL, "image/png"]]);
+  });
+  it("never attaches a file it couldn't name: one on a record outside its folders, or not on `from` at all", async () => {
+    const { attachFrom, added } = make();
+    const outside = await attachFrom({ noteId: "r2", from: "j1", path: `/api/storage/${DIARY}` }).catch((e) => e);
+    const missing = await attachFrom({ noteId: "r2", from: "nosuch", path: `/api/storage/${DIARY}` }).catch((e) => e);
+    expect(outside).toMatchObject({ code: "out_of_scope" });
+    expect(String(outside.message)).toBe(String(missing.message));
+    await expect(attachFrom({ noteId: "r2", from: "r1", path: `/api/storage/${DIARY}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(attachFrom({ noteId: "r2", from: "r1", path: "/api/storage/2026-11-23/nobody.png" })).rejects.toMatchObject({ code: "out_of_scope" });
+    // pictures only: a document it can't read itself is never carried to a record others may see (nor one listed as a
+    // picture whose name says it isn't: the hub serves it by its name)
+    await expect(attachFrom({ noteId: "r2", from: "r1", path: "/api/storage/2026-11-23/1766-contract.pdf" })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(attachFrom({ noteId: "r2", from: "r1", path: "/api/storage/2026-11-23/1767-contract.pdf" })).rejects.toMatchObject({ code: "out_of_scope" });
+    // a file it can read, but read through only `vault.update`: not without vault.read on `from`
+    await expect(attachFrom({ noteId: "r2", from: "r1", path: OWL }, { "vault.update": ["Recipes/"] })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(added).toEqual([]);
+  });
+  it("attaches only to a record it may change, never to code or outside its folders", async () => {
+    const { attachFrom, added } = make();
+    await expect(attachFrom({ noteId: "j1", from: "r1", path: OWL })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(attachFrom({ noteId: "a2", from: "r1", path: OWL })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(attachFrom({ noteId: "r2", from: "r1", path: OWL }, { "vault.read": ["Recipes/"] })).rejects.toMatchObject({ code: "not_granted" });
+    expect(added).toEqual([]);
+  });
+  it("refuses path and id tricks", async () => {
+    const { attachFrom, added } = make();
+    for (const path of [`/api/storage/2026-11-23/../${OWL}`, "/api/storage/2026-11-23%2F..%2Fx.png", `/api/storage/${OWL}?x`, `https://elsewhere.example/api/storage/${OWL}`]) {
+      await expect(attachFrom({ noteId: "r2", from: "r1", path }), path).rejects.toMatchObject({ code: "out_of_scope" });
+    }
+    for (const [noteId, from] of [["Recipes/../Journal/Secret", "r1"], ["r2", "Recipes/../Journal/Secret"]]) {
+      await expect(attachFrom({ noteId, from, path: OWL })).rejects.toMatchObject({ code: "bad_params" });
+    }
+    expect(added).toEqual([]);
   });
 });
