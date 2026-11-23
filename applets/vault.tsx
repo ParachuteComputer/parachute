@@ -1198,7 +1198,7 @@ type Applied = { added: string[]; kept: string[]; notes: string[]; changed: bool
 /** Who added it, in a person's words where the stamp says (an AI's sign-in, the app); a key's own name otherwise. */
 const byWhom = (via: string | null) => (via === "mcp" ? "by an AI" : via === "api" ? "in Parachute" : via?.startsWith("key:") && via.length < 30 ? `with the key ${via.slice(4)}` : "");
 
-type Brought = { picked: boolean; name?: string; found?: { pages: number; tables: number; rows: number }; made?: number; types?: string[]; notes?: string[]; left?: string[]; changed?: boolean };
+type Brought = { picked: boolean; name?: string; found?: { pages: number; tables: number; rows: number; files?: number }; under?: string; made?: number; attached?: number; types?: string[]; notes?: string[]; left?: string[]; changed?: boolean };
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 /** Import from Notion: the app's own picker for the export (a .zip), then what came in, and where to see it. The same
  *  export again changes nothing (it is a pack, with a receipt: docs/PACKS.md). */
@@ -1216,14 +1216,17 @@ function FromNotion({ v, openType, done, children }: { v: Held; openType: (t: st
       done?.();
     } catch (e) { quiet(e, "The Notion export wasn't brought in"); } finally { setBusy(false); }
   };
+  // (the files attached this time: an export already here attached nothing new, whatever it holds)
+  const filesCount = r?.changed ? (r.attached ?? 0) : 0;
   return <>
     <div className="chips">{children}{children ? " " : ""}<Button small busy={busy} onClick={() => void go()}>{busy ? "Bringing it in…" : "Import from Notion"}</Button></div>
     {r?.found && <section aria-label="What came from Notion" className="stack">
-      <p className="note-meta">{r.changed ? "From Notion" : "Already here from Notion"}: {count(r.found.tables, "table")} ({count(r.found.rows, "row")}) and {count(r.found.pages, "page")}, under Notion/.{r.changed ? "" : " Nothing changed."}</p>
+      <p className="note-meta">{r.changed ? "From Notion" : "Already here from Notion"}: {count(r.found.tables, "table")} ({count(r.found.rows, "row")}){filesCount > 0 ? `, ${count(r.found.pages, "page")} and ${count(filesCount, "attachment")}` : ` and ${count(r.found.pages, "page")}`}, under {r.under ?? "Notion/"}.{r.changed ? "" : " Nothing changed."}</p>
       {(r.types ?? []).length > 0 && <div className="chips">{r.types!.map((t) => <Button key={t} small kind="quiet" onClick={() => openType(t)}>{label(t)}</Button>)}</div>}
-      {(r.notes ?? []).slice(0, 5).map((n) => <p key={n} className="note-meta">{n}</p>)}
+      {(r.notes ?? []).slice(0, 5).map((n, i) => <p key={`${i}${n}`} className="note-meta">{n}</p>)}
       {(r.notes ?? []).length > 5 && <p className="note-meta">And {r.notes!.length - 5} more like these.</p>}
-      {(r.left ?? []).length > 0 && <p className="note-meta">{count(r.left!.length, "file")} stayed in your export (images and attachments aren't brought in yet): {r.left!.slice(0, 3).map((f) => f.split("/").pop()).join(", ")}{r.left!.length > 3 ? "…" : ""}.</p>}
+      {/* (each file left has its note above: listed by name too when the notes run past five) */}
+      {(r.left ?? []).length > 0 && (r.notes ?? []).length > 5 && <p className="note-meta">{count(r.left!.length, "file")} skipped: {r.left!.slice(0, 3).map((f) => f.split("/").pop()).join(", ")}{r.left!.length > 3 ? "…" : ""}.</p>}
     </section>}
   </>;
 }

@@ -20,6 +20,7 @@ import { takeBack } from "../applet/approvalStore";
 import { forgetSaved } from "./saved";
 import { officialCopyOf } from "../applet/parachuteSource";
 import { endAccess, inviteTo, knownNames, takeBackInvite, vaultNames, vaultPeople } from "../vault/sharing";
+import { bareName } from "../applet/files";
 
 type Requesting = { request<T>(path: string, init?: RequestInit): Promise<T> };
 const doors = new Map<string, Promise<"records" | "notes">>();
@@ -105,6 +106,10 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
     // goes as it is
     request: (key, method, path, body) => (method === "GET" ? (keptClientFor(rec(key)) as unknown as VaultClient & Requesting).request(`/api${path}`, { method, cache: "reload" })
       : req(key).request(`/api${path}`, { method, cache: "no-store", ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).catch(noReach(key)),
+    upload: async (key, name, bytes, mimeType) => {
+      const up = await clientFor(rec(key)).uploadStorageFile(new File([new Uint8Array(bytes)], bareName(name), { type: mimeType })).catch(noReach(key));
+      return { path: up.path, mimeType: up.mimeType ?? mimeType };
+    },
     // what a screen shows: from the copy kept of the read at once, the hub asked behind it (vault/readCache.ts)
     // a record for what shows, from the copy kept of it (vault/readCache.ts): only for an applet that redraws when told
     ...(opts.read ? { read: (key: string, path: string) => {

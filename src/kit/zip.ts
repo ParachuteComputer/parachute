@@ -5,9 +5,9 @@
 // file from filling memory or the clock, counted across the zip and every zip in it: at most MAX_FILES files with names
 // of 1 KB at most, MAX_TOTAL bytes of files and MAX_TOTAL of the zips at its top (each entry costing the larger of what
 // it reads and makes), each entry stopped as soon as it passes the size it claims, and one name only once. What it
-// holds at most: the file picked, MAX_TOTAL of files (the export's pages: the rest are names only), and one inner zip
-// while it is read. Entries the caller
-// doesn't `want` are listed by name with no bytes, never unpacked (an export's images, when only its pages are read).
+// holds at most: the file picked, MAX_TOTAL of files (or the caller's `max`), and one inner zip while it is read. Entries
+// the caller doesn't `want` (it is told each one's unpacked size) are listed by name with no bytes, never unpacked, and
+// passed to `onSkip` with that size (a Notion export's file over its limit: notion.ts notionWant).
 
 export type ZipFiles = Map<string, Uint8Array>;
 export const MAX_FILES = 5000;
@@ -41,7 +41,7 @@ function directory(b: Uint8Array): { at: number; count: number } {
   throw new ZipError("That file isn't a zip.");
 }
 
-export type ZipOptions = { want?: (path: string) => boolean; /** bytes once unpacked (MAX_TOTAL) */ max?: number };
+export type ZipOptions = { want?: (path: string, size: number) => boolean; /** bytes once unpacked (MAX_TOTAL) */ max?: number; /** called when `want` skips an entry, with its unpacked size */ onSkip?: (path: string, size: number) => void };
 /** `bytes`: files unpacked; `inner`: the zips at the top, unpacked to be opened (their budget isn't given back). */
 type Budget = { bytes: number; inner: number; files: number };
 
@@ -71,7 +71,7 @@ async function readInto(b: Uint8Array, out: ZipFiles, budget: Budget, opts: ZipO
     const path = name.replace(/\\/g, "/").replace(/^\/+/, "");
     // a zip at the top of the outer zip is the export's own wrapping: opened. Anything else not wanted: its name only
     const inner = depth === 0 && /\.zip$/i.test(path) && !path.includes("/");
-    if (!inner && opts.want && !opts.want(path)) { if (out.has(path)) throw new ZipError(`The zip has ${path} twice.`); out.set(path, new Uint8Array(0)); continue; }
+    if (!inner && opts.want && !opts.want(path, full)) { if (out.has(path)) throw new ZipError(`The zip has ${path} twice.`); out.set(path, new Uint8Array(0)); opts.onSkip?.(path, full); continue; }
     if (flags & 1) throw new ZipError("The zip is password-protected.");
     if (size === 0xffffffff || full === 0xffffffff) throw new ZipError("The zip is too big to read here.");
     if (u32(b, local) !== 0x04034b50) throw new ZipError("The zip is broken.");

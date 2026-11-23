@@ -35,7 +35,8 @@ changed, which the person also changed) is not built.
 ## In the app
 
 - `vaults.importNotion(vault)`, during a tap: the app's own picker for a Notion export, applied as a pack (From Notion,
-  above): `{ picked: false }`, or `{ name, found: {pages, tables, rows}, made, types, notes, left, changed }`.
+  above): `{ picked: false }`, or `{ name, found: {pages, tables, rows, files}, under, made, attached, types, notes, left, changed }` (`under`: the folder it
+  landed under).
 - Parachute's starter packs (`src/kit/packs/*.json`, each the block of its page at parachute.computer/docs/build/packs/<id>):
   **Core types** (person, project, meeting, task), **Clients and sessions** (client, session, follow-up: a practice, a
   coach's or a tutor's) and **Reading list** (book). Each has a template per type and a saved view; all three go into one
@@ -54,22 +55,33 @@ changed, which the person also changed) is not built.
 
 **Import from Notion** on a vault (Vault) opens the app's own picker for a Notion export (in Notion: Settings, Export,
 **Markdown & CSV**; the .zip as Notion gives it, up to 200 MB). The app reads it (`src/kit/zip.ts`, `src/kit/notion.ts`)
-and applies it as a pack, by the rule above, under one folder, `Notion/`:
+and applies it as a pack, by the rule above, under one folder, `Notion/` (`Notion/<workspace>/` when the export names
+its workspace, as Notion's `index.html` does, so two workspaces' pages never meet at one path):
 
 - a **database** becomes a type named for it (Reading List → `reading-list`), one field per column, its kind found from
   the values (dates, numbers, yes/no, lists, links to other rows as references: written as the export's relative paths,
   or, as exports since about 2023 write them, notion.so links found by the page's id); its `_all.csv` is read, so rows a view
   filtered out come too. A record at the table's place says where its rows went.
-- a **row** becomes a record of that type at `Notion/<its place>/<title>`: the columns are its fields, its page (less
+- a **row** becomes a record of that type at `Notion/<workspace>/<its place>/<title>`: the columns are its fields, its page (less
   its title and property lines) its words. A page is matched to its row by title, else by its property lines (Notion
   heads a date's page "@Today" where the CSV says the date), so a row is never two records.
 - a **page** becomes a record at its place in the tree; links between pages become wikilinks.
-- **images and attachments** stay in the export, and the app says which; a link to a linked view (a .csv the export
-  doesn't hold) is said to be missing.
-- **names stay clear of the vault's own types and tags in use**: a Notion "Book" beside your own `book` type is
-  `book-2`, and a column one of your types declares as another kind (or indexed) gets a name of its own, `date_2`. A type
-  an import made is described "From Notion: <title>." and that table uses it again, so the same export, or a newer one of
-  the same workspace, adds to it. Two tables of one title each find theirs again in name order (tasks, tasks-2).
+- **images and attachments** in the export become vault attachments on the record they belong to, with links in the
+  record's body rewritten to `/api/storage/…`. 25 MB a file and 150 MB of files in all (the export may unpack to
+  350 MB in all, where it was 200 MB before files came in): a file over either, an empty one, or one no page holds is
+  skipped with a plain message in the summary and body; a link to a linked view (a .csv the export doesn't hold) is said to be missing. A file that
+  couldn't be uploaded is said in the summary and on the record; importing the same export again doesn't retry it.
+  Vault's view of a record shows where a picture is in its words ("Image: owl sketch") but doesn't draw it yet: the
+  kit's `Note` has no reader for a vault's files.
+- **names stay clear of the vault's own types and tags in use, and workspaces stay apart**: a Notion "Book" beside your
+  own `book` type is `book-2`. A type an import made is described `From Notion (<workspace>): <title>.` (or
+  `From Notion: <title>.` when no workspace name is in the export), so a newer export of the same workspace adds to it,
+  while a same-titled table from another workspace gets its own type named by workspace (`personal-tasks` beside Work's
+  `tasks`). Two tables of one title in one workspace each find theirs again in name order (`tasks`, `tasks-2`).
+- **a column whose kind changed between exports** keeps its existing field type on the vault type for values that fit;
+  any value that doesn't fit goes to a text field (`<field>_text`) with a note in the import summary, never silently
+  dropped and never written with the wrong type. A column one of your other types declares as another kind (or indexed)
+  gets a name of its own, `date_2`, and keeps it in a newer export.
 - a comma column is a list when a choice repeats across rows, or when it is named like one (Tags, Labels, Categories,
   Topics); "Le Guin, Ursula" alone stays one name. A value with a leading zero ("02134") keeps a column text.
 - a column named alike in two tables but of two kinds is text in both (a vault takes one meaning per field); a title a

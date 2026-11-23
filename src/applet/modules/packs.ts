@@ -15,9 +15,9 @@
 // publishes, and the receipt last, at Parachute/Receipts/<id>. A vault whose server can't make types this way (core 0.8,
 // or a 0.9 before write could define a type over REST) says so, and nothing is written.
 import { ContractError, ERROR_CODES, hasOnly, plain } from "../contract.ts";
-import { applyPack, checkPack, receiptOf, receiptRecord, refusalWords, RECEIPTS, RECEIPT_TAG, type HeldType, type Pack, type PackTarget, type Receipt } from "../../kit/packs.ts";
+import { applyPack, checkPack, receiptOf, receiptRecord, refusalWords, RECEIPTS, RECEIPT_TAG, type HeldType, type Pack, type Receipt } from "../../kit/packs.ts";
 import coreTypes from "../../kit/packs/core-types.json";
-import { notionImport, NOTION_WANT } from "../../kit/notion.ts";
+import { applyNotion, notionImport, notionWant, NOTION_ZIP_MAX, type NotionTarget } from "../../kit/notion.ts";
 import { readZip } from "../../kit/zip.ts";
 import clients from "../../kit/packs/clients.json";
 import reading from "../../kit/packs/reading.json";
@@ -35,7 +35,7 @@ const enc = encodeURIComponent;
 const messageOf = (e: unknown) => `${(e as Error)?.message ?? ""} ${(e as { body?: unknown })?.body ?? ""}`;
 
 /** A vault as the applier sees it, over the vault's own record door. */
-export function packTarget(deps: VaultsDeps, vault: string): PackTarget {
+export function packTarget(deps: VaultsDeps, vault: string): NotionTarget {
   const receiptAt = (id: string) => `${RECEIPTS}${id}`;
   /** Types whose schema gives `published` a default: a record given one would be published with no sheet (vaults.ts). */
   let publishing = new Set<string>();
@@ -92,6 +92,17 @@ export function packTarget(deps: VaultsDeps, vault: string): PackTarget {
       if (was) await deps.request(vault, "PATCH", `/records/${enc(was.id)}`, { fields: rec.fields, body: rec.body, if_updated_at: was.updatedAt });
       else await deps.request(vault, "POST", "/records", rec);
     },
+    ...(deps.upload ? {
+      upload: (name: string, bytes: Uint8Array, mimeType: string) => deps.upload!(vault, name, bytes, mimeType),
+      async attach(recordId: string, path: string, mimeType: string) {
+        const raw = await deps.request(vault, "POST", `/records/${enc(recordId)}/attachments`, { path, mimeType });
+        return { id: plain(raw) && typeof raw.id === "string" ? raw.id : undefined, path: plain(raw) && typeof raw.path === "string" ? raw.path : path, mimeType: plain(raw) && typeof raw.mimeType === "string" ? raw.mimeType : mimeType };
+      },
+      async updateBody(recordId: string, body: string, updatedAt: string | null) {
+        const raw = await deps.request(vault, "PATCH", `/records/${enc(recordId)}`, { body, ...(updatedAt ? { if_updated_at: updatedAt } : { force: true }) });
+        return { updatedAt: plain(raw) && typeof raw.updatedAt === "string" ? raw.updatedAt : updatedAt };
+      },
+    } : {}),
   };
 }
 
@@ -145,13 +156,15 @@ export function packMethods(deps: VaultsDeps, word: (p: unknown) => void, held: 
         try { held = (await target.types()).filter((t) => t.kind === "type" || t.count > 0).map((t) => ({ name: t.name, description: t.description ?? null, fields: t.kind === "type" ? t.fields as Record<string, { type?: string; indexed?: boolean }> : {} })); }
         catch (e) { throw fail(e); }
         try {
-          pack = notionImport(await readZip(file.bytes, { want: NOTION_WANT }), file.name, held);
+          const skippedSizes = new Map<string, number>();
+          const files = await readZip(file.bytes, { want: notionWant(), max: NOTION_ZIP_MAX, onSkip: (p, size) => skippedSizes.set(p, size) });
+          pack = notionImport(files, file.name, held, { skippedSizes });
         } catch (e) {
           throw new ContractError(ERROR_CODES.failed, e instanceof Error ? e.message.slice(0, 300) : "That file couldn't be read.");
         }
         try {
-          const r = await applyPack(pack.pack, target);
-          return { picked: true, name: pack.pack.name, found: pack.found, made: r.receipt.made.records.length, types: Object.keys(pack.pack.types), notes: r.notes, left: pack.left, changed: r.changed };
+          const r = await applyNotion(pack, target);
+          return { picked: true, name: pack.pack.name, found: pack.found, under: pack.root, made: r.receipt.made.records.length, attached: r.attached, types: Object.keys(pack.pack.types), notes: r.notes, left: r.left, changed: r.changed };
         } catch (e) {
           if ((e as { name?: string })?.name === "NeedsWriteError") throw new ContractError(ERROR_CODES.notGranted, String((e as Error).message).slice(0, 300));
           throw fail(e);
