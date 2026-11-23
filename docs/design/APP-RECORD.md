@@ -235,7 +235,7 @@ lists); the gateway then adds one per event. A mail server reporting its own cou
 | `KEEP = 3`, `parachute.applet-storage.v1:*` | `keep`, the saved store | now (copied once) |
 | "The launcher is for everything" | the open app | now |
 | The launcher's vault chapters, masthead (the week's line, its tally, the hills) and "Lately in" | the list of the app's applets; the home applet for the first page; Settings for vaults | now (11-19, T-476 thin shell) |
-| The launcher and the home placed on the bar by the app | the record's pins, then Applets | now (11-19) |
+| The launcher and the home placed on the bar by the app | the record's pins, then Applets and Settings | now (11-19; Settings on every screen 11-22) |
 | `bar` and `start` in `Parachute/Settings` | the bundle record only: never written to the note (11-20); the note's are read while the open bundle has no record | read until 2026-12-20; `scripts/migrate-bundles.ts` copies them into the chosen bundle (the note keeps them for a device on another bundle) |
 | Simple and Everything as shell code (`BUILT_IN_APPS`, `builtInApp`, the bar's `SimplePlaces`, the `everything`-only `everywhere`, `look: notes` offering every applet) | two records the app ships (`src/shell/default-bundles.json`), read like any other | now (11-20) |
 | Draft PR #50 | this note | closed 11-19, when #66 merged |

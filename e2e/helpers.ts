@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { api, hubState, record, VAULT } from "./hub";
 import { withImports, type AppletRecord } from "../applets/record.ts";
 import { keyDoor } from "./keys";
@@ -67,13 +67,36 @@ export async function signIn(page: Page, vault = VAULT) {
   await backOnTheLauncher(page, vault);
 }
 
+/** Settings: the vaults a Parachute has that this device doesn't read, behind one line ("2 more vaults there…"), shown.
+ *  `within`: the Parachute's own block, when there are several. */
+export async function moreVaults(page: Page, within: Locator = page.locator("main.settings"), timeout = 5000) {
+  await expect(within.locator("details.parachute-more").first()).toBeAttached({ timeout });
+  await openMore(page);
+}
+/** The same, for whichever such lines there are now (none is fine): so "not offered" is checked with them open. */
+export async function openMore(page: Page) {
+  for (const d of await page.locator("main.settings details.parachute-more").all()) if ((await d.getAttribute("open")) === null) await d.locator("summary").click();
+}
+
+/** Settings: a vault's row, opened (what it is held for in a sentence, whose it is, Read only, Sign in again, Sign out). */
+export async function vaultRow(page: Page, vault: string) {
+  const row = page.locator("details.vault-more").filter({ has: page.locator(".vault-name", { hasText: new RegExp(`^${vault}$`) }) });
+  await expect(row).toHaveCount(1);
+  if ((await row.getAttribute("open")) === null) await row.locator("summary").click();
+  return row;
+}
+
 /** Open a vault the sign-in didn't read (docs/design/SCOPES.md): its line in Settings, then the hub's Approve to read
  *  it. Returns how many times the hub asked (0: its grant already covered it). */
 export async function openVault(page: Page, vault: string, onConsent?: (page: Page) => Promise<void>): Promise<number> {
   const hub = hubState();
   await page.goto("/settings");
   const app = new URL(page.url()).origin;
-  await page.getByRole("button", { name: `Open ${vault}`, exact: true }).click();
+  const line = page.getByRole("button", { name: `Open ${vault}`, exact: true });
+  // behind the line that counts them, once it is drawn
+  await expect(page.locator("details.parachute-more summary").or(line).first()).toBeVisible();
+  await openMore(page);
+  await line.click();
   await page.waitForURL((u) => u.origin === hub.origin || u.pathname === "/oauth/callback");
   const asked = await approveUntilBack(page, hub.origin, app, undefined, "/", onConsent);
   await backOnTheLauncher(page, vault);

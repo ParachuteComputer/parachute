@@ -91,9 +91,11 @@ the hub for `vault:<v>:read vault:<v>:write`, keeps the new token and revokes th
 Revoking an applet (its menu, or Settings) recomputes what its vault needs. If nothing still allowed needs write there,
 the app asks the hub for read alone (no page: the grant covers it), keeps that token and revokes the one that could
 write. Checked at the hub (`e2e/scopes.spec.ts`): the old token's write answers 401, its refresh is refused, and the
-token the app holds now gets 403 on a write. Settings shows what the app holds of each vault (*reads* / *reads and
-changes notes*), and **Read only** gives back write that no allowed applet needs (the person's own, or write held from
-an install before this change).
+token the app holds now gets 403 on a write. Settings shows what the app holds of each vault and what for, in one line
+(*reads and changes notes · your home*, *reads notes · for Post*, *reads and changes notes · no applet uses it*:
+`src/views/reachWords.ts`); a tap on it says why in a sentence and offers **Read only**, which gives back write that no
+allowed applet needs (the person's own, or write held from an install before this change), and **Sign out**
+([../ACCESS.md](../ACCESS.md)).
 
 What stays at the hub: on the released hubs (core 0.8, 0.9.0-pre.1), the grant record. They remember the union of what
 this registration was ever granted, so allowing Journal again goes straight through without the hub's page: the token

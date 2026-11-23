@@ -30,7 +30,7 @@ export default function FrameSettings() {
     : fs.choice.why === "failed" ? "The built-in frame runs: your frame stopped." : WHY[fs.choice.why];
   return (
     <section className="card" aria-labelledby="s-frame">
-      <h2 id="s-frame">Frame</h2>
+      <h3 id="s-frame">Frame</h3>
       {!home && vaults.length > 0 && <p className="quiet">No home vault: none of your vaults is marked as yours.</p>}
       <p role="status" className="frame-status">{status}</p>
       {fs.choice.run === "built-in" && fs.choice.why === "failed" && fs.failedWhy && <p className="quiet">It said: <q data-untrusted="true">{fs.failedWhy}</q></p>}

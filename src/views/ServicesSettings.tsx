@@ -14,7 +14,7 @@ export default function ServicesSettings() {
     return vaults.flatMap((v) => { const a = appletsNow(v.key); return a?.state === "ok" ? a.found.entries.filter((e) => e.services.some((s) => originOf(s) === origin)).map((e) => e.manifest.name) : []; });
   };
   return <section className="card" aria-labelledby="s-services">
-    <h2 id="s-services">Your servers</h2>
+    <h3 id="s-services">Your servers</h3>
     <ul className="plain">{settings.services.map((s) => {
       const names = [...new Set(reaching(s.url, s.kind))];
       return <li key={`${s.kind}:${s.url}`} className="line">

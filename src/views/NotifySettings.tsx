@@ -38,7 +38,7 @@ export default function NotifySettings() {
   const using = ds.find((d) => d.id === s.distributor);
   return (
     <section className="card" aria-labelledby="s-notify">
-      <h2 id="s-notify">Notifications while closed</h2>
+      <h3 id="s-notify">Notifications while closed</h3>
       {!ds.length ? <>
         <p>{!s.fallback ? "Off: install a push service, or turn on Parachute's own connection below."
           : s.listening ? "Parachute keeps its own connection open for this. It uses more battery than a push service."

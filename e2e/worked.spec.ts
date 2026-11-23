@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, ORG_VAULT, record, techneState, VAULT } from "./hub";
-import { signInWithKey, ui } from "./helpers";
+import { signInWithKey, ui, vaultRow } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
@@ -122,10 +122,12 @@ test("importing instead: refused from Techne until it is trusted on its card, th
     await expect(page.getByRole("alert")).toContainText("it imports «events» from techne, which this device doesn't trust. Embed it instead, or trust techne in Settings");
     // trust techne, on its card in Settings
     await page.goto("/settings");
+    await vaultRow(page, ORG_VAULT);
     await page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` }).selectOption("trusted");
     const card = page.getByRole("dialog", { name: "Trust techne?" });
     await expect(card).toContainText("Code from techne could then run inside your own applets, with everything they reach: your notes included.");
     await card.getByRole("button", { name: "Trust techne" }).click();
+    await vaultRow(page, ORG_VAULT);
     await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("trusted");
     await page.goto(`/v/${VAULT}/a/${agenda.id}`);
     const appletCard = page.getByRole("region", { name: /asking for access/ });

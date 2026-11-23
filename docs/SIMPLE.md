@@ -22,7 +22,7 @@ their AI writes into their home shows on Notes under **Your applets**, where its
 
 Each is one of Parachute's own applets (`applets/notes`, `journal`, `capture`, `vault`, `connect`), at
 `/v/<home>/a/parachute:<name>`. Settings is the bar's last place on each screen (and ⋯ at the top); it has **Your bundle: Parachute Simplified / Everything**,
-and a line for each vault the sign-in didn't read (**Open letters**).
+and, behind one line that counts them, each vault the sign-in didn't read (**Open letters**).
 
 On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key), then **Sign in with its
 address** for another Parachute (your own hub, an org's, a friend's); the key's ways come after.

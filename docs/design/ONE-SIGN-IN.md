@@ -104,8 +104,8 @@ real test.
    the hub's public list (`/.well-known/parachute.json`), but only on a hub where the sign-in found the person reaches
    every vault (they run it: `covered: "all"` by key; without one, they said Mine, had more than one vault there, and
    their list held every vault the public list names, under the 60-vault cut). That mark changes only at a sign-in. A vault
-   there that this device doesn't hold is one quiet line under that Parachute: **Open playground** (the same line as each
-   vault the sign-in didn't read). The tap is the consent step for that vault alone (`vault:<name>:read`): the hub asks
+   there that this device doesn't hold is counted under that Parachute (*N more vaults there, which Parachute doesn't
+   read*), and a tap there shows it as **Open playground** (the same line as each vault the sign-in didn't read). The tap is the consent step for that vault alone (`vault:<name>:read`): the hub asks
    once, unless the person's grant already covers it; a vault made since the sign-in comes in as someone else's (the hub
    doesn't say whose; another account may have made it), and Settings makes it the person's. **Not now** keeps it off
    Settings on this device until the next sign-in there; signing out of a vault in Settings makes it an Open line again

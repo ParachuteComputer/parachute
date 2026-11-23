@@ -20,7 +20,7 @@ export default function UpdateSettings() {
   const stuck = after.kind === "stuck" && install.kind === "idle" && s.kind === "offer" && s.offer.commit === after.to ? after : null;
   return (
     <section className="card" aria-labelledby="s-updates">
-      <h2 id="s-updates">Updates</h2>
+      <h3 id="s-updates" className="sr-only">Updates</h3>
       <p>This build: {OWN.at ? <>built {builtOn(OWN.at)} <span className="quiet">({OWN.commit})</span></> : "not from a release"}.</p>
       {after.kind === "updated" && <p className="quiet">The update installed.</p>}
       {stuck && <div role="status">

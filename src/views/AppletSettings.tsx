@@ -76,7 +76,7 @@ export default function AppletSettings({ vaults }: { vaults: VaultRecord[] }) {
   const failed = run.last?.checks.filter((c) => !c.ok) ?? [];
   return (
     <section className="card" aria-labelledby="s-applets">
-      <h2 id="s-applets">Applets</h2>
+      <h3 id="s-applets">Applets</h3>
       <p className="selftest-status" role="status">
         {run.running ? "Checking that applets are sealed on this device…"
           : mode === "sealed" ? "Applets run sealed here."
@@ -86,11 +86,11 @@ export default function AppletSettings({ vaults }: { vaults: VaultRecord[] }) {
       </p>
       {run.last && failed.length > 0 && mode !== "approved-code" && <ul className="check-list" aria-label="Checks that failed">{failed.map((c) => <li key={c.id} className="fail">✗ {c.label}</li>)}</ul>}
       <button type="button" className="quiet-button" disabled={run.running} onClick={runSelfTest}>Run again</button>
-      <h3 className="settings-sub">Always open with</h3>
+      <h4 className="settings-sub">Always open with</h4>
       <ul className="plain" aria-label="Defaults">{vaults.map((v) => <DefaultsIn key={v.key} rec={v} />)}</ul>
-      <h3 className="settings-sub">Allowed</h3>
+      <h4 className="settings-sub">Allowed</h4>
       <ul className="plain" aria-label="Allowed applets">{vaults.map((v) => <AllowedIn key={v.key} rec={v} onChange={() => setN((n) => n + 1)} />)}</ul>
-      <h3 className="settings-sub">On your pages</h3>
+      <h4 className="settings-sub">On your pages</h4>
       <ul className="plain" aria-label="Allowed on your pages">{vaults.map((v) => <EmbedsIn key={v.key} rec={v} onChange={() => setN((n) => n + 1)} />)}</ul>
     </section>
   );

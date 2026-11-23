@@ -6,7 +6,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { approveUntilBack, signIn, ui } from "./helpers";
+import { approveUntilBack, moreVaults, openMore, signIn, ui } from "./helpers";
 import { api, cli, hubState, mintToken } from "./hub";
 
 /** Where a walkthrough keeps its pictures, when one is being made (WALKTHROUGH_DIR); CI takes none. */
@@ -35,12 +35,15 @@ test("a vault made after signing in is offered in Settings, and a tap adds it th
   await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
   await expect(page.getByRole("link", { name: "Open kitchen", exact: true })).toBeVisible();
   await page.waitForLoadState("networkidle");
+  await openMore(page);
   await expect(newLine(page, "garden")).toHaveCount(0);
   // a minute on, Settings again: asked again, and the new vault is offered
   await page.getByRole("button", { name: "Back" }).first().click();
   await page.clock.fastForward("01:05");
   await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
-  await expect(newLine(page, "garden")).toBeVisible({ timeout: 15_000 });
+  await moreVaults(page, undefined, 15_000);
+  await expect(page.locator("details.parachute-more summary")).toContainText(/more vaults? there, which Parachute doesn't read/);
+  await expect(newLine(page, "garden")).toBeVisible();
   await expect(page.getByRole("link", { name: "Open garden", exact: true })).toHaveCount(0);
   if (SHOT) { mkdirSync(dirname(SHOT), { recursive: true }); await page.screenshot({ path: SHOT }); }
 
@@ -52,6 +55,7 @@ test("a vault made after signing in is offered in Settings, and a tap adds it th
   await expect(ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Seeds/ })).toBeVisible({ timeout: 20_000 });
   await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
   await expect(page.getByRole("link", { name: "Open garden", exact: true })).toBeVisible();
+  await openMore(page);
   await expect(newLine(page, "garden")).toHaveCount(0);
   const recs = await page.evaluate(() => (JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]") as { vault: string; scope: string }[]));
   // a token for that vault alone, read only, as the hub granted it
@@ -63,13 +67,16 @@ test("Not now keeps a new vault out of Settings, also after the app opens again"
   await makeVault("attic", "Boxes");
   // the app opens again: asked at once
   await page.goto("/settings");
-  await expect(newLine(page, "attic")).toBeVisible({ timeout: 15_000 });
+  await moreVaults(page, undefined, 15_000);
+  await expect(newLine(page, "attic")).toBeVisible();
   await page.getByRole("button", { name: "Not now: attic" }).click();
+  await openMore(page);
   await expect(newLine(page, "attic")).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("link", { name: "Open kitchen", exact: true })).toBeVisible();
   // the hub was asked again (the app opened) and still lists it: it stays away
   await page.waitForLoadState("networkidle");
+  await openMore(page);
   await expect(newLine(page, "attic")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open attic", exact: true })).toHaveCount(0);
 });

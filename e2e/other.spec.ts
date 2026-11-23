@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, ORG_VAULT, techneState, VAULT } from "./hub";
-import { signInWithKey, ui } from "./helpers";
+import { signInWithKey, ui, vaultRow } from "./helpers";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 
@@ -34,7 +34,9 @@ test("the org's vault, added with the person's key as someone else's, is marked 
   await signInWithKey(page, techneState(), ORG_VAULT);
   // Settings says whose each vault is, and offers only the person's own vault as home
   await page.goto("/settings");
+  await vaultRow(page, ORG_VAULT);
   await expect(page.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
+  await vaultRow(page, VAULT);
   await expect(page.getByRole("combobox", { name: `Whose ${VAULT} is` })).toHaveValue("mine");
   // (the home choice names each vault, and where it is only when the person's own span more than one Parachute)
   await expect(page.getByRole("radio", { name: new RegExp(`^${VAULT}\\b`) })).toBeChecked();

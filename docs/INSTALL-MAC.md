@@ -55,7 +55,7 @@ Type your Parachute's address (your hub's, like `your-hub.example`; a vault's ad
 **Sign in with your key**. If you run the hub, Parachute first asks which of its vaults are yours (all ticked; untick
 another person's) and which one is your home. The hub's own page asks "Approve Parachute?" once, to read your home
 vault (it may call Parachute a third-party app). Press **Approve**, and you're back in Parachute. Your other vaults
-are a line each on the launcher (**Open letters**): each asks your hub when you open it, and an applet asks for more
+are counted in Settings, under your Parachute; a tap shows a line each (**Open letters**): each asks your hub when you open it, and an applet asks for more
 when you allow it ([design/SCOPES.md](design/SCOPES.md)).
 Add another Parachute later from **Add a Parachute** at the foot of the launcher.
 

@@ -19,7 +19,9 @@ const NAMES = /\bUni\b|Hermes|WireGuard/;
 
 /** Every vault line's buttons inside the card, each on one line, and nothing wider than the screen. */
 async function staysInside(page: Page) {
-  const card = page.locator("section.card", { has: heading(page, "Your Parachutes") });
+  const card = page.locator("section[aria-labelledby=s-vaults]");
+  // each vault's actions are behind a tap on its line
+  for (const d of await card.locator("details.vault-more").all()) if ((await d.getAttribute("open")) === null) await d.locator("summary").click();
   const box = (await card.boundingBox())!;
   const again = card.getByRole("button", { name: /^Sign in again to / });
   await expect(again.first()).toBeVisible();

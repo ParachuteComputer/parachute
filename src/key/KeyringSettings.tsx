@@ -32,7 +32,7 @@ export default function KeyringSettings({ cards }: { cards: boolean }) {
   const uni = k.approvers.find((a) => a.pubkey === forKey) ?? k.approvers.find((a) => a.name.toLowerCase() === "uni") ?? k.approvers[0];
   return (
     <section className="card" aria-labelledby="s-keyring">
-      <h2 id="s-keyring">Approvals</h2>
+      <h3 id="s-keyring">Approvals</h3>
       <p className="small">One key is yours: it chats, signs in, and answers your agent's approval cards and secret requests, the risky ones behind this device's unlock. A <strong>root key</strong>, if you keep one, is recovery only: written down, never on this device.</p>
       {k.same ? <div className="stack">
         <p>Your key answers approvals too.</p>
@@ -55,7 +55,7 @@ export default function KeyringSettings({ cards }: { cards: boolean }) {
       </div>}
       <details className="small quiet"><summary>Details</summary>Sealing key (compare it with the one your agent shows): <code>{k.seal_pub.slice(0, 16)}…</code></details>
 
-      <h3>Trusted for approvals</h3>
+      <h4>Trusted for approvals</h4>
       <p className="small">Only these keys can ask this device for an approval or a secret, whatever an applet says.</p>
       {k.approvers.length ? <ul className="plain">{k.approvers.map((a) => <li key={a.pubkey} className="row-buttons">
         <span><strong>{a.name}</strong> <details className="quiet small"><summary>Details</summary>Its key: <code>{a.pubkey.slice(0, 12)}…</code></details></span>

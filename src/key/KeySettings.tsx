@@ -12,7 +12,7 @@ export default function KeySettings() {
   if (!keysHere()) return null;
   return (
     <section className="card" aria-labelledby="s-key">
-      <h2 id="s-key">Your key</h2>
+      <h3 id="s-key">Your key</h3>
       {key ? <>
         <Npub npub={key.npub} />
         {sure ? <div className="stack">
