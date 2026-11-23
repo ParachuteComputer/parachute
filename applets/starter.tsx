@@ -1,5 +1,6 @@
-// Starter: a minimal Parachute applet template. Copy starter.json and starter.tsx, change the id, name, folder and
-// fields, then run `npx vite-node scripts/check-applet.ts applets/<name> --strict` before putting the record in your vault.
+// Starter: a minimal Parachute applet template. Copy starter.json and starter.tsx; change the path, id and name, and the
+// folder (FOLDER here, and the access and opens paths in the .json); then run
+// `npx vite-node scripts/check-applet.ts applets/<name> --strict` before putting the record in your vault.
 import { useEffect, useRef, useState } from "react";
 import { Button, Days, Empty, Field, List, Loading, Note, onOpen, Page, Problem, ready, Search, toast, useSaved, vault, when, Write } from "parachute";
 
@@ -105,12 +106,13 @@ export default function Starter() {
       const updated: Item = await vault.updateRecord(id, { body, if_updated_at: draft.base });
       // the person may have gone back or opened another note while it saved: change only what is still this note
       setSelected((s) => (s?.id === id ? { ...s, ...updated, body } : s));
-      setDraft((d) => (d?.id === id ? null : d));
+      // done, unless more was typed while it saved: then that stays a draft, against the version just saved
+      setDraft((d) => (d?.id !== id ? d : d.body === body ? null : { ...d, base: updated.updatedAt }));
       toast("Saved.");
       await load();
     } catch (e) {
       const conflict = (e as { status?: number })?.status === 409;
-      toast(conflict ? "Someone else updated this note. Refresh and try again." : `Not saved: ${e instanceof Error ? e.message : String(e)}`, { error: true });
+      toast(conflict ? "Someone else changed this note. Copy your text, Cancel, and edit it again." : `Not saved: ${e instanceof Error ? e.message : String(e)}`, { error: true });
     } finally {
       setBusy(false);
     }

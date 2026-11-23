@@ -91,13 +91,13 @@ declare module "parachute" {
     list(): Promise<{ key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null; connector: string; view: string | null; reach: "this-device" | "network" | "anyone" }[]>;
     hubs(): Promise<{ host: string; address: string | null; vaults: string[] }[]>;
     types(vault: string): Promise<{ name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, { type?: string; enum?: unknown[]; description?: string }> }[]>;
-    query(vault: string, q?: { type?: string; tag?: string; search?: string; path?: string; where?: { field: string; op: string; value: unknown }[]; sort?: { by: string; dir: "asc" | "desc" }; limit?: number; offset?: number }): Promise<{ records: AppletRecord[]; more: boolean }>;
-    get(vault: string, id: string): Promise<AppletRecord>;
+    query(vault: string, q?: { type?: string; tag?: string; search?: string; path?: string; where?: { field: string; op: string; value: unknown }[]; sort?: { by: string; dir: "asc" | "desc" }; limit?: number; offset?: number }): Promise<{ records: VaultsRecord[]; more: boolean }>;
+    get(vault: string, id: string): Promise<VaultsRecord>;
     history(vault: string, id: string): Promise<unknown[]>;
     version(vault: string, id: string, ix: number): Promise<unknown>;
-    create(vault: string, rec: { path: string; body: string; types?: string[]; tags?: string[]; fields?: Record<string, unknown> }): Promise<AppletRecord>;
-    update(vault: string, id: string, change: { if_updated_at: string; body?: string; fields?: Record<string, unknown>; types?: { add?: string[]; remove?: string[] }; tags?: { add?: string[]; remove?: string[] } }): Promise<AppletRecord>;
-    watch(vault: string, type: string | null, cb: (ev: { upsert?: AppletRecord } | { remove?: string }) => void): () => void;
+    create(vault: string, rec: { path: string; body: string; types?: string[]; tags?: string[]; fields?: Record<string, unknown> }): Promise<VaultsRecord>;
+    update(vault: string, id: string, change: { if_updated_at: string; body?: string; fields?: Record<string, unknown>; types?: { add?: string[]; remove?: string[] }; tags?: { add?: string[]; remove?: string[] } }): Promise<VaultsRecord>;
+    watch(vault: string, type: string | null, cb: (ev: { upsert?: VaultsRecord } | { remove?: string }) => void): () => void;
     applets(vault: string): Promise<{ id: string; name: string; glyph: string; href: string; allowed: boolean }[]>;
     changes(vault: string, since: string, offset?: number): Promise<unknown>;
     compare(vault: string, id: string, before: number | null, after: number | null): Promise<unknown>;
