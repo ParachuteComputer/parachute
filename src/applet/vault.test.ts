@@ -9,7 +9,7 @@ import { createThemeModule } from "./modules/theme";
 import { parseManifest } from "./manifest";
 import { resolvedOf } from "./discovery";
 import { RECIPES } from "./fixtures";
-import type { HostMessage } from "./contract";
+import { LIMITS, type HostMessage } from "./contract";
 
 const manifest = (() => { const r = parseManifest(RECIPES); if (!r.ok) throw new Error(r.error); return r.manifest; })();
 let notes: VaultNote[];
@@ -277,5 +277,120 @@ describe("notes no applet may change", () => {
   it("a bundle record, under its name and its older one: it picks what the app shows and pins (docs/design/APP-RECORD.md)", () => {
     for (const tag of ["parachute-bundle", "parachute-app"]) expect(isAppletCode({ id: "n", path: "Parachute/Bundles/uni", tags: [tag] } as VaultNote), tag).toBe(true);
     expect(isAppletCode({ id: "n", path: "Notes/a", tags: ["recipe"] } as VaultNote)).toBe(false);
+  });
+});
+
+// The hub's own query words (T-476: order, page, filter by a field, tags, links, a long note's write), with the same
+// scope: a hub that answers more than the folder asked (path_prefix is a case-blind string prefix on core; tags and
+// links reach the whole vault) must not let it out.
+describe("the hub's query words, kept to the folders", () => {
+  type Asked = { prefix: string; q: Parameters<NonNullable<VaultDeps["query"]>>[1] };
+  let asked: Asked[];
+  const end = (n: VaultNote) => ({ id: n.id, path: n.path, tags: n.tags ?? [], metadata: n.metadata ?? {}, createdAt: null, updatedAt: n.updatedAt ?? null, linkCount: 3 });
+  const LINKS: [string, string][] = [["r1", "j1"], ["r1", "r2"], ["j1", "r1"]];
+  const withLinks = (n: VaultNote): VaultNote => ({ ...n, links: LINKS.filter(([s, t]) => s === n.id || t === n.id).map(([s, t]) => ({ sourceId: s, targetId: t, relationship: "mentions", createdAt: "2026-11-01", sourceNote: end(notes.find((x) => x.id === s)!), targetNote: end(notes.find((x) => x.id === t)!) })) });
+  const hub: VaultDeps = {
+    ...vault,
+    async getNote(ref, o) { const n = await vault.getNote(ref); return o?.links ? withLinks(n) : n; },
+    // a hub's answer: path_prefix case-blind, as core's lower() is
+    async query(prefix, q) {
+      asked.push({ prefix, q });
+      const rows = notes.filter((n) => (n.path ?? "").toLowerCase().startsWith(prefix.toLowerCase()) && (!q.tag || (n.tags ?? []).includes(q.tag)));
+      return rows.slice(q.offset, q.offset + q.limit).map((n) => (q.links ? withLinks(n) : n));
+    },
+  };
+  function frameOn(deps: VaultDeps, grant = resolvedOf(manifest)) {
+    const out: HostMessage[] = [];
+    const router = createRouter([createVaultModule(deps, { opens: [{ type: "recipe", path: "Recipes/" }] })]);
+    const s = createSession({ post: (m) => out.push(m), router, grant });
+    let n = 0;
+    const send = async (msg: Record<string, unknown>) => {
+      const id = `q${++n}`;
+      s.handle({ pfr: 1, channel: "vault", id, headers: {}, body: null, ...msg });
+      for (let i = 0; i < 50 && !out.some((m) => "id" in m && m.id === id); i++) await new Promise((r) => setTimeout(r, 1));
+      const m = out.find((x) => "id" in x && x.id === id) as { status: number; body: string };
+      return { status: m.status, body: JSON.parse(m.body) };
+    };
+    return { get: (path: string) => send({ method: "GET", path }), send };
+  }
+  beforeEach(() => {
+    asked = [];
+    notes.push(
+      { id: "r2", path: "Recipes/Soup", content: "soup", tags: ["recipe", "winter"], metadata: { serves: 4 }, updatedAt: "2026-11-04" },
+      { id: "r3", path: "recipes/Hidden", content: "another folder, by case", tags: ["recipe", "case-secret"], updatedAt: "2026-11-05" },
+      { id: "j2", path: "Journal/Diary", content: "dear diary", tags: ["journal-secret"], updatedAt: "2026-11-06" },
+    );
+  });
+
+  it("passes order_by, sort, offset and meta[...] to the hub with the folder pinned, and judges each note it gets back", async () => {
+    const f = frameOn(hub);
+    const r = await f.get("/api/notes?order_by=serves&sort=asc&offset=1&limit=10&meta[serves][gte]=2&meta[course]=soup");
+    expect(r.status).toBe(200);
+    expect(asked).toHaveLength(1);
+    expect(asked[0].prefix).toBe("Recipes/");
+    expect(asked[0].q).toMatchObject({ orderBy: "serves", sort: "asc", offset: 1, limit: 10, meta: [["meta[serves][gte]", "2"], ["meta[course]", "soup"]] });
+    // the hub (case-blind) answered recipes/Hidden too: not in the folder, so not shown
+    const all = await f.get("/api/notes?sort=desc");
+    expect(all.body.map((n: { path: string }) => n.path)).not.toContain("recipes/Hidden");
+    expect(all.body.map((n: { path: string }) => n.path)).toEqual(expect.arrayContaining(["Recipes/Toast", "Recipes/Soup"]));
+  });
+
+  it("refuses the words that would reach past the folder or that it can't put together", async () => {
+    const f = frameOn(hub);
+    expect((await f.get("/api/notes?path_prefix=Journal/&order_by=updated_at")).status).toBe(403);
+    // link_count counts links to notes outside the folders
+    expect((await f.get("/api/notes?order_by=link_count")).status).toBe(400);
+    expect((await f.get("/api/notes?sort=sideways")).status).toBe(400);
+    expect((await f.get("/api/notes?offset=-1")).status).toBe(400);
+    expect((await f.get("/api/notes?meta[bad key]=1")).status).toBe(400);
+    expect((await f.get("/api/notes?meta[serves][regex]=1")).status).toBe(400);
+    expect(asked).toHaveLength(0);
+    // a host with no query (an older one) refuses them rather than ignoring them
+    expect((await frameOn(vault).get("/api/notes?order_by=updated_at")).status).toBe(400);
+  });
+
+  it("gives a note's links only where the note at the other end is in the folders too", async () => {
+    const f = frameOn(hub);
+    const listed = await f.get("/api/notes?include_links=true");
+    const toast = listed.body.find((n: { id: string }) => n.id === "r1");
+    expect(toast.links.map((l: { sourceId: string; targetId: string }) => `${l.sourceId}>${l.targetId}`)).toEqual(["r1>r2"]);
+    expect(JSON.stringify(listed.body)).not.toContain("Journal/");
+    expect(JSON.stringify(listed.body)).not.toContain("linkCount");
+    for (const path of ["/api/notes/r1?include_links=true", "/api/notes?id=r1&include_links=true"]) {
+      const one = await f.get(path);
+      const n = Array.isArray(one.body) ? one.body[0] : one.body;
+      expect(n.links.map((l: { targetId: string }) => l.targetId)).toEqual(["r2"]);
+      expect(JSON.stringify(one.body)).not.toContain("Secret");
+    }
+  });
+
+  it("names only the tags on its folders' notes, each with its count there", async () => {
+    const r = await frameOn(hub).get("/api/tags");
+    expect(r.status).toBe(200);
+    const names = r.body.map((t: { name: string }) => t.name);
+    expect(names).not.toContain("journal-secret");
+    expect(names).not.toContain("case-secret");
+    // a.k.a. what the Recipes/ notes carry (the code note a1 is not one of them)
+    expect(r.body).toEqual([{ name: "applet", count: 1 }, { name: "recipe", count: 2 }, { name: "winter", count: 1 }]);
+    expect((await frameOn(hub).get("/api/tags?include_schema=true")).status).toBe(400);
+  });
+
+  it("takes a long note's write as bytes beside the request, and no more than its cap", async () => {
+    const f = frameOn(hub);
+    const content = "A long stew. ".repeat(2000); // 26 KB: past the 7 KB a request's body carries
+    const bytes = (x: unknown) => new TextEncoder().encode(JSON.stringify(x)).buffer;
+    expect((await f.send({ method: "POST", path: "/api/notes", body: JSON.stringify({ path: "Recipes/Stew", content }) })).status).toBe(413);
+    const made = await f.send({ method: "POST", path: "/api/notes", bytes: bytes({ path: "Recipes/Stew", content }) });
+    expect(made.status).toBe(201);
+    expect(notes.find((n) => n.path === "Recipes/Stew")?.content).toBe(content);
+    const changed = await f.send({ method: "PATCH", path: `/api/notes/${made.body.id}`, bytes: bytes({ content: content + "More.", if_updated_at: "2026-11-15" }) });
+    expect(changed.status).toBe(200);
+    // the same scope as any write
+    expect((await f.send({ method: "POST", path: "/api/notes", bytes: bytes({ path: "Journal/Stew", content }) })).status).toBe(403);
+    // not both, not past the cap, and text
+    expect((await f.send({ method: "POST", path: "/api/notes", body: "{}", bytes: bytes({ path: "Recipes/X", content: "x" }) })).status).toBe(400);
+    expect((await f.send({ method: "POST", path: "/api/notes", bytes: new ArrayBuffer(LIMITS.maxWriteBytes + 1) })).status).toBe(413);
+    expect((await f.send({ method: "POST", path: "/api/notes", bytes: new Uint8Array([0xff, 0xfe]).buffer })).status).toBe(400);
+    expect(notes.some((n) => n.path === "Recipes/X")).toBe(false);
   });
 });

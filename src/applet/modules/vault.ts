@@ -3,12 +3,19 @@
 // `vault.read` path prefixes, and so is every note that comes back (whatever
 // key it was looked up by), so search, tag and id lookups can't leak.
 //   GET   /api/vault
-//   GET   /api/notes?path_prefix&tag&search&limit&id&path&include_content
-//   GET   /api/notes/:idOrPath
+//   GET   /api/notes?path_prefix&tag&search&limit&id&path&include_content&include_metadata
+//              &order_by&sort&offset&meta[field]&meta[field][op]&include_links
+//   GET   /api/notes/:idOrPath?include_content&include_links
+//   GET   /api/tags                                      the tags on the notes in its folders, each with its count
+// The hub's own query words (T-476, docs/WRITE-AN-APPLET.md "Reading"): order, page and filter by a field, asked of
+// the hub with the folder pinned and judged again on what comes back. Ordering by link count is not one of them (it
+// counts links to notes outside the folders). A link comes back only when the note at its other end is in the folders
+// too; the tags are counted from the folders' own notes, never the vault's whole list.
 // Two writes, only for a grant that names them (a contract 2 sealed manifest):
 //   POST  /api/notes            {path, content, types?, tags?, metadata?}   a new record, its path inside a `vault.create` folder
 //   PATCH /api/notes/:idOrPath  {if_updated_at, content?, metadata?, types?: {add?, remove?}, tags?: {add?, remove?}}
 //                                                          a change to a record inside a `vault.update` folder, in one call
+// A long note's write comes as bytes beside the request (contract.ts maxWriteBytes), read here as the same JSON text.
 // Typed records end to end (T-476): a write may set a record's fields (`metadata`, merged; null removes a key: plain
 // values only, never `published`), and give or take away the types its card names for that folder (what it opens
 // there, `fields.opens`: "Open book notes in Books/"), so what an applet changes is what an AI reads back. No other
@@ -31,25 +38,34 @@ import { tagsFor, type Opens } from "../opens.ts";
 import type { FetchResult } from "./frameFetch.ts";
 
 export type PathRow = { id: string; path: string | null; extension?: string | null; updatedAt?: string | null };
-export type VaultNote = { id: string; path?: string | null; extension?: string | null; content?: string | null; tags?: string[] | null; types?: string[] | null; metadata?: Record<string, unknown> | null; createdAt?: string | null; updatedAt?: string | null };
+/** One end of a link as the hub summarises it (`include_links`). */
+export type LinkEnd = { id: string; path?: string | null; tags?: string[] | null; metadata?: Record<string, unknown> | null; createdAt?: string | null; updatedAt?: string | null };
+/** A link on a note, both ways (`include_links`): the note it leaves and the one it reaches, each summarised. */
+export type NoteLink = { sourceId: string; targetId: string; relationship?: string | null; metadata?: Record<string, unknown> | null; createdAt?: string | null; sourceNote?: LinkEnd | null; targetNote?: LinkEnd | null };
+export type VaultNote = { id: string; path?: string | null; extension?: string | null; content?: string | null; tags?: string[] | null; types?: string[] | null; metadata?: Record<string, unknown> | null; createdAt?: string | null; updatedAt?: string | null; links?: NoteLink[] | null };
+/** A folder's notes as the hub orders, pages and filters them (`query`): what the module passes on, checked. */
+export type FolderQuery = { limit: number; offset: number; tag: string | null; search: string | null; content: boolean; links: boolean; orderBy: string | null; sort: "asc" | "desc" | null; meta: [string, string][] };
 /** A change to a record's types or tags: names to add and to remove. */
 export type NameChange = { add?: string[]; remove?: string[] };
 /** What a typed write sets beside the text: fields (merged; null removes a key), types and tags. */
 export type RecordChange = { metadata?: Record<string, unknown>; types?: NameChange; tags?: NameChange };
 export type VaultDeps = {
   listPaths(): Promise<PathRow[]>;
-  /** By id or path; rejects when missing. */
-  getNote(ref: string): Promise<VaultNote>;
+  /** By id or path; rejects when missing. `links`: with its links, both ways (`include_links`). */
+  getNote(ref: string, o?: { links?: boolean }): Promise<VaultNote>;
   search(query: string, limit: number, pathPrefix: string | null): Promise<{ id: string; path: string | null; snippet: string }[]>;
   /** The newest notes under a folder with their tags and metadata, no content, in one ask. Absent: fields are read note by note. */
   listFields?(pathPrefix: string, limit: number): Promise<VaultNote[]>;
   /** The newest notes under a folder (with a tag, when given) with their tags, metadata and, when asked, content, in one
    *  ask. Absent, or failing: they are read note by note, as before. */
   list?(pathPrefix: string, o: { limit: number; tag: string | null; content: boolean }): Promise<VaultNote[]>;
+  /** The notes under a folder as the hub orders, pages and filters them, with their tags and metadata (and content and
+   *  links when asked). Absent: those query words are refused (400). */
+  query?(pathPrefix: string, q: FolderQuery): Promise<VaultNote[]>;
   /** The same reads, answered at once from what was read before while the hub is asked behind it (vault/readCache.ts),
    *  for a frame that draws itself again when told the hub's answer differs (the kit's `x-parachute-redraws`). Writes,
    *  and the reads a write is judged on, never use these. */
-  kept?: Pick<VaultDeps, "listPaths" | "getNote" | "search" | "listFields" | "list">;
+  kept?: Pick<VaultDeps, "listPaths" | "getNote" | "search" | "listFields" | "list" | "query">;
   /** A new note at `path` with these tags, and these types and fields (refused when one is there). Absent: the host can't write, and every write is 405. */
   create?(path: string, content: string, tags: string[], more?: { types?: string[]; metadata?: Record<string, unknown> }): Promise<VaultNote>;
   /** A change to the note `id` (new content, when given, and `more`), only if it is still at `ifUpdatedAt`; a rejection whose message starts "conflict:" is a conflict. */
@@ -66,8 +82,20 @@ const CACHE_MAX = 40;
 const CACHE_MAX_CONTENT = 200_000;
 // include_metadata (true, or a list of fields: either way, all of them) brings each note's tags and metadata (its fields):
 // one ask per folder where the host can, else note by note as a tag filter is
-const NOTES_PARAMS = ["path_prefix", "tag", "search", "limit", "id", "path", "include_content", "include_metadata"];
-const NOTE_PARAMS = ["include_content"];
+const NOTES_PARAMS = ["path_prefix", "tag", "search", "limit", "id", "path", "include_content", "include_metadata", "order_by", "sort", "offset", "include_links"];
+const NOTE_PARAMS = ["include_content", "include_links"];
+/** The hub's query words beside the folder's: any of them asks the hub (`query`), the folder pinned. */
+const HUB_WORDS = ["order_by", "sort", "offset", "include_links"];
+/** `meta[field]` or `meta[field][op]` (`[in][]`, `[not_in][]` for a list): the hub's field filter. */
+const META = /^meta\[([A-Za-z_][A-Za-z0-9_-]{0,63})\](?:\[(eq|ne|gt|gte|lt|lte|exists)\]|\[(in|not_in)\]\[\])?$/;
+const MAX_META = 10;
+const MAX_OFFSET = 100_000;
+/** What a list may be ordered by: when it was made or changed, or a field (never link_count: it counts links to notes
+ *  outside the folders). */
+const orderable = (v: string) => v === "updated_at" || v === "created_at" || (/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(v) && v !== "link_count");
+/** The tags a folder's notes carry are read this many at a time, and at most this many per folder. */
+const TAG_PAGE = 500;
+const TAG_MAX = 5_000;
 const VAULT_PARAMS = ["include_stats"];
 const json = (status: number, statusText: string, data: unknown): FetchResult => {
   const body = JSON.stringify(data);
@@ -116,9 +144,22 @@ const fieldsOf = (v: unknown): Record<string, unknown> | null => plain(v) && Obj
   && Object.entries(v).every(([k, x]) => FIELD_KEY.test(k) && !KEPT_FIELDS.test(k) && (fieldValue(x) || (Array.isArray(x) && x.length <= 100 && x.every((y) => y !== null && fieldValue(y))))) ? v : null;
 const namesIn = (c: NameChange | undefined) => [...(c?.add ?? []), ...(c?.remove ?? [])];
 
-const publicNote = (n: VaultNote, content: boolean) => {
+const linkEnd = (e: LinkEnd) => ({ id: e.id, path: e.path ?? null, tags: e.tags ?? [], metadata: e.metadata ?? {}, createdAt: e.createdAt ?? null, updatedAt: e.updatedAt ?? null });
+/** A note's links that stay inside the folders: the note at the other end is judged on its own path (one the hub
+ *  doesn't name is left out), and only what it is told of that note (no link count). */
+const linksIn = (n: VaultNote, prefixes: readonly string[]) => (n.links ?? []).flatMap((l) => {
+  if (!l || typeof l !== "object") return [];
+  const out = l.sourceId === n.id ? l.targetNote : l.targetId === n.id ? l.sourceNote : null;
+  const here = l.sourceId === n.id ? l.sourceNote : l.targetNote;
+  if (!out || !inScope(prefixes, out.path)) return [];
+  return [{ sourceId: l.sourceId, targetId: l.targetId, relationship: l.relationship ?? null, metadata: l.metadata ?? {}, createdAt: l.createdAt ?? null,
+    ...(l.sourceId === n.id ? { targetNote: linkEnd(out), ...(here ? { sourceNote: linkEnd({ ...here, path: n.path }) } : {}) } : { sourceNote: linkEnd(out), ...(here ? { targetNote: linkEnd({ ...here, path: n.path }) } : {}) }) }];
+});
+/** `links`: the folders its links are judged on (asked with include_links); null leaves links out. */
+const publicNote = (n: VaultNote, content: boolean, links: readonly string[] | null = null) => {
   const out: Record<string, unknown> = { id: n.id, path: n.path ?? null, createdAt: n.createdAt ?? null, updatedAt: n.updatedAt ?? null, tags: n.tags ?? [], ...(n.types ? { types: n.types } : {}), metadata: n.metadata ?? {} };
   if (content) out.content = n.content ?? "";
+  if (links) out.links = linksIn(n, links);
   return out;
 };
 
@@ -131,10 +172,12 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     cache.set(key, { at: now(), note });
     while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
   };
-  type Reads = Pick<VaultDeps, "listPaths" | "getNote" | "search" | "listFields" | "list">;
+  type Reads = Pick<VaultDeps, "listPaths" | "getNote" | "search" | "listFields" | "list" | "query">;
   /** Notes by ref, cached 10 s. Each underlying read costs one limiter token; a cache hit is free. A read from the kept
    *  copies (`d` is deps.kept) uses this cache too, and is never put in it (its copy may be older than the hub's). */
-  async function getNote(ref: string, ctx: CallCtx, d: Reads = deps): Promise<VaultNote> {
+  async function getNote(ref: string, ctx: CallCtx, d: Reads = deps, links = false): Promise<VaultNote> {
+    // with its links: asked each time (the cache keeps notes without them)
+    if (links) { ctx.charge(1); return d.getNote(ref, { links: true }); }
     const hit = cache.get(ref);
     if (hit && now() - hit.at < NOTE_TTL_MS) return hit.note;
     if (d !== deps) { ctx.charge(1); return d.getNote(ref); }
@@ -144,16 +187,92 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     return note;
   }
 
-  async function lookup(ref: string, prefixes: string[], content: boolean, ctx: CallCtx, d: Reads = deps) {
+  /** `links`: the folders its links are judged on, when asked with include_links. */
+  async function lookup(ref: string, prefixes: string[], content: boolean, ctx: CallCtx, d: Reads = deps, links: readonly string[] | null = null) {
     if (!safeRef(ref)) return null;
     let note: VaultNote;
-    try { note = await getNote(ref, ctx, d); } catch (e) { if (e instanceof ContractError) throw e; return null; }
+    try { note = await getNote(ref, ctx, d, !!links); } catch (e) { if (e instanceof ContractError) throw e; return null; }
     // Scope is judged on the note we got back, not on the key it was asked for by.
-    return inScope(prefixes, note.path) ? publicNote(note, content) : null;
+    return inScope(prefixes, note.path) ? publicNote(note, content, links) : null;
+  }
+
+  /** A list in the hub's own words (order_by, sort, offset, meta[...], include_links): asked of the hub one folder at a
+   *  time with the folder pinned, each note judged again on its own path. Paging or ordering by a field takes one
+   *  folder (path_prefix, or a grant of one): pages of two folders can't be put together. */
+  async function hubList(q: URLSearchParams, prefixes: string[], granted: string[], limit: number, content: boolean, ctx: CallCtx, d: Reads): Promise<FetchResult> {
+    if (!d.query) return fail(400, "bad_params");
+    const orderBy = q.get("order_by"), sort = q.get("sort"), rawOffset = q.get("offset"), rawLinks = q.get("include_links");
+    if (orderBy !== null && !orderable(orderBy)) return fail(400, "bad_params");
+    if (sort !== null && sort !== "asc" && sort !== "desc") return fail(400, "bad_params");
+    if (rawOffset !== null && (!/^\d{1,9}$/.test(rawOffset) || Number(rawOffset) > MAX_OFFSET)) return fail(400, "bad_params");
+    if (rawLinks !== null && rawLinks !== "true" && rawLinks !== "false") return fail(400, "bad_params");
+    const offset = rawOffset === null ? 0 : Number(rawOffset);
+    const meta: [string, string][] = [];
+    for (const [k, v] of q) {
+      if (!META.test(k)) continue;
+      if (v.length > 500 || hasHidden(v)) return fail(400, "bad_params");
+      meta.push([k, v]);
+    }
+    if (meta.length > MAX_META) return fail(400, "bad_params");
+    const search = q.get("search");
+    if (search !== null && search.length > 500) return fail(400, "bad_params");
+    const byField = orderBy !== null && orderBy !== "updated_at" && orderBy !== "created_at";
+    if (prefixes.length > 1 && (offset > 0 || byField)) return fail(400, "bad_params");
+    const links = rawLinks === "true";
+    const query: FolderQuery = { limit, offset, tag: q.get("tag")?.replace(/^#/, "") || null, search: search || null, content, links, orderBy, sort: sort as FolderQuery["sort"], meta };
+    const seen = new Set<string>();
+    const out: (VaultNote & { path: string })[] = [];
+    try {
+      for (const p of prefixes) {
+        ctx.charge(1);
+        for (const n of await d.query(p, query)) {
+          if (!n || !n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null || (query.tag && !(n.tags ?? []).includes(query.tag))) continue;
+          seen.add(n.id); out.push(n as VaultNote & { path: string });
+        }
+      }
+    } catch (e) {
+      if (e instanceof ContractError) throw e;
+      // the hub refusing the words (a field it can't order by on 0.8): the applet's to fix, not a failure
+      return (e as { status?: number })?.status === 400 ? fail(400, "bad_params") : fail(502, "failed");
+    }
+    // two folders, one order: put together as the hub ordered each (by when made or changed)
+    if (prefixes.length > 1) {
+      const key = orderBy === "created_at" ? "createdAt" : "updatedAt";
+      const dir = sort === "asc" ? 1 : -1;
+      out.sort((a, b) => dir * (a[key] ?? "").localeCompare(b[key] ?? "") || a.path.localeCompare(b.path));
+    }
+    return json(200, "OK", out.slice(0, limit).map((n) => publicNote(n, content, links ? granted : null)));
+  }
+
+  /** GET /api/tags: the tags on the notes in its folders, each with how many of those notes carry it. Never the vault's
+   *  own list: a tag only on notes outside the folders isn't named. */
+  async function tags(q: URLSearchParams, granted: string[], ctx: CallCtx, d: Reads): Promise<FetchResult> {
+    if ([...q.keys()].length) return fail(400, "bad_params");
+    if (!d.query) return fail(400, "bad_params");
+    const counts = new Map<string, number>();
+    const seen = new Set<string>();
+    try {
+      for (const p of granted) {
+        for (let offset = 0; offset < TAG_MAX; offset += TAG_PAGE) {
+          ctx.charge(1);
+          const page = await d.query(p, { limit: TAG_PAGE, offset, tag: null, search: null, content: false, links: false, orderBy: "updated_at", sort: "asc", meta: [] });
+          for (const n of page) {
+            if (!n || !n.path || seen.has(n.id) || !inScope(granted, n.path) || codeKindOf(n) !== null) continue;
+            seen.add(n.id);
+            for (const t of new Set([...(n.tags ?? []), ...(n.types ?? [])])) if (typeof t === "string" && t) counts.set(t, (counts.get(t) ?? 0) + 1);
+          }
+          if (page.length < TAG_PAGE) break;
+        }
+      }
+    } catch (e) {
+      if (e instanceof ContractError) throw e;
+      return fail(502, "failed");
+    }
+    return json(200, "OK", [...counts].sort((a, b) => a[0].localeCompare(b[0])).map(([name, count]) => ({ name, count })));
   }
 
   async function notes(q: URLSearchParams, granted: string[], ctx: CallCtx, d: Reads = deps): Promise<FetchResult> {
-    for (const k of q.keys()) if (!NOTES_PARAMS.includes(k)) return fail(400, "bad_params");
+    for (const k of q.keys()) if (!NOTES_PARAMS.includes(k) && !META.test(k)) return fail(400, "bad_params");
     let prefixes = granted;
     const asked = q.get("path_prefix");
     if (asked) {
@@ -172,9 +291,12 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
 
     const key = q.get("id") ?? q.get("path");
     if (key !== null) {
-      const n = await lookup(key, prefixes, content, ctx, d);
+      const links = q.get("include_links");
+      if (links !== null && links !== "true" && links !== "false") return fail(400, "bad_params");
+      const n = await lookup(key, prefixes, content, ctx, d, links === "true" ? granted : null);
       return json(200, "OK", n ? [n] : []);
     }
+    if (HUB_WORDS.some((k) => q.has(k)) || [...q.keys()].some((k) => META.test(k))) return hubList(q, prefixes, granted, limit, content, ctx, d);
     const tagAsked = q.get("tag")?.replace(/^#/, "") || null;
     // a tag or the notes' content, without a search: one ask per granted folder, the hub filtering by tag (each note
     // still judged on its own path and tags, as any list is). Read note by note (below) where the host can't.
@@ -357,13 +479,16 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
             // a frame that draws itself again when told (the kit's onFresh) may be answered from the kept copies
             const d: Reads = req.method === "GET" && req.headers?.["x-parachute-redraws"] === "1" && deps.kept ? deps.kept : deps;
             if (pathname === "/api/notes") return await notes(query, granted, ctx, d);
+            if (pathname === "/api/tags") return await tags(query, granted, ctx, d);
             if (pathname.startsWith("/api/notes/")) {
               const rest = pathname.slice("/api/notes/".length);
               if (!rest || rest.includes("/")) return notFound();
               let ref: string;
               try { ref = decodeURIComponent(rest); } catch { return fail(400, "bad_request" as ErrorCode); }
               if (!only(NOTE_PARAMS)) return fail(400, "bad_params");
-              const n = await lookup(ref, granted, true, ctx, d);
+              const links = query.get("include_links");
+              if (links !== null && links !== "true" && links !== "false") return fail(400, "bad_params");
+              const n = await lookup(ref, granted, true, ctx, d, links === "true" ? granted : null);
               return n ? json(200, "OK", n) : notFound();
             }
             return notFound();

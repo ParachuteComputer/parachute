@@ -301,7 +301,7 @@ function EmbedFrame({ found, name, props, onBroke, onPageStopped }: { found: Fou
       }
     };
     return createRouter([
-      createVaultModule({ listPaths: watch(deps.listPaths), getNote: watch(deps.getNote), search: watch(deps.search), create: deps.create && watch(deps.create), save: deps.save && watch(deps.save) }, { name: found.rec.vault }),
+      createVaultModule({ listPaths: watch(deps.listPaths), getNote: watch(deps.getNote), search: watch(deps.search), query: deps.query && watch(deps.query), create: deps.create && watch(deps.create), save: deps.save && watch(deps.save) }, { name: found.rec.vault }),
       createThemeModule({ theme: () => embedTokens(tokensNow() as unknown as Record<string, string>) }),
       createPageModule((l) => setHeight(Math.max(EMBED_MIN, Math.min(EMBED_MAX, l.height)))),
     ]);
