@@ -23,7 +23,8 @@ jobs:
             next: "1"
     name: web (core ${{ matrix.core }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # (about 25 min: the specs in Chromium, then the applet frame in WebKit)
+    timeout-minutes: 40
     env:
       E2E_CORE_NEXT: ${{ matrix.next }}
     steps:
