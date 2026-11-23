@@ -118,10 +118,13 @@ export default function Starter() {
     }
   };
 
-  // back to the list (the page's own ← and the app's Back alike)
-  const close = () => { opening.current++; setSelected(null); setSelectedId(null); setDraft(null); };
-  // while a note is open, the app's Back (its bar's ‹, Android's) closes it first (an app before 11-23 has no onBack)
-  useEffect(() => (selected && typeof onBack === "function" ? onBack(close) : undefined), [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // back to the list (the page's own ← and the app's Back alike); an edit in progress is kept, and is there again when
+  // the note opens: only Cancel lets it go
+  const close = () => { opening.current++; setSelected(null); setSelectedId(null); };
+  // while a note is open, the app's Back (its bar's ‹, Android's) closes it first. Held on selectedId, which the tap
+  // that opens a note sets at once (not after the read): the app gives the Back to a hold made in a tap. An app before
+  // 11-23 has no onBack.
+  useEffect(() => (selectedId && typeof onBack === "function" ? onBack(close) : undefined), [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (selected) {
     return (
