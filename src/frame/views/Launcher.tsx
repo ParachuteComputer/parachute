@@ -185,7 +185,9 @@ function VaultEntries({ v, many, onCount, onHold }: { v: FrameVault; many: boole
       return <Entry key={a.noteId} v={v} a={a} where={where} home={isHome} pinned={pinned} onHold={() => onHold(a)} />;
     })}
     {brought.map((p) => <Brought key={p.noteId} p={p} />)}
-    {applets && !applets.ok && <li className="entry-quiet">The applets in {v.vault} couldn't be read.</li>}
+    {/* plain words for what is wrong (vault/failure.ts): a Parachute that isn't reached is a line, not an error */}
+    {applets && !applets.ok && <li className="entry-quiet">{applets.why === "offline" ? `Can't reach ${v.vault} just now.`
+      : applets.why === "refused" ? <>{v.vault} wants you to sign in again: <Link to="/settings">Settings</Link>.</> : `The applets in ${v.vault} couldn't be read.`}</li>}
   </>;
 }
 

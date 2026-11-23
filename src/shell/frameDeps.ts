@@ -106,7 +106,7 @@ async function applets(rec: VaultRecord, fresh: boolean): Promise<FrameApplets> 
   // at a tap (`fresh`), as the hub has them now: if that read fails, no applet opens the note this time
   const ok = fresh || !appletsNow(rec.key) ? await refreshApplets(rec, fresh) : true;
   const e = appletsNow(rec.key);
-  if (!ok || e?.state !== "ok") return { ok: false, error: e?.state === "error" ? e.error : "the applets couldn't be read" };
+  if (!ok || e?.state !== "ok") return { ok: false, error: e?.state === "error" ? e.error : "the applets couldn't be read", ...(e?.state === "error" && (e.failure === "offline" || e.failure === "refused") ? { why: e.failure } : {}) };
   const status = statusOf(rec.key, gateNow());
   // only what the open bundle offers (shell/bundles.ts): listing is all it decides; what runs is still each applet's card
   const app = openBundleNow(), home = homeVault();

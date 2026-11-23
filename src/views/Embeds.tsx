@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NO_DEVICES } from "../applet/frame";
 import { Link } from "react-router";
-import { VaultAuthError, VaultPermissionError, VaultUnreachableError, type Note } from "@openparachute/surface-client";
+import type { Note } from "@openparachute/surface-client";
 import { PAGE_STOPPED_MESSAGE, useSealedFrame } from "../applet/frame";
 import { holdPage, pageHeld, releaseFromPage } from "../applet/violations";
 import { buildSrcdoc } from "../applet/srcdoc";
@@ -34,8 +34,9 @@ import { pageMarks } from "../applet/pageMark";
 import { tokensNow } from "../theme/store";
 import { cssOf } from "../theme/theme";
 import { frameHead } from "../kit/frameCss";
-import { clientFor, signInState } from "../vault/client";
-import { MAX_CODE_CHARS, TooLargeError } from "../vault/limited";
+import { clientFor } from "../vault/client";
+import { failureOf, settled } from "../vault/failure";
+import { MAX_CODE_CHARS } from "../vault/limited";
 import { originOf, listVaults, hostOf, type VaultRecord } from "../vault/store";
 import { whoseOf, type Whose } from "../vault/whose";
 import { LINK_OUT_HOLD_MS } from "../shell/frameSource";
@@ -59,22 +60,6 @@ type Place =
   | { state: "invalid"; name: string; why: string }
   | { state: "newer"; name: string; why: string }
   | { state: "found"; found: Found };
-
-/** Why a read of someone's vault failed, as the shell says it. A 403 is the vault's plain answer, not a refusal. */
-export function failureOf(e: unknown): "refused" | "offline" | "large" | "other" {
-  if (e instanceof VaultAuthError && !(e instanceof VaultPermissionError) && e.status === 401) return "refused";
-  if (e instanceof TooLargeError || (e instanceof Error && e.cause instanceof TooLargeError)) return "large";
-  if (e instanceof VaultUnreachableError || e instanceof TypeError) return "offline";
-  return "other";
-}
-
-/** A failure that looks like the network may be a refusal the browser couldn't read: the sign-in says which. "alive":
- *  the hub answered and gave a fresh token, so it was neither; the call may be tried again. */
-async function settled(rec: VaultRecord, f: ReturnType<typeof failureOf>): Promise<ReturnType<typeof failureOf> | "alive"> {
-  if (f !== "offline") return f;
-  const s = await signInState(rec.key);
-  return s === "refused" ? "refused" : s === "alive" ? "alive" : "offline";
-}
 
 const theirsOf = (p: Place) => p.state === "found" && p.found.whose !== "mine";
 
