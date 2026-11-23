@@ -222,6 +222,10 @@ test("the bar's places are tabs: the one you are in is the page's colour, joined
   expect(side.x + side.width).toBeGreaterThan(1438);
   expect(side.height).toBeGreaterThan(600);
   expect(side.width).toBeLessThan(200);
+  // and the list of applets fills the page beside them (an iframe left at width auto is 300px wide)
+  const list = (await page.locator("iframe.app-frame").boundingBox())!;
+  expect(list.x).toBeLessThan(2);
+  expect(Math.abs(list.x + list.width - side.x)).toBeLessThan(2);
 });
 
 test("on a Mac the place is an open book, two pages a turn; the last turn shows the last of it, whatever the count", async ({ page }) => {

@@ -316,7 +316,8 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
   .home-bar-place[aria-current="page"] { margin: 0 10px 0 -1px; padding: 10px 12px 10px 13px; }
   .home-bar-glyph { font-size: var(--fs-lead); }
   .home-bar-badge { top: 4px; left: 28px; }
-  .with-bar .app-frame { right: calc(env(safe-area-inset-right) + var(--index-w)); width: auto; left: env(safe-area-inset-left); }
+  /* (a width of its own: an iframe left at width auto between left and right is its default 300px) */
+  .with-bar .app-frame { right: calc(env(safe-area-inset-right) + var(--index-w)); left: env(safe-area-inset-left); width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right) - var(--index-w)); }
   /* what sits along the foot (a newer build's line, the shell's passing line) stays beside the index, not under it */
   .with-bar .update-line { right: var(--index-w); }
   .with-bar .shell-line { left: calc((100% - var(--index-w)) / 2); }
