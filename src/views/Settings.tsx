@@ -60,7 +60,19 @@ function signOutVault(v: VaultRecord) {
 
 /** One vault this device holds, in one line: its name, and what Parachute holds of it and what for (reachWords.ts). A tap
  *  on it shows why in a sentence, whose it is, and Read only, Sign in again and Sign out; Open stays beside it. */
-function VaultRow({ v }: { v: VaultRecord }) {
+/** Applets that read across every vault this device holds (app words: applet/app.ts), allowed here and live, by name.
+ *  Parachute's own (Vault, Notes) reach every vault too, with no card: the idle line says so. */
+const ACROSS = ["vaults", "recent", "changes", "sharing"];
+function acrossNames(vaults: readonly VaultRecord[]): string[] {
+  const g = deviceGrants();
+  return vaults.flatMap((rec) => {
+    const read = appletsNow(rec.key);
+    if (read?.state !== "ok") return [];
+    return read.found.entries.filter((e) => !e.newer && e.app.some((w) => ACROSS.includes(w)) && g.status(subjectOf(rec.key, e.noteId), e.keys.scope, e.keys.html) !== "none").map((e) => e.manifest.name);
+  });
+}
+
+function VaultRow({ v, across }: { v: VaultRecord; across: readonly string[] }) {
   const whose = useWhose()(v);
   const g = deviceGrants();
   // the applets allowed here, by name, as Applets lists them: read again when the vault's applets are, and when a grant
@@ -79,7 +91,7 @@ function VaultRow({ v }: { v: VaultRecord }) {
   const unknown = here.length > 0 && (read?.state !== "ok" || entries.some((e) => e?.newer));
   const level = heldLevel(v);
   const home = homeVault()?.key === v.key;
-  const facts = { level, home, applets: [...allowed, ...embeds], unknown, own: ownWrite(v), theirs: whose !== "mine" };
+  const facts = { level, home, applets: [...allowed, ...embeds], unknown, own: ownWrite(v), theirs: whose !== "mine", across };
   // write that no applet allowed here needs (the person's own, or held from before this app asked per vault): theirs to give back
   const needing = appletsNeedingWrite(v);
   const giveable = level === "write" && needing !== null && !needing.length && !home;
@@ -91,7 +103,7 @@ function VaultRow({ v }: { v: VaultRecord }) {
           <p className="small">{why(facts).long}</p>
           <WhoseLine v={v} />
           <div className="vault-acts">
-            {giveable && <button type="button" className="quiet-button" onClick={() => { forgetOwnWrite(v); void giveBack(v.key, "/settings"); }}>Read only</button>}
+            {giveable && <button type="button" className="quiet-button" aria-label={`Read only: ${v.vault}`} onClick={() => { forgetOwnWrite(v); void giveBack(v.key, "/settings"); }}>Read only</button>}
             <button type="button" className="quiet-button" aria-label={`Sign in again to ${v.vault}`} onClick={() => void askVault(v, heldLevel(v) ?? "read", "open", "/settings").then((u) => window.location.assign(u), () => undefined)}>Sign in again</button>
             <button type="button" className="quiet-button" aria-label={`Sign out of ${v.vault}`} onClick={() => signOutVault(v)}>Sign out</button>
           </div>
@@ -185,6 +197,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
   const shown = useShown(vaults);
   // how many vaults each Parachute has that this device doesn't read, counted over its vaults
   useSyncExternalStore(subscribeNewVaults, newVaultsRev);
+  const across = acrossNames(vaults);
   return (
     <main className="screen settings">
       <Bar title="Settings" back={true} onBack={backOrLauncher} />
@@ -206,7 +219,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
               <h4>{p.home ? "Your Parachute" : said(p, parachutes)}{(p.home || hostOf(p.hub) !== said(p, parachutes)) && <span className="quiet small">{hostOf(p.hub)}</span>}</h4>
               {p.vaults.length ? <>
                 <p className="small quiet">{reachCount(p.vaults.length, newVaultsOn(p.hub).length)}</p>
-                <ul className="plain vault-rows">{p.vaults.map((v) => <VaultRow key={v.key} v={v} />)}</ul>
+                <ul className="plain vault-rows">{p.vaults.map((v) => <VaultRow key={v.key} v={v} across={across} />)}</ul>
                 <VaultsToAdd hub={p.hub} name={said(p, parachutes)} />
                 <p className="small"><Link to={`/add?hub=${encodeURIComponent(p.hub)}`}>Sign in again</Link> <span className="quiet">(sees which vaults you have there now)</span>{" · "}
                   <button type="button" className="quiet-button" onClick={() => signOutOf(p.hub, signOutVault)}>Sign out of {said(p, parachutes)}</button></p>

@@ -293,8 +293,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .vault-more > summary { display: flex; flex-direction: column; gap: 1px; list-style: none; cursor: pointer; color: var(--text); }
 .vault-more > summary::-webkit-details-marker { display: none; }
 .vault-name { font: var(--title-weight, 600) calc(var(--fs-body) * 1.15)/1.2 var(--display, var(--serif)); }
-.vault-name::after { content: "▸"; margin-left: 8px; font: var(--fs-label) var(--sans); color: var(--muted); vertical-align: 2px; }
-.vault-more[open] .vault-name::after { content: "▾"; }
+.vault-name::after { content: "▸" / ""; margin-left: 8px; font: var(--fs-label) var(--sans); color: var(--muted); vertical-align: 2px; }
+.vault-more[open] .vault-name::after { content: "▾" / ""; }
 .vault-reach { color: var(--muted); font-size: var(--fs-small); }
 .vault-detail { display: flex; flex-direction: column; align-items: start; gap: 8px; padding: 8px 0 2px; }
 .vault-detail > p { margin: 0; }
