@@ -186,7 +186,8 @@ export const LOOKS: Record<LookName, Look> = {
       "card-edges": "2px", "field-edges": "2px", "field-pad": "8px 12px",
       "radius-card": "var(--radius)", "radius-field": "var(--radius)", "radius-entry": "var(--radius)", "radius-button": "999px",
       "shadow-card": "none", "shadow-sheet": "none",
-      "label-transform": "uppercase", "label-caps": "normal", "label-track": ".08em", "title-weight": "500", "measure": "760px",
+      // labels in sentence case, as in every look but almanac (black on white needs no capitals to stand out)
+      "label-transform": "none", "label-caps": "normal", "label-track": "0em", "title-weight": "500", "measure": "760px",
       ...NO_SKY,
     },
     motion: "still",
