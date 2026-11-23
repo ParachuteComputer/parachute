@@ -589,6 +589,15 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   const all = [...(s.msgs.get(room)?.values() ?? [])].filter((e) => visible(s, e)).sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));
   const newest = all[all.length - 1];
   const toBottom = () => { const sc = scroller.current; if (sc) sc.scrollTop = sc.scrollHeight; };
+  // at the foot, it stays there as the talk's box shrinks (the keyboard coming up) or what is in it grows (a picture)
+  useEffect(() => {
+    const sc = scroller.current;
+    if (!sc || typeof ResizeObserver !== "function") return;
+    const ro = new ResizeObserver(() => { if (atBottom.current) toBottom(); });
+    ro.observe(sc);
+    if (sc.firstElementChild) ro.observe(sc.firstElementChild);
+    return () => ro.disconnect();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // opened: at the message it was opened for (once), else at the newest; a thread opens at its newest
   useEffect(() => {
     if (!loaded) return;

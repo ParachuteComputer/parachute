@@ -629,6 +629,14 @@ test.describe(`on a phone 390 wide, ${which}`, () => {
       await page.waitForTimeout(600);
       await tap("the message just sent", mine);
       await tap("the box to write in, after sending", field);
+      // the keyboard comes up (the screen gets shorter): the newest stays in view above the box (today's Rooms; the
+      // older one never followed it, and its code is the vault's)
+      if (install !== installOlderRooms) {
+        await page.setViewportSize({ width: 390, height: 520 });
+        await page.waitForTimeout(600);
+        await tap("the message just sent, with the keyboard up", mine);
+        await tap("the box to write in, with the keyboard up", field);
+      }
       await expect.poll(async () => (await bob.query({ kinds: [9], "#h": [id], authors: [alice], limit: 10 })).some((e) => e.content === `On my way ${stamp}`), { timeout: 15_000 }).toBe(true);
     } finally {
       await made.remove();
