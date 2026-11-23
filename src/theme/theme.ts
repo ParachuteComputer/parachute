@@ -47,7 +47,7 @@ export const DENSITY: Record<Density, Record<DensityKey, string>> = {
 // every one a value; a record's `tokens` changes them one by one.
 export type StyleKind = "color" | "line" | "edges" | "length" | "pad" | "shadow" | "transform" | "caps" | "track" | "weight";
 export const STYLE_TOKENS = {
-  "primary":         { kind: "color", what: "the main action's fill (a primary button, a field's action)" },
+  "primary":         { kind: "color", what: "the main action's fill (a primary button, a field's action), and what wants the person under a row" },
   "on-primary":      { kind: "color", what: "text on the main action" },
   "tint":            { kind: "color", what: "a row under the pointer, the row open now: a light wash" },
   "card-fill":       { kind: "color", what: "a card's ground" },
