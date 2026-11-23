@@ -213,6 +213,23 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
     await f.getByRole("button", { name: "Save" }).click();
     await expect(f.getByText("shared roasted oolong tea")).toBeVisible();
     await expect(f.getByText(/Someone else changed/)).toHaveCount(0);
+    // and Save tapped while a field change of hers is still on its way: it waits for it, no conflict
+    await f.getByRole("button", { name: "Edit notes" }).click();
+    await f.getByRole("textbox", { name: "Notes and memories" }).fill("## Memories and moments\n\nHiked Green Mountain and shared roasted oolong tea. Twice.\n");
+    // a slow line: the favourite's write takes a while to reach the hub
+    let slowed = false;
+    const hubWrites = (u: URL) => u.origin === new URL(hub.origin).origin;
+    await page.route(hubWrites, async (route) => {
+      if (!slowed && route.request().method() !== "GET") { slowed = true; await new Promise((r) => setTimeout(r, 1500)); }
+      await route.continue().catch(() => {});
+    });
+    await f.getByRole("button", { name: "★ Favorite" }).click();
+    await f.getByRole("button", { name: "Save" }).click();
+    await expect(f.getByText("shared roasted oolong tea. Twice.")).toBeVisible();
+    expect(slowed).toBe(true);
+    await expect(f.getByText(/Someone else changed/)).toHaveCount(0);
+    await f.getByRole("button", { name: "☆ Favorite" }).click();
+    await expect(f.getByRole("button", { name: "★ Favorite" })).toBeVisible();
 
     // Verify persisted on the hub
     const mayaSaved = await api(hub, "GET", `notes?id=${encodeURIComponent("People/Maya Lin")}&include_content=true&include_metadata=true`);

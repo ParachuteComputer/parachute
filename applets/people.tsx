@@ -1399,7 +1399,12 @@ export default function People() {
     const { body } = draft;
     setSavingBody(id);
     try {
-      const updated = await vault.updateRecord(id, { body, if_updated_at: draft.base }) as PersonRecord;
+      // after any field save of ours still under way, on the newer of the draft's version and the one ours left (a
+      // field change of our own doesn't touch the body); someone else's change since is still a conflict
+      await fieldSaves.current;
+      const ours = versions.current.get(id);
+      const base = ours && ours > draft.base ? ours : draft.base;
+      const updated = await vault.updateRecord(id, { body, if_updated_at: base }) as PersonRecord;
       if (updated.updatedAt) versions.current.set(id, updated.updatedAt);
       setSelected((s) => (s?.id === id ? { ...s, ...updated, body } : s));
       setDraft(id, (d) => (!d || d.body === body ? null : { ...d, base: updated.updatedAt }));
