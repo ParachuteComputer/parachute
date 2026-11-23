@@ -41,7 +41,7 @@ export const RULES: readonly Rule[] = [
   // how things move (docs/DESIGN-RULES.md): on the theme's curves and times, which are still under reduce-motion, and
   // only transform and opacity, so nothing moves the page under the reader
   { id: "motion", what: "motion of its own (a time or curve of its own, `all`, or a script moving it)",
-    use: "the parts, which already move; else transform and opacity on var(--ease-out), var(--ease-in-out), var(--ease-drawer) and var(--t-press), var(--t-state), var(--t-sheet), var(--t-step), var(--t-turn), var(--t-swap)",
+    use: "the parts, which already move; else transform and opacity on var(--ease-out), var(--ease-in-out), var(--ease-drawer) and var(--t-press), var(--t-state), var(--t-sheet), var(--t-step), var(--t-swap)",
     test: new RegExp([
       String.raw`\b(?:transition|animation)(?:-(?:duration|delay|timing-function)|Duration|Delay|TimingFunction)?\s*:[^;{}\n]*?(?:(?<![\w-])\d*\.?\d+m?s\b|cubic-bezier\(|steps\(|\bease-in\b(?!-)|\ball\b)`,
       String.raw`\.animate\s*\(\s*[\[{]`,

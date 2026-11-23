@@ -374,7 +374,7 @@ test("Rooms paints the list it last showed at once, keeps it while the relay is 
   }
 });
 
-test("a room opens at once from what the list holds, on its newest page once its own read lands, and on its newest page again next time", async ({ page }) => {
+test("a room opens at once from what the list holds, at its newest once its own read lands, and where you left it next time", async ({ page }) => {
   test.setTimeout(180_000);
   const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
   const bob = await person(RELAY!, secret("bob"));
@@ -403,11 +403,10 @@ test("a room opens at once from what the list holds, on its newest page once its
   const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   const app = frame(page);
   const row = () => app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Yard ${stamp}`) });
-  // the room's talk is pages (docs/LOOK.md): which page the book shows, of how many, and whether the newest line is on it
-  const where = () => app.locator(".room .pa-book").evaluate((b) => {
-    const at = /^(\d+)(?:–\d+)? of (\d+)$/.exec(b.closest(".pa-pages")!.querySelector(".pa-at")!.textContent ?? "");
-    const last = [...b.querySelectorAll(".msg")].pop()!.getBoundingClientRect(), box = b.getBoundingClientRect();
-    return { page: at ? +at[1] : 1, of: at ? +at[2] : 1, newestShown: last.left >= box.left - 1 && last.right <= box.right + 1 };
+  // the room's talk scrolls (docs/LOOK.md): how far its newest line is from the foot of what shows
+  const where = () => app.locator(".room .scroll").evaluate((sc) => {
+    const last = [...sc.querySelectorAll(".msg")].pop()!.getBoundingClientRect(), box = sc.getBoundingClientRect();
+    return { newestShown: last.bottom <= box.bottom + 1 && last.top >= box.top - 1, fromFoot: Math.round(sc.scrollHeight - sc.scrollTop - sc.clientHeight), tall: sc.scrollHeight > sc.clientHeight * 2 };
   });
   const back = () => app.getByRole("button", { name: "← Rooms" }).click();
   try {
@@ -422,17 +421,23 @@ test("a room opens at once from what the list holds, on its newest page once its
     await row().click();
     await expect(app.getByRole("log")).toContainText(`Yard note ${N} ${stamp}`, { timeout: 1_500 });
     await expect(app.getByRole("log")).toContainText(`Yard note 3 ${stamp}`, { timeout: 15_000 }); // the read landed
-    // older lines landed on pages before: the book is on its newest page, the newest line in view
-    await expect.poll(async () => { const w = await where(); return w.of > 1 && w.page === w.of && w.newestShown; }, { timeout: 3_000 }).toBe(true);
+    // older lines landed above: the talk is at its foot, the newest line in view
+    await expect.poll(async () => { const w = await where(); return w.tall && w.newestShown; }, { timeout: 3_000 }).toBe(true);
     slow = false;
 
-    // a page back, then to the list and in again: a room opens on its newest page
-    await app.getByRole("button", { name: "Previous page" }).click();
+    // scrolled up to read, then to the list and in again: the room is where you left it
+    await app.locator(".room .scroll").evaluate((sc) => { sc.scrollTop = sc.scrollTop - 1500; });
     await expect.poll(async () => (await where()).newestShown).toBe(false);
+    const left = (await where()).fromFoot;
     await back();
     await row().click();
     await expect(app.getByRole("log")).toContainText(`Yard note 3 ${stamp}`, { timeout: 15_000 });
-    await expect.poll(async () => { const w = await where(); return w.page === w.of && w.newestShown; }, { timeout: 5_000 }).toBe(true);
+    await expect.poll(async () => Math.abs((await where()).fromFoot - left), { timeout: 5_000 }).toBeLessThan(80);
+    // and what you send takes you to the newest, as in any chat
+    await app.getByLabel(`Message Yard ${stamp}`).fill(`Back at the yard ${stamp}`);
+    await app.getByRole("button", { name: "Send message" }).click();
+    await expect(app.getByRole("log").locator("article.mine", { hasText: `Back at the yard ${stamp}` })).toBeVisible({ timeout: 15_000 });
+    await expect.poll(async () => (await where()).newestShown, { timeout: 5_000 }).toBe(true);
   } finally {
     await made.remove();
     bob.close();

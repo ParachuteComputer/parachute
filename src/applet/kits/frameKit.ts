@@ -244,6 +244,8 @@ export const FRAME_KIT = String.raw`(function () {
     var until = Date.now() + 4000, done = false;
     function tryIt() {
       if (done || Date.now() > until) return;
+      // a page that says where it opens (the kit Page with a start: Home at its top) opens there, not where it was left
+      if (document.querySelector(".pa-page[data-start]")) { done = true; return; }
       if (document.documentElement.scrollHeight - innerHeight >= want) { scrollTo(0, want); done = true; return; }
       setTimeout(tryIt, 100);
     }

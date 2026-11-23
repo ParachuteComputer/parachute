@@ -98,7 +98,7 @@ describe("motion (docs/DESIGN-RULES.md)", () => {
   it("every frame gets the curves and times, all 0 under reduce-motion or a still mark", () => {
     const css = cssOf(tokensOf(DEFAULT_THEME, false));
     for (const [k, v] of Object.entries(MOTION)) expect(css).toContain(`--${k}:${v};`);
-    expect(css).toContain(`@media (prefers-reduced-motion: reduce),(update: slow){:root{--t-press:0ms;--t-state:0ms;--t-sheet:0ms;--t-step:0ms;--t-turn:0ms;--t-swap:0ms;}}`);
+    expect(css).toContain(`@media (prefers-reduced-motion: reduce),(update: slow){:root{--t-press:0ms;--t-state:0ms;--t-sheet:0ms;--t-step:0ms;--t-swap:0ms;}}`);
     expect(css).toContain(`:root[data-motion="still"]{--t-press:0ms;`);
     // flowing: nothing stills it but the device or the mark
     expect(css).not.toContain(`:root:not([data-motion="flowing"])`);
@@ -107,15 +107,14 @@ describe("motion (docs/DESIGN-RULES.md)", () => {
 
   it("a still theme is still from a frame's first paint, until the frame is told it flows", () => {
     const css = cssOf(tokensOf(themeFrom({ theme: { motion: "still" } }), false));
-    expect(css).toContain(`:root:not([data-motion="flowing"]){--t-press:0ms;--t-state:0ms;--t-sheet:0ms;--t-step:0ms;--t-turn:0ms;--t-swap:0ms;}`);
+    expect(css).toContain(`:root:not([data-motion="flowing"]){--t-press:0ms;--t-state:0ms;--t-sheet:0ms;--t-step:0ms;--t-swap:0ms;}`);
   });
 
   it("no time a part arrives in, its steps included, passes 250 ms", () => {
     const ms = (k: keyof typeof MOTION) => parseInt(MOTION[k], 10);
     expect(ms("t-state") + ms("t-step")).toBeLessThanOrEqual(250);
     expect(ms("t-press")).toBeLessThanOrEqual(200);
-    // moving between places and pages (docs/LOOK.md): a turn, a room giving way to another
-    expect(ms("t-turn")).toBeLessThanOrEqual(250);
+    // moving between places (docs/LOOK.md): a room giving way to another
     expect(ms("t-swap")).toBeLessThanOrEqual(150);
   });
 });

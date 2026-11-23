@@ -7,5 +7,5 @@ export function still(): boolean {
   if (typeof document === "undefined" || typeof getComputedStyle !== "function") return true;
   return getComputedStyle(document.documentElement).getPropertyValue("--t-state").trim() === "0ms";
 }
-/** How far a finger goes under still before it counts, in px: then the thing turns, goes or closes at once. */
+/** How far a finger goes under still before it counts, in px: then the thing goes or closes at once. */
 export const STILL_DRAG = 48;
