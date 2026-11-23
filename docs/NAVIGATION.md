@@ -14,6 +14,22 @@ One model, everywhere.
 | `/v/<home>/a/parachute:<name>` | Parachute's own applets ([design/PARACHUTE-SOURCE.md](design/PARACHUTE-SOURCE.md)): Notes, Journal, Capture, Vault, Connect, Home. `/connect`, `/capture`, `/journal` and `/vault` lead there. |
 | `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | The shell's editor: a new note, a note's words, from the plain views (`?with=vault`). |
 
+## What stays, and what a bundle changes
+
+Three layers, from what no record can touch to what is most yours.
+
+1. **What every Parachute has.** The app draws these itself, under any bundle or frame: **Settings**, the bar's last
+   place at every address; a way home on the bar (**Applets**, the list of the bundle's applets, or **Notes** in a bundle
+   that looks like Parachute Simplified; added at the end when the bundle's bar names none); the top bar's **⋯** on the app's own screens (Settings, or a running
+   applet's menu, which ends with Settings); the line that says a newer Parachute is ready; and every card and approval
+   (an applet's access, a frame, the self-test). No record names, moves or hides them.
+2. **The bar.** The rest of the bar is the open bundle's `bar`: its places in its order, or none (`"bar": []` leaves
+   only the app's own). A frame of your own ([CHANGE-YOUR-FRAME.md](CHANGE-YOUR-FRAME.md)) replaces the list, a vault
+   and a note, never the bar or what every Parachute has.
+3. **The first screen.** What the app opens on: the bundle's `start`, one of your applets, or the list (`null`; Notes
+   for a bundle that looks like Parachute Simplified). Home is one choice; Rooms is another. You change it in Settings →
+   **Your bundle** → **Opens on** (the list, or an applet on the bar), or by long-pressing a place: **Open on start**.
+
 ## The four rules
 
 1. **The bar is your pins.** Its places are tabs ([LOOK.md](LOOK.md)): paper tabs hanging from the foot of the page on a
@@ -43,9 +59,9 @@ The top bar's **⋯** on a running applet opens its menu: how it runs (sealed, o
 vault view when it was handed one, **Stop**, **Revoke** and **Settings**. Nothing sits between the bar and the applet.
 Stopped or still asking, ⋯ goes to Settings as on every other screen.
 
-## Home
+## The first screen
 
-Any applet in a vault of yours can be your **home** (an applet in someone else's vault never opens by itself:
+Any applet in a vault of yours can be your **home**, the screen the app opens on (an applet in someone else's vault never opens by itself:
 [OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)): it opens when the app starts. With no home, the app opens on the list. While the home vault holds nothing of the person's (only the hub's guide notes
 and Parachute's own records), the list starts with **Start here**: *Bring in what you have* (Vault: Import from Notion,
 or a starter pack) and *Connect your AI* (Connect). A record of theirs, or a pack they added, and it is gone (read across the vault, past Parachute's own records and the guide notes, not from the 200 newest alone; a vault with over 2,000 of those and none of theirs shows no Start here). It is read before the list draws (and kept per vault), so
@@ -55,7 +71,9 @@ choice came from somewhere else (your agent wrote it, or a frame of your own set
 applet's card or its Open button, and your tap is the choice (also when Allow goes on to your hub's page and back). A
 first sign-in on a new device counts as a start: once it is done, the app opens your home there, not the list (until
 the device's self-test has passed, that screen says applets are off, and shows the card once it has). Once
-chosen here, your home runs whenever you come back to it (Back, or its place on the bar).
+chosen here, your home runs whenever you come back to it (Back, or its place on the bar). Settings → **Your bundle** →
+**Opens on** lists the list and the applets on your bar: a tap there is the choice on this device, and is written to the
+bundle's record as the long-press is.
 
 A home applet is an ordinary applet that asks the app for a little more: the newest notes across your vaults, what is
 on your bar, and a way to take you somewhere on a tap (an applet at a room too: `?room=…&event=…`, the launch a

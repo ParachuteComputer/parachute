@@ -46,7 +46,8 @@ change the vault view, or put something above the notes. For example, a heading 
 ```
 
 The bar at the foot of the screen is the app's own, under any frame: what is on it is your bundle's pins (or your settings note,
-[NAVIGATION.md](NAVIGATION.md)), not frame code.
+[NAVIGATION.md](NAVIGATION.md)), not frame code. So are the first screen (the bundle's `start`), Settings, the update line
+and every card: a frame replaces the list, a vault and a note, and nothing else ([NAVIGATION.md](NAVIGATION.md#what-stays-and-what-a-bundle-changes)).
 
 ## What the person sees
 

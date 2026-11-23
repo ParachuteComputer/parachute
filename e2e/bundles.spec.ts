@@ -83,6 +83,40 @@ test("Settings → Your bundle: choose between Parachute Simplified, Everything 
   await expect(entries.getByRole("link", { name: /Cook mode/ })).toBeVisible();
 });
 
+test("the first screen: the bundle record names it, and Settings → Opens on changes it to the list or another applet on the bar", async ({ page }) => {
+  // Aaron's own opens on Rooms ("My old Uni app just had Rooms as its first screen"); here, the record names Recipe box
+  await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/kitchen-table", content: "an app", tags: ["parachute-bundle"], metadata: { bundle: {
+    contract: 1, id: "kitchen-table", name: "Kitchen table", sources: [{ vault: VAULT, applet: "*" }],
+    bar: [{ vault: VAULT, applet: "Applets/Recipes" }, { vault: VAULT, applet: "Applets/Cook mode" }], start: { vault: VAULT, applet: "Applets/Recipes" } } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "kitchen-table" } } });
+  const record = async () => (await tagged("parachute-bundle"))[0].metadata.bundle;
+  await start(page);
+  // the record alone starts no code: the app opens at Recipe box, which asks (its card) before it runs
+  await expect(page).toHaveURL(/\/a\/[^/?]+$/);
+  await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Recipe box");
+  await page.goto("/settings");
+  const opens = page.getByRole("group", { name: "Opens on" });
+  await expect(opens.getByRole("radio")).toHaveCount(3);
+  await expect(opens.getByRole("radio", { name: /Recipe box/ })).toBeChecked();
+  // the list
+  await opens.getByRole("radio", { name: /Applets/ }).check();
+  await expect.poll(async () => (await record()).start).toBeNull();
+  await start(page);
+  await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  expect(await page.evaluate(() => localStorage.getItem("parachute.start.v1"))).toBeNull();
+  // another applet on the bar: a tap here is this device's choice, so it is the screen the app opens on
+  await page.goto("/settings");
+  await opens.getByRole("radio", { name: /Cook mode/ }).check();
+  await expect.poll(async () => (await record()).start).toEqual({ vault: VAULT, applet: "Applets/Cook mode" });
+  await expect(opens.getByRole("radio", { name: /Cook mode/ })).toBeChecked();
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem("parachute.start.v1") ?? "null"))?.vault).toBe(VAULT);
+  await start(page);
+  await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Cook mode");
+  // the settings note is left as it was
+  expect((await tagged("parachute-settings"))[0].metadata.parachute.start).toBeUndefined();
+});
+
 test("bar and home live in the bundle only: with no record, a pin makes the open bundle's, starting from the settings note's pins; that note is left as it was", async ({ page }) => {
   await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar: [{ vault: VAULT, applet: "Applets/Cook mode" }] } } });
   await start(page);
