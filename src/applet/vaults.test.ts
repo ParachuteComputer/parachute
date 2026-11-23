@@ -451,6 +451,7 @@ describe("vaults.file: a picture's bytes, only of a file attached to the record 
       // the hub's list of each record's attachments: Ideas has the owl, Letter (another record) has a letter
       async request(_v: string, method: string, path: string) {
         if (method === "GET" && path === "/records/ideas/attachments") return [{ id: "att1", path: OWL, mimeType: "image/png" }];
+        if (method === "GET" && path === "/records/song/attachments") return [{ id: "att4", path: "2026-11-22/1766-song.png", mimeType: "audio/mpeg" }];
         if (method === "GET" && path === "/records/letter/attachments") return [{ id: "att2", path: OTHER, mimeType: "image/png" }, { id: "att3", path: "2026-11-22/1765-tour.mp4", mimeType: "video/mp4" }];
         throw new Error("404 not found");
       },
@@ -486,6 +487,9 @@ describe("vaults.file: a picture's bytes, only of a file attached to the record 
     const { call, fetched } = make();
     await expect(call({ vault: "home", id: "letter", path: "/api/storage/2026-11-22/1765-tour.mp4" })).rejects.toMatchObject({ code: "out_of_scope" });
     expect(fetched).toEqual([]);
+  });
+  it("says the hub's type before the one the attacher wrote", async () => {
+    expect((await make().call({ vault: "home", id: "song", path: "/api/storage/2026-11-22/1766-song.png" })).type).toBe("image/png");
   });
   it("reads a path as the words link it: decoded once, never out of storage", () => {
     expect(storagePath(`/api/storage/2026-11-22/caf%C3%A9.png`)).toBe("2026-11-22/café.png");

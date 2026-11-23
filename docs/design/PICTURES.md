@@ -49,8 +49,9 @@ Vault checks for it, so there its pictures keep reading "(not loaded)".
 ## Cache and size limits
 
 - 25 MB a file (the vault's own `FILE_MAX`). The hub's list gives no size, so a bigger one is refused after it is read,
-  and never handed over. A video or a document is refused before it is read, so only pictures and sounds (which the
-  hub takes up to its own upload limit) are ever read for a frame.
+  and never handed over. A file listed as a video or a document is refused before it is read. The list's type is what
+  the attacher wrote, so a big file listed as a picture is still read (up to the hub's own upload limit) before it is
+  refused.
 - Each call costs 2 of the frame's read budget (the list and the bytes). The kit waits up to 2 minutes for one.
 - No cache in the shell. Storage files never change (each upload gets a new name), and the renderer asks once per
   picture per drawn view. It then holds the `blob:` URL and frees it when the view closes.

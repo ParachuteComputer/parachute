@@ -363,9 +363,10 @@ function newIn(v: Record<string, unknown>): New | null {
 }
 
 const refuse = (why: string) => new ContractError(ERROR_CODES.outOfScope, why);
+/** What a note draws: a picture or a sound. */
+const DRAWN = /^(image|audio)\//;
 /** A file's place in the vault's storage, from a link in a record's words (`/api/storage/<date>/<file>`, or the bare
  *  `<date>/<file>`): decoded once; null for anything else (a query, a fragment, a dot segment, a backslash, a control). */
-const DRAWN = /^(image|audio)\//;
 export function storagePath(src: string): string | null {
   if (src.length > 500) return null;
   let p = src.startsWith("/api/storage/") ? src.slice("/api/storage/".length) : src;
