@@ -472,12 +472,20 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
         {r.types.map((t) => <span key={t} className="chip type">{label(t)}{canWrite && <Button small kind="quiet" onClick={() => void change({ types: { remove: [t] } }, `No longer a ${t}.`)}>×</Button>}</span>)}
         {r.tags.map((t) => <span key={t} className="chip">#{t}{canWrite && !["publish", "published"].includes(t.toLowerCase()) && <Button small kind="quiet" onClick={() => void change({ tags: { remove: [t] } })}>×</Button>}</span>)}
       </div>
-      {canWrite && <Field label="Add a tag or type" placeholder="#tag, or a type's name" action="Add" onAction={async (x) => {
-        const t = x.trim().replace(/^#/, "").toLowerCase().replace(/\s+/g, "-");
-        const types: TypeRow[] = await vaults.types(v.key);
-        const isType = !x.trim().startsWith("#") && types.some((y) => y.kind === "type" && y.name === t);
-        await change(isType ? { types: { add: [t] } } : { tags: { add: [t] } });
-      }} />}
+      <p className="sect">Words</p>
+      {editing !== null
+        ? <Write label="The record's words" value={editing} onChange={setEditing} send={busy ? "Saving…" : "Save"} busy={busy} onSend={async () => {
+            setBusy(true);
+            try { await change({ body: editing }, "Saved."); setEditing(null); } catch { /* the words stay */ }
+            setBusy(false);
+          }}><Button kind="quiet" onClick={() => setEditing(null)}>Cancel</Button></Write>
+        : <>
+            {(r.body ?? "").trim() ? <Note body={r.body ?? ""} path={r.path} tags={[...r.types, ...r.tags]} fields={r.fields} onLink={(target) => {
+              const hit = links.find((l) => l.path === target || l.path.split("/").pop() === target);
+              if (hit) open(hit.id);
+            }} /> : <p className="note-meta">No words yet.</p>}
+            {canWrite && <Button small onClick={() => setEditing(r.body ?? "")}>Edit words</Button>}
+          </>}
       <p className="sect">Fields</p>
       {/* a reference is edited by its paths here (the table shows names): a reference to many as a list of them */}
       {/* (a list whose path holds a comma, "…/@November 21, 2026", would be split by the list's commas: shown, not edited) */}
@@ -493,20 +501,12 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
         if (!f || f in r.fields) return;
         await change({ fields: { [f]: "" } });
       }} />}
-      <p className="sect">Words</p>
-      {editing !== null
-        ? <Write label="The record's words" value={editing} onChange={setEditing} send={busy ? "Saving…" : "Save"} busy={busy} onSend={async () => {
-            setBusy(true);
-            try { await change({ body: editing }, "Saved."); setEditing(null); } catch { /* the words stay */ }
-            setBusy(false);
-          }}><Button kind="quiet" onClick={() => setEditing(null)}>Cancel</Button></Write>
-        : <>
-            {(r.body ?? "").trim() ? <Note body={r.body ?? ""} path={r.path} tags={[...r.types, ...r.tags]} fields={r.fields} onLink={(target) => {
-              const hit = links.find((l) => l.path === target || l.path.split("/").pop() === target);
-              if (hit) open(hit.id);
-            }} /> : <p className="note-meta">No words yet.</p>}
-            {canWrite && <Button small onClick={() => setEditing(r.body ?? "")}>Edit words</Button>}
-          </>}
+      {canWrite && <Field label="Add a tag or type" placeholder="#tag, or a type's name" action="Add" onAction={async (x) => {
+        const t = x.trim().replace(/^#/, "").toLowerCase().replace(/\s+/g, "-");
+        const types: TypeRow[] = await vaults.types(v.key);
+        const isType = !x.trim().startsWith("#") && types.some((y) => y.kind === "type" && y.name === t);
+        await change(isType ? { types: { add: [t] } } : { tags: { add: [t] } });
+      }} />}
       {(out.length > 0 || into.length > 0) && <p className="sect">Links</p>}
       {out.length > 0 && <List label="Links to" rows={out.map((l) => ({ key: `o${l.id}`, title: pathTitle(l.path), meta: whereAt(l.path), onPress: () => open(l.id) }))} />}
       {into.length > 0 && <List label="Linked from" rows={into.map((l) => ({ key: `i${l.id}`, title: pathTitle(l.path), meta: whereAt(l.path), onPress: () => open(l.id) }))} />}

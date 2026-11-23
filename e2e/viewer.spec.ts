@@ -194,12 +194,19 @@ test.describe("Vault", () => {
     // the record as read again after the save (a change goes to the version it was read at)
     await expect(rec.getByText("New words for book two.")).toBeVisible();
     await expect(rec.getByRole("button", { name: "Edit words" })).toBeVisible();
+    // read first: the words come before what edits the record (its tags, its fields)
+    expect(await rec.evaluate((el) => {
+      const words = el.querySelector(".pa-note"), labels = [...el.querySelectorAll(".pa-field-label")];
+      const after = ["Add a field", "Add a tag or type"].map((t) => labels.find((x) => x.textContent === t));
+      return !!words && after.every((x) => !!x && !!(words.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING));
+    })).toBe(true);
+    const adder = (label: string) => rec.locator(".pa-field").filter({ hasText: label }).getByRole("button", { name: "Add" });
     await rec.getByLabel("Add a tag or type").fill("#fav");
-    await rec.getByRole("button", { name: "Add" }).first().click();
+    await adder("Add a tag or type").click();
     await expect(rec.getByText("#fav")).toBeVisible();
     await expect.poll(async () => (await book2()).tags).toContain("fav");
     await rec.getByLabel("Add a field").fill("isbn");
-    await rec.getByRole("button", { name: "Add" }).last().click();
+    await adder("Add a field").click();
     await expect.poll(async () => Object.keys((await book2()).metadata ?? {})).toContain("isbn");
     // its history shows at once, each change by whom; the oldest is its making, with the words it was made with
     const versions = rec.getByRole("region", { name: "Versions" });
