@@ -11,8 +11,30 @@ import { embedSubjectParts } from "../applet/embeds";
 import { useSyncExternalStore } from "react";
 import { allDefaults, clearDefault, subscribeDefaults, VAULT } from "../open/defaults";
 import AppletServices from "./AppletServices";
+import { deviceTechne } from "../applet/techneGrants";
+import { heldLine, isWrite, type TechneCap } from "../applet/techne";
+import { takeBackTechne } from "../shell/techneDeps";
+import { subjectOf as approvalSubject } from "../applet/approvalStore";
+import type { AppletEntry } from "../applet/discovery";
 
 const grants = deviceGrants();
+const techne = deviceTechne();
+
+/** What an applet holds on Techne (docs/design/TECHNE.md): one line per write capability, each with Take back. */
+function TechneHeld({ rec, subject, entry }: { rec: VaultRecord; subject: string; entry: AppletEntry }) {
+  const [, setN] = useState(0);
+  const [said, setSaid] = useState<string | null>(null);
+  const held = techne.listed(subject).filter(([c]) => isWrite(c));
+  if (!held.length) return null;
+  const back = (cap: TechneCap) => void takeBackTechne({ subject, name: entry.manifest.name, approval: approvalSubject(rec, entry.noteId, entry.manifest.id) }, cap)
+    .then(() => setSaid(null), (e) => setSaid(`Taken back on this device only: ${e instanceof Error ? e.message : "it couldn't be signed"}`)).finally(() => setN((n) => n + 1));
+  return <ul className="plain" aria-label={`On Techne for ${entry.manifest.name}`}>{said && <li className="line"><p className="error" role="alert">{said}</p></li>}{held.map(([cap, at]) => (
+    <li key={cap} className="line">
+      <span>{heldLine(cap as Exclude<TechneCap, "read">)} <span className="quiet">since {day(at)}</span></span>
+      <button type="button" className="quiet-button" onClick={() => back(cap)}>Take back</button>
+    </li>
+  ))}</ul>;
+}
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
 function DefaultsIn({ rec }: { rec: VaultRecord }) {
@@ -36,7 +58,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
   // device, and the one left in the home vault never allows it here again
   const revoke = (subject: string, id: string, a: { manifest: { id: string; name: string } } | undefined) => void (async () => {
     const told = await takeBack(rec, id, a?.manifest.name ?? "this applet", a?.manifest.id ?? null);
-    grants.revoke(subject); forgetSaved(subject); setSaid(told); onChange(); void giveBack(rec.key, "/settings");
+    grants.revoke(subject); techne.forget(subject); forgetSaved(subject); setSaid(told); onChange(); void giveBack(rec.key, "/settings");
   })();
   // from the grants themselves, so a grant whose applet is gone from the vault can still be revoked
   const subjects = grants.subjects().filter((s) => s.startsWith(subjectOf(rec.key, "")));
@@ -49,6 +71,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
         <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
         <button type="button" className="quiet-button" onClick={() => revoke(subject, id, a)}>Revoke</button>
         {a && (a.services.length > 0 || a.servicesError) && <AppletServices subject={subject} entry={a} />}
+        {a?.techne && <TechneHeld rec={rec} subject={subject} entry={a} />}
       </li>
     );
   })}</>;

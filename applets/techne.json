@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "path": "Applets/Techne",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "techne",
+      "name": "Techne",
+      "glyph": "⁂",
+      "note": "your Techne profile and recent posts; posting asks you the first time",
+      "access": [],
+      "screens": [{ "id": "home", "name": "Techne" }]
+    },
+    "needs": 8,
+    "techne": { "at": "{{techne}}", "can": ["read", "post"] }
+  }
+}

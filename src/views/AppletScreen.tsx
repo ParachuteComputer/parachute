@@ -76,6 +76,8 @@ import { useDeviceSheets } from "./DeviceSheets";
 import { createServicesModule } from "../applet/modules/services";
 import { createBroker, type Broker } from "../services/broker";
 import { useShellSheets } from "./ShellSheets";
+import { createTechneModule } from "../applet/modules/techne";
+import { techneDeps } from "../shell/techneDeps";
 import { lineOptions, useKeyring } from "../services/keyring";
 import { launchOf, vaultLaunchOf } from "../services/notifyLink";
 import { nativeNow } from "../services/native";
@@ -477,6 +479,15 @@ export default function AppletScreen() {
       ...(officialOf(entry.noteId) === "vault" ? { read: (vault: string, read: string) => { let m = vaultsReads.current.get(vault); if (!m) vaultsReads.current.set(vault, m = new Set()); if (m.size < 1000) m.add(read); } } : {}) }))
     : null), [rec?.key, allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => vaultsModule?.stop(), [vaultsModule]);
+  // Techne (docs/design/TECHNE.md): what it holds is read at each call from what is allowed now, and its requests go
+  // through a broker of the shell's own for the AppView, closed with the frame's grant
+  const techneNow = useRef<{ grantKey: string; code: string; asks: string; approval: ReturnType<typeof approvalSubject> } | null>(null);
+  techneNow.current = rec && entry && keys && loaded.state === "ok" && !loaded.official ? { grantKey: keys.scope, code: keys.html, asks: loaded.asks, approval: approvalSubject(rec, entry.noteId, entry.manifest.id) } : null;
+  const techne = useMemo(() => (rec && entry?.techne ? techneDeps({ techne: entry.techne, name: entry.manifest.name, subject: subjectOf(rec.key, entry.noteId),
+    // only while it is allowed here: a frame still going for a moment after Revoke holds nothing
+    now: () => (grants.record(subjectOf(rec.key, entry.noteId)) ? techneNow.current : null),
+    confirm: (q) => sheetsRef.current.confirm(q), shell: () => sheetsRef.current.shell }) : null), [rec?.key, allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => techne?.close(), [techne]);
   // left (another applet, the launcher, the shell's Back): whatever this applet was managing ends with it
   const managing = rec && entry ? subjectOf(rec.key, entry.noteId) : null;
   useEffect(() => () => { if (managing) endManageFor(managing); }, [managing]);
@@ -507,7 +518,9 @@ export default function AppletScreen() {
     }),
     // every vault this device holds (the Vault applet's words: modules/vaults.ts), and what reaches each
     ...(vaultsModule ? [vaultsModule] : []),
-  ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader]); // eslint-disable-line react-hooks/exhaustive-deps
+    // as the person on Techne, one capability at a time (docs/design/TECHNE.md)
+    ...(techne ? [createTechneModule(entry.techne ?? null, techne)] : []),
+  ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader, techne]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
   const note = loaded.state === "ok" ? loaded.note : null;
