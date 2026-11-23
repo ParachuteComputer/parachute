@@ -1,5 +1,6 @@
 // The applets in one vault, as the app lists them (discovery.ts), read from the vault's notes tagged `applet` and kept
 // for this session. Read again when a screen asks (`refresh`), so a newly published applet shows up.
+import { failureOf, type Failure } from "../vault/failure";
 import { hubCheck } from "../services/hubs";
 import { useEffect, useSyncExternalStore } from "react";
 import type { Note, VaultClient } from "@openparachute/surface-client";
@@ -18,7 +19,7 @@ import { onFresh } from "../vault/readCache";
 import { findVault } from "../vault/store";
 import type { VaultRecord } from "../vault/store";
 
-type Entry = { state: "loading" } | { state: "ok"; found: Read; at: number } | { state: "error"; error: string };
+type Entry = { state: "loading" } | { state: "ok"; found: Read; at: number } | { state: "error"; error: string; failure: Failure };
 const cache = new Map<string, Entry>();
 const LOADING: Entry = { state: "loading" };
 const inflight = new Map<string, Promise<boolean>>();
@@ -79,7 +80,7 @@ export function refreshApplets(rec: VaultRecord, fresh = false): Promise<boolean
       if (!fresh && (freshSet.get(rec.key) ?? 0) !== set) return true;
       if (fresh) freshSet.set(rec.key, (freshSet.get(rec.key) ?? 0) + 1);
       cache.set(rec.key, { state: "ok", found, at: Date.now() }); return true;
-    }, (e: unknown) => { if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e) }); return false; })
+    }, (e: unknown) => { if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e), failure: failureOf(e) }); return false; })
     .finally(() => { inflight.delete(at); notify(); });
   inflight.set(at, p);
   return p;

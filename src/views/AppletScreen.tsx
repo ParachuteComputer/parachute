@@ -91,7 +91,9 @@ import { barNow, settingsReadNow, useSettings } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
-import { inParachuteSpace, officialNow, officialOf } from "../applet/parachuteSource";
+import { inParachuteSpace, officialFace, officialNow, officialOf } from "../applet/parachuteSource";
+import { failureOf, type Failure } from "../vault/failure";
+import { siteOf } from "../vault/site";
 
 const grants = deviceGrants();
 
@@ -128,7 +130,7 @@ const startedAsHome = new Set<string>();
 const idOf = (read: string) => { try { return new URLSearchParams(read.slice(read.indexOf("?") + 1)).get("id"); } catch { return null; } };
 
 /** `page` is null for code from someone else's vault until it is allowed: it is transpiled only then (`source` waits). */
-type Loaded = { state: "loading" } | { state: "error"; error: string } | { state: "refused"; error: string } | { state: "newer"; entry: AppletEntry }
+type Loaded = { state: "loading" } | { state: "error"; error: string; failure: Failure } | { state: "refused"; error: string } | { state: "newer"; entry: AppletEntry }
   /** one of Parachute's own, asked for in a vault other than the home: it runs in the home (parachuteSource.ts) */
   | { state: "home"; to: string }
   | { state: "ok"; entry: AppletEntry;
@@ -287,7 +289,7 @@ export default function AppletScreen() {
         setBrought(pointer);
       } catch (e) {
         // a recheck the vault couldn't answer (offline a moment) leaves the running screen as it is
-        if (on && !quiet) setLoaded({ state: "error", error: e instanceof Error ? e.message : "the vault couldn't be read" });
+        if (on && !quiet) setLoaded({ state: "error", error: e instanceof Error ? e.message : "the vault couldn't be read", failure: failureOf(e) });
       }
     })();
     return () => { on = false; };
@@ -590,6 +592,19 @@ export default function AppletScreen() {
   if (mode === "closed" && !officialOf(appletId)) return shell(<div className="card" role="status"><p>Applets are off on this device until its self-test passes. See Settings.</p>{plainNote}</div>);
   if (loaded.state === "loading" || (loaded.state === "ok" && !keys)) return shell(<p className="quiet" role="status">Opening…</p>);
   // the hub's own answer (an address, an id) is under Details
+  // a vault the app can't reach or whose sign-in was refused: what is wrong and what to do, in plain words; the hub's own
+  // answer (an address, an id) under Details for anything else
+  if (loaded.state === "error" && rec && loaded.failure !== "other") {
+    const which = officialOf(appletId), isHome = homeVault()?.key === rec.key;
+    const where = `${rec.vault}${isHome ? ", your home vault," : ""}`;
+    return shell(<div className="card" role="alert">
+      {loaded.failure === "unreached"
+        ? <p>Parachute can't reach {where} just now.{which ? ` ${officialFace(which).name} runs there.` : ""}</p>
+        : <p>{rec.vault} on {siteOf(rec.issuer)} wants you to sign in again.{which ? ` ${officialFace(which).name} runs there.` : ""}</p>}
+      <p className="small quiet">{loaded.failure === "unreached" ? `Its Parachute is ${siteOf(rec.issuer)}. ` : ""}In <Link to="/settings">Settings</Link> you can sign in to it again{isHome ? " or make another vault your home" : ""}.</p>
+      <p><button type="button" className="quiet-button" onClick={() => setRecheck((n) => n + 1)}>Try again</button></p>
+    </div>);
+  }
   if (loaded.state === "error") return shell(<div role="alert"><p className="error">Couldn't open this applet.</p><details className="small"><summary>Details</summary>{loaded.error}</details></div>);
   if (loaded.state === "home") return <Navigate to={loaded.to} replace />;
   if (loaded.state === "refused") return shell(<div className="card" role="alert"><p>This applet can't open. It was not run: {loaded.error}.</p>{plainNote}</div>);

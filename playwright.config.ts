@@ -15,9 +15,13 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${PORT}`, trace: "retain-on-failure" },
   projects: [
     { name: "setup", testMatch: /auth\.setup\.ts/, use: { ...devices["Pixel 7"], browserName: "chromium" } },
-    { name: "phone", dependencies: ["setup"], testIgnore: [/vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /packs\.spec\.ts/, /notion\.spec\.ts/, /start\.spec\.ts/, /plainwords\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    { name: "phone", dependencies: ["setup"], testIgnore: [/webkit\.spec\.ts/, /vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /packs\.spec\.ts/, /notion\.spec\.ts/, /start\.spec\.ts/, /plainwords\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    // the same build in WebKit (the Mac app's WKWebView, Safari) at a Mac's width: the applet frame (e2e/webkit.spec.ts).
+    // PW_WEBKIT_WS: a Playwright server to run WebKit in (a machine whose own system WebKit libraries Playwright can't use)
+    { name: "webkit", dependencies: ["phone"], testMatch: [/webkit\.spec\.ts/], use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 }, storageState: "e2e/.hub-session.json",
+      ...(process.env.PW_WEBKIT_WS ? { connectOptions: { wsEndpoint: process.env.PW_WEBKIT_WS } } : {}) } },
     // signing in again or refreshing retires the sign-in the tests above share (after a minute or so), so these run last
-    { name: "signs-in", dependencies: ["phone"], testMatch: [/vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /start\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
+    { name: "signs-in", dependencies: ["webkit"], testMatch: [/vault\.spec\.ts/, /changes\.spec\.ts/, /grants\.spec\.ts/, /onelist\.spec\.ts/, /sharing\.spec\.ts/, /rotates\.spec\.ts/, /simple\.spec\.ts/, /scopes\.spec\.ts/, /firstrun\.spec\.ts/, /settings\.spec\.ts/, /start\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // last: a 403 there makes the app refresh its sign-in, which rotates the saved session the specs before share
     { name: "packs", dependencies: ["signs-in"], testMatch: [/packs\.spec\.ts/, /notion\.spec\.ts/], use: { ...devices["Pixel 7"], browserName: "chromium", storageState: "e2e/.hub-session.json" } },
     // last of all, for the same reason (the walk of every screen reaches what an older hub refuses: Sharing, Changes), on a
