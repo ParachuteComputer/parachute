@@ -24,14 +24,16 @@ test("the starter applet runs as shipped: lists, adds, opens, edits and saves a 
     await expect(f.locator("header").getByRole("heading", { name: "Seed packets to sort" })).toBeVisible();
     added = await api(hubState(), "GET", `notes?id=${encodeURIComponent("Notes/Seed packets to sort")}`);
     expect(added!.tags).toContain("note");
+    // its name is its heading; the body starts empty, and says so
+    await expect(f.getByText("Nothing written yet. Edit to start.")).toBeVisible();
     await f.getByRole("button", { name: "Edit" }).click();
     // an edit in progress survives the applet closing: kept on the device, back in the box when it opens again
-    await f.getByRole("textbox", { name: "Note" }).fill("# Seed packets to sort\n\nBeans, chard");
+    await f.getByRole("textbox", { name: "Note" }).fill("Beans, chard");
     await expect.poll(() => page.evaluate(() => Object.values(localStorage).some((v) => v.includes("Beans, chard")))).toBe(true);
     await page.reload();
     await page.getByRole("button", { name: "Open Starter" }).click();
-    await expect(f.getByRole("textbox", { name: "Note" })).toHaveValue("# Seed packets to sort\n\nBeans, chard");
-    await f.getByRole("textbox", { name: "Note" }).fill("# Seed packets to sort\n\nBeans, chard, two kinds of kale.");
+    await expect(f.getByRole("textbox", { name: "Note" })).toHaveValue("Beans, chard");
+    await f.getByRole("textbox", { name: "Note" }).fill("Beans, chard, two kinds of kale.");
     await f.getByRole("button", { name: "Save" }).click();
     await expect(f.getByText("Beans, chard, two kinds of kale.")).toBeVisible();
     const saved = await api(hubState(), "GET", `notes/${added!.id}?include_content=true`);
@@ -49,16 +51,39 @@ test("the starter applet runs as shipped: lists, adds, opens, edits and saves a 
     // an edit in progress isn't lost to Back: open again, it is there
     await f.getByRole("button", { name: "Seed packets to sort" }).click();
     await f.getByRole("button", { name: "Edit" }).click();
-    await f.getByRole("textbox", { name: "Note" }).fill("# Seed packets to sort\n\nAnd basil");
+    await f.getByRole("textbox", { name: "Note" }).fill("And basil");
     await page.getByRole("button", { name: "Back", exact: true }).click();
-    await expect(f.getByRole("region", { name: /Notes ·/ })).toBeVisible();
-    await f.getByRole("button", { name: "Seed packets to sort" }).click();
-    await expect(f.getByRole("textbox", { name: "Note" })).toHaveValue("# Seed packets to sort\n\nAnd basil");
-    await f.getByRole("button", { name: "Cancel" }).click();
+    // the list says which note has an unsaved edit
+    await expect(f.getByRole("region", { name: /Notes ·/ }).getByRole("button", { name: /Seed packets to sort/ })).toContainText("Unsaved edit");
+    // an edit of another note keeps its own: one each
+    await f.getByRole("textbox", { name: "New note" }).fill("Tomato starts");
+    await f.getByRole("button", { name: "Add" }).click();
+    await f.getByRole("button", { name: "Edit" }).click();
+    await f.getByRole("textbox", { name: "Note" }).fill("Six of them");
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await f.getByRole("button", { name: /Seed packets to sort/ }).click();
+    await expect(f.getByRole("textbox", { name: "Note" })).toHaveValue("And basil");
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await f.getByRole("button", { name: /Tomato starts/ }).click();
+    await expect(f.getByRole("textbox", { name: "Note" })).toHaveValue("Six of them");
+    // a note deleted elsewhere takes the edit kept for it: none piles up in the saved store
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    const tomato = await api(hubState(), "GET", `notes?id=${encodeURIComponent("Notes/Tomato starts")}`);
+    await api(hubState(), "DELETE", `notes/${(Array.isArray(tomato) ? tomato[0] : tomato).id}`);
+    // opened again later, the list no longer has it: its edit is dropped, Seed's stays (once the closed note is kept as
+    // closed on the device: the app keeps what an applet saved a moment after it changes)
+    await expect.poll(() => page.evaluate(() => Object.values(localStorage).some((v) => v.includes('"selected":')))).toBe(false);
+    await page.reload();
+    await page.getByRole("button", { name: "Open Starter" }).click();
+    await expect(f.getByRole("region", { name: /Notes ·/ }).getByRole("button", { name: /Seed packets to sort/ })).toContainText("Unsaved edit");
+    await expect.poll(() => page.evaluate(() => Object.values(localStorage).some((v) => v.includes("Six of them"))), { timeout: 15_000 }).toBe(false);
+    expect(await page.evaluate(() => Object.values(localStorage).some((v) => v.includes("And basil")))).toBe(true);
   } finally {
     // by path, so a note added before a failed step goes too
     const left = added ?? await api(hubState(), "GET", `notes?id=${encodeURIComponent("Notes/Seed packets to sort")}`).catch(() => null);
     if (left) await api(hubState(), "DELETE", `notes/${left.id}`).catch(() => {});
+    const second = await api(hubState(), "GET", `notes?id=${encodeURIComponent("Notes/Tomato starts")}`).catch(() => null);
+    if (second?.id) await api(hubState(), "DELETE", `notes/${second.id}`).catch(() => {});
     await api(hubState(), "DELETE", `notes/${applet.id}`).catch(() => {});
   }
 });

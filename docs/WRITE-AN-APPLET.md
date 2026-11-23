@@ -458,7 +458,8 @@ With this repo checked out, the shortest way in is to copy the starter and check
 
 - `applets/starter.json` and `applets/starter.tsx`: a small applet that lists, searches, adds, opens and edits notes in
   `Notes/`. Change its `path` (two applets can't share one), its id and name, and its folder, which is written in three
-  places: `FOLDER` in the `.tsx`, the `access` rule's `path`, and the `opens` entry's `path`. `e2e/starter.spec.ts` runs
+  places: `FOLDER` in the `.tsx`, the `access` rule's `path`, and the `opens` entry's `path`. Its name is `NAME` in the
+  `.tsx`, the same as the `.json`'s `name`. `e2e/starter.spec.ts` runs
   it as shipped, against a real hub.
 - `applets/parachute.d.ts`: types for `import { … } from "parachute"`, for an editor (a test holds it to the kit's parts
   and type-checks the starter against it).
