@@ -345,8 +345,8 @@ function localYmd(v: string | null | undefined): string | null {
   if (/^\d{4}-\d{2}-\d{2}$/.test(v.trim())) return ymdOf(v);
   const ms = Date.parse(v);
   if (Number.isNaN(ms)) return null;
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  // the kit's day here; the tests, which run these helpers without the kit, read the day the time names (UTC)
+  return typeof when !== "undefined" && typeof when?.stamp === "function" ? when.stamp(ms).slice(0, 10) : ymdOf(v);
 }
 
 /** The day a note is about, not the day it was last edited (tidying an old meeting note isn't being in touch): its own
