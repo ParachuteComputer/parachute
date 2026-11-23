@@ -698,6 +698,26 @@ describe("vault.file: a picture attached to a record in the applet's folders, an
     await expect(call({ id: "r1", path: `/api/storage/${DIARY}` })).rejects.toMatchObject({ code: "out_of_scope" });
     expect(listed).toEqual(["r1"]);
   });
+  it("hands over short pronunciation audio (webm/ogg/mp3/mp4) up to 2 MB when magic bytes match, and refuses spoofed or oversized audio", async () => {
+    const CLIP = "2026-11-23/1766-word.webm", OGG = "2026-11-23/1767-word.ogg", SPOOF = "2026-11-23/1768-fake.webm";
+    const WEBM_BYTES = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x02]);
+    const OGG_BYTES = new Uint8Array([0x4f, 0x67, 0x67, 0x53, 0x00, 0x02]);
+    const FAKE_BYTES = new TextEncoder().encode("<html>nope</html>");
+    const mkAudio = (data: Uint8Array, served: string) => {
+      const router = createRouter([createVaultModule({
+        ...vault,
+        attachments: async () => [{ path: CLIP, mimeType: "audio/webm" }, { path: OGG, mimeType: "audio/ogg" }, { path: SPOOF, mimeType: "audio/webm" }],
+        file: async () => new NodeBlob([data], { type: served }) as unknown as Blob,
+      })]);
+      return (path: string) => router.call("vault", "file", { id: "r1", path }, { "vault.read": ["Recipes/"] }, { charge() {}, closed: () => false }) as Promise<{ type: string; bytes: ArrayBuffer }>;
+    };
+    expect((await mkAudio(WEBM_BYTES, "audio/webm")(`/api/storage/${CLIP}`)).type).toBe("audio/webm");
+    expect((await mkAudio(OGG_BYTES, "audio/ogg")(`/api/storage/${OGG}`)).type).toBe("audio/ogg");
+    // HTML disguised as audio/webm is refused by magic-byte check
+    await expect(mkAudio(FAKE_BYTES, "audio/webm")(`/api/storage/${SPOOF}`)).rejects.toMatchObject({ code: "out_of_scope" });
+    // Audio over 2 MB is refused
+    await expect(mkAudio(new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, ...new Uint8Array(2 * 1024 * 1024)]), "audio/webm")(`/api/storage/${CLIP}`)).rejects.toMatchObject({ code: "too_large" });
+  });
 });
 
 describe("vault.attachFrom: a picture attached to a record it reads, attached to one it may change too (WEB.md §5)", () => {

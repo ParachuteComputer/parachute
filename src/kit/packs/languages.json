@@ -1,0 +1,41 @@
+{
+  "parachute_pack": 1,
+  "id": "languages",
+  "name": "Languages",
+  "version": 1,
+  "source": "https://parachute.computer/docs/build/packs/languages",
+  "summary": "Words you study, each with a picture, a sound and your own memory, and their flashcards with a review schedule: the Fluent Forever way, for the Languages applet.",
+  "types": {
+    "word": {
+      "description": "A word you study: where you met it, its meaning, grammar, picture, sound and your own memory of it.",
+      "fields": {
+        "language": { "type": "string" },
+        "translit": { "type": "string", "description": "IAST for Sanskrit; how it sounds otherwise" },
+        "gloss": { "type": "string" },
+        "grammar": { "type": "string" },
+        "memory": { "type": "string", "description": "your own connection to the word, written by you" },
+        "from": { "type": "reference", "description": "the verse or passage where you met it" },
+        "cue": { "type": "string", "description": "a picture idea, until a picture is attached" },
+        "picture": { "type": "string" },
+        "sound": { "type": "string" },
+        "state": { "type": "string" }
+      }
+    },
+    "card": {
+      "description": "One flashcard of a word, and when to review it next (SM-2, as Anki).",
+      "fields": {
+        "word": { "type": "reference" },
+        "ask": { "type": "string", "enum": ["picture-to-word", "word-to-meaning", "script", "sound"] },
+        "language": { "type": "string" },
+        "state": { "type": "string" },
+        "due": { "type": "date" },
+        "interval": { "type": "integer" },
+        "ease": { "type": "number" },
+        "reps": { "type": "integer" },
+        "lapses": { "type": "integer" },
+        "last_reviewed": { "type": "string" }
+      }
+    }
+  },
+  "records": []
+}

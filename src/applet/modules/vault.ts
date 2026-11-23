@@ -29,14 +29,15 @@
 // file to a note the grant lets it change (the same judgment as a PATCH), through the hub's own upload and attach
 // routes; `transcribe` asks the hub to transcribe audio. The kit names it `uni.vault.attach(noteId, bytes, type, {transcribe})`.
 // And `vault.file {id, path}`: the bytes of a picture attached to a record in its `vault.read` folders, to draw its
-// pictures (docs/design/PICTURES.md): only one the hub lists as that record's own, the same check as `vaults.file`.
+// pictures, or of a short sound, to play it (docs/design/PICTURES.md): only one the hub lists as that record's own, the
+// same check as `vaults.file` (which hands over pictures alone), and a sound's first bytes its type's.
 // The kit names it `uni.vault.file(id, path)`, a Blob; the kit's Note asks it by itself when given the record's `id`.
 // And `vault.attachFrom {noteId, from, path}`: a picture already attached to record `from` (one it reads) attached to
 // `noteId` too (one it may change, judged as `attach` is), through the hub's attach route: no new bytes, so a picture
 // shown on a second record is that record's own as well. It never attaches a file it couldn't already name.
 
 import { CODE_PATH, codeKindOf, isCodeExtension } from "../code.ts";
-import { attachedPicture, attachmentLists, FILE_MAX, listedPicture, mediaType, storagePath } from "../files.ts";
+import { attachedMedia, attachmentLists, FILE_MAX, listedPicture, mediaType, storagePath } from "../files.ts";
 import { ContractError, ERROR_CODES, hasHidden, hasOnly, inScope, LIMITS, plain, safePrefix, type ErrorCode } from "../contract.ts";
 import type { CallCtx, UniModule } from "../router.ts";
 import type { Resolved } from "../needs.ts";
@@ -90,7 +91,7 @@ type AttachParams = { noteId: string; bytes: ArrayBuffer; type: string; transcri
 type FileParams = { id: string; path: string };
 type AttachFromParams = { noteId: string; from: string; path: string };
 /** One refusal for a record outside the folders, one it can't find and a file not attached to it: none tells it more. */
-const notAttached = () => new ContractError(ERROR_CODES.outOfScope, "only a picture attached to a record it reads");
+const notAttached = () => new ContractError(ERROR_CODES.outOfScope, "only a file attached to a record it reads");
 type FetchParams = { method: string; path: string; headers: Record<string, string>; body: string | null };
 /** A list read in pages, kept by its words and the offset its last page ended at: where the hub was read to, the notes
  *  it kept past that page, and every note it has seen (each is listed once). */
@@ -622,7 +623,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
           if (!inScope(scopes["vault.read"] ?? [], note.path)) throw notAttached();
           let list: unknown[];
           try { list = await lists(note.id, () => ctx.charge(1)); } catch (e) { if (e instanceof ContractError) throw e; throw new ContractError(ERROR_CODES.failed); }
-          return attachedPicture(want, list, (p) => deps.file!(p), (e) => (e instanceof ContractError ? e : new ContractError(ERROR_CODES.failed)));
+          return attachedMedia(want, list, (p) => deps.file!(p), (e) => (e instanceof ContractError ? e : new ContractError(ERROR_CODES.failed)));
         },
       },
       fetch: {

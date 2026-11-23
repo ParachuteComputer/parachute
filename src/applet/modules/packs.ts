@@ -22,10 +22,11 @@ import { readZip } from "../../kit/zip.ts";
 import clients from "../../kit/packs/clients.json";
 import reading from "../../kit/packs/reading.json";
 import library from "../../kit/packs/library.json";
+import languages from "../../kit/packs/languages.json";
 import { PUBLISH_FIELD, type VaultsDeps } from "./vaults.ts";
 
 /** Parachute's own starter packs, checked once. */
-export const STARTERS: Pack[] = [checkPack(coreTypes), checkPack(clients), checkPack(reading), checkPack(library)];
+export const STARTERS: Pack[] = [checkPack(coreTypes), checkPack(clients), checkPack(reading), checkPack(library), checkPack(languages)];
 
 export type Installed = { id: string; name: string; version: number; source: string; appliedAt: string | null; appliedBy: string | null;
   made: Receipt["made"]; skipped: string[]; newer: number | null };

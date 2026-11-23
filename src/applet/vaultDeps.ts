@@ -2,6 +2,10 @@
 // `types` is not in surface-client's payload types (0.3.7); the hub takes it on 0.9 (the record door).
 import { VaultConflictError, type CreateNotePayload, type UpdateNotePayload, type VaultClient } from "@openparachute/surface-client";
 import type { VaultDeps, VaultNote } from "./modules/vault";
+import { mediaType } from "./files";
+
+/** A stored file's ending, where the media type's own second half isn't the one the hub reads it by. */
+const EXTENSION: Record<string, string> = { "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/mpeg": "mp3", "audio/mp3": "mp3" };
 
 const row = (n: { id: string; path?: string | null; extension?: string | null; updatedAt?: string | null }) => ({ id: n.id, path: n.path ?? null, extension: n.extension ?? null, updatedAt: n.updatedAt ?? null });
 
@@ -52,7 +56,10 @@ export function vaultDeps(c: VaultClient, kept?: VaultClient): VaultDeps {
     // the hub's own two steps: the file into the vault's storage (multipart), then onto the note; `transcribe` asks the
     // hub to transcribe audio (core 0.8 and 0.9 alike; on 0.9 the attach goes to the record door, vault/records.ts)
     attach: async (id, bytes, type, transcribe) => {
-      const ext = (type.split("/")[1] ?? "").replace(/[^a-z0-9]/g, "").slice(0, 8) || "bin";
+      // the hub types a stored file by its name: audio/mp4 named .mp4 would be served as a video, audio/mpeg as .mpeg
+      // as nothing at all, so a sound recorded on a Mac or iPhone (audio/mp4) wouldn't play back (vault.file)
+      const base = mediaType(type) ?? "";
+      const ext = EXTENSION[base] ?? ((base.split("/")[1] ?? "").replace(/[^a-z0-9]/g, "").slice(0, 8) || "bin");
       const up = await c.uploadStorageFile(new File([bytes], `${type.startsWith("audio/") ? "voice" : "file"}.${ext}`, { type }));
       const a = await c.addAttachment(id, { path: up.path, mimeType: type, ...(transcribe ? { transcribe: true } : {}) });
       return { id: a.id, path: a.path ?? up.path, mimeType: a.mimeType ?? type };

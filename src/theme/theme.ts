@@ -250,10 +250,10 @@ export const DEFAULT_THEME: Theme = {
   colors: { ...LOOKS[DEFAULT_LOOK].colors },
   dark: { ...LOOKS[DEFAULT_LOOK].dark },
   fonts: {
-    serif: `"Literata", "Literata fallback", "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif`,
-    sans: `"Instrument Sans", "Instrument Sans fallback", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`,
+    serif: `"Literata", "Literata fallback", "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", "Noto Serif Devanagari", "Kohinoor Devanagari", Georgia, serif`,
+    sans: `"Instrument Sans", "Instrument Sans fallback", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", "Kohinoor Devanagari", sans-serif`,
     mono: `ui-monospace, "SF Mono", Menlo, Consolas, monospace`,
-    display: `"Fraunces", "Fraunces fallback", "Literata", Georgia, serif`,
+    display: `"Fraunces", "Fraunces fallback", "Literata", "Noto Serif Devanagari", "Kohinoor Devanagari", Georgia, serif`,
   },
   density: "regular",
   scheme: "system",
@@ -283,8 +283,17 @@ export const isFontStack = (v: unknown): v is string => typeof v === "string" &&
 /** The built-in stacks of an earlier app (system fonts only). "Make this look mine" wrote them into a person's theme in
  *  full, so one there word for word is the built-in face of its day, not a choice: it reads as today's. */
 const EARLIER_FONTS: Partial<Record<FontKey, readonly string[]>> = {
-  serif: [`"Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif`],
-  sans: [`system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`],
+  serif: [
+    `"Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif`,
+    `"Literata", "Literata fallback", "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", Georgia, serif`,
+  ],
+  sans: [
+    `system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`,
+    `"Instrument Sans", "Instrument Sans fallback", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif`,
+  ],
+  display: [
+    `"Fraunces", "Fraunces fallback", "Literata", Georgia, serif`,
+  ],
 };
 
 const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
