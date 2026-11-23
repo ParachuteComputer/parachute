@@ -597,6 +597,17 @@ describe("People at thousands of people", () => {
     expect(api.readPersonFields(person.fields).phones).toContain("3035550142");
   });
 
+  it("a merge never replaces a single value the record holds in a shape People can't read", () => {
+    const fields = { address: { street: "412 Pine St", city: "Boulder" }, birthday: { month: 3, day: 14 }, email: ["ann@example.test", "ann@work.example"] };
+    const merged = api.mergeVCardIntoPerson({ id: "p", path: "People/Ann Lee", updatedAt: null, fields }, blank({ name: "Ann Lee", address: "1 Elm St", birthday: "1990-03-14", emails: ["ann.lee@example.test"] }));
+    expect(merged.fieldsPatch.address).toBeUndefined();
+    expect(merged.fieldsPatch.birthday).toBeUndefined();
+    expect(merged.fieldsPatch.email).toBeUndefined();
+    expect(merged.fieldsPatch.emails).toEqual(["ann.lee@example.test"]);
+    // an empty one is filled
+    expect(api.mergeVCardIntoPerson({ id: "q", path: "People/Bo Lee", updatedAt: null, fields: { address: "" } }, blank({ name: "Bo Lee", address: "1 Elm St" })).fieldsPatch.address).toBe("1 Elm St");
+  });
+
   it("never lets a link carry a second card: one with a newline is dropped on import and on export", () => {
     const [card] = api.parseVCard("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ann Lee\r\nURL:https://ann.example\\nEND:VCARD\\nBEGIN:VCARD\\nFN:Mallory\r\nURL:https://ann.example/ok\r\nEND:VCARD\r\n");
     expect(card.links).toEqual(["https://ann.example/ok"]);

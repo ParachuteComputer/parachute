@@ -162,6 +162,11 @@ function strList(v: unknown): string[] {
 
 /** A list field as the record holds it, to add to: every entry kept as written (a number, an object with a label, a
  *  near-duplicate), whatever shape it is in; a single value becomes the list's first entry. */
+/** A field the record doesn't hold at all (absent, null or empty): the only kind a merge fills. */
+function unset(v: unknown): boolean {
+  return v === undefined || v === null || (typeof v === "string" && !v.trim());
+}
+
 function heldList(v: unknown): unknown[] {
   if (Array.isArray(v)) return v;
   if (v === undefined || v === null || v === "") return [];
@@ -877,7 +882,7 @@ function mergeVCardIntoPerson(
   const newEmails = card.emails.map((e) => e.toLowerCase()).filter((e) => e && !hadEmailSet.has(e));
   if (newEmails.length) {
     // added to what the record holds, as it holds it: nothing it had is rewritten or dropped
-    if (!pf.email) {
+    if (unset(held.email)) {
       patch.email = newEmails[0];
       if (newEmails.length > 1) patch.emails = [...heldList(held.emails), ...newEmails.slice(1)];
     } else {
@@ -895,10 +900,10 @@ function mergeVCardIntoPerson(
   });
   if (newPhones.length) patch.phones = [...heldList(held.phones), ...newPhones];
 
-  // Single-value additive fields: only fill if missing
-  if (!pf.address && card.address) patch.address = card.address;
-  if (!pf.birthday && card.birthday) patch.birthday = card.birthday;
-  if (!pf.summary && card.summary) patch.summary = card.summary;
+  // Single values: only where the record has none (one it holds in a shape this can't read is still kept)
+  if (unset(held.address) && card.address) patch.address = card.address;
+  if (unset(held.birthday) && card.birthday) patch.birthday = card.birthday;
+  if (unset(held.summary) && card.summary) patch.summary = card.summary;
 
   // List fields: what's new added to what the record holds
   const added = (had: string[], more: string[]) => {
