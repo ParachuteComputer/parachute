@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
@@ -176,10 +176,11 @@ describe("applets/parachute.d.ts", () => {
   it("types the starter as written: an editor shows no errors on the file people copy", () => {
     const root = process.cwd();
     // and the folder door's words as WRITE-AN-APPLET.md gives them: an applet using them shows no error either
-    const probe = join(mkdtempSync(join(tmpdir(), "dts-")), "words.tsx");
+    const dir = mkdtempSync(join(tmpdir(), "dts-"));
+    const probe = join(dir, "words.tsx");
     writeFileSync(probe, `import { vault } from "parachute";
 export async function words() {
-  const rows = await vault.queryRecords({ pathPrefix: "Books/", orderBy: "rating", sort: "desc", offset: 50, fields: { rating: { gte: 4 }, genre: "sf" }, includeLinks: true });
+  const rows = await vault.queryRecords({ pathPrefix: "Books/", orderBy: "rating", sort: "desc", offset: 50, fields: { rating: { gte: 4, lte: 5 }, genre: "sf", done: true }, includeLinks: true });
   const one = await vault.getRecord(rows[0]!.id, { includeLinks: true });
   const tags = await vault.listTags();
   return [one?.links?.[0]?.targetNote?.path, one?.links?.[0]?.fields, tags[0]?.count];
@@ -192,6 +193,7 @@ export async function words() {
       types: [], typeRoots: [join(root, "node_modules", "@types")],
     });
     const said = ts.getPreEmitDiagnostics(program).map((d) => `${d.file?.fileName.replace(root, "") ?? ""}: ${ts.flattenDiagnosticMessageText(d.messageText, "\n")}`);
+    rmSync(dir, { recursive: true, force: true });
     expect(said).toEqual([]);
   }, 30_000);
 });

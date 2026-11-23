@@ -47,8 +47,10 @@ declare module "parachute" {
   /** One end of a link: a record in a folder it may read. */
   export interface AppletLinkEnd { id: string; path: string | null; tags: string[]; fields: Record<string, unknown>; createdAt: string | null; updatedAt: string | null }
   export interface AppletLink { sourceId: string; targetId: string; relationship: string | null; fields: Record<string, unknown>; createdAt: string | null; sourceNote?: AppletLinkEnd; targetNote?: AppletLinkEnd }
-  /** A field filter: a value (equals), or one operator. On a 0.8 hub an operator, or ordering by a field, needs the field indexed. */
-  export type FieldFilter = string | number | boolean | { eq?: string | number | boolean; ne?: string | number | boolean; gt?: string | number; gte?: string | number; lt?: string | number; lte?: string | number; in?: (string | number)[]; not_in?: (string | number)[]; exists?: boolean };
+  /** A field filter: a value (equals: text, a number or yes/no), or one or more operators ({ gte: 2, lte: 5 }). An operator
+   *  compares text and numbers, not yes/no; on a 0.8 hub it, or ordering by a field, needs the field indexed. An empty
+   *  `in` filters nothing. */
+  export type FieldFilter = string | number | boolean | { eq?: string | number; ne?: string | number; gt?: string | number; gte?: string | number; lt?: string | number; lte?: string | number; in?: (string | number)[]; not_in?: (string | number)[]; exists?: boolean };
   /** A record from `vaults.*` (every vault on the device): always with its title, types, tags and fields, and `own`
    *  for the app's own records (settings, approvals, an applet's code). */
   export interface VaultsRecord {
@@ -72,7 +74,7 @@ declare module "parachute" {
   export interface RecordQuery {
     pathPrefix?: string;
     tag?: string;
-    /** Ranked by the hub: one page, no offset or orderBy with it. */
+    /** Ranked by the hub: one page, no offset, orderBy or sort with it. */
     search?: string;
     limit?: number;
     /** The next page: up to 5,000. */
