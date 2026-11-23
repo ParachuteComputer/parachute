@@ -44,7 +44,8 @@ Three layers, from what no record can touch to what is most yours.
    An applet that declares signals shows its count beside its glyph unless it is the screen in front ([design/APP-RECORD.md](design/APP-RECORD.md), "Signals").
 2. **The list is your bundle.** Every applet the open bundle offers ([Bundles](#bundles)), in one plain list. In Everything, that
    is every applet in every vault. Vaults are not on it: they are in Settings (**Your Parachutes**, one line each saying what Parachute holds of it and what for, with **Open**),
-   and in a Vault applet when the bundle lists one.
+   and in a Vault applet when the bundle lists one. Nor is Connect an AI: it is a setting (Settings → **Your AI**), a first
+   step in Start here on a new vault, and a place on Parachute Simplified's bar.
 3. **Back returns where you came from.** The app's Back and the phone's Back both go one step back in what you did. On
    the first screen of a start, the app's Back goes to the list, and the phone's Back leaves the app.
 4. **A note opens in its applet.** Tap a note and it opens in the applet that opens its kind; long-press it for "Open
