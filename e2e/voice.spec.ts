@@ -89,6 +89,6 @@ test("a tap is a click at once: the shell and an applet's frame leave out the do
   const rec = await journal(page);
   await expect(rec).toBeVisible();
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).touchAction)).toBe("manipulation");
-  const applet = page.frames().find((f) => f !== page.mainFrame() && f.url().startsWith("about:"));
+  const applet = await page.locator("iframe.applet-frame").elementHandle().then((h) => h!.contentFrame());
   expect(await applet!.evaluate(() => getComputedStyle(document.documentElement).touchAction)).toBe("manipulation");
 });

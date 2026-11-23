@@ -184,7 +184,7 @@ fieldset.plain legend { padding: 0; }
 .with-bar .applet-screen .grant-card > .grant-actions { bottom: calc(var(--foot-h) + env(safe-area-inset-bottom)); }
 .passcode-line { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
 .grant-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
-/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the sheet rises once; in it nothing moves but the figures */
+/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the sheet rises once; in it nothing moves but the figures and the shape of what it hears, drawn as it comes */
 .record-time { margin: 6px 0; font-size: var(--fs-head); font-variant-numeric: tabular-nums; }
 .record-shape { display: block; width: 100%; height: 28px; margin: 2px 0 8px; fill: var(--text); }
 .notice { padding: 8px 12px; border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); background: var(--card-fill); margin: 0 0 8px; font-size: var(--fs-small); }

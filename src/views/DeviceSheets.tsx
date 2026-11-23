@@ -121,10 +121,10 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
         const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (AC) {
           const audio = new AC();
+          r.audio = audio;
           const analyser = audio.createAnalyser();
           analyser.fftSize = 1024;
           audio.createMediaStreamSource(stream).connect(analyser);
-          r.audio = audio;
           (r as typeof r & { analyser?: AnalyserNode }).analyser = analyser;
           if (audio.state === "suspended") void audio.resume().catch(() => {});
         }
@@ -142,6 +142,7 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
   useEffect(() => {
     if (phase !== "recording") return;
     const away = () => { if (document.visibilityState === "hidden") stop("away"); };
+    away(); // gone already while the microphone opened
     const gone = () => stop("away");
     document.addEventListener("visibilitychange", away);
     addEventListener("pagehide", gone);
@@ -167,7 +168,8 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
   const [sending, setSending] = useState(false);
   const send = () => {
     setSending(true);
-    if (phase === "stopped") { void hand(); return; }
+    // stopped already (its handler may have run a moment before this draws): hand it over now
+    if (result.current) { void hand(); return; }
     sendOnStop.current = true;
     stop(null);
   };
