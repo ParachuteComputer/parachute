@@ -74,7 +74,7 @@ async function openLeaves(page: Page) {
   return { app, inner };
 }
 /** The book's scroll, and the page width it turns by. */
-const book = (inner: Frame) => inner.evaluate(() => { const b = document.querySelector<HTMLElement>(".pa-book")!; return { left: b.scrollLeft, page: b.querySelector<HTMLElement>(".pa-mark")!.offsetWidth, count: Number(/of (\d+)/.exec(document.querySelector(".pa-at")!.textContent ?? "")?.[1] ?? 1) }; });
+const book = (inner: Frame) => inner.evaluate(() => { const b = document.querySelector<HTMLElement>(".pa-book")!; return { left: b.scrollLeft, page: b.querySelector<HTMLElement>(".pa-leaf")!.offsetWidth, count: Number(/of (\d+)/.exec(document.querySelector(".pa-at")!.textContent ?? "")?.[1] ?? 1) }; });
 
 test("a long place is a run of pages: the arrows glide a page, the keys turn at once, nothing scrolls down", async ({ page }) => {
   const { app, inner } = await openLeaves(page);
@@ -99,6 +99,10 @@ test("a long place is a run of pages: the arrows glide a page, the keys turn at 
   await expect(app.locator(".pa-at")).toHaveText(`1 of ${b0.count}`);
   // the first page carries the sky; a later page a running head with the place's name
   expect(await inner.evaluate(() => getComputedStyle(document.querySelector(".pa-sky")!).backgroundImage)).toContain("linear-gradient");
+  // and only the head: it fades out just under the place's name, so the rows are on paper (LOOK.md, Sky's rule)
+  const under = await inner.evaluate(() => document.querySelector(".pa-sky")!.getBoundingClientRect().bottom - document.querySelector(".pa-page-head")!.getBoundingClientRect().bottom);
+  expect(under).toBeGreaterThan(0);
+  expect(under).toBeLessThan(60);
   expect(await inner.evaluate(() => document.querySelectorAll(".pa-runhead")[0]?.textContent)).toBe("Leaves");
 });
 
@@ -124,7 +128,7 @@ test("a line that grows as you write shrinks the pages, and the count follows: t
   /** the count shown, and the pages the place really takes (the column its end falls in) */
   const geo = () => inner.evaluate(() => {
     const flow = document.querySelector<HTMLElement>(".pa-flow")!, end = flow.querySelector<HTMLElement>(":scope > .pa-end")!;
-    const w = document.querySelector<HTMLElement>(".pa-mark")!.offsetWidth;
+    const w = document.querySelector<HTMLElement>(".pa-leaf")!.offsetWidth;
     return { shown: Number(/of (\d+)/.exec(document.querySelector(".pa-at")!.textContent ?? "")?.[1] ?? 0), need: Math.floor((end.getBoundingClientRect().left - flow.getBoundingClientRect().left) / w) + 1, h: document.querySelector<HTMLElement>(".pa-book")!.clientHeight };
   });
   const g0 = await geo();
@@ -218,6 +222,10 @@ test("the bar's places are tabs: the one you are in is the page's colour, joined
   expect(side.x + side.width).toBeGreaterThan(1438);
   expect(side.height).toBeGreaterThan(600);
   expect(side.width).toBeLessThan(200);
+  // and the list of applets fills the page beside them (an iframe left at width auto is 300px wide)
+  const list = (await page.locator("iframe.app-frame").boundingBox())!;
+  expect(list.x).toBeLessThan(2);
+  expect(Math.abs(list.x + list.width - side.x)).toBeLessThan(2);
 });
 
 test("on a Mac the place is an open book, two pages a turn; the last turn shows the last of it, whatever the count", async ({ page }) => {

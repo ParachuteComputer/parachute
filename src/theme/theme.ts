@@ -47,7 +47,7 @@ export const DENSITY: Record<Density, Record<DensityKey, string>> = {
 // every one a value; a record's `tokens` changes them one by one.
 export type StyleKind = "color" | "line" | "edges" | "length" | "pad" | "shadow" | "transform" | "caps" | "track" | "weight";
 export const STYLE_TOKENS = {
-  "primary":         { kind: "color", what: "the main action's fill (a primary button, a field's action)" },
+  "primary":         { kind: "color", what: "the main action's fill (a primary button, a field's action), and what wants the person under a row" },
   "on-primary":      { kind: "color", what: "text on the main action" },
   "tint":            { kind: "color", what: "a row under the pointer, the row open now: a light wash" },
   "card-fill":       { kind: "color", what: "a card's ground" },
@@ -186,7 +186,8 @@ export const LOOKS: Record<LookName, Look> = {
       "card-edges": "2px", "field-edges": "2px", "field-pad": "8px 12px",
       "radius-card": "var(--radius)", "radius-field": "var(--radius)", "radius-entry": "var(--radius)", "radius-button": "999px",
       "shadow-card": "none", "shadow-sheet": "none",
-      "label-transform": "uppercase", "label-caps": "normal", "label-track": ".08em", "title-weight": "500", "measure": "760px",
+      // labels in sentence case, as paper's (almanac and book keep their capitals; black on white needs none to stand out)
+      "label-transform": "none", "label-caps": "normal", "label-track": "0em", "title-weight": "500", "measure": "760px",
       ...NO_SKY,
     },
     motion: "still",

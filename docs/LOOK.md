@@ -70,8 +70,10 @@ applet that moves things in its own code asks the kit `still()` first.
 
 **Sky lives at the head of a place and in arrivals. It steps back wherever you read, scan or write.**
 
-- **The head.** The first page's top carries the hour's sky (`--sky-top` into `--sky-mid` into the paper, over about
-  300 px on a phone and 380 on a Mac): morning gold, midday clear, evening rose, night a dusk lilac. It is looked at
+- **The head.** The first page's top carries the hour's sky (`--sky-top` into `--sky-mid` into the paper), as tall as
+  the place's head (its name, what sits over and beside it) and a short fade, so the first rows are on paper: morning
+  gold, midday clear, evening rose, night a dusk lilac. A page that scrolls has a fixed head of sky, about 170 px; the app's own screens (Settings and
+  the rest), about 150. It is looked at
   when the app comes to the front and at each move, never on a timer.
 - **Home.** The greeting in Fraunces sits in the sky. What wants you is the one white card with light on it, and its
   one coral button opens the room to answer it (Home reads rooms; it never answers for you). In the room, the ask's
@@ -79,7 +81,8 @@ applet that moves things in its own code asks the kit `still()` first.
 - **Paper below.** Lists, a room's talk, a note, Settings and editing are warm paper (`--bg`) with hairline rules
   between rows: no cards per row, no shadows, no tints, ink type.
 - **Coral** is spent on the mark and on the one thing you do next: a primary button, the ask's answers, Send once
-  there is something to send, and the count of what wants you on a tab. Links, the focus ring and a ticked box are the
+  there is something to send, the count of what wants you on a tab, and the line under a row that says what wants
+  you. Links, the focus ring and a ticked box are the
   sky's own ink (`--accent`), not coral.
 - **Empty.** "Nothing wants you" and an empty room get a small still scene: the parachute landed, and one line.
 
