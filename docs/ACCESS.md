@@ -38,7 +38,7 @@ them all".
 
 - **Reach adds up.** Vault, and any applet allowed the `vaults` module, reads *every vault this device holds*
   (`applet/modules/vaults.ts`). Every extra vault held widens what they reach, and what a bug in the shell could reach.
-  It is also one more live token on a lost phone.
+  It is also one more live token on a lost phone. Proposal 5 ends that: such an applet reaches only the vaults you pick.
 - **Who reaches a vault.** In 1.0 each vault keeps one list of every grant, and one tap ends one (core
   `docs/SPEC-1.0-grants.md`, "See and stop all of it"; Vault › Sharing shows it today). A blanket device token would be the
   one line in every vault's list that says "everything, for no reason". Home-plus-asks keeps that list true:
@@ -63,8 +63,8 @@ them all".
 
 ## Proposals: Aaron's call, not built
 
-These change what the app holds or what a record does, so they wait for a yes. Proposal 4 also changes where
-Parachute's own applets keep their notes.
+These change what the app holds or what a record does, so they wait for a yes. Proposals 4 and 5 also change where
+Parachute's own applets keep their notes, and 5 changes what an approval holds. **5 takes 4 in** (see 5).
 
 1. **Let go of what nothing uses, in one tap.** On a device that holds vaults *no applet uses*, Settings offers one
    line: *Parachute holds 9 vaults no applet uses. Let go of them.* A tap lists them, each ticked, so a vault you opened
@@ -88,6 +88,8 @@ Parachute's own applets keep their notes.
    ones whose manifest keeps notes in `here` are **Journal and Capture** (`applets/journal.json`, `capture.json`), and
    Home's one line into `Inbox/` (`home.json`), which is Capture's inbox and so follows Capture's choice. Notes, Vault
    and Connect name no folder and reach across vaults by their app words, so a vault choice means nothing for them.
+   *(Proposal 5 says the opposite: they should hold only the vaults you pick. It keeps 4's line and default, and moves
+   the choice from the settings note into the signed approval.)*
    Now someone with a journal vault can keep Journal there only as a copy with its own card.
    - **The ask.** The first time Journal or Capture opens, if the person has more than one vault of their own on this
      device, the shell (not the applet) draws one line over it: *Journal keeps its notes in **kitchen** · Change*. That
@@ -114,9 +116,99 @@ Parachute's own applets keep their notes.
      `Journal/` there. The settings note holds `{hub, vault}`; switching bundle keeps it; a second device opens
      Journal there.
 
-## Gemini Neon's outside read (11-22, from the text only)
+5. **An applet that reaches across vaults asks which vaults, and holds only those.** Aaron, 11-22: *"an applet itself,
+   like the Vault Viewer applet, might be like, hey, we would like access to your vault. Which vault would you like to
+   give us access to? … once it's in there, it's defined and it's specified on the record what Vault we're using. But
+   the app should be able to ask what Vaults potentially change that."* Today Vault, Notes and Connect (app word
+   `vaults`) and Home (`recent`, `changes`) reach every vault the device holds (`modules/vaults.ts`, `modules/app.ts`),
+   and their card says *every vault on this device*.
+   - **Who asks.** An applet whose `app` names a word that reaches across vaults (`vaults`, `sharing`, `recent`,
+     `changes`), and Parachute's own applets that keep notes in `here` but come from no vault (Journal and Capture:
+     proposal 4's case). An applet in a vault with only folder rules has its vault already (`here`) and asks nothing
+     new. One with both keeps its `here` folders as its card says; the pick governs only its cross-vault words.
+   - **The ask.** On its card, or, for Parachute's own (no card), on a sheet the shell draws the first time it opens:
+     *Which vaults may Vault reach?*, a tick for each vault this device knows of on your hubs (one shared with you is
+     marked *someone else's*), the home ticked. Journal and Capture keep notes in one vault, so for them it is one
+     choice, not ticks (proposal 4's line: *Journal keeps its notes in **kitchen** · Change*). With one vault, nothing
+     is asked and nothing is signed: no pick means the home. There is no "all": a vault added later is in no pick until
+     you tick it. Ticking a vault the device doesn't hold asks its hub for it, one page (`askVault`): read for the
+     cross-vault words (write comes later, as now, through the write ask), write for Journal and Capture.
+   - **Where the pick lives: in the signed approval.** The approval gets `vaults: [{hub, vault}]`. The other places, and
+     why not:
+     - *the applet's record*: it is the author's, one record for everyone who runs it (in someone else's vault, or
+       offered by a bundle); `Applets/` is guarded; Parachute's own have no record.
+     - *the bundle record*: other people follow a bundle, and a bundle's words never decide what is asked (proposal 3).
+     - *the settings note* (proposal 4's `keepsIn`): it isn't signed, so anything that can write the home (an AI with a
+       key) could widen what an applet reaches, or move where Journal writes.
+     - *the approval* (`Parachute/Approvals/<host>/<vault>/<record>`): already one per applet, in the home, signed with
+       your key after the device unlock, read by every device and by an agent that reads the home. A vault writer can't
+       make or widen one. For Parachute's own (no card, no code of its own to hash) it is the same record, named
+       `parachute:<id>`, holding the pick alone. A device without your key (a browser tab) keeps the pick beside its own
+       Allow, as it keeps the Allow now; a pick changed on another device doesn't reach it, as an Allow doesn't.
+     - What this gives up from 4: an agent can no longer set where Journal keeps its notes. It can say so to you, and
+       you change it.
+   - **The approval's hash.** The pick is part of what you approved, so it goes into the asks' hash, only when there is
+     one (as `left` does): an approval with no pick hashes as today, so every other applet's approval holds. An older
+     build hashes without the pick, so a picked approval doesn't count there: for an applet with a card, that device
+     shows its card (*every vault on this device*) and asks for itself. It never takes a narrowed approval as cover for
+     every vault. On a new build, an approval made before still counts but holds no pick, and no pick means the home
+     alone: the first open shows the picker, the home ticked. This changes the contract, so it is a design only.
+   - **Older builds, plainly.** An older build doesn't know picks. Parachute's own Vault, Notes, Connect and Home have
+     no card, so there they still reach every vault that device holds, from a bundle or not; only updating the app ends
+     that, and the release notes should say so. If an older build approves a carded cross-vault applet, its approval (no
+     pick, a higher number) becomes the newest: newer builds then drop that applet to the home, the narrow side, until
+     it is picked again.
+   - **What an AI with write on the home can do.** It can't make or widen a pick (no key). It could delete an approval:
+     the applet drops to the home, the narrow side. It could put back an older, wider one it kept: a device that has
+     seen the newer one refuses it (each device keeps the highest number it has seen, `approvalStore.ts`); a device new
+     to that applet hasn't. That is true of every approval today, not new here.
+   - **The manifest.** The `applet` value is untouched: contract 2 takes no new key, and the Uni app reads the same
+     contract. One optional field goes on the record beside it, as `app` does: `"pick": "one"`, for an applet that works
+     in one vault at a time. That is the single-vault, whole-vault applet in `appletshape/APPLETS.md` §5 ("Larger"):
+     `app: ["vaults"]` with `pick: "one"` is a full-power applet held to one vault, with no new manifest key. Absent
+     means "some". It is in the grant's key and the hash only when declared (as `signals`). An older build doesn't read
+     it (discovery reads fields by name), so it asks for every vault on its own card, as today.
+   - **What the shell enforces.** The vaults module gets only the picked vaults: `AppletScreen.tsx` builds it with
+     `list()` cut to the pick, so `list`, `hubs` and every call that names a vault (`held()` in `modules/vaults.ts`)
+     refuse any other, with *not one of the vaults you gave it*. `sharing` is in the same module, so its calls are cut
+     the same way. `recent` and `changes` (`shell/appDeps.ts`) read the picked vaults only. Home's one line into
+     `Inbox/` reads Capture's picked vault, that folder only, as its manifest says today. Journal's and Capture's `here`
+     is the picked vault (`/v/<it>/a/parachute:journal`). A change of pick ends the applet's session and starts it on
+     the new pick, so nothing it kept reaches a vault taken away. The hub does nothing new now (one token per vault; the
+     shell makes every call). In 1.0 the shell asks a vault for a token *as applet* only where it is picked, so each
+     vault's list of grants shows *Vault* only in the vaults you gave it.
+   - **Changing it.** Settings → Applets: *Vault reaches kitchen and letters · Change*. The long-press offers the same.
+     The applet can ask too, during a tap: `vaults.ask()` (new) opens the same sheet of the shell's; the applet learns
+     what you picked, never the list you picked from, and can't set it. Each change signs a new approval, so every
+     device follows it. Adding a vault the device doesn't hold asks its hub. Taking one out gives back what nothing
+     needs any more: when no pick, card or change of yours needs write there, the app drops to read (`narrowIfWider`),
+     as after a revoke.
+   - **What it does for a bundle.** A bundle can put Vault on its bar (`parachute:vault`). Listing it runs nothing;
+     opening it asks which vaults. Today, opening Vault from a bundle reaches every vault the device holds, the
+     "thousand different vaults" Aaron didn't want a bundle to get.
+   - **With 1 to 4.** *1* gets exact: a vault is used when it is the home, an allowed card's vault, or in a pick. Today
+     an allowed Vault reaches every vault held, so "no applet uses it" is never quite true. A vault let go stays in its
+     picks, and the applet says *kitchen isn't on this device · Open* rather than reaching it. *2* stands on its own and
+     matters less: a bundle that offers applets from every vault no longer means a Vault that reads every vault. *3*
+     shares the one-page ask for a vault not held. *4* folds in: its line, its default and "notes already written stay
+     where they are" hold; the choice moves from `keepsIn` in the settings note to the signed approval.
+   - **Recommendation.** Take 5 in place of 4. Build it in two steps: first the cross-vault words (Vault, Notes,
+     Connect, Home), where the trust gain is; then Journal and Capture as a pick of one.
+   - **Tests when built.** Unit, since this is permission logic: the vaults module with a pick of A refuses `get({vault:
+     B})` and lists only A; `recent` and `changes` count only A; the asks' hash with no pick equals today's (an approval
+     made before still holds for an applet with no cross-vault word), and with one it differs and ignores order; an
+     approval whose `vaults` was edited fails its signature. End to end, on throwaway hubs with three vaults: Vault
+     opened the first time ticks the home only; tick B (not held): one hub page, then Vault lists home and B, not C, and
+     a call to C (and a `sharing` call on C) is refused; a second device with the same key opens Vault with no card and
+     asks B's hub once, one page; Change to the home alone: B leaves the open Vault at once; an approval with no pick
+     reaches the home only and shows the picker; an older build's approval made after a pick drops the applet to the
+     home. Each goes red with the cut removed.
+   - **Why it waits for a yes.** It changes what an approval holds and its hash: cross-vault applets approved before
+     drop to the home until you pick; and on an older build Parachute's own still reach every vault until it is updated.
 
-Sound: it limits what a lost device, a shell bug or a `vaults` applet can reach, and keeps the hub's lists meaningful.
+## Gemini Neon's outside reads (from the text only)
+
+**On the first draft (11-22):** sound: it limits what a lost device, a shell bug or a `vaults` applet can reach, and keeps the hub's lists meaningful.
 It flagged four things, now fixed above: (a) "names dropped" was unclear, since the unread vaults are still counted
 (the listing token ends; the names stay on the device); (b) proposal 1 called every idle vault "from an earlier
 sign-in", though some were opened on purpose (now each is ticked and can be kept, and Sign out ends the token at the
@@ -125,5 +217,16 @@ On the proposals it said "change it" to all three: review before letting go (don
 bar first (done: all in his home vault); for 3, say where a card's lines come from before the vault is read (added as
 the open question).
 
+**On proposal 5 (11-23, from the text only):** sound in principle, "change it" as first drafted. The signed
+approval is the right place, better than the applet record, the bundle record or the unsigned settings note; and 4
+should fold into 5. Fixed above: `sharing` was named but not cut; an older build runs Parachute's own (no card) across
+every vault it holds, so it can't be said to "ask for itself" (now said plainly); an older build's approval can become
+the newest (it drops the applet to the home); deleting or putting back an approval (the floor covers devices that saw
+the newer one); "the manifest is untouched" beside a new field (the field is the record's, not the manifest's); taking
+a vault out should give back write (`narrowIfWider`); the second device has to ask B's hub; Home's `Inbox/` line; an
+applet with both `here` folders and a cross-vault word; vaults shared with you in the picker; nothing signed when
+nothing is asked; and that an agent can no longer set where Journal keeps notes.
+
 **Subtract:** the old Settings vault blocks (always-shown Whose, three buttons per vault, the open list of unread vaults)
-are gone with this change (2026-11-22). Proposal 1 would replace signing out of idle vaults one at a time.
+are gone with this change (2026-11-22). Proposal 1 would replace signing out of idle vaults one at a time. Proposal 5, if built, replaces the *every vault on
+this device* lines on the cards (`applet/app.ts`, `face.ts`) and proposal 4's `keepsIn` (never built).
