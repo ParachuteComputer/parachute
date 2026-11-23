@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "path": "Applets/Writing",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "writing",
+      "name": "Writing",
+      "glyph": "✎",
+      "note": "your pieces by stage, with the references and quotes Uni prepared beside your writing",
+      "access": [
+        {
+          "vault": "here",
+          "allow": [
+            {
+              "path": "Writing/Pieces/",
+              "verbs": ["read", "create", "update"]
+            },
+            {
+              "path": "References/",
+              "verbs": ["read", "create", "update"]
+            }
+          ]
+        }
+      ],
+      "search": [
+        { "what": "pieces", "vault": "here", "type": "piece", "path": "Writing/Pieces/" },
+        { "what": "references", "vault": "here", "type": "reference", "path": "References/" }
+      ],
+      "screens": [
+        { "id": "home", "name": "Writing" }
+      ]
+    },
+    "opens": [
+      { "type": "piece", "path": "Writing/Pieces/" },
+      { "type": "reference", "path": "References/" }
+    ],
+    "needs": 4,
+    "app": ["open", "links"]
+  }
+}
