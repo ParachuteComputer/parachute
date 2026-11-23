@@ -15,8 +15,12 @@ export default function Layers() {
   const [open, setOpen] = useState(null);
   // while a screen of its own is open, Back closes it
   useEffect(() => (open ? onBack(() => setOpen(null)) : undefined), [open]);
-  if (open) return <main><h1>{open}</h1><button onClick={() => setOpen(null)}>Close</button><button onClick={() => setOpen(open + " too")}>Next</button></main>;
-  return <main><h1>Layers</h1>{["Plum", "Quince"].map((x) => <button key={x} onClick={() => setOpen(x)}>{x}</button>)}</main>;
+  // a re-read after a moment (no tap) hands the screen a new object: the effect runs again
+  useEffect(() => { if (!open || open.again) return; const t = setTimeout(() => setOpen((o) => (o ? { ...o, again: true } : o)), 600); return () => clearTimeout(t); }, [open]);
+  if (open) return <main><h1>{open.name}</h1><p>{open.again ? "read again" : "first read"}</p><button onClick={() => setOpen(null)}>Close</button><button onClick={() => setOpen({ name: open.name + " too" })}>Next</button></main>;
+  // twenty holds in one tap: one Back for it, not twenty
+  const hoard = () => { for (let i = 0; i < 20; i++) onBack(() => {}); };
+  return <main><h1>Layers</h1>{["Plum", "Quince"].map((x) => <button key={x} onClick={() => setOpen({ name: x })}>{x}</button>)}<button onClick={hoard}>Hoard</button></main>;
 }
 `;
 // holds Back from the start, with no tap: a trap, if Back obeyed it
@@ -56,7 +60,18 @@ test("Back closes an applet's own screen first, then leaves it", async ({ page }
     await f.getByRole("button", { name: "Plum" }).click();
     await f.getByRole("button", { name: "Close" }).click();
     await expect(f.getByRole("heading", { name: "Layers" })).toBeVisible();
-    // nothing of its own open: one Back leaves the applet
+    // read again after the tap, the person elsewhere in the app (the frame not focused): it still holds its Back
+    await f.getByRole("button", { name: "Plum" }).click();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await expect(f.getByText("read again")).toBeVisible();
+    await barBack();
+    await expect(f.getByRole("heading", { name: "Layers" })).toBeVisible();
+    expect(page.url()).toBe(at);
+    // twenty holds in one tap earn one Back: the second leaves
+    await f.getByRole("button", { name: "Hoard" }).click();
+    await barBack();
+    await expect(f.getByRole("heading", { name: "Layers" })).toBeVisible();
+    expect(page.url()).toBe(at);
     await barBack();
     await expect(page).not.toHaveURL(at);
     await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();

@@ -51,8 +51,21 @@
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
   var svcSubs = {}, vaultWatches = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [], freshCbs = [], backCbs = [];
-  // how many it holds Back for (onBack): the shell is told each change (modules/back.ts)
-  function holdBack() { call("back", "hold", { depth: backCbs.length }).catch(function () {}); }
+  // how many it holds Back for (onBack): the shell is told each change (modules/back.ts), once a tick, so letting go
+  // and holding again in one go (an effect run again) says nothing; "again", after a new session, says it anyway
+  var backSaid = 0, backSoon = false;
+  function holdBack(again) {
+    if (again) backSaid = -1;
+    if (backSoon) return;
+    backSoon = true;
+    Promise.resolve().then(function () {
+      backSoon = false;
+      var d = Math.min(backCbs.length, 100);
+      if (d === backSaid) return;
+      backSaid = d;
+      call("back", "hold", { depth: d }).catch(function () {});
+    });
+  }
   // saved state (docs/WRITE-AN-APPLET.md "Saved state"): what the shell handed back, and what changed since it was sent
   // savedOn: the app hands saved state to this frame (an applet's own screen; an embed's has none)
   var savedVals = {}, savedDirty = null, savedTimer = null, savedFirst = 0, savedOn = false, SAVE_MS = 250, SAVE_MAX_MS = 1000, SCROLL = "parachute:scroll";
@@ -72,7 +85,7 @@ export const FRAME_KIT = String.raw`(function () {
   // an answer to Uni's card, trusting its key, a secret), a post, the frame's height. One of the 8 places is kept for
   // these, so a tap is sent at once however many pictures and card checks are out.
   var FIRST = { "app.openLink": 1, "app.follow": 1, "app.save": 1, "app.pick": 1, "app.open": 1, "voice.record": 1, "services.publish": 1, "page.layout": 1,
-    "services.answer": 1, "services.trust": 1, "services.secret": 1, "services.forgetSecret": 1 };
+    "services.answer": 1, "services.trust": 1, "services.secret": 1, "services.forgetSecret": 1, "back.hold": 1 };
   // what must land in the order it was asked goes one at a time, each kind in a lane of its own: what the applet keeps
   // on the device (one store: a read is in the lane too, so it sees the writes asked before it), the frame's height
   // (the last one sent is the one that counts) and its private notes on a relay. A later one is never out while an
@@ -263,7 +276,7 @@ export const FRAME_KIT = String.raw`(function () {
       // booted while hidden: what read shown() before ready (a component's first render) hears the change
       if (m.data && typeof m.data.shown === "boolean" && m.data.shown !== shownNow) { shownNow = m.data.shown; shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); }
       // a session made again while it holds Back: the new one is told
-      if (backCbs.length) holdBack();
+      if (backCbs.length) holdBack(true);
       readyRes(m.data);
       if (m.data && m.data.open) applyOpen(m.data.open);
       if (m.data && m.data.page && (m.data.page.sized || m.data.page.embeds)) startMeasuring();

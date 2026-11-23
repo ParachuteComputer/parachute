@@ -37,7 +37,7 @@ import reactKitSource from "virtual:react-kit";
 import reactNoteKitSource from "virtual:react-note-kit";
 import { embedsFrom, embedTargets, pointerFor, repin, type PointerNote } from "../applet/pointers";
 import { createPageModule } from "../applet/modules/page";
-import { createBackModule } from "../applet/modules/back";
+import { createBackModule, MAX_BACKS } from "../applet/modules/back";
 import { holdNativeBack } from "../shell/nativeBack";
 import { PageEmbeds, PAGE_MAX } from "./Embeds";
 import { isMine, useWhose, whoseOf } from "../vault/whose";
@@ -494,11 +494,12 @@ export default function AppletScreen() {
     ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
+    // one Back for a hold that grew during a tap (one, however much it grew), and never more than MAX_BACKS waiting
     createBackModule((depth) => {
       const b = backHold.current;
-      if (depth > b.depth && tappingIn(() => frameEl.current)) b.given += depth - b.depth;
+      if (depth > b.depth && tappingIn(() => frameEl.current)) b.given += 1;
       b.depth = depth;
-      b.given = Math.min(b.given, depth);
+      b.given = Math.min(b.given, depth, MAX_BACKS);
       setBackHeld(b.given > 0);
     }),
     // every vault this device holds (the Vault applet's words: modules/vaults.ts), and what reaches each
