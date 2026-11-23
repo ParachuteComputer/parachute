@@ -68,6 +68,11 @@ Add another Parachute later from **Add a Parachute** at the foot of the launcher
 
 - **"Parachute is damaged and can't be opened":** the download was changed or cut short. Download it again, or run the
   `xattr` line above.
+- **An applet says "Parachute can't reach … your home vault":** Parachute's own applets (Journal, Notes, Capture, Vault,
+  Connect, Home) run in your home vault, and this Mac can't reach the Parachute that holds it: it is off, or this Mac
+  kept a home from an older install whose address is gone. Settings → Your bundle → **Home vault**: pick the vault you
+  use (it lists only the vaults this Mac holds; open another under your Parachute first). The list of applets says the
+  same in one line ("Can't reach recipes just now.") for any vault it can't reach.
 - **To remove the key:** Settings → Your key → **Remove from this device**, or delete `computer.parachute.app` in Keychain Access.
 - **To uninstall:** drag Parachute from Applications to the Bin. Its data is in
   `~/Library/Application Support/computer.parachute.app` and `~/Library/WebKit/computer.parachute.app`.

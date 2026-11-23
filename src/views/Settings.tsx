@@ -229,6 +229,10 @@ export default function Settings({ children }: { children?: ReactNode }) {
           )) : <p className="quiet">None yet.</p>}
           <p className="small"><Link to="/add">Add a Parachute</Link>{" · "}<Link to="/accept">Accept an invite</Link></p>
         </section>
+        <section className="card" aria-labelledby="s-ai">
+          <h3 id="s-ai">Your AI</h3>
+          <p className="small">Claude, ChatGPT and other AIs reach your vaults through one address. <Link to="/connect">Connect an AI</Link></p>
+        </section>
         <AppletSettings vaults={vaults} />
         <ServicesSettings />
       </Group>

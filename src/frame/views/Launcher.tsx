@@ -12,6 +12,10 @@ import { Days } from "../../kit/parts";
 import { when } from "../../kit/when";
 import { appletPath } from "../../open/paths";
 
+/** Connect an AI: a setting (Settings → Your AI) and a first step (Start here), not an applet in the list. (Its address
+ *  is written out: the frame imports nothing of the shell's applet code, src/frame/boundary.test.ts.) */
+const CONNECT = "parachute:connect";
+
 /** A day inside a line of words: "today", "yesterday", "Monday, November 17". */
 const inLine = (day: string) => (day === "Today" || day === "Yesterday" ? day.toLowerCase() : day);
 
@@ -50,7 +54,7 @@ export default function Launcher() {
       {fresh && homeVault && <h2 className="lately-label">All applets</h2>}
       <ol className="entries" aria-label="Applets">
         {/* Parachute's own (docs/design/PARACHUTE-SOURCE.md), in the home: first, from the app */}
-        {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
+        {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).filter((a) => a.noteId !== CONNECT).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
         {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
         {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
@@ -185,7 +189,9 @@ function VaultEntries({ v, many, onCount, onHold }: { v: FrameVault; many: boole
       return <Entry key={a.noteId} v={v} a={a} where={where} home={isHome} pinned={pinned} onHold={() => onHold(a)} />;
     })}
     {brought.map((p) => <Brought key={p.noteId} p={p} />)}
-    {applets && !applets.ok && <li className="entry-quiet">The applets in {v.vault} couldn't be read.</li>}
+    {/* plain words for what is wrong (vault/failure.ts): a Parachute that isn't reached is a line, not an error */}
+    {applets && !applets.ok && <li className="entry-quiet">{applets.why === "offline" ? `Can't reach ${v.vault} just now.`
+      : applets.why === "refused" ? <>{v.vault} wants you to sign in again: <Link to="/settings">Settings</Link>.</> : `The applets in ${v.vault} couldn't be read.`}</li>}
   </>;
 }
 

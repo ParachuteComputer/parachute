@@ -219,7 +219,7 @@ test("a place has the hour's sky at its head, fading into the paper", async ({ p
   expect(await inner.evaluate(() => getComputedStyle(document.body).backgroundImage)).toContain("linear-gradient");
 });
 
-test("the bar's places are tabs: the one you are in is the page's colour, joined to it; on a Mac they stand down the right edge", async ({ page }) => {
+test("the bar's places are tabs: the one you are in is the page's colour, joined to it; on a Mac they stand down the left edge, and an applet takes the rest", async ({ page }) => {
   await openLeaves(page);
   const bar = page.getByRole("navigation", { name: "Bar" });
   // the list of applets: its tab is the one you are in
@@ -232,14 +232,22 @@ test("the bar's places are tabs: the one you are in is the page's colour, joined
   // a phone: along the foot
   const foot = (await bar.boundingBox())!;
   expect(foot.y + foot.height).toBeGreaterThan(page.viewportSize()!.height - 2);
-  // a Mac: down the right edge, the page beside them
+  // a Mac: down the left edge, a sidebar, the page beside it
   await page.setViewportSize({ width: 1440, height: 900 });
   const side = (await bar.boundingBox())!;
-  expect(side.x + side.width).toBeGreaterThan(1438);
+  expect(side.x).toBeLessThan(2);
   expect(side.height).toBeGreaterThan(600);
   expect(side.width).toBeLessThan(200);
-  // and the list of applets fills the page beside them (an iframe left at width auto is 300px wide)
+  // and the list of applets fills the page beside it (an iframe left at width auto is 300px wide)
   const list = (await page.locator("iframe.app-frame").boundingBox())!;
-  expect(list.x).toBeLessThan(2);
-  expect(Math.abs(list.x + list.width - side.x)).toBeLessThan(2);
+  expect(Math.abs(list.x - (side.x + side.width))).toBeLessThan(2);
+  expect(list.x + list.width).toBeGreaterThan(1438);
+  // an applet takes the whole page beside the sidebar, at 1440 and wider: no bands of another colour beside its own sky
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/v/${VAULT}/a/parachute:journal`);
+    const frame = (await page.locator("iframe.applet-frame").boundingBox({ timeout: 20_000 }))!;
+    expect(Math.abs(frame.x - (side.x + side.width))).toBeLessThan(2);
+    expect(frame.x + frame.width).toBeGreaterThan(width - 2);
+  }
 });

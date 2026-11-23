@@ -1,7 +1,7 @@
 // The bundle record (docs/design/APP-RECORD.md): what an app offers is what its sources name, less what it hides; a record
 // that would widen what is offered is read narrowly; the device's choice wins over the settings note's.
 import { describe, expect, it } from "vitest";
-import { bundleOf, bundlesFrom, DEFAULT_BUNDLES, defaultBundles, offered, offersIn, openBundle, recordOf } from "./bundles";
+import { barNames, bundleOf, bundlesFrom, DEFAULT_BUNDLES, defaultBundles, offered, offersIn, openBundle, recordOf } from "./bundles";
 const def = (id: string) => defaultBundles().find((b) => b.id === id)!;
 
 const HOME = "https://uni.example";
@@ -90,5 +90,23 @@ describe("the bar and home an app gives", async () => {
   it("a live app's places that name no hub are on its Parachute", () => {
     const live = { ...bundleOf({ contract: 1, id: "techne", name: "Techne", sources: [], bar: [{ vault: "techne", applet: "Applets/Events" }] }, "Parachute/Bundles/techne", "1")!, hubOf: "https://techne.example" };
     expect(effective({ ...S, bundle: "techne" }, bundlesFrom([live])).bar).toEqual([{ vault: "techne", applet: "Applets/Events", hub: "https://techne.example" }]);
+  });
+});
+
+describe("what a bundle puts on the bar", () => {
+  it("names its places in order, its home screen where it names none, Settings never", () => {
+    expect(barNames(def("simple"))).toEqual(["Notes", "Journal", "Capture", "Vault", "Connect"]);
+    expect(barNames(def("everything"))).toEqual(["Applets"]);
+    expect(barNames(uni)).toEqual(["Journal", "Applets"]);
+    const pinned = bundleOf({ contract: 1, id: "desk", name: "Desk", look: "notes", bar: [{ shipped: "capture" }, { vault: "home", applet: "Applets/Rooms.tsx" }, { screen: "home" }] }, "Parachute/Bundles/desk", "d")!;
+    expect(barNames(pinned)).toEqual(["Capture", "Rooms", "Notes"]);
+  });
+  it("a bundle with no bar of its own: its default's places, then the person's pins, by the name they are listed with", () => {
+    const pins = [{ vault: "letters", applet: "Applets/Post.html" }, { vault: "home", applet: "Applets/Rooms" }];
+    const named = (p: { applet: string }) => (p.applet === "Applets/Post.html" ? "Letters" : null);
+    expect(barNames(def("everything"), pins, named)).toEqual(["Letters", "Rooms", "Applets"]);
+    expect(barNames(def("simple"), pins)).toEqual(["Notes", "Journal", "Capture", "Vault", "Connect", "Post", "Rooms"]);
+    // a bar of its own: the pins aren't on it
+    expect(barNames(uni, pins)).toEqual(["Journal", "Applets"]);
   });
 });
