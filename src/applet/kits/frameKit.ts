@@ -54,8 +54,9 @@ export const FRAME_KIT = String.raw`(function () {
   var savedVals = {}, savedDirty = null, savedTimer = null, savedFirst = 0, savedOn = false, SAVE_MS = 250, SAVE_MAX_MS = 1000, SCROLL = "parachute:scroll";
   var measuring = false, lastHeight = -1, queued = false;
   var readyP = new Promise(function (r) { readyRes = r; });
-  // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen
-  var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000 };
+  // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen; and the shell may:
+  // a Notion export is chosen, then its records written and up to 150 MB of its files uploaded one at a time
+  var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000 };
   // bytes as an ArrayBuffer (what the shell takes), from an ArrayBuffer or a view of one
   function buf(b) { return b instanceof ArrayBuffer ? b : b && ArrayBuffer.isView(b) ? b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) : null; }
   function post(m) { parent.postMessage(m, "*"); }

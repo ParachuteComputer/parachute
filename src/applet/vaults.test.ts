@@ -374,3 +374,67 @@ describe("sharing: who reaches a vault, a key for an AI, ending one (level 6, T-
     expect(done).toEqual([]);
   });
 });
+
+describe("vaults.importNotion: shell wiring for attachments and re-import", () => {
+  it("uploads and attaches images from the picked export zip and rewrites the record body", async () => {
+    const { readFileSync } = await import("node:fs");
+    const zipBytes = readFileSync(`${process.cwd()}/e2e/fixtures/notion-export.zip`);
+    const ab = zipBytes.buffer.slice(zipBytes.byteOffset, zipBytes.byteOffset + zipBytes.byteLength);
+    const created = new Map<string, { id: string; body: string; fields?: Record<string, unknown> }>();
+    const uploaded: { name: string; mimeType: string; size: number }[] = [];
+    const attachments: { recordId: string; path: string; mimeType: string }[] = [];
+    const defined = new Map<string, { description?: string; fields: Record<string, unknown> }>();
+    let seq = 0;
+    const deps: VaultsDeps = {
+      list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "write", connector: "c", view: null, reach: "anyone" }],
+      door: async () => "records",
+      pick: async () => [{ name: "Export-0c5e1b7a-notion.zip", type: "application/zip", bytes: ab }],
+      upload: async (_v, name, bytes, mimeType) => { uploaded.push({ name, mimeType, size: bytes.byteLength }); return { path: `stored/${name}`, mimeType }; },
+      async request(_v, method, path, body) {
+        if (method === "GET" && path.startsWith("/types")) return [...defined].map(([name, t]) => ({ name, kind: "type", count: 0, description: t.description ?? null, fields: t.fields }));
+        if (method === "PUT" && path.startsWith("/types/")) { const n = decodeURIComponent(path.slice("/types/".length)); const b = body as { description?: string; fields?: Record<string, unknown> }; defined.set(n, { description: b.description ?? defined.get(n)?.description, fields: { ...(defined.get(n)?.fields ?? {}), ...(b.fields ?? {}) } }); return { ok: true }; }
+        if (method === "POST" && path === "/records") {
+          const b = body as { path: string; body: string; fields?: Record<string, unknown> };
+          const had = created.get(b.path);
+          if (had) return { id: had.id, updatedAt: "t0", existed: true };
+          const id = `rec${++seq}`; created.set(b.path, { id, body: b.body, fields: b.fields });
+          return { id, updatedAt: "t0", existed: false };
+        }
+        const att = /^\/records\/([^/]+)\/attachments$/.exec(path);
+        if (method === "POST" && att) {
+          const b = body as { path: string; mimeType: string };
+          attachments.push({ recordId: decodeURIComponent(att[1]), path: b.path, mimeType: b.mimeType });
+          return { id: `att${attachments.length}`, path: b.path, mimeType: b.mimeType };
+        }
+        const rec = /^\/records\/([^?]+)/.exec(path);
+        if (method === "GET" && rec) {
+          const p = decodeURIComponent(rec[1]);
+          const found = created.get(p);
+          if (!found) throw Object.assign(new Error("404 not found"), { status: 404 });
+          return { id: found.id, path: p, tags: ["parachute-receipt"], fields: found.fields ?? {}, updatedAt: "t0" };
+        }
+        if (method === "PATCH" && rec) {
+          const id = decodeURIComponent(rec[1]);
+          const b = body as { body?: string; fields?: Record<string, unknown> };
+          for (const v of created.values()) if (v.id === id) { if (b.body !== undefined) v.body = b.body; if (b.fields) v.fields = b.fields; }
+          return { id, updatedAt: "t1" };
+        }
+        return [];
+      },
+      applets: async () => [], watch: () => () => {}, access: async () => { throw new Error("no"); }, revoke: async () => {}, readOnly: async () => {}, confirm: async () => "yes", emit: () => {},
+    };
+    const router = createRouter([createVaultsModule(["vaults"], deps)]);
+    const run = () => router.call("vaults", "importNotion", { vault: "home" }, {}, { charge() {}, closed: () => false }) as Promise<{ picked: boolean; attached: number; left: string[]; changed: boolean; found: { files: number } }>;
+    const first = await run();
+    expect(first).toMatchObject({ picked: true, attached: 1, left: [], changed: true });
+    expect(first.found.files).toBe(1);
+    expect(uploaded).toEqual([{ name: "owl-sketch.png", mimeType: "image/png", size: 66 }]);
+    const ideas = created.get("Notion/Juno's studio/Home/Ideas")!;
+    expect(ideas.body).toContain("![owl sketch](/api/storage/stored/owl-sketch.png)");
+    expect(attachments).toEqual([{ recordId: ideas.id, path: "stored/owl-sketch.png", mimeType: "image/png" }]);
+    // Second import changes and uploads nothing
+    const second = await run();
+    expect(second).toMatchObject({ picked: true, attached: 0, changed: false });
+    expect(uploaded).toHaveLength(1);
+  });
+});

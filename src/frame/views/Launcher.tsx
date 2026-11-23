@@ -73,6 +73,29 @@ const theirs = (n: Note) => {
  *  new vault is read again on each visit (the list waits for it). */
 const known = new Map<string, boolean>();
 const started = (n: Note) => theirs(n) || ((n as { path?: string }).path ?? "").startsWith("Parachute/Receipts/");
+const FRESH_PAGE = 200;
+/** At most this many pages (2,000 notes) are read: a vault with more of Parachute's own and none of the person's is
+ *  taken as started (no Start here), so the read stays short. */
+const FRESH_MAX_PAGES = 10;
+
+/** Whether a vault holds nothing of the person's yet (neither a record of theirs nor a pack receipt). Pages past
+ *  Parachute's own records and hub #guide notes instead of deciding from the 200 newest notes alone. */
+export async function isFreshVault(reader: { queryNotes(q: { pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; offset?: number }): Promise<Note[]> }): Promise<boolean> {
+  const [receipts, first] = await Promise.all([
+    reader.queryNotes({ pathPrefix: "Parachute/Receipts/", limit: 1 }).catch(() => [] as Note[]),
+    reader.queryNotes({ orderBy: "updated_at", sort: "desc", limit: FRESH_PAGE }),
+  ]);
+  if (receipts.length > 0 || first.some(started)) return false;
+  if (first.length < FRESH_PAGE) return true;
+  // the rest at once, so the answer comes in two reads' time, inside the list's wait (useFresh: 1.5 s)
+  const pages = await Promise.all(Array.from({ length: FRESH_MAX_PAGES - 1 }, (_, i) => reader.queryNotes({ orderBy: "updated_at", sort: "desc", limit: FRESH_PAGE, offset: (i + 1) * FRESH_PAGE })));
+  for (const notes of pages) {
+    if (notes.some(started)) return false;
+    if (notes.length < FRESH_PAGE) return true;
+  }
+  return false;
+}
+
 /** `undefined` until the vaults are read and, for a home vault not read before, while its first read runs (the list
  *  waits for it, at most 1.5 s: then it draws without Start here, which this visit then never adds above it). Never
  *  another vault's answer: a home that changes is read for itself. */
@@ -90,8 +113,7 @@ function useFresh(v: FrameVault | undefined, loaded: boolean): boolean | undefin
     let live = true, drawn = false;
     const draw = (fresh: boolean) => { drawn = true; setState({ key, fresh }); };
     const late = setTimeout(() => { if (live && !drawn) draw(false); }, 1500);
-    readerFor(v).queryNotes({ orderBy: "updated_at", sort: "desc", limit: 200 }).then((notes) => {
-      const isNew = !notes.some(started);
+    isFreshVault(readerFor(v)).then((isNew) => {
       // (only "not new" is kept: a vault read as new is read again on the next visit, which waits for it, so a Start
       // here that something since then ended never shows first and then goes)
       if (!isNew) known.set(key, false);
@@ -110,8 +132,8 @@ function useFresh(v: FrameVault | undefined, loaded: boolean): boolean | undefin
     if (!v || state?.key !== v.key || state.fresh !== true) return;
     let live = true;
     const key = v.key;
-    readerFor(v).queryNotes({ orderBy: "updated_at", sort: "desc", limit: 200 }).then((notes) => {
-      if (!notes.some(started)) return;
+    isFreshVault(readerFor(v)).then((isNew) => {
+      if (isNew) return;
       known.set(key, false);
       if (live) setState({ key, fresh: false });
     }, () => {});

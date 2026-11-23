@@ -48,7 +48,7 @@ Stopped or still asking, ⋯ goes to Settings as on every other screen.
 Any applet in a vault of yours can be your **home** (an applet in someone else's vault never opens by itself:
 [OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)): it opens when the app starts. With no home, the app opens on the list. While the home vault holds nothing of the person's (only the hub's guide notes
 and Parachute's own records), the list starts with **Start here**: *Bring in what you have* (Vault: Import from Notion,
-or a starter pack) and *Connect your AI* (Connect). A record of theirs, or a pack they added, and it is gone. It is read before the list draws (and kept per vault), so
+or a starter pack) and *Connect your AI* (Connect). A record of theirs, or a pack they added, and it is gone (read across the vault, past Parachute's own records and the guide notes, not from the 200 newest alone; a vault with over 2,000 of those and none of theirs shows no Start here). It is read before the list draws (and kept per vault), so
 it never pushes the list down. Parachute Simplified opens on Notes, not the list, so it has no Start here. An applet opens on start by itself only when two things hold on this device: you allowed its code
 (its card), and you chose it as home here (the long-press, or the Open button the app shows the first time). If the
 choice came from somewhere else (your agent wrote it, or a frame of your own set it), the first start shows the

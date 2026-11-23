@@ -120,6 +120,8 @@ export type VaultsDeps = {
   hubs?(): Promise<HubRow[]>;
   /** GET/POST/PATCH/DELETE/PUT under the vault's API (`/records…`, `/types…`; PUT only for a pack's types, packs.ts), its JSON; a 404 rejects with `not_found`. */
   request(vault: string, method: "GET" | "POST" | "PATCH" | "DELETE" | "PUT", path: string, body?: unknown): Promise<unknown>;
+  /** Upload a file to the vault's storage (multipart, for Notion import attachments); absent: attachments are skipped. */
+  upload?(vault: string, name: string, bytes: Uint8Array, mimeType: string): Promise<{ path: string; mimeType?: string }>;
   /** This device's Parachute in that vault: the client id its key is named for (its writes are `key:<id>`, or
    *  `key:<id>-2` … for another sign-in), when it signed in as an app. */
   self?(vault: string): string | null;

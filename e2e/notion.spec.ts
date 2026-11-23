@@ -1,7 +1,7 @@
 // Import from Notion (T-476), on a real hub: a person coming from Notion taps Import from Notion in Vault, chooses their
 // export (e2e/fixtures/notion-export.zip, a made-up workspace shaped like a real "Markdown & CSV" export) in the app's
 // own picker, and their tables land as types with typed fields, their rows as records, their pages as pages with
-// working links, all under Notion/, with a receipt; choosing the same export again changes nothing.
+// working links, all under Notion/<its workspace>/, with a receipt; choosing the same export again changes nothing.
 // Needs a hub where write access may define a type over REST (core #139); on an older one it skips, unless
 // E2E_CORE_NEXT=1 says this hub is core's next and must have it. In the `packs` project (a 403 refreshes the sign-in).
 import { readFileSync } from "node:fs";
@@ -53,8 +53,7 @@ test.describe.serial("Import from Notion", () => {
     await shot(page, "01-vault");
     const app = await importIt(page);
     const said = app.getByRole("region", { name: "What came from Notion" });
-    await expect(said).toContainText("From Notion: 4 tables (82 rows) and 9 pages, under Notion/.", { timeout: 60_000 });
-    await expect(said).toContainText("1 file stayed in your export");
+    await expect(said).toContainText("From Notion: 4 tables (82 rows), 9 pages and 1 attachment, under Notion/Juno's studio/.", { timeout: 60_000 });
     await shot(page, "02-imported");
 
     // the vault has them: each table a type with typed fields, each row a record of it, each page at its place
@@ -66,13 +65,19 @@ test.describe.serial("Import from Notion", () => {
     // 82 rows, 9 pages, 4 tables' own records: more than a frame's 60 reads in 10 s, in one tap
     expect(recs.length).toBe(95);
     // the page headed "@Today" is its row's words, under the row's own name
-    const today = recs.find((r) => r.path === "Notion/Home/Sketch log/@November 21, 2026")!;
+    const today = recs.find((r) => r.path === "Notion/Juno's studio/Home/Sketch log/@November 21, 2026")!;
     expect(today.fields).toMatchObject({ minutes: 29, subject: "Owls" });
     expect((await api(hub(), "GET", `records/${today.id}`)).body).toContain("owl wings");
-    expect(recs.find((r) => r.path === "Notion/Home/Reading List/Piranesi")).toMatchObject({ types: ["reading-list"], fields: { author: "Susanna Clarke", rating: 5, finished: "2026-07-07" } });
-    expect(recs.find((r) => r.path === "Notion/Home/Tasks/Invoice Little Fern Café")?.fields).toMatchObject({ done: true, project: ["Notion/Home/Projects/Café menu illustrations"] });
-    const home = recs.find((r) => r.path === "Notion/Home")!;
-    expect((await api(hub(), "GET", `records/${home.id}`)).body).toContain("[[Notion/Home/Reading List]]");
+    expect(recs.find((r) => r.path === "Notion/Juno's studio/Home/Reading List/Piranesi")).toMatchObject({ types: ["reading-list"], fields: { author: "Susanna Clarke", rating: 5, finished: "2026-07-07" } });
+    expect(recs.find((r) => r.path === "Notion/Juno's studio/Home/Tasks/Invoice Little Fern Café")?.fields).toMatchObject({ done: true, project: ["Notion/Juno's studio/Home/Projects/Café menu illustrations"] });
+    const home = recs.find((r) => r.path === "Notion/Juno's studio/Home")!;
+    expect((await api(hub(), "GET", `records/${home.id}`)).body).toContain("[[Notion/Juno's studio/Home/Reading List]]");
+    const ideas = recs.find((r) => r.path === "Notion/Juno's studio/Home/Ideas")!;
+    const ideasBody = (await api(hub(), "GET", `records/${ideas.id}`)).body as string;
+    expect(ideasBody).toMatch(/!\[owl sketch\]\(\/api\/storage\/.+\)/);
+    const ideasAtts = (await api(hub(), "GET", `notes/${ideas.id}/attachments`)) as { mimeType?: string; mime_type?: string }[];
+    expect(ideasAtts).toHaveLength(1);
+    expect(ideasAtts[0].mimeType ?? ideasAtts[0].mime_type).toBe("image/png");
     const [receipt] = await under(`${RECEIPTS}notion-`);
     expect(receipt.fields.receipt).toMatchObject({ contract: 1, name: "Notion: Export-0c5e1b7a-notion", version: 1 });
 
@@ -90,8 +95,8 @@ test.describe.serial("Import from Notion", () => {
     await shot(page, "04-reference");
     await harbor.click();
     await expect(app.getByRole("article", { name: /Harbor Books cover/ })).toBeVisible();
-    await expect(app.getByRole("textbox", { name: "tasks" })).toHaveValue("Notion/Home/Tasks/Send Harbor Books three sketches");
-    // on the record the list is edited as its paths, one after another, not as text in brackets (`["Notion/Home/Tasks/…"]`)
+    await expect(app.getByRole("textbox", { name: "tasks" })).toHaveValue("Notion/Juno's studio/Home/Tasks/Send Harbor Books three sketches");
+    // on the record the list is edited as its paths, one after another, not as text in brackets (`["Notion/Juno's studio/Home/Tasks/…"]`)
     expect(await app.locator("input, textarea").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value).filter((x) => x.startsWith("[")))).toEqual([]);
 
     // the same export again: nothing new, nothing changed
@@ -102,5 +107,13 @@ test.describe.serial("Import from Notion", () => {
     const after = await under("Notion/");
     expect(after.length).toBe(recs.length);
     for (const r of after) expect(r.updatedAt, r.path).toBe(before.get(r.path));
+
+    // Ideas, found in Vault by its words, with its picture's place in its words (the picture is the record's
+    // attachment, above; Vault's view of a record doesn't draw a vault's pictures yet: the kit's Note has no reader for them)
+    await page.goto(`/v/${VAULT}`);
+    await frame(page).getByRole("searchbox", { name: `Search ${VAULT}` }).fill("print series of city birds");
+    await frame(page).getByText("Ideas", { exact: true }).first().click({ timeout: 30_000 });
+    await expect(frame(page).getByRole("article", { name: "Ideas" })).toContainText("Image: owl sketch", { timeout: 30_000 });
+    await shot(page, "05-ideas");
   });
 });
