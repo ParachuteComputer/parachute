@@ -66,7 +66,7 @@ class UpdatePlugin(private val activity: Activity) : Plugin(activity) {
   init { current = this }
 
   /** The Download waiting on Android, and its file. One at a time: a new one replaces it. */
-  private var waiting: Invoke? = null
+  @Volatile private var waiting: Invoke? = null
   private var apk: File? = null
   /** Android's question, held until the app is in front to show it. */
   private var question: Intent? = null
@@ -241,7 +241,8 @@ class InstallStatus : BroadcastReceiver() {
     val plugin = UpdatePlugin.current ?: return
     val id = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
     if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
-      val question: Intent? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+      // the typed read only from 34: Android 13's has a bug (as androidx IntentCompat does it)
+      val question: Intent? = if (Build.VERSION.SDK_INT >= 34) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
         else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_INTENT)
       if (question != null) plugin.ask(id, question) else plugin.done(id, PackageInstaller.STATUS_FAILURE, "no question to ask")
       return
