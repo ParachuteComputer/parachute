@@ -466,6 +466,29 @@ With this repo checked out, the shortest way in is to copy the starter and check
   package, a relative file), and says which parts need a higher `needs` and what the kit would draw instead.
   `--strict` fails on a warning too.
 
+## A project of many files
+
+An applet is one record of code, but it needn't be written as one file. A React project of many files (its own
+modules, a context, npm packages) becomes one record with:
+
+```bash
+# from this repo; the paths are your project's
+npx vite-node scripts/bundle-applet.ts ../my-applet/src/main.tsx --record ../my-applet/applet.json [--out dir] [--minify]
+```
+
+`applet.json` is the record's `path`, `tags` and `fields`, as `applets/starter.json`. It writes `<stem>.bundled.json`
+and `<stem>.bundled.jsx` (one ES module, JSX already compiled) and checks them as `check-applet.ts` does. What the frame
+gives stays an import: `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `parachute` and `component:<id>`.
+Everything else is folded in, built for production; any other path into those packages (`react-dom/server`) is refused,
+as the frame would refuse it. Each import is said once at the top of the file, where the frame reads them. A stylesheet
+or a picture is refused, with the reason: an applet draws with the kit and its theme's CSS variables. It may `await`
+at its top level. `e2e/fixtures/bundled` is a small project done this way, and `e2e/bundled.spec.ts` runs it.
+
+How big it may be:
+- Opened from someone else's vault, the code may be 200 KB at most (`MAX_CODE_CHARS`). From your own, the app sets none.
+- The device keeps an applet compiled when its compiled code is 250 KB or less (`KEEP_ONE_CHARS`, a quarter of the
+  1 MB kept). A bigger one still runs, but it is compiled again on each open. `--minify` is the first thing to try.
+
 ## A worked example
 
 These are the exact arguments for the MCP tool `create-record` (the same body works for `POST /api/records`). A hub
