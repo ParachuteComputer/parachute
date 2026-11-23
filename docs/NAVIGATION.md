@@ -72,7 +72,7 @@ applet's card or its Open button, and your tap is the choice (also when Allow go
 first sign-in on a new device counts as a start: once it is done, the app opens your home there, not the list (until
 the device's self-test has passed, that screen says applets are off, and shows the card once it has). Once
 chosen here, your home runs whenever you come back to it (Back, or its place on the bar). Settings → **Your bundle** →
-**Opens on** lists the list and the applets on your bar: a tap there is the choice on this device, and is written to the
+**Opens on** lists the list, the applets of yours on your bar, and the first screen it has now: a tap there is the choice on this device, and is written to the
 bundle's record as the long-press is.
 
 A home applet is an ordinary applet that asks the app for a little more: the newest notes across your vaults, what is

@@ -89,7 +89,7 @@ test("the first screen: the bundle record names it, and Settings → Opens on ch
     contract: 1, id: "kitchen-table", name: "Kitchen table", sources: [{ vault: VAULT, applet: "*" }],
     bar: [{ vault: VAULT, applet: "Applets/Recipes" }, { vault: VAULT, applet: "Applets/Cook mode" }], start: { vault: VAULT, applet: "Applets/Recipes" } } } });
   await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "kitchen-table" } } });
-  const record = async () => (await tagged("parachute-bundle"))[0].metadata.bundle;
+  const record = async () => (await tagged("parachute-bundle")).find((n) => n.metadata.bundle?.id === "kitchen-table")!.metadata.bundle;
   await start(page);
   // the record alone starts no code: the app opens at Recipe box, which asks (its card) before it runs
   await expect(page).toHaveURL(/\/a\/[^/?]+$/);

@@ -585,7 +585,7 @@ Then make it the first screen: set `start` in the open bundle's record (`Parachu
 ```
 
 The next time the app starts, it opens on Home and shows its card; once the person taps Allow, it opens there by itself.
-They can also choose it in Settings → **Your bundle** → **Opens on** (once it is on the bar), or long-press it in the list
+They can also choose it in Settings → **Your bundle** → **Opens on** (it lists the applets on the bar), or long-press it in the list
 and tap **Open on start**, and pin it first on the bar.
 
 Two home applets ship with the app, in `applets/`: `home` (Parachute Simplified's starter: a line into `Inbox/`, the

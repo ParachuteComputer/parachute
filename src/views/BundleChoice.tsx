@@ -3,8 +3,8 @@
 // of theirs opens the same one; their agent can change that note too (`bundle` and `app` alike until 2026-12-20).
 // Under it, what the open bundle opens on (its `start`): the list, or one of the applets on its bar. A tap here is the
 // person's choice on this device, as the bar's long-press "Open on start" is (shell/start.ts).
-import { useState } from "react";
-import { chooseBundle, effective, readSettings, startApplet, useSettings } from "../shell/homeSettings";
+import { useState, type ChangeEvent } from "react";
+import { chooseBundle, effective, readSettings, setStart, useSettings, type Pin } from "../shell/homeSettings";
 import { chooseStart, forgetStart } from "../shell/start";
 import { DEFAULT_BUNDLES } from "../shell/bundles";
 import { homeVault, setHome } from "../shell/frameSource";
@@ -37,10 +37,11 @@ export default function BundleChoice() {
   const firsts = [...(bar.start && !bar.pins.some((p) => p.vault === bar.start!.vault && p.noteId === bar.start!.noteId) ? [bar.start] : []), ...bar.pins].filter((p) => own(p.vault));
   const keyOf = (p: { vault: string; noteId: string } | null) => (p ? `${p.vault}/${p.noteId}` : "");
   const now = choosing ?? (starts ? (bar.start ? keyOf(bar.start) : null) : "");
-  const opensOn = (to: { vault: string; noteId: string } | null) => {
-    if (busy) return;
+  // as the bar's long-press does: the pin's own place into the record, then this device's choice (a person's tap only)
+  const opensOn = (e: ChangeEvent, to: Pin | null) => {
+    if (busy || !e.nativeEvent.isTrusted) return;
     setBusy(true); setError(""); setChoosing(keyOf(to));
-    startApplet(to?.vault ?? home.key, to?.noteId ?? null).then(() => {
+    setStart(to?.place ?? null).then(() => {
       if (to) chooseStart(to.vault, to.noteId); else forgetStart();
     }, (e: unknown) => { setError(e instanceof Error ? e.message : "That couldn't be saved."); }).finally(() => { setBusy(false); setChoosing(null); });
   };
@@ -56,13 +57,14 @@ export default function BundleChoice() {
         ))}
       </fieldset>
       <p className="quiet small">Which applets this device shows, its bar and its home. Kept in {home.vault} too, so a new device opens the same one.</p>
-      <fieldset className="plain" disabled={busy}>
+      {/* someone else's bundle: its first screen is theirs, as its bar is */}
+      {!bundle.live && <fieldset className="plain" disabled={busy}>
         <legend className="settings-sub">Opens on</legend>
-        <label className="line"><span><input type="radio" name="opens-on" checked={now === ""} onChange={() => opensOn(null)} /> {bundle.look === "notes" ? <><span aria-hidden="true">¶</span> <b>Notes</b></> : <><span aria-hidden="true">⁂</span> <b>Applets</b>: the list</>}</span></label>
+        <label className="line"><span><input type="radio" name="opens-on" checked={now === ""} onChange={(e) => opensOn(e, null)} /> {bundle.look === "notes" ? <><span aria-hidden="true">¶</span> <b>Notes</b></> : <><span aria-hidden="true">⁂</span> <b>Applets</b>: the list</>}</span></label>
         {firsts.map((p) => (
-          <label key={`${p.vault}/${p.noteId}`} className="line"><span><input type="radio" name="opens-on" checked={now === keyOf(p)} onChange={() => opensOn(p)} /> <span aria-hidden="true">{p.glyph}</span> <b>{p.name}</b></span></label>
+          <label key={`${p.vault}/${p.noteId}`} className="line"><span><input type="radio" name="opens-on" checked={now === keyOf(p)} onChange={(e) => opensOn(e, p)} /> <span aria-hidden="true">{p.glyph}</span> <b>{p.name}</b></span></label>
         ))}
-      </fieldset>
+      </fieldset>}
       {/* where each is, only when they are on more than one Parachute */}
       {mine.length > 1 && (
         <fieldset className="plain">
