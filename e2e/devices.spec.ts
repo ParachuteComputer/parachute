@@ -20,16 +20,13 @@ test.use({ storageState: "e2e/.signed-in.json", launchOptions: { args: ["--use-f
 const secret = (n: string) => readFileSync(join(KEYS, `${n}.hex`), "utf8").trim();
 const frame = (page: Page) => page.frameLocator("iframe.applet-frame");
 
-/** The shell's recorder sheet: Record, a moment of the fake microphone, Stop, Send. */
+/** The shell's recorder sheet, recording from the applet's tap: a moment of the fake microphone, then Send. */
 async function recordOnSheet(page: Page, name: string, seconds = 2) {
-  const sheet = page.getByRole("dialog", { name: `${name} asks for a recording` });
+  const sheet = page.getByRole("dialog", { name: `Recording for ${name}` });
   await expect(sheet).toBeVisible();
-  await expect(sheet).toContainText("Nothing is recorded until you press Record");
-  await sheet.getByRole("button", { name: "Record" }).click();
+  await expect(sheet).toContainText(`${name} gets it only when you press Send`);
   await expect(sheet.getByRole("timer")).toContainText("Recording");
   await expect(sheet.getByRole("timer")).toContainText(`0:0${seconds}`, { timeout: (seconds + 5) * 1000 });
-  await sheet.getByRole("button", { name: "Stop" }).click();
-  await expect(sheet.getByRole("timer")).toContainText("Recorded");
   await sheet.getByRole("button", { name: "Send" }).click();
   await expect(sheet).toBeHidden();
 }
