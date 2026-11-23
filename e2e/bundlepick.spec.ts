@@ -32,6 +32,10 @@ test("Your bundle lists the bundles in the person's other vaults and says what e
     await uni.check();
     await expect(uni).toBeChecked();
     await expect(page.getByRole("radio", { name: PANTRY, exact: true })).toBeChecked();
+    // saved: the choice is no longer being written, and Uni is the home's bundle now
+    await expect(choice).toBeEnabled();
+    await expect(choice.getByRole("radio", { name: /Uni/ })).toBeChecked();
+    await expect.poll(async () => ((await api(pantry(), "GET", "notes?tag=parachute-settings&include_metadata=true", undefined, PANTRY)) as { metadata?: { parachute?: { bundle?: string } } }[])[0]?.metadata?.parachute?.bundle).toBe("uni");
     await page.goto("/");
     await expect(bar(page).getByRole("link", { name: /Shelves/ })).toBeVisible();
     await expect(ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Shelves/ })).toBeVisible();
