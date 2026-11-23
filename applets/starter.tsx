@@ -1,5 +1,5 @@
 // Starter: a minimal Parachute applet template. Copy starter.json and starter.tsx; change the path, id and name, and the
-// folder (FOLDER here, and the access and opens paths in the .json); then run
+// folder (NAME and FOLDER here; the access and opens paths in the .json); then run
 // `npx vite-node scripts/check-applet.ts applets/<name> --strict` before putting the record in your vault.
 import { useEffect, useRef, useState } from "react";
 import { Button, Days, Empty, Field, List, Loading, Note, onBack, onOpen, Page, Problem, ready, Search, toast, useSaved, vault, when, Write } from "parachute";
@@ -13,7 +13,11 @@ type Item = {
   body?: string;
 };
 
+// what this applet is called on its pages, and the folder its notes are in (the same as the access path in the .json)
+const NAME = "Starter";
 const FOLDER = "Notes/";
+/** An edit in progress: the text, and the version of the note it started from. */
+type Draft = { body: string; base: string | null };
 const titleOf = (r: Item) => r.path.replace(FOLDER, "").replace(/\.md$/i, "");
 const cleanName = (s: string) => s.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
 
@@ -23,10 +27,17 @@ export default function Starter() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useSaved<string | null>("selected", null);
   const [selected, setSelected] = useState<Item | null>(null);
-  // an edit in progress, kept on the device (useSaved) so it survives the applet closing: the note's id, the text, and
-  // the version it started from, so a save made after a refresh still says which version it changes
-  const [draft, setDraft] = useSaved<{ id: string; body: string; base: string | null } | null>("draft", null);
-  const editing = draft !== null && draft.id === selected?.id;
+  // edits in progress, one per note, kept on the device (useSaved) so they survive the applet closing; each says the
+  // version it started from, so a save made after a refresh still says which version it changes
+  const [drafts, setDrafts] = useSaved<Record<string, Draft>>("drafts", {});
+  const setDraft = (id: string, d: Draft | null | ((was: Draft | null) => Draft | null)) => setDrafts((all) => {
+    const next = typeof d === "function" ? d(all[id] ?? null) : d;
+    const out = { ...all };
+    if (next) out[id] = next; else delete out[id];
+    return out;
+  });
+  const draft = selected ? drafts[selected.id] ?? null : null;
+  const editing = draft !== null;
   const editingRef = useRef(editing);
   editingRef.current = editing;
   const [busy, setBusy] = useState(false);
@@ -64,7 +75,10 @@ export default function Starter() {
         setSelectedId(null);
       }
     } catch (e) {
-      if (n === opening.current) toast(`Could not open note: ${e instanceof Error ? e.message : String(e)}`, { error: true });
+      if (n !== opening.current) return;
+      // back on the list, holding nothing
+      setSelectedId(null);
+      toast(`Could not open note: ${e instanceof Error ? e.message : String(e)}`, { error: true });
     }
   };
 
@@ -84,10 +98,8 @@ export default function Starter() {
     const name = cleanName(rawTitle);
     if (!name) return;
     try {
-      const made: Item = await vault.createRecord({
-        path: `${FOLDER}${name}`,
-        body: `# ${name}\n\n`,
-      });
+      // its title is its name (the page's heading): the body starts empty
+      const made: Item = await vault.createRecord({ path: `${FOLDER}${name}`, body: "" });
       toast(`Added ${name}.`);
       await load();
       await openItem(made.id);
@@ -97,17 +109,17 @@ export default function Starter() {
   };
 
   const save = async () => {
-    if (!draft) return;
+    if (!selected || !draft) return;
     // the shell refuses a change that doesn't say which version it changes
     if (!draft.base) return toast("This note has no version to save against. Cancel and open it again.", { error: true });
-    const { id, body } = draft;
+    const id = selected.id, { body } = draft;
     setBusy(true);
     try {
       const updated: Item = await vault.updateRecord(id, { body, if_updated_at: draft.base });
       // the person may have gone back or opened another note while it saved: change only what is still this note
       setSelected((s) => (s?.id === id ? { ...s, ...updated, body } : s));
       // done, unless more was typed while it saved: then that stays a draft, against the version just saved
-      setDraft((d) => (d?.id !== id ? d : d.body === body ? null : { ...d, base: updated.updatedAt }));
+      setDraft(id, (d) => (!d || d.body === body ? null : { ...d, base: updated.updatedAt }));
       toast("Saved.");
       await load();
     } catch (e) {
@@ -131,8 +143,8 @@ export default function Starter() {
       <Page
         title={titleOf(selected)}
         kicker={selected.updatedAt ? `Updated ${when.short(selected.updatedAt)}` : undefined}
-        back={{ label: "Starter", onPress: close }}
-        aside={!editing ? <Button small onClick={() => setDraft({ id: selected.id, body: selected.body ?? "", base: selected.updatedAt })}>Edit</Button> : undefined}
+        back={{ label: NAME, onPress: close }}
+        aside={!editing ? <Button small onClick={() => setDraft(selected.id, { body: selected.body ?? "", base: selected.updatedAt })}>Edit</Button> : undefined}
         onRefresh={editing ? undefined : () => openItem(selected.id)}
       >
         {editing ? (
@@ -140,22 +152,24 @@ export default function Starter() {
             label="Note"
             labelled
             value={draft?.body ?? ""}
-            onChange={(body: string) => setDraft((d) => (d ? { ...d, body } : d))}
+            onChange={(body: string) => setDraft(selected.id, (d) => (d ? { ...d, body } : d))}
             onSend={save}
             send={busy ? "Saving…" : "Save"}
             busy={busy}
           >
-            <Button kind="quiet" onClick={() => setDraft(null)}>Cancel</Button>
+            <Button kind="quiet" onClick={() => setDraft(selected.id, null)}>Cancel</Button>
           </Write>
         ) : (
-          <Note body={selected.body ?? ""} path={selected.path} tags={selected.tags} fields={selected.fields} />
+          selected.body?.trim()
+            ? <Note body={selected.body} path={selected.path} tags={selected.tags} fields={selected.fields} />
+            : <Empty>Nothing written yet. Edit to start.</Empty>
         )}
       </Page>
     );
   }
 
   return (
-    <Page title="Starter" onRefresh={() => load()}>
+    <Page title={NAME} onRefresh={() => load()}>
       <Days times={(items ?? []).map((r) => r.updatedAt)} label="Activity over the last four weeks" />
       <Field label="New note" placeholder="Title" action="Add" onAction={add} />
       <Search
@@ -178,7 +192,7 @@ export default function Starter() {
           rows={items.map((r) => ({
             key: r.id,
             title: titleOf(r),
-            aside: when.short(r.updatedAt),
+            aside: drafts[r.id] ? "Unsaved edit" : when.short(r.updatedAt),
             onPress: () => void openItem(r.id),
           }))}
         />
