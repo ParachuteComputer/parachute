@@ -309,10 +309,10 @@ describe("the hub's query words, kept to the folders", () => {
       return rows.slice(q.offset, q.offset + q.limit).map((n) => (q.links ? withLinks(n) : n));
     },
   };
-  function frameOn(deps: VaultDeps, grant = resolvedOf(manifest)) {
+  function frameOn(deps: VaultDeps, grant = resolvedOf(manifest), now?: () => number) {
     const out: HostMessage[] = [];
-    const router = createRouter([createVaultModule(deps, { opens: [{ type: "recipe", path: "Recipes/" }] })]);
-    const s = createSession({ post: (m) => out.push(m), router, grant });
+    const router = createRouter([createVaultModule(deps, { opens: [{ type: "recipe", path: "Recipes/" }], now })]);
+    const s = createSession({ post: (m) => out.push(m), router, grant, now });
     let n = 0;
     const send = async (msg: Record<string, unknown>) => {
       const id = `q${++n}`;
@@ -371,6 +371,165 @@ describe("the hub's query words, kept to the folders", () => {
     expect(without.slice(0, 4)).toEqual(['["Recipes/C"]', '["Recipes/C"]', '["Recipes/C"]', '["Recipes/C"]']);
     // bodies after a search: at most 20, read one by one
     expect(JSON.parse(without[12])).toHaveLength(20);
+  });
+
+  it("a list read in pages goes on where its last page stopped: the hub read through once, the same notes as from the start", async () => {
+    for (let i = 0; i < 300; i++) notes.push({ id: `b${String(i).padStart(3, "0")}`, path: `Recipes/Bulk ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    // and one the hub counts that isn't the folder's (case-blind): it must move no page's edge
+    notes.push({ id: "b-hidden", path: "recipes/Bulk hidden", content: "", tags: [], updatedAt: "2026-11-01", createdAt: "2026-10-01T00:02:30Z" });
+    const words = "order_by=created_at&sort=asc&include_links=true&limit=50";
+    const ids = (r: { body: { id: string }[] }) => r.body.map((n) => n.id);
+    // each page from the start, in a frame of its own: what it must hand back
+    const want: string[][] = [];
+    for (let o = 0; o < 350; o += 50) want.push(ids(await frameOn(hub).get(`/api/notes?${words}&offset=${o}`)));
+    asked = [];
+    const f = frameOn(hub);
+    const got: string[][] = [];
+    for (let o = 0; o < 350; o += 50) got.push(ids(await f.get(`/api/notes?${words}&offset=${o}`)));
+    expect(got).toEqual(want);
+    expect(got.flat()).not.toContain("b-hidden");
+    // a page of links is 50 of the hub's: read through once (a few rows back each time), not again from the first
+    expect(asked.length).toBeLessThanOrEqual(8);
+    expect(asked.slice(1).every((a, i) => a.q.offset > asked[i].q.offset)).toBe(true);
+    // an offset its last page didn't end at reads from the start again
+    asked = [];
+    await f.get(`/api/notes?${words}&offset=100`);
+    expect(asked[0].q.offset).toBe(0);
+    // notes removed behind it while it reads: the next page is still the one after the last it handed back, none missed
+    const g = frameOn(hub);
+    const first = ids(await g.get(`/api/notes?${words}&offset=0`));
+    await g.get(`/api/notes?${words}&offset=50`);
+    for (const id of first.slice(10, 13)) notes.splice(notes.findIndex((n) => n.id === id), 1);
+    asked = [];
+    expect(ids(await g.get(`/api/notes?${words}&offset=100`))).toEqual(want[2]);
+    expect(asked.length).toBeGreaterThan(0);
+  });
+
+  it("a list read one note a page goes on to its end, and notes it can't see change nothing it hands back", async () => {
+    const bulk = (n: number) => { for (let i = 0; i < n; i++) notes.push({ id: `c${String(i).padStart(4, "0")}`, path: `Recipes/C ${i}`, content: "x", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}:00Z` }); };
+    const chain = async () => {
+      // a page each 200 ms: within the frame's read budget
+      let clock = Date.now();
+      const f = frameOn(hub, resolvedOf(manifest), () => (clock += 200)), got: string[] = [];
+      for (let o = 0; ; o++) {
+        const r = await f.send({ method: "GET", path: `/api/notes?order_by=created_at&sort=asc&include_content=true&limit=1&offset=${o}` });
+        expect(r.status).toBe(200);
+        if (!r.body.length) return got;
+        got.push(r.body[0].id);
+      }
+    };
+    bulk(400);
+    const plain = await chain();
+    expect(plain.filter((id) => id.startsWith("c"))).toHaveLength(400);
+    // notes the hub counts (case-blind) and the module drops, among them: the same list, to the same end
+    for (const k of [5, 12]) {
+      for (let i = 0; i < k; i++) notes.push({ id: `h${k}-${i}`, path: `recipes/Hidden ${i}`, content: "x", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T01:00:${String(i).padStart(2, "0")}Z` });
+      expect(await chain()).toEqual(plain);
+    }
+  });
+
+  it("with nothing changed, a list going on hands back just what a read from the start would, page by page", async () => {
+    // seeded: notes the hub counts (case-blind) and the module drops, in runs of any length among its own
+    let x = 7;
+    const rand = (n: number) => { x = (x * 1103515245 + 12345) % 2147483648; return x % n; };
+    const stamp = (i: number) => `2026-10-01T${String(Math.floor(i / 3600)).padStart(2, "0")}:${String(Math.floor(i / 60) % 60).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z`;
+    const cases: { runs: [number, boolean][]; words: string; limit: number }[] = [
+      // the reviewer's: 10 of its own, 1,000 it can't see, 10 more
+      { runs: [[10, true], [1000, false], [10, true]], words: "order_by=created_at&sort=asc", limit: 10 },
+    ];
+    for (let c = 0; c < 6; c++) {
+      const runs: [number, boolean][] = [];
+      for (let r = 0; r < 8; r++) runs.push([1 + rand(r % 2 ? 260 : 40), r % 2 === 0]);
+      cases.push({ runs, words: ["order_by=created_at&sort=asc", "order_by=created_at&sort=asc&include_links=true", "order_by=created_at&sort=desc&include_content=true"][c % 3], limit: c === 0 ? 1 : [7, 50][rand(2)] });
+    }
+    for (const { runs, words, limit } of cases) {
+      const base = notes.length;
+      let i = 0;
+      for (const [n, own] of runs) for (let k = 0; k < n; k++, i++) notes.push({ id: `r${String(i).padStart(5, "0")}`, path: own ? `Recipes/R ${i}` : `recipes/R ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: stamp(i) });
+      // its read budget full at each call (within a minute: the resume is kept); what it hands back is the point here
+      let clock = Date.now();
+      const f = frameOn(hub, resolvedOf(manifest), () => (clock += 11));
+      const shown = (r: { status: number; body: unknown }) => [r.status, Array.isArray(r.body) ? r.body.map((n: { id: string }) => n.id) : r.body];
+      for (let o = 0; o < i + limit && o <= 5000; o += limit) {
+        const q = `/api/notes?${words}&limit=${limit}&offset=${o}`;
+        clock += 10_000;
+        const going = await f.get(q), fresh = await frameOn(hub).get(q);
+        expect([o, ...shown(going)]).toEqual([o, ...shown(fresh)]);
+      }
+      notes.splice(base);
+    }
+  }, 60_000);
+
+  it("as many of its own notes removed behind it as it steps back: none of the rest is skipped or listed twice", async () => {
+    for (let i = 0; i < 300; i++) notes.push({ id: `v${String(i).padStart(4, "0")}`, path: `Recipes/V ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    const words = "order_by=created_at&sort=asc&include_links=true&limit=50";
+    const ids = (r: { body: { id: string }[] }) => r.body.map((n) => n.id);
+    const f = frameOn(hub), got: string[] = [];
+    got.push(...ids(await f.get(`/api/notes?${words}&offset=0`)));
+    const shown = new Set(got);
+    // five it already handed back go
+    for (const id of got.slice(0, 5)) notes.splice(notes.findIndex((n) => n.id === id), 1);
+    for (let o = 50; ; o += 50) { const page = ids(await f.get(`/api/notes?${words}&offset=${o}`)); if (!page.length) break; got.push(...page); }
+    expect(new Set(got).size).toBe(got.length);
+    // every note there now that wasn't shown already comes, in order
+    const now: string[] = [];
+    for (let o = 0; ; o += 50) { const page = ids(await frameOn(hub).get(`/api/notes?${words}&offset=${o}`)); if (!page.length) break; now.push(...page.filter((id) => !shown.has(id))); }
+    expect(got.filter((id) => !shown.has(id))).toEqual(now);
+  });
+
+  it("after a write of its own, the next page reads from the start: the note it changed comes as it is now", async () => {
+    for (let i = 0; i < 120; i++) notes.push({ id: `w${String(i).padStart(3, "0")}`, path: `Recipes/W ${i}`, content: "before", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    const words = "order_by=created_at&sort=asc&include_content=true&include_links=true&limit=10";
+    const f = frameOn(hub);
+    const first = (await f.get(`/api/notes?${words}&offset=0`)).body as { id: string }[];
+    // one the next page will hand back (its order puts the fixture's own notes first)
+    const all = (await frameOn(hub).get(`/api/notes?${words.replace("limit=10", "limit=30")}&offset=0`)).body as { id: string }[];
+    const target = all[15].id;
+    expect(first.map((n) => n.id)).not.toContain(target);
+    const done = await f.send({ method: "PATCH", path: `/api/notes/${target}`, body: JSON.stringify({ content: "after", if_updated_at: "2026-11-01" }) });
+    expect(done.status).toBe(200);
+    const next = (await f.get(`/api/notes?${words}&offset=10`)).body as { id: string; content: string }[];
+    expect(next.find((n) => n.id === target)?.content).toBe("after");
+  });
+
+  it("a write of its own while a page is still being read: that page keeps nothing for the next", async () => {
+    for (let i = 0; i < 120; i++) notes.push({ id: `y${String(i).padStart(3, "0")}`, path: `Recipes/Y ${i}`, content: "before", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    const words = "order_by=created_at&sort=asc&include_content=true&include_links=true&limit=10";
+    const all = (await frameOn(hub).get(`/api/notes?${words.replace("limit=10", "limit=30")}&offset=0`)).body as { id: string }[];
+    const target = all[15].id;
+    // a hub that reads the first list page, then holds its answer until let go
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => { release = r; });
+    let hold = true;
+    const slow: VaultDeps = { ...hub, async query(prefix, q) { const rows = await hub.query!(prefix, q); if (hold) { hold = false; await held; } return rows; } };
+    const f = frameOn(slow);
+    const first = f.get(`/api/notes?${words}&offset=0`);
+    await new Promise((r) => setTimeout(r, 5));
+    // the first page is held at the hub now: the write lands while it is being read
+    expect(hold).toBe(false);
+    expect((await f.send({ method: "PATCH", path: `/api/notes/${target}`, body: JSON.stringify({ content: "after", if_updated_at: "2026-11-01" }) })).status).toBe(200);
+    release();
+    await first;
+    const next = (await f.get(`/api/notes?${words}&offset=10`)).body as { id: string; content: string }[];
+    expect(next.find((n) => n.id === target)?.content).toBe("after");
+  });
+
+  it("a page that fails leaves the list where it was: asked again, it goes on, nothing missed", async () => {
+    for (let i = 0; i < 200; i++) notes.push({ id: `d${String(i).padStart(3, "0")}`, path: `Recipes/D ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    const words = "order_by=created_at&sort=asc&include_links=true&limit=50";
+    const ids = (r: { body: { id: string }[] }) => r.body.map((n) => n.id);
+    const want: string[][] = [];
+    for (let o = 0; o < 200; o += 50) want.push(ids(await frameOn(hub).get(`/api/notes?${words}&offset=${o}`)));
+    let fail = false;
+    const flaky: VaultDeps = { ...hub, async query(prefix, q) { if (fail) { fail = false; throw new Error("hub down"); } return hub.query!(prefix, q); } };
+    const f = frameOn(flaky);
+    expect(ids(await f.get(`/api/notes?${words}&offset=0`))).toEqual(want[0]);
+    expect(ids(await f.get(`/api/notes?${words}&offset=50`))).toEqual(want[1]);
+    fail = true;
+    expect((await f.get(`/api/notes?${words}&offset=100`)).status).toBe(502);
+    asked = [];
+    expect(ids(await f.get(`/api/notes?${words}&offset=100`))).toEqual(want[2]);
+    expect(asked[0].q.offset).toBeGreaterThan(0);
   });
 
   it("two folders: newest changed first unless asked, put together as the hub orders each", async () => {

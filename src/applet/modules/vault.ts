@@ -92,6 +92,9 @@ type AttachFromParams = { noteId: string; from: string; path: string };
 /** One refusal for a record outside the folders, one it can't find and a file not attached to it: none tells it more. */
 const notAttached = () => new ContractError(ERROR_CODES.outOfScope, "only a picture attached to a record it reads");
 type FetchParams = { method: string; path: string; headers: Record<string, string>; body: string | null };
+/** A list read in pages, kept by its words and the offset its last page ended at: where the hub was read to, the notes
+ *  it kept past that page, and every note it has seen (each is listed once). */
+type Resume = { at: number; ahead: (VaultNote & { path: string })[]; seen: Set<string>; time: number };
 
 const MAX_BODY = 512 * 1024;
 const NOTE_TTL_MS = 10_000;
@@ -113,6 +116,12 @@ const MAX_OFFSET = 5_000;
 const HUB_PAGE = 200;
 const HUB_PAGE_FULL = 50;
 const EXTRA_PAGES = 3;
+/** A list going on from where its last page stopped reads this many of the hub's rows again first. */
+const RESUME_BACK = 5;
+/** How long a list read in pages may wait between pages and still go on (a page refused for the read budget waits). */
+const RESUME_TTL_MS = 60_000;
+/** Lists going on at once, per applet. */
+const RESUMES_MAX = 8;
 /** What a list may be ordered by: when it was made or changed, or a field (never link_count: it counts links to notes
  *  outside the folders). */
 const orderable = (v: string) => v === "updated_at" || v === "created_at" || (/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(v) && v !== "link_count");
@@ -193,6 +202,11 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
   /** Each note's attachments as the hub listed them in the last 10 s: a note's pictures ask once, not once each. */
   const lists = attachmentLists((id) => deps.attachments!(id));
   const cache = new Map<string, { at: number; note: VaultNote }>();
+  /** Where each list read in pages stopped, by its words and the offset its last page ended at (one folder, no search;
+   *  the last few), kept a minute: its next page goes on from there. */
+  const resumes = new Map<string, Resume>();
+  /** Writes of its own so far: a list page that began before one keeps no resume (what it read may be older). */
+  let writes = 0;
   const remember = (key: string, note: VaultNote) => {
     cache.delete(key);
     cache.set(key, { at: now(), note });
@@ -227,6 +241,11 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
    *  the hub: the hub's folder is a case-blind string prefix (and a tag takes in its subtypes), so its limit and offset
    *  would count notes the applet never sees, and where a page ends would tell of them. It reads the hub's pages until
    *  it has offset + limit of its own (a bounded number), and is charged by what was asked, not by how many it read.
+   *  A list read in pages (one folder, no search) goes on where its last page stopped, when the next asks for the offset
+   *  that page ended at, with the same words, within a minute: the hub is read on from there (a few rows back, for a
+   *  note removed meanwhile), not again from its first row, and it is charged for the page it asked for. It reads no
+   *  further into the hub than a read from the start would, so with nothing changed it hands back just what that read
+   *  would; each note comes once. A call that fails leaves where it was for a retry.
    *  Ordering by a field takes one folder (path_prefix, or a grant of one): two folders' fields can't be put together. */
   async function hubList(q: URLSearchParams, prefixes: string[], granted: string[], limit: number, content: boolean, ctx: CallCtx, d: Reads): Promise<FetchResult> {
     if (!d.query) return fail(400, "bad_params");
@@ -259,30 +278,64 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     // a list's page with bodies or links is smaller (what the hub sends for it is bigger)
     const later = !!search && (content || links);
     const size = !later && (content || links) ? HUB_PAGE_FULL : HUB_PAGE;
-    const pages = search ? 1 : Math.ceil(want / size);
-    const seen = new Set<string>();
+    // the last page of this same list ended at this offset, a moment ago: go on from there
+    const key = prefixes.length === 1 && !search ? JSON.stringify([prefixes[0], tag, content, links, orderBy, sort, meta, d === deps.kept]) : null;
+    const slot = key !== null ? `${key}@${offset}` : null;
+    const last = slot !== null ? resumes.get(slot) : undefined;
+    const go = last && now() - last.time < RESUME_TTL_MS ? last : null;
+    /** Where `mine` starts in its own list: 0, or the offset it goes on from. */
+    const from = go ? offset : 0;
+    // charged by what was asked: one page going on
+    const pages = search ? 1 : Math.ceil((want - from) / size);
+    // never further into the hub than a read of this page from the start goes (its pages and EXTRA_PAGES more): going on
+    // hands back what that read would, no more
+    const bound = ((search ? 1 : Math.ceil(want / size)) + EXTRA_PAGES) * size;
+    // its own copy: a call that fails puts the resume back as it was, for the kit's retry
+    const seen = new Set<string>(go?.seen);
+    const writesAtStart = writes;
     const out: (VaultNote & { path: string })[] = [];
     try {
       for (const p of prefixes) {
         ctx.charge(pages);
-        const mine: (VaultNote & { path: string })[] = [];
+        // taken once charged (before anything waits, so a second call for the same page reads from the start)
+        if (go) resumes.delete(slot!);
+        const mine: (VaultNote & { path: string })[] = go ? [...go.ahead] : [];
         // a few pages more than asked, for the notes the judging drops; then what it has
         // (past EXTRA_PAGES of notes it drops ahead of the last one asked for, a page comes back short, and a search's past
         // HUB_PAGE less its limit; and a note changed
         // while it reads moves to the front, so one other may be missed: a list read in pages, as any is)
-        for (let at = 0, read = 0; mine.length < want && read < pages + EXTRA_PAGES; read++) {
+        // where the hub was read to; going on, its first read starts RESUME_BACK rows back, so up to that many notes
+        // removed behind it move none past it (each listed once; more, and as many past RESUME_BACK are missed until the
+        // list is read again, as a read from the start misses one for each note removed before its page)
+        let at = go ? go.at : 0;
+        for (let first = true; from + mine.length < want && at < bound; first = false) {
+          const asked = go && first ? Math.max(0, at - RESUME_BACK) : at;
+          const lim = Math.min(size, bound - asked);
           // a search too is asked for a whole page and cut after judging: the hub ranks it and drops offset, never limit
-          const rows = await d.query(p, { limit: size, offset: at, tag, search: search || null, content: content && !later, links: links && !later, orderBy, sort, meta });
-          at += rows.length;
+          const rows = await d.query(p, { limit: lim, offset: asked, tag, search: search || null, content: content && !later, links: links && !later, orderBy, sort, meta });
+          at = Math.max(at, asked + rows.length);
           for (const n of rows) {
             if (!n || !n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null || (tag && !(n.tags ?? []).includes(tag))) continue;
             seen.add(n.id); mine.push(n as VaultNote & { path: string });
           }
-          if (search || rows.length < size) break;
+          if (search || rows.length < lim) break;
         }
-        out.push(...mine.slice(0, want));
+        out.push(...mine.slice(0, want - from));
+        // a page that came back short: where its list stands isn't the offset the next page will ask for; that one
+        // reads from the start
+        if (key !== null && from + mine.length >= want && writes === writesAtStart) {
+          const next = `${key}@${want}`;
+          resumes.delete(next);
+          for (const [k, r] of resumes) if (now() - r.time >= RESUME_TTL_MS) resumes.delete(k);
+          resumes.set(next, { at, ahead: mine.slice(want - from), seen, time: now() });
+          while (resumes.size > RESUMES_MAX) resumes.delete(resumes.keys().next().value as string);
+        }
       }
     } catch (e) {
+      if (go && slot !== null && !resumes.has(slot) && writes === writesAtStart) {
+        resumes.set(slot, go);
+        while (resumes.size > RESUMES_MAX) resumes.delete(resumes.keys().next().value as string);
+      }
       if (e instanceof ContractError) throw e;
       // the hub refusing the words (on 0.8, a field it doesn't index): the applet's to fix, not a failure
       return (e as { status?: number })?.status === 400 ? fail(400, "bad_params") : fail(502, "failed");
@@ -294,7 +347,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       out.sort((a, b) => dir * ((a[key] ?? "").localeCompare(b[key] ?? "") || a.id.localeCompare(b.id)));
     }
     // bodies and links read one by one after a search: at most maxScan of them, as a search with bodies always was
-    let page = out.slice(offset, later ? Math.min(want, offset + LIMITS.maxScan) : want);
+    let page = out.slice(offset - from, (later ? Math.min(want, offset + LIMITS.maxScan) : want) - from);
     if (later) {
       const full: (VaultNote & { path: string })[] = [];
       for (const n of page) {
@@ -428,7 +481,8 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     return json(200, "OK", rows.slice(0, limit).map((r) => ({ id: r.id, path: r.path, updatedAt: r.updatedAt ?? null })));
   }
 
-  const forget = (...refs: (string | null | undefined)[]) => { for (const r of refs) if (r) cache.delete(r); };
+  // a write of its own: the notes it keeps for its lists going on may be older now, so those lists read from the start
+  const forget = (...refs: (string | null | undefined)[]) => { for (const r of refs) if (r) cache.delete(r); resumes.clear(); writes++; };
 
   /** POST /api/notes {path, content, types?, tags?, metadata?}: a new record inside a folder the grant lets it add to. */
   async function create(body: string | null, scopes: Resolved, ctx: CallCtx): Promise<FetchResult> {
