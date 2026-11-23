@@ -25,7 +25,7 @@ cp -R "$mnt/Parachute.app" /Applications/
 xattr -w com.apple.quarantine "0081;$(printf %x "$(date +%s)");Safari;" "$app"
 
 say "signature"
-codesign -dv "$app" 2>&1 | tee "$out/codesign.txt"
+codesign -dvv "$app" 2>&1 | tee "$out/codesign.txt"  # -vv: the Authority lines too
 codesign --verify --deep --strict "$app" || fail "signature doesn't verify"
 if [ -n "${PARACHUTE_MAC_SIGNED:-}" ]; then
   # signed and notarised (mac.yml): Gatekeeper takes the downloaded app as it is

@@ -13,10 +13,13 @@ codesign --verify --deep --strict "$app" || fail "the app's signature doesn't ve
 sig=$(codesign -dv --verbose=4 "$app" 2>&1)
 grep -q "Authority=Developer ID Application" <<<"$sig" || fail "the app isn't signed with a Developer ID certificate"
 grep -Eq "flags=.*runtime" <<<"$sig" || fail "the app isn't signed with the hardened runtime"
+grep -q "^Timestamp=" <<<"$sig" || fail "the app's signature has no secure timestamp (notarisation refuses it)"
 xcrun stapler validate "$app" || fail "the app has no notarisation ticket stapled"
 
 echo "== notarise the dmg"
-codesign -dv "$dmg" 2>&1 | grep -q "Authority=Developer ID Application" || fail "the dmg isn't signed with the Developer ID certificate"
+dsig=$(codesign -dv --verbose=4 "$dmg" 2>&1)
+grep -q "Authority=Developer ID Application" <<<"$dsig" || fail "the dmg isn't signed with the Developer ID certificate"
+grep -q "^Timestamp=" <<<"$dsig" || fail "the dmg's signature has no secure timestamp"
 result=$(xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" \
   --wait --timeout 45m --output-format json)
 id=$(node -p 'JSON.parse(process.argv[1]).id' "$result") status=$(node -p 'JSON.parse(process.argv[1]).status' "$result")
