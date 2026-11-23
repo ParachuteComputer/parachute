@@ -33,7 +33,7 @@ import { homeVault } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
 import type { Levels } from "./levels";
-import { BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, followed, isAppPlace, newerBundle, NEWCOMER_BUNDLE, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
+import { BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, defaultBundles, followed, isAppPlace, newerBundle, NEWCOMER_BUNDLE, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -407,6 +407,12 @@ async function readBundleRecords(home: VaultRecord): Promise<RawBundle[]> {
     }
   }
   return out;
+}
+/** The person's own bundle records in a vault that isn't the home (Settings → Your bundle offers them: choosing one makes
+ *  that vault the home). Read as the home's are, but for following someone else's: a followed one is listed as written. */
+export async function bundlesIn(rec: VaultRecord): Promise<Bundle[]> {
+  const shipped = new Set(defaultBundles().map((d) => d.id));
+  return (await bundleRows(keptClientFor(rec))).map(({ row, body }) => bundleRecordOf(body, row.path ?? null, row.id)).filter((b): b is Bundle => !!b && !shipped.has(b.id));
 }
 const parseBundles = (raw: readonly RawBundle[]): Bundle[] => bundlesFrom(raw.map((r) => { const a = bundleRecordOf(r.app, r.path, r.noteId); return a && r.hubOf ? { ...a, hubOf: r.hubOf } : a; }).filter((a): a is Bundle => !!a));
 

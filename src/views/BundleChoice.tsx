@@ -3,12 +3,13 @@
 // of theirs opens the same one; their agent can change that note too (`bundle` and `app` alike until 2026-12-20).
 // Under it, what the open bundle opens on (its `start`): the list, or one of the applets on its bar. A tap here is the
 // person's choice on this device, as the bar's long-press "Open on start" is (shell/start.ts).
-import { useState, type ChangeEvent } from "react";
-import { chooseBundle, effective, readSettings, setStart, useSettings, type Pin } from "../shell/homeSettings";
+import { useEffect, useState, type ChangeEvent } from "react";
+import { bundlesIn, chooseBundle, effective, readSettings, setStart, useSettings, type Pin } from "../shell/homeSettings";
 import { chooseStart, forgetStart } from "../shell/start";
-import { DEFAULT_BUNDLES } from "../shell/bundles";
+import { barNames, DEFAULT_BUNDLES, type Bundle } from "../shell/bundles";
 import { homeVault, setHome } from "../shell/frameSource";
 import { useVaults } from "../vault/hooks";
+import type { VaultRecord } from "../vault/store";
 import { useWhose } from "../vault/whose";
 import { siteOf } from "../vault/site";
 
@@ -24,7 +25,15 @@ export default function BundleChoice() {
   const [error, setError] = useState("");
   // the choice shows at once, while it is written
   const [choosing, setChoosing] = useState<string | null>(null);
+  // the bundles kept in the person's other vaults here (an older install's home, say): choosing one makes its vault home
+  const others = useOtherBundles(mine.filter((v) => v.key !== home?.key));
   if (!home) return null;
+  const pickThere = (v: VaultRecord, id: string) => {
+    if (busy) return;
+    setBusy(true); setError("");
+    setHome(v.key);
+    readSettings().then(() => chooseBundle(id)).then(() => setBusy(false), (e: unknown) => { setError(e instanceof Error ? e.message : "That couldn't be saved."); setBusy(false); });
+  };
   const pick = (id: string) => {
     if (id === bundle.id || busy) return;
     setBusy(true); setError("");
@@ -53,10 +62,13 @@ export default function BundleChoice() {
       <fieldset className="plain" disabled={busy}>
         <legend className="sr-only">Which bundle opens</legend>
         {order.map((a) => (
-          <label key={a.id} className="line"><span><input type="radio" name="bundle" checked={a.id === bundle.id} onChange={() => pick(a.id)} /> <span aria-hidden="true">{a.glyph}</span> <b>{a.name}</b>{a.note ? <>: {a.note}</> : null}{a.live ? <span className="quiet"> · from {siteOf(a.live.hub)}</span> : null}</span></label>
+          <label key={a.id} className="line"><span><input type="radio" name="bundle" checked={a.id === bundle.id} onChange={() => pick(a.id)} /> <span aria-hidden="true">{a.glyph}</span> <b>{a.name}</b>{a.note ? <>: {a.note}.</> : "."} {onBar(a)}{a.live ? <span className="quiet"> · from {siteOf(a.live.hub)}</span> : null}</span></label>
+        ))}
+        {others.map(({ v, b }) => (
+          <label key={`${v.key} ${b.id}`} className="line"><span><input type="radio" name="bundle" checked={false} onChange={() => pickThere(v, b.id)} /> <span aria-hidden="true">{b.glyph}</span> <b>{b.name}</b>, in {v.vault}. {onBar(b)}</span></label>
         ))}
       </fieldset>
-      <p className="quiet small">Which applets this device shows, its bar and its home. Kept in {home.vault} too, so a new device opens the same one.</p>
+      <p className="quiet small">Which applets this device shows, its bar and its home. Kept in {home.vault} too, so a new device opens the same one.{others.length ? " Choosing a bundle kept in another vault makes that vault your home." : ""}</p>
       {/* someone else's bundle: its first screen is theirs, as its bar is */}
       {!bundle.live && <fieldset className="plain" disabled={busy}>
         <legend className="settings-sub">Opens on</legend>
@@ -79,3 +91,18 @@ export default function BundleChoice() {
   );
 }
 const rank = (id: string) => { const i = DEFAULT_BUNDLES.findIndex((r) => r.id === id); return i < 0 ? DEFAULT_BUNDLES.length : i; };
+
+/** One line on what a bundle puts on the bar. */
+const onBar = (b: Bundle) => `On the bar: ${barNames(b).join(", ")}.`;
+
+/** The person's bundle records in these vaults, read when Settings shows (a vault that can't be read offers none). */
+function useOtherBundles(vaults: readonly VaultRecord[]): { v: VaultRecord; b: Bundle }[] {
+  const [found, setFound] = useState<{ v: VaultRecord; b: Bundle }[]>([]);
+  const keys = vaults.map((v) => v.key).join();
+  useEffect(() => {
+    let on = true;
+    void Promise.all(vaults.map((v) => bundlesIn(v).then((bs) => bs.map((b) => ({ v, b })), () => []))).then((all) => { if (on) setFound(all.flat()); });
+    return () => { on = false; };
+  }, [keys]); // eslint-disable-line react-hooks/exhaustive-deps
+  return found;
+}
