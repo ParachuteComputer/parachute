@@ -84,7 +84,8 @@ div.pa-row { cursor: default; }
 .pa-unseen { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .pa-row[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; background: var(--tint); }
 .pa-badge { margin-left: 8px; padding: 0 7px; border: 1.5px solid var(--text); border-radius: 999px; font: 600 var(--fs-label) var(--sans); vertical-align: .15em; }
-.pa-row-under { grid-column: 1 / -1; font-size: var(--fs-small); color: var(--accent); }
+/* what wants the person: in the coral of the next thing, as Home's "Wants you" (the accent is for links) */
+.pa-row-under { grid-column: 1 / -1; font-size: var(--fs-small); color: var(--primary, var(--accent)); }
 .pa-row:not(:has(.pa-row-mark)) .pa-row-under { grid-column: 1 / -1; }
 .pa-more { display: block; margin: var(--gap) auto 0; padding: 5px 16px; border: var(--button-line); border-radius: var(--radius-button); background: var(--button-fill);
   color: var(--text); font: var(--fs-small) var(--sans); cursor: pointer; }
@@ -306,8 +307,8 @@ select.pa-finput { appearance: auto; }
   background: linear-gradient(to bottom, var(--sky-top) 0, var(--sky-mid) 55%, var(--sky-foot) 82%, var(--bg) 100%); }
 @media (min-width: 900px) { .pa-sky { height: min(380px, 48%); } }
 /* a snap point per spread, and every later page's running head: the place's name over a thin strip of the sky */
-.pa-mark { position: absolute; top: 0; height: 1px; pointer-events: none; }
-.pa-mark.pa-snap { scroll-snap-align: start; }
+.pa-leaf { position: absolute; top: 0; height: 1px; pointer-events: none; }
+.pa-leaf.pa-snap { scroll-snap-align: start; }
 .pa-runhead { box-sizing: border-box; height: 32px; padding: 9px 20px 0; border-top: 4px solid var(--sky-top); color: var(--muted);
   font: var(--title-weight) var(--fs-small)/1.2 var(--display, var(--serif)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pa-dock { flex: none; box-sizing: border-box; width: 100%; max-width: 760px; margin: 0 auto; padding: 8px var(--pad); border-top: var(--line-row); }
@@ -331,13 +332,13 @@ select.pa-finput { appearance: auto; }
 :root[data-sized] .pa-page.pa-paged { display: block; height: auto; }
 :root[data-sized] .pa-book { overflow: visible; width: auto !important; }
 :root[data-sized] .pa-flow { height: auto; column-width: auto !important; column-count: 1 !important; width: auto !important; }
-:root[data-sized] :is(.pa-sky, .pa-mark, .pa-pageline) { display: none; }
+:root[data-sized] :is(.pa-sky, .pa-leaf, .pa-pageline) { display: none; }
 @media print {
   :root:has(.pa-paged), :root:has(.pa-paged) body { height: auto; overflow: visible; }
   .pa-page.pa-paged { display: block; height: auto; overflow: visible; }
   .pa-book { overflow: visible; width: auto !important; }
   .pa-flow { height: auto; column-width: auto !important; column-count: 1 !important; width: auto !important; }
-  :is(.pa-sky, .pa-mark, .pa-pageline, .pa-dock) { display: none; }
+  :is(.pa-sky, .pa-leaf, .pa-pageline, .pa-dock) { display: none; }
 }
 }
 @layer parachute.parts {
