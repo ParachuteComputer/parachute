@@ -292,10 +292,18 @@ describe("the hub's query words, kept to the folders", () => {
   const hub: VaultDeps = {
     ...vault,
     async getNote(ref, o) { const n = await vault.getNote(ref); return o?.links ? withLinks(n) : n; },
-    // a hub's answer: path_prefix case-blind, as core's lower() is
+    // a hub's answer as core gives it: path_prefix case-blind (its lower()), meta[f][gte] and meta[f] filters, ordered by
+    // a field or a time, then offset and limit over all of that
     async query(prefix, q) {
       asked.push({ prefix, q });
-      const rows = notes.filter((n) => (n.path ?? "").toLowerCase().startsWith(prefix.toLowerCase()) && (!q.tag || (n.tags ?? []).includes(q.tag)));
+      const field = (n: VaultNote, f: string) => (n.metadata ?? {})[f] as number | string | undefined;
+      let rows = notes.filter((n) => (n.path ?? "").toLowerCase().startsWith(prefix.toLowerCase()) && (!q.tag || (n.tags ?? []).includes(q.tag)));
+      for (const [k, v] of q.meta) {
+        const m = /^meta\[(\w+)\](?:\[(\w+)\])?$/.exec(k)!;
+        rows = rows.filter((n) => m[2] === "gte" ? Number(field(n, m[1])) >= Number(v) : String(field(n, m[1])) === v);
+      }
+      const key = (n: VaultNote) => q.orderBy === "updated_at" ? n.updatedAt ?? "" : q.orderBy === "created_at" ? n.createdAt ?? "" : field(n, q.orderBy ?? "") ?? "";
+      rows = [...rows].sort((a, b) => { const x = key(a), y = key(b); const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y)); return (q.sort === "desc" ? -c : c) || a.id.localeCompare(b.id); });
       return rows.slice(q.offset, q.offset + q.limit).map((n) => (q.links ? withLinks(n) : n));
     },
   };
@@ -328,11 +336,44 @@ describe("the hub's query words, kept to the folders", () => {
     expect(r.status).toBe(200);
     expect(asked).toHaveLength(1);
     expect(asked[0].prefix).toBe("Recipes/");
-    expect(asked[0].q).toMatchObject({ orderBy: "serves", sort: "asc", offset: 1, limit: 10, meta: [["meta[serves][gte]", "2"], ["meta[course]", "soup"]] });
+    // the hub's page is read from the start: the module cuts offset and limit itself, after judging
+    expect(asked[0].q).toMatchObject({ orderBy: "serves", sort: "asc", offset: 0, meta: [["meta[serves][gte]", "2"], ["meta[course]", "soup"]] });
     // the hub (case-blind) answered recipes/Hidden too: not in the folder, so not shown
     const all = await f.get("/api/notes?sort=desc");
     expect(all.body.map((n: { path: string }) => n.path)).not.toContain("recipes/Hidden");
     expect(all.body.map((n: { path: string }) => n.path)).toEqual(expect.arrayContaining(["Recipes/Toast", "Recipes/Soup"]));
+  });
+
+  it("pages only its own notes: a note outside the folders the hub counts never moves where a page starts or ends", async () => {
+    notes.push(
+      { id: "w1", path: "Recipes/A", content: "", tags: [], metadata: { cost: 100 }, updatedAt: "2026-11-07" },
+      { id: "w2", path: "Recipes/B", content: "", tags: [], metadata: { cost: 300 }, updatedAt: "2026-11-08" },
+      { id: "w3", path: "Recipes/C", content: "", tags: [], metadata: { cost: 900 }, updatedAt: "2026-11-09" },
+    );
+    const hidden: VaultNote = { id: "w9", path: "recipes/Boss", content: "", tags: [], metadata: { cost: 777 }, updatedAt: "2026-11-10" };
+    const pages = async () => {
+      const f = frameOn(hub), said: string[] = [];
+      for (const x of [301, 600, 777, 778]) said.push(JSON.stringify((await f.get(`/api/notes?order_by=cost&sort=asc&limit=1&meta[cost][gte]=${x}`)).body.map((n: { path: string }) => n.path)));
+      for (const o of [0, 1, 2, 3]) said.push(JSON.stringify((await f.get(`/api/notes?order_by=cost&sort=asc&limit=1&offset=${o}&meta[cost][gte]=1`)).body.map((n: { path: string }) => n.path)));
+      return said;
+    };
+    const without = await pages();
+    notes.push(hidden);
+    expect(await pages()).toEqual(without);
+    expect(without.slice(0, 4)).toEqual(['["Recipes/C"]', '["Recipes/C"]', '["Recipes/C"]', '["Recipes/C"]']);
+  });
+
+  it("two folders: newest changed first unless asked, put together as the hub orders each", async () => {
+    const two = parseManifest({ ...RECIPES, access: [{ vault: "here", allow: [{ path: "Recipes/", verbs: ["read"] }, { path: "Soups/", verbs: ["read"] }] }] });
+    if (!two.ok) throw new Error(two.error);
+    notes.push({ id: "s1", path: "Soups/Leek", content: "", tags: [], updatedAt: "2026-11-20", createdAt: "2026-10-01" }, { id: "s2", path: "Soups/Old", content: "", tags: [], updatedAt: "2026-10-02", createdAt: "2026-10-02" });
+    const f = frameOn(hub, resolvedOf(two.manifest));
+    const paths = async (q: string) => (await f.get(`/api/notes?${q}`)).body.map((n: { path: string }) => n.path);
+    expect(await paths("include_links=true&limit=2")).toEqual(["Soups/Leek", "Recipes/Soup"]);
+    expect(await paths("order_by=updated_at&sort=asc&limit=2")).toEqual(["Soups/Old", "Recipes/Tagged"]);
+    expect(await paths("order_by=updated_at&sort=desc&offset=1&limit=1")).toEqual(["Recipes/Soup"]);
+    // a field's order can't be put together across two folders
+    expect((await f.get("/api/notes?order_by=serves")).status).toBe(400);
   });
 
   it("refuses the words that would reach past the folder or that it can't put together", async () => {
@@ -344,6 +385,10 @@ describe("the hub's query words, kept to the folders", () => {
     expect((await f.get("/api/notes?offset=-1")).status).toBe(400);
     expect((await f.get("/api/notes?meta[bad key]=1")).status).toBe(400);
     expect((await f.get("/api/notes?meta[serves][regex]=1")).status).toBe(400);
+    // the hub's search pages nothing: offset or an order with it would answer page one again and again
+    expect((await f.get("/api/notes?search=soup&offset=50")).status).toBe(400);
+    expect((await f.get("/api/notes?search=soup&order_by=updated_at")).status).toBe(400);
+    expect((await f.get("/api/notes?offset=5001")).status).toBe(400);
     expect(asked).toHaveLength(0);
     // a host with no query (an older one) refuses them rather than ignoring them
     expect((await frameOn(vault).get("/api/notes?order_by=updated_at")).status).toBe(400);
@@ -392,5 +437,7 @@ describe("the hub's query words, kept to the folders", () => {
     expect((await f.send({ method: "POST", path: "/api/notes", bytes: new ArrayBuffer(LIMITS.maxWriteBytes + 1) })).status).toBe(413);
     expect((await f.send({ method: "POST", path: "/api/notes", bytes: new Uint8Array([0xff, 0xfe]).buffer })).status).toBe(400);
     expect(notes.some((n) => n.path === "Recipes/X")).toBe(false);
+    // only a write carries a body
+    expect((await f.send({ method: "GET", path: "/api/notes", bytes: bytes({}) })).status).toBe(400);
   });
 });

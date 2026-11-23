@@ -309,8 +309,9 @@ export const FRAME_KIT = String.raw`(function () {
       if (freshCbs.length && String(init.method || "GET").toUpperCase() === "GET") headers["x-parachute-redraws"] = "1";
       var id = "f" + (++n);
       var msg = { pfr: 1, channel: "vault", id: id, method: String(init.method || "GET"), path: u.pathname + u.search, headers: headers, body: typeof init.body === "string" ? init.body : null };
-      // a long body (a long note written) goes as bytes beside the request, past the 8 KB a request carries
-      if (msg.body !== null && msg.body.length > 6000) { msg.bytes = new TextEncoder().encode(msg.body).buffer; msg.body = null; }
+      // a long body (a long note written) goes as bytes beside the request, past the 8 KB a request carries (its path and
+      // headers take some of those)
+      if (msg.body !== null && msg.body.length > 4000) { msg.bytes = new TextEncoder().encode(msg.body).buffer; msg.body = null; }
       send(fetches, id, msg, 20000, res, rej, false);
     });
   }

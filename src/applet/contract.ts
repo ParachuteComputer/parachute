@@ -113,7 +113,8 @@ export function parseEnvelope(raw: unknown): Envelope {
   // (an ArrayBuffer by its tag, as vaults.ts reads one: one made in the frame's realm is still one)
   const pfrBytes = "pfr" in raw && raw.bytes !== undefined ? raw.bytes : undefined;
   const isBuffer = Object.prototype.toString.call(pfrBytes) === "[object ArrayBuffer]";
-  if (pfrBytes !== undefined && (!isBuffer || raw.body !== null)) return bad(ERROR_CODES.badRequest);
+  // only a write carries a body
+  if (pfrBytes !== undefined && (!isBuffer || raw.body !== null || (raw.method !== "POST" && raw.method !== "PATCH"))) return bad(ERROR_CODES.badRequest);
   if (isBuffer && (pfrBytes as ArrayBuffer).byteLength > LIMITS.maxWriteBytes) return bad(ERROR_CODES.tooLarge);
   const measured = bytes ? { ...raw, params: { ...params, bytes: null } } : pfrBytes !== undefined ? { ...raw, bytes: null } : raw;
   if (!withinBudget(measured, { left: LIMITS.maxRequestBytes })) return bad(ERROR_CODES.tooLarge);

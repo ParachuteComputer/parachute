@@ -88,12 +88,18 @@ const NOTE_PARAMS = ["include_content", "include_links"];
 const HUB_WORDS = ["order_by", "sort", "offset", "include_links"];
 /** `meta[field]` or `meta[field][op]` (`[in][]`, `[not_in][]` for a list): the hub's field filter. */
 const META = /^meta\[([A-Za-z_][A-Za-z0-9_-]{0,63})\](?:\[(eq|ne|gt|gte|lt|lte|exists)\]|\[(in|not_in)\]\[\])?$/;
-const MAX_META = 10;
-const MAX_OFFSET = 100_000;
+/** meta[...] values (a list's each value is one) */
+const MAX_META = 40;
+/** How far a list may page: the module reads the hub's pages up to offset + limit (see hubList). */
+const MAX_OFFSET = 5_000;
+/** The hub's page the module reads at a time, and how many more than asked it may read for the notes it drops. */
+const HUB_PAGE = 200;
+const EXTRA_PAGES = 3;
 /** What a list may be ordered by: when it was made or changed, or a field (never link_count: it counts links to notes
  *  outside the folders). */
 const orderable = (v: string) => v === "updated_at" || v === "created_at" || (/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(v) && v !== "link_count");
-/** The tags a folder's notes carry are read this many at a time, and at most this many per folder. */
+/** The tags a folder's notes carry are read this many at a time, and at most this many per folder (past that, the counts
+ *  are of the first 5,000). */
 const TAG_PAGE = 500;
 const TAG_MAX = 5_000;
 const VAULT_PARAMS = ["include_stats"];
@@ -197,13 +203,16 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
   }
 
   /** A list in the hub's own words (order_by, sort, offset, meta[...], include_links): asked of the hub one folder at a
-   *  time with the folder pinned, each note judged again on its own path. Paging or ordering by a field takes one
-   *  folder (path_prefix, or a grant of one): pages of two folders can't be put together. */
+   *  time with the folder pinned, each note judged again on its own path. The page is cut after that judging, never by
+   *  the hub: the hub's folder is a case-blind string prefix (and a tag takes in its subtypes), so its limit and offset
+   *  would count notes the applet never sees, and where a page ends would tell of them. It reads the hub's pages until
+   *  it has offset + limit of its own (a bounded number), and is charged by what was asked, not by how many it read.
+   *  Ordering by a field takes one folder (path_prefix, or a grant of one): two folders' fields can't be put together. */
   async function hubList(q: URLSearchParams, prefixes: string[], granted: string[], limit: number, content: boolean, ctx: CallCtx, d: Reads): Promise<FetchResult> {
     if (!d.query) return fail(400, "bad_params");
-    const orderBy = q.get("order_by"), sort = q.get("sort"), rawOffset = q.get("offset"), rawLinks = q.get("include_links");
-    if (orderBy !== null && !orderable(orderBy)) return fail(400, "bad_params");
-    if (sort !== null && sort !== "asc" && sort !== "desc") return fail(400, "bad_params");
+    const rawOrder = q.get("order_by"), rawSort = q.get("sort"), rawOffset = q.get("offset"), rawLinks = q.get("include_links");
+    if (rawOrder !== null && !orderable(rawOrder)) return fail(400, "bad_params");
+    if (rawSort !== null && rawSort !== "asc" && rawSort !== "desc") return fail(400, "bad_params");
     if (rawOffset !== null && (!/^\d{1,9}$/.test(rawOffset) || Number(rawOffset) > MAX_OFFSET)) return fail(400, "bad_params");
     if (rawLinks !== null && rawLinks !== "true" && rawLinks !== "false") return fail(400, "bad_params");
     const offset = rawOffset === null ? 0 : Number(rawOffset);
@@ -216,32 +225,48 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     if (meta.length > MAX_META) return fail(400, "bad_params");
     const search = q.get("search");
     if (search !== null && search.length > 500) return fail(400, "bad_params");
-    const byField = orderBy !== null && orderBy !== "updated_at" && orderBy !== "created_at";
-    if (prefixes.length > 1 && (offset > 0 || byField)) return fail(400, "bad_params");
+    // the hub's search ranks by itself and pages nothing (it drops offset and order_by): one page, as asked
+    if (search && (rawOrder !== null || rawSort !== null || offset > 0)) return fail(400, "bad_params");
+    // no order named: newest changed first, as every other list here
+    const orderBy = rawOrder ?? "updated_at";
+    const sort: "asc" | "desc" = rawSort === "desc" || (rawSort === null && rawOrder === null) ? "desc" : "asc";
+    const byField = orderBy !== "updated_at" && orderBy !== "created_at";
+    if (prefixes.length > 1 && byField) return fail(400, "bad_params");
     const links = rawLinks === "true";
-    const query: FolderQuery = { limit, offset, tag: q.get("tag")?.replace(/^#/, "") || null, search: search || null, content, links, orderBy, sort: sort as FolderQuery["sort"], meta };
+    const tag = q.get("tag")?.replace(/^#/, "") || null;
+    const want = offset + limit;
+    const pages = search ? 1 : Math.ceil(want / HUB_PAGE);
     const seen = new Set<string>();
     const out: (VaultNote & { path: string })[] = [];
     try {
       for (const p of prefixes) {
-        ctx.charge(1);
-        for (const n of await d.query(p, query)) {
-          if (!n || !n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null || (query.tag && !(n.tags ?? []).includes(query.tag))) continue;
-          seen.add(n.id); out.push(n as VaultNote & { path: string });
+        ctx.charge(pages);
+        const mine: (VaultNote & { path: string })[] = [];
+        // a few pages more than asked, for the notes the judging drops; then what it has
+        for (let at = 0, read = 0; mine.length < want && read < pages + EXTRA_PAGES; read++) {
+          const size = search ? limit : HUB_PAGE;
+          const rows = await d.query(p, { limit: size, offset: at, tag, search: search || null, content, links, orderBy, sort, meta });
+          at += rows.length;
+          for (const n of rows) {
+            if (!n || !n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null || (tag && !(n.tags ?? []).includes(tag))) continue;
+            seen.add(n.id); mine.push(n as VaultNote & { path: string });
+          }
+          if (search || rows.length < size) break;
         }
+        out.push(...mine.slice(0, want));
       }
     } catch (e) {
       if (e instanceof ContractError) throw e;
-      // the hub refusing the words (a field it can't order by on 0.8): the applet's to fix, not a failure
+      // the hub refusing the words (on 0.8, a field it doesn't index): the applet's to fix, not a failure
       return (e as { status?: number })?.status === 400 ? fail(400, "bad_params") : fail(502, "failed");
     }
-    // two folders, one order: put together as the hub ordered each (by when made or changed)
+    // two folders, one order: put together as the hub ordered each (by when made or changed), ties as the hub breaks them
     if (prefixes.length > 1) {
       const key = orderBy === "created_at" ? "createdAt" : "updatedAt";
-      const dir = sort === "asc" ? 1 : -1;
-      out.sort((a, b) => dir * (a[key] ?? "").localeCompare(b[key] ?? "") || a.path.localeCompare(b.path));
+      const dir = sort === "desc" ? -1 : 1;
+      out.sort((a, b) => dir * ((a[key] ?? "").localeCompare(b[key] ?? "") || (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id)));
     }
-    return json(200, "OK", out.slice(0, limit).map((n) => publicNote(n, content, links ? granted : null)));
+    return json(200, "OK", out.slice(offset, want).map((n) => publicNote(n, content, links ? granted : null)));
   }
 
   /** GET /api/tags: the tags on the notes in its folders, each with how many of those notes carry it. Never the vault's
@@ -253,8 +278,9 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     const seen = new Set<string>();
     try {
       for (const p of granted) {
+        // charged once a folder, whatever it holds: how many pages it took mustn't tell of notes it then drops
+        ctx.charge(1);
         for (let offset = 0; offset < TAG_MAX; offset += TAG_PAGE) {
-          ctx.charge(1);
           const page = await d.query(p, { limit: TAG_PAGE, offset, tag: null, search: null, content: false, links: false, orderBy: "updated_at", sort: "asc", meta: [] });
           for (const n of page) {
             if (!n || !n.path || seen.has(n.id) || !inScope(granted, n.path) || codeKindOf(n) !== null) continue;
