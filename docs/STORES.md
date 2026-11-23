@@ -48,7 +48,8 @@ testing doesn't count toward it. An organisation account (D-U-N-S number) doesn'
 - **Signing: Play App Signing with Google's key** (the default; Google now makes a quantum-ready hybrid key). We keep
   only an **upload key**, new for Play: Uni makes it on aero, keeps it at `~/.config/parachute-play-upload/`, and sets
   the four repository secrets `PLAY_UPLOAD_KEYSTORE_BASE64`, `PLAY_UPLOAD_KEYSTORE_PASSWORD`, `PLAY_UPLOAD_KEY_ALIAS`,
-  `PLAY_UPLOAD_KEY_PASSWORD` (the same shape as the play-test key's). A lost upload key can be reset by Google.
+  `PLAY_UPLOAD_KEY_PASSWORD` (the same shape as the play-test key's; no backslash in the passwords). Pull requests never
+  get them: they build with a throwaway key. A lost upload key can be reset by Google.
 
   The cost: a Play install and an APK from aero have different signers, so one can't update the other. Moving between
   them is a reinstall (the key comes back by pairing). The other way, giving Play a copy of the play-test key, keeps

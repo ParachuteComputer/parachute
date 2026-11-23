@@ -1,8 +1,9 @@
 name: Play
 # The app bundle for Google Play (scripts/android-build.sh --play, docs/STORES.md): arm64, no in-app update (no right to
 # install apps, no update feed), signed with the upload key from four repository secrets: PLAY_UPLOAD_KEYSTORE_BASE64,
-# PLAY_UPLOAD_KEYSTORE_PASSWORD, PLAY_UPLOAD_KEY_ALIAS, PLAY_UPLOAD_KEY_PASSWORD. Without them it signs with a key made
-# for this run, and the file name says so: the build and its checks still run, but Play wouldn't take that file. The
+# PLAY_UPLOAD_KEYSTORE_PASSWORD, PLAY_UPLOAD_KEY_ALIAS, PLAY_UPLOAD_KEY_PASSWORD (no backslash in the passwords: the
+# properties file reads it as an escape). Without them, and on every pull request, it signs with a key made for this run,
+# and the file name says so: the build and its checks still run, but Play wouldn't take that file. The
 # bundle is this run's artifact `play-bundle`; nothing here uploads it to Play. A change to the Android build runs it; a
 # release tag runs it through release.yml.
 permissions:
@@ -61,12 +62,13 @@ jobs:
         with:
           workspaces: src-tauri
           key: android
+      # never on a pull request: its code is unreviewed, and a bundle signed with the upload key is one Play would take
       - name: The upload key
         env:
-          KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
+          KEYSTORE_BASE64: ${{ github.event_name != 'pull_request' && secrets.PLAY_UPLOAD_KEYSTORE_BASE64 || '' }}
+          KEYSTORE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD || '' }}
+          KEY_ALIAS: ${{ github.event_name != 'pull_request' && secrets.PLAY_UPLOAD_KEY_ALIAS || '' }}
+          KEY_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.PLAY_UPLOAD_KEY_PASSWORD || '' }}
         run: |
           dir="$RUNNER_TEMP/upload" && mkdir -p "$dir" && chmod 700 "$dir"
           if [ -n "$KEYSTORE_BASE64" ]; then
