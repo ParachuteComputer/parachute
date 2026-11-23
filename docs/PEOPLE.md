@@ -109,3 +109,19 @@ import never misses a match.
 - **Export:** vCard 4.0 (CRLF, 75-octet folding, escaped values) for everyone, the filtered list, or one person: phones,
   emails, address, birthday, links, `groups` as `CATEGORIES`, `tags` as `X-PARACHUTE-TAGS`, `summary` as `NOTE`, and
   the photo embedded. Importing an export back changes nothing.
+
+## On the phone (CardDAV)
+
+`services/carddav` serves `People/` to a phone as one CardDAV address book (DAVx5 on Android syncs it into Contacts),
+read-write, straight from the vault: the vault stays the only copy. Only card facts cross (phones, emails, address,
+birthday, links, groups, summary, photo); the body and every other field never leave. A phone edit replaces the card
+facts and keeps the rest; a name changed on the phone doesn't rename the note. It adds four fields to a record:
+
+| Field | Type | Notes |
+|---|---|---|
+| `uid` | `string` | The card's UID, for a person made on the phone (one made in the vault uses its record id) |
+| `href` | `string` | The card's file name on the phone, kept only when it isn't the UID |
+| `vcard_extra` | `string[]` | Raw vCard lines the phone sent that People has no field for (`ORG`, `TITLE`, `NICKNAME`, `X-…`), sent back as they came |
+| `on_phone` | `boolean` | `false` keeps the person off the phone (deleting a contact on the phone sets it); remove it or set `true` to bring them back |
+
+How to run it, what maps to what and why: [services/carddav/README.md](../services/carddav/README.md).

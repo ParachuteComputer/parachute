@@ -14,6 +14,8 @@ whether I install the apk/dmg before or after you do the home thing".
      narrow it, and that leaves a smaller app.
    - The push gateway (`services/push-gateway`): unknown fields in a registration, an unregistration or a set of counts
      are left out. Only the fields it read are kept.
+   - The People CardDAV bridge (`services/carddav`): a record field it doesn't know never reaches a card (an
+     allowlist), and a phone edit leaves it as it is.
    - The kit: a part or call the app doesn't have reads as `undefined`. An applet can fall back for it
      (docs/WRITE-AN-APPLET.md "Older apps"), as #60 did for `Link`.
 2. **What can't be left out is declared.** Each build has a level (`APP_LEVEL` in `src/applet/level.ts`; this one is 7: level 3 brought the kit's `Table` and `Fields` and the

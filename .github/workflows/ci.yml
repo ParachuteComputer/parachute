@@ -39,6 +39,8 @@ jobs:
         run: npm test
       - name: Push gateway (services/push-gateway)
         run: cd services/push-gateway && npm ci && npm run typecheck && npm test
+      - name: People CardDAV bridge (services/carddav)
+        run: cd services/carddav && npm ci && npm run typecheck && npm test
       # the app's bundle has no test signer (src/services/e2eNative.ts); the e2e build below has one
       - name: No test signer in the app's bundle
         run: npm run build && scripts/no-test-signer.sh dist
@@ -46,6 +48,10 @@ jobs:
       - uses: ./.github/actions/core
         with:
           core: ${{ matrix.core }}
+      # the bridge needs the record door and person-scoped tokens: core's next
+      - name: People CardDAV bridge end to end (a real hub, DAVx5's requests)
+        if: matrix.next == '1'
+        run: cd services/carddav && npm run e2e
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: End-to-end tests (Playwright, web build)
