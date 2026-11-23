@@ -10,7 +10,7 @@
 // With `fetchBlob`, a picture the note links in the vault's storage (`/api/storage/…`) is drawn from the bytes it hands
 // back (Vault gives `vaults.file` for the record: docs/design/PICTURES.md); without it, pictures aren't drawn: the note
 // shows the picture's name in their place.
-import { useMemo, type MouseEvent } from "react";
+import { memo, useMemo, type MouseEvent } from "react";
 import { NoteRenderer } from "@openparachute/surface-render/note";
 import type { WikilinkResolver } from "@openparachute/surface-render/markdown";
 import "@openparachute/surface-render/styles.css";
@@ -48,8 +48,10 @@ function eachProse(body: string, f: (text: string) => string): string {
   }).join("\n");
 }
 
-/** `tags` and `fields` (the record's) let it draw a typed note richly: a note tagged `recipe` as a recipe. */
-export function Note({ body, path, tags, fields, onLink, fetchBlob }: { body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void;
+/** `tags` and `fields` (the record's) let it draw a typed note richly: a note tagged `recipe` as a recipe. Drawn again
+ *  only when what it is given changes: a page that draws many notes (a journal) and re-renders on every key typed
+ *  above them doesn't parse each note again (T-476: typing showed late in a long journal). */
+export const Note = memo(function Note({ body, path, tags, fields, onLink, fetchBlob }: { body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void;
   /** The bytes of a file the note links in the vault's storage; keep it the same function between draws (useCallback). */
   fetchBlob?: (src: string) => Promise<Blob> }) {
   const found = useMemo(() => linksIn(body), [body]);
@@ -114,4 +116,4 @@ export function Note({ body, path, tags, fields, onLink, fetchBlob }: { body: st
       <NoteRenderer key={`${path ?? body}\n${wikis.size}`} note={note} format="markdown" rich calm resolve={resolve} onNavigate={tap} openLink={tap} fetchBlob={fetchBlob} />
     </div>
   );
-}
+});
