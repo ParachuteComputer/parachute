@@ -1,5 +1,6 @@
 // Make a React project of many files into one applet record, then check it as the app reads it:
-//   npx vite-node scripts/bundle-applet.ts <src/main.tsx> --record <applet.json> [--out <dir>] [--minify]
+//   npx vite-node scripts/bundle-applet.ts ../my-applet/src/main.tsx --record ../my-applet/applet.json [--out <dir>] [--minify]
+// (run from this repo: the paths are your project's)
 // <applet.json> is the record's path, tags and fields (as applets/starter.json); its extension becomes jsx. It writes
 // <dir>/<stem>.json and <dir>/<stem>.jsx (by default beside applet.json, the stem its name with .bundled), which
 // scripts/check-applet.ts reads, and which go into a vault as any record does (STARTER.md). Exits 1 when the bundle
@@ -19,6 +20,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (k === "--out") out = argv[++i] ?? "";
   else if (k === "--minify") minify = true;
   else if (!k.startsWith("-")) entry = k;
+  else { console.error(`Unknown option ${k}`); process.exit(2); }
 }
 if (!entry || !recordPath) {
   console.error("Usage: npx vite-node scripts/bundle-applet.ts <src/main.tsx> --record <applet.json> [--out <dir>] [--minify]");

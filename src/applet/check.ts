@@ -31,7 +31,8 @@ export type AppletCheckResult = {
 
 /** Every module the compiled code requires: what the frame's loader will be asked for, re-exports included (a
  *  `require("x")` written in a comment or a string is not one). Known limit, shared with importsOf: a regex literal
- *  holding a quote (`/"/`) reads as the start of a string, so what follows it on that line may go unseen. */
+ *  holding a quote (`/"/`) reads as the start of a string, so what follows it may go unseen (on one line of minified
+ *  code, the rest of the file): scripts/bundle-applet.ts says every import at the top for that reason. */
 export function requiresOf(js: string): string[] {
   return [...new Set(stringsAfter(js, String.raw`\brequire\s*\(\s*`))];
 }
