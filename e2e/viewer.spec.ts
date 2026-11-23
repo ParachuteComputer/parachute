@@ -196,8 +196,9 @@ test.describe("Vault", () => {
     await expect(rec.getByRole("button", { name: "Edit words" })).toBeVisible();
     // read first: the words come before what edits the record (its tags, its fields)
     expect(await rec.evaluate((el) => {
-      const words = el.querySelector(".pa-note"), tag = [...el.querySelectorAll(".pa-field-label")].find((x) => x.textContent === "Add a tag or type");
-      return !!words && !!tag && !!(words.compareDocumentPosition(tag) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const words = el.querySelector(".pa-note"), labels = [...el.querySelectorAll(".pa-field-label")];
+      const after = ["Add a field", "Add a tag or type"].map((t) => labels.find((x) => x.textContent === t));
+      return !!words && after.every((x) => !!x && !!(words.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING));
     })).toBe(true);
     const adder = (label: string) => rec.locator(".pa-field").filter({ hasText: label }).getByRole("button", { name: "Add" });
     await rec.getByLabel("Add a tag or type").fill("#fav");

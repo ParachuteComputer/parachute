@@ -199,7 +199,7 @@ fieldset.plain legend { padding: 0; }
    (ui/press.ts); nor do they drag. Still under reduce-motion (theme.ts MOTION). */
 .sheet-scrim { position: fixed; inset: 0; z-index: 10; background: color-mix(in srgb, var(--text) 22%, transparent); background: light-dark(color-mix(in srgb, var(--text) 22%, transparent), rgb(0 0 0 / .45));
   display: flex; align-items: flex-end; justify-content: center; animation: shell-fade var(--t-sheet, 0ms) var(--ease-out, ease) backwards; overscroll-behavior: contain; }
-.sheet { width: min(560px, 100%); max-height: 80dvh; overflow: auto; overscroll-behavior: contain; background: var(--bg); border-top: var(--line-card); border-radius: max(var(--radius-card), var(--radius)) max(var(--radius-card), var(--radius)) 0 0;
+.sheet { color: var(--text); font-size: var(--fs-body); width: min(560px, 100%); max-height: 80dvh; overflow: auto; overscroll-behavior: contain; background: var(--bg); border-top: var(--line-card); border-radius: max(var(--radius-card), var(--radius)) max(var(--radius-card), var(--radius)) 0 0;
   box-shadow: var(--shadow-sheet); padding: 14px var(--pad) calc(14px + env(safe-area-inset-bottom)); }
 @keyframes shell-fade { from { opacity: 0; } }
 .sheet h2 { margin: 0 0 10px; font: 600 var(--fs-lead)/1.3 var(--serif); }
@@ -284,10 +284,6 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .lately-label { margin: 18px 0 6px; font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--muted); }
 .parts-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; }
 .part-chip { border: var(--button-line); border-radius: var(--radius-button); background: var(--button-fill); padding: 4px 12px; font: var(--fs-body) var(--serif); color: var(--text); cursor: pointer; }
-/* a vault's line: its name and whose on one row, its buttons wrap beneath on a narrow phone, never past the card */
-.settings-parachute .line { flex-wrap: wrap; justify-content: flex-start; }
-.settings-parachute .line > span { flex: 1 1 12em; min-width: 0; }
-.settings-parachute .line > .quiet-button { white-space: nowrap; }
 /* a vault: its name in the display face, whose it is and what this device may do quiet under it, its actions at the side */
 .settings-parachute .vault-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 16px; padding: 10px 0; }
 .vault-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
