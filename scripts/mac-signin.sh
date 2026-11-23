@@ -86,12 +86,14 @@ ax wait "Approve Parachute?" 30 || fail "the hub's Approve page didn't open"
 shot 13-hub-consent
 ax press "Approve" || fail "no Approve on the hub's page"
 # the list of the app's applets (Parachute's own first: docs/design/PARACHUTE-SOURCE.md); in Settings, the home (recipes,
-# the first by name, chosen on the pick) to open, and the other vault a line to open (the sign-in read the home only)
+# the first by name, chosen on the pick) to open, and the other vault counted on one line, to open (the sign-in read the home only)
 ax wait "connect your AI: one address for your vaults (or one vault's own), and how to add it to Claude or ChatGPT" 40 || fail "the list of applets didn't open"
 sleep 2
 shot 14-list
 ax press "Settings" || fail "no Settings on the list"
 ax wait "Open recipes" 20 || fail "the home isn't in Settings"
+# the vaults it doesn't read are counted on one line; a tap shows them (src/views/Settings.tsx VaultsToAdd)
+ax press "1 more vault there, which Parachute doesn't read" || fail "no line counting the vault it doesn't read"
 ax wait "Open work" 20 || fail "the other vault isn't offered to open"
 shot 14b-settings-vaults
 ax dump > "$out/14-settings-ui.txt" 2>&1 || true
