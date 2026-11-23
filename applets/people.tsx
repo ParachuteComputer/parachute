@@ -20,10 +20,14 @@
 //                               no extra folder permission, no two-record sync, direct vCard CATEGORIES mapping)
 //   photo             string    storage path of an image attached to the record via vault.attach
 //   favorite          boolean   true when pinned to Favorites at the top of the list
+//   keep_in_touch     string    how often to be in touch: "every week" … "every year" (or a number of days)
+//   talked            string[]  times you were in touch with no note of their own: "YYYY-MM-DD" or "YYYY-MM-DD: what"
+//   how_we_met        string    the story of how you met
+//   met               string    when you met: "YYYY-MM-DD" or "YYYY"
 //
 // Body: markdown (e.g. "## Memories and moments"), editable in place with device-saved drafts.
-// Links: reads links from Meetings/, Journal/, Notes/, Organizations/ and People/ for "Everything that mentions them"
-//        and "Haven't talked in a while".
+// Links: reads links from Meetings/, Journal/, Notes/, Organizations/ and People/ for each person's timeline and the
+//        last time you were in touch (the newest `talked` entry or linked note, dated by the note's own day).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   app, Button, Card, Drawer, Empty, Field, Fields, Link, link, List, Loading, Note, onBack, onOpen, Page, Problem,
@@ -2395,7 +2399,7 @@ export default function People() {
               {reconnect.unlinked.length > 0 && (
                 <List
                   label={`No connection yet · ${reconnect.unlinked.length}`}
-                  rows={reconnect.unlinked.map((r) => personRow(r.person, { aside: "Not yet" }))}
+                  rows={reconnect.unlinked.map((r) => personRow(r.person))}
                 />
               )}
             </>
