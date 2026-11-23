@@ -455,8 +455,11 @@ Before you hand it over, check it the way a person sees it:
 With this repo checked out, the shortest way in is to copy the starter and check it before it goes into a vault:
 
 - `applets/starter.json` and `applets/starter.tsx`: a small applet that lists, searches, adds, opens and edits notes in
-  `Notes/`. Change its id, name, folder and what it opens. `e2e/starter.spec.ts` runs it as shipped, against a real hub.
-- `applets/parachute.d.ts`: types for `import { … } from "parachute"`, for an editor (a test holds it to the kit's parts).
+  `Notes/`. Change its `path` (two applets can't share one), its id and name, and its folder, which is written in three
+  places: `FOLDER` in the `.tsx`, the `access` rule's `path`, and the `opens` entry's `path`. `e2e/starter.spec.ts` runs
+  it as shipped, against a real hub.
+- `applets/parachute.d.ts`: types for `import { … } from "parachute"`, for an editor (a test holds it to the kit's parts
+  and type-checks the starter against it).
 - `npx vite-node scripts/check-applet.ts applets/<name> [--strict]`: reads the record as the app does (the manifest and
   each field it may leave out), compiles the code with the app's compiler, refuses what the frame won't load (an npm
   package, a relative file), and says which parts need a higher `needs` and what the kit would draw instead.

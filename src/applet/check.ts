@@ -4,7 +4,7 @@
 // network. scripts/check-applet.ts runs it from the command line (through vite-node, which reads the app's modules).
 import { codeKindOf, KEEP_ONE_CHARS, PROVIDED_IMPORTS, transpile } from "./code.ts";
 import { readApplet, type AppletEntry } from "./discovery.ts";
-import { IMPORT_PREFIX, MAX_IMPORTS, plainImportId, stringsAfter } from "./imports.ts";
+import { IMPORT_PREFIX, importsOf, MAX_IMPORTS, plainImportId, stringsAfter } from "./imports.ts";
 import { PART_LEVEL, PART_NAMES } from "./kits/modules.ts";
 import { APP_LEVEL, levelNeeded, neededWhy, tooNew } from "./level.ts";
 import { check as checkConformance, withoutComments, type Finding } from "../kit/conformance.ts";
@@ -30,7 +30,8 @@ export type AppletCheckResult = {
 };
 
 /** Every module the compiled code requires: what the frame's loader will be asked for, re-exports included (a
- *  `require("x")` written in a comment or a string is not one). */
+ *  `require("x")` written in a comment or a string is not one). Known limit, shared with importsOf: a regex literal
+ *  holding a quote (`/"/`) reads as the start of a string, so what follows it on that line may go unseen. */
 export function requiresOf(js: string): string[] {
   return [...new Set(stringsAfter(js, String.raw`\brequire\s*\(\s*`))];
 }
@@ -132,20 +133,23 @@ export async function checkAppletRecord(record: AppletRecordInput): Promise<Appl
       }
       if (!hasDefault(compiled.js)) errors.push("module has no default export (export default function App() …)");
 
-      // 5. Allowed imports
+      // 5. Allowed imports: the compiled requires (what the loader is asked for), and the component ids the frame
+      // resolves before it runs anything, read from the source as the frame reads them (importsOf): an unused or
+      // `import type` component import is gone from the compiled code but the frame still refuses or resolves it.
       imports = requiresOf(compiled.js);
-      const componentImports: string[] = [];
+      const frameIds = importsOf(record.body);
       for (const spec of imports) {
         if ((PROVIDED_IMPORTS as readonly string[]).includes(spec)) continue;
         if (spec.startsWith(IMPORT_PREFIX)) {
-          const cid = spec.slice(IMPORT_PREFIX.length);
-          if (!plainImportId(cid)) errors.push(`invalid component import "${spec}": id must be short kebab-case`);
-          else componentImports.push(cid);
+          if (!frameIds.includes(spec.slice(IMPORT_PREFIX.length))) errors.push(`"${spec}" is required but not imported: the frame loads a component only for \`import … from "${spec}"\``);
           continue;
         }
         errors.push(`unsupported import "${spec}": an applet may import only ${PROVIDED_IMPORTS.join(", ")} or component:<id>`);
       }
-      if (componentImports.length > MAX_IMPORTS) errors.push(`imports ${componentImports.length} components (at most ${MAX_IMPORTS})`);
+      for (const cid of frameIds) {
+        if (!plainImportId(cid)) errors.push(`invalid component import "${IMPORT_PREFIX}${cid}": id must be short kebab-case`);
+      }
+      if (frameIds.length > MAX_IMPORTS) errors.push(`imports ${frameIds.length} components (at most ${MAX_IMPORTS})`);
     }
 
     // 6. Shadowed imports

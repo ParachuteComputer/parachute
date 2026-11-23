@@ -22,8 +22,12 @@ export default function Starter() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useSaved<string | null>("selected", null);
   const [selected, setSelected] = useState<Item | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
+  // an edit in progress, kept on the device (useSaved) so it survives the applet closing: the note's id, the text, and
+  // the version it started from, so a save made after a refresh still says which version it changes
+  const [draft, setDraft] = useSaved<{ id: string; body: string; base: string | null } | null>("draft", null);
+  const editing = draft !== null && draft.id === selected?.id;
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
   const [busy, setBusy] = useState(false);
 
   // only the newest read shows: one that lands after a later one is dropped
@@ -49,13 +53,11 @@ export default function Starter() {
   const openItem = async (id: string) => {
     const n = ++opening.current;
     setSelectedId(id);
-    setEditing(false);
     try {
       const full: Item | null = await vault.getRecord(id);
       if (n !== opening.current) return;
       if (full) {
         setSelected(full);
-        setDraft(full.body ?? "");
       } else {
         setSelected(null);
         setSelectedId(null);
@@ -70,7 +72,11 @@ export default function Starter() {
       void load("");
       if (selectedId) void openItem(selectedId);
     });
-    return onOpen((o: { note: { id: string } }) => { void openItem(o.note.id); });
+    // the app asks to open a note: not over an edit in progress
+    return onOpen((o: { note: { id: string } }) => {
+      if (editingRef.current) toast("Save or cancel your edit first.");
+      else void openItem(o.note.id);
+    });
   }, []);
 
   const add = async (rawTitle: string) => {
@@ -90,15 +96,16 @@ export default function Starter() {
   };
 
   const save = async () => {
-    if (!selected) return;
+    if (!draft) return;
+    // the shell refuses a change that doesn't say which version it changes
+    if (!draft.base) return toast("This note has no version to save against. Cancel and open it again.", { error: true });
+    const { id, body } = draft;
     setBusy(true);
     try {
-      const updated: Item = await vault.updateRecord(selected.id, {
-        body: draft,
-        if_updated_at: selected.updatedAt ?? "",
-      });
-      setSelected({ ...selected, ...updated, body: draft });
-      setEditing(false);
+      const updated: Item = await vault.updateRecord(id, { body, if_updated_at: draft.base });
+      // the person may have gone back or opened another note while it saved: change only what is still this note
+      setSelected((s) => (s?.id === id ? { ...s, ...updated, body } : s));
+      setDraft((d) => (d?.id === id ? null : d));
       toast("Saved.");
       await load();
     } catch (e) {
@@ -114,21 +121,21 @@ export default function Starter() {
       <Page
         title={titleOf(selected)}
         kicker={selected.updatedAt ? `Updated ${when.short(selected.updatedAt)}` : undefined}
-        back={{ label: "Starter", onPress: () => { opening.current++; setSelected(null); setSelectedId(null); setEditing(false); } }}
-        aside={!editing ? <Button small onClick={() => { setDraft(selected.body ?? ""); setEditing(true); }}>Edit</Button> : undefined}
+        back={{ label: "Starter", onPress: () => { opening.current++; setSelected(null); setSelectedId(null); setDraft(null); } }}
+        aside={!editing ? <Button small onClick={() => setDraft({ id: selected.id, body: selected.body ?? "", base: selected.updatedAt })}>Edit</Button> : undefined}
         onRefresh={editing ? undefined : () => openItem(selected.id)}
       >
         {editing ? (
           <Write
             label="Note"
             labelled
-            value={draft}
-            onChange={setDraft}
+            value={draft?.body ?? ""}
+            onChange={(body: string) => setDraft((d) => (d ? { ...d, body } : d))}
             onSend={save}
             send={busy ? "Saving…" : "Save"}
             busy={busy}
           >
-            <Button kind="quiet" onClick={() => setEditing(false)}>Cancel</Button>
+            <Button kind="quiet" onClick={() => setDraft(null)}>Cancel</Button>
           </Write>
         ) : (
           <Note body={selected.body ?? ""} path={selected.path} tags={selected.tags} fields={selected.fields} />

@@ -1,6 +1,7 @@
 // The starter template (applets/starter.json + starter.tsx, docs/WRITE-AN-APPLET.md) is what a person copies to build
 // their first applet: it must run as shipped. In the sealed frame against a real hub: Allow, add a note (it lands in
-// Notes/ with the type it opens), open it, edit and save it (the write carries if_updated_at), and the hub has it.
+// Notes/ with the type it opens), open it, edit (the edit survives a reload) and save it (the write carries
+// if_updated_at), and the hub has it.
 import { expect, test } from "@playwright/test";
 import { appletRecord } from "../applets/record.ts";
 import { api, hubState, VAULT } from "./hub";
@@ -24,6 +25,12 @@ test("the starter applet runs as shipped: lists, adds, opens, edits and saves a 
     added = await api(hubState(), "GET", `notes?id=${encodeURIComponent("Notes/Seed packets to sort")}`);
     expect(added!.tags).toContain("note");
     await f.getByRole("button", { name: "Edit" }).click();
+    // an edit in progress survives the applet closing: kept on the device, back in the box when it opens again
+    await f.getByRole("textbox", { name: "Note" }).fill("# Seed packets to sort\n\nBeans, chard");
+    await expect.poll(() => page.evaluate(() => Object.values(localStorage).some((v) => v.includes("Beans, chard")))).toBe(true);
+    await page.reload();
+    await page.getByRole("button", { name: "Open Starter" }).click();
+    await expect(f.getByRole("textbox", { name: "Note" })).toHaveValue("# Seed packets to sort\n\nBeans, chard");
     await f.getByRole("textbox", { name: "Note" }).fill("# Seed packets to sort\n\nBeans, chard, two kinds of kale.");
     await f.getByRole("button", { name: "Save" }).click();
     await expect(f.getByText("Beans, chard, two kinds of kale.")).toBeVisible();

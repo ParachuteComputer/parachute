@@ -1,6 +1,6 @@
 // Ambient types for Parachute TSX/JSX applets (`import { ... } from "parachute"`).
-// Kept in sync with src/applet/kits/modules.ts (PART_NAMES) and src/applet/kits/frameKit.ts
-// by src/applet/check.test.ts.
+// Kept in sync with src/applet/kits/modules.ts (PART_NAMES) and src/applet/kits/frameKit.ts: src/applet/check.test.ts
+// holds every part name to it and type-checks applets/starter.tsx against it.
 declare module "parachute" {
   import type { ButtonHTMLAttributes, KeyboardEvent, ReactNode, Ref } from "react";
 
@@ -41,6 +41,25 @@ declare module "parachute" {
     metadata?: Record<string, unknown>;
     body?: string;
     content?: string;
+  }
+  /** A record from `vaults.*` (every vault on the device): always with its title, types, tags and fields, and `own`
+   *  for the app's own records (settings, approvals, an applet's code). */
+  export interface VaultsRecord {
+    id: string;
+    path: string;
+    title: string;
+    createdAt: string | null;
+    updatedAt: string | null;
+    types: string[];
+    tags: string[];
+    fields: Record<string, unknown>;
+    own: boolean;
+    body?: string;
+    createdBy?: string | null;
+    createdVia?: string | null;
+    updatedBy?: string | null;
+    updatedVia?: string | null;
+    links?: { dir: "out" | "in"; id: string; path: string; relationship: string }[];
   }
   export interface RecordQuery {
     pathPrefix?: string;
@@ -171,13 +190,13 @@ declare module "parachute" {
     data?: Record<string, string>;
   }
   export function Page(props: { title?: ReactNode; kicker?: ReactNode; aside?: ReactNode; back?: { label: string; onPress: () => void }; onRefresh?: () => unknown; wide?: boolean; scroll?: boolean; start?: "first" | "last"; className?: string; children?: ReactNode }): ReactNode;
-  export function Pages(props: { start?: "first" | "last"; name?: ReactNode; handle?: Ref<{ toElement(el: Element): void; toEnd(): void; toStart(): void } | null>; className?: string; children?: ReactNode }): ReactNode;
+  export function Pages(props: { start?: "first" | "last"; name?: string; handle?: Ref<{ toElement(el: Element): void; toEnd(): void; toStart(): void } | null>; className?: string; children?: ReactNode }): ReactNode;
   export function List(props: { label?: ReactNode; hideLabel?: boolean; rows: readonly Row[]; more?: { label: string; onPress: () => void; busy?: boolean } }): ReactNode;
   export function Card(props: { title?: ReactNode; children?: ReactNode }): ReactNode;
   export function Days(props: { counts?: readonly number[]; times?: readonly (string | number | null | undefined)[]; days?: number; label?: string; inline?: boolean }): ReactNode;
-  export function Field(props: { label: string; placeholder?: string; action?: string; onAction?: (text: string) => unknown; value?: string; onChange?: (text: string) => void; clearOnAction?: boolean }): ReactNode;
+  export function Field(props: { label: ReactNode; placeholder?: string; action?: string; onAction?: (text: string) => unknown; value?: string; onChange?: (text: string) => void; clearOnAction?: boolean }): ReactNode;
   export function Search(props: { label: string; placeholder?: string; value?: string; onChange?: (text: string) => void; onSearch: (text: string) => void; live?: number }): ReactNode;
-  export function Write(props: { label: string; labelled?: boolean; value: string; onChange: (text: string) => void; onSend?: () => unknown; send?: string; sendLabel?: string; canSend?: boolean; busy?: boolean; enter?: "send" | "newline"; line?: boolean; dock?: boolean; maxLength?: number; placeholder?: string; inputRef?: Ref<HTMLTextAreaElement | null>; onKeyDown?: (e: KeyboardEvent<HTMLTextAreaElement>) => void; children?: ReactNode }): ReactNode;
+  export function Write(props: { label: string; labelled?: boolean; value: string; onChange: (text: string) => void; onSend?: () => unknown; send?: ReactNode; sendLabel?: string; canSend?: boolean; busy?: boolean; enter?: "send" | "newline"; line?: boolean; dock?: boolean; maxLength?: number; placeholder?: string; inputRef?: Ref<HTMLTextAreaElement | null>; onKeyDown?: (e: KeyboardEvent<HTMLTextAreaElement>) => void; children?: ReactNode }): ReactNode;
   export function Button(props: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type"> & { kind?: "primary" | "plain" | "quiet"; small?: boolean; busy?: boolean }): ReactNode;
   export function Tabs(props: { label: string; tabs: readonly { key: string; label: ReactNode; count?: number }[]; current: string; onChange: (key: string) => void }): ReactNode;
   export function Table(props: { label: string; columns: readonly { key: string; label: ReactNode; align?: "start" | "end"; width?: number; sortable?: boolean }[]; rows?: readonly { key: string; cells: Record<string, ReactNode>; onPress?: () => void; current?: boolean; label?: string }[]; groups?: readonly { key: string; label: ReactNode; count?: number; rows: readonly { key: string; cells: Record<string, ReactNode>; onPress?: () => void; current?: boolean; label?: string }[] }[]; sort?: { by: string; dir: "asc" | "desc" }; onSort?: (key: string) => void; more?: { label: string; onPress: () => void; busy?: boolean } }): ReactNode;
@@ -191,9 +210,10 @@ declare module "parachute" {
   export function Link(props: { to: string; from?: string; children?: ReactNode }): ReactNode;
   export function Linked(props: { text: string; web?: boolean }): ReactNode;
   export const link: {
-    to(record: { id: string }): Promise<string | null>;
+    /** a note's address on its hub; throws when it has none here (does the applet ask for open?) */
+    to(record: string | { id: string }): Promise<string>;
     follow(target: string, opts?: { from?: string; choose?: boolean }): Promise<boolean>;
-    open(record: { id: string }): Promise<boolean>;
+    open(record: string | { id: string }): Promise<boolean>;
     parse(text: string): unknown;
     find(text: string): unknown[];
   };
@@ -205,13 +225,19 @@ declare module "parachute" {
   export function useTranscripts(bodies: readonly (string | null | undefined)[], reload: () => unknown): { say(body: string): string; strip(body: string): string; again(): void };
   export const when: {
     time(t: unknown): string;
-    day(t: unknown): string;
-    date(t: unknown): string;
-    short(t: unknown): string;
-    full(t: unknown): string;
-    ago(t: unknown): string;
+    day(t: unknown, now?: Date): string;
+    date(t: unknown, now?: Date): string;
+    short(t: unknown, now?: Date): string;
+    full(t: unknown, now?: Date): string;
+    ago(t: unknown, now?: Date): string;
     stamp(t: unknown): string;
-    path(t: unknown): string;
+    path(t: unknown, seconds?: boolean): string;
     parse(t: unknown): Date | null;
   };
+}
+
+/** A component from a vault (`import Events from "component:events"`): a React component, its props its own. */
+declare module "component:*" {
+  const Component: (props: Record<string, unknown>) => import("react").ReactNode;
+  export default Component;
 }

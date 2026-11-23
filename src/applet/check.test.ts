@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { checkAppletRecord, type AppletRecordInput } from "./check";
 import { PART_NAMES } from "./kits/modules";
@@ -60,6 +61,23 @@ describe("checkAppletRecord", () => {
     });
     expect(bad.ok).toBe(false);
     expect(bad.errors.some((e) => e.includes("invalid component import"))).toBe(true);
+  });
+
+  it("refuses component imports the compiler drops but the frame still reads from the source", async () => {
+    const unused = await checkAppletRecord({ ...VALID, body: `import Bad from "component:Not_Valid";\nexport default function Demo() { return <div />; }\n` });
+    expect(unused.errors.some((e) => e.includes("invalid component import"))).toBe(true);
+
+    const nine = Array.from({ length: 9 }, (_, i) => `import C${i} from "component:c${i}";`).join("\n");
+    const tooMany = await checkAppletRecord({ ...VALID, body: `${nine}\nexport default function Demo() { return <div />; }\n` });
+    expect(tooMany.errors.some((e) => e.includes("imports 9 components"))).toBe(true);
+
+    const typeOnly = await checkAppletRecord({ ...VALID, body: `import type X from "component:foo";\nexport default function Demo(): X | null { return null; }\n` });
+    expect(typeOnly.imports).not.toContain("component:foo");
+    expect(typeOnly.ok).toBe(true);
+
+    // a require the frame's importsOf doesn't list: the frame never loads that component
+    const required = await checkAppletRecord({ ...VALID, body: `const C = require("component:foo");\nexport default function Demo() { return <C />; }\n` });
+    expect(required.errors.some((e) => e.includes("required but not imported"))).toBe(true);
   });
 
   it("catches missing default exports, syntax errors, shadowed imports and invalid manifests", async () => {
@@ -153,4 +171,16 @@ describe("applets/parachute.d.ts", () => {
       expect(dts, `applets/parachute.d.ts is missing "${part}"`).toMatch(new RegExp(`export\\s+(?:function|const)\\s+${part}\\b`));
     }
   });
+
+  it("types the starter as written: an editor shows no errors on the file people copy", () => {
+    const root = process.cwd();
+    const files = [join(root, "applets", "parachute.d.ts"), join(root, "applets", "starter.tsx")];
+    const program = ts.createProgram(files, {
+      strict: true, noEmit: true, skipLibCheck: true, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, lib: ["lib.es2022.d.ts", "lib.dom.d.ts"],
+      types: [], typeRoots: [join(root, "node_modules", "@types")],
+    });
+    const said = ts.getPreEmitDiagnostics(program).map((d) => `${d.file?.fileName.replace(root, "") ?? ""}: ${ts.flattenDiagnosticMessageText(d.messageText, "\n")}`);
+    expect(said).toEqual([]);
+  }, 30_000);
 });
