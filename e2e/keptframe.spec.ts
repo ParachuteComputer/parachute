@@ -51,7 +51,7 @@ test("back to the list of applets from an applet, from Settings and by the bar i
     expect((await same()).booted).toBe(1);
 
     // Settings, where an applet is added meanwhile (by an agent, say), and back: the same frame, and the new one listed
-    await ui(page).getByRole("link", { name: "Settings" }).click();
+    await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
     await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
     added = await record(hubState(), "create", { ...ARGS, path: "Applets/Also here", body: CODE.replace("Here", "Also here"), fields: { applet: { ...ARGS.fields.applet, id: "also-here", name: "Also here", glyph: "◆" } } });
     await page.goBack();

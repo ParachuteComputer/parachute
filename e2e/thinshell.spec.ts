@@ -35,16 +35,16 @@ test("a bundle record naming a home opens on it", async ({ page }) => {
   await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Cook mode");
 });
 
-test("the bar is the record's pins, in its order, then Applets: nothing else of the shell's", async ({ page }) => {
+test("the bar is the record's pins, in its order, then Applets and Settings: nothing else of the shell's", async ({ page }) => {
   await app({ sources: [{ vault: VAULT, applet: "*" }], start: RECIPES, bar: [COOK] });
   await page.goto("/settings");
   const names = async () => (await bar(page).getByRole("link").allInnerTexts()).map((n) => n.split("\n").map((x) => x.trim()).filter(Boolean)[1]);
-  await expect.poll(names).toEqual(["Cook mode", "Applets"]);
+  await expect.poll(names).toEqual(["Cook mode", "Applets", "Settings"]);
   // pinned in the other order: the bar follows
   const [rec] = await tagged("parachute-bundle");
   await api(hubState(), "PATCH", `notes/${rec.id}`, { metadata: { bundle: { ...rec.metadata.bundle, bar: [COOK, RECIPES] } }, if_updated_at: (await api(hubState(), "GET", `notes/${rec.id}`)).updatedAt });
   await page.goto("/settings");
-  await expect.poll(names).toEqual(["Cook mode", "Recipe box", "Applets"]);
+  await expect.poll(names).toEqual(["Cook mode", "Recipe box", "Applets", "Settings"]);
 });
 
 test("the list is the app's applets, not the vaults: no chapters, no vault links; vaults are in Settings", async ({ page }) => {
@@ -58,7 +58,7 @@ test("the list is the app's applets, not the vaults: no chapters, no vault links
   await expect(ui(page).getByRole("region", { name: VAULT, exact: true })).toHaveCount(0);
   await expect(ui(page).getByRole("link", { name: "Open the vault" })).toHaveCount(0);
   // the vault itself: from Settings
-  await ui(page).getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
   await page.getByRole("link", { name: `Open ${VAULT}` }).click();
   await expect(page).toHaveURL(new RegExp(`/v/${VAULT}$`));
 });
@@ -98,7 +98,7 @@ test("a way back: a home applet that throws still leaves the bar, the list and S
   await expect(page.locator("iframe.applet-frame")).toHaveCount(1);
   await bar(page).getByRole("link", { name: /Applets/ }).click();
   await expect(ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Thrower/ })).toBeVisible();
-  await ui(page).getByRole("link", { name: "Settings" }).first().click();
+  await bar(page).getByRole("link", { name: "Settings" }).click();
   await expect(page.getByRole("heading", { name: "Your bundle" })).toBeVisible();
 });
 

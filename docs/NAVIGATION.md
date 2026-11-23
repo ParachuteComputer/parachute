@@ -10,7 +10,7 @@ One model, everywhere.
 | `/v/<vault>` | A vault: in Vault ([VAULT.md](VAULT.md)) when it is there and allowed; else its newest notes, and search. |
 | `/v/<vault>/n/<note>` | A note. It opens in the applet that opens its kind (open-with), else in Vault, else as plain text. |
 | `/v/<vault>/a/<applet>` | An applet. |
-| `/settings` | Settings. |
+| `/settings` | Settings: always the bar's last place. |
 | `/v/<home>/a/parachute:<name>` | Parachute's own applets ([design/PARACHUTE-SOURCE.md](design/PARACHUTE-SOURCE.md)): Notes, Journal, Capture, Vault, Connect, Home. `/connect`, `/capture`, `/journal` and `/vault` lead there. |
 | `/v/<vault>/new`, `/v/<vault>/n/<note>/edit` | The shell's editor: a new note, a note's words, from the plain views (`?with=vault`). |
 
@@ -19,9 +19,10 @@ One model, everywhere.
 1. **The bar is your pins.** Its places are tabs ([LOOK.md](LOOK.md)): paper tabs hanging from the foot of the page on a
    phone, a thumb index down the right edge on a Mac (960 px and up); the place you are in is the tab the colour of the
    page, joined to it (on the Daylight, the black one), and a place opened from its tab rises from it. It sits at the bottom of the list, a vault, a note and an applet. On it: the applets
-   pinned in the open bundle (its record's `bar`), in that order (up to 12), and nothing else of the app's but **Applets**
-   at the end, the one way to the list (and Settings from there). The home applet is on the bar when it is pinned; pin
-   it first to have it there. Under a frame of your own it also ends with the app's own way to Settings.
+   pinned in the open bundle (its record's `bar`), in that order (up to 12), then **Applets**, the one way to the list,
+   and last **Settings**: nothing else of the app's. Settings is the app's own place, on the bar at every address, held
+   at the right edge however full the bar is (at the foot of the index on a Mac); no record names, moves or hides it,
+   and a frame of your own can't either. The home applet is on the bar when it is pinned; pin it first to have it there.
    An applet that declares signals shows its count beside its glyph unless it is the screen in front ([design/APP-RECORD.md](design/APP-RECORD.md), "Signals").
 2. **The list is your bundle.** Every applet the open bundle offers ([Bundles](#bundles)), in one plain list. In Everything, that
    is every applet in every vault. Vaults are not on it: they are in Settings (**Your Parachutes**, each with **Open**),
@@ -68,7 +69,7 @@ own content, each in its own frame: **Add to home** on a component in the list (
 
 A broken record never locks you out. When the bundle this device chose doesn't load (its record is malformed or gone),
 the app opens the next it can (the settings note's, else Everything) and the list says so: *Your bundle didn't
-load*, with **Settings**. A home applet that throws is only a blank applet: the bar's **Applets** and Settings work.
+load*, with **Settings**. A home applet that throws is only a blank applet: the bar's **Applets** and **Settings** work.
 
 ## Other Parachutes
 
