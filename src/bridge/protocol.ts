@@ -58,7 +58,7 @@ export type FrameHome = { start: FramePlace | null; bar: FramePlace[]; parachute
   /** Parachute's own applets (docs/design/PARACHUTE-SOURCE.md), in the home: from the app, not from any vault's list */
   official?: FrameApplet[] };
 /** What a read of the vault may ask: a read-only subset of the vault's notes query. */
-export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; includeContent?: boolean; includeMetadata?: boolean };
+export type Query = { search?: string; tag?: string; pathPrefix?: string; orderBy?: "updated_at" | "created_at"; sort?: "asc" | "desc"; limit?: number; offset?: number; includeContent?: boolean; includeMetadata?: boolean };
 /** `decided`: what the note's route already decided for this history entry (kept by the shell, which outlives the frame). */
 export type Decided = "applet" | "ask" | "vault";
 export type FrameLocation = { pathname: string; search: string; hash: string; key: string; decided?: Decided };
@@ -161,11 +161,12 @@ function paramsOk(m: Method, p: Record<string, unknown>): boolean {
     case "vault.query": {
       if (!only(p, ["vault", "query"]) || !str(p.vault, 120) || !plain(p.query)) return false;
       const q = p.query;
-      return only(q, ["search", "tag", "pathPrefix", "orderBy", "sort", "limit", "includeContent", "includeMetadata"])
+      return only(q, ["search", "tag", "pathPrefix", "orderBy", "sort", "limit", "offset", "includeContent", "includeMetadata"])
         && optStr(q.search, 500) && optStr(q.tag, 120) && optStr(q.pathPrefix, 300)
         && (q.orderBy === undefined || q.orderBy === "updated_at" || q.orderBy === "created_at")
         && (q.sort === undefined || q.sort === "asc" || q.sort === "desc")
         && (q.limit === undefined || (Number.isInteger(q.limit) && (q.limit as number) > 0 && (q.limit as number) <= 200))
+        && (q.offset === undefined || (Number.isInteger(q.offset) && (q.offset as number) >= 0 && (q.offset as number) <= 1_000_000))
         && optBool(q.includeContent) && optBool(q.includeMetadata);
     }
   }
