@@ -37,6 +37,7 @@ import reactKitSource from "virtual:react-kit";
 import reactNoteKitSource from "virtual:react-note-kit";
 import { embedsFrom, embedTargets, pointerFor, repin, type PointerNote } from "../applet/pointers";
 import { createPageModule } from "../applet/modules/page";
+import { createBackModule } from "../applet/modules/back";
 import { PageEmbeds, PAGE_MAX } from "./Embeds";
 import { isMine, useWhose, whoseOf } from "../vault/whose";
 import { pageMarks } from "../applet/pageMark";
@@ -436,7 +437,12 @@ export default function AppletScreen() {
   const device = useDeviceSheets(entry?.manifest.name ?? "This applet");
   const servicesWhy = useRef<string | null>(null);
   const sessionRef = useRef<Session | null>(null);
+  // Back, held by the applet while it has a screen of its own open (the kit's onBack, modules/back.ts): `n` counts each
+  // word from it, so after each Back it hands over the entry above it is put back if it still holds it
+  const [backHeld, setBackHeld] = useState({ held: false, n: 0 });
   const onSession = (s: Session | null) => {
+    // a frame made again (or gone) holds nothing until it says so
+    if (sessionNow.current !== s) setBackHeld((b) => ({ held: false, n: b.n + 1 }));
     // a frame made again (or gone) leaves no live watch behind it (modules/vaults.ts): the new one asks for its own
     if (sessionNow.current && sessionNow.current !== s) vaultsModule?.stop();
     sessionNow.current = s;
@@ -486,6 +492,7 @@ export default function AppletScreen() {
     ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
+    createBackModule((held) => setBackHeld((b) => ({ held, n: b.n + 1 }))),
     // every vault this device holds (the Vault applet's words: modules/vaults.ts), and what reaches each
     ...(vaultsModule ? [vaultsModule] : []),
   ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -545,6 +552,26 @@ export default function AppletScreen() {
       setRecheck((n) => n + 1);
     }
   }, [kept.shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  // While the applet holds Back, an entry of the same address sits above it in history: the app's Back (the bar's ‹ goes
+  // one step back) and a phone's Back both take that entry, and the applet is told instead of left. It says whether it
+  // still holds Back after each, and the entry is put back; when it lets go, the entry goes. Only on its own screen,
+  // shown: a Back taken elsewhere (another address) is not its.
+  const backTop = (st: unknown) => !!subject && (st as { appletBack?: string } | null)?.appletBack === subject;
+  const backAt = useRef<string | null>(null), backLeaving = useRef(false), backWasTop = useRef(backTop(location.state));
+  useEffect(() => {
+    const top = backTop(location.state);
+    if (backWasTop.current && !top && !backLeaving.current && backHeld.held && location.pathname === backAt.current) sessionNow.current?.sendEvent("back", {});
+    backLeaving.current = false;
+    backWasTop.current = top;
+  }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!subject || !kept.shown) return;
+    const top = backTop(location.state);
+    if (backHeld.held && !top) {
+      backAt.current = location.pathname;
+      navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...((location.state as object | null) ?? {}), appletBack: subject } });
+    } else if (!backHeld.held && top) { backLeaving.current = true; navigate(-1); }
+  }, [backHeld, kept.shown, subject]); // eslint-disable-line react-hooks/exhaustive-deps
   // a grant changed elsewhere (revoked in Settings while this was kept): drawn again, so it stops at once
   useEffect(() => grants.onChange(bump), []); // eslint-disable-line react-hooks/exhaustive-deps
   const tap = (f: () => void) => (e: React.MouseEvent) => { if (e.isTrusted) f(); };
