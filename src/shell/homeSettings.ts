@@ -21,6 +21,7 @@
 //   written       by the shell only, on a tap (the bar's sheet, or the frame's tap-gated bridge call), with
 //                 if_updated_at; applets can't (their writes are content-only, and they can't tag a note parachute-*).
 //   open on start the shell's rule, in start.ts: never on the record alone.
+import { failureNow, type Failure } from "../vault/failure";
 import { officialFace, officialId, officialOf, officialPath } from "../applet/parachuteSource";
 import { useSyncExternalStore } from "react";
 import { appletsNow, refreshApplets, subscribeApplets } from "../applet/useApplets";
@@ -169,7 +170,8 @@ export function find(p: Place): Found | null {
 
 // ── the store ──
 
-type State = { read: "none" | "reading" | "read" | "unreachable"; rev: number };
+/** `why`: when the home couldn't be read, whether it was out of reach or refused this device (vault/failure.ts). */
+type State = { read: "none" | "reading" | "read" | "unreachable"; why?: Failure; rev: number };
 let state: State = { read: "none", rev: 0 };
 const listeners = new Set<() => void>();
 const bump = (p: Partial<State> = {}) => { state = { ...state, ...p, rev: state.rev + 1 }; listeners.forEach((f) => f()); };
@@ -241,10 +243,10 @@ export async function readSettings(): Promise<void> {
     keepNow({ vault: home.key, settings, noteId: n?.id ?? null, updatedAt: (n as { updatedAt?: string } | null)?.updatedAt ?? null, found, apps });
     readThisSession = home.key;
     bump({ read: "read" });
-  } catch {
+  } catch (e) {
     if (mine !== generation) return;
     readThisSession = null;
-    bump({ read: "unreachable" });
+    bump({ read: "unreachable", why: failureNow(home, e) });
   }
 }
 
@@ -545,5 +547,5 @@ export function subscribeSettings(f: () => void): () => void {
 }
 export function useSettings() {
   useSyncExternalStore(subscribeSettings, () => `${state.rev}:${homeVault()?.key ?? ""}`);
-  return { settings: settingsNow(), bar: barNow(), read: state.read, bundle: openBundleNow(), bundles: bundlesNow() };
+  return { settings: settingsNow(), bar: barNow(), read: state.read, why: state.read === "unreachable" ? state.why : undefined, bundle: openBundleNow(), bundles: bundlesNow() };
 }

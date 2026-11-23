@@ -36,3 +36,30 @@ test("a home the app can't reach: Journal, Settings and the list offer the vault
   await expect(page.getByRole("radio", { name: "pantry", exact: true })).toBeChecked();
   await expect(page.getByRole("region", { name: "Your home vault" })).toHaveCount(0);
 });
+
+test("in Settings, one tap makes another vault home, and says so", async ({ page }) => {
+  await page.route(`${hubState().origin}/vault/${VAULT}/**`, (r) => r.abort("connectionrefused"));
+  await page.goto("/settings");
+  const home = page.getByRole("region", { name: "Your home vault" });
+  await home.getByRole("button", { name: "Make letters your home" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "letters is your home now." })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Your home vault" })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "letters", exact: true })).toBeChecked();
+});
+
+test("a person with no other vault of their own here is told how to add one, not offered nothing", async ({ page }) => {
+  // letters and pantry are someone else's on this device (set before the app reads it; a visit first would keep copies
+  // of the home's reads, which then answer for it)
+  await page.addInitScript(() => {
+    const k = "parachute.whose.v1";
+    const v = JSON.parse(localStorage.getItem(k) ?? '{"whose":{},"ask":[]}') as { whose: Record<string, string> };
+    for (const key of Object.keys(v.whose)) if (/letters|pantry/.test(key)) v.whose[key] = "theirs";
+    localStorage.setItem(k, JSON.stringify(v));
+  });
+  await page.route(`${hubState().origin}/vault/${VAULT}/**`, (r) => r.abort("connectionrefused"));
+  await page.goto("/settings");
+  const home = page.getByRole("region", { name: "Your home vault" });
+  await expect(home).toContainText("No other vault of yours is on this device.");
+  await expect(home.getByRole("link", { name: "Add a Parachute" })).toBeVisible();
+  await expect(home.getByRole("button", { name: /your home/ })).toHaveCount(0);
+});

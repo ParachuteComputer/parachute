@@ -55,7 +55,7 @@ export default function Launcher() {
       <ol className="entries" aria-label="Applets">
         {/* Parachute's own (docs/design/PARACHUTE-SOURCE.md), in the home: first, from the app */}
         {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).filter((a) => a.noteId !== CONNECT).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
-        {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
+        {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} otherHome={vaults.some((x) => !x.home && (x.whose ?? "mine") === "mine")} onCount={count} onHold={(a) => setAsked({ v, a })} />)}
         {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
       <Components vaults={vaults} onPart={(v, c) => setPart({ v, c })} />
@@ -174,7 +174,7 @@ function StartHere({ v }: { v: FrameVault }) {
 }
 
 /** One vault's applets in the list (and, in the home, the ones brought in from other Parachutes). */
-function VaultEntries({ v, many, onCount, onHold }: { v: FrameVault; many: boolean; onCount: (key: string, n: number) => void; onHold: (a: FrameApplet) => void }) {
+function VaultEntries({ v, many, otherHome, onCount, onHold }: { v: FrameVault; many: boolean; otherHome: boolean; onCount: (key: string, n: number) => void; onHold: (a: FrameApplet) => void }) {
   const applets = useApplets(v.key);
   const home = useHome();
   const pointers = usePointers();
@@ -190,7 +190,7 @@ function VaultEntries({ v, many, onCount, onHold }: { v: FrameVault; many: boole
     })}
     {brought.map((p) => <Brought key={p.noteId} p={p} />)}
     {/* plain words for what is wrong (vault/failure.ts): a Parachute that isn't reached is a line, not an error */}
-    {applets && !applets.ok && <li className="entry-quiet">{applets.why === "offline" ? (v.home ? <>Can't reach {v.vault}, your home vault, just now. <Link to="/settings">Choose another home</Link></> : `Can't reach ${v.vault} just now.`)
+    {applets && !applets.ok && <li className="entry-quiet">{applets.why === "offline" ? (v.home ? <>Can't reach {v.vault}, your home vault, just now. <Link to="/settings">{otherHome ? "Choose another home" : "Settings"}</Link></> : `Can't reach ${v.vault} just now.`)
       : applets.why === "refused" ? <>{v.vault} wants you to sign in again: <Link to="/settings">Settings</Link>.</> : `The applets in ${v.vault} couldn't be read.`}</li>}
   </>;
 }
