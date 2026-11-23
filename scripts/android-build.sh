@@ -53,5 +53,13 @@ else
   got=$("$ANDROID_HOME/build-tools/$bt/apksigner" verify --print-certs "$out" | sed -n 's/.*SHA-256 digest: //p' | head -1)
 fi
 [ -n "$want" ] && [ "$got" = "$want" ] || { echo "$out is not signed with the $keyname (got ${got:-none})" >&2; exit 1; }
+# each native library loads on phones with 16 KB memory pages (Play requires it of apps targeting Android 15 and later)
+objdump=$(ls "$NDK_HOME"/toolchains/llvm/prebuilt/*/bin/llvm-objdump | head -1)
+libs=$(mktemp -d) && trap 'rm -rf "$libs"' EXIT
+unzip -q -o "$out" '*.so' -d "$libs"
+while IFS= read -r so; do
+  align=$("$objdump" -p "$so" | awk '/LOAD/ { sub(/2\*\*/, "", $NF); print $NF }' | sort -n | head -1)
+  [ "${align:-0}" -ge 14 ] || { echo "${so#"$libs"/} isn't aligned for 16 KB pages (2**${align:-?})" >&2; exit 1; }
+done < <(find "$libs" -name '*.so')
 echo "$out"
 echo "signed with the $keyname ${got:0:16}…"

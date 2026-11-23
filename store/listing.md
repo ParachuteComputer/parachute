@@ -1,7 +1,9 @@
 # Store listing (Google Play)
 
 Paste into Play Console → Grow users → Store presence → Main store listing. Words from parachute.computer where they fit.
-Screenshots and graphics are in `store/play/` (made-up content only). docs/STORES.md says where each goes.
+Graphics are in `store/play/`: `icon-512.png` (App icon), `feature-graphic.jpg` (Feature graphic, 1024×500) and
+`phone-1-home.png` … `phone-8-start.png` (Phone screenshots, 1080×1920, in this order). The screenshots are the Play
+build on an Android 15 emulator, signed in to a throwaway hub holding made-up notes, journal entries and people.
 
 ## App name (30 characters at most)
 
@@ -40,7 +42,8 @@ This is an early test version. Tell us what breaks: hello@parachute.computer
 - Tags: Notes, Journal (pick from Play's list)
 - Email: hello@parachute.computer
 - Website: https://parachute.computer
-- Privacy policy: https://github.com/ParachuteComputer/parachute/blob/next/docs/PRIVACY.md (until the site has it)
+- Privacy policy: https://parachute.computer/privacy/ once it has the app's part (docs/STORES.md); for internal testing,
+  https://github.com/ParachuteComputer/parachute/blob/next/docs/PRIVACY.md
 
 ## What's new (for each testing release)
 

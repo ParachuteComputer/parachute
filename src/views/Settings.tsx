@@ -1,5 +1,6 @@
 import UpdateSettings from "./UpdateSettings";
 import { OWN } from "../shell/updates";
+import { openLinkOut } from "../shell/device";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Bar, backOrLauncher } from "../ui/Bar";
 import { Link } from "react-router";
@@ -42,6 +43,9 @@ import { DEFAULTS } from "../shell/levelRules";
 import { onLevels } from "../shell/levels";
 import { useWhose } from "../vault/whose";
 import { ownFrame, settingsShown, usesCards } from "./settingsShown";
+
+/** What the app does with a person's data (docs/PRIVACY.md); the stores ask that it be reachable in the app. */
+const PRIVACY = "https://parachute.computer/privacy/";
 
 /** Signing out of a vault ends what its applets were allowed on this device too, and the embeds on its pages or from it;
  *  what those applets saved here (drafts) goes with them. */
@@ -238,7 +242,8 @@ export default function Settings({ children }: { children?: ReactNode }) {
       </Group>
       <Group id="g-updates" title="Updates">
         <UpdateSettings />
-        <p className="screen-foot quiet">Parachute {__APP_VERSION__}{OWN.commit && <> · {OWN.commit}</>}</p>
+        <p className="screen-foot quiet">Parachute {__APP_VERSION__}{OWN.commit && <> · {OWN.commit}</>}{" · "}
+          <a href={PRIVACY} onClick={(e) => { e.preventDefault(); void openLinkOut(PRIVACY).catch(() => undefined); }}>Privacy</a></p>
       </Group>
       {/* the sections the person's applets draw (BundleSections.tsx): last, so a frame that changes height moves nothing
           of Settings' own under a tap */}

@@ -10,6 +10,7 @@ Plan as of 2026-11-23. The short of it:
   and notarisation (`.github/workflows/mac.yml`, `scripts/mac-notarise-dmg.sh`), the privacy policy
   ([PRIVACY.md](PRIVACY.md)), the listing and screenshots (`store/`).
 - Missing: Aaron's console steps (FOR-AARON) and three secrets, which Uni asks for through a sealed secret card.
+- Read from outside once (Gemini Neon, 11-23); what it caught is folded in below.
 
 ## Google Play
 
@@ -22,13 +23,13 @@ Plan as of 2026-11-23. The short of it:
 | Open testing, production | anyone | yes | production access |
 
 A **personal** Play account made after 13 Nov 2023 gets production access only after a closed test with at least 12
-testers opted in for the 14 days before applying. Internal testing doesn't count toward it. An organisation account
-(D-U-N-S number) doesn't have this rule.
+testers opted in for the 14 days before applying (invite about 20, so drop-outs don't restart the count). Internal
+testing doesn't count toward it. An organisation account (D-U-N-S number) doesn't have this rule.
 
 ### What the Play build is
 
-- **Package id `computer.parachute.app`.** Not on Play yet (its store page answered 404 on 11-23). It can't change
-  once the app is created in Play Console. Keep it: every installed build, the Mac Keychain item and the app's data
+- **Package id `computer.parachute.app`.** Not on Play yet (its store page answered 404 on 11-23). The first uploaded
+  bundle fixes it for good. Keep it: every installed build, the Mac Keychain item and the app's data
   folders already use it. (Tauri warns that a Mac bundle id ending in `.app` looks like an app bundle; the only effect
   is that Finder shows the data folder `~/Library/Application Support/computer.parachute.app` as an app. Changing the
   id would cost every install its key and data.)
@@ -40,7 +41,10 @@ testers opted in for the 14 days before applying. Internal testing doesn't count
   only its own build under Settings → Updates. The build script checks the bundle's manifest and fails if the
   permission is back. The Android TV launcher entry is gone from both builds (Play would list the app as a TV app).
 - **Target SDK 36**: what Play requires of new apps and updates since 31 Aug 2026.
-- **Version code**: the commit's time, so it only grows along `next`. Play's ceiling (2,100,000,000) is reached in 2036.
+- **Version code**: the commit's time, so it only grows along `next`. Play takes each code once, so uploading again
+  needs a new commit. Play's ceiling (2,100,000,000) is reached in 2036.
+- **16 KB memory pages**: every native library is aligned for them (Play requires it for Android 15 targets); the build
+  script checks each one.
 - **Signing: Play App Signing with Google's key** (the default; Google now makes a quantum-ready hybrid key). We keep
   only an **upload key**, new for Play: Uni makes it on aero, keeps it at `~/.config/parachute-play-upload/`, and sets
   the four repository secrets `PLAY_UPLOAD_KEYSTORE_BASE64`, `PLAY_UPLOAD_KEYSTORE_PASSWORD`, `PLAY_UPLOAD_KEY_ALIAS`,
@@ -48,8 +52,9 @@ testers opted in for the 14 days before applying. Internal testing doesn't count
 
   The cost: a Play install and an APK from aero have different signers, so one can't update the other. Moving between
   them is a reinstall (the key comes back by pairing). The other way, giving Play a copy of the play-test key, keeps
-  one signature everywhere but adds steps and gives up Google's hybrid key; it can be chosen until the first open or
-  production release. Recommended: Google's key.
+  one signature everywhere, but adds steps, gives up Google's hybrid key, and hands Google the key that signs the
+  builds people take outside Play. Recommended: Google's key. Decide before the first upload: Google's page allows a
+  change until the first open or production release, but internal testers would have to reinstall.
 - **Sideloaded APKs and Android's developer verification** (enforced worldwide in 2027 on Google-certified phones;
   GrapheneOS doesn't enforce it). Creating the app in Play Console registers the package and the Play signing key. The
   play-test key that signs the aero APK must be added too: Play Console → Android developer verification → the
@@ -59,9 +64,10 @@ testers opted in for the 14 days before applying. Internal testing doesn't count
 
 None of this is needed for internal testing; all of it before closed testing.
 
-- **Privacy policy URL:** https://github.com/ParachuteComputer/parachute/blob/next/docs/PRIVACY.md until
-  parachute.computer/privacy/ carries the app's part (that page covers Parachute Cloud today).
-- **Ads:** no ads.
+- **Privacy policy URL:** https://parachute.computer/privacy/, which Settings → Privacy opens in the app too. That page
+  covers Parachute Cloud today; the app's part ([PRIVACY.md](PRIVACY.md)) has to be added there before closed testing
+  (a site change, with Aaron's go-ahead). For internal testing the GitHub page of PRIVACY.md will do.
+- **Ads:** no ads. **Advertising ID:** not used (the app doesn't ask for it). **News app:** no.
 - **App access:** reviewers need a sign-in that always works without an emailed code. Parachute Cloud's sign-in is an
   emailed code, so the answer is a reviewer account on a hub with a password, and the steps (first screen → Your notes
   on another Parachute → its address → Other ways to sign in). **Not set up yet** (Uni).
@@ -69,20 +75,25 @@ None of this is needed for internal testing; all of it before closed testing.
   gambling or purchases; users **can** interact (rooms); no location shared. Expect Everyone or Teen, with "Users
   Interact".
 - **Target audience:** 18 and over.
+- **User-generated content:** rooms let people send each other messages, and Play asks such apps for a way to report
+  content and block a person, and for rules on what is allowed. The app has neither yet. Needed before closed testing
+  review; the rooms applet is where it goes.
 - **Data safety:** the answers are in the next section.
 - **Foreground service:** the app declares `remoteMessaging` for its fallback relay listener (NotifyService.kt), so
   Play asks for a description and a link to a short video of a person turning on notifications while the app is
-  closed. Google reads `remoteMessaging` narrowly (passing messages between a person's devices); if review refuses it,
-  the type becomes `specialUse` with the same explanation. Description: "Keeps one connection to the person's own
+  closed. Google reads `remoteMessaging` narrowly (passing messages between a person's devices). If review refuses it,
+  the plain way out is to leave the listener out of the Play build (one more line in its manifest, and a guard where
+  the app starts it): people on Play then get notifications while closed through a UnifiedPush app such as ntfy. Description: "Keeps one connection to the person's own
   message relay so that messages that name them arrive while the app is closed, on phones without a push
   distributor. The person turns it on or off in Settings; it shows a lasting notification while it runs." The video:
   **not made yet** (Uni, on the emulator).
 - **Account deletion:** the first screen offers **Sign in with Parachute Cloud**, which makes an account for a new
   email, so Play requires deletion from inside the app and on the web. Web: https://parachute.computer/privacy/
-  ("Deleting your data": email hello@parachute.computer; Cloud deletes the account and its vaults). In the app:
-  **not built yet**. Parachute Cloud already has the door (`POST /account/delete`, `account_delete` in its account
+  ("Deleting your data": email hello@parachute.computer; Cloud deletes the account and its vaults); Play prefers a page
+  of its own that names the app and says what is deleted and what is kept. In the app: **not built yet**. Parachute Cloud already has the door (`POST /account/delete`, `account_delete` in its account
   descriptor); the app needs a Settings line for a Cloud sign-in that uses it, or links to a Cloud page that does.
 - **Government, financial, health features:** none.
+- **Countries:** choose them on the closed testing track (internal testing needs none).
 
 ### Data safety answers
 
@@ -157,30 +168,35 @@ Revisit it with an iPhone app: TestFlight would then serve both.
   `APPLE_API_KEY_P8` (the .p8's text). None set, and on every pull request: ad-hoc as now. Some set: the run fails.
 
 After the first notarised build, the Mac asks once more about the Keychain item (the signature changed from ad-hoc),
-then not again. The certificate needs renewing before it expires (check the date on the first one; G2 certificates
-may be valid for one year); renewing means a new .p12 in the same secret.
+then not again. The certificate needs renewing before it expires (check the date on the first one: Apple's page says
+one year for G2 certificates, other sources five); renewing means a new .p12 in the same secret. notarytool also stops
+working whenever Apple has a new agreement the Account Holder hasn't accepted.
 
 ## The secrets Uni asks for (through a sealed secret card)
 
-Each goes into the repository's Actions secrets; none is ever printed, pasted in chat or committed.
+Three things, as the files Apple and Google give (Uni base64-encodes what needs it). Each goes into the repository's
+Actions secrets; none is ever printed, pasted in chat or committed.
 
 1. **App Store Connect API key** (Team key, role Developer): the `.p8` file, its Key ID, and the Issuer ID →
    `APPLE_API_KEY_P8`, `APPLE_API_KEY`, `APPLE_API_ISSUER`.
 2. **Developer ID Application certificate** as a `.p12` and its password → `APPLE_CERTIFICATE` (base64),
    `APPLE_CERTIFICATE_PASSWORD`. Apple lets no API key make this certificate, so it comes from Aaron's Mac.
-3. **Play Console service account key** (JSON), with "Release apps to testing tracks" and "Manage testing tracks and
-   edit tester lists" on this app only. It lets Uni upload later builds to internal testing and keep the tester list.
-   The first bundle has to be uploaded by hand in Play Console; no upload script exists yet.
+3. **A Google Cloud service account key** (JSON) for the Google Play Developer API. It is made in Google Cloud Console,
+   then the service account's email is invited in Play Console → Users and permissions, on this app only, with "View
+   app information", "Release apps to testing tracks" and "Manage testing tracks and edit tester lists". It lets Uni
+   upload later builds to internal testing and keep the tester list. The first bundle has to be uploaded by hand in
+   Play Console; no upload script exists yet.
 
-The Play upload key is ours, not Aaron's: Uni makes it.
+The Play upload key is ours, not Aaron's: Uni makes it, before Aaron's first upload.
 
 ## Next, after Aaron's steps
 
 | What | Who |
 |---|---|
-| Make the upload key on aero, set the four `PLAY_UPLOAD_*` secrets | Uni |
+| Before Aaron's first upload: make the upload key on aero, set the four `PLAY_UPLOAD_*` secrets, run Play by hand on `next`, give Aaron the `.aab` from its artifact | Uni |
 | Set the five Apple secrets; run Mac by hand on `next`; check the summary says notarised | Uni |
 | A reviewer account on a hub with a password (App access) | Uni |
+| Report and block in rooms (user-generated content) | an app worker |
 | The foreground-service video (emulator, 30 s) | Uni |
 | Cloud account deletion inside the app | an app worker |
 | The app's part on parachute.computer/privacy/ | Uni, with Aaron's go-ahead for the site |
