@@ -94,6 +94,7 @@ const MAX_META = 40;
 const MAX_OFFSET = 5_000;
 /** The hub's page the module reads at a time, and how many more than asked it may read for the notes it drops. */
 const HUB_PAGE = 200;
+const HUB_PAGE_FULL = 50;
 const EXTRA_PAGES = 3;
 /** What a list may be ordered by: when it was made or changed, or a field (never link_count: it counts links to notes
  *  outside the folders). */
@@ -235,7 +236,9 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     const links = rawLinks === "true";
     const tag = q.get("tag")?.replace(/^#/, "") || null;
     const want = offset + limit;
-    const pages = search ? 1 : Math.ceil(want / HUB_PAGE);
+    // a page with bodies or links is smaller (what the hub sends for it is bigger)
+    const size = content || links ? HUB_PAGE_FULL : HUB_PAGE;
+    const pages = search ? 1 : Math.ceil(want / size);
     const seen = new Set<string>();
     const out: (VaultNote & { path: string })[] = [];
     try {
@@ -243,8 +246,10 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         ctx.charge(pages);
         const mine: (VaultNote & { path: string })[] = [];
         // a few pages more than asked, for the notes the judging drops; then what it has
+        // (past EXTRA_PAGES of notes it drops ahead of the last one asked for, a page comes back short; and a note changed
+        // while it reads moves to the front, so one other may be missed: a list read in pages, as any is)
         for (let at = 0, read = 0; mine.length < want && read < pages + EXTRA_PAGES; read++) {
-          const size = search ? limit : HUB_PAGE;
+          // a search too is asked for a whole page and cut after judging: the hub ranks it and drops offset, never limit
           const rows = await d.query(p, { limit: size, offset: at, tag, search: search || null, content, links, orderBy, sort, meta });
           at += rows.length;
           for (const n of rows) {
@@ -260,11 +265,11 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
       // the hub refusing the words (on 0.8, a field it doesn't index): the applet's to fix, not a failure
       return (e as { status?: number })?.status === 400 ? fail(400, "bad_params") : fail(502, "failed");
     }
-    // two folders, one order: put together as the hub ordered each (by when made or changed), ties as the hub breaks them
+    // two folders, one order: put together as the hub ordered each (by when made or changed), ties by id as the hub breaks them
     if (prefixes.length > 1) {
       const key = orderBy === "created_at" ? "createdAt" : "updatedAt";
       const dir = sort === "desc" ? -1 : 1;
-      out.sort((a, b) => dir * ((a[key] ?? "").localeCompare(b[key] ?? "") || (a.createdAt ?? "").localeCompare(b.createdAt ?? "") || a.id.localeCompare(b.id)));
+      out.sort((a, b) => dir * ((a[key] ?? "").localeCompare(b[key] ?? "") || a.id.localeCompare(b.id)));
     }
     return json(200, "OK", out.slice(offset, want).map((n) => publicNote(n, content, links ? granted : null)));
   }

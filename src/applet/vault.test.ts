@@ -297,13 +297,14 @@ describe("the hub's query words, kept to the folders", () => {
     async query(prefix, q) {
       asked.push({ prefix, q });
       const field = (n: VaultNote, f: string) => (n.metadata ?? {})[f] as number | string | undefined;
-      let rows = notes.filter((n) => (n.path ?? "").toLowerCase().startsWith(prefix.toLowerCase()) && (!q.tag || (n.tags ?? []).includes(q.tag)));
+      let rows = notes.filter((n) => (n.path ?? "").toLowerCase().startsWith(prefix.toLowerCase()) && (!q.tag || (n.tags ?? []).includes(q.tag)) && (!q.search || (n.content ?? "").includes(q.search)));
       for (const [k, v] of q.meta) {
         const m = /^meta\[(\w+)\](?:\[(\w+)\])?$/.exec(k)!;
         rows = rows.filter((n) => m[2] === "gte" ? Number(field(n, m[1])) >= Number(v) : String(field(n, m[1])) === v);
       }
       const key = (n: VaultNote) => q.orderBy === "updated_at" ? n.updatedAt ?? "" : q.orderBy === "created_at" ? n.createdAt ?? "" : field(n, q.orderBy ?? "") ?? "";
-      rows = [...rows].sort((a, b) => { const x = key(a), y = key(b); const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y)); return (q.sort === "desc" ? -c : c) || a.id.localeCompare(b.id); });
+      // a search ranks by itself (here, the boss's memo first); anything else by its order
+      rows = q.search ? [...rows].sort((a, b) => Number(b.id === "w9") - Number(a.id === "w9")) : [...rows].sort((a, b) => { const x = key(a), y = key(b); const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y)); return (q.sort === "desc" ? -c : c) || a.id.localeCompare(b.id); });
       return rows.slice(q.offset, q.offset + q.limit).map((n) => (q.links ? withLinks(n) : n));
     },
   };
@@ -346,15 +347,17 @@ describe("the hub's query words, kept to the folders", () => {
 
   it("pages only its own notes: a note outside the folders the hub counts never moves where a page starts or ends", async () => {
     notes.push(
-      { id: "w1", path: "Recipes/A", content: "", tags: [], metadata: { cost: 100 }, updatedAt: "2026-11-07" },
-      { id: "w2", path: "Recipes/B", content: "", tags: [], metadata: { cost: 300 }, updatedAt: "2026-11-08" },
-      { id: "w3", path: "Recipes/C", content: "", tags: [], metadata: { cost: 900 }, updatedAt: "2026-11-09" },
+      { id: "w1", path: "Recipes/A", content: "memo", tags: [], metadata: { cost: 100 }, updatedAt: "2026-11-07" },
+      { id: "w2", path: "Recipes/B", content: "memo", tags: [], metadata: { cost: 300 }, updatedAt: "2026-11-08" },
+      { id: "w3", path: "Recipes/C", content: "memo", tags: [], metadata: { cost: 900 }, updatedAt: "2026-11-09" },
     );
-    const hidden: VaultNote = { id: "w9", path: "recipes/Boss", content: "", tags: [], metadata: { cost: 777 }, updatedAt: "2026-11-10" };
+    const hidden: VaultNote = { id: "w9", path: "recipes/Boss", content: "memo", tags: [], metadata: { cost: 777 }, updatedAt: "2026-11-10" };
     const pages = async () => {
       const f = frameOn(hub), said: string[] = [];
       for (const x of [301, 600, 777, 778]) said.push(JSON.stringify((await f.get(`/api/notes?order_by=cost&sort=asc&limit=1&meta[cost][gte]=${x}`)).body.map((n: { path: string }) => n.path)));
       for (const o of [0, 1, 2, 3]) said.push(JSON.stringify((await f.get(`/api/notes?order_by=cost&sort=asc&limit=1&offset=${o}&meta[cost][gte]=1`)).body.map((n: { path: string }) => n.path)));
+      // a search, ranked by the hub with the hidden note first, the same
+      for (const x of [101, 700, 777, 778]) said.push(JSON.stringify((await f.get(`/api/notes?search=memo&limit=1&meta[cost][gte]=${x}`)).body.map((n: { path: string }) => n.path)));
       return said;
     };
     const without = await pages();
