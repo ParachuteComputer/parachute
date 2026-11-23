@@ -149,3 +149,29 @@ describe("what must land in order, and what must not wait", () => {
     expect(f.sent().filter((m) => m.method === "publish").length).toBe(2);
   });
 });
+
+describe("a call that runs long in the shell", () => {
+  // Found in review (T-476): Import from Notion gave up after the kit's 20 seconds while the shell went on uploading a
+  // workspace's pictures; the button came back and a second import ran beside the first.
+  it("Import from Notion is still waited on after ten minutes", async () => {
+    const dom = new JSDOM("<!doctype html><body></body>", { runScripts: "outside-only", pretendToBeVisual: true });
+    const w = dom.window as unknown as Window & typeof globalThis & { eval(s: string): unknown };
+    const sent: Msg[] = [];
+    const shell = { postMessage: (m: Msg) => { sent.push(m); } };
+    Object.defineProperty(w, "parent", { value: shell, configurable: true });
+    Object.assign(w, { TextEncoder, TextDecoder });
+    // ten minutes pass at once: any wait of 15 s up to 10 min is over on the next turn
+    const real = w.setTimeout.bind(w);
+    (w as unknown as { setTimeout: unknown }).setTimeout = (fn: () => void, ms?: number) => real(fn, ms && ms >= 15_000 && ms <= 600_000 ? 0 : ms);
+    w.eval(FRAME_KIT);
+    const ev = new w.MessageEvent("message", { data: { uni: 1, event: "ready", data: { contract: 1, saved: {} } } });
+    Object.defineProperty(ev, "source", { value: shell });
+    w.dispatchEvent(ev);
+    const kit = (w as unknown as { parachute: { vaults: { importNotion(v: string): Promise<unknown> } } }).parachute;
+    let ended: unknown = "still waiting";
+    kit.vaults.importNotion("kitchen").then(() => { ended = "answered"; }, (e: Error) => { ended = e.message; });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(sent.some((m) => m.method === "importNotion")).toBe(true);
+    expect(ended).toBe("still waiting");
+  });
+});
