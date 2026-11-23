@@ -29,11 +29,11 @@ import { clientFor, keptClientFor } from "../vault/client";
 import { onFresh } from "../vault/readCache";
 import { originOf, listVaults, subscribeVaults, type VaultRecord } from "../vault/store";
 import { isMine } from "../vault/whose";
-import { homeVault } from "./frameSource";
+import { homeVault, setHome } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
 import type { Levels } from "./levels";
-import { BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, followed, isAppPlace, newerBundle, NEWCOMER_BUNDLE, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
+import { BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, defaultBundles, followed, isAppPlace, newerBundle, NEWCOMER_BUNDLE, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -407,6 +407,33 @@ async function readBundleRecords(home: VaultRecord): Promise<RawBundle[]> {
     }
   }
   return out;
+}
+/** The person's own bundle records in a vault that isn't the home (Settings → Your bundle offers them: choosing one makes
+ *  that vault the home). Read as the home's are, but for following someone else's: a followed one is listed as written. */
+export async function bundlesIn(rec: VaultRecord): Promise<Bundle[]> {
+  const shipped = new Set(defaultBundles().map((d) => d.id));
+  // each id once: the newer record first, as the home's are read (bundlesFrom)
+  const all = (await bundleRows(keptClientFor(rec))).map(({ row, body }) => bundleRecordOf(body, row.path ?? null, row.id)).filter((b): b is Bundle => !!b && !shipped.has(b.id));
+  return all.filter((b, i) => all.findIndex((x) => x.id === b.id) === i);
+}
+/** Open a bundle kept in another of the person's vaults: it is read there first, then that vault becomes the home and
+ *  the bundle opens as chooseBundle opens one. If it can't be read there or the choice can't be saved, the home and
+ *  this device's choice go back to what they were, and the error says why. */
+export async function chooseBundleIn(rec: VaultRecord, id: string): Promise<void> {
+  if (!(await bundlesIn(rec)).some((b) => b.id === id)) throw new Error("That bundle couldn't be read there just now.");
+  const before = homeVault()?.key ?? null;
+  let chosen: Record<string, unknown> = {};
+  try { chosen = JSON.parse(localStorage.getItem(DEVICE_BUNDLE_KEY) ?? "{}") as Record<string, unknown>; } catch { /* none */ }
+  setHome(rec.key);
+  try {
+    // (it reads the settings again once written)
+    await chooseBundle(id);
+  } catch (e) {
+    try { localStorage.setItem(DEVICE_BUNDLE_KEY, JSON.stringify(chosen)); } catch { /* this session */ }
+    if (before) setHome(before);
+    void readSettings();
+    throw e;
+  }
 }
 const parseBundles = (raw: readonly RawBundle[]): Bundle[] => bundlesFrom(raw.map((r) => { const a = bundleRecordOf(r.app, r.path, r.noteId); return a && r.hubOf ? { ...a, hubOf: r.hubOf } : a; }).filter((a): a is Bundle => !!a));
 
