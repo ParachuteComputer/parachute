@@ -329,7 +329,7 @@ async function appletPlace(vault: string, noteId: string): Promise<Place> {
   if (!rec || !e) throw new Error("That isn't an applet this vault has.");
   return placeFor(rec, stripExt(e.path));
 }
-/** Pin one of this device's applets (at the end of the bar), or unpin it however the note names it. */
+/** Pin one of this device's applets (after the other pins), or unpin it however the note names it. */
 export async function pinApplet(vault: string, noteId: string, on: boolean): Promise<void> {
   // unpinning needs no read of that vault: what each place names comes from the copy kept when it can't be read
   if (!on) return changeChoices((r) => pinRaw(r, (x) => names(x, vault, noteId), null));
