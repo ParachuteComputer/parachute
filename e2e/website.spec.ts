@@ -33,6 +33,8 @@ test("the starter as a website: link your Parachute, then it reads and writes th
     // back on the website, linked, the starter on that vault
     await expect(page.getByText(`Linked to ${VAULT}`)).toBeVisible();
     await expect(page.getByRole("heading", { name: "Starter", level: 1 })).toBeVisible();
+    // in the app's own faces, as in the app (nothing fetched: they are in the page)
+    expect(await page.evaluate(async () => { await document.fonts.ready; return ["Literata", "Fraunces", "Instrument Sans"].map((f) => document.fonts.check(`16px "${f}"`) && [...document.fonts].some((x) => x.family.replace(/"/g, "") === f && x.status === "loaded")); })).toEqual([true, true, true]);
     await page.getByRole("textbox", { name: "New note" }).fill("Written from the website");
     await page.getByRole("button", { name: "Add" }).click();
     await expect(page.locator("header").getByRole("heading", { name: "Written from the website" })).toBeVisible();

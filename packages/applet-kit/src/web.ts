@@ -4,6 +4,7 @@
 // unchanged. The vault speaks record words, as in the frame: body and fields, includeBody and includeFields.
 import type { VaultClient } from "@openparachute/surface-client";
 import { cssOf, DEFAULT_THEME, tokensOf } from "../../../src/theme/theme.ts";
+import { FONTS_CSS } from "../../../src/theme/fonts.ts";
 
 export type AppletInfo = { id: string; name: string };
 type Rec = Record<string, unknown>;
@@ -72,7 +73,8 @@ const paint = () => {
   if (typeof document === "undefined") return;
   let el = document.getElementById("parachute-theme");
   if (!el) { el = document.createElement("style"); el.id = "parachute-theme"; document.head.appendChild(el); }
-  el.textContent = cssOf(tokens() as never);
+  // the app's own faces (data: URLs, nothing fetched), then the theme's variables that name them
+  el.textContent = FONTS_CSS + cssOf(tokens() as never);
 };
 if (typeof matchMedia === "function") matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { paint(); for (const cb of themeCbs) cb(tokens()); });
 export const theme = {
