@@ -332,7 +332,7 @@ export function Write({ label, labelled, value, onChange, placeholder, onSend, s
 
 // ── Record ──
 
-/** The microphone button. A tap opens the app's own recorder sheet (the applet never touches the microphone; it needs
+/** The microphone button. A tap opens the app's own recorder sheet, recording (the applet never touches the microphone; it needs
  *  `reach: [voice]`); `onRecorded` gets what was recorded on Send, nothing on Cancel. A failure is said as a toast. */
 export function Record({ onRecorded, children, max_s, disabled, kind = "plain", small, label }: {
   onRecorded: (r: Recording) => void | Promise<unknown>; children?: ReactNode; max_s?: number; disabled?: boolean;

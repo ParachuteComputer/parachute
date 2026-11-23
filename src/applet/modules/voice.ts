@@ -1,7 +1,7 @@
 // voice module: the microphone, for an applet whose manifest says `reach: [voice]` and was allowed on its card
 // (docs/design/KEYRING.md "Voice, files, links, storage"). The applet never touches the microphone: during a tap the
-// shell opens its own recorder sheet over the frame (Record, a running time, Stop, Send, Cancel), records in its own
-// document and, on Send, hands over the recording.
+// shell opens its own recorder sheet over the frame, recording at once (a running time, its shape, Send, Cancel),
+// records in its own document and, on Send, hands over the recording.
 //   voice.record({max_s?})   → {bytes: ArrayBuffer, type: "audio/webm", duration: seconds} on Send, null on Cancel.
 //                              max_s: 1 to 600 (10 minutes, the default)
 import { ContractError, ERROR_CODES, hasOnly, plain } from "../contract.ts";

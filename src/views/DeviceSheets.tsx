@@ -190,7 +190,7 @@ function RecorderSheet({ name, max, done }: { name: string; max: number; done: (
           </svg>
         )}
         {phase === "stopped" && stopped && <p className="quiet" role="status">{STOPPED[stopped]} What was recorded is here.</p>}
-        {phase !== "failed" && <p className="quiet small">{name} gets it only when you press Send. Cancel throws it away.</p>}
+        {phase !== "failed" && <p className="quiet small">{name} gets it only when you press Send.</p>}
         {phase === "failed" && <p role="alert">{why}</p>}
         <div className="grant-actions">
           <button type="button" className="quiet-button" onClick={cancel}>{phase === "failed" ? "Close" : "Cancel"}</button>
