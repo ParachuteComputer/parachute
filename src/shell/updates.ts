@@ -50,11 +50,14 @@ export function checkUpdates(force = false, read: () => Promise<Answer> = native
   if (running) return running;
   if (!force && Date.now() - lastAt < EVERY_MS) return Promise.resolve();
   lastAt = Date.now();
+  const before = state.kind === "offer" ? state.offer.commit : "";
   if (state.kind !== "offer") set({ kind: "checking" });
   running = read().then((a) => {
     if (!a) return set({ kind: "none" });
     const offer = offerFor(parseFeed(a.body, a.feed), OWN, a.platform);
     set(offer ? { kind: "offer", offer, platform: a.platform } : { kind: "current" });
+    // a refusal was about the build offered then
+    if (inst.install.kind === "failed" && offer?.commit !== before) setInst({ kind: "idle" });
   }, (e: unknown) => {
     // a failed read doesn't take back an offer already made (offline in Settings, the newer build is still there)
     if (state.kind !== "offer") set({ kind: "error", message: e instanceof Error ? e.message : String(e) });
@@ -135,7 +138,7 @@ type Native = (offer: Offer, step: (s: Step) => void) => Promise<void>;
 
 /** Download: on Android, the app's own download and Android's installer; elsewhere, the browser. Never throws: a
  *  failure is the `failed` state, in words to show. */
-export async function download(offer: Offer, platform: string, native: Native = nativeInstall): Promise<void> {
+export async function download(offer: Offer, platform: string, native: Native = nativeInstall, read: () => Promise<Answer> = nativeFeed): Promise<void> {
   if (platform !== "android") {
     try { await openLinkOut(offer.url); } catch (e) { setInst({ kind: "failed", message: e instanceof Error ? e.message : String(e) }); }
     return;
@@ -145,6 +148,12 @@ export async function download(offer: Offer, platform: string, native: Native = 
   setInst({ kind: "downloading", got: 0, total: 0 });
   let handed = false;
   try {
+    // the feed as it is now: a build or file replaced since the offer is taken with the sum the feed now gives it (a
+    // failed read keeps the offer; a feed with nothing newer ends here)
+    await checkUpdates(true, read);
+    const now = updateNow();
+    if (now.kind !== "offer") return setInst({ kind: "idle" });
+    offer = now.offer;
     await native(offer, (s) => {
       if (s.stage === "download") setInst({ kind: "downloading", got: s.got, total: s.total });
       else {

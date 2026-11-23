@@ -100,7 +100,19 @@ describe("afterTry", () => {
 
 describe("download on Android", () => {
   const offer = { at: OWN.at + 60, commit: "fedcba9", url: "https://builds.example.org/parachute/p.apk", sha256: SUM };
+  const now = (o: Record<string, unknown> = {}) => async () => ({ feed: FEED, body: feed({ at: offer.at, commit: offer.commit, files: { android: "p.apk" }, sha256: { android: SUM }, ...o }), platform: "android" });
   beforeEach(() => { resetUpdates(); localStorage.clear(); });
+  it("takes the feed as it is now: the file's sum given since the offer was made", async () => {
+    const other = "1".repeat(64);
+    let asked: unknown;
+    await download(offer, "android", async (o) => { asked = o; }, now({ sha256: { android: other } }));
+    expect(asked).toMatchObject({ commit: "fedcba9", sha256: other });
+    // and a feed with nothing newer any more: no download
+    asked = undefined;
+    await download(offer, "android", async (o) => { asked = o; }, now({ at: OWN.at, commit: OWN.commit }));
+    expect(asked).toBeUndefined();
+    expect(installState().install).toEqual({ kind: "idle" });
+  });
   it("shows the download, then Android's installer, and remembers the try", async () => {
     const seen: string[] = [];
     await download(offer, "android", async (_o, step) => {
@@ -108,21 +120,38 @@ describe("download on Android", () => {
       seen.push(JSON.stringify(installState().install));
       step({ stage: "install", checked: true });
       seen.push(JSON.stringify(installState().install));
-    });
+    }, now());
     expect(seen).toEqual([JSON.stringify({ kind: "downloading", got: 5, total: 10 }), JSON.stringify({ kind: "installing", checked: true })]);
     expect(JSON.parse(localStorage.getItem("parachute.update.tried")!)).toMatchObject({ from: OWN.commit, to: "fedcba9", toAt: offer.at });
     // this build still runs: the next start would say so
     expect(installState().after).toEqual({ kind: "stuck", at: offer.at, why: "" });
   });
   it("keeps Android's refusal with the try", async () => {
-    await download(offer, "android", async (_o, step) => { step({ stage: "install", checked: false }); throw new Error("Not installed: you cancelled it."); });
+    await download(offer, "android", async (_o, step) => { step({ stage: "install", checked: false }); throw new Error("Not installed: you cancelled it."); }, now());
     expect(installState().install).toEqual({ kind: "failed", message: "Not installed: you cancelled it." });
     expect(installState().after).toEqual({ kind: "stuck", at: offer.at, why: "Not installed: you cancelled it." });
   });
   it("a download that fails (a file that doesn't match) is no try", async () => {
-    await download(offer, "android", async () => { throw new Error("The downloaded file isn't the one the update list names."); });
+    await download(offer, "android", async () => { throw new Error("The downloaded file isn't the one the update list names."); }, now());
     expect(installState().install).toMatchObject({ kind: "failed" });
     expect(localStorage.getItem("parachute.update.tried")).toBeNull();
     expect(installState().after).toEqual({ kind: "none" });
+  });
+});
+
+describe("a refusal belongs to its build", () => {
+  beforeEach(() => { resetUpdates(); localStorage.clear(); });
+  it("goes when the feed offers another build, and stays for the same one", async () => {
+    const one = async () => ({ feed: FEED, body: feed({ at: OWN.at + 60, commit: "fedcba9" }), platform: "android" });
+    const two = async () => ({ feed: FEED, body: feed({ at: OWN.at + 120, commit: "0123456" }), platform: "android" });
+    await checkUpdates(true, one);
+    const o = updateNow();
+    if (o.kind !== "offer") throw new Error("no offer");
+    await download(o.offer, "android", async () => { throw new Error("Not installed: the file is an older build than this one."); }, one);
+    expect(installState().install.kind).toBe("failed");
+    await checkUpdates(true, one);
+    expect(installState().install.kind).toBe("failed");
+    await checkUpdates(true, two);
+    expect(installState().install).toEqual({ kind: "idle" });
   });
 });
