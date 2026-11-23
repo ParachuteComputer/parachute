@@ -1,5 +1,5 @@
 // Room: one room on a Buzz relay (a NIP-29 group), as the Uni app shows it: its messages and threads, the composer,
-// Uni's cards and asks, media, voice notes, typing, and Uni's turn (working, Stop, listening). A component
+// Uni's cards and asks, media, voice notes, typing, and Uni's turn (working, Stop). A component
 // record (Components/Room, id room) that applets import, `import Room from "component:room"`, and draw with
 // `<Room service="rooms" room={id} />`: it runs in the importing applet's frame, with that applet's services and what
 // its card allows, so a grant scoped to one room keeps it to that room. It talks to the relay only through the shell
@@ -16,7 +16,8 @@
 //   place    optional: where it was left, kept by the importer across opens: `get()` the distance from the foot it was
 //            left at (null: at the foot), `set(d)` when it goes
 // Which key is Uni's is the service's own declaration (ready().services: approvals.from, else notify.from): without
-// one there is no turn line, no Stop and no listening switch. Its named exports (the store, the cards' readers) are for
+// one there is no turn line and no Stop. Uni hears every message here unless the room was muted (an older build's
+// switch, kept per room): then "Uni muted" shows, and a tap lets Uni listen again; listening is never shown. Its named exports (the store, the cards' readers) are for
 // the importer's own list; times are the kit's (when), a relay's seconds as they come.
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { app, Button, Link, Linked, link, Loading, onShown, Pages as KitPages, Problem, ready, Record, services, shown as onScreen, storage, toast, when, Write } from "parachute";
@@ -451,7 +452,6 @@ const CSS = `
 .room .composer .attach, .room .composer .pa-record { width: 2.4em; height: 2.4em; padding: 0; }
 .room .composer .note { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: var(--fs-small); color: var(--muted); }
 .room .composer .listen { order: 10; margin-left: auto; color: var(--muted); }
-.room .composer .listen[aria-pressed="true"] { border-color: var(--text); color: var(--text); }
 .room .pick { list-style: none; margin: 0 0 6px; padding: 0; border: 1px solid var(--line); background: var(--surface); }
 .room .pick li .pa-button { display: block; width: 100%; text-align: left; padding: 6px 10px; color: var(--text); text-decoration: none; border-radius: 0; }
 .room .pick li[aria-selected="true"] .pa-button { background: var(--tint); box-shadow: inset 3px 0 0 var(--accent); }
@@ -689,7 +689,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     } catch (e: any) { setErr(`Not sent: ${e?.message ?? e}`); }
     setPosting(false);
   };
-  const toggleUni = () => { const next = !listening; setListening(next); storage.set(`u:${room}`, next ? null : false).catch(() => {}); };
+  // muted (a choice an older build offered, kept per room): one tap and Uni hears this room again
+  const listenAgain = () => { setListening(true); storage.set(`u:${room}`, null).catch(() => {}); };
   const answer = async (ask: Ev, a: "pick" | "did" | "seen" | "later", pick?: { id: string; label: string }) => {
     const words = a === "pick" ? `Picked: ${pick!.label}` : a === "did" ? "Did it." : a === "seen" ? "Seen." : "Later.";
     const body: any = { v: 1, ask: ask.id, a };
@@ -757,7 +758,7 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     {/* at the foot, in view: what shows above may be the list's copy, and this says the room isn't live */}
     {readErr ? <div className="read-err"><Problem error={readErr} onRetry={() => setReadTry((n) => n + 1)}>Couldn't read the room</Problem></div> : null}
     <Composer key={`${room}|${thread ?? ""}`} st={st} relay={relay} room={room} thread={thread} members={authors} send={send} typing={typing} setErr={setErr} sendErr={sendErr} name={name || "the room"}
-      listen={uniHere ? { on: listening, toggle: toggleUni } : null} />
+      muted={uniHere && !listening ? listenAgain : null} />
   </section></Svc.Provider>;
 }
 
@@ -972,7 +973,7 @@ async function plainImage(f: File): Promise<{ bytes: ArrayBuffer; type: string }
 /** What one message may hold here: the app takes a call of at most 8 KB from an applet. */
 const MAX_TEXT = 7000;
 
-function Composer({ st, relay, room, thread, members, send, typing, setErr, sendErr, name, listen }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; send: (c: string, extra?: string[][], mentions?: string[]) => Promise<boolean>; typing: string[]; setErr: (e: string) => void; sendErr: string; name: string; listen: { on: boolean; toggle: () => void } | null }) {
+function Composer({ st, relay, room, thread, members, send, typing, setErr, sendErr, name, muted }: { st: Store; relay: any; room: string; thread: string | null; members: string[]; send: (c: string, extra?: string[][], mentions?: string[]) => Promise<boolean>; typing: string[]; setErr: (e: string) => void; sendErr: string; name: string; muted: (() => void) | null }) {
   const s = st.s;
   const svc = useContext(Svc);
   const [text, setText] = useState("");
@@ -1067,8 +1068,9 @@ function Composer({ st, relay, room, thread, members, send, typing, setErr, send
         {sendErr && <Problem>{sendErr}</Problem>}
         <span className="typing">{typing.length === 1 ? `${typing[0]} is typing…` : typing.length === 2 ? `${typing[0]} and ${typing[1]} are typing…` : typing.length > 2 ? "Several people are typing…" : ""}</span>
         {text.length > MAX_TEXT - 500 && <span className="quiet">{MAX_TEXT - text.length} characters left in this message</span>}
-        {listen && <Button small className="listen" aria-pressed={listen.on} onClick={listen.toggle} aria-label={listen.on ? "Uni is listening. Mute Uni for your messages" : "Uni is muted. Let Uni listen again"}
-          title={listen.on ? "Uni hears what you send here. Tap to mute." : "Uni is muted: your messages don't notify Uni. Tap to let Uni listen."}>{listen.on ? "Uni listening" : "Uni muted"}</Button>}
+        {/* Uni hearing the room is the usual: nothing says so (Aaron, 11-22). Only a room muted before shows it, with the way back */}
+        {muted && <Button small className="listen" onClick={muted} aria-label="Uni is muted here. Let Uni listen again"
+          title="Your messages here don't notify Uni. Tap to let Uni listen.">Uni muted</Button>}
         {files.map((f, i) => <span key={i} className="file-chip">{f.name} <Button kind="quiet" small aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((_, j) => j !== i))}>×</Button></span>)}
       </div>
       {pick && options.length > 0 && <ul className="pick pa-tight" role="listbox" aria-label="People in this room">{options.map((o, i) => <li key={o.p} role="option" aria-selected={i === pick.sel}><Button kind="quiet" onMouseDown={(e) => { e.preventDefault(); choose(o); }}>{o.n}</Button></li>)}</ul>}

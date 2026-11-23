@@ -225,9 +225,22 @@ test("Uni's turn in a room: a quick reply, working and Stop, muted, a draft with
     await expect.poll(async () => (await mine("/stop")).length, { timeout: 15_000 }).toBe(1);
     expect((await mine("/stop"))[0].tags).toContainEqual(["p", bob.pubkey]);
 
-    // muted: what she sends here doesn't name Uni, and the switch says so
-    await app.getByRole("button", { name: "Uni is listening. Mute Uni for your messages" }).click();
-    await expect(app.getByRole("button", { name: "Uni is muted. Let Uni listen again" })).toHaveAttribute("aria-pressed", "false");
+    // Uni hearing the room is the usual, so nothing says so (Aaron, 11-22: "Uni listening feels irrelevant to show")
+    await expect(app.getByText("Uni listening")).toHaveCount(0);
+    await expect(app.getByRole("button", { name: /Mute Uni/ })).toHaveCount(0);
+    // a room muted before (an older build's switch, kept in the applet's storage on this device) says so, and stays muted
+    const kept = await page.evaluate(([prefix, key]) => {
+      const names = Object.keys(localStorage).filter((k) => k.startsWith(prefix));
+      for (const k of names) localStorage.setItem(k, JSON.stringify({ ...JSON.parse(localStorage.getItem(k) ?? "{}"), [key]: false }));
+      return names.length;
+    }, ["parachute.applet-storage.v1:" /* src/shell/saved.ts SAVED_PREFIX */, `u:${b}`] as const);
+    expect(kept).toBeGreaterThan(0);
+    // (the app holds the store while it runs: it reads the device's copy when it starts again)
+    await page.goto(appUrl);
+    await page.getByRole("button", { name: "Open Rooms" }).click();
+    await list.getByRole("button", { name: new RegExp(`Beds ${stamp}`) }).click({ timeout: 30_000 });
+    await expect(app.getByRole("button", { name: "Uni is muted here. Let Uni listen again" })).toBeVisible();
+    // muted: what she sends here doesn't name Uni
     const field = app.getByLabel(`Message Beds ${stamp}`);
     await field.fill(`Just noting ${stamp}`);
     await app.getByRole("button", { name: "Send message" }).click();
@@ -246,11 +259,18 @@ test("Uni's turn in a room: a quick reply, working and Stop, muted, a draft with
     await app.getByRole("button", { name: "← Rooms" }).click();
     await list.getByRole("button", { name: new RegExp(`Beds ${stamp}`) }).click();
     await expect(field).toHaveValue(`Thanks @Bob for the beds ${stamp}`);
-    await expect(app.getByRole("button", { name: "Uni is muted. Let Uni listen again" })).toBeVisible(); // muted stays, per room
+    await expect(app.getByRole("button", { name: "Uni is muted here. Let Uni listen again" })).toBeVisible(); // muted stays, per room
     await app.getByRole("button", { name: "Send message" }).click();
     await expect.poll(async () => (await mine(`for the beds ${stamp}`)).length, { timeout: 15_000 }).toBe(1);
     expect((await mine(`for the beds ${stamp}`))[0].tags).toContainEqual(["p", bob.pubkey]); // the mention came back with the text
     await expect(field).toHaveValue("");
+    // one tap and Uni hears the room again: "Uni muted" goes, nothing takes its place, and what she sends names Uni
+    await app.getByRole("button", { name: "Uni is muted here. Let Uni listen again" }).click();
+    await expect(app.getByText("Uni muted")).toHaveCount(0);
+    await field.fill(`Over to you ${stamp}`);
+    await app.getByRole("button", { name: "Send message" }).click();
+    await expect.poll(async () => (await mine(`Over to you ${stamp}`)).length, { timeout: 15_000 }).toBe(1);
+    expect((await mine(`Over to you ${stamp}`))[0].tags).toContainEqual(["p", bob.pubkey]);
     await app.getByRole("button", { name: "← Rooms" }).click();
     await list.getByRole("button", { name: new RegExp(`Shed ${stamp}`) }).click();
     await expect(app.getByLabel(`Message Shed ${stamp}`)).toHaveValue(`a shed draft ${stamp}`);
