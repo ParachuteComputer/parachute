@@ -8,6 +8,8 @@ import { api, hubState, VAULT } from "./hub";
 type Row = { id: string; path: string; content?: string; tags?: string[] };
 
 test("Parachute Simplified: sign in → Notes → find, edit and write a note → Connect → Capture a line → Journal", async ({ page, context }) => {
+  // one walk through five screens and a sign-in: 25-30 s on its own, past 30 s after a long run of specs
+  test.setTimeout(60_000);
   const hub = hubState();
   const stamp = Date.now().toString(36);
   const made: string[] = [];
