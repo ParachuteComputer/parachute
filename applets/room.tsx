@@ -420,6 +420,7 @@ const CSS = `
 .room .file { border: 1px solid var(--line); padding: 6px 10px; border-radius: var(--radius-field); margin: 6px 0; display: inline-block; }
 .room .card { border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); padding: 10px 14px; margin: 6px 0; background: var(--card-fill); box-shadow: var(--shadow-card); }
 .room .card .head { font: 600 var(--fs-label) var(--sans); letter-spacing: var(--label-track); text-transform: var(--label-transform); font-variant-caps: var(--label-caps); color: var(--label-ink); }
+.room .card .head .want { color: var(--primary); }
 .room .card .what { font: var(--fs-lead)/1.35 var(--serif); margin: 4px 0; }
 .room .card .why { color: var(--muted); }
 .room .card .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
@@ -801,7 +802,7 @@ function AskCard({ e, ask, answeredBy, mine, answer }: { e: Ev; ask: Ask; answer
   }
   const signed = ask.kind === "approve" || ask.kind === "give";
   return <div className="card" role="group" aria-label={`Wants you: ${ask.what}`}>
-    <div className="head">◆ Wants you · {KIND_WORD[ask.kind]} · until {when.short(ask.until)}</div>
+    <div className="head"><span className="want">◆ Wants you</span> · {KIND_WORD[ask.kind]} · until {when.short(ask.until)}</div>
     <p className="what">{ask.what}</p>
     <p className="why">{ask.why}</p>
     {ask.context && <Markdown text={ask.context} />}
