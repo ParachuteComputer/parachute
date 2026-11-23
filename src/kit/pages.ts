@@ -81,6 +81,8 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
     sky.style.width = `${per * pageW}px`;
     // as tall as the place's head (its name, what sits over and beside it) and a short fade: the rows under it are on paper
     const head = flow.querySelector<HTMLElement>(":scope > .pa-page-head");
+    // (watched itself: a face drawn in, a density changed, grow it with no change the flow's observers see)
+    if (head && head !== watchedHead) { if (watchedHead) ro?.unobserve(watchedHead); ro?.observe(head); watchedHead = head; }
     if (head) sky.style.height = `${Math.round(head.getBoundingClientRect().bottom - book.getBoundingClientRect().top + SKY_FADE)}px`;
     else sky.style.removeProperty("height");
     const before = count;
@@ -224,6 +226,7 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
 
   // the count again when the screen or what is on it changes (a list arrives, a line is added, the faces load)
   const ro = typeof ResizeObserver === "function" ? new ResizeObserver(soon) : null;
+  let watchedHead: HTMLElement | null = null;
   ro?.observe(book.parentElement ?? book);
   // the book itself: it shrinks when what sits under it grows (a docked line wrapping to two or three lines)
   if (book.parentElement) ro?.observe(book);
