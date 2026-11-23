@@ -68,8 +68,9 @@ test("Settings is on the bar at every place, in reach with a full bar, at a phon
       await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
       const s = await settingsInReach(page, `Settings at ${size.width}`);
       await expect(s).toHaveAttribute("aria-current", "page");
-      // the bar's other places scroll past it, and a place brought into view (a key's focus, say) is not under it
-      await notUnderSettings(page, "Extra 6");
+      // the bar's other places scroll past it, and a place brought into view (a key's focus, say) is not under it (the
+      // index at 1440×900 holds them all: the short window below is the computer's case)
+      if (size.width < 960) await notUnderSettings(page, "Extra 6");
     }
     // a computer's window too short for the index: Settings is held at its foot, and the places pass above it
     await page.setViewportSize({ width: 1440, height: 640 });
@@ -77,9 +78,17 @@ test("Settings is on the bar at every place, in reach with a full bar, at a phon
     await expect(bar(page).getByRole("link", { name: /Extra 11/ })).toBeAttached();
     expect(await bar(page).evaluate((n) => n.scrollHeight > n.clientHeight), "the index overflows").toBe(true);
     await settingsInReach(page, "the list at 1440×640");
-    await notUnderSettings(page, "Extra 9");
+    await notUnderSettings(page, "Extra 11");
     await bar(page).evaluate((n) => { n.scrollTop = n.scrollHeight; });
     await settingsInReach(page, "the list at 1440×640, scrolled to the end");
+    // on Daylight, Settings open: still at the index's foot
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate(() => localStorage.setItem("parachute.screen.v1", "daylight"));
+    await page.goto("/settings");
+    const foot = await bar(page).evaluate((n) => n.getBoundingClientRect().bottom);
+    const box = (await (await settingsInReach(page, "Settings on Daylight at 1440")).boundingBox())!;
+    expect(foot - (box.y + box.height), "Settings sits at the index's foot on Daylight").toBeLessThan(40);
+    await page.evaluate(() => localStorage.removeItem("parachute.screen.v1"));
   } finally {
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`);
   }
