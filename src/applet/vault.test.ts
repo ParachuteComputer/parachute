@@ -309,10 +309,10 @@ describe("the hub's query words, kept to the folders", () => {
       return rows.slice(q.offset, q.offset + q.limit).map((n) => (q.links ? withLinks(n) : n));
     },
   };
-  function frameOn(deps: VaultDeps, grant = resolvedOf(manifest)) {
+  function frameOn(deps: VaultDeps, grant = resolvedOf(manifest), now?: () => number) {
     const out: HostMessage[] = [];
-    const router = createRouter([createVaultModule(deps, { opens: [{ type: "recipe", path: "Recipes/" }] })]);
-    const s = createSession({ post: (m) => out.push(m), router, grant });
+    const router = createRouter([createVaultModule(deps, { opens: [{ type: "recipe", path: "Recipes/" }], now })]);
+    const s = createSession({ post: (m) => out.push(m), router, grant, now });
     let n = 0;
     const send = async (msg: Record<string, unknown>) => {
       const id = `q${++n}`;
@@ -403,6 +403,47 @@ describe("the hub's query words, kept to the folders", () => {
     asked = [];
     expect(ids(await g.get(`/api/notes?${words}&offset=100`))).toEqual(want[2]);
     expect(asked.length).toBeGreaterThan(0);
+  });
+
+  it("a list read one note a page goes on to its end, and notes it can't see change nothing it hands back", async () => {
+    const bulk = (n: number) => { for (let i = 0; i < n; i++) notes.push({ id: `c${String(i).padStart(4, "0")}`, path: `Recipes/C ${i}`, content: "x", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}:00Z` }); };
+    const chain = async () => {
+      // a page each 200 ms: within the frame's read budget
+      let clock = Date.now();
+      const f = frameOn(hub, resolvedOf(manifest), () => (clock += 200)), got: string[] = [];
+      for (let o = 0; ; o++) {
+        const r = await f.send({ method: "GET", path: `/api/notes?order_by=created_at&sort=asc&include_content=true&limit=1&offset=${o}` });
+        expect(r.status).toBe(200);
+        if (!r.body.length) return got;
+        got.push(r.body[0].id);
+      }
+    };
+    bulk(400);
+    const plain = await chain();
+    expect(plain.filter((id) => id.startsWith("c"))).toHaveLength(400);
+    // notes the hub counts (case-blind) and the module drops, among them: the same list, to the same end
+    for (const k of [5, 12]) {
+      for (let i = 0; i < k; i++) notes.push({ id: `h${k}-${i}`, path: `recipes/Hidden ${i}`, content: "x", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T01:00:${String(i).padStart(2, "0")}Z` });
+      expect(await chain()).toEqual(plain);
+    }
+  });
+
+  it("a page that fails leaves the list where it was: asked again, it goes on, nothing missed", async () => {
+    for (let i = 0; i < 200; i++) notes.push({ id: `d${String(i).padStart(3, "0")}`, path: `Recipes/D ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    const words = "order_by=created_at&sort=asc&include_links=true&limit=50";
+    const ids = (r: { body: { id: string }[] }) => r.body.map((n) => n.id);
+    const want: string[][] = [];
+    for (let o = 0; o < 200; o += 50) want.push(ids(await frameOn(hub).get(`/api/notes?${words}&offset=${o}`)));
+    let fail = false;
+    const flaky: VaultDeps = { ...hub, async query(prefix, q) { if (fail) { fail = false; throw new Error("hub down"); } return hub.query!(prefix, q); } };
+    const f = frameOn(flaky);
+    expect(ids(await f.get(`/api/notes?${words}&offset=0`))).toEqual(want[0]);
+    expect(ids(await f.get(`/api/notes?${words}&offset=50`))).toEqual(want[1]);
+    fail = true;
+    expect((await f.get(`/api/notes?${words}&offset=100`)).status).toBe(502);
+    asked = [];
+    expect(ids(await f.get(`/api/notes?${words}&offset=100`))).toEqual(want[2]);
+    expect(asked[0].q.offset).toBeGreaterThan(0);
   });
 
   it("two folders: newest changed first unless asked, put together as the hub orders each", async () => {

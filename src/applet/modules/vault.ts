@@ -92,9 +92,9 @@ type AttachFromParams = { noteId: string; from: string; path: string };
 /** One refusal for a record outside the folders, one it can't find and a file not attached to it: none tells it more. */
 const notAttached = () => new ContractError(ERROR_CODES.outOfScope, "only a picture attached to a record it reads");
 type FetchParams = { method: string; path: string; headers: Record<string, string>; body: string | null };
-/** A list read in pages: its words, the offset its last page ended at, where the hub was read to, the notes it kept past
- *  that page, and every note it has seen (each is listed once). */
-type Resume = { next: number; at: number; ahead: (VaultNote & { path: string })[]; seen: Set<string>; time: number };
+/** A list read in pages, kept by its words and the offset its last page ended at: where the hub was read to, the notes
+ *  it kept past that page, and every note it has seen (each is listed once). */
+type Resume = { at: number; ahead: (VaultNote & { path: string })[]; seen: Set<string>; time: number };
 
 const MAX_BODY = 512 * 1024;
 const NOTE_TTL_MS = 10_000;
@@ -118,6 +118,10 @@ const HUB_PAGE_FULL = 50;
 const EXTRA_PAGES = 3;
 /** A list going on from where its last page stopped reads this many of the hub's rows again first. */
 const RESUME_BACK = 5;
+/** How long a list read in pages may wait between pages and still go on (a page refused for the read budget waits). */
+const RESUME_TTL_MS = 60_000;
+/** Lists going on at once, per applet. */
+const RESUMES_MAX = 8;
 /** What a list may be ordered by: when it was made or changed, or a field (never link_count: it counts links to notes
  *  outside the folders). */
 const orderable = (v: string) => v === "updated_at" || v === "created_at" || (/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(v) && v !== "link_count");
@@ -198,8 +202,8 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
   /** Each note's attachments as the hub listed them in the last 10 s: a note's pictures ask once, not once each. */
   const lists = attachmentLists((id) => deps.attachments!(id));
   const cache = new Map<string, { at: number; note: VaultNote }>();
-  /** Where each list read in pages stopped (one folder, no search; the last few lists), kept 10 s: its next page goes on
-   *  from there. */
+  /** Where each list read in pages stopped, by its words and the offset its last page ended at (one folder, no search;
+   *  the last few), kept a minute: its next page goes on from there. */
   const resumes = new Map<string, Resume>();
   const remember = (key: string, note: VaultNote) => {
     cache.delete(key);
@@ -236,9 +240,9 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
    *  would count notes the applet never sees, and where a page ends would tell of them. It reads the hub's pages until
    *  it has offset + limit of its own (a bounded number), and is charged by what was asked, not by how many it read.
    *  A list read in pages (one folder, no search) goes on where its last page stopped, when the next asks for the offset
-   *  that page ended at, with the same words, within 10 s: the hub is read on from there (a few rows back, for a note
-   *  removed meanwhile), not again from its first row, and it is charged for the page it asked for. What it hands back
-   *  is the same either way.
+   *  that page ended at, with the same words, within a minute: the hub is read on from there (a few rows back, for a
+   *  note removed meanwhile), not again from its first row, and it is charged for the page it asked for. Each note it
+   *  can see comes once, in the list's order, as from the start; a call that fails leaves where it was for a retry.
    *  Ordering by a field takes one folder (path_prefix, or a grant of one): two folders' fields can't be put together. */
   async function hubList(q: URLSearchParams, prefixes: string[], granted: string[], limit: number, content: boolean, ctx: CallCtx, d: Reads): Promise<FetchResult> {
     if (!d.query) return fail(400, "bad_params");
@@ -273,28 +277,33 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     const size = !later && (content || links) ? HUB_PAGE_FULL : HUB_PAGE;
     // the last page of this same list ended at this offset, a moment ago: go on from there
     const key = prefixes.length === 1 && !search ? JSON.stringify([prefixes[0], tag, content, links, orderBy, sort, meta, d === deps.kept]) : null;
-    const last = key !== null ? resumes.get(key) : undefined;
-    if (key !== null) resumes.delete(key);
-    const go = last && last.next === offset && now() - last.time < NOTE_TTL_MS ? last : null;
+    const slot = key !== null ? `${key}@${offset}` : null;
+    const last = slot !== null ? resumes.get(slot) : undefined;
+    const go = last && now() - last.time < RESUME_TTL_MS ? last : null;
     /** Where `mine` starts in its own list: 0, or the offset it goes on from. */
     const from = go ? offset : 0;
     const pages = search ? 1 : Math.ceil((want - from) / size);
-    const seen = go?.seen ?? new Set<string>();
+    // its own copy: a call that fails puts the resume back as it was, for the kit's retry
+    const seen = new Set<string>(go?.seen);
     const out: (VaultNote & { path: string })[] = [];
     try {
       for (const p of prefixes) {
         ctx.charge(pages);
+        // taken once charged (before anything waits, so a second call for the same page reads from the start)
+        if (go) resumes.delete(slot!);
         const mine: (VaultNote & { path: string })[] = go ? [...go.ahead] : [];
         // a few pages more than asked, for the notes the judging drops; then what it has
         // (past EXTRA_PAGES of notes it drops ahead of the last one asked for, a page comes back short, and a search's past
         // HUB_PAGE less its limit; and a note changed
         // while it reads moves to the front, so one other may be missed: a list read in pages, as any is)
-        // going on: from a few of the hub's rows back, so a note removed behind it moves none past it (each listed once)
-        let at = go ? Math.max(0, go.at - RESUME_BACK) : 0;
+        // where the hub was read to; going on, its first read starts a few rows back, so a note removed behind it moves
+        // none past it (each listed once)
+        let at = go ? go.at : 0;
         for (let read = 0; from + mine.length < want && read < pages + EXTRA_PAGES; read++) {
+          const asked = go && read === 0 ? Math.max(0, at - RESUME_BACK) : at;
           // a search too is asked for a whole page and cut after judging: the hub ranks it and drops offset, never limit
-          const rows = await d.query(p, { limit: size, offset: at, tag, search: search || null, content: content && !later, links: links && !later, orderBy, sort, meta });
-          at += rows.length;
+          const rows = await d.query(p, { limit: size, offset: asked, tag, search: search || null, content: content && !later, links: links && !later, orderBy, sort, meta });
+          at = Math.max(at, asked + rows.length);
           for (const n of rows) {
             if (!n || !n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null || (tag && !(n.tags ?? []).includes(tag))) continue;
             seen.add(n.id); mine.push(n as VaultNote & { path: string });
@@ -303,11 +312,12 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         }
         out.push(...mine.slice(0, want - from));
         if (key !== null) {
-          resumes.set(key, { next: want, at, ahead: mine.slice(want - from), seen, time: now() });
-          while (resumes.size > 4) resumes.delete(resumes.keys().next().value as string);
+          resumes.set(`${key}@${want}`, { at, ahead: mine.slice(want - from), seen, time: now() });
+          while (resumes.size > RESUMES_MAX) resumes.delete(resumes.keys().next().value as string);
         }
       }
     } catch (e) {
+      if (go && slot !== null && !resumes.has(slot)) resumes.set(slot, go);
       if (e instanceof ContractError) throw e;
       // the hub refusing the words (on 0.8, a field it doesn't index): the applet's to fix, not a failure
       return (e as { status?: number })?.status === 400 ? fail(400, "bad_params") : fail(502, "failed");
