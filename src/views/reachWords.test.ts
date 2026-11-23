@@ -36,10 +36,8 @@ describe("what Parachute holds of a vault, in words", () => {
   it("someone else's says so first", () => {
     expect(reachLine(f({ theirs: true, applets: ["Events"] }))).toBe("Someone else's · reads notes · for Events");
   });
-  it("counts what it reaches and what it doesn't read", () => {
-    expect(reachCount(1, 0)).toBe("Parachute reaches 1 vault here.");
-    expect(reachCount(3, 12)).toBe("Parachute reaches 3 vaults here, and doesn't read 12 more.");
-    expect(reachCount(0, 2)).toBe("Parachute reads none of your 2 vaults here.");
-    expect(reachCount(0, 0)).toBe("");
+  it("counts what it reaches", () => {
+    expect(reachCount(1)).toBe("Parachute reaches 1 vault here.");
+    expect(reachCount(3)).toBe("Parachute reaches 3 vaults here.");
   });
 });

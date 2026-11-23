@@ -51,9 +51,6 @@ export function why(f: ReachFacts): { short: string; long: string; idle: boolean
 /** The line under a vault's name: "reads and changes notes · your home", "Someone else's · reads notes · for Post". */
 export const reachLine = (f: ReachFacts) => [f.theirs ? "Someone else's" : "", holds(f.level), why(f).short].filter(Boolean).join(" · ");
 
-/** The sentence over a Parachute's vaults: how many it reaches here, and how many it doesn't read. */
-export function reachCount(held: number, notRead: number): string {
-  const v = (n: number) => `${n} ${n === 1 ? "vault" : "vaults"}`;
-  if (!held) return notRead ? `Parachute reads none of your ${v(notRead)} here.` : "";
-  return `Parachute reaches ${v(held)} here${notRead ? `, and doesn't read ${notRead} more` : ""}.`;
-}
+/** The sentence over a Parachute's vaults: how many it reaches here (the ones it doesn't read are counted on their own
+ *  line, under them). */
+export const reachCount = (held: number) => `Parachute reaches ${held} ${held === 1 ? "vault" : "vaults"} here.`;

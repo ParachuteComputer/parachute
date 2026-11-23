@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { Bar, backOrLauncher } from "../ui/Bar";
 import { Link } from "react-router";
 import { useVaults } from "../vault/hooks";
-import { hostOf, removeVault, type VaultRecord } from "../vault/store";
+import { hostOf, listVaults, removeVault, type VaultRecord } from "../vault/store";
 import { siteOf } from "../vault/site";
 import { dropClient } from "../vault/client";
 import { revoke } from "../vault/oauth";
@@ -72,7 +72,7 @@ function acrossNames(vaults: readonly VaultRecord[]): string[] {
   });
 }
 
-function VaultRow({ v, across }: { v: VaultRecord; across: readonly string[] }) {
+function VaultRow({ v }: { v: VaultRecord }) {
   const whose = useWhose()(v);
   const g = deviceGrants();
   // the applets allowed here, by name, as Applets lists them: read again when the vault's applets are, and when a grant
@@ -80,17 +80,19 @@ function VaultRow({ v, across }: { v: VaultRecord; across: readonly string[] }) 
   useSyncExternalStore(subscribeApplets, () => { const e = appletsNow(v.key); return e?.state === "ok" ? e.at : e?.state ?? ""; });
   useSyncExternalStore(g.onChange, () => g.subjects().map((s) => { const r = g.record(s); return `${s} ${r?.scope ?? ""} ${r?.expires ?? ""}`; }).join("|"));
   const read = appletsNow(v.key);
-  const here = g.subjects().filter((s) => s.startsWith(subjectOf(v.key, "")));
+  const live = (s: string) => { const r = g.record(s); return !!r && (r.expires === null || Date.parse(r.expires) > Date.now()); };
+  const here = g.subjects().filter((s) => s.startsWith(subjectOf(v.key, "")) && live(s));
   const entries = here.map((s) => (read?.state === "ok" ? read.found.entries.find((x) => subjectOf(v.key, x.noteId) === s) : undefined));
   const allowed = here.flatMap((s, i) => { const e = entries[i]; return e && !e.newer && g.status(s, e.keys.scope, e.keys.html) !== "none" ? [e.manifest.name] : []; });
   // a component from this vault allowed on a page (applet/embeds.ts) reaches it too
-  const live = (s: string) => { const r = g.record(s); return !!r && (r.expires === null || Date.parse(r.expires) > Date.now()); };
   const embeds = g.subjects().filter((s) => isEmbedSubject(s) && live(s)).map(embedSubjectParts).filter((p) => p?.from === v.key).map((p) => `«${p!.name}» on a page`);
   // grants here whose applets this device hasn't read (still reading, the vault not answering, made for a newer app):
   // what they need isn't known, so the vault is never called unused
   const unknown = here.length > 0 && (read?.state !== "ok" || entries.some((e) => e?.newer));
   const level = heldLevel(v);
   const home = homeVault()?.key === v.key;
+  // read here, under the grants' subscription, so a Revoke elsewhere on this screen shows at once
+  const across = acrossNames(listVaults());
   const facts = { level, home, applets: [...allowed, ...embeds], unknown, own: ownWrite(v), theirs: whose !== "mine", across };
   // write that no applet allowed here needs (the person's own, or held from before this app asked per vault): theirs to give back
   const needing = appletsNeedingWrite(v);
@@ -195,9 +197,6 @@ export default function Settings({ children }: { children?: ReactNode }) {
   const vaults = useVaults();
   const parachutes = useParachutes();
   const shown = useShown(vaults);
-  // how many vaults each Parachute has that this device doesn't read, counted over its vaults
-  useSyncExternalStore(subscribeNewVaults, newVaultsRev);
-  const across = acrossNames(vaults);
   return (
     <main className="screen settings">
       <Bar title="Settings" back={true} onBack={backOrLauncher} />
@@ -218,8 +217,8 @@ export default function Settings({ children }: { children?: ReactNode }) {
             <section key={p.hub} className="settings-parachute" aria-label={`Parachute: ${said(p, parachutes)}`}>
               <h4>{p.home ? "Your Parachute" : said(p, parachutes)}{(p.home || hostOf(p.hub) !== said(p, parachutes)) && <span className="quiet small">{hostOf(p.hub)}</span>}</h4>
               {p.vaults.length ? <>
-                <p className="small quiet">{reachCount(p.vaults.length, newVaultsOn(p.hub).length)}</p>
-                <ul className="plain vault-rows">{p.vaults.map((v) => <VaultRow key={v.key} v={v} across={across} />)}</ul>
+                <p className="small quiet">{reachCount(p.vaults.length)}</p>
+                <ul className="plain vault-rows">{p.vaults.map((v) => <VaultRow key={v.key} v={v} />)}</ul>
                 <VaultsToAdd hub={p.hub} name={said(p, parachutes)} />
                 <p className="small"><Link to={`/add?hub=${encodeURIComponent(p.hub)}`}>Sign in again</Link> <span className="quiet">(sees which vaults you have there now)</span>{" · "}
                   <button type="button" className="quiet-button" onClick={() => signOutOf(p.hub, signOutVault)}>Sign out of {said(p, parachutes)}</button></p>
