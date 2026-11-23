@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "path": "Applets/People",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "people",
+      "name": "People",
+      "glyph": "☺",
+      "note": "your contacts and everyone in your life: cards, tags, groups, birthdays, links and vCard",
+      "access": [
+        {
+          "vault": "here",
+          "allow": [
+            { "path": "People/", "verbs": ["read", "create", "update"] },
+            { "path": "Meetings/", "verbs": ["read"] },
+            { "path": "Journal/", "verbs": ["read"] },
+            { "path": "Notes/", "verbs": ["read"] },
+            { "path": "Organizations/", "verbs": ["read"] }
+          ]
+        }
+      ],
+      "search": [
+        { "what": "people", "vault": "here", "path": "People/" }
+      ],
+      "screens": [
+        { "id": "home", "name": "People" }
+      ]
+    },
+    "needs": 4,
+    "app": ["open", "links", "save", "attach", "copy"],
+    "opens": [
+      {
+        "type": "person",
+        "path": "People/"
+      }
+    ]
+  }
+}
