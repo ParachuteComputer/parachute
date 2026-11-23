@@ -72,22 +72,22 @@ test("Settings is on the bar at every place, in reach with a full bar, at a phon
       // index at 1440×900 holds them all: the short window below is the computer's case)
       if (size.width < 960) await notUnderSettings(page, "Extra 6");
     }
-    // a computer's window too short for the index: Settings is held at its foot, and the places pass above it
+    // a computer's window too short for the sidebar: Settings is held at its foot, and the places pass above it
     await page.setViewportSize({ width: 1440, height: 640 });
     await page.goto("/");
     await expect(bar(page).getByRole("link", { name: /Extra 11/ })).toBeAttached();
-    expect(await bar(page).evaluate((n) => n.scrollHeight > n.clientHeight), "the index overflows").toBe(true);
+    expect(await bar(page).evaluate((n) => n.scrollHeight > n.clientHeight), "the sidebar overflows").toBe(true);
     await settingsInReach(page, "the list at 1440×640");
     await notUnderSettings(page, "Extra 11");
     await bar(page).evaluate((n) => { n.scrollTop = n.scrollHeight; });
     await settingsInReach(page, "the list at 1440×640, scrolled to the end");
-    // on Daylight, Settings open: still at the index's foot
+    // on Daylight, Settings open: still at the sidebar's foot
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.evaluate(() => localStorage.setItem("parachute.screen.v1", "daylight"));
     await page.goto("/settings");
     const foot = await bar(page).evaluate((n) => n.getBoundingClientRect().bottom);
     const box = (await (await settingsInReach(page, "Settings on Daylight at 1440")).boundingBox())!;
-    expect(foot - (box.y + box.height), "Settings sits at the index's foot on Daylight").toBeLessThan(40);
+    expect(foot - (box.y + box.height), "Settings sits at the sidebar's foot on Daylight").toBeLessThan(40);
     await page.evaluate(() => localStorage.removeItem("parachute.screen.v1"));
   } finally {
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`);

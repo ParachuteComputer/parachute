@@ -34,7 +34,7 @@ Connect, Mail, Calendar, Matrix, Claude accounts, Sessions, Area).
 | --- | --- | --- |
 | A place | One column that scrolls, the width of the screen | One column at a reading measure (760 px); a `wide` place, two columns |
 | Tabs | Along the foot | Down the left edge, a sidebar; the page takes the rest of the width, an applet all of it |
-| Rooms | The room, with the row of rooms at its head | The list of rooms on the left, the room on the right |
+| Rooms | The room, with the row of rooms at its head | The list of rooms on the left of the page (beside the sidebar), the room on the right |
 
 The app's own screens (Settings, adding a Parachute, a key) are places like the rest: the sky and their name at the
 head, and they scroll. On a Mac a reading measure keeps lines short enough to read (the margins beside it are the page's own paper and sky, never a band of another colour), and the list of rooms beside a room
