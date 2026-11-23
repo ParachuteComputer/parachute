@@ -41,7 +41,7 @@
 //   uni.vault.attach(noteId, bytes, type, {transcribe}) → a file onto a note it may change, through the hub
 //   uni.vault.file(id, path)         → a picture attached to a record in its folders, as a Blob (path as its words link
 //                                      it, /api/storage/…): the kit's Note asks it by itself when given the record's id
-//   uni.vault.attachFrom(noteId, fromId, path) → a file attached to a record it reads, attached to one it may change too
+//   uni.vault.attachFrom(noteId, fromId, path) → a picture attached to a record it reads, attached to one it may change too
 //   uni.services.*                   → the servers it declared (docs/design/SERVICES.md); card/answer/secret: Uni's
 //                                      approvals, with the approval key (docs/design/KEYRING.md)
 //   uni.props() / uni.onProps(cb)    → a component's props (plain data from the page's record), and later changes

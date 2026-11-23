@@ -31,12 +31,12 @@
 // And `vault.file {id, path}`: the bytes of a picture attached to a record in its `vault.read` folders, to draw its
 // pictures (docs/design/PICTURES.md): only one the hub lists as that record's own, the same check as `vaults.file`.
 // The kit names it `uni.vault.file(id, path)`, a Blob; the kit's Note asks it by itself when given the record's `id`.
-// And `vault.attachFrom {noteId, from, path}`: a file already attached to record `from` (one it reads) attached to
+// And `vault.attachFrom {noteId, from, path}`: a picture already attached to record `from` (one it reads) attached to
 // `noteId` too (one it may change, judged as `attach` is), through the hub's attach route: no new bytes, so a picture
 // shown on a second record is that record's own as well. It never attaches a file it couldn't already name.
 
 import { CODE_PATH, codeKindOf, isCodeExtension } from "../code.ts";
-import { attachedPicture, attachmentLists, FILE_MAX, mediaType, storagePath } from "../files.ts";
+import { attachedPicture, attachmentLists, FILE_MAX, listedPicture, mediaType, storagePath } from "../files.ts";
 import { ContractError, ERROR_CODES, hasHidden, hasOnly, inScope, LIMITS, plain, safePrefix, type ErrorCode } from "../contract.ts";
 import type { CallCtx, UniModule } from "../router.ts";
 import type { Resolved } from "../needs.ts";
@@ -530,8 +530,9 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
           if (!inScope(scopes["vault.read"] ?? [], from.path)) throw notAttached();
           let had: unknown[];
           try { had = await lists(from.id, () => ctx.charge(1), true); } catch (e) { if (e instanceof ContractError) throw e; throw new ContractError(ERROR_CODES.failed); }
+          // a picture only: one it could read itself (vault.file), never a document carried to a record others may see
           const att = had.find((a): a is Record<string, unknown> => plain(a) && a.path === want);
-          const type = att && mediaType(att.mimeType ?? att.mime_type);
+          const type = att && listedPicture(att, want);
           if (!att || !type) throw notAttached();
           // the record it goes onto: judged as attach is, on the note as read now
           ctx.charge(1);
@@ -557,6 +558,8 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         // no more reach than a read: a picture the hub lists as attached to a note in its folders, judged on the note
         // as the hub gives it back (whatever it was asked for by), under the sign-in its reads use
         async run({ id, path }: FileParams, scopes, ctx) {
+          // each call costs one, as vaults.file does: the bytes are read every time, whatever is kept
+          ctx.charge(1);
           const want = storagePath(path);
           if (!want) throw notAttached();
           if (!deps.attachments || !deps.file) throw new ContractError(ERROR_CODES.notGranted, "this screen hands over no files");

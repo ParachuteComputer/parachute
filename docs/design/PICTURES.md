@@ -48,9 +48,10 @@ does an attachment need to be linked to a note to be rendered in it?"*
 A recipe and the day's menu can show the same photo. Each record that shows it has it attached; the stored file is
 the same, so there are no extra bytes. The Notion import already does this for a file two pages share.
 
-- **In an applet:** `vault.attachFrom(id, fromId, path)` attaches a file already attached to record `fromId` to
+- **In an applet:** `vault.attachFrom(id, fromId, path)` attaches a picture already attached to record `fromId` to
   record `id` too, through the hub's attach route (`POST /records/:id/attachments {path, mimeType}`, no upload).
-  `fromId` must be a record it reads, with `path` in its list. `id` must be a record it may change, judged as
+  `fromId` must be a record it reads, with `path` in its list as a picture (listed as `image/*`, and named as one, which
+  is how the hub will serve it): a document it can't read itself is never carried to a record others may see. `id` must be a record it may change, judged as
   `vault.attach` is: inside its `vault.update` folders, never code or the app's own. If the file is already attached
   there, nothing more happens. So an applet can't attach, and then read, a file it couldn't already name.
 - **Uni and imports** write the same call when they put a picture into a record: upload once, attach to each record
@@ -122,7 +123,8 @@ there a picture's name shows in its place, as before.
   and never handed over. A file listed as a sound, a video or a document is refused before it is read: a note draws
   none of them, and a voice memo's bytes are more than drawing pictures needs. The listed type is what the attacher
   wrote, so a big file listed as a picture is still read (up to the hub's own upload limit) before it is refused.
-- A call costs 1 of the frame's read budget for the record, and 1 more when it reads the record's list. The list is
+- A call costs 1 of the frame's read budget, 1 more when it reads the record's list, and for `vault.file` 1 more when
+  it reads the record. The list is
   kept 10 s (20 records at most), so a note's pictures read it once; an attach forgets it, so the picture draws at
   once. The kit waits up to 2 minutes for a call.
 - No cache of bytes in the shell. Storage files never change (each upload gets a new name), and the renderer asks

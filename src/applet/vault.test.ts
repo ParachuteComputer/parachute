@@ -523,6 +523,16 @@ describe("vault.file: a picture attached to a record in the applet's folders, an
     await expect(make({ served: "text/html" }).call({ id: "r1", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "out_of_scope" });
     await expect(make({ big: true }).call({ id: "r1", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "too_large" });
   });
+  it("costs read budget each call, even when the record and its list are kept", async () => {
+    let spent = 0;
+    const router = createRouter([createVaultModule({ ...vault, attachments: async (id) => ATTACHED[id] ?? [], file: async () => new NodeBlob([new Uint8Array(4)], { type: "image/png" }) as unknown as Blob })]);
+    const charged = () => router.call("vault", "file", { id: "r1", path: OWL }, { "vault.read": ["Recipes/"] }, { charge(n: number) { spent += n; }, closed: () => false });
+    await charged();
+    const first = spent;
+    await charged();
+    expect(spent - first).toBeGreaterThanOrEqual(1);
+    expect(first).toBe(3);
+  });
   it("a note's pictures ask for the record's list once", async () => {
     const { call, listed } = make();
     await Promise.all([call({ id: "r1", path: `/api/storage/${OWL}` }), call({ id: "r1", path: `/api/storage/${OWL}` })]);
@@ -531,11 +541,11 @@ describe("vault.file: a picture attached to a record in the applet's folders, an
   });
 });
 
-describe("vault.attachFrom: a file attached to a record it reads, attached to one it may change too (WEB.md §5)", () => {
+describe("vault.attachFrom: a picture attached to a record it reads, attached to one it may change too (WEB.md §5)", () => {
   const OWL = "2026-11-23/1763-owl.png", DIARY = "2026-11-23/1764-diary.png";
   const make = () => {
     notes.push({ id: "r2", path: "Recipes/Soup", content: "soup", tags: ["recipe"], updatedAt: "2026-11-04" });
-    const attached: Record<string, { id: string; path: string; mimeType: string }[]> = { r1: [{ id: "att1", path: OWL, mimeType: "image/png" }], j1: [{ id: "att2", path: DIARY, mimeType: "image/png" }] };
+    const attached: Record<string, { id: string; path: string; mimeType: string }[]> = { r1: [{ id: "att1", path: OWL, mimeType: "image/png" }, { id: "att7", path: "2026-11-23/1766-contract.pdf", mimeType: "application/pdf" }, { id: "att8", path: "2026-11-23/1767-contract.pdf", mimeType: "image/png" }], j1: [{ id: "att2", path: DIARY, mimeType: "image/png" }] };
     const added: [string, string, string][] = [];
     const deps: VaultDeps = {
       ...vault,
@@ -570,6 +580,10 @@ describe("vault.attachFrom: a file attached to a record it reads, attached to on
     expect(String(outside.message)).toBe(String(missing.message));
     await expect(attachFrom({ noteId: "r2", from: "r1", path: `/api/storage/${DIARY}` })).rejects.toMatchObject({ code: "out_of_scope" });
     await expect(attachFrom({ noteId: "r2", from: "r1", path: "/api/storage/2026-11-23/nobody.png" })).rejects.toMatchObject({ code: "out_of_scope" });
+    // pictures only: a document it can't read itself is never carried to a record others may see (nor one listed as a
+    // picture whose name says it isn't: the hub serves it by its name)
+    await expect(attachFrom({ noteId: "r2", from: "r1", path: "/api/storage/2026-11-23/1766-contract.pdf" })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(attachFrom({ noteId: "r2", from: "r1", path: "/api/storage/2026-11-23/1767-contract.pdf" })).rejects.toMatchObject({ code: "out_of_scope" });
     // a file it can read, but read through only `vault.update`: not without vault.read on `from`
     await expect(attachFrom({ noteId: "r2", from: "r1", path: OWL }, { "vault.update": ["Recipes/"] })).rejects.toMatchObject({ code: "out_of_scope" });
     expect(added).toEqual([]);

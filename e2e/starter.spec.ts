@@ -3,11 +3,12 @@
 // Notes/ with the type it opens), open it, edit (the edit survives a reload) and save it (the write carries
 // if_updated_at), and the hub has it; the app's Back closes an open note, and an edit in progress survives it.
 import { readFileSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { appletRecord } from "../applets/record.ts";
 import { api, hubState, VAULT } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });
+const shot = (page: Page, name: string) => (process.env.WALKTHROUGH_DIR ? page.screenshot({ path: `${process.env.WALKTHROUGH_DIR}/${name}.png` }) : Promise.resolve());
 
 test("the starter applet runs as shipped: lists, adds, opens, edits and saves a note in its folder", async ({ page }) => {
   const r = appletRecord("starter");
@@ -119,6 +120,7 @@ test("the starter draws a picture attached to its note, and attaches it to a sec
     await expect.poll(() => pic.evaluate((i) => (i as HTMLImageElement).naturalWidth), { timeout: 15_000 }).toBe(48);
     expect(await pic.getAttribute("src")).toMatch(/^blob:/);
     await expect(f.getByText("Water every other day.")).toBeVisible();
+    await shot(page, "01-attached");
 
     // the second note links it but hasn't it attached: its name shows, and nothing is drawn
     await f.getByRole("button", { name: "← Starter" }).click();
@@ -126,6 +128,7 @@ test("the starter draws a picture attached to its note, and attaches it to a sec
     await expect(f.getByText("Water every other day.")).toBeVisible();
     await expect(f.getByText(/seedlings on the sill: only a file attached to the record/)).toBeVisible();
     await expect(f.locator("img")).toHaveCount(0);
+    await shot(page, "02-not-attached");
     // attached there too, from the note it is attached to: the same stored file, no new bytes
     const frame = await page.locator("iframe.applet-frame").elementHandle().then((e) => e!.contentFrame());
     const got = await frame!.evaluate(([to, from, src]) => (window as unknown as { parachute: { vault: { attachFrom(a: string, b: string, c: string): Promise<{ path: string }> } } }).parachute.vault.attachFrom(to, from, src),
@@ -136,6 +139,7 @@ test("the starter draws a picture attached to its note, and attaches it to a sec
     await f.getByRole("button", { name: "← Starter" }).click();
     await f.getByRole("button", { name: /^Seedlings again/ }).click();
     await expect.poll(() => f.getByRole("img", { name: "seedlings on the sill" }).evaluate((i) => (i as HTMLImageElement).naturalWidth), { timeout: 15_000 }).toBe(48);
+    await shot(page, "03-attached-there-too");
   } finally {
     for (const id of made) await api(h, "DELETE", `notes/${id}`).catch(() => {});
     await api(h, "DELETE", `notes/${applet.id}`).catch(() => {});

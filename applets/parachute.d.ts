@@ -111,7 +111,7 @@ declare module "parachute" {
     /** A picture attached to a record in its folders, as its words link it (`/api/storage/…`). The Note asks it by itself
      *  when given the record's id. Absent in an app before 11-23. */
     file?(id: string, path: string): Promise<Blob>;
-    /** A file attached to record `fromId` (one it reads) attached to `noteId` (one it may change) too, with no new bytes:
+    /** A picture attached to record `fromId` (one it reads) attached to `noteId` (one it may change) too, with no new bytes:
      *  a picture shown on a second record. Already there: nothing more. Absent in an app before 11-23. */
     attachFrom?(noteId: string, fromId: string, path: string): Promise<{ id: string | null; path: string; type: string }>;
   }

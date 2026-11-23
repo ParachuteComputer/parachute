@@ -75,6 +75,14 @@ export function asJson(x: unknown): unknown {
 
 /** What a note draws: a picture (a sound, a video or a document is opened, not drawn). */
 const DRAWN = /^image\//;
+/** A stored file's name that the hub serves as a picture (it types storage by the file's name; never SVG). */
+const PICTURE_NAME = /\.(png|jpe?g|gif|webp|avif|bmp|heic|heif)$/i;
+/** A record's attachment that is a picture both ways: listed as one (what the attacher wrote), and named as one (what
+ *  the hub will serve it as), for a call that never reads the bytes (attachFrom). */
+export const listedPicture = (att: Record<string, unknown>, path: string): string | null => {
+  const type = mediaType(att.mimeType ?? att.mime_type);
+  return type && DRAWN.test(type) && PICTURE_NAME.test(path) ? type : null;
+};
 /** A file's place in the vault's storage, from a link in a record's words (`/api/storage/<date>/<file>`, or the bare
  *  `<date>/<file>`): decoded once; null for anything else (a query, a fragment, a dot segment, a backslash, a control). */
 export function storagePath(src: string): string | null {
