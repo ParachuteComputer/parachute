@@ -145,6 +145,7 @@ function strList(v: unknown): string[] {
     const out: string[] = [];
     for (const item of v) {
       if (typeof item === "string" && item.trim()) out.push(item.trim());
+      else if (typeof item === "number" && Number.isFinite(item)) out.push(String(item));
       else if (item && typeof item === "object") {
         const o = item as Record<string, unknown>;
         const val = str(o.value ?? o.number ?? o.email ?? o.url);
@@ -155,7 +156,16 @@ function strList(v: unknown): string[] {
     return out;
   }
   if (typeof v === "string" && v.trim()) return [v.trim()];
+  if (typeof v === "number" && Number.isFinite(v)) return [String(v)];
   return [];
+}
+
+/** A list field as the record holds it, to add to: every entry kept as written (a number, an object with a label, a
+ *  near-duplicate), whatever shape it is in; a single value becomes the list's first entry. */
+function heldList(v: unknown): unknown[] {
+  if (Array.isArray(v)) return v;
+  if (v === undefined || v === null || v === "") return [];
+  return [v];
 }
 
 function dedupeStrings(items: string[], keyFn: (s: string) => string = (s) => s.toLowerCase()): string[] {
@@ -858,6 +868,7 @@ function mergeVCardIntoPerson(
   card: VCardContact,
 ): { changed: boolean; fieldsPatch: Record<string, unknown>; nextBody?: string; attachPhoto: VCardPhoto | null } {
   const pf = readPersonFields(existing.fields);
+  const held = existing.fields ?? {};
   const patch: Record<string, unknown> = {};
 
   // Emails: keep existing primary `email`; append any unseen lower-case emails to `emails`
@@ -865,12 +876,12 @@ function mergeVCardIntoPerson(
   const hadEmailSet = new Set(hadEmails);
   const newEmails = card.emails.map((e) => e.toLowerCase()).filter((e) => e && !hadEmailSet.has(e));
   if (newEmails.length) {
+    // added to what the record holds, as it holds it: nothing it had is rewritten or dropped
     if (!pf.email) {
       patch.email = newEmails[0];
-      const rest = dedupeStrings([...pf.emails, ...newEmails.slice(1)]).filter((e) => e !== newEmails[0]);
-      if (rest.length) patch.emails = rest;
+      if (newEmails.length > 1) patch.emails = [...heldList(held.emails), ...newEmails.slice(1)];
     } else {
-      patch.emails = dedupeStrings([...pf.emails, ...newEmails]).filter((e) => e !== pf.email);
+      patch.emails = [...heldList(held.emails), ...newEmails];
     }
   }
 
@@ -882,22 +893,24 @@ function mergeVCardIntoPerson(
     hadPhoneKeys.add(k);
     return true;
   });
-  if (newPhones.length) patch.phones = [...pf.phones, ...newPhones];
+  if (newPhones.length) patch.phones = [...heldList(held.phones), ...newPhones];
 
   // Single-value additive fields: only fill if missing
   if (!pf.address && card.address) patch.address = card.address;
   if (!pf.birthday && card.birthday) patch.birthday = card.birthday;
   if (!pf.summary && card.summary) patch.summary = card.summary;
 
-  // List fields: union without duplicates
-  const nextGroups = dedupeStrings([...pf.groups, ...card.groups]);
-  if (nextGroups.length > pf.groups.length) patch.groups = nextGroups;
-
-  const nextTags = dedupeStrings([...pf.tags, ...card.tags]);
-  if (nextTags.length > pf.tags.length) patch.tags = nextTags;
-
-  const nextLinks = dedupeStrings([...pf.links, ...card.links]);
-  if (nextLinks.length > pf.links.length) patch.links = nextLinks;
+  // List fields: what's new added to what the record holds
+  const added = (had: string[], more: string[]) => {
+    const keys = new Set(had.map((x) => x.toLowerCase()));
+    return dedupeStrings(more).filter((x) => !keys.has(x.toLowerCase()));
+  };
+  const newGroups = added(pf.groups, card.groups);
+  if (newGroups.length) patch.groups = [...heldList(held.groups), ...newGroups];
+  const newTags = added(pf.tags, card.tags);
+  if (newTags.length) patch.tags = [...heldList(held.tags), ...newTags];
+  const newLinks = added(pf.links, card.links);
+  if (newLinks.length) patch.links = [...heldList(held.links), ...newLinks];
 
   // Note: append only if present and not already in the body or the summary (an export writes the summary as NOTE).
   // A list record has no body: then the note is left out here, and the import reads the record before it writes.
@@ -1329,7 +1342,9 @@ export default function People() {
   const fieldSaves = useRef<Promise<unknown>>(Promise.resolve());
   const patchPersonFields = (person: PersonRecord, fieldsPatch: Record<string, unknown>, message?: string): Promise<PersonRecord> => {
     const run = async () => {
-      const base = versions.current.get(person.id) ?? person.updatedAt;
+      // the newer of what our own last save left and what this person was last read as (a reload may bring one newer)
+      const mine = versions.current.get(person.id);
+      const base = mine && (!person.updatedAt || mine > person.updatedAt) ? mine : person.updatedAt;
       if (!base) {
         toast("Refresh this person before editing.", { error: true });
         throw new Error("missing version");

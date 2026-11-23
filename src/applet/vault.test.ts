@@ -428,28 +428,47 @@ describe("the hub's query words, kept to the folders", () => {
     }
   });
 
-  it("more notes it can't see removed behind it than it steps back: the next page reads from the start, nothing skipped", async () => {
-    // every tenth a note the hub counts (case-blind) and the module drops
-    for (let i = 0; i < 300; i++) notes.push({ id: `n${String(i).padStart(4, "0")}`, path: i % 10 === 0 ? `recipes/N ${i}` : `Recipes/N ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
-    const words = "order_by=created_at&sort=asc&include_links=true&limit=50";
-    const ids = (r: { body: { id: string }[] }) => r.body.map((n) => n.id);
-    const want = [ids(await frameOn(hub).get(`/api/notes?${words}&offset=0`)), ids(await frameOn(hub).get(`/api/notes?${words}&offset=50`))];
-    const f = frameOn(hub);
-    expect(ids(await f.get(`/api/notes?${words}&offset=0`))).toEqual(want[0]);
-    // twelve hidden ones, all behind where it read to, go
-    for (const i of [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110]) notes.splice(notes.findIndex((n) => n.id === `n${String(i).padStart(4, "0")}`), 1);
-    expect(ids(await f.get(`/api/notes?${words}&offset=50`))).toEqual(want[1]);
-  });
+  it("with nothing changed, a list going on hands back just what a read from the start would, page by page", async () => {
+    // seeded: notes the hub counts (case-blind) and the module drops, in runs of any length among its own
+    let x = 7;
+    const rand = (n: number) => { x = (x * 1103515245 + 12345) % 2147483648; return x % n; };
+    const stamp = (i: number) => `2026-10-01T${String(Math.floor(i / 3600)).padStart(2, "0")}:${String(Math.floor(i / 60) % 60).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z`;
+    const cases: { runs: [number, boolean][]; words: string; limit: number }[] = [
+      // the reviewer's: 10 of its own, 1,000 it can't see, 10 more
+      { runs: [[10, true], [1000, false], [10, true]], words: "order_by=created_at&sort=asc", limit: 10 },
+    ];
+    for (let c = 0; c < 6; c++) {
+      const runs: [number, boolean][] = [];
+      for (let r = 0; r < 8; r++) runs.push([1 + rand(r % 2 ? 260 : 40), r % 2 === 0]);
+      cases.push({ runs, words: ["order_by=created_at&sort=asc", "order_by=created_at&sort=asc&include_links=true", "order_by=created_at&sort=desc&include_content=true"][c % 3], limit: c === 0 ? 1 : [7, 50][rand(2)] });
+    }
+    for (const { runs, words, limit } of cases) {
+      const base = notes.length;
+      let i = 0;
+      for (const [n, own] of runs) for (let k = 0; k < n; k++, i++) notes.push({ id: `r${String(i).padStart(5, "0")}`, path: own ? `Recipes/R ${i}` : `recipes/R ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: stamp(i) });
+      // its read budget full at each call (within a minute: the resume is kept); what it hands back is the point here
+      let clock = Date.now();
+      const f = frameOn(hub, resolvedOf(manifest), () => (clock += 11));
+      const shown = (r: { status: number; body: unknown }) => [r.status, Array.isArray(r.body) ? r.body.map((n: { id: string }) => n.id) : r.body];
+      for (let o = 0; o < i + limit && o <= 5000; o += limit) {
+        const q = `/api/notes?${words}&limit=${limit}&offset=${o}`;
+        clock += 10_000;
+        const going = await f.get(q), fresh = await frameOn(hub).get(q);
+        expect([o, ...shown(going)]).toEqual([o, ...shown(fresh)]);
+      }
+      notes.splice(base);
+    }
+  }, 60_000);
 
-  it("more of its own notes removed behind it than it steps back: none of the rest is skipped or listed twice", async () => {
+  it("as many of its own notes removed behind it as it steps back: none of the rest is skipped or listed twice", async () => {
     for (let i = 0; i < 300; i++) notes.push({ id: `v${String(i).padStart(4, "0")}`, path: `Recipes/V ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
     const words = "order_by=created_at&sort=asc&include_links=true&limit=50";
     const ids = (r: { body: { id: string }[] }) => r.body.map((n) => n.id);
     const f = frameOn(hub), got: string[] = [];
     got.push(...ids(await f.get(`/api/notes?${words}&offset=0`)));
     const shown = new Set(got);
-    // eight it already handed back go
-    for (const id of got.slice(0, 8)) notes.splice(notes.findIndex((n) => n.id === id), 1);
+    // five it already handed back go
+    for (const id of got.slice(0, 5)) notes.splice(notes.findIndex((n) => n.id === id), 1);
     for (let o = 50; ; o += 50) { const page = ids(await f.get(`/api/notes?${words}&offset=${o}`)); if (!page.length) break; got.push(...page); }
     expect(new Set(got).size).toBe(got.length);
     // every note there now that wasn't shown already comes, in order

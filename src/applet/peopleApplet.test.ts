@@ -586,6 +586,17 @@ describe("People at thousands of people", () => {
     expect([one, all]).toEqual([0, 0]);
   });
 
+  it("a merge adds to a list as the record holds it: numbers, labelled objects and near-duplicates an AI wrote stay", () => {
+    const phones = [3035550142, "home: +1 303-555-0199", "work: 303 555 0199", { type: "cell", number: "303-555-0100", ext: "7" }];
+    const person: PersonRecord = { id: "p", path: "People/Ann Lee", updatedAt: null, fields: { phones, groups: ["Book club", "book club"], email: "ann@example.test" } };
+    const merged = api.mergeVCardIntoPerson(person, blank({ name: "Ann Lee", phones: ["+1 720 555 0111", "(303) 555-0142"], groups: ["Climbing"], emails: ["ann.lee@example.test"] }));
+    expect(merged.fieldsPatch.phones).toEqual([...phones, "+1 720 555 0111"]);
+    expect(merged.fieldsPatch.groups).toEqual(["Book club", "book club", "Climbing"]);
+    expect(merged.fieldsPatch.emails).toEqual(["ann.lee@example.test"]);
+    // and the number written as a number is read as one: matched, shown
+    expect(api.readPersonFields(person.fields).phones).toContain("3035550142");
+  });
+
   it("never lets a link carry a second card: one with a newline is dropped on import and on export", () => {
     const [card] = api.parseVCard("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ann Lee\r\nURL:https://ann.example\\nEND:VCARD\\nBEGIN:VCARD\\nFN:Mallory\r\nURL:https://ann.example/ok\r\nEND:VCARD\r\n");
     expect(card.links).toEqual(["https://ann.example/ok"]);

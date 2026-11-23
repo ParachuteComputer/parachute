@@ -93,9 +93,8 @@ type AttachFromParams = { noteId: string; from: string; path: string };
 const notAttached = () => new ContractError(ERROR_CODES.outOfScope, "only a picture attached to a record it reads");
 type FetchParams = { method: string; path: string; headers: Record<string, string>; body: string | null };
 /** A list read in pages, kept by its words and the offset its last page ended at: where the hub was read to, the notes
- *  it kept past that page, and every note it has seen (each is listed once). `lastId`: the hub's row just before `at`,
- *  which must still be where it steps back to, or it reads from the start. */
-type Resume = { at: number; lastId: string | null; ahead: (VaultNote & { path: string })[]; seen: Set<string>; time: number };
+ *  it kept past that page, and every note it has seen (each is listed once). */
+type Resume = { at: number; ahead: (VaultNote & { path: string })[]; seen: Set<string>; time: number };
 
 const MAX_BODY = 512 * 1024;
 const NOTE_TTL_MS = 10_000;
@@ -242,8 +241,9 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
    *  it has offset + limit of its own (a bounded number), and is charged by what was asked, not by how many it read.
    *  A list read in pages (one folder, no search) goes on where its last page stopped, when the next asks for the offset
    *  that page ended at, with the same words, within a minute: the hub is read on from there (a few rows back, for a
-   *  note removed meanwhile), not again from its first row, and it is charged for the page it asked for. Each note it
-   *  can see comes once, in the list's order, as from the start; a call that fails leaves where it was for a retry.
+   *  note removed meanwhile), not again from its first row, and it is charged for the page it asked for. It reads no
+   *  further into the hub than a read from the start would, so with nothing changed it hands back just what that read
+   *  would; each note comes once. A call that fails leaves where it was for a retry.
    *  Ordering by a field takes one folder (path_prefix, or a grant of one): two folders' fields can't be put together. */
   async function hubList(q: URLSearchParams, prefixes: string[], granted: string[], limit: number, content: boolean, ctx: CallCtx, d: Reads): Promise<FetchResult> {
     if (!d.query) return fail(400, "bad_params");
@@ -283,8 +283,11 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     const go = last && now() - last.time < RESUME_TTL_MS ? last : null;
     /** Where `mine` starts in its own list: 0, or the offset it goes on from. */
     const from = go ? offset : 0;
-    // charged by what was asked: one page going on (also when it must read from the start after all, below)
+    // charged by what was asked: one page going on
     const pages = search ? 1 : Math.ceil((want - from) / size);
+    // never further into the hub than a read of this page from the start goes (its pages and EXTRA_PAGES more): going on
+    // hands back what that read would, no more
+    const bound = ((search ? 1 : Math.ceil(want / size)) + EXTRA_PAGES) * size;
     // its own copy: a call that fails puts the resume back as it was, for the kit's retry
     const seen = new Set<string>(go?.seen);
     const out: (VaultNote & { path: string })[] = [];
@@ -293,41 +296,34 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         ctx.charge(pages);
         // taken once charged (before anything waits, so a second call for the same page reads from the start)
         if (go) resumes.delete(slot!);
-        let on = go;
-        const mine: (VaultNote & { path: string })[] = on ? [...on.ahead] : [];
+        const mine: (VaultNote & { path: string })[] = go ? [...go.ahead] : [];
         // a few pages more than asked, for the notes the judging drops; then what it has
         // (past EXTRA_PAGES of notes it drops ahead of the last one asked for, a page comes back short, and a search's past
         // HUB_PAGE less its limit; and a note changed
         // while it reads moves to the front, so one other may be missed: a list read in pages, as any is)
-        // where the hub was read to, and the last row read there; going on, its first read starts a few rows back, so a
-        // note removed behind it moves none past it (each listed once)
-        let at = on ? on.at : 0;
-        let lastId = on ? on.lastId : null;
-        let reads = pages;
-        for (let read = 0; from + mine.length < want && read < reads + EXTRA_PAGES; read++) {
-          const asked = on && read === 0 ? Math.max(0, at - RESUME_BACK) : at;
+        // where the hub was read to; going on, its first read starts RESUME_BACK rows back, so up to that many notes
+        // removed behind it move none past it (each listed once; more, and as many past RESUME_BACK are missed until the
+        // list is read again, as a read from the start misses one for each note removed before its page)
+        let at = go ? go.at : 0;
+        for (let first = true; from + mine.length < want && at < bound; first = false) {
+          const asked = go && first ? Math.max(0, at - RESUME_BACK) : at;
+          const lim = Math.min(size, bound - asked);
           // a search too is asked for a whole page and cut after judging: the hub ranks it and drops offset, never limit
-          const rows = await d.query(p, { limit: size, offset: asked, tag, search: search || null, content: content && !later, links: links && !later, orderBy, sort, meta });
-          // the row it stopped at isn't among them: more moved behind it than it steps back (notes removed, its own or
-          // not): read the hub again from its first row, keeping what it has handed back and seen, so nothing is missed
-          // or listed twice. Still one page's charge: charging more would tell of notes it can't see.
-          if (on && read === 0 && lastId !== null && !rows.some((n) => n?.id === lastId)) {
-            on = null; at = 0; lastId = null; reads = Math.ceil(want / size); read = -1;
-            continue;
-          }
-          if (asked + rows.length > at && rows.length) lastId = rows[rows.length - 1]?.id ?? null;
+          const rows = await d.query(p, { limit: lim, offset: asked, tag, search: search || null, content: content && !later, links: links && !later, orderBy, sort, meta });
           at = Math.max(at, asked + rows.length);
           for (const n of rows) {
             if (!n || !n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null || (tag && !(n.tags ?? []).includes(tag))) continue;
             seen.add(n.id); mine.push(n as VaultNote & { path: string });
           }
-          if (search || rows.length < size) break;
+          if (search || rows.length < lim) break;
         }
         out.push(...mine.slice(0, want - from));
-        if (key !== null) {
+        // a page that came back short: where its list stands isn't the offset the next page will ask for; that one
+        // reads from the start
+        if (key !== null && from + mine.length >= want) {
           const next = `${key}@${want}`;
           resumes.delete(next);
-          resumes.set(next, { at, lastId, ahead: mine.slice(want - from), seen, time: now() });
+          resumes.set(next, { at, ahead: mine.slice(want - from), seen, time: now() });
           while (resumes.size > RESUMES_MAX) resumes.delete(resumes.keys().next().value as string);
         }
       }
