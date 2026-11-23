@@ -64,7 +64,7 @@ function Holds({ v }: { v: VaultRecord }) {
   const applets = appletsNeedingWrite(v);
   // not the home: Parachute's own applets write there, so it stays writable (docs/design/PARACHUTE-SOURCE.md)
   const own = level === "write" && applets !== null && !applets.length && homeVault()?.key !== v.key;
-  return <span className="quiet holds">· {level === "write" ? "reads and changes notes" : "reads"}{own && <> <button type="button" className="quiet-button" onClick={() => { forgetOwnWrite(v); void giveBack(v.key, "/settings"); }}>Read only</button></>}</span>;
+  return <span className="quiet holds">{level === "write" ? "reads and changes notes" : "reads"}{own && <> <button type="button" className="quiet-button" onClick={() => { forgetOwnWrite(v); void giveBack(v.key, "/settings"); }}>Read only</button></>}</span>;
 }
 
 /** The person's vaults on a Parachute that this device doesn't read yet (docs/design/SCOPES.md): one quiet line each. A
@@ -151,11 +151,11 @@ export default function Settings({ children }: { children?: ReactNode }) {
             {p.vaults.length ? <>
               <ul className="plain">
                 {p.vaults.map((v) => (
-                  <li key={v.key} className="line">
-                    <span><strong>{v.vault}</strong> <WhoseLine v={v} /> <Holds v={v} /></span>
-                    <Link className="quiet-button" to={`/v/${encodeURIComponent(v.key)}`} aria-label={`Open ${v.vault}`}>Open</Link>
+                  <li key={v.key} className="line vault-line">
+                    <div className="vault-who"><strong className="vault-name">{v.vault}</strong><span className="vault-sub"><WhoseLine v={v} /> <Holds v={v} /></span></div>
+                    <div className="vault-acts"><Link className="quiet-button" to={`/v/${encodeURIComponent(v.key)}`} aria-label={`Open ${v.vault}`}>Open</Link>
                     <button type="button" className="quiet-button" aria-label={`Sign out of ${v.vault}`} onClick={() => signOutVault(v)}>Sign out</button>
-                    <button type="button" className="quiet-button" aria-label={`Sign in again to ${v.vault}`} onClick={() => void askVault(v, heldLevel(v) ?? "read", "open", "/settings").then((u) => window.location.assign(u), () => undefined)}>Sign in again</button>
+                    <button type="button" className="quiet-button" aria-label={`Sign in again to ${v.vault}`} onClick={() => void askVault(v, heldLevel(v) ?? "read", "open", "/settings").then((u) => window.location.assign(u), () => undefined)}>Sign in again</button></div>
                   </li>
                 ))}
               </ul>

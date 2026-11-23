@@ -288,6 +288,16 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .settings-parachute .line { flex-wrap: wrap; justify-content: flex-start; }
 .settings-parachute .line > span { flex: 1 1 12em; min-width: 0; }
 .settings-parachute .line > .quiet-button { white-space: nowrap; }
+/* a vault: its name in the display face, whose it is and what this device may do quiet under it, its actions at the side */
+.settings-parachute .vault-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 16px; padding: 10px 0; }
+.vault-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vault-name { font: var(--title-weight, 600) calc(var(--fs-body) * 1.15)/1.2 var(--display, var(--serif)); }
+.vault-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--muted); font-size: var(--fs-small); }
+.vault-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.vault-acts .quiet-button { white-space: nowrap; }
+@media (max-width: 560px) { .settings-parachute .vault-line { grid-template-columns: minmax(0, 1fr); } .vault-acts { justify-content: flex-start; } }
+/* a link drawn as a button reads as the button, not a link */
+a.quiet-button { color: var(--text); text-decoration: none; display: inline-block; }
 /* a vault made there since this device signed in (vault/newVaults.ts): one quiet line, a tap adds it (Notes, Settings) */
 .parachute-new { margin: 8px 0 4px; }
 .parachute-new li { display: flex; align-items: baseline; gap: 10px; padding: 2px 0; }
