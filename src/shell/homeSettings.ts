@@ -33,7 +33,7 @@ import { homeVault, setHome } from "./frameSource";
 import { parseHub } from "../vault/parachute";
 import { normalUrl } from "../applet/services";
 import type { Levels } from "./levels";
-import { BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, defaultBundles, followed, isAppPlace, newerBundle, NEWCOMER_BUNDLE, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
+import { ANY_HUB, recordOf, BUNDLE_TAG, bundleOf as bundleRecordOf, bundlesFrom, defaultBundles, followed, isAppPlace, newerBundle, NEWCOMER_BUNDLE, openBundle, BUNDLE_FOLDER, type AppPlace, type BarEntry, OLD_BUNDLE_FOLDER, OLD_BUNDLE_TAG, type Bundle } from "./bundles";
 
 export const SETTINGS_TAG = "parachute-settings";
 export const SETTINGS_PATH = "Parachute/Settings";
@@ -294,6 +294,19 @@ function shownIndices(r: Raw): number[] {
   return out;
 }
 /** Swap a place with its neighbour on the bar as shown, left or right (entries the bar doesn't show don't count). */
+/** Make the open bundle, one someone else offers (`live`), a copy of the person's own: theirs as it is now, each place
+ *  naming their hub, written over the person's record without `live`, so its bar takes the person's pins. Their later
+ *  changes no longer reach it. */
+export async function copyBundle(): Promise<void> {
+  const app = openBundleNow();
+  if (!app.live) return;
+  const hub = app.hubOf ?? app.live.hub;
+  const at = <T extends { hub?: string }>(p: T): T => (p.hub ? p : { ...p, hub });
+  const own: Bundle = { ...app, live: undefined, hubOf: undefined, sources: app.sources.map((x) => (x.hub === ANY_HUB ? x : at(x))), hide: app.hide.map(at),
+    bar: app.bar && app.bar.map((e) => (isAppPlace(e) ? e : at(e))), start: app.start ? at(app.start) : app.start, opens: app.opens.map(at) };
+  await changeBundle(() => recordOf(own));
+  await readSettings();
+}
 export const move = (p: Place, by: -1 | 1) => changeChoices((r) => {
   const shown = shownIndices(r);
   const k = shown.findIndex((i) => parsedAs(r.bar[i], (y) => same(y, p)));
