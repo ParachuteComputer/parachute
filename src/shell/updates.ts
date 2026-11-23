@@ -57,7 +57,7 @@ export function checkUpdates(force = false, read: () => Promise<Answer> = native
     const offer = offerFor(parseFeed(a.body, a.feed), OWN, a.platform);
     set(offer ? { kind: "offer", offer, platform: a.platform } : { kind: "current" });
     // a refusal was about the build offered then
-    if (inst.install.kind === "failed" && offer?.commit !== before) setInst({ kind: "idle" });
+    if (installNow().install.kind === "failed" && offer?.commit !== before) setInst({ kind: "idle" });
   }, (e: unknown) => {
     // a failed read doesn't take back an offer already made (offline in Settings, the newer build is still there)
     if (state.kind !== "offer") set({ kind: "error", message: e instanceof Error ? e.message : String(e) });
@@ -100,15 +100,15 @@ export type Install =
 /** An install handed to Android, kept across starts: from this build to the feed's. `why`: Android's refusal, if it
  *  gave one before the app closed. */
 export type Tried = { from: string; to: string; toAt: number; when: number; why?: string };
-/** What the last try came to, seen from this build. */
-export type After = { kind: "none" } | { kind: "updated"; at: number } | { kind: "stuck"; at: number; why: string };
+/** What the last try came to, seen from this build (`to`: the build tried). */
+export type After = { kind: "none" } | { kind: "updated"; at: number } | { kind: "stuck"; to: string; at: number; why: string };
 
 /** This build is the one tried: updated. Still the build it was tried from: stuck. Another (installed some other way):
  *  nothing to say. */
 export function afterTry(t: Tried | null, own: Build): After {
   if (!t) return { kind: "none" };
   if (own.commit === t.to) return { kind: "updated", at: t.toAt };
-  if (own.commit === t.from) return { kind: "stuck", at: t.toAt, why: t.why ?? "" };
+  if (own.commit === t.from) return { kind: "stuck", to: t.to, at: t.toAt, why: t.why ?? "" };
   return { kind: "none" };
 }
 
@@ -119,65 +119,67 @@ function readTried(): Tried | null {
     return t && typeof t.from === "string" && typeof t.to === "string" && typeof t.toAt === "number" ? t : null;
   } catch { return null; }
 }
-function writeTried(t: Tried) { try { localStorage.setItem(TRIED_KEY, JSON.stringify(t)); } catch { /* private mode */ } }
 
 type Installing = { install: Install; after: After };
-let inst: Installing = { install: { kind: "idle" }, after: { kind: "none" } };
-let afterRead = false;
+let inst: Installing | null = null;  // read from storage on first use
 const instSubs = new Set<() => void>();
-const setInst = (i: Install) => { inst = { install: i, after: afterTry(readTried(), OWN) }; for (const f of instSubs) f(); };
-const installNow = () => {
-  if (!afterRead) { afterRead = true; inst = { ...inst, after: afterTry(readTried(), OWN) }; }
-  return inst;
-};
+const installNow = (): Installing => (inst ??= { install: { kind: "idle" }, after: afterTry(readTried(), OWN) });
+const publish = (next: Installing) => { inst = next; for (const f of instSubs) f(); };
+const setInst = (install: Install) => publish({ ...installNow(), install });
+function writeTried(t: Tried) {
+  try { localStorage.setItem(TRIED_KEY, JSON.stringify(t)); } catch { /* private mode */ }
+  publish({ ...installNow(), after: afterTry(t, OWN) });
+}
 export const useInstall = () => useSyncExternalStore((f) => { instSubs.add(f); return () => { instSubs.delete(f); }; }, installNow);
 
-/** What the shell says while it downloads and installs (src-tauri/src/updates.rs `Step`). */
-export type Step = { stage: "download"; got: number; total: number } | { stage: "install"; checked: boolean };
-type Native = (offer: Offer, step: (s: Step) => void) => Promise<void>;
+/** What the shell says while it downloads and installs (src-tauri/src/updates.rs `Step`): the build it hands Android is
+ *  the one the feed names when it reads it, which may be later than the offer on screen. */
+export type Step = { stage: "download"; got: number; total: number } | { stage: "install"; checked: boolean; commit: string; at: number };
+type Native = (step: (s: Step) => void) => Promise<void>;
 
-/** Download: on Android, the app's own download and Android's installer; elsewhere, the browser. Never throws: a
- *  failure is the `failed` state, in words to show. */
-export async function download(offer: Offer, platform: string, native: Native = nativeInstall, read: () => Promise<Answer> = nativeFeed): Promise<void> {
+/** "12 MB" */
+export const mb = (n: number) => `${(n / 1e6).toFixed(0)} MB`;
+/** "40%", or "12 MB" when the server didn't say how much */
+export const share = (got: number, total: number) => total > 0 ? `${Math.min(100, Math.floor((got / total) * 100))}%` : mb(got);
+
+let tries = 0;
+/** Download: on Android, the app's own download of what the feed names and Android's installer (a second Download
+ *  while Android's question is open replaces the first); elsewhere, the browser. Never throws: a failure is the
+ *  `failed` state, in words to show. */
+export async function download(offer: Offer, platform: string, native: Native = nativeInstall): Promise<void> {
   if (platform !== "android") {
-    try { await openLinkOut(offer.url); } catch (e) { setInst({ kind: "failed", message: e instanceof Error ? e.message : String(e) }); }
+    try { await openLinkOut(offer.url); setInst({ kind: "idle" }); }
+    catch (e) { setInst({ kind: "failed", message: e instanceof Error ? e.message : String(e) }); }
     return;
   }
-  const k = inst.install.kind;
-  if (k === "downloading" || k === "installing") return;
-  setInst({ kind: "downloading", got: 0, total: 0 });
-  let handed = false;
+  if (installNow().install.kind === "downloading") return;
+  const mine = ++tries;
+  const now = (i: Install) => { if (mine === tries) setInst(i); };  // a replaced try says nothing more
+  now({ kind: "downloading", got: 0, total: 0 });
+  let handed: Tried | null = null;
   try {
-    // the feed as it is now: a build or file replaced since the offer is taken with the sum the feed now gives it (a
-    // failed read keeps the offer; a feed with nothing newer ends here)
-    await checkUpdates(true, read);
-    const now = updateNow();
-    if (now.kind !== "offer") return setInst({ kind: "idle" });
-    offer = now.offer;
-    await native(offer, (s) => {
-      if (s.stage === "download") setInst({ kind: "downloading", got: s.got, total: s.total });
-      else {
-        handed = true;
-        writeTried({ from: OWN.commit, to: offer.commit, toAt: offer.at, when: Date.now() });
-        setInst({ kind: "installing", checked: s.checked });
-      }
+    await native((s) => {
+      if (s.stage === "download") return now({ kind: "downloading", got: s.got, total: s.total });
+      handed = { from: OWN.commit, to: s.commit, toAt: s.at, when: Date.now() };
+      if (mine === tries) writeTried(handed);
+      now({ kind: "installing", checked: s.checked });
     });
     // Android installed it (the app is usually closed by then, and the next start says so)
-    setInst({ kind: "idle" });
+    now({ kind: "idle" });
   } catch (e) {
+    if (mine !== tries) return;
     const message = e instanceof Error ? e.message : String(e);
-    const t = readTried();
-    if (handed && t) writeTried({ ...t, why: message });
+    if (handed) writeTried({ ...(handed as Tried), why: message });
     setInst({ kind: "failed", message });
   }
 }
-async function nativeInstall(offer: Offer, step: (s: Step) => void): Promise<void> {
+async function nativeInstall(step: (s: Step) => void): Promise<void> {
   const { Channel, invoke } = await import("@tauri-apps/api/core");
   const onStep = new Channel<Step>();
   onStep.onmessage = step;
-  await invoke("update_install", { url: offer.url, sha256: offer.sha256 ?? null, onStep });
+  await invoke("update_install", { onStep });
 }
 
 /** for tests */
-export function resetUpdates() { state = { kind: "none" }; lastAt = 0; running = null; inst = { install: { kind: "idle" }, after: { kind: "none" } }; afterRead = false; }
+export function resetUpdates() { state = { kind: "none" }; lastAt = 0; running = null; inst = null; tries = 0; }
 export const installState = installNow;

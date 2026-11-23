@@ -2,25 +2,30 @@
 // Download installs it from here (with how far the download is, and Android's refusal in words), and after a try this
 // says whether it took. Only in a build made with an update feed; the others say their build at the foot of Settings.
 import { useEffect } from "react";
-import { share } from "../shell/UpdateLine";
-import { builtOn, checkUpdates, download, OWN, useInstall, useUpdate } from "../shell/updates";
-
-const mb = (n: number) => `${(n / 1e6).toFixed(0)} MB`;
+import { useLocation } from "react-router";
+import { openLinkOut } from "../shell/device";
+import { builtOn, checkUpdates, download, mb, OWN, share, useInstall, useUpdate } from "../shell/updates";
 
 export default function UpdateSettings() {
   const s = useUpdate();
   const { install, after } = useInstall();
   useEffect(() => { void checkUpdates(true); }, []);
+  // the line's Why comes here (each tap a new visit, so it scrolls even when Settings is open)
+  const at = useLocation();
+  const shown = s.kind !== "none";
+  useEffect(() => { if (shown && at.hash === "#s-updates") document.getElementById("s-updates")?.scrollIntoView({ block: "start" }); }, [at.key, at.hash, shown]);
   if (s.kind === "none") return null;
-  const busy = install.kind === "downloading" || install.kind === "installing";
+  const busy = install.kind === "downloading";
+  // the try that didn't take, while its build is still the one offered
+  const stuck = after.kind === "stuck" && install.kind === "idle" && s.kind === "offer" && s.offer.commit === after.to ? after : null;
   return (
     <section className="card" aria-labelledby="s-updates">
       <h2 id="s-updates">Updates</h2>
       <p>This build: {OWN.at ? <>built {builtOn(OWN.at)} <span className="quiet">({OWN.commit})</span></> : "not from a release"}.</p>
       {after.kind === "updated" && <p className="quiet">The update installed.</p>}
-      {after.kind === "stuck" && install.kind === "idle" && <div role="status">
-        <p>The update to the build of {builtOn(after.at)} didn't install: this is still the old one.</p>
-        <p className="small">{after.why || "Tap Download to try again, and Update when Android asks. If Android says Parachute isn't allowed to install apps, allow it there and come back."}</p>
+      {stuck && <div role="status">
+        <p>The update to the build of {builtOn(stuck.at)} didn't install: this is still the old one.</p>
+        <p className="small">{stuck.why || "Tap Download to try again, and Update when Android asks. If Android says Parachute isn't allowed to install apps, allow it there and come back."}</p>
       </div>}
       {s.kind === "checking" && <p className="quiet">Looking for a newer one…</p>}
       {s.kind === "current" && <p className="quiet">It's the newest.</p>}
@@ -36,7 +41,10 @@ export default function UpdateSettings() {
           <p className="small quiet">{install.checked ? "The file matches the update list." : "The update list doesn't say what the file should be, so the app couldn't check it. Android still installs it only if it comes from the same maker."}</p>
         </div>}
         {!busy && <div className="row-buttons"><button type="button" className="primary" onClick={() => void download(s.offer, s.platform)}>Download</button></div>}
-        {install.kind === "failed" && <p className="error" role="alert">{install.message}</p>}
+        {install.kind === "failed" && <>
+          <p className="error" role="alert">{install.message}</p>
+          {s.platform === "android" && <p className="small"><button type="button" className="quiet-button" onClick={() => void openLinkOut(s.offer.url).catch(() => undefined)}>Download in the browser instead</button></p>}
+        </>}
         {!busy && <p className="small quiet">{s.platform === "android"
           ? "Parachute downloads it and Android installs it over this one. Android asks first (the first time, to let Parachute install apps), and installs it only if it comes from the same maker as this one."
           : "Your browser downloads it; open it and drag Parachute to Applications, over this one."}</p>}

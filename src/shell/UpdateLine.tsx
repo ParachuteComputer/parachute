@@ -3,12 +3,7 @@
 // which says the same at length, and what this build is).
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
-import { builtOn, download, laterAt, putOff, useInstall, useUpdate, useUpdateChecks } from "./updates";
-
-/** "40%", or "12 MB" when the server didn't say how much */
-export function share(got: number, total: number) {
-  return total > 0 ? `${Math.min(100, Math.floor((got / total) * 100))}%` : `${(got / 1e6).toFixed(0)} MB`;
-}
+import { builtOn, download, laterAt, putOff, share, useInstall, useUpdate, useUpdateChecks } from "./updates";
 
 export default function UpdateLine() {
   useUpdateChecks();
@@ -20,7 +15,7 @@ export default function UpdateLine() {
   useEffect(() => { document.documentElement.classList.toggle("update-showing", showing); return () => document.documentElement.classList.remove("update-showing"); }, [showing]);
   if (s.kind !== "offer" || !showing) return null;
   const go = () => void download(s.offer, s.platform);
-  const missed = s.platform === "android" && (install.kind === "failed" || (install.kind === "idle" && after.kind === "stuck"));
+  const missed = s.platform === "android" && (install.kind === "failed" || (install.kind === "idle" && after.kind === "stuck" && after.to === s.offer.commit));
   return (
     <aside className="update-line" aria-label="A newer Parachute">
       {install.kind === "downloading" ? <span role="status">Downloading the newer Parachute… {share(install.got, install.total)}</span>
@@ -28,7 +23,7 @@ export default function UpdateLine() {
         : missed ? <span role="status">The update didn't install</span>
         : <span>A newer Parachute is ready <span className="quiet">(built {builtOn(s.offer.at)})</span></span>}
       {(install.kind === "idle" || install.kind === "failed") && <>
-        {missed ? <button type="button" className="quiet-button" onClick={() => void navigate("/settings")}>Why</button>
+        {missed ? <button type="button" className="quiet-button" onClick={() => void navigate("/settings#s-updates")}>Why</button>
           : <button type="button" className="quiet-button" onClick={go}>Download</button>}
         <button type="button" className="quiet-button" onClick={() => putOff(s.offer.at)}>Later</button>
       </>}

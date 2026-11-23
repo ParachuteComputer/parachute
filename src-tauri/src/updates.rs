@@ -6,6 +6,9 @@
 //! which asks the person and installs it only when it is signed with the same key as the app it replaces. On a Mac the
 //! file opens in the browser and the person opens the dmg.
 
+// The download and its checks run only on Android (the Mac's Download is the browser); elsewhere only the tests use them.
+#![cfg_attr(not(target_os = "android"), allow(dead_code))]
+
 use std::path::Path;
 use std::time::Duration;
 
@@ -36,6 +39,12 @@ fn feed_url(raw: &str) -> Result<url::Url, String> {
 /// The feed, read now; `None` when this build has none.
 #[tauri::command]
 pub async fn update_feed() -> Result<Option<Feed>, String> {
+    let Some((url, body)) = read_feed().await? else { return Ok(None) };
+    Ok(Some(Feed { feed: url.to_string(), body, platform: PLATFORM }))
+}
+
+/// This build's feed and what it says now; `None` when this build has none.
+async fn read_feed() -> Result<Option<(url::Url, String)>, String> {
     let Some(raw) = FEED.filter(|f| !f.trim().is_empty()) else { return Ok(None) };
     let url = feed_url(raw)?;
     let http = crate::door::http_client(Duration::from_secs(15)).map_err(|_| "Couldn't check for updates.".to_string())?;
@@ -51,7 +60,7 @@ pub async fn update_feed() -> Result<Option<Feed>, String> {
         }
     }
     let body = String::from_utf8(body).map_err(|_| "The update address sent something else.".to_string())?;
-    Ok(Some(Feed { feed: url.to_string(), body, platform: PLATFORM }))
+    Ok(Some((url, body)))
 }
 
 // ── Download and install (Android) ──
@@ -63,35 +72,48 @@ const STALL: Duration = Duration::from_secs(60);
 
 /// What the screens show while it runs (src/shell/updates.ts `Step`).
 #[derive(serde::Serialize, Clone, Debug, PartialEq)]
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 #[serde(tag = "stage", rename_all = "lowercase")]
 pub enum Step {
     /// bytes so far, of `total` (0: the server didn't say)
     Download { got: u64, total: u64 },
-    /// handed to the installer; `checked`: the file matched the feed's sha256 (false: the feed has none for it)
-    Install { checked: bool },
+    /// handed to the installer: the feed's build (`commit`, `at`); `checked`: the file matched the feed's sha256 (false:
+    /// the feed has none for it)
+    Install { checked: bool, commit: String, at: u64 },
 }
 
-/// The file to download: on the feed's own origin (as the screens resolve it), over https or http to this machine.
-fn install_url(raw: &str, feed: &url::Url) -> Result<url::Url, String> {
-    let u = url::Url::parse(raw).map_err(|_| "The update's address isn't one.".to_string())?;
-    if u.origin() != feed.origin() || !matches!(u.scheme(), "https" | "http") {
+/// What the feed names for this device: its file (on the feed's own origin), the file's sha256 when the feed gives one,
+/// and the build. The feed as src/shell/feed.ts reads it, but a sum that isn't one is refused here, not ignored.
+#[derive(Debug, PartialEq)]
+struct Pick {
+    url: url::Url,
+    sha256: Option<String>,
+    commit: String,
+    at: u64,
+}
+
+fn pick(body: &str, feed: &url::Url, platform: &str) -> Result<Pick, String> {
+    let bad = || "The update list isn't one.".to_string();
+    let v: serde_json::Value = serde_json::from_str(body).map_err(|_| bad())?;
+    if v.get("v").and_then(|n| n.as_u64()) != Some(1) {
+        return Err(bad());
+    }
+    let at = v.get("at").and_then(|n| n.as_u64()).filter(|&a| a > 0 && a <= (1u64 << 53)).ok_or_else(bad)?;
+    let commit = v.get("commit").and_then(|c| c.as_str())
+        .filter(|c| (7..=40).contains(&c.len()) && c.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+        .ok_or_else(bad)?
+        .to_string();
+    let name = v.get("files").and_then(|f| f.get(platform)).and_then(|n| n.as_str()).filter(|n| !n.is_empty())
+        .ok_or("The update list has no file for this device.")?;
+    let url = feed.join(name).map_err(|_| "The update's address isn't one.".to_string())?;
+    if url.origin() != feed.origin() || !matches!(url.scheme(), "https" | "http") {
         return Err("The update's address isn't beside this build's update list.".into());
     }
-    Ok(u)
-}
-
-/// A sha256 as the feed writes it: 64 hex digits (any case).
-fn sum_of(raw: Option<&str>) -> Result<Option<String>, String> {
-    match raw.map(str::trim).filter(|s| !s.is_empty()) {
-        None => Ok(None),
-        Some(s) if s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()) => Ok(Some(s.to_ascii_lowercase())),
-        Some(_) => Err("The update list's checksum for this file isn't one.".into()),
-    }
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    let sha256 = match v.get("sha256").and_then(|s| s.get(platform)) {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(s)) if crate::door::hex64(&s.to_ascii_lowercase()) => Some(s.to_ascii_lowercase()),
+        Some(_) => return Err("The update list's checksum for this file isn't one.".into()),
+    };
+    Ok(Pick { url, sha256, commit, at })
 }
 
 /// Downloads `url` to `dest`, hashing as it goes; `step` hears the bytes so far. With `want`, a file whose sha256 differs
@@ -105,7 +127,7 @@ pub async fn fetch_checked(
 ) -> Result<bool, String> {
     use sha2::{Digest, Sha256};
     use std::io::Write;
-    let want = sum_of(want)?;
+    let want = want.map(str::to_ascii_lowercase);
     let mut res = http.get(url).send().await.map_err(|_| "Couldn't reach the update's address.".to_string())?;
     if !res.status().is_success() {
         return Err(format!("The update's address answered {}.", res.status().as_u16()));
@@ -149,7 +171,7 @@ pub async fn fetch_checked(
     let done = read.await;
     drop(out);
     let checked = match (&done, &want) {
-        (Ok(()), Some(w)) if hex(&hash.finalize()) != *w => {
+        (Ok(()), Some(w)) if crate::saved::hex(&hash.finalize()) != *w => {
             Err("The downloaded file isn't the one the update list names (its checksum differs), so it wasn't installed.".to_string())
         }
         (Ok(()), w) => Ok(w.is_some()),
@@ -185,32 +207,29 @@ pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
         .build()
 }
 
-/// Download on Android: the feed's file, checked against its sha256, into the app's cache (`cache/update/`, the one
-/// folder UpdatePlugin.kt installs from), then Android's installer. Answers when Android has (a refusal in plain words);
-/// on an install Android closes the app first.
+/// Download on Android: what this build's feed names now (read here, so nothing the webview says picks the file or its
+/// sum), checked against the feed's sha256 as it downloads into the app's cache (`cache/update/`, the one folder
+/// UpdatePlugin.kt installs from), then Android's installer. Answers when Android has (a refusal in plain words); on an
+/// install Android closes the app first. A second Download while Android's question is open replaces the first.
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub async fn update_install<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    url: String,
-    sha256: Option<String>,
-    on_step: tauri::ipc::Channel<Step>,
-) -> Result<(), String> {
+pub async fn update_install<R: tauri::Runtime>(app: tauri::AppHandle<R>, on_step: tauri::ipc::Channel<Step>) -> Result<(), String> {
     use tauri::Manager;
-    let Some(raw) = FEED.filter(|f| !f.trim().is_empty()) else { return Err("This build has no updates.".into()) };
-    let url = install_url(&url, &feed_url(raw)?)?;
+    let Some((feed, body)) = read_feed().await? else { return Err("This build has no updates.".into()) };
+    let Pick { url, sha256, commit, at } = pick(&body, &feed, PLATFORM)?;
     let handle = app.try_state::<UpdateHandle<R>>().map(|h| h.0.clone()).ok_or("The installer isn't registered.")?;
     let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("update");
-    // one download at a time, and nothing an earlier one left
+    // this try's own file; what earlier tries left goes (a file already handed to Android was copied into its session)
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("Couldn't save the update: {e}"))?;
-    let apk = dir.join("parachute-update.apk");
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let apk = dir.join(format!("parachute-{commit}-{nanos}.apk"));
     let http = crate::door::http_client(Duration::from_secs(30 * 60)).map_err(|_| "Couldn't download the update.".to_string())?;
     let checked = fetch_checked(&http, url, sha256.as_deref(), &apk, |got, total| {
         let _ = on_step.send(Step::Download { got, total });
     })
     .await?;
-    let _ = on_step.send(Step::Install { checked });
+    let _ = on_step.send(Step::Install { checked, commit, at });
     #[derive(serde::Serialize)]
     struct Args<'a> {
         path: &'a str,
@@ -220,20 +239,21 @@ pub async fn update_install<R: tauri::Runtime>(
         .await
         .map(|_| ())
         .map_err(|e| e.to_string());
-    let _ = std::fs::remove_dir_all(&dir);
+    // only this try's file: a later try may be using the folder by now
+    let _ = std::fs::remove_file(&apk);
     done
 }
 
 /// Elsewhere Download opens the file in the browser (src/shell/updates.ts); this is Android's.
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-pub async fn update_install(_url: String, _sha256: Option<String>, _on_step: tauri::ipc::Channel<Step>) -> Result<(), String> {
+pub async fn update_install(_on_step: tauri::ipc::Channel<Step>) -> Result<(), String> {
     Err("Only the Android app installs its update itself.".into())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{feed_url, install_url, sum_of};
+    use super::{feed_url, pick, Pick};
 
     #[test]
     fn only_https_or_this_machine() {
@@ -246,24 +266,33 @@ mod tests {
     }
 
     #[test]
-    fn the_file_is_beside_the_feed() {
+    fn the_feed_names_the_file_and_its_sum() {
         let feed = feed_url("https://builds.example.org/parachute/latest.json").unwrap();
-        assert!(install_url("https://builds.example.org/parachute/p-abc1234.apk", &feed).is_ok());
-        assert!(install_url("https://builds.example.org/other/p.apk", &feed).is_ok());
-        assert!(install_url("https://elsewhere.example/p.apk", &feed).is_err());
-        assert!(install_url("http://builds.example.org/parachute/p.apk", &feed).is_err());
-        assert!(install_url("https://builds.example.org:8443/p.apk", &feed).is_err());
-        assert!(install_url("file:///sdcard/p.apk", &feed).is_err());
-    }
-
-    #[test]
-    fn a_sum_is_64_hex_or_none() {
-        let s = "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08";
-        assert_eq!(sum_of(Some(s)).unwrap().as_deref(), Some(s.to_ascii_lowercase().as_str()));
-        assert_eq!(sum_of(None).unwrap(), None);
-        assert_eq!(sum_of(Some(" ")).unwrap(), None);
-        assert!(sum_of(Some("abc")).is_err());
-        assert!(sum_of(Some(&"g".repeat(64))).is_err());
+        let sum = "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08";
+        let body = |files: &str, sums: &str| format!(r#"{{"v":1,"at":2000,"commit":"abc1234","files":{files},"sha256":{sums}}}"#);
+        assert_eq!(
+            pick(&body(r#"{"android":"p-abc1234.apk"}"#, &format!(r#"{{"android":"{sum}"}}"#)), &feed, "android"),
+            Ok(Pick {
+                url: url::Url::parse("https://builds.example.org/parachute/p-abc1234.apk").unwrap(),
+                sha256: Some(sum.to_ascii_lowercase()),
+                commit: "abc1234".into(),
+                at: 2000
+            })
+        );
+        // an older feed, without sums: the file, unchecked
+        let old = r#"{"v":1,"at":2000,"commit":"abc1234","files":{"android":"p.apk"}}"#;
+        assert_eq!(pick(old, &feed, "android").unwrap().sha256, None);
+        // a sum that isn't one is refused, not skipped
+        assert!(pick(&body(r#"{"android":"p.apk"}"#, r#"{"android":"abc"}"#), &feed, "android").is_err());
+        assert!(pick(&body(r#"{"android":"p.apk"}"#, r#"{"android":7}"#), &feed, "android").is_err());
+        // only a file on the feed's own origin, over the feed's scheme
+        for elsewhere in [r#""https://elsewhere.example/p.apk""#, r#""//elsewhere.example/p.apk""#, r#""http://builds.example.org/p.apk""#, r#""https://builds.example.org:8443/p.apk""#, r#""file:///sdcard/p.apk""#] {
+            assert!(pick(&body(&format!(r#"{{"android":{elsewhere}}}"#), "{}"), &feed, "android").is_err(), "{elsewhere}");
+        }
+        assert!(pick(&body(r#"{"mac":"p.dmg"}"#, "{}"), &feed, "android").is_err());
+        for bad in ["", "[]", r#"{"v":2,"at":2000,"commit":"abc1234","files":{"android":"p.apk"}}"#, r#"{"v":1,"at":0,"commit":"abc1234","files":{"android":"p.apk"}}"#, r#"{"v":1,"at":2000,"commit":"ABC1234","files":{"android":"p.apk"}}"#] {
+            assert!(pick(bad, &feed, "android").is_err(), "{bad}");
+        }
     }
 
     /// Serves `body` once per connection on this machine, as a build's host would; the address to fetch.
@@ -288,7 +317,7 @@ mod tests {
 
     fn sha(bytes: &[u8]) -> String {
         use sha2::{Digest, Sha256};
-        super::hex(&Sha256::digest(bytes))
+        crate::saved::hex(&Sha256::digest(bytes))
     }
 
     #[tokio::test]

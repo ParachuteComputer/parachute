@@ -65,11 +65,13 @@ class UpdatePlugin(private val activity: Activity) : Plugin(activity) {
 
   init { current = this }
 
-  /** The Download waiting on Android, and its file. One at a time. */
+  /** The Download waiting on Android, and its file. One at a time: a new one replaces it. */
   private var waiting: Invoke? = null
   private var apk: File? = null
   /** Android's question, held until the app is in front to show it. */
   private var question: Intent? = null
+  /** The session of the try waiting: Android's answers about another (one a newer try abandoned) are not for it. */
+  @Volatile private var session = -1
 
   /** Only a file Rust wrote: an .apk directly in cache/update/. */
   private fun updateFile(path: String): File? {
@@ -83,6 +85,7 @@ class UpdatePlugin(private val activity: Activity) : Plugin(activity) {
     waiting = null
     apk = null
     question = null
+    session = -1
     if (error == null) invoke.resolve(JSObject()) else invoke.reject(error)
   }
 
@@ -92,9 +95,10 @@ class UpdatePlugin(private val activity: Activity) : Plugin(activity) {
       val args = try { invoke.parseArgs(InstallArgs::class.java) } catch (e: Exception) {
         invoke.reject("bad install request"); return@runOnUiThread
       }
-      if (waiting != null) { invoke.reject("An update is already installing."); return@runOnUiThread }
       val file = updateFile(args.path)
       if (file == null) { invoke.reject("The downloaded update is missing. Try again."); return@runOnUiThread }
+      // a try still waiting on Android (its question went away without an answer): this one replaces it
+      finish("Not installed: a newer try replaced this one.")
       waiting = invoke
       apk = file
       if (activity.packageManager.canRequestPackageInstalls()) {
@@ -178,6 +182,7 @@ class UpdatePlugin(private val activity: Activity) : Plugin(activity) {
       setInstallReason(PackageManager.INSTALL_REASON_USER)
     }
     val id = installer.createSession(params)
+    session = id
     val session = installer.openSession(id)
     try {
       session.openWrite("parachute.apk", 0, file.length()).use { out ->
@@ -199,9 +204,9 @@ class UpdatePlugin(private val activity: Activity) : Plugin(activity) {
     (activity as? LifecycleOwner)?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) ?: true
 
   /** Android's question ("Do you want to update this app?"): shown now if the app is in front, else when it is. */
-  fun ask(intent: Intent) {
+  fun ask(id: Int, intent: Intent) {
     activity.runOnUiThread {
-      if (waiting == null) return@runOnUiThread
+      if (waiting == null || id != session) return@runOnUiThread
       if (resumed()) show(intent) else question = intent
     }
   }
@@ -216,8 +221,10 @@ class UpdatePlugin(private val activity: Activity) : Plugin(activity) {
   }
 
   /** Android's last word. On success the app is usually closed before it arrives. */
-  fun done(status: Int, message: String?) {
-    activity.runOnUiThread { finish(if (status == PackageInstaller.STATUS_SUCCESS) null else refusal(status, message)) }
+  fun done(id: Int, status: Int, message: String?) {
+    activity.runOnUiThread {
+      if (id == session) finish(if (status == PackageInstaller.STATUS_SUCCESS) null else refusal(status, message))
+    }
   }
 }
 
@@ -227,12 +234,13 @@ class InstallStatus : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
     val plugin = UpdatePlugin.current ?: return
+    val id = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
     if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
       val question: Intent? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
         else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_INTENT)
-      if (question != null) plugin.ask(question) else plugin.done(PackageInstaller.STATUS_FAILURE, "no question to ask")
+      if (question != null) plugin.ask(id, question) else plugin.done(id, PackageInstaller.STATUS_FAILURE, "no question to ask")
       return
     }
-    plugin.done(status, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
+    plugin.done(id, status, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
   }
 }

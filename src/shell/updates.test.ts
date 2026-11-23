@@ -89,8 +89,8 @@ describe("afterTry", () => {
     expect(afterTry(tried, { at: 2_000, commit: "abc1234" })).toEqual({ kind: "updated", at: 2_000 });
   });
   it("says the old build still runs after a try, with Android's reason when it gave one", () => {
-    expect(afterTry(tried, own)).toEqual({ kind: "stuck", at: 2_000, why: "" });
-    expect(afterTry({ ...tried, why: "Not installed: you cancelled it." }, own)).toEqual({ kind: "stuck", at: 2_000, why: "Not installed: you cancelled it." });
+    expect(afterTry(tried, own)).toEqual({ kind: "stuck", to: "abc1234", at: 2_000, why: "" });
+    expect(afterTry({ ...tried, why: "Not installed: you cancelled it." }, own)).toMatchObject({ kind: "stuck", why: "Not installed: you cancelled it." });
   });
   it("says nothing on a build installed some other way", () => {
     expect(afterTry({ ...tried, from: "0000000" }, own)).toEqual({ kind: "none" });
@@ -100,42 +100,41 @@ describe("afterTry", () => {
 
 describe("download on Android", () => {
   const offer = { at: OWN.at + 60, commit: "fedcba9", url: "https://builds.example.org/parachute/p.apk", sha256: SUM };
-  const now = (o: Record<string, unknown> = {}) => async () => ({ feed: FEED, body: feed({ at: offer.at, commit: offer.commit, files: { android: "p.apk" }, sha256: { android: SUM }, ...o }), platform: "android" });
   beforeEach(() => { resetUpdates(); localStorage.clear(); });
-  it("takes the feed as it is now: the file's sum given since the offer was made", async () => {
-    const other = "1".repeat(64);
-    let asked: unknown;
-    await download(offer, "android", async (o) => { asked = o; }, now({ sha256: { android: other } }));
-    expect(asked).toMatchObject({ commit: "fedcba9", sha256: other });
-    // and a feed with nothing newer any more: no download
-    asked = undefined;
-    await download(offer, "android", async (o) => { asked = o; }, now({ at: OWN.at, commit: OWN.commit }));
-    expect(asked).toBeUndefined();
-    expect(installState().install).toEqual({ kind: "idle" });
-  });
-  it("shows the download, then Android's installer, and remembers the try", async () => {
+  it("shows the download, then Android's installer, and remembers the build the shell handed it", async () => {
     const seen: string[] = [];
-    await download(offer, "android", async (_o, step) => {
+    await download(offer, "android", async (step) => {
       step({ stage: "download", got: 5, total: 10 });
       seen.push(JSON.stringify(installState().install));
-      step({ stage: "install", checked: true });
+      // the feed read by the shell names a later build than the offer on screen: that is the one tried
+      step({ stage: "install", checked: true, commit: "0123456", at: offer.at + 60 });
       seen.push(JSON.stringify(installState().install));
-    }, now());
+    });
     expect(seen).toEqual([JSON.stringify({ kind: "downloading", got: 5, total: 10 }), JSON.stringify({ kind: "installing", checked: true })]);
-    expect(JSON.parse(localStorage.getItem("parachute.update.tried")!)).toMatchObject({ from: OWN.commit, to: "fedcba9", toAt: offer.at });
+    expect(JSON.parse(localStorage.getItem("parachute.update.tried")!)).toMatchObject({ from: OWN.commit, to: "0123456", toAt: offer.at + 60 });
     // this build still runs: the next start would say so
-    expect(installState().after).toEqual({ kind: "stuck", at: offer.at, why: "" });
+    expect(installState().after).toEqual({ kind: "stuck", to: "0123456", at: offer.at + 60, why: "" });
   });
   it("keeps Android's refusal with the try", async () => {
-    await download(offer, "android", async (_o, step) => { step({ stage: "install", checked: false }); throw new Error("Not installed: you cancelled it."); }, now());
+    await download(offer, "android", async (step) => { step({ stage: "install", checked: false, commit: "fedcba9", at: offer.at }); throw new Error("Not installed: you cancelled it."); });
     expect(installState().install).toEqual({ kind: "failed", message: "Not installed: you cancelled it." });
-    expect(installState().after).toEqual({ kind: "stuck", at: offer.at, why: "Not installed: you cancelled it." });
+    expect(installState().after).toEqual({ kind: "stuck", to: "fedcba9", at: offer.at, why: "Not installed: you cancelled it." });
   });
   it("a download that fails (a file that doesn't match) is no try", async () => {
-    await download(offer, "android", async () => { throw new Error("The downloaded file isn't the one the update list names."); }, now());
+    await download(offer, "android", async () => { throw new Error("The downloaded file isn't the one the update list names."); });
     expect(installState().install).toMatchObject({ kind: "failed" });
     expect(localStorage.getItem("parachute.update.tried")).toBeNull();
     expect(installState().after).toEqual({ kind: "none" });
+  });
+  it("a second Download while Android is asking replaces the first, which then says nothing", async () => {
+    let refuse: (e: Error) => void = () => {};
+    const first = download(offer, "android", (step) => new Promise<void>((_, no) => { step({ stage: "install", checked: true, commit: "fedcba9", at: offer.at }); refuse = no; }));
+    await Promise.resolve();
+    expect(installState().install).toEqual({ kind: "installing", checked: true });
+    const second = download(offer, "android", async (step) => { step({ stage: "download", got: 1, total: 10 }); refuse(new Error("Not installed: a newer try replaced this one.")); await Promise.resolve(); step({ stage: "download", got: 2, total: 10 }); });
+    await Promise.all([first, second]);
+    expect(installState().install).toEqual({ kind: "idle" });
+    expect(installState().after).toMatchObject({ kind: "stuck", why: "" });
   });
 });
 
@@ -147,7 +146,7 @@ describe("a refusal belongs to its build", () => {
     await checkUpdates(true, one);
     const o = updateNow();
     if (o.kind !== "offer") throw new Error("no offer");
-    await download(o.offer, "android", async () => { throw new Error("Not installed: the file is an older build than this one."); }, one);
+    await download(o.offer, "android", async () => { throw new Error("Not installed: the file is an older build than this one."); });
     expect(installState().install.kind).toBe("failed");
     await checkUpdates(true, one);
     expect(installState().install.kind).toBe("failed");

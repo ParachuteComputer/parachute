@@ -291,7 +291,7 @@ const SHARING_TOOLS: &[(&str, &[&str])] = &[
 ];
 pub const ACCEPT_PATH: &str = "/account/invites/accept";
 
-fn hex64(v: &str) -> bool {
+pub(crate) fn hex64(v: &str) -> bool {
     v.len() == 64 && v.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
