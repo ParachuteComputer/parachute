@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { Bar, backOrLauncher } from "../ui/Bar";
 import { Link } from "react-router";
 import { useVaults } from "../vault/hooks";
-import { hostOf, listVaults, removeVault, type VaultRecord } from "../vault/store";
+import { listVaults, removeVault, type VaultRecord } from "../vault/store";
 import { siteOf } from "../vault/site";
 import { dropClient } from "../vault/client";
 import { revoke } from "../vault/oauth";
@@ -215,7 +215,8 @@ export default function Settings({ children }: { children?: ReactNode }) {
           <AskWhose vaults={vaults} />
           {parachutes.length ? parachutes.map((p) => (
             <section key={p.hub} className="settings-parachute" aria-label={`Parachute: ${said(p, parachutes)}`}>
-              <h4>{p.home ? "Your Parachute" : said(p, parachutes)}{(p.home || hostOf(p.hub) !== said(p, parachutes)) && <span className="quiet small">{hostOf(p.hub)}</span>}</h4>
+              {/* its site beside its name when the name doesn't say it (never a port: plainwords.spec) */}
+              <h4>{p.home ? "Your Parachute" : said(p, parachutes)}{siteOf(p.hub) !== said(p, parachutes) && <span className="quiet small">{siteOf(p.hub)}</span>}</h4>
               {p.vaults.length ? <>
                 <p className="small quiet">{reachCount(p.vaults.length)}</p>
                 <ul className="plain vault-rows">{p.vaults.map((v) => <VaultRow key={v.key} v={v} />)}</ul>

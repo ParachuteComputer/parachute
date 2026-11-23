@@ -7,7 +7,7 @@ import { api, hubState, mintToken, MORE_VAULTS, NOT_GIVEN, ORG_VAULT, techneStat
 import { approveUntilBack, held, moreVaults, openVault, signInWithKey, ui, vaultRow } from "./helpers";
 
 /** A Parachute in Settings: its vaults, and a line for each vault there this device doesn't read yet. */
-/** A Parachute in Settings: the home's is "your Parachute"; another is called by its site (its host and port beside its name). */
+/** A Parachute in Settings: the home's is "your Parachute"; another is called by its site (its site beside its name when the name doesn't say it). */
 const said = (origin: string) => (origin === hubState().origin ? "your Parachute" : new URL(origin).hostname);
 const parachute = (page: Page, origin: string) => page.getByRole("region", { name: `Parachute: ${said(origin)}` });
 const home = (method: string, path: string, body?: unknown) => api(hubState(), method, path, body, VAULT);
