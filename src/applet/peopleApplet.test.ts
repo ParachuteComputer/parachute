@@ -73,7 +73,7 @@ const api = new Function(
     readOne: (id: string) => Promise<PersonRecord | null>,
     readAll: () => Promise<PersonRecord[]>,
   ) => Promise<PersonRecord[]>;
-  readFolder: (query: (q: Record<string, unknown>) => Promise<PersonRecord[]>, base: Record<string, unknown>) => Promise<PersonRecord[]>;
+  readFolder: (query: (q: Record<string, unknown>) => Promise<PersonRecord[]>, base: Record<string, unknown>) => Promise<{ rows: PersonRecord[]; capped: boolean }>;
 };
 
 // Tiny valid 1x1 PNG bytes encoded as base64 (made-up fixture photo)
@@ -507,6 +507,8 @@ describe("People at thousands of people", () => {
         return dir === "desc" ? -c : c;
       });
       const offset = Number(q.offset ?? 0);
+      // the app pages no further than an offset of 5,000
+      if (offset > 5000) throw Object.assign(new Error("bad_params"), { status: 400 });
       const page = sorted.slice(offset, offset + Math.min(Number(q.limit ?? 50), 50)).map((r) => ({ ...r }));
       between(pages++);
       return page;
@@ -525,7 +527,8 @@ describe("People at thousands of people", () => {
       }
       if (page === 7) rows.push({ id: "znew", path: "People/New Person", createdAt: stamp(clock), updatedAt: stamp(clock++) });
     });
-    const got = await api.readFolder(query, { pathPrefix: "People/", includeFields: true });
+    const { rows: got, capped } = await api.readFolder(query, { pathPrefix: "People/", includeFields: true });
+    expect(capped).toBe(false);
     const ids = got.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
     // every record there now, none missed by one that changed while it read (a delete behind it: the app's to go on
@@ -534,11 +537,20 @@ describe("People at thousands of people", () => {
     expect(got.find((r) => r.id === "p00010")?.fields?.summary).toBe("changed");
   });
 
-  it("reads a hub that can't order by when a record was made newest-changed first", async () => {
+  it("reads a hub that can't order by when a record was made newest-changed first, and one changed meanwhile comes in", async () => {
     const rows = many(120);
-    const { query } = hub(rows, () => {}, true);
-    const got = await api.readFolder(query, { pathPrefix: "People/" });
+    // the oldest-changed, not read yet, changed while it reads: it jumps ahead of where the read is
+    const { query } = hub(rows, (page) => { if (page === 1) rows[0] = { ...rows[0], updatedAt: stamp(99_999) }; }, true);
+    const { rows: got } = await api.readFolder(query, { pathPrefix: "People/" });
     expect(got.map((r) => r.id).sort()).toEqual(rows.map((r) => r.id).sort());
+  });
+
+  it("past the furthest offset the app pages to, lists what it has and says there are more", async () => {
+    const { query } = hub(many(5100));
+    const { rows, capped } = await api.readFolder(query, { pathPrefix: "People/" });
+    expect(capped).toBe(true);
+    expect(rows.length).toBeGreaterThanOrEqual(5050);
+    expect((await api.readFolder(hub(many(5049)).query, { pathPrefix: "People/" })).capped).toBe(false);
   });
 
   it("reads bodies only for the people a card's note merges into", async () => {

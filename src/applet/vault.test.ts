@@ -428,6 +428,19 @@ describe("the hub's query words, kept to the folders", () => {
     }
   });
 
+  it("more notes it can't see removed behind it than it steps back: the next page reads from the start, nothing skipped", async () => {
+    // every tenth a note the hub counts (case-blind) and the module drops
+    for (let i = 0; i < 300; i++) notes.push({ id: `n${String(i).padStart(4, "0")}`, path: i % 10 === 0 ? `recipes/N ${i}` : `Recipes/N ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    const words = "order_by=created_at&sort=asc&include_links=true&limit=50";
+    const ids = (r: { body: { id: string }[] }) => r.body.map((n) => n.id);
+    const want = [ids(await frameOn(hub).get(`/api/notes?${words}&offset=0`)), ids(await frameOn(hub).get(`/api/notes?${words}&offset=50`))];
+    const f = frameOn(hub);
+    expect(ids(await f.get(`/api/notes?${words}&offset=0`))).toEqual(want[0]);
+    // twelve hidden ones, all behind where it read to, go
+    for (const i of [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110]) notes.splice(notes.findIndex((n) => n.id === `n${String(i).padStart(4, "0")}`), 1);
+    expect(ids(await f.get(`/api/notes?${words}&offset=50`))).toEqual(want[1]);
+  });
+
   it("a page that fails leaves the list where it was: asked again, it goes on, nothing missed", async () => {
     for (let i = 0; i < 200; i++) notes.push({ id: `d${String(i).padStart(3, "0")}`, path: `Recipes/D ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
     const words = "order_by=created_at&sort=asc&include_links=true&limit=50";

@@ -792,6 +792,8 @@ function matchVCardContact(card: VCardContact, people: readonly PersonRecord[]):
 
 /** A folder's page: 50, the most the app gives. */
 const FOLDER_PAGE = 50;
+/** The furthest offset the app pages to. */
+const FOLDER_MAX_OFFSET = 5_000;
 
 /** The people as listed, with bodies for those a card's note would merge into: so the preview says truly what will
  *  change without reading every person's notes. Each is read alone, or the folder in pages when that is fewer reads. */
@@ -820,16 +822,18 @@ async function withBodiesForCards(
 
 /** Every record a folder query finds, in pages of a stable order: oldest made first, so a record changed while it reads
  *  moves nowhere and a new one lands at the end. Then one page newest-changed first, so a record changed while it read
- *  comes in its newest version. A hub that can't order by when a record was made (0.8) is read newest-changed first.
+ *  comes in its newest version. A hub that can't order by when a record was made (0.8) is read newest-changed first
+ *  (where that last page brings in one changed while it read, which moved ahead of where it was). Past the furthest
+ *  offset the app pages to, it stops: `capped`.
  *  Each page asks for the offset the last one ended at: the app goes on reading from there (and a record removed
  *  behind it moves none past it), so thousands cost one read a page, not a read of everything before it. */
-async function readFolder(query: (q: Record<string, unknown>) => Promise<PersonRecord[]>, base: Record<string, unknown>): Promise<PersonRecord[]> {
+async function readFolder(query: (q: Record<string, unknown>) => Promise<PersonRecord[]>, base: Record<string, unknown>): Promise<{ rows: PersonRecord[]; capped: boolean }> {
   const byId = new Map<string, PersonRecord>();
   const keep = (r: PersonRecord) => {
     const had = byId.get(r.id);
     if (!had || (r.updatedAt ?? "") >= (had.updatedAt ?? "")) byId.set(r.id, r);
   };
-  let stable = true;
+  let stable = true, capped = false;
   for (let offset = 0; ; offset += FOLDER_PAGE) {
     let rows: PersonRecord[];
     try {
@@ -841,9 +845,11 @@ async function readFolder(query: (q: Record<string, unknown>) => Promise<PersonR
     }
     for (const r of rows) keep(r);
     if (rows.length < FOLDER_PAGE) break;
+    // the app pages no further than this: what it has, and that there are more
+    if (offset + FOLDER_PAGE > FOLDER_MAX_OFFSET) { capped = true; break; }
   }
-  if (stable) for (const r of await query({ ...base, limit: FOLDER_PAGE })) keep(r);
-  return [...byId.values()];
+  for (const r of await query({ ...base, limit: FOLDER_PAGE })) keep(r);
+  return { rows: [...byId.values()], capped };
 }
 
 /** Build an additive patch to merge a vCard into an existing person without dropping or overwriting existing fields. */
@@ -1096,6 +1102,8 @@ function Avatar({ name, url, size, want }: { name: string; url?: string; size: n
 export default function People() {
   const [people, setPeople] = useState<PersonRecord[] | null>(null);
   const [error, setError] = useState<unknown>(null);
+  /** More people than the app pages to: the list holds the first of them. */
+  const [capped, setCapped] = useState(false);
   const [tab, setTab] = useSaved<ViewTab>("tab", "all");
   const [query, setQuery] = useState("");
   const [relationFilter, setRelationFilter] = useSaved<string>("filter.relation", "");
@@ -1185,25 +1193,34 @@ export default function People() {
   }, [drainPhotos]);
 
   // Load all people in People/ (paginated, so 118+ people all load cleanly)
-  const asked = useRef(0);
-  const load = useCallback(async () => {
-    const n = ++asked.current;
-    try {
-      const base = { pathPrefix: FOLDER, includeFields: true };
-      const query = (q: Record<string, unknown>) => vault.queryRecords(q) as Promise<PersonRecord[]>;
-      // a hub that doesn't hand links with a folder's records: the list still loads, without "last talked"
-      let all: PersonRecord[];
-      try {
-        all = await readFolder(query, { ...base, includeLinks: true });
-      } catch {
-        all = await readFolder(query, base);
-      }
-      if (n !== asked.current) return;
-      setPeople(all);
-      setError(null);
-    } catch (e) {
-      if (n === asked.current) setError(e);
-    }
+  // one load at a time: a load asked for while one runs runs once more after it, and both callers wait for that
+  const loading = useRef<Promise<void> | null>(null);
+  const again = useRef(false);
+  const load = useCallback((): Promise<void> => {
+    if (loading.current) { again.current = true; return loading.current; }
+    const run = async () => {
+      do {
+        again.current = false;
+        try {
+          const base = { pathPrefix: FOLDER, includeFields: true };
+          const query = (q: Record<string, unknown>) => vault.queryRecords(q) as Promise<PersonRecord[]>;
+          // a hub that doesn't hand links with a folder's records: the list still loads, without "last talked"
+          let got: { rows: PersonRecord[]; capped: boolean };
+          try {
+            got = await readFolder(query, { ...base, includeLinks: true });
+          } catch {
+            got = await readFolder(query, base);
+          }
+          setPeople(got.rows);
+          setCapped(got.capped);
+          setError(null);
+        } catch (e) {
+          setError(e);
+        }
+      } while (again.current);
+    };
+    loading.current = run().finally(() => { loading.current = null; });
+    return loading.current;
   }, []);
 
   const opening = useRef(0);
@@ -1467,7 +1484,7 @@ export default function People() {
         parsed,
         people ?? [],
         (id) => vault.getRecord(id) as Promise<PersonRecord | null>,
-        () => readFolder((q) => vault.queryRecords(q) as Promise<PersonRecord[]>, { pathPrefix: FOLDER, includeBody: true }),
+        async () => (await readFolder((q) => vault.queryRecords(q) as Promise<PersonRecord[]>, { pathPrefix: FOLDER, includeBody: true })).rows,
       );
       const rows: VcfPlanRow[] = [];
       const seenNew: PersonRecord[] = [];
@@ -1877,7 +1894,7 @@ export default function People() {
   const totalCount = people?.length ?? 0;
   const kicker = people === null ? undefined
     : query || activeFilterCount > 0 ? `${filtered.length} of ${totalCount} people`
-      : `${totalCount} ${totalCount === 1 ? "person" : "people"}`;
+      : capped ? `${totalCount}+ people` : `${totalCount} ${totalCount === 1 ? "person" : "people"}`;
 
   const soonTwoWeeks = birthdaysSoon.filter((b) => b.daysUntil <= 14);
 
@@ -1889,7 +1906,7 @@ export default function People() {
       aside={
         <>
           {/* contacts in and out match against everyone: only once everyone is listed */}
-          <Button small disabled={people === null || !!error} onClick={() => setVcfOpen(true)}>vCard</Button>
+          <Button small disabled={people === null || !!error || capped} onClick={() => setVcfOpen(true)}>vCard</Button>
           <Button kind="primary" small onClick={() => { setNewDraft(EMPTY_NEW); setAddOpen(true); }}>Add</Button>
         </>
       }

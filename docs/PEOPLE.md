@@ -85,9 +85,10 @@ The list reads `People/` in pages of 50, oldest made first (`orderBy: "created_a
 reads moves nowhere and a new one lands at the end. Each page asks for the offset the last one ended at, so the app goes
 on reading from there (a few rows back, so a person deleted meanwhile pushes none past it) instead of reading everyone
 before it again: one read a page. Then one page newest-changed first brings in anyone changed while it read. A 0.8 hub,
-which can't order by when a record was made, is read newest-changed first. The app pages up to an offset of 5,000, so
-the list holds about 5,000 people at most. vCard in and out wait until everyone is listed, so an import never misses a
-match.
+which can't order by when a record was made, is read newest-changed first (that last page catches one changed while
+it read). The app pages to an offset of 5,000 at most: past that the list holds the first 5,050 or so and its
+heading says "5050+ people". vCard in and out wait until everyone is listed (and are off past 5,050), so an
+import never misses a match.
 
 ## vCard (`.vcf`) import and export
 
