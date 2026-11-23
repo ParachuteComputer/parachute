@@ -110,6 +110,8 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       const up = await clientFor(rec(key)).uploadStorageFile(new File([new Uint8Array(bytes)], bareName(name), { type: mimeType })).catch(noReach(key));
       return { path: up.path, mimeType: up.mimeType ?? mimeType };
     },
+    // a file attached to a record (vaults.ts `file` checks it is one), with this device's sign-in
+    file: (key, path) => clientFor(rec(key)).fetchAttachmentBlob(`/api/storage/${path.split("/").map(encodeURIComponent).join("/")}`).catch(noReach(key)),
     // what a screen shows: from the copy kept of the read at once, the hub asked behind it (vault/readCache.ts)
     // a record for what shows, from the copy kept of it (vault/readCache.ts): only for an applet that redraws when told
     ...(opts.read ? { read: (key: string, path: string) => {

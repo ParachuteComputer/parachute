@@ -8,7 +8,7 @@
 // back: putting back is a change of its own, kept in history (docs/VAULT.md "Changes").
 // It asks the app for every vault on this device (`vaults`) and what reaches them (`sharing`): its card says so.
 // An ordinary applet otherwise: a note in your vault (Applets/Vault); change it, or ask your AI to.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 // Table, Fields and the vaults calls are level 3, Changes' calls (vaults.changes, compare, restore, remove) level 5, and
 // who reaches a vault (vaults.reach, manage, giveKey, endReach, stopManaging) level 6: its record says `needs: 6`, so an
 // older app says to update
@@ -419,6 +419,9 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
   const readHistory = () => vaults.history(v.key, id).then((h: typeof history) => { setHistory(h); setHistFailed(null); }, setHistFailed);
   const editingRef = useRef(editing);
   editingRef.current = editing;
+  // its pictures, from the files attached to it (a Parachute before 11-22 has no vaults.file: their names show in their place)
+  const fetchBlob = useCallback((src: string): Promise<Blob> => vaults.file(v.key, id, src), [v.key, id]);
+  const pictures = typeof (vaults as { file?: unknown }).file === "function" ? fetchBlob : undefined;
   const top = useRef<HTMLElement | null>(null);
   // a record opened from a long table comes into view
   useEffect(() => { top.current?.scrollIntoView?.({ block: "start" }); }, [id]);
@@ -480,7 +483,7 @@ function RecordView({ v, id, open, back }: { v: Held; id: string; open: (id: str
             setBusy(false);
           }}><Button kind="quiet" onClick={() => setEditing(null)}>Cancel</Button></Write>
         : <>
-            {(r.body ?? "").trim() ? <Note body={r.body ?? ""} path={r.path} tags={[...r.types, ...r.tags]} fields={r.fields} onLink={(target) => {
+            {(r.body ?? "").trim() ? <Note body={r.body ?? ""} path={r.path} tags={[...r.types, ...r.tags]} fields={r.fields} fetchBlob={pictures} onLink={(target) => {
               const hit = links.find((l) => l.path === target || l.path.split("/").pop() === target);
               if (hit) open(hit.id);
             }} /> : <p className="note-meta">No words yet.</p>}
