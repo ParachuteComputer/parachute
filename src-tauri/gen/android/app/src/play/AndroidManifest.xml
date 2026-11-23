@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The build for Google Play (PARACHUTE_STORE=play, scripts/android-build.sh --play) merges this over the main manifest:
+<!-- The build for Google Play (PARACHUTE_STORE=play, from scripts/android-build.sh) merges this over the main manifest:
      Play updates the app itself, so it drops the right to install apps that the in-app update needs (UpdatePlugin.kt).
      Play's policy refuses that permission in an app whose purpose isn't installing apps. docs/STORES.md -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"

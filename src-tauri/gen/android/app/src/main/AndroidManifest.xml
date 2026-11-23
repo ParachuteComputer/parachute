@@ -11,12 +11,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Download installs the newer build itself (UpdatePlugin.kt): Android asks the person once (Install unknown apps)
-         and then before each update. A build for Google Play will have to drop it (Play updates the app itself, and its
-         policy refuses it otherwise); nothing does that yet (docs/LAUNCH.md §3). -->
+         and then before each update. The build for Google Play drops it (src/play/AndroidManifest.xml): Play updates the
+         app itself, and its policy refuses it otherwise (docs/STORES.md). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-
-    <!-- AndroidTV support -->
-    <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <!-- Nothing of the app goes into Android's backup or a device-to-device transfer (drafts an applet saved, the
          sign-ins, the passcode's hash, the approvals ledger): they are this device's own, "never synced". The key was
@@ -39,8 +36,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-                <!-- AndroidTV support -->
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
             <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
             <intent-filter >
