@@ -190,7 +190,7 @@ test("a full bar: its first place and Applets stay in reach on a phone, and a th
     await writeBundle({ bar: [{ vault: VAULT, applet: "Applets/Recipes" }, ...Array.from({ length: 11 }, (_, i) => ({ vault: VAULT, applet: `Applets/Extra ${i + 1}` }))] });
     await start(page);
     await expect(bar(page).getByRole("link")).toHaveCount(14);
-    // the first place can be reached: it starts at the bar's left edge, not off screen; Applets, last, scrolls into reach
+    // the first place can be reached: it starts at the bar's left edge, not off screen; Applets, before Settings, scrolls into reach
     expect((await bar(page).getByRole("link").first().boundingBox())!.x).toBeGreaterThanOrEqual(0);
     await bar(page).getByRole("link", { name: /Applets/ }).scrollIntoViewIfNeeded();
     await expect(bar(page).getByRole("link", { name: /Applets/ })).toBeInViewport();

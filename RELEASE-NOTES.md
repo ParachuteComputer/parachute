@@ -25,7 +25,8 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   components on your home, each in its own sealed frame with its own card, seeing only what that card allows of their
   vault ([docs/OTHER-PARACHUTES.md](docs/OTHER-PARACHUTES.md)).
 - **Your bundle.** The app opens on the home applet your bundle names (`Parachute/Bundles/<id>`; called an app record before 11-20), the bar is that
-  record's pins in its order, then **Applets**: one list of the app's applets. Vaults are in Settings. *Changed:* the
+  record's pins in its order, then **Applets**: one list of the app's applets, and last **Settings**, on every screen
+  (no record can take it off). Vaults are in Settings. *Changed:* the
   bar no longer puts your home first by itself: pin it (long-press it in Applets, **Pin to the bar**) to keep it there.
   A record that doesn't load leaves you the list and Settings ([docs/NAVIGATION.md](docs/NAVIGATION.md)).
 - **Vault**, Parachute's own viewer: your vaults, each one's types with counts, a type's records as a table (sort,

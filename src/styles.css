@@ -248,8 +248,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .home-bar-place { position: relative; }
 .home-bar-badge { position: absolute; top: 1px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--primary); color: var(--on-primary); font: 700 var(--fs-label) var(--sans); line-height: 17px; text-align: center; }
 /* Settings, the shell's own place, last on the bar: held at the right edge, on screen however full the bar is (the
-   places before it pass under it, the desk's colour closing the gap) */
-.home-bar .home-bar-settings { position: sticky; right: 0; flex: none; box-shadow: -4px 0 0 var(--desk), 12px 0 0 var(--desk); }
+   places before it pass under it; the desk's colour closes the gaps beside it, starting under the bar's top line) */
+.home-bar .home-bar-settings { position: sticky; right: 0; flex: none; box-shadow: -4px 2px 0 var(--desk), 12px 2px 0 var(--desk); }
 .home-bar-settings .home-bar-glyph { font-size: 1.3em; line-height: 0.85; }
 .home-bar-sep { width: 1px; margin: 10px 6px; background: var(--line); flex: none; }
 .with-bar .app-frame { bottom: calc(env(safe-area-inset-bottom) + var(--foot-h)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--foot-h)); }
@@ -319,7 +319,8 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
   .home-bar-glyph { font-size: var(--fs-lead); }
   .home-bar-badge { top: 4px; left: 28px; }
   /* Settings at the foot of the index */
-  .home-bar .home-bar-settings, .home-bar .home-bar-settings[aria-current="page"] { position: sticky; right: auto; bottom: 0; margin-top: auto; margin-bottom: 16px; box-shadow: 0 6px 0 var(--desk); }
+  .home-bar { scroll-padding-block-end: 80px; }
+  .home-bar .home-bar-settings, .home-bar .home-bar-settings[aria-current="page"] { position: sticky; right: auto; bottom: 16px; margin-top: auto; margin-bottom: 16px; box-shadow: 2px -6px 0 var(--desk), 2px 16px 0 var(--desk); }
   .with-bar .app-frame { right: calc(env(safe-area-inset-right) + var(--index-w)); width: auto; left: env(safe-area-inset-left); }
   /* what sits along the foot (a newer build's line, the shell's passing line) stays beside the index, not under it */
   .with-bar .update-line { right: var(--index-w); }

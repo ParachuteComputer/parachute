@@ -22,6 +22,16 @@ async function settingsInReach(page: Page, where: string) {
   return s;
 }
 
+/** A place brought into view the nearest way (as focus does) from the start of the bar is not under Settings. */
+async function notUnderSettings(page: Page, name: string) {
+  await bar(page).evaluate((n) => { n.scrollLeft = 0; n.scrollTop = 0; });
+  const place = bar(page).getByRole("link", { name: new RegExp(`${name}$`) });
+  await place.evaluate((el) => el.scrollIntoView({ block: "nearest", inline: "nearest" }));
+  const a = (await place.boundingBox())!;
+  const free = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest(".home-bar-place:not(.home-bar-settings)"), [a.x + a.width / 2, a.y + a.height / 2]);
+  expect(free, `${name}, brought into view, is not under Settings`).toBe(true);
+}
+
 test("Settings is on the bar at every place, in reach with a full bar, at a phone's width and a computer's; a tap opens it", async ({ page }) => {
   const made: string[] = [];
   try {
@@ -58,15 +68,18 @@ test("Settings is on the bar at every place, in reach with a full bar, at a phon
       await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
       const s = await settingsInReach(page, `Settings at ${size.width}`);
       await expect(s).toHaveAttribute("aria-current", "page");
-      // the bar's other places scroll past it, and a place scrolled to is not under it
-      if (size.width < 960) {
-        const applets = bar(page).getByRole("link", { name: /Applets/ });
-        await applets.scrollIntoViewIfNeeded();
-        const a = (await applets.boundingBox())!;
-        const covered = await page.evaluate(([x, y]) => !document.elementFromPoint(x, y)?.closest(".home-bar-place:not(.home-bar-settings)"), [a.x + a.width / 2, a.y + a.height / 2]);
-        expect(covered, "Applets, scrolled to, is not under Settings").toBe(false);
-      }
+      // the bar's other places scroll past it, and a place brought into view (a key's focus, say) is not under it
+      await notUnderSettings(page, "Extra 6");
     }
+    // a computer's window too short for the index: Settings is held at its foot, and the places pass above it
+    await page.setViewportSize({ width: 1440, height: 640 });
+    await page.goto("/");
+    await expect(bar(page).getByRole("link", { name: /Extra 11/ })).toBeAttached();
+    expect(await bar(page).evaluate((n) => n.scrollHeight > n.clientHeight), "the index overflows").toBe(true);
+    await settingsInReach(page, "the list at 1440×640");
+    await notUnderSettings(page, "Extra 9");
+    await bar(page).evaluate((n) => { n.scrollTop = n.scrollHeight; });
+    await settingsInReach(page, "the list at 1440×640, scrolled to the end");
   } finally {
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`);
   }
