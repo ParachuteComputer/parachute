@@ -98,8 +98,10 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, scroll, star
     addEventListener("touchcancel", up);
     return () => { removeEventListener("touchstart", down); removeEventListener("touchmove", move); removeEventListener("touchend", up); removeEventListener("touchcancel", up); };
   }, [on]);
-  // the pages (pages.ts): not for a wide page, one that asked to scroll, or a frame sized to what it draws
-  const paged = !wide && !scroll && !sizedFrame();
+  // the pages (pages.ts): not for a wide page, one that asked to scroll, or a frame sized to what it draws; nor for a page
+  // with no head of its own (no title, kicker, aside or back): a screen the applet lays out itself, as a room written
+  // before the pages did (its talk, and its box to write in at the foot of the screen), which pages would push sideways
+  const paged = !wide && !scroll && !sizedFrame() && !!(title || kicker || aside || back);
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const top = <>
       {on && (pull > 0 || busy) && <div className="pa-pull" style={{ height: busy ? PULL * 0.6 : pull * 0.6 }} role="status">{busy ? "Reading again…" : pull >= PULL ? "Let go to read again" : "Pull to read again"}</div>}

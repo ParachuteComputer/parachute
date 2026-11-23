@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 import { expect, test, type Page } from "@playwright/test";
 import { generateSecretKey, getPublicKey } from "nostr-tools/pure";
-import { VAULT } from "./hub";
+import { api, hubState, record, VAULT } from "./hub";
+import { withImports } from "../applets/record.ts";
 import { installApplet, ui } from "./helpers";
 import { person } from "./services/client";
 
@@ -560,4 +561,73 @@ test("room to room in one tap: the rooms are a row at the room's head; the new r
     await made.remove();
     bob.close();
   }
+});
+
+/** Rooms and its Room as an older vault keeps them (e2e/fixtures/older-rooms: before the pages), with today's records. */
+async function installOlderRooms(vars: Record<string, string>) {
+  const recs = withImports("rooms", vars).map((r) => ({ ...r, body: readFileSync(new URL(`./fixtures/older-rooms/${r.path === "Components/Room" ? "room" : "rooms"}.tsx`, import.meta.url), "utf8") }));
+  const made: string[] = [];
+  const remove = async () => { for (const id of made.splice(0).reverse()) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {}); };
+  try { for (const r of recs) made.push((await record(hubState(), "create", r)).id as string); } catch (e) { await remove(); throw e; }
+  return { remove };
+}
+
+for (const [which, install] of [["today's Rooms", (v: Record<string, string>) => installApplet("rooms", v)], ["a Rooms from before the pages, as an older vault keeps it", installOlderRooms]] as const)
+test.describe(`on a phone 390 wide, ${which}`, () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test("a room opens on its newest messages with the box to write in on screen; a tap there and on Send reaches the other person", async ({ page }) => {
+    test.setTimeout(120_000);
+    const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
+    const bob = await person(RELAY!, secret("bob"));
+    const stamp = Date.now().toString(36);
+    const owner = await person(RELAY!, secret("owner"));
+    const id = crypto.randomUUID(), name = `Porch ${stamp}`;
+    for (const p of [alice, bob.pubkey]) await owner.publish({ kind: 9030, tags: [["p", p]] });
+    expect((await owner.publish({ kind: 9007, tags: [["h", id], ["name", name], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+    for (const p of [alice, bob.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", id], ["p", p]] })).ok).toBe(true);
+    owner.close();
+    // more than a screen of talk, the newest last
+    for (let i = 1; i <= 24; i++) expect((await bob.publish({ kind: 9, content: `Line ${i} of the porch talk, long enough to wrap on a phone ${stamp}`, tags: [["h", id]] })).ok).toBe(true);
+    await new Promise((r) => setTimeout(r, 1100));
+    expect((await bob.publish({ kind: 9, content: `The newest line ${stamp}`, tags: [["h", id]] })).ok).toBe(true);
+    await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+    const made = await install({ relay: RELAY!, uni: bob.pubkey });
+    const app = frame(page);
+    /** A tap where a person sees it: it must be wholly on the screen as it is (nothing scrolled or turned for the test). */
+    const tap = async (what: string, l: ReturnType<typeof app.locator>) => {
+      const b = await l.boundingBox(), v = page.viewportSize()!;
+      expect(b, `${what}: drawn`).not.toBeNull();
+      expect(b!.x >= 0 && b!.y >= 0 && b!.x + b!.width <= v.width + 0.5 && b!.y + b!.height <= v.height + 0.5, `${what} on the screen: ${JSON.stringify(b)} in ${v.width}x${v.height}`).toBe(true);
+      return { at: () => page.mouse.click(b!.x + b!.width / 2, b!.y + b!.height / 2) };
+    };
+    try {
+      await page.goto(`/v/${VAULT}?with=vault`);
+      await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+      await page.getByRole("button", { name: "Allow" }).click();
+      const row = app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(name) });
+      await expect(row).toBeVisible({ timeout: 30_000 });
+      await (await tap("the room's row", row)).at();
+      const log = app.getByRole("log");
+      const newest = log.locator("article", { hasText: `The newest line ${stamp}` });
+      await expect(newest).toBeVisible({ timeout: 20_000 });
+      await page.waitForTimeout(600); // settled: where it lands is where a person finds it
+      await tap("the newest message", newest);
+      // a person taps the box and writes, then taps Send: no scrolling, no turning a page to find either
+      const field = app.getByLabel(`Message ${name}`);
+      await (await tap("the box to write in", field)).at();
+      await page.keyboard.type(`On my way ${stamp}`);
+      await expect(field).toHaveValue(`On my way ${stamp}`);
+      await (await tap("Send", app.getByRole("button", { name: "Send message" }))).at();
+      const mine = log.locator("article.mine", { hasText: `On my way ${stamp}` });
+      await expect(mine).toBeVisible({ timeout: 15_000 });
+      await expect(field).toHaveValue("");
+      await page.waitForTimeout(600);
+      await tap("the message just sent", mine);
+      await tap("the box to write in, after sending", field);
+      await expect.poll(async () => (await bob.query({ kinds: [9], "#h": [id], authors: [alice], limit: 10 })).some((e) => e.content === `On my way ${stamp}`), { timeout: 15_000 }).toBe(true);
+    } finally {
+      await made.remove();
+      bob.close();
+    }
+  });
 });
