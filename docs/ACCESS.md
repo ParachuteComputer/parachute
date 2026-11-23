@@ -165,7 +165,7 @@ Parachute's own applets keep their notes, and 5 changes what an approval holds. 
      device's Allow (it sees other asks), and an Allow given again on the old device is the newest approval, with no
      pick, so new devices fall back to no pick. Updating the old device ends it.
    - **What an AI with write on the home can do.** It can't make or widen a pick (no key). It could delete an approval:
-     the applet drops to the home, the narrow side. It could put back an older, wider one it kept: a device that has
+     Parachute's own drop to the home, and an applet with a card asks again; both the narrow side. It could put back an older, wider one it kept: a device that has
      seen the newer one refuses it (each device keeps the highest number it has seen, `approvalStore.ts`); a device new
      to that applet hasn't. That is true of every approval today, not new here.
    - **The manifest.** The `applet` value is untouched: contract 2 takes no new key, and the Uni app reads the same
@@ -215,12 +215,12 @@ Parachute's own applets keep their notes, and 5 changes what an approval holds. 
        lists home and B, not C, and a call to C (a `sharing` call too) is refused;
      - a second device with the same key opens Vault on home and B, with no line, and asks B's hub once;
      - Change to the home alone: B leaves the open Vault at once;
-     - an approval with no pick reaches the home only; an older build's approval made after a pick drops the applet to
-       the home.
+     - an approval with no pick reaches the home only (and, for an applet with a card, its own vault); an older build's
+       approval made after a pick drops the applet to no pick.
 
      Each goes red with the cut removed.
    - **Why it waits for a yes.** It changes what an approval holds and its hash. Cross-vault applets approved before
-     drop to the home until you pick, and on an older build Parachute's own still reach every vault until it is updated.
+     fall back to no pick until you pick, and on an older build Parachute's own still reach every vault until it is updated.
 
 ## Gemini Neon's outside reads (from the text only)
 
