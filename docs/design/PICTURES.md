@@ -11,8 +11,8 @@ bytes.
   `vaults.file(vault, id, path)` returns a `Blob`.
 - The shell checks that it holds the vault. It then asks the hub for record `id`'s attachments
   (`GET /records/:id/attachments`, with this device's sign-in for that vault). `path` (as the words link it, or
-  `<date>/<file>`) must be one of them. Only then does it read the bytes from `/api/storage/<path>` and hand back
-  `{type, bytes}`.
+  `<date>/<file>`) must be one of them, listed as a picture or a sound (`image/*`, `audio/*`). Only then does it read
+  the bytes from `/api/storage/<path>` and hand back `{type, bytes}`.
 - The kit's `Note` takes `fetchBlob(src)`. Vault gives it `src => vaults.file(vault, record.id, src)`. The renderer
   asks only for a `/api/storage/…` src, and draws the bytes from a `blob:` URL, which the frame's CSP already allows
   (`img-src data: blob:`).
@@ -32,11 +32,12 @@ because the person allowed `vaults` on its card. What it must not gain:
 - **The device's sign-in.** It stays in the shell. The frame gets bytes, never a token or a URL it could reuse.
 - **Other hubs or the web.** The renderer never asks for a remote src. The shell builds the storage URL from the
   held vault's own address.
-- **Running code from a file.** The bytes become a `blob:` URL in an `<img>`, which runs no script. The hub refuses
+- **Running code from a file.** The bytes become a `blob:` URL in an `<img>` or `<audio>`, which runs no script. The hub refuses
   `.svg`/`.html` uploads, and its storage sends `nosniff`.
 
 What's refused: an unknown vault (out_of_scope), an applet without `vaults` (not_granted), a path not attached to
-that record (out_of_scope), a record the hub can't find (failed), a file over 25 MB (too_large), and every call
+that record (out_of_scope), a file listed as anything but a picture or a sound (out_of_scope, before it is read), a
+record the hub can't find (failed), a file over 25 MB (too_large), and every call
 from a screen whose shell hands over no files (not_granted).
 
 ## No new reach, no contract change
@@ -47,7 +48,9 @@ Vault checks for it, so there its pictures keep reading "(not loaded)".
 
 ## Cache and size limits
 
-- 25 MB a file (the vault's own `FILE_MAX`); a bigger one is refused after it is read, and never handed over.
+- 25 MB a file (the vault's own `FILE_MAX`). The hub's list gives no size, so a bigger one is refused after it is read,
+  and never handed over. A video or a document is refused before it is read, so only pictures and sounds (which the
+  hub takes up to its own upload limit) are ever read for a frame.
 - Each call costs 2 of the frame's read budget (the list and the bytes). The kit waits up to 2 minutes for one.
 - No cache in the shell. Storage files never change (each upload gets a new name), and the renderer asks once per
   picture per drawn view. It then holds the `blob:` URL and frees it when the view closes.

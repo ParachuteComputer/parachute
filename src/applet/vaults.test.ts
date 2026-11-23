@@ -1,7 +1,7 @@
 // The `vaults` and `sharing` words (modules/vaults.ts): what an applet that asked for them may do across the person's
 // vaults, and what it never may, whatever its card says.
 import { describe, expect, it } from "vitest";
-import { createVaultsModule, queryPath, recOf, writablePath, type VaultsDeps } from "./modules/vaults";
+import { createVaultsModule, queryPath, recOf, storagePath, writablePath, type VaultsDeps } from "./modules/vaults";
 import { createRouter } from "./router";
 // the browser's Blob (jsdom's has no arrayBuffer())
 import { Blob as NodeBlob } from "node:buffer";
@@ -451,7 +451,7 @@ describe("vaults.file: a picture's bytes, only of a file attached to the record 
       // the hub's list of each record's attachments: Ideas has the owl, Letter (another record) has a letter
       async request(_v: string, method: string, path: string) {
         if (method === "GET" && path === "/records/ideas/attachments") return [{ id: "att1", path: OWL, mimeType: "image/png" }];
-        if (method === "GET" && path === "/records/letter/attachments") return [{ id: "att2", path: OTHER, mimeType: "image/png" }];
+        if (method === "GET" && path === "/records/letter/attachments") return [{ id: "att2", path: OTHER, mimeType: "image/png" }, { id: "att3", path: "2026-11-22/1765-tour.mp4", mimeType: "video/mp4" }];
         throw new Error("404 not found");
       },
       ...(o.file === false ? {} : { file: async (_v: string, p: string) => { fetched.push(p); return new NodeBlob([new Uint8Array(o.big ? 25 * 1024 * 1024 + 1 : 4)], { type: "image/png" }); } }),
@@ -481,6 +481,19 @@ describe("vaults.file: a picture's bytes, only of a file attached to the record 
     await expect(make().call({ vault: "elsewhere", id: "ideas", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "out_of_scope" });
     await expect(make({ file: false }).call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "not_granted" });
     await expect(make().call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}`, more: 1 })).rejects.toThrow();
+  });
+  it("hands over a picture or a sound only: a video is refused before it is read", async () => {
+    const { call, fetched } = make();
+    await expect(call({ vault: "home", id: "letter", path: "/api/storage/2026-11-22/1765-tour.mp4" })).rejects.toMatchObject({ code: "out_of_scope" });
+    expect(fetched).toEqual([]);
+  });
+  it("reads a path as the words link it: decoded once, never out of storage", () => {
+    expect(storagePath(`/api/storage/2026-11-22/caf%C3%A9.png`)).toBe("2026-11-22/café.png");
+    expect(storagePath("2026-11-22/a.png")).toBe("2026-11-22/a.png");
+    for (const bad of ["/api/storage/2026-11-22/%2e%2e/x.png", "/api/storage/../x.png", "/api/storage/a/./b.png", "/api/storage//a/b.png", "/api/storage/a.png",
+      "/api/storage/a/b.png?x", "/api/storage/a/b.png#f", "/api/storage/a%5Cb/c.png", "/api/storage/a/%0Ab.png", "/api/storage/a/%E0%A4%A.png", "https://elsewhere/api/storage/a/b.png"]) {
+      expect(storagePath(bad), bad).toBeNull();
+    }
   });
   it("refuses a file over 25 MB", async () => {
     await expect(make({ big: true }).call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "too_large" });
