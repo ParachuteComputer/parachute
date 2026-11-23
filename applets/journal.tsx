@@ -233,7 +233,7 @@ export default function Journal() {
     </Write>
     {opened && <section className="opened" aria-label="The entry you opened" ref={shown}>
       <div className="when">{when.day(whenOf(opened))}, {when.time(whenOf(opened))}<Button kind="quiet" small onClick={() => setOpenId(null)}>Close</Button></div>
-      <Note body={words.strip(opened.body)} path={opened.path} tags={opened.tags} />
+      <Note id={opened.id} body={words.strip(opened.body)} path={opened.path} tags={opened.tags} />
     </section>}
     {outbox.length > 0 && <List label="Waiting to be saved" rows={outbox.map((x) => ({ key: x.at, title: entryWords(x.body), meta: `${when.day(x.at)}, ${when.time(x.at)}` }))}
       more={{ label: "Try now", onPress: () => void flush(true) }} />}
@@ -250,7 +250,7 @@ export default function Journal() {
       const waiting = words.say(e.body);
       return [head, <article className="entry" key={e.id} aria-label={`Entry at ${when.time(at)}`}>
         <div className="when">{when.time(at)}{spoken && <span className="voice">voice</span>}</div>
-        {body && <Note body={body} path={e.path} tags={e.tags} />}
+        {body && <Note id={e.id} body={body} path={e.path} tags={e.tags} />}
         {waiting && <p className="wait">{waiting}</p>}
       </article>];
     })}

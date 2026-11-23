@@ -63,7 +63,8 @@
 // budget; a change to a vault held only for reading is refused and the person is asked (vault/writeAsk.ts).
 import { CODE_PATH, isCodeExtension } from "../code.ts";
 import { ContractError, ERROR_CODES, hasHidden, hasOnly, plain } from "../contract.ts";
-import { FILE_MAX, mediaType } from "../files.ts";
+import { attachedPicture, attachmentLists, storagePath } from "../files.ts";
+export { storagePath };
 import type { UniModule } from "../router.ts";
 import type { AppWord } from "../app.ts";
 import { packMethods } from "./packs.ts";
@@ -363,17 +364,6 @@ function newIn(v: Record<string, unknown>): New | null {
 }
 
 const refuse = (why: string) => new ContractError(ERROR_CODES.outOfScope, why);
-/** What a note draws: a picture (a sound, a video or a document is opened, not drawn). */
-const DRAWN = /^image\//;
-/** A file's place in the vault's storage, from a link in a record's words (`/api/storage/<date>/<file>`, or the bare
- *  `<date>/<file>`): decoded once; null for anything else (a query, a fragment, a dot segment, a backslash, a control). */
-export function storagePath(src: string): string | null {
-  if (src.length > 500) return null;
-  let p = src.startsWith("/api/storage/") ? src.slice("/api/storage/".length) : src;
-  try { p = decodeURIComponent(p); } catch { return null; }
-  if (!p || /[?#\\\u0000-\u001f\u007f]/.test(p) || p.startsWith("/") || p.includes("//")) return null;
-  return p.split("/").length >= 2 && p.split("/").every((s) => s !== "" && !/^\.+$/.test(s.trim())) ? p : null;
-}
 /** A person's name as the hub takes one (core share-invites.ts `parseName`): 1 to 40 characters, no control, not "You". */
 export const personName = (x: unknown): boolean => typeof x === "string" && [...x.trim()].length >= 1 && [...x.trim()].length <= 40 && !UNSEEN_IN_NAME.test(x) && !/^you$/i.test(x.trim());
 /** Controls and invisible formatting (bidi, zero-width, line breaks), as the hub refuses them; the joiners stay. */
@@ -439,20 +429,8 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
   const publishingTypes = async (vault: string) => new Set((await types(vault)).filter((t) => t.fields && Object.prototype.hasOwnProperty.call(t.fields, PUBLISH_FIELD) && (t.fields[PUBLISH_FIELD] as { default?: unknown })?.default !== undefined).map((t) => t.name));
   const namesFor = async (vault: string, shows = false) => typeNames.get(vault) ?? new Set((await types(vault, shows)).filter((t) => t.kind === "type").map((t) => t.name));
   /** A record's attachments as the hub listed them in the last 10 s: a note's pictures ask once, not once each. */
-  const lists = new Map<string, { at: number; rows: Promise<unknown[]> }>();
-  const attachmentsOf = (vault: string, id: string, ctx: { charge(n: number): void }) => {
-    const key = `${vault} ${id}`, hit = lists.get(key);
-    if (hit && Date.now() - hit.at < 10_000) return hit.rows;
-    ctx.charge(1);
-    const rows = (async () => {
-      const raw = await deps.request(vault, "GET", `/${await deps.door(vault)}/${encodeURIComponent(id)}/attachments`);
-      return Array.isArray(raw) ? raw : plain(raw) && Array.isArray(raw.attachments) ? raw.attachments as unknown[] : [];
-    })();
-    rows.catch(() => { if (lists.get(key)?.rows === rows) lists.delete(key); });
-    lists.set(key, { at: Date.now(), rows });
-    while (lists.size > 20) lists.delete(lists.keys().next().value as string);
-    return rows;
-  };
+  const lists = attachmentLists(async (key) => { const [vault, id] = JSON.parse(key) as [string, string]; return deps.request(vault, "GET", `/${await deps.door(vault)}/${encodeURIComponent(id)}/attachments`); });
+  const attachmentsOf = (vault: string, id: string, ctx: { charge(n: number): void }) => lists(JSON.stringify([vault, id]), () => ctx.charge(1));
   /** Records a change found changed meanwhile: their next read for what shows is the hub's (the copy is from before). */
   const changedMeanwhile = new Set<string>();
   /** A record's GET for what shows: from what was read before, where the shell keeps it. */
@@ -532,21 +510,11 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         async run({ vault, id, path }: { vault: string; id: string; path: string }, _s, ctx) {
           held(vault); ctx.charge(1);
           const want = storagePath(path);
-          if (!want) throw refuse("only a file attached to the record");
+          if (!want) throw refuse("not attached to this record");
           if (!deps.file) throw new ContractError(ERROR_CODES.notGranted, "this screen hands over no files");
           let list: unknown[];
           try { list = await attachmentsOf(vault, id, ctx); } catch (e) { throw failed(e); }
-          const att = list.find((a): a is Record<string, unknown> => plain(a) && a.path === want);
-          if (!att) throw refuse("only a file attached to the record");
-          // only what a note draws: listed as a picture before it is read, and served as one by the hub (the type it
-          // gives from the file's name: the listed one is whatever the attacher wrote)
-          if (!DRAWN.test(mediaType(att.mimeType ?? att.mime_type) ?? "")) throw refuse("only a picture is handed over");
-          let blob: Blob;
-          try { blob = await deps.file(vault, want); } catch (e) { throw failed(e); }
-          const type = mediaType(blob.type);
-          if (!type || !DRAWN.test(type)) throw refuse("only a picture is handed over");
-          if (blob.size > FILE_MAX) throw new ContractError(ERROR_CODES.tooLarge, "too_large: a file over 25 MB isn't handed over");
-          return { type, bytes: await blob.arrayBuffer() };
+          return attachedPicture(want, list, (p) => deps.file!(vault, p), failed);
         },
       },
       history: {

@@ -1,9 +1,10 @@
 // The website kit against what the frame gives an applet: every part, the calls a folder applet makes, the vault in
 // record words both ways (a real VaultClient; only the network is faked), and the hub asked for the named vault only.
+import { Blob as NodeBlob } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { VaultClient } from "@openparachute/surface-client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { PART_NAMES } from "../../../src/applet/kits/modules";
 import { hubOf, surfaceOptions } from "./LinkParachute";
 import * as parachute from "./parachute";
@@ -61,6 +62,27 @@ describe("the website's parachute", () => {
     expect(seen[1]).toMatchObject({ method: "POST", body: { path: "Reading/Dune", content: "spice", metadata: { rating: 5 } } });
     await vault.updateRecord("n1", { if_updated_at: "x", body: "more spice" });
     expect(seen[2]).toMatchObject({ method: "PATCH", body: { if_updated_at: "x", content: "more spice" } });
+  });
+
+  it("draws a picture attached to the record, as the frame does: none that isn't, none from elsewhere", async () => {
+    const OWL = "2026-11-23/1763-owl.png";
+    const asked: string[] = [];
+    // jsdom's Blob has no arrayBuffer(); a browser's does
+    const JsdomBlob = globalThis.Blob;
+    globalThis.Blob = NodeBlob as unknown as typeof Blob;
+    onTestFinished(() => { globalThis.Blob = JsdomBlob; });
+    linkClient(new VaultClient({ vaultUrl: "https://hub.test/vault/home", accessToken: "t", fetchImpl: (async (url: string) => {
+      const u = new URL(url);
+      asked.push(u.pathname);
+      if (u.pathname.endsWith("/attachments")) return new Response(JSON.stringify([{ id: "a1", path: OWL, mimeType: "image/png" }]), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(new Uint8Array([137, 80, 78, 71]), { status: 200, headers: { "content-type": "image/png" } });
+    }) as unknown as typeof fetch }));
+    const blob = await vault.file("n1", `/api/storage/${OWL}`);
+    expect([blob.type, blob.size]).toEqual(["image/png", 4]);
+    expect(asked).toEqual(["/vault/home/api/notes/n1/attachments", `/vault/home/api/storage/${OWL}`]);
+    await expect(vault.file("n1", "/api/storage/2026-11-23/other.png")).rejects.toThrow(/attached/);
+    await expect(vault.file("n1", `https://elsewhere.example/api/storage/${OWL}`)).rejects.toThrow(/attached/);
+    expect(asked.filter((p) => p.includes("/storage/"))).toHaveLength(1);
   });
 
   it("says plainly when no Parachute is linked", async () => {

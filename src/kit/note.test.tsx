@@ -21,3 +21,30 @@ describe("Note draws a vault's text as text", () => {
     expect(container.textContent).toContain("Hello");
   });
 });
+
+describe("Note draws the pictures attached to its record (docs/design/PICTURES.md)", () => {
+  const body = "Before.\n\n![owl sketch](/api/storage/2026-11-23/1763-owl.png)\n\n![web](https://elsewhere.example/x.png)\n\nAfter.";
+  const withFile = async (run: (asked: [string, string][]) => Promise<void>) => {
+    const asked: [string, string][] = [];
+    const g = globalThis as unknown as { parachute?: unknown };
+    const make = URL.createObjectURL;
+    URL.createObjectURL = () => "blob:owl";
+    g.parachute = { vault: { file: async (id: string, src: string) => { asked.push([id, src]); return new Blob([new Uint8Array(4)], { type: "image/png" }); } } };
+    try { await run(asked); } finally { delete g.parachute; URL.createObjectURL = make; }
+  };
+  for (const tags of [undefined, ["recipe"]]) {
+    it(`given the record's id, asks vault.file for a storage picture and draws it; never a web one (${tags ? "a rich note" : "plain words"})`, () => withFile(async (asked) => {
+      const { findByRole, container } = render(<Note id="r1" body={body} path="Notes/Owl" tags={tags} />);
+      expect((await findByRole("img", { name: "owl sketch" })).getAttribute("src")).toBe("blob:owl");
+      expect(asked).toEqual([["r1", "/api/storage/2026-11-23/1763-owl.png"]]);
+      expect(container.querySelector('img[src^="https:"]')).toBeNull();
+    }));
+  }
+  it("without an id (or in an app with no vault.file) shows the picture's name, and asks for nothing", () => withFile(async (asked) => {
+    const { container } = render(<Note body={body} path="Notes/Owl" />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.textContent).toContain("owl sketch");
+    expect(asked).toEqual([]);
+  }));
+});

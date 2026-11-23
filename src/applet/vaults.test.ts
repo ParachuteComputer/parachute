@@ -1,7 +1,8 @@
 // The `vaults` and `sharing` words (modules/vaults.ts): what an applet that asked for them may do across the person's
 // vaults, and what it never may, whatever its card says.
 import { describe, expect, it } from "vitest";
-import { createVaultsModule, queryPath, recOf, storagePath, writablePath, type VaultsDeps } from "./modules/vaults";
+import { createVaultsModule, queryPath, recOf, writablePath, type VaultsDeps } from "./modules/vaults";
+import { storagePath } from "./files";
 import { createRouter } from "./router";
 // the browser's Blob (jsdom's has no arrayBuffer())
 import { Blob as NodeBlob } from "node:buffer";

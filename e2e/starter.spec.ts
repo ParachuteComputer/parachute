@@ -2,11 +2,13 @@
 // their first applet: it must run as shipped. In the sealed frame against a real hub: Allow, add a note (it lands in
 // Notes/ with the type it opens), open it, edit (the edit survives a reload) and save it (the write carries
 // if_updated_at), and the hub has it; the app's Back closes an open note, and an edit in progress survives it.
-import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { expect, test, type Page } from "@playwright/test";
 import { appletRecord } from "../applets/record.ts";
 import { api, hubState, VAULT } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });
+const shot = (page: Page, name: string) => (process.env.WALKTHROUGH_DIR ? page.screenshot({ path: `${process.env.WALKTHROUGH_DIR}/${name}.png` }) : Promise.resolve());
 
 test("the starter applet runs as shipped: lists, adds, opens, edits and saves a note in its folder", async ({ page }) => {
   const r = appletRecord("starter");
@@ -85,5 +87,61 @@ test("the starter applet runs as shipped: lists, adds, opens, edits and saves a 
     const second = await api(hubState(), "GET", `notes?id=${encodeURIComponent("Notes/Tomato starts")}`).catch(() => null);
     if (second?.id) await api(hubState(), "DELETE", `notes/${second.id}`).catch(() => {});
     await api(hubState(), "DELETE", `notes/${applet.id}`).catch(() => {});
+  }
+});
+
+// Pictures in a folder applet (docs/design/PICTURES.md): a picture attached to a note in the starter's folder, linked in
+// its words, is drawn from its bytes (vault.file, asked by the kit's Note given the note's id). A second note that links
+// the same picture without it attached shows its name, until vault.attachFrom attaches it there too (no new bytes).
+test("the starter draws a picture attached to its note, and attaches it to a second note that shows it", async ({ page }) => {
+  const r = appletRecord("starter");
+  const h = hubState();
+  const applet = await api(h, "POST", "notes", { path: r.path, extension: r.extension, tags: r.tags, content: r.body, metadata: r.fields });
+  const made: string[] = [];
+  try {
+    const form = new FormData();
+    form.append("file", new Blob([readFileSync(new URL("./fixtures/seedlings.png", import.meta.url))], { type: "image/png" }), "seedlings.png");
+    const up = await fetch(`${h.origin}/vault/${VAULT}/api/storage/upload`, { method: "POST", headers: { authorization: `Bearer ${h.token}` }, body: form });
+    expect(up.status).toBeLessThan(300);
+    const stored = String(((await up.json()) as { path: string }).path).replace(/^\/?(api\/storage\/)?/, "");
+    const words = `Sown on the sill.\n\n![seedlings on the sill](/api/storage/${stored})\n\nWater every other day.`;
+    const owl = await api(h, "POST", "notes", { path: "Notes/Seedlings", content: words, tags: ["note"] });
+    made.push(owl.id);
+    await api(h, "POST", `notes/${owl.id}/attachments`, { path: stored, mimeType: "image/png" });
+    const again = await api(h, "POST", "notes", { path: "Notes/Seedlings again", content: words, tags: ["note"] });
+    made.push(again.id);
+
+    await page.goto(`/v/${VAULT}/a/${applet.id}`);
+    await page.getByRole("button", { name: "Allow" }).click();
+    const f = page.frameLocator("iframe.applet-frame");
+    await f.getByRole("button", { name: /^Seedlings \d/ }).click();
+    const pic = f.getByRole("img", { name: "seedlings on the sill" });
+    await expect(pic).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => pic.evaluate((i) => (i as HTMLImageElement).naturalWidth), { timeout: 15_000 }).toBe(48);
+    expect(await pic.getAttribute("src")).toMatch(/^blob:/);
+    await expect(f.getByText("Water every other day.")).toBeVisible();
+    await shot(page, "01-attached");
+
+    // the second note links it but hasn't it attached: its name shows, and nothing is drawn
+    await f.getByRole("button", { name: "← Starter" }).click();
+    await f.getByRole("button", { name: /^Seedlings again/ }).click();
+    await expect(f.getByText("Water every other day.")).toBeVisible();
+    await expect(f.getByText(/seedlings on the sill: not attached to this record/)).toBeVisible();
+    await expect(f.locator("img")).toHaveCount(0);
+    await shot(page, "02-not-attached");
+    // attached there too, from the note it is attached to: the same stored file, no new bytes
+    const frame = await page.locator("iframe.applet-frame").elementHandle().then((e) => e!.contentFrame());
+    const got = await frame!.evaluate(([to, from, src]) => (window as unknown as { parachute: { vault: { attachFrom(a: string, b: string, c: string): Promise<{ path: string }> } } }).parachute.vault.attachFrom(to, from, src),
+      [again.id, owl.id, `/api/storage/${stored}`] as const);
+    expect(got.path).toBe(stored);
+    const atts = (await api(h, "GET", `notes/${again.id}/attachments`)) as { path: string }[];
+    expect(atts.map((a) => a.path)).toEqual([stored]);
+    await f.getByRole("button", { name: "← Starter" }).click();
+    await f.getByRole("button", { name: /^Seedlings again/ }).click();
+    await expect.poll(() => f.getByRole("img", { name: "seedlings on the sill" }).evaluate((i) => (i as HTMLImageElement).naturalWidth), { timeout: 15_000 }).toBe(48);
+    await shot(page, "03-attached-there-too");
+  } finally {
+    for (const id of made) await api(h, "DELETE", `notes/${id}`).catch(() => {});
+    await api(h, "DELETE", `notes/${applet.id}`).catch(() => {});
   }
 });
