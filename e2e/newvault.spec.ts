@@ -32,7 +32,7 @@ test("a vault made after signing in is offered in Settings, and a tap adds it th
   await signIn(page);
   await makeVault("garden", "Seeds");
   // within the minute, Settings doesn't ask again
-  await ui(page).getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
   await expect(page.getByRole("link", { name: "Open kitchen", exact: true })).toBeVisible();
   await page.waitForLoadState("networkidle");
   await openMore(page);
@@ -40,7 +40,7 @@ test("a vault made after signing in is offered in Settings, and a tap adds it th
   // a minute on, Settings again: asked again, and the new vault is offered
   await page.getByRole("button", { name: "Back" }).first().click();
   await page.clock.fastForward("01:05");
-  await ui(page).getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
   await moreVaults(page, undefined, 15_000);
   await expect(page.locator("details.parachute-more summary")).toContainText(/more vaults? there, which Parachute doesn't read/);
   await expect(newLine(page, "garden")).toBeVisible();
@@ -53,7 +53,7 @@ test("a vault made after signing in is offered in Settings, and a tap adds it th
   await page.waitForURL((u) => u.origin === hubState().origin);
   expect(await approveUntilBack(page, hubState().origin, app)).toBe(1);
   await expect(ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Seeds/ })).toBeVisible({ timeout: 20_000 });
-  await ui(page).getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
   await expect(page.getByRole("link", { name: "Open garden", exact: true })).toBeVisible();
   await openMore(page);
   await expect(newLine(page, "garden")).toHaveCount(0);

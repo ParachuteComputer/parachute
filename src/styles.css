@@ -222,7 +222,7 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 /* The bar (src/shell/BottomBar.tsx) is the tabs (docs/LOOK.md): one paper tab per place, hanging from the foot of the
    page; the place you are in is the tab the colour of the page, joined to it. On a Mac they stand down the right edge,
    a thumb index (below). */
-.home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: safe center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: var(--line-head); overflow-x: auto; }
+.home-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; scroll-padding-inline-end: calc(96px + env(safe-area-inset-right)); justify-content: safe center; align-items: stretch; gap: 2px; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 calc(env(safe-area-inset-right) + 6px) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px); background: var(--surface); border-top: var(--line-head); overflow-x: auto; }
 .home-bar-place { flex: 0 1 auto; min-width: 64px; max-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 8px 2px; color: var(--text); text-decoration: none; font-size: var(--fs-small); line-height: 1.2; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; -webkit-touch-callout: none; user-select: none; }
 .home-bar-glyph { font: var(--fs-head)/1 var(--serif); }
 .home-bar { --desk: color-mix(in srgb, var(--text) 5%, var(--bg)); align-items: start; gap: 4px; background: var(--desk); border-top: 0; box-shadow: inset 0 1px 0 var(--line); }
@@ -249,8 +249,12 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 /* an applet's signals (services/signals.ts): its count, beside its glyph */
 .home-bar-place { position: relative; }
 .home-bar-badge { position: absolute; top: 1px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--primary); color: var(--on-primary); font: 700 var(--fs-label) var(--sans); line-height: 17px; text-align: center; }
-/* the app's own Settings, under a frame of the person's: held at the right edge, on screen however full the bar is */
-.home-bar-own { position: sticky; right: 0; margin-left: auto; background: var(--surface); border-left: 1px solid var(--line); }
+/* Settings, the shell's own place, last on the bar: held at the right edge, on screen however full the bar is (the
+   places before it pass under it; the desk's colour closes the gaps beside it, starting under the bar's top line) */
+.home-bar .home-bar-settings { position: sticky; right: 0; flex: none; box-shadow: -4px 2px 0 var(--desk), calc(12px + env(safe-area-inset-right)) 2px 0 var(--desk); }
+/* pressed, it stays opaque: the places passing under it don't show through */
+.home-bar .home-bar-settings:active { background: color-mix(in srgb, var(--text) 8%, var(--bg)); }
+.home-bar-settings .home-bar-glyph { font-size: 1.3em; line-height: 0.85; }
 .home-bar-sep { width: 1px; margin: 10px 6px; background: var(--line); flex: none; }
 .with-bar .app-frame { bottom: calc(env(safe-area-inset-bottom) + var(--foot-h)); height: calc(100% - env(safe-area-inset-top) - env(safe-area-inset-bottom) - var(--foot-h)); }
 .with-bar > .screen, .with-bar > main { padding-bottom: calc(var(--foot-h) + 24px); }
@@ -328,6 +332,10 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
   .home-bar-place[aria-current="page"] { margin: 0 10px 0 -1px; padding: 10px 12px 10px 13px; }
   .home-bar-glyph { font-size: var(--fs-lead); }
   .home-bar-badge { top: 4px; left: 28px; }
+  /* Settings at the foot of the index */
+  .home-bar { scroll-padding-block-end: 80px; }
+  /* (:root: over Daylight's current tab, which sets its top margin) */
+  :root .home-bar .home-bar-settings, :root .home-bar .home-bar-settings[aria-current="page"] { position: sticky; right: auto; bottom: 16px; margin-top: auto; margin-bottom: 16px; box-shadow: 2px -6px 0 var(--desk), 2px 16px 0 var(--desk); }
   /* (a width of its own: an iframe left at width auto between left and right is its default 300px) */
   .with-bar .app-frame { right: calc(env(safe-area-inset-right) + var(--index-w)); left: env(safe-area-inset-left); width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right) - var(--index-w)); }
   /* what sits along the foot (a newer build's line, the shell's passing line) stays beside the index, not under it */

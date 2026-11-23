@@ -4,7 +4,7 @@ import { MORE_VAULTS, VAULT } from "./hub";
 
 /** Into a vault, as a person does: Settings, its Open (which carries on to Vault, Parachute's own applet); then its plain view, which these tests read. */
 const openVault = async (page: Page, vault = VAULT) => {
-  await ui(page).getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
   // Vault runs once this new device's self-test has passed
   await expect(page.getByRole("status").filter({ hasText: /approved code only|run sealed/ })).toBeVisible({ timeout: 45_000 });
   await page.getByRole("link", { name: `Open ${vault}`, exact: true }).click();
@@ -48,7 +48,7 @@ test("the vaults stay after a reload, and Sign out of the Parachute forgets them
   await expect(ui(page).getByRole("list", { name: "Applets" })).toBeVisible();
   const recs = await page.evaluate(() => JSON.parse(localStorage.getItem("parachute.vaults.v1") ?? "[]") as { vault: string; tokenEndpoint: string; refreshToken: string; clientId: string; revocationEndpoint: string }[]);
   expect(recs.map((r) => r.vault).sort()).toEqual([VAULT, MORE_VAULTS[0].vault].sort());
-  await ui(page).getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
   const revoked = page.waitForResponse((r) => r.url() === recs[0].revocationEndpoint);
   await page.getByRole("button", { name: "Sign out of your Parachute" }).click();
   await revoked;

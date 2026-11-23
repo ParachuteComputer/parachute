@@ -37,11 +37,11 @@ test("the settings note's bar is still read while the bundle has no record; the 
   const note = { vault: VAULT, applet: "Applets/Cook mode" };
   await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bar: [note] } } });
   await start(page);
-  await expect(bar(page).getByRole("link")).toHaveText([/Cook mode/, /Applets/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Cook mode/, /Applets/, /Settings/]);
   expect(await bundleOf()).toBeUndefined();
   await bar(page).getByRole("link", { name: /Cook mode/ }).click({ button: "right" });
   await page.getByRole("button", { name: "Unpin" }).click();
-  await expect(bar(page).getByRole("link")).toHaveText([/Applets/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Applets/, /Settings/]);
   await expect.poll(async () => (await bundleOf())?.body.bar).toEqual([]);
   expect((await settingsNotes())[0].metadata.parachute?.bar).toEqual([note]);
 });
@@ -73,13 +73,13 @@ test("the agent changes the bar by writing the bundle record; the bar's long-pre
   await writeBundle({ bar: [{ vault: VAULT, applet: "Applets/Cook mode" }, { vault: VAULT, applet: await idOf("Applets/Recipes") }, { vault: VAULT, applet: "Applets/Gone" }, theirs] });
   await start(page);
   // in the record's order; a place this device can't find is left out
-  await expect(bar(page).getByRole("link")).toHaveText([/Cook mode/, /Recipe box/, /Applets/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Cook mode/, /Recipe box/, /Applets/, /Settings/]);
   await bar(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
   await page.getByRole("button", { name: "Move left" }).click();
-  await expect(bar(page).getByRole("link")).toHaveText([/Recipe box/, /Cook mode/, /Applets/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Recipe box/, /Cook mode/, /Applets/, /Settings/]);
   await bar(page).getByRole("link", { name: /Cook mode/ }).click({ button: "right" });
   await page.getByRole("button", { name: "Unpin" }).click();
-  await expect(bar(page).getByRole("link")).toHaveText([/Recipe box/, /Applets/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Recipe box/, /Applets/, /Settings/]);
   // what the app doesn't read is kept as written
   await expect.poll(async () => (await bundleOf())?.body.bar).toEqual([{ vault: VAULT, applet: await idOf("Applets/Recipes") }, { vault: VAULT, applet: "Applets/Gone" }, theirs]);
 });
@@ -189,8 +189,8 @@ test("a full bar: its first place and Applets stay in reach on a phone, and a th
     }
     await writeBundle({ bar: [{ vault: VAULT, applet: "Applets/Recipes" }, ...Array.from({ length: 11 }, (_, i) => ({ vault: VAULT, applet: `Applets/Extra ${i + 1}` }))] });
     await start(page);
-    await expect(bar(page).getByRole("link")).toHaveCount(13);
-    // the first place can be reached: it starts at the bar's left edge, not off screen; Applets, last, scrolls into reach
+    await expect(bar(page).getByRole("link")).toHaveCount(14);
+    // the first place can be reached: it starts at the bar's left edge, not off screen; Applets, before Settings, scrolls into reach
     expect((await bar(page).getByRole("link").first().boundingBox())!.x).toBeGreaterThanOrEqual(0);
     await bar(page).getByRole("link", { name: /Applets/ }).scrollIntoViewIfNeeded();
     await expect(bar(page).getByRole("link", { name: /Applets/ })).toBeInViewport();
@@ -228,12 +228,12 @@ test("an applet the record names twice: one place on the bar, the home among the
   await start(page);
   await page.goto(`/v/${VAULT}?with=vault`);
   // the pins in the record's order, Recipe box once; the home (Cook mode) where it is pinned
-  await expect(bar(page).getByRole("link")).toHaveText([/Recipe box/, /Cook mode/, /Applets/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Recipe box/, /Cook mode/, /Applets/, /Settings/]);
   await bar(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
   // the first place: nothing to its left
   await expect(page.getByRole("button", { name: "Move left" })).toHaveCount(0);
   await page.getByRole("button", { name: "Unpin" }).click();
-  await expect(bar(page).getByRole("link")).toHaveText([/Cook mode/, /Applets/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Cook mode/, /Applets/, /Settings/]);
   await expect.poll(async () => (await bundleOf())?.body.bar).toEqual([{ vault: VAULT, applet: "Applets/Cook mode" }]);
 });
 
@@ -247,7 +247,7 @@ test("a pin whose vault's applets can't be read stays on the bar, and Unpin stil
   await expect(bar(page).getByRole("link", { name: /Recipe box/ })).toBeVisible();
   await bar(page).getByRole("link", { name: /Recipe box/ }).click({ button: "right" });
   await page.getByRole("button", { name: "Unpin" }).click();
-  await expect(bar(page).getByRole("link")).toHaveText([/Applets/]);
+  await expect(bar(page).getByRole("link")).toHaveText([/Applets/, /Settings/]);
   await expect.poll(async () => (await bundleOf())?.body.bar).toEqual([]);
 });
 
@@ -265,7 +265,7 @@ test("under a frame of the person's own, the app's Settings stays on screen howe
     await expect(page.locator(".frame-status")).toHaveText("Your frame runs: Parachute/Frame.");
     await page.goto(`/v/${VAULT}?with=vault`);
     await expect(page.locator("iframe.app-frame")).toHaveAttribute("data-frame", "vault");
-    const own = bar(page).getByRole("link", { name: "Settings (the app's own)" });
+    const own = bar(page).getByRole("link", { name: "Settings" });
     const box = (await own.boundingBox())!;
     const width = page.viewportSize()!.width;
     expect(box.x).toBeGreaterThanOrEqual(0);

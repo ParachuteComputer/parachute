@@ -55,7 +55,6 @@ export default function Launcher() {
         {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
       <Components vaults={vaults} onPart={(v, c) => setPart({ v, c })} />
-      <p className="launcher-foot"><Link to="/settings">Settings</Link></p>
       </>}
       {asked && <AppletSheet v={asked.v} a={asked.a} onClose={() => setAsked(null)} />}
       {part && <ComponentSheet v={part.v} c={part.c} onClose={() => setPart(null)} />}
