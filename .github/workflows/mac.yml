@@ -43,7 +43,8 @@ jobs:
   mac:
     name: mac (Apple Silicon)
     runs-on: macos-15
-    timeout-minutes: 60
+    # notarising the app and the dmg can each take a while on a new account
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

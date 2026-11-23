@@ -20,19 +20,22 @@ echo "== notarise the dmg"
 dsig=$(codesign -dv --verbose=4 "$dmg" 2>&1)
 grep -q "Authority=Developer ID Application" <<<"$dsig" || fail "the dmg isn't signed with the Developer ID certificate"
 grep -q "^Timestamp=" <<<"$dsig" || fail "the dmg's signature has no secure timestamp"
+# notarytool exits non-zero on a refusal or a timeout; its answer is read either way, so the log below can say why
 result=$(xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" \
-  --wait --timeout 45m --output-format json)
-id=$(node -p 'JSON.parse(process.argv[1]).id' "$result") status=$(node -p 'JSON.parse(process.argv[1]).status' "$result")
+  --wait --timeout 40m --output-format json) || true
+read -r id status < <(node -e 'try { const r = JSON.parse(process.argv[1]); console.log(r.id || "-", r.status || "none") } catch { console.log("- none") }' "$result")
 echo "submission $id: $status"
 if [ "$status" != Accepted ]; then
-  xcrun notarytool log "$id" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" || true
+  [ "$id" = - ] && echo "$result" >&2
+  [ "$id" = - ] || xcrun notarytool log "$id" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" || true
   fail "Apple didn't accept the dmg ($status)"
 fi
 xcrun stapler staple "$dmg"
 xcrun stapler validate "$dmg" || fail "the dmg's ticket didn't staple"
 
 echo "== as Gatekeeper sees them"
-spctl -a -vv -t install "$app" 2>&1 | tee /dev/stderr | grep -q "source=Notarized Developer ID" || fail "Gatekeeper doesn't take the app as notarised"
-spctl -a -vv -t open --context context:primary-signature "$dmg" 2>&1 | tee /dev/stderr | grep -q "source=Notarized Developer ID" \
-  || fail "Gatekeeper doesn't take the dmg as notarised"
+gk=$(spctl -a -vv -t exec "$app" 2>&1) || { echo "$gk" >&2; fail "Gatekeeper refuses the app"; }
+echo "$gk"; grep -q "source=Notarized Developer ID" <<<"$gk" || fail "Gatekeeper doesn't take the app as notarised"
+gk=$(spctl -a -vv -t open --context context:primary-signature "$dmg" 2>&1) || { echo "$gk" >&2; fail "Gatekeeper refuses the dmg"; }
+echo "$gk"; grep -q "source=Notarized Developer ID" <<<"$gk" || fail "Gatekeeper doesn't take the dmg as notarised"
 echo "ok: the app and the dmg are signed, notarised and stapled"
