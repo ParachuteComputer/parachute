@@ -500,9 +500,11 @@ APPLET=applets/starter npx vite --config packages/applet-kit/site/vite.config.ts
 ```
 
 The page asks for a Parachute's address and a vault, and the hub asks its person to approve the website for that
-vault's read and write. Then the applet runs on it, with saved state kept in the browser. Only what a folder applet
-uses crosses: the kit's parts and `vault`. `app.*`, `vaults.*`, `services.*`, voice and `component:` imports are the
-app's. On the website the scope is the whole vault the person approved, not the folders the card names, so a website
+vault's read and write. Then the applet runs on it, in the app's look and fonts. What a folder applet uses crosses: the
+kit's parts, `vault`, `useSaved` and `saved` (kept in this browser, per linked vault, forgotten on Unlink) and
+`theme`. `app` only opens a web link. `vaults`, `services`, `storage`, `voice` and `signal` read as `undefined`, so
+the applet still builds and can fall back; `component:` imports are the app's. A project of many files serves the
+same way from its bundle: `APPLET=applets/applet.bundled`. On the website the scope is the whole vault the person approved, not the folders the card names, so a website
 is for applets people trust with that vault. `e2e/website.spec.ts` links the starter to a real hub this way.
 
 ## A worked example

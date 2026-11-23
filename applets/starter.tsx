@@ -91,7 +91,7 @@ export default function Starter() {
         // gone (deleted elsewhere): back to the list, and an edit kept for it goes too (drafts share one saved store)
         setSelected(null);
         setSelectedId(null);
-        if (id in draftsNow.current) toast("That note is gone, with the edit kept for it.");
+        if (id in draftsNow.current) toast("That note is gone, and so is the edit kept for it.");
         dropDraft(id);
       }
     } catch (e) {
