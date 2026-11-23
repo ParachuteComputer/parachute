@@ -4,6 +4,7 @@
 // APPLET is the record's stem: <stem>.json (its id and name) and its code, <stem>.tsx or .jsx.
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { parachuteApplet } from "../src/vite.ts";
@@ -14,7 +15,7 @@ if (!code) throw new Error(`No ${stem}.tsx or .jsx`);
 const applet = (JSON.parse(readFileSync(`${stem}.json`, "utf8")) as { fields: { applet: { id: string; name: string } } }).fields.applet;
 
 export default defineConfig({
-  root: new URL(".", import.meta.url).pathname,
+  root: fileURLToPath(new URL(".", import.meta.url)),
   plugins: [react(), parachuteApplet(), { name: "applet-entry", config: () => ({ resolve: { alias: [{ find: /^applet-entry$/, replacement: code }] } }) }],
   define: { "import.meta.env.VITE_APPLET_ID": JSON.stringify(applet.id), "import.meta.env.VITE_APPLET_NAME": JSON.stringify(applet.name) },
   build: { outDir: resolve(process.env.OUT ?? `dist-web/${applet.id}`), emptyOutDir: true },

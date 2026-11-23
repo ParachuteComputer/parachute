@@ -9,4 +9,4 @@ export { Note } from "../../../src/kit/parts-note.tsx";
 export { useTheme } from "../../../src/kit/useTheme.ts";
 export { Drawer } from "../../../src/kit/drawer.tsx";
 export { Link, Linked, link } from "../../../src/kit/links.tsx";
-export { launch, onBack, onFresh, onLaunch, onOpen, onShown, ready, shown, vault } from "./web.ts";
+export { app, launch, onBack, onFresh, onLaunch, onOpen, onProps, onShown, props, ready, saved, services, shown, signal, storage, theme, vault, vaults, voice } from "./web.ts";

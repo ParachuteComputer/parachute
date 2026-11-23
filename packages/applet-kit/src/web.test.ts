@@ -1,11 +1,13 @@
 // The website kit against what the frame gives an applet: every part, the calls a folder applet makes, the vault in
 // record words both ways (a real VaultClient; only the network is faked), and the hub asked for the named vault only.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { VaultClient } from "@openparachute/surface-client";
 import { afterEach, describe, expect, it } from "vitest";
 import { PART_NAMES } from "../../../src/applet/kits/modules";
 import { hubOf, surfaceOptions } from "./LinkParachute";
 import * as parachute from "./parachute";
-import { linkClient, vault } from "./web";
+import { linkClient, theme, vault } from "./web";
 
 type Seen = { url: URL; method: string; body: unknown };
 function hub(answer: (s: Seen) => unknown) {
@@ -23,6 +25,18 @@ describe("the website's parachute", () => {
   it("gives every part the frame's kit gives, and a folder applet's calls", () => {
     for (const p of PART_NAMES) expect(parachute, p).toHaveProperty(p);
     for (const c of ["vault", "ready", "onOpen", "onBack", "onFresh", "onShown", "shown", "onLaunch", "launch"]) expect(parachute, c).toHaveProperty(c);
+  });
+
+  it("has every name an applet may import, as the editor's types say them: one the website can't give reads as undefined", () => {
+    const dts = readFileSync(join(process.cwd(), "applets", "parachute.d.ts"), "utf8");
+    const names = [...dts.matchAll(/^\s*export (?:function|const) (\w+)/gm)].map((m) => m[1]);
+    expect(names.length).toBeGreaterThan(30);
+    for (const n of names) expect(n in parachute, n).toBe(true);
+  });
+
+  it("gives the theme as one object until the scheme changes (useTheme reads it as a store)", () => {
+    expect(theme.now()).toBe(theme.now());
+    expect(theme.now()).toHaveProperty("accent");
   });
 
   it("asks the hub for the named vault's read and write, and comes back to this site", () => {

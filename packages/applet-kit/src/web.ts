@@ -25,6 +25,8 @@ export const toRecord = (n: unknown): Rec => {
 
 let client: VaultClient | null = null;
 let applet: AppletInfo = { id: "applet", name: "Applet" };
+/** Whose vault the saved state is of: the hub and vault linked, so relinking elsewhere starts afresh. */
+let linkedTo = "";
 const need = () => {
   if (!client) throw Object.assign(new Error("No Parachute is linked yet."), { status: 401 });
   return client;
@@ -38,27 +40,60 @@ export const vault = {
   updateRecord: async (id: string, c: Rec) => toRecord(await need().updateNote(id, renamed(c, IN) as never)),
   listTags: async () => need().listTags(),
   queryNotes: (q: Rec = {}) => need().queryNotes(q as never),
-  getNote: (id: string) => need().getNote(id),
+  getNote: (id: string, o?: { includeLinks?: boolean; includeAttachments?: boolean }) => need().getNote(id, o),
   createNote: (p: Rec) => need().createNote(p as never),
   updateNote: (id: string, p: Rec) => need().updateNote(id, p as never),
 };
 
-/** What it saved (useSaved), kept in this browser, under the applet's id. */
-const savedKey = (k: string) => `parachute.applet.${applet.id}.${k}`;
-const saved = {
+/** What it saved (useSaved), kept in this browser, under the applet's id and the vault linked. */
+const savedPrefix = () => `parachute.applet.${applet.id}.`;
+const savedKey = (k: string) => `${savedPrefix()}${linkedTo}.${k}`;
+export const saved = {
   get: (k: string): unknown => { try { const v = localStorage.getItem(savedKey(k)); return v === null ? null : JSON.parse(v); } catch { return null; } },
   set: (k: string, v: unknown) => { try { if (v === null || v === undefined) localStorage.removeItem(savedKey(k)); else localStorage.setItem(savedKey(k), JSON.stringify(v)); } catch { /* full or off: kept for this visit only */ } },
+  all: (): Record<string, unknown> => Object.fromEntries(Object.keys(localStorage).filter((k) => k.startsWith(`${savedPrefix()}${linkedTo}.`)).map((k) => [k.slice(`${savedPrefix()}${linkedTo}.`.length), saved.get(k.slice(`${savedPrefix()}${linkedTo}.`.length))])),
+  flush: () => Promise.resolve(null),
 };
+/** Forget everything this applet saved in this browser (Unlink). */
+export function forgetSaved() {
+  try { for (const k of Object.keys(localStorage)) if (k.startsWith(savedPrefix())) localStorage.removeItem(k); } catch { /* nothing kept */ }
+}
 
-const tokens = () => tokensOf(DEFAULT_THEME, typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches) as unknown as Record<string, string>;
+// the theme's tokens for the system's light or dark, made once each (useTheme reads them as a store: the same object
+// until the scheme changes), and told to whoever listens when it does
+const dark = () => typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+const made: { light?: Record<string, string>; dark?: Record<string, string> } = {};
+const tokens = (): Record<string, string> => {
+  const d = dark();
+  return (made[d ? "dark" : "light"] ??= tokensOf(DEFAULT_THEME, d) as unknown as Record<string, string>);
+};
+const themeCbs = new Set<(t: Record<string, string>) => void>();
+const paint = () => {
+  if (typeof document === "undefined") return;
+  let el = document.getElementById("parachute-theme");
+  if (!el) { el = document.createElement("style"); el.id = "parachute-theme"; document.head.appendChild(el); }
+  el.textContent = cssOf(tokens() as never);
+};
+if (typeof matchMedia === "function") matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { paint(); for (const cb of themeCbs) cb(tokens()); });
+export const theme = {
+  now: tokens,
+  get: async () => tokens(),
+  on: (cb: (t: Record<string, string>) => void) => { themeCbs.add(cb); return () => { themeCbs.delete(cb); }; },
+};
+// a link out opens in a new tab; a note link has no app to open in here, so it reads as nothing to follow
+export const app = {
+  openLink: async (url: string) => { window.open(url, "_blank", "noopener"); return true; },
+  follow: async () => false,
+  links: async (ls: string[]) => ls.map(() => null),
+  address: async () => null,
+};
 
 /** The kit object the frame would give, for the parts that read it (screen.tsx, parts.tsx, links.tsx, useTheme.ts). */
 const kit = {
   vault,
   saved,
-  theme: { now: tokens, on: () => () => {}, get: async () => tokens() },
-  // a link out opens in a new tab; a note link has no app to open in here
-  app: { openLink: async (url: string) => !!window.open(url, "_blank", "noopener"), follow: async () => false, links: async (ls: string[]) => Object.fromEntries(ls.map((l) => [l, null])), address: async () => null },
+  theme,
+  app,
   onFresh: () => () => {},
   onShown: () => () => {},
 };
@@ -67,14 +102,11 @@ const kit = {
 export function installWebKit(info: AppletInfo) {
   applet = info;
   (globalThis as unknown as { parachute?: unknown }).parachute = kit;
-  if (typeof document === "undefined") return;
-  let el = document.getElementById("parachute-theme");
-  if (!el) { el = document.createElement("style"); el.id = "parachute-theme"; document.head.appendChild(el); }
-  el.textContent = cssOf(tokensOf(DEFAULT_THEME, false) as never);
+  paint();
 }
 
-/** The VaultClient the visitor linked (or null when they unlink). */
-export function linkClient(c: VaultClient | null) { client = c; }
+/** The VaultClient the visitor linked (or null when they unlink), and whose vault it is (hub and vault). */
+export function linkClient(c: VaultClient | null, to = "") { client = c; linkedTo = to; }
 
 // ── the lifecycle a frame has, as a website has it: always shown, started at once, nothing handed to it ──
 export const ready = () => Promise.resolve({ applet, access: [] as { path: string; verbs: string[] }[], services: [] as unknown[], shown: true });
@@ -86,3 +118,13 @@ export const onLaunch = (_cb: (l: unknown) => void) => () => {};
 export const launch = () => null;
 // the browser's own Back leaves a website; an applet's own screens close with their own ←
 export const onBack = (_cb: () => void) => () => {};
+// what a website has nothing to give for: props (an embed's), and what is the app's (every vault, servers, the
+// device's storage and microphone, the bar's counts). Undefined, as an older app's missing call is, so an applet can
+// fall back (typeof vaults === "undefined")
+export const props = () => ({});
+export const onProps = (_cb: (p: Record<string, unknown>) => void) => () => {};
+export const vaults = undefined;
+export const services = undefined;
+export const storage = undefined;
+export const voice = undefined;
+export const signal = undefined;
