@@ -65,6 +65,8 @@ export const COMPILED_KEY = "parachute.applets.compiled.v1";
 const KEEP = 24;
 /** At most this much transpiled code is kept on the device (in characters), and none of one module bigger than a quarter of it. */
 const KEEP_CHARS = 1_000_000;
+/** The biggest one module kept compiled on the device; a bigger one is transpiled again on each open. */
+export const KEEP_ONE_CHARS = KEEP_CHARS / 4;
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 type Cached = { t: string; js: string; at: number };
 
@@ -84,7 +86,7 @@ export function createCompileCache(storage: StorageLike | null = typeof localSto
       const c: Cached = { t: TRANSPILER, js, at: Date.now() };
       memory.set(hash, c);
       // the newest few stay on the device, within a size; an older one is transpiled again if it is ever opened
-      const all = Object.entries({ ...read(), [hash]: c }).filter(([, v]) => v?.t === TRANSPILER && typeof v.js === "string" && v.js.length <= KEEP_CHARS / 4).sort((a, b) => (b[1]?.at ?? 0) - (a[1]?.at ?? 0));
+      const all = Object.entries({ ...read(), [hash]: c }).filter(([, v]) => v?.t === TRANSPILER && typeof v.js === "string" && v.js.length <= KEEP_ONE_CHARS).sort((a, b) => (b[1]?.at ?? 0) - (a[1]?.at ?? 0));
       let size = 0;
       const kept = Object.fromEntries(all.slice(0, KEEP).filter(([, v]) => (size += v.js.length) <= KEEP_CHARS));
       try { storage?.setItem(COMPILED_KEY, JSON.stringify(kept)); } catch { try { storage?.setItem(COMPILED_KEY, "{}"); } catch { /* this session only */ } }

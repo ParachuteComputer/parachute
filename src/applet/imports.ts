@@ -12,13 +12,21 @@ const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 /** The component ids a module imports (`from "component:<id>"`, or a bare `import "component:<id>"`), each once. Comments
  *  are not imports. A specifier that isn't a plain id is returned as is, for the caller to refuse. */
 export function importsOf(code: string): string[] {
-  // one pass over comments and strings, in order, so a string inside a comment or another string is never read
   const out: string[] = [];
-  const token = /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|(\bfrom\s*|\bimport\s*\(?\s*)?("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)/g;
+  for (const spec of stringsAfter(code, String.raw`\bfrom\s*|\bimport\s*\(?\s*`)) {
+    if (spec.startsWith(IMPORT_PREFIX) && !out.includes(spec.slice(IMPORT_PREFIX.length))) out.push(spec.slice(IMPORT_PREFIX.length));
+  }
+  return out;
+}
+
+/** Each quoted string (not a template) that follows `prefix` (a regex source), in order. One pass over comments and
+ *  strings, so a string inside a comment or another string is never read. Also src/applet/check.ts: `require(`. */
+export function stringsAfter(code: string, prefix: string): string[] {
+  const out: string[] = [];
+  const token = new RegExp(String.raw`(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|(${prefix})?("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\x60(?:\\.|[^\x60\\])*\x60)`, "g");
   for (const m of code.matchAll(token)) {
     if (m[1] || !m[2] || m[3][0] === "`") continue;
-    const spec = m[3].slice(1, -1);
-    if (spec.startsWith(IMPORT_PREFIX) && !out.includes(spec.slice(IMPORT_PREFIX.length))) out.push(spec.slice(IMPORT_PREFIX.length));
+    out.push(m[3].slice(1, -1));
   }
   return out;
 }
