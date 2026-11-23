@@ -101,14 +101,28 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, start, class
   // which has no foot of its own (there it sits in place)
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const sized = sizedFrame();
+  // the page ends above the strip, by its height (it grows as a line grows)
+  useLayoutEffect(() => {
+    const main = dock?.parentElement;
+    if (!dock || !main || typeof ResizeObserver !== "function") return;
+    const ro = new ResizeObserver(() => main.style.setProperty("--pa-dock-h", `${dock.offsetHeight}px`));
+    ro.observe(dock);
+    return () => ro.disconnect();
+  }, [dock]);
   // shown again (the app keeps an applet running while the person is elsewhere): a place that opens somewhere opens
   // there, its top (a home) or its foot (a conversation's newest); the first time, too
   useLayoutEffect(() => {
     if (!start || sized) return;
-    const to = () => window.scrollTo(0, start === "last" ? document.documentElement.scrollHeight : 0);
+    const root = document.documentElement;
+    // at its foot (a conversation): it stays there as more arrives, until the person scrolls up
+    let foot = start === "last";
+    const to = () => { foot = start === "last"; window.scrollTo(0, foot ? root.scrollHeight : 0); };
     to();
     const off = kit()?.onShown?.((on: boolean) => { if (on) to(); });
-    return () => { if (typeof off === "function") off(); };
+    const scrolled = () => { foot = start === "last" && root.scrollHeight - scrollY - innerHeight < 48; };
+    const ro = start === "last" && typeof ResizeObserver === "function" ? new ResizeObserver(() => { if (foot) window.scrollTo(0, root.scrollHeight); }) : null;
+    if (ro) { ro.observe(document.body); addEventListener("scroll", scrolled, { passive: true }); }
+    return () => { if (typeof off === "function") off(); ro?.disconnect(); removeEventListener("scroll", scrolled); };
   }, [start, sized]);
   return (
     <main className={`pa-page${wide ? " pa-wide" : ""}${className ? ` ${className}` : ""}`} data-start={start}>

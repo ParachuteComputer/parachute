@@ -660,10 +660,12 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     const rootAuthor = root && !(root.pubkey === uni && !toUni) ? [root.pubkey] : [];
     const p = [...new Set([s.me, ...rootAuthor, ...mentions, ...(toUni ? [uni!] : [])])].map((x) => ["p", x]);
     const tg = [["h", room], ...p, ...(thread ? [["e", thread, "", "root"]] : []), ...extra];
-    const r = await relay.publish({ kind: 9, content, tags: tg });
-    if (!r.ok) { setErr(`Not sent: ${r.message || "the relay refused it"}`); return false; }
-    // what you sent is shown, as in any chat: the talk goes to its foot, wherever you had scrolled to
+    // what you send is shown, as in any chat: the talk goes to its foot, wherever you had scrolled to (set before the
+    // relay's answer: the line may come back by the subscription first)
+    const was = atBottom.current;
     atBottom.current = true;
+    const r = await relay.publish({ kind: 9, content, tags: tg });
+    if (!r.ok) { atBottom.current = was; setErr(`Not sent: ${r.message || "the relay refused it"}`); return false; }
     st.add(r.event); st.bump();
     return true;
   };
@@ -675,9 +677,12 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     // Stop answers Uni's turn on the main line (where the turn line comes from), wherever it is pressed
     const target = body === STOP ? null : thread ? (s.msgs.get(room)?.has(thread) ? thread : shown[shown.length - 1]?.id ?? null) : null;
     setPosting(true); setErr("");
+    // (at the foot before the relay answers, as for a message: the line may come back by the subscription first)
+    const was = atBottom.current;
+    atBottom.current = true;
     try {
       const r = await relay.publish({ kind: 9, content: body, tags: [["h", room], ...(naming ? [["p", uni!]] : []), ...(target ? [["e", target, "", "root"]] : [])] });
-      if (r.ok) { atBottom.current = true; st.add(r.event); st.bump(); } else setErr(`Not sent: ${r.message || "the relay refused it"}`);
+      if (r.ok) { st.add(r.event); st.bump(); } else { atBottom.current = was; setErr(`Not sent: ${r.message || "the relay refused it"}`); }
     } catch (e: any) { setErr(`Not sent: ${e?.message ?? e}`); }
     setPosting(false);
   };

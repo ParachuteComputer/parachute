@@ -85,7 +85,7 @@ export function LinkParachute({ applet, hub: hubDefault = "", vault: vaultDefaul
       </Page>
     );
   }
-  // the line, then the applet in what is left of the screen (a paged Page is a screen tall: link.css)
+  // the line, held at the top, then the applet, which scrolls with the window (link.css)
   return (
     <div className="pa-linked">
       <p className="pa-linked-line">

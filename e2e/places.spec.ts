@@ -39,7 +39,21 @@ export default function Wide() { return <Page title="Wide place" wide><Empty tit
 // the same place, but one that doesn't say where it opens: it is where the person left it, even after the app closes
 const ACORNS = CODE.replace(' start="first"', "").replace("function Leaves", "function Acorns").replace(/title="Leaves"/g, 'title="Acorns"');
 
+// a talk written against the kit's Pages (as Rooms' room was on 11-22): its own scroller between a head and a box
+const TALK = `import { useRef, useState } from "react";
+import { Button, Page, Pages } from "parachute";
+export default function Talk() {
+  const [n, setN] = useState(40);
+  const h = useRef(null);
+  return <Page scroll title="Talk"><div style={{ display: "flex", flexDirection: "column", height: "70dvh" }}>
+    <Pages start="last" name="Talk" handle={h}>{Array.from({ length: n }, (_, i) => <p key={i} data-i={i}>Line {String(i).padStart(2, "0")} of the talk</p>)}</Pages>
+    <div><Button onClick={() => setN((x) => x + 1)}>One more</Button><Button onClick={() => h.current.toElement(document.querySelector("[data-i='5']"))}>To five</Button></div>
+  </div></Page>;
+}
+`;
+
 const made: string[] = [];
+let talkId = "";
 let appletId = "";
 let acornsId = "";
 let wideId = "";
@@ -57,6 +71,12 @@ test.beforeAll(async () => {
   });
   acornsId = acorns.id;
   made.push(acorns.id);
+  const talk = await record(hubState(), "create", {
+    path: `Applets/Talk ${stamp}`, extension: "tsx", tags: ["applet"], body: TALK,
+    fields: { needs: 7, applet: { contract: 2, id: `talk-${stamp}`, name: "Talk", glyph: "❦", access: [] } },
+  });
+  talkId = talk.id;
+  made.push(talk.id);
   const wide = await record(hubState(), "create", {
     path: `Applets/Wide ${stamp}`, extension: "tsx", tags: ["applet"], body: WIDE,
     fields: { needs: 7, applet: { contract: 2, id: `wide-${stamp}`, name: "Wide place", glyph: "❦", access: [] } },
@@ -152,6 +172,36 @@ test("after the app closes, a place that opens at its top (Home) still does; one
     expect(await inner2.evaluate(() => scrollY), name).toBe(back);
     await again.close();
   }
+});
+
+test("a talk on the kit's Pages scrolls on its own: it opens at the newest, follows what arrives at the foot, stays put when scrolled up", async ({ page }) => {
+  await page.goto(`/v/${VAULT}/a/${talkId}`);
+  const start = page.getByRole("button", { name: "Open Talk" });
+  await start.or(page.getByRole("button", { name: "Allow" })).first().waitFor();
+  if (await start.isVisible()) await start.click();
+  const allow = page.getByRole("button", { name: "Allow" });
+  if (await allow.isVisible().catch(() => false)) await allow.click();
+  const app = page.frameLocator('iframe[title="Talk"]');
+  await expect(app.getByText("Line 39 of the talk")).toBeAttached({ timeout: 20_000 });
+  const talk = app.locator(".pa-pages");
+  const fromFoot = () => talk.evaluate((t) => Math.round(t.scrollHeight - t.scrollTop - t.clientHeight));
+  expect(await talk.evaluate((t) => t.scrollHeight > t.clientHeight * 2)).toBe(true);
+  await expect.poll(fromFoot).toBeLessThan(2);
+  expect(await onScreen(page, app.getByText("Line 39 of the talk"))).toBe(true);
+  // a line arrives while at the foot: still at the foot, the new line in view
+  await app.getByRole("button", { name: "One more" }).click();
+  await expect(app.getByText("Line 40 of the talk")).toBeAttached();
+  await expect.poll(fromFoot).toBeLessThan(2);
+  // scrolled up to read: a new line doesn't move you
+  await talk.evaluate((t) => { t.scrollTop = 200; });
+  await app.getByRole("button", { name: "One more" }).click();
+  await expect(app.getByText("Line 41 of the talk")).toBeAttached();
+  await page.waitForTimeout(200);
+  expect(await talk.evaluate((t) => t.scrollTop)).toBe(200);
+  // a line asked for from code (a message a notification opened) is brought into view
+  await app.getByRole("button", { name: "To five" }).click();
+  await expect.poll(() => onScreen(page, app.getByText("Line 05 of the talk"))).toBe(true);
+  await expect(app.locator(".pa-at, .pa-book")).toHaveCount(0);
 });
 
 test("a place has the hour's sky at its head, fading into the paper", async ({ page }) => {

@@ -118,9 +118,9 @@ function swapOut() {
   ghost.removeAttribute("aria-label");
   ghost.style.cssText = `position: fixed; left: ${r.left}px; top: ${r.top}px; width: ${r.width}px; height: ${r.height}px; margin: 0; z-index: 5; pointer-events: none; background: var(--bg); transition: opacity var(--t-swap) var(--ease-out);`;
   document.body.appendChild(ghost);
-  // the copy shows the page the room was on
-  const from = el.querySelector<HTMLElement>(".pa-book"), to = ghost.querySelector<HTMLElement>(".pa-book");
-  if (from && to) to.scrollLeft = from.scrollLeft;
+  // the copy shows the talk where it was scrolled (a copy starts at its top)
+  const from = el.querySelector<HTMLElement>(".scroll"), to = ghost.querySelector<HTMLElement>(".scroll");
+  if (from && to) to.scrollTop = from.scrollTop;
   void ghost.getBoundingClientRect();
   ghost.style.opacity = "0";
   const gone = () => ghost.remove();

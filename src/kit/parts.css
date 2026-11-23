@@ -281,13 +281,13 @@ select.pa-finput { appearance: auto; }
   border: var(--line-card); border-radius: max(var(--radius-card), var(--radius)); box-shadow: none; transform: none; transition: none; animation: pa-in var(--t-state) var(--ease-out) both; }
 }
 
-/* What you write in, pinned at the page's foot (a Write with `dock`: Home's line, docs/LOOK.md): the page is at least the
-   screen's height, so the line sits at the foot even when there is little above it, and it stays there as the page
-   scrolls under it. */
+/* What you write in, pinned at the screen's foot (a Write with `dock`: Home's line, docs/LOOK.md), in the page's own
+   column, whatever is above it; the page ends that much higher (Page measures the strip: --pa-dock-h), so its last
+   row scrolls clear of it. The page's own layout is untouched. */
 @layer parachute.parts {
-.pa-page:has(> .pa-dock:not(:empty)) { display: flex; flex-direction: column; min-height: 100dvh; padding-bottom: 0; }
-.pa-dock { position: sticky; bottom: 0; z-index: 2; box-sizing: border-box; width: 100%; margin-top: auto; padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
-  border-top: var(--line-row); background: var(--bg); }
+.pa-page:has(> .pa-dock:not(:empty)) { padding-bottom: calc(var(--pa-dock-h, 64px) + var(--pad)); }
+.pa-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; box-sizing: border-box; max-width: inherit; margin: 0 auto;
+  padding: 8px var(--pad) calc(8px + env(safe-area-inset-bottom, 0px)); border-top: var(--line-row); background: var(--bg); }
 .pa-dock:empty { display: none; }
 .pa-dock > .pa-write { margin: 0; }
 /* a part of a screen that scrolls on its own (a room's talk): the room its box gives it */
