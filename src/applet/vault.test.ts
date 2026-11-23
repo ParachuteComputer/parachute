@@ -441,6 +441,23 @@ describe("the hub's query words, kept to the folders", () => {
     expect(ids(await f.get(`/api/notes?${words}&offset=50`))).toEqual(want[1]);
   });
 
+  it("more of its own notes removed behind it than it steps back: none of the rest is skipped or listed twice", async () => {
+    for (let i = 0; i < 300; i++) notes.push({ id: `v${String(i).padStart(4, "0")}`, path: `Recipes/V ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    const words = "order_by=created_at&sort=asc&include_links=true&limit=50";
+    const ids = (r: { body: { id: string }[] }) => r.body.map((n) => n.id);
+    const f = frameOn(hub), got: string[] = [];
+    got.push(...ids(await f.get(`/api/notes?${words}&offset=0`)));
+    const shown = new Set(got);
+    // eight it already handed back go
+    for (const id of got.slice(0, 8)) notes.splice(notes.findIndex((n) => n.id === id), 1);
+    for (let o = 50; ; o += 50) { const page = ids(await f.get(`/api/notes?${words}&offset=${o}`)); if (!page.length) break; got.push(...page); }
+    expect(new Set(got).size).toBe(got.length);
+    // every note there now that wasn't shown already comes, in order
+    const now: string[] = [];
+    for (let o = 0; ; o += 50) { const page = ids(await frameOn(hub).get(`/api/notes?${words}&offset=${o}`)); if (!page.length) break; now.push(...page.filter((id) => !shown.has(id))); }
+    expect(got.filter((id) => !shown.has(id))).toEqual(now);
+  });
+
   it("a page that fails leaves the list where it was: asked again, it goes on, nothing missed", async () => {
     for (let i = 0; i < 200; i++) notes.push({ id: `d${String(i).padStart(3, "0")}`, path: `Recipes/D ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
     const words = "order_by=created_at&sort=asc&include_links=true&limit=50";

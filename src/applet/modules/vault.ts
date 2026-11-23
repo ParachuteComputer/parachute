@@ -282,11 +282,11 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     const last = slot !== null ? resumes.get(slot) : undefined;
     const go = last && now() - last.time < RESUME_TTL_MS ? last : null;
     /** Where `mine` starts in its own list: 0, or the offset it goes on from. */
-    let from = go ? offset : 0;
+    const from = go ? offset : 0;
     // charged by what was asked: one page going on (also when it must read from the start after all, below)
     const pages = search ? 1 : Math.ceil((want - from) / size);
     // its own copy: a call that fails puts the resume back as it was, for the kit's retry
-    let seen = new Set<string>(go?.seen);
+    const seen = new Set<string>(go?.seen);
     const out: (VaultNote & { path: string })[] = [];
     try {
       for (const p of prefixes) {
@@ -294,7 +294,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         // taken once charged (before anything waits, so a second call for the same page reads from the start)
         if (go) resumes.delete(slot!);
         let on = go;
-        let mine: (VaultNote & { path: string })[] = on ? [...on.ahead] : [];
+        const mine: (VaultNote & { path: string })[] = on ? [...on.ahead] : [];
         // a few pages more than asked, for the notes the judging drops; then what it has
         // (past EXTRA_PAGES of notes it drops ahead of the last one asked for, a page comes back short, and a search's past
         // HUB_PAGE less its limit; and a note changed
@@ -309,12 +309,13 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
           // a search too is asked for a whole page and cut after judging: the hub ranks it and drops offset, never limit
           const rows = await d.query(p, { limit: size, offset: asked, tag, search: search || null, content: content && !later, links: links && !later, orderBy, sort, meta });
           // the row it stopped at isn't among them: more moved behind it than it steps back (notes removed, its own or
-          // not): read from the start, as with no resume, so nothing is missed
+          // not): read the hub again from its first row, keeping what it has handed back and seen, so nothing is missed
+          // or listed twice. Still one page's charge: charging more would tell of notes it can't see.
           if (on && read === 0 && lastId !== null && !rows.some((n) => n?.id === lastId)) {
-            on = null; from = 0; seen = new Set(); mine = []; at = 0; lastId = null; reads = Math.ceil(want / size); read = -1;
+            on = null; at = 0; lastId = null; reads = Math.ceil(want / size); read = -1;
             continue;
           }
-          if (asked + rows.length > at && rows.length) lastId = rows[rows.length - 1].id;
+          if (asked + rows.length > at && rows.length) lastId = rows[rows.length - 1]?.id ?? null;
           at = Math.max(at, asked + rows.length);
           for (const n of rows) {
             if (!n || !n.path || seen.has(n.id) || !inScope(prefixes, n.path) || codeKindOf(n) !== null || (tag && !(n.tags ?? []).includes(tag))) continue;

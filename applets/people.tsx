@@ -1218,8 +1218,9 @@ export default function People() {
           setError(e);
         }
       } while (again.current);
+      loading.current = null;
     };
-    loading.current = run().finally(() => { loading.current = null; });
+    loading.current = run();
     return loading.current;
   }, []);
 

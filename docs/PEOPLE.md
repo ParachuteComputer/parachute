@@ -83,7 +83,7 @@ A group could be either a list field on each person (`fields.groups: string[]`) 
 
 The list reads `People/` in pages of 50, oldest made first (`orderBy: "created_at"`), so a person changed while it
 reads moves nowhere and a new one lands at the end. Each page asks for the offset the last one ended at, so the app goes
-on reading from there (a few rows back, so a person deleted meanwhile pushes none past it) instead of reading everyone
+on reading from there (and from the start, if people were deleted behind it, without listing anyone twice) instead of reading everyone
 before it again: one read a page. Then one page newest-changed first brings in anyone changed while it read. A 0.8 hub,
 which can't order by when a record was made, is read newest-changed first (that last page catches one changed while
 it read). The app pages to an offset of 5,000 at most: past that the list holds the first 5,050 or so and its
