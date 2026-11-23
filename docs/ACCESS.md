@@ -82,24 +82,25 @@ Parachute's own applets keep their notes.
    which isn't read yet, so the card either reads it in the same page as the ask, or trusts what a signed approval says
    it asks (its hash: SCOPES.md "Permissions follow the person"). A bundle's own words never decide what is asked.
 4. **An applet that names no vault asks which one, the choice is written onto its record, and it can be changed
-   later** (Uni's note for this job, 11-22). An applet in a vault has one already: `here`, the vault its note lives in
+   later.** An applet in a vault has one already: `here`, the vault its note lives in
    (manifest contract 2, `src/applet/manifest.ts`). Parachute's own applets come from the app, not a vault, and run in
    the home (`/v/<home>/a/parachute:<id>`, [design/PARACHUTE-SOURCE.md](design/PARACHUTE-SOURCE.md)). Of those, the
-   ones whose manifest keeps notes in `here` are **Journal and Capture** (`applets/journal.json`, `capture.json`);
-   Notes, Vault, Connect and Home name no folder and reach across vaults by their app words, so a vault choice means
-   nothing for them. Today someone with a journal vault can keep Journal there only as a copy with its own card.
+   ones whose manifest keeps notes in `here` are **Journal and Capture** (`applets/journal.json`, `capture.json`), and
+   Home's one line into `Inbox/` (`home.json`), which is Capture's inbox and so follows Capture's choice. Notes, Vault
+   and Connect name no folder and reach across vaults by their app words, so a vault choice means nothing for them. Today someone with a journal vault can keep Journal there only as a copy with its own card.
    - **The ask.** The first time Journal or Capture opens, if the person has more than one vault of their own on this
      device, the shell (not the applet) draws one line over it: *Journal keeps its notes in **kitchen** · Change*. That
      is a good default they can override, not a question they must answer first. With one vault, nothing is asked.
    - **Written onto the person's record.** The choice goes in their settings note (`Parachute/Settings`, beside
-     `hubs` and `bundle`), as `"places": [{"applet": "parachute:journal", "hub": "https://…", "vault": "journal"}]`:
+     `hubs` and `bundle`), as `"keepsIn": [{"applet": "parachute:journal", "hub": "https://…", "vault": "journal"}]`:
      the person's own, so switching bundles or following someone else's bundle never moves it. Every device and their
-     agent see it, and the agent can write it. A build that doesn't know `places` reads none, which means the home as
+     agent see it, and the agent can write it. A build that doesn't know `keepsIn` reads none, which means the home as
      today, and keeps the entry when it writes the note (`homeSettings.ts` `changeSettings` writes back what it
      doesn't read).
    - **Changed later.** Settings → Applets gets a line for each, *Journal keeps its notes in journal · Change*, and the
      long-press in the list offers the same. A change moves nothing already written: notes made before stay where they
-     are, and the applet opens on the new vault.
+     are, and the applet opens on the new vault. An applet of the person's that reads `Journal/` in its own vault (Today,
+     in Aaron's home) doesn't see a journal that moved; it would say so, or name the vault it reads.
    - **What it holds.** Choosing a vault the device doesn't hold asks the hub for write on that one vault (`askVault`;
      one page, or none with the device's key), as an applet's card does now. The home-plus-asks rule above holds.
      `here` for Journal and Capture becomes "the vault chosen for it, else the home", and the address
