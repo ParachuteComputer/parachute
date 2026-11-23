@@ -44,7 +44,16 @@ declare module "parachute" {
     metadata?: Record<string, unknown>;
     body?: string;
     content?: string;
+    /** With includeLinks: its links both ways, only those whose other end is in a folder it may read. */
+    links?: AppletLink[];
   }
+  /** One end of a link: a record in a folder it may read. */
+  export interface AppletLinkEnd { id: string; path: string | null; tags: string[]; fields: Record<string, unknown>; createdAt: string | null; updatedAt: string | null }
+  export interface AppletLink { sourceId: string; targetId: string; relationship: string | null; fields: Record<string, unknown>; createdAt: string | null; sourceNote?: AppletLinkEnd; targetNote?: AppletLinkEnd }
+  /** A field filter: a value (equals: text, a number or yes/no), or one or more operators ({ gte: 2, lte: 5 }). An operator
+   *  compares text and numbers, not yes/no; on a 0.8 hub it, or ordering by a field, needs the field indexed. An empty
+   *  `in` filters nothing. */
+  export type FieldFilter = string | number | boolean | { eq?: string | number; ne?: string | number; gt?: string | number; gte?: string | number; lt?: string | number; lte?: string | number; in?: (string | number)[]; not_in?: (string | number)[]; exists?: boolean };
   /** A record from `vaults.*` (every vault on the device): always with its title, types, tags and fields, and `own`
    *  for the app's own records (settings, approvals, an applet's code). */
   export interface VaultsRecord {
@@ -64,11 +73,21 @@ declare module "parachute" {
     updatedVia?: string | null;
     links?: { dir: "out" | "in"; id: string; path: string; relationship: string }[];
   }
+  /** A folder's records (docs/WRITE-AN-APPLET.md "vault.queryRecords"): 50 at most a page, newest changed first. */
   export interface RecordQuery {
     pathPrefix?: string;
     tag?: string;
+    /** Ranked by the hub: one page, no offset, orderBy or sort with it. */
     search?: string;
     limit?: number;
+    /** The next page: up to 5,000. */
+    offset?: number;
+    /** updated_at, created_at (on 0.9), or a field's name (one folder: pathPrefix). Never link_count. */
+    orderBy?: string;
+    sort?: "asc" | "desc";
+    /** Filter by fields: { course: "soup" }, { serves: { gte: 2 } }. */
+    fields?: Record<string, FieldFilter>;
+    includeLinks?: boolean;
     id?: string;
     path?: string;
     includeBody?: boolean;
@@ -78,7 +97,10 @@ declare module "parachute" {
   }
   export interface AppletVault {
     queryRecords(q?: RecordQuery): Promise<AppletRecord[]>;
-    getRecord(idOrPath: string): Promise<AppletRecord | null>;
+    getRecord(idOrPath: string, opts?: { includeLinks?: boolean }): Promise<AppletRecord | null>;
+    /** The tags (and types) on the records in its folders, each with how many there carry it. */
+    listTags(): Promise<{ name: string; count: number }[]>;
+    /** A body up to 500 KB (before 11-23, 7 KB). */
     createRecord(rec: { path: string; body: string; types?: string[]; tags?: string[]; fields?: Record<string, unknown> }): Promise<AppletRecord>;
     updateRecord(id: string, change: { if_updated_at: string; body?: string; fields?: Record<string, unknown>; types?: { add?: string[]; remove?: string[] }; tags?: { add?: string[]; remove?: string[] } }): Promise<AppletRecord>;
     queryNotes(q?: Record<string, unknown>): Promise<AppletRecord[]>;
