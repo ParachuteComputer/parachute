@@ -57,5 +57,8 @@ export function vaultDeps(c: VaultClient, kept?: VaultClient): VaultDeps {
       const a = await c.addAttachment(id, { path: up.path, mimeType: type, ...(transcribe ? { transcribe: true } : {}) });
       return { id: a.id, path: a.path ?? up.path, mimeType: a.mimeType ?? type };
     },
+    // a note's pictures (vault.ts `file` asks only for one the note's list names), with this device's sign-in
+    attachments: (id) => c.listAttachments(id),
+    file: (path) => c.fetchAttachmentBlob(`/api/storage/${path.split("/").map(encodeURIComponent).join("/")}`),
   };
 }

@@ -28,9 +28,12 @@
 // One call beside the REST subset (docs/design/KEYRING.md): `vault.attach {noteId, bytes, type, transcribe?}` adds a
 // file to a note the grant lets it change (the same judgment as a PATCH), through the hub's own upload and attach
 // routes; `transcribe` asks the hub to transcribe audio. The kit names it `uni.vault.attach(noteId, bytes, type, {transcribe})`.
+// And `vault.file {id, path}`: the bytes of a picture attached to a record in its `vault.read` folders, to draw its
+// pictures (docs/design/PICTURES.md): only one the hub lists as that record's own, the same check as `vaults.file`.
+// The kit names it `uni.vault.file(id, path)`, a Blob; the kit's Note asks it by itself when given the record's `id`.
 
 import { CODE_PATH, codeKindOf, isCodeExtension } from "../code.ts";
-import { FILE_MAX, mediaType } from "../files.ts";
+import { attachedPicture, attachmentLists, FILE_MAX, mediaType, storagePath } from "../files.ts";
 import { ContractError, ERROR_CODES, hasHidden, hasOnly, inScope, LIMITS, plain, safePrefix, type ErrorCode } from "../contract.ts";
 import type { CallCtx, UniModule } from "../router.ts";
 import type { Resolved } from "../needs.ts";
@@ -72,8 +75,16 @@ export type VaultDeps = {
   save?(id: string, content: string | undefined, ifUpdatedAt: string, more?: RecordChange): Promise<VaultNote>;
   /** Upload the bytes to the vault's storage and attach them to the note `id`. Absent: the host can't, and attach is not_granted. */
   attach?(id: string, bytes: ArrayBuffer, type: string, transcribe: boolean): Promise<{ id?: string; path: string; mimeType?: string }>;
+  /** The note `id`'s attachments as the hub lists them ({path: `<date>/<file>`, mimeType}). Absent (with `file`): no
+   *  file is handed to the applet, and `file` is not_granted. */
+  attachments?(id: string): Promise<unknown>;
+  /** The bytes of a file in the vault's storage (`<date>/<file>`). Asked only for one the hub lists as the note's own. */
+  file?(path: string): Promise<Blob>;
 };
 type AttachParams = { noteId: string; bytes: ArrayBuffer; type: string; transcribe: boolean };
+type FileParams = { id: string; path: string };
+/** One refusal for a record outside the folders, one it can't find and a file not attached to it: none tells it more. */
+const notAttached = () => new ContractError(ERROR_CODES.outOfScope, "only a picture attached to a record it reads");
 type FetchParams = { method: string; path: string; headers: Record<string, string>; body: string | null };
 
 const MAX_BODY = 512 * 1024;
@@ -173,6 +184,8 @@ const publicNote = (n: VaultNote, content: boolean, links: readonly string[] | n
 export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; opens?: readonly Opens[]; name?: string } = {}): UniModule {
   const now = opts.now ?? Date.now;
   const opens = opts.opens ?? [];
+  /** Each note's attachments as the hub listed them in the last 10 s: a note's pictures ask once, not once each. */
+  const lists = attachmentLists((id) => deps.attachments!(id));
   const cache = new Map<string, { at: number; note: VaultNote }>();
   const remember = (key: string, note: VaultNote) => {
     cache.delete(key);
@@ -493,6 +506,24 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
           const a = await deps.attach(note.id, v.bytes, v.type, v.transcribe).catch((e: unknown) => { throw new ContractError(ERROR_CODES.failed, `the vault didn't take it: ${e instanceof Error ? e.message.slice(0, 200) : "it failed"}`); });
           forget(v.noteId, note.id, note.path);
           return { id: a.id ?? null, path: a.path, type: a.mimeType ?? v.type, transcribe: v.transcribe };
+        },
+      },
+      file: {
+        cap: "vault.read",
+        validate: (p: unknown) => (plain(p) && hasOnly(p, ["id", "path"]) && typeof p.id === "string" && safeRef(p.id) && typeof p.path === "string"
+          ? { ok: true, value: { id: p.id, path: p.path } } : { ok: false }),
+        // no more reach than a read: a picture the hub lists as attached to a note in its folders, judged on the note
+        // as the hub gives it back (whatever it was asked for by), under the sign-in its reads use
+        async run({ id, path }: FileParams, scopes, ctx) {
+          const want = storagePath(path);
+          if (!want) throw notAttached();
+          if (!deps.attachments || !deps.file) throw new ContractError(ERROR_CODES.notGranted, "this screen hands over no files");
+          let note: VaultNote;
+          try { note = await getNote(id, ctx); } catch (e) { if (e instanceof ContractError) throw e; throw notAttached(); }
+          if (!inScope(scopes["vault.read"] ?? [], note.path)) throw notAttached();
+          let list: unknown[];
+          try { list = await lists(note.id, () => ctx.charge(1)); } catch (e) { if (e instanceof ContractError) throw e; throw new ContractError(ERROR_CODES.failed); }
+          return attachedPicture(want, list, (p) => deps.file!(p), (e) => (e instanceof ContractError ? e : new ContractError(ERROR_CODES.failed)));
         },
       },
       fetch: {

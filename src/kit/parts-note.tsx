@@ -7,10 +7,11 @@
 // app through the shell, a web address in the browser; a short form or wikilink that leads nowhere stays plain text.
 // With `onLink`, a tap goes there instead, with a wikilink's target as written (`[[Green herb rice]]` gives
 // "Green herb rice"), the `<vault>:<ULID>` or the web address: the applet may open it itself, or call `link.follow`.
-// With `fetchBlob`, a picture the note links in the vault's storage (`/api/storage/…`) is drawn from the bytes it hands
-// back (Vault gives `vaults.file` for the record: docs/design/PICTURES.md); without it, pictures aren't drawn: the note
-// shows the picture's name in their place.
-import { useMemo, type MouseEvent } from "react";
+// Pictures: a picture the note links in the vault's storage (`![owl](/api/storage/…)`), attached to the record, is drawn
+// from its bytes (docs/design/PICTURES.md). Give the record's `id` and the Note asks `vault.file(id, src)` by itself (the
+// applet's own vault); or give `fetchBlob` (Vault gives `vaults.file` for a record of any vault). Without either, or in
+// an app older than `vault.file`, the note shows the picture's name in its place. A web picture is never loaded.
+import { useCallback, useMemo, type MouseEvent } from "react";
 import { NoteRenderer } from "@openparachute/surface-render/note";
 import type { WikilinkResolver } from "@openparachute/surface-render/markdown";
 import "@openparachute/surface-render/styles.css";
@@ -48,10 +49,19 @@ function eachProse(body: string, f: (text: string) => string): string {
   }).join("\n");
 }
 
+type Files = { file?(id: string, path: string): Promise<Blob> };
+/** The applet's own vault's `file`, where the app has one (an app before 11-23 has none). */
+const ownVault = () => { const v = (globalThis as unknown as { parachute?: { vault?: Files } }).parachute?.vault; return v && typeof v.file === "function" ? v as Required<Files> : null; };
+
 /** `tags` and `fields` (the record's) let it draw a typed note richly: a note tagged `recipe` as a recipe. */
-export function Note({ body, path, tags, fields, onLink, fetchBlob }: { body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void;
-  /** The bytes of a file the note links in the vault's storage; keep it the same function between draws (useCallback). */
+export function Note({ id, body, path, tags, fields, onLink, fetchBlob }: {
+  /** The record's id in the applet's own vault: its attached pictures are drawn (vault.file). */
+  id?: string; body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void;
+  /** The bytes of a file the note links in the vault's storage, in place of `id`'s; keep it the same function between
+   *  draws (useCallback). */
   fetchBlob?: (src: string) => Promise<Blob> }) {
+  const own = useCallback((src: string) => ownVault()!.file(id!, src), [id]);
+  const pictures = fetchBlob ?? (id && ownVault() ? own : undefined);
   const found = useMemo(() => linksIn(body), [body]);
   // what the shell says each leads to: a wikilink is drawn missing when it leads nowhere, a short form only when it leads
   const wikis = useAnswers(onLink ? [] : found.wikis.map((t) => `[[${t}]]`), path);
@@ -111,7 +121,7 @@ export function Note({ body, path, tags, fields, onLink, fetchBlob }: { body: st
       onAuxClickCapture={(e) => { if (hrefAt(e) !== null) e.preventDefault(); }}>
       {/* markdown whatever the path says (a dot in a title is not an extension); a note with no path is new with each body;
           drawn again once the wikilinks' answers are in (a missing one drawn as missing) */}
-      <NoteRenderer key={`${path ?? body}\n${wikis.size}`} note={note} format="markdown" rich calm resolve={resolve} onNavigate={tap} openLink={tap} fetchBlob={fetchBlob} />
+      <NoteRenderer key={`${path ?? body}\n${wikis.size}`} note={note} format="markdown" rich calm resolve={resolve} onNavigate={tap} openLink={tap} fetchBlob={pictures} />
     </div>
   );
 }

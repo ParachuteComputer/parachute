@@ -162,7 +162,7 @@ function SectionFrame({ html, rec, a }: { html: string; rec: VaultRecord; a: Key
     const deps = vaultDeps(clientFor(rec));
     return createRouter([
       // reads only: no create, no save
-      createVaultModule({ listPaths: deps.listPaths, getNote: deps.getNote, search: deps.search, listFields: deps.listFields, list: deps.list, query: deps.query }, { name: rec.vault }),
+      createVaultModule({ listPaths: deps.listPaths, getNote: deps.getNote, search: deps.search, listFields: deps.listFields, list: deps.list, query: deps.query, attachments: deps.attachments, file: deps.file }, { name: rec.vault }),
       createThemeModule({ theme: tokensNow }),
       // it grows and never shrinks while it is on screen: a frame that shrank under a tap would slide what is above it
       createPageModule((l) => setHeight((h) => Math.max(h, Math.min(SECTION_MAX, l.height)))),
