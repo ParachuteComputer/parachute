@@ -60,7 +60,7 @@ export async function readApplets(client: Pick<VaultClient, "queryNotes" | "getN
     const kind = kinds.get(e.noteId)!, source = html.get(e.noteId) ?? "";
     const imp = kind !== "html" && host && importsOf(source).length ? await readImports(host, source).catch(() => null) : null;
     const code = imp?.ok && imp.imports.length && kind !== "html" ? await compositeHash(kind, source, imp.imports) : await codeHash(kind, source);
-    return { ...e, keys: { scope: await grantKey({ ...grantOf(e.manifest, vault, e.opens, e.app, e.services, e.signals, e.settings), embedsFrom: from }, e.path), html: code } };
+    return { ...e, keys: { scope: await grantKey({ ...grantOf(e.manifest, vault, e.opens, e.app, e.services, e.signals, e.settings, e.techne), embedsFrom: from }, e.path), html: code } };
   }));
   return { entries, skipped: rows.length - found.entries.length };
 }
