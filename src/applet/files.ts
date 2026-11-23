@@ -117,7 +117,7 @@ export function attachmentLists(read: (key: string) => Promise<unknown>) {
  *  whatever the attacher wrote), 25 MB at most. `failed` turns the read's failure into the caller's error. */
 export async function attachedPicture(want: string, list: unknown[], read: (path: string) => Promise<Blob>, failed: (e: unknown) => ContractError): Promise<{ type: string; bytes: ArrayBuffer }> {
   const att = list.find((a): a is Record<string, unknown> => plain(a) && a.path === want);
-  if (!att) throw new ContractError(ERROR_CODES.outOfScope, "only a file attached to the record");
+  if (!att) throw new ContractError(ERROR_CODES.outOfScope, "not attached to this record");
   if (!DRAWN.test(mediaType(att.mimeType ?? att.mime_type) ?? "")) throw new ContractError(ERROR_CODES.outOfScope, "only a picture is handed over");
   let blob: Blob;
   try { blob = await read(want); } catch (e) { throw failed(e); }

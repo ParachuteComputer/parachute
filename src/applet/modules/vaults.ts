@@ -510,7 +510,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
         async run({ vault, id, path }: { vault: string; id: string; path: string }, _s, ctx) {
           held(vault); ctx.charge(1);
           const want = storagePath(path);
-          if (!want) throw refuse("only a file attached to the record");
+          if (!want) throw refuse("not attached to this record");
           if (!deps.file) throw new ContractError(ERROR_CODES.notGranted, "this screen hands over no files");
           let list: unknown[];
           try { list = await attachmentsOf(vault, id, ctx); } catch (e) { throw failed(e); }

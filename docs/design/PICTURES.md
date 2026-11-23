@@ -22,7 +22,7 @@ does an attachment need to be linked to a note to be rendered in it?"*
 - **It must be both: attached to that record and linked in its words.** The words say where the picture goes. The
   attachment is what lets an applet have the bytes. A picture attached but not linked doesn't show in the note (an
   applet can still ask for it, as a book's cover). A picture linked but attached to some other record shows
-  "[owl sketch: only a file attached to the record]". The fix is to attach it to this record too (below), which costs
+  "[owl sketch: not attached to this record]". The fix is to attach it to this record too (below), which costs
   no new bytes.
 
 ## The path

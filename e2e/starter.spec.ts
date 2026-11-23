@@ -126,7 +126,7 @@ test("the starter draws a picture attached to its note, and attaches it to a sec
     await f.getByRole("button", { name: "← Starter" }).click();
     await f.getByRole("button", { name: /^Seedlings again/ }).click();
     await expect(f.getByText("Water every other day.")).toBeVisible();
-    await expect(f.getByText(/seedlings on the sill: only a file attached to the record/)).toBeVisible();
+    await expect(f.getByText(/seedlings on the sill: not attached to this record/)).toBeVisible();
     await expect(f.locator("img")).toHaveCount(0);
     await shot(page, "02-not-attached");
     // attached there too, from the note it is attached to: the same stored file, no new bytes
