@@ -75,15 +75,21 @@ export function refreshApplets(rec: VaultRecord, fresh = false): Promise<boolean
   if (!cache.has(rec.key)) cache.set(rec.key, { state: "loading" });
   // a read from the copy that set off before the hub's own answer landed never lays its list over that answer
   const set = freshSet.get(rec.key) ?? 0;
-  const p = readApplets(fresh ? clientFor(rec) : keptClientFor(rec), rec.key, whoseOf(rec) !== "mine", rec)
+  const read = () => readApplets(fresh ? clientFor(rec) : keptClientFor(rec), rec.key, whoseOf(rec) !== "mine", rec);
+  const p = read()
+    // what went wrong, in the words the list says it with: a read that reached no hub may be a refused sign-in; one the
+    // hub renewed just now (it answers) is read once more
+    .catch(async (e: unknown) => {
+      const f = await settled(rec, failureOf(e)).catch(() => "other" as const);
+      if (f !== "alive") throw { e, f };
+      try { return await read(); } catch (again) { const g = failureOf(again); throw { e: again, f: g === "offline" ? "other" : g }; }
+    })
     .then((found) => {
       if (!fresh && (freshSet.get(rec.key) ?? 0) !== set) return true;
       if (fresh) freshSet.set(rec.key, (freshSet.get(rec.key) ?? 0) + 1);
       cache.set(rec.key, { state: "ok", found, at: Date.now() }); return true;
-    }, async (e: unknown) => {
-      // what went wrong, in the words the list says it with (a read that reached no hub may be a refused sign-in)
-      const f = await settled(rec, failureOf(e)).catch(() => "other" as const);
-      if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(e), failure: f === "alive" ? "offline" : f });
+    }, (x: { e: unknown; f: Failure }) => {
+      if (cache.get(rec.key)?.state !== "ok") cache.set(rec.key, { state: "error", error: String(x.e), failure: x.f });
       return false;
     })
     .finally(() => { inflight.delete(at); notify(); });

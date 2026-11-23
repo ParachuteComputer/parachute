@@ -286,6 +286,7 @@ export default function AppletScreen() {
         if (!on) return;
         // a reload that isn't a quiet recheck (another note asked of it, say) reads the approvals again, and waits for them
         if (!quiet) { setSigned(null); setWaitedFor(null); }
+        renewed.current = false;
         setLoaded({ state: "ok", entry: a.entry, official: !!o, page, source: { kind, text: source }, imports, note, from, asks, now });
         setKeys({ scope, html: hash });
         setBrought(pointer);
