@@ -2,7 +2,7 @@
 an outer zip holding Export-<id>-Part-1.zip, whose one root folder is Export-<id>/; names end in a 32-hex id; databases are <name> <id>.csv and _all.csv beside a
 folder of row pages, each starting with its properties; links are relative and URL-encoded; CSVs start with a BOM.
 Everything in it is invented (Juno Okafor, a freelance illustrator). Run: python3 scripts/make-notion-export.py e2e/fixtures/notion-export.zip"""
-import hashlib, io, sys, zipfile
+import hashlib, io, struct, sys, zipfile, zlib
 from urllib.parse import quote
 
 def hid(s): return hashlib.md5(s.encode()).hexdigest()
@@ -79,8 +79,26 @@ for t, d, p, body in meetings:
 files[f"{db}/{nm('Ideas')}.md"] = ("# Ideas\n\n> 💡 Draw every morning, even ten minutes.\n\n- [ ]  A print series of city birds\n"
     "- [x]  Ask the café about a wall piece\n- [ ]  Sticker sheet for the zine launch\n\n"
     f"![owl sketch]({link(nm('Ideas') + '/owl-sketch.png')})\n")
-files[f"{db}/{nm('Ideas')}/owl-sketch.png"] = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"
-    "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082")
+def owl_png(w=96, h=96):
+    """A small owl drawn in code (a PNG big enough to see on the record): body, two eyes, a beak, ear tufts."""
+    paper, body, belly, white, ink, beak = (250, 246, 238), (122, 92, 62), (196, 164, 120), (255, 255, 255), (40, 32, 24), (226, 150, 60)
+    def px(x, y):
+        dx, dy = (x - 48) / 30, (y - 56) / 36
+        if dx * dx + dy * dy > 1:
+            # ear tufts: two triangles above the head
+            for ex in (30, 66):
+                if 14 <= y <= 30 and abs(x - ex) <= (y - 14) / 2: return body
+            return paper
+        for ex in (37, 59):
+            d = (x - ex) ** 2 + (y - 44) ** 2
+            if d <= 16: return ink
+            if d <= 100: return white
+        if 44 <= x <= 52 and 52 <= y <= 60 and abs(x - 48) <= (60 - y) / 2 + 1: return beak
+        return belly if ((x - 48) / 18) ** 2 + ((y - 72) / 16) ** 2 <= 1 else body
+    raw = b"".join(b"\0" + bytes(c for x in range(w) for c in px(x, y)) for y in range(h))
+    chunk = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d))
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+files[f"{db}/{nm('Ideas')}/owl-sketch.png"] = owl_png()
 # Home links to everything, the way Notion writes it
 files[f"{root}/{home}.md"] = ("# Home\n\nMy studio, in one place.\n\n"
     f"[Reading List]({link(home + '/' + rl)}.csv)\n\n[Projects]({link(home + '/' + pj)}.csv)\n\n[Tasks]({link(home + '/' + tk)}.csv)\n\n"

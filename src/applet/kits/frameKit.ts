@@ -56,7 +56,7 @@ export const FRAME_KIT = String.raw`(function () {
   var readyP = new Promise(function (r) { readyRes = r; });
   // the person may take a while: a recording of up to 10 minutes and then Send, a file being chosen; and the shell may:
   // a Notion export is chosen, then its records written and up to 150 MB of its files uploaded one at a time
-  var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000 };
+  var WAITS = { "voice.record": 3600000, "app.pick": 3600000, "app.save": 120000, "vault.attach": 120000, "vaults.importNotion": 3600000, "vaults.addPack": 600000, "vaults.file": 120000 };
   // bytes as an ArrayBuffer (what the shell takes), from an ArrayBuffer or a view of one
   function buf(b) { return b instanceof ArrayBuffer ? b : b && ArrayBuffer.isView(b) ? b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) : null; }
   function post(m) { parent.postMessage(m, "*"); }
@@ -548,6 +548,8 @@ export const FRAME_KIT = String.raw`(function () {
         }, function () {});
         return function () { stopped = true; if (id) { delete vaultWatches[id]; call("vaults", "unwatch", { id: id }).catch(function () {}); } };
       },
+      // a file attached to the record, as a Blob (to draw its pictures: the kit's Note takes it as fetchBlob)
+      file: function (vault, id, path) { return call("vaults", "file", { vault: vault, id: id, path: path }).then(function (r) { return new Blob([r.bytes], { type: r.type }); }); },
       applets: function (vault) { return call("vaults", "applets", { vault: vault }); },
       packs: function (vault) { return call("vaults", "packs", { vault: vault }); },
       addPack: function (vault, id) { return call("vaults", "addPack", { vault: vault, id: id }); },

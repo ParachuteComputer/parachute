@@ -7,6 +7,8 @@
 // app through the shell, a web address in the browser; a short form or wikilink that leads nowhere stays plain text.
 // With `onLink`, a tap goes there instead, with a wikilink's target as written (`[[Green herb rice]]` gives
 // "Green herb rice"), the `<vault>:<ULID>` or the web address: the applet may open it itself, or call `link.follow`.
+// With `fetchBlob`, a picture the note links in the vault's storage (`/api/storage/…`) is drawn from the bytes it hands
+// back (Vault gives `vaults.file` for the record: docs/design/PICTURES.md); without it, it reads "(not loaded)".
 import { useMemo, type MouseEvent } from "react";
 import { NoteRenderer } from "@openparachute/surface-render/note";
 import type { WikilinkResolver } from "@openparachute/surface-render/markdown";
@@ -46,7 +48,9 @@ function eachProse(body: string, f: (text: string) => string): string {
 }
 
 /** `tags` and `fields` (the record's) let it draw a typed note richly: a note tagged `recipe` as a recipe. */
-export function Note({ body, path, tags, fields, onLink }: { body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void }) {
+export function Note({ body, path, tags, fields, onLink, fetchBlob }: { body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void;
+  /** The bytes of a file the note links in the vault's storage; keep it the same function between draws (useCallback). */
+  fetchBlob?: (src: string) => Promise<Blob> }) {
   const found = useMemo(() => linksIn(body), [body]);
   // what the shell says each leads to: a wikilink is drawn missing when it leads nowhere, a short form only when it leads
   const wikis = useAnswers(onLink ? [] : found.wikis.map((t) => `[[${t}]]`), path);
@@ -106,7 +110,7 @@ export function Note({ body, path, tags, fields, onLink }: { body: string; path?
       onAuxClickCapture={(e) => { if (hrefAt(e) !== null) e.preventDefault(); }}>
       {/* markdown whatever the path says (a dot in a title is not an extension); a note with no path is new with each body;
           drawn again once the wikilinks' answers are in (a missing one drawn as missing) */}
-      <NoteRenderer key={`${path ?? body}\n${wikis.size}`} note={note} format="markdown" rich calm resolve={resolve} onNavigate={tap} openLink={tap} />
+      <NoteRenderer key={`${path ?? body}\n${wikis.size}`} note={note} format="markdown" rich calm resolve={resolve} onNavigate={tap} openLink={tap} fetchBlob={fetchBlob} />
     </div>
   );
 }

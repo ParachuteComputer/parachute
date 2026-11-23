@@ -108,12 +108,15 @@ test.describe.serial("Import from Notion", () => {
     expect(after.length).toBe(recs.length);
     for (const r of after) expect(r.updatedAt, r.path).toBe(before.get(r.path));
 
-    // Ideas, found in Vault by its words, with its picture's place in its words (the picture is the record's
-    // attachment, above; Vault's view of a record doesn't draw a vault's pictures yet: the kit's Note has no reader for them)
+    // Ideas, found in Vault by its words, with its picture drawn: the record's attachment (above), its bytes handed to
+    // the frame by vaults.file (docs/design/PICTURES.md)
     await page.goto(`/v/${VAULT}`);
     await frame(page).getByRole("searchbox", { name: `Search ${VAULT}` }).fill("print series of city birds");
     await frame(page).getByText("Ideas", { exact: true }).first().click({ timeout: 30_000 });
-    await expect(frame(page).getByRole("article", { name: "Ideas" })).toContainText("Image: owl sketch", { timeout: 30_000 });
+    const owl = frame(page).getByRole("article", { name: "Ideas" }).getByRole("img", { name: "owl sketch" });
+    await expect(owl).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => owl.evaluate((i) => (i as HTMLImageElement).naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0);
+    await expect(frame(page).getByRole("article", { name: "Ideas" })).not.toContainText("not loaded");
     await shot(page, "05-ideas");
   });
 });

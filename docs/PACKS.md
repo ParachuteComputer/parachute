@@ -71,8 +71,7 @@ its workspace, as Notion's `index.html` does, so two workspaces' pages never mee
   350 MB in all, where it was 200 MB before files came in): a file over either, an empty one, or one no page holds is
   skipped with a plain message in the summary and body; a link to a linked view (a .csv the export doesn't hold) is said to be missing. A file that
   couldn't be uploaded is said in the summary and on the record; importing the same export again doesn't retry it.
-  Vault's view of a record shows where a picture is in its words ("Image: owl sketch") but doesn't draw it yet: the
-  kit's `Note` has no reader for a vault's files.
+  Vault draws the pictures in a record's words from its attachments (`vaults.file`, [design/PICTURES.md](design/PICTURES.md)).
 - **names stay clear of the vault's own types and tags in use, and workspaces stay apart**: a Notion "Book" beside your
   own `book` type is `book-2`. A type an import made is described `From Notion (<workspace>): <title>.` (or
   `From Notion: <title>.` when no workspace name is in the export), so a newer export of the same workspace adds to it,

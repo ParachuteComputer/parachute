@@ -3,6 +3,8 @@
 import { describe, expect, it } from "vitest";
 import { createVaultsModule, queryPath, recOf, writablePath, type VaultsDeps } from "./modules/vaults";
 import { createRouter } from "./router";
+// the browser's Blob (jsdom's has no arrayBuffer())
+import { Blob as NodeBlob } from "node:buffer";
 
 const enc = (x: unknown) => new TextEncoder().encode(JSON.stringify(x)).buffer;
 type Call = { method: string; path: string; body?: unknown };
@@ -428,7 +430,7 @@ describe("vaults.importNotion: shell wiring for attachments and re-import", () =
     const first = await run();
     expect(first).toMatchObject({ picked: true, attached: 1, left: [], changed: true });
     expect(first.found.files).toBe(1);
-    expect(uploaded).toEqual([{ name: "owl-sketch.png", mimeType: "image/png", size: 66 }]);
+    expect(uploaded).toEqual([{ name: "owl-sketch.png", mimeType: "image/png", size: 641 }]);
     const ideas = created.get("Notion/Juno's studio/Home/Ideas")!;
     expect(ideas.body).toContain("![owl sketch](/api/storage/stored/owl-sketch.png)");
     expect(attachments).toEqual([{ recordId: ideas.id, path: "stored/owl-sketch.png", mimeType: "image/png" }]);
@@ -436,5 +438,51 @@ describe("vaults.importNotion: shell wiring for attachments and re-import", () =
     const second = await run();
     expect(second).toMatchObject({ picked: true, attached: 0, changed: false });
     expect(uploaded).toHaveLength(1);
+  });
+});
+
+describe("vaults.file: a picture's bytes, only of a file attached to the record (docs/design/PICTURES.md)", () => {
+  const OWL = "2026-11-22/1763-owl.png", OTHER = "2026-11-22/1764-letter.png";
+  const make = (o: { words?: ("vaults" | "sharing")[]; file?: boolean; big?: boolean } = {}) => {
+    const fetched: string[] = [];
+    const deps = {
+      list: () => [{ key: "home", name: "home", host: "hub.example", mine: true, home: true, level: "read", connector: "", view: null, reach: "anyone" }],
+      door: async () => "records",
+      // the hub's list of each record's attachments: Ideas has the owl, Letter (another record) has a letter
+      async request(_v: string, method: string, path: string) {
+        if (method === "GET" && path === "/records/ideas/attachments") return [{ id: "att1", path: OWL, mimeType: "image/png" }];
+        if (method === "GET" && path === "/records/letter/attachments") return [{ id: "att2", path: OTHER, mimeType: "image/png" }];
+        throw new Error("404 not found");
+      },
+      ...(o.file === false ? {} : { file: async (_v: string, p: string) => { fetched.push(p); return new NodeBlob([new Uint8Array(o.big ? 25 * 1024 * 1024 + 1 : 4)], { type: "image/png" }); } }),
+    } as unknown as VaultsDeps;
+    const router = createRouter([createVaultsModule(o.words ?? ["vaults"], deps)]);
+    return { fetched, call: (params: unknown) => router.call("vaults", "file", params, {}, { charge() {}, closed: () => false }) as Promise<{ type: string; bytes: ArrayBuffer }> };
+  };
+  it("hands over the bytes of a file the hub lists as the record's own, as its words link it", async () => {
+    const { call, fetched } = make();
+    const got = await call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}` });
+    expect(got.type).toBe("image/png");
+    expect(got.bytes.byteLength).toBe(4);
+    expect(fetched).toEqual([OWL]);
+  });
+  it("refuses another record's file, one attached to nothing, and a way out of storage, and fetches none of them", async () => {
+    const { call, fetched } = make();
+    await expect(call({ vault: "home", id: "ideas", path: `/api/storage/${OTHER}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(call({ vault: "home", id: "ideas", path: "/api/storage/2026-11-22/nobody.png" })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(call({ vault: "home", id: "ideas", path: `/api/storage/2026-11-22/../../${OWL}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(call({ vault: "home", id: "ideas", path: `/api/storage/2026-11-22%2F..%2F..%2Fsecrets` })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}?x=1` })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(call({ vault: "home", id: "nosuch", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "failed" });
+    expect(fetched).toEqual([]);
+  });
+  it("needs the vaults word and a vault this device holds; a shell without files hands none over", async () => {
+    await expect(make({ words: ["sharing"] }).call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "not_granted" });
+    await expect(make().call({ vault: "elsewhere", id: "ideas", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "out_of_scope" });
+    await expect(make({ file: false }).call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "not_granted" });
+    await expect(make().call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}`, more: 1 })).rejects.toThrow();
+  });
+  it("refuses a file over 25 MB", async () => {
+    await expect(make({ big: true }).call({ vault: "home", id: "ideas", path: `/api/storage/${OWL}` })).rejects.toMatchObject({ code: "too_large" });
   });
 });
