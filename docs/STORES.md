@@ -80,19 +80,20 @@ None of this is needed for internal testing; all of it before closed testing.
   content and block a person, and for rules on what is allowed. The app has neither yet. Needed before closed testing
   review; the rooms applet is where it goes.
 - **Data safety:** the answers are in the next section.
-- **Foreground service:** the app declares `remoteMessaging` for its fallback relay listener (NotifyService.kt), so
-  Play asks for a description and a link to a short video of a person turning on notifications while the app is
-  closed. Google reads `remoteMessaging` narrowly (passing messages between a person's devices). If review refuses it,
-  the plain way out is to leave the listener out of the Play build (one more line in its manifest, and a guard where
-  the app starts it): people on Play then get notifications while closed through a UnifiedPush app such as ntfy. Description: "Keeps one connection to the person's own
-  message relay so that messages that name them arrive while the app is closed, on phones without a push
-  distributor. The person turns it on or off in Settings; it shows a lasting notification while it runs." The video:
-  **not made yet** (Uni, on the emulator).
+- **Foreground service:** the app declares `remoteMessaging` for its fallback relay listener (NotifyService.kt), so Play
+  asks for a description and a link to a short video of a person turning on notifications while the app is closed.
+  Google reads `remoteMessaging` narrowly (passing messages between a person's devices). If review refuses it, the plain
+  way out is to leave the listener out of the Play build (one more line in its manifest, and a guard where the app
+  starts it): people on Play then get notifications while closed through a UnifiedPush app such as ntfy. Description:
+  "Keeps one connection to the person's own message relay so that messages that name them arrive while the app is
+  closed, on phones without a push distributor. The person turns it on or off in Settings; it shows a lasting
+  notification while it runs." The video: **not made yet** (Uni, on the emulator).
 - **Account deletion:** the first screen offers **Sign in with Parachute Cloud**, which makes an account for a new
   email, so Play requires deletion from inside the app and on the web. Web: https://parachute.computer/privacy/
   ("Deleting your data": email hello@parachute.computer; Cloud deletes the account and its vaults); Play prefers a page
-  of its own that names the app and says what is deleted and what is kept. In the app: **not built yet**. Parachute Cloud already has the door (`POST /account/delete`, `account_delete` in its account
-  descriptor); the app needs a Settings line for a Cloud sign-in that uses it, or links to a Cloud page that does.
+  of its own that names the app and says what is deleted and what is kept. In the app: **not built yet**. Parachute
+  Cloud already has the door (`POST /account/delete`, `account_delete` in its account descriptor); the app needs a
+  Settings line for a Cloud sign-in that uses it, or links to a Cloud page that does.
 - **Government, financial, health features:** none.
 - **Countries:** choose them on the closed testing track (internal testing needs none).
 
@@ -194,7 +195,7 @@ The Play upload key is ours, not Aaron's: Uni makes it, before Aaron's first upl
 
 | What | Who |
 |---|---|
-| Before Aaron's first upload: make the upload key on aero, set the four `PLAY_UPLOAD_*` secrets, run Play by hand on `next`, give Aaron the `.aab` from its artifact | Uni |
+| Before Aaron's first upload: make the upload key on aero, set the four `PLAY_UPLOAD_*` secrets, build the `.aab` on aero (`scripts/android-build.sh --play`) and give it to Aaron | Uni |
 | Set the five Apple secrets; run Mac by hand on `next`; check the summary says notarised | Uni |
 | A reviewer account on a hub with a password (App access) | Uni |
 | Report and block in rooms (user-generated content) | an app worker |
