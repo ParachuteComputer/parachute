@@ -416,19 +416,22 @@ export async function bundlesIn(rec: VaultRecord): Promise<Bundle[]> {
   const all = (await bundleRows(keptClientFor(rec))).map(({ row, body }) => bundleRecordOf(body, row.path ?? null, row.id)).filter((b): b is Bundle => !!b && !shipped.has(b.id));
   return all.filter((b, i) => all.findIndex((x) => x.id === b.id) === i);
 }
-/** Open a bundle kept in another of the person's vaults: that vault becomes the home, then the bundle opens there as
- *  chooseBundle opens one. If its record can't be read there or the choice can't be saved, the home goes back to the
- *  one before and the error says why. */
-export async function chooseBundleIn(key: string, id: string): Promise<void> {
+/** Open a bundle kept in another of the person's vaults: it is read there first, then that vault becomes the home and
+ *  the bundle opens as chooseBundle opens one. If it can't be read there or the choice can't be saved, the home and
+ *  this device's choice go back to what they were, and the error says why. */
+export async function chooseBundleIn(rec: VaultRecord, id: string): Promise<void> {
+  if (!(await bundlesIn(rec)).some((b) => b.id === id)) throw new Error("That bundle couldn't be read there just now.");
   const before = homeVault()?.key ?? null;
-  setHome(key);
+  let chosen: Record<string, unknown> = {};
+  try { chosen = JSON.parse(localStorage.getItem(DEVICE_BUNDLE_KEY) ?? "{}") as Record<string, unknown>; } catch { /* none */ }
+  setHome(rec.key);
   try {
-    await readSettings();
-    if (!bundlesNow().some((b) => b.id === id)) throw new Error("That bundle couldn't be read there just now.");
+    // (it reads the settings again once written)
     await chooseBundle(id);
   } catch (e) {
-    try { const v = JSON.parse(localStorage.getItem(DEVICE_BUNDLE_KEY) ?? "{}") as Record<string, unknown>; delete v[key]; localStorage.setItem(DEVICE_BUNDLE_KEY, JSON.stringify(v)); } catch { /* nothing kept */ }
-    if (before) { setHome(before); void readSettings(); }
+    try { localStorage.setItem(DEVICE_BUNDLE_KEY, JSON.stringify(chosen)); } catch { /* this session */ }
+    if (before) setHome(before);
+    void readSettings();
     throw e;
   }
 }
