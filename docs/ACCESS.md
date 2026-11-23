@@ -63,7 +63,8 @@ them all".
 
 ## Proposals: Aaron's call, not built
 
-These change what the app holds or what a record does, so they wait for a yes.
+These change what the app holds or what a record does, so they wait for a yes. Proposal 4 also changes where
+Parachute's own applets keep their notes.
 
 1. **Let go of what nothing uses, in one tap.** On a device that holds vaults *no applet uses*, Settings offers one
    line: *Parachute holds 9 vaults no applet uses. Let go of them.* A tap lists them, each ticked, so a vault you opened
@@ -80,6 +81,33 @@ These change what the app holds or what a record does, so they wait for a yes.
    This needs the record to name the applet, not `*`. Open question: the card's lines come from the applet's manifest,
    which isn't read yet, so the card either reads it in the same page as the ask, or trusts what a signed approval says
    it asks (its hash: SCOPES.md "Permissions follow the person"). A bundle's own words never decide what is asked.
+4. **An applet that names no vault asks which one, the choice is written onto its record, and it can be changed
+   later** (Uni's note for this job, 11-22). Every applet in a vault has one already: `here`, the vault its note lives in
+   (manifest contract 2, `src/applet/manifest.ts`). The ones with no vault of their own are Parachute's own (Journal,
+   Capture, Notes, Vault, Connect, Home), which come from the app, not a vault, and today run in the home
+   (`/v/<home>/a/parachute:<id>`, [design/PARACHUTE-SOURCE.md](design/PARACHUTE-SOURCE.md)). Someone with a journal
+   vault can't keep Journal there.
+   - **The ask.** The first time such an applet opens, if the person has more than one vault of their own on this
+     device, the shell (not the applet) draws one line over it: *Journal keeps its notes in **kitchen** · Change*. That
+     is a good default they can override, not a question they must answer first. With one vault, nothing is asked.
+   - **Written onto its record.** The choice goes in the open bundle's record, beside its bar and `opens`, as
+     `"vaults": {"parachute:journal": "journal"}` (a new optional field; a build that doesn't know it reads none, which
+     means the home, as today). Every device and the person's agent see it, and the agent can write it.
+   - **Changed later.** Settings → Applets gets a line for it, *Journal keeps its notes in journal · Change*, and the
+     long-press in the list offers the same. A change moves nothing that's already written. Notes made before stay where they are, and
+     the applet opens on the new vault.
+   - **What it holds.** Choosing a vault the device doesn't hold asks the hub for that one vault, at the verbs the
+     applet's manifest needs (write for Journal and Capture), in one page (`askVault`), as an applet's card does now.
+     The home-plus-asks rule above holds. `here` for Parachute's own becomes "the vault chosen for it, else the home",
+     and its address becomes `/v/<that vault>/a/parachute:journal`.
+   - **Why it waits for a yes.** It changes where Parachute's own applets read and write, and adds a field to the
+     bundle record that other builds and Aaron's records would carry. The manifest is untouched, so the Uni app, which
+     reads the same contract, isn't affected.
+   - **Tests when built.** Two of the person's own vaults, Journal opened for the first time: the line names the
+     home. **Change** to the second vault: the hub asks once, for write on that vault only. A line written lands under
+     `Journal/` there. The bundle record holds the choice, and a second device opens Journal there.
+   - *Note:* Uni's full note for this was in this folder's PROGRESS.md, and the worker overwrote it before reading it.
+     This design is rebuilt from its summary (`ADD-vaultpick.md`): check it against what was meant.
 
 ## Gemini Neon's outside read (11-22, from the text only)
 
