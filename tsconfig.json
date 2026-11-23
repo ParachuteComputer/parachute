@@ -36,6 +36,7 @@
   "include": [
     "src",
     "packages/surface-render/src",
+    "packages/applet-kit",
     "e2e",
     "applets/record.ts",
     "vite.config.ts",
