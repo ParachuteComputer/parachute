@@ -87,7 +87,8 @@ Parachute's own applets keep their notes.
    the home (`/v/<home>/a/parachute:<id>`, [design/PARACHUTE-SOURCE.md](design/PARACHUTE-SOURCE.md)). Of those, the
    ones whose manifest keeps notes in `here` are **Journal and Capture** (`applets/journal.json`, `capture.json`), and
    Home's one line into `Inbox/` (`home.json`), which is Capture's inbox and so follows Capture's choice. Notes, Vault
-   and Connect name no folder and reach across vaults by their app words, so a vault choice means nothing for them. Today someone with a journal vault can keep Journal there only as a copy with its own card.
+   and Connect name no folder and reach across vaults by their app words, so a vault choice means nothing for them. Now someone with a journal vault can keep Journal there only as a copy
+   with its own card.
    - **The ask.** The first time Journal or Capture opens, if the person has more than one vault of their own on this
      device, the shell (not the applet) draws one line over it: *Journal keeps its notes in **kitchen** · Change*. That
      is a good default they can override, not a question they must answer first. With one vault, nothing is asked.
@@ -99,8 +100,8 @@ Parachute's own applets keep their notes.
      doesn't read).
    - **Changed later.** Settings → Applets gets a line for each, *Journal keeps its notes in journal · Change*, and the
      long-press in the list offers the same. A change moves nothing already written: notes made before stay where they
-     are, and the applet opens on the new vault. An applet of the person's that reads `Journal/` in its own vault (Today,
-     in Aaron's home) doesn't see a journal that moved; it would say so, or name the vault it reads.
+     are, and the applet opens on the new vault. An applet of the person's that reads `Journal/` in its own vault (Aaron's
+     Home, `applets/today.json`) doesn't see a journal that moved; it would say so, or name the vault it reads.
    - **What it holds.** Choosing a vault the device doesn't hold asks the hub for write on that one vault (`askVault`;
      one page, or none with the device's key), as an applet's card does now. The home-plus-asks rule above holds.
      `here` for Journal and Capture becomes "the vault chosen for it, else the home", and the address
