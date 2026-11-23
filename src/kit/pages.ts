@@ -96,7 +96,7 @@ export function pages(book: HTMLElement, flow: HTMLElement, line: { at: HTMLElem
         marks.push(m);
       }
       const head = i > 0 && i < count;
-      m.className = `pa-mark${head ? " pa-runhead" : ""}${i % per === 0 ? " pa-snap" : ""}`;
+      m.className = `pa-leaf${head ? " pa-runhead" : ""}${i % per === 0 ? " pa-snap" : ""}`;
       m.style.left = `${i * pageW}px`;
       m.style.width = `${pageW}px`;
       const words = head ? said : "";

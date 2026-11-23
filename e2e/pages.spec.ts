@@ -74,7 +74,7 @@ async function openLeaves(page: Page) {
   return { app, inner };
 }
 /** The book's scroll, and the page width it turns by. */
-const book = (inner: Frame) => inner.evaluate(() => { const b = document.querySelector<HTMLElement>(".pa-book")!; return { left: b.scrollLeft, page: b.querySelector<HTMLElement>(".pa-mark")!.offsetWidth, count: Number(/of (\d+)/.exec(document.querySelector(".pa-at")!.textContent ?? "")?.[1] ?? 1) }; });
+const book = (inner: Frame) => inner.evaluate(() => { const b = document.querySelector<HTMLElement>(".pa-book")!; return { left: b.scrollLeft, page: b.querySelector<HTMLElement>(".pa-leaf")!.offsetWidth, count: Number(/of (\d+)/.exec(document.querySelector(".pa-at")!.textContent ?? "")?.[1] ?? 1) }; });
 
 test("a long place is a run of pages: the arrows glide a page, the keys turn at once, nothing scrolls down", async ({ page }) => {
   const { app, inner } = await openLeaves(page);
@@ -124,7 +124,7 @@ test("a line that grows as you write shrinks the pages, and the count follows: t
   /** the count shown, and the pages the place really takes (the column its end falls in) */
   const geo = () => inner.evaluate(() => {
     const flow = document.querySelector<HTMLElement>(".pa-flow")!, end = flow.querySelector<HTMLElement>(":scope > .pa-end")!;
-    const w = document.querySelector<HTMLElement>(".pa-mark")!.offsetWidth;
+    const w = document.querySelector<HTMLElement>(".pa-leaf")!.offsetWidth;
     return { shown: Number(/of (\d+)/.exec(document.querySelector(".pa-at")!.textContent ?? "")?.[1] ?? 0), need: Math.floor((end.getBoundingClientRect().left - flow.getBoundingClientRect().left) / w) + 1, h: document.querySelector<HTMLElement>(".pa-book")!.clientHeight };
   });
   const g0 = await geo();

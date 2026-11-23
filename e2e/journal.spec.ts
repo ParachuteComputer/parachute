@@ -170,3 +170,34 @@ test("journal offline: lines the vault can't take wait on the device in order an
     for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
   }
 });
+
+test("journal on pages: an entry's time never sits at a page's foot without its words", async ({ page }) => {
+  const stamp = Date.now().toString(36);
+  const made: string[] = [];
+  made.push((await record(hubState(), "create", appletRecord("journal"))).id);
+  const now = new Date(), day = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  // a day of entries of every length, so some time lands at the foot of a page
+  for (let i = 0; i < 24; i++) {
+    const words = `Entry ${i} ${stamp}. ` + "The beds want turning before the frost comes in. ".repeat(1 + (i * 7) % 5);
+    made.push((await api(hubState(), "POST", "notes", { path: `Journal/${day}/${String(i % 24).padStart(2, "0")}-${String(10 + i).padStart(2, "0")} Entry ${i} ${stamp}`, tags: ["journal"], content: words })).id);
+  }
+  try {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    const app = page.frameLocator("iframe.applet-frame");
+    await expect(app.getByText(`Entry 0 ${stamp}.`)).toBeVisible();
+    // each entry's time and its first line of words are on one page
+    const apart = await app.locator(".pa-book").evaluate((book) => {
+      const w = book.querySelector<HTMLElement>(":scope > .pa-leaf")!.offsetWidth, x0 = book.getBoundingClientRect().left - book.scrollLeft;
+      const pageOf = (el: Element) => Math.floor((el.getBoundingClientRect().left - x0) / w);
+      return [...book.querySelectorAll(".entry")].filter((e) => { const t = e.querySelector(".when"), n = e.querySelector(".pa-note"); return t && n && pageOf(t) !== pageOf(n); }).map((e) => e.getAttribute("aria-label"));
+    });
+    expect(apart).toEqual([]);
+    // the strip of the last four weeks draws its marks at their own height (the pages' marks once flattened them to 1px)
+    const tallest = await app.locator(".pa-days rect.pa-mark").evaluateAll((rs) => Math.max(0, ...rs.map((r) => (r as SVGGraphicsElement).getBBox().height)));
+    expect(tallest).toBeGreaterThan(3);
+  } finally {
+    for (const id of made) await api(hubState(), "DELETE", `notes/${id}`).catch(() => {});
+  }
+});

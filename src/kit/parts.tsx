@@ -68,7 +68,7 @@ export type Row = {
   strong?: boolean;
   /** the one open now (aria-current) */
   current?: boolean;
-  /** a line under the rest, in the accent: what wants the person */
+  /** a line under the rest, in the coral of the next thing: what wants the person */
   under?: ReactNode;
   /** what a screen reader says for a row that is a button, when its text isn't enough */
   label?: string;
