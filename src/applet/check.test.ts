@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -174,7 +175,17 @@ describe("applets/parachute.d.ts", () => {
 
   it("types the starter as written: an editor shows no errors on the file people copy", () => {
     const root = process.cwd();
-    const files = [join(root, "applets", "parachute.d.ts"), join(root, "applets", "starter.tsx")];
+    // and the folder door's words as WRITE-AN-APPLET.md gives them: an applet using them shows no error either
+    const probe = join(mkdtempSync(join(tmpdir(), "dts-")), "words.tsx");
+    writeFileSync(probe, `import { vault } from "parachute";
+export async function words() {
+  const rows = await vault.queryRecords({ pathPrefix: "Books/", orderBy: "rating", sort: "desc", offset: 50, fields: { rating: { gte: 4 }, genre: "sf" }, includeLinks: true });
+  const one = await vault.getRecord(rows[0]!.id, { includeLinks: true });
+  const tags = await vault.listTags();
+  return [one?.links?.[0]?.targetNote?.path, one?.links?.[0]?.fields, tags[0]?.count];
+}
+`);
+    const files = [join(root, "applets", "parachute.d.ts"), join(root, "applets", "starter.tsx"), probe];
     const program = ts.createProgram(files, {
       strict: true, noEmit: true, skipLibCheck: true, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022,
       module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, lib: ["lib.es2022.d.ts", "lib.dom.d.ts"],
