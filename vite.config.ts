@@ -95,5 +95,5 @@ export default defineConfig({
   server: { port: 1420, strictPort: true, headers },
   preview: { headers },
   build: { target: "es2022" },
-  test: { environment: "jsdom", include: ["src/**/*.test.{ts,tsx}"], setupFiles: ["src/test-setup.ts"], globals: false },
+  test: { environment: "jsdom", include: ["src/**/*.test.{ts,tsx}", "packages/applet-kit/src/**/*.test.{ts,tsx}"], setupFiles: ["src/test-setup.ts"], globals: false },
 });

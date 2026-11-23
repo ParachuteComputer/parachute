@@ -491,6 +491,20 @@ How big it may be:
 - The device keeps an applet compiled when its compiled code is 250 KB or less (`KEEP_ONE_CHARS`, a quarter of the
   1 MB kept). A bigger one still runs, but it is compiled again on each open. `--minify` is the first thing to try.
 
+## As a website
+
+The same code, unchanged, can be a website people link their Parachute to (`packages/applet-kit`):
+
+```bash
+APPLET=applets/starter npx vite --config packages/applet-kit/site/vite.config.ts
+```
+
+The page asks for a Parachute's address and a vault, and the hub asks its person to approve the website for that
+vault's read and write. Then the applet runs on it, with saved state kept in the browser. Only what a folder applet
+uses crosses: the kit's parts and `vault`. `app.*`, `vaults.*`, `services.*`, voice and `component:` imports are the
+app's. On the website the scope is the whole vault the person approved, not the folders the card names, so a website
+is for applets people trust with that vault. `e2e/website.spec.ts` links the starter to a real hub this way.
+
 ## A worked example
 
 These are the exact arguments for the MCP tool `create-record` (the same body works for `POST /api/records`). A hub

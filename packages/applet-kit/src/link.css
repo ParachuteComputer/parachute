@@ -1,0 +1,7 @@
+/* A linked website (LinkParachute.tsx): the "Linked to …" line, then the applet in what is left of the screen. A paged
+   Page is a screen tall where it stands alone (src/kit/parts.css); here it is as tall as its part of the screen. */
+.pa-linked { display: flex; flex-direction: column; height: 100dvh; }
+.pa-linked-line { display: flex; justify-content: space-between; align-items: center; gap: var(--gap); margin: 0;
+  padding: calc(var(--gap) / 2) var(--pad); color: var(--muted); font-size: var(--fs-small, 0.875rem); border-bottom: 1px solid var(--line); }
+.pa-linked-applet { flex: 1; min-height: 0; overflow: auto; }
+.pa-linked-applet .pa-page.pa-paged { height: 100%; }
