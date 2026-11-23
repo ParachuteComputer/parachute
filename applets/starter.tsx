@@ -1,5 +1,5 @@
-// Starter: a minimal Parachute applet template. Copy starter.json and starter.tsx; change the path, id and name, and the
-// folder (NAME and FOLDER here; the access and opens paths in the .json); then run
+// Starter: a minimal Parachute applet template. Copy starter.json and starter.tsx; change the path, id and name (NAME
+// here too, as the .json's name), and the folder (FOLDER here, and the access and opens paths in the .json); then run
 // `npx vite-node scripts/check-applet.ts applets/<name> --strict` before putting the record in your vault.
 import { useEffect, useRef, useState } from "react";
 import { Button, Days, Empty, Field, List, Loading, Note, onBack, onOpen, Page, Problem, ready, Search, toast, useSaved, vault, when, Write } from "parachute";
@@ -40,7 +40,12 @@ export default function Starter() {
   const editing = draft !== null;
   const editingRef = useRef(editing);
   editingRef.current = editing;
-  const [busy, setBusy] = useState(false);
+  // the note a save is under way for (its Save says "Saving…"; another note's doesn't)
+  const [saving, setSaving] = useState<string | null>(null);
+  const busy = saving !== null && saving === selected?.id;
+  // the note on screen, for a read that fails while it is shown
+  const shown = useRef<string | null>(null);
+  shown.current = selected?.id ?? null;
 
   // only the newest read shows: one that lands after a later one is dropped
   const asked = useRef(0);
@@ -55,10 +60,22 @@ export default function Starter() {
       if (n !== asked.current) return;
       setItems(rows);
       setError(null);
+      if (!search) dropGone(rows);
     } catch (e) {
       if (n === asked.current) setError(e);
     }
   };
+  // an edit kept for a note that is gone (deleted elsewhere) goes too, so none piles up in the saved store: each one
+  // not on the list is asked for once a load
+  const draftsNow = useRef(drafts);
+  draftsNow.current = drafts;
+  const dropGone = (rows: Item[]) => {
+    for (const id of Object.keys(draftsNow.current)) {
+      if (rows.some((r) => r.id === id)) continue;
+      vault.getRecord(id).then((r: Item | null) => { if (!r) dropDraft(id); }, () => {});
+    }
+  };
+  const dropDraft = (id: string) => setDrafts((all) => { if (!(id in all)) return all; const out = { ...all }; delete out[id]; return out; });
 
   // only the newest open shows: a note tapped earlier that answers later doesn't replace it
   const opening = useRef(0);
@@ -71,13 +88,16 @@ export default function Starter() {
       if (full) {
         setSelected(full);
       } else {
+        // gone (deleted elsewhere): back to the list, and an edit kept for it goes too (drafts share one saved store)
         setSelected(null);
         setSelectedId(null);
+        if (id in draftsNow.current) toast("That note is gone, with the edit kept for it.");
+        dropDraft(id);
       }
     } catch (e) {
       if (n !== opening.current) return;
-      // back on the list, holding nothing
-      setSelectedId(null);
+      // what is on screen stays (a note, or the list), and so does the Back it holds
+      setSelectedId(shown.current);
       toast(`Could not open note: ${e instanceof Error ? e.message : String(e)}`, { error: true });
     }
   };
@@ -112,21 +132,21 @@ export default function Starter() {
     if (!selected || !draft) return;
     // the shell refuses a change that doesn't say which version it changes
     if (!draft.base) return toast("This note has no version to save against. Cancel and open it again.", { error: true });
-    const id = selected.id, { body } = draft;
-    setBusy(true);
+    const id = selected.id, title = titleOf(selected), { body } = draft;
+    setSaving(id);
     try {
       const updated: Item = await vault.updateRecord(id, { body, if_updated_at: draft.base });
       // the person may have gone back or opened another note while it saved: change only what is still this note
       setSelected((s) => (s?.id === id ? { ...s, ...updated, body } : s));
       // done, unless more was typed while it saved: then that stays a draft, against the version just saved
       setDraft(id, (d) => (!d || d.body === body ? null : { ...d, base: updated.updatedAt }));
-      toast("Saved.");
+      toast(`Saved ${title}.`);
       await load();
     } catch (e) {
       const conflict = (e as { status?: number })?.status === 409;
-      toast(conflict ? "Someone else changed this note. Copy your text, Cancel, and edit it again." : `Not saved: ${e instanceof Error ? e.message : String(e)}`, { error: true });
+      toast(conflict ? `Someone else changed ${title}. Copy your text, Cancel, and edit it again.` : `${title} not saved: ${e instanceof Error ? e.message : String(e)}`, { error: true });
     } finally {
-      setBusy(false);
+      setSaving((x) => (x === id ? null : x));
     }
   };
 
@@ -160,8 +180,9 @@ export default function Starter() {
             <Button kind="quiet" onClick={() => setDraft(selected.id, null)}>Cancel</Button>
           </Write>
         ) : (
-          selected.body?.trim()
-            ? <Note body={selected.body} path={selected.path} tags={selected.tags} fields={selected.fields} />
+          // nothing written and no fields: say so (a typed record's fields still show)
+          selected.body?.trim() || Object.keys(selected.fields ?? {}).length
+            ? <Note body={selected.body ?? ""} path={selected.path} tags={selected.tags} fields={selected.fields} />
             : <Empty>Nothing written yet. Edit to start.</Empty>
         )}
       </Page>

@@ -63,10 +63,21 @@ test("the starter applet runs as shipped: lists, adds, opens, edits and saves a 
     await page.getByRole("button", { name: "Back", exact: true }).click();
     await f.getByRole("button", { name: /Seed packets to sort/ }).click();
     await expect(f.getByRole("textbox", { name: "Note" })).toHaveValue("And basil");
-    await f.getByRole("button", { name: "Cancel" }).click();
     await page.getByRole("button", { name: "Back", exact: true }).click();
     await f.getByRole("button", { name: /Tomato starts/ }).click();
     await expect(f.getByRole("textbox", { name: "Note" })).toHaveValue("Six of them");
+    // a note deleted elsewhere takes the edit kept for it: none piles up in the saved store
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    const tomato = await api(hubState(), "GET", `notes?id=${encodeURIComponent("Notes/Tomato starts")}`);
+    await api(hubState(), "DELETE", `notes/${(Array.isArray(tomato) ? tomato[0] : tomato).id}`);
+    // opened again later, the list no longer has it: its edit is dropped, Seed's stays (once the closed note is kept as
+    // closed on the device: the app keeps what an applet saved a moment after it changes)
+    await expect.poll(() => page.evaluate(() => Object.values(localStorage).some((v) => v.includes('"selected":')))).toBe(false);
+    await page.reload();
+    await page.getByRole("button", { name: "Open Starter" }).click();
+    await expect(f.getByRole("region", { name: /Notes ·/ }).getByRole("button", { name: /Seed packets to sort/ })).toContainText("Unsaved edit");
+    await expect.poll(() => page.evaluate(() => Object.values(localStorage).some((v) => v.includes("Six of them"))), { timeout: 15_000 }).toBe(false);
+    expect(await page.evaluate(() => Object.values(localStorage).some((v) => v.includes("And basil")))).toBe(true);
   } finally {
     // by path, so a note added before a failed step goes too
     const left = added ?? await api(hubState(), "GET", `notes?id=${encodeURIComponent("Notes/Seed packets to sort")}`).catch(() => null);
