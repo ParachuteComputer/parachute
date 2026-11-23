@@ -99,7 +99,7 @@ export default function NotesHome() {
         key: `${v.key}/${n.id}`, to: noteHref(v.key, n.id), title: titleOf(n), meta: shown.length > 1 ? v.vault : "", aside: when.short(updated(n)),
       }))} />}
       {rows && !rows.length && (term ? <p className="quiet">Nothing matches “{term}”.</p> : <Empty>Nothing written here yet. Start with New note, or Capture below.</Empty>)}
-      <p className="launcher-foot"><Link to="/add">Add a Parachute</Link><Link to="/settings">Settings</Link></p>
+      <p className="launcher-foot"><Link to="/add">Add a Parachute</Link></p>
     </main>
   );
 }

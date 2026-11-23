@@ -21,7 +21,7 @@ their AI writes into their home shows on Notes under **Your applets**, where its
 | **Connect** | the bar | The hub's one address for an AI (`https://…/mcp`: every vault you give it there) with **Copy**, how to add it to Claude and ChatGPT, what to ask it for next (an applet, with the guide's address, **Copy**), and each vault's own address under **Just one vault**. A hub without one (older, or Parachute Cloud today) shows each vault's own address. |
 
 Each is one of Parachute's own applets (`applets/notes`, `journal`, `capture`, `vault`, `connect`), at
-`/v/<home>/a/parachute:<name>`. Settings is ⋯ on each screen; it has **Your bundle: Parachute Simplified / Everything**,
+`/v/<home>/a/parachute:<name>`. Settings is the bar's last place on each screen (and ⋯ at the top); it has **Your bundle: Parachute Simplified / Everything**,
 and a line for each vault the sign-in didn't read (**Open letters**).
 
 On a phone's first run the first choice is **Sign in with Parachute Cloud** (an email, no key), then **Sign in with its

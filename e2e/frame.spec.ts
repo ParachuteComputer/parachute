@@ -150,7 +150,7 @@ export default function Leaky() {
   await page.waitForTimeout(500);
   expect(opened).toBe(false);
   // the frame has no way to Settings; the app's own place at the end of the bar does
-  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings (the app's own)" }).click();
+  await page.getByRole("navigation", { name: "Bar" }).getByRole("link", { name: "Settings" }).click();
   await expect(status(page)).toHaveText("Your frame runs: Parachute/Frame.");
   // leaving the frame for Settings and starting again straight away is no sign it hung the app
   await page.reload();

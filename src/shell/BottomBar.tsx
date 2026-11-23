@@ -1,9 +1,9 @@
 // The bar (docs/NAVIGATION.md): at the foot of the list, a vault, a note, an applet and Settings. The open bundle's bar,
 // in its order: the app's own places it names (its home screen, Connect, Capture) and the pins this device can find.
-// When nothing on it leads to the home screen, the shell adds that one place at the end (the list, or Notes), the one
-// way to the rest and to Settings: a record can't take the way back away. The home applet is on it when it is pinned. The shell
-// draws it, under the frame and under applets, so it is there on every screen, under a frame of the person's own too
-// (which also gets the app's own Settings). A tap on a place is a real tap on a link inside the app: it marks that
+// When nothing on it leads to the home screen, the shell adds that one place (the list, or Notes): a record can't take
+// the way back away. Then, always last, Settings: the shell's own, which no record names, moves or hides, held on screen
+// however full the bar is (T-476). The home applet is on it when it is pinned. The shell draws it, under the frame and
+// under applets, so it is there on every screen, under a frame of the person's own too. A tap on a place is a real tap on a link inside the app: it marks that
 // address, so an allowed applet starts. A long-press (or a right-click) on a place offers moving it, unpinning it, and
 // open on start.
 import { useEffect, useState } from "react";
@@ -13,7 +13,7 @@ import { move, pinApplet, setStart, useSettings, type Found, type Pin, type Plac
 import type { AppPlace } from "./bundles";
 import { chooseStart, forgetStart } from "./start";
 import { clearMark } from "../open/mark";
-import { homeVault, useFrameSource } from "./frameSource";
+import { homeVault } from "./frameSource";
 import { officialFace, officialPath, type OfficialName } from "../applet/parachuteSource";
 import { useVaults } from "../vault/hooks";
 import { useBadge } from "../services/signals";
@@ -24,7 +24,6 @@ type Item = Found & { place: Place; home: boolean };
 export default function BottomBar() {
   const { bar, bundle } = useSettings();
   const notes = bundle.look === "notes";
-  const ownFrame = useFrameSource().choice.run === "vault";
   const { pathname } = useLocation();
   const [asked, setAsked] = useState<Item | null>(null);
   const item = (p: Pin): Item => ({ ...p, home: !!bar.start && bar.start.href === p.href });
@@ -39,12 +38,10 @@ export default function BottomBar() {
           ? <Place key={e.href} item={item(e)} current={here(e.href)} onHold={() => setAsked(item(e))} />
           : <AppPlaceLink key={JSON.stringify(e)} place={e} notes={notes} pathname={pathname} />))}
         {!wayHome && <AppPlaceLink place={{ screen: "home" }} notes={notes} pathname={pathname} />}
-        {/* under a frame of the person's own, the app keeps its own way to Settings, whatever that frame draws */}
-        {ownFrame && (
-          <Link className="home-bar-place home-bar-own" to="/settings" aria-label="Settings (the app's own)" aria-current={pathname === "/settings" ? "page" : undefined}>
-            <span className="home-bar-glyph" aria-hidden="true">◠</span>Settings
-          </Link>
-        )}
+        {/* Settings, the shell's own: last, on every screen, whatever the bundle's bar or a frame of the person's own says */}
+        <Link className="home-bar-place home-bar-settings" to="/settings" aria-current={pathname === "/settings" ? "page" : undefined}>
+          <span className="home-bar-glyph" aria-hidden="true">⛭</span>Settings
+        </Link>
       </nav>
       {asked && <PlaceSheet item={asked} first={items[0]?.href === asked.href} last={items.at(-1)?.href === asked.href} onClose={() => setAsked(null)} />}
     </>
