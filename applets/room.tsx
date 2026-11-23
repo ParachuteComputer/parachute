@@ -638,6 +638,11 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
     const got = await relay.query([{ kinds: [9], "#h": [room], until: oldest - 1, limit: 100 }]).catch(() => []);
     got.forEach(st.add); (await askEndings(relay, got)).forEach(st.add); st.bump(); void names(got.map((e: Ev) => e.pubkey));
     setOlder(got.length ? "more" : "start");
+    // once they are drawn, at the foot or not is the talk's own again (a short talk can still be at its foot)
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const sc = scroller.current;
+      if (sc) { const d = sc.scrollHeight - sc.scrollTop - sc.clientHeight; atBottom.current = d < 200; fromFoot.current = d; }
+    }));
   };
 
   const replies = new Map<string, Ev[]>();
