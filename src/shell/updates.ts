@@ -95,7 +95,7 @@ export type Install =
   | { kind: "idle" }
   | { kind: "downloading"; got: number; total: number }  // total 0: the server didn't say
   | { kind: "installing"; checked: boolean }             // with Android's installer, which asks the person
-  | { kind: "failed"; message: string };
+  | { kind: "failed"; message: string; browser?: boolean };  // browser: the download itself failed, so the browser's may work
 
 /** An install handed to Android, kept across starts: from this build to the feed's. `why`: Android's refusal, if it
  *  gave one before the app closed. */
@@ -157,9 +157,10 @@ export async function download(offer: Offer, platform: string, native: Native = 
   const now = (i: Install) => { if (mine === tries) setInst(i); };  // a replaced try says nothing more
   now({ kind: "downloading", got: 0, total: 0 });
   let handed: Tried | null = null;
+  let whole = false;  // every byte arrived: a failure after that is the file (its sum, its maker), not the way to it
   try {
     await native((s) => {
-      if (s.stage === "download") return now({ kind: "downloading", got: s.got, total: s.total });
+      if (s.stage === "download") { whole = s.total > 0 && s.got >= s.total; return now({ kind: "downloading", got: s.got, total: s.total }); }
       handed = { from: OWN.commit, to: s.commit, toAt: s.at, when: Date.now() };
       if (mine === tries) writeTried(handed);
       now({ kind: "installing", checked: s.checked });
@@ -170,7 +171,7 @@ export async function download(offer: Offer, platform: string, native: Native = 
     if (mine !== tries) return;
     const message = e instanceof Error ? e.message : String(e);
     if (handed) writeTried({ ...(handed as Tried), why: message });
-    setInst({ kind: "failed", message });
+    setInst({ kind: "failed", message, browser: !handed && !whole });
   }
 }
 async function nativeInstall(step: (s: Step) => void): Promise<void> {

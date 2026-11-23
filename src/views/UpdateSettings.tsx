@@ -43,7 +43,7 @@ export default function UpdateSettings() {
         {!busy && <div className="row-buttons"><button type="button" className="primary" onClick={() => void download(s.offer, s.platform)}>Download</button></div>}
         {install.kind === "failed" && <>
           <p className="error" role="alert">{install.message}</p>
-          {s.platform === "android" && <p className="small"><button type="button" className="quiet-button" onClick={() => void openLinkOut(s.offer.url).catch(() => undefined)}>Download in the browser instead</button></p>}
+          {s.platform === "android" && install.browser && <p className="small"><button type="button" className="quiet-button" onClick={() => void openLinkOut(s.offer.url).catch(() => undefined)}>Download in the browser instead</button></p>}
         </>}
         {!busy && <p className="small quiet">{s.platform === "android"
           ? "Parachute downloads it and Android installs it over this one. Android asks first (the first time, to let Parachute install apps), and installs it only if it comes from the same maker as this one."

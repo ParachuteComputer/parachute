@@ -117,12 +117,14 @@ describe("download on Android", () => {
   });
   it("keeps Android's refusal with the try", async () => {
     await download(offer, "android", async (step) => { step({ stage: "install", checked: false, commit: "fedcba9", at: offer.at }); throw new Error("Not installed: you cancelled it."); });
-    expect(installState().install).toEqual({ kind: "failed", message: "Not installed: you cancelled it." });
+    expect(installState().install).toEqual({ kind: "failed", message: "Not installed: you cancelled it.", browser: false });
     expect(installState().after).toEqual({ kind: "stuck", to: "fedcba9", at: offer.at, why: "Not installed: you cancelled it." });
   });
-  it("a download that fails (a file that doesn't match) is no try", async () => {
-    await download(offer, "android", async () => { throw new Error("The downloaded file isn't the one the update list names."); });
-    expect(installState().install).toMatchObject({ kind: "failed" });
+  it("a download that fails is no try; the browser is offered only when the bytes didn't all arrive", async () => {
+    await download(offer, "android", async (step) => { step({ stage: "download", got: 3, total: 10 }); throw new Error("The download broke off. Try again."); });
+    expect(installState().install).toEqual({ kind: "failed", message: "The download broke off. Try again.", browser: true });
+    await download(offer, "android", async (step) => { step({ stage: "download", got: 10, total: 10 }); throw new Error("The downloaded file isn't the one the update list names."); });
+    expect(installState().install).toMatchObject({ kind: "failed", browser: false });
     expect(localStorage.getItem("parachute.update.tried")).toBeNull();
     expect(installState().after).toEqual({ kind: "none" });
   });
