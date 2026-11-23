@@ -1,7 +1,7 @@
 // The starter template (applets/starter.json + starter.tsx, docs/WRITE-AN-APPLET.md) is what a person copies to build
 // their first applet: it must run as shipped. In the sealed frame against a real hub: Allow, add a note (it lands in
 // Notes/ with the type it opens), open it, edit (the edit survives a reload) and save it (the write carries
-// if_updated_at), and the hub has it.
+// if_updated_at), and the hub has it; the app's Back closes an open note, and an edit in progress survives it.
 import { expect, test } from "@playwright/test";
 import { appletRecord } from "../applets/record.ts";
 import { api, hubState, VAULT } from "./hub";
@@ -39,6 +39,22 @@ test("the starter applet runs as shipped: lists, adds, opens, edits and saves a 
     // back to the list: the note is there
     await f.getByRole("button", { name: "← Starter" }).click();
     await expect(f.getByRole("region", { name: /Notes ·/ })).toContainText("Seed packets to sort");
+    // the app's own Back closes an open note first, and the person stays in the applet
+    const at = page.url();
+    await f.getByRole("button", { name: "Seed packets to sort" }).click();
+    await expect(f.locator("header").getByRole("heading", { name: "Seed packets to sort" })).toBeVisible();
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(f.getByRole("region", { name: /Notes ·/ })).toContainText("Seed packets to sort");
+    expect(page.url()).toBe(at);
+    // an edit in progress isn't lost to Back: open again, it is there
+    await f.getByRole("button", { name: "Seed packets to sort" }).click();
+    await f.getByRole("button", { name: "Edit" }).click();
+    await f.getByRole("textbox", { name: "Note" }).fill("# Seed packets to sort\n\nAnd basil");
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(f.getByRole("region", { name: /Notes ·/ })).toBeVisible();
+    await f.getByRole("button", { name: "Seed packets to sort" }).click();
+    await expect(f.getByRole("textbox", { name: "Note" })).toHaveValue("# Seed packets to sort\n\nAnd basil");
+    await f.getByRole("button", { name: "Cancel" }).click();
   } finally {
     // by path, so a note added before a failed step goes too
     const left = added ?? await api(hubState(), "GET", `notes?id=${encodeURIComponent("Notes/Seed packets to sort")}`).catch(() => null);

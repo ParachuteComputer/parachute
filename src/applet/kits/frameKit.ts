@@ -10,6 +10,8 @@
 //                                      running while the person is elsewhere (shell/kept.tsx); hidden, it gets no tap,
 //                                      and what only a person looking should do (mark a message read) waits.
 //   uni.frameFetch(url, init)        → fetch over the frame (pfr envelope), what VaultClient uses
+//   uni.onBack(cb)                   → while held, the app's Back (its bar's ‹, Android's Back) calls the newest cb rather
+//                                      than leaving: an applet's own screens close first (modules/back.ts). Returns off()
 //   uni.onFresh(cb)                  → cb() when the vault's answer to a read differs from what it was answered with:
 //                                      while one is listening, the shell may answer a read at once from what it read
 //                                      before, and ask the hub behind it (T-476). The React kit's Page listens with its
@@ -48,7 +50,22 @@
 
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
-  var svcSubs = {}, vaultWatches = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [], freshCbs = [];
+  var svcSubs = {}, vaultWatches = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [], freshCbs = [], backCbs = [];
+  // how many it holds Back for (onBack): the shell is told each change (modules/back.ts), once a tick, so letting go
+  // and holding again in one go (an effect run again) says nothing; "again", after a new session, says it anyway
+  var backSaid = 0, backSoon = false;
+  function holdBack(again) {
+    if (again) backSaid = -1;
+    if (backSoon) return;
+    backSoon = true;
+    Promise.resolve().then(function () {
+      backSoon = false;
+      var d = Math.min(backCbs.length, 100);
+      if (d === backSaid) return;
+      backSaid = d;
+      call("back", "hold", { depth: d }).catch(function () {});
+    });
+  }
   // saved state (docs/WRITE-AN-APPLET.md "Saved state"): what the shell handed back, and what changed since it was sent
   // savedOn: the app hands saved state to this frame (an applet's own screen; an embed's has none)
   var savedVals = {}, savedDirty = null, savedTimer = null, savedFirst = 0, savedOn = false, SAVE_MS = 250, SAVE_MAX_MS = 1000, SCROLL = "parachute:scroll";
@@ -68,7 +85,7 @@ export const FRAME_KIT = String.raw`(function () {
   // an answer to Uni's card, trusting its key, a secret), a post, the frame's height. One of the 8 places is kept for
   // these, so a tap is sent at once however many pictures and card checks are out.
   var FIRST = { "app.openLink": 1, "app.follow": 1, "app.save": 1, "app.pick": 1, "app.open": 1, "voice.record": 1, "services.publish": 1, "page.layout": 1,
-    "services.answer": 1, "services.trust": 1, "services.secret": 1, "services.forgetSecret": 1 };
+    "services.answer": 1, "services.trust": 1, "services.secret": 1, "services.forgetSecret": 1, "back.hold": 1 };
   // what must land in the order it was asked goes one at a time, each kind in a lane of its own: what the applet keeps
   // on the device (one store: a read is in the lane too, so it sees the writes asked before it), the frame's height
   // (the last one sent is the one that counts) and its private notes on a relay. A later one is never out while an
@@ -258,6 +275,8 @@ export const FRAME_KIT = String.raw`(function () {
       if (m.data && m.data.props) applyProps(m.data.props);
       // booted while hidden: what read shown() before ready (a component's first render) hears the change
       if (m.data && typeof m.data.shown === "boolean" && m.data.shown !== shownNow) { shownNow = m.data.shown; shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); }
+      // a session made again while it holds Back: the new one is told
+      if (backCbs.length) holdBack(true);
       readyRes(m.data);
       if (m.data && m.data.open) applyOpen(m.data.open);
       if (m.data && m.data.page && (m.data.page.sized || m.data.page.embeds)) startMeasuring();
@@ -266,6 +285,7 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "props") { applyProps(m.data); return; }
     if (m.event === "theme") { applyTheme(m.data); return; }
     if (m.event === "open") { applyOpen(m.data); return; }
+    if (m.event === "back") { var b = backCbs[backCbs.length - 1]; if (b) { try { b(); } catch (e) {} } return; }
     if (m.event === "vault.fresh") { freshCbs.slice().forEach(function (f) { try { f(); } catch (e) {} }); return; }
     if (m.event === "launch") { launchCbs.slice().forEach(function (f) { try { f(m.data); } catch (e) {} }); return; }
     if (m.event === "shown") { shownNow = !!(m.data && m.data.shown); if (!shownNow) savedFlush(); shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); return; }
@@ -404,6 +424,12 @@ export const FRAME_KIT = String.raw`(function () {
       if (typeof cb !== "function") throw new TypeError("onShown needs a function");
       shownCbs.push(cb);
       return function () { var i = shownCbs.indexOf(cb); if (i >= 0) shownCbs.splice(i, 1); };
+    },
+    // Back closes its own screen first: the newest cb is called (and the person stays)
+    onBack: function (cb) {
+      if (typeof cb !== "function") throw new TypeError("onBack needs a function");
+      backCbs.push(cb); holdBack();
+      return function () { var i = backCbs.indexOf(cb); if (i >= 0) { backCbs.splice(i, 1); holdBack(); } };
     },
     onFresh: function (cb) {
       if (typeof cb !== "function") throw new TypeError("onFresh needs a function");
