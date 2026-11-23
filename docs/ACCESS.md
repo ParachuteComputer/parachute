@@ -165,9 +165,10 @@ Parachute's own applets keep their notes, and 5 changes what an approval holds. 
      device's Allow (it sees other asks), and an Allow given again on the old device is the newest approval, with no
      pick, so new devices fall back to no pick. Updating the old device ends it.
    - **What an AI with write on the home can do.** It can't make or widen a pick (no key). It could delete an approval:
-     Parachute's own drop to the home, and an applet with a card asks again; both the narrow side. It could put back an older, wider one it kept: a device that has
-     seen the newer one refuses it (each device keeps the highest number it has seen, `approvalStore.ts`); a device new
-     to that applet hasn't. That is true of every approval today, not new here.
+     Parachute's own drop to the home, and an applet with a card asks again; both the narrow side. It could put back an
+     older, wider one it kept: a device that has seen the newer one refuses it (each device keeps the highest number it
+     has seen, `approvalStore.ts`); a device new to that applet hasn't. That is true of every approval today, not new
+     here.
    - **The manifest.** The `applet` value is untouched: contract 2 takes no new key, and the Uni app reads the same
      contract. One optional field goes on the record beside it, as `app` does: `"pick": "one"`, for an applet that works
      in one vault at a time. With `app: ["vaults"]` that is a whole-vault applet (types, links, watch) held to one vault
@@ -220,7 +221,8 @@ Parachute's own applets keep their notes, and 5 changes what an approval holds. 
 
      Each goes red with the cut removed.
    - **Why it waits for a yes.** It changes what an approval holds and its hash. Cross-vault applets approved before
-     fall back to no pick until you pick, and on an older build Parachute's own still reach every vault until it is updated.
+     fall back to no pick until you pick, and on an older build Parachute's own still reach every vault until it is
+     updated.
 
 ## Gemini Neon's outside reads (from the text only)
 
