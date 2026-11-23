@@ -87,8 +87,8 @@ Parachute's own applets keep their notes.
    the home (`/v/<home>/a/parachute:<id>`, [design/PARACHUTE-SOURCE.md](design/PARACHUTE-SOURCE.md)). Of those, the
    ones whose manifest keeps notes in `here` are **Journal and Capture** (`applets/journal.json`, `capture.json`), and
    Home's one line into `Inbox/` (`home.json`), which is Capture's inbox and so follows Capture's choice. Notes, Vault
-   and Connect name no folder and reach across vaults by their app words, so a vault choice means nothing for them. Now someone with a journal vault can keep Journal there only as a copy
-   with its own card.
+   and Connect name no folder and reach across vaults by their app words, so a vault choice means nothing for them.
+   Now someone with a journal vault can keep Journal there only as a copy with its own card.
    - **The ask.** The first time Journal or Capture opens, if the person has more than one vault of their own on this
      device, the shell (not the applet) draws one line over it: *Journal keeps its notes in **kitchen** · Change*. That
      is a good default they can override, not a question they must answer first. With one vault, nothing is asked.
