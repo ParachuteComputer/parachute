@@ -248,7 +248,8 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         ctx.charge(pages);
         const mine: (VaultNote & { path: string })[] = [];
         // a few pages more than asked, for the notes the judging drops; then what it has
-        // (past EXTRA_PAGES of notes it drops ahead of the last one asked for, a page comes back short; and a note changed
+        // (past EXTRA_PAGES of notes it drops ahead of the last one asked for, a page comes back short, and a search's past
+        // HUB_PAGE less its limit; and a note changed
         // while it reads moves to the front, so one other may be missed: a list read in pages, as any is)
         for (let at = 0, read = 0; mine.length < want && read < pages + EXTRA_PAGES; read++) {
           // a search too is asked for a whole page and cut after judging: the hub ranks it and drops offset, never limit
