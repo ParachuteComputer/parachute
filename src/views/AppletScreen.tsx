@@ -38,6 +38,7 @@ import reactNoteKitSource from "virtual:react-note-kit";
 import { embedsFrom, embedTargets, pointerFor, repin, type PointerNote } from "../applet/pointers";
 import { createPageModule } from "../applet/modules/page";
 import { createBackModule } from "../applet/modules/back";
+import { holdNativeBack } from "../shell/nativeBack";
 import { PageEmbeds, PAGE_MAX } from "./Embeds";
 import { isMine, useWhose, whoseOf } from "../vault/whose";
 import { pageMarks } from "../applet/pageMark";
@@ -437,12 +438,13 @@ export default function AppletScreen() {
   const device = useDeviceSheets(entry?.manifest.name ?? "This applet");
   const servicesWhy = useRef<string | null>(null);
   const sessionRef = useRef<Session | null>(null);
-  // Back, held by the applet while it has a screen of its own open (the kit's onBack, modules/back.ts): `n` counts each
-  // word from it, so after each Back it hands over the entry above it is put back if it still holds it
-  const [backHeld, setBackHeld] = useState({ held: false, n: 0 });
+  // Back, held by the applet while it has screens of its own open (the kit's onBack, modules/back.ts). It gets one Back for
+  // each it opened during the person's tap in it, so it can't keep anyone in: Backs it wasn't given leave, as before
+  const backHold = useRef({ depth: 0, given: 0 });
+  const [backHeld, setBackHeld] = useState(false);
   const onSession = (s: Session | null) => {
     // a frame made again (or gone) holds nothing until it says so
-    if (sessionNow.current !== s) setBackHeld((b) => ({ held: false, n: b.n + 1 }));
+    if (sessionNow.current !== s) { backHold.current = { depth: 0, given: 0 }; setBackHeld(false); }
     // a frame made again (or gone) leaves no live watch behind it (modules/vaults.ts): the new one asks for its own
     if (sessionNow.current && sessionNow.current !== s) vaultsModule?.stop();
     sessionNow.current = s;
@@ -492,7 +494,13 @@ export default function AppletScreen() {
     ...(entry.services.length ? [createServicesModule(async () => (brokerRef.current ? brokerRef.current.broker : null), () => servicesWhy.current)] : []),
     // a page with embeds grows to its content, and they follow it (docs/design/EMBED.md)
     ...(entry.embeds.length ? [createPageModule((l) => setHostHeight((h) => grow(h, l.height)))] : []),
-    createBackModule((held) => setBackHeld((b) => ({ held, n: b.n + 1 }))),
+    createBackModule((depth) => {
+      const b = backHold.current;
+      if (depth > b.depth && tappingIn(() => frameEl.current)) b.given += depth - b.depth;
+      b.depth = depth;
+      b.given = Math.min(b.given, depth);
+      setBackHeld(b.given > 0);
+    }),
     // every vault this device holds (the Vault applet's words: modules/vaults.ts), and what reaches each
     ...(vaultsModule ? [vaultsModule] : []),
   ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -552,33 +560,24 @@ export default function AppletScreen() {
       setRecheck((n) => n + 1);
     }
   }, [kept.shown]); // eslint-disable-line react-hooks/exhaustive-deps
-  // While the applet holds Back, an entry of the same address sits above it in history: the app's Back (the bar's ‹ goes
-  // one step back) and a phone's Back both take that entry, and the applet is told instead of left. It says whether it
-  // still holds Back after each, and the entry is put back; when it lets go, the entry goes. Only on its own screen,
-  // shown: a Back taken elsewhere (another address) is not its.
-  const backTop = (st: unknown) => !!subject && (st as { appletBack?: string } | null)?.appletBack === subject;
-  const backAt = useRef<string | null>(null), backLeaving = useRef(false), backWasTop = useRef(backTop(location.state));
-  useEffect(() => {
-    const top = backTop(location.state);
-    if (backWasTop.current && !top && !backLeaving.current && backHeld.held && location.pathname === backAt.current) sessionNow.current?.sendEvent("back", {});
-    backLeaving.current = false;
-    backWasTop.current = top;
-  }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!subject || !kept.shown) return;
-    const top = backTop(location.state);
-    if (backHeld.held && !top) {
-      backAt.current = location.pathname;
-      navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...((location.state as object | null) ?? {}), appletBack: subject } });
-    } else if (!backHeld.held && top) { backLeaving.current = true; navigate(-1); }
-  }, [backHeld, kept.shown, subject]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Give this Back to the applet, when it holds one it was given: true when it took it. */
+  const backToApplet = () => {
+    const b = backHold.current;
+    if (!kept.shown || b.given <= 0 || !sessionNow.current) return false;
+    b.given -= 1;
+    setBackHeld(b.given > 0);
+    sessionNow.current.sendEvent("back", {});
+    return true;
+  };
+  // Android's Back, while it holds one (shell/nativeBack.ts); else the webview goes back, as before
+  useEffect(() => (backHeld && kept.shown ? holdNativeBack(() => { if (!backToApplet()) backOrLauncher((to, o) => (typeof to === "number" ? navigate(to) : navigate(to, o))); }) : undefined), [backHeld, kept.shown]); // eslint-disable-line react-hooks/exhaustive-deps
   // a grant changed elsewhere (revoked in Settings while this was kept): drawn again, so it stops at once
   useEffect(() => grants.onChange(bump), []); // eslint-disable-line react-hooks/exhaustive-deps
   const tap = (f: () => void) => (e: React.MouseEvent) => { if (e.isTrusted) f(); };
 
   if (!rec) return <NoVault />;
   // Back returns where the person came from; on the first screen of a start, to the launcher
-  const back = backOrLauncher;
+  const back = (nav: Parameters<typeof backOrLauncher>[0]) => { if (!backToApplet()) backOrLauncher(nav); };
   const plainNote = note ? <Link to={`${noteHref(rec.key, note.id)}?with=vault`}>Open {titleOf(note)} in the vault view</Link> : null;
   const theirsLabel = notMine ? ` · ${rec.vault}'s` : "";
   const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu} />{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;

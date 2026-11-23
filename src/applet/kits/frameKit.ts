@@ -10,7 +10,7 @@
 //                                      running while the person is elsewhere (shell/kept.tsx); hidden, it gets no tap,
 //                                      and what only a person looking should do (mark a message read) waits.
 //   uni.frameFetch(url, init)        → fetch over the frame (pfr envelope), what VaultClient uses
-//   uni.onBack(cb)                   → while held, the app's Back (its bar's ‹, a phone's Back) calls the newest cb rather
+//   uni.onBack(cb)                   → while held, the app's Back (its bar's ‹, Android's Back) calls the newest cb rather
 //                                      than leaving: an applet's own screens close first (modules/back.ts). Returns off()
 //   uni.onFresh(cb)                  → cb() when the vault's answer to a read differs from what it was answered with:
 //                                      while one is listening, the shell may answer a read at once from what it read
@@ -51,8 +51,8 @@
 export const FRAME_KIT = String.raw`(function () {
   var pending = {}, fetches = {}, n = 0, themeCbs = [], openCbs = [], propsCbs = [], theme = null, opened = null, props = {}, readyRes;
   var svcSubs = {}, vaultWatches = {}, svcStatus = [], launchCbs = [], shownNow = true, shownCbs = [], freshCbs = [], backCbs = [];
-  // whether it holds Back (onBack): the shell is told each change, and after each Back it hands over
-  function holdBack() { call("back", "hold", { held: backCbs.length > 0 }).catch(function () {}); }
+  // how many it holds Back for (onBack): the shell is told each change (modules/back.ts)
+  function holdBack() { call("back", "hold", { depth: backCbs.length }).catch(function () {}); }
   // saved state (docs/WRITE-AN-APPLET.md "Saved state"): what the shell handed back, and what changed since it was sent
   // savedOn: the app hands saved state to this frame (an applet's own screen; an embed's has none)
   var savedVals = {}, savedDirty = null, savedTimer = null, savedFirst = 0, savedOn = false, SAVE_MS = 250, SAVE_MAX_MS = 1000, SCROLL = "parachute:scroll";
@@ -262,6 +262,8 @@ export const FRAME_KIT = String.raw`(function () {
       if (m.data && m.data.props) applyProps(m.data.props);
       // booted while hidden: what read shown() before ready (a component's first render) hears the change
       if (m.data && typeof m.data.shown === "boolean" && m.data.shown !== shownNow) { shownNow = m.data.shown; shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); }
+      // a session made again while it holds Back: the new one is told
+      if (backCbs.length) holdBack();
       readyRes(m.data);
       if (m.data && m.data.open) applyOpen(m.data.open);
       if (m.data && m.data.page && (m.data.page.sized || m.data.page.embeds)) startMeasuring();
@@ -270,7 +272,7 @@ export const FRAME_KIT = String.raw`(function () {
     if (m.event === "props") { applyProps(m.data); return; }
     if (m.event === "theme") { applyTheme(m.data); return; }
     if (m.event === "open") { applyOpen(m.data); return; }
-    if (m.event === "back") { var b = backCbs[backCbs.length - 1]; if (b) { try { b(); } catch (e) {} } holdBack(); return; }
+    if (m.event === "back") { var b = backCbs[backCbs.length - 1]; if (b) { try { b(); } catch (e) {} } return; }
     if (m.event === "vault.fresh") { freshCbs.slice().forEach(function (f) { try { f(); } catch (e) {} }); return; }
     if (m.event === "launch") { launchCbs.slice().forEach(function (f) { try { f(m.data); } catch (e) {} }); return; }
     if (m.event === "shown") { shownNow = !!(m.data && m.data.shown); if (!shownNow) savedFlush(); shownCbs.slice().forEach(function (f) { try { f(shownNow); } catch (e) {} }); return; }
@@ -410,11 +412,11 @@ export const FRAME_KIT = String.raw`(function () {
       shownCbs.push(cb);
       return function () { var i = shownCbs.indexOf(cb); if (i >= 0) shownCbs.splice(i, 1); };
     },
-    // Back closes its own screen first: the newest cb is called (and the person stays), until none is held
+    // Back closes its own screen first: the newest cb is called (and the person stays)
     onBack: function (cb) {
       if (typeof cb !== "function") throw new TypeError("onBack needs a function");
-      backCbs.push(cb); if (backCbs.length === 1) holdBack();
-      return function () { var i = backCbs.indexOf(cb); if (i >= 0) { backCbs.splice(i, 1); if (!backCbs.length) holdBack(); } };
+      backCbs.push(cb); holdBack();
+      return function () { var i = backCbs.indexOf(cb); if (i >= 0) { backCbs.splice(i, 1); holdBack(); } };
     },
     onFresh: function (cb) {
       if (typeof cb !== "function") throw new TypeError("onFresh needs a function");
