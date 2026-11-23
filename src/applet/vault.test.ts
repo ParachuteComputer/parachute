@@ -492,6 +492,26 @@ describe("the hub's query words, kept to the folders", () => {
     expect(next.find((n) => n.id === target)?.content).toBe("after");
   });
 
+  it("a write of its own while a page is still being read: that page keeps nothing for the next", async () => {
+    for (let i = 0; i < 120; i++) notes.push({ id: `y${String(i).padStart(3, "0")}`, path: `Recipes/Y ${i}`, content: "before", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    const words = "order_by=created_at&sort=asc&include_content=true&include_links=true&limit=10";
+    const all = (await frameOn(hub).get(`/api/notes?${words.replace("limit=10", "limit=30")}&offset=0`)).body as { id: string }[];
+    const target = all[15].id;
+    // a hub that reads the first list page, then holds its answer until let go
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => { release = r; });
+    let hold = true;
+    const slow: VaultDeps = { ...hub, async query(prefix, q) { const rows = await hub.query!(prefix, q); if (hold) { hold = false; await held; } return rows; } };
+    const f = frameOn(slow);
+    const first = f.get(`/api/notes?${words}&offset=0`);
+    await new Promise((r) => setTimeout(r, 5));
+    expect((await f.send({ method: "PATCH", path: `/api/notes/${target}`, body: JSON.stringify({ content: "after", if_updated_at: "2026-11-01" }) })).status).toBe(200);
+    release();
+    await first;
+    const next = (await f.get(`/api/notes?${words}&offset=10`)).body as { id: string; content: string }[];
+    expect(next.find((n) => n.id === target)?.content).toBe("after");
+  });
+
   it("a page that fails leaves the list where it was: asked again, it goes on, nothing missed", async () => {
     for (let i = 0; i < 200; i++) notes.push({ id: `d${String(i).padStart(3, "0")}`, path: `Recipes/D ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
     const words = "order_by=created_at&sort=asc&include_links=true&limit=50";

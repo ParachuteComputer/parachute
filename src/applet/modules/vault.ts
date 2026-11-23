@@ -205,6 +205,8 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
   /** Where each list read in pages stopped, by its words and the offset its last page ended at (one folder, no search;
    *  the last few), kept a minute: its next page goes on from there. */
   const resumes = new Map<string, Resume>();
+  /** Writes of its own so far: a list page that began before one keeps no resume (what it read may be older). */
+  let writes = 0;
   const remember = (key: string, note: VaultNote) => {
     cache.delete(key);
     cache.set(key, { at: now(), note });
@@ -290,6 +292,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     const bound = ((search ? 1 : Math.ceil(want / size)) + EXTRA_PAGES) * size;
     // its own copy: a call that fails puts the resume back as it was, for the kit's retry
     const seen = new Set<string>(go?.seen);
+    const writesAtStart = writes;
     const out: (VaultNote & { path: string })[] = [];
     try {
       for (const p of prefixes) {
@@ -320,7 +323,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         out.push(...mine.slice(0, want - from));
         // a page that came back short: where its list stands isn't the offset the next page will ask for; that one
         // reads from the start
-        if (key !== null && from + mine.length >= want) {
+        if (key !== null && from + mine.length >= want && writes === writesAtStart) {
           const next = `${key}@${want}`;
           resumes.delete(next);
           for (const [k, r] of resumes) if (now() - r.time >= RESUME_TTL_MS) resumes.delete(k);
@@ -329,7 +332,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         }
       }
     } catch (e) {
-      if (go && slot !== null && !resumes.has(slot)) {
+      if (go && slot !== null && !resumes.has(slot) && writes === writesAtStart) {
         resumes.set(slot, go);
         while (resumes.size > RESUMES_MAX) resumes.delete(resumes.keys().next().value as string);
       }
@@ -479,7 +482,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
   }
 
   // a write of its own: the notes it keeps for its lists going on may be older now, so those lists read from the start
-  const forget = (...refs: (string | null | undefined)[]) => { for (const r of refs) if (r) cache.delete(r); resumes.clear(); };
+  const forget = (...refs: (string | null | undefined)[]) => { for (const r of refs) if (r) cache.delete(r); resumes.clear(); writes++; };
 
   /** POST /api/notes {path, content, types?, tags?, metadata?}: a new record inside a folder the grant lets it add to. */
   async function create(body: string | null, scopes: Resolved, ctx: CallCtx): Promise<FetchResult> {
