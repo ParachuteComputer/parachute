@@ -631,6 +631,8 @@ export default function Room({ service, room, name: named, at, readAt, onRead, o
   useEffect(() => { if (!newest || !loaded || !looking) return; onReadNow.current?.(newest.created_at); if (atBottom.current) toBottom(); }, [newest?.id, loaded, looking]);
 
   const loadOlder = async () => {
+    // asked for older lines: they land above, and the talk doesn't go to its foot for them
+    atBottom.current = false;
     setOlder("loading");
     const oldest = all[0]?.created_at ?? now();
     const got = await relay.query([{ kinds: [9], "#h": [room], until: oldest - 1, limit: 100 }]).catch(() => []);
