@@ -5,7 +5,7 @@
 //   large    the answer was bigger than the app takes from someone else's vault
 //   other    anything else (a 5xx, an answer that couldn't be read): the screen's own words and the details
 import { VaultAuthError, VaultPermissionError, VaultServerError, VaultUnreachableError } from "@openparachute/surface-client";
-import { signInState } from "./client";
+import { lastRefreshFailure, signInState } from "./client";
 import { TooLargeError } from "./limited";
 import type { VaultRecord } from "./store";
 
@@ -28,4 +28,12 @@ export async function settled(rec: Pick<VaultRecord, "key">, f: Failure): Promis
   if (f !== "offline") return f;
   const s = await signInState(rec.key);
   return s === "refused" ? "refused" : s === "alive" ? "alive" : "offline";
+}
+
+/** The same, from what the app already knows and asking nothing: a read that reached no hub counts as a refused sign-in
+ *  when this vault's last refresh was refused. (Refreshing to find out retires the sign-in on core 0.9 and is the
+ *  person's to ask for, with Try again: `settled`.) */
+export function failureNow(rec: Pick<VaultRecord, "key">, e: unknown): Failure {
+  const f = failureOf(e);
+  return f === "offline" && lastRefreshFailure(rec.key) === "refused" ? "refused" : f;
 }

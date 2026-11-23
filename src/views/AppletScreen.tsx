@@ -92,7 +92,7 @@ import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
 import { inParachuteSpace, officialFace, officialNow, officialOf } from "../applet/parachuteSource";
-import { failureOf, settled, type Failure } from "../vault/failure";
+import { failureNow, settled, type Failure } from "../vault/failure";
 import { siteOf } from "../vault/site";
 
 const grants = deviceGrants();
@@ -200,8 +200,6 @@ export default function AppletScreen() {
   const kept = useKept();
   // shown again after being kept hidden: its note is read again (below), quietly while nothing changed
   const [recheck, setRecheck] = useState(0);
-  // a failed read whose sign-in the hub renewed is tried once more, not again and again
-  const renewed = useRef(false);
   const rechecked = useRef(0);
   const was = useRef({ loaded, keys });
   was.current = { loaded, keys };
@@ -286,18 +284,13 @@ export default function AppletScreen() {
         if (!on) return;
         // a reload that isn't a quiet recheck (another note asked of it, say) reads the approvals again, and waits for them
         if (!quiet) { setSigned(null); setWaitedFor(null); }
-        renewed.current = false;
         setLoaded({ state: "ok", entry: a.entry, official: !!o, page, source: { kind, text: source }, imports, note, from, asks, now });
         setKeys({ scope, html: hash });
         setBrought(pointer);
       } catch (e) {
         // a recheck the vault couldn't answer (offline a moment) leaves the running screen as it is
         if (!on || quiet) return;
-        // a read that reached no hub may be a refused sign-in the browser couldn't read; one the hub renewed is read once more
-        const f = await settled(rec, failureOf(e)).catch(() => "other" as const);
-        if (!on) return;
-        if (f === "alive" && !renewed.current) { renewed.current = true; setRecheck((n) => n + 1); return; }
-        setLoaded({ state: "error", error: e instanceof Error ? e.message : "the vault couldn't be read", failure: f === "alive" ? "offline" : f });
+        setLoaded({ state: "error", error: e instanceof Error ? e.message : "the vault couldn't be read", failure: failureNow(rec, e) });
       }
     })();
     return () => { on = false; };
@@ -601,6 +594,14 @@ export default function AppletScreen() {
   if (loaded.state === "loading" || (loaded.state === "ok" && !keys)) return shell(<p className="quiet" role="status">Opening…</p>);
   // a vault the app can't reach or whose sign-in was refused: what is wrong and what to do, in plain words; the hub's own
   // answer (an address, an id) under Details for anything else
+  // Try again: a read that reached no hub may have been a refused sign-in the browser couldn't read (core 0.9): the
+  // sign-in is asked first, at the person's tap only (a refresh retires the one before)
+  const tryAgain = async (f: Failure) => {
+    if (!rec) return;
+    const now = await settled(rec, f).catch(() => f);
+    if (now === "refused" && f !== "refused") setLoaded({ state: "error", error: "this device's sign-in was refused", failure: "refused" });
+    else setRecheck((n) => n + 1);
+  };
   if (loaded.state === "error" && rec && (loaded.failure === "offline" || loaded.failure === "refused")) {
     const which = officialOf(appletId), isHome = homeVault()?.key === rec.key;
     const runs = which ? ` ${officialFace(which).name} runs there.` : "";
@@ -610,7 +611,7 @@ export default function AppletScreen() {
           <p className="small quiet">Its Parachute is {siteOf(rec.issuer)}.{isHome ? <> In <Link to="/settings">Settings</Link> you can make another vault your home.</> : null}</p></>
         : <><p>{rec.vault} on {siteOf(rec.issuer)} wants you to sign in again.{runs}</p>
           <p className="small quiet"><Link to={`/add?hub=${encodeURIComponent(originOf(rec.issuer))}`}>Sign in again</Link>{isHome ? <>, or make another vault your home in <Link to="/settings">Settings</Link></> : null}.</p></>}
-      <p><button type="button" className="quiet-button" onClick={() => { renewed.current = false; setRecheck((n) => n + 1); }}>Try again</button></p>
+      <p><button type="button" className="quiet-button" onClick={() => void tryAgain(loaded.failure)}>Try again</button></p>
     </div>);
   }
   if (loaded.state === "error") return shell(<div role="alert"><p className="error">Couldn't open this applet.</p><details className="small"><summary>Details</summary>{loaded.error}</details></div>);
