@@ -10,7 +10,8 @@
 
 @layer parachute.base {
   :where(button, input, select, textarea, pre, table):where(:not([class^="pa-"], [class*=" pa-"], .rn, .rn *, .pa-note *)) { box-sizing: border-box; }  /* only what the base draws: an applet's own boxes keep the browser's sizing */
-  :where(html) { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  /* a tap is a click at once: Android's webview otherwise waits ~300 ms to see whether it is a double tap (pinch still zooms) */
+  :where(html) { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
   /* on each control, so an applet's own --accent (set on body or a wrapper) reaches it */
   :where(input, progress, meter) { accent-color: var(--accent); }
   :where(body) { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-body)/var(--leading) var(--sans); -webkit-tap-highlight-color: transparent; }

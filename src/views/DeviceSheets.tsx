@@ -1,8 +1,10 @@
 // The shell's own sheets over a running applet for what it asks of this device (docs/design/KEYRING.md "Voice, files,
 // links, storage"): the recorder (`voice.record`) and the file picker (`app.pick`). Both run in the shell's document,
-// never the frame: the microphone opens only when the person presses Record, and the applet gets the recording only
-// on Send, or only the files the person chose. Beside useShellSheets (ShellSheets.tsx), which draws the approvals'.
-// Every word is the app's. Nothing pulses or loops: the recorder says what it is doing in words and a running time.
+// never the frame. The recorder opens only on the person's tap in the applet (AppletScreen's tappingIn: live user
+// activation, the focus in that applet's frame) and starts recording at once, as the Uni app's microphone button does;
+// the applet gets the recording only on Send. Beside useShellSheets (ShellSheets.tsx), which draws the approvals'.
+// Every word is the app's. Nothing pulses or loops: the recorder says what it is doing in words, a running time, and
+// the shape of what it has heard so far.
 import { useEffect, useRef, useState } from "react";
 import { ContractError, ERROR_CODES } from "../applet/contract";
 import { bareName, FILE_MAX, mediaType, PICK_MAX } from "../applet/files";
@@ -22,105 +24,179 @@ export function recorderMime(supported: (t: string) => boolean): string {
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const canRecord = () => typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getUserMedia === "function" && typeof MediaRecorder !== "undefined";
 
-type Phase = "ready" | "starting" | "recording" | "stopped" | "failed";
+type Phase = "starting" | "recording" | "stopped" | "failed";
+/** Why a recording stopped before Send: the app went to the background (the screen locked, another app came to the
+ *  front), it reached the most it may be, or the microphone went (a call took it, say). What was recorded is kept. */
+type Stopped = "away" | "max" | "mic";
+const STOPPED: Record<Stopped, string> = {
+  away: "Stopped when Parachute went to the background.",
+  max: "Stopped at the most it may be.",
+  mic: "The microphone stopped.",
+};
+/** How long after the sheet opens Send waits: a quick second tap on the applet's button can't send a blink of sound. */
+export const SEND_ARM_MS = 400;
+/** The shape drawn while it records: one bar per tenth of a second, the newest at the right. */
+const BARS = 48, BAR_MS = 100;
+
+/** How loud a moment is, 0 to 1, from a frame of samples: its RMS on a gentle curve, so speech fills the bar. */
+export function levelOf(samples: Float32Array): number {
+  let sum = 0;
+  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+  const rms = Math.sqrt(sum / Math.max(1, samples.length));
+  return Math.min(1, Math.sqrt(rms * 4));
+}
 
 function RecorderSheet({ name, max, done }: { name: string; max: number; done: (r: Recording | null) => void }) {
-  const [phase, setPhase] = useState<Phase>(canRecord() ? "ready" : "failed");
+  const [phase, setPhase] = useState<Phase>(canRecord() ? "starting" : "failed");
   const [why, setWhy] = useState(canRecord() ? "" : "This device can't record here: the microphone isn't open to Parachute on it.");
+  const [stopped, setStopped] = useState<Stopped | null>(null);
   const [secs, setSecs] = useState(0);
-  const rec = useRef<{ stream: MediaStream; recorder: MediaRecorder; started: number; stoppedAt: number | null } | null>(null);
+  const [levels, setLevels] = useState<number[]>([]);
+  const rec = useRef<{ stream: MediaStream; recorder: MediaRecorder; started: number; stoppedAt: number | null; audio: AudioContext | null } | null>(null);
   const result = useRef<{ blob: Blob; type: string; duration: number } | null>(null);
+  // Send pressed while it records: it sends the moment the recorder has handed over its last part
+  const sendOnStop = useRef(false);
   const over = useRef(false);
   const release = () => {
     const r = rec.current;
     if (!r) return;
     try { if (r.recorder.state !== "inactive") r.recorder.stop(); } catch { /* already stopped */ }
     r.stream.getTracks().forEach((t) => t.stop());
+    void r.audio?.close().catch(() => {});
   };
-  // the microphone is let go whenever the sheet goes (Send, Cancel, the applet's screen closing)
-  useEffect(() => () => { over.current = true; release(); }, []);
-
-  const start = async () => {
-    setPhase("starting");
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-    } catch (e) {
-      if (over.current) return;
-      setWhy((e as { name?: string })?.name === "NotAllowedError" ? "Parachute isn't allowed to use the microphone. Allow it in this device's settings, then try again." : "The microphone couldn't be opened.");
-      setPhase("failed");
-      return;
-    }
-    if (over.current) { stream.getTracks().forEach((t) => t.stop()); return; }
-    const mime = recorderMime((t) => MediaRecorder.isTypeSupported(t));
-    let recorder: MediaRecorder;
-    try { recorder = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32000 }); } catch {
-      stream.getTracks().forEach((t) => t.stop());
-      setWhy("This device can't record in a format Parachute sends."); setPhase("failed"); return;
-    }
-    const chunks: Blob[] = [];
-    const r = { stream, recorder, started: performance.now(), stoppedAt: null as number | null };
-    recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-    recorder.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop());
-      const type = mediaType(recorder.mimeType || mime) ?? "audio/webm";
-      const duration = Math.min(max, ((r.stoppedAt ?? performance.now()) - r.started) / 1000);
-      result.current = { blob: new Blob(chunks, { type }), type, duration };
-      if (!over.current) setPhase("stopped");
-    };
-    rec.current = r;
-    recorder.start(1000);
-    setSecs(0);
-    setPhase("recording");
-  };
-  const stop = () => {
-    const r = rec.current;
-    if (!r || r.recorder.state === "inactive") return;
-    r.stoppedAt = performance.now();
-    r.recorder.stop();
-  };
-  // the running time, and the stop at the most it may be
-  useEffect(() => {
-    if (phase !== "recording") return;
-    const t = setInterval(() => {
-      const r = rec.current;
-      if (!r) return;
-      const s = (performance.now() - r.started) / 1000;
-      setSecs(Math.min(max, s));
-      if (s >= max) stop();
-    }, 250);
-    return () => clearInterval(t);
-  }, [phase, max]); // eslint-disable-line react-hooks/exhaustive-deps
-  const cancel = () => { over.current = true; release(); done(null); };
-  const send = async () => {
+  const hand = async () => {
     const r = result.current;
-    if (!r) return;
+    if (!r || over.current) return;
     over.current = true;
     done({ bytes: await r.blob.arrayBuffer(), type: r.type, duration: Math.round(r.duration * 10) / 10 });
   };
-  const recorded = result.current ? result.current.duration : secs;
-  // Record, Stop and Send sit in one place: each waits a moment after the one before, so taps in a row can't run
-  // through all three
+  const stop = (reason: Stopped | null) => {
+    const r = rec.current;
+    if (!r || r.recorder.state === "inactive") return;
+    r.stoppedAt = performance.now();
+    if (reason) setStopped(reason);
+    r.recorder.stop();
+  };
+
+  // it records from the moment the sheet opens: the tap that opened it was the person's, in the applet (tappingIn)
+  useEffect(() => {
+    if (!canRecord()) return;
+    over.current = false;
+    let live = true;
+    void (async () => {
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      } catch (e) {
+        if (!live) return;
+        setWhy((e as { name?: string })?.name === "NotAllowedError" ? "Parachute isn't allowed to use the microphone. Allow it in this device's settings, then try again." : "The microphone couldn't be opened.");
+        setPhase("failed");
+        return;
+      }
+      if (!live) { stream.getTracks().forEach((t) => t.stop()); return; }
+      const mime = recorderMime((t) => MediaRecorder.isTypeSupported(t));
+      let recorder: MediaRecorder;
+      try { recorder = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32000 }); } catch {
+        stream.getTracks().forEach((t) => t.stop());
+        setWhy("This device can't record in a format Parachute sends."); setPhase("failed"); return;
+      }
+      const chunks: Blob[] = [];
+      const r = { stream, recorder, started: performance.now(), stoppedAt: null as number | null, audio: null as AudioContext | null };
+      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        void r.audio?.close().catch(() => {});
+        const type = mediaType(recorder.mimeType || mime) ?? "audio/webm";
+        const duration = Math.min(max, ((r.stoppedAt ?? performance.now()) - r.started) / 1000);
+        result.current = { blob: new Blob(chunks, { type }), type, duration };
+        if (over.current) return;
+        setSecs(duration);
+        setPhase("stopped");
+        if (sendOnStop.current) void hand();
+      };
+      // the microphone taken away (a call, another app): stop, and keep what was heard
+      for (const t of stream.getAudioTracks()) t.addEventListener("ended", () => stop("mic"));
+      // the shape of what it hears: an analyser beside the recorder, on the same stream (nothing more is opened)
+      try {
+        const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (AC) {
+          const audio = new AC();
+          r.audio = audio;
+          const analyser = audio.createAnalyser();
+          analyser.fftSize = 1024;
+          audio.createMediaStreamSource(stream).connect(analyser);
+          (r as typeof r & { analyser?: AnalyserNode }).analyser = analyser;
+          if (audio.state === "suspended") void audio.resume().catch(() => {});
+        }
+      } catch { /* no shape, only the time */ }
+      rec.current = r;
+      recorder.start(1000);
+      setSecs(0);
+      setPhase("recording");
+    })();
+    // the microphone is let go whenever the sheet goes (Send, Cancel, the applet's screen closing)
+    return () => { live = false; over.current = true; release(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // away from the app (the screen locked, another app in front): stop and keep it, for Send or Cancel on coming back
+  useEffect(() => {
+    if (phase !== "recording") return;
+    const away = () => { if (document.visibilityState === "hidden") stop("away"); };
+    away(); // gone already while the microphone opened
+    const gone = () => stop("away");
+    document.addEventListener("visibilitychange", away);
+    addEventListener("pagehide", gone);
+    return () => { document.removeEventListener("visibilitychange", away); removeEventListener("pagehide", gone); };
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the running time and the shape, a bar each tenth of a second; and the stop at the most it may be
+  useEffect(() => {
+    if (phase !== "recording") return;
+    const r = rec.current as (typeof rec.current & { analyser?: AnalyserNode }) | null;
+    const frame = r?.analyser ? new Float32Array(r.analyser.fftSize) : null;
+    const t = setInterval(() => {
+      if (!r) return;
+      const s = (performance.now() - r.started) / 1000;
+      setSecs(Math.min(max, s));
+      if (r.analyser && frame) { r.analyser.getFloatTimeDomainData(frame); const l = levelOf(frame); setLevels((ls) => [...ls.slice(1 - BARS), l]); }
+      if (s >= max) stop("max");
+    }, BAR_MS);
+    return () => clearInterval(t);
+  }, [phase, max]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cancel = () => { over.current = true; release(); done(null); };
+  const [sending, setSending] = useState(false);
+  const send = () => {
+    setSending(true);
+    // stopped already (its handler may have run a moment before this draws): hand it over now
+    if (result.current) { void hand(); return; }
+    sendOnStop.current = true;
+    stop(null);
+  };
   const [armed, setArmed] = useState(false);
-  useEffect(() => { setArmed(false); const t = setTimeout(() => setArmed(true), 600); return () => clearTimeout(t); }, [phase]);
+  useEffect(() => { const t = setTimeout(() => setArmed(true), SEND_ARM_MS); return () => clearTimeout(t); }, []);
+  const live = phase === "recording";
   return (
     <div className="sheet-scrim sheet-over-frames" role="presentation">
-      <section className="sheet device-sheet" role="dialog" aria-modal="true" aria-label={`${name} asks for a recording`}>
-        <h2>{name} asks for a recording</h2>
-        {phase === "ready" && <p className="quiet">Nothing is recorded until you press Record. {name} gets the recording only when you press Send.</p>}
-        {phase === "starting" && <p className="quiet">Opening the microphone…</p>}
+      <section className="sheet device-sheet recorder" role="dialog" aria-modal="true" aria-label={`Recording for ${name}`}>
+        <h2>Recording for {name}</h2>
+        {phase === "starting" && <p className="quiet" role="status">Opening the microphone…</p>}
         {(phase === "recording" || phase === "stopped") && (
-          <p className="record-time" role="timer" aria-label={phase === "recording" ? "Recording time" : "Recorded time"}>
-            <strong>{phase === "recording" ? "Recording" : "Recorded"}</strong> {clock(recorded)} <span className="quiet">of {clock(max)}</span>
+          <p className="record-time" role="timer" aria-label={live ? "Recording time" : "Recorded time"}>
+            <strong>{live ? "Recording" : "Recorded"}</strong> {clock(secs)} <span className="quiet">of {clock(max)}</span>
           </p>
         )}
-        {phase === "stopped" && <p className="quiet">Send gives it to {name}. Cancel throws it away.</p>}
+        {(phase === "recording" || phase === "stopped") && levels.length > 0 && (
+          <svg className="record-shape" viewBox={`0 0 ${BARS * 3} 24`} preserveAspectRatio="none" aria-hidden="true">
+            {levels.map((l, i) => { const h = Math.max(1.5, l * 24); return <rect key={i} x={(BARS - levels.length + i) * 3} y={(24 - h) / 2} width="2" height={h} rx="1" />; })}
+          </svg>
+        )}
+        {phase === "stopped" && stopped && <p className="quiet" role="status">{STOPPED[stopped]} What was recorded is here.</p>}
+        {phase !== "failed" && <p className="quiet small">{name} gets it only when you press Send.</p>}
         {phase === "failed" && <p role="alert">{why}</p>}
         <div className="grant-actions">
           <button type="button" className="quiet-button" onClick={cancel}>{phase === "failed" ? "Close" : "Cancel"}</button>
-          {phase === "ready" && <button type="button" className="primary" disabled={!armed} onClick={() => void start()}>Record</button>}
-          {phase === "recording" && <button type="button" className="primary" disabled={!armed} onClick={stop}>Stop</button>}
-          {phase === "stopped" && <button type="button" className="primary" disabled={!armed} onClick={() => void send()}>Send</button>}
+          {phase !== "failed" && <button type="button" className="primary" disabled={!armed || phase === "starting" || sending} onClick={send}>Send</button>}
         </div>
       </section>
     </div>

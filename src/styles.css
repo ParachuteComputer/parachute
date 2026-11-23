@@ -21,7 +21,8 @@
 * { box-sizing: border-box; }
 /* the fallbacks are the built-in theme's, for a paint before the shell sets the tokens */
 /* checkboxes, radios and ranges in the theme's accent, never the browser's blue */
-html { accent-color: var(--accent, #36627d); }
+/* a tap is a click at once: Android's webview otherwise waits ~300 ms to see whether it is a double tap (pinch still zooms) */
+html { accent-color: var(--accent, #36627d); touch-action: manipulation; }
 html, body { margin: 0; background: var(--bg, #fbf8f1); color: var(--text, #27221d); font: var(--size, 16px)/var(--leading, 1.45) var(--sans, system-ui, sans-serif); -webkit-tap-highlight-color: transparent; font-variant-emoji: text; }
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 a { color: var(--accent); }
@@ -183,8 +184,9 @@ fieldset.plain legend { padding: 0; }
 .with-bar .applet-screen .grant-card > .grant-actions { bottom: calc(var(--foot-h) + env(safe-area-inset-bottom)); }
 .passcode-line { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
 .grant-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
-/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the sheet rises once; in it nothing moves but the figures */
+/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the sheet rises once; in it nothing moves but the figures and the shape of what it hears, drawn as it comes */
 .record-time { margin: 6px 0; font-size: var(--fs-head); font-variant-numeric: tabular-nums; }
+.record-shape { display: block; width: 100%; height: 28px; margin: 2px 0 8px; fill: var(--text); }
 .notice { padding: 8px 12px; border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); background: var(--card-fill); margin: 0 0 8px; font-size: var(--fs-small); }
 .check-list { list-style: none; padding: 0; margin: 6px 0 0; font-size: var(--fs-small); columns: 2; }
 .check-list .fail { color: var(--danger); }
