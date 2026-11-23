@@ -62,8 +62,8 @@ import { vaultsDeps } from "../shell/vaultsDeps";
 import { createStorageModule } from "../applet/modules/storage";
 import { storageFor } from "../shell/device";
 import { deviceSaved, forgetSaved } from "../shell/saved";
-import { asksOf } from "../applet/approvals";
-import { approvalFor, floorOf, ownKey, passcodeHere, signApproval, signsHere, subjectOf as approvalSubject, takeBack } from "../applet/approvalStore";
+import { asksOf, dOf } from "../applet/approvals";
+import { approvalFor, floorOf, ownKey, passcodeHere, signApproval, signPick, signsHere, subjectOf as approvalSubject, takeBack } from "../applet/approvalStore";
 import { approvedOtherLine, changedLine, lastCodeChange, type NoteNow, type Version } from "../applet/changedBy";
 import { versionsOf } from "../vault/client";
 import { sha256Hex } from "../applet/needs";
@@ -76,6 +76,10 @@ import { useDeviceSheets } from "./DeviceSheets";
 import { createServicesModule } from "../applet/modules/services";
 import { createBroker, type Broker } from "../services/broker";
 import { useShellSheets } from "./ShellSheets";
+import { useVaultPick, refOf } from "./useVaultPick";
+import { hideLine, lineHidden, MissingLine, PickLine, PickSheet, PickTicks, namesOf, pickChoices, reachLine } from "./VaultPick";
+import { pickToSign, type VaultRef } from "../applet/vaultPick";
+import { setDevicePick } from "../applet/pickStore";
 import { lineOptions, useKeyring } from "../services/keyring";
 import { launchOf, vaultLaunchOf } from "../services/notifyLink";
 import { nativeNow } from "../services/native";
@@ -136,6 +140,8 @@ type Loaded = { state: "loading" } | { state: "error"; error: string } | { state
       official: boolean; page: string | null; source: { kind: CodeKind; text: string }; imports: Imported[]; note: Note | null; from: string[];
       /** the hash of what it asks as written, the same on every device (approvals.ts `asksHash`) */
       asks: string;
+      /** that hash with a pick in it (docs/ACCESS.md proposal 5): the pick is read from the approval first */
+      asksFor: (vaults: VaultRef[] | null) => Promise<string>;
       /** its note as the hub says it is now: its content's hash, who made it and wrote it last (applet/changedBy.ts) */
       now: NoteNow };
 
@@ -274,7 +280,9 @@ export default function AppletScreen() {
         if (kind === "html") page = source;
         else if (!late && !imports.length) page = appletPage(kind, source, code.compiled?.js ?? null, a.entry.manifest.name);
         else if (!late) { const built = await buildPage(kind, source, imports, a.entry.manifest.name); if (!on) return; if (!built.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${built.error}` }); return; } page = built.page; }
-        const asks = await asksOf(approvalSubject(rec, n.id, a.entry.manifest.id), a.entry, (n.metadata ?? {}) as Record<string, unknown>, await embedTargets(a.entry.embeds).catch(() => ["unread"]));
+        const targets = await embedTargets(a.entry.embeds).catch(() => ["unread"]);
+        const asksFor = (vaults: VaultRef[] | null) => asksOf(approvalSubject(rec, n.id, a.entry.manifest.id), a.entry, (n.metadata ?? {}) as Record<string, unknown>, targets, vaults);
+        const asks = await asksFor(null);
         if (!on) return;
         const said = n as unknown as Record<string, unknown>;
         const str = (x: unknown) => (typeof x === "string" ? x : null);
@@ -282,7 +290,7 @@ export default function AppletScreen() {
         if (!on) return;
         // a reload that isn't a quiet recheck (another note asked of it, say) reads the approvals again, and waits for them
         if (!quiet) { setSigned(null); setWaitedFor(null); }
-        setLoaded({ state: "ok", entry: a.entry, official: !!o, page, source: { kind, text: source }, imports, note, from, asks, now });
+        setLoaded({ state: "ok", entry: a.entry, official: !!o, page, source: { kind, text: source }, imports, note, from, asks, asksFor, now });
         setKeys({ scope, html: hash });
         setBrought(pointer);
       } catch (e) {
@@ -321,6 +329,11 @@ export default function AppletScreen() {
   const signedFor = entry && rec && keys && loaded.state === "ok" && !loaded.official ? `${keys.html}|${loaded.asks}` : null;
   const [signed, setSigned] = useState<{ for: string; d: Decision | null } | null>(null);
   const [signing, setSigning] = useState<string | null>(null);
+  // the sheet that changes what it reaches (and the vault it opens with ticked: Home's link to one it wasn't given)
+  const [picking, setPicking] = useState<{ add: VaultRef | null } | null>(null);
+  const [pickError, setPickError] = useState<string | null>(null);
+  // the card's ticks, before Allow
+  const [ticked, setTicked] = useState<VaultRef[] | null>(null);
   const [passcode, setPasscode] = useState("");
   const [needsPasscode, setNeedsPasscode] = useState(false);
   // asked again when the levels change (the open bundle's record raised them after this screen opened)
@@ -328,7 +341,8 @@ export default function AppletScreen() {
   useEffect(() => {
     if (!signedFor || !entry || !rec || loaded.state !== "ok" || !keys) return;
     let on = true;
-    void approvalFor(approvalSubject(rec, entry.noteId, entry.manifest.id), keys.html, loaded.asks).then((d) => { if (on) setSigned({ for: signedFor, d }); }, () => { if (on) setSigned({ for: signedFor, d: null }); });
+    // the asks' hash is taken with the pick the newest approval holds, read before it (docs/ACCESS.md proposal 5)
+    void approvalFor(approvalSubject(rec, entry.noteId, entry.manifest.id), keys.html, loaded.asksFor).then((d) => { if (on) setSigned({ for: signedFor, d }); }, () => { if (on) setSigned({ for: signedFor, d: null }); });
     return () => { on = false; };
   }, [signedFor, recheck]); // eslint-disable-line react-hooks/exhaustive-deps
   const signedNow = signed && signed.for === signedFor ? signed.d : undefined;
@@ -341,7 +355,20 @@ export default function AppletScreen() {
     const t = setTimeout(() => setWaitedFor(signedFor), APPROVALS_WAIT_MS);
     return () => clearTimeout(t);
   }, [signedFor]);
-  const approvalsRead = official || signedNow !== undefined || (!!signedFor && waitedFor === signedFor);
+  // the vaults it reaches (docs/ACCESS.md proposal 5): an applet whose `app` reaches across vaults reaches only its pick,
+  // read from the approval checked here (or kept on this device), else the home (and its own vault)
+  const approvalAt = rec && entry ? approvalSubject(rec, entry.noteId, entry.manifest.id) : null;
+  const pickNow = useVaultPick({ rec, entry, official, subject: approvalAt, signed: official ? null : signedNow, recheck });
+  // Parachute's own wait for their pick as an applet with a card waits for its approvals, up to the same time; then they
+  // start on the home alone, and the pick, once read, starts them again on it
+  const [pickWaited, setPickWaited] = useState<string | null>(null);
+  const pickFor = official && pickNow.asks && approvalAt ? dOf(approvalAt) : null;
+  useEffect(() => {
+    if (!pickFor) return;
+    const t = setTimeout(() => setPickWaited(pickFor), APPROVALS_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [pickFor]);
+  const approvalsRead = (official && (pickNow.read || pickWaited === pickFor)) || (!official && (signedNow !== undefined || (!!signedFor && waitedFor === signedFor)));
   // taken back on another device after it was allowed here, or a newer approval for other code (this code was put back
   // over it): it stops here too
   useEffect(() => {
@@ -467,12 +494,14 @@ export default function AppletScreen() {
     ? createVaultsModule(entry.app, vaultsDeps({ confirm: (q) => sheetsRef.current.confirm(q), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search,
       // what it manages is its own, and a key's secret is shown on the shell's sheet (vault/manage.ts, ShellSheets.tsx)
       applet: subjectOf(rec.key, entry.noteId), reveal: (k) => sheetsRef.current.reveal(k),
+      // only the vaults it was given (docs/ACCESS.md proposal 5), asked at each call
+      given: pickNow.given,
       // the shell's own picker, as `app.pick` opens it: only while the person taps in this applet
       // (a Notion export carries its images: up to the import's own limit, not an attachment's 25 MB)
       pick: (accept, multiple) => (tappingIn(() => frameEl.current) ? device.pick(accept, multiple, IMPORT_MAX, "Parachute reads it and writes it into this vault, under Notion/.") : Promise.reject(notTapped())),
       // Parachute's own Vault draws a record again when told: it may be answered from the copies kept of its reads
       ...(officialOf(entry.noteId) === "vault" ? { read: (vault: string, read: string) => { let m = vaultsReads.current.get(vault); if (!m) vaultsReads.current.set(vault, m = new Set()); if (m.size < 1000) m.add(read); } } : {}) }))
-    : null), [rec?.key, allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    : null), [rec?.key, allowedKey, pickNow.key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => vaultsModule?.stop(), [vaultsModule]);
   // left (another applet, the launcher, the shell's Back): whatever this applet was managing ends with it
   const managing = rec && entry ? subjectOf(rec.key, entry.noteId) : null;
@@ -482,7 +511,7 @@ export default function AppletScreen() {
   const router = useMemo(() => (rec && entry && reader ? createRouter([
     createVaultModule(vaultDeps(clientFor(rec), reader.client), { opens: entry.opens, name: rec.vault }),
     createThemeModule({ theme: tokensNow }),
-    createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current, device, () => findVault(rec.key), entry.manifest.allow.filter((r) => r.verbs.includes("read")).map((r) => r.path))),
+    createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current, device, () => findVault(rec.key), entry.manifest.allow.filter((r) => r.verbs.includes("read")).map((r) => r.path), pickNow.given)),
     // the microphone (manifest `reach: [voice]`) and a little storage on this device (`app: [storage]`): not_granted without
     createVoiceModule(!!entry.manifest.reach?.includes("voice"), { record: (max) => (tappingIn(() => frameEl.current) ? device.record(max) : Promise.reject(notTapped())) }),
     createStorageModule(entry.app.includes("storage"), storageFor(subjectOf(rec.key, entry.noteId))),
@@ -504,7 +533,7 @@ export default function AppletScreen() {
     }),
     // every vault this device holds (the Vault applet's words: modules/vaults.ts), and what reaches each
     ...(vaultsModule ? [vaultsModule] : []),
-  ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader]); // eslint-disable-line react-hooks/exhaustive-deps
+  ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader, pickNow.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
   const note = loaded.state === "ok" ? loaded.note : null;
@@ -576,6 +605,50 @@ export default function AppletScreen() {
   useEffect(() => grants.onChange(bump), []); // eslint-disable-line react-hooks/exhaustive-deps
   const tap = (f: () => void) => (e: React.MouseEvent) => { if (e.isTrusted) f(); };
 
+  // ── what it reaches (docs/ACCESS.md proposal 5) ──
+  // Save on the sheet, or Allow on the card: on a device with the person's key, a new approval signed after the unlock
+  // (Parachute's own: the pick alone; an applet with a card: this code and asks, with the pick in them), so every device
+  // follows it and nothing without the key can widen it; on a device without the key, kept here. Then a vault picked
+  // that this device doesn't hold is asked of its hub (one page). Returns the approval signed, if one was.
+  async function keepPick(ticked: VaultRef[], face?: string[]): Promise<Content | null> {
+    if (!rec || !entry || !keys || !approvalAt || loaded.state !== "ok") throw new Error("it isn't open");
+    const h = homeVault();
+    const toSign = pickToSign(ticked, h ? refOf(h) : null, official ? null : refOf(rec));
+    if (await signsHere()) {
+      const code = passcode && needsPasscode ? passcode : null;
+      const r = official ? await signPick(approvalAt, name, toSign, code)
+        : await signApproval({ subject: approvalAt, name, approved: true, code: keys.html, scope: await loaded.asksFor(toSign), face, passcode: code, runs: mode === "approved-code" ? "approved-code" : "sealed", vaults: toSign });
+      return JSON.parse(r.ev.content) as Content;
+    }
+    // a device that reads signed picks but can't sign one (an anchor alone): a pick kept here would count for nothing
+    if (pickNow.signed) throw new Error("Change it on a device that holds your key: this one reads the vaults you picked there");
+    setDevicePick(dOf(approvalAt), toSign);
+    return null;
+  }
+  const openPicked = (r: VaultRef) => void askVault({ issuer: r.hub, vault: r.vault }, "read", "open", `${location.pathname}${location.search}`)
+    .then((url) => window.location.assign(url), (e: unknown) => setPickError(e instanceof Error ? e.message : "Its hub didn't answer."));
+  const savePick = (ticked: VaultRef[]) => void (async () => {
+    setPickError(null);
+    let mine: Content | null;
+    try {
+      const was = signedNow && signedNow.run ? signedNow.content : null;
+      mine = await keepPick(ticked, was?.face ?? (subject ? grants.record(subject)?.asked?.face : undefined));
+    } catch (e) {
+      setPickError(`Not changed: ${(e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "it couldn't be signed").replace(/\.$/, "")}.`);
+      return;
+    }
+    // the approval just signed is the newest: it holds here at once, whatever the home's copy says yet
+    if (mine && !official && signedFor) setSigned({ for: signedFor, d: { run: true, content: mine } });
+    setPicking(null); setPasscode(""); pickNow.again(); setRecheck((x) => x + 1);
+    const first = ticked.find((r) => !listVaults().some((v) => refOf(v).hub === r.hub && v.vault === r.vault));
+    if (first) openPicked(first);
+  })();
+
+  // Settings' Change (`?vaults=change`) opens the sheet over the applet once it runs
+  const askedChange = params.get("vaults") === "change";
+  useEffect(() => { if (askedChange && pickNow.asks && granted) setPicking({ add: null }); }, [askedChange, pickNow.asks, granted]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [, setLineGone] = useState(0);
+
   if (!rec) return <NoVault />;
   // Back returns where the person came from; on the first screen of a start, to the launcher
   const back = (nav: Parameters<typeof backOrLauncher>[0]) => { if (!backToApplet()) backOrLauncher(nav); };
@@ -610,14 +683,20 @@ export default function AppletScreen() {
         hubAsk={covers(heldLevel(rec), appletLevel(entry.manifest)) ? null : { host: hostOf(rec.issuer), level: appletLevel(entry.manifest) }}
         approvedElsewhere={approvedElsewhere ? signedNow && signedNow.run ? signedNow.content.device ?? "another device" : null : null}
         signing={signing} history={{ changed: changeNow, other: otherApproved }}
+        pick={pickNow.asks && !approvedElsewhere ? <PickTicks choices={pickChoices()} ticked={ticked ?? pickNow.reach} onChange={setTicked} /> : undefined}
         onAllow={(asked) => void (async () => {
           // on a device with the person's key, Allow is an approval for every device: signed here, after the device
           // unlock (and the passcode, when one is set), and kept in the home vault. Approved elsewhere already: no new one
           let mine: Content | null = null;
-          if (!approvedElsewhere && await signsHere()) {
+          // what its ticks say, when it reaches across vaults: signed with the approval, or kept on this device
+          const h = homeVault();
+          const cardPick = pickNow.asks && !approvedElsewhere ? pickToSign(ticked ?? pickNow.reach, h ? refOf(h) : null, refOf(rec)) : null;
+          const signsNow = !approvedElsewhere && await signsHere();
+          if (pickNow.asks && !approvedElsewhere && !signsNow && approvalAt) setDevicePick(dOf(approvalAt), cardPick);
+          if (signsNow) {
             setSigning(null);
             try {
-              mine = JSON.parse((await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? loaded.asks : "", face: asked.face, passcode: needsPasscode && passcode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed" })).ev.content) as Content;
+              mine = JSON.parse((await signApproval({ subject: approvalSubject(rec, entry.noteId, entry.manifest.id), name, approved: true, code: keys.html, scope: loaded.state === "ok" ? await loaded.asksFor(cardPick) : "", face: asked.face, passcode: needsPasscode && passcode ? passcode : null, runs: mode === "approved-code" ? "approved-code" : "sealed", vaults: cardPick })).ev.content) as Content;
             } catch (e) {
               setSigning(`Not approved: ${(e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "it couldn't be signed").replace(/\.$/, "")}.`);
               return;
@@ -651,7 +730,7 @@ export default function AppletScreen() {
       // (applet/approvalStore.ts `takeBack`, as Revoke in Settings does).
       const seen = signedNow && (signedNow.run ? signedNow.content : signedNow.newest);
       const said = await takeBack(rec, entry.noteId, name, entry.manifest.id, seen?.n ?? null);
-      grants.revoke(subject); forgetSaved(subject); setSigned(null); setStarted(false); setHubError(said); bump(); setRecheck((n) => n + 1);
+      grants.revoke(subject); forgetSaved(subject); if (approvalAt) setDevicePick(dOf(approvalAt), null); setSigned(null); setStarted(false); setHubError(said); bump(); setRecheck((n) => n + 1);
       void giveBack(rec.key, `${location.pathname}${location.search}`);
     })();
   };
@@ -667,22 +746,41 @@ export default function AppletScreen() {
   </div>);
   // how it runs, and Stop and Revoke: in the bar's menu (⋯), so the applet has the screen
   const closeMenu = () => setMenu(false);
+  // over it, one line at most: a vault it was opened on that it wasn't given (Home's count of changes), a vault it was
+  // given that this device doesn't hold, or, for one of Parachute's own with no pick yet, what it reaches
+  const pickLines = () => {
+    if (!pickNow.asks || !approvalAt) return null;
+    const launched = launch && "vault" in launch ? findVault(launch.vault) : null;
+    if (launched && !pickNow.given(launched.key)) {
+      const ref = refOf(launched);
+      return <PickLine text={`${namesOf([ref])[0]} isn't one of ${name}'s vaults`} act="Add" onChange={() => setPicking({ add: ref })} />;
+    }
+    if (pickNow.missing.length) return <MissingLine refs={pickNow.missing} onOpen={openPicked} />;
+    const d = dOf(approvalAt);
+    if (official && pickNow.read && pickNow.pick === null && !lineHidden(d) && pickChoices().length > 1)
+      return <PickLine text={reachLine(name, pickNow.reach)} onChange={() => setPicking({ add: null })} onDismiss={() => { hideLine(d); setLineGone((x) => x + 1); }} />;
+    return null;
+  };
   return shell(<>
     {menu && kept.shown && <AppletMenu glyph={entry.manifest.glyph} name={name} runs={official ? "Parachute's own" : mode === "approved-code" ? "Approved code only" : "Sealed"} onClose={closeMenu}
       note={note ? { title: handed ? titleOf(note) : undefined, href: `${noteHref(rec.key, note.id)}?with=vault` } : null}
-      onStop={tap(() => { closeMenu(); setStarted(false); })} onRevoke={official ? null : tap(() => { closeMenu(); revoke(); })} />}
+      onStop={tap(() => { closeMenu(); setStarted(false); })} onRevoke={official ? null : tap(() => { closeMenu(); revoke(); })}
+      onVaults={pickNow.asks ? tap(() => { closeMenu(); setPicking({ add: null }); }) : null} />}
+    {pickLines()}
     {late && "error" in late && late.hash === keys.html && <p className="error" role="alert">This applet can't run: its code doesn't compile: {late.error}.</p>}
-    {router && page && savedNow && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}:${embedsKey}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
+    {router && page && savedNow && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}:${embedsKey}:${pickNow.key}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
     {sheets.ui}
     {device.ui}
+    {picking && <PickSheet name={name} initial={picking.add && !pickNow.reach.some((r) => r.hub === picking.add!.hub && r.vault === picking.add!.vault) ? [...pickNow.reach, picking.add] : pickNow.reach}
+      onSave={savePick} onCancel={() => { setPicking(null); setPickError(null); }} error={pickError} passcode={needsPasscode ? { value: passcode, set: setPasscode } : null} />}
     {router && page && sized && rec && isMine(rec) && <PageEmbeds host={rec} hostNote={entry.noteId} embeds={entry.embeds} from={loaded.state === "ok" ? loaded.from : []} />}
   </>, () => setMenu(true));
 }
 
 /** A running applet's menu, from the bar's ⋯: how it runs (and the note it was handed), then the note in the vault,
  *  Stop, Revoke and Settings. A sheet over the frame, as the bar's own long-press menu is. */
-function AppletMenu({ glyph, name, runs, note, onStop, onRevoke, onClose }: { glyph: string; name: string; runs: string; note: { title?: string; href: string } | null;
-  onStop: (e: React.MouseEvent) => void; onRevoke: ((e: React.MouseEvent) => void) | null; onClose: () => void }) {
+function AppletMenu({ glyph, name, runs, note, onStop, onRevoke, onVaults, onClose }: { glyph: string; name: string; runs: string; note: { title?: string; href: string } | null;
+  onStop: (e: React.MouseEvent) => void; onRevoke: ((e: React.MouseEvent) => void) | null; onVaults: ((e: React.MouseEvent) => void) | null; onClose: () => void }) {
   useEffect(() => { const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; addEventListener("keydown", esc); return () => removeEventListener("keydown", esc); }, [onClose]);
   return (
     <div className="sheet-scrim sheet-over-frames" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -691,6 +789,7 @@ function AppletMenu({ glyph, name, runs, note, onStop, onRevoke, onClose }: { gl
         <p className="quiet sheet-line">{runs}{note?.title ? ` · ${note.title}` : ""}</p>
         <ul className="plain sheet-list">
           {note && <li><Link className="sheet-choice" to={note.href} onClick={onClose}>Open the note in the vault view</Link></li>}
+          {onVaults && <li><button type="button" className="sheet-choice" onClick={onVaults}>Vaults it reaches</button></li>}
           <li><button type="button" className="sheet-choice" onClick={onStop}>Stop</button></li>
           {onRevoke && <li><button type="button" className="sheet-choice" onClick={onRevoke}>Revoke</button></li>}
           <li><Link className="sheet-choice" to="/settings" onClick={onClose}>Settings</Link></li>

@@ -448,3 +448,10 @@ main.settings .card h4:not(.settings-sub) { margin: 12px 0 4px; font: 600 var(--
 main.settings .card .settings-parachute > h4 { margin: 14px 0 0; font: 600 var(--fs-body)/1.3 var(--sans); }
 main.settings ul.plain:empty, main.settings .settings-sub:has(+ ul.plain:empty) { display: none; }
 }
+/* what an applet reaches (views/VaultPick.tsx, docs/ACCESS.md proposal 5): one quiet line over it, never a wall */
+.pick-line { display: flex; align-items: center; gap: 6px; margin: 0; padding: 4px 12px; font-size: var(--fs-small); background: var(--surface); border-bottom: 1px solid var(--line); }
+.pick-line > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-line .link-button { flex: none; }
+.pick-line-x { margin-left: auto; padding: 0 4px; }
+.pick-ticks { margin: 8px 0; }
+.reach-line { display: block; flex-basis: 100%; font-size: var(--fs-small); }

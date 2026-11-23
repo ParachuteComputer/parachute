@@ -10,11 +10,15 @@ import { clientFor, keptClientFor } from "../vault/client";
 import { isMine } from "../vault/whose";
 import { originOf, type VaultRecord } from "../vault/store";
 import { stripExt } from "./contract";
-import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, approvalContent, approvalPath, checkApproval, checkKeyList, decide, dOf, revokeFloor, trustedKeys, type Decision, type KeyList, type SignedEvent, type Subject } from "./approvals";
+import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, PICK_CODE, approvalContent, approvalPath, checkApproval, checkKeyList, decide, dOf, newestOf, pickIn, revokeFloor, trustedKeys, type Decision, type KeyList, type SignedEvent, type Subject } from "./approvals";
+import type { VaultRef } from "./vaultPick";
 
 const SEEN_KEY = "parachute.approvals.seen.v1";
 const ANCHOR_KEY = "parachute.anchor.v1";
 const LIST_SEEN_KEY = "parachute.keys.seen.v1";
+/** The newest approval this device signed for each applet, as signed: read with the home's (each checked as they are),
+ *  so a pick made here holds here even when the home couldn't take it. */
+const MINE_KEY = "parachute.approvals.mine.v1";
 const store = () => (typeof localStorage === "undefined" ? null : localStorage);
 const readMap = (k: string): Record<string, unknown> => { try { const v = JSON.parse(store()?.getItem(k) ?? "{}") as unknown; return v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {}; } catch { return {}; } };
 const writeMap = (k: string, m: Record<string, unknown>) => { try { store()?.setItem(k, JSON.stringify(m)); } catch { /* this session */ } };
@@ -82,15 +86,26 @@ async function rowsFor(home: VaultRecord, s: Subject, kept = false): Promise<App
   return (rows as (ApprovalRow & { path?: string })[]).filter((r) => stripExt(r.path ?? "") === path);
 }
 
+/** The approvals for a subject: the home vault's (from the copy kept of the read, `kept`), and the one this device
+ *  signed last. Each is checked by `decide` as any other is. */
+async function eventsFor(home: VaultRecord, s: Subject, kept: boolean): Promise<unknown[]> {
+  const mine = readMap(MINE_KEY)[dOf(s)];
+  return [...(await rowsFor(home, s, kept).catch(() => [])).map((r) => r.metadata?.approval), ...(mine ? [mine] : [])];
+}
+
 /** What the approvals in the home vault say about this exact code and asks, on this device. A newer one seen raises
  *  the floor. null: this device doesn't check approvals. Read from the copy kept of the approvals at once (the signed
  *  list as last read, vault/readCache.ts), the home vault asked behind it: the applet screen reads again when its
- *  answer differs, so a taking back stops the applet as soon as that read answers (review finding 16). */
-export async function approvalFor(s: Subject, code: string, scope: string, now = Date.now()): Promise<Decision | null> {
+ *  answer differs, so a taking back stops the applet as soon as that read answers (review finding 16).
+ *  `scope`: the asks' hash; for an applet that reaches across vaults, made from the pick the newest approval holds
+ *  (docs/ACCESS.md proposal 5): read first, then hashed, then decided. The pick that runs is `content.vaults`. */
+export async function approvalFor(s: Subject, code: string, scope: string | ((vaults: VaultRef[] | null) => Promise<string>), now = Date.now()): Promise<Decision | null> {
   const home = homeVault();
   if (!home || !(await approvalsHere())) return null;
-  const events = (await rowsFor(home, s, true).catch(() => [])).map((r) => r.metadata?.approval);
-  const d = decide(events, s, code, scope, await trustedNow(true), now, floorOf(s));
+  const events = await eventsFor(home, s, true);
+  const trusted = await trustedNow(true);
+  const asks = typeof scope === "string" ? scope : await scope(pickIn(events, s, trusted, now, floorOf(s)));
+  const d = decide(events, s, code, asks, trusted, now, floorOf(s));
   const newest = d.run ? d.content : d.newest;
   if (newest && (d.run || d.why !== "older")) raiseFloor(s, newest.n + (newest.approved ? 0 : 0.5));
   return d;
@@ -99,13 +114,14 @@ export async function approvalFor(s: Subject, code: string, scope: string, now =
 /** Sign (on this device, after its unlock) and write an approval of this exact code, or with `approved: false` the
  *  taking back of one. Throws when it can't be signed (no key, the unlock cancelled, a wrong passcode); `written`
  *  says whether it reached the home vault. */
-export async function signApproval(o: { subject: Subject; name: string; approved: boolean; code: string; scope: string; face?: string[]; passcode?: string | null; runs?: "sealed" | "approved-code" }): Promise<{ ev: SignedEvent; written: boolean }> {
+export async function signApproval(o: { subject: Subject; name: string; approved: boolean; code: string; scope: string; face?: string[]; passcode?: string | null; runs?: "sealed" | "approved-code"; vaults?: readonly VaultRef[] | null }): Promise<{ ev: SignedEvent; written: boolean }> {
   const home = homeVault();
   const native = await nativeNow();
   if (!home || !native) throw new Error("Approving for every device needs the Parachute app with your key.");
-  const content = approvalContent({ subject: o.subject, approved: o.approved, code: o.code, scope: o.scope, now: Date.now(), seen: floorOf(o.subject), face: o.face, device: deviceName(), runs: o.runs });
+  const content = approvalContent({ subject: o.subject, approved: o.approved, code: o.code, scope: o.scope, now: Date.now(), seen: floorOf(o.subject), face: o.face, device: deviceName(), runs: o.runs, vaults: o.vaults });
   const ev = await native.approvalSign(JSON.stringify(content), dOf(o.subject), o.name, o.passcode ?? null) as SignedEvent;
   raiseFloor(o.subject, content.n + (o.approved ? 0 : 0.5));
+  writeMap(MINE_KEY, { ...readMap(MINE_KEY), [dOf(o.subject)]: ev });
   // signed: a home Parachute may only read (docs/design/SCOPES.md) still leaves this device's own Allow; the other
   // devices then ask for themselves
   const written = await writeApproval(home, o.subject, o.name, ev).then(() => true, () => false);
@@ -168,6 +184,28 @@ async function writeApproval(home: VaultRecord, s: Subject, name: string, ev: Si
   if (was) await c.updateNote(was.id, { content: body, metadata: { ...(was.metadata ?? {}), approval: ev }, ...(was.updatedAt ? { if_updated_at: was.updatedAt } : {}) } as Parameters<typeof c.updateNote>[1]);
   else await c.createNote({ path: approvalPath(s), content: body, tags: [APPROVAL_TAG], metadata: { approval: ev } } as Parameters<typeof c.createNote>[0]);
 }
+
+// ── picks of Parachute's own applets (docs/ACCESS.md proposal 5) ──
+
+/** The pick signed for one of Parachute's own applets (its subject names `parachute:<id>`), read from the newest
+ *  approval that counts: null for none (no approval, a taking back, or one older than this device has seen), which
+ *  means the home. `undefined`: this device doesn't check approvals (no key, no anchor), and keeps its own. */
+export async function signedPick(s: Subject, now = Date.now()): Promise<VaultRef[] | null | undefined> {
+  const home = homeVault();
+  if (!home || !(await approvalsHere())) return undefined;
+  const events = await eventsFor(home, s, true);
+  const trusted = await trustedNow(true);
+  const floor = floorOf(s);
+  const pick = pickIn(events, s, trusted, now, floor);
+  // the newest seen raises the floor, as for any approval: last week's wider pick can't be put back over it
+  const { newest } = newestOf(events, s, trusted, now);
+  if (newest && (floor === null || newest.n >= floor)) raiseFloor(s, newest.n + (newest.approved ? 0 : 0.5));
+  return pick;
+}
+
+/** Sign a pick for one of Parachute's own applets: an approval holding the pick alone. Throws as `signApproval` does. */
+export const signPick = (s: Subject, name: string, vaults: readonly VaultRef[] | null, passcode?: string | null) =>
+  signApproval({ subject: s, name, approved: true, code: PICK_CODE, scope: PICK_CODE, vaults, passcode });
 
 /** What this device calls itself on an approval it signs. */
 export function deviceName(): string {

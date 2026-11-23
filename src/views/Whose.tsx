@@ -12,7 +12,7 @@ const LABEL: Record<Whose, string> = { mine: "Mine", trusted: "Someone else's, t
 /** What each value lets a vault's code do, as the card says it. */
 export function whoseCard(v: Pick<VaultRecord, "vault" | "issuer">, to: Whose): { title: string; lines: string[]; act: string } | null {
   if (to === "mine") return { title: `Is ${v.vault} yours?`, act: `${v.vault} is mine`, lines: [
-    `Its applets could then ask the app for things across your vaults (the titles of your newest notes, your bar, or every record in every vault, to read and change), if their card says so.`,
+    `Its applets could then ask the app for things across your vaults (the titles of your newest notes, your bar, or every record in the vaults you tick for them, to read and change), if their card says so.`,
     `Its applets could show things from other Parachutes on their page, and it could be your home.`,
     `Say so only for a vault that is yours, on a hub you trust (${siteOf(v.issuer)}).`] };
   if (to === "trusted") return { title: `Trust ${v.vault}?`, act: `Trust ${v.vault}`, lines: [

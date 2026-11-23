@@ -3,7 +3,7 @@
 // what a vault writer, a stranger's key or an old approval put back can and can't make run.
 import { describe, expect, it } from "vitest";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
-import { APPROVAL_KIND, KEYS_KIND, approvalContent, asksHash, asksOf, checkKeyList, decide, dOf, revokeFloor, trustedKeys, type Subject } from "./approvals";
+import { APPROVAL_KIND, KEYS_KIND, approvalContent, asksHash, asksOf, checkKeyList, decide, dOf, pickIn, revokeFloor, trustedKeys, type Subject } from "./approvals";
 import { appletRecord } from "../../applets/record";
 import { readApplet } from "./discovery";
 
@@ -150,5 +150,62 @@ describe("an approval covers what the approving device's card showed, not what a
     const e = read(false);
     expect(e.left).toBeUndefined();
     expect(await asks(e)).toBe(await asksHash({ ...subject, vault: "team" }, e.path, note.metadata, { opens: e.opens.map((o) => ({ type: o.type, path: o.path, screen: o.screen ?? null })), from: [] }));
+  });
+});
+
+// docs/ACCESS.md proposal 5: an applet that reaches across vaults holds only the vaults the person picked, and the pick
+// lives in the signed approval. These are the rules a device checks before it gives an applet any vault.
+describe("the vaults an approval holds (proposal 5)", () => {
+  const A = { hub: "https://uni.example", vault: "home" }, B = { hub: "https://uni.example", vault: "letters" }, C = { hub: "https://uni.example", vault: "pantry" };
+  const picked = (sk: Uint8Array, vaults: { hub: string; vault: string }[] | null, o: { now?: number; approved?: boolean; scope?: string } = {}) =>
+    sign(sk, approvalContent({ subject, approved: o.approved ?? true, code: "tsx:v1", scope: o.scope ?? "asks1", now: o.now ?? T0, seen: null, vaults }), APPROVAL_KIND, dOf(subject), Math.floor((o.now ?? T0) / 1000));
+  it("the asks' hash with no pick is today's; with one it differs, whatever order it was ticked in", async () => {
+    const fields = { applet: { contract: 2, id: "rooms" }, app: ["vaults"] };
+    const today = await asksHash(subject, "Applets/Rooms", fields);
+    expect(await asksHash(subject, "Applets/Rooms", fields, {}, null)).toBe(today);
+    const ab = await asksHash(subject, "Applets/Rooms", fields, {}, [A, B]);
+    expect(ab).not.toBe(today);
+    expect(await asksHash(subject, "Applets/Rooms", fields, {}, [B, A])).toBe(ab);
+    expect(await asksHash(subject, "Applets/Rooms", fields, {}, [A, B, C])).not.toBe(ab);
+  });
+  it("the pick is read from the newest approval that counts, and from nothing else", () => {
+    expect(pickIn([picked(me, [A, B])], subject, mine, LATER, null)).toEqual([A, B]);
+    // an approval made with no pick (before picks, or by an older build): none, which is the home
+    expect(pickIn([picked(me, [A, B]), picked(me, null, { now: T0 + 60_000 })], subject, mine, LATER, null)).toBeNull();
+    // a taking back holds no pick
+    expect(pickIn([picked(me, [A, B]), picked(me, null, { now: T0 + 60_000, approved: false })], subject, mine, LATER, null)).toBeNull();
+    // an older one put back, under what this device has seen: refused, so none
+    expect(pickIn([picked(me, [A, B, C])], subject, mine, LATER, Math.floor(T0 / 1000) + 60)).toBeNull();
+  });
+  it("widening needs a new approval signed with your key: an edited pick breaks the signature", () => {
+    const ev = picked(me, [A]);
+    const wider = { ...ev, content: ev.content.replace(JSON.stringify([A]), JSON.stringify([A, B])) };
+    expect(wider.content).not.toBe(ev.content);
+    expect(pickIn([wider], subject, mine, LATER, null)).toBeNull();
+    expect(decide([wider], subject, "tsx:v1", "asks1", mine, LATER, null)).toMatchObject({ run: false, refused: ["its signature doesn't hold"] });
+  });
+  it("an AI with a write key can't widen it: an approval it signs with its own key, newer or not, counts for nothing", () => {
+    const ai = generateSecretKey();
+    const mineNarrow = picked(me, [A]);
+    const its = picked(ai, [A, B, C], { now: T0 + 60_000 });
+    expect(pickIn([mineNarrow, its], subject, mine, LATER, null)).toEqual([A]);
+    // nor can it write a pick no one can read as "some of it": the whole approval is refused
+    const garbled = picked(me, [A]);
+    const bad = finalizeEvent({ kind: APPROVAL_KIND, created_at: garbled.created_at, tags: garbled.tags, content: JSON.stringify({ ...JSON.parse(garbled.content), vaults: [A, { hub: "not a hub", vault: "x" }] }) }, ai);
+    expect(pickIn([bad], subject, new Set([getPublicKey(ai)]), LATER, null)).toBeNull();
+  });
+  it("an approval holding a pick that can't be read is refused whole, even signed by you", () => {
+    for (const vaults of [[{ hub: "https://uni.example/", vault: "home" }], [A, A], [{ ...A, extra: 1 }], "home", [{ hub: "javascript:alert(1)", vault: "x" }]]) {
+      const ev = sign(me, { ...approvalContent({ subject, approved: true, code: "tsx:v1", scope: "asks1", now: T0, seen: null }), vaults });
+      expect(decide([ev], subject, "tsx:v1", "asks1", mine, LATER, null)).toMatchObject({ run: false, refused: ["it can't be read"] });
+    }
+  });
+  it("an older build hashes without the pick, so a picked approval is other asks there (it asks again, never runs wider)", async () => {
+    const fields = { applet: { contract: 2, id: "rooms" }, app: ["vaults"] };
+    const withPick = await asksHash(subject, "Applets/Rooms", fields, {}, [A, B]);
+    const without = await asksHash(subject, "Applets/Rooms", fields);
+    const ev = picked(me, [A, B], { scope: withPick });
+    expect(decide([ev], subject, "tsx:v1", without, mine, LATER, null)).toMatchObject({ run: false, why: "other" });
+    expect(decide([ev], subject, "tsx:v1", withPick, mine, LATER, null)).toMatchObject({ run: true, content: { vaults: [A, B] } });
   });
 });

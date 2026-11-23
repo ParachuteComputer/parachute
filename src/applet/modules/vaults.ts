@@ -2,8 +2,9 @@
 // (app.ts), which the person allowed on its card. The Vault applet (applets/vault.tsx) is built on it; any applet may
 // ask, and its card says so, stressed. An applet in someone else's vault asks the app for nothing (discovery.ts).
 //
-//   vaults        (read every vault this device holds; change records where the person lets Parachute change them)
-//     list()                                   the vaults: {key, name, host, mine, home, level, connector, view, reach}
+//   vaults        (read the vaults the person gave it, docs/ACCESS.md proposal 5; change records there where the person lets
+//                 Parachute change them). Every call that names a vault refuses any other: "not one of the vaults you gave it"
+//     list()                                   the vaults it was given: {key, name, host, mine, home, level, connector, view, reach}
 //     hubs()                                   each hub those vaults are on: {host, address, vaults}, `address` the one
 //                                              address an AI gets there for every vault (null: a vault's own only)
 //     types({vault})                           its types and tags, with counts and declared fields
@@ -388,9 +389,14 @@ const failed = (e: unknown) => {
   return new ContractError(ERROR_CODES.failed, m.slice(0, 300));
 };
 
+/** The refusal for a vault the applet wasn't given (or this device doesn't hold). */
+export const NOT_GIVEN = "not one of the vaults you gave it";
+
 export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps): UniModule & { stop(): void } {
   const need = (w: AppWord) => { if (!allowed.includes(w)) throw new ContractError(ERROR_CODES.notGranted); };
-  const held = (vault: string) => { const v = deps.list().find((x) => x.key === vault); if (!v) throw refuse("this device holds no such vault"); return v; };
+  // only the vaults the person gave it (docs/ACCESS.md proposal 5: `list` is cut to its pick by the shell); one answer
+  // for a vault not given and one not held, so it can't learn which vaults the device holds
+  const held = (vault: string) => { const v = deps.list().find((x) => x.key === vault); if (!v) throw refuse(NOT_GIVEN); return v; };
   /** The names of a vault's people, for naming its writers (changes.ts `writer`); none where the shell can't ask. */
   const people = (vault: string) => (deps.names ? (bys: string[]) => deps.names!(vault, bys) : undefined);
   /** Each vault's type names, as last read (a 0.8 door lists them among tags). */

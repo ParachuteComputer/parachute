@@ -82,6 +82,10 @@ export function newVaultsOn(hub: string): string[] {
   return listedOn(h).filter((v) => !held.has(v) && !away.has(keyOf(h, v)));
 }
 
+/** Every vault the last listing found the person reaches on `hub`, held here or not (an applet's pick offers them all:
+ *  docs/ACCESS.md proposal 5). */
+export const listedVaults = (hub: string): string[] => listedOn(originOf(hub));
+
 export function subscribeNewVaults(f: () => void): () => void { listeners.add(f); return () => { listeners.delete(f); }; }
 export const newVaultsRev = () => rev;
 
