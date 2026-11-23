@@ -8,8 +8,10 @@ export type ReachFacts = {
   level: Level | null;
   /** It is the home: Parachute's own applets write there, and the settings and bundles live there. */
   home: boolean;
-  /** The applets allowed here on this device, by name (any order). */
+  /** The applets allowed here on this device, by name (any order), and components from here allowed on a page. */
   applets: readonly string[];
+  /** Applets are allowed here but this device hasn't read them (yet, or they are a newer app's): what they need is unknown. */
+  unknown?: boolean;
   /** The person let Parachute change notes here for a change of their own. */
   own: boolean;
   /** Someone else's vault (whose.ts). */
@@ -33,6 +35,8 @@ export function why(f: ReachFacts): { short: string; long: string; idle: boolean
     long: "Your home: your settings and bundle are kept here, and Parachute's own applets (Notes, Journal, Capture) write here." };
   if (f.applets.length) return { short: `for ${names(f.applets)}`, idle: false,
     long: `${names(f.applets)} ${f.applets.length === 1 ? "reaches" : "reach"} it, as you allowed on ${f.applets.length === 1 ? "its card" : "their cards"}. Revoking one in Applets gives back what it needed.` };
+  if (f.unknown) return { short: "for applets you allowed", idle: false,
+    long: "Applets you allowed reach it; their list hasn't been read on this device yet, so they aren't named here." };
   if (f.own) return { short: "for your own changes", idle: false, long: "You let Parachute change notes here for a change of your own." };
   return { short: "no applet uses it", idle: true,
     long: "No applet you allowed uses it: Parachute holds it because you opened it, or from an earlier sign-in. Sign out stops Parachute reaching it on this device." };

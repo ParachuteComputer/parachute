@@ -19,6 +19,12 @@ describe("what Parachute holds of a vault, in words", () => {
     expect(reachLine(f({ level: "write" }))).toBe("reads and changes notes · no applet uses it");
     expect(reachLine(f({ level: "write", own: true }))).toBe("reads and changes notes · for your own changes");
   });
+  it("allowed applets not read yet are never called unused", () => {
+    const w = why(f({ level: "write", unknown: true }));
+    expect(w.idle).toBe(false);
+    expect(reachLine(f({ level: "write", unknown: true }))).toBe("reads and changes notes · for applets you allowed");
+    expect(reachLine(f({ applets: ["«events» on a page"] }))).toBe("reads notes · for «events» on a page");
+  });
   it("someone else's says so first", () => {
     expect(reachLine(f({ theirs: true, applets: ["Events"] }))).toBe("Someone else's · reads notes · for Events");
   });

@@ -1,4 +1,4 @@
-// A Parachute's address as a sentence says it: its site, without a port (hosts and ports go under Details). Pure: the
+// A Parachute's address as a sentence says it: its site, without a port (the host and port show beside its name in Settings). Pure: the
 // frame uses it too, so it stays apart from the store that holds sign-ins (frame/boundary.test.ts).
 
 /** From an issuer or hub address ("https://example.org:8443" → "example.org"). */

@@ -287,8 +287,8 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 /* Settings → Your Parachutes: a vault in one line, its name and what Parachute holds of it and what for; a tap on it
    shows why, whose it is and its actions; Open at the side */
 .settings-lead { margin: 0 0 6px; }
-.settings-parachute h4 { margin: 14px 0 0; font: 600 var(--fs-body)/1.3 var(--sans); }
-.settings-parachute h4 .quiet { font-weight: 400; margin-left: 6px; }
+main.settings .settings-parachute > h4 { margin: 14px 0 0; font: 600 var(--fs-body)/1.3 var(--sans); }
+.settings-parachute > h4 .quiet { font-weight: 400; margin-left: 8px; }
 .vault-rows { margin: 6px 0 2px; }
 .vault-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 4px 12px; padding: 8px 0; border-top: var(--line-row); }
 .vault-more > summary { display: flex; flex-direction: column; gap: 1px; list-style: none; cursor: pointer; color: var(--text); }
@@ -428,7 +428,7 @@ main.screen:not(.applet-screen) > .bar :is(.bar-back, .bar-menu) { color: var(--
    group none of whose sections shows isn't drawn, nor a list with nothing in it or its label */
 main.settings .settings-group { padding: 16px 0 8px; border-top: var(--line-row); }
 main.settings .settings-group:first-of-type { padding-top: 4px; border-top: 0; }
-main.settings .settings-group:not(:has(> :not(h2))) { display: none; }
+main.settings .settings-group:not(:has(> :not(h2, .bundle-section-place:empty:not([style])))) { display: none; }
 main.settings .settings-group > h2 { margin: 0 0 2px; font: var(--title-weight) var(--fs-head)/1.2 var(--display, var(--serif)); }
 main.settings .card { margin: 0; padding: 10px 0 8px; background: none; border: 0; border-radius: 0; box-shadow: none; }
 main.settings .card > h3 { margin: 0 0 6px; font: 600 var(--fs-body)/1.3 var(--sans); }

@@ -4,7 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react
 import { Bar, backOrLauncher } from "../ui/Bar";
 import { Link } from "react-router";
 import { useVaults } from "../vault/hooks";
-import { removeVault, type VaultRecord } from "../vault/store";
+import { hostOf, removeVault, type VaultRecord } from "../vault/store";
 import { siteOf } from "../vault/site";
 import { dropClient } from "../vault/client";
 import { revoke } from "../vault/oauth";
@@ -19,7 +19,7 @@ import ThemeSettings from "./ThemeSettings";
 import ServicesSettings from "./ServicesSettings";
 import { appletsNow, forgetApplets, subscribeApplets } from "../applet/useApplets";
 import { deviceGrants, subjectOf } from "../applet/grants";
-import { grantInVault, isEmbedSubject } from "../applet/embeds";
+import { embedSubjectParts, grantInVault, isEmbedSubject } from "../applet/embeds";
 import { forgetSaved } from "../shell/saved";
 import KeySettings from "../key/KeySettings";
 import KeyringSettings from "../key/KeyringSettings";
@@ -62,17 +62,23 @@ function signOutVault(v: VaultRecord) {
  *  on it shows why in a sentence, whose it is, and Read only, Sign in again and Sign out; Open stays beside it. */
 function VaultRow({ v }: { v: VaultRecord }) {
   const whose = useWhose()(v);
-  // the applets allowed here, by name, as Applets lists them (read again when the vault's applets are)
-  useSyncExternalStore(subscribeApplets, () => { const e = appletsNow(v.key); return e?.state === "ok" ? e.at : e?.state ?? ""; });
-  const read = appletsNow(v.key);
   const g = deviceGrants();
-  const allowed = g.subjects().filter((s) => s.startsWith(subjectOf(v.key, ""))).flatMap((s) => {
-    const e = read?.state === "ok" ? read.found.entries.find((x) => subjectOf(v.key, x.noteId) === s) : undefined;
-    return e && g.status(s, e.keys.scope, e.keys.html) !== "none" ? [e.manifest.name] : [];
-  });
+  // the applets allowed here, by name, as Applets lists them: read again when the vault's applets are, and when a grant
+  // here comes or goes (a Revoke in Applets, on this screen)
+  useSyncExternalStore(subscribeApplets, () => { const e = appletsNow(v.key); return e?.state === "ok" ? e.at : e?.state ?? ""; });
+  useSyncExternalStore(g.onChange, () => g.subjects().join("|"));
+  const read = appletsNow(v.key);
+  const here = g.subjects().filter((s) => s.startsWith(subjectOf(v.key, "")));
+  const entries = here.map((s) => (read?.state === "ok" ? read.found.entries.find((x) => subjectOf(v.key, x.noteId) === s) : undefined));
+  const allowed = here.flatMap((s, i) => { const e = entries[i]; return e && !e.newer && g.status(s, e.keys.scope, e.keys.html) !== "none" ? [e.manifest.name] : []; });
+  // a component from this vault allowed on a page (applet/embeds.ts) reaches it too
+  const embeds = g.subjects().filter(isEmbedSubject).map(embedSubjectParts).filter((p) => p?.from === v.key).map((p) => `«${p!.name}» on a page`);
+  // grants here whose applets this device hasn't read (still reading, the vault not answering, made for a newer app):
+  // what they need isn't known, so the vault is never called unused
+  const unknown = here.length > 0 && (read?.state !== "ok" || entries.some((e) => e?.newer));
   const level = heldLevel(v);
   const home = homeVault()?.key === v.key;
-  const facts = { level, home, applets: allowed, own: ownWrite(v), theirs: whose !== "mine" };
+  const facts = { level, home, applets: [...allowed, ...embeds], unknown, own: ownWrite(v), theirs: whose !== "mine" };
   // write that no applet allowed here needs (the person's own, or held from before this app asked per vault): theirs to give back
   const needing = appletsNeedingWrite(v);
   const giveable = level === "write" && needing !== null && !needing.length && !home;
@@ -196,7 +202,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
           <AskWhose vaults={vaults} />
           {parachutes.length ? parachutes.map((p) => (
             <section key={p.hub} className="settings-parachute" aria-label={`Parachute: ${said(p, parachutes)}`}>
-              <h4>{p.home ? "Your Parachute" : said(p, parachutes)} <span className="quiet small">{siteOf(p.hub)}</span></h4>
+              <h4>{p.home ? "Your Parachute" : said(p, parachutes)}{(p.home || hostOf(p.hub) !== said(p, parachutes)) && <span className="quiet small">{hostOf(p.hub)}</span>}</h4>
               {p.vaults.length ? <>
                 <p className="small quiet">{reachCount(p.vaults.length, newVaultsOn(p.hub).length)}</p>
                 <ul className="plain vault-rows">{p.vaults.map((v) => <VaultRow key={v.key} v={v} />)}</ul>

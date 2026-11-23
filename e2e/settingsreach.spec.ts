@@ -36,4 +36,7 @@ test("Settings is a few groups; each vault is one line of what Parachute holds a
   await page.goto("/settings");
   await expect(line(page, "letters")).toHaveText(`reads and changes notes · for ${post.applet}`);
   await expect(await vaultRow(page, "letters")).toContainText(`${post.applet} reaches it, as you allowed on its card.`);
+  // revoked in Applets, on this screen: the line says so at once
+  await page.getByRole("list", { name: "Allowed applets" }).getByRole("listitem").filter({ hasText: post.applet }).getByRole("button", { name: "Revoke" }).click();
+  await expect(line(page, "letters")).toHaveText("reads and changes notes · for your own changes");
 });

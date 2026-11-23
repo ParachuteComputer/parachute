@@ -4,10 +4,10 @@
 // a tap away. A second device that signs in to the home Parachute finds Techne on the person's list.
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mintToken, MORE_VAULTS, NOT_GIVEN, ORG_VAULT, techneState, VAULT } from "./hub";
-import { approveUntilBack, held, moreVaults, openMore, openVault, signInWithKey, ui, vaultRow } from "./helpers";
+import { approveUntilBack, held, moreVaults, openVault, signInWithKey, ui, vaultRow } from "./helpers";
 
 /** A Parachute in Settings: its vaults, and a line for each vault there this device doesn't read yet. */
-/** A Parachute in Settings: the home's is "your Parachute"; another is called by its site (its address is under Details). */
+/** A Parachute in Settings: the home's is "your Parachute"; another is called by its site (its host and port beside its name). */
 const said = (origin: string) => (origin === hubState().origin ? "your Parachute" : new URL(origin).hostname);
 const parachute = (page: Page, origin: string) => page.getByRole("region", { name: `Parachute: ${said(origin)}` });
 const home = (method: string, path: string, body?: unknown) => api(hubState(), method, path, body, VAULT);
@@ -54,7 +54,8 @@ test("sign in once per hub with the key: the home read, every other vault of you
   await vaultRow(page, ORG_VAULT);
   await expect(org.getByRole("combobox", { name: `Whose ${ORG_VAULT} is` })).toHaveValue("theirs");
   await expect(page.getByRole("link", { name: `Open ${NOT_GIVEN}`, exact: true })).toHaveCount(0);
-  await openMore(page);
+  // with the home's list of vaults it doesn't read drawn and open: the one not given isn't on any
+  await moreVaults(page);
   await expect(page.getByRole("button", { name: `Open ${NOT_GIVEN}`, exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: /^Parachute: / }).first()).toHaveAccessibleName("Parachute: your Parachute");
 
