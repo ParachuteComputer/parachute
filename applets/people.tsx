@@ -160,13 +160,13 @@ function strList(v: unknown): string[] {
   return [];
 }
 
-/** A list field as the record holds it, to add to: every entry kept as written (a number, an object with a label, a
- *  near-duplicate), whatever shape it is in; a single value becomes the list's first entry. */
 /** A field the record doesn't hold at all (absent, null or empty): the only kind a merge fills. */
 function unset(v: unknown): boolean {
   return v === undefined || v === null || (typeof v === "string" && !v.trim());
 }
 
+/** A list field as the record holds it, to add to: every entry kept as written (a number, an object with a label, a
+ *  near-duplicate), whatever shape it is in; a single value becomes the list's first entry. */
 function heldList(v: unknown): unknown[] {
   if (Array.isArray(v)) return v;
   if (v === undefined || v === null || v === "") return [];
@@ -798,11 +798,6 @@ function peopleIndex(people: readonly PersonRecord[]) {
   };
   for (const p of people) put(p);
   return { match, put };
-}
-
-/** Match an imported vCard against existing vault people by email, then phone, then name. */
-function matchVCardContact(card: VCardContact, people: readonly PersonRecord[]): VCardMatch | null {
-  return peopleIndex(people).match(card);
 }
 
 /** A folder's page: 50, the most the app gives. */

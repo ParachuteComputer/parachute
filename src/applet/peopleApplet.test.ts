@@ -46,11 +46,10 @@ type PersonRecord = {
 };
 
 const api = new Function(
-  `${code}; return { parseVCard, exportVCard, matchVCardContact, mergeVCardIntoPerson, fieldsForNewVCard, upcomingBirthdays, reconnectList, filterPeople, normalizePhoneKey, initialsOf, letterOf, readPersonFields, peopleIndex, withBodiesForCards, readFolder };`,
+  `${code}; return { parseVCard, exportVCard, mergeVCardIntoPerson, fieldsForNewVCard, upcomingBirthdays, reconnectList, filterPeople, normalizePhoneKey, initialsOf, letterOf, readPersonFields, peopleIndex, withBodiesForCards, readFolder };`,
 )() as {
   parseVCard: (text: string) => VCardContact[];
   exportVCard: (people: readonly PersonRecord[], photos?: Map<string, VCardPhoto>) => string;
-  matchVCardContact: (card: VCardContact, people: readonly PersonRecord[]) => { person: PersonRecord; by: "email" | "phone" | "name" } | null;
   mergeVCardIntoPerson: (existing: PersonRecord, card: VCardContact) => { changed: boolean; fieldsPatch: Record<string, unknown>; nextBody?: string; attachPhoto: VCardPhoto | null };
   fieldsForNewVCard: (card: VCardContact) => Record<string, unknown>;
   upcomingBirthdays: (people: readonly PersonRecord[], todayYmd: string, windowDays?: number) => { name: string; nextDate: string; daysUntil: number; turning: number | null }[];
@@ -75,6 +74,9 @@ const api = new Function(
   ) => Promise<PersonRecord[]>;
   readFolder: (query: (q: Record<string, unknown>) => Promise<PersonRecord[]>, base: Record<string, unknown>) => Promise<{ rows: PersonRecord[]; capped: boolean }>;
 };
+
+/** How the import matches a card: through the index it builds over the people. */
+const matchVCardContact = (card: VCardContact, people: readonly PersonRecord[]) => api.peopleIndex(people).match(card);
 
 // Tiny valid 1x1 PNG bytes encoded as base64 (made-up fixture photo)
 const TINY_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -201,7 +203,7 @@ describe("People vCard matching & additive merge (email → phone → name, neve
 
   it("matches by email first (including secondary emails), then phone (normalized digits), then name", () => {
     // Email match beats a different name and phone
-    const byEmail = api.matchVCardContact(
+    const byEmail = matchVCardContact(
       { name: "Sam R.", emails: ["SAM.ALT@example.test"], phones: ["+1 999-555-0000"], address: "", birthday: "", links: [], groups: [], tags: [], summary: "", note: "", photo: null },
       existing,
     );
@@ -209,7 +211,7 @@ describe("People vCard matching & additive merge (email → phone → name, neve
     expect(byEmail?.by).toBe("email");
 
     // Phone match works across formatting and leading US country code (1)
-    const byPhone = api.matchVCardContact(
+    const byPhone = matchVCardContact(
       { name: "M. Lin", emails: ["new@example.test"], phones: ["303.555.0142"], address: "", birthday: "", links: [], groups: [], tags: [], summary: "", note: "", photo: null },
       existing,
     );
@@ -217,7 +219,7 @@ describe("People vCard matching & additive merge (email → phone → name, neve
     expect(byPhone?.by).toBe("phone");
 
     // Name match (case & whitespace insensitive) when email and phone don't match
-    const byName = api.matchVCardContact(
+    const byName = matchVCardContact(
       { name: "  maya   lin ", emails: [], phones: [], address: "", birthday: "", links: [], groups: [], tags: [], summary: "", note: "", photo: null },
       existing,
     );
@@ -225,7 +227,7 @@ describe("People vCard matching & additive merge (email → phone → name, neve
     expect(byName?.by).toBe("name");
 
     // Unmatched contact returns null
-    const none = api.matchVCardContact(
+    const none = matchVCardContact(
       { name: "Tessa Cho", emails: ["tessa@example.test"], phones: ["+1 212-555-0100"], address: "", birthday: "", links: [], groups: [], tags: [], summary: "", note: "", photo: null },
       existing,
     );

@@ -323,6 +323,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         if (key !== null && from + mine.length >= want) {
           const next = `${key}@${want}`;
           resumes.delete(next);
+          for (const [k, r] of resumes) if (now() - r.time >= RESUME_TTL_MS) resumes.delete(k);
           resumes.set(next, { at, ahead: mine.slice(want - from), seen, time: now() });
           while (resumes.size > RESUMES_MAX) resumes.delete(resumes.keys().next().value as string);
         }
@@ -477,7 +478,8 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
     return json(200, "OK", rows.slice(0, limit).map((r) => ({ id: r.id, path: r.path, updatedAt: r.updatedAt ?? null })));
   }
 
-  const forget = (...refs: (string | null | undefined)[]) => { for (const r of refs) if (r) cache.delete(r); };
+  // a write of its own: the notes it keeps for its lists going on may be older now, so those lists read from the start
+  const forget = (...refs: (string | null | undefined)[]) => { for (const r of refs) if (r) cache.delete(r); resumes.clear(); };
 
   /** POST /api/notes {path, content, types?, tags?, metadata?}: a new record inside a folder the grant lets it add to. */
   async function create(body: string | null, scopes: Resolved, ctx: CallCtx): Promise<FetchResult> {

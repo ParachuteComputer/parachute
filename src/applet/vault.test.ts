@@ -477,6 +477,21 @@ describe("the hub's query words, kept to the folders", () => {
     expect(got.filter((id) => !shown.has(id))).toEqual(now);
   });
 
+  it("after a write of its own, the next page reads from the start: the note it changed comes as it is now", async () => {
+    for (let i = 0; i < 120; i++) notes.push({ id: `w${String(i).padStart(3, "0")}`, path: `Recipes/W ${i}`, content: "before", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
+    const words = "order_by=created_at&sort=asc&include_content=true&include_links=true&limit=10";
+    const f = frameOn(hub);
+    const first = (await f.get(`/api/notes?${words}&offset=0`)).body as { id: string }[];
+    // one the next page will hand back (its order puts the fixture's own notes first)
+    const all = (await frameOn(hub).get(`/api/notes?${words.replace("limit=10", "limit=30")}&offset=0`)).body as { id: string }[];
+    const target = all[15].id;
+    expect(first.map((n) => n.id)).not.toContain(target);
+    const done = await f.send({ method: "PATCH", path: `/api/notes/${target}`, body: JSON.stringify({ content: "after", if_updated_at: "2026-11-01" }) });
+    expect(done.status).toBe(200);
+    const next = (await f.get(`/api/notes?${words}&offset=10`)).body as { id: string; content: string }[];
+    expect(next.find((n) => n.id === target)?.content).toBe("after");
+  });
+
   it("a page that fails leaves the list where it was: asked again, it goes on, nothing missed", async () => {
     for (let i = 0; i < 200; i++) notes.push({ id: `d${String(i).padStart(3, "0")}`, path: `Recipes/D ${i}`, content: "", tags: [], updatedAt: "2026-11-01", createdAt: `2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}Z` });
     const words = "order_by=created_at&sort=asc&include_links=true&limit=50";
