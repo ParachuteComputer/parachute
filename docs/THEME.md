@@ -73,7 +73,7 @@ The style tokens, what each draws, and its value in `paper` and in `almanac` (`s
 
 | Token | What it draws | `paper` | `almanac` |
 |---|---|---|---|
-| `--primary` | The main action's fill (a primary button, a field's action): the one thing you do next, and a count of what wants you on the bar. In `paper` it is coral whatever the accent is; set it in `tokens` to change it. | `#bf4a2a` (coral; `#e07552` in the dark) | `var(--text)` |
+| `--primary` | The main action's fill (a primary button, a field's action): the one thing you do next, a count of what wants you on the bar, and the words under a row that say what wants you. In `paper` it is coral whatever the accent is; set it in `tokens` to change it. | `#bf4a2a` (coral; `#e07552` in the dark) | `var(--text)` |
 | `--on-primary` | Text on the main action. | `#ffffff` | `var(--bg)` |
 | `--tint` | A row under the pointer, the row open now: a light wash. | `color-mix(in srgb, var(--text) 5%, transparent)` | `color-mix(in srgb, var(--line) 30%, transparent)` |
 | `--card-fill` | A card's ground. | `var(--surface)` | `var(--surface)` |

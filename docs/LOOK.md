@@ -79,7 +79,8 @@ applet that moves things in its own code asks the kit `still()` first.
 - **Paper below.** Lists, a room's talk, a note, Settings and editing are warm paper (`--bg`) with hairline rules
   between rows: no cards per row, no shadows, no tints, ink type.
 - **Coral** is spent on the mark and on the one thing you do next: a primary button, the ask's answers, Send once
-  there is something to send, and the count of what wants you on a tab. Links, the focus ring and a ticked box are the
+  there is something to send, the count of what wants you on a tab, and the line under a row that says what wants
+  you. Links, the focus ring and a ticked box are the
   sky's own ink (`--accent`), not coral.
 - **Empty.** "Nothing wants you" and an empty room get a small still scene: the parachute landed, and one line.
 
