@@ -19,16 +19,16 @@ One model, everywhere.
 Three layers, from what no record can touch to what is most yours.
 
 1. **What every Parachute has.** The app draws these itself, under any bundle or frame: **Settings**, the bar's last
-   place at every address; a way home on the bar (**Applets**, the list of the bundle's applets, or **Notes** in a bundle
+   place wherever the bar shows; a way home on the bar (**Applets**, the list of the bundle's applets, or **Notes** in a bundle
    that looks like Parachute Simplified; added at the end when the bundle's bar names none); the top bar's **⋯** on the app's own screens (Settings, or a running
    applet's menu, which ends with Settings); the line that says a newer Parachute is ready; and every card and approval
-   (an applet's access, a frame, the self-test). No record names, moves or hides them.
+   (an applet's access, a frame, the self-test). No record removes them (a bundle's bar may place its way home itself).
 2. **The bar.** The rest of the bar is the open bundle's `bar`: its places in its order, or none (`"bar": []` leaves
    only the app's own). A frame of your own ([CHANGE-YOUR-FRAME.md](CHANGE-YOUR-FRAME.md)) replaces the list, a vault
    and a note, never the bar or what every Parachute has.
 3. **The first screen.** What the app opens on: the bundle's `start`, one of your applets, or the list (`null`; Notes
    for a bundle that looks like Parachute Simplified). Home is one choice; Rooms is another. You change it in Settings →
-   **Your bundle** → **Opens on** (the list, or an applet on the bar), or by long-pressing a place: **Open on start**.
+   **Your bundle** → **Opens on** (the list, or one of your applets pinned on the bar), or by long-pressing a place: **Open on start**.
 
 ## The four rules
 

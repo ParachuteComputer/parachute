@@ -110,9 +110,16 @@ test("the first screen: the bundle record names it, and Settings → Opens on ch
   await opens.getByRole("radio", { name: /Cook mode/ }).check();
   await expect.poll(async () => (await record()).start).toEqual({ vault: VAULT, applet: "Applets/Cook mode" });
   await expect(opens.getByRole("radio", { name: /Cook mode/ })).toBeChecked();
-  expect(JSON.parse(await page.evaluate(() => localStorage.getItem("parachute.start.v1") ?? "null"))?.vault).toBe(VAULT);
+  const chosen = JSON.parse(await page.evaluate(() => localStorage.getItem("parachute.start.v1") ?? "null"));
+  expect(chosen?.vault).toBe(VAULT);
+  expect(chosen?.noteId).toBe(((await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Applets/Cook mode")}`)) as { id: string }[])[0]?.id);
   await start(page);
   await expect(page.getByRole("region", { name: /asking for access/ })).toContainText("Cook mode");
+  // and back to the list: the record says none, and this device's choice is let go
+  await page.goto("/settings");
+  await opens.getByRole("radio", { name: /Applets/ }).check();
+  await expect.poll(async () => (await record()).start).toBeNull();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("parachute.start.v1"))).toBeNull();
   // the settings note is left as it was
   expect((await tagged("parachute-settings"))[0].metadata.parachute.start).toBeUndefined();
 });
