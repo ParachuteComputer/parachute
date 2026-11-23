@@ -243,7 +243,9 @@ button.primary[aria-disabled="true"] { opacity: 0.5; }
 .update-line { position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom); height: var(--update-h); box-sizing: border-box; overflow: hidden; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 6px calc(env(safe-area-inset-right) + 12px) 6px calc(env(safe-area-inset-left) + 12px); background: var(--surface); border-top: 1px solid var(--line); font-size: var(--fs-small); }
 .with-bar .update-line { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); }
 .update-line > span:first-child { flex: 1 1 auto; min-width: 0; }
+.update-line button { flex: none; white-space: nowrap; }
 :root.keyboard-up .update-line { display: none; }
+.update-progress { display: block; width: 100%; height: 6px; margin: 8px 0 2px; accent-color: var(--primary); }
 /* an applet's signals (services/signals.ts): its count, beside its glyph */
 .home-bar-place { position: relative; }
 .home-bar-badge { position: absolute; top: 1px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: var(--primary); color: var(--on-primary); font: 700 var(--fs-label) var(--sans); line-height: 17px; text-align: center; }
@@ -326,7 +328,8 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
   .home-bar-place[aria-current="page"] { margin: 0 10px 0 -1px; padding: 10px 12px 10px 13px; }
   .home-bar-glyph { font-size: var(--fs-lead); }
   .home-bar-badge { top: 4px; left: 28px; }
-  .with-bar .app-frame { right: calc(env(safe-area-inset-right) + var(--index-w)); width: auto; left: env(safe-area-inset-left); }
+  /* (a width of its own: an iframe left at width auto between left and right is its default 300px) */
+  .with-bar .app-frame { right: calc(env(safe-area-inset-right) + var(--index-w)); left: env(safe-area-inset-left); width: calc(100% - env(safe-area-inset-left) - env(safe-area-inset-right) - var(--index-w)); }
   /* what sits along the foot (a newer build's line, the shell's passing line) stays beside the index, not under it */
   .with-bar .update-line { right: var(--index-w); }
   .with-bar .shell-line { left: calc((100% - var(--index-w)) / 2); }
@@ -419,7 +422,7 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
    the head and the screen's name in the big serif in it; plain paper with hairlines below, where you read and change
    things. They are forms, so they scroll. */
 @layer parachute.app {
-:root:has(main.screen:not(.applet-screen)) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 150px, var(--bg) 300px); background-size: 100% 300px; }
+:root:has(main.screen:not(.applet-screen)) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 70px, var(--bg) 150px); background-size: 100% 150px; }
 main.screen:not(.applet-screen) > .bar { position: static; min-height: 56px; margin-bottom: 2px; background: none; border-bottom: 0; }
 main.screen:not(.applet-screen) > .bar .bar-title { font: var(--title-weight) var(--fs-title)/1.1 var(--display, var(--serif)); letter-spacing: -.015em; white-space: normal; }
 main.screen:not(.applet-screen) > .bar :is(.bar-back, .bar-menu) { color: var(--muted); }

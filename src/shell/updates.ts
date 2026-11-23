@@ -1,13 +1,19 @@
 // Updates outside an app store (docs/LAUNCH.md "An update channel"). A build made with PARACHUTE_UPDATE_FEED reads that
 // feed (src-tauri/src/updates.rs) when the app starts, when it comes back to the front (at most every few hours) and
-// when Settings opens; a newer build there is offered: one line above the bar until Later, and in Settings. Download
-// opens the file in the system's browser, and the system installs it (Android takes an APK only when it is signed with
-// the key of the app it replaces). The feed, beside the builds:
+// when Settings opens; a newer build there is offered: one line above the bar until Later, and in Settings. Download:
+// - Android: the app downloads the APK itself (src-tauri/src/updates.rs), checks it against the feed's sha256, and hands
+//   it to Android's installer (UpdatePlugin.kt), which asks the person and installs it only when it is signed with the
+//   key of the app it replaces. Each try is remembered, so the next start knows whether it took (`afterTry`).
+// - elsewhere (the Mac): the file opens in the system's browser, and the person installs it.
+// The feed, beside the builds (scripts/update-feed.sh):
 //   { "v": 1, "at": <the build's commit time, seconds>, "commit": "3656d68",
-//     "files": { "android": "parachute-3656d68-arm64.apk", "mac": "parachute-3656d68.dmg" } }
-// A file is named relative to the feed, or by an address on the feed's own origin; any other is ignored.
+//     "files": { "android": "parachute-3656d68-arm64.apk", "mac": "parachute-3656d68.dmg" },
+//     "sha256": { "android": "<64 hex>", "mac": "<64 hex>" } }
+// A file is named relative to the feed, or by an address on the feed's own origin; any other is ignored. `sha256` came
+// later: a feed without it still offers its files, and the app says it couldn't check the download.
 import { useEffect, useSyncExternalStore } from "react";
 import { inShell } from "../vault/oauth";
+import { openLinkOut } from "./device";
 
 import { offerFor, parseFeed, type Build, type Offer } from "./feed.ts";
 export { offerFor, parseFeed, type Build, type Feed, type Offer } from "./feed.ts";
@@ -44,11 +50,15 @@ export function checkUpdates(force = false, read: () => Promise<Answer> = native
   if (running) return running;
   if (!force && Date.now() - lastAt < EVERY_MS) return Promise.resolve();
   lastAt = Date.now();
+  const before = state.kind === "offer" ? state.offer.commit : "";
   if (state.kind !== "offer") set({ kind: "checking" });
   running = read().then((a) => {
     if (!a) return set({ kind: "none" });
     const offer = offerFor(parseFeed(a.body, a.feed), OWN, a.platform);
     set(offer ? { kind: "offer", offer, platform: a.platform } : { kind: "current" });
+    // a refusal was about the build offered then
+    const was = installNow().install;
+    if (was.kind === "failed" && offer?.commit !== before && offer?.commit !== was.to) setInst({ kind: "idle" });
   }, (e: unknown) => {
     // a failed read doesn't take back an offer already made (offline in Settings, the newer build is still there)
     if (state.kind !== "offer") set({ kind: "error", message: e instanceof Error ? e.message : String(e) });
@@ -79,5 +89,114 @@ export function useUpdateChecks() {
   }, []);
 }
 
+// ── Download, and whether the install took ──
+
+/** Where a Download is. `checked`: the file matched the feed's sha256 (false: the feed has none for it). */
+export type Install =
+  | { kind: "idle" }
+  | { kind: "downloading"; got: number; total: number }  // total 0: the server didn't say
+  | { kind: "installing"; checked: boolean }             // with Android's installer, which asks the person
+  | { kind: "installed" }                                // Android says done; it closes the app any moment
+  // browser: the way to the file failed (not the file), so the browser's download may work; to: the build tried
+  | { kind: "failed"; message: string; browser?: boolean; to?: string };
+
+/** An install handed to Android, kept across starts: from this build to the feed's. `why`: Android's refusal, if it
+ *  gave one before the app closed. */
+export type Tried = { from: string; to: string; toAt: number; when: number; why?: string; seen?: boolean };
+/** What the last try came to, seen from this build (`to`: the build tried). */
+export type After = { kind: "none" } | { kind: "updated"; at: number } | { kind: "stuck"; to: string; at: number; why: string };
+
+/** This build is the one tried: updated (said on its first start only: `seen`). Still the build it was tried from:
+ *  stuck. Another (installed some other way): nothing to say. */
+export function afterTry(t: Tried | null, own: Build): After {
+  if (!t) return { kind: "none" };
+  if (own.commit === t.to) return t.seen ? { kind: "none" } : { kind: "updated", at: t.toAt };
+  if (own.commit === t.from) return { kind: "stuck", to: t.to, at: t.toAt, why: t.why ?? "" };
+  return { kind: "none" };
+}
+
+const TRIED_KEY = "parachute.update.tried";
+function readTried(): Tried | null {
+  try {
+    const t = JSON.parse(localStorage.getItem(TRIED_KEY) ?? "null") as Tried | null;
+    return t && typeof t.from === "string" && typeof t.to === "string" && typeof t.toAt === "number" ? t : null;
+  } catch { return null; }
+}
+
+type Installing = { install: Install; after: After };
+let inst: Installing | null = null;  // read from storage on first use
+const instSubs = new Set<() => void>();
+function installNow(): Installing {
+  if (inst) return inst;
+  const t = readTried();
+  inst = { install: { kind: "idle" }, after: afterTry(t, OWN) };
+  // "The update installed" is for this start: the next one says nothing
+  if (t && inst.after.kind === "updated") try { localStorage.setItem(TRIED_KEY, JSON.stringify({ ...t, seen: true })); } catch { /* private mode */ }
+  return inst;
+}
+const publish = (next: Installing) => { inst = next; for (const f of instSubs) f(); };
+const setInst = (install: Install) => publish({ ...installNow(), install });
+function writeTried(t: Tried) {
+  try { localStorage.setItem(TRIED_KEY, JSON.stringify(t)); } catch { /* private mode */ }
+  publish({ ...installNow(), after: afterTry(t, OWN) });
+}
+export const useInstall = () => useSyncExternalStore((f) => { instSubs.add(f); return () => { instSubs.delete(f); }; }, installNow);
+
+/** What the shell says while it downloads and installs (src-tauri/src/updates.rs `Step`): the build it hands Android is
+ *  the one the feed names when it reads it, which may be later than the offer on screen. */
+export type Step = { stage: "download"; got: number; total: number } | { stage: "install"; checked: boolean; commit: string; at: number };
+type Native = (step: (s: Step) => void) => Promise<void>;
+
+/** "12 MB" */
+export const mb = (n: number) => `${(n / 1e6).toFixed(0)} MB`;
+/** "40%", or "12 MB" when the server didn't say how much */
+export const share = (got: number, total: number) => total > 0 ? `${Math.min(100, Math.floor((got / total) * 100))}%` : mb(got);
+
+let tries = 0;
+/** Download: on Android, the app's own download of what the feed names and Android's installer (a second Download
+ *  while Android's question is open replaces the first); elsewhere, the browser. Never throws: a failure is the
+ *  `failed` state, in words to show. */
+export async function download(offer: Offer, platform: string, native: Native = nativeInstall): Promise<void> {
+  if (platform !== "android") {
+    try { await openLinkOut(offer.url); setInst({ kind: "idle" }); }
+    catch (e) { setInst({ kind: "failed", message: e instanceof Error ? e.message : String(e) }); }
+    return;
+  }
+  if (installNow().install.kind === "downloading") return;
+  const mine = ++tries;
+  let open = true;  // a step that arrives after the answer, or for a replaced try, says nothing
+  const now = (i: Install) => { if (open && mine === tries) setInst(i); };
+  now({ kind: "downloading", got: 0, total: 0 });
+  let handed: Tried | null = null;
+  try {
+    await native((s) => {
+      if (!open || mine !== tries) return;
+      if (s.stage === "download") return now({ kind: "downloading", got: s.got, total: s.total });
+      handed = { from: OWN.commit, to: s.commit, toAt: s.at, when: Date.now() };
+      writeTried(handed);
+      now({ kind: "installing", checked: s.checked });
+    });
+    // Android installed it; it closes the app any moment (the next start says so)
+    now({ kind: "installed" });
+  } catch (e) {
+    if (mine !== tries) return;
+    // the shell's refusal ({ message, browser }: updates.rs `Refused`), or an Error
+    const r = (e ?? {}) as { message?: unknown; browser?: unknown };
+    const message = typeof r.message === "string" ? r.message : String(e);
+    const tried = handed as Tried | null;
+    if (tried) writeTried({ ...tried, why: message });
+    now({ kind: "failed", message, browser: r.browser === true, ...(tried ? { to: tried.to } : {}) });
+  } finally {
+    open = false;
+  }
+}
+async function nativeInstall(step: (s: Step) => void): Promise<void> {
+  const { Channel, invoke } = await import("@tauri-apps/api/core");
+  const onStep = new Channel<Step>();
+  onStep.onmessage = step;
+  await invoke("update_install", { onStep });
+}
+
 /** for tests */
-export function resetUpdates() { state = { kind: "none" }; lastAt = 0; running = null; }
+export function resetUpdates() { state = { kind: "none" }; lastAt = 0; running = null; inst = null; tries = 0; }
+export const installState = installNow;

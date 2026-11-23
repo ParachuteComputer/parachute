@@ -10,6 +10,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Download installs the newer build itself (UpdatePlugin.kt): Android asks the person once (Install unknown apps)
+         and then before each update. A build for Google Play will have to drop it (Play updates the app itself, and its
+         policy refuses it otherwise); nothing does that yet (docs/LAUNCH.md §3). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -67,6 +71,11 @@
                 <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Android's installer answers here about an update (UpdatePlugin.kt); only its PendingIntent reaches it -->
+        <receiver
+            android:name=".InstallStatus"
+            android:exported="false" />
 
         <provider
           android:name="androidx.core.content.FileProvider"

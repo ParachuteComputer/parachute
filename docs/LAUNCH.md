@@ -38,22 +38,30 @@ with no Gatekeeper step, and a stable signature ends the Keychain question after
 
 ## 3. An update channel
 
-**Now:** a build made with `PARACHUTE_UPDATE_FEED` (the address of a `latest.json` beside the builds) reads it at
-start, when it comes back to the front (at most every six hours) and when Settings opens, and offers a newer build:
-one line above the bar ("A newer Parachute is ready", **Download**, **Later**) and Settings → Updates. Download opens
-the file in the system's browser; the system installs it. On Android that is the trust: an APK installs over Parachute
-only when it is signed with the same key. The feed names files on its own origin only, and nothing from a vault or an
-applet can change where a build looks (src-tauri/src/updates.rs, src/shell/updates.ts). `scripts/update-feed.sh`
-writes the feed, last, after the files are in place. A build's identity is its commit and that commit's time; the time
-is also the Android version code, so each build of next installs over the one before. Mac builds of next get the feed
-from the repository secret `PARACHUTE_UPDATE_FEED` (none: no updates offered). Builds without a feed offer nothing.
+**Now:** a build made with `PARACHUTE_UPDATE_FEED` (the address of a `latest.json` beside the builds) reads it at start,
+when it comes back to the front (at most every six hours) and when Settings opens, and offers a newer build: one line
+above the bar ("A newer Parachute is ready", **Download**, **Later**) and Settings → Updates. On Android, Download
+installs it from inside the app: the shell reads the feed itself, downloads the APK it names (from the feed's own origin
+only), checks it against the feed's `sha256`, looks at it (Parachute, newer than this build, same signer) and hands it
+to Android's installer (a PackageInstaller session, UpdatePlugin.kt). Android asks once for the right to install apps,
+then before each update, and installs it only when it is signed with the same key: that is the trust. A refusal is said
+in words (a different signer, an older file, blocked by the system, cancelled), and each try is remembered, so after a
+restart Settings says whether the update took or this is still the old build. A feed written before `sha256` still
+works; the app says it couldn't check the file. When the download itself fails, Settings also offers the browser's
+download. On the Mac, Download opens the file in the browser and the person installs it. The feed names files on its own
+origin only, and nothing from a vault or an applet can change where a build looks (src-tauri/src/updates.rs,
+src/shell/updates.ts). `scripts/update-feed.sh` writes the feed with each file's sha256, last, after the files are in
+place. A build's identity is its commit and that commit's time; the time is also the Android version code, so each build
+of next installs over the one before. Mac builds of next get the feed from the repository secret `PARACHUTE_UPDATE_FEED`
+(none: no updates offered). Builds without a feed offer nothing.
 
 **Recommendation for launch:** on the Mac (and later Windows and Linux), Tauri's updater plugin, reading a signed
 `latest.json` that the release workflow attaches to each GitHub release; its signing key is one more secret
 (`TAURI_SIGNING_PRIVATE_KEY`). It should wait for notarisation, so an update doesn't bring back the Gatekeeper step. On
-Android, Google Play once the app is there. The feed above is for builds made by hand or from next (the release
-workflow passes none, and GitHub's release downloads answer with a redirect, which the app doesn't follow); until
-then testers can point Obtainium at this repository's releases.
+Android, Google Play once the app is there; its build will have to drop `REQUEST_INSTALL_PACKAGES` (only the in-app
+install needs it, and Play's policy refuses it otherwise), which nothing does yet. The feed above is for builds made by
+hand or from next (the release workflow passes none, and GitHub's release downloads answer with a redirect, which the
+app doesn't follow); until then testers can point Obtainium at this repository's releases.
 
 ## 4. Crash reporting
 

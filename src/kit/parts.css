@@ -303,9 +303,9 @@ select.pa-finput { appearance: auto; }
 .pa-flow :is(pre, .pa-tgrid) { max-height: var(--pa-col-h, 60dvh); overflow-y: auto; }
 .pa-flow :is(p, li, dd, h1, h2, h3, td) { overflow-wrap: anywhere; }
 /* the first page's head: the hour's sky, behind the place's name (pages.ts hangs it, one page wide) */
-.pa-sky { position: absolute; top: 0; left: 0; z-index: 0; height: min(300px, 48%); pointer-events: none;
+/* as tall as the head (pages.ts sets it from the place's head; this is for a book with no head of its own) */
+.pa-sky { position: absolute; top: 0; left: 0; z-index: 0; height: min(160px, 30%); pointer-events: none;
   background: linear-gradient(to bottom, var(--sky-top) 0, var(--sky-mid) 55%, var(--sky-foot) 82%, var(--bg) 100%); }
-@media (min-width: 900px) { .pa-sky { height: min(380px, 48%); } }
 /* a snap point per spread, and every later page's running head: the place's name over a thin strip of the sky */
 .pa-leaf { position: absolute; top: 0; height: 1px; pointer-events: none; }
 .pa-leaf.pa-snap { scroll-snap-align: start; }
@@ -343,5 +343,5 @@ select.pa-finput { appearance: auto; }
 }
 @layer parachute.parts {
 /* a page that scrolls (`scroll`, `wide`) has the hour's sky at its head too, under its title, fading into the paper */
-:root:has(.pa-page:not(.pa-paged)):not([data-sized]) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 120px, var(--bg) 220px); background-size: 100% 220px; background-repeat: no-repeat; }
+:root:has(.pa-page:not(.pa-paged)):not([data-sized]) body { background-image: linear-gradient(to bottom, var(--sky-top), var(--sky-mid) 90px, var(--bg) 170px); background-size: 100% 170px; background-repeat: no-repeat; }
 }

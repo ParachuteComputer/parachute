@@ -23,7 +23,7 @@ fn no(code: &'static str, message: impl Into<String>) -> Refusal {
     Refusal { code, message: message.into() }
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
