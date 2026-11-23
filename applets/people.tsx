@@ -1339,6 +1339,8 @@ export default function People() {
   // Favorite tapped twice, isn't a conflict with itself); a notes draft begun before our own field change moves on
   // to the new version, since its body didn't change. Only someone else's change is a conflict.
   const versions = useRef(new Map<string, string>());
+  /** Each field save of our own, `<id>|<version it began on>` → the version it left: a notes draft follows only these. */
+  const ownSaves = useRef(new Map<string, string>());
   const fieldSaves = useRef<Promise<unknown>>(Promise.resolve());
   const patchPersonFields = (person: PersonRecord, fieldsPatch: Record<string, unknown>, message?: string): Promise<PersonRecord> => {
     const run = async () => {
@@ -1351,7 +1353,7 @@ export default function People() {
       }
       try {
         const updated = await vault.updateRecord(person.id, { fields: fieldsPatch, if_updated_at: base }) as PersonRecord;
-        if (updated.updatedAt) versions.current.set(person.id, updated.updatedAt);
+        if (updated.updatedAt) { versions.current.set(person.id, updated.updatedAt); ownSaves.current.set(`${person.id}|${base}`, updated.updatedAt); }
         const merge = (fields?: Record<string, unknown>) => {
           const out: Record<string, unknown> = { ...(fields ?? {}) };
           for (const [k, v] of Object.entries(fieldsPatch)) { if (v === null) delete out[k]; else out[k] = v; }
@@ -1399,11 +1401,11 @@ export default function People() {
     const { body } = draft;
     setSavingBody(id);
     try {
-      // after any field save of ours still under way, on the newer of the draft's version and the one ours left (a
-      // field change of our own doesn't touch the body); someone else's change since is still a conflict
+      // after any field save of ours still under way; from the draft's version, on along our own field saves only (they
+      // don't touch the body): someone else's change in between is still a conflict
       await fieldSaves.current;
-      const ours = versions.current.get(id);
-      const base = ours && ours > draft.base ? ours : draft.base;
+      let base = draft.base;
+      for (let i = 0, next = ownSaves.current.get(`${id}|${base}`); next && i < 100; i++, next = ownSaves.current.get(`${id}|${base}`)) base = next;
       const updated = await vault.updateRecord(id, { body, if_updated_at: base }) as PersonRecord;
       if (updated.updatedAt) versions.current.set(id, updated.updatedAt);
       setSelected((s) => (s?.id === id ? { ...s, ...updated, body } : s));

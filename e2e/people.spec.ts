@@ -220,7 +220,7 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
     let slowed = false;
     const hubWrites = (u: URL) => u.origin === new URL(hub.origin).origin;
     await page.route(hubWrites, async (route) => {
-      if (!slowed && route.request().method() !== "GET") { slowed = true; await new Promise((r) => setTimeout(r, 1500)); }
+      if (!slowed && route.request().method() !== "GET" && (route.request().postData() ?? "").includes("favorite")) { slowed = true; await new Promise((r) => setTimeout(r, 1500)); }
       await route.continue().catch(() => {});
     });
     await f.getByRole("button", { name: "★ Favorite" }).click();
@@ -230,12 +230,30 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
     await expect(f.getByText(/Someone else changed/)).toHaveCount(0);
     await f.getByRole("button", { name: "☆ Favorite" }).click();
     await expect(f.getByRole("button", { name: "★ Favorite" })).toBeVisible();
+    await page.unroute(hubWrites);
 
     // Verify persisted on the hub
     const mayaSaved = await api(hub, "GET", `notes?id=${encodeURIComponent("People/Maya Lin")}&include_content=true&include_metadata=true`);
     const mayaRow = Array.isArray(mayaSaved) ? mayaSaved[0] : mayaSaved;
     expect(mayaRow.metadata.summary).toBe("Ceramicist, trail runner, and tea fan in Boulder");
     expect(mayaRow.content).toContain("roasted oolong tea");
+
+    // but a draft begun before someone else changed her notes stays a conflict, whatever she saves of her own after
+    await f.getByRole("button", { name: "Edit notes" }).click();
+    await f.getByRole("textbox", { name: "Notes and memories" }).fill("## Memories and moments\n\nA draft from before.\n");
+    await page.waitForTimeout(400);
+    await f.getByRole("button", { name: "← People" }).click();
+    await api(hub, "PATCH", `notes/${mayaRow.id}`, { content: "## Memories and moments\n\nWritten on another device.\n", if_updated_at: mayaRow.updatedAt });
+    await f.getByRole("region", { name: /Favorites/ }).getByRole("button", { name: "Maya Lin" }).click();
+    await expect(f.getByRole("textbox", { name: "Notes and memories" })).toHaveValue(/A draft from before/);
+    await f.getByRole("button", { name: "★ Favorite" }).click();
+    await expect(f.getByText("Removed from favorites.")).toBeVisible();
+    await f.getByRole("button", { name: "Save" }).click();
+    await expect(f.getByText(/Someone else changed/)).toBeVisible();
+    expect((await api(hub, "GET", `notes/${mayaRow.id}?include_content=true`)).content).toContain("Written on another device.");
+    await f.getByRole("button", { name: "Cancel" }).click();
+    await f.getByRole("button", { name: "☆ Favorite" }).click();
+    await expect(f.getByRole("button", { name: "★ Favorite" })).toBeVisible();
 
     // Back to list
     await f.getByRole("button", { name: "← People" }).click();

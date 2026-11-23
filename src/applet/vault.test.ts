@@ -505,6 +505,8 @@ describe("the hub's query words, kept to the folders", () => {
     const f = frameOn(slow);
     const first = f.get(`/api/notes?${words}&offset=0`);
     await new Promise((r) => setTimeout(r, 5));
+    // the first page is held at the hub now: the write lands while it is being read
+    expect(hold).toBe(false);
     expect((await f.send({ method: "PATCH", path: `/api/notes/${target}`, body: JSON.stringify({ content: "after", if_updated_at: "2026-11-01" }) })).status).toBe(200);
     release();
     await first;
