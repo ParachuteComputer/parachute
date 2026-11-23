@@ -578,14 +578,16 @@ pinned applets. It reads no folder of its own vault, so it has no `access`; it a
 }
 ```
 
-Then make it the home: write the settings note in the home vault (`Parachute/Settings`, tagged `parachute-settings`):
+Then make it the first screen: set `start` in the open bundle's record (`Parachute/Bundles/<id>`,
+[NAVIGATION.md](NAVIGATION.md#bundles)):
 
 ```json
-{ "fields": { "parachute": { "start": { "vault": "<the vault's name>", "applet": "Applets/Home" } } } }
+"start": { "vault": "<the vault's name>", "applet": "Applets/Home" }
 ```
 
 The next time the app starts, it opens on Home and shows its card; once the person taps Allow, it opens there by itself.
-They can also long-press it in the list and tap **Open on start**, and pin it first on the bar.
+They can also choose it in Settings → **Your bundle** → **Opens on** (it lists the applets on the bar), or long-press it in the list
+and tap **Open on start**, and pin it first on the bar.
 
 Two home applets ship with the app, in `applets/`: `home` (Parachute Simplified's starter: a line into `Inbox/`, the
 newest notes, the pins) and `today` (for a person with rooms and a journal: what wants you in your rooms (an open ask, or
