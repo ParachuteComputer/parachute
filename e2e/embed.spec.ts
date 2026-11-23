@@ -103,7 +103,14 @@ async function reopen(page: Page) {
 async function openAndAllow(page: Page, homeId: string, embeds: string[]) {
   await page.goto(`/v/${VAULT}/a/${homeId}`);
   await page.getByRole("button", { name: "Allow" }).click();
-  await expect(host(page).getByRole("heading", { name: "Home" })).toBeVisible();
+  // a "home" another test allowed with less asks again for what is new here: allowed too
+  const heading = host(page).getByRole("heading", { name: "Home" });
+  await expect.poll(async () => {
+    if (await heading.isVisible()) return true;
+    const again = page.getByRole("button", { name: "Allow" });
+    if (await again.isVisible()) await again.click();
+    return false;
+  }, { timeout: 15_000 }).toBe(true);
   for (const name of embeds) {
     await page.locator(`.embed-place[data-embed="${name}"]`).getByRole("button", { name: "Review" }).click();
     const sheet = page.getByRole("dialog", { name: /is asking for access/ });
