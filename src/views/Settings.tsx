@@ -66,13 +66,14 @@ function VaultRow({ v }: { v: VaultRecord }) {
   // the applets allowed here, by name, as Applets lists them: read again when the vault's applets are, and when a grant
   // here comes or goes (a Revoke in Applets, on this screen)
   useSyncExternalStore(subscribeApplets, () => { const e = appletsNow(v.key); return e?.state === "ok" ? e.at : e?.state ?? ""; });
-  useSyncExternalStore(g.onChange, () => g.subjects().join("|"));
+  useSyncExternalStore(g.onChange, () => g.subjects().map((s) => { const r = g.record(s); return `${s} ${r?.scope ?? ""} ${r?.expires ?? ""}`; }).join("|"));
   const read = appletsNow(v.key);
   const here = g.subjects().filter((s) => s.startsWith(subjectOf(v.key, "")));
   const entries = here.map((s) => (read?.state === "ok" ? read.found.entries.find((x) => subjectOf(v.key, x.noteId) === s) : undefined));
   const allowed = here.flatMap((s, i) => { const e = entries[i]; return e && !e.newer && g.status(s, e.keys.scope, e.keys.html) !== "none" ? [e.manifest.name] : []; });
   // a component from this vault allowed on a page (applet/embeds.ts) reaches it too
-  const embeds = g.subjects().filter(isEmbedSubject).map(embedSubjectParts).filter((p) => p?.from === v.key).map((p) => `«${p!.name}» on a page`);
+  const live = (s: string) => { const r = g.record(s); return !!r && (r.expires === null || Date.parse(r.expires) > Date.now()); };
+  const embeds = g.subjects().filter((s) => isEmbedSubject(s) && live(s)).map(embedSubjectParts).filter((p) => p?.from === v.key).map((p) => `«${p!.name}» on a page`);
   // grants here whose applets this device hasn't read (still reading, the vault not answering, made for a newer app):
   // what they need isn't known, so the vault is never called unused
   const unknown = here.length > 0 && (read?.state !== "ok" || entries.some((e) => e?.newer));

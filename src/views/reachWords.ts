@@ -33,8 +33,9 @@ export const holds = (level: Level | null) => (level === "write" ? "reads and ch
 export function why(f: ReachFacts): { short: string; long: string; idle: boolean } {
   if (f.home) return { short: "your home", idle: false,
     long: "Your home: your settings and bundle are kept here, and Parachute's own applets (Notes, Journal, Capture) write here." };
+  const one = new Set(f.applets).size === 1;
   if (f.applets.length) return { short: `for ${names(f.applets)}`, idle: false,
-    long: `${names(f.applets)} ${f.applets.length === 1 ? "reaches" : "reach"} it, as you allowed on ${f.applets.length === 1 ? "its card" : "their cards"}. Revoking one in Applets gives back what it needed.` };
+    long: `${names(f.applets)} ${one ? "reaches" : "reach"} it, as you allowed on ${one ? "its card" : "their cards"}. Revoking one in Applets gives back what it needed.` };
   if (f.unknown) return { short: "for applets you allowed", idle: false,
     long: "Applets you allowed reach it; their list hasn't been read on this device yet, so they aren't named here." };
   if (f.own) return { short: "for your own changes", idle: false, long: "You let Parachute change notes here for a change of your own." };

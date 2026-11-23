@@ -12,6 +12,8 @@ describe("what Parachute holds of a vault, in words", () => {
     expect(names(["Rooms", "Mail", "Journal"])).toBe("Journal, Mail and Rooms");
     expect(names(["Rooms", "Mail", "Journal", "Calendar", "Mail"])).toBe("Calendar, Journal and 2 more");
     expect(why(f({ applets: ["Post"] })).long).toMatch(/^Post reaches it, as you allowed on its card/);
+    expect(why(f({ applets: ["Post", "Post"] })).long).toMatch(/^Post reaches it, as you allowed on its card/);
+    expect(why(f({ applets: ["Post", "Mail"] })).long).toMatch(/^Mail and Post reach it, as you allowed on their cards/);
   });
   it("held for nothing allowed is said plainly, so it can be let go", () => {
     const w = why(f({ level: "write" }));
