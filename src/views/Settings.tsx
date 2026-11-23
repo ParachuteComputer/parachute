@@ -139,7 +139,7 @@ export default function Settings({ children }: { children?: ReactNode }) {
   const parachutes = useParachutes();
   const shown = useShown(vaults);
   return (
-    <main className="screen">
+    <main className="screen settings">
       <Bar title="Settings" back={true} onBack={backOrLauncher} />
       <section className="card" aria-labelledby="s-vaults">
         <h2 id="s-vaults">Your Parachutes</h2>

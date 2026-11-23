@@ -353,7 +353,7 @@ test("Rooms paints the list it last showed at once, keeps it while the relay is 
   }
 });
 
-test("a room opens at once from what the list holds, at its foot once its own read lands, and where you left it", async ({ page }) => {
+test("a room opens at once from what the list holds, on its newest page once its own read lands, and on its newest page again next time", async ({ page }) => {
   test.setTimeout(180_000);
   const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
   const bob = await person(RELAY!, secret("bob"));
@@ -382,8 +382,12 @@ test("a room opens at once from what the list holds, at its foot once its own re
   const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
   const app = frame(page);
   const row = () => app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(`Yard ${stamp}`) });
-  const scroller = () => app.locator(".room .scroll");
-  const fromFoot = () => scroller().evaluate((x) => x.scrollHeight - x.scrollTop - x.clientHeight);
+  // the room's talk is pages (docs/LOOK.md): which page the book shows, of how many, and whether the newest line is on it
+  const where = () => app.locator(".room .pa-book").evaluate((b) => {
+    const at = /^(\d+)(?:–\d+)? of (\d+)$/.exec(b.closest(".pa-pages")!.querySelector(".pa-at")!.textContent ?? "");
+    const last = [...b.querySelectorAll(".msg")].pop()!.getBoundingClientRect(), box = b.getBoundingClientRect();
+    return { page: at ? +at[1] : 1, of: at ? +at[2] : 1, newestShown: last.left >= box.left - 1 && last.right <= box.right + 1 };
+  });
   const back = () => app.getByRole("button", { name: "← Rooms" }).click();
   try {
     await page.goto(`/v/${VAULT}?with=vault`);
@@ -393,23 +397,21 @@ test("a room opens at once from what the list holds, at its foot once its own re
 
     // the room's read held back: it draws at once from what the list holds; as a browser without scroll anchoring
     // (WebKit) would, it is at its foot again once the read lands with older lines above
-    await app.locator("head").evaluate(() => { const st = document.createElement("style"); st.textContent = ".room .scroll { overflow-anchor: none; }"; document.head.appendChild(st); });
     slow = true;
     await row().click();
     await expect(app.getByRole("log")).toContainText(`Yard note ${N} ${stamp}`, { timeout: 1_500 });
     await expect(app.getByRole("log")).toContainText(`Yard note 3 ${stamp}`, { timeout: 15_000 }); // the read landed
-    await expect.poll(fromFoot, { timeout: 3_000 }).toBeLessThan(60);
+    // older lines landed on pages before: the book is on its newest page, the newest line in view
+    await expect.poll(async () => { const w = await where(); return w.of > 1 && w.page === w.of && w.newestShown; }, { timeout: 3_000 }).toBe(true);
     slow = false;
 
-    // partway up, back to the list and in again: where it was left
-    await scroller().evaluate((x) => { x.scrollTop = Math.max(0, x.scrollHeight - x.clientHeight - 600); x.dispatchEvent(new Event("scroll")); });
-    const left = await fromFoot();
-    expect(left).toBeGreaterThan(400);
+    // a page back, then to the list and in again: a room opens on its newest page
+    await app.getByRole("button", { name: "Previous page" }).click();
+    await expect.poll(async () => (await where()).newestShown).toBe(false);
     await back();
     await row().click();
     await expect(app.getByRole("log")).toContainText(`Yard note 3 ${stamp}`, { timeout: 15_000 });
-    await expect.poll(fromFoot, { timeout: 5_000 }).toBeGreaterThan(left - 60);
-    expect(await fromFoot()).toBeLessThan(left + 60);
+    await expect.poll(async () => { const w = await where(); return w.page === w.of && w.newestShown; }, { timeout: 5_000 }).toBe(true);
   } finally {
     await made.remove();
     bob.close();
@@ -482,6 +484,58 @@ test("in twenty-six rooms, a room full of asks and pictures opens and reads: not
     await send(bob, { kind: 9, content: `After it opened ${stamp}`, tags: [["h", asks]] });
     await expect(log).toContainText(`After it opened ${stamp}`, { timeout: 15_000 });
     await expect(app.getByText(/Couldn't read the room|too_many_pending|rate_limited/)).toHaveCount(0);
+  } finally {
+    await made.remove();
+    bob.close();
+  }
+});
+
+test("room to room in one tap: the rooms are a row at the room's head; the new room is there at once and the old one fades over it, never blank; on a Mac the list stays beside", async ({ page }) => {
+  test.setTimeout(120_000);
+  const alice = getPublicKey(Uint8Array.from(Buffer.from(secret("alice"), "hex")));
+  const bob = await person(RELAY!, secret("bob"));
+  const stamp = Date.now().toString(36);
+  const owner = await person(RELAY!, secret("owner"));
+  const ids = [crypto.randomUUID(), crypto.randomUUID()], names = [`Beds ${stamp}`, `Bakery ${stamp}`];
+  for (const p of [alice, bob.pubkey]) await owner.publish({ kind: 9030, tags: [["p", p]] });
+  for (const [i, id] of ids.entries()) {
+    expect((await owner.publish({ kind: 9007, tags: [["h", id], ["name", names[i]], ["visibility", "private"], ["channel_type", "stream"]] })).ok).toBe(true);
+    for (const p of [alice, bob.pubkey]) expect((await owner.publish({ kind: 9000, tags: [["h", id], ["p", p]] })).ok).toBe(true);
+    expect((await bob.publish({ kind: 9, content: `A line in ${names[i]}`, tags: [["h", id]] })).ok).toBe(true);
+  }
+  owner.close();
+  await page.addInitScript((k) => { if (window === window.top) (window as unknown as { __parachuteE2EKey: string }).__parachuteE2EKey = k; }, secret("alice"));
+  const made = await installApplet("rooms", { relay: RELAY!, uni: bob.pubkey });
+  const app = frame(page);
+  try {
+    await page.goto(`/v/${VAULT}?with=vault`);
+    await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Rooms/ }).click();
+    await page.getByRole("button", { name: "Allow" }).click();
+    await app.getByRole("region", { name: "Your rooms" }).getByRole("button", { name: new RegExp(names[0]) }).click();
+    await expect(app.getByRole("log")).toContainText(`A line in ${names[0]}`);
+    // the row: every room, the one you are in marked
+    const row = app.getByRole("navigation", { name: "Your rooms" });
+    await expect(row.locator('[aria-current="page"]')).toContainText(names[0]);
+    // one tap: the new room drawn at once (its words in the first frames), the old one a copy fading over it
+    const inner = (await (await page.locator('iframe[title="Rooms"]').elementHandle())!.contentFrame())!;
+    await inner.evaluate(() => { (window as unknown as { __frames: string[] }).__frames = []; const f = () => { const w = window as unknown as { __frames: string[] }; const ghost = document.querySelector<HTMLElement>("body > .room[aria-hidden]"); w.__frames.push(`${document.querySelector("section.room:not([aria-hidden]) h2")?.textContent}|${ghost ? getComputedStyle(ghost).opacity : "-"}`); if (w.__frames.length < 30) requestAnimationFrame(f); }; requestAnimationFrame(f); });
+    await row.getByRole("button", { name: new RegExp(names[1]) }).click();
+    await expect(app.getByRole("log")).toContainText(`A line in ${names[1]}`);
+    await page.waitForTimeout(400);
+    const frames = await inner.evaluate(() => (window as unknown as { __frames: string[] }).__frames);
+    const after = frames.filter((f) => f.startsWith(names[1]));
+    expect(after.length).toBeGreaterThan(0);
+    // the old room fades between 1 and 0 over the new one in the first frames after the tap, then is gone
+    expect(after.some((f) => { const o = parseFloat(f.split("|")[1]); return o > 0 && o < 1; }), frames.join("\n")).toBe(true);
+    await expect(inner.locator("body > .room[aria-hidden]")).toHaveCount(0);
+    await expect(row.locator('[aria-current="page"]')).toContainText(names[1]);
+    // a Mac: the list of rooms on the left page, the room beside it; a tap there swaps the room
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const list = app.getByRole("region", { name: "Rooms", exact: true });
+    await expect(list).toBeVisible();
+    await list.getByRole("button", { name: new RegExp(names[0]) }).click();
+    await expect(app.getByRole("log")).toContainText(`A line in ${names[0]}`);
+    await expect(list).toBeVisible();
   } finally {
     await made.remove();
     bob.close();

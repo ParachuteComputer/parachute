@@ -177,7 +177,8 @@ test("one list: AIs, then people, then apps; each once, each ended, each refused
   await expect(bo).toContainText("reads and changes everything");
   await expect(apps.getByRole("listitem").filter({ hasText: backup })).toContainText("reads every type");
   await expect(apps).toContainText("Parachute, on this device");
-  const y = async (l: Locator) => (await l.boundingBox())!.y;
+  // in reading order: a page's columns run left to right (docs/LOOK.md), and within one, top to bottom
+  const y = async (l: Locator) => { const b = (await l.boundingBox())!; return Math.round(b.x) * 100_000 + b.y; };
   expect(await y(ais)).toBeLessThan(await y(people));
   expect(await y(people)).toBeLessThan(await y(apps));
   // nothing twice: Bo is one row, and his own sign-in isn't another; each key is in one group

@@ -8,7 +8,7 @@
       "id": "home",
       "name": "Home",
       "glyph": "⌂",
-      "note": "today: what wants you, the latest from Uni, your journal",
+      "note": "today: what wants you, and today from Uni and your journal, the newest first",
       "access": [{ "vault": "here", "allow": [{ "path": "Journal/", "verbs": ["read", "create"] }] }]
     },
     "app": ["open", "pins"],

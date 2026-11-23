@@ -13,7 +13,10 @@ The kit already follows them, so most applets get them by using its parts and ad
    screen: Fraunces), `--serif` (names, headings, reading: Literata) and `--sans` (labels, buttons, the bar: Instrument
    Sans). The three faces come with the app, in every applet's frame; load no others. Labels in sentence case. **checked**
 3. **Space from the theme:** `--pad` around, `--gap` between. Content starts at the top of the screen: no empty hero,
-   no big gaps. Group with space and a rule (`--line`), not boxes inside boxes.
+   no big gaps. Group with space and a rule (`--line`), not boxes inside boxes. A place is pages, not a scroll
+   ([LOOK.md](LOOK.md)): the kit's `Page` turns, what is written in sits under the pages (`Write dock`), and only a
+   long form or something drawn edge to edge scrolls (`<Page scroll>`). The sky is at the head of a place only;
+   where you read, scan or write it is paper with hairlines, and coral is the one thing to do next.
 4. **Lines, corners and depth from the look**, never fixed: `--line-head` over a list, `--line-row` between rows,
    `--line-card` and `--radius-card` for a block that stands apart, `--field-line` and `--radius-field` for a box to
    write in (`--entry-line`, `--entry-fill`, `--radius-entry` for a one-line field), `--shadow-card` for a lift, `--primary` for the main action ([THEME.md](THEME.md#in-an-applet)). Each look

@@ -106,7 +106,7 @@ test("one ask: a close under a stream of later edits still ends it, on Today and
     await page.goto("about:blank");
     await page.goto("/");
     await page.getByRole("button", { name: "Allow" }).click();
-    const wants = frame(page).getByRole("region", { name: "Wants you" });
+    const wants = frame(page).getByRole("region", { name: "Wants you", exact: true });
     await expect(wants).toContainText(`Stays open ${stamp}`, { timeout: 30_000 });
     await expect(wants).not.toContainText(`Closed then buried ${stamp}`);
     // Rooms, started fresh: the room wants him once (the open ask), not twice

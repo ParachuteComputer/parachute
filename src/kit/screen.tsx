@@ -1,7 +1,8 @@
 // The kit's screen parts: what every applet had built for itself (docs/INVENTORY.md), now one each, drawn on the
 // theme's tokens and type scale (parts.css), so every applet looks and behaves the same. Like parts.tsx, every export
 // is a promise to applets written against it (docs/WRITE-AN-APPLET.md): add with care, never change a prop's meaning.
-//   Page      the applet's screen: its width and margins, its title, a way back, two columns (wide), pull to refresh
+//   Page      the applet's screen: a short run of pages you turn (pages.ts), its title in the sky, a way back, two
+//             columns (wide), pull to refresh; `scroll` for a page that scrolls instead
 //   Loading   the quiet line while something is read
 //   Problem   what went wrong, said once, with Try again
 //   Button    a button in the app's look: primary, plain or quiet
@@ -14,11 +15,16 @@
 //   still     whether nothing should move now (reduce-motion, an e-paper screen, Daylight, a still theme)
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import "./parts.css";
+import { createContext, useContext } from "react";
+import { createPortal } from "react-dom";
+import { still, STILL_DRAG } from "./still";
+import { pages } from "./pages";
 
 type Recording = { bytes: ArrayBuffer; type: string; duration: number };
 type Rec = { id: string; updatedAt?: string | null };
 type Kit = {
   onFresh?(cb: () => void): () => void;
+  onShown?(cb: (on: boolean) => void): () => void;
   voice?: { record(o?: { max_s?: number }): Promise<Recording | null> };
   vault?: {
     attach(id: string, bytes: ArrayBuffer, type: string, o?: { transcribe?: boolean }): Promise<unknown>;
@@ -37,7 +43,16 @@ const PULL = 64;
  *  `back` puts a way back above the title (from a room to the list: `{ label: "Matrix", onPress }`).
  *  `wide` for a page of two columns on a computer (an area: its notes beside its room); `className` is for the
  *  applet's own CSS on what is inside. */
-export function Page({ title, kicker, aside, back, onRefresh, wide, className, children }: { title?: ReactNode; kicker?: ReactNode; aside?: ReactNode; back?: { label: string; onPress: () => void }; onRefresh?: () => unknown; wide?: boolean; className?: string; children?: ReactNode }) {
+/** Where a page's docked parts go (a Write with `dock`): the strip under the pages, outside them. */
+const Dock = createContext<HTMLElement | null>(null);
+/** A frame drawn at its content's height (a page with embeds, an embed) never scrolls itself, nor turns. */
+// (the kit marks such a frame's root `data-sized`, frameKit.ts; the pages' own `overflow: hidden` is not this)
+const sizedFrame = () => typeof document !== "undefined" && document.documentElement.hasAttribute("data-sized");
+
+export function Page({ title, kicker, aside, back, onRefresh, wide, scroll, start, className, children }: { title?: ReactNode; kicker?: ReactNode; aside?: ReactNode; back?: { label: string; onPress: () => void }; onRefresh?: () => unknown; wide?: boolean;
+  /** a page that scrolls instead of turning: a long form, a board, something drawn edge to edge */ scroll?: boolean;
+  /** which page it opens on each time it is shown: the first (Home), or the last (a conversation: the newest). Left
+   *  out, it opens on the first and is where you left it when you come back. */ start?: "first" | "last"; className?: string; children?: ReactNode }) {
   const [pull, setPull] = useState(0);
   const [busy, setBusy] = useState(false);
   const refresh = useRef(onRefresh);
@@ -50,7 +65,7 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, className, c
     if (!on) return;
     let start: number | null = null, dist = 0, running = false;
     // a frame drawn at its content's height (a page with embeds) never scrolls itself: the page around it does
-    const sized = () => getComputedStyle(document.documentElement).overflowY === "hidden" || getComputedStyle(document.body).overflowY === "hidden";
+    const sized = sizedFrame;
     // a touch for something else: in a box being written in, or in a part scrolled away from its own top
     const elsewhere = (t: EventTarget | null) => {
       for (let el = t instanceof Element ? t : null; el && el !== document.body; el = el.parentElement) {
@@ -83,8 +98,10 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, className, c
     addEventListener("touchcancel", up);
     return () => { removeEventListener("touchstart", down); removeEventListener("touchmove", move); removeEventListener("touchend", up); removeEventListener("touchcancel", up); };
   }, [on]);
-  return (
-    <main className={`pa-page${wide ? " pa-wide" : ""}${className ? ` ${className}` : ""}`}>
+  // the pages (pages.ts): not for a wide page, one that asked to scroll, or a frame sized to what it draws
+  const paged = !wide && !scroll && !sizedFrame();
+  const [dock, setDock] = useState<HTMLElement | null>(null);
+  const top = <>
       {on && (pull > 0 || busy) && <div className="pa-pull" style={{ height: busy ? PULL * 0.6 : pull * 0.6 }} role="status">{busy ? "Reading again…" : pull >= PULL ? "Let go to read again" : "Pull to read again"}</div>}
       {(title || kicker || aside || back) && (
         <header className="pa-page-head">
@@ -95,9 +112,53 @@ export function Page({ title, kicker, aside, back, onRefresh, wide, className, c
           {aside && <div className="pa-page-aside">{aside}</div>}
         </header>
       )}
-      {children}
+  </>;
+  if (!paged) return <main className={`pa-page${wide ? " pa-wide" : ""}${className ? ` ${className}` : ""}`}>{top}{children}</main>;
+  return (
+    <main className={`pa-page pa-paged${className ? ` ${className}` : ""}`}>
+      <Book start={start ?? "first"} reopen={!!start} dock={setDock}>{top}<Dock.Provider value={dock}>{children}</Dock.Provider></Book>
     </main>
   );
+}
+
+/** What a Pages can be asked to do from code: show a thing's page, the last page, the first. */
+export type PagesHandle = { toElement(el: Element): void; toEnd(): void; toStart(): void };
+/** The book (pages.ts): the pages, the dock under them when asked for, and the page line. */
+function Book({ start, reopen, dock, name, handle, children }: { start: "first" | "last"; reopen?: boolean; dock?: (el: HTMLElement | null) => void; name?: string; handle?: Ref<PagesHandle | null>; children?: ReactNode }) {
+  const book = useRef<HTMLDivElement>(null), flow = useRef<HTMLDivElement>(null), at = useRef<HTMLSpanElement>(null);
+  const prev = useRef<HTMLButtonElement>(null), next = useRef<HTMLButtonElement>(null);
+  const engine = useRef<ReturnType<typeof pages> | null>(null);
+  useLayoutEffect(() => {
+    if (!book.current || !flow.current || !at.current || !prev.current || !next.current) return;
+    const p = pages(book.current, flow.current, { at: at.current, prev: prev.current, next: next.current }, { start, name });
+    engine.current = p;
+    const h: PagesHandle = { toElement: (el) => p.toElement(el), toEnd: () => p.toEnd(), toStart: () => p.toStart() };
+    if (typeof handle === "function") handle(h); else if (handle) (handle as { current: PagesHandle | null }).current = h;
+    // shown again (the app keeps an applet running while the person is elsewhere): a place that opens on a page opens there
+    const off = reopen ? kit()?.onShown?.((on: boolean) => { if (on) p.toStart(); }) : undefined;
+    return () => { p.destroy(); engine.current = null; if (typeof off === "function") off(); if (typeof handle === "function") handle(null); else if (handle) (handle as { current: PagesHandle | null }).current = null; };
+  }, [start, reopen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the running heads' words, when they change (a room's name read, a thread opened)
+  useEffect(() => { engine.current?.setName(name); }, [name]);
+  return <>
+    <div className="pa-book" ref={book}>
+      <div className="pa-flow" ref={flow}>{children}<span className="pa-end" aria-hidden="true" /></div>
+    </div>
+    {dock && <div className="pa-dock" ref={dock} />}
+    <nav className="pa-pageline" aria-label="Pages">
+      <button type="button" ref={prev} className="pa-turn" aria-label="Previous page" hidden>‹</button>
+      <span ref={at} className="pa-at" aria-live="polite" />
+      <button type="button" ref={next} className="pa-turn" aria-label="Next page" hidden>›</button>
+    </nav>
+  </>;
+}
+
+/** Pages of their own inside a screen (a room's talk, between its head and what you write): what it holds, turned
+ *  as a Page's pages are, filling the room its box gives it. `start="last"` opens on the newest and stays with it while
+ *  you are there; `name` is said in the running head of every page after the first; `handle` turns to a thing's page
+ *  from code (a message a notification opened). On an older app it is undefined: fall back to a box that scrolls. */
+export function Pages({ start = "first", name, handle, className, children }: { start?: "first" | "last"; name?: string; handle?: Ref<PagesHandle | null>; className?: string; children?: ReactNode }) {
+  return <div className={`pa-pages${className ? ` ${className}` : ""}`}><Book start={start} name={name} handle={handle}>{children}</Book></div>;
 }
 
 // ── Loading, Problem ──
@@ -234,7 +295,8 @@ export function Search({ label, placeholder, value, onChange, onSearch, live }: 
  *  chat, Enter alone on a computer, Shift Enter a new line). Buttons of your own (`children`) sit beside the action. `line` lays
  *  it out as one line that grows as it is written in (a chat's composer). The text is yours (`value`, `onChange`):
  *  keep a draft with useSaved. No form submits (a sealed frame has none). */
-export function Write({ label, labelled, value, onChange, placeholder, onSend, send = "Save", sendLabel, canSend, busy, enter = "newline", line, maxLength, inputRef, onKeyDown, children }: {
+export function Write({ label, labelled, value, onChange, placeholder, onSend, send = "Save", sendLabel, canSend, busy, enter = "newline", line, dock, maxLength, inputRef, onKeyDown, children }: {
+  /** in the strip under the pages, outside them, so writing never turns the page (a page that scrolls: in place) */ dock?: boolean;
   label: string; /** the label shown above the box, as a Field's (else it is only said to a screen reader) */ labelled?: boolean; value: string; onChange: (v: string) => void; placeholder?: string;
   onSend?: () => void | Promise<unknown>; send?: ReactNode; /** what a screen reader calls the action, when `send` is short */ sendLabel?: string;
   /** whether there is something to send (a file with no words); else, whether there are words */ canSend?: boolean; busy?: boolean; enter?: "newline" | "send"; line?: boolean;
@@ -262,8 +324,10 @@ export function Write({ label, labelled, value, onChange, placeholder, onSend, s
   const box = <textarea ref={setRef} id={id} className="pa-write-box" aria-label={labelled && !line ? undefined : label} placeholder={placeholder} value={value} maxLength={maxLength} rows={line ? 1 : undefined}
     onChange={(e) => onChange(e.target.value)} onKeyDown={keys} />;
   const action = onSend && <Button kind="primary" className="pa-write-send" busy={busy} disabled={!something} aria-label={sendLabel} onClick={() => void onSend()}>{send}</Button>;
-  if (line) return <div className="pa-write pa-line">{children}{box}{action}</div>;
-  return <div className="pa-write">{labelled && <label className="pa-field-label" htmlFor={id}>{label}</label>}{box}{(action || children) && <div className="pa-write-row">{action}{children}</div>}</div>;
+  const docked = useContext(Dock);
+  if (line) { const el = <div className="pa-write pa-line">{children}{box}{action}</div>; return dock && docked ? createPortal(el, docked) : el; }
+  const el = <div className="pa-write">{labelled && <label className="pa-field-label" htmlFor={id}>{label}</label>}{box}{(action || children) && <div className="pa-write-row">{action}{children}</div>}</div>;
+  return dock && docked ? createPortal(el, docked) : el;
 }
 
 // ── Record ──
@@ -337,20 +401,9 @@ export function settled(el: Element, most = 1000): Promise<void> {
   if (!running.length) return Promise.resolve();
   return Promise.race([Promise.all(running.map((a) => a.finished.catch(() => {}))).then(() => {}), new Promise<void>((r) => setTimeout(r, most))]);
 }
-/** Whether nothing should move now: the device asks for less motion, the screen is slow to redraw (e-paper), it shows
- *  Daylight, or the theme is still. It asks the same thing the kit's CSS does (every time is 0, theme.ts MOTION_CSS), so
- *  an applet's own motion, the kit's and the app's agree. Under still, a finger doesn't drag anything: a drag that goes
- *  far enough does what letting go would, at once (docs/LOOK.md, "Still"). */
-export function still(): boolean {
-  if (typeof document === "undefined" || typeof getComputedStyle !== "function") return true;
-  return getComputedStyle(document.documentElement).getPropertyValue("--t-state").trim() === "0ms";
-}
-/** How far a finger goes under still before it counts, in px: then the thing turns, goes or closes at once. */
-export const STILL_DRAG = 48;
-
+export { still, STILL_DRAG } from "./still";
 /** Into its place: drawn first as it starts (`data-state="before"`), then, the same moment, moved to "open", so the
  *  change is a transition (which a newer change can take over from where it is). */
-
 export function arrive(el: HTMLElement) {
   el.dataset.state = "before";
   void el.getBoundingClientRect();

@@ -124,6 +124,7 @@ export function applyToDocument() {
   }
   document.documentElement.dataset.motion = t.motion;
   document.documentElement.dataset.hour = t.hour;
+  document.documentElement.dataset.look = t.look;
 }
 darkQuery()?.addEventListener?.("change", () => bump());
 einkQuery()?.addEventListener?.("change", () => bump());

@@ -35,7 +35,9 @@ test("Claude accounts: each account's use, and which one new workers use, from t
     expect(fill).toBe(text);
     expect(fill).not.toBe("rgba(0, 0, 0, 0)");
     await expect(app.getByRole("group", { name: "Session 40%" })).toContainText("info, not a limit");
-    await expect(app.getByRole("region", { name: "Account B" })).toContainText("last reading 3h ago");
+    // (three hours before a time just after midnight is yesterday: then it says so)
+    const bRead = new Date(Date.now() - 3 * 3600_000);
+    await expect(app.getByRole("region", { name: "Account B" })).toContainText(bRead.toDateString() === new Date().toDateString() ? "last reading 3h ago" : "last reading Yesterday");
     await expect(app.getByRole("group", { name: "Week 12%" })).toContainText("on pace");
 
     // in Settings: its section, the meters without the info-only session, and who new workers go to

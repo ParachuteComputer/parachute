@@ -299,13 +299,14 @@ does. Each takes plain props; a newer prop is only ever added, never changed.
 | `<Fields label? fields onSave? />` | A record's fields, name and value (level 3). A field is `{ name, label?, kind?, choices?, value, readOnly? }`, `kind` one of `text`, `number`, `yesno`, `choice`, `date`, `list`, `long`; with `onSave(name, value)` each is changed where it stands (a choice, a box for yes or no, a number, a date) and saved on Enter, on leaving it or on the pick, the value typed back by its kind (`""` is `null`). |
 | `<Field label placeholder? action? onAction? value? onChange? clearOnAction? />` | A line to write on, and one action (its button, or Enter): `onAction(text)` gets what was written. It keeps its own text unless `value` is given, and clears after the action unless `clearOnAction` is false. `onAction` should catch its own errors and show them: a failed action leaves the text as it was. |
 | `<Empty>…</Empty>` | What shows when there is nothing yet: a sprig and a line. |
-| `<Page title? kicker? aside? back? onRefresh? wide? className? >…</Page>` | The applet's screen: one width and margin for every applet (`--measure`: 760 px, 700 in Book), its title on the type scale (a small `kicker` above, `aside` at its right, `back: { label, onPress }` a way back above it), with `onRefresh` pull down at the top to read again (and the page is drawn at once from what it read before, then `onRefresh` runs again by itself when the vault's answer differs: `onFresh`). `wide` lets it grow to 1240 px on a computer, for a board or a table; put what sits side by side in a `<div className="pa-grid">`. |
+| `<Page title? kicker? aside? back? onRefresh? wide? scroll? start? className? >…</Page>` | The applet's screen: a short run of pages you turn, sideways ([LOOK.md](LOOK.md)): one page on a phone, an open book of two on a Mac, "2 of 3" and the arrows at its foot, the hour's sky behind the title on the first page and a running head on the rest; one width and margin for every applet (`--measure`: 760 px, 700 in Book), its title in the display serif on the type scale (a small `kicker` above, `aside` at its right, `back: { label, onPress }` a way back above it), with `onRefresh` pull down at the top to read again (and the page is drawn at once from what it read before, then `onRefresh` runs again by itself when the vault's answer differs: `onFresh`). `wide` lets it grow to 1240 px on a computer, for a board or a table; put what sits side by side in a `<div className="pa-grid">`. A `wide` page, and one with `scroll`, scrolls instead of turning. `start="first"` opens it on its first page each time it is shown (a home), `start="last"` on its last (a conversation, which then stays with the newest while you are on it). |
 | `<Tabs label tabs current onChange />` | Places to switch between in one screen (Inbox, Later, Sent): `tabs` is `[{ key, label, count? }]`, the one shown is marked. |
 | `<Loading>…</Loading>` | The quiet line while something is read ("Reading…" unless you say). |
 | `<Problem error? onRetry? >…</Problem>` | What went wrong, said once: your words, Try again with `onRetry`, and the error's own words (an address, a code, the hub's answer) under Details. With no words of yours, the error's are said. |
 | `<Button kind? small? busy? onClick >…</Button>` | A button in the app's look: `primary` (the one main action), `plain` (the default) or `quiet`. |
 | `<Search label placeholder? value? onChange? onSearch live? />` | A search box: Enter searches (each pause in typing, with `live` ms); emptying it searches for "". |
-| `<Write label labelled? value onChange onSend? send? sendLabel? canSend? busy? enter? line? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone on a computer, as in a chat). `labelled` shows the label above it, as a Field's. Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows; `sendLabel` names the action for a screen reader, `canSend` says there is something to send without words (a file). |
+| `<Pages start? name? handle? className? >…</Pages>` | Pages of their own inside a screen, turned as a `Page`'s are (a room's talk between its head and the line you write in, on a `<Page scroll>`): it fills the room its box gives it. `start="last"` opens on the newest and stays with it while you are on it; `name` goes in the running head of every page after the first; `handle` (a ref) gives `toElement(el)`, `toEnd()` and `toStart()`. Level 7: on an older app fall back to a box that scrolls (`const Turned = Pages ?? Scroller`). |
+| `<Write label labelled? value onChange onSend? send? sendLabel? canSend? busy? enter? line? dock? maxLength? inputRef? onKeyDown? >…</Write>` | A box to write in and its action (Ctrl or ⌘ Enter; with `enter="send"`, Enter alone on a computer, as in a chat). `labelled` shows the label above it, as a Field's. Your own buttons (`Record`) sit beside the action; `line` makes it one line that grows; `dock` puts it in the strip under the page's pages, outside them, so writing never turns the page (on a page that scrolls, it stays where it is); `sendLabel` names the action for a screen reader, `canSend` says there is something to send without words (a file). |
 | `<Record onRecorded label? max_s? disabled? kind? small? >…</Record>` | The microphone button: the app's own recorder sheet (needs `reach: [voice]`); `onRecorded({ bytes, type, duration })` on Send. |
 | `<Drawer open onClose title? label? >…</Drawer>` | A panel that rises from the foot of the screen over the page (level 4): a choice, a short form, a record's detail. Show it with `open`; `onClose` is asked to put it away (dragged down by its grip, or anywhere while its content fits; a tap outside; Escape; or your own button). It follows the finger; focus goes into it and back. In a page drawn at its content's height (one with embeds) it opens in place instead. |
 | `toast(text, { error? })` | A short word after an action ("Saved"), rising at the foot of the screen, gone by itself (held while pointed at or while the app is away; a tap or a swipe down puts it away). |
@@ -334,7 +335,7 @@ kit's ([THEME.md](THEME.md#the-order-of-styles)).
 older apps ([docs/design/VERSIONS.md](design/VERSIONS.md)). Each part has the level of the app it came in. All the
 parts above are level 1, the floor: the kit of 11-20, with every prop it lists, but `Table` and `Fields`, which are level 3
 (as are the `vaults` and `sharing` words), and `Drawer`, level 4; `vaults.changes`, `compare`, `restore`, `remove` and
-the `changes` word are level 5; `vaults.reach`, `manage`, `giveKey`, `endReach` and `stopManaging` are level 6; `still` is level 7 (fall back for it: `import { still as kitStill } from "parachute"`, then `const still = kitStill ?? (() => getComputedStyle(document.documentElement).getPropertyValue("--t-state").trim() === "0ms")`, which asks what the kit's own `still()` asks). A newer prop counts as a newer part,
+the `changes` word are level 5; `vaults.reach`, `manage`, `giveKey`, `endReach` and `stopManaging` are level 6; `still` and `Pages`, and `Page`'s `scroll` and `start` and `Write`'s `dock`, are level 7 (an older app ignores the props, and its pages scroll as before; fall back for `still`: `import { still as kitStill } from "parachute"`, then `const still = kitStill ?? (() => getComputedStyle(document.documentElement).getPropertyValue("--t-state").trim() === "0ms")`, which asks what the kit's own `still()` asks). A newer prop counts as a newer part,
 and an older app ignores it. If an applet uses a part above the floor, either fall back for it, or put
 `"needs": <its level>` beside `applet` in the fields (`"fields": { "applet": { … }, "needs": 4 }`, a bare number). With `needs`, an older app lists the applet and says "Update
 Parachute to open …" instead of running it (`src/kit/olderApp.test.ts` checks the shipped applets do one or the other).
@@ -418,7 +419,8 @@ the kit (`src/kit/links.test.ts` checks it): no `<a>` of their own, no `app.open
 
 An applet looks like the rest of Parachute without any CSS of its own. Three steps, in this order:
 
-1. **Draw it with the parts.** `Page` is the screen (its title, width and margins). `List` holds rows, `Card` a block
+1. **Draw it with the parts.** `Page` is the screen: its title in the hour's sky, its width and margins, and its
+   pages, which the person turns ([LOOK.md](LOOK.md)); a line to write in goes under them (`Write dock`). `List` holds rows, `Card` a block
    that stands apart, `Field`, `Search` and `Write` take words, `Button` acts (one `primary` on a screen), `Tabs`
    switch places, `Table` and `Fields` show records, `Empty`, `Loading` and `Problem` say what state it is in,
    `Drawer` holds a detail or a short form, and `toast` says what an action did. Each part follows the person's
@@ -430,7 +432,7 @@ An applet looks like the rest of Parachute without any CSS of its own. Three ste
 3. **Your own CSS only for what is yours** (a board, a chart, a grid of days), written on the tokens, never on fixed
    values: colours `var(--text)`, `var(--muted)`, `var(--line)`, `var(--accent)`, `var(--surface)`; space
    `var(--pad)` and `var(--gap)`; rules `var(--line-row)` and `var(--line-head)`; corners `var(--radius-card)`,
-   `var(--radius-field)`; type `var(--fs-title)` … `var(--fs-label)` in `var(--serif)` or `var(--sans)`. A fixed
+   `var(--radius-field)`; type `var(--fs-display)` … `var(--fs-label)` in `var(--display)`, `var(--serif)` or `var(--sans)`. A fixed
    colour or size breaks in dark mode and on an e-paper screen. The tokens: [THEME.md](THEME.md#in-an-applet).
    What you write wins over the kit's own rules ([THEME.md](THEME.md#the-order-of-styles)).
 
@@ -438,12 +440,14 @@ Before you hand it over, check it the way a person sees it:
 
 - One title (the `Page`'s, the applet's own name), and the content starts at the top of the screen: no empty hero, no
   big gaps.
-- One main action, as `kind="primary"`; the rest plain or quiet.
+- One main action, as `kind="primary"` (it is the coral on the screen); the rest plain or quiet.
+- Pages, not a scroll: the `Page` turns by itself; what the person writes in is a `Write dock`, so writing never
+  turns the page; a long form or something drawn edge to edge is a `<Page scroll>`. Motion of your own asks `still()`.
 - Rows, not boxes: a `List` for things of a kind; a `Card` only for a block that stands apart.
 - Every state has words: `Loading` while reading, `Empty` with what to do next, `Problem` with Try again, a `toast`
   after an action.
-- It works at 390 px (a phone) and 1600 px (a computer): `Page` holds the width; `wide` lets a board grow on a
-  computer, and `pa-grid` makes its columns.
+- It works at 390 px (a phone) and 1600 px (a computer): `Page` holds the width and is an open book of two pages on
+  a computer; `wide` lets a board grow there instead (and scrolls), and `pa-grid` makes its columns.
 - No fixed colour, size or font anywhere: it reads in light, in dark and on the Daylight's black and white.
 
 ## A worked example

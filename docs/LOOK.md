@@ -5,8 +5,9 @@ of Sheets brought to it, and Sky's appearance, calmed. The Daylight keeps Pages'
 [THEME.md](THEME.md) (the tokens), [COMPONENTS.md](COMPONENTS.md) (the parts), [DESIGN-RULES.md](DESIGN-RULES.md)
 (the rules a part or an applet keeps), [NAVIGATION.md](NAVIGATION.md) (where things are).
 
-**Where it stands (T-476):** the sky, the faces and coral are in. Motion and still, the pages and tabs, and each screen
-on them come next, in that order.
+**Where it stands (T-476):** in: the sky, the faces and coral; motion and still; the pages and the tabs; Home,
+the rooms, Settings and the app's own screens, and every official applet on them (Journal, Capture, Notes, Vault,
+Connect, Mail, Calendar, Matrix, Claude accounts, Sessions, Area).
 
 ## Structure
 
@@ -33,6 +34,9 @@ on them come next, in that order.
 | Tabs | Along the foot | Down the right edge of the book, a thumb index |
 | Rooms | The room's pages, with the row of rooms at their head | The list of rooms on the left page, the room on the right |
 | Turning | A sideways swipe; the arrows on the page line | The arrows; ← and →; a sideways swipe on the trackpad turns once |
+
+The app's own screens that are forms (Settings, adding a Parachute, a key) scroll, with the sky and their name at the
+head: a form is filled, not read, and a field half on one page and half on the next helps no one.
 
 Why a book on a Mac: one page of phone width on a wide screen leaves most of it empty, and a single wide page makes
 lines too long to read. Two pages keep a reading measure and use the width, and the list of rooms beside a room is the
@@ -70,7 +74,8 @@ applet that moves things in its own code asks the kit `still()` first.
   300 px on a phone and 380 on a Mac): morning gold, midday clear, evening rose, night a dusk lilac. It is looked at
   when the app comes to the front and at each move, never on a timer.
 - **Home.** The greeting in Fraunces sits in the sky. What wants you is the one white card with light on it, and its
-  answers are the one coral pair on the screen.
+  one coral button opens the room to answer it (Home reads rooms; it never answers for you). In the room, the ask's
+  answers are the coral pair.
 - **Paper below.** Lists, a room's talk, a note, Settings and editing are warm paper (`--bg`) with hairline rules
   between rows: no cards per row, no shadows, no tints, ink type.
 - **Coral** is spent on the mark and on the one thing you do next: a primary button, the ask's answers, Send once

@@ -53,9 +53,9 @@ export default function Home() {
     setBusy(false);
   };
   return (
-    <Page title={hello()} className="home" onRefresh={load}>
+    <Page title={hello()} start="first" className="home" onRefresh={load}>
       <style>{CSS}</style>
-      <Write line enter="send" label="Write something down" placeholder="Write something down" value={line} onChange={setLine} onSend={save} send={busy ? "Saving…" : "Save"} busy={busy} />
+      <Write line dock enter="send" label="Write something down" placeholder="Write something down" value={line} onChange={setLine} onSend={save} send={busy ? "Saving…" : "Save"} busy={busy} />
       {changed && changed.count > 0 && changed.href && <p className="changed">
         <span>{changedLine(changed)}</span>
         <Button small kind="quiet" onClick={() => void app.open(changed.href!)}>See what changed</Button>

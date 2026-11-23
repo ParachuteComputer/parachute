@@ -86,17 +86,56 @@ async function loadRead(relay: any): Promise<Record<string, number>> {
 
 const CSS = `
 .pa-page.in-room { max-width: none; padding: 0; }
+/* a Mac: the list of rooms on the left page, the room on the right (docs/LOOK.md) */
+.beside { display: grid; grid-template-columns: minmax(300px, 2fr) minmax(0, 3fr); height: 100dvh; }
+.beside > .rooms { height: 100dvh; overflow-y: auto; padding: calc(var(--pad) * 1.2) calc(var(--pad) * 1.6); border-right: 1px solid var(--line); background: linear-gradient(to bottom, var(--sky-top), var(--bg) 240px); }
+.beside > .rooms h2 { margin: 0 0 var(--gap); font: var(--title-weight) var(--fs-title)/1.1 var(--display, var(--serif)); }
+.beside .room .rooms-row { display: none; }
 .quiet { color: var(--muted); }
 .rooms .note { color: var(--muted); font-style: italic; font-family: var(--serif); margin: 8px 0; }
 .rooms .pa-row-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rooms .pa-badge:has(.at) { background: var(--text); color: var(--bg); }
 `;
 
+/** The rooms in the list's order (the newest talk first), each with its glyph and whether something in it wants you. */
+function inOrder(s: Store["s"]) {
+  return [...s.rooms.values()].map((room) => {
+    const msgs = [...(s.msgs.get(room.id)?.values() ?? [])].filter((e) => visible(s, e) && !rootOf(e));
+    const at = msgs.reduce((m, e) => Math.max(m, e.created_at), 0);
+    return { id: room.id, name: room.name, glyph: glyph(room.name), wants: openAsks(s, room.id) > 0, at };
+  }).sort((a, b) => b.at - a.at || a.name.localeCompare(b.name));
+}
+
+/** Room to room in place (docs/LOOK.md, "Motion"): the new room is drawn at once, and the old one, a still copy laid over
+ *  it, fades out on --t-swap, so the page is never blank. Nothing of it under still (the time is 0 then). */
+function swapOut() {
+  const el = document.querySelector<HTMLElement>(".room");
+  const ms = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--t-swap")) || 0;
+  if (!el || !ms) return;
+  const r = el.getBoundingClientRect();
+  const ghost = el.cloneNode(true) as HTMLElement;
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.removeAttribute("aria-label");
+  ghost.style.cssText = `position: fixed; left: ${r.left}px; top: ${r.top}px; width: ${r.width}px; height: ${r.height}px; margin: 0; z-index: 5; pointer-events: none; background: var(--bg); transition: opacity var(--t-swap) var(--ease-out);`;
+  document.body.appendChild(ghost);
+  // the copy shows the page the room was on
+  const from = el.querySelector<HTMLElement>(".pa-book"), to = ghost.querySelector<HTMLElement>(".pa-book");
+  if (from && to) to.scrollLeft = from.scrollLeft;
+  void ghost.getBoundingClientRect();
+  ghost.style.opacity = "0";
+  const gone = () => ghost.remove();
+  ghost.addEventListener("transitionend", gone, { once: true });
+  setTimeout(gone, ms + 100);
+}
+
 /** A room id safe inside a selector (the page's CSS.escape: `CSS` here is this applet's own style text). */
 const CSS_ESCAPE = (s: string): string => (globalThis as any).CSS?.escape?.(s) ?? s.replace(/["\\]/g, "\\$&");
 type Status = { k: "" | "reading" | "empty" } | { k: "problem" | "note"; t: string; e?: unknown };
 
 export default function Rooms() {
+  // an open book (a Mac, a tablet on its side): the list of rooms stays beside the room
+  const [wide, setWide] = useState(() => typeof matchMedia === "function" && matchMedia("(min-width: 900px)").matches);
+  useEffect(() => { if (typeof matchMedia !== "function") return; const q = matchMedia("(min-width: 900px)"); const f = () => setWide(q.matches); q.addEventListener?.("change", f); return () => q.removeEventListener?.("change", f); }, []);
   const st = useMemo(createStore, []);
   const s = useStore(st);
   const relay = useMemo(() => services.relay("rooms"), []);
@@ -261,10 +300,15 @@ export default function Rooms() {
   // the held messages with their edits: the newest of anyone, and each editor's newest with no ask block (an ask's close)
   const seed = { msgs: [...held, ...[...s.edits.entries(), ...[...s.plain.entries()].map(([k, ed]) => [k.split(" ")[0], ed] as const)].filter(([t]) => heldIds.has(t)).map(([, ed]) => ed)], names: s.names, me: s.me };
   const place = { get: () => places.current.get(id) ?? null, set: (d: number | null) => { places.current.set(id, d); } };
-  return <Page className="in-room"><style>{CSS}</style>
-    <Room key={id + (view.event ?? "")} service="rooms" room={id} name={s.rooms.get(id)?.name} at={view.event} readAt={s.read[id] ?? 0} seed={seed} place={place}
-      onRead={(latest: number) => markRead(id, latest)} onBack={() => setView({ at: "list" })} />
+  // a room turns its own pages (its talk, room.tsx); the page around it doesn't
+  const toRoom = (to: string) => { swapOut(); open(to); };
+  const theRoom = <Room key={id + (view.event ?? "")} service="rooms" room={id} name={s.rooms.get(id)?.name} at={view.event} readAt={s.read[id] ?? 0} seed={seed} place={place}
+      onRead={(latest: number) => markRead(id, latest)} onBack={() => setView({ at: "list" })} rooms={inOrder(s)} onRoom={toRoom} />;
+  // a Mac: the list on the left page, the room on the right; a tap there swaps the room in place
+  if (wide) return <Page scroll className="in-room"><style>{CSS}</style>
+    <div className="beside"><section className="rooms" aria-label="Rooms"><h2>Rooms</h2><RoomList st={st} status={status} open={toRoom} y={0} row={null} search={search} /></section>{theRoom}</div>
   </Page>;
+  return <Page scroll className="in-room"><style>{CSS}</style>{theRoom}</Page>;
 }
 
 function unreadOf(s: Store["s"], room: string) {

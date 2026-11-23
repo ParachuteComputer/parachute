@@ -17,7 +17,7 @@ export { Bar } from "../ui/Bar";
 /** The parts applets have (docs/WRITE-AN-APPLET.md), for a frame of the person's too. */
 export { Card, Days, Empty, Field, List } from "../kit/parts";
 export { Fields, Table } from "../kit/parts-data";
-export { Button, Loading, Page, Problem, Record, Search, still, Tabs, toast, useTranscripts, voiceNote, Write } from "../kit/screen";
+export { Button, Loading, Page, Pages, Problem, Record, Search, still, Tabs, toast, useTranscripts, voiceNote, Write } from "../kit/screen";
 export { when } from "../kit/when";
 export { Drawer } from "../kit/drawer";
 export { Note } from "../kit/parts-note";
