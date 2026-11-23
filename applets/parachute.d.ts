@@ -231,7 +231,7 @@ declare module "parachute" {
   export function Loading(props: { children?: ReactNode }): ReactNode;
   export function Problem(props: { error?: unknown; onRetry?: () => unknown; children?: ReactNode }): ReactNode;
   export function Record(props: { onRecorded: (r: { bytes: ArrayBuffer; type: string; duration: number }) => unknown; label?: string; max_s?: number; disabled?: boolean; kind?: "primary" | "plain" | "quiet"; small?: boolean; children?: ReactNode }): ReactNode;
-  export function Note(props: { body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void }): ReactNode;
+  export function Note(props: { body: string; path?: string; tags?: readonly string[]; fields?: Record<string, unknown>; onLink?: (target: string) => void; fetchBlob?: (src: string) => Promise<Blob> }): ReactNode;
   export function Link(props: { to: string; from?: string; children?: ReactNode }): ReactNode;
   export function Linked(props: { text: string; web?: boolean }): ReactNode;
   export const link: {
