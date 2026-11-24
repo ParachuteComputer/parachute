@@ -56,8 +56,17 @@ final class Drive: XCTestCase {
             shot("failed")
             return XCTFail("no field \"\(field)\". On screen:\n\(app.debugDescription)", file: file, line: line)
         }
-        f.tap()
-        f.typeText(text)
+        // a webview field takes keys only once it has the focus and the keyboard is up: wait for both, check the text
+        // arrived, and try again if it didn't (it sometimes doesn't, the first time)
+        for _ in 0..<3 {
+            f.tap()
+            _ = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+            f.typeText(text)
+            let now = (f.value as? String) ?? ""
+            if !now.isEmpty && now != f.placeholderValue { return }
+        }
+        shot("failed")
+        XCTFail("couldn't type into \"\(field)\"", file: file, line: line)
     }
 
     /// iOS's own questions over the app (Face ID's first use, saving a password): the answer a person gives here.
