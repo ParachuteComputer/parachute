@@ -27,7 +27,7 @@ invite. Real mail is mostly HTML. This is how Mail draws it now, and why it is s
    the kit's own rules (links only http/https/mailto; a picture only `cid:`, a PNG/JPEG/GIF/WebP `data:`, or a shown web
    picture already fetched into a `blob:`; every CSS `url()` asked the same; no `@import`, `@font-face`, `:host`,
    escapes in selectors, or `position: fixed/sticky`); then a last walk with its own allowlist. Each rule is
-   mutation-proved: `npx vite-node scripts/mutate-mail.ts` breaks each one and a test goes red (65 of 65).
+   mutation-proved: `npx vite-node scripts/mutate-mail.ts` breaks each one and a test goes red (69 of 69).
 2. **Two shadow roots** (`src/kit/parts-mail.tsx`): the mail's CSS is in an inner root, so it reaches only the mail
    (a `:host` rule reaches only the inner box) and the app's reaches only the app. The outer root, whose CSS is the
    kit's alone, holds that box with `contain: paint`: nothing positioned in the mail leaves it, so it can't cover Reply
@@ -72,6 +72,10 @@ the mail gateway (as Gmail does) would hide both; that is the gateway's (the Uni
 - In the web build (a browser tab) the browser fetches a shown picture, and can't check where a name points: a public
   name that points into the local network gets a GET with no credentials (CORS keeps its answer out). The app (Rust)
   resolves each name and dials only public addresses.
+- A hostile mail can still be slow or crash the frame inside the browser's own HTML parse, before any cleaning: a
+  `<style>` nested about 10,000 deep, or hundreds of thousands of unclosed tags (Chromium's limits; Mail on next before
+  this work parsed the same HTML). Parsing once, into an inert `<template>` with the style text taken out first, would
+  avoid the first and halve the second.
 - A link opens on the first tap; where it goes shows while it is pointed at or held (and after the tap).
 - Dark versions of a sender's HTML (Apple Mail's): a coloured mail is shown on paper instead.
 

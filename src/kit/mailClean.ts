@@ -189,7 +189,9 @@ export function cleanSheet(css: string, pic: (src: string) => string | null): st
   // a last look at the whole, as the browser will read it (`seen`: each string blanked, each kept at-rule's condition
   // left out): if a rule for the host, a url() it didn't write, or a position out of the flow is in it anywhere (a
   // reading of ours that differs from the browser's), none of it is kept
-  return /:host|::?slotted|::?part\b/i.test(seen) || FOREIGN_URL.test(seen) || PINNED_ANYWHERE.test(seen) || tooDeep(seen) ? "" : out;
+  // (a kept condition's brackets are in `seen`, its words not; an at-keyword left in `seen` is one nested in a rule,
+  // as CSS nesting allows: @scope, @starting-style, none of them ours)
+  return /:host|::?slotted|::?part\b/i.test(seen) || FOREIGN_URL.test(seen) || PINNED_ANYWHERE.test(seen) || tooDeep(seen) || /@[\w-]/.test(seen) ? "" : out;
 }
 /** Braces, brackets and parentheses nested deeper than this: the browser's own style pass slows to seconds and then
  *  crashes (CSS nesting, a selector of :is( in :is( …), so such a sheet is left out. */
@@ -202,6 +204,11 @@ function tooDeep(seen: string): boolean {
     else if (pairs[c]) { const at = open.lastIndexOf(pairs[c]); if (at >= 0) open.length = at; }
   }
   return false;
+}
+/** A style attribute, cleaned; nested past DEPTH_MAX (var( in var( …), none of it. */
+function styleOf(raw: string | null | undefined, pic: (src: string) => string | null): string {
+  const style = cleanDeclarations(plainCss(raw ?? ""), pic);
+  return tooDeep(blank(style)) ? "" : style;
 }
 /** The first `{` or `;` at or after `i` outside strings and url()s: where a statement's prelude ends (-1: none). */
 function statementEnd(s: string, i: number): number {
@@ -241,7 +248,7 @@ function cleanRules(css: string, pic: (src: string) => string | null, depth: num
       // a condition is plain words, numbers and brackets that close: no string, url(, brace, escape or the host's name
       // (any of them could put our reading out of step with the browser's, and the last look leaves conditions out)
       if (!plainCondition(prelude)) continue;
-      if (KEEP_AT.test(prelude) && depth < NEST_MAX) { const inner = cleanRules(body, pic, depth + 1); out += `${prelude}{${inner.out}}`; seen += `@{${inner.seen}}`; }
+      if (KEEP_AT.test(prelude) && depth < NEST_MAX) { const inner = cleanRules(body, pic, depth + 1); out += `${prelude}{${inner.out}}`; seen += `@${prelude.replace(/[^()[\]]/g, "")}{${inner.seen}}`; }
       else if (FRAMES_AT.test(prelude)) { const f = frames(body, pic); out += `${prelude}{${f}}`; seen += `@{${blank(f)}}`; }
       continue;
     }
@@ -324,7 +331,7 @@ export function cleanMail(html: string, pictures: Pictures): Clean {
     } else el.removeAttribute("src");
     if (el.hasAttribute("background")) { const got = pic(el.getAttribute("background") ?? ""); if (got) el.setAttribute("background", got); else el.removeAttribute("background"); }
     if (el.hasAttribute("style")) {
-      const style = cleanDeclarations(plainCss(el.getAttribute("style") ?? ""), pic);
+      const style = styleOf(el.getAttribute("style"), pic);
       if (style) el.setAttribute("style", style); else el.removeAttribute("style");
       if (COLOURS.test(style)) colored = true;
     }
@@ -339,7 +346,7 @@ export function cleanMail(html: string, pictures: Pictures): Clean {
   const bg = body?.getAttribute("bgcolor"), ink = body?.getAttribute("text");
   if (bg && /^#?[0-9a-z]{3,20}$/i.test(bg)) own.push(`background-color: ${bg}`);
   if (ink && /^#?[0-9a-z]{3,20}$/i.test(ink)) own.push(`color: ${ink}`);
-  const bodyStyle = cleanDeclarations(plainCss(body?.getAttribute("style") ?? ""), pic);
+  const bodyStyle = styleOf(body?.getAttribute("style"), pic);
   if (bodyStyle) own.push(bodyStyle);
   if (own.length) { root.setAttribute("style", own.join("; ")); if (COLOURS.test(root.getAttribute("style")!)) colored = true; }
   root.append(frag);
@@ -358,7 +365,14 @@ export function lastWalk(root: Element): number {
     if (!root.contains(el)) continue; // went with an element above it
     if (el.namespaceURI !== "http://www.w3.org/1999/xhtml" || NEVER_TAGS.has(el.localName)) { el.remove(); refused++; continue; }
     // one a mail has no use for (a <canvas>, a <spacer>) goes, and its words stay where they were
-    if (!ALLOWED.has(el.localName)) { el.replaceWith(...Array.from(el.childNodes)); refused++; continue; }
+    if (!ALLOWED.has(el.localName)) {
+      // moved out a child at a time (spread into one call, a great many would take the stack)
+      const words = document.createDocumentFragment();
+      while (el.firstChild) words.appendChild(el.firstChild);
+      el.replaceWith(words);
+      refused++;
+      continue;
+    }
     for (const a of Array.from(el.attributes)) {
       const v = a.value.trim();
       const bad = /^on/i.test(a.name) || NEVER_ATTR.includes(a.name)

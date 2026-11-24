@@ -271,6 +271,20 @@ describe("cleanSheet", () => {
     expect(cleanSheet(`${"(]".repeat(5_000)}p{color:red}`, none)).toBe("");
     expect(cleanSheet(`${":is(".repeat(30)}p${")".repeat(30)}{color:red}`, none)).toBe(`${":is(".repeat(30)}p${")".repeat(30)}{color:red}`);
   });
+  it("depth counts a condition's brackets and a style attribute's too; a rule nested in a rule may hold no at-rule (fourth review of #225)", () => {
+    expect(cleanSheet(`@supports selector(${":is(".repeat(10_000)}p${")".repeat(10_000)}){.a{color:red}} .b{color:blue}`, none)).toBe("");
+    expect(cleanSheet(`@media ${"(".repeat(5_000)}x${")".repeat(5_000)}{.a{color:red}}`, none)).toBe("");
+    expect(cleanSheet("@media (min-width:1px) and (max-width:2px){.a{color:red}}", none)).toBe("@media (min-width:1px) and (max-width:2px){.a{color:red}}");
+    const deep = cleanMail(`<p style="color: ${"var(--a, ".repeat(10_000)}red${")".repeat(10_000)}">x</p>`, HIDDEN);
+    const host = document.createElement("div"); host.append(deep.root);
+    expect(host.querySelector("p")!.hasAttribute("style")).toBe(false);
+    expect(cleanSheet("p{@scope{:scope{margin-left:77px}}} .b{color:blue}", none)).toBe("");
+    expect(cleanSheet("@media all{p{@starting-style{opacity:0}}}", none)).toBe("");
+  });
+  it("an element unwrapped with a great many children doesn't take the stack", () => {
+    const { host } = drawn(`<canvas>${"<br>".repeat(125_000)}</canvas><p>after</p>`);
+    expect(host.querySelectorAll("br")).toHaveLength(125_000);
+  });
   it("<!-- or --> in front of an at-rule doesn't hide it: it goes", () => {
     expect(cleanSheet("<!--@font-face{font-family:Zed;src:local(Arial)} .b{color:blue}", none)).toBe(".b{color:blue}");
     expect(cleanSheet("-->@property --text{syntax:'*'} .b{color:blue}", none)).toBe(".b{color:blue}");
