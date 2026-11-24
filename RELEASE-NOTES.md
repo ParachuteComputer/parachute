@@ -26,8 +26,12 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   vault ([docs/OTHER-PARACHUTES.md](docs/OTHER-PARACHUTES.md)).
 - **Your bundle.** The app opens on the home applet your bundle names (`Parachute/Bundles/<id>`; called an app record before 11-20), the bar is that
   record's pins in its order, then **Applets**: one list of the app's applets, and last **Settings**, on every screen
-  (no record can take it off). Vaults are in Settings. *Changed:* the
-  bar no longer puts your home first by itself: pin it (long-press it in Applets, **Pin to the bar**) to keep it there.
+  (no record can take it off). Vaults are in Settings; a vault of yours the bundle draws from and this device doesn't read
+  yet also ends the list (**Not open here yet**, **Open library**), so its applets aren't missed. *Changed:* the
+  bar no longer puts your home first by itself: pin it (its **Pin**, in Applets or at its top) to keep it there.
+- **Pin, one tap.** Every applet has **Pin** on its row in Applets and in its own top bar; **Pinned** when it is on the
+  bar, and a tap takes it off. Written to your bundle, so your other devices follow. (The list's long-press no longer
+  offers **Pin to the bar**.) On a phone, **Applets** and **Settings** stay at the bar's edge however many are pinned.
   A record that doesn't load leaves you the list and Settings ([docs/NAVIGATION.md](docs/NAVIGATION.md)).
 - **Vault**, Parachute's own viewer: your vaults, each one's types with counts, a type's records as a table (sort,
   filter, group, saved views), a record's fields (changed where they stand), words, links both ways and history; what

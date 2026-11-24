@@ -43,7 +43,10 @@ Three layers, from what no record can touch to what is most yours.
    and a frame of your own can't either. The home applet is on the bar when it is pinned; pin it first to have it there.
    An applet that declares signals shows its count beside its glyph unless it is the screen in front ([design/APP-RECORD.md](design/APP-RECORD.md), "Signals").
 2. **The list is your bundle.** Every applet the open bundle offers ([Bundles](#bundles)), in one plain list. In Everything, that
-   is every applet in every vault. Vaults are not on it: they are in Settings (**Your Parachutes**, one line each saying what Parachute holds of it and what for, with **Open**),
+   is every applet in every vault. Vaults are not on it, save one kind: a vault of yours that the bundle draws applets
+   from and this device doesn't read yet ends the list under **Not open here yet** (*Their applets show here once you
+   open them*), **Open <vault>** or **Not now** each (T-476: Aaron's Library sat in such a vault, unseen). Otherwise
+   vaults are in Settings (**Your Parachutes**, one line each saying what Parachute holds of it and what for, with **Open**),
    and in a Vault applet when the bundle lists one. Nor is Connect an AI: it is a setting (Settings → **Your AI**), a first
    step in Start here on a new vault, and a place on Parachute Simplified's bar.
 3. **Back returns where you came from.** The app's Back and the phone's Back both go one step back in what you did. On
@@ -53,10 +56,15 @@ Three layers, from what no record can touch to what is most yours.
 
 ## Pinning
 
-Long-press (or right-click) an applet in the list: **Pin to the bar** or **Unpin**, and **Open on start**.
-Long-press a place on the bar: **Move left**, **Move right**, **Unpin**, **Open on start**.
+Every applet has a **Pin** button, the same wherever it shows (T-476, Aaron 11-24: "I dont see a way to pin applets
+so I can get to them easily"): on its row in the list, and in its own top bar beside ⋯, whether it runs, asks or is
+stopped (pinning runs nothing). A tap puts it on the bar; on the bar it reads **Pinned** (pressed), and a tap takes it
+off (`src/ui/PinButton.tsx`).
+Long-press (or right-click) an applet in the list: **Open on start** (and **Bring into my Parachute** for someone else's).
+Long-press a place on the bar: **Move left**, **Move right**, **Unpin from the bar**, **Open on start**.
 Settings → **Your bundle** → **On the bar** lists the pins in order, to move up or down or unpin, and **Pin another
-applet** offers every applet here. Each goes into the open bundle's record in the home vault, so every device that opens
+applet** offers every applet here. On a phone the bar scrolls sideways when it is full; **Applets** (when the app adds
+it) and **Settings** stay held at its right edge, so the way to the list is always in reach. Each goes into the open bundle's record in the home vault, so every device that opens
 the bundle shows the same bar. A bundle someone else offers keeps their bar until **Make a copy of your own**.
 
 ## A running applet's menu
@@ -103,7 +111,7 @@ components put on your home ([OTHER-PARACHUTES.md](OTHER-PARACHUTES.md)).
 
 ## Where the choices live
 
-The bar and the home are the open bundle's ([Bundles](#bundles)): you change them by long-pressing, your agent by
+The bar and the home are the open bundle's ([Bundles](#bundles)): you change them with **Pin** and by long-pressing, your agent by
 writing that record. The list of your Parachutes, your servers and the bundle a new device opens are one note in your
 home vault, `Parachute/Settings`, tagged `parachute-settings`; its `bar` and `start` from before 11-20 are still read
 until 2026-12-20, while the open bundle has no record of its own, and never written. Your agent can change the note
@@ -203,7 +211,8 @@ agent can add one by writing an entry. A Parachute on the list that a device isn
 as one line with **Sign in**; nothing is signed in to, or fetched from it, until you tap that and say whose it is.
 
 Signing in reads your home vault only. Each other vault on that Parachute, and any made there later, is counted under
-it in Settings (*3 more vaults there, which Parachute doesn't read*); a tap on that line shows them, each as **Open
+it in Settings (*3 more vaults there, not open here*) and at the foot of the list when the open bundle draws applets
+from them (**Not open here yet**); a tap on that line shows them, each as **Open
 playground**. A tap asks your hub to let Parachute read that one vault; **Not now** stops offering it on this device ([design/SCOPES.md](design/SCOPES.md), [design/ONE-SIGN-IN.md](design/ONE-SIGN-IN.md),
 step 7).
 
