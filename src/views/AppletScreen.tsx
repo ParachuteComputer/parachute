@@ -539,7 +539,7 @@ export default function AppletScreen() {
       b.given = Math.min(b.given, depth, MAX_BACKS);
       setBackHeld(b.given > 0);
     }),
-    // every vault this device holds (the Vault applet's words: modules/vaults.ts), and what reaches each
+    // the vaults it was given (the Vault applet's words: modules/vaults.ts; its pick, docs/ACCESS.md proposal 5), and what reaches each
     ...(vaultsModule ? [vaultsModule] : []),
   ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader, pickNow.key]); // eslint-disable-line react-hooks/exhaustive-deps
 

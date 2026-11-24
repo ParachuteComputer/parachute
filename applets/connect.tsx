@@ -3,7 +3,7 @@
 // reaches every vault the person gives it on the hub's page, names one on each call, and may make new ones. Each
 // vault's own address (`<vault>/mcp`) stays, under "Just one vault". A hub that has no one address (an older hub,
 // Parachute Cloud today) shows each vault's own, as before. The AI asks the person on their hub's page, so nothing here
-// grants anything. It reads which vaults this device holds and their hubs (`vaults`) and copies on a tap (`copy`); then
+// grants anything. It reads the vaults the person gives it and their hubs (`vaults`) and copies on a tap (`copy`); then
 // what to ask the AI for: an applet, with the guide's address, also to copy.
 import { useEffect, useRef, useState } from "react";
 import { app, Button, List, Loading, Page, Problem, vaults } from "parachute";

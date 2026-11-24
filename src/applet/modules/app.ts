@@ -2,7 +2,7 @@
 // names (app.ts), which the person allowed on its card (a word it didn't ask for is not_granted, before anything else).
 // All are the shell's answers; nothing here reads a token. The last four are docs/design/KEYRING.md's "Voice, files,
 // links, storage" (storage is its own module, storage.ts).
-//   app.recent({limit?})   the newest notes across the vaults this device holds: titles, where, when (never content)
+//   app.recent({limit?})   the newest notes across the vaults the person gave it: titles, where, when (never content)
 //   app.changes()          (changes) what others (an AI, another app) changed today across those vaults: how many, by
 //                          whom (names only), and where Vault shows them: {count, names, more, href} (count 0: href null)
 //   app.pins()             what is on the bar: the home applet and the pins, by name, glyph and address

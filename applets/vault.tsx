@@ -6,7 +6,7 @@
 // of its types, invites someone, and takes access back. Changes says what changed
 // in a vault, by whom (your AI by its key's name), each before and after, and puts a change, or a writer's run of them,
 // back: putting back is a change of its own, kept in history (docs/VAULT.md "Changes").
-// It asks the app for every vault on this device (`vaults`) and what reaches them (`sharing`): its card says so.
+// It asks the app for the vaults the person gives it (`vaults`; docs/ACCESS.md proposal 5) and what reaches them (`sharing`).
 // An ordinary applet otherwise: a note in your vault (Applets/Vault); change it, or ask your AI to.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 // Table, Fields and the vaults calls are level 3, Changes' calls (vaults.changes, compare, restore, remove) level 5, and

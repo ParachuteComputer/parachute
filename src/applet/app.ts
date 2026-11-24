@@ -1,12 +1,12 @@
 // What an applet may ask of the app beyond its own vault: `metadata.app` on its note, beside the manifest (the manifest
 // itself is the Uni app's contract 2 and takes no new key). A home applet uses these: the newest notes across the
-// vaults this device holds (titles only), what is on the bar, and a move to a note or an applet on a tap. Each word is
+// vaults the person gave it (titles only), what is on the bar, and a move to a note or an applet on a tap. Each word is
 // a line on the card and part of the grant's key, so adding one asks again. The shell's own capabilities for the Uni
 // app's rooms (docs/design/KEYRING.md "Voice, files, links, storage"): links, save, attach (a file the person picks)
 // and storage (a little, on this device). Pure.
 //
 //   app: [recent, pins, open, links, save, attach, storage, vaults, sharing, copy, changes]
-// `changes` (Home's, level 5): how many changes others (an AI, another app) made today in the vaults this device holds,
+// `changes` (Home's, level 5): how many changes others (an AI, another app) made today in the vaults the person gave it,
 // and their names; never what changed.
 // `copy` (Connect's, docs/design/PARACHUTE-SOURCE.md): what the person taps goes to the clipboard, during their tap.
 // `vaults` and `sharing` are the Vault applet's (applets/vault.tsx; modules/vaults.ts). `recent`, `changes`, `vaults` and
