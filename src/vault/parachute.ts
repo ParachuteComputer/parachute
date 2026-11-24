@@ -229,7 +229,8 @@ export class HubRefused extends Error {}
  *  made it; throws HubRefused in the hub's own words when it refuses, a plain Error when its answer can't be read. */
 export async function createWithToken(accountMcp: string, token: string, name: string, fetchImpl: typeof fetch = fetch.bind(globalThis)): Promise<string> {
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create-vault", arguments: { name } } });
-  const res = await postAccount(accountMcp, token, body, fetchImpl);
+  // a hub that never answers ends the step (signInFlow firstVault) rather than holding "Making it…" for good
+  const res = await postAccount(accountMcp, token, body, fetchImpl, AbortSignal.timeout(20_000));
   if (!res.ok) throw new Error(`The hub didn't make the vault (${res.status}).`);
   let a: { error?: { message?: unknown }; result?: { isError?: boolean; content?: { text?: unknown }[] } };
   try { a = rpcAnswer(await res.text()) as typeof a; } catch { throw new Error("The hub's answer couldn't be read."); }

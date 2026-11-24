@@ -23,7 +23,11 @@ export default function FirstVault({ first, onError, onCancel }: { first: First;
     e.preventDefault();
     if (!isVaultName(clean) || clean.length < 2) { setError("Use letters, numbers and hyphens, starting with a letter or number."); return; }
     setBusy(true); setError(null);
-    try { window.location.assign(await first.make(clean)); } catch (err) {
+    try {
+      const go = await first.make(clean);
+      // the person left while it was being made: the vault is theirs, and the next sign-in finds it; don't pull them back
+      if (here.current) window.location.assign(go);
+    } catch (err) {
       setBusy(false);
       // a refusal the person can answer (a name taken) stays here; anything else ends this step (the screen says it)
       if (err instanceof HubRefused) setError(err.message); else onError(err);

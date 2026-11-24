@@ -23,6 +23,8 @@ export default function OAuthCallback() {
   const [pick, setPick] = useState<VaultPick | null>(null);
   const [first, setFirst] = useState<First | null>(null);
   const once = useRef(false);
+  const live = useRef(true);
+  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   useEffect(() => {
     if (once.current) return;
     once.current = true;
@@ -38,7 +40,8 @@ export default function OAuthCallback() {
     if (!code || !state) { setError("This page needs a sign-in from a hub."); return; }
     finishStep(code, state, params.get("iss")).then(async (next) => {
       if ("pick" in next) { setPick(next.pick); return; }
-      if ("first" in next) { setFirst(next.first); return; }
+      // left before the answer came: the first-vault step never shows, so its token is ended here
+      if ("first" in next) { if (!live.current) void next.first.end(); else setFirst(next.first); return; }
       if ("go" in next) { setSaying("Asking your hub for your home vault…"); window.location.assign(next.go); return; }
       setSaying(next.signIn ? "Signed in." : next.why === "manage" ? `You can manage who reaches ${next.done.vault}.` : `Parachute now ${next.done.scope.includes(`vault:${next.done.vault}:write`) ? "reads and changes" : "reads"} ${next.done.vault}.`);
       if (next.signIn) await afterSignIn(next.parachute.hub, [next.done], next.parachute.door === "cloud", next.firstHome && next.solo).catch(() => undefined);

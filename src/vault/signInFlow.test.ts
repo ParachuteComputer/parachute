@@ -35,7 +35,7 @@ function listingStep(whose: "mine" | "theirs" = "mine") {
   localStorage.setItem(PENDING, JSON.stringify({ parachute: P, step: "list", why: "signin", how: "page", whose, issuer: HUB, tokenEndpoint: `${HUB}/oauth/token`,
     revocationEndpoint: `${HUB}/oauth/revoke`, clientId: "c1", codeVerifier: "v", state: "s1", redirectUri: "http://localhost/oauth/callback", startedAt: Date.now() }));
 }
-async function first(seen: Seen, scope = VAULTS_AND_CREATE, create = made): Promise<FirstVault> {
+async function first(seen: Seen, scope = VAULTS_AND_CREATE, create: (name: string) => unknown = made): Promise<FirstVault> {
   vi.stubGlobal("fetch", hub(scope, create, seen));
   listingStep();
   const next = await finishStep("code", "s1");
