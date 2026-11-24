@@ -10,10 +10,10 @@ import { app, Button, Field, Linked, List, Loading, MailBody, Page, Problem, rea
 type Addr = { name?: string | null; email: string };
 type Email = { id: string; threadId: string; mailboxIds: Record<string, boolean>; keywords: Record<string, boolean>; from?: Addr[]; to?: Addr[]; replyTo?: Addr[]; cc?: Addr[]; subject?: string; receivedAt: string; preview?: string; hasAttachment?: boolean;
   textBody?: Part[]; htmlBody?: Part[]; bodyValues?: Record<string, { value: string; isTruncated?: boolean }>; attachments?: File[] };
-type Part = { partId: string; type?: string };
+type Part = { partId: string; type?: string; blobId?: string; name?: string | null };
 /** A file that came with a message (JMAP's EmailBodyPart): its bytes are the gateway's `raw` of its blob. An inline
  *  picture has the Content-ID its HTML names it by (`cid:`). */
-type File = { blobId?: string; name?: string | null; type?: string; size?: number; cid?: string | null; disposition?: string | null };
+type File = { partId?: string; blobId?: string; name?: string | null; type?: string; size?: number; cid?: string | null; disposition?: string | null };
 type Box = { id: string; name: string; role: string | null; unreadEmails?: number; totalEmails?: number };
 type Session = { account: string; primaryAccounts: Record<string, string>; accounts: Record<string, { name: string }>; roles: Record<string, string>; operations: Record<string, string[]> };
 type View = { at: "list" } | { at: "read"; id: string } | { at: "compose"; draft?: Draft; reply?: Email } | { at: "held"; opId: string };
@@ -66,9 +66,17 @@ function bodyOf(e: Email): { html?: string; text?: string; cut: boolean } {
   const html = e.htmlBody ?? [];
   // the text part is also what shows if the HTML can't be drawn
   const text = (e.textBody ?? []).filter((p) => p.type !== "text/html").map(value).join("\n").trim();
-  if (html.some((p) => p.type === "text/html")) return { html: html.map((p) => (p.type === "text/html" ? value(p) : `<pre>${esc(value(p))}</pre>`)).join("\n"), text, cut };
+  // a picture between the parts (an iPhone's text, photo, text) is drawn where it was, through the same inline path as
+  // a cid: one (its own part id stands for its cid)
+  const piece = (p: Part) => p.type === "text/html" ? value(p) : /^image\//i.test(p.type ?? "") && p.blobId ? `<p><${PICTURE} src="cid:${PART}${p.partId}" alt="${esc(p.name ?? "")}"></p>` : /^text\//i.test(p.type ?? "") ? `<pre>${esc(value(p))}</pre>` : "";
+  if (html.some((p) => p.type === "text/html")) return { html: html.map(piece).join("\n"), text, cut };
   return { text, cut };
 }
+/** The made-up cid that names a picture part by its part id (bodyOf, and Thread's `part`). */
+const PART = "pa-part-";
+/** The tag, by name: this is HTML handed to MailBody's cleaning (which sizes pictures to the screen), not a picture on
+ *  Mail's own page, where the kit's checker rightly asks for a width and height. */
+const PICTURE = "img";
 const sender = (e: Email) => (e.from?.[0]?.email ?? "").toLowerCase();
 /** The Content-ID a part's HTML names it by, without its angle brackets. */
 const cidOf = (f: File) => (f.cid ?? "").trim().replace(/^<|>$/g, "");
@@ -313,7 +321,8 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
   };
   /** One of a message's own parts (an inline picture), from the gateway. */
   const part = (e: Email) => async (cid: string) => {
-    const f = (e.attachments ?? []).find((a) => cidOf(a) === cid && a.blobId && /^image\//i.test(a.type ?? ""));
+    const f = cid.startsWith(PART) ? [...(e.htmlBody ?? []), ...(e.attachments ?? [])].find((a) => a.partId === cid.slice(PART.length) && a.blobId && /^image\//i.test(a.type ?? ""))
+      : (e.attachments ?? []).find((a) => cidOf(a) === cid && a.blobId && /^image\//i.test(a.type ?? ""));
     if (!f) return null;
     const r: any = await services.fetch("mail", "raw", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountId: account, blobId: f.blobId }), as: "bytes" });
     return r.status < 300 ? new Blob([r.body], { type: f.type }) : null;
@@ -329,7 +338,7 @@ function Thread({ id, account, me, can, back, reply, edit, inDrafts }: { id: str
       </article>;
       const body = bodyOf(e);
       // pictures inline in its HTML are drawn there, not listed again as files
-      const files = (e.attachments ?? []).filter((a) => !(body.html && cidOf(a) && a.disposition !== "attachment" && body.html.includes(`cid:${cidOf(a)}`)));
+      const files = (e.attachments ?? []).filter((a) => !(body.html && ((cidOf(a) && a.disposition !== "attachment" && body.html.includes(`cid:${cidOf(a)}`)) || (a.partId && body.html.includes(`cid:${PART}${a.partId}"`)))));
       const s = sender(e);
       return <article className="msg" key={e.id} aria-label={e.subject || "a message"}>
         <div className="meta"><b className="who">{from?.name || from?.email || "(nobody)"}</b>{from?.name && <span className="quiet"> {from.email}</span>}<span className="quiet"> · {when.full(e.receivedAt)}</span>

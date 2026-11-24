@@ -19,7 +19,7 @@ const kitApp = (): { picture?: (url: string) => Promise<Got> } => ((globalThis a
 
 /** The root's own CSS, under the mail's (which may override any of it but the root itself). */
 const BASE = `
-:host { display: block; position: relative; contain: paint; }
+:host { display: block; position: relative; contain: paint; overflow-x: auto; }
 :host(.pa-mail-paper) { background: #ffffff; color-scheme: light; border-radius: var(--radius-card, 10px); padding: 12px; }
 .pa-mail-fit { color: var(--text); font: var(--fs-body)/1.55 var(--serif); overflow-wrap: break-word; }
 :host(.pa-mail-paper) .pa-mail-fit { color: #1d1d1f; font-family: var(--sans); }

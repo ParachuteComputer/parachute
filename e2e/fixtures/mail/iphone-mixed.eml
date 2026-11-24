@@ -1,0 +1,30 @@
+From: Lena Park <lena@park.example.test>
+To: alice@test.test
+Subject: The new beds
+Date: Mon, 23 Nov 2026 16:20:00 -0700
+Message-ID: <iphone-beds@park.example.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="Apple-Mail-beds-1"
+
+--Apple-Mail-beds-1
+Content-Type: text/html; charset=utf-8
+
+<html><body><div dir="auto">Look how the raised beds came out:</div></body></html>
+--Apple-Mail-beds-1
+Content-Type: image/png; name="IMG_0412.png"
+Content-Disposition: inline; filename="IMG_0412.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAKAAAAB4CAIAAAD6wG44AAABLklEQVR4nO3RAQkAIBDAwM9pJoMZ
+yxQijIMLMNisfQib7wU8ZXCcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEG
+xxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkc
+Z3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3Cc
+wXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEG
+xxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEGxxkcZ3CcwXEXkrQB
+YwmfVOgAAAAASUVORK5CYII=
+
+--Apple-Mail-beds-1
+Content-Type: text/html; charset=utf-8
+
+<html><body><div dir="auto">Cedar, no paint. Sent from my iPhone</div></body></html>
+--Apple-Mail-beds-1--

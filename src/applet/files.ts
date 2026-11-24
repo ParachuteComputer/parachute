@@ -57,7 +57,8 @@ export function pictureUrlOk(url: unknown): url is string {
     const u = new URL(url);
     if (u.username || u.password) return false;
     const host = u.hostname;
-    return !!host && host.includes(".") && !LOCAL_NAME.test(host) && !localAddress(host);
+    // a name with a dot, or an IPv6 address written out (a public one: localAddress refuses the rest), as Rust takes them
+    return !!host && (host.includes(".") || host.startsWith("[")) && !LOCAL_NAME.test(host) && !localAddress(host);
   } catch { return false; }
 }
 /** What a picture's first bytes say it is: PNG, JPEG, GIF or WebP (never SVG: it is a document), or null. */

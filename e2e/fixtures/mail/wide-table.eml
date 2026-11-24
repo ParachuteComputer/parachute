@@ -1,0 +1,9 @@
+From: Tool Library <hello@tools.example.test>
+To: alice@test.test
+Subject: Your borrowing history
+Date: Mon, 23 Nov 2026 10:00:00 -0700
+Message-ID: <wide-1@tools.example.test>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body><table width="1600" style="min-width:1600px;background:#ffffff;color:#222"><tr><td width="100" style="padding:4px">col 0</td><td width="100" style="padding:4px">col 1</td><td width="100" style="padding:4px">col 2</td><td width="100" style="padding:4px">col 3</td><td width="100" style="padding:4px">col 4</td><td width="100" style="padding:4px">col 5</td><td width="100" style="padding:4px">col 6</td><td width="100" style="padding:4px">col 7</td><td width="100" style="padding:4px">col 8</td><td width="100" style="padding:4px">col 9</td><td width="100" style="padding:4px">col 10</td><td width="100" style="padding:4px">col 11</td><td width="100" style="padding:4px">col 12</td><td width="100" style="padding:4px">col 13</td><td width="100" style="padding:4px">col 14</td><td width="100" style="padding:4px">col 15</td></tr><tr><td colspan="15"></td><td><a href="https://tools.example.test/return">Return it</a></td></tr></table></body></html>

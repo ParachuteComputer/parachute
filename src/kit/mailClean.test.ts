@@ -207,6 +207,12 @@ describe("cleanSheet", () => {
     // and when our reading and the browser's could still differ (a rule nested in a declaration list), none of it
     expect(cleanSheet(".a{color:red; & .b{position:fixed}}", none)).toBe("");
   });
+  it("a condition or a string that only names a position or a url() keeps the sheet (closing review, T-476)", () => {
+    expect(cleanSheet("@supports (position: sticky) { .hdr { top: 0 } } .b { color: blue }", none)).toBe("@supports (position: sticky){.hdr{top: 0}}.b{color: blue}");
+    expect(cleanSheet('.a { content: "position: fixed" } .b { color: blue }', none)).toBe('.a{content: "position: fixed"}.b{color: blue}');
+    // and a condition can't carry a rule out of sight
+    expect(cleanSheet("@media x } :host{position:fixed} .z{color:red}", none)).not.toMatch(/:host/);
+  });
   it("a comment is a space: taking one out can't make a new comment, or :host (second security review)", () => {
     expect(cleanSheet("://**/* c */host{contain:none;margin-top:-180px} .b{color:blue}", none)).not.toMatch(/:\s*host|:\/\*/);
     expect(cleanSheet(".a{position: /**/ fixed; color: red}", none)).toBe(".a{color: red}");
@@ -252,7 +258,8 @@ describe("the last walk takes out what the steps before it should have", () => {
     root.innerHTML = '<p onclick="x()">a</p><a href="javascript:x()">b</a><span href="https://x">c</span><img src="https://x/y.png"><img src="data:text/html,x"><div style="background:url(https://x)">d</div><div title="javascript:x">e</div><table background="https://x/t.png"></table><img srcset="https://x/2x.png 2x"><a target="_top" ping="https://x/p">f</a>';
     // an SVG <a> has an allowed name in another namespace
     root.append(document.createElementNS("http://www.w3.org/2000/svg", "a"));
-    const script = document.createElement("script"); root.append(script);
+    // a script goes whole: its words are code, not words to keep
+    const script = document.createElement("script"); script.textContent = "steal()"; root.append(script);
     expect(lastWalk(root)).toBe(13);
     expect(root.innerHTML).toBe("<p>a</p><a>b</a><span>c</span><img><img><div>d</div><div>e</div><table></table><img><a>f</a>");
   });
@@ -266,9 +273,10 @@ describe("the last walk takes out what the steps before it should have", () => {
 });
 
 describe("cleanMail's last walk runs", () => {
-  it("an element DOMPurify keeps but a mail has no use for goes, counted", () => {
-    const { c, host } = drawn('<p>words</p><canvas width="9"></canvas><spacer type="block"></spacer>');
+  it("an element DOMPurify keeps but a mail has no use for goes, its words staying; counted", () => {
+    const { c, host, text } = drawn('<p>words</p><canvas width="9"><p>Your order #123 total $40</p></canvas><spacer type="block"></spacer>');
     expect(host.querySelector("canvas, spacer")).toBeNull();
+    expect(text).toContain("Your order #123 total $40");
     expect(c.refused).toBe(2);
   });
 });

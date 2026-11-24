@@ -168,7 +168,11 @@ export function cleanSheet(css: string, pic: (src: string) => string | null): st
   const out = cleanRules(css, pic, 0);
   // a last look at the whole: if a rule for the host, a url() it didn't write or a position out of the flow is in it
   // anywhere (a parse of ours that differs from the browser's), none of it is kept
-  return /:host|::?slotted|::?part\b/i.test(out) || FOREIGN_URL.test(out) || PINNED_ANYWHERE.test(out) ? "" : out;
+  // read with its strings and its at-rules' conditions blanked: `@supports (position: sticky)` or content: "url(…)"
+  // say nothing that applies (a string runs to its line's end at most, as the browser reads it; a condition stops at
+  // a brace or semicolon, so one can't swallow a rule)
+  const seen = out.replace(/(?<!url\()(?:"[^"\n\r\f]*"|'[^'\n\r\f]*')/g, '""').replace(/@[a-z-]+[^{};]*\{/gi, "@{");
+  return /:host|::?slotted|::?part\b/i.test(seen) || FOREIGN_URL.test(seen) || PINNED_ANYWHERE.test(seen) ? "" : out;
 }
 function cleanRules(css: string, pic: (src: string) => string | null, depth: number): string {
   const s = plainCss(css);
@@ -217,6 +221,8 @@ function tracker(img: Element): boolean {
     || /^\s*none\s*$/.test(decl("display") ?? "") || /^\s*hidden\s*$/.test(decl("visibility") ?? "") || /^\s*0(?:\.0*)?\s*$/.test(decl("opacity") ?? "");
 }
 
+/** What the last walk takes out whole, with what is in it. */
+const NEVER_TAGS = new Set("script style template iframe frame frameset object embed applet form input button textarea select option optgroup datalist output svg math noscript noembed noframes link meta base video audio source track dialog map area portal".split(" "));
 /** The tags the last walk allows (DOMPurify's HTML set, less FORBID_TAGS; details and summary are ours, for quotes). */
 const ALLOWED = new Set("a abbr acronym address article aside b bdi bdo big blink blockquote br caption center cite code col colgroup data dd del details dfn dir div dl dt em figcaption figure font footer h1 h2 h3 h4 h5 h6 header hgroup hr i img ins kbd label legend li main mark marquee menu meter nav nobr ol p picture pre progress q rp rt ruby s samp section small span strike strong sub summary sup table tbody td tfoot th thead time tr tt u ul var wbr fieldset".split(" "));
 
@@ -294,7 +300,10 @@ export function cleanMail(html: string, pictures: Pictures): Clean {
 export function lastWalk(root: Element): number {
   let refused = 0;
   for (const el of Array.from(root.querySelectorAll("*"))) {
-    if (!ALLOWED.has(el.localName) || el.namespaceURI !== "http://www.w3.org/1999/xhtml") { el.remove(); refused++; continue; }
+    if (!root.contains(el)) continue; // went with an element above it
+    if (el.namespaceURI !== "http://www.w3.org/1999/xhtml" || NEVER_TAGS.has(el.localName)) { el.remove(); refused++; continue; }
+    // one a mail has no use for (a <canvas>, a <spacer>) goes, and its words stay where they were
+    if (!ALLOWED.has(el.localName)) { el.replaceWith(...Array.from(el.childNodes)); refused++; continue; }
     for (const a of Array.from(el.attributes)) {
       const v = a.value.trim();
       const bad = /^on/i.test(a.name) || NEVER_ATTR.includes(a.name)
