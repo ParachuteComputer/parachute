@@ -78,7 +78,8 @@ function rowsOf(grant: Grant, face: { lines: FaceLine[]; also: string[] }): Row[
       : l.lead.startsWith("What it reads on Techne") ? ["↗", "Send what it reads on Techne elsewhere"]
       : /someone else|from .* \(someone/.test(t) ? ["⧉", "Show someone else's things"]
       : ["·", l.lead.replace(/[:.]$/, "")];
-    const words = at ? at.split(" ")[0] : null;
+    // "Techne at host": its lines are the ones that name its host (not "What it reads on Techne … could reach")
+    const words = at ? (at.includes(" at ") ? at.split(" at ")[1] : at.split(" ")[0]) : null;
     rows.push({ mark, title, line: l, text: t, detail: ({ lines }) => {
       const mine = lines.filter((x) => (words ? x.text.includes(words) : x.text === t || t.includes(x.text)));
       return mine.length ? <ul className="grant-lines">{mine.map((x, i) => <li key={i} className={x.stress ? "grant-stress" : undefined}>{x.text}</li>)}</ul> : <p>{t}</p>;

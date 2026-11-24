@@ -5,8 +5,8 @@
 import type { TechneDeps } from "../applet/modules/techne";
 import { askOf, capRecord, capScope, isWrite, techneService, TECHNE_SERVICE_ID, WHO_AM_I, type Techne, type TechneCap } from "../applet/techne";
 import { deviceTechne, type Signed } from "../applet/techneGrants";
-import { approvalFor, signApproval, signsHere } from "../applet/approvalStore";
-import type { Subject } from "../applet/approvals";
+import { approvalFor, floorOf, raiseFloor, signApproval, signsHere } from "../applet/approvalStore";
+import { revokeFloor, type Subject } from "../applet/approvals";
 import { createBroker, withPasscode, type Broker, type Shell } from "../services/broker";
 import { nativeNow } from "../services/native";
 import { knownHubs } from "../services/hubs";
@@ -22,22 +22,29 @@ export type TechneShell = {
   shell: () => Shell;
 };
 
-/** The signed side for this applet, on a device with the person's key; null elsewhere. */
+/** A taking back, whatever becomes of its signature: this device never takes an approval made before it again (as
+ *  approvalStore.ts `takeBack` does for an applet), then the signed one tells every other device. */
+async function takeBackSigned(approval: Subject, cap: TechneCap, name: string): Promise<boolean> {
+  const s: Subject = { ...approval, record: capRecord(approval.record, cap) };
+  raiseFloor(s, revokeFloor(Date.now(), null, floorOf(s)));
+  return (await signApproval({ subject: s, name, approved: false, code: "", scope: "" })).written;
+}
+
+/** The signed side for this applet, on a device with the person's key; null elsewhere. Also null until the applet's own
+ *  approval has been read here (`under`): it then runs by this device's Allow, and its capabilities are this device's. */
 async function signedFor(o: TechneShell): Promise<Signed | null> {
   const n = o.now();
-  if (!n || !(await signsHere())) return null;
-  const sub = (cap: TechneCap): Subject => ({ ...n.approval, record: capRecord(n.approval.record, cap) });
-  // under the applet's own approval as this device read it; not read yet, nothing is held (it asks)
+  if (!n || n.under === null || !(await signsHere())) return null;
   const under = n.under;
+  const sub = (cap: TechneCap): Subject => ({ ...n.approval, record: capRecord(n.approval.record, cap) });
   return {
-    holds: async (cap) => under !== null && (await approvalFor(sub(cap), n.code, capScope(n.asks, cap, under)))?.run === true,
+    holds: async (cap) => (await approvalFor(sub(cap), n.code, capScope(n.asks, cap, under)))?.run === true,
     sign: async (cap, approved) => {
+      if (!approved) return takeBackSigned(n.approval, cap, o.name);
       // this device's level for approving (the unlock, or the passcode first when set), asked on the shell's own sheet
-      await withPasscode(o.shell(), `Let «${o.name}» ${cap === "post" ? "post" : "follow people"} as you on Techne`,
-        async (passcode) => {
-          if (approved && under === null) throw new Error("its approval isn't read yet: try again in a moment");
-          return signApproval({ subject: sub(cap), name: o.name, approved, code: approved ? n.code : "", scope: approved ? capScope(n.asks, cap, under ?? 0) : "", passcode });
-        });
+      const r = await withPasscode(o.shell(), `Let «${o.name}» ${cap === "post" ? "post" : "follow people"} as you on Techne`,
+        (passcode) => signApproval({ subject: sub(cap), name: o.name, approved, code: n.code, scope: capScope(n.asks, cap, under), passcode }));
+      return r.written;
     },
   };
 }
@@ -45,10 +52,7 @@ async function signedFor(o: TechneShell): Promise<Signed | null> {
 /** What Settings uses to take one capability back (the applet needn't be running): the unlock alone, as any taking back
  *  (approve.rs), never the passcode. */
 export async function takeBackTechne(o: Pick<TechneShell, "subject" | "name"> & { approval: Subject }, cap: TechneCap): Promise<void> {
-  const signed: Signed | null = (await signsHere()) ? {
-    holds: async () => false,
-    sign: async (c, approved) => { await signApproval({ subject: { ...o.approval, record: capRecord(o.approval.record, c) }, name: o.name, approved, code: "", scope: "" }); },
-  } : null;
+  const signed: Signed | null = (await signsHere()) ? { holds: async () => false, sign: (c) => takeBackSigned(o.approval, c, o.name) } : null;
   await deviceTechne().takeBack(o.subject, cap, signed);
 }
 

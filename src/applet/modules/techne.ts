@@ -47,7 +47,9 @@ export function createTechneModule(t: Techne | null, deps: TechneDeps): UniModul
           ? ok({ method: p.method, params: (p.params ?? {}) as Call["params"], input: p.input }) : no),
         run: async (c: Call) => {
           const techne = need();
-          let check = checkCall(techne, await deps.held(), c.method);
+          // a read needs nothing held: what it holds is read only for a write
+          let check = checkCall(techne, new Set(), c.method);
+          if (!check.ok && "ask" in check) check = checkCall(techne, await deps.held(), c.method);
           if (!check.ok && "ask" in check) {
             const cap = check.ask;
             const said = await deps.ask(cap);

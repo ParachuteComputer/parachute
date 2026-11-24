@@ -1,6 +1,6 @@
 // Settings → Applets: the self-test's result (and Run again), and each applet this device has allowed, with Revoke.
 import { giveBack } from "../vault/reach";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { runSelfTest, useGate, useSelfTestRun } from "../applet/selftest/run";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { takeBack } from "../applet/approvalStore";
@@ -24,8 +24,10 @@ const techne = deviceTechne();
 function TechneHeld({ rec, subject, entry }: { rec: VaultRecord; subject: string; entry: AppletEntry }) {
   const [, setN] = useState(0);
   const [said, setSaid] = useState<string | null>(null);
+  // a running applet's grant or a Take back elsewhere shows here at once
+  useEffect(() => techne.onChange(() => setN((n) => n + 1)), []);
   const held = techne.listed(subject).filter(([c]) => isWrite(c));
-  if (!held.length) return null;
+  if (!held.length && !said) return null;
   const back = (cap: TechneCap) => void takeBackTechne({ subject, name: entry.manifest.name, approval: approvalSubject(rec, entry.noteId, entry.manifest.id) }, cap)
     .then(() => setSaid(null), (e) => setSaid(`Taken back on this device only: ${e instanceof Error ? e.message : "it couldn't be signed"}`)).finally(() => setN((n) => n + 1));
   return <ul className="plain applet-techne" aria-label={`On Techne for ${entry.manifest.name}`}>{said && <li className="line"><p className="error" role="alert">{said}</p></li>}{held.map(([cap, at]) => (
@@ -72,6 +74,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
         <button type="button" className="quiet-button" onClick={() => revoke(subject, id, a)}>Revoke</button>
         {a && (a.services.length > 0 || a.servicesError) && <AppletServices subject={subject} entry={a} />}
         {a?.techne && <TechneHeld rec={rec} subject={subject} entry={a} />}
+        {a?.techneError && <p className="quiet applet-techne">It reaches nothing on Techne: {a.techneError}.</p>}
       </li>
     );
   })}</>;

@@ -101,6 +101,39 @@ describe("a grant is scoped to one capability", () => {
   });
 });
 
+describe("review findings", () => {
+  it("a yes signed here that the home vault couldn't take is held here, and Take back ends it", async () => {
+    const grants = createTechneGrants(mem());
+    const notWritten: Signed = { holds: async () => false, sign: async () => false };
+    const a = applet({ grants, signed: notWritten });
+    await a.call(POST, { input: {} });
+    await a.call(POST, { input: {} });
+    expect(a.asked).toEqual(["post"]);
+    expect(a.sent).toEqual([`POST ${POST}`, `POST ${POST}`]);
+    await grants.takeBack(a.subject, "post", notWritten);
+    const after = applet({ grants, signed: notWritten, answer: "no" });
+    await expect(after.call(POST, { input: {} })).rejects.toMatchObject({ code: "not_granted" });
+  });
+  it("a Revoke anywhere forgets what the applet held (Settings lists only allowed applets' lines)", async () => {
+    const grants = createTechneGrants(mem());
+    await applet({ grants }).call(POST, { input: {} });
+    expect(grants.listed("vault\u0000NOTE").map(([c]) => c)).toEqual(["post"]);
+    grants.keepOnly(new Set(["vault\u0000OTHER"]));
+    expect(grants.listed("vault\u0000NOTE")).toEqual([]);
+  });
+  it("a read doesn't read what it holds; only a write does", async () => {
+    let reads = 0;
+    const grants = createTechneGrants(mem());
+    const counting: Signed = { holds: async () => { reads++; return false; }, sign: async () => true };
+    await applet({ grants, signed: counting, answer: "no" }).call(PROFILE, { params: { did: "did:plc:x" } });
+    expect(reads).toBe(0);
+  });
+  it("Techne's subdomains are Techne too: never a plain service", () => {
+    for (const o of ["https://api.techne.computer", "https://alice.pds.techne.town", "https://techne.town."]) expect(isTechneOrigin(o, null), o).toBe(true);
+    expect(isTechneOrigin("https://nottechne.computer", null)).toBe(false);
+  });
+});
+
 describe("revocation", () => {
   it("Take back: the next write asks again, in the same running applet", async () => {
     const a = applet();
@@ -138,6 +171,7 @@ function signedDevice(events: SignedEvent[] = [], clock = { now: T0 }, under = 1
       const c = approvalContent({ subject: s, approved, code: CODE, scope: capScope(ASKS, cap, under), now: clock.now, seen: floors.get(dOf(s)) ?? null });
       events.push(finalizeEvent({ kind: APPROVAL_KIND, created_at: Math.floor(clock.now / 1000), tags: [["d", dOf(s)]], content: JSON.stringify(c) }, me) as SignedEvent);
       floors.set(dOf(s), c.n + (approved ? 0 : 0.5));
+      return true;
     },
   };
   return { signed, events, floors, clock };

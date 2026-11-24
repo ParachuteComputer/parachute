@@ -58,11 +58,14 @@ export function parseTechne(raw: unknown, isHub: (origin: string) => boolean = (
 export function isTechneOrigin(origin: string, t: Techne | null): boolean {
   try {
     const u = new URL(origin);
-    return (t !== null && new URL(t.at).origin === u.origin) || TECHNE_HOSTS.includes(u.hostname.replace(/\.$/, ""));
+    const host = u.hostname.replace(/\.$/, "");
+    return (t !== null && new URL(t.at).origin === u.origin) || TECHNE_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
   } catch { return false; }
 }
 
 export const techneHost = (t: Techne) => new URL(t.at).host;
+/** "a", "a, or b", "a, b, or c"; "a and b", "a, b, and c": the card's lists. */
+const list = (xs: readonly string[], word: "or" | "and") => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")}${word === "or" || xs.length > 2 ? "," : ""} ${word} ${xs[xs.length - 1]}`);
 
 /** What each write capability is, in the card's words (after "Will ask you once before it can …"). */
 const WRITE_WORDS: Record<Exclude<TechneCap, "read">, string> = { post: "post as you in your circles", follow: "follow people as you (anyone can see who you follow)" };
@@ -79,13 +82,13 @@ export function techneLines(t: Techne): { text: string; stress: boolean }[] {
   const writes = t.can.filter(isWrite) as Exclude<TechneCap, "read">[];
   if (writes.length) {
     const w = writes.map((c) => WRITE_WORDS[c]);
-    out.push({ text: `Will ask you once before it can ${w.length === 1 ? w[0] : `${w.slice(0, -1).join(", ")}, or ${w[w.length - 1]}`} at ${host}`, stress: true });
+    out.push({ text: `Will ask you once before it can ${list(w, "or")} at ${host}`, stress: true });
   }
   return out;
 }
 
 /** The card's line when what it reads on Techne could leave through a server it also declares (services.ts). */
-export const techneOutLine = (hosts: readonly string[]) => ({ text: `What it reads on Techne, your private circles too, could reach ${hosts.length === 1 ? hosts[0] : `${hosts.slice(0, -1).join(", ")} and ${hosts[hosts.length - 1]}`}`, stress: true });
+export const techneOutLine = (hosts: readonly string[]) => ({ text: `What it reads on Techne, your private circles too, could reach ${list(hosts, "and")}`, stress: true });
 
 /** The card's face for Techne (face.ts): what it does there as the person, the writes it asks for first, and where
  *  what it reads could go. Each keeps its host, as every stressed line does. */
@@ -96,9 +99,9 @@ export function techneFace(t: Techne, outHosts: readonly string[]): { lead: stri
   const writes = t.can.filter(isWrite) as Exclude<TechneCap, "read">[];
   if (writes.length) {
     const w = writes.map((c) => WRITE_WORDS[c]);
-    out.push({ lead: "Asks you first", rest: `, once, before it can ${w.length === 1 ? w[0] : `${w.slice(0, -1).join(", ")}, or ${w[w.length - 1]}`} at ${host}.`, risky: true });
+    out.push({ lead: "Asks you first", rest: `, once, before it can ${list(w, "or")} at ${host}.`, risky: true });
   }
-  if (t.can.includes("read") && outHosts.length) out.push({ lead: "What it reads on Techne can leave", rest: `: your private circles too, to ${outHosts.length === 1 ? outHosts[0] : `${outHosts.slice(0, -1).join(", ")} and ${outHosts[outHosts.length - 1]}`}.`, risky: true });
+  if (t.can.includes("read") && outHosts.length) out.push({ lead: "What it reads on Techne can leave", rest: `: your private circles too, to ${list(outHosts, "and")}.`, risky: true });
   return out;
 }
 

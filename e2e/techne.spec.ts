@@ -74,10 +74,13 @@ test("techne: reads as you from the card; the first post asks and is signed for 
     await expect(sheet).toBeHidden();
     expect(signedBy("social.scenius.createCirclePost")).toBe(2);
 
-    // Take back in Settings: the next post asks again
+    // Take back in Settings, with the unlock cancelled so the taking back isn't signed: this device still stops (its
+    // floor), and the next post asks again
     await page.goto("/settings");
     const line = page.getByRole("list", { name: "On Techne for Techne" }).getByRole("listitem").filter({ hasText: "Posts as you on Techne" });
+    await page.evaluate(() => { (window as unknown as { __parachuteE2EApprove?: string }).__parachuteE2EApprove = "cancel"; });
     await line.getByRole("button", { name: "Take back" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Taken back on this device only" })).toBeVisible();
     await expect(line).toHaveCount(0);
     await page.goto(`/v/${VAULT}?with=vault`);
     await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Techne/ }).click();
