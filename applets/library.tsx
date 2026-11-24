@@ -137,7 +137,7 @@ function jobLine(job: LibraryRecord, sending: Sending | undefined): string {
   return status || "Waiting.";
 }
 
-/** A job's place: the day and time, and the file's name without its ending. */
+/** A job's place: the day and time, and the file's name with its ending in words ("Walden (epub)"). */
 function jobPath(name: string, now: Date, n = 1): string {
   // its ending in words ("Walden (epub)"): an epub and a PDF of one book, added in one minute, are two jobs
   const named = cleanPathSegment(name.replace(/\.([a-z0-9]{1,5})$/i, " ($1)"), 80) || "book";

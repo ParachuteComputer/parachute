@@ -88,7 +88,7 @@ A **job** is a record that asks for work. Any AI with the vault can find it, tak
 | `result` | What it made: a reference to the book |
 | `note` | What happened: why it failed, or what was left out |
 
-- **Where it lives:** the folder of the applet that made it, e.g. `Jobs/Library/2026-11-24 Walden`. The applet's
+- **Where it lives:** the folder of the applet that made it, e.g. `Jobs/Library/2026-11-24 09-41 Walden (epub)`. The applet's
   scope stays narrow. The type is what an AI watches for, not the folder.
 - **Taking one:** an AI sets `status: working` and `by`, with `if_updated_at` on the version it read. If two AIs see
   the same job, the second gets a 409 and leaves it.

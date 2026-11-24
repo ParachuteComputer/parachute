@@ -44,10 +44,10 @@ export type UploadIo = {
   closed(): boolean;
 };
 
-/** Waits between tries of one step, about two minutes in all; time offline doesn't count. */
-/** How many times an offline device is waited on (each a few seconds, about ten minutes) before a piece is tried
- *  anyway, and the tries count. */
+/** How many times an offline device is waited on (each a few seconds, about ten minutes) in one spell offline before
+ *  a step is tried anyway, and its tries count. */
 const OFFLINE_LOOKS = 120;
+/** Waits between tries of one step, about two minutes in all; time offline doesn't count. */
 export const WAITS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000];
 
 /** The hub's answer's status on an error, or 0 for none (the network). surface-client says most refusals only in its
@@ -88,14 +88,15 @@ export async function uploadInParts(file: Blob, name: string, type: string, io: 
   if (size > UPLOAD_MAX) throw new UploadError("the file is over 2 GB");
   const n = pieces(size);
   const piece = (i: number) => file.slice(i * PART, Math.min(size, (i + 1) * PART));
-  // looks at an offline device, for the whole upload: once it has been waited out, its word isn't taken again
+  // looks at an offline device in this spell offline: the device back online starts the count again (one that says
+  // offline all along is waited on once, about ten minutes, for the whole upload)
   let waited = 0;
   const step = async <T,>(what: string, run: () => Promise<T>): Promise<T> => {
     for (let tries = 0; ; ) {
       if (io.closed()) throw new UploadError("the applet's screen closed");
       // offline: wait for it, but not for ever on the device's word (a webview can say offline while it isn't)
       if (!io.online() && waited++ < OFFLINE_LOOKS) { await io.whenOnline(); continue; }
-      try { return await run(); } catch (e) {
+      try { const r = await run(); if (io.online()) waited = 0; return r; } catch (e) {
         if (e instanceof UploadError || !again(e) || tries >= WAITS.length) throw new UploadError(`${what}: ${e instanceof Error ? e.message.slice(0, 200) : "it failed"}`);
         await io.sleep(WAITS[tries++]);
         // a sign-in renewed meanwhile: a read takes the new one, which the next piece then goes with

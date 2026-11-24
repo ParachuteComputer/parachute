@@ -1096,10 +1096,12 @@ def stale(f):
 
 def waiting_jobs(hub):
     """The waiting import-book jobs in the vault, oldest first (by path: Library names a job by its day and time)."""
-    rows, off = [], 0
+    rows, off, seen = [], 0, set()
     while True:  # every job, a page at a time: done ones stay in the folder, so a vault gathers many
         page = hub.req("GET", f"/notes?tag=job&include_metadata=true&limit=200&offset={off}") or []
-        rows += page; off += len(page)
+        new = [r for r in page if r.get("id") not in seen]
+        if not new: break  # a hub that doesn't page: what it gave is all there is
+        seen.update(r.get("id") for r in new); rows += new; off += len(page)
         if len(page) < 200: break
     mine = [r for r in rows if (r.get("metadata") or {}).get("kind") == JOB_KIND
             and ((r.get("metadata") or {}).get("status") == "waiting" or stale(r.get("metadata") or {}))]
