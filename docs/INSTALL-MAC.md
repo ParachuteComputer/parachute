@@ -1,7 +1,8 @@
 # Parachute on a Mac
 
-For Macs with Apple Silicon (M1 and later), macOS 11 or newer. The app is not notarised by Apple yet, so macOS asks
-once before it opens it.
+For Macs with Apple Silicon (M1 and later), macOS 11 or newer. Builds are notarised by Apple once the project's
+Apple keys are in place (docs/STORES.md); such a build opens after macOS's usual "downloaded from the internet" question,
+and section 3 doesn't apply. Until then a build is not notarised, so macOS asks once before it opens it.
 
 ## 1. Download
 
@@ -14,7 +15,7 @@ once before it opens it.
 
 Open the `.dmg` and drag **Parachute** onto **Applications**.
 
-## 3. Open it past Gatekeeper
+## 3. Open it past Gatekeeper (a build that isn't notarised)
 
 The first time, macOS says it can't check Parachute for malicious software. Do one of these, once:
 
