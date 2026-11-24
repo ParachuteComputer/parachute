@@ -90,6 +90,8 @@ function extraLines(fields: Record<string, unknown>): Prop[] {
 }
 
 export type PhotoLine = { type: string; base64: string };
+/** A picture a phone can show: whatever else a `photo` field might name (a PDF, by hand or by an agent) stays off the card. */
+const PICTURE_TYPES = new Set(["JPEG", "PNG", "GIF", "WEBP", "HEIC", "HEIF"]);
 export const photoType = (pathOrMime: string): string => {
   const ext = pathOrMime.toLowerCase().replace(/^image\//, "").replace(/^.*\./, "");
   return ext === "jpg" ? "JPEG" : ext.toUpperCase().replace(/[^A-Z0-9-]/g, "") || "JPEG";
@@ -123,7 +125,7 @@ export function cardText(p: Person, folder: string, photo?: PhotoLine | null): s
   for (const u of facts.links) lines.push(`URL:${u}`);
   if (facts.groups.length) lines.push(`CATEGORIES:${facts.groups.map(escapeValue).join(",")}`);
   if (facts.summary) lines.push(`NOTE:${escapeValue(facts.summary)}`);
-  if (photo) lines.push(`PHOTO;ENCODING=b;TYPE=${photo.type}:${photo.base64}`);
+  if (photo && PICTURE_TYPES.has(photo.type)) lines.push(`PHOTO;ENCODING=b;TYPE=${photo.type}:${photo.base64}`);
   for (const x of extra) if (x.name !== "N") lines.push(x.line);
   lines.push("END:VCARD");
   return lines.map(foldLine).join("\r\n") + "\r\n";

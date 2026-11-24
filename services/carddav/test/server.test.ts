@@ -54,7 +54,7 @@ function fakeHub(records: Rec[], opts: { storage?: (path: string) => Response; u
   return { fetch, asked, records };
 }
 
-async function withBridge(hub: ReturnType<typeof fakeHub>, run: (call: (method: string, path: string, init?: { body?: string; headers?: Record<string, string> }) => Promise<Response>, logs: string[]) => Promise<void>) {
+async function withBridge(hub: ReturnType<typeof fakeHub>, run: (call: (method: string, path: string, init?: { body?: string; headers?: Record<string, string> }) => Promise<Response>, logs: string[], at: { base: string; auth: string }) => Promise<void>) {
   const dir = mkdtempSync(join(tmpdir(), "carddav-server-"));
   const devices = join(dir, "devices");
   const pw = addDevice(devices, "pixel");
@@ -64,7 +64,7 @@ async function withBridge(hub: ReturnType<typeof fakeHub>, run: (call: (method: 
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const auth = `Basic ${Buffer.from(`pixel:${pw}`).toString("base64")}`;
   try {
-    await run((method, path, init = {}) => fetch(base + path, { method, body: init.body, headers: { authorization: auth, ...init.headers } }), logs);
+    await run((method, path, init = {}) => fetch(base + path, { method, body: init.body, headers: { authorization: auth, ...init.headers } }), logs, { base, auth });
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
     rmSync(dir, { recursive: true, force: true });
@@ -135,5 +135,24 @@ test("a card with something the vault won't keep gets no ETag on its PUT, so the
     r = await call("PUT", `${BOOK}u-4.vcf`, { body: card("u-4", "PHOTO;VALUE=uri:https://pictures.example/ines.jpg\r\n"), headers: { "if-none-match": "*", "content-type": "text/vcard" } });
     assert.equal(r.status, 201);
     assert.equal(r.headers.get("etag"), null);
+  });
+});
+
+test("a phone whose upload stalls halfway holds up no one else's writes", async () => {
+  const { request } = await import("node:http");
+  const hub = fakeHub([rec("A", "Maya Lin"), rec("B", "Theo Park")]);
+  await withBridge(hub, async (_call, _logs, { base, auth }) => {
+    // a PUT that says 4 KB are coming, sends a few bytes, and goes quiet without closing
+    const stalled = request(`${base}${BOOK}A.vcf`, { method: "PUT", headers: { authorization: auth, "content-type": "text/vcard", "content-length": "4096" } });
+    stalled.on("error", () => {});
+    stalled.write("BEGIN:VCARD\r\nVERSION:3.0\r\n");
+    await new Promise((r) => setTimeout(r, 100));
+    try {
+      const del = await fetch(`${base}${BOOK}B.vcf`, { method: "DELETE", headers: { authorization: auth }, signal: AbortSignal.timeout(2000) })
+        .catch(() => null);
+      assert.equal(del?.status, 204, "the DELETE waited behind the stalled upload");
+    } finally {
+      stalled.destroy();
+    }
   });
 });

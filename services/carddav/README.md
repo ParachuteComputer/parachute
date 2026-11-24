@@ -174,6 +174,11 @@ order (`test/davx5.ts`, taken from davx5-ose and dav4jvm):
 
 ## Limits
 
+- Labels a phone gives that People can't hold come back plain after the next sync: a fax or pager number (as `work` or
+  no label), an email's or address's type, and a label with letters outside a–z (`Büro` → `b ro`). Only the phone's
+  copy changes; the number itself is kept.
+- Behind a Cloudflare Tunnel, put Cloudflare Access in front: each wrong password costs the bridge a scrypt check.
+
 - Every request reads the whole folder (in pages of 200). That is fine for hundreds or a few thousand people, but it
   isn't an index.
 - It needs a hub with the record door (core 0.9 or newer).

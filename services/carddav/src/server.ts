@@ -125,7 +125,8 @@ export function createBridge(o: BridgeOptions) {
     const path = str(p.fields.photo);
     // a picture the vault can't give now fails the request (the phone asks again later): served without it under the
     // same ETag, the phone would keep the card without its photo. One that is gone or too big is left out, always.
-    const photo = path ? await vault.file(path, photoMax) : null;
+    // only a picture is read (cardText leaves anything else off the card, and the ETag agrees)
+    const photo = path && /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(path) ? await vault.file(path, photoMax) : null;
     return cardText(p, folder, photo ? { type: photoType(path), base64: Buffer.from(photo.bytes).toString("base64") } : null);
   }
 
@@ -275,11 +276,16 @@ export function createBridge(o: BridgeOptions) {
     return [await vault.patch(rec.id, fresh.updatedAt, { photo: path }), true];
   }
 
-  async function put(req: IncomingMessage, res: ServerResponse, t: Target) {
+  /** A PUT's card, read in full before its turn to write: a phone whose upload stalls holds up no one else. */
+  async function putBody(req: IncomingMessage, t: Target): Promise<string> {
     if (t.k !== "card") throw new HttpError(405, "PUT a card into the address book");
     const ct = String(req.headers["content-type"] ?? "text/vcard").toLowerCase();
     if (!/^text\/(vcard|x-vcard|directory)\b/.test(ct)) throw new HttpError(415, "a vCard (text/vcard)");
-    const body = await readBody(req);
+    return readBody(req);
+  }
+
+  async function put(req: IncomingMessage, res: ServerResponse, t: Target, body: string) {
+    if (t.k !== "card") throw new HttpError(405, "PUT a card into the address book");
     let card: PhoneCard;
     try { card = readPhoneCard(body); } catch (e) { throw new HttpError(400, (e as Error).message); }
     if (card.group) {
@@ -386,7 +392,7 @@ export function createBridge(o: BridgeOptions) {
         case "REPORT": await report(req, res, t); break;
         case "GET": await get(res, t, false); break;
         case "HEAD": await get(res, t, true); break;
-        case "PUT": await serial(() => put(req, res, t)); break;
+        case "PUT": { const body = await putBody(req, t); await serial(() => put(req, res, t, body)); break; }
         case "DELETE": await serial(() => del(req, res, t)); break;
         default: throw new HttpError(405, "not allowed");
       }

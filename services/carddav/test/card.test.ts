@@ -223,3 +223,10 @@ test("an address the phone sends back with its lines as a street list keeps its 
   const escaped = card.replace("412 Pine St,Boulder", "412 Pine St\\nBoulder");
   assert.equal(readPhoneCard(escaped).facts.address, "412 Pine St\nBoulder, CO 80302");
 });
+
+test("only a picture goes to the phone as the photo: a photo field naming another file (a PDF) is left off the card", () => {
+  const p = (photo: string): Person => ({ id: "r1", path: "People/Ana Ruiz", updatedAt: "2026-11-23T00:00:00Z", fields: { photo } });
+  assert.ok(cardText(p("2026-11-23/x.pdf"), "People/", { type: "PDF", base64: "JVBERi0=" }).includes("PHOTO") === false);
+  assert.equal(etagOf(p("2026-11-23/x.pdf"), "People/"), etagOf({ ...p(""), fields: {} }, "People/"));
+  assert.ok(cardText(p("2026-11-23/x.png"), "People/", { type: "PNG", base64: "iVBORw0=" }).includes("PHOTO;ENCODING=b;TYPE=PNG"));
+});
