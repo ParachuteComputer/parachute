@@ -84,6 +84,7 @@ jobs:
               -dname "CN=Parachute throwaway upload key" -storepass:env KEYPASS -keypass:env KEYPASS >/dev/null
             printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=throwaway\nkeyPassword=%s\n' "$dir/keystore.jks" "$pw" "$pw" > "$dir/keystore.properties"
             echo "AAB_SUFFIX=-throwaway-key" >> "$GITHUB_ENV"
+            echo "PARACHUTE_PLAY_UNCHECKED_BRANCH=1" >> "$GITHUB_ENV"  # nobody uploads this bundle: any branch may build
           fi
           chmod 600 "$dir"/*
           echo "PARACHUTE_KEYSTORE_PROPERTIES=$dir/keystore.properties" >> "$GITHUB_ENV"
