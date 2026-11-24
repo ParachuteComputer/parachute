@@ -23,7 +23,8 @@ jobs:
             next: "1"
     name: web (core ${{ matrix.core }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # (about 25 min: the specs in Chromium, then the applet frame in WebKit)
+    timeout-minutes: 40
     env:
       E2E_CORE_NEXT: ${{ matrix.next }}
     steps:
@@ -48,12 +49,13 @@ jobs:
       - uses: ./.github/actions/core
         with:
           core: ${{ matrix.core }}
-      # the bridge needs the record door and person-scoped tokens: core's next
+      # the bridge needs the record door and person-scoped tokens: core 0.9 (0.9.0-pre.1 is what Aaron's hub runs) and next
       - name: People CardDAV bridge end to end (a real hub, DAVx5's requests)
-        if: matrix.next == '1'
+        if: matrix.core != '0.8.0'
         run: cd services/carddav && npm run e2e
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      # Chromium (Android's webview) for the specs, WebKit (the Mac app's WKWebView) for e2e/webkit.spec.ts
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
       - name: End-to-end tests (Playwright, web build)
         run: npm run e2e
       - uses: actions/upload-artifact@v4
