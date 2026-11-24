@@ -48,7 +48,8 @@ final class Drive: XCTestCase {
         // the keyboard going away moves the page under the finger (a tap aimed at Continue lands on Back): let it go,
         // and bring the button on screen first
         _ = app.keyboards.firstMatch.waitForNonExistence(timeout: 3)
-        for _ in 0..<6 where !e.isHittable { app.swipeUp() }
+        let window = app.windows.firstMatch.frame
+        for _ in 0..<6 where !window.contains(CGPoint(x: e.frame.midX, y: e.frame.midY)) { app.swipeUp() }
         e.tap()
     }
 
