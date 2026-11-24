@@ -142,3 +142,34 @@ test("an applet with a card: ticks on its card decide what it reaches; pantry, u
     await page.context().close();
   }
 });
+
+test("an applet allowed with a pick and a section of Settings stays allowed when Settings reads its approval (review: Settings hashed without the pick)", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const page = await device(browser, newKey());
+  const made = await record(hubState(), "create", { path: "Applets/Glancer", extension: "tsx", tags: ["applet"], body: "export default function G() { return <main><p id=\"g\">glancing</p></main>; }\n",
+    fields: { applet: { contract: 2, id: "glancer-test", name: "Glancer", glyph: "◇", note: "a test applet", access: [], screens: [{ id: "home", name: "Glancer" }] }, app: ["vaults"], settings: { name: "A glance across", screen: "home" } } });
+  try {
+    await page.goto(`/v/${VAULT}/a/${made.id}`);
+    const card = page.getByRole("region", { name: /is asking for access/ });
+    await card.getByRole("checkbox", { name: /^letters\b/ }).check();
+    await card.getByRole("button", { name: "Allow" }).click();
+    await expect(frame(page).locator("#g")).toHaveText("glancing");
+    // the pick changed afterwards (a newer approval than this device's grant): pantry too
+    await page.locator("header.bar").getByRole("button", { name: "Menu" }).click();
+    await page.getByRole("button", { name: "Vaults it reaches" }).click();
+    await pick(page, { pantry: true });
+    await expect(frame(page).locator("#g")).toHaveText("glancing");
+    // Settings checks the signed approval, with the pick in its hash: its section shows, and the grant stays
+    await page.goto("/settings");
+    await expect(page.getByRole("region", { name: "A glance across" }).frameLocator("iframe").locator("#g")).toHaveText("glancing", { timeout: 20_000 });
+    await page.waitForTimeout(2000);
+    await page.goto(`/v/${VAULT}/a/${made.id}`);
+    // still allowed: no card, only the Open a load (not a tap) waits behind
+    await page.getByRole("button", { name: "Open Glancer" }).click();
+    await expect(page.getByRole("region", { name: /is asking for access/ })).toHaveCount(0);
+    await expect(frame(page).locator("#g")).toHaveText("glancing");
+  } finally {
+    await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {});
+    await page.context().close();
+  }
+});
