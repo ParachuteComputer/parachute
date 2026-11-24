@@ -10,6 +10,7 @@ import { capRecord, capScope, checkCall, isTechneOrigin, parseTechne, techneLine
 import { APPROVAL_KIND, approvalContent, decide, dOf, revokeFloor, type SignedEvent, type Subject } from "./approvals";
 import { readApplet } from "./discovery";
 import { grantKey, grantLines, grantOf } from "./grant";
+import { faceOf, faceTexts } from "./face";
 import { parseManifest } from "./manifest";
 
 const T: Techne = { at: "https://techne.example/", can: ["read", "post", "follow"] };
@@ -235,6 +236,15 @@ describe("the declaration and the card", () => {
     expect(grantLines(withT, null).some((l) => l.text.startsWith("What it reads on Techne"))).toBe(false);
     const out = grantLines({ ...withT, services: [{ id: "x", kind: "http", url: "https://elsewhere.example/", auth: "none" }] }, null);
     expect(out).toContainEqual({ text: "What it reads on Techne, your private circles too, could reach elsewhere.example", stress: true });
+  });
+  it("the face says each Techne line once, in its own words (a screenshot showed each twice)", () => {
+    const m = parseManifest({ contract: 2, id: "t", name: "T" });
+    if (!m.ok) throw new Error(m.error);
+    const texts = faceTexts(faceOf({ ...grantOf(m.manifest, "v", []), techne: T }, null));
+    expect(texts).toEqual([
+      "As you on Techne at techne.example (your key): reads what you see there, your private circles included.",
+      "Asks you first, once, before it can post as you in your circles, or follow people as you (anyone can see who you follow) at techne.example.",
+    ]);
   });
   it("post creates only: deleting any of your posts isn't in it", async () => {
     const a = applet();

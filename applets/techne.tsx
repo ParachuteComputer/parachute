@@ -54,7 +54,7 @@ export default function Techne() {
       {error ? <Problem error={error} onRetry={load} /> : me === null ? <Loading /> : <>
         {me.handle && <p className="quiet">@{me.handle}</p>}
         {me.bio && <p>{me.bio}</p>}
-        <Write label="Post in your circle" labelled value={text} onChange={setText} onSend={post} sendLabel="Post" canSend={!!text.trim()} busy={busy} maxLength={2000} />
+        <Write label="Post in your circle" labelled value={text} onChange={setText} onSend={post} send="Post" canSend={!!text.trim()} busy={busy} maxLength={2000} />
         {posts && posts.length
           ? <List label="Your recent posts" rows={posts.map((p) => ({ key: p.uri, title: p.value.text ?? "", meta: when.day(p.value.createdAt ?? p.time) }))} />
           : <Empty>Nothing posted yet.</Empty>}

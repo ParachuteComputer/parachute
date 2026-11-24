@@ -87,6 +87,21 @@ export function techneLines(t: Techne): { text: string; stress: boolean }[] {
 /** The card's line when what it reads on Techne could leave through a server it also declares (services.ts). */
 export const techneOutLine = (hosts: readonly string[]) => ({ text: `What it reads on Techne, your private circles too, could reach ${hosts.length === 1 ? hosts[0] : `${hosts.slice(0, -1).join(", ")} and ${hosts[hosts.length - 1]}`}`, stress: true });
 
+/** The card's face for Techne (face.ts): what it does there as the person, the writes it asks for first, and where
+ *  what it reads could go. Each keeps its host, as every stressed line does. */
+export function techneFace(t: Techne, outHosts: readonly string[]): { lead: string; rest: string; risky: boolean }[] {
+  const host = techneHost(t);
+  const out: { lead: string; rest: string; risky: boolean }[] = [];
+  if (t.can.includes("read")) out.push({ lead: `As you on Techne at ${host}`, rest: " (your key): reads what you see there, your private circles included.", risky: true });
+  const writes = t.can.filter(isWrite) as Exclude<TechneCap, "read">[];
+  if (writes.length) {
+    const w = writes.map((c) => WRITE_WORDS[c]);
+    out.push({ lead: "Asks you first", rest: `, once, before it can ${w.length === 1 ? w[0] : `${w.slice(0, -1).join(", ")}, or ${w[w.length - 1]}`} at ${host}.`, risky: true });
+  }
+  if (t.can.includes("read") && outHosts.length) out.push({ lead: "What it reads on Techne can leave", rest: `: your private circles too, to ${outHosts.length === 1 ? outHosts[0] : `${outHosts.slice(0, -1).join(", ")} and ${outHosts[outHosts.length - 1]}`}.`, risky: true });
+  return out;
+}
+
 /** The shell's sheet the first time a write capability is used: what Allow grants, and that it lasts. */
 export function askOf(name: string, t: Techne, cap: Exclude<TechneCap, "read">): { title: string; body: string; act: string } {
   const a = ASK_WORDS[cap];

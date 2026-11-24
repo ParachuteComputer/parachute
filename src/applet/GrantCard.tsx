@@ -74,6 +74,8 @@ function rowsOf(grant: Grant, face: { lines: FaceLine[]; also: string[] }): Row[
       : l.lead.startsWith("Show a count on the bar") ? ["◔", "Show a count on the bar"]
       : l.lead.startsWith("Send the count to") ? ["◔", "Tell your phone while closed"]
       : l.lead.startsWith("Shows a section in Settings") ? ["⊟", "Show a section in Settings"]
+      : l.lead.startsWith("Asks you first") ? ["✎", "Ask before it acts as you"]
+      : l.lead.startsWith("What it reads on Techne") ? ["↗", "Send what it reads on Techne elsewhere"]
       : /someone else|from .* \(someone/.test(t) ? ["⧉", "Show someone else's things"]
       : ["·", l.lead.replace(/[:.]$/, "")];
     const words = at ? at.split(" ")[0] : null;
