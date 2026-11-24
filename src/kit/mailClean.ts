@@ -80,13 +80,14 @@ const ESCAPED = "\uffff";
 /** CSS with its comments out, and each escape marked. */
 function plainCss(css: string): string {
   // a comment becomes a space, never nothing: taken out, `://**/* c */host` would join into a new comment and `:host`
-  return css.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, " ").replace(/\\(?:[0-9a-f]{1,6}\s?|[\s\S])/gi, ESCAPED);
+  // `<!--` and `-->` mean nothing to the browser between rules, so neither may stand in front of an at-rule unseen
+  return css.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, " ").replace(/<!--|-->/g, " ").replace(/\\(?:[0-9a-f]{1,6}\s?|[\s\S])/gi, ESCAPED);
 }
 // CSS's own whitespace, not JavaScript's \s (which takes U+00A0, inside an address to CSS)
 // its whitespace taken whole each side (a lookahead and its backreference: no backtracking through a long run of
 // spaces). A url( that ends a longer name (`xurl(`) is read as one too: whatever it leaves, the last look refuses a
 // url() the cleaning didn't write, so the sheet goes rather than being read two ways.
-const URL_TOKEN = /url\((?=([ \t\n\r\f]*))\1(?:"([^"\n\r\f]*)"|'([^'\n\r\f]*)'|([^)"' \t\n\r\f]*))(?=([ \t\n\r\f]*))\5\)/gi;
+const URL_TOKEN = /url\((?=([ \t\n\r\f]*))\1(?:"([^"\n\r\f]*)"|'([^'\n\r\f]*)'|([^()"' \t\n\r\f]*))(?=([ \t\n\r\f]*))\5\)/gi;
 /** A url() the cleaning didn't write: a blob: or data: picture in quotes is the only kind it writes. */
 const FOREIGN_URL = /url\((?!"(?:blob:|data:image\/))/i;
 /** Ways CSS loads or runs something that aren't url(): taken out with their declaration. */
@@ -102,7 +103,7 @@ const PINNED_ANYWHERE = /(?<![\w-])position[ \t\n\r\f]*:(?![ \t\n\r\f]*(?:static
  *  nest would take the cleaning's stack, and the browser's). */
 const NEST_MAX = 8;
 export const CSS_MAX = 200_000;
-const COLOURS = /(?:^|[;{\s])(?:background(?:-color)?|color)\s*:\s*(?!\s*(?:transparent|inherit|initial|unset|none|currentcolor)\s*(?:!important)?\s*(?:;|$))/i;
+const COLOURS = /(?:^|[;{\s])(?:background(?:-color)?|color)\s*:(?!\s*(?:transparent|inherit|initial|unset|none|currentcolor)\s*(?:!important\s*)?(?:;|$))/i;
 
 /** One declaration list (a style attribute, a rule's block): each url() asked of `pic` (none if it may not draw), and
  *  each declaration that would load or run something another way dropped. */
@@ -172,7 +173,7 @@ function blockEnd(s: string, open: number): number {
   return s.length;
 }
 const plainCondition = (p: string) => {
-  if (!/^@[a-z-]+[\w \t\n\r\f(),.:%/<>=!*+-]*$/i.test(p) || /url\(|:host|::?slotted|::?part\b/i.test(p)) return false;
+  if (!/^@[\w \t\n\r\f(),.:%/<>=!*+-]*$/i.test(p) || /url\(|:host|::?slotted|::?part\b/i.test(p)) return false;
   let depth = 0;
   for (const c of p) { if (c === "(") depth++; else if (c === ")" && --depth < 0) return false; }
   return depth === 0;
@@ -188,7 +189,19 @@ export function cleanSheet(css: string, pic: (src: string) => string | null): st
   // a last look at the whole, as the browser will read it (`seen`: each string blanked, each kept at-rule's condition
   // left out): if a rule for the host, a url() it didn't write, or a position out of the flow is in it anywhere (a
   // reading of ours that differs from the browser's), none of it is kept
-  return /:host|::?slotted|::?part\b/i.test(seen) || FOREIGN_URL.test(seen) || PINNED_ANYWHERE.test(seen) ? "" : out;
+  return /:host|::?slotted|::?part\b/i.test(seen) || FOREIGN_URL.test(seen) || PINNED_ANYWHERE.test(seen) || tooDeep(seen) ? "" : out;
+}
+/** Braces, brackets and parentheses nested deeper than this: the browser's own style pass slows to seconds and then
+ *  crashes (CSS nesting, a selector of :is( in :is( …), so such a sheet is left out. */
+const DEPTH_MAX = 32;
+function tooDeep(seen: string): boolean {
+  const open: string[] = [];
+  const pairs: Record<string, string> = { "}": "{", ")": "(", "]": "[" };
+  for (const c of seen) {
+    if (c === "{" || c === "(" || c === "[") { open.push(c); if (open.length > DEPTH_MAX) return true; }
+    else if (pairs[c]) { const at = open.lastIndexOf(pairs[c]); if (at >= 0) open.length = at; }
+  }
+  return false;
 }
 /** The first `{` or `;` at or after `i` outside strings and url()s: where a statement's prelude ends (-1: none). */
 function statementEnd(s: string, i: number): number {
@@ -253,7 +266,7 @@ function frames(body: string, pic: (src: string) => string | null): string {
   return out;
 }
 
-const px = (v: string | null | undefined) => { const m = /^\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i.exec(v ?? ""); return m ? Number(m[1]) : null; };
+const px = (v: string | null | undefined) => { const m = /^\s*(\d+(?:\.\d+)?)\s*(?:px\s*)?$/i.exec(v ?? ""); return m ? Number(m[1]) : null; };
 /** A picture there only to tell its sender the mail was opened: drawn 3 px or less, or not drawn at all. */
 function tracker(img: Element): boolean {
   const style = (img.getAttribute("style") ?? "").toLowerCase();

@@ -27,7 +27,7 @@ invite. Real mail is mostly HTML. This is how Mail draws it now, and why it is s
    the kit's own rules (links only http/https/mailto; a picture only `cid:`, a PNG/JPEG/GIF/WebP `data:`, or a shown web
    picture already fetched into a `blob:`; every CSS `url()` asked the same; no `@import`, `@font-face`, `:host`,
    escapes in selectors, or `position: fixed/sticky`); then a last walk with its own allowlist. Each rule is
-   mutation-proved: `npx vite-node scripts/mutate-mail.ts` breaks each one and a test goes red (61 of 61).
+   mutation-proved: `npx vite-node scripts/mutate-mail.ts` breaks each one and a test goes red (65 of 65).
 2. **Two shadow roots** (`src/kit/parts-mail.tsx`): the mail's CSS is in an inner root, so it reaches only the mail
    (a `:host` rule reaches only the inner box) and the app's reaches only the app. The outer root, whose CSS is the
    kit's alone, holds that box with `contain: paint`: nothing positioned in the mail leaves it, so it can't cover Reply
@@ -35,7 +35,9 @@ invite. Real mail is mostly HTML. This is how Mail draws it now, and why it is s
    line break; an unquoted `url(` at its `)`), and a whole sheet that still has a `:host`, a pinned position or a
    `url()` the cleaning didn't write is dropped (the security review found a newline in a string could hide one). A
    comment is read as a space; a `position` other than static, relative or absolute goes (a `var()` could be fixed);
-   `@media` nests at most 8 deep and a mail's CSS is at most 200,000 characters (a deep nest took the stack). If the
+   `@media` nests at most 8 deep, nothing (braces, brackets, CSS nesting) past 32, and a mail's CSS is at most 200,000
+   characters (a deep nest took the stack, and crashes the browser's own style pass). Every pattern reads a long run
+   of spaces once (no backtracking): a hostile sheet cleans in milliseconds. If the
    HTML still can't be cleaned, its text part shows.
 3. **The frame's CSP** (`src/applet/srcdoc.ts`): `img-src data: blob:`, `connect-src 'none'`, no frames. A web address
    left in the HTML by a bug still loads nothing: the frame can't reach the web at all.

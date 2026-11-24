@@ -251,16 +251,29 @@ describe("cleanSheet", () => {
   it("a quoted url( with space before its quote is read as quoted", () => {
     expect(cleanSheet('.a{background:url( "x)")} .b{color:blue}', none)).toBe(".a{background:none}.b{color:blue}");
   });
-  it("a long run of spaces can't make the cleaning slow (no backtracking through it)", () => {
+  it("a long run of spaces, or many url(, can't make the cleaning slow (no backtracking through it; third review of #225)", () => {
     const ws = " ".repeat(190_000);
-    for (const css of [`.a{background:url(${ws}`, `.a{color:${ws}red}`, `.a{position:${ws}fixed}`, `.a{b:${"url( ".repeat(45_000)}}`]) {
+    const letters = "a".repeat(190_000);
+    for (const css of [`.a{background:url(${ws}`, `.a{color:${ws}red}`, `.a{position:${ws}fixed}`, `.a{b:${"url( ".repeat(45_000)}}`, `p{b:${"url(".repeat(47_500)}}`, `@${letters}#{}`, `p{color:${ws}transparent;x:y}`]) {
       const t0 = performance.now();
       cleanSheet(css, none);
       expect(performance.now() - t0, css.slice(0, 30)).toBeLessThan(1500);
     }
-    const t1 = performance.now();
-    expect(cleanMail(`<p style="background:url(${ws}">x</p>`, HIDDEN).root).toBeTruthy();
-    expect(performance.now() - t1).toBeLessThan(1500);
+    for (const html of [`<p style="background:url(${ws}">x</p>`, `<p style="${"url(".repeat(120_000)}">x</p>`, `<img src="https://x.example/p.png" width="1${" ".repeat(480_000)}x">`]) {
+      const t1 = performance.now();
+      expect(cleanMail(html, HIDDEN).root).toBeTruthy();
+      expect(performance.now() - t1, html.slice(0, 30)).toBeLessThan(1500);
+    }
+  });
+  it("CSS nested deeper than 32 (which crashes the browser's style pass) leaves the sheet out; 32 is kept", () => {
+    expect(cleanSheet(`p{${"a{".repeat(10_000)}color:red${"}".repeat(10_001)}`, none)).toBe("");
+    expect(cleanSheet(`${":is(".repeat(10_000)}p${")".repeat(10_000)}{color:red}`, none)).toBe("");
+    expect(cleanSheet(`${"(]".repeat(5_000)}p{color:red}`, none)).toBe("");
+    expect(cleanSheet(`${":is(".repeat(30)}p${")".repeat(30)}{color:red}`, none)).toBe(`${":is(".repeat(30)}p${")".repeat(30)}{color:red}`);
+  });
+  it("<!-- or --> in front of an at-rule doesn't hide it: it goes", () => {
+    expect(cleanSheet("<!--@font-face{font-family:Zed;src:local(Arial)} .b{color:blue}", none)).toBe(".b{color:blue}");
+    expect(cleanSheet("-->@property --text{syntax:'*'} .b{color:blue}", none)).toBe(".b{color:blue}");
   });
   it("@media nested past 8 deep, or more CSS than 200,000 characters, is left out; neither takes the stack", () => {
     const deep = `${"@media a{".repeat(20000)}.x{color:red}${"}".repeat(20000)} .ok{color:blue}`;
