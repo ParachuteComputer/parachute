@@ -138,12 +138,16 @@ export default function Mail() {
     const inbox = (r.list as Box[]).find((b) => b.role === "inbox");
     if (inbox && typeof signal === "function") Promise.resolve(signal("unread", Math.min(9999, inbox.unreadEmails ?? 0))).catch(() => {});
   };
+  // the newest read of the list is the one shown: one asked before it (the place it was on a moment ago) that answers
+  // later is dropped, so Sent never shows the Inbox it came from
+  const reading = useRef(0);
   const load = async () => {
     if (!account || (place === "waiting" && !searched)) return;
+    const mine = ++reading.current;
     setErr(null);
     try {
       const box = boxes.find((b) => b.role === place);
-      if (!box && !searched && place !== "later") { setList([]); return; }
+      if (!box && !searched && place !== "later") { if (mine === reading.current) setList([]); return; }
       const away = boxes.filter((b) => b.role === "junk" || b.role === "trash").map((b) => b.id);
       const filter = searched ? { text: searched }
         : place === "later" ? { operator: "AND", conditions: [{ someInThreadHaveKeyword: "$flagged", ...(away.length ? { inMailboxOtherThan: away } : {}) }, { notKeyword: "$draft" }] }
@@ -155,9 +159,10 @@ export default function Mail() {
         ["Email/get", { accountId: account, "#ids": { resultOf: "q", name: "Email/query", path: "/ids" }, properties: LIST_PROPS }, "g"],
         ...(threads ? [["Thread/get", { accountId: account, "#ids": { resultOf: "g", name: "Email/get", path: "/list/*/threadId" } }, "t"]] : []),
       ]);
+      if (mine !== reading.current) return;
       setSizes(Object.fromEntries(((res.find((x) => x[0] === "Thread/get")?.[1].list ?? []) as { id: string; emailIds: string[] }[]).map((t) => [t.id, t.emailIds.length])));
       setList((res.find((x) => x[0] === "Email/get")?.[1].list ?? []) as Email[]);
-    } catch (e: any) { setErr({ lead: `Couldn't read ${searched ? "the search" : placeName(place) ?? place}`, e, retry: () => void load() }); setList([]); }
+    } catch (e: any) { if (mine !== reading.current) return; setErr({ lead: `Couldn't read ${searched ? "the search" : placeName(place) ?? place}`, e, retry: () => void load() }); setList([]); }
   };
   /** The held sends, listed again: a send decided here keeps its outcome (it stays on screen after it leaves the list). */
   const loadHeld = async () => {

@@ -64,10 +64,20 @@ test("mail: alice reads what bob sent, replies after reviewing exactly what will
     const review = app.getByRole("region", { name: "What will be sent" });
     await expect(review).toContainText(`Saturday works. Thank you! ${stamp}`);
     await expect(review).toContainText(`To `);
+    // the Inbox's read (its threads too) answers slowly from here on: an Inbox read asked as Sent opens must not land
+    // over Sent (a slow CI runner showed it, T-476)
+    await page.route("**/mail/jmap", async (route) => {
+      if (/Thread\/get/.test(route.request().postData() ?? "") && /collapseThreads/.test(route.request().postData() ?? "")) await new Promise((r) => setTimeout(r, 2500));
+      await route.continue();
+    });
     await app.getByRole("button", { name: "Send it" }).click();
     await expect(app.getByRole("status").filter({ hasText: "Sent." })).toBeVisible();
     // it is in Sent, and in bob's inbox
     await expect(app.getByRole("region", { name: "Sent" }).getByRole("button", { name: new RegExp(`Re: Tomato seedlings ${stamp}`) })).toBeVisible({ timeout: 20_000 });
+    // and still, once the slow Inbox read has answered
+    await page.waitForTimeout(3000);
+    await expect(app.getByRole("region", { name: "Sent" }).getByRole("button", { name: new RegExp(`Re: Tomato seedlings ${stamp}`) })).toBeVisible();
+    await page.unroute("**/mail/jmap");
     await expect.poll(async () => (await bob.inbox()).some((m) => m.subject === `Re: Tomato seedlings ${stamp}`), { timeout: 30_000 }).toBe(true);
     // the thread now ends with her own reply: Reply still answers bob, not herself
     await app.getByRole("navigation", { name: "Places" }).getByRole("button", { name: /Inbox/ }).click();

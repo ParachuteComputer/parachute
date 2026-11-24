@@ -89,7 +89,8 @@ export async function corsProxy(target: string, port: number) {
     res.writeHead(r.status, { "content-type": r.headers.get("content-type") ?? "application/json" }).end(Buffer.from(await r.arrayBuffer()));
   });
   await new Promise<void>((r) => server.listen(port, "127.0.0.1", () => r()));
-  return { url: `http://127.0.0.1:${port}`, close: () => new Promise<void>((r) => server.close(() => r())) };
+  // closed with the browser's kept-alive connections too: close() alone waits for them, past a test's time
+  return { url: `http://127.0.0.1:${port}`, close: () => new Promise<void>((r) => { server.close(() => r()); server.closeAllConnections(); }) };
 }
 
 /** A whole message (its MIME, as a sender's mail program made it) put straight into someone's Inbox on the stack's
