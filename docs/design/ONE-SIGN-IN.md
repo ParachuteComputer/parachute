@@ -52,12 +52,19 @@ vaults; the per-vault steps after it came back with no page, as the source said.
 
 - **It keeps the name "Parachute"** for apps whose return address is one of its own: any other registration named
   like it is refused (`400 client_name is reserved`). (Its source also lets two exact names of self-hosted Parachute
-  software through: "Parachute Notes", "Parachute Hub (agent connector)".) The app registers there as **Vault app**
-  (`CLOUD_CLIENT_NAME`, chosen by the descriptor's `door: "cloud"`); core hubs still see "Parachute". Its consent pages say *Unverified app* above
+  software through: "Parachute Notes", "Parachute Hub (agent connector)".) The app registers there as **Vault app on Android**, **on a Mac** and so on (`cloudClientName`,
+  chosen by the descriptor's `door: "cloud"`; since 2026-11-23, because under one name Cloud took a second device's
+  sign-in for the same app reconnecting and disconnected the first); core hubs still see "Parachute". Its consent pages say *Unverified app* above
   the ask, as for any app that registered itself.
 - **On Android** the Cloud page opens inside the app's sign-in; the 6-digit code from the mail works there as well as
-  the link. The first run now offers **Sign in with Parachute Cloud** before any key, and then another Parachute by its
+  the link. The first run now offers **Start with Parachute Cloud** before any key, and then another Parachute by its
   address (`KeyStart`, docs/SIMPLE.md).
+- **A new person** (2026-11-23, T-476): a new email at Cloud's sign-in makes the account, with no vault. Cloud's listing
+  consent then offers **Create new vaults** (parachute-cloud#443; before it, a dead end), and its token says so
+  (`account:<id>:vault-create`). The app keeps that one token a moment longer: **Your first vault** asks a name, the
+  account door's `create-vault` makes it, the token is ended, and the sign-in goes on to the home consent as for anyone
+  with one vault (`signInFlow.ts` `firstVault`, `views/FirstVault.tsx`). Without that grant (an older Cloud, or the box
+  unticked), the app says to make one on Cloud's website.
 - **Its vaults answer the record API** (`/api/records`) and the older `/api/notes`, as core 0.9 does.
 
 Refresh rotates and retires the previous access token, as core 0.9 does. Its vaults live at `my.parachute.computer`.

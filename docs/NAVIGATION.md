@@ -55,6 +55,9 @@ Three layers, from what no record can touch to what is most yours.
 
 Long-press (or right-click) an applet in the list: **Pin to the bar** or **Unpin**, and **Open on start**.
 Long-press a place on the bar: **Move left**, **Move right**, **Unpin**, **Open on start**.
+Settings → **Your bundle** → **On the bar** lists the pins in order, to move up or down or unpin, and **Pin another
+applet** offers every applet here. Each goes into the open bundle's record in the home vault, so every device that opens
+the bundle shows the same bar. A bundle someone else offers keeps their bar until **Make a copy of your own**.
 
 ## A running applet's menu
 

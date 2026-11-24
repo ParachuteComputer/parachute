@@ -554,6 +554,12 @@ export const FRAME_KIT = String.raw`(function () {
       trust: function (service, event) { return call("services", "trust", { service: service, event: event }); },
       forgetSecret: function (service, event) { return call("services", "forgetSecret", { service: service, event: event }); }
     }),
+    // with fields.techne (docs/design/TECHNE.md, level 8): as you on Techne, one capability at a time; the shell signs,
+    // and asks you the first time a write is used. call(method, { params, input }) answers the method's output
+    techne: Object.freeze({
+      me: function () { return call("techne", "me", {}); },
+      call: function (method, o) { o = o || {}; var p = { method: method }; if (o.params) p.params = o.params; if (o.input !== undefined) p.input = o.input; return call("techne", "call", p); }
+    }),
     // its own number for a signal its record declares (docs/design/APP-RECORD.md "Signals"): the bar's count
     signal: function (id, count) { return call("signals", "set", { id: id, count: count }); },
     // with app: [vaults] (the Vault applet's): the vaults the person gave it; a change goes as JSON text in bytes

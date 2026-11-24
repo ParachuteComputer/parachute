@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { beginSignIn, CLOUD_CLIENT_NAME, SHELL_RETURN, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
+import { beginSignIn, cloudClientName, SHELL_RETURN, completeSignIn, PendingApprovalError, type Begin, type Pending } from "./oauth";
 
 const PENDING = "parachute.oauth.pending.v1";
 const P = { hub: "https://hub.example", issuer: "https://hub.example", accountMcp: "https://hub.example/account/mcp", vaultTemplate: "https://hub.example/vault/{name}" };
@@ -8,7 +8,12 @@ const pending = (over: Partial<Pending> = {}): Pending => ({ parachute: P, step:
 // the hub's token endpoint, which this app does not control: answered here
 const hub = (status: number, body: unknown) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  // the device the app runs on names its registration on Cloud (cloudClientName): one fixed here, so the tests read the
+  // same on any machine (jsdom's own user agent names the host's platform)
+  Object.defineProperty(navigator, "userAgent", { value: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36", configurable: true });
+});
 /** A token shaped as the hub's (a JWT whose audience names a vault); only its claims are read here. */
 const jwt = (aud: string) => `x.${btoa(JSON.stringify({ aud })).replace(/=+$/, "")}.y`;
 
@@ -159,7 +164,7 @@ describe("beginSignIn", () => {
     const meta = { ...META, issuer: "https://cloud.example", authorization_endpoint: "https://cloud.example/oauth/authorize", token_endpoint: "https://cloud.example/oauth/token", registration_endpoint: "https://cloud.example/oauth/register" };
     const url = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
     expect(url.searchParams.get("client_id")).toBe("client-1");
-    expect(names).toEqual([CLOUD_CLIENT_NAME]);
+    expect(names).toEqual(["Vault app on Linux"]);
     // a hub of Parachute's own (core) still sees the app's own name
     localStorage.clear();
     await beginSignIn(begin({ step: "list" }), cloudLike(META, names)).catch(() => null);
@@ -185,7 +190,33 @@ describe("beginSignIn", () => {
     localStorage.clear(); names.length = 0;
     const tab = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(withIss, names)));
     expect(tab.searchParams.get("client_id")).toBe("client-1");
-    expect(names).toEqual([CLOUD_CLIENT_NAME]);
+    expect(names).toEqual(["Vault app on Linux"]);
+  });
+  // T-476 journey: Lena signed in on her phone, then her Mac, and Cloud disconnected the phone ("the same app
+  // reconnecting": same name, same loopback return). Each kind of device registers under its own name.
+  it("on Parachute Cloud, a phone and a Mac register under different names, so one's sign-in never replaces the other's", () => {
+    const phone = cloudClientName("Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36");
+    const mac = cloudClientName("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)");
+    expect([phone, mac]).toEqual(["Vault app on Android", "Vault app on a Mac"]);
+    expect(cloudClientName("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)")).toBe("Vault app on iPhone");
+    expect(cloudClientName("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)")).toBe("Vault app on iPad");
+    // never the name Cloud keeps for itself
+    for (const n of [phone, mac, cloudClientName("")]) expect(n).not.toMatch(/Parachute/);
+  });
+  it("a device that registered on Cloud as plain \"Vault app\" registers once more under its device's name, then keeps it", async () => {
+    const names: string[] = [];
+    const cloud = { ...P, hub: "https://cloud.example", issuer: "https://cloud.example", door: "cloud" as const };
+    const meta = { ...META, issuer: "https://cloud.example", authorization_endpoint: "https://cloud.example/oauth/authorize", token_endpoint: "https://cloud.example/oauth/token", registration_endpoint: "https://cloud.example/oauth/register" };
+    // what an earlier build kept: the registration under the hub and return address only
+    localStorage.setItem("parachute.oauth.clients.v1", JSON.stringify({ "https://cloud.example http://localhost:3000/oauth/callback": "old-vault-app" }));
+    const first = new URL(await beginSignIn({ parachute: cloud, step: "list", how: "page" }, cloudLike(meta, names)));
+    expect(first.searchParams.get("client_id")).toBe("client-1");
+    expect(names).toEqual(["Vault app on Linux"]);
+    const again = new URL(await beginSignIn({ parachute: cloud, step: "open", vault: "recipes", how: "page" }, cloudLike(meta, names)));
+    expect(again.searchParams.get("client_id")).toBe("client-1");
+    expect(names).toHaveLength(1);
+    // the plain-name registration it replaced is gone from the device
+    expect(Object.values(JSON.parse(localStorage.getItem("parachute.oauth.clients.v1")!))).not.toContain("old-vault-app");
   });
   it("a hub that refused the reserved id gets a registration on the next sign-in", async () => {
     const cloud = { ...P, hub: "https://cloud.example", issuer: "https://cloud.example", door: "cloud" as const, appClientId: "parachute-app" };

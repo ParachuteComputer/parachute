@@ -4,7 +4,7 @@
 // MCP doors as an AI uses them, recipes are added and read, and a journal record is as if it didn't exist: by id, by
 // search, in the type list and in its history. Ending it in the list makes its very next request fail; the row stays, ended.
 // Needs a hub with typed keys (core uni/t476-typed-keys or later); an older hub (core from npm) skips, unless
-// E2E_CORE_NEXT=1 says it is core's next (CI's pinned leg).
+// E2E_CORE_NEXT=1 says it is a core that has it (CI's 0.9.0-pre.2 leg).
 import { expect, test, type FrameLocator, type Page } from "@playwright/test";
 import { signIn } from "./helpers";
 import { api, cli, hubState, VAULT } from "./hub";
@@ -37,7 +37,7 @@ test("a key for an AI reaches recipes only; the list names it; ending it stops i
   const stamp = Date.now().toString(36);
   const admin = cli(hub, ["auth", "mint-token", "--scope", `vault:${VAULT}:admin`, "--json"]).token as string;
   const list = await fetch(`${hub.origin}/account/vaults/${VAULT}/statements`, { headers: { authorization: `Bearer ${admin}` } });
-  // E2E_CORE_NEXT=1: this hub is core's next (CI's pinned leg), so the list must be there: never skipped
+  // E2E_CORE_NEXT=1: this hub is a core that has it (CI's 0.9.0-pre.2 leg), so the list must be there: never skipped
   test.skip((list.status === 404 || list.status === 405) && process.env.E2E_CORE_NEXT !== "1", "a hub without typed keys (core before the 1.0 grants slice)");
 
   // the owner's vault: a recipe, and a journal entry with a word only it holds

@@ -3,7 +3,7 @@
 // own picker, and their tables land as types with typed fields, their rows as records, their pages as pages with
 // working links, all under Notion/<its workspace>/, with a receipt; choosing the same export again changes nothing.
 // Needs a hub where write access may define a type over REST (core #139); on an older one it skips, unless
-// E2E_CORE_NEXT=1 says this hub is core's next and must have it. In the `packs` project (a 403 refreshes the sign-in).
+// E2E_CORE_NEXT=1 says this hub is a core that must have it (CI's 0.9.0-pre.2 leg). In the `packs` project (a 403 refreshes the sign-in).
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { api, hubState, mintToken, VAULT } from "./hub";

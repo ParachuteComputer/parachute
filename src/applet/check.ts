@@ -107,7 +107,7 @@ export async function checkAppletRecord(record: AppletRecordInput): Promise<Appl
     else if (read.entry.newer) errors.push(`this app would list it but not run it: ${read.entry.newerWhy ?? "written for a newer app"}`);
     else {
       entry = read.entry;
-      for (const [k, e] of [["app", entry.appError], ["opens", entry.opensError], ["services", entry.servicesError], ["signals", entry.signalsError], ["settings", entry.settingsError]] as const) {
+      for (const [k, e] of [["app", entry.appError], ["opens", entry.opensError], ["services", entry.servicesError], ["signals", entry.signalsError], ["settings", entry.settingsError], ["techne", entry.techneError]] as const) {
         if (e) errors.push(`fields.${k}: ${e}`);
       }
     }

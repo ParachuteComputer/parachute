@@ -1,0 +1,56 @@
+{
+  "parachute_pack": 1,
+  "id": "library",
+  "name": "Library",
+  "version": 1,
+  "source": "https://parachute.computer/docs/build/packs/library",
+  "summary": "Books you own, chapter by chapter, with the words you mark in them and summaries beside each chapter. Its book is the Reading list's, with every field it has.",
+  "types": {
+    "book": {
+      "description": "A book you want to read, are reading, or have read. One you own can hold its chapters in its folder.",
+      "fields": {
+        "author": { "type": "string" },
+        "translator": { "type": "string" },
+        "language": { "type": "string" },
+        "kind": { "type": "string", "enum": ["book", "scripture", "cookbook", "method"] },
+        "status": { "type": "string", "enum": ["want to read", "reading", "read"], "default": "want to read" },
+        "rating": { "type": "number" },
+        "finished": { "type": "date" },
+        "source": { "type": "string" },
+        "rights": { "type": "string" },
+        "at": { "type": "string", "description": "Where you stopped: the chapter and its paragraph." }
+      }
+    },
+    "chapter": {
+      "description": "A chapter or part of a book, as the book divides it. Its text is the body.",
+      "fields": {
+        "book": { "type": "reference", "cardinality": "one" },
+        "part": { "type": "reference", "cardinality": "one", "description": "The part it sits in, itself a chapter record." },
+        "order": { "type": "integer" },
+        "words": { "type": "integer" }
+      }
+    },
+    "quote": {
+      "description": "Words you marked in a book, with your note. It says where they are, so they can be found again.",
+      "fields": {
+        "from": { "type": "reference", "cardinality": "one", "description": "The chapter the words are in." },
+        "book": { "type": "reference", "cardinality": "one" },
+        "block": { "type": "integer", "description": "The paragraph's number in the chapter." },
+        "before": { "type": "string", "description": "A few words just before, to find the place again." },
+        "after": { "type": "string", "description": "A few words just after." },
+        "by": { "type": "string" },
+        "used_in": { "type": "array", "description": "The addresses of the pieces it went into." }
+      }
+    },
+    "summary": {
+      "description": "A summary of a chapter, a part or a whole book, beside it, never inside it. It says who wrote it.",
+      "fields": {
+        "of": { "type": "reference", "cardinality": "one" },
+        "sources": { "type": "reference", "cardinality": "many" },
+        "by": { "type": "string" },
+        "made": { "type": "date" }
+      }
+    }
+  },
+  "records": []
+}

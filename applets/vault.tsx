@@ -1277,7 +1277,7 @@ function Packs({ v, back, openType }: { v: Held; back: { label: string; onPress:
             <h2 className="pa-title">{s.name}</h2>
             <p>{s.summary}</p>
             <p className="note-meta">Types: {Object.entries(s.types).map(([t, f]) => `${label(t)} (${f.map(label).join(", ")})`).join("; ")}.</p>
-            <p className="note-meta">Records: {s.records.join(", ")}.</p>
+            {s.records.length > 0 && <p className="note-meta">Records: {s.records.join(", ")}.</p>}
             <p className="note-meta">A type you already have keeps its fields, and a record of yours stays as it is.</p>
             {canWrite ? <Button kind="primary" busy={busy === s.id} onClick={() => void add(s)}>{busy === s.id ? "Adding…" : `Add ${s.name}`}</Button>
               : <p className="note-meta">Parachute only reads {v.name}, so it can't add a pack here.</p>}

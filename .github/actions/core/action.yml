@@ -1,7 +1,7 @@
 name: A Parachute hub for the tests
 description: >-
   Installs parachute-core and sets PARACHUTE_CORE. `core` is an npm version of @openparachute/core (0.8.0,
-  0.9.0-pre.1) or a git ref of ParachuteComputer/parachute-core (next, a commit), built from source: CI needn't wait
+  0.9.0-pre.2) or a git ref of ParachuteComputer/parachute-core (next, a commit), built from source: CI needn't wait
   for a release to test against core's next.
 inputs:
   core:

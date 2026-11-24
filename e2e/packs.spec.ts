@@ -99,6 +99,9 @@ test.describe.serial("Packs", () => {
     const app = await openPacks(page);
     await expect(app.getByText("No packs in kitchen yet.")).toBeVisible();
     await expect(app.getByRole("region", { name: "Core types" })).toContainText("meeting (date, people, project)");
+    // a pack of types alone (Library) lists its types and no empty "Records: ."
+    await expect(app.getByRole("region", { name: "Library" })).toContainText("chapter (book, part, order, words)");
+    await expect(app.getByRole("region", { name: "Library" })).not.toContainText("Records:");
     await shot(page, "01-add-a-pack");
     await app.getByRole("button", { name: "Add Core types" }).click();
     await expect(app.getByRole("region", { name: "What Core types did" })).toContainText("Added the types person, project, meeting, task and template, 4 templates and the saved view Open.");

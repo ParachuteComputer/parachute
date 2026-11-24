@@ -15,7 +15,7 @@ Records live at `People/<Name>` with type `person` (parent `entity`). All new fi
 | `email` | `string` | Primary email address (lower-case) |
 | `status` | `"new" \| "active" \| "past"` | Current relationship state |
 | `ways_of_working` | `string[]` | Collaboration notes / preferences |
-| `source` | `string` | Where you met or where the record came from |
+| `source` | `string` | Where the record came from (an import, a list); the story of meeting is `how_we_met` |
 
 ### New additive fields
 
@@ -30,6 +30,10 @@ Records live at `People/<Name>` with type `person` (parent `entity`). All new fi
 | `groups` | `string[]` | Group names stored on the person record (e.g. `["Close friends", "Techne"]`) |
 | `photo` | `string` | Storage path of an image attached to the record via `vault.attach` (e.g. `"2026-11-23/1763...-photo.jpg"`) |
 | `favorite` | `boolean` | `true` to pin the person to **Favorites** at the top of the list (omit or `null` when false) |
+| `keep_in_touch` | `string` | How often to be in touch: `"every week"`, `"every 2 weeks"`, `"every month"`, `"every 3 months"`, `"every 6 months"`, `"every year"`. People also reads `"monthly"`, `"quarterly"`, `"yearly"` and a number of days (`45`, `"45 days"`) |
+| `talked` | `string[]` | Times you were in touch that left no note of their own, newest first: `"YYYY-MM-DD"` or `"YYYY-MM-DD: what about"` |
+| `how_we_met` | `string` | How you met, in your words |
+| `met` | `string` | When you met: `"YYYY-MM-DD"`, `"YYYY-MM"`, or `"YYYY"` when that's all you know |
 
 ### Body
 
@@ -54,12 +58,41 @@ Standard markdown, starting with `## Memories and moments` when created in the a
     "tags": ["boulder", "ceramics", "running"],
     "groups": ["Close friends", "Climbing"],
     "favorite": true,
+    "keep_in_touch": "every month",
+    "talked": ["2026-11-20: tea at the studio; she'll send the glaze notes"],
+    "how_we_met": "At the pottery studio open house",
+    "met": "2023-06-10",
     "ways_of_working": ["Prefers voice notes over long emails"],
     "source": "Met at pottery studio open house"
   },
   "body": "## Memories and moments\n\nHiked Green Mountain together in October.\n"
 }
 ```
+
+## In touch: last connection, keep in touch, timeline
+
+People keeps no counter of its own. **The last time you were in touch** is worked out when the list loads, from what the
+vault already holds: the newest of a `talked` entry and a note in `Meetings/`, `Journal/` or `Notes/` that links the
+person. A linked note counts on **its own day** (a `date`, `start`, `when` or `day` field, a time read as the day it was
+here; else a date in its path such as `Journal/2026-11-10` or `Meetings/2026/10-02 Kiln`; else the day it was made), never
+the day it was last edited: tidying an old meeting note isn't being in touch. A day after today (next week's meeting)
+isn't contact yet. An organization's card that lists them isn't contact (it shows on the timeline); another person's card
+that links them shows as "People linked".
+
+- **Contacts** sorts A–Z or **Recent** (most recently in touch first, no connection yet at the end), and the filters
+  narrow by **Last in touch**: this week, this month, 3 months, longer ago, never.
+- **We talked** on a person's card adds today (or an earlier day) and an optional line to `talked`. A call, a walk, a
+  message: anything that left no note. Tap a talk on the timeline to put it right or remove it.
+- **Keep in touch** (`keep_in_touch`, set in Edit details) is how often you want to be in touch with someone. The **In
+  touch** tab lists who it's time to reach out to (never in touch counts), then who comes up this week, earliest first.
+  Below, everyone else you haven't been in touch with for 30 days, 90 days or a year, and those with no connection yet.
+  The tab shows no count and nothing turns red: it's a short list to look at, not a backlog
+  ([design/PEOPLE-CRM.md](design/PEOPLE-CRM.md) says why).
+- **Timeline**, on each card, newest first: talks, the meetings, journal entries and notes that link them, how you met
+  (`how_we_met`, `met`). It replaces the old "Everything that mentions them" list.
+
+Room messages on a relay don't count yet: People reads the vault only. A room's talk counts once it is kept as a note in
+`Meetings/`, `Journal/` or `Notes/` that links the person.
 
 ## Why `groups` is a person-field list
 
@@ -72,7 +105,7 @@ A group could be either a list field on each person (`fields.groups: string[]`) 
 
 ## Access and level
 
-- **`access`:** Read/create/update on `People/`, plus read-only on `Meetings/`, `Journal/`, `Notes/`, and `Organizations/` so `vault.getRecord(id, { includeLinks: true })` and `vault.queryRecords({ pathPrefix: "People/", includeLinks: true })` surface backlinks ("Everything that mentions them") and compute "Haven't talked in a while" without asking for whole-vault `vaults` access.
+- **`access`:** Read/create/update on `People/`, plus read-only on `Meetings/`, `Journal/`, `Notes/`, and `Organizations/` so `vault.getRecord(id, { includeLinks: true })` and `vault.queryRecords({ pathPrefix: "People/", includeLinks: true })` surface backlinks (the timeline) and the last time you were in touch, without asking for whole-vault `vaults` access.
 - **`opens`:** `{ "type": "person", "path": "People/" }` — tapping a `person` record in Parachute opens their contact card in People, and records created in People get the `person` type.
 - **`app`:** `["open", "links", "save", "attach", "copy"]` — open linked notes, open `mailto:` / `https://` links, save exported `.vcf` files, pick `.vcf` files and contact photos, and copy phone/email/address.
 - **`needs`:** `4` (uses kit `Fields` at level 3 and `Drawer` at level 4; degrades gracefully if `vault.file` or `onBack` is absent on older builds).
@@ -109,3 +142,19 @@ import never misses a match.
 - **Export:** vCard 4.0 (CRLF, 75-octet folding, escaped values) for everyone, the filtered list, or one person: phones,
   emails, address, birthday, links, `groups` as `CATEGORIES`, `tags` as `X-PARACHUTE-TAGS`, `summary` as `NOTE`, and
   the photo embedded. Importing an export back changes nothing.
+
+## On the phone (CardDAV)
+
+`services/carddav` serves `People/` to a phone as one CardDAV address book (DAVx5 on Android syncs it into Contacts),
+read-write, straight from the vault: the vault stays the only copy. Only card facts cross (phones, emails, address,
+birthday, links, groups, summary, photo); the body and every other field never leave. A phone edit replaces the card
+facts and keeps the rest; a name changed on the phone doesn't rename the note. It adds four fields to a record:
+
+| Field | Type | Notes |
+|---|---|---|
+| `uid` | `string` | The card's UID, for a person made on the phone (one made in the vault uses its record id) |
+| `href` | `string` | The card's file name on the phone, kept only when it isn't the UID |
+| `vcard_extra` | `string[]` | Raw vCard lines the phone sent that People has no field for (`ORG`, `TITLE`, `NICKNAME`, `X-…`), sent back as they came |
+| `on_phone` | `boolean` | `false` keeps the person off the phone (deleting a contact on the phone sets it); **On my phone** in Edit details turns it back on (People removes the field) |
+
+How to run it, what maps to what and why: [services/carddav/README.md](../services/carddav/README.md).

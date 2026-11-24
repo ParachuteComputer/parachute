@@ -1,7 +1,8 @@
 # Parachute on a Mac
 
-For Macs with Apple Silicon (M1 and later), macOS 11 or newer. The app is not notarised by Apple yet, so macOS asks
-once before it opens it.
+For Macs with Apple Silicon (M1 and later), macOS 11 or newer. Builds are notarised by Apple once the project's
+Apple keys are in place (docs/STORES.md); such a build opens after macOS's usual "downloaded from the internet" question,
+and section 3 doesn't apply. Until then a build is not notarised, so macOS asks once before it opens it.
 
 ## 1. Download
 
@@ -14,7 +15,7 @@ once before it opens it.
 
 Open the `.dmg` and drag **Parachute** onto **Applications**.
 
-## 3. Open it past Gatekeeper
+## 3. Open it past Gatekeeper (a build that isn't notarised)
 
 The first time, macOS says it can't check Parachute for malicious software. Do one of these, once:
 
@@ -31,8 +32,8 @@ After that it opens like any app.
 
 ## 4. Sign in with your key
 
-No key? On the first screen, **Sign in with Parachute Cloud** (you're done once it opens on your notes), or **Sign in
-with its address** for your own hub, an org's or a friend's, and skip to section 5.
+No key? On the first screen, **Start with Parachute Cloud** (your email; it makes your account if you're new, and you're
+done once it opens on your notes), or **Sign in with its address** for your own hub, an org's or a friend's, and skip to section 5.
 
 Parachute signs you in with your Nostr key and keeps it in your Mac's login Keychain (under `computer.parachute.app`).
 In the Nostr key card on the first screen:

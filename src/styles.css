@@ -102,6 +102,11 @@ fieldset.plain { border: 0; min-width: 0; }
 fieldset.plain legend { padding: 0; }
 .line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; }
 .line + .line { border-top: 1px solid var(--line); }
+/* what an allowed applet holds beyond its line (its servers, what it may do on Techne): under it, the whole width */
+.line:has(> .applet-services, > .applet-techne) { flex-wrap: wrap; }
+.line > .applet-services, .line > .applet-techne { flex-basis: 100%; }
+.applet-techne { margin: 0; padding: 0 0 0 1.4em; }
+.applet-techne .quiet-button { white-space: nowrap; }
 .screen-foot { margin: 14px 0 0; font-size: var(--fs-small); }
 
 .note { background: var(--card-fill); border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); padding: 4px var(--pad) 12px; }
@@ -357,6 +362,17 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
 .swatch { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--text); }
 .choice { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 12px; }
 .choice legend { width: 100%; }
+
+/* the bar in Settings (views/BarSettings.tsx): a pin a line, its moves at the end */
+.bar-pins .line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bar-pin-acts { display: flex; gap: 4px; flex: none; }
+.bar-pin-acts .quiet-button { min-width: 36px; min-height: 36px; }
+@media (pointer: coarse) { .bar-pin-acts .quiet-button, .bar-more .quiet-button { min-width: 44px; min-height: 44px; } }
+.bar-more summary { cursor: pointer; color: var(--muted); font-size: var(--fs-small); padding: 4px 0; }
+.bar-more li { padding: 2px 0; }
+
+/* the person's other vaults, one tap each to make one home (views/HomeChoice.tsx) */
+.home-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
 
 /* the shell's own words over a running applet (views/ShellSheets.tsx): a secret's sheet, and a passing line */
 .secret-field { display: grid; gap: 4px; margin: 10px 0; }

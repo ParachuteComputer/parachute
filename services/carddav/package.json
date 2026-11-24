@@ -1,0 +1,17 @@
+{
+  "name": "parachute-carddav",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Serves a Parachute vault's People/ folder to phones as one CardDAV address book, read-write; only card facts cross.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test test/*.test.ts",
+    "e2e": "node test/e2e.ts",
+    "typecheck": "tsc -p . --noEmit"
+  }
+}

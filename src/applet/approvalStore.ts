@@ -99,10 +99,12 @@ async function eventsFor(home: VaultRecord, s: Subject, kept: boolean): Promise<
  *  answer differs, so a taking back stops the applet as soon as that read answers (review finding 16).
  *  `scope`: the asks' hash; for an applet that reaches across vaults, made from the pick the newest approval holds
  *  (docs/ACCESS.md proposal 5): read first, then hashed, then decided. The pick that runs is `content.vaults`. */
-export async function approvalFor(s: Subject, code: string, scope: string | ((vaults: VaultRef[] | null) => Promise<string>), now = Date.now()): Promise<Decision | null> {
+export async function approvalFor(s: Subject, code: string, scope: string | ((vaults: VaultRef[] | null) => Promise<string>), now = Date.now(), kept = true): Promise<Decision | null> {
   const home = homeVault();
   if (!home || !(await approvalsHere())) return null;
-  const events = await eventsFor(home, s, true);
+  // `kept: false`: from the home vault itself, not the copy kept of it (a Techne write, which can't be undone, waits for
+  // a taking back made on another device: docs/design/TECHNE.md)
+  const events = await eventsFor(home, s, kept);
   const trusted = await trustedNow(true);
   const asks = typeof scope === "string" ? scope : await scope(pickIn(events, s, trusted, now, floorOf(s)));
   const d = decide(events, s, code, asks, trusted, now, floorOf(s));

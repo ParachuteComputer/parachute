@@ -6,8 +6,8 @@ One app for your vaults and the applets that grow on them. Early: version 0.1.0,
 ## Install and sign in
 
 You need a Parachute (a hub of your own, an org's, or Parachute Cloud). On Parachute Cloud that is all: on the first
-screen, **Sign in with Parachute Cloud** (your email, then the code it mails you; no key), and the app opens on your
-notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, sign in with its own sign-in (on the first
+screen, **Start with Parachute Cloud** (your email, then the code it mails you; no key; new to Cloud, it makes your
+account and you name your first vault), and the app opens on your notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, sign in with its own sign-in (on the first
 screen, **Your notes on another Parachute?** → **Sign in with its address**, then step 4), or with a Nostr key:
 
 1. **Get the app** from the [releases page](https://github.com/ParachuteComputer/parachute/releases):
@@ -70,6 +70,9 @@ screen, **Your notes on another Parachute?** → **Sign in with its address**, t
   with your key, which the applet never holds ([docs/design/SERVICES.md](docs/design/SERVICES.md)). `applets/` has
   the first ones: Rooms (a Buzz relay), Mail (a mail gateway), Journal and Matrix; `scripts/install-applets.ts` puts
   them into a vault and lays out the bar around them. What they cover of the Uni app: [docs/PARITY.md](docs/PARITY.md).
+- **Techne, one permission at a time.** An applet can act on Techne as you with your key: it reads on its card, and
+  asks you the first time it would post or follow; you can take each back in Settings
+  ([docs/design/TECHNE.md](docs/design/TECHNE.md)). `applets/techne.tsx` is the first.
 
 It runs on Android and desktop (Tauri 2); releases are built for Android and Apple Silicon Macs
 ([.github/workflows/release.yml](.github/workflows/release.yml), [docs/LAUNCH.md](docs/LAUNCH.md) for what a public
@@ -143,6 +146,8 @@ an applet by itself only when this device holds both its Allow and the person's 
   phone's UnifiedPush distributor (ntfy from F-Droid); the shell signs only the gateway registration. Without a
   distributor (a de-Googled phone with nothing installed), `NotifyService.kt` keeps its own relay connection (on unless
   turned off in Settings; idle while push serves everything).
+- `services/carddav/`: the vault's `People/` on a phone, as one CardDAV address book (DAVx5), read-write, with only card
+  facts crossing; the vault stays the only copy.
 - `src/links/`: links in, `parachute://open?url=<a note's web address>`; note links, the one parser and builder
   (`note.ts`) and what the shell opens for one (`resolve.ts`). The kit draws them (`src/kit/links.tsx`).
 
@@ -166,11 +171,14 @@ copies of wry's templates that keep the bridge to native code out of applet fram
 npm run tauri dev                       # desktop, against the dev server
 scripts/android-build.sh                # release APK for arm64, signed with the play-test key
 scripts/android-build.sh --debug --target x86_64   # a debug build for the emulator
+scripts/android-build.sh --play         # the Google Play bundle (.aab): no in-app update, signed with the upload key
 ```
 
 The Android build needs `ANDROID_HOME`, `NDK_HOME` and Java 17, and a signing key described in
 `~/.config/parachute-playtest/keystore.properties` (or `PARACHUTE_KEYSTORE_PROPERTIES`): `storeFile`, `storePassword`,
-`keyAlias`, `keyPassword`. The script checks the APK's signature against it. Keys never go in the repo.
+`keyAlias`, `keyPassword`. The script checks the APK's signature against it. The Play bundle's upload key is described
+the same way in `~/.config/parachute-play-upload/keystore.properties` ([docs/STORES.md](docs/STORES.md)). Keys never go
+in the repo.
 
 **Signing in from the shell.** The app registers on a hub as "Parachute" with the redirect
 `http://127.0.0.1:47219/oauth/callback`. A hub keeps that name for redirects only the person's own device can receive,

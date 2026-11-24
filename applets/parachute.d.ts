@@ -183,6 +183,12 @@ declare module "parachute" {
     set(key: string, value: unknown): Promise<unknown>;
     keys(): Promise<string[]>;
   };
+  /** As you on Techne, with `fields.techne` (docs/design/TECHNE.md, level 8): reads at once, and asks you the first
+   *  time it uses a write (post, follow). `call` answers the method's output, or rejects with Techne's refusal. */
+  export const techne: {
+    me(): Promise<{ did: string; handle?: string }>;
+    call<T = unknown>(method: string, o?: { params?: Record<string, string | number | boolean>; input?: unknown }): Promise<T>;
+  };
   export const services: {
     me(): Promise<{ pubkey: string }>;
     fetch(id: string, path: string, init?: { method?: string; headers?: Record<string, string>; body?: unknown; as?: "text" | "json" | "bytes" }): Promise<{ status: number; headers: Record<string, string>; body: unknown }>;
