@@ -5,7 +5,7 @@
 // is refused pantry through `vaults` and `sharing`. The second lock (every word, each call) is src/shell/vaultPick.test.ts.
 import { readFileSync } from "node:fs";
 import { devices, expect, test, type Browser, type Page } from "@playwright/test";
-import { api, hubState, record, VAULT } from "./hub";
+import { api, hubState, mintToken, record, VAULT } from "./hub";
 import { newKey } from "./keys";
 
 test.use({ storageState: "e2e/.signed-in.json" });
@@ -14,7 +14,7 @@ const { defaultBrowserType: _b, ...phone } = devices["Pixel 7"];
 const vaultApplet = `/v/${VAULT}/a/parachute%3Avault`;
 const frame = (page: Page) => page.frameLocator('iframe.applet-frame');
 const line = (page: Page) => page.locator("p.pick-line");
-const sheet = (page: Page) => page.getByRole("dialog", { name: /^Vaults .* reaches$/ });
+const sheet = (page: Page) => page.getByRole("dialog", { name: /^Which vaults may .* reach\?$|^Where does .* keep its notes\?$/ });
 
 /** A device with no picks kept on it (the shared start ticked every vault for Parachute's own): `key`, the person's. */
 async function device(browser: Browser, key?: string): Promise<Page> {
@@ -31,7 +31,7 @@ async function device(browser: Browser, key?: string): Promise<Page> {
 /** Tick (or untick) vaults on the shell's sheet, then Save: a press counts only once the sheet has settled. */
 async function pick(page: Page, set: Record<string, boolean>) {
   await expect(sheet(page)).toBeVisible();
-  for (const [vault, on] of Object.entries(set)) await sheet(page).getByRole("checkbox", { name: new RegExp(`^${vault}\\b`) }).setChecked(on);
+  for (const [vault, on] of Object.entries(set)) await sheet(page).getByRole("checkbox", { name: new RegExp(`^${vault}\\b`) }).or(sheet(page).getByRole("radio", { name: new RegExp(`^${vault}\\b`) })).setChecked(on);
   await page.waitForTimeout(800);
   await sheet(page).getByRole("button", { name: "Save" }).click();
   await expect(sheet(page)).toHaveCount(0);
@@ -98,7 +98,7 @@ test("with the person's key: a pick is signed into the home vault, a second devi
   // doesn't fall back to the home; it reaches nothing until a pick is signed again. The first keeps its own signed copy
   for (const n of await tagged("parachute-approval")) if (n.path.endsWith("/parachute:vault")) await api(hubState(), "DELETE", `notes/${n.id}`);
   await b.reload();
-  await expect(line(b)).toContainText("Vault reaches no vault here: the vaults you gave it couldn't be confirmed");
+  await expect(line(b)).toContainText("Vault reaches no vault here until you pick its vaults again");
   await expect(frame(b).getByRole("heading", { name: VAULT })).toHaveCount(0);
   await a.reload();
   await expect(vaultList(a).getByRole("listitem")).toHaveCount(2);
@@ -170,6 +170,96 @@ test("an applet allowed with a pick and a section of Settings stays allowed when
     await expect(frame(page).locator("#g")).toHaveText("glancing");
   } finally {
     await api(hubState(), "DELETE", `notes/${made.id}`).catch(() => {});
+    await page.context().close();
+  }
+});
+
+// Journal and Capture keep their notes in one vault: a pick of one, among the person's own vaults (the next step of
+// proposal 5). Home's line into Inbox/ is Capture's inbox, so it follows Capture.
+test("Journal keeps its notes in the vault you pick: the line names the home; picked letters, a line written lands there, and it opens there from then on", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const stamp = Date.now().toString(36);
+  const page = await device(browser);
+  const letters = { origin: hubState().origin, token: mintToken("vault:letters:write") };
+  const inLetters = async () => ((await api(letters, "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=100`, undefined, "letters")) as { id: string; content?: string }[]).filter((n) => n.content?.includes(stamp));
+  try {
+    await page.goto(`/v/${VAULT}/a/parachute%3Ajournal`);
+    await expect(line(page)).toContainText(`Journal keeps its notes in ${VAULT}`);
+    await line(page).getByRole("button", { name: "Change" }).click();
+    await expect(sheet(page)).toHaveAccessibleName("Where does Journal keep its notes?");
+    await expect(sheet(page).getByRole("radio", { name: new RegExp(`^${VAULT}\\b`) })).toBeChecked();
+    await pick(page, { letters: true });
+    await expect(page).toHaveURL(/\/v\/letters\/a\/parachute%3Ajournal/);
+    const app = frame(page);
+    await app.getByLabel("Write in your journal").fill(`Kept in letters ${stamp}.`);
+    await app.getByRole("button", { name: "Save" }).click();
+    await expect(app.getByText(`Kept in letters ${stamp}.`)).toBeVisible();
+    await expect.poll(async () => (await inLetters()).length).toBe(1);
+    const inKitchen = ((await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_content=true&limit=100`)) as { content?: string }[]).filter((n) => n.content?.includes(stamp));
+    expect(inKitchen).toEqual([]);
+    // opened from the home's address (the bar, the list): it goes where its notes are
+    await page.goto(`/v/${VAULT}/a/parachute%3Ajournal`);
+    await expect(page).toHaveURL(/\/v\/letters\/a\/parachute%3Ajournal/);
+    // an address naming another vault and a note that isn't there doesn't move it either (review: ?note= skipped the pick)
+    await page.goto(`/v/pantry/a/parachute%3Ajournal?note=01KA3Z9V6B2W8XQJ4M7N5P0R1S`);
+    await expect(page).toHaveURL(/\/v\/letters\/a\/parachute%3Ajournal/);
+    // nor does a note there that isn't Journal's; a journal note there opens where it is (written before, it stays)
+    const pantry = { origin: hubState().origin, token: mintToken("vault:pantry:write") };
+    const recipe = await api(pantry, "POST", "notes", { path: `Recipes/Soup ${stamp}`, content: "soup" }, "pantry") as { id: string };
+    const old = await api(pantry, "POST", "notes", { path: `Journal/2026/11-01/08-00 Older ${stamp}`, tags: ["journal"], content: `Older ${stamp}` }, "pantry") as { id: string };
+    try {
+      await page.goto(`/v/pantry/a/parachute%3Ajournal?note=${recipe.id}`);
+      await expect(page).toHaveURL(/\/v\/letters\/a\/parachute%3Ajournal/);
+      await page.goto(`/v/pantry/a/parachute%3Ajournal?note=${old.id}`);
+      await expect(frame(page).getByRole("heading", { name: "Journal" })).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`/v/pantry/a/parachute%3Ajournal\\?note=${old.id}`));
+    } finally {
+      for (const id of [recipe.id, old.id]) await api(pantry, "DELETE", `notes/${id}`, undefined, "pantry").catch(() => {});
+    }
+  } finally {
+    for (const n of await inLetters()) await api(letters, "DELETE", `notes/${n.id}`, undefined, "letters").catch(() => {});
+    await page.context().close();
+  }
+});
+
+test("Capture picked into letters: Home's line into Inbox/ lands in letters too", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const stamp = Date.now().toString(36);
+  const page = await device(browser);
+  const at = (vault: string) => (vault === VAULT ? hubState() : { origin: hubState().origin, token: mintToken(`vault:${vault}:write`) });
+  const inbox = async (vault: string) => ((await api(at(vault), "GET", `notes?path_prefix=${encodeURIComponent("Inbox/")}&include_content=true&limit=100`, undefined, vault)) as { id: string; content?: string }[]).filter((n) => n.content?.includes(stamp));
+  try {
+    // Home's line into Inbox/ adds in the home while Capture keeps its notes there
+    await page.goto(`/v/${VAULT}/a/parachute%3Ahome`);
+    await frame(page).getByLabel("Write something down").fill(`At home first ${stamp}`);
+    await frame(page).getByRole("button", { name: "Save" }).click();
+    await expect(frame(page).getByText(/Saved to Inbox|Not saved/)).toHaveText(/Saved to Inbox/);
+    await expect.poll(async () => (await inbox(VAULT)).length).toBe(1);
+    await page.goto(`/v/${VAULT}/a/parachute%3Acapture`);
+    await line(page).getByRole("button", { name: "Change" }).click();
+    await pick(page, { letters: true });
+    await expect(page).toHaveURL(/\/v\/letters\/a\/parachute%3Acapture/);
+    await page.goto(`/v/${VAULT}/a/parachute%3Ahome`);
+    const app = frame(page);
+    await app.getByLabel("Write something down").fill(`Into the inbox ${stamp}`);
+    await app.getByRole("button", { name: "Save" }).click();
+    await expect(app.getByText(/Saved to Inbox|Not saved/)).toHaveText(/Saved to Inbox/);
+    await expect.poll(async () => (await inbox("letters")).length).toBe(1);
+    // the one written before stays in the home; nothing new lands there
+    expect((await inbox(VAULT)).length).toBe(1);
+    // Capture's vault not on this device (kept here as a pick of a vault it doesn't hold): Capture says so, and Home's
+    // line adds nowhere, never in the home meanwhile
+    await page.evaluate((hub) => { const all = JSON.parse(localStorage.getItem("parachute.picks.v1") ?? "{}"); for (const k of Object.keys(all)) if (k.endsWith("|parachute:capture")) all[k] = [{ hub, vault: "attic" }]; localStorage.setItem("parachute.picks.v1", JSON.stringify(all)); }, new URL(hubState().origin).origin);
+    await page.goto(`/v/${VAULT}/a/parachute%3Acapture`);
+    await expect(page.getByText("Capture keeps its notes in attic, which isn't on this device yet.")).toBeVisible();
+    await page.goto(`/v/${VAULT}/a/parachute%3Ahome`);
+    await app.getByLabel("Write something down").fill(`Nowhere ${stamp}`);
+    await app.getByRole("button", { name: "Save" }).click();
+    await expect(app.getByText(/Saved to Inbox|Not saved/)).toHaveText(/Not saved/);
+    expect((await inbox(VAULT)).length).toBe(1);
+  } finally {
+    for (const n of await inbox("letters")) await api(at("letters"), "DELETE", `notes/${n.id}`, undefined, "letters").catch(() => {});
+    for (const n of await inbox(VAULT)) await api(hubState(), "DELETE", `notes/${n.id}`).catch(() => {});
     await page.context().close();
   }
 });

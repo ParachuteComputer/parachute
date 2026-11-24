@@ -16,7 +16,7 @@ import { Link } from "react-router";
 import { dOf, type PickRead, type Subject } from "../applet/approvals";
 import { signedPick } from "../applet/approvalStore";
 import { devicePick, setDevicePick } from "../applet/pickStore";
-import { asksVaults, reachOf, type VaultRef } from "../applet/vaultPick";
+import { asksVaults, KEEPS_NOTES, reachOf, type VaultRef } from "../applet/vaultPick";
 import { BUNDLED, OFFICIAL_NAMES, officialId, officialPath } from "../applet/parachuteSource";
 import { parseApp } from "../applet/app";
 import { homeVault } from "../shell/frameSource";
@@ -84,7 +84,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
         <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
         <button type="button" className="quiet-button" onClick={() => revoke(subject, id, a)}>Revoke</button>
         {a && (a.services.length > 0 || a.servicesError) && <AppletServices subject={subject} entry={a} />}
-        {a && asksVaults(a.app) && <ReachLine subject={approvalSubject(rec, id, a.manifest.id)} name={a.manifest.name} own={refOf(rec)} href={`/v/${encodeURIComponent(rec.key)}/a/${encodeURIComponent(id)}`} />}
+        {a && asksVaults(a.app) && <ReachLine subject={approvalSubject(rec, id, a.manifest.id)} name={a.manifest.name} own={refOf(rec)} href={`/v/${encodeURIComponent(rec.key)}/a/${encodeURIComponent(id)}`} one={!!a.pickOne} />}
         {a?.techne && <TechneHeld rec={rec} subject={subject} entry={a} />}
         {a?.techneError && <p className="quiet applet-techne">It reaches nothing on Techne: {a.techneError}.</p>}
       </li>
@@ -94,7 +94,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
 
 /** What one applet reaches: its pick (signed, or kept here), else the home and its own vault; Change opens the shell's
  *  sheet over the applet. */
-function ReachLine({ subject, name, own, href }: { subject: Subject; name: string; own: VaultRef | null; href: string }) {
+function ReachLine({ subject, name, own, href, one = false }: { subject: Subject; name: string; own: VaultRef | null; href: string; one?: boolean }) {
   const [read, setRead] = useState<PickRead | undefined>(undefined);
   const d = dOf(subject);
   useEffect(() => {
@@ -105,18 +105,19 @@ function ReachLine({ subject, name, own, href }: { subject: Subject; name: strin
   if (read === undefined) return null;
   const h = homeVault();
   return (
-    <span className="reach-line"><span className="quiet">{"unconfirmed" in read ? unconfirmedLine(name) : reachLine(name, reachOf(read.pick, h ? refOf(h) : null, own))}</span> · <Link className="link-button" to={`${href}?vaults=change`}>Change</Link></span>
+    <span className="reach-line"><span className="quiet">{"unconfirmed" in read ? unconfirmedLine(name) : reachLine(name, reachOf(read.pick, h ? refOf(h) : null, own, one), undefined, one)}</span> · <Link className="link-button" to={`${href}?vaults=change`}>Change</Link></span>
   );
 }
 
-/** Parachute's own that reach across vaults (Vault, Notes, Connect, Home): what each reaches, in the home. */
+/** Parachute's own that reach across vaults (Vault, Notes, Connect, Home): what each reaches; and where Journal and
+ *  Capture keep their notes. Their picks are kept in the home. */
 function OwnReaches() {
   const h = homeVault();
   if (!h) return null;
-  const own = OFFICIAL_NAMES.filter((n) => { const p = parseApp(BUNDLED[n].record.fields.app); return p.ok && asksVaults(p.app); });
+  const own = OFFICIAL_NAMES.filter((n) => { const p = parseApp(BUNDLED[n].record.fields.app); return (p.ok && asksVaults(p.app)) || (KEEPS_NOTES as readonly string[]).includes(n); });
   return <>{own.map((n) => {
     const m = BUNDLED[n].record.fields.applet as { id: string; name: string };
-    return <li key={n} className="line"><ReachLine subject={approvalSubject(h, officialId(n), m.id)} name={m.name} own={null} href={officialPath(h.key, n)} /></li>;
+    return <li key={n} className="line"><ReachLine subject={approvalSubject(h, officialId(n), m.id)} name={m.name} own={null} href={officialPath(h.key, n)} one={(KEEPS_NOTES as readonly string[]).includes(n)} /></li>;
   })}</>;
 }
 

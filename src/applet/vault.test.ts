@@ -9,6 +9,7 @@ import { createThemeModule } from "./modules/theme";
 import { parseManifest } from "./manifest";
 import { resolvedOf } from "./discovery";
 import { RECIPES } from "./fixtures";
+import homeRecord from "../../applets/home.json";
 import { LIMITS, type HostMessage } from "./contract";
 import { Blob as NodeBlob } from "node:buffer";
 
@@ -785,5 +786,21 @@ describe("vault.attachFrom: a picture attached to a record it reads, attached to
       await expect(attachFrom({ noteId, from, path: OWL })).rejects.toMatchObject({ code: "bad_params" });
     }
     expect(added).toEqual([]);
+  });
+});
+
+describe("an applet granted only to add, in one folder (Home's line into Inbox/)", () => {
+  const home = (() => { const r = parseManifest((homeRecord as { fields: { applet: unknown } }).fields.applet); if (!r.ok) throw new Error(r.error); return r.manifest; })();
+  it("adds a record there", async () => {
+    const r = await frame(resolvedOf(home)).fetch("POST", "/api/notes", { path: "Inbox/Call the plumber", content: "Call the plumber" });
+    expect(r.status).toBe(201);
+    expect(created.map((c) => c.path)).toEqual(["Inbox/Call the plumber"]);
+  });
+  it("reads nothing, not even the vault's name, and adds nowhere else", async () => {
+    const f = frame(resolvedOf(home));
+    for (const p of ["/api/vault", "/api/notes?path_prefix=Inbox/", "/api/notes/r1", "/api/tags"]) expect((await f.fetch("GET", p)).status, p).toBe(403);
+    expect((await f.fetch("POST", "/api/notes", { path: "Recipes/Soup", content: "x" })).status).toBe(403);
+    expect((await f.fetch("PATCH", "/api/notes/r1", { if_updated_at: "2026-11-02", content: "x" })).status).toBe(403);
+    expect(created).toEqual([]);
   });
 });

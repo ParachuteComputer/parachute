@@ -244,3 +244,12 @@ describe("what a device that checks approvals lets an applet reach (proposal 5, 
     expect(await asksHash(subject, "Applets/Rooms", fields, {}, [o, z])).toBe(await asksHash(subject, "Applets/Rooms", fields, {}, [z, o]));
   });
 });
+
+describe("a record's pick: \"one\" (proposal 5)", () => {
+  it("is in the asks' hash only when declared: every applet without it hashes as before", async () => {
+    const fields = { applet: { contract: 2, id: "rooms" }, app: ["vaults"] };
+    const before = await asksHash(subject, "Applets/Rooms", fields);
+    expect(await asksHash(subject, "Applets/Rooms", { ...fields, pick: undefined })).toBe(before);
+    expect(await asksHash(subject, "Applets/Rooms", { ...fields, pick: "one" })).not.toBe(before);
+  });
+});

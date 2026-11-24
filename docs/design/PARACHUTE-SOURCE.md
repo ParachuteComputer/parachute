@@ -28,7 +28,9 @@ Parachute signs in (docs/design/SCOPES.md).
 
 At `/v/<home>/a/parachute:<id>`, in the home vault. `parachute:` can't be a note id (the hub makes ULIDs), and the
 applet screen decides by the address before it reads anything from a vault: the hub is never asked for a note of that
-name. Elsewhere than the home, the address goes to the home's. Their saved state, counts and drafts are kept as any
+name. Elsewhere than the home, the address goes to the home's; Journal and Capture run in the vault picked for their
+notes instead (`/v/<that vault>/a/parachute:journal`, [ACCESS.md](../ACCESS.md) proposal 5), and their picks, like
+every pick of Parachute's own, are kept in the home as approvals named `parachute:<id>`. Their saved state, counts and drafts are kept as any
 applet's, under that address. They start without a tap (the person's own code waits for one), and whatever the
 sandbox self-test found (it guards against code the person hasn't trusted), but not while it runs: its probes' escapes
 would stop any frame beside them, so a device's first start waits those few seconds. The Everything list shows them

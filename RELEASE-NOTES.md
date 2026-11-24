@@ -63,6 +63,8 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   Connect and Home, and any applet that reaches across vaults, reach your home vault until you tick more: on its card,
   on the line over it (*Vault reaches kitchen · Change*), in its menu (**Vaults it reaches**) or in Settings → Applets.
   The pick is signed with your key, so every device of yours follows it and nothing without the key can widen it.
+  - **Journal and Capture keep their notes where you pick** (*Journal keeps its notes in kitchen · Change*): one of your
+    own vaults; notes written before stay where they are. Home's line into Inbox/ follows Capture.
   - **Update every device.** A build from before 11-23 doesn't know picks: there, Vault, Notes, Connect and Home still
     reach every vault that device holds. An applet with a card that you pick for on a new build asks again on an older
     one; allowing it again there drops it back to your home on every device until you pick again.

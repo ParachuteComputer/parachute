@@ -12,8 +12,8 @@ export type ReachFacts = {
   applets: readonly string[];
   /** Applets are allowed here but this device hasn't read them (yet, or they are a newer app's): what they need is unknown. */
   unknown?: boolean;
-  /** Applets allowed anywhere here that read across every vault this device holds (app words vaults, recent, changes,
-   *  sharing: applet/app.ts), by name. */
+  /** Applets that reach it because it is in their pick (docs/ACCESS.md proposal 5): Parachute's own that read across
+   *  vaults, Journal and Capture where they keep notes, and applets allowed here that ask; by name. */
   across?: readonly string[];
   /** The person let Parachute change notes here for a change of their own. */
   own: boolean;
@@ -42,10 +42,10 @@ export function why(f: ReachFacts): { short: string; long: string; idle: boolean
   if (f.unknown) return { short: "for applets you allowed", idle: false,
     long: "Applets you allowed reach it; their list hasn't been read on this device yet, so they aren't named here." };
   if (f.own) return { short: "for your own changes", idle: false, long: "You let Parachute change notes here for a change of your own." };
-  if (f.across?.length) return { short: `for ${names(f.across)}, across your vaults`, idle: false,
-    long: `${names(f.across)} ${new Set(f.across).size === 1 ? "reads" : "read"} across every vault this device holds, as you allowed on ${new Set(f.across).size === 1 ? "its card" : "their cards"}; signing out takes this one out of what ${new Set(f.across).size === 1 ? "it sees" : "they see"}.` };
+  if (f.across?.length) { const one = new Set(f.across).size === 1; return { short: `for ${names(f.across)}`, idle: false,
+    long: `${names(f.across)} ${one ? "reaches" : "reach"} it: you picked it for ${one ? "it" : "them"} (Settings → Applets, Change). Taking it out there, or signing out, takes it out of what ${one ? "it reaches" : "they reach"}.` }; }
   return { short: "no applet uses it", idle: true,
-    long: "No applet you allowed uses it: Parachute holds it because you opened it, or from an earlier sign-in. Signing out takes it off this device (Vault and Notes stop showing it)." };
+    long: "No applet you allowed uses it, and none has it in its pick: Parachute holds it because you opened it, or from an earlier sign-in. Signing out takes it off this device." };
 }
 
 /** The line under a vault's name: "reads and changes notes · your home", "Someone else's · reads notes · for Post". */

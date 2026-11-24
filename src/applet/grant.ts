@@ -42,15 +42,17 @@ export type Grant = {
   settings?: SettingsSection;
   /** What it may do as the person on Techne (techne.ts, docs/design/TECHNE.md): on its card, and in its key, only when declared. */
   techne?: Techne;
+  /** `pick: "one"`: across vaults, one vault at a time (vaultPick.ts): on its card, and in its key, only when declared. */
+  pickOne?: boolean;
 };
 
 /** How long a grant lasts before the card comes back. */
 export const GRANT_DAYS = 365;
 export const grantExpiry = (from: Date): Date => new Date(from.getTime() + GRANT_DAYS * 86_400_000);
 
-export const grantOf = (m: Manifest, vault: string, opens: readonly Opens[], app: readonly AppWord[] = [], services: readonly Service[] = [], signals: readonly Signal[] = [], settings?: SettingsSection | null, techne?: Techne | null): Grant =>
+export const grantOf = (m: Manifest, vault: string, opens: readonly Opens[], app: readonly AppWord[] = [], services: readonly Service[] = [], signals: readonly Signal[] = [], settings?: SettingsSection | null, techne?: Techne | null, pickOne = false): Grant =>
   ({ applet: { id: m.id, name: m.name }, vault, allow: m.allow.map((r) => ({ path: r.path, verbs: [...r.verbs] })), opens: opens.map((o) => ({ ...o })), app: [...app], ...(services.length ? { services: services.map((s) => ({ ...s })) } : {}), ...(m.reach?.length ? { reach: [...m.reach] } : {}),
-    ...(signals.length ? { signals: signals.map((s) => ({ ...s })) } : {}), ...(settings ? { settings: { ...settings } } : {}), ...(techne ? { techne: { at: techne.at, can: [...techne.can] } } : {}) });
+    ...(signals.length ? { signals: signals.map((s) => ({ ...s })) } : {}), ...(settings ? { settings: { ...settings } } : {}), ...(techne ? { techne: { at: techne.at, can: [...techne.can] } } : {}), ...(pickOne ? { pickOne: true } : {}) });
 
 /** A note's path as a rule may judge it: plain segments only, no percent-encoded dot, slash, backslash or percent. */
 const plainPath = (path: unknown): path is string => typeof path === "string" && !/%(?:2e|2f|5c|25)/i.test(path) && inScope([""], path);
@@ -84,6 +86,7 @@ export function grantLines(g: Grant, ownFolder: string | null, keyring: LineOpti
     if (g.allow.some((r) => r.verbs.includes("create") && (r.path.startsWith(o.path) || o.path.startsWith(r.path)))) out.push({ text: `Tag the notes it adds in ${o.path} as ${o.type}`, stress: false });
   }
   out.push(...appLines(g.app));
+  if (g.pickOne) out.push({ text: "Work in one of your vaults at a time: the one you pick", stress: false });
   if (g.reach?.includes("voice")) out.push({ text: "Record from your microphone when you press record (the app shows its own recorder)", stress: false });
   out.push(...serviceLines(g.services ?? [], keyring));
   if (g.techne) out.push(...techneLines(g.techne));
@@ -123,7 +126,9 @@ export function grantKey(g: Grant, notePath: string): Promise<string> {
   const settings = settingsKeyPart(g.settings, g.applet.name);
   // only when it acts on Techne: every other key stays as it was
   const techne = techneKeyPart(g.techne);
-  return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens, app, embeds, services, reach, signals, settings, techne }));
+  // only when it declares `pick: "one"`: every other key stays as it was
+  const pick = g.pickOne ? "one" : undefined;
+  return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens, app, embeds, services, reach, signals, settings, techne, pick }));
 }
 
 /** "9b13 b2ae": the first eight digits of the key, to tell two cards apart. */

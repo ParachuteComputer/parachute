@@ -81,8 +81,8 @@ Connect and Home, and any applet asking `vaults`, `sharing`, `recent` or `change
   in is gone). A pick that can't be read makes the whole approval unreadable. A device without the key (a browser tab)
   keeps its pick on the device (`applet/pickStore.ts`) and never reads it where approvals are checked. Where approvals
   are checked and one was seen for the applet but none counts now (deleted, put back under what the device saw, taken
-  back, unreadable), it reaches **no vault**, with the line *Vault reaches no vault here: the vaults you gave it couldn't
-  be confirmed · Change*: never the default, which holds the home the person may have left out
+  back, unreadable), it reaches **no vault**, with the line *Vault reaches no vault here until you pick its vaults
+  again · Change* (the approval may have run out after its year, too): never the default, which holds the home the person may have left out
   (`approvals.ts` `pickRead`). Until the pick is read it reaches nothing too, and starts again once it is. A device new
   to the applet can't tell "never picked" from "deleted", as for any approval, so it takes the default.
 - **The ask.** An applet with a card: *Which vaults may it reach?* on its card, the home and its own vault ticked;
@@ -101,8 +101,25 @@ Connect and Home, and any applet asking `vaults`, `sharing`, `recent` or `change
   whole approval; an older build sees a picked approval as other asks; a deleted or put-back approval reaches nothing); `src/shell/vaultPick.test.ts` (one vault of three, through the real
   modules: vaults, sharing, recent, changes and links reach only it, follow still opens); `e2e/vaultpick.spec.ts` (Vault
   on a device without the key; two devices with one key, and the approval deleted under the second; an applet with a card). Each goes red with its cut removed.
-- **Not yet.** Journal and Capture as a pick of one (their `here`), and `pick: "one"` on a record: the next step. The
-  long-press in the list doesn't offer Change yet (the applet's menu and Settings do). Taking a vault out drops nothing
+- **Journal and Capture: a pick of one** (second step, same day). They keep their notes in one vault of the person's
+  own: the line *Journal keeps its notes in kitchen · Change* opens a choice of one (radios, the person's own vaults only),
+  signed into the approval `parachute:journal` (`parachute:capture`) as above. They run at that vault's address
+  (`/v/<vault>/a/parachute:journal`; the home's address goes there), so their `here` is it; notes written before stay
+  where they are, and a note asked for opens where it is (only a note that is there: an address with any `note` doesn't
+  move them). A vault picked that this device doesn't hold: *Journal keeps
+  its notes in journal, which isn't on this device yet* with **Open** (its hub is asked for write, one page) and
+  **Change**; it doesn't write in the home meanwhile. Where the pick can't be confirmed, it asks to pick again. Home's
+  line into `Inbox/` is Capture's inbox, so it adds in Capture's vault, and nowhere while that vault isn't on the device
+  or can't be confirmed. No `keepsIn` in the settings note: proposal 4 is folded in here. As for every approval, a
+  device that never saw Journal's can't tell "never picked" from "deleted", and takes the home.
+- **Settings' vault lines** count a vault as used by the applets whose pick holds it (*reads notes · for Vault*), and
+  Journal and Capture where they keep notes; an applet that reads across vaults no longer keeps every vault "used".
+- **Home's line into `Inbox/` saves.** It never had: the frame's vault module asked `vault.read` of every call, and
+  Home may only add. Now a read asks read, a new record create, a change update (`modules/vault.ts`).
+- **`pick: "one"` on a record** (beside `app`, not in the manifest): an applet that reaches across vaults one vault at a
+  time; its card offers a choice of one, its own vault chosen. In the grant's key and the asks' hash only when declared.
+  An older build doesn't read it and asks as for any pick.
+- **Not yet.** The long-press in the list doesn't offer Change yet (the applet's menu and Settings do). Taking a vault out drops nothing
   at the hub by itself: a pick needs only read, and write still goes back with the last thing that needed it.
 
 **Older builds.** A build from before this doesn't know picks. There, Parachute's own Vault, Notes, Connect and Home
@@ -166,7 +183,7 @@ Parachute's own applets keep their notes, and 5 changes what an approval holds. 
      Journal there.
 
 5. **An applet that reaches across vaults asks which vaults, and holds only those.** *Built for the cross-vault words
-   11-23 (above); Journal and Capture next. The design as approved:* Aaron, 11-22: *"an applet itself,
+   11-23, Journal and Capture with it (above). The design as approved:* Aaron, 11-22: *"an applet itself,
    like the Vault Viewer applet, might be like, hey, we would like access to your vault. Which vault would you like to
    give us access to? … once it's in there, it's defined and it's specified on the record what Vault we're using. But
    the app should be able to ask what Vaults potentially change that."* Today Vault, Notes and Connect (app word

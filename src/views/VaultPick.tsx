@@ -34,18 +34,21 @@ export function pickChoices(): Choice[] {
 export function namesOf(refs: readonly VaultRef[], choices: readonly Choice[] = pickChoices()): string[] {
   return sortPick(refs).map((r) => choices.find((c) => sameRef(c.ref, r))?.name ?? r.vault);
 }
-/** Where the vaults it was given couldn't be confirmed here (an approval gone or put back): it reaches none. */
-export const unconfirmedLine = (applet: string) => `${applet} reaches no vault here: the vaults you gave it couldn't be confirmed`;
-export const reachLine = (applet: string, refs: readonly VaultRef[], choices?: readonly Choice[]) => `${applet} reaches ${namesLine(namesOf(refs, choices))}`;
+/** Where the vaults it was given can't be confirmed here (the approval ran out after its year, its key left the key
+ *  list, or it went missing or was put back): it reaches none until they are picked again. Said plainly, no blame. */
+export const unconfirmedLine = (applet: string) => `${applet} reaches no vault here until you pick its vaults again`;
+export const reachLine = (applet: string, refs: readonly VaultRef[], choices?: readonly Choice[], one = false) =>
+  (one ? `${applet} keeps its notes in ${namesOf(refs.slice(0, 1), choices)[0] ?? "your home"}` : `${applet} reaches ${namesLine(namesOf(refs, choices))}`);
 
 /** The ticks: one per vault on offer; `one`: a choice of one. */
-export function PickTicks({ choices, ticked, onChange, legend = "Which vaults may it reach?", one = false }: {
-  choices: readonly Choice[]; ticked: readonly VaultRef[]; onChange: (next: VaultRef[]) => void; legend?: string; one?: boolean }) {
+export function PickTicks({ choices, ticked, onChange, legend = "Which vaults may it reach?", one = false, legendHidden = false }: {
+  choices: readonly Choice[]; ticked: readonly VaultRef[]; onChange: (next: VaultRef[]) => void; legend?: string; one?: boolean;
+  /** the sheet says it in its heading already */ legendHidden?: boolean }) {
   const on = (r: VaultRef) => ticked.some((t) => sameRef(t, r));
   const flip = (r: VaultRef) => onChange(one ? [r] : on(r) ? ticked.filter((t) => !sameRef(t, r)) : [...ticked, r]);
   return (
     <fieldset className="plain pick-ticks">
-      <legend>{legend}</legend>
+      <legend className={legendHidden ? "sr-only" : undefined}>{legend}</legend>
       {choices.map((c) => (
         <label key={refKey(c.ref)} className="line"><span>
           <input type={one ? "radio" : "checkbox"} name={one ? "pick-one" : undefined} checked={on(c.ref)} onChange={() => flip(c.ref)} /> {c.name}
@@ -58,19 +61,21 @@ export function PickTicks({ choices, ticked, onChange, legend = "Which vaults ma
 }
 
 /** The shell's own sheet to change what an applet reaches: over the applet, answered by a real tap. */
-export function PickSheet({ name, initial, onSave, onCancel, error, passcode, one = false }: {
+export function PickSheet({ name, initial, onSave, onCancel, error, passcode, one = false, mineOnly = false }: {
   name: string; initial: readonly VaultRef[]; onSave: (picked: VaultRef[]) => void; onCancel: () => void; error?: string | null;
-  /** the passcode's box, when approving here asks it (levels) */ passcode?: { value: string; set: (v: string) => void } | null; one?: boolean }) {
-  const [choices] = useState(pickChoices);
+  /** the passcode's box, when approving here asks it (levels) */ passcode?: { value: string; set: (v: string) => void } | null; one?: boolean;
+  /** only the person's own vaults (where Journal or Capture keeps its notes) */ mineOnly?: boolean }) {
+  const [choices] = useState(() => pickChoices().filter((c) => !mineOnly || !c.theirs));
+  const title = one ? `Where does ${name} keep its notes?` : `Which vaults may ${name} reach?`;
   const [ticked, setTicked] = useState<VaultRef[]>(() => sortPick(initial));
   const cancel = useRef<HTMLButtonElement>(null);
   const press = useSettledPress(700);
   useEffect(() => { cancel.current?.focus(); const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); }; addEventListener("keydown", esc); return () => removeEventListener("keydown", esc); }, [onCancel]);
   return (
     <div className="sheet-scrim sheet-over-frames" role="presentation">
-      <section className="sheet" role="dialog" aria-modal="true" aria-label={`Vaults ${name} reaches`}>
-        <h2>Vaults {name} reaches</h2>
-        <PickTicks choices={choices} ticked={ticked} onChange={setTicked} one={one} legend={one ? `Which vault does ${name} keep its notes in?` : `Which vaults may ${name} reach?`} />
+      <section className="sheet" role="dialog" aria-modal="true" aria-label={title}>
+        <h2>{title}</h2>
+        <PickTicks choices={choices} ticked={ticked} onChange={setTicked} one={one} legend={title} legendHidden />
         {passcode && <label className="line passcode-line"><span>Your passcode, to approve it</span> <input type="password" autoComplete="off" aria-label="Your passcode" value={passcode.value} onChange={(e) => passcode.set(e.target.value)} /></label>}
         {error && <p className="error" role="alert">{error}</p>}
         <div className="grant-actions">

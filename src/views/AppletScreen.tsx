@@ -26,7 +26,8 @@ import AppletFrame, { appletPage } from "../applet/frame";
 import GrantCard from "../applet/GrantCard";
 import { readApplet, resolvedOf, ownFolder, type AppletEntry } from "../applet/discovery";
 import { updateLine } from "../applet/level";
-import { claimOf, withoutRoles } from "../applet/opens";
+import { claimOf, parseOpens, withoutRoles, type Opens } from "../applet/opens";
+import { parseManifest } from "../applet/manifest";
 import { readRoleTags } from "../open/roles";
 import { fingerprint, grantExpiry, grantKey, grantOf } from "../applet/grant";
 import { deviceGrants, subjectOf } from "../applet/grants";
@@ -63,7 +64,7 @@ import { createStorageModule } from "../applet/modules/storage";
 import { storageFor } from "../shell/device";
 import { deviceSaved, forgetSaved } from "../shell/saved";
 import { asksOf, dOf } from "../applet/approvals";
-import { approvalFor, floorOf, ownKey, passcodeHere, signApproval, signPick, signsHere, subjectOf as approvalSubject, takeBack } from "../applet/approvalStore";
+import { approvalFor, floorOf, ownKey, passcodeHere, signApproval, signsHere, subjectOf as approvalSubject, takeBack } from "../applet/approvalStore";
 import { approvedOtherLine, changedLine, lastCodeChange, type NoteNow, type Version } from "../applet/changedBy";
 import { versionsOf } from "../vault/client";
 import { sha256Hex } from "../applet/needs";
@@ -76,9 +77,9 @@ import { useDeviceSheets } from "./DeviceSheets";
 import { createServicesModule } from "../applet/modules/services";
 import { createBroker, type Broker } from "../services/broker";
 import { useShellSheets } from "./ShellSheets";
-import { useVaultPick, refOf } from "./useVaultPick";
+import { keepOwnPick, keptIn, ownSubject, useVaultPick, refOf } from "./useVaultPick";
 import { hideLine, lineHidden, MissingLine, PickLine, PickSheet, PickTicks, namesOf, pickChoices, reachLine, unconfirmedLine } from "./VaultPick";
-import { pickToSign, reachOf, type VaultRef } from "../applet/vaultPick";
+import { KEEPS_NOTES, pickToSign, reachOf, type VaultRef } from "../applet/vaultPick";
 import { setDevicePick } from "../applet/pickStore";
 import { createTechneModule } from "../applet/modules/techne";
 import { techneDeps } from "../shell/techneDeps";
@@ -97,7 +98,7 @@ import { barNow, settingsReadNow, useSettings } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
-import { inParachuteSpace, officialFace, officialNow, officialOf } from "../applet/parachuteSource";
+import { BUNDLED, inParachuteSpace, officialFace, officialNow, officialOf, type OfficialName } from "../applet/parachuteSource";
 import { failureNow, settled, type Failure } from "../vault/failure";
 import { OtherHomes } from "./HomeChoice";
 import { siteOf } from "../vault/site";
@@ -140,6 +141,9 @@ const idOf = (read: string) => { try { return new URLSearchParams(read.slice(rea
 type Loaded = { state: "loading" } | { state: "error"; error: string; failure: Failure } | { state: "refused"; error: string } | { state: "newer"; entry: AppletEntry }
   /** one of Parachute's own, asked for in a vault other than the home: it runs in the home (parachuteSource.ts) */
   | { state: "home"; to: string }
+  /** Journal or Capture, whose notes are kept in a vault this device doesn't hold (docs/ACCESS.md proposal 5) */
+  /** (`ref` null: where it keeps them couldn't be confirmed on this device, so it runs nowhere until picked again) */
+  | { state: "away"; name: string; ref: VaultRef | null }
   | { state: "ok"; entry: AppletEntry;
       /** Parachute's own (parachuteSource.ts): loaded from the Parachute source, never from the vault; no card */
       official: boolean; page: string | null; source: { kind: CodeKind; text: string }; imports: Imported[]; note: Note | null; from: string[];
@@ -147,11 +151,20 @@ type Loaded = { state: "loading" } | { state: "error"; error: string; failure: F
       asks: string;
       /** that hash with a pick in it (docs/ACCESS.md proposal 5): the pick is read from the approval first */
       asksFor: (vaults: VaultRef[] | null) => Promise<string>;
+      /** the vault its `here` folders are in, when not this one (Home's Inbox/ line: Capture's vault) */
+      here?: string | null;
       /** its note as the hub says it is now: its content's hash, who made it and wrote it last (applet/changedBy.ts) */
       now: NoteNow };
 
 /** The pointer in the home is repinned only while the app may change notes there (a home read only waits: no ask is
  *  raised for something the person didn't do). */
+/** What one of Parachute's own opens, as its shipped record says (Journal: journal notes in Journal/; Capture: none). */
+const ownOpens = (name: OfficialName): Opens[] => {
+  const r = BUNDLED[name].record.fields, m = parseManifest(r.applet);
+  if (!m.ok) return [];
+  const o = parseOpens(r.opens, m.manifest);
+  return o.ok ? o.opens : [];
+};
 const homeWritable = () => { const h = homeVault(); return !!h && canWrite(h.key); };
 
 export default function AppletScreen() {
@@ -238,10 +251,26 @@ export default function AppletScreen() {
         // space is never asked of the hub), and loaded from the Parachute source (docs/design/PARACHUTE-SOURCE.md)
         const which = officialOf(appletId);
         if (inParachuteSpace(appletId) && !which) { if (on) setLoaded({ state: "newer", entry: { manifest: { contract: 2, id: "newer-parachute", name: "this applet", glyph: "·", allow: [], search: [], screens: [{ id: "home", name: "this applet" }] }, vault: rec.key, noteId: appletId, path: "", opens: [], app: [], embeds: [], services: [], signals: [], newer: true, newerWhy: "it is one of Parachute's own that this Parachute doesn't have" } }); return; }
+        // Home's line into Inbox/ is Capture's inbox: it adds there in Capture's vault
+        // (null: Capture's vault isn't on this device, or its pick can't be confirmed: Home adds nowhere meanwhile)
+        let here: string | null | undefined;
         if (which) {
           const h = homeVault();
           if (!h) { if (on) setLoaded({ state: "refused", error: "it runs in your home vault, and this device has none yet" }); return; }
-          if (h.key !== rec.key) { if (on) setLoaded({ state: "home", to: `/v/${encodeURIComponent(h.key)}/a/${encodeURIComponent(appletId)}${location.search}` }); return; }
+          // Journal and Capture run in the vault picked for their notes (docs/ACCESS.md proposal 5), else the home; one
+          // asked to open a note runs where that note is, in a vault of the person's own (notes made before stay where
+          // they are). The others run in the home
+          const keeps = (KEEPS_NOTES as readonly string[]).includes(which);
+          // a note asked for counts only when it is there, in this vault, and is one it opens (a journal note in Journal/):
+          // an address with any `note` doesn't move it
+          const there = keeps && askedNote && isMine(rec) ? await c.getNote(askedNote).then((x) => !!x && !!claimOf(ownOpens(which), x as { path?: string | null; tags?: readonly unknown[] | null }), () => false) : false;
+          if (!on) return;
+          const at = keeps && !there ? await keptIn(which) : null;
+          if (!on) return;
+          if (at && !("held" in at && at.held)) { setLoaded({ state: "away", name: (BUNDLED[which].record.fields.applet as { name: string }).name, ref: "ref" in at ? at.ref : null }); return; }
+          const to = at && "rec" in at ? at.rec : there ? rec : h;
+          if (to.key !== rec.key) { setLoaded({ state: "home", to: `/v/${encodeURIComponent(to.key)}/a/${encodeURIComponent(appletId)}${location.search}` }); return; }
+          if (which === "home") { const k = await keptIn("capture"); if (!on) return; if (k && "rec" in k) { if (k.rec.key !== rec.key) here = k.rec.key; } else if (k) here = null; }
         }
         const o = which ? await officialNow(which) : null;
         const n = o ? ({ id: appletId, path: o.record.path, content: o.body, tags: o.record.tags, metadata: o.record.fields, extension: o.record.extension } as unknown as Note) : await c.getNote(appletId);
@@ -271,7 +300,7 @@ export default function AppletScreen() {
         const imports = imp.imports;
         // code from someone else's vault, its own or imported, is transpiled only once it is allowed
         const late = notMine || imports.some((i) => i.whose !== "mine");
-        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app, a.entry.services, a.entry.signals, a.entry.settings, a.entry.techne), embedsFrom: from }, a.entry.path),
+        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app, a.entry.services, a.entry.signals, a.entry.settings, a.entry.techne, !!a.entry.pickOne), embedsFrom: from }, a.entry.path),
           late || imports.length ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), o ? null : pointerFor(rec, n.id).catch(() => null)]);
         const hash = imports.length && kind !== "html" ? await compositeHash(kind, source, imports) : code.hash;
         if (!on) return;
@@ -279,7 +308,7 @@ export default function AppletScreen() {
         // drawn from the copy kept of it, whose record now hands its embeds other props, say)
         const prev = was.current.loaded.state === "ok" ? was.current.loaded : null;
         const sameNote = !!prev && prev.now.updatedAt === ((x: unknown) => (typeof x === "string" ? x : null))((n as unknown as Record<string, unknown>).updatedAt) && prev.note?.id === note?.id && (prev.note as { updatedAt?: string } | null)?.updatedAt === (note as { updatedAt?: string } | null)?.updatedAt;
-        if (quiet && was.current.keys?.scope === scope && was.current.keys?.html === hash && sameNote) return;
+        if (quiet && was.current.keys?.scope === scope && was.current.keys?.html === hash && sameNote && prev?.here === here) return;
         if (code.compiled && !code.compiled.ok) { setLoaded({ state: "refused", error: `its code doesn't compile: ${code.compiled.error}` }); return; }
         let page: string | null = null;
         if (kind === "html") page = source;
@@ -295,7 +324,7 @@ export default function AppletScreen() {
         if (!on) return;
         // a reload that isn't a quiet recheck (another note asked of it, say) reads the approvals again, and waits for them
         if (!quiet) { setSigned(null); setWaitedFor(null); }
-        setLoaded({ state: "ok", entry: a.entry, official: !!o, page, source: { kind, text: source }, imports, note, from, asks, asksFor, now });
+        setLoaded({ state: "ok", entry: a.entry, official: !!o, page, source: { kind, text: source }, imports, note, from, asks, asksFor, now, ...(here !== undefined ? { here } : {}) });
         setKeys({ scope, html: hash });
         setBrought(pointer);
       } catch (e) {
@@ -365,7 +394,9 @@ export default function AppletScreen() {
   }, [signedFor]);
   // the vaults it reaches (docs/ACCESS.md proposal 5): an applet whose `app` reaches across vaults reaches only its pick,
   // read from the approval checked here (or kept on this device), else the home (and its own vault)
-  const approvalAt = rec && entry ? approvalSubject(rec, entry.noteId, entry.manifest.id) : null;
+  // Parachute's own keep theirs in the home, named for the applet, wherever it runs (Journal in its own vault)
+  const ownName = official && entry ? officialOf(entry.noteId) : null;
+  const approvalAt = rec && entry ? (ownName && homeVault() ? ownSubject(ownName, homeVault()!) : approvalSubject(rec, entry.noteId, entry.manifest.id)) : null;
   const pickNow = useVaultPick({ rec, entry, official, subject: approvalAt, signed: official ? null : signedNow, recheck });
   // Parachute's own wait for their pick as an applet with a card waits for its approvals, up to the same time; then they
   // start on the home alone, and the pick, once read, starts them again on it
@@ -532,7 +563,9 @@ export default function AppletScreen() {
   // the frame's reads, from the kept copies while its page redraws on fresh data: noted, so it is told only of those
   const reader = useMemo(() => (rec ? keptReaderFor(rec) : null), [rec?.key, rec?.issuer]); // eslint-disable-line react-hooks/exhaustive-deps
   const router = useMemo(() => (rec && entry && reader ? createRouter([
-    createVaultModule(vaultDeps(clientFor(rec), reader.client), { opens: entry.opens, name: rec.vault }),
+    // its `here`: this vault, or for Home's Inbox/ line Capture's (none to add to while that isn't here: no create)
+    ((h, add) => createVaultModule(((d) => (add ? d : { ...d, create: undefined }))(vaultDeps(clientFor(h), h === rec ? reader.client : keptReaderFor(h).client)), { opens: entry.opens, name: h.vault }))(
+      loaded.state === "ok" && loaded.here ? findVault(loaded.here) ?? rec : rec, !(loaded.state === "ok" && loaded.here === null)),
     createThemeModule({ theme: tokensNow }),
     createAppModule(entry.app, appDeps((href) => navRef.current(href), () => frameEl.current, device, () => findVault(rec.key), entry.manifest.allow.filter((r) => r.verbs.includes("read")).map((r) => r.path), pickNow.given)),
     // the microphone (manifest `reach: [voice]`) and a little storage on this device (`app: [storage]`): not_granted without
@@ -558,7 +591,7 @@ export default function AppletScreen() {
     ...(vaultsModule ? [vaultsModule] : []),
     // as the person on Techne, one capability at a time (docs/design/TECHNE.md)
     ...(techne ? [createTechneModule(entry.techne ?? null, techne)] : []),
-  ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader, techne, pickNow.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader, techne, pickNow.key, loaded.state === "ok" ? loaded.here : undefined]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
   const note = loaded.state === "ok" ? loaded.note : null;
@@ -638,12 +671,12 @@ export default function AppletScreen() {
   async function keepPick(ticked: VaultRef[], face?: string[]): Promise<Content | null> {
     if (!rec || !entry || !keys || !approvalAt || loaded.state !== "ok") throw new Error("it isn't open");
     const h = homeVault();
-    const toSign = pickToSign(ticked, h ? refOf(h) : null, official ? null : refOf(rec));
+    const toSign = pickToSign(ticked, h ? refOf(h) : null, official ? null : refOf(rec), pickNow.one);
+    if (ownName) return keepOwnPick(ownName, name, toSign, passcode && needsPasscode ? passcode : null, (c) => pickNow.took(c.vaults ?? null));
     if (await signsHere()) {
       const code = passcode && needsPasscode ? passcode : null;
       // signed, then kept in the home vault: what it reaches follows at once, not after that write
-      const r = official ? await signPick(approvalAt, name, toSign, code, (c) => pickNow.took(c.vaults ?? null))
-        : await signApproval({ subject: approvalAt, name, approved: true, code: keys.html, scope: await loaded.asksFor(toSign), face, passcode: code, runs: mode === "approved-code" ? "approved-code" : "sealed", vaults: toSign,
+      const r = await signApproval({ subject: approvalAt, name, approved: true, code: keys.html, scope: await loaded.asksFor(toSign), face, passcode: code, runs: mode === "approved-code" ? "approved-code" : "sealed", vaults: toSign,
           signed: (c) => { if (signedFor) setSigned({ for: signedFor, d: { run: true, content: c } }); } });
       return JSON.parse(r.ev.content) as Content;
     }
@@ -652,7 +685,8 @@ export default function AppletScreen() {
     setDevicePick(dOf(approvalAt), toSign);
     return null;
   }
-  const openPicked = (r: VaultRef) => void askVault({ issuer: r.hub, vault: r.vault }, "read", "open", `${location.pathname}${location.search}`)
+  // a vault picked that this device doesn't hold: its hub is asked for read (write, where Journal or Capture keeps notes)
+  const openPicked = (r: VaultRef, level: "read" | "write" = ownName && pickNow.one ? "write" : "read") => void askVault({ issuer: r.hub, vault: r.vault }, level, "open", `${location.pathname}${location.search}`)
     .then((url) => window.location.assign(url), (e: unknown) => setPickError(e instanceof Error ? e.message : "Its hub didn't answer."));
   const savePick = (ticked: VaultRef[]) => void (async () => {
     setPickError(null);
@@ -667,6 +701,11 @@ export default function AppletScreen() {
     // the approval just signed is the newest: it holds here at once, whatever the home's copy says yet
     if (mine && !official && signedFor) setSigned({ for: signedFor, d: { run: true, content: mine } });
     picking?.done?.(true); setPicking(null); setPasscode(""); pickNow.again(); setRecheck((x) => x + 1);
+    // Journal or Capture: it opens where its notes are kept now (notes made before stay where they were)
+    if (ownName && pickNow.one) {
+      const to = ticked[0] ? listVaults().find((v) => refOf(v).hub === ticked[0].hub && v.vault === ticked[0].vault) : homeVault();
+      if (to && to.key !== rec?.key) { navigate(`/v/${encodeURIComponent(to.key)}/a/${encodeURIComponent(entry!.noteId)}`, { replace: true }); return; }
+    }
     const first = ticked.find((r) => !listVaults().some((v) => refOf(v).hub === r.hub && v.vault === r.vault));
     if (first) openPicked(first);
   })();
@@ -675,8 +714,8 @@ export default function AppletScreen() {
   // Allow out of habit doesn't give back a vault left out: review finding 4); else what it reaches now, or the default
   function cardTicks(): VaultRef[] {
     const h = homeVault(), at = [h ? refOf(h) : null, rec ? refOf(rec) : null] as const;
-    if (signedNow && !signedNow.run && signedNow.why === "other" && signedNow.newest?.approved) return reachOf(signedNow.newest.vaults ?? null, ...at);
-    return pickNow.read && !pickNow.unconfirmed ? pickNow.reach : reachOf(null, ...at);
+    if (signedNow && !signedNow.run && signedNow.why === "other" && signedNow.newest?.approved) return reachOf(signedNow.newest.vaults ?? null, ...at, pickNow.one);
+    return pickNow.read && !pickNow.unconfirmed ? pickNow.reach : reachOf(null, ...at, pickNow.one);
   }
   // Settings' Change (`?vaults=change`) opens the sheet over the applet once it runs
   const askedChange = params.get("vaults") === "change";
@@ -722,6 +761,27 @@ export default function AppletScreen() {
   }
   if (loaded.state === "error") return shell(<div role="alert"><p className="error">Couldn't open this applet.</p><details className="small"><summary>Details</summary>{loaded.error}</details></div>);
   if (loaded.state === "home") return <Navigate to={loaded.to} replace />;
+  // Journal or Capture, its notes kept in a vault this device doesn't hold: it doesn't run elsewhere meanwhile
+  if (loaded.state === "away") {
+    const which = officialOf(appletId);
+    const ref = loaded.ref;
+    const [vault] = ref ? namesOf([ref]) : [""];
+    const keepHere = (to: VaultRef[]) => void (async () => {
+      setPickError(null);
+      try { if (which) await keepOwnPick(which, loaded.name, pickToSign(to, homeVault() ? refOf(homeVault()!) : null, null, true), needsPasscode && passcode ? passcode : null); }
+      catch (e) { setPickError(`Not changed: ${e instanceof Error ? e.message.replace(/\.$/, "") : "it couldn't be signed"}.`); return; }
+      setPicking(null); setRecheck((x) => x + 1);
+    })();
+    return shell(<div className="card" role="status">
+      {ref ? <p>{loaded.name} keeps its notes in <strong>{vault}</strong>, which isn't on this device yet.</p>
+        : <p>Pick where {loaded.name} keeps its notes again: this device can't confirm the last pick, so it doesn't open meanwhile.</p>}
+      {pickError && !picking && <p className="error" role="alert">{pickError}</p>}
+      {ref && <><button type="button" className="primary" onClick={tap(() => openPicked(ref, "write"))}>Open {vault}</button>{" "}</>}
+      <button type="button" className={ref ? "quiet-button" : "primary"} onClick={tap(() => setPicking({ add: null }))}>Change</button>
+      {picking && <PickSheet name={loaded.name} initial={ref ? [ref] : homeVault() ? [refOf(homeVault()!)] : []} one mineOnly onSave={keepHere} onCancel={() => { setPicking(null); setPickError(null); }} error={pickError}
+        passcode={needsPasscode ? { value: passcode, set: setPasscode } : null} />}
+    </div>);
+  }
   if (loaded.state === "refused") return shell(<div className="card" role="alert"><p>This applet can't open. It was not run: {loaded.error}.</p>{plainNote}</div>);
   if (loaded.state === "newer") return shell(<div className="card" role="status"><p><strong>{updateLine(loaded.entry.manifest.name)}</strong></p><p className="quiet">It was made for a newer Parachute than this one, so nothing of it ran here{loaded.entry.newerWhy ? ` (${loaded.entry.newerWhy})` : ""}.</p>{plainNote}</div>);
   if (!entry || !keys || !subject) return null;
@@ -734,13 +794,13 @@ export default function AppletScreen() {
       {hubError && <p className="error" role="alert">{hubError}</p>}
       {needsPasscode && !approvedElsewhere && <label className="line passcode-line"><span>Your passcode, to approve it</span> <input type="password" autoComplete="off" aria-label="Your passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} /></label>}
       <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"}
-        grant={{ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services, entry.signals, entry.settings, entry.techne), embedsFrom: loaded.state === "ok" ? loaded.from : [] }} ownFolder={ownFolder(entry.path)} keyring={lineOptions(keyring)}
+        grant={{ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services, entry.signals, entry.settings, entry.techne, !!entry.pickOne), embedsFrom: loaded.state === "ok" ? loaded.from : [] }} ownFolder={ownFolder(entry.path)} keyring={lineOptions(keyring)}
         imports={loaded.state === "ok" ? loaded.imports : []} scope={keys.scope} code={keys.html} status={status} was={grants.record(subject)}
         broughtChanged={pinMoved} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         hubAsk={covers(heldLevel(rec), appletLevel(entry.manifest)) ? null : { host: hostOf(rec.issuer), level: appletLevel(entry.manifest) }}
         approvedElsewhere={approvedElsewhere ? signedNow && signedNow.run ? signedNow.content.device ?? "another device" : null : null}
         signing={signing} history={{ changed: changeNow, other: otherApproved }}
-        pick={pickNow.asks && !approvedElsewhere ? (pickNow.canPick ? <PickTicks choices={pickChoices()} ticked={ticked ?? cardTicks()} onChange={setTicked} />
+        pick={pickNow.asks && !approvedElsewhere ? (pickNow.canPick ? <PickTicks choices={pickChoices()} ticked={ticked ?? cardTicks()} onChange={setTicked} one={pickNow.one} legend={pickNow.one ? "Which vault may it work in?" : undefined} />
           : <p className="grant-hub" role="note">It reaches the vaults you picked for it on a device that holds your key; change them there.</p>) : undefined}
         onAllow={(asked) => void (async () => {
           // on a device with the person's key, Allow is an approval for every device: signed here, after the device
@@ -750,7 +810,7 @@ export default function AppletScreen() {
           const h = homeVault();
           const cardTicked = ticked ?? cardTicks();
           if (pickNow.asks && !approvedElsewhere && pickNow.canPick && !cardTicked.length) { setSigning("Tick at least one vault it may reach."); return; }
-          const cardPick = pickNow.asks && !approvedElsewhere && pickNow.canPick ? pickToSign(cardTicked, h ? refOf(h) : null, refOf(rec)) : null;
+          const cardPick = pickNow.asks && !approvedElsewhere && pickNow.canPick ? pickToSign(cardTicked, h ? refOf(h) : null, refOf(rec), pickNow.one) : null;
           const signsNow = !approvedElsewhere && await signsHere();
           // kept on this device only where approvals aren't checked: a device with an anchor alone reads signed picks only
           if (pickNow.asks && !approvedElsewhere && !signsNow && pickNow.canPick && approvalAt) setDevicePick(dOf(approvalAt), cardPick);
@@ -819,8 +879,10 @@ export default function AppletScreen() {
     if (pickNow.unconfirmed) return <PickLine text={unconfirmedLine(name)} onChange={() => setPicking({ add: null })} />;
     if (pickNow.missing.length) return <MissingLine refs={pickNow.missing} onOpen={openPicked} />;
     const d = dOf(approvalAt);
-    if (official && pickNow.read && pickNow.pick === null && !lineHidden(d) && pickChoices().length > 1)
-      return <PickLine text={reachLine(name, pickNow.reach)} onChange={() => setPicking({ add: null })} onDismiss={() => { hideLine(d); setLineGone((x) => x + 1); }} />;
+    // Journal and Capture: a choice among the person's own vaults only
+    const choices = pickChoices().filter((c) => !(ownName && pickNow.one) || !c.theirs);
+    if (official && pickNow.read && pickNow.pick === null && !lineHidden(d) && choices.length > 1)
+      return <PickLine text={reachLine(name, pickNow.reach, undefined, pickNow.one)} onChange={() => setPicking({ add: null })} onDismiss={() => { hideLine(d); setLineGone((x) => x + 1); }} />;
     return null;
   };
   return shell(<>
@@ -833,7 +895,8 @@ export default function AppletScreen() {
     {router && page && savedNow && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}:${embedsKey}:${pickNow.key}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
     {sheets.ui}
     {picking && <PickSheet name={name} initial={picking.add && !pickNow.reach.some((r) => r.hub === picking.add!.hub && r.vault === picking.add!.vault) ? [...pickNow.reach, picking.add] : pickNow.reach}
-      onSave={savePick} onCancel={() => { picking.done?.(false); setPicking(null); setPickError(null); }} error={pickError} passcode={needsPasscode ? { value: passcode, set: setPasscode } : null} />}
+      onSave={savePick} onCancel={() => { picking.done?.(false); setPicking(null); setPickError(null); }} error={pickError} passcode={needsPasscode ? { value: passcode, set: setPasscode } : null}
+      one={pickNow.one} mineOnly={!!ownName && pickNow.one} />}
     {router && page && sized && rec && isMine(rec) && <PageEmbeds host={rec} hostNote={entry.noteId} embeds={entry.embeds} from={loaded.state === "ok" ? loaded.from : []} />}
     {/* last: the recorder rests at the screen's foot, below the frame and its embeds */}
     {device.ui}
