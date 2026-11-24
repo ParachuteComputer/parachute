@@ -2,38 +2,13 @@
 // app"): one tap on an applet's record button and it records, as the Uni app's microphone does; Send sends. Going to
 // the background stops it and keeps what was recorded; Cancel throws it away and lets the microphone go. Journal's
 // voice entry on the hub alone, with Chromium's fake microphone (docs/design/KEYRING.md "Voice, files, links, storage").
-import { expect, test, type Page } from "@playwright/test";
-import { api, hubState, record, VAULT } from "./hub";
-import { ui } from "./helpers";
+import { expect, test } from "@playwright/test";
+import { api, hubState, record } from "./hub";
 import { appletRecord } from "../applets/record.ts";
 
 test.use({ storageState: "e2e/.signed-in.json", launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] } });
 
-const entries = async () => (await api(hubState(), "GET", `notes?path_prefix=${encodeURIComponent("Journal/")}&include_metadata=true&limit=100`) as { id: string; metadata?: Record<string, unknown> }[]);
-const voiced = async () => (await entries()).filter((r) => r.metadata?.transcribe_stub === true);
-
-/** Journal, allowed, with the recorder's moments kept: when the recorder started, and every stream the shell opened. */
-async function journal(page: Page) {
-  await page.addInitScript(() => {
-    const w = window as unknown as { __started: number; __streams: MediaStream[] };
-    w.__started = 0; w.__streams = [];
-    if (typeof MediaRecorder !== "undefined") {
-      const start = MediaRecorder.prototype.start;
-      MediaRecorder.prototype.start = function (this: MediaRecorder, ...a: [number?]) { this.addEventListener("start", () => { w.__started = performance.timeOrigin + performance.now(); }, { once: true }); return start.apply(this, a); };
-    }
-    const gum = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
-    if (gum) navigator.mediaDevices.getUserMedia = async (c) => { const s = await gum(c); w.__streams.push(s); return s; };
-  });
-  await page.goto(`/v/${VAULT}?with=vault`);
-  await ui(page).getByRole("list", { name: "Applets" }).getByRole("link", { name: /Journal/ }).click();
-  await page.getByRole("button", { name: "Allow" }).click();
-  const app = page.frameLocator("iframe.applet-frame");
-  await expect(app.getByRole("heading", { name: "Journal" })).toBeVisible();
-  return app.getByRole("button", { name: "Record a voice entry" });
-}
-const now = (page: Page) => page.evaluate(() => performance.timeOrigin + performance.now());
-const started = (page: Page) => page.evaluate(() => (window as unknown as { __started: number }).__started);
-const micOpen = (page: Page) => page.evaluate(() => (window as unknown as { __streams: MediaStream[] }).__streams.some((s) => s.getTracks().some((t) => t.readyState === "live")));
+import { entries, journal, micOpen, now, started, voiced } from "./voiceHelpers";
 
 let made: string[] = [];
 test.beforeEach(async () => { made = [(await record(hubState(), "create", appletRecord("journal"))).id]; });
