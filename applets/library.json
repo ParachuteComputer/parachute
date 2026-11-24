@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "path": "Applets/Library",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "library",
+      "name": "Library",
+      "glyph": "❧",
+      "note": "your shelf of books, chapters in a reading serif, summaries and marked quotes",
+      "access": [
+        {
+          "vault": "here",
+          "allow": [
+            { "path": "Books/", "verbs": ["read", "update"] },
+            { "path": "Quotes/", "verbs": ["read", "create", "update"] }
+          ]
+        }
+      ],
+      "search": [
+        { "what": "books", "vault": "here", "path": "Books/" },
+        { "what": "quotes", "vault": "here", "path": "Quotes/" }
+      ],
+      "screens": [
+        { "id": "home", "name": "Library" }
+      ]
+    },
+    "needs": 4,
+    "app": ["copy"],
+    "opens": [
+      { "type": "book", "path": "Books/" },
+      { "type": "chapter", "path": "Books/" },
+      { "type": "summary", "path": "Books/" },
+      { "type": "quote", "path": "Quotes/" }
+    ]
+  }
+}
