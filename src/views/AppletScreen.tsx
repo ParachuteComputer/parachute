@@ -76,6 +76,8 @@ import { useDeviceSheets } from "./DeviceSheets";
 import { createServicesModule } from "../applet/modules/services";
 import { createBroker, type Broker } from "../services/broker";
 import { useShellSheets } from "./ShellSheets";
+import { createTechneModule } from "../applet/modules/techne";
+import { techneDeps } from "../shell/techneDeps";
 import { lineOptions, useKeyring } from "../services/keyring";
 import { launchOf, vaultLaunchOf } from "../services/notifyLink";
 import { nativeNow } from "../services/native";
@@ -263,7 +265,7 @@ export default function AppletScreen() {
         const imports = imp.imports;
         // code from someone else's vault, its own or imported, is transpiled only once it is allowed
         const late = notMine || imports.some((i) => i.whose !== "mine");
-        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app, a.entry.services, a.entry.signals, a.entry.settings), embedsFrom: from }, a.entry.path),
+        const [scope, code, pointer] = await Promise.all([grantKey({ ...grantOf(a.entry.manifest, rec.key, a.entry.opens, a.entry.app, a.entry.services, a.entry.signals, a.entry.settings, a.entry.techne), embedsFrom: from }, a.entry.path),
           late || imports.length ? codeHash(kind, source).then((hash) => ({ hash, compiled: null })) : prepare(source, kind), o ? null : pointerFor(rec, n.id).catch(() => null)]);
         const hash = imports.length && kind !== "html" ? await compositeHash(kind, source, imports) : code.hash;
         if (!on) return;
@@ -478,6 +480,18 @@ export default function AppletScreen() {
       ...(officialOf(entry.noteId) === "vault" ? { read: (vault: string, read: string) => { let m = vaultsReads.current.get(vault); if (!m) vaultsReads.current.set(vault, m = new Set()); if (m.size < 1000) m.add(read); } } : {}) }))
     : null), [rec?.key, allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => vaultsModule?.stop(), [vaultsModule]);
+  // Techne (docs/design/TECHNE.md): what it holds is read at each call from what is allowed now, and its requests go
+  // through a broker of the shell's own for the AppView, closed with the frame's grant
+  // `grantKey` names this device's Allow too (when it was given), and `under` the applet's own signed approval: Revoke
+  // then Allow again starts both afresh, so a write given before doesn't come back with it
+  const techneNow = useRef<{ grantKey: string; code: string; asks: string; approval: ReturnType<typeof approvalSubject>; under: number | null } | null>(null);
+  techneNow.current = rec && entry && keys && loaded.state === "ok" && !loaded.official
+    ? { grantKey: `${keys.scope}|${grants.record(subjectOf(rec.key, entry.noteId))?.grantedAt ?? ""}`, code: keys.html, asks: loaded.asks, approval: approvalSubject(rec, entry.noteId, entry.manifest.id), under: signedNow?.run ? signedNow.content.n : null } : null;
+  const techne = useMemo(() => (rec && entry?.techne ? techneDeps({ techne: entry.techne, name: entry.manifest.name, subject: subjectOf(rec.key, entry.noteId),
+    // only while it is allowed here: a frame still going for a moment after Revoke holds nothing
+    now: () => (grants.record(subjectOf(rec.key, entry.noteId)) ? techneNow.current : null),
+    confirm: (q) => sheetsRef.current.confirm(q), shell: () => sheetsRef.current.shell }) : null), [rec?.key, allowedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => techne?.close(), [techne]);
   // left (another applet, the launcher, the shell's Back): whatever this applet was managing ends with it
   const managing = rec && entry ? subjectOf(rec.key, entry.noteId) : null;
   useEffect(() => () => { if (managing) endManageFor(managing); }, [managing]);
@@ -508,7 +522,9 @@ export default function AppletScreen() {
     }),
     // every vault this device holds (the Vault applet's words: modules/vaults.ts), and what reaches each
     ...(vaultsModule ? [vaultsModule] : []),
-  ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader]); // eslint-disable-line react-hooks/exhaustive-deps
+    // as the person on Techne, one capability at a time (docs/design/TECHNE.md)
+    ...(techne ? [createTechneModule(entry.techne ?? null, techne)] : []),
+  ]) : null), [rec?.key, rec?.issuer, rec?.vault, allowedKey, vaultsModule, reader, techne]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the note it is handed: one it claims, never its own note, and only to the code that was allowed
   const note = loaded.state === "ok" ? loaded.note : null;
@@ -631,7 +647,7 @@ export default function AppletScreen() {
       {hubError && <p className="error" role="alert">{hubError}</p>}
       {needsPasscode && !approvedElsewhere && <label className="line passcode-line"><span>Your passcode, to approve it</span> <input type="password" autoComplete="off" aria-label="Your passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} /></label>}
       <GrantCard name={name} glyph={entry.manifest.glyph} vault={rec.vault} whose={whoseOf(rec)} host={hostOf(rec.issuer)} runs={mode === "approved-code" ? "approved-code" : "sealed"}
-        grant={{ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services, entry.signals, entry.settings), embedsFrom: loaded.state === "ok" ? loaded.from : [] }} ownFolder={ownFolder(entry.path)} keyring={lineOptions(keyring)}
+        grant={{ ...grantOf(entry.manifest, rec.key, entry.opens, entry.app, entry.services, entry.signals, entry.settings, entry.techne), embedsFrom: loaded.state === "ok" ? loaded.from : [] }} ownFolder={ownFolder(entry.path)} keyring={lineOptions(keyring)}
         imports={loaded.state === "ok" ? loaded.imports : []} scope={keys.scope} code={keys.html} status={status} was={grants.record(subject)}
         broughtChanged={pinMoved} fingerprint={fingerprint(keys.scope)} expires={grantExpiry(new Date())}
         hubAsk={covers(heldLevel(rec), appletLevel(entry.manifest)) ? null : { host: hostOf(rec.issuer), level: appletLevel(entry.manifest) }}

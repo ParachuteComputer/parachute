@@ -11,15 +11,15 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { verifyEvent, type Event } from "nostr-tools/pure";
 
 export type Seen = { method: string; url: string; auth: string | null; pubkey: string | null; error: string | null; body: string };
-const read = (req: IncomingMessage) => new Promise<Buffer>((res) => { const c: Buffer[] = []; req.on("data", (d) => c.push(d)); req.on("end", () => res(Buffer.concat(c))); });
-const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
-const decode = (h: string | undefined): Event | null => {
+export const read = (req: IncomingMessage) => new Promise<Buffer>((res) => { const c: Buffer[] = []; req.on("data", (d) => c.push(d)); req.on("end", () => res(Buffer.concat(c))); });
+export const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+export const decode = (h: string | undefined): Event | null => {
   if (!h?.startsWith("Nostr ")) return null;
   try { return JSON.parse(Buffer.from(h.slice(6), "base64").toString("utf8")) as Event; } catch { return null; }
 };
-const tag = (e: Event, n: string) => e.tags.find((t) => t[0] === n)?.[1];
+export const tag = (e: Event, n: string) => e.tags.find((t) => t[0] === n)?.[1];
 // the test signer runs in the browser, so these fakes answer CORS (the app's own native side needs none)
-const cors = (req: IncomingMessage, res: import("node:http").ServerResponse) => {
+export const cors = (req: IncomingMessage, res: import("node:http").ServerResponse) => {
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("access-control-allow-headers", "authorization, content-type, x-sha-256, accept");
   res.setHeader("access-control-allow-methods", "GET, HEAD, POST, PUT, PATCH, DELETE");
@@ -27,7 +27,7 @@ const cors = (req: IncomingMessage, res: import("node:http").ServerResponse) => 
   return false;
 };
 /** On a free port below the ephemeral range (see hub.ts freePort). */
-const listen = async (s: Server): Promise<number> => {
+export const listen = async (s: Server): Promise<number> => {
   for (let i = 0; i < 50; i++) {
     const p = 20000 + Math.floor(Math.random() * 12000);
     if (await new Promise<boolean>((res) => { const fail = () => res(false); s.once("error", fail); s.listen(p, "127.0.0.1", () => { s.off("error", fail); res(true); }); })) return p;

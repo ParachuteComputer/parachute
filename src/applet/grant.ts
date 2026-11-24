@@ -7,9 +7,10 @@ import type { Manifest, Reach, Rule, Verb } from "./manifest.ts";
 import type { Opens } from "./opens.ts";
 import { sha256Hex } from "./needs.ts";
 import { appLines, type AppWord } from "./app.ts";
-import { serviceLines, servicesKeyPart, type LineOptions, type Service } from "./services.ts";
+import { hostLine, serviceLines, servicesKeyPart, type LineOptions, type Service } from "./services.ts";
 import { signalLines, signalsKeyPart, type Signal } from "./signals.ts";
 import { settingsKeyPart, settingsLine, type SettingsSection } from "./settingsSection.ts";
+import { techneKeyPart, techneLines, techneOutLine, type Techne } from "./techne.ts";
 
 /** The card's line for a page whose embeds come from someone else's vaults ("techne at techne.example"). */
 export function embedsLine(from: readonly string[]): string | null {
@@ -39,15 +40,17 @@ export type Grant = {
   signals?: Signal[];
   /** A section of Settings it draws (settingsSection.ts): on its card, and in its key, only when declared. */
   settings?: SettingsSection;
+  /** What it may do as the person on Techne (techne.ts, docs/design/TECHNE.md): on its card, and in its key, only when declared. */
+  techne?: Techne;
 };
 
 /** How long a grant lasts before the card comes back. */
 export const GRANT_DAYS = 365;
 export const grantExpiry = (from: Date): Date => new Date(from.getTime() + GRANT_DAYS * 86_400_000);
 
-export const grantOf = (m: Manifest, vault: string, opens: readonly Opens[], app: readonly AppWord[] = [], services: readonly Service[] = [], signals: readonly Signal[] = [], settings?: SettingsSection | null): Grant =>
+export const grantOf = (m: Manifest, vault: string, opens: readonly Opens[], app: readonly AppWord[] = [], services: readonly Service[] = [], signals: readonly Signal[] = [], settings?: SettingsSection | null, techne?: Techne | null): Grant =>
   ({ applet: { id: m.id, name: m.name }, vault, allow: m.allow.map((r) => ({ path: r.path, verbs: [...r.verbs] })), opens: opens.map((o) => ({ ...o })), app: [...app], ...(services.length ? { services: services.map((s) => ({ ...s })) } : {}), ...(m.reach?.length ? { reach: [...m.reach] } : {}),
-    ...(signals.length ? { signals: signals.map((s) => ({ ...s })) } : {}), ...(settings ? { settings: { ...settings } } : {}) });
+    ...(signals.length ? { signals: signals.map((s) => ({ ...s })) } : {}), ...(settings ? { settings: { ...settings } } : {}), ...(techne ? { techne: { at: techne.at, can: [...techne.can] } } : {}) });
 
 /** A note's path as a rule may judge it: plain segments only, no percent-encoded dot, slash, backslash or percent. */
 const plainPath = (path: unknown): path is string => typeof path === "string" && !/%(?:2e|2f|5c|25)/i.test(path) && inScope([""], path);
@@ -83,6 +86,9 @@ export function grantLines(g: Grant, ownFolder: string | null, keyring: LineOpti
   out.push(...appLines(g.app));
   if (g.reach?.includes("voice")) out.push({ text: "Record from your microphone when you press record (the app shows its own recorder)", stress: false });
   out.push(...serviceLines(g.services ?? [], keyring));
+  if (g.techne) out.push(...techneLines(g.techne));
+  // what it reads as the person on Techne could leave through a server it declares: said, as for its notes
+  if (g.techne?.can.includes("read") && g.services?.length) out.push(techneOutLine([...new Set(g.services.map(hostLine))]));
   out.push(...signalLines(g.signals ?? []));
   if (g.settings) out.push(settingsLine(g.settings, g.applet.name));
   const page = embedsLine(g.embedsFrom ?? []);
@@ -115,7 +121,9 @@ export function grantKey(g: Grant, notePath: string): Promise<string> {
   const signals = g.signals?.length ? signalsKeyPart(g.signals) : undefined;
   // only when it draws a section of Settings: every other key stays as it was
   const settings = settingsKeyPart(g.settings, g.applet.name);
-  return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens, app, embeds, services, reach, signals, settings }));
+  // only when it acts on Techne: every other key stays as it was
+  const techne = techneKeyPart(g.techne);
+  return sha256Hex(canonical({ v: 3, note: stripExt(notePath), applet: g.applet.id, vault: g.vault, allow, opens, app, embeds, services, reach, signals, settings, techne }));
 }
 
 /** "9b13 b2ae": the first eight digits of the key, to tell two cards apart. */

@@ -70,6 +70,9 @@ screen, **Your notes on another Parachute?** → **Sign in with its address**, t
   with your key, which the applet never holds ([docs/design/SERVICES.md](docs/design/SERVICES.md)). `applets/` has
   the first ones: Rooms (a Buzz relay), Mail (a mail gateway), Journal and Matrix; `scripts/install-applets.ts` puts
   them into a vault and lays out the bar around them. What they cover of the Uni app: [docs/PARITY.md](docs/PARITY.md).
+- **Techne, one permission at a time.** An applet can act on Techne as you with your key: it reads on its card, and
+  asks you the first time it would post or follow; you can take each back in Settings
+  ([docs/design/TECHNE.md](docs/design/TECHNE.md)). `applets/techne.tsx` is the first.
 
 It runs on Android and desktop (Tauri 2); releases are built for Android and Apple Silicon Macs
 ([.github/workflows/release.yml](.github/workflows/release.yml), [docs/LAUNCH.md](docs/LAUNCH.md) for what a public

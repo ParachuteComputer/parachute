@@ -11,7 +11,8 @@ import { parseApp, type AppWord } from "./app.ts";
 import type { Need, Resolved } from "./needs.ts";
 import { resolveNeeds } from "./needs.ts";
 import { parseEmbeds, type Embed } from "./embeds.ts";
-import { parseServices, type Service } from "./services.ts";
+import { originOf, parseServices, type Service } from "./services.ts";
+import { isTechneOrigin, parseTechne, type Techne } from "./techne.ts";
 import { parseSignals, type Signal } from "./signals.ts";
 import { parseSettings, type SettingsSection } from "./settingsSection.ts";
 import { inParachuteSpace } from "./parachuteSource.ts";
@@ -45,6 +46,10 @@ export type AppletEntry = {
   settings?: SettingsSection;
   /** why `settings` was refused, when it was (the applet then has no section) */
   settingsError?: string;
+  /** What it may do as the person on Techne (techne.ts, docs/design/TECHNE.md): only in a vault of the person's own. */
+  techne?: Techne;
+  /** why `techne` was refused, when it was (the applet then reaches nothing on Techne) */
+  techneError?: string;
   /** Which of the note's asks this device left out (someone else's vault here, a server at one of this device's hubs, a
    *  field it couldn't read). Part of the asks' hash (approvals.ts): an approval made where its card left something out
    *  doesn't allow the applet on a device that leaves nothing out. */
@@ -88,7 +93,14 @@ export function readApplet(r: Row, vault: string, theirs = false, isHub: (origin
   // as with `opens`: a bad `app` costs the applet what it asked of the app, not the applet
   const app = theirs ? { ok: false as const, error: "an applet in someone else's vault can't ask the app for anything" } : parseApp(meta.app);
   const opens = parseOpens(meta.opens, parsed.manifest);
-  const services = theirs ? (meta.services === undefined ? { ok: true as const, services: [] } : { ok: false as const, error: "an applet in someone else's vault reaches no service" }) : parseServices(meta.services, isHub);
+  // as with services: someone else's applet gets no Techne, and a bad `techne` costs it Techne, not the applet
+  const techne = theirs ? (meta.techne === undefined ? { ok: true as const, techne: null } : { ok: false as const, error: "an applet in someone else's vault reaches no Techne" }) : parseTechne(meta.techne, isHub);
+  const t = techne.ok ? techne.techne : null;
+  const parsedServices = theirs ? (meta.services === undefined ? { ok: true as const, services: [] } : { ok: false as const, error: "an applet in someone else's vault reaches no service" }) : parseServices(meta.services, isHub);
+  // Techne is not a service (docs/design/TECHNE.md): its AppView as a plain signed server would sign every call, past
+  // the capabilities. Refused whole, as a hub is
+  const atTechne = parsedServices.ok ? parsedServices.services.find((s) => isTechneOrigin(originOf(s), t)) : undefined;
+  const services = atTechne ? { ok: false as const, error: `${atTechne.id}: that address is Techne, which an applet reaches only through techne` } : parsedServices;
   // as with `opens`: a bad `signals` costs the applet its counts, not the applet
   const signals = parseSignals(meta.signals, parsed.manifest, services.ok ? services.services : [], theirs, isHub);
   // as with `opens`: a bad `settings` costs the applet its section, not the applet; someone else's applet has none
@@ -96,8 +108,10 @@ export function readApplet(r: Row, vault: string, theirs = false, isHub: (origin
   if (meta.app !== undefined && !app.ok) left.push("app");
   if (!services.ok) left.push("services");
   if (!signals.ok) left.push("signals");
+  if (meta.techne !== undefined && !techne.ok) left.push("techne");
   return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], embeds: theirs ? [] : parseEmbeds(meta.embeds), services: services.ok ? services.services : [],
     signals: signals.ok ? signals.value : [], ...(left.length ? { left } : {}), ...(settings.ok && settings.value ? { settings: settings.value } : {}), ...(settings.ok ? {} : { settingsError: settings.error }),
+    ...(t ? { techne: t } : {}), ...(techne.ok ? {} : { techneError: techne.error }),
     ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }), ...(services.ok ? {} : { servicesError: services.error }), ...(signals.ok ? {} : { signalsError: signals.error }) } };
 }
 

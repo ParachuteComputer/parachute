@@ -59,10 +59,11 @@ export function asksHash(subject: Subject, notePath: string, fields: Record<stri
   // device's approval for another one ("other"), and each device's Allow would stop the other's. It is in this
   // device's grant key (grant.ts), and an approval from another device covers it only when its card said it
   // (settingsSection.ts approvalCoversSection), so the card here asks.
+  // techne only when declared, as signals (docs/design/TECHNE.md).
   // `left` (discovery.ts): which of these fields the approving device left out of its card and its grant (the vault is
   // someone else's there, or a server is one of its hubs). Only when it left something out, so an approval made where
   // nothing was holds. A device that leaves out less (or more) gets another hash, and asks for itself.
-  return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds"), signals: fields.signals,
+  return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds"), signals: fields.signals, techne: fields.techne,
     resolved: { opens: resolved.opens ?? null, from: resolved.from ? [...resolved.from].sort() : [], ...(resolved.left?.length ? { left: [...resolved.left].sort() } : {}) } }));
 }
 

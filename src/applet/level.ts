@@ -5,7 +5,7 @@
 
 /** This build's level. Raise it by one when the kit gains a part (kits/modules.ts PART_LEVEL) or a record gains a field
  *  older builds can't do without, and give that part or field this number. */
-export const APP_LEVEL = 7;
+export const APP_LEVEL = 8;
 /** What a record without `needs` is taken to need: the kit and records of 11-20 (level 1). Level 2 reads `needs`. */
 export const FLOOR = 1;
 

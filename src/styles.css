@@ -102,6 +102,11 @@ fieldset.plain { border: 0; min-width: 0; }
 fieldset.plain legend { padding: 0; }
 .line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; }
 .line + .line { border-top: 1px solid var(--line); }
+/* what an allowed applet holds beyond its line (its servers, what it may do on Techne): under it, the whole width */
+.line:has(> .applet-services, > .applet-techne) { flex-wrap: wrap; }
+.line > .applet-services, .line > .applet-techne { flex-basis: 100%; }
+.applet-techne { margin: 0; padding: 0 0 0 1.4em; }
+.applet-techne .quiet-button { white-space: nowrap; }
 .screen-foot { margin: 14px 0 0; font-size: var(--fs-small); }
 
 .note { background: var(--card-fill); border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); padding: 4px var(--pad) 12px; }

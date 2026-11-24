@@ -130,13 +130,15 @@ export const onLaunch = (_cb: (l: unknown) => void) => () => {};
 export const launch = () => null;
 // the browser's own Back leaves a website; an applet's own screens close with their own ←
 export const onBack = (_cb: () => void) => () => {};
-// what a website has nothing to give for: props (an embed's), and what is the app's (every vault, servers, the
+// what a website has nothing to give for: props (an embed's), and what is the app's (every vault, servers, Techne, the
 // device's storage and microphone, the bar's counts). Undefined, as an older app's missing call is, so an applet can
 // fall back (typeof vaults === "undefined")
 export const props = () => ({});
 export const onProps = (_cb: (p: Record<string, unknown>) => void) => () => {};
 export const vaults = undefined;
 export const services = undefined;
+// Techne as the person (docs/design/TECHNE.md) is the app's: a website signs in to Techne itself, with techne-sdk
+export const techne = undefined;
 export const storage = undefined;
 export const voice = undefined;
 export const signal = undefined;
