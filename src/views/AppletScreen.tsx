@@ -95,7 +95,7 @@ import { useGate, useSelfTestRun } from "../applet/selftest/run";
 import { vaultDeps } from "../applet/vaultDeps";
 import { takeMark } from "../open/mark";
 import { chooseStart, startChosenHere, takeStart } from "../shell/start";
-import { barNow, pinApplet, settingsReadNow, useSettings } from "../shell/homeSettings";
+import { barNow, barOwnIds, pinApplet, settingsReadNow, useSettings } from "../shell/homeSettings";
 import { backOrLauncher } from "../ui/Bar";
 import NoVault from "../ui/NoVault";
 import { useKept } from "../shell/kept";
@@ -192,7 +192,7 @@ export default function AppletScreen() {
   // so does any other way to that home (Back to it, the bar), when it isn't asked to open a note: while the settings, as
   // read this session, still name it, and the person chose it here. That read may be answered from the copy kept on
   // this device while the hub is asked behind it (vault/readCache.ts); a home the hub's answer no longer names stops (below)
-  useSettings();
+  const { bar: barHere, bundle: bundleHere } = useSettings();
   const home = settingsReadNow() ? barNow().start : null;
   // a home applet is in a vault of the person's own: someone else's code never runs by itself
   const chosenHome = !askedNote && !!rec && !!appletId && isMine(rec) && home?.vault === rec.key && home.noteId === appletId && startChosenHere(rec.key, appletId);
@@ -602,7 +602,6 @@ export default function AppletScreen() {
   const sized = !!entry?.embeds.length;
   // Pin, in the top bar: one tap puts it on the bar or takes it off, written to the open bundle's record (as the list's
   // Pin and Settings → On the bar do). Pinning runs nothing, so it is there while the applet asks or is stopped too
-  const { bar: barHere } = useSettings();
   const [pinBusy, setPinBusy] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const pinId = entry?.noteId ?? appletId ?? "";
@@ -740,7 +739,9 @@ export default function AppletScreen() {
   const back = (nav: Parameters<typeof backOrLauncher>[0]) => { if (!backToApplet()) backOrLauncher(nav); };
   const plainNote = note ? <Link to={`${noteHref(rec.key, note.id)}?with=vault`}>Open {titleOf(note)} in the vault view</Link> : null;
   const theirsLabel = notMine ? ` · ${rec.vault}'s` : "";
-  const pinName = entry ? name : loaded.state === "newer" ? loaded.entry.manifest.name : null;
+  // (none on a bar someone else offers, nor for one of Parachute's own the bundle places on the bar itself)
+  const canPin = !bundleHere.live && !(rec.key === homeVault()?.key && barOwnIds(barHere.entries, bundleHere.look).includes(pinId));
+  const pinName = !canPin ? null : entry ? name : loaded.state === "newer" ? loaded.entry.manifest.name : null;
   const shell = (body: React.ReactNode, onMenu?: () => void) => <main className="screen applet-screen"><Bar title={entry ? `${entry.manifest.glyph} ${name}${theirsLabel}` : loaded.state === "newer" ? `${loaded.entry.manifest.glyph} ${loaded.entry.manifest.name}${theirsLabel}` : "Applet"} back={true} onBack={back} onMenu={onMenu}>
     {pinName && <PinButton name={pinName} pinned={pinnedHere} busy={pinBusy} onToggle={togglePin} />}
   </Bar>{pinError && <p className="error" role="alert">{pinError}</p>}{atStart && !atStart.chosen && <p className="quiet start-line">Your settings open {name} when the app starts.</p>}{body}</main>;

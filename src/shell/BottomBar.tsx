@@ -32,19 +32,26 @@ export default function BottomBar() {
   useEffect(() => { setAsked(null); }, [pathname]);
   // a phone's bar scrolls sideways when full: the place you are in is brought into view, clear of the held Applets and
   // Settings (a start, or the hub's page coming back, opens it scrolled to its left end)
-  const nav = useRef<HTMLElement>(null);
-  useEffect(() => {
-    const el = nav.current;
-    if (!el || el.scrollWidth <= el.clientWidth) return;
-    const cur = el.querySelector<HTMLElement>('.home-bar-place[aria-current="page"]');
-    if (!cur || cur.closest(".home-bar-held")) return;
-    const view = el.clientWidth - (el.querySelector<HTMLElement>(".home-bar-held")?.offsetWidth ?? 0);
-    const left = cur.offsetLeft, right = left + cur.offsetWidth;
-    if (left < el.scrollLeft) el.scrollLeft = left - 6;
-    else if (right > el.scrollLeft + view) el.scrollLeft = right - view + 6;
-  }, [pathname, bar.entries.length]);
   const wayHome = bar.entries.some((e) => "screen" in e && e.screen === "home");
-  return (
+  const nav = useRef<HTMLElement>(null);
+  const places = bar.entries.map((e) => ("href" in e ? e.href : JSON.stringify(e))).join(" ");
+  useEffect(() => {
+    const show = () => {
+      const el = nav.current;
+      if (!el || el.scrollWidth <= el.clientWidth) return;
+      const cur = el.querySelector<HTMLElement>('.home-bar-place[aria-current="page"]');
+      if (!cur || cur.closest(".home-bar-held")) return;
+      const view = el.clientWidth - (el.querySelector<HTMLElement>(".home-bar-held")?.offsetWidth ?? 0);
+      const left = cur.offsetLeft, right = left + cur.offsetWidth;
+      if (left < el.scrollLeft) el.scrollLeft = left - 6;
+      else if (right > el.scrollLeft + view) el.scrollLeft = right - view + 6;
+    };
+    show();
+    // a turn of the phone or a narrower window moves it under them again
+    addEventListener("resize", show);
+    return () => removeEventListener("resize", show);
+  }, [pathname, places, wayHome]);
+    return (
     <>
       <nav ref={nav} className="home-bar" aria-label="Bar" onClickCapture={(e) => { const tab = (e.target as Element).closest(".home-bar-place"); if (tab && e.detail > 0) fromTab(tab); }}>
         {bar.entries.map((e) => ("href" in e

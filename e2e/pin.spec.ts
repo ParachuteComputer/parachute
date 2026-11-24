@@ -4,7 +4,7 @@
 // bar keeps its way to the list in reach however many places are pinned.
 import { expect, test, type Page } from "@playwright/test";
 import { bundleOf, clearBarAndHome, ui, writeBundle } from "./helpers";
-import { VAULT } from "./hub";
+import { api, hubState, VAULT } from "./hub";
 
 test.use({ storageState: "e2e/.signed-in.json" });
 test.afterEach(clearBarAndHome);
@@ -78,4 +78,30 @@ test("a full bar keeps Applets in reach beside Settings on a phone, with no side
   await expect(here).toBeInViewport({ ratio: 0.95 });
   const [a, b] = [await here.boundingBox(), await bar(page).locator(".home-bar-held").boundingBox()];
   expect(a!.x + a!.width).toBeLessThanOrEqual(b!.x + 1);
+});
+
+test("no Pin where a tap couldn't pin: a bar someone else offers, and one of Parachute's own the bundle places on its bar", async ({ page }) => {
+  const origin = hubState().origin;
+  // someone else's bundle (a record standing in for theirs), followed live: its bar is theirs
+  const theirs = await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/shared-desk", content: "theirs", tags: ["parachute-bundle"], metadata: { bundle: {
+    contract: 1, id: "shared-desk", name: "Shared desk", sources: [{ vault: VAULT, applet: "*" }], bar: [] } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/desk", content: "mine", tags: ["parachute-bundle"], metadata: { bundle: {
+    contract: 1, id: "desk", name: "Desk", live: { hub: origin, vault: VAULT, path: "Parachute/Bundles/shared-desk" } } } });
+  const settings = await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "desk" } } });
+  try {
+    await start(page);
+    const list = ui(page).getByRole("list", { name: "Applets" });
+    await expect(list.getByRole("link", { name: /Recipe box/ })).toBeVisible();
+    await expect(list.getByRole("button", { name: /to the bar|from the bar/ })).toHaveCount(0);
+    await list.getByRole("link", { name: /Recipe box/ }).click();
+    await expect(page.getByRole("region", { name: /asking for access/ })).toBeVisible();
+    await expect(page.locator("header.bar").getByRole("button", { name: /to the bar|from the bar/ })).toHaveCount(0);
+    // Parachute Simplified: Journal is the bundle's own place on its bar, not a pin, so it offers none; Vault isn't there
+    await api(hubState(), "PATCH", `notes/${settings.id}`, { metadata: { parachute: { bundle: "simple" } }, if_updated_at: (await api(hubState(), "GET", `notes/${settings.id}`)).updatedAt });
+    await page.goto(`/v/${VAULT}/a/parachute%3Ajournal`);
+    await expect(bar(page).getByRole("link", { name: /Journal/ })).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("header.bar").getByRole("button", { name: /to the bar|from the bar/ })).toHaveCount(0);
+    await page.goto(`/v/${VAULT}/a/parachute%3Ahome`);
+    await expect(page.locator("header.bar").getByRole("button", { name: "Pin Home to the bar" })).toBeVisible();
+  } finally { await api(hubState(), "DELETE", `notes/${theirs.id}`).catch(() => {}); }
 });

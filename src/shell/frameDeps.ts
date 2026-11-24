@@ -23,7 +23,7 @@ import { originOf, listVaults, hostOf, type VaultRecord } from "../vault/store";
 import { dismissVault, newVaultsOn, startAddVault } from "../vault/newVaults";
 import type { HostDeps } from "./frameBridge";
 import { atFirstEntry } from "../ui/history";
-import { bundleMissing, bundleNewer, barNow, openBundleNow, pinApplet, startApplet } from "./homeSettings";
+import { barOwnIds, bundleMissing, bundleNewer, barNow, openBundleNow, pinApplet, startApplet } from "./homeSettings";
 import { offered, offersIn, namesApplet, type Bundle } from "./bundles";
 import { chooseStart, forgetStart, START_WAIT_MS } from "./start";
 import { parachutesNow } from "./parachutes";
@@ -35,16 +35,18 @@ import { parachutesNow } from "./parachutes";
 export const homeNow = () => {
   const b = barNow();
   const bundle = openBundleNow(), h = homeVault();
-  const homeHub = h ? originOf(h.issuer) : "";
+  // the hub a source naming none means: the home's (or, while no home vault is held, the Parachute marked home)
+  const homeHub = h ? originOf(h.issuer) : parachutesNow().find((p) => p.home)?.hub;
   // the app chosen here didn't load: made for a newer Parachute (its name), or malformed (null)
   const missing = bundleMissing(), newer = missing ? bundleNewer(missing) : null;
   return { start: b.start ? { vault: b.start.vault, noteId: b.start.noteId } : null, bar: b.pins.map((p) => ({ vault: p.vault, noteId: p.noteId })),
     parachutes: parachutesNow().map((p) => {
-      // the person's vaults there this device doesn't read, that the open bundle would list applets from (the list ends
-      // with them, a tap each: T-476, his Library sat in one unseen)
-      const fresh = newVaultsOn(p.hub).filter((vault) => offersIn(bundle, { hub: originOf(p.hub), vault }, homeHub));
+      // the person's vaults there this device doesn't read: for the list, the ones the open bundle would list applets
+      // from (it ends with them, a tap each: T-476, his Library sat in one unseen); Notes reads every vault, so all
+      const fresh = newVaultsOn(p.hub).filter((vault) => bundle.look === "notes" || homeHub === undefined || offersIn(bundle, { hub: originOf(p.hub), vault }, originOf(homeHub)));
       return { hub: p.hub, host: p.host, name: p.name, home: p.home, signedIn: p.vaults.length > 0, ...(fresh.length ? { fresh } : {}) };
-    }), ...(openBundleNow().look === "notes" ? { look: "notes" as const, app: "simple" as const } : {}), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
+    }), ...(bundle.look === "notes" ? { look: "notes" as const, app: "simple" as const } : {}),
+    ...(bundle.live ? { barTheirs: true as const } : {}), ...(() => { const own = barOwnIds(b.entries, bundle.look); return own.length ? { barOwn: own } : {}; })(), ...(missing ? (newer ? { notice: "bundle-newer" as const, noticeName: newer } : { notice: "bundle-record" as const }) : {}),
     ...viewerNow(), ...officialNow() };
 };
 /** A home's copy of one of Parachute's own (the old Add Capture wrote these), listed beside Parachute's own: said so. */

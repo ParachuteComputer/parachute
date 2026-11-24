@@ -66,8 +66,8 @@ export default function Launcher() {
       {pinError && <p className="error" role="alert">{pinError}</p>}
       <ol className="entries" aria-label="Applets">
         {/* Parachute's own (docs/design/PARACHUTE-SOURCE.md), in the home: first, from the app */}
-        {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).filter((a) => a.noteId !== CONNECT).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} busy={pinning} onPin={(on) => pin(h, a, on)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
-        {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} otherHome={vaults.some((x) => !x.home && (x.whose ?? "mine") === "mine")} onCount={count} busy={pinning} onPin={(a, on) => pin(v, a, on)} onHold={(a) => setAsked({ v, a })} />)}
+        {(() => { const h = vaults.find((v) => v.home); return h ? (home.official ?? []).filter((a) => a.noteId !== CONNECT).map((a) => <Entry key={a.noteId} v={h} a={a} where="" home={home.start?.vault === h.key && home.start.noteId === a.noteId} pinned={home.bar.some((p) => p.vault === h.key && p.noteId === a.noteId)} busy={pinning} onPin={home.barTheirs || home.barOwn?.includes(a.noteId) ? null : (on) => pin(h, a, on)} onHold={() => setAsked({ v: h, a })} />) : null; })()}
+        {vaults.map((v) => <VaultEntries key={v.key} v={v} many={many} otherHome={vaults.some((x) => !x.home && (x.whose ?? "mine") === "mine")} onCount={count} busy={pinning} onPin={home.barTheirs ? null : (a, on) => pin(v, a, on)} onHold={(a) => setAsked({ v, a })} />)}
         {read && !anyApplets && <li className="entry-quiet">No applets here yet.</li>}
       </ol>
       {toOpen.length > 0 && <section className="launcher-closed" aria-label="Your vaults not open here">
@@ -191,7 +191,7 @@ function StartHere({ v }: { v: FrameVault }) {
 }
 
 /** One vault's applets in the list (and, in the home, the ones brought in from other Parachutes). */
-function VaultEntries({ v, many, otherHome, onCount, busy, onPin, onHold }: { v: FrameVault; many: boolean; otherHome: boolean; onCount: (key: string, n: number) => void; busy: boolean; onPin: (a: FrameApplet, on: boolean) => void; onHold: (a: FrameApplet) => void }) {
+function VaultEntries({ v, many, otherHome, onCount, busy, onPin, onHold }: { v: FrameVault; many: boolean; otherHome: boolean; onCount: (key: string, n: number) => void; busy: boolean; onPin: ((a: FrameApplet, on: boolean) => void) | null; onHold: (a: FrameApplet) => void }) {
   const applets = useApplets(v.key);
   const home = useHome();
   const pointers = usePointers();
@@ -203,7 +203,7 @@ function VaultEntries({ v, many, otherHome, onCount, busy, onPin, onHold }: { v:
     {shown.map((a) => {
       const isHome = home.start?.vault === v.key && home.start.noteId === a.noteId;
       const pinned = home.bar.some((p) => p.vault === v.key && p.noteId === a.noteId);
-      return <Entry key={a.noteId} v={v} a={a} where={where} home={isHome} pinned={pinned} busy={busy} onPin={(on) => onPin(a, on)} onHold={() => onHold(a)} />;
+      return <Entry key={a.noteId} v={v} a={a} where={where} home={isHome} pinned={pinned} busy={busy} onPin={onPin && ((on) => onPin(a, on))} onHold={() => onHold(a)} />;
     })}
     {brought.map((p) => <Brought key={p.noteId} p={p} />)}
     {/* plain words for what is wrong (vault/failure.ts): a Parachute that isn't reached is a line, not an error */}
@@ -267,7 +267,7 @@ export function whoseLine(v: FrameVault, many: boolean): string | null {
   return null;
 }
 
-function Entry({ v, a, where, home, pinned, busy, onPin, onHold }: { v: FrameVault; a: FrameApplet; where: string; home: boolean; pinned: boolean; busy: boolean; onPin: (on: boolean) => void; onHold: () => void }) {
+function Entry({ v, a, where, home, pinned, busy, onPin, onHold }: { v: FrameVault; a: FrameApplet; where: string; home: boolean; pinned: boolean; busy: boolean; onPin: ((on: boolean) => void) | null; onHold: () => void }) {
   const hold = useHold(onHold);
   const o = a.opens[0];
   const load = useVaultQuery<Note[]>(o ? v : null, (r) => r.queryNotes({ tag: o!.type, pathPrefix: o!.path, orderBy: "updated_at", sort: "desc", limit: 30 }), [o?.type, o?.path]);
@@ -284,7 +284,8 @@ function Entry({ v, a, where, home, pinned, busy, onPin, onHold }: { v: FrameVau
         <span className="entry-life">{where && <span className="entry-where">{where} · </span>}{life}</span>
         {o && load.state === "ok" && <span className="entry-days" aria-hidden="true"><Days times={load.data.map(updated)} days={7} inline /></span>}
       </Link>
-      <PinButton name={a.manifest.name} pinned={pinned} busy={busy} onToggle={() => onPin(!pinned)} />
+      {/* (none on a bar someone else offers, nor for one of Parachute's own the bundle places on the bar itself) */}
+      {onPin && <PinButton name={a.manifest.name} pinned={pinned} busy={busy} onToggle={() => onPin(!pinned)} />}
     </li>
   );
 }
