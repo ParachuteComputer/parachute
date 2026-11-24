@@ -39,8 +39,11 @@ pub fn global(ip: IpAddr) -> bool {
                 return global(IpAddr::V4(v4));
             }
             let s = v.segments();
-            !(v.is_loopback() || v.is_unspecified() || v.is_multicast() || (s[0] & 0xfe00) == 0xfc00 || (s[0] & 0xffc0) == 0xfe80
-                || (s[0] == 0x2001 && s[1] == 0x0db8) || (s[0] == 0x64 && s[1] == 0xff9b) || (s[0] == 0x2002) || (s[0] == 0x2001 && s[1] < 0x200))
+            // loopback, unspecified, multicast, unique-local, link-local and site-local (fe80::/9), documentation,
+            // NAT64 (64:ff9b::/32, the local one too), 6to4, IETF assignments, IPv4-compatible (::/96)
+            !(v.is_loopback() || v.is_unspecified() || v.is_multicast() || (s[0] & 0xfe00) == 0xfc00 || (s[0] & 0xff80) == 0xfe80
+                || (s[0] == 0x2001 && s[1] == 0x0db8) || (s[0] == 0x64 && s[1] == 0xff9b) || (s[0] == 0x2002) || (s[0] == 0x2001 && s[1] < 0x200)
+                || s[..6].iter().all(|&x| x == 0))
         }
     }
 }
@@ -167,7 +170,7 @@ mod tests {
         for bad in [
             "https://localhost/a.png", "http://127.0.0.1/a.png", "http://10.0.0.1/", "http://192.168.1.1/", "http://172.16.5.4/", "http://169.254.169.254/latest",
             "http://100.101.102.103/", "https://uni.tail1234.ts.net/x.png", "https://printer.local/x.png", "https://box.internal/", "http://[::1]/", "http://[fd00::1]/",
-            "http://[fe80::1]/", "http://[::ffff:127.0.0.1]/", "http://0.0.0.0/", "https://intranet/x.png", "file:///etc/passwd", "ftp://x.example.com/a.png",
+            "http://[fe80::1]/", "http://[fec0::1]/", "http://[64:ff9b:1::a00:1]/", "http://[::7f00:1]/", "http://[::ffff:127.0.0.1]/", "http://2130706433/", "http://0x7f.1/", "http://0.0.0.0/", "https://intranet/x.png", "file:///etc/passwd", "ftp://x.example.com/a.png",
             "https://user:pw@cdn.example.com/a.png", "https://cdn.example.com/a b.png", "data:image/png;base64,AAAA", "http://224.0.0.1/", "http://255.255.255.255/",
         ] {
             assert!(checked(bad).is_err(), "{bad}");

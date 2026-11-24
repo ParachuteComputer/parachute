@@ -38,6 +38,12 @@ const MUTATIONS: { name: string; from: string; to: string }[] = [
   // 2. finish: CSS
   { name: "escapes marked", from: '.replace(/\\\\(?:[0-9a-f]{1,6}\\s?|[\\s\\S])/gi, ESCAPED)', to: "" },
   { name: "a rule with an escape goes", from: "prelude.includes(ESCAPED) || ", to: "" },
+  { name: "a string ends at a line break, as the browser reads it", from: 'if (s[j] === "\\n" || s[j] === "\\r" || s[j] === "\\f") return j;', to: "" },
+  { name: "an unquoted url( ends at its ), as the browser reads it", from: 'if ((c === "u" || c === "U") && ', to: "if (false && " },
+  { name: "CSS's whitespace in url(), not JavaScript's", from: `|([^)"' \\t\\n\\r\\f]*))`, to: `|([^)"'\\s]*))` },
+  { name: "a url() the cleaning didn't write goes with its declaration", from: " && !FOREIGN_URL.test(d)", to: "" },
+  { name: "the whole sheet is looked at last", from: 'return /:host|::?slotted|::?part\\b/i.test(out) || FOREIGN_URL.test(out) || /position[ \\t\\n\\r\\f]*:[ \\t\\n\\r\\f]*(?:fixed|sticky)/i.test(out) ? "" : out;', to: "return out;" },
+  { name: "a declaration whose string never closes goes", from: " && closed(d)).join", to: ").join" },
   { name: "url() asked", from: 'const withUrls = css.replace(URL_TOKEN,', to: "const withUrls = css; void css.replace(URL_TOKEN," },
   { name: "other loads and scripts in CSS go", from: "expression\\s*\\(|behavior\\s*:|-moz-binding|javascript:|vbscript:|(?:image-set", to: "(?:image-set" },
   { name: "image-set() and the like go", from: "|(?:image-set|image|src|cross-fade|element)\\s*\\(/i;", to: "/i;" },

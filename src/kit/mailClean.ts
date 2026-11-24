@@ -52,7 +52,16 @@ const NEVER_ATTR = ["srcset", "target", "ping", "formaction", "action", "poster"
 export function webHref(raw: string | null): string | null {
   const v = (raw ?? "").trim();
   if (!/^(?:https?:\/\/[^/?#\s]|mailto:)/i.test(v) || /[\u0000-\u0020\u007f-\u009f\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/.test(v) || v.length > 2000) return null;
-  try { new URL(v); return v; } catch { return null; }
+  try {
+    const u = new URL(v);
+    // an address with a user part reads as another site's ("https://www.apple.com@evil.example/")
+    if (u.username || u.password) return null;
+    if (u.protocol === "mailto:" && u.search) {
+      const keep = [...u.searchParams].filter(([k]) => ["subject", "body", "cc", "bcc"].includes(k.toLowerCase()));
+      return `mailto:${u.pathname}${keep.length ? `?${new URLSearchParams(keep)}` : ""}`;
+    }
+    return v;
+  } catch { return null; }
 }
 
 const DATA_PICTURE = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i;
@@ -71,7 +80,10 @@ const ESCAPED = "\uffff";
 function plainCss(css: string): string {
   return css.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, "").replace(/\\(?:[0-9a-f]{1,6}\s?|[\s\S])/gi, ESCAPED);
 }
-const URL_TOKEN = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)"'\s]*))\s*\)/gi;
+// CSS's own whitespace, not JavaScript's \s (which takes U+00A0, inside an address to CSS)
+const URL_TOKEN = /url\([ \t\n\r\f]*(?:"([^"\n\r\f]*)"|'([^'\n\r\f]*)'|([^)"' \t\n\r\f]*))[ \t\n\r\f]*\)/gi;
+/** A url() the cleaning didn't write: a blob: or data: picture in quotes is the only kind it writes. */
+const FOREIGN_URL = /url\((?!"(?:blob:|data:image\/))/i;
 /** Ways CSS loads or runs something that aren't url(): taken out with their declaration. */
 const CSS_BAD = /expression\s*\(|behavior\s*:|-moz-binding|javascript:|vbscript:|(?:image-set|image|src|cross-fade|element)\s*\(/i;
 /** Out of the flow onto the screen: a mail's "cover" over its own words, or a bar that sits over the app's. */
@@ -82,17 +94,40 @@ const COLOURS = /(?:^|[;{\s])(?:background(?:-color)?|color)\s*:\s*(?!\s*(?:tran
  *  each declaration that would load or run something another way dropped. */
 function cleanDeclarations(css: string, pic: (src: string) => string | null): string {
   const withUrls = css.replace(URL_TOKEN, (_m, a, b, c) => { const got = pic(String(a ?? b ?? c ?? "").trim()); return got ? `url("${got.replace(/["\\\n]/g, "")}")` : "none"; });
-  return splitOutside(withUrls, ";").map((d) => d.trim()).filter((d) => d && !CSS_BAD.test(d) && !PINNED.test(d)).join("; ");
+  return splitOutside(withUrls, ";").map((d) => d.trim()).filter((d) => d && !CSS_BAD.test(d) && !PINNED.test(d) && !FOREIGN_URL.test(d) && closed(d)).join("; ");
 }
-/** Split on `sep` outside quotes and brackets. */
+/** Where a string or an unquoted url() that starts at `i` ends, as the browser's CSS tokenizer reads them: a string
+ *  ends at its quote or at a line break (which it doesn't take); an unquoted url( at its `)`, whatever quotes are in it.
+ *  -1 when neither starts there. (Escapes are already marked, so no backslash is left to read.) */
+function tokenEnd(s: string, i: number): number {
+  const c = s[i];
+  if (c === '"' || c === "'") {
+    for (let j = i + 1; j < s.length; j++) { if (s[j] === c) return j + 1; if (s[j] === "\n" || s[j] === "\r" || s[j] === "\f") return j; }
+    return s.length;
+  }
+  if ((c === "u" || c === "U") && /^url\([ \t\n\r\f]*(?!["'])/i.test(s.slice(i, i + 40))) { const close = s.indexOf(")", i); return close < 0 ? s.length : close + 1; }
+  return -1;
+}
+/** Every string in it closes on its line (one that doesn't would run on over the rules after it). */
+function closed(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const end = tokenEnd(s, i);
+    if (end < 0) continue;
+    // a string closed by its quote ends just after it; one cut by a line break or the end doesn't
+    if ((s[i] === '"' || s[i] === "'") && (end - i < 2 || s[end - 1] !== s[i])) return false;
+    i = end - 1;
+  }
+  return true;
+}
+/** Split on `sep` outside strings, url()s and brackets. */
 function splitOutside(s: string, sep: string): string[] {
   const out: string[] = [];
-  let depth = 0, quote = "", at = 0;
+  let depth = 0, at = 0;
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
-    if (quote) { if (c === quote) quote = ""; continue; }
-    if (c === '"' || c === "'") quote = c;
-    else if (c === "(" || c === "[") depth++;
+    const end = tokenEnd(s, i);
+    if (end >= 0) { i = end - 1; continue; }
+    if (c === "(" || c === "[") depth++;
     else if ((c === ")" || c === "]") && depth > 0) depth--;
     else if (c === sep && depth === 0) { out.push(s.slice(at, i)); at = i + 1; }
   }
@@ -101,12 +136,12 @@ function splitOutside(s: string, sep: string): string[] {
 }
 /** The end of the block that opens at `open` (a `{`), or the text's end. */
 function blockEnd(s: string, open: number): number {
-  let depth = 0, quote = "";
+  let depth = 0;
   for (let i = open; i < s.length; i++) {
     const c = s[i];
-    if (quote) { if (c === quote) quote = ""; continue; }
-    if (c === '"' || c === "'") quote = c;
-    else if (c === "{") depth++;
+    const end = tokenEnd(s, i);
+    if (end >= 0) { i = end - 1; continue; }
+    if (c === "{") depth++;
     else if (c === "}" && --depth === 0) return i;
   }
   return s.length;
@@ -117,6 +152,12 @@ const FRAMES_AT = /^@(?:-webkit-|-moz-|-o-)?keyframes\b/i;
  *  @import, @font-face, @charset, @namespace, @page and any other at-rule dropped; a rule that names the shadow root's
  *  host (`:host`, `::slotted`, `::part`) dropped, so nothing reaches the app; `html`, `body` and `:root` mean the root. */
 export function cleanSheet(css: string, pic: (src: string) => string | null): string {
+  const out = cleanRules(css, pic);
+  // a last look at the whole: if a rule for the host, a url() it didn't write or a pinned position is in it anywhere
+  // (a parse of ours that differs from the browser's), none of it is kept
+  return /:host|::?slotted|::?part\b/i.test(out) || FOREIGN_URL.test(out) || /position[ \t\n\r\f]*:[ \t\n\r\f]*(?:fixed|sticky)/i.test(out) ? "" : out;
+}
+function cleanRules(css: string, pic: (src: string) => string | null): string {
   const s = plainCss(css);
   let out = "", i = 0;
   while (i < s.length) {
@@ -128,7 +169,7 @@ export function cleanSheet(css: string, pic: (src: string) => string | null): st
     const prelude = s.slice(i, open).trim(), end = blockEnd(s, open), body = s.slice(open + 1, end);
     i = end + 1;
     if (prelude.startsWith("@")) {
-      if (KEEP_AT.test(prelude)) out += `${prelude}{${cleanSheet(body, pic)}}`;
+      if (KEEP_AT.test(prelude)) out += `${prelude}{${cleanRules(body, pic)}}`;
       else if (FRAMES_AT.test(prelude)) out += `${prelude}{${frames(body, pic)}}`;
       continue;
     }
@@ -255,10 +296,14 @@ export function lastWalk(root: Element): number {
 /** A quoted reply folds behind "Quoted text": Apple Mail's and Gmail's quote blocks (with Gmail's "On … wrote:" line
  *  before one), when the message has words of its own besides. A forwarded message isn't a quote: it shows. */
 function foldQuotes(frag: DocumentFragment) {
-  const quotes = Array.from(frag.querySelectorAll('blockquote[type="cite" i], blockquote.gmail_quote')).filter((q) => !q.parentElement?.closest('blockquote[type="cite" i], blockquote.gmail_quote'));
+  const QUOTE = 'blockquote[type="cite" i], blockquote.gmail_quote';
+  const quotes = Array.from(frag.querySelectorAll(QUOTE)).filter((q) => !q.parentElement?.closest(QUOTE));
+  if (!quotes.length) return;
+  // the words outside every quote, read once: a message that is all quote is left whole
+  const rest = frag.cloneNode(true) as DocumentFragment;
+  for (const q of Array.from(rest.querySelectorAll(QUOTE))) q.remove();
+  if (!(rest.textContent ?? "").trim()) return;
   for (const q of quotes) {
-    const said = (frag.textContent ?? "").replace(q.textContent ?? "", "").trim();
-    if (!said) continue;
     const details = document.createElement("details");
     details.className = "pa-quote";
     const summary = document.createElement("summary");

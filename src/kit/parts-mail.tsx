@@ -34,6 +34,27 @@ details.pa-quote > summary::-webkit-details-marker { display: none; }
 :host(.pa-mail-paper) details.pa-quote > summary { color: #555555; border-color: #cccccc; }
 `;
 const style = (css: string) => { const s = document.createElement("style"); s.textContent = css; return s; };
+/** Two shadow roots, one inside the other: the mail's CSS is in the inner one, so a rule for its host (`:host`) can
+ *  reach only the inner box, which the outer root holds in place (contain: paint: nothing positioned in it leaves it,
+ *  or is drawn outside it). The outer root's CSS is the kit's alone. */
+const OUTER = ":host { display: block; position: relative; contain: paint; } .pa-mail-box { display: block; }";
+function innerRoot(el: HTMLElement): ShadowRoot {
+  const outer = el.shadowRoot ?? el.attachShadow({ mode: "open" });
+  let box = outer.querySelector<HTMLElement>(".pa-mail-box");
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "pa-mail-box";
+    box.setAttribute("data-pa-mail", "");
+    box.attachShadow({ mode: "open" });
+    outer.replaceChildren(style(OUTER), box);
+  }
+  return box.shadowRoot!;
+}
+/** Where a link goes, as it is shown: its site (in its punycode form, so a look-alike shows as what it is) and the
+ *  whole address; a mail address for mailto. */
+function destination(href: string): { site: string; whole: string } {
+  try { const u = new URL(href); return u.protocol === "mailto:" ? { site: decodeURIComponent(u.pathname), whole: href } : { site: u.host, whole: href }; } catch { return { site: href, whole: href }; }
+}
 
 /** A message's body: `html` when it has one, else `text`. */
 export function MailBody({ html, text, pictures = false, onShowPictures, inline }: {
@@ -141,7 +162,8 @@ function HtmlMail({ html, pictures, onShowPictures, inline }: { html: string; pi
   useLayoutEffect(() => {
     const el = host.current;
     if (!el) return;
-    const root = el.shadowRoot ?? el.attachShadow({ mode: "open" });
+    const root = innerRoot(el);
+    (root.host as HTMLElement).className = clean.colored ? "pa-mail-box pa-mail-paper" : "pa-mail-box";
     const fit = document.createElement("div");
     fit.className = "pa-mail-fit";
     fit.append(clean.root.cloneNode(true));
@@ -160,8 +182,8 @@ function HtmlMail({ html, pictures, onShowPictures, inline }: { html: string; pi
 
   // a tap on a link opens it in the browser; pointing at one (or holding it) shows where it goes
   useEffect(() => {
-    const root = host.current?.shadowRoot;
-    if (!root) return;
+    if (!host.current) return;
+    const root = innerRoot(host.current);
     const linkOf = (e: Event) => (e.target instanceof Element ? e.target.closest("a[href]") : null);
     const click = (e: Event) => {
       const a = linkOf(e);
@@ -188,7 +210,7 @@ function HtmlMail({ html, pictures, onShowPictures, inline }: { html: string; pi
       <Button small onClick={onShowPictures}>Show pictures</Button>
     </div>}
     {pictures && failed > 0 && <p className="pa-mail-note">{failed === 1 ? "A picture" : `${failed} pictures`} couldn't load.</p>}
-    <div ref={host} data-pa-mail="" className={clean.colored ? "pa-mail-paper" : undefined} onPointerLeave={() => setDest(null)} />
-    {dest && <p className="pa-mail-dest" aria-live="polite"><span>Opens</span> {dest}</p>}
+    <div ref={host} data-pa-mail="" onPointerLeave={() => setDest(null)} />
+    {dest && (() => { const d = destination(dest); return <p className="pa-mail-dest" aria-live="polite"><span>Opens</span> <b>{d.site}</b>{d.whole !== d.site && <span> {d.whole}</span>}</p>; })()}
   </div>;
 }

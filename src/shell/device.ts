@@ -6,7 +6,7 @@ import { inShell } from "../vault/oauth";
 import type { StorageDeps } from "../applet/modules/storage";
 import { deviceSaved } from "./saved";
 import { ContractError, ERROR_CODES } from "../applet/contract";
-import { PICTURE_MAX, pictureType, pictureUrlOk } from "../applet/files";
+import { PICTURE_MAX, pictureType } from "../applet/files";
 
 async function invoke<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
@@ -23,15 +23,15 @@ export async function openLinkOut(url: string): Promise<void> {
 
 /** A web picture for an applet allowed `pictures` (applet/modules/app.ts checked the address): in the app, Rust fetches it
  *  (src-tauri/src/pictures.rs: public addresses only, every name resolved there, no cookies or referrer, 10 MB); in a
- *  browser, the browser does, without credentials or referrer, if the picture's server allows it (CORS). Either way
+ *  browser, the browser does, without credentials or referrer, if the picture's server allows it (CORS), and never
+ *  after a redirect (the browser would follow one before it could be checked). Either way
  *  it is a picture only if its first bytes say PNG, JPEG, GIF or WebP. */
 export async function pictureOut(url: string): Promise<{ type: string; bytes: ArrayBuffer }> {
   let bytes: ArrayBuffer;
   if (inShell()) bytes = await invoke<ArrayBuffer>("web_picture", { url });
   else {
-    const r = await fetch(url, { credentials: "omit", referrerPolicy: "no-referrer", mode: "cors", redirect: "follow", cache: "force-cache" });
+    const r = await fetch(url, { credentials: "omit", referrerPolicy: "no-referrer", mode: "cors", redirect: "error", cache: "force-cache" });
     if (!r.ok) throw new ContractError(ERROR_CODES.failed, `the picture's server said ${r.status}`);
-    if (r.redirected && !pictureUrlOk(r.url)) throw new ContractError(ERROR_CODES.failed, "the picture moved somewhere it may not come from");
     if (Number(r.headers.get("content-length") ?? 0) > PICTURE_MAX) throw new ContractError(ERROR_CODES.failed, "the picture is over 10 MB");
     const reader = r.body?.getReader();
     const parts: Uint8Array[] = [];

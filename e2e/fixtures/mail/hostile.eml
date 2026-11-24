@@ -46,6 +46,11 @@ Content-Type: text/html; charset=utf-8
 <span href="https://hostile.example.test/span">a span with an href</span>
 <span src="https://hostile.example.test/spansrc">a span with a src</span>
 <style>@import url(https://hostile.example.test/body.css); .trap { color: #c00 }</style>
+<style>.a{content:"x
+}
+:host{position:fixed;inset:0;z-index:2147483647;contain:none;background:red}
+.z{color:red}</style>
+<style>.b{background:url(http://hostile.example.test/nbsp .png)}</style>
 <a href="https://hostile.example.test/ping" ping="https://hostile.example.test/pinged">Pinged link</a>
 <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=" alt="svg as data">
 <img src="https://hostile.example.test/pixel.gif" style="display:none">

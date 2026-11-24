@@ -162,7 +162,7 @@ describe("a hostile mail", () => {
     expect(c.trackers).toBe(1);
   });
   it("loads nothing but its pictures, each through `web`: no stylesheet, @import, font or frame", () => {
-    expect(c.web.sort()).toEqual(["https://hostile.example.test/bg.png?who=alice", "https://hostile.example.test/inline.png", "https://hostile.example.test/pic.png", "https://hostile.example.test/tablebg.png", "https://hostile.example.test/tdbg.png"]);
+    expect(c.web.sort()).toEqual(["http://hostile.example.test/nbsp\u00a0.png", "https://hostile.example.test/bg.png?who=alice", "https://hostile.example.test/inline.png", "https://hostile.example.test/pic.png", "https://hostile.example.test/tablebg.png", "https://hostile.example.test/tdbg.png"]);
     expect(c.css).not.toMatch(/@import|@font-face|font\.woff|expression|behavior|binding/);
     for (const el of host.querySelectorAll("[style]")) expect(el.getAttribute("style")).not.toMatch(/url\(\s*(?!"?blob:)/);
     expect(c.refused).toBe(0);
@@ -197,6 +197,24 @@ describe("cleanSheet", () => {
   it("::slotted and ::part are dropped; body, html and :root mean the root; a class named body stays", () => {
     expect(cleanSheet("::slotted(p) { color: red } p::part(x) { color: red }", none)).toBe("");
     expect(cleanSheet("body { margin: 0 } html, .body-text, #body { color: #111 } :root { color: #222 }", none)).toBe(".pa-mail-doc{margin: 0}.pa-mail-doc, .body-text, #body{color: #111}.pa-mail-doc{color: #222}");
+  });
+  it("reads strings and url()s as the browser does: a :host rule can't hide in one (security review, T-476)", () => {
+    const host = ":host{position:fixed;inset:0;z-index:2147483647;contain:none;background:red}";
+    // only what would hide it goes: the rules around it stay
+    expect(cleanSheet(`.a{content:"x\n}\n${host}\n.z{color:red}`, none)).toBe(".a{}.z{color:red}");
+    expect(cleanSheet(`.a{background:url(x"y); color: red}\n${host}\n.c{content:"c"}`, none)).toBe('.a{color: red}.c{content:"c"}');
+    expect(cleanSheet(`:host{color:red} .b{color:blue}`, none)).toBe(".b{color:blue}");
+    // and when our reading and the browser's could still differ (a rule nested in a declaration list), none of it
+    expect(cleanSheet(".a{color:red; & .b{position:fixed}}", none)).toBe("");
+  });
+  it("a url() the cleaning can't read goes with its declaration; the rules around it stay", () => {
+    expect(cleanSheet('.a { background: url( "https://x/1.png" y); color: red } .b { color: blue }', none)).toBe(".a{color: red}.b{color: blue}");
+  });
+  it("a url() with a no-break space in it is still asked, and loads nothing", () => {
+    const asked: string[] = [];
+    const out = cleanSheet(".a{background:url(http://evil.example/t\u00a0.png)}", (u) => { asked.push(u); return null; });
+    expect(out).not.toMatch(/evil/);
+    expect(cleanMail("<style>.a{background:url(http://evil.example/t\u00a0.png)}</style><p class=a>x</p>", HIDDEN).hidden).toBe(1);
   });
   it("keyframes keep their steps, cleaned", () => {
     expect(cleanSheet("@keyframes k { from { background: url(https://x) } to { opacity: 1 } }", none)).toBe("@keyframes k{from{background: none}to{opacity: 1}}");
@@ -234,6 +252,8 @@ describe("webHref", () => {
   it("keeps http, https and mailto; nothing else, nothing hidden or spaced", () => {
     expect(webHref(" https://x.test/a?b=1 ")).toBe("https://x.test/a?b=1");
     expect(webHref("mailto:a@b.test")).toBe("mailto:a@b.test");
+    expect(webHref("mailto:a@b.test?subject=Hi&attach=/etc/passwd")).toBe("mailto:a@b.test?subject=Hi");
+    expect(webHref("https://www.apple.com@evil.example/login")).toBeNull();
     for (const bad of ["javascript:alert(1)", "data:text/html,x", "vbscript:x", "/relative", "x.test", "tel:+1555", "https://x.test/a b", "https://x\u200b.test", "https://", "ftp://x.test", "cid:abc"]) expect(webHref(bad), bad).toBeNull();
   });
 });
@@ -245,6 +265,13 @@ describe("plain text: the quoted reply at its end", () => {
     expect(said.trim().endsWith("Ruth")).toBe(true);
     expect(quoted.startsWith("On Mon, 23 Nov 2026 at 6:02 PM, Alice <alice@test.test> wrote:")).toBe(true);
     expect(quoted).toContain("> Does Saturday still work");
+  });
+  it("an HTML message that is all quote is left whole; many quotes fold in one pass", () => {
+    expect(drawn('<blockquote type="cite">only a quote</blockquote>').host.querySelector("details")).toBeNull();
+    const many = `<p>top</p>${'<blockquote type="cite">q</blockquote>'.repeat(3000)}`;
+    const t0 = performance.now();
+    expect(drawn(many).host.querySelectorAll("details.pa-quote")).toHaveLength(3000);
+    expect(performance.now() - t0).toBeLessThan(3000);
   });
   it("leaves a message that is only a quote, or has none, whole", () => {
     expect(splitQuote("> just a quote\n> more")).toEqual({ said: "> just a quote\n> more", quoted: "" });

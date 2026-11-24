@@ -30,7 +30,7 @@ export function appLines(app: readonly AppWord[]): { text: string; stress: boole
   if (app.includes("pins")) out.push({ text: "See what is on your bar", stress: false });
   if (app.includes("open")) out.push({ text: "Take you to a note or an applet when you tap, see which note links lead to a note, and know its vault's web address", stress: false });
   if (app.includes("links")) out.push({ text: "Open web addresses in your browser: what it reads could leave in an address it opens", stress: true });
-  if (app.includes("pictures")) out.push({ text: "Load pictures from the web in what it shows you: the sites they are on see when, and from where, it was opened", stress: true });
+  if (app.includes("pictures")) out.push({ text: "Load pictures from the web without a tap: the sites they are on see when, and from where, and what it reads could leave in a picture's address", stress: true });
   if (app.includes("save")) out.push({ text: "Save files to your device's Downloads", stress: false });
   if (app.includes("attach")) out.push({ text: "Ask you to pick a file or picture to give it", stress: false });
   if (app.includes("vaults")) out.push({ text: "See every record in the vaults you give it (its words, fields, types, tags, links and history), and change records where you let Parachute change them (and put one back as it was, which deletes a record another app or AI made; the vault keeps it, so it can be put back too); a published record (anyone with its link reads it) only after you say yes on the app's own sheet", stress: true });

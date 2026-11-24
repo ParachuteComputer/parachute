@@ -30,7 +30,9 @@ export function linkOk(url: unknown): url is string {
 
 /** A web picture it may have the shell fetch (`pictures`): 10 MB at most, and at most this many a minute. */
 export const PICTURE_MAX = 10 * 1024 * 1024;
-export const PICTURES_A_MINUTE = 300;
+export const PICTURES_A_MINUTE = 120;
+/** At most this many asked of the shell at once. */
+export const PICTURES_AT_ONCE = 6;
 /** A name that is this device's, the local network's or the tailnet's (src-tauri/src/pictures.rs `local_name`). */
 const LOCAL_NAME = /(?:^|\.)(?:localhost|local|internal|lan|home\.arpa|intranet|corp|ts\.net)\.?$/i;
 /** An address written out that isn't on the public internet: loopback, private, link-local, shared (100.64/10, the
@@ -43,7 +45,8 @@ function localAddress(host: string): boolean {
     const [a, b] = [Number(v4[1]), Number(v4[2])];
     return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b < 128) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b < 32) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || (a === 192 && b === 0);
   }
-  if (h.includes(":")) return h === "::" || h === "::1" || /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || h.startsWith("::ffff:") || /^ff/.test(h);
+  // unspecified, loopback, unique-local, link- and site-local, IPv4-mapped or -compatible, NAT64, multicast
+  if (h.includes(":")) return h === "::" || h === "::1" || /^f[cd]/.test(h) || /^fe[89a-f]/.test(h) || /^::(?:ffff:)?[0-9a-f.:]*$/.test(h) || /^64:ff9b:/.test(h) || /^ff/.test(h);
   return false;
 }
 /** A web picture's address the shell may fetch for it: http or https, nothing hidden or spaced, no user or password,
