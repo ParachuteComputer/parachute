@@ -283,9 +283,10 @@ fn seal_webview(window: &tauri::WebviewWindow) {
                 // log, where the drive keeps it; a private WebKit switch, so never in a release build
                 #[cfg(debug_assertions)]
                 {
-                    use objc2::runtime::{Bool, NSObjectProtocol};
+                    use objc2::runtime::Bool;
                     let prefs: Retained<AnyObject> = msg_send![&*config, preferences];
-                    if prefs.respondsToSelector(objc2::sel!(_setLogsPageMessagesToSystemConsoleEnabled:)) {
+                    let can: Bool = msg_send![&*prefs, respondsToSelector: objc2::sel!(_setLogsPageMessagesToSystemConsoleEnabled:)];
+                    if can.as_bool() {
                         let () = msg_send![&*prefs, _setLogsPageMessagesToSystemConsoleEnabled: Bool::YES];
                     }
                 }
