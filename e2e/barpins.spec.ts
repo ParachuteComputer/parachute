@@ -19,9 +19,10 @@ test("Settings → Your bundle: pin applets to the bar, move and unpin them; the
   const onBar = page.getByRole("group", { name: "On the bar" });
   await expect(onBar).toContainText("Nothing pinned yet.");
   await onBar.getByText("Pin another applet").click();
+  const pinned = onBar.getByRole("list", { name: "On the bar now" });
   await onBar.getByRole("button", { name: "Pin Recipe box" }).click();
+  await expect(pinned.getByRole("listitem")).toHaveText([/Recipe box/]);
   await onBar.getByRole("button", { name: "Pin Post" }).click();
-  const pinned = onBar.getByRole("list", { name: "Pinned on the bar" });
   await expect(pinned.getByRole("listitem")).toHaveText([/Recipe box/, /Post/]);
   await expect.poll(async () => (await barOfRecord())?.map((p) => p.applet)).toEqual(["Applets/Recipes", "Applets/Post"]);
   // moved: Post first
@@ -38,7 +39,7 @@ test("Settings → Your bundle: pin applets to the bar, move and unpin them; the
 
 test("a bundle someone else offers: its bar is theirs until the person makes a copy of their own, which then takes pins", async ({ page }) => {
   const origin = hubState().origin;
-  // theirs (here: a record in another of the person's vaults standing in for theirs) and the person's, following it live
+  // theirs (here: a record in the home vault standing in for theirs) and the person's, following it live
   const theirs = await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/shared-desk", content: "theirs", tags: ["parachute-bundle"], metadata: { bundle: {
     contract: 1, id: "shared-desk", name: "Shared desk", sources: [{ vault: "kitchen", applet: "*" }], bar: [{ vault: "kitchen", applet: "Applets/Recipes" }] } } });
   await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/desk", content: "mine", tags: ["parachute-bundle"], metadata: { bundle: {
@@ -52,12 +53,25 @@ test("a bundle someone else offers: its bar is theirs until the person makes a c
     await onBar.getByRole("button", { name: "Make a copy of your own" }).click();
     // copied: the bar is the person's now, with theirs on it
     await expect(onBar).not.toContainText("This bar is the one the bundle's owner offers.");
-    await expect(onBar.getByRole("list", { name: "Pinned on the bar" }).getByRole("listitem")).toHaveText([/Recipe box/]);
+    await expect(onBar.getByRole("list", { name: "On the bar now" }).getByRole("listitem")).toHaveText([/Recipe box/]);
     const mine = (await tagged("parachute-bundle")).find((r) => r.path.startsWith("Parachute/Bundles/desk"))!;
     expect(mine.metadata.bundle.live).toBeUndefined();
     expect(mine.metadata.bundle.bar).toEqual([{ hub: origin, vault: "kitchen", applet: "Applets/Recipes" }]);
+    expect(mine.metadata.bundle.sources).toEqual([{ hub: origin, vault: "kitchen", applet: "*" }]);
+    // what it offers is what theirs offered: kitchen's applets, not letters'
     await onBar.getByText("Pin another applet").click();
-    await onBar.getByRole("button", { name: "Pin Post" }).click();
-    await expect(onBar.getByRole("list", { name: "Pinned on the bar" }).getByRole("listitem")).toHaveText([/Recipe box/, /Post/]);
+    await expect(onBar.getByRole("button", { name: "Pin Post" })).toHaveCount(0);
+    await onBar.getByRole("button", { name: "Pin Cook mode" }).click();
+    await expect(onBar.getByRole("list", { name: "On the bar now" }).getByRole("listitem")).toHaveText([/Recipe box/, /Cook mode/]);
   } finally { await api(hubState(), "DELETE", `notes/${theirs.id}`).catch(() => {}); }
+});
+
+test("a bundle someone else offers that can't be read here yet: no copy of nothing is offered", async ({ page }) => {
+  await api(hubState(), "POST", "notes", { path: "Parachute/Bundles/desk", content: "mine", tags: ["parachute-bundle"], metadata: { bundle: {
+    contract: 1, id: "desk", name: "Desk", live: { hub: "https://elsewhere.example", vault: "studio", path: "Parachute/Bundles/desk" } } } });
+  await api(hubState(), "POST", "notes", { path: "Parachute/Settings", content: "settings", tags: ["parachute-settings"], metadata: { parachute: { bundle: "desk" } } });
+  await page.goto("/settings");
+  const onBar = page.getByRole("group", { name: "On the bar" });
+  await expect(onBar).toContainText("it can't be read here yet");
+  await expect(onBar.getByRole("button", { name: "Make a copy of your own" })).toHaveCount(0);
 });

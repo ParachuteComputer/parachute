@@ -293,20 +293,23 @@ function shownIndices(r: Raw): number[] {
   r.bar.forEach((x, i) => { const p = placeOf(x), f = p ? find(p) : null; if (f && out.length < MAX_PLACES && !seen.has(`${f.vault}|${f.noteId}`)) { seen.add(`${f.vault}|${f.noteId}`); out.push(i); } });
   return out;
 }
-/** Swap a place with its neighbour on the bar as shown, left or right (entries the bar doesn't show don't count). */
 /** Make the open bundle, one someone else offers (`live`), a copy of the person's own: theirs as it is now, each place
  *  naming their hub, written over the person's record without `live`, so its bar takes the person's pins. Their later
- *  changes no longer reach it. */
+ *  changes no longer reach it. Written as the app reads a bundle (recordOf): what it doesn't read of theirs, and any
+ *  publisher but Parachute's, isn't copied. Only once theirs has been read on this device (`hubOf`): a copy of the
+ *  person's bare record would offer nothing. */
 export async function copyBundle(): Promise<void> {
   const app = openBundleNow();
   if (!app.live) return;
-  const hub = app.hubOf ?? app.live.hub;
+  if (!app.hubOf) throw new Error(`${app.name} can't be read here yet, so there's nothing to copy: sign in to the Parachute that offers it first.`);
+  const hub = app.hubOf;
   const at = <T extends { hub?: string }>(p: T): T => (p.hub ? p : { ...p, hub });
   const own: Bundle = { ...app, live: undefined, hubOf: undefined, sources: app.sources.map((x) => (x.hub === ANY_HUB ? x : at(x))), hide: app.hide.map(at),
     bar: app.bar && app.bar.map((e) => (isAppPlace(e) ? e : at(e))), start: app.start ? at(app.start) : app.start, opens: app.opens.map(at) };
   await changeBundle(() => recordOf(own));
   await readSettings();
 }
+/** Swap a place with its neighbour on the bar as shown, left or right (entries the bar doesn't show don't count). */
 export const move = (p: Place, by: -1 | 1) => changeChoices((r) => {
   const shown = shownIndices(r);
   const k = shown.findIndex((i) => parsedAs(r.bar[i], (y) => same(y, p)));
