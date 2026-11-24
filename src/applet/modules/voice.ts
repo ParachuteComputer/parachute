@@ -10,7 +10,7 @@ import { RECORD_MAX_S } from "../files.ts";
 
 export type Recording = { bytes: ArrayBuffer; type: string; duration: number };
 export type VoiceDeps = {
-  /** The shell's recorder sheet: the recording on Send, null on Cancel. Throws `notTapped()` (app.ts) without a tap. */
+  /** The shell's recorder: the recording on Send, null on Cancel. Throws `notTapped()` (app.ts) without a tap. */
   record(maxSeconds: number): Promise<Recording | null>;
 };
 

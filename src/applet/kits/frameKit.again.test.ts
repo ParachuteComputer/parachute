@@ -18,10 +18,10 @@ function frame() {
   Object.assign(w, { TextEncoder, TextDecoder });
   w.eval(FRAME_KIT);
   const deliver = (data: unknown) => { const ev = new w.MessageEvent("message", { data }); Object.defineProperty(ev, "source", { value: shell }); w.dispatchEvent(ev); };
-  const kit = (w as unknown as { parachute: { voice: { record(): Promise<unknown> } } }).parachute;
+  const kit = (w as unknown as { parachute: { voice: { record(): Promise<unknown> }; app: { pick(): Promise<unknown> }; storage: { set(k: string, v: unknown): Promise<unknown> } } }).parachute;
   const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
   deliver({ uni: 1, event: "ready", data: { contract: 1 } });
-  return { kit, sent, deliver, tick };
+  return { kit, sent, deliver, tick, close: () => dom.window.close() };
 }
 
 describe("the session made again", () => {
@@ -41,5 +41,20 @@ describe("the session made again", () => {
     expect(asks).toHaveLength(2);
     f.deliver({ uni: 1, id: asks[1].id, result: null });
     await expect(second).resolves.toBeNull();
+    f.close();
+  });
+
+  it("a pick is settled as none; a write is left to its own timeout and retry, not sent again", async () => {
+    const f = frame();
+    const pick = f.kit.app.pick();
+    let wrote: unknown = "waiting";
+    f.kit.storage.set("draft", "half a thought").then(() => { wrote = "done"; }, () => { wrote = "error"; });
+    await f.tick();
+    f.deliver({ uni: 1, event: "ready", data: { contract: 1 } });
+    await expect(pick).resolves.toEqual([]);
+    await f.tick();
+    expect(wrote).toBe("waiting");
+    expect(f.sent.filter((m) => m.ns === "storage")).toHaveLength(1);
+    f.close();
   });
 });

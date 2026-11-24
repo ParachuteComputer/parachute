@@ -28,8 +28,9 @@
 //   uni.app.openLink(url)            → (links) an http/https/mailto address in the browser, during a tap: whether it went
 //   uni.app.save(name, bytes, type)  → (save) a file into Downloads, during a tap: {saved: name}
 //   uni.app.pick({accept, multiple}) → (attach) the shell's own picker, during a tap: [{name, type, bytes}], [] for none
-//   uni.voice.record({max_s})        → (reach: [voice]) the shell's recorder sheet, during a tap: {bytes, type, duration}
-//                                      on Send, null on Cancel (docs/design/KEYRING.md "Voice, files, links, storage")
+//   uni.voice.record({max_s})        → (reach: [voice]) the shell's recorder, during a tap: {bytes, type, duration}
+//                                      on Send, null on Cancel or when the shell makes the session again
+//                                      (docs/design/KEYRING.md "Voice, files, links, storage")
 //   uni.storage.get/set/keys         → (storage) a little JSON kept by the shell on this device for it, 256 KB in all (a
 //                                      value of any size within it: set sends it as bytes)
 //   uni.saved.get(key) / .set(key, value) / .all() / .flush() → what it saves on this device as the person goes (drafts,
