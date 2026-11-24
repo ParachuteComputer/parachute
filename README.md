@@ -6,8 +6,8 @@ One app for your vaults and the applets that grow on them. Early: version 0.1.0,
 ## Install and sign in
 
 You need a Parachute (a hub of your own, an org's, or Parachute Cloud). On Parachute Cloud that is all: on the first
-screen, **Sign in with Parachute Cloud** (your email, then the code it mails you; no key), and the app opens on your
-notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, sign in with its own sign-in (on the first
+screen, **Start with Parachute Cloud** (your email, then the code it mails you; no key; new to Cloud, it makes your
+account and you name your first vault), and the app opens on your notes ([docs/SIMPLE.md](docs/SIMPLE.md)). On a hub of your own, or an org's, sign in with its own sign-in (on the first
 screen, **Your notes on another Parachute?** → **Sign in with its address**, then step 4), or with a Nostr key:
 
 1. **Get the app** from the [releases page](https://github.com/ParachuteComputer/parachute/releases):
