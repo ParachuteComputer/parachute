@@ -10,7 +10,7 @@ import { clientFor, keptClientFor } from "../vault/client";
 import { isMine } from "../vault/whose";
 import { originOf, type VaultRecord } from "../vault/store";
 import { stripExt } from "./contract";
-import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, PICK_CODE, approvalContent, approvalPath, checkApproval, checkKeyList, decide, dOf, newestOf, pickIn, revokeFloor, trustedKeys, type Decision, type KeyList, type SignedEvent, type Subject } from "./approvals";
+import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, PICK_CODE, approvalContent, approvalPath, checkApproval, checkKeyList, decide, dOf, newestOf, pickIn, revokeFloor, trustedKeys, type Content, type Decision, type KeyList, type SignedEvent, type Subject } from "./approvals";
 import type { VaultRef } from "./vaultPick";
 
 const SEEN_KEY = "parachute.approvals.seen.v1";
@@ -114,7 +114,8 @@ export async function approvalFor(s: Subject, code: string, scope: string | ((va
 /** Sign (on this device, after its unlock) and write an approval of this exact code, or with `approved: false` the
  *  taking back of one. Throws when it can't be signed (no key, the unlock cancelled, a wrong passcode); `written`
  *  says whether it reached the home vault. */
-export async function signApproval(o: { subject: Subject; name: string; approved: boolean; code: string; scope: string; face?: string[]; passcode?: string | null; runs?: "sealed" | "approved-code"; vaults?: readonly VaultRef[] | null }): Promise<{ ev: SignedEvent; written: boolean }> {
+export async function signApproval(o: { subject: Subject; name: string; approved: boolean; code: string; scope: string; face?: string[]; passcode?: string | null; runs?: "sealed" | "approved-code"; vaults?: readonly VaultRef[] | null;
+  /** Told as soon as it is signed, before it is written to the home vault (a pick holds here at once). */ signed?: (c: Content) => void }): Promise<{ ev: SignedEvent; written: boolean }> {
   const home = homeVault();
   const native = await nativeNow();
   if (!home || !native) throw new Error("Approving for every device needs the Parachute app with your key.");
@@ -122,6 +123,7 @@ export async function signApproval(o: { subject: Subject; name: string; approved
   const ev = await native.approvalSign(JSON.stringify(content), dOf(o.subject), o.name, o.passcode ?? null) as SignedEvent;
   raiseFloor(o.subject, content.n + (o.approved ? 0 : 0.5));
   writeMap(MINE_KEY, { ...readMap(MINE_KEY), [dOf(o.subject)]: ev });
+  o.signed?.(content);
   // signed: a home Parachute may only read (docs/design/SCOPES.md) still leaves this device's own Allow; the other
   // devices then ask for themselves
   const written = await writeApproval(home, o.subject, o.name, ev).then(() => true, () => false);
@@ -204,8 +206,8 @@ export async function signedPick(s: Subject, now = Date.now()): Promise<VaultRef
 }
 
 /** Sign a pick for one of Parachute's own applets: an approval holding the pick alone. Throws as `signApproval` does. */
-export const signPick = (s: Subject, name: string, vaults: readonly VaultRef[] | null, passcode?: string | null) =>
-  signApproval({ subject: s, name, approved: true, code: PICK_CODE, scope: PICK_CODE, vaults, passcode });
+export const signPick = (s: Subject, name: string, vaults: readonly VaultRef[] | null, passcode?: string | null, signed?: (c: Content) => void) =>
+  signApproval({ subject: s, name, approved: true, code: PICK_CODE, scope: PICK_CODE, vaults, passcode, signed });
 
 /** What this device calls itself on an approval it signs. */
 export function deviceName(): string {

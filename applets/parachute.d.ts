@@ -121,6 +121,9 @@ declare module "parachute" {
   export const vaults: {
     list(): Promise<{ key: string; name: string; host: string; mine: boolean; home: boolean; level: "read" | "write" | null; connector: string; view: string | null; reach: "this-device" | "network" | "anyone" }[]>;
     hubs(): Promise<{ host: string; address: string | null; vaults: string[] }[]>;
+    /** During a tap: the shell's own sheet, which vaults this applet may reach (docs/ACCESS.md proposal 5). It never
+     *  sees the list picked from; after a change the applet starts again on the new pick. */
+    ask(): Promise<{ changed: boolean }>;
     types(vault: string): Promise<{ name: string; kind: "type" | "tag"; count: number; description: string | null; fields: Record<string, { type?: string; enum?: unknown[]; description?: string }> }[]>;
     query(vault: string, q?: { type?: string; tag?: string; search?: string; path?: string; where?: { field: string; op: string; value: unknown }[]; sort?: { by: string; dir: "asc" | "desc" }; limit?: number; offset?: number }): Promise<{ records: VaultsRecord[]; more: boolean }>;
     get(vault: string, id: string): Promise<VaultsRecord>;

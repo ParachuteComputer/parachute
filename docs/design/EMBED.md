@@ -61,7 +61,8 @@ sign-in (`parachute.whose.v1`), so signing in again keeps it. No record or agent
 
 So "another Parachute" is decided per vault by the person, not by hub: an org vault on the person's own hub (Cloud
 holds many people's vaults) is still someone else's, and a new device that signs in to Techne first doesn't make Techne
-its home. The `recent` card line keeps saying "every vault on this device"; that now includes someone else's.
+its home. The `recent` card line says "the vaults you give it" (since 11-23, [ACCESS.md](../ACCESS.md) proposal 5); one of
+those may be someone else's, marked so where it is ticked.
 
 ## The records
 

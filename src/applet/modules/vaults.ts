@@ -5,6 +5,8 @@
 //   vaults        (read the vaults the person gave it, docs/ACCESS.md proposal 5; change records there where the person lets
 //                 Parachute change them). Every call that names a vault refuses any other: "not one of the vaults you gave it"
 //     list()                                   the vaults it was given: {key, name, host, mine, home, level, connector, view, reach}
+//     ask()                                    during a tap, the shell's own sheet: which vaults it may reach. {changed}; the
+//                                              applet never sees the list picked from, and can't set the pick itself
 //     hubs()                                   each hub those vaults are on: {host, address, vaults}, `address` the one
 //                                              address an AI gets there for every vault (null: a vault's own only)
 //     types({vault})                           its types and tags, with counts and declared fields
@@ -122,6 +124,9 @@ export type GivenKey = { name: string; token: string; until: string; types: stri
  *  throws the write ask before it is sent), and what the app knows of each vault. */
 export type VaultsDeps = {
   list(): HeldVault[];
+  /** The shell's own sheet that changes which vaults it reaches, opened during a tap: whether the pick changed. Rejects
+   *  without a tap (notTapped). Absent: this shell can't. */
+  ask?(): Promise<boolean>;
   /** The hubs of `list()`, each with its one address (what its description says; null when it can't be read). */
   hubs?(): Promise<HubRow[]>;
   /** GET/POST/PATCH/DELETE/PUT under the vault's API (`/records…`, `/types…`; PUT only for a pack's types, packs.ts), its JSON; a 404 rejects with `not_found`. */
@@ -471,6 +476,7 @@ export function createVaultsModule(allowed: readonly AppWord[], deps: VaultsDeps
     methods: {
       list: { cap: null, validate: one((p) => (hasOnly(p, []) ? {} : null)), run: async () => deps.list() },
       hubs: { cap: null, validate: one((p) => (hasOnly(p, []) ? {} : null)), run: async () => (deps.hubs ? deps.hubs() : []) },
+      ask: { cap: null, validate: one((p) => (hasOnly(p, []) ? {} : null)), run: async () => { if (!deps.ask) throw new ContractError(ERROR_CODES.notGranted); return { changed: await deps.ask() }; } },
       types: {
         cap: null, validate: one(vaultOnly()),
         run: async ({ vault }: { vault: string }, _s, ctx) => { held(vault); ctx.charge(1); return types(vault).catch((e) => { throw failed(e); }); },

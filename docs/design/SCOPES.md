@@ -26,6 +26,14 @@ applet's card are the app's own rule, as before (`src/applet/modules/vault.ts`).
 Code: `src/vault/reach.ts` (what each vault needs and why), `src/vault/signInFlow.ts` (`askVault`, the one ask),
 `src/vault/parachute.ts` (`scopeFor`, `levelIn`), `src/shell/WriteAsk.tsx` (the ask for a change).
 
+**What an applet reaches of what the app holds** (since 11-23, [ACCESS.md](../ACCESS.md) proposal 5). Holding a vault
+doesn't give it to every applet. An applet whose `app` reaches across vaults (`vaults`, `sharing`, `recent`, `changes`)
+reaches only the vaults ticked for it: its pick, kept in the person's signed approval (or, on a device without their
+key, on the device), else the home and its own vault. Ticking a vault the device doesn't hold asks its hub for read, the
+same one-vault ask as **Open**. A pick needs read only: write still comes from an applet's card or a change of the
+person's own, and goes back as before. Code: `src/applet/vaultPick.ts`, `src/views/useVaultPick.ts`,
+`src/views/VaultPick.tsx`.
+
 ## What signing in asks
 
 1. **Which vaults are yours.** With the device's key (the phone, the Mac), the shell signs the hub's `list-vaults`

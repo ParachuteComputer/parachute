@@ -13,7 +13,7 @@ Bases, Anytype, Capacities).
 
 | Screen | What is on it |
 |---|---|
-| Your vaults | every vault on this device (whether it is someone else's, whether Parachute reads or also changes it; where it is only to tell two of one name apart), and a search across all of them |
+| Your vaults | the vaults you gave Vault ([ACCESS.md](ACCESS.md) proposal 5: the home until you tick more, on the line over it or **Choose which vaults Vault reaches**) (whether it is someone else's, whether Parachute reads or also changes it; where it is only to tell two of one name apart), and a search across all of them |
 | A vault | its types, each with how many records it has and its fields; its tags; the newest records the person (or their AI) wrote, as **Lately**; a search; **New type**; **Add a pack** (**Packs** once it has types); **Import from Notion**; **Parachute's own** (the records the app keeps for itself here: settings, approvals, saved views; out of Lately and search until asked for); its address under **Details**; **Changes**; **Sharing** |
 | Packs | **Installed packs** (version, when, **Update** when the app ships a newer one), and Parachute's own to add with one tap (Core types; Clients and sessions; Reading list): what each adds, then **Add**. What it added, and what it left as the person had it, said in plain words ([PACKS.md](PACKS.md)) |
 | A type | its records as a table: the type's fields are the columns, a header's tap sorts by it, the first column stays in view as the rest scroll across. **Filter** (a field's value), **Group** (by a field), **List** or **Table**, a search. Saved views as tabs. **New …** adds a record of the type, starting from its default template when it has one ([PACKS.md](PACKS.md)). A record opens beside the table on a computer, in its place on a phone |
@@ -107,8 +107,9 @@ history the vault already keeps, not a second record of it (`src/applet/changes.
 
 ## How it is built
 
-- **Two words in `fields.app`** ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)): `vaults` (see every record in every vault on
-  this device, and change records where the person lets Parachute change them) and `sharing` (what reaches each vault;
+- **Two words in `fields.app`** ([WRITE-AN-APPLET.md](WRITE-AN-APPLET.md)): `vaults` (see every record in the vaults the
+  person gives the applet, and change records there where the person lets Parachute change them; any other vault is
+  refused: [ACCESS.md](ACCESS.md) proposal 5) and `sharing` (what reaches each vault;
   and, each after the person's yes on the app's own sheet, which the applet can't draw or answer: publishing a record,
   taking an applet's access back, making a vault read only). Each is a stressed line on the card and part
   of the asks' hash, so adding one asks again. An applet in someone else's vault asks the app for nothing, as before.
@@ -182,7 +183,7 @@ reads their notes. They go when Parachute's own applets load from a trusted sour
    refuses to give such a type; a field named `__proto__`, `constructor` or `prototype` is refused anywhere.
 4. **Counts per group**: `aggregate` groups only by an indexed field, so a grouped table counts what it has read.
 5. **Someone else's vault.** `vaults` changes records in any vault the app may change, a shared one of someone else's
-   too (the card says every vault): what it reads in one vault can be written into another the person shares.
+   too, among the vaults the person gave it: what it reads in one of those can be written into another.
 6. **Reads a browser may keep.** The hub answers a record's read with `ETag` and `Last-Modified` and no `Cache-Control`,
    so a browser may serve a read of a moment ago again (heuristic freshness): a record just changed then reads as it
    was, and the next change is refused as a conflict. Vault's reads of the hub ask `cache: "reload"` (never a

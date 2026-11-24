@@ -83,8 +83,8 @@ record draws it like any other.
 
 ## Threat model
 
-The applet is untrusted code in a sealed frame. With `vaults` it may already read every record in every vault this
-device holds; with `vault`, every record in its granted folders. What it must not gain:
+The applet is untrusted code in a sealed frame. With `vaults` it may already read every record in the vaults the
+person gave it ([ACCESS.md](../ACCESS.md) proposal 5); with `vault`, every record in its granted folders. What it must not gain:
 
 - **Files of records it can't read.** `vaults.file` names a record it can already `get`. `vault.file` judges the
   record the hub gives back on its own path, whatever it was asked for by (an id, a path, a path with `..` is refused

@@ -33,6 +33,8 @@ export type VaultPickNow = {
   given: (key: string) => boolean;
   /** Read again (a pick just saved on this device). */
   again: () => void;
+  /** One of Parachute's own: the pick just signed here holds at once, before the home vault has it. */
+  took: (pick: VaultRef[] | null) => void;
 };
 
 export function useVaultPick(o: { rec: VaultRecord | null; entry: AppletEntry | null; official: boolean; subject: Subject | null;
@@ -72,5 +74,6 @@ export function useVaultPick(o: { rec: VaultRecord | null; entry: AppletEntry | 
   reachRef.current = reach;
   const given = useMemo(() => (asks ? (k: string) => heldIn(listVaults(), reachRef.current, originOf).some((v) => v.key === k) : () => true), [asks]);
   const missing = useMemo(() => reach.filter((r) => !listVaults().some((v) => originOf(v.issuer) === r.hub && v.vault === r.vault)), [key, held]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { asks, read, pick, signed, reach, key, missing, given, again };
+  const took = (p: VaultRef[] | null) => { if (d) setOfficial({ for: d, pick: p, signed: true }); };
+  return { asks, read, pick, signed, reach, key, missing, given, again, took };
 }

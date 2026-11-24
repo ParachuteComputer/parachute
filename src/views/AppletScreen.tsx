@@ -330,7 +330,7 @@ export default function AppletScreen() {
   const [signed, setSigned] = useState<{ for: string; d: Decision | null } | null>(null);
   const [signing, setSigning] = useState<string | null>(null);
   // the sheet that changes what it reaches (and the vault it opens with ticked: Home's link to one it wasn't given)
-  const [picking, setPicking] = useState<{ add: VaultRef | null } | null>(null);
+  const [picking, setPicking] = useState<{ add: VaultRef | null; done?: (changed: boolean) => void } | null>(null);
   const [pickError, setPickError] = useState<string | null>(null);
   // the card's ticks, before Allow
   const [ticked, setTicked] = useState<VaultRef[] | null>(null);
@@ -494,8 +494,10 @@ export default function AppletScreen() {
     ? createVaultsModule(entry.app, vaultsDeps({ confirm: (q) => sheetsRef.current.confirm(q), emit: (event, data) => sessionNow.current?.sendEvent(event, data), back: () => window.location.pathname + window.location.search,
       // what it manages is its own, and a key's secret is shown on the shell's sheet (vault/manage.ts, ShellSheets.tsx)
       applet: subjectOf(rec.key, entry.noteId), reveal: (k) => sheetsRef.current.reveal(k),
-      // only the vaults it was given (docs/ACCESS.md proposal 5), asked at each call
+      // only the vaults it was given (docs/ACCESS.md proposal 5), asked at each call; and the shell's sheet to change
+      // that, during a tap in it (`vaults.ask`)
       given: pickNow.given,
+      ask: () => (tappingIn(() => frameEl.current) ? new Promise<boolean>((done) => setPicking({ add: null, done })) : Promise.reject(notTapped())),
       // the shell's own picker, as `app.pick` opens it: only while the person taps in this applet
       // (a Notion export carries its images: up to the import's own limit, not an attachment's 25 MB)
       pick: (accept, multiple) => (tappingIn(() => frameEl.current) ? device.pick(accept, multiple, IMPORT_MAX, "Parachute reads it and writes it into this vault, under Notion/.") : Promise.reject(notTapped())),
@@ -616,8 +618,10 @@ export default function AppletScreen() {
     const toSign = pickToSign(ticked, h ? refOf(h) : null, official ? null : refOf(rec));
     if (await signsHere()) {
       const code = passcode && needsPasscode ? passcode : null;
-      const r = official ? await signPick(approvalAt, name, toSign, code)
-        : await signApproval({ subject: approvalAt, name, approved: true, code: keys.html, scope: await loaded.asksFor(toSign), face, passcode: code, runs: mode === "approved-code" ? "approved-code" : "sealed", vaults: toSign });
+      // signed, then kept in the home vault: what it reaches follows at once, not after that write
+      const r = official ? await signPick(approvalAt, name, toSign, code, (c) => pickNow.took(c.vaults ?? null))
+        : await signApproval({ subject: approvalAt, name, approved: true, code: keys.html, scope: await loaded.asksFor(toSign), face, passcode: code, runs: mode === "approved-code" ? "approved-code" : "sealed", vaults: toSign,
+          signed: (c) => { if (signedFor) setSigned({ for: signedFor, d: { run: true, content: c } }); } });
       return JSON.parse(r.ev.content) as Content;
     }
     // a device that reads signed picks but can't sign one (an anchor alone): a pick kept here would count for nothing
@@ -639,7 +643,7 @@ export default function AppletScreen() {
     }
     // the approval just signed is the newest: it holds here at once, whatever the home's copy says yet
     if (mine && !official && signedFor) setSigned({ for: signedFor, d: { run: true, content: mine } });
-    setPicking(null); setPasscode(""); pickNow.again(); setRecheck((x) => x + 1);
+    picking?.done?.(true); setPicking(null); setPasscode(""); pickNow.again(); setRecheck((x) => x + 1);
     const first = ticked.find((r) => !listVaults().some((v) => refOf(v).hub === r.hub && v.vault === r.vault));
     if (first) openPicked(first);
   })();
@@ -772,7 +776,7 @@ export default function AppletScreen() {
     {sheets.ui}
     {device.ui}
     {picking && <PickSheet name={name} initial={picking.add && !pickNow.reach.some((r) => r.hub === picking.add!.hub && r.vault === picking.add!.vault) ? [...pickNow.reach, picking.add] : pickNow.reach}
-      onSave={savePick} onCancel={() => { setPicking(null); setPickError(null); }} error={pickError} passcode={needsPasscode ? { value: passcode, set: setPasscode } : null} />}
+      onSave={savePick} onCancel={() => { picking.done?.(false); setPicking(null); setPickError(null); }} error={pickError} passcode={needsPasscode ? { value: passcode, set: setPasscode } : null} />}
     {router && page && sized && rec && isMine(rec) && <PageEmbeds host={rec} hostNote={entry.noteId} embeds={entry.embeds} from={loaded.state === "ok" ? loaded.from : []} />}
   </>, () => setMenu(true));
 }

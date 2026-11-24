@@ -93,7 +93,8 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
   /** The shell's own picker over the applet, during a tap (Import from Notion). */ pick?: VaultsDeps["pick"];
   /** The vaults the applet was given (docs/ACCESS.md proposal 5), by this device's key: every call that names another
    *  is refused, and `list` and `hubs` name none of the others. Asked at each call, so a change of pick holds at once. */
-  given: (key: string) => boolean }): VaultsDeps {
+  given: (key: string) => boolean;
+  /** The shell's sheet to change which vaults it reaches, during a tap (`vaults.ask`). */ ask?: VaultsDeps["ask"] }): VaultsDeps {
   // a vault it wasn't given is refused as one this device doesn't hold: here too, under the module's own check
   const rec = (key: string): VaultRecord => {
     if (!opts.given(key)) throw new Error(NOT_GIVEN);
@@ -103,6 +104,7 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
   const applet = opts.applet ?? "";
   return {
     ...(opts.pick ? { pick: opts.pick } : {}),
+    ...(opts.ask ? { ask: opts.ask } : {}),
     list: () => heldVaults(opts.given),
     hubs: () => heldHubs(opts.given),
     // this device's Parachute signed in as an app: its writes are its key's, named for this client id (core keys.ts)
