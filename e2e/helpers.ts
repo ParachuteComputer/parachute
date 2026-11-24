@@ -55,7 +55,9 @@ export async function signIn(page: Page, vault = VAULT) {
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((u) => u.origin === hub.origin);
   // a new registration is pending until the hub's owner approves it: the hub asks them to sign in first
-  const approveFirst = page.getByText("Sign in as admin to approve");
+  // the hub's page for an app no one has approved yet, with no sign-in: core 0.8/0.9.0-pre.1 say "Sign in as admin to
+  // approve"; from 0.9.0-pre.2 (core #147) it leads with a "Sign in" link
+  const approveFirst = page.getByText("Sign in as admin to approve").or(page.locator("a.approve-signin-cta"));
   if (await approveFirst.isVisible().catch(() => false)) await approveFirst.click();
   if (await page.locator('input[type="password"]').isVisible().catch(() => false)) {
     await page.locator('input[name="username"]').fill("owner");

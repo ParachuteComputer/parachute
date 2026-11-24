@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       core:
-        description: "core: an npm version (0.9.0-pre.1) or a branch or commit of parachute-core"
+        description: "core: an npm version (0.9.0-pre.2) or a branch or commit of parachute-core"
         default: next
   # on every PR but a docs-only one: what these specs exercise reaches across the app, the shell and the build (e2e/**
   # again: its Markdown is the test vault's notes)

@@ -41,7 +41,9 @@ test("a fresh sign-in asks for the list of vaults and the home at write; Journal
   await page.getByRole("radio", { name: "Mine" }).check();
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((u) => u.origin === hub.origin);
-  const approveFirst = page.getByText("Sign in as admin to approve");
+  // the hub's page for an app no one has approved yet, with no sign-in: core 0.8/0.9.0-pre.1 say "Sign in as admin to
+  // approve"; from 0.9.0-pre.2 (core #147) it leads with a "Sign in" link
+  const approveFirst = page.getByText("Sign in as admin to approve").or(page.locator("a.approve-signin-cta"));
   if (await approveFirst.isVisible().catch(() => false)) await approveFirst.click();
   await approveUntilBack(page, hub.origin, app, async (p) => {
     // the person runs this hub: which vaults are theirs, and which is home (the first by name, kitchen, to begin with)
