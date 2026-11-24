@@ -87,13 +87,15 @@ test("Add a book: an epub picked in Library becomes a job, and the importer make
     const f = frame(page);
     await shot(page, "uploads-01-empty-shelf");
     await f.getByRole("button", { name: "Add a book" }).click();
+    await expect(page.getByRole("dialog", { name: /Library asks for a file/ })).toBeVisible();
+    await shot(page, "uploads-02-picker");
     await choose(page, epub);
 
     // the job: waiting for an AI, the file on it in one piece, its hash the file's
     const adding = f.getByRole("region", { name: "Being added" });
     await expect(adding).toContainText("A Small Garden.epub");
     await expect(adding).toContainText(/Waiting for an AI/, { timeout: 30_000 });
-    await shot(page, "uploads-02-waiting");
+    await shot(page, "uploads-04-waiting");
     const [job] = await jobs();
     expect([...(job.types ?? []), ...((job as { tags?: string[] }).tags ?? [])]).toContain("job");
     expect(job.metadata).toMatchObject({ kind: "import-book", status: "waiting" });
@@ -118,7 +120,7 @@ test("Add a book: an epub picked in Library becomes a job, and the importer make
     await reopen(page);
     await expect(f.getByRole("button", { name: /A Small Garden/ }).first()).toBeVisible({ timeout: 20_000 });
     await expect(f.getByRole("region", { name: "Being added" })).toHaveCount(0);
-    await shot(page, "uploads-04-on-the-shelf");
+    await shot(page, "uploads-05-on-the-shelf");
   } finally {
     rmSync(dir, { recursive: true, force: true });
     await cleanup(made);

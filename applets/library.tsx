@@ -2666,7 +2666,7 @@ export default function Library() {
               />
             )}
 
-            {visibleBooks.length === 0 ? (
+            {visibleBooks.length === 0 ? (shelfFilter || !openJobs.length) && (
               <Empty>
                 {shelfFilter
                   ? `No books match “${shelfQuery}”.`
