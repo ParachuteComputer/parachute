@@ -27,11 +27,13 @@ fi
 export PARACHUTE_KEYSTORE_PROPERTIES=$props
 export ANDROID_USER_HOME="${PARACHUTE_ANDROID_USER_HOME:-$(dirname "$props")/android-home}"
 mkdir -p "$ANDROID_USER_HOME"
-# which build this is (src/shell/updates.ts): the commit and its time, the same for the screens (vite.config.ts) and the
-# version code, which then only grows along next, so Android takes each newer build as an update of the one before
+# which build this is (src/shell/updates.ts): the commit and its time, the same for the screens (vite.config.ts) and, for
+# the APK, the version code, which then only grows along next, so Android takes each newer build as an update of the one
+# before. The Play bundle's version code is the commit count instead: small, so it lasts (scripts/play-version-code.sh)
 export PARACHUTE_BUILD_AT=${PARACHUTE_BUILD_AT:-$(git log -1 --format=%ct)} PARACHUTE_BUILD_COMMIT=${PARACHUTE_BUILD_COMMIT:-$(git rev-parse --short=7 HEAD)}
 [[ $PARACHUTE_BUILD_AT =~ ^[0-9]+$ && -n $PARACHUTE_BUILD_COMMIT ]] || { echo "no build identity (git, or PARACHUTE_BUILD_AT and PARACHUTE_BUILD_COMMIT)" >&2; exit 1; }
-flags=(--target "$target" --config "{\"bundle\":{\"android\":{\"versionCode\":$PARACHUTE_BUILD_AT}}}")
+if [ -n "$play" ]; then code=$(scripts/play-version-code.sh); else code=$PARACHUTE_BUILD_AT; fi
+flags=(--target "$target" --config "{\"bundle\":{\"android\":{\"versionCode\":$code}}}")
 if [ -n "$play" ]; then flags+=(--aab); else flags+=(--apk); fi
 [ "$mode" = debug ] && flags+=(--debug)
 npx tauri android build "${flags[@]}"
@@ -62,4 +64,4 @@ while IFS= read -r so; do
   [ "${align:-0}" -ge 14 ] || { echo "${so#"$libs"/} isn't aligned for 16 KB pages (2**${align:-?})" >&2; exit 1; }
 done < <(find "$libs" -name '*.so')
 echo "$out"
-echo "signed with the $keyname ${got:0:16}…"
+echo "signed with the $keyname ${got:0:16}…, version code $code"

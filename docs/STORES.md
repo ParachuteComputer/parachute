@@ -41,8 +41,14 @@ testing doesn't count toward it. An organisation account (D-U-N-S number) doesn'
   only its own build under Settings → Updates. The build script checks the bundle's manifest and fails if the
   permission is back. The Android TV launcher entry is gone from both builds (Play would list the app as a TV app).
 - **Target SDK 36**: what Play requires of new apps and updates since 31 Aug 2026.
-- **Version code**: the commit's time, so it only grows along `next`. Play takes each code once, so uploading again
-  needs a new commit. Play's ceiling (2,100,000,000) is reached in 2036.
+- **Version code**: the number of commits behind the built commit (`scripts/play-version-code.sh`, 513 on 11-24).
+  Two builds of one commit agree, each commit on `next` (and `main`, which `next` contains) counts one more, and
+  squash merges never take a commit away, so it only rises. It stays small: Play's ceiling is 2,100,000,000 and a used
+  code can never go back down, so the first try, the commit's unix time (about 1.8 billion now, the ceiling in 2036),
+  was refused by Play ("significantly higher than your previous version code"). A shallow clone is refused (its count
+  would be too low): `play.yml` fetches the whole history. Play takes each code once, so uploading again needs a new
+  commit. The APK for sideloading (a different signer, never an update of a Play install) keeps the commit's time as
+  its code. The first bundle, with code 1795514721, stays unpublished in the Play library and is replaced.
 - **16 KB memory pages**: every native library is aligned for them (Play requires it for Android 15 targets); the build
   script checks each one.
 - **Signing: Play App Signing with Google's key** (the default; Google now makes a quantum-ready hybrid key). We keep

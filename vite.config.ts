@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
 // Which build this is (src/shell/updates.ts): its commit and that commit's time, which only grows along next, so a feed's
-// newer build is the one with the later time (and on Android the version code, scripts/android-build.sh). From
+// newer build is the one with the later time (and, for the Android APK, the version code, scripts/android-build.sh). From
 // PARACHUTE_BUILD_AT / PARACHUTE_BUILD_COMMIT, else git; neither (a tarball) is build 0, which is offered nothing.
 function git(...args: string[]) { try { return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); } catch { return ""; } }
 const BUILD = { at: Number(process.env.PARACHUTE_BUILD_AT || git("log", "-1", "--format=%ct")) || 0, commit: process.env.PARACHUTE_BUILD_COMMIT || git("rev-parse", "--short=7", "HEAD") };
