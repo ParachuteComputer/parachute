@@ -3,13 +3,14 @@
 
     python3 -I import_book.py SOURCE --vault library --token-file F [--hub http://127.0.0.1:1939] [--dry] [--report out.json]
     python3 -I import_book.py --job RECORD --vault library --token-file F [--hub ...] [--by NAME]
+    python3 -I import_book.py --jobs --vault library --token-file F         every waiting import-book job
 
 SOURCE is an epub, or a folder already made from one (structure.json, metadata.json, text/NN-*.md, assets/,
 summaries/). --job takes a `job` record Library's Add a book left (docs/design/UPLOADS.md in the app repo): it joins
 the epub from the pieces attached to it, imports it, and says on the job how it went. See README.md for what it
 writes and how a second run changes nothing.
 """
-import argparse, base64, hashlib, json, mimetypes, os, posixpath, re, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request, uuid, zipfile
+import argparse, base64, calendar, hashlib, json, mimetypes, os, posixpath, re, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request, uuid, zipfile
 from html.parser import HTMLParser
 import xml.etree.ElementTree as ET
 
@@ -988,6 +989,7 @@ def counts(book, recs):
 
 # ---------- a job: a book someone added in Library, waiting for an AI ----------
 JOB_KIND, EPUB = "import-book", "application/epub+zip"
+STALE_S = 6 * 3600  # a job taken this long ago and still working: its taker died (a reboot, a kill), and it is taken again
 
 
 class Job:
@@ -1034,7 +1036,7 @@ def run_job(a, hub, types_hub=None):
         raise SystemExit(f"{job.rec.get('path')} is not a job: left as it is")
     if f.get("kind") != JOB_KIND:
         raise SystemExit(f"{job.rec.get('path')} asks for {f.get('kind')!r}, not {JOB_KIND}: left as it is")
-    if f.get("status") != "waiting":
+    if f.get("status") != "waiting" and not stale(f):
         raise SystemExit(f"{job.rec.get('path')} is {f.get('status')!r}, not waiting: left as it is")
     up = f.get("upload") or {}
     parts = up.get("parts") or []
@@ -1043,8 +1045,12 @@ def run_job(a, hub, types_hub=None):
         raise SystemExit(f"this tool takes only an epub; {name} ({up.get('type')}) is left waiting for an AI that reads it")
     if not parts or not isinstance(up.get("size"), int) or sum(p.get("size", 0) for p in parts) != up["size"]:
         raise SystemExit(f"{job.rec.get('path')}: its upload isn't whole (the pieces don't add up to its size): left as it is")
+    # only the job's own files: its upload field is writable by the applet that made it, its attachments are what came
+    on = {a.get("path") for a in (hub.req("GET", f"/notes/{job.id}/attachments") or [])}
+    if any(p.get("path") not in on for p in parts):
+        raise SystemExit(f"{job.rec.get('path')}: its upload names a file not attached to it: left as it is")
     # taken: on the version read, so two takers can't both have it
-    try: job.set(status="working", by=a.by)
+    try: job.set(status="working", by=a.by, taken=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     except RuntimeError as e:
         if " 409 " in str(e): raise SystemExit(f"{job.rec.get('path')} was taken or changed meanwhile: left to whoever has it") from None
         raise
@@ -1075,9 +1081,36 @@ def run_job(a, hub, types_hub=None):
         raise
 
 
+def stale(f):
+    """A job taken and still working after STALE_S: its taker is gone."""
+    if f.get("status") != "working": return False
+    try: return time.time() - calendar.timegm(time.strptime(str(f.get("taken")), "%Y-%m-%dT%H:%M:%SZ")) > STALE_S
+    except ValueError: return False
+
+
+def waiting_jobs(hub):
+    """The waiting import-book jobs in the vault, oldest first (by path: Library names a job by its day and time)."""
+    rows = hub.req("GET", "/notes?tag=job&include_metadata=true&limit=200") or []
+    mine = [r for r in rows if (r.get("metadata") or {}).get("kind") == JOB_KIND
+            and ((r.get("metadata") or {}).get("status") == "waiting" or stale(r.get("metadata") or {}))]
+    return sorted(mine, key=lambda r: r.get("path") or "")
+
+
+def run_jobs(a, hub, types_hub=None):
+    """Every waiting import-book job, one at a time: each epub imported, anything else left for an AI that reads it."""
+    out = []
+    for r in waiting_jobs(hub):
+        a.job = r["id"]
+        try: out.append(run_job(a, hub, types_hub))
+        except SystemExit as e: out.append({"job": r["id"], "path": r.get("path"), "left": str(e)})
+        except Exception as e: out.append({"job": r["id"], "path": r.get("path"), "failed": str(e)[:400]})
+    return {"jobs": out}
+
+
 def main():
     ap = argparse.ArgumentParser(description="A book (an epub, or a folder made from one) into a Parachute vault.")
     ap.add_argument("source", nargs="?", help="an .epub, or a folder made from one")
+    ap.add_argument("--jobs", action="store_true", help="every waiting import-book job in the vault, one at a time")
     ap.add_argument("--job", help="a job record (id or path) Library's Add a book left: its epub, imported, and the job "
                     "marked done or failed")
     ap.add_argument("--vault", required=True)
@@ -1093,11 +1126,12 @@ def main():
     ap.add_argument("--dry", action="store_true", help="read and plan only; print what would be written")
     ap.add_argument("--report", help="write the run's report (paths and counts, never the book's text) here")
     a = ap.parse_args()
-    if a.job:
-        if a.source or a.dry: ap.error("--job takes no SOURCE and no --dry")
+    if a.job or a.jobs:
+        if a.source or a.dry or (a.job and a.jobs): ap.error("--job or --jobs, with no SOURCE and no --dry")
         if not a.token_file: ap.error("--job needs --token-file")
         types_hub = Hub(a.hub, a.vault, read_token(a.types_token_file)) if a.types_token_file else None
-        report = run_job(a, Hub(a.hub, a.vault, read_token(a.token_file)), types_hub)
+        hub = Hub(a.hub, a.vault, read_token(a.token_file))
+        report = run_jobs(a, hub, types_hub) if a.jobs else run_job(a, hub, types_hub)
         print(json.dumps(report, indent=1, ensure_ascii=False))
         if a.report:
             with open(a.report, "w") as f: json.dump(report, f, indent=1, ensure_ascii=False)

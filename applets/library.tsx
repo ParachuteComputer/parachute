@@ -2060,6 +2060,20 @@ export default function Library() {
     await sendFile(job, f);
   }, [sendFile]);
 
+  /** A job that couldn't be added, asked again: an AI takes it as a new one. */
+  const retryJob = useCallback(async (job: LibraryRecord) => {
+    try {
+      const fresh = await vault.getRecord(job.id) as LibraryRecord | null;
+      if (!fresh?.updatedAt) throw new Error("it couldn't be read again");
+      await vault.updateRecord(job.id, { if_updated_at: fresh.updatedAt, fields: { status: "waiting", note: null, by: null } });
+    } catch (e) {
+      toast(`Could not ask again: ${e instanceof Error ? e.message : String(e)}`, { error: true });
+    }
+    void load();
+  }, [load]);
+
+  // one upload at a time: each holds one of the frame's few open calls while it goes
+  const busy = Object.keys(sending).length > 0;
   const openJobs = jobs.filter((j) => str(j.fields?.status) !== "done").sort((a, b) => (b.path > a.path ? 1 : -1));
 
   const shelfFilter = shelfQuery.trim().toLowerCase();
@@ -2613,7 +2627,7 @@ export default function Library() {
           <>
             {canAdd && (
               <div className="pa-actions lib-add">
-                <Button kind="primary" onClick={() => void addBook()}>Add a book</Button>
+                <Button kind="primary" disabled={busy} onClick={() => void addBook()}>Add a book</Button>
               </div>
             )}
             {openJobs.length > 0 && (
@@ -2630,7 +2644,10 @@ export default function Library() {
                         <p className="lib-muted">{jobLine(j, now)}</p>
                         {now && <progress max={now.size || 1} value={now.sent} aria-label={`Uploading ${name}`} />}
                         {!now && str(j.fields?.status) === "uploading" && canAdd && (
-                          <div className="pa-actions"><Button small onClick={() => void resumeJob(j)}>Pick it again</Button></div>
+                          <div className="pa-actions"><Button small disabled={busy} onClick={() => void resumeJob(j)}>Pick it again</Button></div>
+                        )}
+                        {str(j.fields?.status) === "failed" && (
+                          <div className="pa-actions"><Button small onClick={() => void retryJob(j)}>Try again</Button></div>
                         )}
                       </div>
                     </Card>

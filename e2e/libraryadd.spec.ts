@@ -104,12 +104,13 @@ test("Add a book: an epub picked in Library becomes a job, and the importer make
     const attached = (await api(h, "GET", `notes/${job.id}/attachments`)) as { path: string }[];
     expect(attached.map((a) => a.path)).toEqual([up.parts[0].path]);
 
-    // an AI takes it: the importer, run from the job (core 0.9's record door)
+    // an AI takes it: the importer, run on the vault's waiting jobs (core 0.9's record door)
     const rest = await fetch(`${h.origin}/vault/${VAULT}/api/records?limit=1`, { headers: { authorization: `Bearer ${h.token}` } });
     test.skip(rest.status === 404 && process.env.E2E_CORE_NEXT !== "1", "the importer writes through core 0.9's record door");
     const key = join(dir, "key");
     writeFileSync(key, h.token, { mode: 0o600 });
-    execFileSync("python3", ["-I", join(TOOLS, "import_book.py"), "--job", job.id, "--vault", VAULT, "--hub", h.origin, "--token-file", key, "--by", "the e2e"], { stdio: "pipe" });
+    // as Uni runs it when told a book was added: every waiting job in the vault
+    execFileSync("python3", ["-I", join(TOOLS, "import_book.py"), "--jobs", "--vault", VAULT, "--hub", h.origin, "--token-file", key, "--by", "the e2e"], { stdio: "pipe" });
     const done = (await api(h, "GET", `notes/${job.id}?include_metadata=true`)) as Rec;
     expect(done.metadata).toMatchObject({ status: "done", by: "the e2e", result: "Books/A Small Garden" });
 

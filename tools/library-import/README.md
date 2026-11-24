@@ -7,6 +7,7 @@ T-476. One book, as records, into a vault, for the Library applet (`applets/libr
 ```sh
 python3 -I import_book.py SOURCE --vault library --token-file F [--types-token-file A] [--dry] [--report out.json]
 python3 -I import_book.py --job RECORD --vault library --token-file F [--by NAME]
+python3 -I import_book.py --jobs --vault library --token-file F [--by NAME]
 ```
 
 - **SOURCE** is an `.epub` (DRM-free; a locked one is refused and nothing is written), or a folder already made from
@@ -32,11 +33,16 @@ file up to 8 MiB). `--job <id or path>`:
 
 1. reads the job and takes it only if it is a waiting `import-book` job for an epub. A PDF, or anything else, is left
    `waiting` for an AI that reads it, and the run says so and exits 1.
-2. takes it: `status: working`, `by: <--by>`, on the version it read (another taker's change first: a 409, and it
-   leaves the job to them);
-3. reads each piece, checks its size and SHA-256, and joins them into the epub, in a temporary folder;
+2. takes it: `status: working`, `by: <--by>`, `taken: <time>`, on the version it read (another taker's change first: a
+   409, and it leaves the job to them). A job still `working` six hours after it was taken has lost its taker (a
+   reboot, a kill), and is taken again;
+3. reads each piece (only files attached to the job), checks its size and SHA-256, and joins them into the epub, in a
+   temporary folder;
 4. imports it as below;
 5. writes `status: done`, `result: Books/<title>`, and a `note` with the counts; or `status: failed` with why.
+
+`--jobs` does this for every waiting `import-book` job in the vault, oldest first, and reports each: done, failed,
+or left (a PDF). Run it when told a book was added; nothing here polls.
 
 Any AI can do the same by hand: find jobs with `types: job, status: waiting`, take one on its version, and say how it
 went in `status`, `result` and `note`.

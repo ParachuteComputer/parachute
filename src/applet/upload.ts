@@ -29,11 +29,14 @@ export type UploadIo = {
   put(piece: Blob, name: string, type: string, onSent: (loaded: number) => void): Promise<{ path: string }>;
   /** A stored piece onto the record. */
   attach(path: string, type: string): Promise<{ id: string | null }>;
+  /** Whether a stored file is attached to the record already (asked only when an attach is tried again: its first
+   *  answer may have been lost after it landed). */
+  attached(path: string): Promise<boolean>;
   /** The record's `upload` field set (the hub merges fields: nothing else changes), on version `updatedAt`. */
   write(upload: Manifest, updatedAt: string | null): Promise<void>;
   hash(bytes: ArrayBuffer): Promise<string>;
   online(): boolean;
-  /** Resolves when the device says it is online again. */
+  /** Resolves when the device says it is online again, or after a few seconds (to look whether the screen closed). */
   whenOnline(): Promise<void>;
   sleep(ms: number): Promise<void>;
   /** The applet's screen is gone: stop between steps. */
@@ -43,10 +46,13 @@ export type UploadIo = {
 /** Waits between tries of one step, about two minutes in all; time offline doesn't count. */
 export const WAITS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000];
 
-/** The hub's answer's status on an error, or 0 for none (the network). */
-const statusOf = (e: unknown): number => {
+/** The hub's answer's status on an error, or 0 for none (the network). surface-client says most refusals only in its
+ *  message ("POST /api/… failed (400): …"). */
+export const statusOf = (e: unknown): number => {
   const s = (e as { status?: unknown } | null)?.status;
-  return typeof s === "number" ? s : 0;
+  if (typeof s === "number") return s;
+  const m = /\bfailed \((\d{3})\)/.exec(String((e as Error)?.message ?? ""));
+  return m ? Number(m[1]) : 0;
 };
 /** Worth trying again: no answer, a timeout, too many, a hub restarting; a sign-in being renewed. */
 const again = (e: unknown) => { const s = statusOf(e); return s === 0 || s === 401 || s === 408 || s === 429 || s >= 500; };
@@ -93,8 +99,10 @@ export async function uploadInParts(file: Blob, name: string, type: string, io: 
 
   // what landed before: kept only while it is this file's, piece by piece (same size, same hash)
   const was = asManifest((await step("reading the record", () => io.read())).upload);
-  const m: Manifest = { name, type, size, parts: [] };
-  if (was && was.parts.length && (was.name !== name || was.size !== size || was.type !== type)) throw new UploadError(`this record holds another file's upload (${was.name.slice(0, 100)})`);
+  // the same file is its name and size (the pieces' hashes check the rest); its type as the record has it, as a
+  // picker on another device may name it otherwise
+  if (was && was.parts.length && (was.name !== name || was.size !== size)) throw new UploadError(`this record holds another file's upload (${was.name.slice(0, 100)})`);
+  const m: Manifest = { name, type: was && was.parts.length ? was.type : type, size, parts: [] };
   for (const p of was?.parts.slice(0, n) ?? []) {
     const b = piece(m.parts.length);
     if (p.size !== b.size || p.sha256 !== await io.hash(await b.arrayBuffer())) break;
@@ -108,14 +116,24 @@ export async function uploadInParts(file: Blob, name: string, type: string, io: 
     const b = piece(i);
     const sha = await io.hash(await b.arrayBuffer());
     const one = n === 1;
-    const stored = await step(`piece ${i + 1} of ${n}`, () => io.put(b, one ? name : `${String(i + 1).padStart(4, "0")}.part`, one ? type : "application/octet-stream", (loaded) => say(done + Math.min(loaded, b.size))));
-    const att = await step(`attaching piece ${i + 1}`, () => io.attach(stored.path, one ? type : "application/octet-stream"));
+    const stored = await step(`piece ${i + 1} of ${n}`, () => io.put(b, one ? name : `${String(i + 1).padStart(4, "0")}.part`, one ? m.type : "application/octet-stream", (loaded) => say(done + Math.min(loaded, b.size))));
+    let tried = false;
+    const att = await step(`attaching piece ${i + 1}`, async () => {
+      // tried before: it may have landed with its answer lost
+      if (tried && await io.attached(stored.path)) return { id: null };
+      tried = true;
+      return io.attach(stored.path, one ? m.type : "application/octet-stream");
+    });
     m.parts.push({ path: stored.path, size: b.size, sha256: sha, id: att.id });
     done += b.size;
     // the record says what landed: read fresh each time (the applet may write it too), once more on a conflict
     await step("saving what landed", async () => {
       for (let k = 0; ; k++) {
-        try { await io.write({ ...m, parts: [...m.parts] }, (await io.read()).updatedAt); return; } catch (e) { if (!conflict(e) || k >= 3) throw e; }
+        const now = await io.read();
+        // another upload of this file onto the record (another device) is further on: its list stays
+        const there = asManifest(now.upload);
+        if (there && there.name === name && there.size === size && there.parts.length > m.parts.length) return;
+        try { await io.write({ ...m, parts: [...m.parts] }, now.updatedAt); return; } catch (e) { if (!conflict(e) || k >= 3) throw e; }
       }
     });
     say(done, true);

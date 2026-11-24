@@ -309,7 +309,7 @@ function PickSheet({ name, accept, multiple, max, note, done, chosen: keep }: { 
     <div className="sheet-scrim sheet-over-frames" role="presentation">
       <section className="sheet device-sheet" role="dialog" aria-modal="true" aria-label={`${name} asks for ${what}`}>
         <h2>{name} asks for {what}</h2>
-        <p className="quiet">{note ? `${note} At most ${size(max)}.` : keep ? `Parachute puts what you choose here into your vault, at most ${size(max)}${multiple ? ` a file, up to ${PICK_MAX} files` : ""}. ${name} sees its name and where it went, not what is in it.` : `It gets only what you choose here${multiple ? `, up to ${PICK_MAX} files` : ""}, each at most ${size(max)}.`}</p>
+        <p className="quiet">{note ? `${note} At most ${size(max)}.` : keep ? `Parachute puts what you choose here into your vault, at most ${size(max)}${multiple ? ` a file, up to ${PICK_MAX} files` : ""}. ${name} gets its name and where it went, not the file itself.` : `It gets only what you choose here${multiple ? `, up to ${PICK_MAX} files` : ""}, each at most ${size(max)}.`}</p>
         {why && <p role="alert">{why}</p>}
         <input ref={input} type="file" hidden data-shell-pick="" aria-label={`Choose ${what} for ${name}`} accept={accept.join(",") || undefined} multiple={multiple}
           onChange={(e) => { void chosen(e.target.files); e.target.value = ""; }} />

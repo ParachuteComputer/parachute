@@ -92,8 +92,12 @@ A **job** is a record that asks for work. Any AI with the vault can find it, tak
   scope stays narrow. The type is what an AI watches for, not the folder.
 - **Taking one:** an AI sets `status: working` and `by`, with `if_updated_at` on the version it read. If two AIs see
   the same job, the second gets a 409 and leaves it.
-- **Who watches:** on Aaron's machine, a clock job or Uni queries `types: job, status: waiting` in the vaults it
-  watches, or holds a live subscription. Over MCP, any AI can do the same with `query-notes`.
+- **Who watches:** nothing polls.
+  - **Now:** Uni runs `import_book.py --jobs` when it is told that a book was added. That takes every waiting
+    `import-book` job once.
+  - **Next:** a hub trigger wakes Uni instead (core's `triggers.ts` webhook fires on a write tagged `job`), so Aaron
+    doesn't have to tell it.
+  - **Over MCP:** any AI can find jobs with `query-notes` (`tag: job`, `status: waiting`).
 - **A job no tool can do** stays `waiting` for an AI that can. The importer takes only an epub (`kind: import-book`,
   type `application/epub+zip`). A PDF waits for an AI that reads PDFs (Uni with a model, by hand).
 - **The type:** `job` is in the Library pack for now, the first applet that makes jobs. When a second applet makes
@@ -119,6 +123,12 @@ with it.**
 - **A sandboxed agent** (Claude's sandbox) can't reach our host. the `add-attachment` proposal (inline base64,
   1 MiB, T-476's Claude-sandbox study, for Aaron and Benjamin) covers it.
 - **An AI handing work to another AI** writes a job record. That needs no new tool.
+- **Where the two designs meet:**
+  - Both end in the same place: an attachment on a record.
+  - `add-attachment` checks a whole file's `digest`, and `vault.upload` checks each piece's `sha256`. Both use SHA-256.
+  - Phase 2 of that proposal has Claude's servers PUT to a URL the hub returns. The resumable route in §6.1 can serve
+    that URL, so a large file from Claude resumes as one from the app does. That makes one upload route on the hub,
+    with two doors: the kit, and MCP.
 
 ## 6. Contract changes, for Aaron and Benjamin
 
@@ -136,8 +146,8 @@ with it.**
 - **Kit:** `app.pick({bytes: false})`, `vault.upload` (parts, retries, resume, progress).
 - **Library:** **Add a book** (epub or PDF). It uploads with progress and leaves a `job` record in `Jobs/Library/`.
   A **Being added** shelf shows each job's status, with **Pick it again** to resume an unfinished upload.
-- **The importer:** `tools/library-import/import_book.py --job <record>` in the app repo, copied from uni-ops. It
-  takes a waiting `import-book` job. It joins and checks the parts, imports the epub as Library's books, and writes
+- **The importer:** `tools/library-import/import_book.py --job <record>` (or `--jobs`, for every waiting job) in the
+  app repo, copied from uni-ops. It takes a waiting `import-book` job. It joins and checks the parts, imports the epub as Library's books, and writes
   `done` with `result`, or `failed` with `note`.
 - **Tests:** e2e, red first:
   - a made-up epub added in Library becomes a book on the shelf;

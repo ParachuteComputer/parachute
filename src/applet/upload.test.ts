@@ -33,6 +33,7 @@ function hub() {
       return { path };
     },
     attach: async (path) => { maybe("attach"); attached.push(path); return { id: `a${attached.length}` }; },
+    attached: async (path) => attached.includes(path),
     write: async (m, at) => { maybe("write"); if (at !== String(version)) throw Object.assign(new Error("conflict"), { status: 409 }); upload = JSON.parse(JSON.stringify(m)); version++; },
     hash: sha256Hex,
     online: () => online,
@@ -101,6 +102,46 @@ describe("uploadInParts", () => {
     const m = await uploadInParts(blob(c), "Big.pdf", "application/pdf", h.io);
     expect(h.calls.put - puts).toBe(2);
     expect(await same(h.joined(m), c)).toBe(true);
+  });
+
+  it("doesn't try a refusal again: a 400 said only in surface-client's message stops at once", async () => {
+    const h = hub();
+    h.fail("write", 1, new Error("PATCH /api/notes/x failed (400): bad field"));
+    await expect(uploadInParts(blob(bytes(10)), "a.epub", "application/epub+zip", h.io)).rejects.toThrow(/saving what landed: .*\(400\)/);
+    expect(h.slept).toEqual([]);
+  });
+
+  it("attaches a piece once when the first answer was lost after it landed", async () => {
+    const h = hub();
+    const real = h.io.attach;
+    let n = 0;
+    h.io.attach = async (path, type) => { const r = await real(path, type); if (++n === 1) throw Object.assign(new Error("Network error"), { status: 0 }); return r; };
+    const m = await uploadInParts(blob(bytes(PART + 3)), "Big.pdf", "application/pdf", h.io);
+    expect(h.attached).toEqual(m.parts.map((p) => p.path));
+  });
+
+  it("goes on with a file whose type another picker named otherwise, keeping the record's", async () => {
+    const h = hub();
+    const b = bytes(2 * PART);
+    h.fail("put", 2, Object.assign(new Error("bad request"), { status: 400 }));
+    await expect(uploadInParts(blob(b), "Book.epub", "application/epub+zip", h.io)).rejects.toThrow(UploadError);
+    const m = await uploadInParts(blob(b), "Book.epub", "application/octet-stream", h.io);
+    expect(m.type).toBe("application/epub+zip");
+    expect(m.parts).toHaveLength(2);
+  });
+
+  it("never shortens a list another upload of the same file has taken further", async () => {
+    const h = hub();
+    const b = bytes(3 * PART);
+    await uploadInParts(blob(b), "Big.pdf", "application/pdf", h.io);
+    const full = asManifest(h.upload)!;
+    // a second upload that saw only the first piece writes nothing shorter over the full list
+    const realRead = h.io.read;
+    let first = true;
+    h.io.read = async () => { const r = await realRead(); if (first) { first = false; return { ...r, upload: { ...full, parts: full.parts.slice(0, 1) } }; } return r; };
+    h.fail("put", 5, Object.assign(new Error("bad request"), { status: 400 }));  // and stops before its last piece
+    await expect(uploadInParts(blob(b), "Big.pdf", "application/pdf", h.io)).rejects.toThrow(UploadError);
+    expect(asManifest(h.upload)!.parts).toHaveLength(3);
   });
 
   it("refuses a record that holds another file's upload", async () => {

@@ -88,10 +88,12 @@ export function vaultDeps(c: VaultClient, kept?: VaultClient): VaultDeps {
             .finally(() => clearTimeout(still));
         }),
         attach: async (path, mimeType) => { const a = await c.addAttachment(id, { path, mimeType }); return { id: a.id ?? null }; },
+        attached: async (path) => { const l = await c.listAttachments(id) as unknown; return Array.isArray(l) && l.some((a) => (a as { path?: unknown })?.path === path); },
         write: async (upload, at) => { await c.updateNote(id, { metadata: { upload }, ...(at ? { if_updated_at: at } : { force: true }) } as UpdateNotePayload); },
         hash: sha256Hex,
         online: () => typeof navigator === "undefined" || navigator.onLine !== false,
-        whenOnline: () => new Promise<void>((r) => addEventListener("online", () => r(), { once: true })),
+        // back online, or a few seconds gone (the screen may have closed meanwhile: the upload looks again)
+        whenOnline: () => new Promise<void>((r) => { const t = setTimeout(r, 5000); addEventListener("online", () => { clearTimeout(t); r(); }, { once: true }); }),
         sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
         closed,
       };
