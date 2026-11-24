@@ -110,14 +110,15 @@ describe("applyPack", () => {
   });
 });
 
-// Parachute's starter packs (T-476 first run: a coach, a reader, people and projects; then Library): a person may add
-// them all to one vault, and none may leave out a field of another's (a field one pack declares otherwise than another
-// is refused). Library's book is the Reading list's book with more fields, so either may go first.
+// Parachute's starter packs (T-476 first run: a coach, a reader, people and projects; then Library, and Languages' words
+// and cards): a person may add them all to one vault, and none may leave out a field of another's (a field one pack
+// declares otherwise than another is refused). Library's book is the Reading list's book with more fields, so either may
+// go first.
 describe("the starter packs", () => {
-  test("each passes, and all four go into one vault in any order with every field", async () => {
+  test("each passes, and all five go into one vault in any order with every field", async () => {
     const { STARTERS } = await import("../applet/modules/packs");
-    expect(STARTERS.map((p) => p.id)).toEqual(["core-types", "clients", "reading", "library"]);
-    for (const order of [[0, 1, 2, 3], [3, 2, 1, 0], [1, 3, 0, 2], [2, 3, 0, 1]]) {
+    expect(STARTERS.map((p) => p.id)).toEqual(["core-types", "clients", "reading", "library", "languages"]);
+    for (const order of [[0, 1, 2, 3, 4], [4, 3, 2, 1, 0], [1, 3, 4, 0, 2], [2, 4, 3, 0, 1]]) {
       const types = new Map<string, { name: string; kind: "type"; count: number; fields: Record<string, { type?: string }> }>();
       const paths = new Set<string>();
       const target: PackTarget = {

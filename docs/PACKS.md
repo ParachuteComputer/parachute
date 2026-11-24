@@ -39,13 +39,14 @@ changed, which the person also changed) is not built.
   landed under).
 - Parachute's starter packs (`src/kit/packs/*.json`, each the block of its page at parachute.computer/docs/build/packs/<id>):
   **Core types** (person, project, meeting, task), **Clients and sessions** (client, session, follow-up: a practice, a
-  coach's or a tutor's), **Reading list** (book) and **Library** (book, chapter, quote, summary: books you own, read
-  chapter by chapter). Each but Library has a template per type and a saved view (Library's book shares Reading list's
-  Reading now, so it ships none of its own); all four go into one vault
-  together, in any order, with every field (`src/kit/packs.test.ts`). Library's `book` is the Reading list's with more
-  fields (translator, language, kind, source, rights, and `at`, where you stopped), so a vault may hold either or both.
-  Its chapters and summaries come from importing a book (a script an AI runs today; Import a book in Vault later),
-  its quotes from reading.
+  coach's or a tutor's), **Reading list** (book), **Library** (book, chapter, quote, summary: books you own, read
+  chapter by chapter) and **Languages** (word, card; `from` and `word` are links). Core types, Clients and Reading list
+  each have a template per type and a saved view; Library's book shares Reading list's Reading now, so it ships none of
+  its own; Languages has neither, since the Languages applet is its view. All five go into one vault together, in any
+  order, with every field (`src/kit/packs.test.ts`). Library's `book` is the Reading list's with more fields
+  (translator, language, kind, source, rights, and `at`, where you stopped), so a vault may hold either or both. Its
+  chapters and summaries come from importing a book (a script an AI runs today; Import a book in Vault later), its
+  quotes from reading.
 - No pack ships for the **Writing** applet ([WRITING.md](WRITING.md)): `piece` and `reference` are already in the vault
   it serves. It writes three fields on `reference`, additive: `piece` (the piece's name, as Uni already writes it on the research
   it prepares; not `for`, which names the person a thing is for), `used_in` (the pieces a quote went into) and `state`

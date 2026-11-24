@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "path": "Applets/Languages",
+  "extension": "tsx",
+  "tags": ["applet"],
+  "fields": {
+    "applet": {
+      "contract": 2,
+      "id": "languages",
+      "name": "Languages",
+      "glyph": "अ",
+      "note": "Flashcards the Fluent Forever way: a picture, a sound and your own memory on each word, reviewed on Anki's schedule",
+      "access": [
+        {
+          "vault": "here",
+          "allow": [
+            { "path": "Words/", "verbs": ["read", "create", "update"] },
+            { "path": "Cards/", "verbs": ["read", "create", "update"] },
+            { "path": "Texts/", "verbs": ["read"] }
+          ]
+        }
+      ],
+      "search": [
+        { "what": "words", "vault": "here", "path": "Words/" }
+      ],
+      "screens": [
+        { "id": "today", "name": "Today" },
+        { "id": "words", "name": "Words" }
+      ],
+      "reach": ["voice"]
+    },
+    "needs": 4,
+    "app": ["open", "attach"],
+    "opens": [
+      { "type": "word", "path": "Words/", "screen": "words" },
+      { "type": "card", "path": "Cards/", "screen": "today" }
+    ]
+  }
+}

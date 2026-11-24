@@ -1,0 +1,654 @@
+{
+  "about": "Made-up starter records for Languages (applets/languages.tsx): the Yoga Sutras 1.1–1.4 (public domain; the word-by-word glosses are our own) as Library's verse records, and the starter words as the applet writes them. Their cards are made by the applet when it sees the words.",
+  "verses": [
+    {
+      "path": "Texts/Yoga Sutras/YS 1.1",
+      "types": [
+        "verse"
+      ],
+      "fields": {
+        "work": "Yoga Sutras",
+        "ref": "1.1",
+        "sanskrit": "अथ योगानुशासनम् ॥१॥",
+        "translit": "atha yogānuśāsanam"
+      },
+      "body": "| word | meaning |\n|---|---|\n| atha | now |\n| yoga | yoga |\n| anuśāsanam | the teaching |\n"
+    },
+    {
+      "path": "Texts/Yoga Sutras/YS 1.2",
+      "types": [
+        "verse"
+      ],
+      "fields": {
+        "work": "Yoga Sutras",
+        "ref": "1.2",
+        "sanskrit": "योगश्चित्तवृत्तिनिरोधः ॥२॥",
+        "translit": "yogaś citta-vṛtti-nirodhaḥ"
+      },
+      "body": "| word | meaning |\n|---|---|\n| yogaḥ | yoga |\n| citta | of the mind |\n| vṛtti | of the movements |\n| nirodhaḥ | the stilling |\n"
+    },
+    {
+      "path": "Texts/Yoga Sutras/YS 1.3",
+      "types": [
+        "verse"
+      ],
+      "fields": {
+        "work": "Yoga Sutras",
+        "ref": "1.3",
+        "sanskrit": "तदा द्रष्टुः स्वरूपेऽवस्थानम् ॥३॥",
+        "translit": "tadā draṣṭuḥ svarūpe 'vasthānam"
+      },
+      "body": "| word | meaning |\n|---|---|\n| tadā | then |\n| draṣṭuḥ | of the seer |\n| svarūpe | in its own form |\n| avasthānam | abiding |\n"
+    },
+    {
+      "path": "Texts/Yoga Sutras/YS 1.4",
+      "types": [
+        "verse"
+      ],
+      "fields": {
+        "work": "Yoga Sutras",
+        "ref": "1.4",
+        "sanskrit": "वृत्तिसारूप्यमितरत्र ॥४॥",
+        "translit": "vṛtti-sārūpyam itaratra"
+      },
+      "body": "| word | meaning |\n|---|---|\n| vṛtti | with the movements |\n| sārūpyam | sameness of form |\n| itaratra | otherwise |\n"
+    }
+  ],
+  "words": [
+    {
+      "path": "Words/Sanskrit/अथ",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "atha",
+        "gloss": "now, here begins",
+        "grammar": "indeclinable; opens a teaching",
+        "cue": "A notebook opened beside a lamp at dawn",
+        "from": "Texts/Yoga Sutras/YS 1.1"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/योग",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "yoga",
+        "gloss": "yoking, union; disciplined stillness",
+        "grammar": "masc. a-stem, from √yuj (to yoke)",
+        "cue": "A wooden yoke over two oxen",
+        "from": "Texts/Yoga Sutras/YS 1.1"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/अनुशासन",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "anuśāsana",
+        "gloss": "instruction, teaching handed on",
+        "grammar": "neut. a-stem; anu- (after) + śāsana (teaching)",
+        "cue": "A teacher's chalk letters, copied line by line",
+        "from": "Texts/Yoga Sutras/YS 1.1"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/चित्त",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "citta",
+        "gloss": "the mind, the field of thought and feeling",
+        "grammar": "neut. a-stem, from √cit (to perceive)",
+        "cue": "A mountain lake reflecting the pines",
+        "from": "Texts/Yoga Sutras/YS 1.2"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/वृत्ति",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "vṛtti",
+        "gloss": "turning; a movement of the mind",
+        "grammar": "fem. i-stem, from √vṛt (to turn)",
+        "cue": "Rings spreading from one raindrop on a pond",
+        "from": "Texts/Yoga Sutras/YS 1.2"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/निरोध",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "nirodha",
+        "gloss": "stilling, restraint",
+        "grammar": "masc. a-stem; ni- + √rudh (to hold back)",
+        "cue": "River stones damming a pool until the water clears",
+        "from": "Texts/Yoga Sutras/YS 1.2"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/तदा",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "tadā",
+        "gloss": "then, at that time",
+        "grammar": "adverb; answers yadā (when)",
+        "cue": "The moment a bell's ring fades into silence",
+        "from": "Texts/Yoga Sutras/YS 1.3"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/द्रष्टृ",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "draṣṭṛ",
+        "gloss": "the seer, the witness",
+        "grammar": "masc. agent noun in -tṛ, from √dṛś (to see); gen. sg. draṣṭuḥ",
+        "cue": "Someone on a ridge watching clouds cross a valley",
+        "from": "Texts/Yoga Sutras/YS 1.3"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/स्वरूप",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "svarūpa",
+        "gloss": "own form, true nature",
+        "grammar": "neut. a-stem; sva (own) + rūpa (form); loc. sg. svarūpe",
+        "cue": "Pebbles seen clearly through still spring water",
+        "from": "Texts/Yoga Sutras/YS 1.3"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/अवस्थान",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "avasthāna",
+        "gloss": "abiding, resting in place",
+        "grammar": "neut. a-stem; ava- + √sthā (to stand)",
+        "cue": "An old cedar rooted on a granite ledge",
+        "from": "Texts/Yoga Sutras/YS 1.3"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/सारूप्य",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "sārūpya",
+        "gloss": "taking the same form, likeness",
+        "grammar": "neut. abstract noun from sa-rūpa (same form)",
+        "cue": "A clear crystal glowing red beside a red flower",
+        "from": "Texts/Yoga Sutras/YS 1.4"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/इतरत्र",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "itaratra",
+        "gloss": "otherwise, at other times",
+        "grammar": "adverb; itara (other) + -tra (in)",
+        "cue": "A busy street after a quiet morning",
+        "from": "Texts/Yoga Sutras/YS 1.4"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/शासन",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "śāsana",
+        "gloss": "teaching, command",
+        "grammar": "neut. a-stem, from √śās (to teach); in anuśāsana",
+        "cue": "A hand pointing out the way on a map",
+        "from": "Texts/Yoga Sutras/YS 1.1"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/स्व",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "sva",
+        "gloss": "own, one's self",
+        "grammar": "pronominal adjective; in svarūpa",
+        "cue": "Your own reflection in a window",
+        "from": "Texts/Yoga Sutras/YS 1.3"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/रूप",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "rūpa",
+        "gloss": "form, shape, appearance",
+        "grammar": "neut. a-stem; in svarūpa and sārūpya",
+        "cue": "Clay taking shape on a potter's wheel",
+        "from": "Texts/Yoga Sutras/YS 1.3"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/इतर",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "itara",
+        "gloss": "other",
+        "grammar": "pronominal adjective; in itaratra",
+        "cue": "One shoe among a row of others",
+        "from": "Texts/Yoga Sutras/YS 1.4"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/युज्",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "yuj",
+        "gloss": "to yoke, to join",
+        "grammar": "verbal root √yuj; gives yoga",
+        "cue": "Hands buckling a harness",
+        "from": "Texts/Yoga Sutras/YS 1.1"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/वृत्",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "vṛt",
+        "gloss": "to turn, to roll",
+        "grammar": "verbal root √vṛt; gives vṛtti",
+        "cue": "A potter's wheel turning",
+        "from": "Texts/Yoga Sutras/YS 1.2"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/रुध्",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "rudh",
+        "gloss": "to hold back, to obstruct",
+        "grammar": "verbal root √rudh; gives nirodha",
+        "cue": "A gate closing across a stream",
+        "from": "Texts/Yoga Sutras/YS 1.2"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/दृश्",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "dṛś",
+        "gloss": "to see",
+        "grammar": "verbal root √dṛś; gives draṣṭṛ",
+        "cue": "An eye looking through a telescope",
+        "from": "Texts/Yoga Sutras/YS 1.3"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Sanskrit/स्था",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "sanskrit",
+        "translit": "sthā",
+        "gloss": "to stand, to stay",
+        "grammar": "verbal root √sthā; gives avasthāna",
+        "cue": "A heron standing still in shallow water",
+        "from": "Texts/Yoga Sutras/YS 1.3"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/el agua",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "el A-gwa",
+        "gloss": "water",
+        "grammar": "feminine, but el in the singular before a stressed a (las aguas)",
+        "cue": "Cold water poured into a glass"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/el pan",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "el pahn",
+        "gloss": "bread",
+        "grammar": "masculine; plural los panes",
+        "cue": "A crusty loaf on a wooden board"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/la casa",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "la KA-sa",
+        "gloss": "house, home",
+        "grammar": "feminine; plural las casas",
+        "cue": "A small house with its porch light on"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/el sol",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "el sol",
+        "gloss": "sun",
+        "grammar": "masculine; plural los soles",
+        "cue": "The sun rising over a meadow"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/la luna",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "la LOO-na",
+        "gloss": "moon",
+        "grammar": "feminine",
+        "cue": "A crescent moon in an evening sky"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/el árbol",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "el AR-bol",
+        "gloss": "tree",
+        "grammar": "masculine; plural los árboles",
+        "cue": "A wide walnut tree throwing shade"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/la mano",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "la MA-no",
+        "gloss": "hand",
+        "grammar": "feminine, though it ends in -o (las manos)",
+        "cue": "Two hands around a warm mug"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/el corazón",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "el ko-ra-SON",
+        "gloss": "heart",
+        "grammar": "masculine; plural los corazones",
+        "cue": "A hand over a beating heart"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/la montaña",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "la mon-TA-nya",
+        "gloss": "mountain",
+        "grammar": "feminine; ñ as the ny in canyon",
+        "cue": "A snowy peak in evening light"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/el perro",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "el PE-rro",
+        "gloss": "dog",
+        "grammar": "masculine; la perra for a female dog",
+        "cue": "A dog waiting by the door"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/el libro",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "el LEE-bro",
+        "gloss": "book",
+        "grammar": "masculine; plural los libros",
+        "cue": "An open book on a table"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/la mesa",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "la ME-sa",
+        "gloss": "table",
+        "grammar": "feminine; plural las mesas",
+        "cue": "A kitchen table set for two"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/la puerta",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "la PWER-ta",
+        "gloss": "door",
+        "grammar": "feminine; plural las puertas",
+        "cue": "A blue door, half open"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/el camino",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "el ka-MEE-no",
+        "gloss": "path, way",
+        "grammar": "masculine; plural los caminos",
+        "cue": "A dirt path through tall grass"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/comer",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "ko-MER",
+        "gloss": "to eat",
+        "grammar": "regular -er verb: como, comes, come",
+        "cue": "A fork lifting a bite of food"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/beber",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "be-BER",
+        "gloss": "to drink",
+        "grammar": "regular -er verb: bebo, bebes, bebe",
+        "cue": "Someone drinking from a water bottle"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/caminar",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "ka-mee-NAR",
+        "gloss": "to walk",
+        "grammar": "regular -ar verb: camino, caminas, camina",
+        "cue": "Boots walking down a leafy path"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/escuchar",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "es-koo-CHAR",
+        "gloss": "to listen",
+        "grammar": "regular -ar verb; oír is to hear",
+        "cue": "A hand cupped behind an ear"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/despacio",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "des-PA-syo",
+        "gloss": "slowly",
+        "grammar": "adverb; habla despacio, por favor",
+        "cue": "A turtle crossing a log"
+      },
+      "body": ""
+    },
+    {
+      "path": "Words/Spanish/rojo",
+      "types": [
+        "word"
+      ],
+      "fields": {
+        "language": "spanish",
+        "translit": "RRO-ho",
+        "gloss": "red",
+        "grammar": "adjective: rojo, roja, rojos, rojas",
+        "cue": "A red apple on a white plate"
+      },
+      "body": ""
+    }
+  ]
+}
