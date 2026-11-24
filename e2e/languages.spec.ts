@@ -84,8 +84,16 @@ test("Languages: starter words, today's cards, a review written to the card, a p
     await f.getByRole("button", { name: /^Again, next in now/ }).click();
     await expect.poll(async () => (await get("Cards/Sanskrit/योग picture-to-word")).metadata?.state, { timeout: 15_000 }).toBe("learning");
     await expect(f.getByText("39 left")).toBeVisible();
+    // a double tap on an answer: one answer, one card off the queue, one line on the card
+    await f.getByRole("button", { name: "Show answer" }).click();
+    await expect(f.getByText(/^39 left · /)).toBeVisible();
+    await f.getByRole("button", { name: /^Good, next in/ }).dblclick();
+    await expect(f.getByText(/^38 left · /)).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(2_000);
+    await expect(f.getByText(/^38 left · /)).toBeVisible();
+    expect((await list("Cards/")).filter((c) => c.metadata?.last_reviewed).map((c) => (c.content ?? "").trim().split("\n").length)).toEqual([1, 1, 1]);
     await f.getByRole("button", { name: "← Today" }).click();
-    await expect(f.getByRole("heading", { name: "39 cards to review today" })).toBeVisible();
+    await expect(f.getByRole("heading", { name: "38 cards to review today" })).toBeVisible();
 
     // a word: its picture from the shell's picker, its sound from the app's recorder, both back through vault.file
     await f.getByRole("button", { name: /^Words · / }).click();
@@ -142,6 +150,16 @@ test("Languages: starter words, today's cards, a review written to the card, a p
     // a word typed in IAST: saved in Devanagari, with its cards
     await f.getByRole("button", { name: "Add a word" }).first().click();
     const drawer = f.getByRole("dialog", { name: "Add a word" });
+    // one already there (citta) is not added twice, and what was written for it stays in the form
+    await drawer.getByRole("textbox", { name: "The word, in IAST or Devanagari" }).fill("citta");
+    await drawer.getByRole("textbox", { name: "My memory" }).fill("The lake at Gokyo");
+    await drawer.getByRole("button", { name: "Save the word" }).click();
+    await expect(f.getByText(/चित्त is already in your words/)).toBeVisible();
+    await expect(drawer.getByRole("textbox", { name: "My memory" })).toHaveValue("The lake at Gokyo");
+    // the pointer off the toast (one under a pointer stays), and it goes by itself
+    await page.mouse.move(10, 10);
+    await expect(f.getByText(/चित्त is already in your words/)).toBeHidden({ timeout: 10_000 });
+    await drawer.getByRole("textbox", { name: "My memory" }).fill("");
     await drawer.getByRole("textbox", { name: "The word, in IAST or Devanagari" }).fill("śānti");
     await expect(drawer.locator("p.lang-deva")).toHaveText("शान्ति");
     await drawer.getByRole("textbox", { name: "Meaning" }).fill("peace, calm");

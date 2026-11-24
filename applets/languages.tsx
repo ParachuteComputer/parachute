@@ -371,7 +371,8 @@ export interface Face {
   typed?: { expected: string; placeholder: string; lang?: string };
 }
 
-/** What the front of a card shows. The meaning in English stays off the front of picture → word. */
+/** What the front of a card shows. The meaning in English stays off the front of picture → word while the word has a
+ *  picture or a picture idea; with neither, the meaning is all there is to answer from. */
 export function cardFace(ask: Ask, w: WordData): Face {
   const sk = langKey(w.language) === "sanskrit" ? sanskritPair(w.word, w.translit) : null;
   const label = askLabel(ask, w.language);
@@ -642,6 +643,12 @@ export default function Languages() {
   const wordByPath = useMemo(() => new Map((words ?? []).map((w) => [w.rec.path.normalize("NFC"), w])), [words]);
   const wordByKey = useMemo(() => new Map((words ?? []).map((w) => [wordKey(w.data), w])), [words]);
   const cardById = useMemo(() => new Map((cards ?? []).map((c) => [c.rec.id, c])), [cards]);
+  /** Each word's cards, by the word's path: a row of the list asks once, not of every card. */
+  const cardsByWord = useMemo(() => {
+    const m = new Map<string, CardRec[]>();
+    for (const c of cards ?? []) { const l = m.get(c.word); if (l) l.push(c); else m.set(c.word, [c]); }
+    return m;
+  }, [cards]);
   const due = useMemo(() => dueToday((cards ?? []).filter((c) => wordByPath.has(c.word)).map((c) => ({ id: c.rec.id, word: c.word, language: c.language, sm2: c.sm2, days: c.days })), day), [cards, wordByPath, day]);
   const dueIds = useMemo(() => new Set(due.map((c) => c.id)), [due]);
   const languages = useMemo(() => {
@@ -656,6 +663,8 @@ export default function Languages() {
   const openWord = openWordId ? wordById.get(openWordId) ?? null : null;
   const current = queue?.length ? cardById.get(queue[0]) ?? null : null;
   const currentWord = current ? wordByPath.get(current.word) ?? null : null;
+  // once cards and words are read, a card in the queue that isn't there, or whose word isn't, is passed over
+  useEffect(() => { if (queue?.length && cards && words && (!current || !currentWord)) setQueue((q) => (q ?? []).slice(1)); }, [queue, cards, words, current, currentWord]);
 
   const endReview = useCallback(() => { setQueue(null); setRevealed(false); setTyped(""); }, []);
   const closeWord = useCallback(() => setOpenWordId(null), [setOpenWordId]);
@@ -671,8 +680,11 @@ export default function Languages() {
     setTyped("");
   };
 
+  /** An answer being written: a second tap or key before the screen redraws is not a second answer. */
+  const answering = useRef(false);
   const rate = useCallback(async (rating: Rating) => {
-    if (!current || busy) return;
+    if (!current || answering.current) return;
+    answering.current = true;
     setBusy(true);
     try {
       const at = new Date().toISOString(), stamp = when.stamp(Date.now());
@@ -689,7 +701,7 @@ export default function Languages() {
         done = await answer(current.rec);
       } catch (e) {
         // changed since it was read (another device reviewed it, or Vault): this answer goes on the card as it is now
-        if ((e as { status?: number })?.status !== 409) throw e;
+        if (!conflict(e)) throw e;
         const fresh = await vault.getRecord(current.rec.id);
         if (!fresh?.updatedAt) throw e;
         if ((fresh.fields?.last_reviewed ?? null) !== (current.rec.fields?.last_reviewed ?? null)) {
@@ -715,9 +727,10 @@ export default function Languages() {
     } catch (e) {
       toast(`The review wasn't saved: ${e instanceof Error ? e.message : String(e)}`, { error: true });
     } finally {
+      answering.current = false;
       setBusy(false);
     }
-  }, [current, busy]);
+  }, [current]);
 
   // Space or Enter shows the answer; 1–4 rate it
   useEffect(() => {
@@ -790,6 +803,9 @@ export default function Languages() {
 
   // ── Review ──
   if (queue !== null) {
+    if (!cards || !words || (queue.length > 0 && (!current || !currentWord))) {
+      return <Page title="Review" back={{ label: "Today", onPress: endReview }}><Loading /></Page>;
+    }
     if (!current || !currentWord) {
       return (
         <Page title="Review" kicker={when.date(Date.now())} back={{ label: "Today", onPress: endReview }}>
@@ -814,7 +830,8 @@ export default function Languages() {
         <style>{CSS}</style>
         <Card>
           <p className="lang-prompt">{face.prompt}</p>
-          {face.picture && (pic.url ? <div className="lang-media"><img className="lang-pic" width={480} height={300} src={pic.url} alt="" /></div> : <p className="lang-cue">{w.cue ?? "…"}</p>)}
+          {face.picture && (pic.url ? <div className="lang-media"><img className="lang-pic" width={480} height={300} src={pic.url} alt="" /></div>
+            : pic.missing ? <p className="lang-cue">{w.cue ?? w.gloss}</p> : <Loading />)}
           {face.audio && (sound.url ? <div className="lang-media"><audio className="lang-audio" controls autoPlay src={sound.url} /></div> : (sound.missing ? <p className="lang-muted">This Parachute can't play the sound yet.</p> : <Loading />))}
           {face.big && <p className={face.bigLang === "sa-Deva" ? "lang-deva" : "lang-big"} lang={face.bigLang}>{face.big}</p>}
           {face.small && <p className="lang-translit">{face.small}</p>}
@@ -855,7 +872,7 @@ export default function Languages() {
   if (openWord) {
     const w = openWord.data;
     const sk = langKey(w.language) === "sanskrit";
-    const its = (cards ?? []).filter((c) => c.word === openWord.rec.path.normalize("NFC")).sort((a, b) => ASKS.indexOf(a.ask) - ASKS.indexOf(b.ask));
+    const its = [...(cardsByWord.get(openWord.rec.path.normalize("NFC")) ?? [])].sort((a, b) => ASKS.indexOf(a.ask) - ASKS.indexOf(b.ask));
     const open = cardOpen ? cardById.get(cardOpen) ?? null : null;
     return (
       <Page title={sk ? sanskritPair(w.word, w.translit).deva : w.word} kicker={langName(w.language)} back={{ label: "Words", onPress: closeWord }} onRefresh={load}
@@ -896,7 +913,7 @@ export default function Languages() {
           rows={its.map((c) => ({
             key: c.rec.id,
             title: askLabel(c.ask, w.language),
-            meta: c.sm2.state === "new" ? "new" : `every ${formatInterval(c.sm2.interval)} · ease ${c.sm2.ease.toFixed(2)}${c.sm2.lapses ? ` · ${plural(c.sm2.lapses, "lapse")}` : ""}`,
+            meta: c.sm2.state === "new" ? "new" : `${c.sm2.interval ? `every ${formatInterval(c.sm2.interval)}` : c.sm2.state} · ease ${c.sm2.ease.toFixed(2)}${c.sm2.lapses ? ` · ${plural(c.sm2.lapses, "lapse")}` : ""}`,
             aside: dueIds.has(c.rec.id) ? "due" : c.sm2.state === "new" ? "waiting" : when.short(c.sm2.due),
             onPress: () => setCardOpen(c.rec.id),
           }))}
@@ -904,7 +921,7 @@ export default function Languages() {
         <Drawer open={open !== null} onClose={() => setCardOpen(null)} title={open ? askLabel(open.ask, w.language) : undefined}>
           {open && (
             <>
-              <p className="lang-text">{open.sm2.state === "new" ? "Not studied yet." : `${open.sm2.state === "review" ? "Due" : "Relearning, due"} ${when.short(open.sm2.due)} · every ${formatInterval(open.sm2.interval)} · ease ${open.sm2.ease.toFixed(2)} · ${plural(open.sm2.lapses, "lapse")}`}</p>
+              <p className="lang-text">{open.sm2.state === "new" ? "Not studied yet." : `${open.sm2.state === "review" ? "Due" : open.sm2.state === "learning" ? "Learning, due" : "Relearning, due"} ${when.short(open.sm2.due)}${open.sm2.interval ? ` · every ${formatInterval(open.sm2.interval)}` : ""} · ease ${open.sm2.ease.toFixed(2)} · ${plural(open.sm2.lapses, "lapse")}`}</p>
               <div className="pa-actions lang-gap"><Button kind="primary" onClick={() => { setCardOpen(null); startReview([open.rec.id]); }}>Review this card</Button></div>
               {open.days.length > 0 && <List label="Reviews" rows={(open.rec.body ?? "").split("\n").filter((l) => /^- \d{4}-/.test(l)).reverse().map((l, i) => ({ key: String(i), title: l.slice(2) }))} />}
             </>
@@ -959,7 +976,7 @@ export default function Languages() {
           <div className="lang-gap"><Search label="Search words" placeholder="A word, IAST or meaning" value={query} onChange={setQuery} onSearch={setQuery} live={150} /></div>
           {listed.length === 0 ? <Empty>{q ? `Nothing matches “${query.trim()}”.` : "No words here yet."}</Empty> : (
             <List label={`${langFilter === "all" ? "Words" : langName(langFilter)} · ${listed.length}`} rows={listed.map((w) => {
-              const n = (cards ?? []).filter((c) => c.word === w.rec.path.normalize("NFC") && dueIds.has(c.rec.id)).length;
+              const n = (cardsByWord.get(w.rec.path.normalize("NFC")) ?? []).filter((c) => dueIds.has(c.rec.id)).length;
               const sk = w.data.language === "sanskrit" ? sanskritPair(w.data.word, w.data.translit) : null;
               return {
                 key: w.rec.id, glyph: langGlyph(w.data.language),
@@ -1010,7 +1027,8 @@ function AddWord({ open, onClose, initial, pickPicture, exists, onAdded, onLocal
       grammar: grammar.trim() || null, memory: memory.trim() || null, cue: null, picture: null, sound: null, from: from.trim() || null };
     const path = wordPathFor(data);
     const there = exists(data);
-    if (there) { toast(`${headword} is already in your words.`); clear(); await onAdded(there.rec.id); return; }
+    // what was typed, picked and recorded stays in the form: it may be meant for the word that's there
+    if (there) { toast(`${headword} is already in your words: open it from Words to add to it.`); return; }
     setSaving(true);
     try {
       const made = await vault.createRecord({ path, types: ["word"], fields: wordFields(data), body: "" });
