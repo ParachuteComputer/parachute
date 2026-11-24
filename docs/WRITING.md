@@ -8,9 +8,9 @@ The Writing applet (`applets/writing.json`, `applets/writing.tsx`) is a quiet wr
 - **Quiet editor**: Writes directly into the piece's body with debounced saves and local draft recovery (`saved`), keeping the editor memoized so typing never re-renders the page or the Beside-it panel.
 - **Beside it**: On wide screens (`>= 900px`), a sticky column beside the editor; on phones, a kit `Drawer` opened from the page header. Lists `reference` records whose `piece` names the open piece, newest first. Each reference can be inserted as a Markdown blockquote with a link to its source, opened at its source, or opened on its own Reference page.
 - **Reference page**: Shows the quote, where it came from, and Uni's line on why it fits, with **Keep** and **Let go** actions (and **Insert as quote** when opened from a piece).
-- **Ask Uni**: A one-line field on the piece creates a new `reference` record, `References/Ask <date time> <first words>`, with `state: "asked"` and `piece` set to the piece's name. It names no type: the app gives the new record the `reference` the applet opens there, as a type or a plain tag, whichever the vault has (a vault refuses a plain tag sent as a type, and a type sent as a tag). It never writes into the piece's body. An ask can be let go, not kept, so a question never goes into the piece as a quote.
+- **Ask Uni**: A one-line field on the piece creates a new `reference` record, `References/Ask <date time> <first words>`, with `state: "asked"` and `piece` set to the piece's name (a second ask alike in the same minute is `… (2)`). It names no type: the app gives the new record the `reference` the applet opens there, as a type or a plain tag, whichever the vault has (a vault refuses a plain tag sent as a type, and a type sent as a tag). It never writes into the piece's body. An ask can be let go, not kept, so a question never goes into the piece as a quote.
 - **Stage and published pieces**: The applet moves a piece between `seed` and `draft` only. `ready` and `published` are the site's: unforced.org publishes a `#piece` whose stage is one of them (with a slug and a date), so the applet never sets them. On a ready or published piece the stage, `slug`, `url` and `published_at` are read-only.
-- **What goes into a piece**: a quote is cited with its source's web address when it has one (`source_url`, or a `source` that is one), else with the source in plain words. Never a `[[wikilink]]` (unforced.org won't publish a piece with one) and never the vault's own address of the reference (a published piece is public; the vault isn't).
+- **What goes into a piece**: a quote is cited with its source's web address when it has one (`source_url`, or a `source` that is one), else with the source in plain words. Never a `[[wikilink]]` (unforced.org won't publish a piece with one) and never a vault's address, the reference's or one given as its source (a published piece is public; the vault isn't). With the piece never touched, a quote goes in at its end.
 
 ## Folder scope and permissions
 
@@ -41,7 +41,7 @@ These fields are additive on an existing `reference` type. Applying them adds on
 | `quote` | `string` | Optional explicit quote text (falls back to a blockquote or the record body). |
 | `source` | `string` | Where the quote came from (title, book, or publication). |
 | `author` | `string` | Author of the source. |
-| `source_url` | `string` | Source web URL or vault note link (`url` is also read). |
+| `source_url` | `string` | Source web URL (`url` is also read). A vault's address here is never cited in a piece: the quote cites the source in words. |
 | `why` | `string` | Uni's line on why this reference fits the piece. |
 
 ## Writing pack

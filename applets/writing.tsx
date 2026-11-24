@@ -306,6 +306,8 @@ export function refWhy(ref: Pick<VaultRec, "fields">): string {
   return str(f.why) || str(f.why_it_fits) || str(f.reason) || str(f.note);
 }
 
+const VAULT_URL = /\/vault\/[^/?#]+\/|\/(?:view|n)\/[A-Za-z0-9_-]{8,64}(?:[/?#]|$)/;
+
 /** `[[Notes/Ivan Illich|Illich]]` → `Illich`, `[[Ivan Illich]]` → `Ivan Illich`: the words a wikilink shows. */
 export function unwiki(text: string): string {
   return text.replace(/!?\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g, (_m, target: string, alias?: string) =>
@@ -318,15 +320,18 @@ export function unwiki(text: string): string {
  *  address of the reference (a published piece is public; the vault isn't). */
 export function formatQuoteMarkdown(ref: Pick<VaultRec, "id" | "path" | "fields" | "body">): string {
   const quote = refQuote(ref);
-  const src = refSource(ref);
+  const found = refSource(ref);
+  // a vault's address (a hub's /vault/<name>/ or a record's /view/<id>) is no source to cite in public
+  const words = [ref.fields?.source, ref.fields?.source_title, ref.fields?.from].map(str).find((w) => w && !/^(https?:|mailto:)/i.test(w)) ?? "";
+  const src = VAULT_URL.test(found.url) ? { ...found, url: "", label: words.replace(/^\[\[([^\]|#]+).*$/, (_m, t: string) => t.split("/").pop() ?? t) } : found;
   const bodyLines = unwiki(quote || recordTitle(ref))
     .replace(/\r\n/g, "\n")
     .split("\n")
     .map((line) => (line.trim() ? `> ${line}` : ">"));
 
   // with no source named, the label is the reference's own note name: that stays in the vault
-  const named = !!(str(ref.fields?.source) || str(ref.fields?.source_title) || str(ref.fields?.from) || src.url);
-  const label = named ? src.label.replace(/[\[\]]/g, "") : "";
+  const named = !!(src.label && (words || src.url));
+  const label = named && !/^(https?:|mailto:)/i.test(src.label) ? src.label.replace(/[\[\]]/g, "") : "";
   const author = src.author.replace(/[\[\]]/g, "");
   const href = /^(https?:|mailto:)/i.test(src.url) ? src.url.replace(/\s/g, "%20").replace(/\(/g, "%28").replace(/\)/g, "%29") : "";
   const cited = href ? `[${label || href}](${href})` : label;
@@ -731,7 +736,8 @@ const PieceEditor = memo(function PieceEditor({
         const focused = !!el && el.ownerDocument.activeElement === el;
         const [start, end] = focused
           ? [el.selectionStart, el.selectionEnd]
-          : caretOf.get(pieceId) ?? (el ? [el.selectionStart, el.selectionEnd] : [current.length, current.length]);
+          // never touched: at the end (an unfocused box's selection differs between browsers, often the top)
+          : caretOf.get(pieceId) ?? [current.length, current.length];
         const { text, cursor } = insertAtSelection(current, markdown, start, end);
         caretOf.set(pieceId, [cursor, cursor]);
         setBody(text);
@@ -1076,7 +1082,10 @@ export default function Writing() {
   const openSeq = useRef(0);
   const besideSeq = useRef(0);
 
-  const loadPieces = useCallback(async (search = query, folder = foldersRef.current.pieces) => {
+  // the search as typed now, for a load started from a callback made before it (openReferenceById, on mount)
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const loadPieces = useCallback(async (search = queryRef.current, folder = foldersRef.current.pieces) => {
     const n = ++piecesSeq.current;
     try {
       const rows: VaultRec[] = search
@@ -1277,7 +1286,15 @@ export default function Writing() {
       if (!piece) return;
       const payload = buildAskRecord(foldersRef.current.refs, piece, line, new Date(), foldersRef.current.pieces);
       try {
-        await vault.createRecord(payload);
+        // two asks alike in one minute share a name: the second is "… (2)"
+        for (let n = 1; ; n++) {
+          try {
+            await vault.createRecord(n === 1 ? payload : { ...payload, path: `${payload.path} (${n})` });
+            break;
+          } catch (e) {
+            if ((e as { status?: number })?.status !== 409 || n >= 5) throw e;
+          }
+        }
         toast("Asked Uni.");
         await loadBeside(piece);
       } catch (e) {

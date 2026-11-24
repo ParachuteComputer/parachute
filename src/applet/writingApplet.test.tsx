@@ -423,6 +423,10 @@ describe("insert-as-quote formatting & cursor splicing", () => {
     // a web address with ( ) stays one link
     const paren = { ...bare, fields: { quote: "Q.", source: "Tools", source_url: "https://en.wikipedia.org/wiki/Tools_(book)" } };
     expect(formatQuoteMarkdown(paren)).toBe("> Q.\n> — [Tools](https://en.wikipedia.org/wiki/Tools_%28book%29)");
+    // nor a vault's address given as the source: cited in words, or not at all
+    const hub = { ...bare, fields: { quote: "Q.", source: "Fieldcraft", source_url: "https://hub.example/vault/home/view/01J8ABCDEFGHJKMNPQRSTVWXYZ" } };
+    expect(formatQuoteMarkdown(hub)).toBe("> Q.\n> — Fieldcraft");
+    expect(formatQuoteMarkdown({ ...bare, fields: { quote: "Q.", source: "https://hub.example/vault/home/n/01J8ABCDEFGHJKMN" } })).toBe("> Q.");
     // nor from the quote's own words
     const linked = { ...bare, fields: { quote: "As [[Notes/Ivan Illich|Illich]] put it, [[Tools for Conviviality]] matter." } };
     expect(formatQuoteMarkdown(linked)).toBe("> As Illich put it, Tools for Conviviality matter.");
@@ -518,6 +522,8 @@ describe("Writing applet UI flows", { timeout: 20_000 }, () => {
       return structuredClone(target);
     });
     mockState.createRecord.mockImplementation(async (rec: { path: string; body: string; fields?: Record<string, unknown>; types?: string[] }) => {
+      // as a hub does: a name already taken is refused
+      if ([...pieces, ...refs].some((r) => r.path === rec.path)) throw Object.assign(new Error("conflict: exists"), { status: 409 });
       const created: VaultRec = {
         id: `01NEW_${refs.length + 1}`,
         path: rec.path,
@@ -580,10 +586,16 @@ describe("Writing applet UI flows", { timeout: 20_000 }, () => {
     });
     expect(editor.value).toBe(bodyBeforeAsk);
 
+    // the same ask again within the minute is a second record, not "Could not ask Uni"
+    fireEvent.change(askBox, { target: { value: "Find the passage about quiet tools in workshops" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await waitFor(() => expect(refs.filter((r) => r.fields?.state === "asked").map((r) => r.path.endsWith(" (2)"))).toEqual([true, false]));
+    expect(mockState.toastCalls.some((t) => t.opts?.error)).toBe(false);
+
     // Open Reference page and Keep it
     const detailsButtons = screen.getAllByRole("button", { name: "Details" });
-    // First item is the newly asked one; second is REF_READY
-    fireEvent.click(detailsButtons[1]);
+    // the first two are the new asks; the third is REF_READY
+    fireEvent.click(detailsButtons[2]);
     await screen.findByText("Why it fits");
     expect(screen.getByText(/Directly supports your opening point/)).toBeTruthy();
     // Uni sharpened the reference after the list was read
@@ -877,6 +889,21 @@ describe("Writing applet UI flows", { timeout: 20_000 }, () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Insert quote" })[0]);
     await waitFor(() => expect(hubRef.fields?.used_in).toEqual(["01OTHER_PIECE", "Tools that stay quiet"]));
     expect(mockState.toastCalls.some((t) => t.opts?.error)).toBe(false);
+  });
+
+  it("Insert quote into a piece never touched lands at its end, not where an unfocused box's selection says", async () => {
+    const { pieces, refs } = setupMockVault();
+    // a piece of its own: the caret kept for a piece outlives one test
+    pieces.unshift({ ...structuredClone(PIECE_DRAFT), id: "01UNTOUCHED", path: "Writing/Pieces/Untouched" });
+    refs.unshift({ ...structuredClone(REF_READY), id: "01REF_UNTOUCHED", fields: { ...REF_READY.fields, piece: "Untouched" } });
+    render(<Writing />);
+    fireEvent.click(await screen.findByRole("button", { name: /Untouched/ }));
+    const editor = (await screen.findByLabelText("Piece")) as HTMLTextAreaElement;
+    await screen.findByText(/A room that lets you hear yourself think/);
+    editor.setSelectionRange(0, 0); // as WebKit reports a box never focused
+    fireEvent.click(screen.getAllByRole("button", { name: "Insert quote" })[0]);
+    await waitFor(() => expect(editor.value.startsWith(PIECE_DRAFT.body!)).toBe(true));
+    expect(editor.value).toMatch(/> A room that lets you hear yourself think[\s\S]*$/);
   });
 
   it("lists every piece, past the hub's page of 50", async () => {
