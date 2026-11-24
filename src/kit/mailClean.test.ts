@@ -226,6 +226,10 @@ describe("cleanSheet", () => {
     expect(performance.now() - t0).toBeLessThan(3000);
     expect(cleanSheet(`${"@media a{".repeat(9)}.x{color:red}${"}".repeat(9)}.ok{color:blue}`, none)).toBe(`${"@media a{".repeat(8)}${"}".repeat(8)}.ok{color:blue}`);
     expect(cleanSheet(`.a{color:red}${" ".repeat(200_001)}`, none)).toBe("");
+    // many rules and no semicolon after them: read in one pass
+    const t1 = performance.now();
+    expect(cleanSheet("a{}".repeat(66_000), none).length).toBe(3 * 66_000);
+    expect(performance.now() - t1).toBeLessThan(3000);
   });
   it("a url() the cleaning can't read goes with its declaration; the rules around it stay", () => {
     expect(cleanSheet('.a { background: url( "https://x/1.png" y); color: red } .b { color: blue }', none)).toBe(".a{color: red}.b{color: blue}");
@@ -273,6 +277,7 @@ describe("webHref", () => {
     expect(webHref(" https://x.test/a?b=1 ")).toBe("https://x.test/a?b=1");
     expect(webHref("mailto:a@b.test")).toBe("mailto:a@b.test");
     expect(webHref("mailto:a@b.test?subject=Hi&attach=/etc/passwd")).toBe("mailto:a@b.test?subject=Hi");
+    expect(webHref("mailto:list@x.org?subject=Please%20unsubscribe%20me&body=a+b")).toBe("mailto:list@x.org?subject=Please%20unsubscribe%20me&body=a+b");
     expect(webHref("https://www.apple.com@evil.example/login")).toBeNull();
     for (const bad of ["javascript:alert(1)", "data:text/html,x", "vbscript:x", "/relative", "x.test", "tel:+1555", "https://x.test/a b", "https://x\u200b.test", "https://", "ftp://x.test", "cid:abc"]) expect(webHref(bad), bad).toBeNull();
   });

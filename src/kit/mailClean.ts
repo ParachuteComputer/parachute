@@ -57,8 +57,9 @@ export function webHref(raw: string | null): string | null {
     // an address with a user part reads as another site's ("https://www.apple.com@evil.example/")
     if (u.username || u.password) return null;
     if (u.protocol === "mailto:" && u.search) {
-      const keep = [...u.searchParams].filter(([k]) => ["subject", "body", "cc", "bcc"].includes(k.toLowerCase()));
-      return `mailto:${u.pathname}${keep.length ? `?${new URLSearchParams(keep)}` : ""}`;
+      // the pairs kept as they were written (RFC 6068 reads %20 as a space and + as a +; URLSearchParams wouldn't)
+      const keep = u.search.slice(1).split("&").filter((pair) => ["subject", "body", "cc", "bcc"].includes(pair.split("=")[0].toLowerCase()));
+      return `mailto:${u.pathname}${keep.length ? `?${keep.join("&")}` : ""}`;
     }
     return v;
   } catch { return null; }
@@ -171,9 +172,11 @@ export function cleanSheet(css: string, pic: (src: string) => string | null): st
 }
 function cleanRules(css: string, pic: (src: string) => string | null, depth: number): string {
   const s = plainCss(css);
-  let out = "", i = 0;
+  let out = "", i = 0, semi = -2;
   while (i < s.length) {
-    const open = s.indexOf("{", i), semi = s.indexOf(";", i);
+    // the next semicolon, looked for again only once it is behind (looking each time would read the sheet once a rule)
+    if (semi !== -1 && semi < i) semi = s.indexOf(";", i);
+    const open = s.indexOf("{", i);
     // a statement without a block ends at its semicolon, and goes: an @import, an @charset, or anything else before
     // the next rule that isn't one
     if (semi >= 0 && (open < 0 || semi < open)) { i = semi + 1; continue; }

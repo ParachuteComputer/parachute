@@ -106,8 +106,30 @@ function TextMail({ text }: { text: string }) {
   </div>;
 }
 
-/** At most this many web pictures asked of the shell at once. */
+/** At most this many web pictures asked of the shell at once, by every MailBody in the frame together (the shell
+ *  takes 6 at once and 120 a minute from an applet). */
 const AT_ONCE = 4;
+const gate = { running: 0, waiting: [] as (() => void)[] };
+async function inTurn<T>(run: () => Promise<T>): Promise<T> {
+  while (gate.running >= AT_ONCE) await new Promise<void>((r) => gate.waiting.push(r));
+  gate.running++;
+  try { return await run(); } finally { gate.running--; gate.waiting.shift()?.(); }
+}
+/** A web picture from the shell; refused for the shell's limit, asked again after a while (for a minute or so). */
+async function webPicture(url: string): Promise<Got> {
+  for (let tries = 0; ; tries++) {
+    try { return await inTurn(() => kitApp().picture!(url)); } catch (e) {
+      if ((e as { code?: string } | null)?.code !== "rate_limited" || tries >= 12) throw e;
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
+}
+/** The words of HTML, read from an inert parse: what shows when a mail's HTML can't be drawn and it has no text part. */
+function wordsOf(html: string): string {
+  const d = new DOMParser().parseFromString(html, "text/html");
+  d.querySelectorAll("style, script, template, noscript, title").forEach((n) => n.remove());
+  return (d.body?.textContent ?? "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 
 function HtmlMail({ html, fallback, pictures, onShowPictures, inline }: { html: string; fallback?: string | null; pictures: boolean; onShowPictures?: () => void; inline?: (cid: string) => Promise<Blob | null> }) {
   const host = useRef<HTMLDivElement>(null);
@@ -123,18 +145,37 @@ function HtmlMail({ html, fallback, pictures, onShowPictures, inline }: { html: 
   // a mail its cleaning can't take (too deep, a bug) shows its text part instead
   const c = clean ?? NOTHING;
 
-  // the blobs made here go when it does
-  useEffect(() => () => { for (const u of made.current) URL.revokeObjectURL(u); }, []);
-  // what came is put in together, a moment after, so many pictures clean the mail a few times, not once each
+  // the blobs made here go when it does; a picture that comes after that makes none
+  const live = useRef(true);
   const pending = useRef(new Map<string, string>());
   const flush = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const arrived = (key: string, blob: Blob) => {
-    const u = URL.createObjectURL(blob);
-    made.current.push(u);
-    pending.current.set(key, u);
-    if (!flush.current) flush.current = setTimeout(() => { flush.current = null; const add = pending.current; pending.current = new Map(); setGot((m) => new Map([...m, ...add])); }, 60);
+  const inFlight = useRef(0);
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; for (const u of made.current) URL.revokeObjectURL(u); made.current = []; if (flush.current) clearTimeout(flush.current); flush.current = null; };
+  }, []);
+  // what came goes in together: the mail is cleaned and drawn again once nothing is on its way (or every 1.5 s while
+  // much is), not once a picture, so a quote opened or text chosen stays as it is
+  const flushNow = () => {
+    if (flush.current) { clearTimeout(flush.current); flush.current = null; }
+    if (!live.current || !pending.current.size) return;
+    const add = pending.current;
+    pending.current = new Map();
+    setGot((m) => new Map([...m, ...add]));
   };
-  useEffect(() => () => { if (flush.current) clearTimeout(flush.current); }, []);
+  const settled = () => {
+    inFlight.current = Math.max(0, inFlight.current - 1);
+    if (inFlight.current === 0) flushNow();
+    else if (!flush.current) flush.current = setTimeout(flushNow, 1500);
+  };
+  const arrived = (key: string, blob: Blob) => {
+    if (live.current) {
+      const u = URL.createObjectURL(blob);
+      made.current.push(u);
+      pending.current.set(key, u);
+    }
+    settled();
+  };
 
   // the message's own pictures, at once
   useEffect(() => {
@@ -143,26 +184,22 @@ function HtmlMail({ html, fallback, pictures, onShowPictures, inline }: { html: 
       const key = `cid:${id}`;
       if (asked.current.has(key)) continue;
       asked.current.add(key);
-      void inline(id).then((b) => { if (b) arrived(key, b); }, () => {});
+      inFlight.current++;
+      void inline(id).then((b) => (b ? arrived(key, b) : settled()), settled);
     }
   }, [c.cids.join("\n")]); // eslint-disable-line react-hooks/exhaustive-deps
-  // web pictures, once shown: a few at a time, through the shell
+  // web pictures, once shown, through the shell (a few at a time across the frame; one the shell's limit refused is
+  // asked again a little later)
   useEffect(() => {
     if (!pictures) return;
-    const fetch = kitApp().picture;
     const todo = c.web.filter((u) => !asked.current.has(u));
     if (!todo.length) return;
-    if (typeof fetch !== "function") { setFailed((n) => n + todo.length); for (const u of todo) asked.current.add(u); return; }
-    for (const u of todo) asked.current.add(u);
-    let next = 0, gone = false;
-    const one = async (): Promise<void> => {
-      const u = todo[next++];
-      if (u === undefined || gone) return;
-      try { const r = await fetch(u); arrived(u, new Blob([r.bytes], { type: r.type })); } catch { setFailed((n) => n + 1); }
-      return one();
-    };
-    for (let i = 0; i < Math.min(AT_ONCE, todo.length); i++) void one();
-    return () => { gone = true; };
+    if (typeof kitApp().picture !== "function") { setFailed((n) => n + todo.length); for (const u of todo) asked.current.add(u); return; }
+    for (const u of todo) {
+      asked.current.add(u);
+      inFlight.current++;
+      void webPicture(u).then((r) => arrived(u, new Blob([r.bytes], { type: r.type })), () => { if (live.current) setFailed((n) => n + 1); settled(); });
+    }
   }, [pictures, c.web.join("\n")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // drawn into its own shadow root, and narrowed to fit when wider than the screen
@@ -174,7 +211,10 @@ function HtmlMail({ html, fallback, pictures, onShowPictures, inline }: { html: 
     const fit = document.createElement("div");
     fit.className = "pa-mail-fit";
     fit.append(c.root.cloneNode(true));
+    // a quote the person opened stays open when the mail is drawn again (its pictures came)
+    const opened = Array.from(root.querySelectorAll("details"), (d) => d.open);
     root.replaceChildren(style(BASE), style(c.css), fit);
+    root.querySelectorAll("details").forEach((d, i) => { if (opened[i]) d.open = true; });
     const size = () => {
       fit.style.removeProperty("zoom");
       const wide = fit.scrollWidth, room = fit.clientWidth;
@@ -211,7 +251,7 @@ function HtmlMail({ html, fallback, pictures, onShowPictures, inline }: { html: 
     return () => { root.removeEventListener("click", click); root.removeEventListener("pointerover", over); root.removeEventListener("focusin", over); root.removeEventListener("pointerleave", out); root.removeEventListener("contextmenu", hold); };
   }, []);
 
-  if (!clean) return <><p className="pa-mail-note">This message can't be drawn as its sender made it; here are its words.</p><TextMail text={fallback ?? ""} /></>;
+  if (!clean) return <><p className="pa-mail-note">This message can't be drawn as its sender made it; here are its words.</p><TextMail text={fallback || wordsOf(html)} /></>;
   return <div className="pa-mail">
     {!pictures && c.hidden > 0 && onShowPictures && <div className="pa-mail-pictures">
       <span title="So the sender can't tell when you read it">Pictures from the web are hidden.</span>

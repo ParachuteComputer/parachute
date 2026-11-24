@@ -100,7 +100,17 @@ impl reqwest::dns::Resolve for PublicOnly {
     }
 }
 
+/// One client for every picture, so a newsletter's 40 pictures on one CDN share its connections.
 fn client() -> Result<reqwest::Client, String> {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(c) = CLIENT.get() {
+        return Ok(c.clone());
+    }
+    let made = build_client()?;
+    Ok(CLIENT.get_or_init(|| made).clone())
+}
+
+fn build_client() -> Result<reqwest::Client, String> {
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let provider = rustls::crypto::CryptoProvider::get_default().cloned().unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
