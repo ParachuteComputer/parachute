@@ -88,8 +88,10 @@ Node 22.18 or newer runs the `.ts` files directly; there are no runtime dependen
    chmod 600 ~/.config/parachute-carddav/vault-token
    ```
 
-   With this token the bridge can't read or write anything without the `person` type: not your journal, not other
-   notes. A note in `People/` that lacks the type isn't served; give it the type in People. A `person` record outside
+   In core 0.9, `auth mint-token` prints that it is now `keys new`, and still mints. Use it as written: `keys new`
+   refuses a type scope until 0.9.1 enforces one (core `packages/cli/src/keys.ts`). With this token the bridge can't
+   read or write anything without the `person` type: not your journal, not other notes (`test/e2e.ts` checks this
+   against a real hub). A note in `People/` that lacks the type isn't served; give it the type in People. A `person` record outside
    `People/` can be read by the token, but the bridge never serves it.
 
 2. **A device** for each phone. The password is shown once, and only its scrypt hash is kept:
