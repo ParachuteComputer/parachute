@@ -41,3 +41,13 @@ describe("the grant", () => {
     expect(allowsNote(g, "read", "Journal/x")).toBe(false);
   });
 });
+
+describe("pick: \"one\" in the grant (docs/ACCESS.md proposal 5)", () => {
+  it("changes the key only when declared, and the card says it", async () => {
+    const m = (parseManifest(RECIPES) as { ok: true; manifest: Parameters<typeof grantOf>[0] }).manifest;
+    const base = await grantKey(grantOf(m, "recipes", [], ["vaults"]), "Applets/Recipes");
+    expect(await grantKey(grantOf(m, "recipes", [], ["vaults"], [], [], null, null, false), "Applets/Recipes")).toBe(base);
+    expect(await grantKey(grantOf(m, "recipes", [], ["vaults"], [], [], null, null, true), "Applets/Recipes")).not.toBe(base);
+    expect(grantLines(grantOf(m, "recipes", [], ["vaults"], [], [], null, null, true), null).map((l) => l.text)).toContain("Work in one of your vaults at a time: the one you pick");
+  });
+});

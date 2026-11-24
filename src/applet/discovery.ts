@@ -7,6 +7,7 @@ import { plain, stripExt } from "./contract.ts";
 import { parseManifest, shownGlyph, shownId, shownName, type Manifest } from "./manifest.ts";
 import { APP_LEVEL, neededWhy, tooNew } from "./level.ts";
 import { parseOpens, type Opens } from "./opens.ts";
+import { asksVaults } from "./vaultPick.ts";
 import { parseApp, type AppWord } from "./app.ts";
 import type { Need, Resolved } from "./needs.ts";
 import { resolveNeeds } from "./needs.ts";
@@ -44,6 +45,9 @@ export type AppletEntry = {
   signalsError?: string;
   /** A section of Settings it draws (settingsSection.ts): only for an applet in a vault of the person's own. */
   settings?: SettingsSection;
+  /** `pick: "one"` on its record: it reaches across vaults one vault at a time, the one the person picks (vaultPick.ts,
+   *  docs/ACCESS.md proposal 5). Only for an applet that asks for a word across vaults. */
+  pickOne?: true;
   /** why `settings` was refused, when it was (the applet then has no section) */
   settingsError?: string;
   /** What it may do as the person on Techne (techne.ts, docs/design/TECHNE.md): only in a vault of the person's own. */
@@ -110,7 +114,7 @@ export function readApplet(r: Row, vault: string, theirs = false, isHub: (origin
   if (!signals.ok) left.push("signals");
   if (meta.techne !== undefined && !techne.ok) left.push("techne");
   return { ok: true, entry: { manifest: parsed.manifest, vault, noteId: r.id, path: r.path, opens: opens.ok ? opens.opens : [], app: app.ok ? app.app : [], embeds: theirs ? [] : parseEmbeds(meta.embeds), services: services.ok ? services.services : [],
-    signals: signals.ok ? signals.value : [], ...(left.length ? { left } : {}), ...(settings.ok && settings.value ? { settings: settings.value } : {}), ...(settings.ok ? {} : { settingsError: settings.error }),
+    signals: signals.ok ? signals.value : [], ...(left.length ? { left } : {}), ...(meta.pick === "one" && app.ok && asksVaults(app.app) ? { pickOne: true as const } : {}), ...(settings.ok && settings.value ? { settings: settings.value } : {}), ...(settings.ok ? {} : { settingsError: settings.error }),
     ...(t ? { techne: t } : {}), ...(techne.ok ? {} : { techneError: techne.error }),
     ...(app.ok ? {} : { appError: app.error }), ...(opens.ok ? {} : { opensError: opens.error }), ...(services.ok ? {} : { servicesError: services.error }), ...(signals.ok ? {} : { signalsError: signals.error }) } };
 }

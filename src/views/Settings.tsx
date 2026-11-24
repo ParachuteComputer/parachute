@@ -37,6 +37,7 @@ import BundleChoice from "./BundleChoice";
 import BundleSections from "./BundleSections";
 import { appletsNeedingWrite, forgetOwnWrite, giveBack, heldLevel, ownWrite } from "../vault/reach";
 import { reachCount, reachLine, why } from "./reachWords";
+import { useReachers } from "./useVaultPick";
 import { anchorNow, forgetOwnKey, ownKey } from "../applet/approvalStore";
 import { useKey } from "../key/key";
 import { nativeNow } from "../services/native";
@@ -65,17 +66,6 @@ function signOutVault(v: VaultRecord) {
 
 /** One vault this device holds, in one line: its name, and what Parachute holds of it and what for (reachWords.ts). A tap
  *  on it shows why in a sentence, whose it is, and Read only, Sign in again and Sign out; Open stays beside it. */
-/** Applets that read across every vault this device holds (app words: applet/app.ts), allowed here and live, by name.
- *  Parachute's own (Vault, Notes) reach every vault too, with no card: the idle line says so. */
-const ACROSS = ["vaults", "recent", "changes", "sharing"];
-function acrossNames(vaults: readonly VaultRecord[]): string[] {
-  const g = deviceGrants();
-  return vaults.flatMap((rec) => {
-    const read = appletsNow(rec.key);
-    if (read?.state !== "ok") return [];
-    return read.found.entries.filter((e) => !e.newer && e.app.some((w) => ACROSS.includes(w)) && g.status(subjectOf(rec.key, e.noteId), e.keys.scope, e.keys.html) !== "none").map((e) => e.manifest.name);
-  });
-}
 
 function VaultRow({ v }: { v: VaultRecord }) {
   const whose = useWhose()(v);
@@ -96,8 +86,10 @@ function VaultRow({ v }: { v: VaultRecord }) {
   const unknown = here.length > 0 && (read?.state !== "ok" || entries.some((e) => e?.newer));
   const level = heldLevel(v);
   const home = homeVault()?.key === v.key;
-  // read here, under the grants' subscription, so a Revoke elsewhere on this screen shows at once
-  const across = acrossNames(listVaults());
+  // the applets that reach it through their pick (docs/ACCESS.md proposal 5), read again with the grants and the
+  // applets here, so a Revoke elsewhere on this screen shows at once
+  const reachers = useReachers(`${g.subjects().join(" ")}|${listVaults().map((x) => { const a = appletsNow(x.key); return `${x.key}:${a?.state === "ok" ? a.at : a?.state ?? ""}`; }).join(" ")}`);
+  const across = reachers?.get(v.key) ?? [];
   const facts = { level, home, applets: [...allowed, ...embeds], unknown, own: ownWrite(v), theirs: whose !== "mine", across };
   // write that no applet allowed here needs (the person's own, or held from before this app asked per vault): theirs to give back
   const needing = appletsNeedingWrite(v);

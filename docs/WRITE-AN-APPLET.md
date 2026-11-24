@@ -14,6 +14,7 @@ the Parachute app reads the record, shows the person what it asks for, and runs 
 | `fields.applet` | The manifest: what it is and what it may do (below). |
 | `fields.opens` | Optional: which kind of note opens in it when the person taps one. |
 | `fields.app` | Optional: what it asks of the app beyond its vault: any of `recent`, `pins`, `open`, `links`, `save`, `attach`, `storage`, `vaults`, `sharing`, `copy`, `changes` (below). Anything else is ignored, and the applet then asks nothing of the app. `recent`, `changes`, `vaults` and `sharing` reach across vaults: the card asks the person which vaults (the home and the applet's own vault ticked), and the applet reaches only those; so does `links`, for such an applet ([ACCESS.md](ACCESS.md) proposal 5). The pick is the person's, kept in their signed approval: the applet can open the shell's sheet during a tap (`vaults.ask()`), never set it. |
+| `fields.pick` | Optional: `"one"` for an applet that reaches across vaults one vault at a time (a whole-vault applet held to one vault): the card asks which one, its own vault chosen. Absent: as many as the person ticks. |
 | `fields.services` | Optional: the servers it talks to, through the app (below). |
 | `fields.settings` | Optional: a section of Settings it draws, under a heading: `{ name, screen }` (below). |
 | `body` | The code: one self-contained file. |

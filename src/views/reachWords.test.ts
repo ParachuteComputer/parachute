@@ -27,10 +27,10 @@ describe("what Parachute holds of a vault, in words", () => {
     expect(reachLine(f({ level: "write", unknown: true }))).toBe("reads and changes notes · for applets you allowed");
     expect(reachLine(f({ applets: ["«events» on a page"] }))).toBe("reads notes · for «events» on a page");
   });
-  it("an applet that reads across every vault keeps a vault from being called unused", () => {
+  it("an applet whose pick holds the vault keeps it from being called unused", () => {
     expect(why(f({ across: ["Home"] })).idle).toBe(false);
-    expect(reachLine(f({ across: ["Home", "Home"] }))).toBe("reads notes · for Home, across your vaults");
-    expect(why(f({ across: ["Home"] })).long).toMatch(/^Home reads across every vault this device holds, as you allowed on its card; signing out takes this one out of what it sees/);
+    expect(reachLine(f({ across: ["Home", "Home"] }))).toBe("reads notes · for Home");
+    expect(why(f({ across: ["Home"] })).long).toMatch(/^Home reaches it: you picked it for it \(Settings → Applets, Change\)/);
     expect(reachLine(f({ applets: ["Post"], across: ["Home"] }))).toBe("reads notes · for Post");
   });
   it("someone else's says so first", () => {

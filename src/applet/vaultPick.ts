@@ -4,7 +4,7 @@
 // device (pickStore.ts). No pick means the home, and for an applet with a card its own vault too. There is no "all": a
 // vault added later is in no pick until it is ticked. A vault is named by its hub's origin and its name there, never by
 // this device's key for it, so every device reads a pick the same. Pure.
-import type { AppWord } from "./app";
+import type { AppWord } from "./app.ts";
 
 /** The words that reach across vaults: an applet naming one of them asks which vaults. */
 export const CROSS_WORDS: readonly AppWord[] = ["vaults", "sharing", "recent", "changes"];
@@ -49,8 +49,13 @@ export function defaultReach(home: VaultRef | null, own: VaultRef | null): Vault
   return sortPick(out);
 }
 
-/** The vaults it reaches: the pick, else the default. */
-export const reachOf = (pick: readonly VaultRef[] | null, home: VaultRef | null, own: VaultRef | null): VaultRef[] => (pick ? sortPick(pick) : defaultReach(home, own));
+/** The vaults it reaches: the pick, else the default. `one`: a pick of one (Journal and Capture, or a record's
+ *  `pick: "one"`): the first picked, else its own vault, else the home. */
+export const reachOf = (pick: readonly VaultRef[] | null, home: VaultRef | null, own: VaultRef | null, one = false): VaultRef[] =>
+  (one ? (pick?.length ? [sortPick(pick)[0]] : own ? [own] : home ? [home] : []) : pick ? sortPick(pick) : defaultReach(home, own));
+
+/** Parachute's own that keep their notes in one vault (`here`), and come from no vault: they ask which, as a pick of one. */
+export const KEEPS_NOTES = ["journal", "capture"] as const;
 
 /** Of the vaults this device holds, the ones a reach names (by hub and name). */
 export function heldIn<V extends { issuer: string; vault: string }>(held: readonly V[], reach: readonly VaultRef[], originOf: (issuer: string) => string): V[] {
@@ -58,8 +63,8 @@ export function heldIn<V extends { issuer: string; vault: string }>(held: readon
 }
 
 /** The pick to sign: none when it is the default (nothing to sign, and its approval hashes as before), else the pick. */
-export const pickToSign = (ticked: readonly VaultRef[], home: VaultRef | null, own: VaultRef | null): VaultRef[] | null =>
-  (samePick(sortPick(ticked), defaultReach(home, own)) ? null : sortPick(ticked));
+export const pickToSign = (ticked: readonly VaultRef[], home: VaultRef | null, own: VaultRef | null, one = false): VaultRef[] | null =>
+  (samePick(sortPick(ticked), one ? reachOf(null, home, own, true) : defaultReach(home, own)) ? null : sortPick(ticked));
 
 /** "kitchen", "kitchen and letters", "kitchen, letters and 3 more": the vaults by name, for a line. */
 export function namesLine(names: readonly string[]): string {

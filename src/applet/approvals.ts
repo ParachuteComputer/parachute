@@ -71,6 +71,8 @@ export function asksHash(subject: Subject, notePath: string, fields: Record<stri
   // `vaults`: the pick (vaultPick.ts), only when there is one, so an approval with none hashes as before; sorted, so the
   // order it was ticked in says nothing
   return sha256Hex(canonical({ v: 1, subject, path: stripExt(notePath), applet: pick("applet"), opens: pick("opens"), app: pick("app"), services: pick("services"), embeds: pick("embeds"), signals: fields.signals, techne: fields.techne,
+    // `pick` (the record's "one": vaultPick.ts) only when declared, as signals
+    pick: fields.pick,
     ...(vaults ? { vaults: sortPick(vaults) } : {}),
     resolved: { opens: resolved.opens ?? null, from: resolved.from ? [...resolved.from].sort() : [], ...(resolved.left?.length ? { left: [...resolved.left].sort() } : {}) } }));
 }

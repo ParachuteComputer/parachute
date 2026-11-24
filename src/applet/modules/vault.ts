@@ -627,7 +627,10 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         },
       },
       fetch: {
-        cap: "vault.read",
+        // each method its own grant, checked below: a read needs `vault.read`, a new record `vault.create`, a change
+        // `vault.update`. (It was `vault.read` for all, so an applet granted only to add, Home's line into Inbox/, was
+        // refused every write.)
+        cap: null,
         validate: (p: unknown) => {
           const o = p as FetchParams | null;
           return o && typeof o === "object" && typeof o.method === "string" && typeof o.path === "string" ? { ok: true, value: o } : { ok: false };
@@ -635,6 +638,7 @@ export function createVaultModule(deps: VaultDeps, opts: { now?: () => number; o
         async run(req: FetchParams, scopes, ctx) {
           const granted = scopes["vault.read"] ?? [];
           if (req.method !== "GET" && req.method !== "POST" && req.method !== "PATCH") return fail(405, "method_not_allowed");
+          if (req.method === "GET" && !granted.length) return fail(403, "not_granted");
           if (!req.path.startsWith("/") || req.path.startsWith("//") || /[\\\u0000-\u001f]/.test(req.path)) return fail(400, "bad_request" as ErrorCode);
           const cut = req.path.indexOf("?");
           const pathname = cut < 0 ? req.path : req.path.slice(0, cut);
