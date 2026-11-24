@@ -288,6 +288,19 @@ test("Library applet: Shelf, Book, Read (pictures, summary, select->Quote, marks
     await expect(mark).toBeVisible({ timeout: 15_000 });
     await expect(mark).toHaveText(targetPhrase);
 
+    // the record is a `quote` (the door tags it with the type the card opens in Quotes/), linked to its chapter and book
+    const saved = ((await api(h, "GET", "notes?path_prefix=Quotes/Walden/&include_metadata=true")) as { tags?: string[]; metadata?: Record<string, unknown> }[]);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].tags).toContain("quote");
+    expect(saved[0].metadata).toMatchObject({ from: FIXTURE_PATHS.walden.ch2Path, book: FIXTURE_PATHS.walden.bookPath, block: expect.any(Number) });
+
+    // the summary a tap away after a save: the chapter's text and its mark stay as they were
+    await f.getByRole("button", { name: "Summary" }).click();
+    await expect(f.getByRole("dialog", { name: "Chapter summary" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(f.locator("mark.lib-mark")).toHaveCount(1);
+    await expect(f.locator("mark.lib-mark").first()).toHaveText(targetPhrase);
+
     await shot(page, "library-03-read-390", 390, 844);
     await shot(page, "library-03-read-1440", 1440, 900);
     await page.setViewportSize({ width: 390, height: 844 });
@@ -300,13 +313,20 @@ test("Library applet: Shelf, Book, Read (pictures, summary, select->Quote, marks
     await page.keyboard.press("Escape");
     await expect(viewDialog).toHaveCount(0);
 
-    // Leave chapter -> verify where we stopped was written to Walden's `at` field on the hub
+    // On to the next chapter: the book says you are at its start (and only that: no older place written after it)
+    const waldenAt = async () => String((await api(h, "GET", `notes/${waldenBook.id}`)).metadata?.at ?? "");
+    await f.getByRole("button", { name: /Part Two - The Quiet →/ }).click();
+    await expect(f.locator("header").getByRole("heading", { name: "Part Two - The Quiet" })).toBeVisible();
+    await expect.poll(waldenAt, { timeout: 15_000 }).toBe(`${FIXTURE_PATHS.walden.partTwoPath}#p1`);
+    await page.waitForTimeout(1500);
+    expect(await waldenAt()).toBe(`${FIXTURE_PATHS.walden.partTwoPath}#p1`);
+
+    // Back to chapter 2, then leave it: where we stopped is written to Walden's `at` on the hub
+    await f.getByRole("button", { name: /← Where I Lived/ }).click();
+    await expect(f.locator("header").getByRole("heading", { name: "Where I Lived, and What I Lived For" })).toBeVisible();
     await f.getByRole("button", { name: "← Walden" }).click();
     await expect(f.locator("header").getByRole("heading", { name: "Walden" })).toBeVisible();
-    await expect.poll(async () => {
-      const b = await api(h, "GET", `notes/${waldenBook.id}`);
-      return String(b.metadata?.at ?? b.fields?.at ?? "");
-    }, { timeout: 15_000 }).toMatch(/^Books\/Walden\/02 Where I Lived, and What I Lived For#p\d+$/);
+    await expect.poll(waldenAt, { timeout: 15_000 }).toMatch(/^Books\/Walden\/02 Where I Lived, and What I Lived For#p\d+$/);
 
     // 5. Quotes tab: grouped by book, and tapping a quote opens the chapter at its marked place
     await f.getByRole("button", { name: "← Shelf" }).click();

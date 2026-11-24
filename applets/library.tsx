@@ -774,7 +774,7 @@ type DomBlock = {
   nodes: { node: Text; start: number; end: number }[];
 };
 
-const BLOCK_SELECTOR = "p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, dd, dt";
+const BLOCK_SELECTOR = "p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, dd, dt, td, th, figcaption";
 
 function isFootnoteMarker(node: Node): boolean {
   let cur: Node | null = node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode;
@@ -804,20 +804,19 @@ function clearMarks(root: HTMLElement) {
 
 function collectReadableBlocks(root: HTMLElement): DomBlock[] {
   const noteEl = root.querySelector<HTMLElement>(".pa-note") ?? root;
-  const candidates = Array.from(noteEl.querySelectorAll<HTMLElement>(BLOCK_SELECTOR));
-  const leafEls = candidates.filter((el) => {
-    if (el.closest("section.footnotes, [data-footnotes]")) return false;
-    return !el.querySelector(BLOCK_SELECTOR);
-  });
+  const candidates = Array.from(noteEl.querySelectorAll<HTMLElement>(BLOCK_SELECTOR))
+    .filter((el) => !el.closest("section.footnotes, [data-footnotes]"));
 
+  // each block holds its own words: a list item with a list inside keeps "Rule one", its sub-items are blocks of their own
   const blocks: DomBlock[] = [];
-  for (const el of leafEls) {
+  for (const el of candidates) {
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     const nodes: { node: Text; start: number; end: number }[] = [];
     let text = "";
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
       const t = n as Text;
       if (!t.nodeValue || isFootnoteMarker(t)) continue;
+      if (t.parentElement?.closest(BLOCK_SELECTOR) !== el) continue;
       const start = text.length;
       text += t.nodeValue;
       nodes.push({ node: t, start, end: text.length });
@@ -1098,6 +1097,7 @@ const ChapterProse = memo(function ChapterProse({
       }}
     >
       <Note
+        key={`${chapter.id}|${chapter.updatedAt ?? ""}|${(chapter.body ?? "").length}`}
         id={chapter.id}
         body={chapter.body ?? ""}
         path={chapter.path}
@@ -1409,6 +1409,9 @@ export default function Library() {
 
   // Loaded full summaries (by record id) when viewing summary drawer or Book Summaries tab
   const [summaryBodies, setSummaryBodies] = useState<Record<string, LibraryRecord>>({});
+  // more records than one read reaches (5,000 a folder): said, not hidden
+  const [capped, setCapped] = useState(false);
+  const summaryAsked = useRef<Set<string>>(new Set());
 
   // Cover blob URL cache (keyed by `${bookId}|${coverSrc}`)
   const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
@@ -1493,53 +1496,35 @@ export default function Library() {
         againRef.current = false;
         try {
           const q = (params: Record<string, unknown>) => vault.queryRecords(params) as Promise<LibraryRecord[]>;
+          // Books/ with fields (books, chapters, parts, summaries); the books again with their bodies (the cover is
+          // in the body); Quotes/ with bodies (the quoted words and the note). Summary bodies load per book, on open.
           const [booksRes, quotesRes, bookBodies] = await Promise.all([
             readFolder(q, { pathPrefix: BOOKS_FOLDER, includeFields: true }),
-            readFolder(q, { pathPrefix: QUOTES_FOLDER, includeFields: true, includeBody: true }).catch(() => ({ rows: [] as LibraryRecord[], capped: false })),
-            vault.queryRecords({ pathPrefix: BOOKS_FOLDER, tag: "book", includeFields: true, includeBody: true, limit: 50 }).catch(() => [] as LibraryRecord[]),
+            readFolder(q, { pathPrefix: QUOTES_FOLDER, includeFields: true, includeBody: true }),
+            readFolder(q, { pathPrefix: BOOKS_FOLDER, tag: "book", includeFields: true, includeBody: true }),
           ]);
           const merged = new Map<string, LibraryRecord>();
-          for (const r of booksRes.rows) merged.set(r.id, r);
-          for (const r of bookBodies) {
+          for (const r of [...booksRes.rows, ...bookBodies.rows, ...quotesRes.rows]) {
             const prev = merged.get(r.id);
             merged.set(r.id, prev ? { ...prev, ...r } : r);
           }
-          for (const r of quotesRes.rows) {
-            const prev = merged.get(r.id);
-            merged.set(r.id, prev ? { ...prev, ...r } : r);
-          }
-          // For books that weren't returned by tag:"book" (e.g., untagged depth-1 book), fetch their bodies for covers
-          const list = [...merged.values()];
-          const needsCoverBody = list.filter((r) => {
+          // a book not typed `book` (a record at Books/<Title>): its body one at a time, for its cover
+          const needsCoverBody = [...merged.values()].filter((r) => {
             const clean = stripMd(r.path);
-            if (!clean.startsWith(BOOKS_FOLDER)) return false;
+            if (!clean.startsWith(BOOKS_FOLDER) || hasRecordKind(r, "book")) return false;
             const depth = clean.slice(BOOKS_FOLDER.length).split("/").filter(Boolean).length;
-            return (depth === 1 || hasRecordKind(r, "book")) && r.body === undefined && !str(r.fields?.cover);
+            return depth === 1 && r.body === undefined && !str(r.fields?.cover);
           });
-          if (needsCoverBody.length) {
-            await Promise.all(
-              needsCoverBody.slice(0, 12).map(async (b) => {
-                try {
-                  const full = await vault.getRecord(b.id) as LibraryRecord | null;
-                  if (full) merged.set(full.id, { ...b, ...full });
-                } catch { /* keep metadata-only book */ }
-              }),
-            );
+          for (let i = 0; i < needsCoverBody.length; i += 6) {
+            await Promise.all(needsCoverBody.slice(i, i + 6).map(async (b) => {
+              try {
+                const full = await vault.getRecord(b.id) as LibraryRecord | null;
+                if (full) merged.set(full.id, { ...b, ...full });
+              } catch { /* its cover shows as words */ }
+            }));
           }
-          // Fetch bodies for summaries (so Book view can show a 1-line summary preview per chapter)
-          const summaryRecs = [...merged.values()].filter((r) => {
-            const clean = stripMd(r.path);
-            return (hasRecordKind(r, "summary") || clean.includes("/Summaries/") || Boolean(str(r.fields?.of))) && r.body === undefined;
-          });
-          if (summaryRecs.length) {
-            try {
-              const withBodies = await vault.queryRecords({ pathPrefix: BOOKS_FOLDER, tag: "summary", includeFields: true, includeBody: true, limit: 50 }) as LibraryRecord[];
-              for (const s of withBodies) {
-                const prev = merged.get(s.id);
-                merged.set(s.id, prev ? { ...prev, ...s } : s);
-              }
-            } catch { /* will lazy-load on open */ }
-          }
+          setCapped(booksRes.capped || quotesRes.capped);
+          summaryAsked.current.clear(); // a refresh reads the summaries again too
           if (!mounted.current) return;
           setRecords([...merged.values()]);
           setError(null);
@@ -1558,17 +1543,17 @@ export default function Library() {
   libRef.current = lib;
 
   // Patch book fields cleanly with serialized versions + single conflict retry
-  const patchBookFields = useCallback((bookId: string, patch: Record<string, unknown>, quiet = false): Promise<void> => {
+  const patchBookFields = useCallback((bookId: string, patch: Record<string, unknown>, quiet = false): Promise<boolean> => {
     const run = async () => {
       const bundle = libRef.current.bookByKey.get(bookId);
-      if (!bundle) return;
+      if (!bundle) throw new Error("this book isn't in your library any more");
       const mine = versions.current.get(bookId);
       let base = mine && (!bundle.book.updatedAt || mine > bundle.book.updatedAt) ? mine : bundle.book.updatedAt;
       if (!base) {
         const fresh = await vault.getRecord(bookId) as LibraryRecord | null;
         base = fresh?.updatedAt ?? null;
       }
-      if (!base) return;
+      if (!base) throw new Error("this book isn't in your library any more");
       const apply = async (ifUpdatedAt: string) =>
         await vault.updateRecord(bookId, { if_updated_at: ifUpdatedAt, fields: patch }) as LibraryRecord;
 
@@ -1582,13 +1567,13 @@ export default function Library() {
         updated = await apply(fresh.updatedAt);
       }
       if (updated.updatedAt) versions.current.set(bookId, updated.updatedAt);
-      if (!mounted.current) return;
-      setRecords((prev) => (prev ? prev.map((r) => (r.id === bookId ? { ...r, ...updated, fields: { ...r.fields, ...patch } } : r)) : prev));
+      if (mounted.current) setRecords((prev) => (prev ? prev.map((r) => (r.id === bookId ? { ...r, ...updated, fields: { ...r.fields, ...patch } } : r)) : prev));
     };
     const next = saveChain.current.then(run, run);
     saveChain.current = next.catch(() => {});
-    return next.catch((e) => {
+    return next.then(() => true, (e) => {
       if (!quiet) toast(`Could not save book: ${e instanceof Error ? e.message : String(e)}`, { error: true });
+      return false;
     });
   }, []);
 
@@ -1612,11 +1597,12 @@ export default function Library() {
   const openChapter = useCallback(async (
     bookId: string,
     chapterId: string,
-    opts: { focusQuoteId?: string | null; targetBlock?: number | null } = {},
+    opts: { focusQuoteId?: string | null; targetBlock?: number | null; fresh?: boolean } = {},
   ) => {
-    if (activeReadRef.current && (activeReadRef.current.bookId !== bookId || activeReadRef.current.chapterPath !== "")) {
-      persistReadingPosition();
-    }
+    // leaving a chapter writes where you stopped in it; from here on you are in the new one, even while it loads
+    const known = libRef.current.chapterByKey.get(chapterId)?.chapter ?? null;
+    if (activeReadRef.current && activeReadRef.current.chapterPath !== known?.path) persistReadingPosition();
+    activeReadRef.current = known ? { bookId, chapterPath: known.path } : null;
     const seq = ++chapterLoadSeq.current;
     const initialBlock = opts.targetBlock ?? 1;
     stoppedBlockRef.current = initialBlock;
@@ -1627,9 +1613,8 @@ export default function Library() {
     setChapterQuotesOpen(false);
     setRoute({ view: "read", bookId, chapterId, focusQuoteId: opts.focusQuoteId ?? null, targetBlock: opts.targetBlock ?? null });
 
-    const existing = libRef.current.chapterByKey.get(chapterId)?.chapter ?? null;
-    if (existing?.body !== undefined) {
-      activeReadRef.current = { bookId, chapterPath: existing.path };
+    const existing = known;
+    if (existing?.body !== undefined && !opts.fresh) {
       setActiveChapter(existing);
       setChapterError(null);
       setChapterLoading(false);
@@ -1744,25 +1729,40 @@ export default function Library() {
     });
   }, [route.view, route.view === "home" ? "" : route.bookId, leaveChapter, setRoute]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load summary record bodies on demand (for summary drawer or Book Summaries tab)
-  const ensureSummaryBodies = useCallback(async (ids: readonly string[]) => {
-    const missing = ids.filter((id) => {
-      const fromList = records?.find((r) => r.id === id);
-      return fromList?.body === undefined && !summaryBodies[id];
-    });
+  // Load summary bodies on demand (the summary drawer, a book's contents and Summaries): a book's in one folder read,
+  // any left one at a time; each asked once, so one that fails isn't asked again in a loop
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
+  const ensureSummaryBodies = useCallback(async (ids: readonly string[], folder?: string) => {
+    const missing = ids.filter((id) => !summaryAsked.current.has(id) && recordsRef.current?.find((r) => r.id === id)?.body === undefined);
     if (!missing.length) return;
-    const fetched = await Promise.all(
-      missing.map(async (id) => {
-        try { return await vault.getRecord(id) as LibraryRecord | null; } catch { return null; }
-      }),
-    );
+    for (const id of missing) summaryAsked.current.add(id);
+    const got = new Map<string, LibraryRecord>();
+    if (folder && missing.length > 1) {
+      try {
+        const q = (params: Record<string, unknown>) => vault.queryRecords(params) as Promise<LibraryRecord[]>;
+        const res = await readFolder(q, { pathPrefix: folder, tag: "summary", includeFields: true, includeBody: true });
+        for (const r of res.rows) got.set(r.id, r);
+      } catch { /* one at a time below */ }
+    }
+    const rest = missing.filter((id) => !got.has(id));
+    for (let i = 0; i < rest.length; i += 6) {
+      await Promise.all(rest.slice(i, i + 6).map(async (id) => {
+        try {
+          const r = await vault.getRecord(id) as LibraryRecord | null;
+          if (r) got.set(r.id, r);
+        } catch { /* stays "Opening summary…"; asked again on the next load */ }
+      }));
+    }
     if (!mounted.current) return;
+    for (const id of missing) if (!got.has(id)) summaryAsked.current.delete(id);
+    if (!got.size) return;
     setSummaryBodies((prev) => {
       const next = { ...prev };
-      for (const r of fetched) if (r) next[r.id] = r;
+      for (const r of got.values()) next[r.id] = r;
       return next;
     });
-  }, [records, summaryBodies]);
+  }, []);
 
   const openSummaryDrawer = useCallback((title: string, summaries: readonly LibraryRecord[]) => {
     const ids = summaries.map((s) => s.id);
@@ -1772,17 +1772,17 @@ export default function Library() {
     void ensureSummaryBodies(ids);
   }, [ensureSummaryBodies]);
 
-  // Preload summaries when entering Book -> Summaries tab
+  // A book's summaries, for its contents (a line under each chapter) and its Summaries tab
   useEffect(() => {
-    if (route.view !== "book" || bookTab !== "summaries") return;
+    if (route.view !== "book") return;
     const bundle = lib.bookByKey.get(route.bookId);
     if (!bundle) return;
     const allIds = [
       ...bundle.bookSummaries.map((s) => s.id),
       ...[...bundle.summariesByChapter.values()].flat().map((s) => s.id),
     ];
-    void ensureSummaryBodies(allIds);
-  }, [route, bookTab, lib, ensureSummaryBodies]);
+    void ensureSummaryBodies(allIds, `${stripMd(bundle.book.path)}/`);
+  }, [route, lib, ensureSummaryBodies]);
 
   // Preload cover for active book view
   useEffect(() => {
@@ -1794,7 +1794,7 @@ export default function Library() {
   const currentBook = route.view !== "home" ? lib.bookByKey.get(route.bookId) ?? null : null;
 
   // Handle internal wikilinks inside a chapter (e.g. `[[02 Water|watering]]` or `[[Books/Walden/02 Where I Lived]]`)
-  const handleChapterLink = useCallback((target: string) => {
+  const followLink = useCallback((target: string) => {
     const clean = normalizeRef(target);
     if (!clean) return;
     const l = libRef.current;
@@ -1829,6 +1829,11 @@ export default function Library() {
     }
     toast(`Could not find “${clean}” in your library.`);
   }, [openChapter, leaveChapter, openSummaryDrawer]);
+  // the same function for the life of the applet: a Note given a new one draws again, and the chapter's Note holds the
+  // quote marks, which React must not redraw under
+  const followLinkRef = useRef(followLink);
+  followLinkRef.current = followLink;
+  const handleChapterLink = useCallback((target: string) => followLinkRef.current(target), []);
 
   // Save a newly marked quote
   const saveNewQuote = async () => {
@@ -1997,7 +2002,10 @@ export default function Library() {
               )}
             </>
           )}
-          onRefresh={() => openChapter(currentBook.book.id, route.chapterId, { focusQuoteId: route.focusQuoteId, targetBlock: stoppedBlockRef.current })}
+          onRefresh={async () => {
+            await load();
+            await openChapter(currentBook.book.id, route.chapterId, { focusQuoteId: route.focusQuoteId, targetBlock: stoppedBlockRef.current, fresh: true });
+          }}
         >
           {chapterError ? (
             <Problem error={chapterError} onRetry={() => void openChapter(currentBook.book.id, route.chapterId)}>
@@ -2026,6 +2034,8 @@ export default function Library() {
                   ) : <span />}
                   {nextCh ? (
                     <Button small kind="primary" onClick={() => {
+                      // on to the next chapter: that is where you are now, from its start
+                      activeReadRef.current = null;
                       persistReadingPosition({ bookId: currentBook.book.id, chapterPath: nextCh.path, block: 1 });
                       void openChapter(currentBook.book.id, nextCh.id);
                     }}>
@@ -2396,8 +2406,7 @@ export default function Library() {
                 if (name === "status" && value === "read" && !currentBook.fields.finished) {
                   patch.finished = when.stamp(Date.now()).slice(0, 10);
                 }
-                await patchBookFields(currentBook.book.id, patch);
-                toast("Updated book.");
+                if (await patchBookFields(currentBook.book.id, patch)) toast("Updated book.");
               }}
             />
           </Drawer>
@@ -2440,6 +2449,9 @@ export default function Library() {
           ]}
         />
 
+        {capped && !error && (
+          <p className="lib-summary-meta">Your library has more than 5,000 records in one folder; only the first 5,000 are shown.</p>
+        )}
         {error ? (
           <Problem error={error} onRetry={load}>Could not read your library.</Problem>
         ) : records === null ? (

@@ -316,3 +316,35 @@ describe("applets/library record validation and TypeScript check", () => {
     expect(said).toEqual([]);
   }, 30_000);
 });
+
+// The reading view's DOM side (collectReadableBlocks, locatorFromSelection, applyMarks) on a real DOM (jsdom).
+const domStart = src.indexOf("// ── DOM block collection, selection capture, and mark rendering ──");
+const domEnd = src.indexOf("// ── UI subcomponents ──");
+if (domStart < 0 || domEnd <= domStart) throw new Error("could not locate the DOM block in applets/library.tsx");
+const dom = new Function(
+  `${transform(block + src.slice(domStart, domEnd), { transforms: ["typescript"] }).code}; return { collectReadableBlocks, applyMarks, clearMarks };`,
+)() as {
+  collectReadableBlocks: (root: HTMLElement) => { block: number; text: string }[];
+  applyMarks: (root: HTMLElement, quotes: readonly unknown[], focus: string | null) => { focusedMark: HTMLElement | null; blocksCount: number };
+  clearMarks: (root: HTMLElement) => void;
+};
+
+describe("applets/library reading view on a DOM", () => {
+  it("counts a list item's own words as a block when it holds a list, and table cells as blocks", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `<div class="pa-note"><p>Rules for the morning.</p><ul><li>Rise early<ul><li>before the sun</li></ul></li></ul>`
+      + `<table><tr><td>Bread</td><td>one loaf</td></tr></table></div>`;
+    expect(dom.collectReadableBlocks(root).map((b) => b.text)).toEqual(["Rules for the morning.", "Rise early", "before the sun", "Bread", "one loaf"]);
+  });
+
+  it("marks a saved quote in the outer list item's own words, and clears it again", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `<div class="pa-note"><p>Rules for the morning.</p><ul><li>Rise early and walk<ul><li>before the sun</li></ul></li></ul></div>`;
+    const quote = { record: { id: "q1" }, text: "early and walk", block: 2, before: "Rise ", after: "", note: "" };
+    const { focusedMark } = dom.applyMarks(root, [quote], "q1");
+    expect(focusedMark?.textContent).toBe("early and walk");
+    dom.clearMarks(root);
+    expect(root.querySelector("mark")).toBeNull();
+    expect(root.querySelector("li")?.firstChild?.nodeValue).toBe("Rise early and walk");
+  });
+});
