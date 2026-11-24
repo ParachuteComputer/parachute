@@ -73,15 +73,21 @@ describe("Linked, when the person is back", () => {
     expect(seen.get(B)).toBe("note");
     expect(seen.get(C)).toBe("note");
   });
-  it("a return asks again no more than one call's worth of links: the rest wait for a later one (the frame's reads)", async () => {
+  it("a return asks again no more than one call's worth of links, the rest at a later one (the frame's reads), with real minutes passing", async () => {
+    // every timer faked: the kit's own minute after a miss runs as it does in the app
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
     const many = Array.from({ length: 30 }, (_, i) => `nosuch:01KA3Z9V6B2W8XQJ4M7N5P${String(i).padStart(4, "0")}`);
     const asked: string[] = [];
     g.parachute = { app: { links: async (links: string[]) => { asked.push(...links); return links.map(() => null); } } };
     render(<Linked text={many.join(" ")} />);
-    await act(() => new Promise((r) => setTimeout(r, 40)));
+    await tick(40);
     expect(asked).toHaveLength(30);
-    later();
-    await act(async () => { document.dispatchEvent(new Event("visibilitychange")); await new Promise((r) => setTimeout(r, 40)); });
+    const back = async () => { await tick(AGAIN_MS + 1); await act(async () => { document.dispatchEvent(new Event("visibilitychange")); }); await tick(40); };
+    await back();
     expect(asked).toHaveLength(30 + 20);
+    await back();
+    expect(asked).toHaveLength(30 + 20 + 20);
   });
 });

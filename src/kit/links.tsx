@@ -98,13 +98,20 @@ export function useAnswers(links: readonly string[], from?: string): Map<string,
     return () => { backs.delete(f); };
   }, []);
   const key = links.join("\n") + "\n" + (from ?? "");
+  const handled = useRef(0);
   useEffect(() => {
     let on = true;
+    // the run a return started (not a later change of links): what led nowhere here asks again, while the round has room
+    const back = round !== handled.current;
+    handled.current = round;
     for (const l of new Set(links)) {
-      // asked again: a last answer of nothing is let go first, while this round has room (one another link is asking
-      // now stays); any other answer is the one kept
-      const k = keyOf(l, from), was = answers.get(k);
-      if (round && was && came.get(was) === null && left > 0) { left--; answers.delete(k); }
+      if (back && got.get(l) === null) {
+        if (left <= 0) continue;
+        left--;
+        // its last answer of nothing is let go (one another link is asking now stays)
+        const k = keyOf(l, from), was = answers.get(k);
+        if (was && came.get(was) === null) answers.delete(k);
+      }
       void answerFor(l, from).then((a) => { askedAt.current = Date.now(); if (on) setGot((m) => (m.get(l) === a ? m : new Map(m).set(l, a))); });
     }
     return () => { on = false; };
