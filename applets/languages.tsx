@@ -804,7 +804,11 @@ export default function Languages() {
   // ── Review ──
   if (queue !== null) {
     if (!cards || !words || (queue.length > 0 && (!current || !currentWord))) {
-      return <Page title="Review" back={{ label: "Today", onPress: endReview }}><Loading /></Page>;
+      return (
+        <Page title="Review" back={{ label: "Today", onPress: endReview }}>
+          {loadError ? <Problem error={loadError} onRetry={() => void load()}>Your words couldn't be read.</Problem> : <Loading />}
+        </Page>
+      );
     }
     if (!current || !currentWord) {
       return (
@@ -831,7 +835,7 @@ export default function Languages() {
         <Card>
           <p className="lang-prompt">{face.prompt}</p>
           {face.picture && (pic.url ? <div className="lang-media"><img className="lang-pic" width={480} height={300} src={pic.url} alt="" /></div>
-            : pic.missing ? <p className="lang-cue">{w.cue ?? w.gloss}</p> : <Loading />)}
+            : pic.missing ? <p className="lang-cue">{w.cue || w.gloss || "This Parachute can't show the picture yet."}</p> : <Loading />)}
           {face.audio && (sound.url ? <div className="lang-media"><audio className="lang-audio" controls autoPlay src={sound.url} /></div> : (sound.missing ? <p className="lang-muted">This Parachute can't play the sound yet.</p> : <Loading />))}
           {face.big && <p className={face.bigLang === "sa-Deva" ? "lang-deva" : "lang-big"} lang={face.bigLang}>{face.big}</p>}
           {face.small && <p className="lang-translit">{face.small}</p>}
