@@ -52,6 +52,10 @@
     "android": {
       "versionCode": 1,
       "minSdkVersion": 26
+    },
+    "iOS": {
+      "developmentTeam": "FLX9G758VB",
+      "minimumSystemVersion": "16.0"
     }
   },
   "plugins": {
