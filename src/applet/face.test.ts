@@ -79,7 +79,7 @@ describe("the face keeps every stressed line's facts", () => {
   it("Vault: every vault, and what reaches each, said on the face", () => {
     const { g, folder } = grantFor("vault");
     const t = faceTexts(holds(g, folder, trusted)).join("\n");
-    expect(t).toContain("Sees and changes records in every vault");
+    expect(t).toContain("Sees and changes records in the vaults you give it");
     expect(t).toContain("Sees what reaches each vault");
   });
   it("two relays: each approval line names its own server, so a second one reads apart from the first", () => {

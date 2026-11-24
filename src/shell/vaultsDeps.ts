@@ -2,7 +2,7 @@
 // with this device's sign-in (a change to a vault held only for reading is refused before it is sent, and the person
 // is asked: vault/writeAsk.ts), the vault's live changes, and what the app knows of who reaches a vault.
 import type { VaultClient } from "@openparachute/surface-client";
-import type { AccessRow, HeldVault, HubRow, ReachRow, VaultsDeps, WatchEvent } from "../applet/modules/vaults";
+import { NOT_GIVEN, type AccessRow, type HeldVault, type HubRow, type ReachRow, type VaultsDeps, type WatchEvent } from "../applet/modules/vaults";
 import { askManage } from "../vault/signInFlow";
 import { endManage, endReach, hubLists, listReach, makeKey, ManageEndedError, manageHeld, type HubGrantRow } from "../vault/manage";
 import { describe, oneAddress } from "../vault/parachute";
@@ -16,7 +16,9 @@ import { userOf } from "../services/signals";
 import { reachOf, viewBase } from "../vault/published";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
-import { takeBack } from "../applet/approvalStore";
+import { subjectOf as approvalSubjectOf, takeBack } from "../applet/approvalStore";
+import { dOf } from "../applet/approvals";
+import { setDevicePick } from "../applet/pickStore";
 import { forgetSaved } from "./saved";
 import { officialCopyOf } from "../applet/parachuteSource";
 import { endAccess, inviteTo, knownNames, takeBackInvite, vaultNames, vaultPeople } from "../vault/sharing";
@@ -25,15 +27,16 @@ import { bareName } from "../applet/files";
 type Requesting = { request<T>(path: string, init?: RequestInit): Promise<T> };
 const doors = new Map<string, Promise<"records" | "notes">>();
 
-const rec = (key: string): VaultRecord => {
+const held = (key: string): VaultRecord => {
   const r = findVault(key);
   if (!r) throw new Error("This device doesn't hold that vault.");
   return r;
 };
 
-export function heldVaults(): HeldVault[] {
+/** The vaults this device holds, as the `vaults` words show them; `given`: only those (an applet's pick). */
+export function heldVaults(given?: (key: string) => boolean): HeldVault[] {
   const home = homeVault();
-  return listVaults().map((v) => ({ key: v.key, name: v.vault, host: hostOf(v.issuer), mine: isMine(v), home: home?.key === v.key, level: heldLevel(v), connector: connectorAddress(v), view: viewBase(v), reach: reachOf(vaultUrlOf(v)) }));
+  return listVaults().filter((v) => !given || given(v.key)).map((v) => ({ key: v.key, name: v.vault, host: hostOf(v.issuer), mine: isMine(v), home: home?.key === v.key, level: heldLevel(v), connector: connectorAddress(v), view: viewBase(v), reach: reachOf(vaultUrlOf(v)) }));
 }
 
 /** Each hub's one address, asked of its description once a session. A hub that doesn't answer within 4 s, or can't
@@ -51,9 +54,9 @@ const addressOf = (hub: string) => {
 };
 
 /** The hubs the device holds vaults on, in the order of `heldVaults`, each with its one address (T-476). */
-export async function heldHubs(): Promise<HubRow[]> {
+export async function heldHubs(given?: (key: string) => boolean): Promise<HubRow[]> {
   const by = new Map<string, HubRow & { hub: string }>();
-  for (const v of listVaults()) {
+  for (const v of listVaults().filter((x) => !given || given(x.key))) {
     const hub = originOf(v.issuer);
     const row = by.get(hub) ?? { hub, host: hostOf(v.issuer), address: null, vaults: [] };
     row.vaults.push(v.key);
@@ -89,17 +92,27 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
   /** The applet these words serve (its subject): what it manages is held for it alone (vault/manage.ts). */ applet?: string;
   /** The shell's own sheet that shows a key's secret once, never handing it to the applet. */ reveal?(k: { name: string; vault: string; token: string; address: string; until: string }): Promise<void>;
   /** Each read made from the kept copies (the vault, the read's path and query as readCache names it). */ read?(vault: string, read: string): void;
-  /** The shell's own picker over the applet, during a tap (Import from Notion). */ pick?: VaultsDeps["pick"] }): VaultsDeps {
+  /** The shell's own picker over the applet, during a tap (Import from Notion). */ pick?: VaultsDeps["pick"];
+  /** The vaults the applet was given (docs/ACCESS.md proposal 5), by this device's key: every call that names another
+   *  is refused, and `list` and `hubs` name none of the others. Asked at each call, so a change of pick holds at once. */
+  given: (key: string) => boolean;
+  /** The shell's sheet to change which vaults it reaches, during a tap (`vaults.ask`). */ ask?: VaultsDeps["ask"] }): VaultsDeps {
+  // a vault it wasn't given is refused as one this device doesn't hold: here too, under the module's own check
+  const rec = (key: string): VaultRecord => {
+    if (!opts.given(key)) throw new Error(NOT_GIVEN);
+    return held(key);
+  };
   const req = (key: string) => clientFor(rec(key)) as unknown as VaultClient & Requesting;
   const applet = opts.applet ?? "";
   return {
     ...(opts.pick ? { pick: opts.pick } : {}),
-    list: heldVaults,
-    hubs: heldHubs,
+    ...(opts.ask ? { ask: opts.ask } : {}),
+    list: () => heldVaults(opts.given),
+    hubs: () => heldHubs(opts.given),
     // this device's Parachute signed in as an app: its writes are its key's, named for this client id (core keys.ts)
-    self: (key) => findVault(key)?.clientId ?? null,
+    self: (key) => (opts.given(key) ? findVault(key)?.clientId ?? null : null),
     // the person's own account on that hub: the sign-in's subject (a write for it, by no named key, is theirs)
-    account: (key) => { const v = findVault(key); return v ? userOf(v.accessToken) : null; },
+    account: (key) => { const v = opts.given(key) ? findVault(key) : null; return v ? userOf(v.accessToken) : null; },
     // never from the browser's cache: the hub sends ETag and Last-Modified with no Cache-Control, so a browser may reuse a
     // read of a moment ago (heuristic freshness), and a record just changed would read as it was
     // a read as the hub has it now, kept for the screens that may show it from the copy (vault/readCache.ts); a change
@@ -135,6 +148,7 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       return d;
     },
     watch(key, type, on: (e: WatchEvent) => void) {
+      if (!opts.given(key)) throw new Error(NOT_GIVEN);
       try {
         // the live query sends what matches now first (the hub ignores `limit` there: the whole type, or the whole
         // vault, without bodies), then every change; only the changes go on to the applet
@@ -177,6 +191,8 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       // as Settings' Revoke: the signed approval taken back where the key is, the grant, what it saved here
       await takeBack(v, noteId, e?.manifest.name ?? "this applet", e?.manifest.id ?? null).catch(() => null);
       deviceGrants().revoke(subject);
+      // the vaults it was given on this device go with it (a pick kept here, where approvals aren't checked)
+      if (e) setDevicePick(dOf(approvalSubjectOf(v, noteId, e.manifest.id)), null);
       forgetSaved(subject);
       await giveBack(v.key, opts.back());
     },
@@ -222,8 +238,8 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       await giveBack(v.key, opts.back());
     },
     // sharing with people (docs/design/SHARING.md; vault/sharing.ts)
-    names: (key, bys) => vaultNames(key, bys),
-    knownNames: (key, bys) => knownNames(key, bys),
+    names: (key, bys) => (opts.given(key) ? vaultNames(key, bys) : Promise.reject(new Error(NOT_GIVEN))),
+    knownNames: (key, bys) => (opts.given(key) ? knownNames(key, bys) : {}),
     people: (key) => vaultPeople(rec(key)),
     invite: (key, name, from) => inviteTo(rec(key), name, from),
     takeBack: (key, id) => takeBackInvite(rec(key), id),

@@ -28,10 +28,12 @@ test("a home applet written only by create-note opens on start after Allow: the 
   try {
     await start(page);
     const card = page.getByRole("region", { name: /asking for access/ });
-    await expect(card).toContainText("See the titles of the newest notes in every vault on this device");
+    await expect(card).toContainText("See the titles of the newest notes in the vaults you give it");
     await expect(card).toContainText("See what is on your bar");
     await expect(card).toContainText("Take you to a note or an applet when you tap, see which note links lead to a note, and know its vault's web address");
     await expect(page.locator("iframe.applet-frame")).toHaveCount(0);
+    // it reaches the home (its own vault) unless more is ticked on its card (docs/ACCESS.md proposal 5): letters too
+    await card.getByRole("group", { name: "Which vaults may it reach?" }).getByRole("checkbox", { name: /^letters\b/ }).check();
     await page.getByRole("button", { name: "Allow" }).click();
     const lately = applet(page).getByRole("region", { name: "Lately" });
     await expect(lately.getByRole("button", { name: /^Fresh in the kitchen kitchen/ })).toBeVisible();

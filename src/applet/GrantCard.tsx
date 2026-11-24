@@ -6,7 +6,7 @@
 // out, or it asks for something else, with what is new marked. Every sentence is the app's. The only text from a note is
 // the applet's name, shown quoted and marked unverified. Nothing runs until Allow, and only a real tap counts
 // (`isTrusted`). From the Uni app's GrantCard, reworded for this app.
-import { useId, useState, type MouseEvent } from "react";
+import { useId, useState, type MouseEvent, type ReactNode } from "react";
 import { siteOfHost } from "../vault/site";
 import { grantLines, type Grant } from "./grant";
 import type { LineOptions } from "./services";
@@ -68,7 +68,7 @@ function rowsOf(grant: Grant, face: { lines: FaceLine[]; also: string[] }): Row[
       : l.lead.startsWith("Notifies") ? ["◔", "Tell you when something comes"]
       : l.lead.startsWith("Opens web") ? ["↗", "Open links"]
       : l.lead.startsWith("Sees the titles") ? ["☰", "See your newest notes"]
-      : l.lead.startsWith("Sees and changes records") ? ["▦", "See and change every vault"]
+      : l.lead.startsWith("Sees and changes records") ? ["▦", "See and change the vaults you give it"]
       : l.lead.startsWith("Sees what reaches") ? ["⚿", "See and change who reaches them"]
       : l.lead.startsWith("With a token") ? ["◉", "Use a token you give it"]
       : l.lead.startsWith("Show a count on the bar") ? ["◔", "Show a count on the bar"]
@@ -89,7 +89,7 @@ function rowsOf(grant: Grant, face: { lines: FaceLine[]; also: string[] }): Row[
   return rows;
 }
 
-export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, grant, ownFolder, keyring = {}, imports = [], scope, code, status, was, fingerprint, expires, broughtChanged = false, onAllow, onNotNow, onBack, what = "applet", handed, settle, hubAsk = null, approvedElsewhere = null, signing = null, history }: {
+export default function GrantCard({ name, glyph, vault, whose = "mine", host, runs, grant, ownFolder, keyring = {}, imports = [], scope, code, status, was, fingerprint, expires, broughtChanged = false, onAllow, onNotNow, onBack, what = "applet", handed, settle, hubAsk = null, approvedElsewhere = null, signing = null, history, pick }: {
   name: string; glyph: string; vault: string; runs: Runs;
   /** what it asks (grant.ts), the folder its note is in, and the keyring's names for keys: the card's lines come from these */
   grant: Grant; ownFolder: string | null; keyring?: LineOptions;
@@ -122,6 +122,8 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
   /** Who changed it, when and how many times today (changedBy.ts `changedLine`), and an approval of other code this
    *  device read (`approvedOtherLine`): shown when the code changed since something was allowed, here or elsewhere. */
   history?: { changed?: string | null; other?: string | null };
+  /** For an applet that reaches across vaults: the shell's ticks, which vaults it may reach (docs/ACCESS.md proposal 5). */
+  pick?: ReactNode;
 }) {
   const [about, setAbout] = useState<number | null>(null);
   const tap = (f: () => void) => (e: MouseEvent) => { if (e.isTrusted) f(); };
@@ -186,6 +188,7 @@ export default function GrantCard({ name, glyph, vault, whose = "mine", host, ru
         : reaches ? <><strong>Nothing else.</strong> It can't delete notes.</>
         : <><strong>Nothing else.</strong> It can't delete notes or reach the internet.</>}
         {whose === "mine" && what === "component" && <> It reads only that vault.</>}</p>
+      {pick}
       {hubAsk && <p className="grant-hub" role="note">Then your hub ({siteOfHost(hubAsk.host)}) asks you to let Parachute {hubAsk.level === "write" ? <>change notes in <strong>{vault}</strong></> : <>read <strong>{vault}</strong></>}: only this vault.</p>}
       {signing && <p className="error" role="alert">{signing}</p>}
       <div className="grant-actions">

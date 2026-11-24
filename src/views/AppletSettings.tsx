@@ -1,4 +1,5 @@
-// Settings → Applets: the self-test's result (and Run again), and each applet this device has allowed, with Revoke.
+// Settings → Applets: the self-test's result (and Run again), and each applet this device has allowed, with Revoke; and
+// for each that reaches across vaults, the vaults it reaches, with Change (docs/ACCESS.md proposal 5).
 import { giveBack } from "../vault/reach";
 import { useEffect, useState } from "react";
 import { runSelfTest, useGate, useSelfTestRun } from "../applet/selftest/run";
@@ -11,6 +12,16 @@ import { embedSubjectParts } from "../applet/embeds";
 import { useSyncExternalStore } from "react";
 import { allDefaults, clearDefault, subscribeDefaults, VAULT } from "../open/defaults";
 import AppletServices from "./AppletServices";
+import { Link } from "react-router";
+import { dOf, type PickRead, type Subject } from "../applet/approvals";
+import { signedPick } from "../applet/approvalStore";
+import { devicePick, setDevicePick } from "../applet/pickStore";
+import { asksVaults, reachOf, type VaultRef } from "../applet/vaultPick";
+import { BUNDLED, OFFICIAL_NAMES, officialId, officialPath } from "../applet/parachuteSource";
+import { parseApp } from "../applet/app";
+import { homeVault } from "../shell/frameSource";
+import { refOf } from "./useVaultPick";
+import { reachLine, unconfirmedLine } from "./VaultPick";
 import { deviceTechne } from "../applet/techneGrants";
 import { heldLine, isWrite, type TechneCap } from "../applet/techne";
 import { takeBackTechne } from "../shell/techneDeps";
@@ -60,7 +71,7 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
   // device, and the one left in the home vault never allows it here again
   const revoke = (subject: string, id: string, a: { manifest: { id: string; name: string } } | undefined) => void (async () => {
     const told = await takeBack(rec, id, a?.manifest.name ?? "this applet", a?.manifest.id ?? null);
-    grants.revoke(subject); techne.forget(subject); forgetSaved(subject); setSaid(told); onChange(); void giveBack(rec.key, "/settings");
+    grants.revoke(subject); techne.forget(subject); forgetSaved(subject); if (a) setDevicePick(dOf(approvalSubject(rec, id, a.manifest.id)), null); setSaid(told); onChange(); void giveBack(rec.key, "/settings");
   })();
   // from the grants themselves, so a grant whose applet is gone from the vault can still be revoked
   const subjects = grants.subjects().filter((s) => s.startsWith(subjectOf(rec.key, "")));
@@ -73,10 +84,39 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
         <span>{a ? <><span aria-hidden="true">{a.manifest.glyph}{"\uFE0E"}</span> <strong>{a.manifest.name}</strong></> : <strong>An applet no longer in the vault</strong>} <span className="quiet">in {rec.vault}{r?.grantedAt ? `, since ${day(r.grantedAt)}` : ""}</span></span>
         <button type="button" className="quiet-button" onClick={() => revoke(subject, id, a)}>Revoke</button>
         {a && (a.services.length > 0 || a.servicesError) && <AppletServices subject={subject} entry={a} />}
+        {a && asksVaults(a.app) && <ReachLine subject={approvalSubject(rec, id, a.manifest.id)} name={a.manifest.name} own={refOf(rec)} href={`/v/${encodeURIComponent(rec.key)}/a/${encodeURIComponent(id)}`} />}
         {a?.techne && <TechneHeld rec={rec} subject={subject} entry={a} />}
         {a?.techneError && <p className="quiet applet-techne">It reaches nothing on Techne: {a.techneError}.</p>}
       </li>
     );
+  })}</>;
+}
+
+/** What one applet reaches: its pick (signed, or kept here), else the home and its own vault; Change opens the shell's
+ *  sheet over the applet. */
+function ReachLine({ subject, name, own, href }: { subject: Subject; name: string; own: VaultRef | null; href: string }) {
+  const [read, setRead] = useState<PickRead | undefined>(undefined);
+  const d = dOf(subject);
+  useEffect(() => {
+    let on = true;
+    void signedPick(subject).then((p) => { if (on) setRead(p === undefined ? { pick: devicePick(d) } : p); }, () => { if (on) setRead({ unconfirmed: true }); });
+    return () => { on = false; };
+  }, [d]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (read === undefined) return null;
+  const h = homeVault();
+  return (
+    <span className="reach-line"><span className="quiet">{"unconfirmed" in read ? unconfirmedLine(name) : reachLine(name, reachOf(read.pick, h ? refOf(h) : null, own))}</span> · <Link className="link-button" to={`${href}?vaults=change`}>Change</Link></span>
+  );
+}
+
+/** Parachute's own that reach across vaults (Vault, Notes, Connect, Home): what each reaches, in the home. */
+function OwnReaches() {
+  const h = homeVault();
+  if (!h) return null;
+  const own = OFFICIAL_NAMES.filter((n) => { const p = parseApp(BUNDLED[n].record.fields.app); return p.ok && asksVaults(p.app); });
+  return <>{own.map((n) => {
+    const m = BUNDLED[n].record.fields.applet as { id: string; name: string };
+    return <li key={n} className="line"><ReachLine subject={approvalSubject(h, officialId(n), m.id)} name={m.name} own={null} href={officialPath(h.key, n)} /></li>;
   })}</>;
 }
 
@@ -114,6 +154,8 @@ export default function AppletSettings({ vaults }: { vaults: VaultRecord[] }) {
       <button type="button" className="quiet-button" disabled={run.running} onClick={runSelfTest}>Run again</button>
       <h4 className="settings-sub">Always open with</h4>
       <ul className="plain" aria-label="Defaults">{vaults.map((v) => <DefaultsIn key={v.key} rec={v} />)}</ul>
+      <h4 className="settings-sub">Vaults they reach</h4>
+      <ul className="plain" aria-label="Vaults they reach"><OwnReaches /></ul>
       <h4 className="settings-sub">Allowed</h4>
       <ul className="plain" aria-label="Allowed applets">{vaults.map((v) => <AllowedIn key={v.key} rec={v} onChange={() => setN((n) => n + 1)} />)}</ul>
       <h4 className="settings-sub">On your pages</h4>

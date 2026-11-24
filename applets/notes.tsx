@@ -1,6 +1,6 @@
 // Notes: Parachute Simplified's home, one of Parachute's own applets (docs/design/PARACHUTE-SOURCE.md). Every vault's
 // newest notes in one list, a search across them, the vaults as tabs, and a new note. A tap opens the note where notes
-// open (Vault, or the applet that claims it). It reads every vault on this device and writes a new note where the person
+// open (Vault, or the applet that claims it). It reads the vaults the person gives it and writes a new note where the person
 // says (`vaults`), and takes them to a note on a tap (`open`).
 import { useEffect, useState } from "react";
 import { app, Button, Empty, List, Loading, onShown, Page, Problem, Search, Tabs, toast, useSaved, vaults, when, Write } from "parachute";

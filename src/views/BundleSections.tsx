@@ -30,6 +30,7 @@ import { createThemeModule } from "../applet/modules/theme";
 import { createPageModule } from "../applet/modules/page";
 import { vaultDeps } from "../applet/vaultDeps";
 import { asksOf } from "../applet/approvals";
+import type { VaultRef } from "../applet/vaultPick";
 import { approvalFor, subjectOf as approvalSubject } from "../applet/approvalStore";
 import { SECTION_MAX, SECTION_MIN } from "../applet/settingsSection";
 import { useApplets, type Keyed } from "../applet/useApplets";
@@ -116,7 +117,9 @@ function Section({ rec, a }: { rec: VaultRecord; a: Keyed }) {
       if (!code.compiled || !code.compiled.ok) return on && setRead({ state: "say", line: `${name} doesn't compile right now.` });
       // a newer approval in the home vault that takes it back (another device's Revoke) stops it here too: waited for up
       // to APPROVALS_WAIT_MS before it starts, and heard whenever it comes after
-      const asks = await asksOf(approvalSubject(rec, a.noteId, a.manifest.id), a, (n.metadata ?? {}) as Record<string, unknown>, []);
+      // the asks' hash with the pick the newest approval holds (docs/ACCESS.md proposal 5), as the applet's own screen
+      // takes it: without it, an applet allowed with a pick would read as other asks here, and be revoked
+      const asks = (vaults: VaultRef[] | null) => asksOf(approvalSubject(rec, a.noteId, a.manifest.id), a, (n.metadata ?? {}) as Record<string, unknown>, [], vaults);
       // judged on the grant as it is when the answer comes (an Allow made meanwhile is newer than an old taking back),
       // also when the answer comes after Settings was left: the grant is this device's either way
       const takenBack = (d: Awaited<ReturnType<typeof approvalFor>>) => !!d && !d.run && (d.why === "withdrawn" || d.why === "other") && !!d.newest

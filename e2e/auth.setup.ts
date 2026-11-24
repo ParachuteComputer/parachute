@@ -30,6 +30,13 @@ setup("sign in on the hub with a password, then add the vault in the app", async
   expect((await held(page))[VAULT]).toContain(`vault:${VAULT}:write`);
   for (const v of MORE_VAULTS) await openVault(page, v.vault);
   for (const v of MORE_VAULTS.map((m) => m.vault)) await letWrite(page, v);
+  // and ticked every vault for Parachute's own that reach across vaults (Vault, Notes, Connect, Home): each reaches only
+  // the vaults picked for it (docs/ACCESS.md proposal 5), kept on this device, which has no key. e2e/vaultpick.spec.ts
+  // starts from none
+  await page.evaluate(({ hub, home, vaults }) => {
+    const pick = vaults.map((vault) => ({ hub, vault }));
+    localStorage.setItem("parachute.picks.v1", JSON.stringify(Object.fromEntries(["vault", "notes", "connect", "home"].map((n) => [`${hub}|${home}|parachute:${n}`, pick]))));
+  }, { hub: new URL(hubState().origin).origin, home: VAULT, vaults: [VAULT, ...MORE_VAULTS.map((m) => m.vault)] });
   // the sign-in put the hub on the person's list, in a settings note of the home vault; the tests that follow write
   // their own settings note, so the shared start has none (e2e/parachutes.spec.ts covers the list)
   for (const n of await api(hubState(), "GET", "notes?tag=parachute-settings")) await api(hubState(), "DELETE", `notes/${n.id}`);

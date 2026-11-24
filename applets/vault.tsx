@@ -6,7 +6,7 @@
 // of its types, invites someone, and takes access back. Changes says what changed
 // in a vault, by whom (your AI by its key's name), each before and after, and puts a change, or a writer's run of them,
 // back: putting back is a change of its own, kept in history (docs/VAULT.md "Changes").
-// It asks the app for every vault on this device (`vaults`) and what reaches them (`sharing`): its card says so.
+// It asks the app for the vaults the person gives it (`vaults`; docs/ACCESS.md proposal 5) and what reaches them (`sharing`).
 // An ordinary applet otherwise: a note in your vault (Applets/Vault); change it, or ask your AI to.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 // Table, Fields and the vaults calls are level 3, Changes' calls (vaults.changes, compare, restore, remove) level 5, and
@@ -146,7 +146,7 @@ export default function Vault() {
     changes={() => setAt((a: At) => ({ ...a, changes: true }))} packs={() => setAt((a: At) => ({ ...a, packs: true }))} />;
 }
 
-/** Every vault on this device, and a search across all of them. */
+/** The vaults the person gave Vault (docs/ACCESS.md proposal 5), and a search across all of them. */
 function Vaults({ list, onOpen, onRecord }: { list: Held[]; onOpen: (key: string) => void; onRecord: (vault: string, id: string) => void }) {
   const [term, setTerm] = useState("");
   const [found, setFound] = useState<{ v: Held; r: Rec }[] | null>(null);
@@ -160,13 +160,15 @@ function Vaults({ list, onOpen, onRecord }: { list: Held[]; onOpen: (key: string
   return (
     <Page title="Your vaults" className="vlt">
       <style>{CSS}</style>
-      <Search label="Search every vault" placeholder="Search every vault" onSearch={setTerm} live={300} />
+      <Search label="Search these vaults" placeholder="Search these vaults" onSearch={setTerm} live={300} />
       {found ? (found.length
         ? <List label="Found" rows={found.map(({ v, r }) => ({ key: `${v.key}|${r.id}`, title: r.title, meta: [v.name, ...r.types].join(" · "), aside: when.short(r.updatedAt), onPress: () => onRecord(v.key, r.id) }))} />
         : <Empty>Nothing matches.</Empty>)
         // a vault's address isn't its name: said only to tell apart two vaults of the same name (by its site, or its whole
         // address when the site is the same too)
         : <List label="Vaults" hideLabel rows={list.map((v) => ({ key: v.key, title: v.name, meta: [placeOf(v, list), v.mine ? "" : "someone else's"].filter(Boolean).join(" · "), aside: v.level === "write" ? "reads and changes" : "reads", onPress: () => onOpen(v.key) }))} />}
+      {/* the shell's own sheet: which vaults Vault reaches (it never sees the list, only what it is given) */}
+      {typeof vaults.ask === "function" && <p><Button small onClick={() => { vaults.ask().catch(() => {}); }}>Choose which vaults Vault reaches</Button></p>}
     </Page>
   );
 }

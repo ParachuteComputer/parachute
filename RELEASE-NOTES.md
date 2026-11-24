@@ -59,6 +59,14 @@ Expect rough edges and say what you find in [issues](https://github.com/Parachut
   Uni's `uni:<ULID>` in a room and a `[[wikilink]]` in a note open the note in the app, through the kit
   ([docs/WRITE-AN-APPLET.md](docs/WRITE-AN-APPLET.md#links)). Rooms, Journal, Mail and Area ask for `open` to do it.
 
+- **Applets hold only the vaults you tick** (11-23, [docs/ACCESS.md](docs/ACCESS.md) proposal 5). Vault, Notes,
+  Connect and Home, and any applet that reaches across vaults, reach your home vault until you tick more: on its card,
+  on the line over it (*Vault reaches kitchen · Change*), in its menu (**Vaults it reaches**) or in Settings → Applets.
+  The pick is signed with your key, so every device of yours follows it and nothing without the key can widen it.
+  - **Update every device.** A build from before 11-23 doesn't know picks: there, Vault, Notes, Connect and Home still
+    reach every vault that device holds. An applet with a card that you pick for on a new build asks again on an older
+    one; allowing it again there drops it back to your home on every device until you pick again.
+
 ## What doesn't yet
 
 - **Editing notes in the app.** The plain view reads; applets can write. Write from your agent or another client.

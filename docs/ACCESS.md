@@ -6,7 +6,8 @@ quite right … I'm not sure if the app bundle should be getting access to a tho
 **Recommendation: the home vault, plus what each applet asks for on its card, plus a vault you open yourself. Never
 every vault, and a bundle never holds anything.** This has been the app's rule since 11-18 ([design/SCOPES.md](design/SCOPES.md)).
 What was wrong was older sign-ins and a Settings screen that didn't say it. Both are dealt with below, the second one
-in this change.
+in this change. **Since 11-23 an applet that reaches across vaults reaches only the vaults you tick for it** (proposal 5,
+[built](#built-proposal-5-applets-hold-only-the-vaults-you-tick)).
 
 ## What the app holds, and how it got it
 
@@ -38,7 +39,8 @@ them all".
 
 - **Reach adds up.** Vault, and any applet allowed the `vaults` module, reads *every vault this device holds*
   (`applet/modules/vaults.ts`). Every extra vault held widens what they reach, and what a bug in the shell could reach.
-  It is also one more live token on a lost phone. Proposal 5 ends that: such an applet reaches only the vaults you pick.
+  It is also one more live token on a lost phone. Proposal 5 (built 11-23) ends that: such an applet reaches only the
+  vaults you pick.
 - **Who reaches a vault.** In 1.0 each vault keeps one list of every grant, and one tap ends one (core
   `docs/SPEC-1.0-grants.md`, "See and stop all of it"; Vault › Sharing shows it today). A blanket device token would be the
   one line in every vault's list that says "everything, for no reason". Home-plus-asks keeps that list true:
@@ -60,6 +62,53 @@ them all".
 - The vaults it doesn't read are counted on one line (*12 more vaults there, which Parachute doesn't read*), with the
   list behind a tap.
 - No change to what the app asks for or holds.
+
+## Built: proposal 5, applets hold only the vaults you tick
+
+Aaron, 11-23: *"Yes on applets holding vaults I tick."* Built for the words that reach across vaults (Vault, Notes,
+Connect and Home, and any applet asking `vaults`, `sharing`, `recent` or `changes`), PR to next (T-476):
+
+- **What it reaches.** Its pick, else the home (and, for an applet with a card, its own vault). No "all": a vault added
+  later is in no pick. `vaults.list` and `hubs` name only those; every call that names another vault is refused,
+  *not one of the vaults you gave it*, the same answer as for a vault the device doesn't hold, so an applet can't learn
+  which vaults the device holds (`modules/vaults.ts` `held`, and again under it in `shell/vaultsDeps.ts`). `recent`,
+  `changes` and `links` read only those (`shell/appDeps.ts`); a tap (`follow`) still opens a note in any vault held,
+  through a resolver of its own, and the applet hears only whether it went. An applet with no such word is as before.
+- **Where the pick lives.** In the signed approval: `vaults: [{hub, vault}]`, only when the pick isn't the default
+  (`applet/approvals.ts`). Parachute's own keep one named `parachute:<id>` holding the pick alone. A device with the
+  person's key reads the pick from the approval it checks: the newest approval is read first, its pick goes into the
+  asks' hash, then it is decided (`approvalStore.ts` `approvalFor`; the order `AppletScreen.tsx` used to take the hash
+  in is gone). A pick that can't be read makes the whole approval unreadable. A device without the key (a browser tab)
+  keeps its pick on the device (`applet/pickStore.ts`) and never reads it where approvals are checked. Where approvals
+  are checked and one was seen for the applet but none counts now (deleted, put back under what the device saw, taken
+  back, unreadable), it reaches **no vault**, with the line *Vault reaches no vault here: the vaults you gave it couldn't
+  be confirmed · Change*: never the default, which holds the home the person may have left out
+  (`approvals.ts` `pickRead`). Until the pick is read it reaches nothing too, and starts again once it is. A device new
+  to the applet can't tell "never picked" from "deleted", as for any approval, so it takes the default.
+- **The ask.** An applet with a card: *Which vaults may it reach?* on its card, the home and its own vault ticked;
+  every vault on your hubs is listed, *someone else's* and *not on this device yet* marked. Parachute's own: one line
+  over it, *Vault reaches kitchen · Change* (× hides it on that device), which opens the shell's sheet; it never blocks.
+  Ticking a vault the device doesn't hold asks its hub for read, one page; until then the line says *letters isn't on
+  this device · Open*. A link from Home's count into a vault Vault wasn't given: *letters isn't one of Vault's vaults ·
+  Add*.
+- **Changing it.** The applet's menu (⋯): **Vaults it reaches**; Settings → Applets: *Vault reaches kitchen and letters ·
+  Change*, for Parachute's own and each allowed applet that asks; and the applet itself, during a tap,
+  `vaults.ask()` (Vault: **Choose which vaults Vault reaches**). Each change signs a new approval (after the unlock,
+  and the passcode where the levels ask it), so every device follows it; the applet starts again on the new pick.
+- **Card words.** *every vault on this device* is gone from the cards: *in the vaults you give it*.
+- **Tests.** `src/applet/approvals.test.ts` (hash with no pick is today's; with one it differs and ignores order and the
+  device's language; an edited pick breaks the signature; an AI's own key widens nothing; a garbled pick refuses the
+  whole approval; an older build sees a picked approval as other asks; a deleted or put-back approval reaches nothing); `src/shell/vaultPick.test.ts` (one vault of three, through the real
+  modules: vaults, sharing, recent, changes and links reach only it, follow still opens); `e2e/vaultpick.spec.ts` (Vault
+  on a device without the key; two devices with one key, and the approval deleted under the second; an applet with a card). Each goes red with its cut removed.
+- **Not yet.** Journal and Capture as a pick of one (their `here`), and `pick: "one"` on a record: the next step. The
+  long-press in the list doesn't offer Change yet (the applet's menu and Settings do). Taking a vault out drops nothing
+  at the hub by itself: a pick needs only read, and write still goes back with the last thing that needed it.
+
+**Older builds.** A build from before this doesn't know picks. There, Parachute's own Vault, Notes, Connect and Home
+still reach every vault that device holds, until the app is updated. For an applet with a card, the two undo each
+other: a pick made on a new device ends the old device's Allow (it sees other asks), and an Allow given again there is
+the newest approval, with no pick, so new devices fall back to the home until you pick again.
 
 ## Proposals: Aaron's call, not built
 
@@ -116,7 +165,8 @@ Parachute's own applets keep their notes, and 5 changes what an approval holds. 
      `Journal/` there. The settings note holds `{hub, vault}`; switching bundle keeps it; a second device opens
      Journal there.
 
-5. **An applet that reaches across vaults asks which vaults, and holds only those.** Aaron, 11-22: *"an applet itself,
+5. **An applet that reaches across vaults asks which vaults, and holds only those.** *Built for the cross-vault words
+   11-23 (above); Journal and Capture next. The design as approved:* Aaron, 11-22: *"an applet itself,
    like the Vault Viewer applet, might be like, hey, we would like access to your vault. Which vault would you like to
    give us access to? … once it's in there, it's defined and it's specified on the record what Vault we're using. But
    the app should be able to ask what Vaults potentially change that."* Today Vault, Notes and Connect (app word
@@ -247,5 +297,6 @@ nothing is asked; and that an agent can no longer set where Journal keeps notes.
 
 **Subtract:** the old Settings vault blocks (always-shown Whose, three buttons per vault, the open list of unread
 vaults) are gone with this change (2026-11-22). Proposal 1 would replace signing out of idle vaults one at a time.
-Proposal 5, if built, replaces the *every vault on this device* lines on the cards (`applet/app.ts`, `face.ts`) and
-proposal 4's `keepsIn` (never built).
+Proposal 5, built 11-23, replaced the *every vault on this device* lines on the cards (`applet/app.ts`, `face.ts`) and
+every cross-vault applet reaching every vault held (`shell/vaultsDeps.ts` `heldVaults`, `appDeps.ts` `recent`/`changes`);
+proposal 4's `keepsIn` is not to be built. Older builds keep the old reach until updated (release notes).

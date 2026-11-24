@@ -26,7 +26,7 @@ describe("metadata.app", () => {
   it("each word is a line on the card; reading every vault is stressed", () => {
     const lines = grantLines(grantOf({ ...m, allow: [] }, "v", [], ["recent", "pins", "open"]), "Applets/");
     expect(lines).toEqual([
-      { text: "See the titles of the newest notes in every vault on this device", stress: true },
+      { text: "See the titles of the newest notes in the vaults you give it", stress: true },
       { text: "See what is on your bar", stress: false },
       { text: "Take you to a note or an applet when you tap, see which note links lead to a note, and know its vault's web address", stress: false },
     ]);

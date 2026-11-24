@@ -57,8 +57,10 @@ export function noteFinder(read: (rec: VaultRecord, idOrPath: string) => Promise
 }
 
 /** `here`: the applet's own vault (a wikilink's, and where `address` makes its addresses); `reads`: the folders it may
- *  read there (a wikilink is looked up only in them). */
-export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameElement | null, picker: Picker, here: () => VaultRecord | null = () => null, reads: readonly string[] = []): AppDeps {
+ *  read there (a wikilink is looked up only in them); `given`: the vaults it may read across, by this device's key
+ *  (docs/ACCESS.md proposal 5): `recent`, `changes` and `links` read only those (none, unless said). A tap (`follow`)
+ *  still goes to a note in any vault this device holds: the applet learns only whether the tap opened something. */
+export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameElement | null, picker: Picker, here: () => VaultRecord | null = () => null, reads: readonly string[] = [], given: (key: string) => boolean = () => false): AppDeps {
   const tappingInApplet = () => tappingIn(frame);
   // where a link leads, from the copy kept of that read at once (vault/readCache.ts): the note's route judges it again
   const find = noteFinder((rec, idOrPath) => keptClientFor(rec).getNote(idOrPath).catch((e: unknown) => {
@@ -68,7 +70,11 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
   }) as Promise<VaultNote | null>);
   // a rule's path is a folder ending in / (manifest.ts), as the vault module checks it
   const mayRead = (path: string) => reads.some((f) => f.endsWith("/") && path.startsWith(f));
-  const resolver = (): ResolveDeps => ({ vaults: listVaults, here, mayRead, find });
+  const givenVaults = () => listVaults().filter((v) => given(v.key));
+  // two resolvers: what a link leads to, asked of the vaults it was given (the answer is the applet's); where a tap goes,
+  // of every vault held (the shell goes there; the applet hears only true or false)
+  const resolver = (): ResolveDeps => ({ vaults: givenVaults, here, mayRead, find });
+  const tapResolver = (): ResolveDeps => ({ vaults: listVaults, here, mayRead, find });
   return {
     async links(links, from, charge) {
       // the same for every link, read or not (a wikilink may take two): what it costs says nothing of what it names
@@ -79,7 +85,7 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
     async follow(link, from, choose) {
       if (!tappingInApplet()) return false;
       const at = location.href;
-      const r = await resolveLink(link, from, resolver());
+      const r = await resolveLink(link, from, tapResolver());
       // a slow answer moves no one: the tap must still count (it wears off in seconds), with the applet still on screen
       // and the person still where they tapped
       if (r.answer === null || !tappingInApplet() || location.href !== at) return false;
@@ -99,7 +105,7 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
       return rec ? addressIn(rec, note) : null;
     },
     async recent(limit, charge) {
-      const vaults = listVaults();
+      const vaults = givenVaults();
       charge(vaults.length);
       const lists = await Promise.all(vaults.map(async (rec) => {
         const rows = await clientFor(rec).queryNotes({ orderBy: "updated_at", sort: "desc", limit: limit + 10 }).catch(() => [] as Note[]);
@@ -112,8 +118,8 @@ export function appDeps(go: (href: string) => void, frame: () => HTMLIFrameEleme
     },
     async changes(charge) {
       // the vault's own API, as Vault reads it (no sheet is ever asked: this only reads)
-      const d = vaultsDeps({ confirm: async () => "no", emit: () => {}, back: () => "" });
-      const vaults = listVaults().slice(0, 6);
+      const d = vaultsDeps({ confirm: async () => "no", emit: () => {}, back: () => "", given });
+      const vaults = givenVaults().slice(0, 6);
       const since = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
       const per = await Promise.all(vaults.map(async (rec) => {
         const cid = d.self?.(rec.key) ?? null;
