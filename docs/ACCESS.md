@@ -79,7 +79,12 @@ Connect and Home, and any applet asking `vaults`, `sharing`, `recent` or `change
   person's key reads the pick from the approval it checks: the newest approval is read first, its pick goes into the
   asks' hash, then it is decided (`approvalStore.ts` `approvalFor`; the order `AppletScreen.tsx` used to take the hash
   in is gone). A pick that can't be read makes the whole approval unreadable. A device without the key (a browser tab)
-  keeps its pick on the device (`applet/pickStore.ts`) and never reads it where approvals are checked.
+  keeps its pick on the device (`applet/pickStore.ts`) and never reads it where approvals are checked. Where approvals
+  are checked and one was seen for the applet but none counts now (deleted, put back under what the device saw, taken
+  back, unreadable), it reaches **no vault**, with the line *Vault reaches no vault here: the vaults you gave it couldn't
+  be confirmed · Change*: never the default, which holds the home the person may have left out
+  (`approvals.ts` `pickRead`). Until the pick is read it reaches nothing too, and starts again once it is. A device new
+  to the applet can't tell "never picked" from "deleted", as for any approval, so it takes the default.
 - **The ask.** An applet with a card: *Which vaults may it reach?* on its card, the home and its own vault ticked;
   every vault on your hubs is listed, *someone else's* and *not on this device yet* marked. Parachute's own: one line
   over it, *Vault reaches kitchen · Change* (× hides it on that device), which opens the shell's sheet; it never blocks.
@@ -91,11 +96,11 @@ Connect and Home, and any applet asking `vaults`, `sharing`, `recent` or `change
   `vaults.ask()` (Vault: **Choose which vaults Vault reaches**). Each change signs a new approval (after the unlock,
   and the passcode where the levels ask it), so every device follows it; the applet starts again on the new pick.
 - **Card words.** *every vault on this device* is gone from the cards: *in the vaults you give it*.
-- **Tests.** `src/applet/approvals.test.ts` (hash with no pick is today's; with one it differs and ignores order; an
-  edited pick breaks the signature; an AI's own key widens nothing; a garbled pick refuses the whole approval; an older
-  build sees a picked approval as other asks); `src/shell/vaultPick.test.ts` (one vault of three, through the real
+- **Tests.** `src/applet/approvals.test.ts` (hash with no pick is today's; with one it differs and ignores order and the
+  device's language; an edited pick breaks the signature; an AI's own key widens nothing; a garbled pick refuses the
+  whole approval; an older build sees a picked approval as other asks; a deleted or put-back approval reaches nothing); `src/shell/vaultPick.test.ts` (one vault of three, through the real
   modules: vaults, sharing, recent, changes and links reach only it, follow still opens); `e2e/vaultpick.spec.ts` (Vault
-  on a device without the key; two devices with one key; an applet with a card). Each goes red with its cut removed.
+  on a device without the key; two devices with one key, and the approval deleted under the second; an applet with a card). Each goes red with its cut removed.
 - **Not yet.** Journal and Capture as a pick of one (their `here`), and `pick: "one"` on a record: the next step. The
   long-press in the list doesn't offer Change yet (the applet's menu and Settings do). Taking a vault out drops nothing
   at the hub by itself: a pick needs only read, and write still goes back with the last thing that needed it.

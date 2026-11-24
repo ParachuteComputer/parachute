@@ -77,8 +77,8 @@ import { createServicesModule } from "../applet/modules/services";
 import { createBroker, type Broker } from "../services/broker";
 import { useShellSheets } from "./ShellSheets";
 import { useVaultPick, refOf } from "./useVaultPick";
-import { hideLine, lineHidden, MissingLine, PickLine, PickSheet, PickTicks, namesOf, pickChoices, reachLine } from "./VaultPick";
-import { pickToSign, type VaultRef } from "../applet/vaultPick";
+import { hideLine, lineHidden, MissingLine, PickLine, PickSheet, PickTicks, namesOf, pickChoices, reachLine, unconfirmedLine } from "./VaultPick";
+import { pickToSign, reachOf, type VaultRef } from "../applet/vaultPick";
 import { setDevicePick } from "../applet/pickStore";
 import { lineOptions, useKeyring } from "../services/keyring";
 import { launchOf, vaultLaunchOf } from "../services/notifyLink";
@@ -337,6 +337,8 @@ export default function AppletScreen() {
   const [pickError, setPickError] = useState<string | null>(null);
   // the card's ticks, before Allow
   const [ticked, setTicked] = useState<VaultRef[] | null>(null);
+  // ticks belong to one card: another card (changed code) starts from its own
+  useEffect(() => { setTicked(null); }, [signedFor]);
   const [passcode, setPasscode] = useState("");
   const [needsPasscode, setNeedsPasscode] = useState(false);
   // asked again when the levels change (the open bundle's record raised them after this screen opened)
@@ -500,7 +502,8 @@ export default function AppletScreen() {
       // only the vaults it was given (docs/ACCESS.md proposal 5), asked at each call; and the shell's sheet to change
       // that, during a tap in it (`vaults.ask`)
       given: pickNow.given,
-      ask: () => (tappingIn(() => frameEl.current) ? new Promise<boolean>((done) => setPicking({ add: null, done })) : Promise.reject(notTapped())),
+      // one sheet at a time: an ask while one is open answers "nothing changed" at once
+      ask: () => (tappingIn(() => frameEl.current) ? new Promise<boolean>((done) => setPicking((p) => { if (p) { done(false); return p; } return { add: null, done }; })) : Promise.reject(notTapped())),
       // the shell's own picker, as `app.pick` opens it: only while the person taps in this applet
       // (a Notion export carries its images: up to the import's own limit, not an attachment's 25 MB)
       pick: (accept, multiple) => (tappingIn(() => frameEl.current) ? device.pick(accept, multiple, IMPORT_MAX, "Parachute reads it and writes it into this vault, under Notion/.") : Promise.reject(notTapped())),
@@ -651,6 +654,13 @@ export default function AppletScreen() {
     if (first) openPicked(first);
   })();
 
+  // the card's ticks before any are touched: the pick last approved, when the card asks again for changed code (so an
+  // Allow out of habit doesn't give back a vault left out: review finding 4); else what it reaches now, or the default
+  function cardTicks(): VaultRef[] {
+    const h = homeVault(), at = [h ? refOf(h) : null, rec ? refOf(rec) : null] as const;
+    if (signedNow && !signedNow.run && signedNow.why === "other" && signedNow.newest?.approved) return reachOf(signedNow.newest.vaults ?? null, ...at);
+    return pickNow.read && !pickNow.unconfirmed ? pickNow.reach : reachOf(null, ...at);
+  }
   // Settings' Change (`?vaults=change`) opens the sheet over the applet once it runs
   const askedChange = params.get("vaults") === "change";
   useEffect(() => { if (askedChange && pickNow.asks && granted) setPicking({ add: null }); }, [askedChange, pickNow.asks, granted]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -711,16 +721,20 @@ export default function AppletScreen() {
         hubAsk={covers(heldLevel(rec), appletLevel(entry.manifest)) ? null : { host: hostOf(rec.issuer), level: appletLevel(entry.manifest) }}
         approvedElsewhere={approvedElsewhere ? signedNow && signedNow.run ? signedNow.content.device ?? "another device" : null : null}
         signing={signing} history={{ changed: changeNow, other: otherApproved }}
-        pick={pickNow.asks && !approvedElsewhere ? <PickTicks choices={pickChoices()} ticked={ticked ?? pickNow.reach} onChange={setTicked} /> : undefined}
+        pick={pickNow.asks && !approvedElsewhere ? (pickNow.canPick ? <PickTicks choices={pickChoices()} ticked={ticked ?? cardTicks()} onChange={setTicked} />
+          : <p className="grant-hub" role="note">It reaches the vaults you picked for it on a device that holds your key; change them there.</p>) : undefined}
         onAllow={(asked) => void (async () => {
           // on a device with the person's key, Allow is an approval for every device: signed here, after the device
           // unlock (and the passcode, when one is set), and kept in the home vault. Approved elsewhere already: no new one
           let mine: Content | null = null;
           // what its ticks say, when it reaches across vaults: signed with the approval, or kept on this device
           const h = homeVault();
-          const cardPick = pickNow.asks && !approvedElsewhere ? pickToSign(ticked ?? pickNow.reach, h ? refOf(h) : null, refOf(rec)) : null;
+          const cardTicked = ticked ?? cardTicks();
+          if (pickNow.asks && !approvedElsewhere && pickNow.canPick && !cardTicked.length) { setSigning("Tick at least one vault it may reach."); return; }
+          const cardPick = pickNow.asks && !approvedElsewhere && pickNow.canPick ? pickToSign(cardTicked, h ? refOf(h) : null, refOf(rec)) : null;
           const signsNow = !approvedElsewhere && await signsHere();
-          if (pickNow.asks && !approvedElsewhere && !signsNow && approvalAt) setDevicePick(dOf(approvalAt), cardPick);
+          // kept on this device only where approvals aren't checked: a device with an anchor alone reads signed picks only
+          if (pickNow.asks && !approvedElsewhere && !signsNow && pickNow.canPick && approvalAt) setDevicePick(dOf(approvalAt), cardPick);
           if (signsNow) {
             setSigning(null);
             try {
@@ -783,6 +797,7 @@ export default function AppletScreen() {
       const ref = refOf(launched);
       return <PickLine text={`${namesOf([ref])[0]} isn't one of ${name}'s vaults`} act="Add" onChange={() => setPicking({ add: ref })} />;
     }
+    if (pickNow.unconfirmed) return <PickLine text={unconfirmedLine(name)} onChange={() => setPicking({ add: null })} />;
     if (pickNow.missing.length) return <MissingLine refs={pickNow.missing} onOpen={openPicked} />;
     const d = dOf(approvalAt);
     if (official && pickNow.read && pickNow.pick === null && !lineHidden(d) && pickChoices().length > 1)

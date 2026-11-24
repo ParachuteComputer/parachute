@@ -14,7 +14,7 @@ import { allDefaults, clearDefault, subscribeDefaults, VAULT } from "../open/def
 import AppletServices from "./AppletServices";
 import { useEffect } from "react";
 import { Link } from "react-router";
-import { dOf, type Subject } from "../applet/approvals";
+import { dOf, type PickRead, type Subject } from "../applet/approvals";
 import { signedPick, subjectOf as approvalSubject } from "../applet/approvalStore";
 import { devicePick, setDevicePick } from "../applet/pickStore";
 import { asksVaults, reachOf, type VaultRef } from "../applet/vaultPick";
@@ -22,7 +22,7 @@ import { BUNDLED, OFFICIAL_NAMES, officialId, officialPath } from "../applet/par
 import { parseApp } from "../applet/app";
 import { homeVault } from "../shell/frameSource";
 import { refOf } from "./useVaultPick";
-import { reachLine } from "./VaultPick";
+import { reachLine, unconfirmedLine } from "./VaultPick";
 
 const grants = deviceGrants();
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
@@ -70,17 +70,17 @@ function AllowedIn({ rec, onChange }: { rec: VaultRecord; onChange: () => void }
 /** What one applet reaches: its pick (signed, or kept here), else the home and its own vault; Change opens the shell's
  *  sheet over the applet. */
 function ReachLine({ subject, name, own, href }: { subject: Subject; name: string; own: VaultRef | null; href: string }) {
-  const [pick, setPick] = useState<VaultRef[] | null | undefined>(undefined);
+  const [read, setRead] = useState<PickRead | undefined>(undefined);
   const d = dOf(subject);
   useEffect(() => {
     let on = true;
-    void signedPick(subject).then((p) => { if (on) setPick(p === undefined ? devicePick(d) : p); }, () => { if (on) setPick(null); });
+    void signedPick(subject).then((p) => { if (on) setRead(p === undefined ? { pick: devicePick(d) } : p); }, () => { if (on) setRead({ unconfirmed: true }); });
     return () => { on = false; };
   }, [d]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (pick === undefined) return null;
+  if (read === undefined) return null;
   const h = homeVault();
   return (
-    <span className="reach-line"><span className="quiet">{reachLine(name, reachOf(pick, h ? refOf(h) : null, own))}</span> · <Link className="link-button" to={`${href}?vaults=change`}>Change</Link></span>
+    <span className="reach-line"><span className="quiet">{"unconfirmed" in read ? unconfirmedLine(name) : reachLine(name, reachOf(read.pick, h ? refOf(h) : null, own))}</span> · <Link className="link-button" to={`${href}?vaults=change`}>Change</Link></span>
   );
 }
 

@@ -3,7 +3,8 @@
 // what a vault writer, a stranger's key or an old approval put back can and can't make run.
 import { describe, expect, it } from "vitest";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools/pure";
-import { APPROVAL_KIND, KEYS_KIND, approvalContent, asksHash, asksOf, checkKeyList, decide, dOf, pickIn, revokeFloor, trustedKeys, type Subject } from "./approvals";
+import { APPROVAL_KIND, KEYS_KIND, approvalContent, asksHash, asksOf, checkKeyList, decide, dOf, pickIn, pickOfDecision, pickRead, revokeFloor, trustedKeys, type Subject } from "./approvals";
+import { sortPick } from "./vaultPick";
 import { appletRecord } from "../../applets/record";
 import { readApplet } from "./discovery";
 
@@ -207,5 +208,39 @@ describe("the vaults an approval holds (proposal 5)", () => {
     const ev = picked(me, [A, B], { scope: withPick });
     expect(decide([ev], subject, "tsx:v1", without, mine, LATER, null)).toMatchObject({ run: false, why: "other" });
     expect(decide([ev], subject, "tsx:v1", withPick, mine, LATER, null)).toMatchObject({ run: true, content: { vaults: [A, B] } });
+  });
+});
+
+describe("what a device that checks approvals lets an applet reach (proposal 5, review finding 1)", () => {
+  const A = { hub: "https://uni.example", vault: "letters" };
+  const content = (o: { n?: number; approved?: boolean; vaults?: { hub: string; vault: string }[] | null } = {}) =>
+    ({ ...approvalContent({ subject, approved: o.approved ?? true, code: "tsx:v1", scope: "asks1", now: (o.n ?? 1000) * 1000, seen: null, vaults: o.vaults ?? null }), n: o.n ?? 1000 });
+  it("the newest approval's pick, or the default when it was made with none", () => {
+    expect(pickRead(content({ vaults: [A] }), 1000)).toEqual({ pick: [A] });
+    expect(pickRead(content(), 1000)).toEqual({ pick: null });
+  });
+  it("the default only where this device never saw an approval for it", () => {
+    expect(pickRead(null, null)).toEqual({ pick: null });
+  });
+  it("an approval deleted, put back or taken back after one was seen here reaches nothing, never the default (which holds the home)", () => {
+    // deleted: none counts now, though this device saw one (its floor)
+    expect(pickRead(null, 1000)).toEqual({ unconfirmed: true });
+    // an older one put back under what this device saw
+    expect(pickRead(content({ n: 900, vaults: [A] }), 1000)).toEqual({ unconfirmed: true });
+    // a taking back
+    expect(pickRead(content({ approved: false }), 1000)).toEqual({ unconfirmed: true });
+  });
+  it("the same for an applet with a card, from what decide said", () => {
+    const ev = finalizeEvent({ kind: APPROVAL_KIND, created_at: Math.floor(T0 / 1000), tags: [["d", dOf(subject)]], content: JSON.stringify(approvalContent({ subject, approved: true, code: "tsx:v1", scope: "asks1", now: T0, seen: null, vaults: [A] })) }, me);
+    expect(pickOfDecision(decide([ev], subject, "tsx:v1", "asks1", mine, LATER, null), null)).toEqual({ pick: [A] });
+    expect(pickOfDecision(decide([], subject, "tsx:v1", "asks1", mine, LATER, null), null)).toEqual({ pick: null });
+    expect(pickOfDecision(decide([], subject, "tsx:v1", "asks1", mine, LATER, Math.floor(T0 / 1000)), Math.floor(T0 / 1000))).toEqual({ unconfirmed: true });
+    expect(pickOfDecision(decide([ev], subject, "tsx:v1", "asks1", mine, LATER, Math.floor(T0 / 1000) + 60), Math.floor(T0 / 1000) + 60)).toEqual({ unconfirmed: true });
+  });
+  it("the asks' hash is the same whatever the device's language: the pick is sorted by code unit (review finding 2)", async () => {
+    const z = { hub: "https://uni.example", vault: "zebra" }, o = { hub: "https://uni.example", vault: "öl" };
+    const fields = { applet: { contract: 2, id: "rooms" }, app: ["vaults"] };
+    expect(sortPick([o, z])).toEqual([z, o]);
+    expect(await asksHash(subject, "Applets/Rooms", fields, {}, [o, z])).toBe(await asksHash(subject, "Applets/Rooms", fields, {}, [z, o]));
   });
 });

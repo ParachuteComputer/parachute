@@ -16,7 +16,9 @@ import { userOf } from "../services/signals";
 import { reachOf, viewBase } from "../vault/published";
 import { deviceGrants, subjectOf } from "../applet/grants";
 import { appletsNow, refreshApplets } from "../applet/useApplets";
-import { takeBack } from "../applet/approvalStore";
+import { subjectOf as approvalSubjectOf, takeBack } from "../applet/approvalStore";
+import { dOf } from "../applet/approvals";
+import { setDevicePick } from "../applet/pickStore";
 import { forgetSaved } from "./saved";
 import { officialCopyOf } from "../applet/parachuteSource";
 import { endAccess, inviteTo, knownNames, takeBackInvite, vaultNames, vaultPeople } from "../vault/sharing";
@@ -189,6 +191,8 @@ export function vaultsDeps(opts: { confirm(q: { title: string; body: string; act
       // as Settings' Revoke: the signed approval taken back where the key is, the grant, what it saved here
       await takeBack(v, noteId, e?.manifest.name ?? "this applet", e?.manifest.id ?? null).catch(() => null);
       deviceGrants().revoke(subject);
+      // the vaults it was given on this device go with it (a pick kept here, where approvals aren't checked)
+      if (e) setDevicePick(dOf(approvalSubjectOf(v, noteId, e.manifest.id)), null);
       forgetSaved(subject);
       await giveBack(v.key, opts.back());
     },

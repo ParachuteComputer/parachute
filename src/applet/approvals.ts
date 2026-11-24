@@ -152,6 +152,23 @@ export function pickIn(events: readonly unknown[], subject: Subject, trusted: Re
   return newest.vaults ?? null;
 }
 
+/** What an applet that reaches across vaults may reach on a device that checks approvals (docs/ACCESS.md proposal 5):
+ *  the newest approval's pick (null: the default) when it is approved and not older than this device has seen; the
+ *  default when this device has seen none for it (a device new to it can't tell "never picked" from "deleted", as for
+ *  any approval); else `unconfirmed`, and it reaches nothing. An approval deleted, put back or garbled by someone without
+ *  the key never turns a pick into the default, which holds the home the person may have left out (review finding 1). */
+export type PickRead = { pick: VaultRef[] | null } | { unconfirmed: true };
+export function pickRead(newest: Content | null, floor: number | null): PickRead {
+  if (!newest) return floor === null ? { pick: null } : { unconfirmed: true };
+  if ((floor !== null && newest.n < floor) || !newest.approved) return { unconfirmed: true };
+  return { pick: newest.vaults ?? null };
+}
+/** The same, from what `decide` said of an applet with a card (`floor`: this device's, after that read). */
+export function pickOfDecision(d: Decision, floor: number | null): PickRead {
+  if (d.run) return { pick: d.content.vaults ?? null };
+  return d.why === "none" && floor === null ? { pick: null } : { unconfirmed: true };
+}
+
 /** Parachute's own applets (no card, no code of their own to hash) keep a pick alone, in an approval of the same shape
  *  named `parachute:<id>`: approved, with this code and scope. */
 export const PICK_CODE = "pick";

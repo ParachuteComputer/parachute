@@ -36,7 +36,9 @@ export function parsePick(raw: unknown): VaultRef[] | null {
   }
   return sortPick(out);
 }
-export const sortPick = (p: readonly VaultRef[]): VaultRef[] => [...p].map((r) => ({ hub: r.hub, vault: r.vault })).sort((a, b) => refKey(a).localeCompare(refKey(b)));
+// by code unit, never the device's language: the sorted pick is hashed, and two devices must hash it alike (review finding 2)
+const byUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+export const sortPick = (p: readonly VaultRef[]): VaultRef[] => [...p].map((r) => ({ hub: r.hub, vault: r.vault })).sort((a, b) => byUnit(refKey(a), refKey(b)));
 export const samePick = (a: readonly VaultRef[] | null, b: readonly VaultRef[] | null) =>
   a === b || (!!a && !!b && a.length === b.length && sortPick(a).every((r, i) => sameRef(r, sortPick(b)[i])));
 

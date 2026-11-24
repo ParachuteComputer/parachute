@@ -34,6 +34,8 @@ export function pickChoices(): Choice[] {
 export function namesOf(refs: readonly VaultRef[], choices: readonly Choice[] = pickChoices()): string[] {
   return sortPick(refs).map((r) => choices.find((c) => sameRef(c.ref, r))?.name ?? r.vault);
 }
+/** Where the vaults it was given couldn't be confirmed here (an approval gone or put back): it reaches none. */
+export const unconfirmedLine = (applet: string) => `${applet} reaches no vault here: the vaults you gave it couldn't be confirmed`;
 export const reachLine = (applet: string, refs: readonly VaultRef[], choices?: readonly Choice[]) => `${applet} reaches ${namesLine(namesOf(refs, choices))}`;
 
 /** The ticks: one per vault on offer; `one`: a choice of one. */

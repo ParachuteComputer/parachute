@@ -94,6 +94,15 @@ test("with the person's key: a pick is signed into the home vault, a second devi
   await expect(vaultList(b)).toContainText("letters");
   await expect(line(b)).toHaveCount(0);
 
+  // someone without the key (an AI with a write key to the home) deletes the approval: the second device, which saw it,
+  // doesn't fall back to the home; it reaches nothing until a pick is signed again. The first keeps its own signed copy
+  for (const n of await tagged("parachute-approval")) if (n.path.endsWith("/parachute:vault")) await api(hubState(), "DELETE", `notes/${n.id}`);
+  await b.reload();
+  await expect(line(b)).toContainText("Vault reaches no vault here: the vaults you gave it couldn't be confirmed");
+  await expect(frame(b).getByRole("heading", { name: VAULT })).toHaveCount(0);
+  await a.reload();
+  await expect(vaultList(a).getByRole("listitem")).toHaveCount(2);
+
   // the first takes letters out: it leaves the open Vault at once
   await a.locator("header.bar").getByRole("button", { name: "Menu" }).click();
   await a.getByRole("button", { name: "Vaults it reaches" }).click();

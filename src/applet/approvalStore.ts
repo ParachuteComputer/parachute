@@ -10,7 +10,7 @@ import { clientFor, keptClientFor } from "../vault/client";
 import { isMine } from "../vault/whose";
 import { originOf, type VaultRecord } from "../vault/store";
 import { stripExt } from "./contract";
-import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, PICK_CODE, approvalContent, approvalPath, checkApproval, checkKeyList, decide, dOf, newestOf, pickIn, revokeFloor, trustedKeys, type Content, type Decision, type KeyList, type SignedEvent, type Subject } from "./approvals";
+import { APPROVAL_TAG, KEYS_PATH, KEYS_TAG, PICK_CODE, approvalContent, approvalPath, checkApproval, checkKeyList, decide, dOf, newestOf, pickIn, pickRead, revokeFloor, trustedKeys, type Content, type Decision, type PickRead, type KeyList, type SignedEvent, type Subject } from "./approvals";
 import type { VaultRef } from "./vaultPick";
 
 const SEEN_KEY = "parachute.approvals.seen.v1";
@@ -189,20 +189,20 @@ async function writeApproval(home: VaultRecord, s: Subject, name: string, ev: Si
 
 // ── picks of Parachute's own applets (docs/ACCESS.md proposal 5) ──
 
-/** The pick signed for one of Parachute's own applets (its subject names `parachute:<id>`), read from the newest
- *  approval that counts: null for none (no approval, a taking back, or one older than this device has seen), which
- *  means the home. `undefined`: this device doesn't check approvals (no key, no anchor), and keeps its own. */
-export async function signedPick(s: Subject, now = Date.now()): Promise<VaultRef[] | null | undefined> {
+/** The pick signed for an applet (one of Parachute's own names `parachute:<id>`), read from the newest approval that
+ *  counts (approvals.ts `pickRead`: unconfirmed where one was seen and none counts now). `undefined`: this device
+ *  doesn't check approvals (no key, no anchor), and keeps its own. */
+export async function signedPick(s: Subject, now = Date.now()): Promise<PickRead | undefined> {
   const home = homeVault();
   if (!home || !(await approvalsHere())) return undefined;
   const events = await eventsFor(home, s, true);
   const trusted = await trustedNow(true);
   const floor = floorOf(s);
-  const pick = pickIn(events, s, trusted, now, floor);
-  // the newest seen raises the floor, as for any approval: last week's wider pick can't be put back over it
   const { newest } = newestOf(events, s, trusted, now);
+  const read = pickRead(newest, floor);
+  // the newest seen raises the floor, as for any approval: last week's wider pick can't be put back over it
   if (newest && (floor === null || newest.n >= floor)) raiseFloor(s, newest.n + (newest.approved ? 0 : 0.5));
-  return pick;
+  return read;
 }
 
 /** Sign a pick for one of Parachute's own applets: an approval holding the pick alone. Throws as `signApproval` does. */
