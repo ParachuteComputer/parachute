@@ -21,10 +21,11 @@ import { applyNotion, notionImport, notionWant, NOTION_ZIP_MAX, type NotionTarge
 import { readZip } from "../../kit/zip.ts";
 import clients from "../../kit/packs/clients.json";
 import reading from "../../kit/packs/reading.json";
+import library from "../../kit/packs/library.json";
 import { PUBLISH_FIELD, type VaultsDeps } from "./vaults.ts";
 
 /** Parachute's own starter packs, checked once. */
-export const STARTERS: Pack[] = [checkPack(coreTypes), checkPack(clients), checkPack(reading)];
+export const STARTERS: Pack[] = [checkPack(coreTypes), checkPack(clients), checkPack(reading), checkPack(library)];
 
 export type Installed = { id: string; name: string; version: number; source: string; appliedAt: string | null; appliedBy: string | null;
   made: Receipt["made"]; skipped: string[]; newer: number | null };
