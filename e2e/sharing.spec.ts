@@ -22,6 +22,19 @@ async function person(browser: Browser, info: TestInfo, key: string): Promise<{ 
   return { ctx, page: await ctx.newPage() };
 }
 
+/** Vault reaches the home until more is ticked (docs/ACCESS.md proposal 5): opened on a vault it wasn't given, the line
+ *  over it offers to add it, and the person does, on the shell's sheet (signed with their key). */
+async function give(page: Page, vault: string) {
+  const line = page.locator("p.pick-line").filter({ hasText: `${vault} isn't one of Vault's vaults` });
+  if (!(await line.waitFor({ timeout: 10_000 }).then(() => true, () => false))) return;
+  await line.getByRole("button", { name: "Add" }).click();
+  const sheet = page.getByRole("dialog", { name: /^Vaults Vault reaches$|^Which vaults may Vault reach\?$/ });
+  await expect(sheet.getByRole("checkbox", { name: new RegExp(`^${vault}\\b`) })).toBeChecked();
+  await page.waitForTimeout(800);
+  await sheet.getByRole("button", { name: "Save" }).click();
+  await sheet.waitFor({ state: "detached" });
+}
+
 /** Change a record's words in the app, as a person does; the first change to a vault held for reading asks first. */
 async function edit(page: Page, vault: string, id: string, words: string, reader: { origin: string; token: string }) {
   const hub = hubState();
@@ -65,6 +78,7 @@ test("Aaron invites Bo to recipes; Bo accepts with his own key; their edits read
   await signInWithKey(aaron.page, hub, VAULT, "Mine");
   await openVault(aaron.page, SHARED);
   await aaron.page.goto(`/v/${VAULT}/a/parachute%3Avault?vault=${SHARED}`);
+  await give(aaron.page, SHARED);
   let v = vaultApplet(aaron.page);
   await v.getByRole("button", { name: "Sharing" }).click();
   await expect(v.getByRole("heading", { level: 1, name: "Sharing" })).toBeVisible({ timeout: 30_000 });
@@ -140,6 +154,7 @@ test("Aaron invites Bo to recipes; Bo accepts with his own key; their edits read
 
   // Bo's Changes: Aaron's under "Aaron", his own as his
   await bo.page.goto(`/v/${BO_HOME}/a/parachute%3Avault?vault=${SHARED}&show=changes`);
+  await give(bo.page, SHARED);
   const bv = vaultApplet(bo.page);
   await expect(bv.getByRole("heading", { level: 1, name: "Changes" })).toBeVisible({ timeout: 30_000 });
   await expect(bv.getByRole("region", { name: /^Aaron, Today$/ }).getByRole("button", { name: /Changed Bread/ })).toBeVisible({ timeout: 20_000 });
