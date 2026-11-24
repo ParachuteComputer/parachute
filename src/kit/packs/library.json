@@ -7,7 +7,7 @@
   "summary": "Books you own, chapter by chapter, with the words you mark in them and summaries beside each chapter. Its book is the Reading list's, with every field it has.",
   "types": {
     "book": {
-      "description": "A book you own: one edition. Its chapters and summaries are records in its folder.",
+      "description": "A book you want to read, are reading, or have read. One you own can hold its chapters in its folder.",
       "fields": {
         "author": { "type": "string" },
         "translator": { "type": "string" },

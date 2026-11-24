@@ -44,7 +44,8 @@ changed, which the person also changed) is not built.
   Reading now, so it ships none of its own); all four go into one vault
   together, in any order, with every field (`src/kit/packs.test.ts`). Library's `book` is the Reading list's with more
   fields (translator, language, kind, source, rights, and `at`, where you stopped), so a vault may hold either or both.
-  Its chapters come from a book import (Uni's `library-import` today, WEB.md step 1), its quotes from reading.
+  Its chapters and summaries come from importing a book (a script an AI runs today; Import a book in Vault later),
+  its quotes from reading.
 - `vaults.packs(vault)`: Parachute's starter packs and the vault's receipts (`installed`, with `newer` when the app
   ships a newer version). `vaults.addPack(vault, id)`: apply a starter pack; `{ added, kept, notes, changed }`.
   Shell side: `src/applet/modules/packs.ts`. An applet can't hand the app a pack of its own to apply: only the packs
