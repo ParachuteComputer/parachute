@@ -793,3 +793,20 @@ describe("People round 2, review fixes (T-476)", () => {
     expect(api.withoutTalk(held, "2026-10-02: call, about the bylaws")).toEqual(["2026-11-20: tea"]);
   });
 });
+
+describe("People round 2, second review (T-476)", () => {
+  it("reads when you met written as a bare year number (YAML `met: 2019`)", () => {
+    const t = api.timelineOf({ id: "a", path: "People/A", updatedAt: null, fields: { met: 2019, how_we_met: "Climbing gym" }, links: [] });
+    expect(t.map((m) => [m.date, m.kind, m.title])).toEqual([["2019", "Met", "Climbing gym"]]);
+    expect(api.timelineOf({ id: "b", path: "People/B", updatedAt: null, fields: { met: 20.5 }, links: [] })).toEqual([]);
+  });
+
+  it("the last-in-touch filters don't overlap: 30 days ago is past 'this month', 91 is 'longer ago'", () => {
+    const p = (id: string, talked: string): PersonRecord => ({ id, path: `People/${id}`, updatedAt: null, fields: { talked: [talked] }, links: [] });
+    const people = [p("D30", "2026-10-24"), p("D29", "2026-10-25"), p("D91", "2026-08-24"), p("D6", "2026-11-17"), p("D7", "2026-11-16")];
+    const opts = { query: "", relation: "", group: "", tag: "", todayYmd: "2026-11-23" };
+    expect(api.filterPeople(people, { ...opts, since: "week" }).map((x) => x.id)).toEqual(["D6"]);
+    expect(api.filterPeople(people, { ...opts, since: "month" }).map((x) => x.id)).toEqual(["D29", "D6", "D7"]);
+    expect(api.filterPeople(people, { ...opts, since: "older" }).map((x) => x.id)).toEqual(["D91"]);
+  });
+});

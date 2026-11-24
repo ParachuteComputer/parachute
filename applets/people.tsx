@@ -339,6 +339,13 @@ function ymdOf(v: unknown): string | null {
   return p && p.y !== null ? m[1] : null;
 }
 
+/** When you met, as written: "YYYY-MM-DD", "YYYY-MM" or "YYYY" (a year an AI or YAML wrote as a number too); else "". */
+function metOf(fields?: Record<string, unknown>): string {
+  const v = fields?.met;
+  const t = typeof v === "number" && Number.isInteger(v) ? String(v) : str(v);
+  return ymdOf(t) ?? (/^\d{4}(-\d{2})?$/.test(t) ? t : "");
+}
+
 /** An instant (an ISO time) as the day it fell on here; a bare day stays as written. */
 function localYmd(v: string | null | undefined): string | null {
   if (!v) return null;
@@ -483,7 +490,7 @@ function timelineOf(person: PersonRecord): Moment[] {
     if (m.isPerson) continue;
     out.push({ key: m.id, date: m.date, title: m.title, kind: m.kind, id: m.id, isPerson: false, detail: m.relationship && !/^(wiki)?link$/.test(m.relationship) ? m.relationship : "" });
   }
-  const met = ymdOf(person.fields?.met) ?? (/^\d{4}(-\d{2})?$/.test(str(person.fields?.met)) ? str(person.fields?.met) : null);
+  const met = metOf(person.fields) || null;
   const how = str(person.fields?.how_we_met);
   if (met || how) out.push({ key: "met", date: met, title: how || "Met", kind: "Met", id: null, isPerson: false, detail: "" });
   // undated moments last; on one day, a talk before a note before how you met
@@ -547,9 +554,9 @@ function reconnectList(
 /** How long ago you were last in touch, as the list filters it. */
 const SINCE = [
   { key: "week", label: "This week", test: (d: number | null) => d !== null && d < 7 },
-  { key: "month", label: "This month", test: (d: number | null) => d !== null && d <= 30 },
-  { key: "quarter", label: "3 months", test: (d: number | null) => d !== null && d <= 91 },
-  { key: "older", label: "Longer ago", test: (d: number | null) => d !== null && d > 91 },
+  { key: "month", label: "This month", test: (d: number | null) => d !== null && d < 30 },
+  { key: "quarter", label: "3 months", test: (d: number | null) => d !== null && d < 91 },
+  { key: "older", label: "Longer ago", test: (d: number | null) => d !== null && d >= 91 },
   { key: "never", label: "Never", test: (d: number | null) => d === null },
 ] as const;
 
@@ -1330,7 +1337,7 @@ export default function People() {
   const [vcfBusy, setVcfBusy] = useState(false);
   const [talkOpen, setTalkOpen] = useState(false);
   /** The talk being written; `entry` is the one being put right, as the record holds it. */
-  const [talkDraft, setTalkDraft] = useState<{ date: string; what: string; entry?: string }>({ date: "", what: "" });
+  const [talkDraft, setTalkDraft] = useState<{ id: string; date: string; what: string; entry?: string }>({ id: "", date: "", what: "" });
   const [talkBusy, setTalkBusy] = useState(false);
 
   // Photo object URL cache (keyed by `${id}|${photoPath}`)
@@ -1434,6 +1441,7 @@ export default function People() {
     const n = ++opening.current;
     setSelectedId(id);
     setEditingDetails(false);
+    setTalkOpen(false);
     try {
       let full: PersonRecord | null;
       try {
@@ -1475,6 +1483,7 @@ export default function People() {
     setSelected(null);
     setSelectedId(null);
     setEditingDetails(false);
+    setTalkOpen(false);
   }, [setSelectedId]);
 
   useEffect(() => (selectedId && typeof onBack === "function" ? onBack(closePerson) : undefined), [selectedId, closePerson]);
@@ -1591,12 +1600,23 @@ export default function People() {
     await patchPersonFields(selected, { [name]: clean }, "Saved");
   };
 
-  const openTalk = (t?: { date: string; what: string; entry: string }) => { setTalkDraft(t ?? { date: todayYmd, what: "" }); setTalkOpen(true); };
+  const openTalk = (t?: { date: string; what: string; entry: string }) => {
+    if (!selected) return;
+    setTalkDraft({ id: selected.id, ...(t ?? { date: todayYmd, what: "" }) });
+    setTalkOpen(true);
+  };
   const logTalk = async (remove = false) => {
     if (!selected || talkBusy) return;
+    // a draft is for the person it was begun on, and a talk being put right must still be there as it was
+    if (talkDraft.id !== selected.id || (talkDraft.entry && !strList(selected.fields?.talked).includes(talkDraft.entry))) {
+      toast("That changed meanwhile. Open it again.", { error: true });
+      setTalkOpen(false);
+      return;
+    }
     const date = talkDraft.date.trim() || todayYmd;
     if (!remove && !ymdOf(date)) { toast("A day is YYYY-MM-DD.", { error: true }); return; }
-    if (!remove && date > todayYmd) { toast("That day hasn't come yet.", { error: true }); return; }
+    // a day to come can't be written; one already written that way can still have its words put right
+    if (!remove && date > todayYmd && date !== ymdOf(talkDraft.entry)) { toast("That day hasn't come yet.", { error: true }); return; }
     const talked = remove ? withoutTalk(selected.fields, talkDraft.entry ?? "") : withTalk(selected.fields, date, talkDraft.what, talkDraft.entry);
     setTalkBusy(true);
     try {
@@ -1910,8 +1930,8 @@ export default function People() {
     const last = lastConnection(selected, todayYmd);
     const cadence = cadenceDays(selected.fields?.keep_in_touch);
     const howWeMet = str(selected.fields?.how_we_met);
-    const met = str(selected.fields?.met);
-    const keepText = !cadence ? "" : (() => {
+    const met = metOf(selected.fields);
+    const keepText = !cadence || pf.status === "past" ? "" : (() => {
       // as written ("monthly", "every month"); a bare number as days
       const written = str(selected.fields?.keep_in_touch).toLowerCase();
       const every = written && !/^\d/.test(written) ? written : `every ${cadence} days`;
@@ -2063,7 +2083,7 @@ export default function People() {
                 { name: "summary", label: "Summary", kind: "text", value: pf.summary },
                 { name: "relation", label: "Relation", kind: "choice", choices: RELATIONS, value: pf.relation },
                 { name: "status", label: "Status", kind: "choice", choices: STATUSES, value: pf.status },
-                { name: "keep_in_touch", label: "Keep in touch", kind: "choice", choices: CADENCES, value: str(selected.fields?.keep_in_touch) },
+                { name: "keep_in_touch", label: "Keep in touch", kind: "choice", choices: CADENCES, value: typeof selected.fields?.keep_in_touch === "number" ? String(selected.fields.keep_in_touch) : str(selected.fields?.keep_in_touch) },
                 { name: "how_we_met", label: "How we met", kind: "long", value: howWeMet },
                 { name: "met", label: "When we met (YYYY-MM-DD or YYYY)", kind: "text", value: met },
                 { name: "email", label: "Email", kind: "text", value: pf.email },
@@ -2291,7 +2311,7 @@ export default function People() {
                 const last = lastConnection(p, todayYmd);
                 return personRow(p, {
                   aside: last ? formatDaysSince(Math.max(0, daysBetween(last.date, todayYmd))) : "Not yet",
-                  ...(last ? { metaOverride: `${last.kind === "Talked" ? "Talked" : last.kind}: ${last.title}` } : {}),
+                  ...(last ? { metaOverride: last.kind === "Talked" && last.title === "Talked" ? "Talked" : `${last.kind}: ${last.title}` } : {}),
                 });
               })}
             />

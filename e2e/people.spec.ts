@@ -240,6 +240,16 @@ test("People applet: open, search, filter, view links, add, edit, import vCard w
     await expect(f.getByRole("region", { name: /Timeline · 4/ }).getByRole("listitem").first()).toContainText("glaze notes coming");
     const fixed = await api(hub, "GET", `notes?id=${encodeURIComponent("People/Maya Lin")}&include_metadata=true`);
     expect((Array.isArray(fixed) ? fixed[0] : fixed).metadata.talked).toEqual([expect.stringMatching(/^\d{4}-\d{2}-\d{2}: Tea at the studio; glaze notes coming$/)]);
+    // a half-written talk doesn't follow you to the next card: Back with the drawer open, then open someone else
+    await f.getByRole("button", { name: "We talked" }).click();
+    await f.getByRole("dialog", { name: "In touch with Maya Lin" }).getByLabel("What about (optional)").fill("meant for Maya");
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(f.getByRole("heading", { name: "People" })).toBeVisible();
+    await f.getByRole("button", { name: "Devon Park" }).first().click();
+    await expect(f.locator("header").getByRole("heading", { name: "Devon Park" })).toBeVisible();
+    await expect(f.getByRole("dialog")).toHaveCount(0);
+    await f.getByRole("button", { name: "← People" }).click();
+    await f.getByRole("region", { name: /Favorites/ }).getByRole("button", { name: "Maya Lin" }).click();
 
     // 6. Edit details in place & edit notes in place
     await f.getByRole("button", { name: "Edit details" }).click();

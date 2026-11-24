@@ -4,7 +4,7 @@ Aaron, 11-23: "I wonder about sorting it based on recency of connection or addin
 it… study how many CRMs work and look at that as inspiration." This note says what the personal CRMs and contact apps do
 for a person's own life (not for sales), and which of those ideas People takes.
 
-**Being judged:** whether the five built features below are the right ones, and whether the "not doing" list is right.
+**Being judged:** whether the features built below are the right ones, and whether the "not doing" list is right.
 
 ## What they do
 
