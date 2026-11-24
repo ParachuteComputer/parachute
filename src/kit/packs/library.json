@@ -52,20 +52,5 @@
       }
     }
   },
-  "records": [
-    {
-      "path": "Parachute/Views/book/Reading now",
-      "tags": ["parachute-view"],
-      "fields": {
-        "view": {
-          "contract": 1,
-          "layout": "table",
-          "sort": null,
-          "where": [{ "field": "status", "op": "eq", "value": "reading" }],
-          "group": null
-        }
-      },
-      "body": ""
-    }
-  ]
+  "records": []
 }

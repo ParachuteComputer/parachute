@@ -40,7 +40,8 @@ changed, which the person also changed) is not built.
 - Parachute's starter packs (`src/kit/packs/*.json`, each the block of its page at parachute.computer/docs/build/packs/<id>):
   **Core types** (person, project, meeting, task), **Clients and sessions** (client, session, follow-up: a practice, a
   coach's or a tutor's), **Reading list** (book) and **Library** (book, chapter, quote, summary: books you own, read
-  chapter by chapter). Each has a saved view, and all but Library a template per type; all four go into one vault
+  chapter by chapter). Each but Library has a template per type and a saved view (Library's book shares Reading list's
+  Reading now, so it ships none of its own); all four go into one vault
   together, in any order, with every field (`src/kit/packs.test.ts`). Library's `book` is the Reading list's with more
   fields (translator, language, kind, source, rights, and `at`, where you stopped), so a vault may hold either or both.
   Its chapters come from a book import (Uni's `library-import` today, WEB.md step 1), its quotes from reading.
