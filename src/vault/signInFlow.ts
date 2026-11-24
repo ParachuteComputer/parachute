@@ -6,7 +6,7 @@
 // Parachute, the sign-in's return, the launcher's Open, an applet's Allow, a change that needs write) call these.
 import { beginSignIn, completeSignIn, dropPending, revoke, type AllowAfter, type Pending, type Why } from "./oauth";
 import { endUnheld, holdManage } from "./manage";
-import { describe, homeFrom, homeWithToken, levelIn, listWithToken, reachesEvery, vaultUrlFrom, type Level, type Listed, type Parachute } from "./parachute";
+import { canCreate, createWithToken, describe, homeFrom, homeWithToken, levelIn, listWithToken, reachesEvery, vaultUrlFrom, type Level, type Listed, type Parachute } from "./parachute";
 import { limitedFetch } from "./limited";
 import { MAX_VAULTS } from "./address";
 import { listVaults, originOf, saveVault, vaultUrlOf, type VaultRecord } from "./store";
@@ -28,7 +28,12 @@ export type VaultPick = { hub: string; vaults: string[]; askMine: boolean; mine:
   go: (mine: string[], first: string) => Promise<string> };
 /** Where to go next: the hub (its sign-in or consent page), a pick first, or done, with the vault now held and where to
  *  go after (`back`). `signIn`: this finished a sign-in to the Parachute (its list and home follow, afterSignIn). */
-export type Next = { go: string } | { pick: VaultPick } | { done: VaultRecord; parachute: Parachute; back?: string; signIn: boolean; firstHome: boolean;
+/** A person with no vault yet on a Parachute that lets the sign-in make one (Parachute Cloud, for someone who signed up
+ *  from the app a moment ago, T-476): the screen asks its name and calls `make`, which makes it with the sign-in's own
+ *  account token, ends that token, and gives the address to open (the hub's consent for the new home). `end` ends the
+ *  token when the person leaves instead. */
+export type FirstVault = { hub: string; make: (name: string) => Promise<string>; end: () => Promise<void> };
+export type Next = { go: string } | { pick: VaultPick } | { first: FirstVault } | { done: VaultRecord; parachute: Parachute; back?: string; signIn: boolean; firstHome: boolean;
   /** the sign-in listed one vault, the person's own (a new person on Cloud has one; another vault may hold settings) */
   solo: boolean; why: Why };
 
@@ -143,6 +148,20 @@ export async function askManage(rec: Pick<VaultRecord, "issuer" | "vault">, back
   return beginSignIn({ ...b, how: "page" });
 }
 
+/** The first vault, made with the listing sign-in's token, then read as the home like any sign-in's only vault. */
+function firstVault(p: Parachute, how: Pending["how"], accessToken: string, end: () => Promise<void>, f: typeof fetch): FirstVault {
+  let ended = false;
+  const endOnce = async () => { if (!ended) { ended = true; await end(); } };
+  return { hub: p.hub, end: endOnce,
+    make: async (name) => {
+      if (ended) throw new Error("This sign-in has ended. Sign in again.");
+      const made = await createWithToken(p.accountMcp, accessToken, name, f);
+      await endOnce();
+      const next = readFirst(p, { vaults: [made], all: false }, "mine", (v, home, marks) => beginSignIn({ parachute: p, step: "open", vault: v, level: "write", why: "signin", whose: "mine", how, home, marks }, f));
+      return "go" in next ? next.go : next.pick.go([made], made);
+    } };
+}
+
 /** The hub sent the person back with a code: finish that step, keep what it brought, and say where to go next. */
 export async function finishStep(code: string, state: string, iss?: string | null): Promise<Next> {
   const { pending, token, vault, level } = await completeSignIn(code, state, undefined, iss);
@@ -151,6 +170,8 @@ export async function finishStep(code: string, state: string, iss?: string | nul
 
   if (pending.step === "list") {
     let listed: Listed;
+    let first: FirstVault | null = null;
+    const end = () => revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint });
     try {
       // an account token's `covered` says what the token covers, not whether the person runs the hub (0.9 grants it
       // per vault): that is read from the hub's public list instead
@@ -160,15 +181,21 @@ export async function finishStep(code: string, state: string, iss?: string | nul
       const [all, home] = await Promise.all([ask && reachesEvery(p.hub, theirs.vaults, f),
         asksHome(pending.whose ?? "theirs", theirs) ? homeWithToken(p.accountMcp, token.access_token, theirs.vaults, f) : null]);
       listed = { vaults: theirs.vaults, all, home };
+      // no vault yet, on a Parachute of the person's own whose page let the sign-in make one: the token is kept for that
+      // one call, and ended right after it (or when the person leaves)
+      if (!listed.vaults.length && pending.whose === "mine" && canCreate(token.scope)) first = firstVault(p, pending.how, token.access_token, end, f);
     } finally {
       // the listing token has done its one job: ended before the page moves on (it could do more than list on some
       // hubs: docs/design/SCOPES.md)
-      await revoke({ issuer: pending.issuer, clientId: pending.clientId, refreshToken: token.refresh_token, revocationEndpoint: pending.revocationEndpoint });
+      if (!first) await end();
     }
+    if (first) return { first };
     // whether the person reaches every vault there: then the hub's public list is theirs, for vaults made later (newVaults.ts)
     // (strictly: a list cut at MAX_VAULTS is taken as every vault for the pick, never here)
     noteEvery(p.hub, listed.all && listed.vaults.length < MAX_VAULTS);
-    if (!listed.vaults.length) throw new Error("You're signed in there, but no vault is yours yet. Ask the hub's owner to give you one.");
+    if (!listed.vaults.length) throw new Error(p.door === "cloud"
+      ? "You're signed in, but you have no vault there yet, and Parachute wasn't let make one. Make one on Parachute Cloud's website, then sign in again."
+      : "You're signed in there, but no vault is yours yet. Ask the hub's owner to give you one.");
     // the hub's session is still in place: its consent for the one vault comes next
     const whose = pending.whose ?? "theirs";
     const next = readFirst(p, listed, whose, (first, home, marks) => beginSignIn({ parachute: p, step: "open", vault: first, level: home ? "write" : levelAt(p, first), why: "signin", whose, how: pending.how, home, marks }, f));

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { Bar } from "../ui/Bar";
 import { dropPending, peekPending, PendingApprovalError } from "../vault/oauth";
-import { finishStep, signInWords, type VaultPick } from "../vault/signInFlow";
+import { finishStep, signInWords, type FirstVault as First, type VaultPick } from "../vault/signInFlow";
+import FirstVault from "./FirstVault";
 import PickVaults from "./PickVaults";
 import { afterSignIn, listWaiting } from "../shell/parachutes";
 import { homeVault } from "../shell/frameSource";
@@ -20,6 +21,7 @@ export default function OAuthCallback() {
   const [saying, setSaying] = useState("Finishing the sign-in…");
   const [back, setBack] = useState<string | null>(null);
   const [pick, setPick] = useState<VaultPick | null>(null);
+  const [first, setFirst] = useState<First | null>(null);
   const once = useRef(false);
   useEffect(() => {
     if (once.current) return;
@@ -36,6 +38,7 @@ export default function OAuthCallback() {
     if (!code || !state) { setError("This page needs a sign-in from a hub."); return; }
     finishStep(code, state, params.get("iss")).then(async (next) => {
       if ("pick" in next) { setPick(next.pick); return; }
+      if ("first" in next) { setFirst(next.first); return; }
       if ("go" in next) { setSaying("Asking your hub for your home vault…"); window.location.assign(next.go); return; }
       setSaying(next.signIn ? "Signed in." : next.why === "manage" ? `You can manage who reaches ${next.done.vault}.` : `Parachute now ${next.done.scope.includes(`vault:${next.done.vault}:write`) ? "reads and changes" : "reads"} ${next.done.vault}.`);
       if (next.signIn) await afterSignIn(next.parachute.hub, [next.done], next.parachute.door === "cloud", next.firstHome && next.solo).catch(() => undefined);
@@ -52,8 +55,8 @@ export default function OAuthCallback() {
   }, [params, nav]);
   return (
     <main className="screen">
-      <Bar title="Signing in" back="/" />
-      {pick ? <section className="card stack"><PickVaults pick={pick} onCancel={() => nav(`/add?hub=${encodeURIComponent(pick.hub)}`, { replace: true })} onError={(e) => { setPick(null); setError(signInWords(e)); }} /></section> : <div className="card" role="status">
+      <Bar title={first ? "Your first vault" : "Signing in"} back="/" />
+      {first ? <section className="card stack"><FirstVault first={first} onCancel={() => nav("/", { replace: true })} onError={(e) => { setFirst(null); setError(signInWords(e)); }} /></section> : pick ? <section className="card stack"><PickVaults pick={pick} onCancel={() => nav(`/add?hub=${encodeURIComponent(pick.hub)}`, { replace: true })} onError={(e) => { setPick(null); setError(signInWords(e)); }} /></section> : <div className="card" role="status">
         {approve ? <>
           <p>Your hub hasn't approved Parachute yet. Approve it there, then sign in again.</p>
           <a className="primary" href={approve}>Approve on your hub</a>

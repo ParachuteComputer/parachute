@@ -17,10 +17,15 @@ describe("the first screen on a device that can hold a key", () => {
     expect(own, "a way in by the hub's address").toBeTruthy();
     expect(own!.getAttribute("href")).toBe("/add");
     const text = c.textContent!;
-    const cloud = text.indexOf(`Sign in with ${CLOUD_NAME}`), other = text.indexOf("Your notes on another Parachute?"), key = text.indexOf("Nostr key");
+    const cloud = text.indexOf(`Start with ${CLOUD_NAME}`), other = text.indexOf("Your notes on another Parachute?"), key = text.indexOf("Nostr key");
     for (const at of [cloud, other, key]) expect(at).toBeGreaterThan(-1);
     expect(other).toBeGreaterThan(cloud);
     expect(other).toBeLessThan(key);
+  });
+  // T-476 journey: Cloud's emailed sign-in makes the account for a new email, so this one button is the sign-up too, and
+  // says so (a new person met "Sign in" and had no account to sign in to)
+  it("tells a new person the Cloud button makes their account", () => {
+    expect(first().textContent).toContain("it makes your account if you're new");
   });
   it("says it once: no second link to the same place at the foot", () => {
     expect([...first().querySelectorAll('a[href="/add"]')]).toHaveLength(1);
