@@ -358,6 +358,14 @@ a.quiet-button { color: var(--text); text-decoration: none; display: inline-bloc
 .choice { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 12px; }
 .choice legend { width: 100%; }
 
+/* the bar in Settings (views/BarSettings.tsx): a pin a line, its moves at the end */
+.bar-pins .line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bar-pin-acts { display: flex; gap: 4px; flex: none; }
+.bar-pin-acts .quiet-button { min-width: 36px; min-height: 36px; }
+@media (pointer: coarse) { .bar-pin-acts .quiet-button, .bar-more .quiet-button { min-width: 44px; min-height: 44px; } }
+.bar-more summary { cursor: pointer; color: var(--muted); font-size: var(--fs-small); padding: 4px 0; }
+.bar-more li { padding: 2px 0; }
+
 /* the person's other vaults, one tap each to make one home (views/HomeChoice.tsx) */
 .home-choices { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
 

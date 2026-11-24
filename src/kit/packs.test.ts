@@ -110,18 +110,21 @@ describe("applyPack", () => {
   });
 });
 
-// Parachute's starter packs (T-476 first run: a coach, a reader, people and projects): a person may add all three to one
-// vault, and none may leave out a field of another's (a field one pack declares otherwise than another is refused).
+// Parachute's starter packs (T-476 first run: a coach, a reader, people and projects; then Library): a person may add
+// them all to one vault, and none may leave out a field of another's (a field one pack declares otherwise than another
+// is refused). Library's book is the Reading list's book with more fields, so either may go first.
 describe("the starter packs", () => {
-  test("each passes, and all three go into one vault in any order with every field", async () => {
+  test("each passes, and all four go into one vault in any order with every field", async () => {
     const { STARTERS } = await import("../applet/modules/packs");
-    expect(STARTERS.map((p) => p.id)).toEqual(["core-types", "clients", "reading"]);
-    for (const order of [[0, 1, 2], [2, 1, 0], [1, 0, 2]]) {
+    expect(STARTERS.map((p) => p.id)).toEqual(["core-types", "clients", "reading", "library"]);
+    for (const order of [[0, 1, 2, 3], [3, 2, 1, 0], [1, 3, 0, 2], [2, 3, 0, 1]]) {
       const types = new Map<string, { name: string; kind: "type"; count: number; fields: Record<string, { type?: string }> }>();
+      const paths = new Set<string>();
       const target: PackTarget = {
         types: async () => [...types.values()],
         defineType: async (name, def) => { const t = types.get(name) ?? { name, kind: "type" as const, count: 0, fields: {} }; Object.assign(t.fields, def.fields); types.set(name, t); return "ok"; },
-        create: async (r) => ({ id: r.path, updatedAt: null, existed: false }),
+        // a path is taken once made, as on a hub (if_exists: ignore): two packs shipping one record would show here
+        create: async (r) => { const existed = paths.has(r.path); paths.add(r.path); return { id: r.path, updatedAt: null, existed }; },
         receipt: async () => null,
         writeReceipt: async () => {},
       };
