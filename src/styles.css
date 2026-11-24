@@ -189,9 +189,21 @@ fieldset.plain legend { padding: 0; }
 .with-bar .applet-screen .grant-card > .grant-actions { bottom: calc(var(--foot-h) + env(safe-area-inset-bottom)); }
 .passcode-line { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
 .grant-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
-/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the sheet rises once; in it nothing moves but the figures and the shape of what it hears, drawn as it comes */
-.record-time { margin: 6px 0; font-size: var(--fs-head); font-variant-numeric: tabular-nums; }
-.record-shape { display: block; width: 100%; height: 28px; margin: 2px 0 8px; fill: var(--text); }
+/* the shell's recorder (views/DeviceSheets.tsx): its time in words and figures, the dock fades in once; in it nothing moves but the figures and the shape of what it hears, drawn as it comes */
+/* it rests at the foot of the applet's screen, in its flow and held there (sticky), never over the applet: the frame
+   above gets shorter (its least height let go), so the applet still scrolls under a finger while it records and its
+   foot (a room's newest line) stays in sight above it. Aaron, 11-23: "I can't scroll ... while I'm recording" (T-476) */
+.recorder-dock { position: sticky; bottom: 0; z-index: 4; display: flex; justify-content: center; margin: 0 calc(-1 * var(--pad)); animation: shell-fade var(--t-sheet, 0ms) var(--ease-out, ease) backwards; }
+.with-bar .recorder-dock { bottom: calc(var(--foot-h) + env(safe-area-inset-bottom)); }
+.applet-screen:has(> .recorder-dock) > .applet-frame { min-height: 0; }
+.recorder-dock > .sheet { max-height: 50dvh; padding-top: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+.with-bar .recorder-dock > .sheet { padding-bottom: 10px; } /* the bar below holds the safe area */
+.record-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.record-head > p { margin: 0; }
+.record-head > .grant-actions { margin: 0 0 0 auto; }
+.recorder p.small { margin: 4px 0 0; }
+.record-time { font-size: var(--fs-body); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.record-shape { display: block; width: 100%; height: 24px; margin: 8px 0 0; fill: var(--text); }
 .notice { padding: 8px 12px; border: var(--line-card); border-width: var(--card-edges); border-radius: var(--radius-card); background: var(--card-fill); margin: 0 0 8px; font-size: var(--fs-small); }
 .check-list { list-style: none; padding: 0; margin: 6px 0 0; font-size: var(--fs-small); columns: 2; }
 .check-list .fail { color: var(--danger); }

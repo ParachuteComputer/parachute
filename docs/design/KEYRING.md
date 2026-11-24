@@ -234,9 +234,11 @@ alone are refused. Not room-scoped, said on the card's notes: media on that rela
 
 ## Voice, files, links, storage
 
-- **Voice** (`reach: voice`): `voice.record()`, during the person's tap in the applet, opens the shell's recorder sheet
-  over it, already recording, as the Uni app's microphone button does: a running time, the shape of what it hears, Send
-  and Cancel; nothing pulses. Going to the background (the screen locks, another app comes to the front), reaching
+- **Voice** (`reach: voice`): `voice.record()`, during the person's tap in the applet, opens the shell's recorder at
+  the foot of its screen, already recording, as the Uni app's microphone button does: a running time, Send and Cancel on
+  one row, the shape of what it hears; nothing pulses. It rests beside the applet, never over it: the frame above gets
+  shorter, so the applet still scrolls under a finger while it records (the message being answered can be read) and its
+  foot stays in sight. Going to the background (the screen locks, another app comes to the front), reaching
   `max_s`, or the microphone going stops it and keeps what was recorded, for Send or Cancel. The shell records with MediaRecorder (`audio/webm;codecs=opus`, 32 kbit/s, as the
   Uni app) in its own document, never the frame; Send hands the applet `{bytes, type, duration}`. The applet uploads it
   with `services.upload` (the production relay takes WebM Opus) and posts a kind 9 with an audio `imeta` and an empty

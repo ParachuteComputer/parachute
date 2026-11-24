@@ -832,10 +832,11 @@ export default function AppletScreen() {
     {late && "error" in late && late.hash === keys.html && <p className="error" role="alert">This applet can't run: its code doesn't compile: {late.error}.</p>}
     {router && page && savedNow && <AppletFrame key={`${keys.html}:${handed?.note.id ?? ""}:${embedsKey}:${pickNow.key}`} html={page} title={name} router={router} grant={grant} ready={ready} onSession={onSession} onElement={(el) => { frameEl.current = el; }} height={sized ? Math.max(hostHeight.h, 80) : undefined} />}
     {sheets.ui}
-    {device.ui}
     {picking && <PickSheet name={name} initial={picking.add && !pickNow.reach.some((r) => r.hub === picking.add!.hub && r.vault === picking.add!.vault) ? [...pickNow.reach, picking.add] : pickNow.reach}
       onSave={savePick} onCancel={() => { picking.done?.(false); setPicking(null); setPickError(null); }} error={pickError} passcode={needsPasscode ? { value: passcode, set: setPasscode } : null} />}
     {router && page && sized && rec && isMine(rec) && <PageEmbeds host={rec} hostNote={entry.noteId} embeds={entry.embeds} from={loaded.state === "ok" ? loaded.from : []} />}
+    {/* last: the recorder rests at the screen's foot, below the frame and its embeds */}
+    {device.ui}
   </>, () => setMenu(true));
 }
 

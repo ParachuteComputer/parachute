@@ -92,3 +92,37 @@ test("a tap is a click at once: the shell and an applet's frame leave out the do
   const applet = await page.locator("iframe.applet-frame").elementHandle().then((h) => h!.contentFrame());
   expect(await applet!.evaluate(() => getComputedStyle(document.documentElement).touchAction)).toBe("manipulation");
 });
+
+// Aaron, 11-23: "I can't scroll ... while I'm recording". The recorder rests at the foot of the screen, beside the
+// applet, not over it: a journal longer than the screen still scrolls under a finger while it records.
+test.describe("on a phone 390 wide", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test("the journal scrolls under a finger while the recorder records; Send still sends", async ({ page }) => {
+    const stamp = Date.now().toString(36);
+    for (let i = 0; i < 14; i++) made.push((await api(hubState(), "POST", "notes", { path: `Journal/2026/11-${String(2 + i).padStart(2, "0")}/07-15 Morning ${i} ${stamp}`, tags: ["journal"], content: `Morning ${i} ${stamp}. ${"The beds, the frost, the light on the fence. ".repeat(4)}` })).id);
+    const rec = await journal(page);
+    const app = page.frameLocator("iframe.applet-frame");
+    const entry = app.getByRole("article", { name: /Entry at/ }).filter({ hasText: `Morning 13 ${stamp}` });
+    await expect(entry).toBeVisible();
+    await rec.click();
+    const sheet = page.getByRole("dialog", { name: "Recording for Journal" });
+    await expect(sheet.getByRole("timer")).toContainText("Recording");
+    await page.waitForTimeout(600);
+    const top = (await sheet.boundingBox())!.y;
+    const cdp = await page.context().newCDPSession(page);
+    const before = (await entry.boundingBox())!.y;
+    // a finger above the recorder pushes the journal up, to the older days below
+    await expect(async () => {
+      const y = top - 60;
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 195, y }] });
+      for (let i = 1; i <= 12; i++) { await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 195, y: y - (300 * i) / 12 }] }); await page.waitForTimeout(16); }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      expect((await entry.boundingBox())?.y ?? 9999, "the journal moved under the finger").toBeLessThan(before - 100);
+    }).toPass({ intervals: [300, 600], timeout: 8000 });
+    await cdp.detach();
+    await expect(sheet.getByRole("timer")).toContainText("Recording");
+    await sheet.getByRole("button", { name: "Send" }).click();
+    await expect(sheet).toBeHidden();
+    await expect.poll(async () => (await voiced()).length, { timeout: 15_000 }).toBe(1);
+  });
+});

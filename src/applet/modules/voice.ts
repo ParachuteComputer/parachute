@@ -1,6 +1,6 @@
 // voice module: the microphone, for an applet whose manifest says `reach: [voice]` and was allowed on its card
 // (docs/design/KEYRING.md "Voice, files, links, storage"). The applet never touches the microphone: during a tap the
-// shell opens its own recorder sheet over the frame, recording at once (a running time, its shape, Send, Cancel),
+// shell opens its own recorder at the foot of the screen, beside the frame (which still scrolls), recording at once (a running time, its shape, Send, Cancel),
 // records in its own document and, on Send, hands over the recording.
 //   voice.record({max_s?})   → {bytes: ArrayBuffer, type: "audio/webm", duration: seconds} on Send, null on Cancel.
 //                              max_s: 1 to 600 (10 minutes, the default)
@@ -10,7 +10,7 @@ import { RECORD_MAX_S } from "../files.ts";
 
 export type Recording = { bytes: ArrayBuffer; type: string; duration: number };
 export type VoiceDeps = {
-  /** The shell's recorder sheet: the recording on Send, null on Cancel. Throws `notTapped()` (app.ts) without a tap. */
+  /** The shell's recorder: the recording on Send, null on Cancel. Throws `notTapped()` (app.ts) without a tap. */
   record(maxSeconds: number): Promise<Recording | null>;
 };
 
