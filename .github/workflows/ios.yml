@@ -57,7 +57,7 @@ jobs:
         with:
           core: 0.8.0
       - run: brew install xcodegen
-      - name: Build for the simulator (no update feed: an iPhone build never has one)
+      - name: Build for the simulator (no update feed, as every iPhone build)
         run: |
           unset PARACHUTE_UPDATE_FEED
           npx tauri ios build --debug --target aarch64-sim --ci
